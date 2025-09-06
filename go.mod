@@ -1,4 +1,4 @@
-module github.com/gaurav-gosain/tuios
+module github.com/Gaurav-Gosain/tuios
 
 go 1.24.4
 
