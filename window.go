@@ -6,13 +6,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/x/vt"
-	"github.com/creack/pty"
+	pty "github.com/aymanbagabas/go-pty"
 )
 
 // Window represents a terminal window with its own shell process.
@@ -27,8 +28,8 @@ type Window struct {
 	Z                  int
 	ID                 string
 	Terminal           *vt.Terminal
-	Pty                *os.File
-	Cmd                *exec.Cmd
+	Pty                pty.Pty
+	Cmd                *pty.Cmd
 	LastUpdate         time.Time
 	Dirty              bool
 	ContentDirty       bool
@@ -79,10 +80,20 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		"TUIOS_WINDOW_ID="+id,
 	)
 
-	// Start PTY
-	ptmx, err := pty.Start(cmd)
+	// Create PTY and start command
+	ptyInstance, err := pty.New()
 	if err != nil {
 		// Return nil to indicate failure - caller should handle this
+		return nil
+	}
+
+	// Create command through PTY
+	ptyCmd := ptyInstance.Command(shell)
+	ptyCmd.Env = cmd.Env
+	
+	// Start the command
+	if err := ptyCmd.Start(); err != nil {
+		ptyInstance.Close()
 		return nil
 	}
 
@@ -97,8 +108,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		Z:                  z,
 		ID:                 id,
 		Terminal:           terminal,
-		Pty:                ptmx,
-		Cmd:                cmd,
+		Pty:                ptyInstance,
+		Cmd:                ptyCmd,
 		LastUpdate:         time.Now(),
 		Dirty:              true,
 		ContentDirty:       true,
@@ -125,7 +136,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		}()
 
 		// Wait for process to exit
-		cmd.Wait()
+		ptyCmd.Wait()
 
 		// Mark process as exited
 		window.ProcessExited = true
@@ -155,15 +166,31 @@ func detectShell() string {
 		return shell
 	}
 
-	// Try common shells in order of preference
+	// Check if we're on Windows
+	if runtime.GOOS == "windows" {
+		// Check for PowerShell or CMD
+		shells := []string{
+			"powershell.exe",
+			"pwsh.exe", // PowerShell Core/7+
+			"cmd.exe",
+		}
+		for _, shell := range shells {
+			if _, err := exec.LookPath(shell); err == nil {
+				return shell
+			}
+		}
+		// Windows fallback
+		return "cmd.exe"
+	}
+
+	// Unix/Linux/macOS shells
 	shells := []string{"/bin/bash", "/bin/zsh", "/bin/fish", "/bin/sh"}
 	for _, shell := range shells {
 		if _, err := os.Stat(shell); err == nil {
 			return shell
 		}
 	}
-
-	// Ultimate fallback
+	// Unix fallback
 	return "/bin/sh"
 }
 
@@ -303,10 +330,7 @@ func (w *Window) Resize(width, height int) {
 
 	w.Terminal.Resize(termWidth, termHeight)
 	if w.Pty != nil {
-		if err := pty.Setsize(w.Pty, &pty.Winsize{
-			Rows: uint16(termHeight),
-			Cols: uint16(termWidth),
-		}); err != nil {
+		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
 			// Log PTY resize error for debugging, but continue operation
 			// This is not fatal as the terminal can still function
 			_ = err // Acknowledge error but don't break functionality
