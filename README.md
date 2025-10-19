@@ -224,7 +224,7 @@ Similar to tmux, TUIOS supports a prefix key for advanced commands:
 
 The bottom status bar displays:
 
-- **Mode Indicator**: `[W]` for Window Mode, `[T]` for Terminal Mode, `[▦]` for Tiling
+- **Mode Indicator**: `[W]` for Window Mode, `[T]` for Terminal Mode, `[T]` for Tiling
 - **Workspace Indicator**: Shows current workspace and windows per workspace
 - **Minimized Windows**: Pill-style dock items with custom names
 - **CPU Graph**: Real-time CPU usage visualization

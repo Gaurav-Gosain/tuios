@@ -996,7 +996,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 	}
 	// Add tiling indicator
 	if m.AutoTiling {
-		modeText += " [▦]" // Grid/tiling icon
+		modeText += " [T]" // Tiling mode icon
 	}
 
 	// Add workspace indicator with window counts

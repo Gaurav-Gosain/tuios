@@ -617,7 +617,7 @@ func (m *OS) handleKeyPress(msg tea.KeyPressMsg) (*OS, tea.Cmd) {
 		m.AutoTiling = !m.AutoTiling
 		if m.AutoTiling {
 			m.TileAllWindows()
-			m.ShowNotification("Tiling Mode Enabled ▦", "success", time.Duration(NotificationDuration)*time.Millisecond)
+			m.ShowNotification("Tiling Mode Enabled [T]", "success", time.Duration(NotificationDuration)*time.Millisecond)
 		} else {
 			m.ShowNotification("Tiling Mode Disabled", "info", time.Duration(NotificationDuration)*time.Millisecond)
 		}
