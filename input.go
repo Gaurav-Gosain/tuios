@@ -74,10 +74,158 @@ func (m *OS) handleKeyPress(msg tea.KeyPressMsg) (*OS, tea.Cmd) {
 			return m, nil
 		}
 
+		// Handle workspace prefix commands (Ctrl+B, w, ...)
+		if m.WorkspacePrefixActive {
+			m.WorkspacePrefixActive = false
+			m.PrefixActive = false
+			switch msg.String() {
+			case "1":
+				m.SwitchToWorkspace(1)
+				return m, nil
+			case "2":
+				m.SwitchToWorkspace(2)
+				return m, nil
+			case "3":
+				m.SwitchToWorkspace(3)
+				return m, nil
+			case "4":
+				m.SwitchToWorkspace(4)
+				return m, nil
+			case "5":
+				m.SwitchToWorkspace(5)
+				return m, nil
+			case "6":
+				m.SwitchToWorkspace(6)
+				return m, nil
+			case "7":
+				m.SwitchToWorkspace(7)
+				return m, nil
+			case "8":
+				m.SwitchToWorkspace(8)
+				return m, nil
+			case "9":
+				m.SwitchToWorkspace(9)
+				return m, nil
+			case "shift+1", "!":
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 1)
+				}
+				return m, nil
+			case "shift+2", "@":
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 2)
+				}
+				return m, nil
+			case "shift+3", "#":
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 3)
+				}
+				return m, nil
+			case "shift+4", "$":
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 4)
+				}
+				return m, nil
+			case "shift+5", "%":
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 5)
+				}
+				return m, nil
+			case "shift+6", "^":
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 6)
+				}
+				return m, nil
+			case "shift+7", "&":
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 7)
+				}
+				return m, nil
+			case "shift+8", "*":
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 8)
+				}
+				return m, nil
+			case "shift+9", "(":
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 9)
+				}
+				return m, nil
+			case "esc":
+				// Cancel workspace prefix mode
+				return m, nil
+			default:
+				// Unknown workspace command, ignore
+				return m, nil
+			}
+		}
+
+		// Handle minimize prefix commands (Ctrl+B, m, ...)
+		if m.MinimizePrefixActive {
+			m.MinimizePrefixActive = false
+			m.PrefixActive = false
+
+			// Get list of minimized windows in current workspace
+			var minimizedWindows []int
+			for i, win := range m.Windows {
+				if win.Minimized && win.Workspace == m.CurrentWorkspace {
+					minimizedWindows = append(minimizedWindows, i)
+				}
+			}
+
+			switch msg.String() {
+			case "m":
+				// Minimize focused window
+				if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+					m.MinimizeWindow(m.FocusedWindow)
+				}
+				return m, nil
+			case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+				num := int(msg.String()[0] - '0')
+				if num > 0 && num <= len(minimizedWindows) {
+					windowIndex := minimizedWindows[num-1]
+					m.RestoreWindow(windowIndex)
+					// Retile if in tiling mode
+					if m.AutoTiling {
+						m.TileAllWindows()
+					}
+				}
+				return m, nil
+			case "shift+m", "M":
+				// Restore all minimized windows
+				for _, idx := range minimizedWindows {
+					m.RestoreWindow(idx)
+				}
+				// Retile if in tiling mode
+				if m.AutoTiling {
+					m.TileAllWindows()
+				}
+				return m, nil
+			case "esc":
+				// Cancel minimize prefix mode
+				return m, nil
+			default:
+				// Unknown minimize command, ignore
+				return m, nil
+			}
+		}
+
 		// Handle prefix commands in terminal mode
 		if m.PrefixActive {
 			m.PrefixActive = false
 			switch msg.String() {
+			case "w":
+				// Activate workspace prefix mode
+				m.WorkspacePrefixActive = true
+				m.PrefixActive = true // Keep prefix active for the next key
+				m.LastPrefixTime = time.Now()
+				return m, nil
+			case "m":
+				// Activate minimize prefix mode
+				m.MinimizePrefixActive = true
+				m.PrefixActive = true // Keep prefix active for the next key
+				m.LastPrefixTime = time.Now()
+				return m, nil
 			case "d", "esc":
 				// Detach/exit terminal mode (like tmux detach)
 				m.Mode = WindowManagementMode
@@ -143,7 +291,7 @@ func (m *OS) handleKeyPress(msg tea.KeyPressMsg) (*OS, tea.Cmd) {
 				// Create new window
 				m.AddWindow("")
 				return m, nil
-			case "x", "w":
+			case "x":
 				// Close current window
 				if len(m.Windows) > 0 && m.FocusedWindow >= 0 {
 					m.DeleteWindow(m.FocusedWindow)
@@ -225,75 +373,76 @@ func (m *OS) handleKeyPress(msg tea.KeyPressMsg) (*OS, tea.Cmd) {
 		}
 
 		// Handle Alt+1-9 workspace switching in terminal mode
+		// On macOS, Option+number generates special characters, so we handle both
 		switch msg.String() {
-		case "alt+1":
+		case "alt+1", "¡": // Option+1 on macOS generates ¡
 			m.SwitchToWorkspace(1)
 			return m, nil
-		case "alt+2":
+		case "alt+2", "™": // Option+2 on macOS generates ™
 			m.SwitchToWorkspace(2)
 			return m, nil
-		case "alt+3":
+		case "alt+3", "£": // Option+3 on macOS generates £
 			m.SwitchToWorkspace(3)
 			return m, nil
-		case "alt+4":
+		case "alt+4", "¢": // Option+4 on macOS generates ¢
 			m.SwitchToWorkspace(4)
 			return m, nil
-		case "alt+5":
+		case "alt+5", "∞": // Option+5 on macOS generates ∞
 			m.SwitchToWorkspace(5)
 			return m, nil
-		case "alt+6":
+		case "alt+6", "§": // Option+6 on macOS generates §
 			m.SwitchToWorkspace(6)
 			return m, nil
-		case "alt+7":
+		case "alt+7", "¶": // Option+7 on macOS generates ¶
 			m.SwitchToWorkspace(7)
 			return m, nil
-		case "alt+8":
+		case "alt+8", "•": // Option+8 on macOS generates •
 			m.SwitchToWorkspace(8)
 			return m, nil
-		case "alt+9":
+		case "alt+9", "ª": // Option+9 on macOS generates ª
 			m.SwitchToWorkspace(9)
 			return m, nil
-		case "alt+shift+1", "alt+!":
+		case "alt+shift+1", "alt+!", "⁄": // Option+Shift+1 on macOS generates ⁄
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 1)
 			}
 			return m, nil
-		case "alt+shift+2", "alt+@":
+		case "alt+shift+2", "alt+@", "€": // Option+Shift+2 on macOS generates €
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 2)
 			}
 			return m, nil
-		case "alt+shift+3", "alt+#":
+		case "alt+shift+3", "alt+#", "‹": // Option+Shift+3 on macOS generates ‹
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 3)
 			}
 			return m, nil
-		case "alt+shift+4", "alt+$":
+		case "alt+shift+4", "alt+$", "›": // Option+Shift+4 on macOS generates ›
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 4)
 			}
 			return m, nil
-		case "alt+shift+5", "alt+%":
+		case "alt+shift+5", "alt+%", "ﬁ": // Option+Shift+5 on macOS generates ﬁ
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 5)
 			}
 			return m, nil
-		case "alt+shift+6", "alt+^":
+		case "alt+shift+6", "alt+^", "ﬂ": // Option+Shift+6 on macOS generates ﬂ
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 6)
 			}
 			return m, nil
-		case "alt+shift+7", "alt+&":
+		case "alt+shift+7", "alt+&", "‡": // Option+Shift+7 on macOS generates ‡
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 7)
 			}
 			return m, nil
-		case "alt+shift+8", "alt+*":
+		case "alt+shift+8", "alt+*", "°": // Option+Shift+8 on macOS generates °
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 8)
 			}
 			return m, nil
-		case "alt+shift+9", "alt+(":
+		case "alt+shift+9", "alt+(", "·": // Option+Shift+9 on macOS generates ·
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 9)
 			}
@@ -356,18 +505,166 @@ func (m *OS) handleKeyPress(msg tea.KeyPressMsg) (*OS, tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle workspace prefix commands (Ctrl+B, w, ...)
+	if m.WorkspacePrefixActive {
+		m.WorkspacePrefixActive = false
+		m.PrefixActive = false
+		switch msg.String() {
+		case "1":
+			m.SwitchToWorkspace(1)
+			return m, nil
+		case "2":
+			m.SwitchToWorkspace(2)
+			return m, nil
+		case "3":
+			m.SwitchToWorkspace(3)
+			return m, nil
+		case "4":
+			m.SwitchToWorkspace(4)
+			return m, nil
+		case "5":
+			m.SwitchToWorkspace(5)
+			return m, nil
+		case "6":
+			m.SwitchToWorkspace(6)
+			return m, nil
+		case "7":
+			m.SwitchToWorkspace(7)
+			return m, nil
+		case "8":
+			m.SwitchToWorkspace(8)
+			return m, nil
+		case "9":
+			m.SwitchToWorkspace(9)
+			return m, nil
+		case "shift+1", "!":
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 1)
+			}
+			return m, nil
+		case "shift+2", "@":
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 2)
+			}
+			return m, nil
+		case "shift+3", "#":
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 3)
+			}
+			return m, nil
+		case "shift+4", "$":
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 4)
+			}
+			return m, nil
+		case "shift+5", "%":
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 5)
+			}
+			return m, nil
+		case "shift+6", "^":
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 6)
+			}
+			return m, nil
+		case "shift+7", "&":
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 7)
+			}
+			return m, nil
+		case "shift+8", "*":
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 8)
+			}
+			return m, nil
+		case "shift+9", "(":
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 9)
+			}
+			return m, nil
+		case "esc":
+			// Cancel workspace prefix mode
+			return m, nil
+		default:
+			// Unknown workspace command, ignore
+			return m, nil
+		}
+	}
+
+	// Handle minimize prefix commands (Ctrl+B, m, ...) in window management mode
+	if m.MinimizePrefixActive {
+		m.MinimizePrefixActive = false
+		m.PrefixActive = false
+
+		// Get list of minimized windows in current workspace
+		var minimizedWindows []int
+		for i, win := range m.Windows {
+			if win.Minimized && win.Workspace == m.CurrentWorkspace {
+				minimizedWindows = append(minimizedWindows, i)
+			}
+		}
+
+		switch msg.String() {
+		case "m":
+			// Minimize focused window
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+				m.MinimizeWindow(m.FocusedWindow)
+			}
+			return m, nil
+		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+			num := int(msg.String()[0] - '0')
+			if num > 0 && num <= len(minimizedWindows) {
+				windowIndex := minimizedWindows[num-1]
+				m.RestoreWindow(windowIndex)
+				// Retile if in tiling mode
+				if m.AutoTiling {
+					m.TileAllWindows()
+				}
+			}
+			return m, nil
+		case "shift+m", "M":
+			// Restore all minimized windows
+			for _, idx := range minimizedWindows {
+				m.RestoreWindow(idx)
+			}
+			// Retile if in tiling mode
+			if m.AutoTiling {
+				m.TileAllWindows()
+			}
+			return m, nil
+		case "esc":
+			// Cancel minimize prefix mode
+			return m, nil
+		default:
+			// Unknown minimize command, ignore
+			return m, nil
+		}
+	}
+
 	// Handle prefix commands in window management mode
 	if m.PrefixActive {
 		// Deactivate prefix after handling command
 		m.PrefixActive = false
 
 		switch msg.String() {
+		case "w":
+			// Activate workspace prefix mode
+			m.WorkspacePrefixActive = true
+			m.PrefixActive = true // Keep prefix active for the next key
+			m.LastPrefixTime = time.Now()
+			return m, nil
+		case "m":
+			// Activate minimize prefix mode
+			m.MinimizePrefixActive = true
+			m.PrefixActive = true // Keep prefix active for the next key
+			m.LastPrefixTime = time.Now()
+			return m, nil
 		// Window management
 		case "c":
 			// Create new window (like tmux)
 			m.AddWindow("")
 			return m, nil
-		case "x", "w":
+		case "x":
 			// Close current window
 			if len(m.Windows) > 0 && m.FocusedWindow >= 0 {
 				m.DeleteWindow(m.FocusedWindow)
@@ -471,76 +768,77 @@ func (m *OS) handleKeyPress(msg tea.KeyPressMsg) (*OS, tea.Cmd) {
 		return m, tea.Quit
 
 	// Workspace switching with Alt+1-9
-	case "alt+1":
+	// On macOS, Option+number generates special characters, so we handle both
+	case "alt+1", "¡": // Option+1 on macOS generates ¡
 		m.SwitchToWorkspace(1)
 		return m, nil
-	case "alt+2":
+	case "alt+2", "™": // Option+2 on macOS generates ™
 		m.SwitchToWorkspace(2)
 		return m, nil
-	case "alt+3":
+	case "alt+3", "£": // Option+3 on macOS generates £
 		m.SwitchToWorkspace(3)
 		return m, nil
-	case "alt+4":
+	case "alt+4", "¢": // Option+4 on macOS generates ¢
 		m.SwitchToWorkspace(4)
 		return m, nil
-	case "alt+5":
+	case "alt+5", "∞": // Option+5 on macOS generates ∞
 		m.SwitchToWorkspace(5)
 		return m, nil
-	case "alt+6":
+	case "alt+6", "§": // Option+6 on macOS generates §
 		m.SwitchToWorkspace(6)
 		return m, nil
-	case "alt+7":
+	case "alt+7", "¶": // Option+7 on macOS generates ¶
 		m.SwitchToWorkspace(7)
 		return m, nil
-	case "alt+8":
+	case "alt+8", "•": // Option+8 on macOS generates •
 		m.SwitchToWorkspace(8)
 		return m, nil
-	case "alt+9":
+	case "alt+9", "ª": // Option+9 on macOS generates ª
 		m.SwitchToWorkspace(9)
 		return m, nil
 
 	// Move window to workspace and follow with Alt+Shift+1-9
-	case "alt+shift+1", "alt+!":
+	case "alt+shift+1", "alt+!", "⁄": // Option+Shift+1 on macOS generates ⁄
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 1)
 		}
 		return m, nil
-	case "alt+shift+2", "alt+@":
+	case "alt+shift+2", "alt+@", "€": // Option+Shift+2 on macOS generates €
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 2)
 		}
 		return m, nil
-	case "alt+shift+3", "alt+#":
+	case "alt+shift+3", "alt+#", "‹": // Option+Shift+3 on macOS generates ‹
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 3)
 		}
 		return m, nil
-	case "alt+shift+4", "alt+$":
+	case "alt+shift+4", "alt+$", "›": // Option+Shift+4 on macOS generates ›
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 4)
 		}
 		return m, nil
-	case "alt+shift+5", "alt+%":
+	case "alt+shift+5", "alt+%", "ﬁ": // Option+Shift+5 on macOS generates ﬁ
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 5)
 		}
 		return m, nil
-	case "alt+shift+6", "alt+^":
+	case "alt+shift+6", "alt+^", "ﬂ": // Option+Shift+6 on macOS generates ﬂ
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 6)
 		}
 		return m, nil
-	case "alt+shift+7", "alt+&":
+	case "alt+shift+7", "alt+&", "‡": // Option+Shift+7 on macOS generates ‡
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 7)
 		}
 		return m, nil
-	case "alt+shift+8", "alt+*":
+	case "alt+shift+8", "alt+*", "°": // Option+Shift+8 on macOS generates °
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 8)
 		}
 		return m, nil
-	case "alt+shift+9", "alt+(":
+	case "alt+shift+9", "alt+(", "·": // Option+Shift+9 on macOS generates ·
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, 9)
 		}
@@ -594,6 +892,10 @@ func (m *OS) handleKeyPress(msg tea.KeyPressMsg) (*OS, tea.Cmd) {
 			if m.Windows[i].Minimized {
 				m.RestoreWindow(i)
 			}
+		}
+		// Retile if in tiling mode
+		if m.AutoTiling {
+			m.TileAllWindows()
 		}
 		return m, nil
 
@@ -1451,18 +1753,31 @@ func (m *OS) handleMouseClick(msg tea.MouseClickMsg) (*OS, tea.Cmd) {
 	}
 
 	// square (maximize button) - middle button
-	if mouse.Button == tea.MouseLeft && X >= leftMost-8 && X <= leftMost-6 && Y == clickedWindow.Y {
-		// Toggle fullscreen for now (maximize functionality)
-		m.Snap(clickedWindowIndex, SnapFullScreen)
-		m.InteractionMode = false
-		return m, nil
-	}
+	// In tiling mode, buttons are positioned differently (no maximize button)
+	if m.AutoTiling {
+		// Tiling mode: only dash (minimize) and cross (close) buttons
+		// dash (minimize button) - leftmost button
+		if mouse.Button == tea.MouseLeft && X >= leftMost-8 && X <= leftMost-6 && Y == clickedWindow.Y {
+			m.MinimizeWindow(clickedWindowIndex)
+			m.InteractionMode = false
+			return m, nil
+		}
+	} else {
+		// Non-tiling mode: dash, square (maximize), and cross buttons
+		// square (maximize button) - middle button
+		if mouse.Button == tea.MouseLeft && X >= leftMost-8 && X <= leftMost-6 && Y == clickedWindow.Y {
+			// Toggle fullscreen for now (maximize functionality)
+			m.Snap(clickedWindowIndex, SnapFullScreen)
+			m.InteractionMode = false
+			return m, nil
+		}
 
-	// dash (minimize button) - leftmost button
-	if mouse.Button == tea.MouseLeft && X >= leftMost-11 && X <= leftMost-9 && Y == clickedWindow.Y {
-		m.MinimizeWindow(clickedWindowIndex)
-		m.InteractionMode = false
-		return m, nil
+		// dash (minimize button) - leftmost button
+		if mouse.Button == tea.MouseLeft && X >= leftMost-11 && X <= leftMost-9 && Y == clickedWindow.Y {
+			m.MinimizeWindow(clickedWindowIndex)
+			m.InteractionMode = false
+			return m, nil
+		}
 	}
 
 	// Calculate drag offset based on the clicked window

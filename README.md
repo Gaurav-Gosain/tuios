@@ -1,5 +1,7 @@
 # TUIOS - Terminal UI Operating System
 
+![TUIOS](./assets/demo.gif)
+
 TUIOS is a terminal-based window manager that provides a modern, efficient
 interface for managing multiple terminal sessions. Built with Go using the
 Charm stack (Bubble Tea v2 and Lipgloss v2), TUIOS offers a vim-like modal
@@ -7,6 +9,8 @@ interface with comprehensive keyboard shortcuts, workspace support, and mouse
 interaction.
 
 ## Features
+
+![TUIOS](./assets/tuios.gif)
 
 ### Core Functionality
 
@@ -46,19 +50,67 @@ interaction.
 
 ## Installation
 
-### Prerequisites
+You can install TUIOS using one of the following methods:
 
-- Go 1.21 or later
-- A terminal with true color support (most modern terminals)
+### Download the latest release
+
+Grab the latest release from the
+[releases page](https://github.com/Gaurav-Gosain/tuios/releases) and extract
+the archive to a location of your choice.
+
+### Install using Go
+
+> [!NOTE]
+> Prerequisite: [Go](https://go.dev/) 1.21 or later installed on your system.
+
+You can also install TUIOS using the `go install` command:
+
+```bash
+go install github.com/gaurav-gosain/tuios@latest
+```
+
+### Run using Docker
+
+You can pull the latest docker image from the
+[GitHub Docker Container Registry](https://github.com/Gaurav-Gosain/tuios/pkgs/container/tuios)
+and run it using the following command:
+
+```bash
+docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
+```
 
 ### Build from Source
 
-```bash
-git clone https://github.com/gaurav-gosain/tuios.git
-cd tuios
-go build
-./tuios
-```
+If you prefer to build from source, follow these steps:
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/gaurav-gosain/tuios.git
+   ```
+
+2. Navigate to the project directory:
+
+   ```bash
+   cd tuios
+   ```
+
+3. Build the executable:
+
+   ```bash
+   go build
+   ```
+
+4. Run TUIOS:
+
+   ```bash
+   ./tuios
+   ```
+
+### Prerequisites
+
+- Go 1.21 or later (for building from source or using `go install`)
+- A terminal with true color support (most modern terminals)
 
 ### Dependencies
 
@@ -127,7 +179,7 @@ ssh -p 2222 your-server-ip
 | Key                             | Action                                   |
 | ------------------------------- | ---------------------------------------- |
 | <kbd>n</kbd>                    | Create new window                        |
-| <kbd>w</kbd>, <kbd>x</kbd>      | Close current window                     |
+| <kbd>x</kbd>                    | Close current window                     |
 | <kbd>r</kbd>                    | Rename window                            |
 | <kbd>m</kbd>                    | Minimize window                          |
 | <kbd>Shift</kbd>+<kbd>M</kbd>   | Restore all minimized windows            |
@@ -137,10 +189,15 @@ ssh -p 2222 your-server-ip
 
 #### Workspace Management
 
-| Key                                                       | Action                              |
-| --------------------------------------------------------- | ----------------------------------- |
-| <kbd>Alt</kbd>+<kbd>1</kbd>-<kbd>9</kbd>                  | Switch to workspace 1-9             |
-| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>9</kbd> | Move window to workspace and follow |
+> [!NOTE]
+> On macOS, use <kbd>Option</kbd> instead of <kbd>Alt</kbd>. The <kbd>Ctrl</kbd>+<kbd>B</kbd> prefix alternatives work universally and are recommended for tiling window managers like Aerospace.
+
+| Key                                                                | Action                                    |
+| ------------------------------------------------------------------ | ----------------------------------------- |
+| <kbd>Alt</kbd>+<kbd>1</kbd>-<kbd>9</kbd>                           | Switch to workspace 1-9                   |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>9</kbd>          | Move window to workspace and follow       |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd>, <kbd>w</kbd>, <kbd>1</kbd>-<kbd>9</kbd> | Switch to workspace (prefix alternative)  |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd>, <kbd>w</kbd>, <kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>9</kbd> | Move window to workspace (prefix alternative) |
 
 #### Window Layout (Non-Tiling Mode)
 
@@ -208,6 +265,11 @@ Similar to tmux, TUIOS supports a prefix key for advanced commands:
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>n</kbd>                 | Next window                               |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>p</kbd>                 | Previous window                           |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>0</kbd>-<kbd>9</kbd>    | Jump to window                            |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>w</kbd> <kbd>1</kbd>-<kbd>9</kbd> | Switch to workspace (universal alternative) |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>w</kbd> <kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>9</kbd> | Move window to workspace  |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>m</kbd> | Minimize focused window |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>1</kbd>-<kbd>9</kbd> | Restore minimized window by number |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>Shift</kbd>+<kbd>M</kbd> | Restore all minimized windows |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>d</kbd>                 | Detach from terminal (exit terminal mode) |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>s</kbd>                 | Toggle selection mode                     |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Ctrl</kbd>+<kbd>B</kbd> | Send literal Ctrl+B to terminal           |
@@ -435,9 +497,9 @@ The following features are planned for future implementation:
 
 ## Local Development
 
-### Build from source
+### Run locally using Docker
 
-If you prefer to build from source, follow these steps:
+You can also run TUIOS locally using docker:
 
 1. Clone the repository:
 
@@ -451,17 +513,25 @@ If you prefer to build from source, follow these steps:
    cd tuios
    ```
 
-3. Build the executable:
+3. Build the docker image:
 
    ```bash
-   go build
+   docker build -t tuios .
    ```
 
-4. Run TUIOS:
+4. Run the docker image:
 
    ```bash
-   ./tuios
+   docker run -it tuios
    ```
+
+> [!NOTE]
+> The above commands build the docker image with the tag `tuios`.
+> You can replace `tuios` with any tag of your choice.
+
+### Build from source
+
+For building from source, refer to the [Build from Source](#build-from-source) section in the Installation guide above.
 
 ### Testing
 

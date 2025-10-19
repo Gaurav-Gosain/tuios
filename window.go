@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
+	pty "github.com/aymanbagabas/go-pty"
 	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/x/vt"
-	pty "github.com/aymanbagabas/go-pty"
 )
 
 // Window represents a terminal window with its own shell process.
@@ -90,7 +90,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Create command through PTY
 	ptyCmd := ptyInstance.Command(shell)
 	ptyCmd.Env = cmd.Env
-	
+
 	// Start the command
 	if err := ptyCmd.Start(); err != nil {
 		ptyInstance.Close()
@@ -194,16 +194,18 @@ func detectShell() string {
 	return "/bin/sh"
 }
 
-// enableTerminalFeatures enables advanced terminal features like bracketed paste
+// enableTerminalFeatures enables advanced terminal features
 func (w *Window) enableTerminalFeatures() {
 	if w.Pty == nil {
 		return
 	}
 
-	// Enable bracketed paste mode - allows terminals to distinguish pasted text
-	// This prevents accidental command execution when pasting
-	// Enable bracketed paste mode, ignore errors if PTY is not ready
-	_, _ = w.Pty.Write([]byte("\x1b[?2004h"))
+	// Bracketed paste mode is handled by wrapping paste content with escape sequences
+	// when pasting (see input.go handleClipboardPaste). We don't need to enable it
+	// via the PTY as that sends the sequence to the shell's stdin, which can cause
+	// the escape codes to be echoed back and appear as garbage in the terminal.
+	// The shell/application running in the PTY will handle bracketed paste mode
+	// if it supports it, based on receiving the wrapped paste content.
 
 	// Don't enable mouse modes automatically - let applications request them
 	// Applications like vim, less, htop will enable mouse support themselves
@@ -216,12 +218,9 @@ func (w *Window) disableTerminalFeatures() {
 		return
 	}
 
-	// Disable bracketed paste mode
-	// Disable bracketed paste mode, ignore errors during cleanup
-	_, _ = w.Pty.Write([]byte("\x1b[?2004l"))
-
-	// We don't need to disable mouse tracking since we're not enabling it
-	// Applications that enabled it will disable it themselves
+	// No terminal features to explicitly disable
+	// Bracketed paste is handled at the application level
+	// Mouse tracking is managed by applications themselves
 }
 
 func (w *Window) handleIOOperations() {

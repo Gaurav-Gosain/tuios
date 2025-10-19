@@ -106,54 +106,56 @@ const (
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
-	Dragging           bool
-	Resizing           bool
-	ResizeCorner       ResizeCorner
-	PreResizeState     Window
-	ResizeStartX       int
-	ResizeStartY       int
-	DragOffsetX        int
-	DragOffsetY        int
-	DragStartX         int // Track where drag started
-	DragStartY         int // Track where drag started
-	TiledX             int // Original tiled position X
-	TiledY             int // Original tiled position Y
-	TiledWidth         int // Original tiled width
-	TiledHeight        int // Original tiled height
-	DraggedWindowIndex int // Index of window being dragged
-	Windows            []*Window
-	FocusedWindow      int
-	Width              int
-	Height             int
-	X                  int
-	Y                  int
-	Mode               Mode
-	terminalMu         sync.Mutex
-	LastMouseX         int
-	LastMouseY         int
-	HasActiveTerminals bool
-	ShowHelp           bool
-	InteractionMode    bool           // True when actively dragging/resizing
-	MouseSnapping      bool           // Enable/disable mouse snapping
-	WindowExitChan     chan string    // Channel to signal window closure
-	Animations         []*Animation   // Active animations
-	CPUHistory         []float64      // CPU usage history for graph
-	LastCPUUpdate      time.Time      // Last time CPU was updated
-	AutoTiling         bool           // Automatic tiling mode enabled
-	RenamingWindow     bool           // True when renaming a window
-	RenameBuffer       string         // Buffer for new window name
-	PrefixActive       bool           // True when prefix key was pressed (tmux-style)
-	LastPrefixTime     time.Time      // Time when prefix was activated
-	HelpScrollOffset   int            // Scroll offset for help menu
-	CurrentWorkspace   int            // Current active workspace (1-9)
-	NumWorkspaces      int            // Total number of workspaces
-	WorkspaceFocus     map[int]int    // Remembers focused window per workspace
-	ShowLogs           bool           // True when showing log overlay
-	LogMessages        []LogMessage   // Store log messages
-	LogScrollOffset    int            // Scroll offset for log viewer
-	Notifications      []Notification // Active notifications
-	SelectionMode      bool           // True when in text selection mode
-	ClipboardContent   string         // Store clipboard content from tea.ClipboardMsg
+	Dragging              bool
+	Resizing              bool
+	ResizeCorner          ResizeCorner
+	PreResizeState        Window
+	ResizeStartX          int
+	ResizeStartY          int
+	DragOffsetX           int
+	DragOffsetY           int
+	DragStartX            int // Track where drag started
+	DragStartY            int // Track where drag started
+	TiledX                int // Original tiled position X
+	TiledY                int // Original tiled position Y
+	TiledWidth            int // Original tiled width
+	TiledHeight           int // Original tiled height
+	DraggedWindowIndex    int // Index of window being dragged
+	Windows               []*Window
+	FocusedWindow         int
+	Width                 int
+	Height                int
+	X                     int
+	Y                     int
+	Mode                  Mode
+	terminalMu            sync.Mutex
+	LastMouseX            int
+	LastMouseY            int
+	HasActiveTerminals    bool
+	ShowHelp              bool
+	InteractionMode       bool           // True when actively dragging/resizing
+	MouseSnapping         bool           // Enable/disable mouse snapping
+	WindowExitChan        chan string    // Channel to signal window closure
+	Animations            []*Animation   // Active animations
+	CPUHistory            []float64      // CPU usage history for graph
+	LastCPUUpdate         time.Time      // Last time CPU was updated
+	AutoTiling            bool           // Automatic tiling mode enabled
+	RenamingWindow        bool           // True when renaming a window
+	RenameBuffer          string         // Buffer for new window name
+	PrefixActive          bool           // True when prefix key was pressed (tmux-style)
+	WorkspacePrefixActive bool           // True when Ctrl+B, w was pressed (workspace sub-prefix)
+	MinimizePrefixActive  bool           // True when Ctrl+B, m was pressed (minimize sub-prefix)
+	LastPrefixTime        time.Time      // Time when prefix was activated
+	HelpScrollOffset      int            // Scroll offset for help menu
+	CurrentWorkspace      int            // Current active workspace (1-9)
+	NumWorkspaces         int            // Total number of workspaces
+	WorkspaceFocus        map[int]int    // Remembers focused window per workspace
+	ShowLogs              bool           // True when showing log overlay
+	LogMessages           []LogMessage   // Store log messages
+	LogScrollOffset       int            // Scroll offset for log viewer
+	Notifications         []Notification // Active notifications
+	SelectionMode         bool           // True when in text selection mode
+	ClipboardContent      string         // Store clipboard content from tea.ClipboardMsg
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH

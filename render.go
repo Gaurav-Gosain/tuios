@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -640,7 +641,21 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		allHelpLines = append(allHelpLines, "")
 
 		// Show prefix status
-		if m.PrefixActive {
+		if m.WorkspacePrefixActive {
+			activeStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("10")).
+				Bold(true).
+				Render
+			allHelpLines = append(allHelpLines, activeStyle("WORKSPACE PREFIX ACTIVE - Select workspace (1-9)"))
+			allHelpLines = append(allHelpLines, "")
+		} else if m.MinimizePrefixActive {
+			activeStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("10")).
+				Bold(true).
+				Render
+			allHelpLines = append(allHelpLines, activeStyle("MINIMIZE PREFIX ACTIVE - Restore window (1-9)"))
+			allHelpLines = append(allHelpLines, "")
+		} else if m.PrefixActive {
 			activeStyle := lipgloss.NewStyle().
 				Foreground(lipgloss.Color("10")).
 				Bold(true).
@@ -652,7 +667,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		allHelpLines = append(allHelpLines, keyStyle("WINDOW MANAGEMENT"))
 		allHelpLines = append(allHelpLines, "")
 		allHelpLines = append(allHelpLines, keyStyle("n")+"              "+descStyle("New window"))
-		allHelpLines = append(allHelpLines, keyStyle("w, x")+"           "+descStyle("Close window"))
+		allHelpLines = append(allHelpLines, keyStyle("x")+"              "+descStyle("Close window"))
 		allHelpLines = append(allHelpLines, keyStyle("r")+"              "+descStyle("Rename window"))
 		allHelpLines = append(allHelpLines, keyStyle("m")+"              "+descStyle("Minimize window"))
 		allHelpLines = append(allHelpLines, keyStyle("Shift+M")+"        "+descStyle("Restore all"))
@@ -662,8 +677,17 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		allHelpLines = append(allHelpLines, "")
 		allHelpLines = append(allHelpLines, keyStyle("WORKSPACES"))
 		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("Alt+1-9")+"        "+descStyle("Switch workspace"))
-		allHelpLines = append(allHelpLines, keyStyle("Alt+Shift+1-9")+"  "+descStyle("Move window and follow"))
+
+		// Detect OS and use appropriate modifier key name
+		modifierKey := "Alt"
+		if runtime.GOOS == "darwin" {
+			modifierKey = "Opt"
+		}
+
+		allHelpLines = append(allHelpLines, keyStyle(modifierKey+"+1-9")+"        "+descStyle("Switch workspace"))
+		allHelpLines = append(allHelpLines, keyStyle(modifierKey+"+Shift+1-9")+"  "+descStyle("Move window and follow"))
+		allHelpLines = append(allHelpLines, keyStyle("Ctrl+B, w, 1-9")+" "+descStyle("Switch workspace (prefix)"))
+		allHelpLines = append(allHelpLines, keyStyle("Ctrl+B, w, Shift+1-9")+" "+descStyle("Move window (prefix)"))
 		allHelpLines = append(allHelpLines, "")
 		allHelpLines = append(allHelpLines, keyStyle("MODES"))
 		allHelpLines = append(allHelpLines, "")
@@ -711,6 +735,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		allHelpLines = append(allHelpLines, keyStyle(",")+"              "+descStyle("Rename window"))
 		allHelpLines = append(allHelpLines, keyStyle("n/p")+"            "+descStyle("Next/Previous window"))
 		allHelpLines = append(allHelpLines, keyStyle("0-9")+"            "+descStyle("Jump to window"))
+		allHelpLines = append(allHelpLines, keyStyle("w")+"              "+descStyle("Workspace commands"))
+		allHelpLines = append(allHelpLines, keyStyle("m")+"              "+descStyle("Minimize commands"))
 		allHelpLines = append(allHelpLines, keyStyle("d")+"              "+descStyle("Detach from terminal"))
 		allHelpLines = append(allHelpLines, keyStyle("s")+"              "+descStyle("Toggle selection mode"))
 		allHelpLines = append(allHelpLines, keyStyle("Ctrl+B")+"         "+descStyle("Send literal Ctrl+B"))
@@ -864,6 +890,87 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			X(0).Y(0).Z(1001).ID("logs")
 
 		layers = append(layers, logLayer)
+	}
+
+	// Which-key style overlay for prefix commands (appears after delay)
+	if m.PrefixActive && !m.ShowHelp && time.Since(m.LastPrefixTime) > 500*time.Millisecond {
+		keyStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("11")).
+			Bold(true)
+		descStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("7"))
+
+		var helpLines []string
+
+		if m.WorkspacePrefixActive {
+			// Workspace prefix commands
+			helpLines = []string{
+				keyStyle.Render("Workspace Commands:"),
+				"",
+				keyStyle.Render("1-9") + "        " + descStyle.Render("Switch to workspace"),
+				keyStyle.Render("Shift+1-9") + "  " + descStyle.Render("Move window to workspace"),
+				keyStyle.Render("Esc") + "        " + descStyle.Render("Cancel"),
+			}
+		} else if m.MinimizePrefixActive {
+			// Minimize prefix commands
+			// Count minimized windows in current workspace
+			minimizedCount := 0
+			for _, win := range m.Windows {
+				if win.Minimized && win.Workspace == m.CurrentWorkspace {
+					minimizedCount++
+				}
+			}
+			helpLines = []string{
+				keyStyle.Render("Minimize Commands:"),
+				"",
+				keyStyle.Render("m") + "       " + descStyle.Render("Minimize focused window"),
+				keyStyle.Render("1-9") + "     " + descStyle.Render(fmt.Sprintf("Restore window (%d minimized)", minimizedCount)),
+				keyStyle.Render("Shift+M") + " " + descStyle.Render("Restore all"),
+				keyStyle.Render("Esc") + "     " + descStyle.Render("Cancel"),
+			}
+		} else {
+			// General prefix commands
+			helpLines = []string{
+				keyStyle.Render("Prefix Commands:"),
+				"",
+				keyStyle.Render("c") + "   " + descStyle.Render("Create window"),
+				keyStyle.Render("x") + "   " + descStyle.Render("Close window"),
+				keyStyle.Render(",") + "   " + descStyle.Render("Rename window"),
+				keyStyle.Render("n") + "   " + descStyle.Render("Next window"),
+				keyStyle.Render("p") + "   " + descStyle.Render("Previous window"),
+				keyStyle.Render("0-9") + " " + descStyle.Render("Jump to window"),
+				keyStyle.Render("w") + "   " + descStyle.Render("Workspace commands..."),
+				keyStyle.Render("m") + "   " + descStyle.Render("Minimize commands..."),
+				keyStyle.Render("d") + "   " + descStyle.Render("Detach (exit terminal)"),
+				keyStyle.Render("s") + "   " + descStyle.Render("Selection mode"),
+				keyStyle.Render("?") + "   " + descStyle.Render("Toggle help"),
+			}
+		}
+
+		content := lipgloss.JoinVertical(lipgloss.Left, helpLines...)
+
+		// Style the overlay with border
+		overlayStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#ff6b6b")).
+			Background(lipgloss.Color("#1a1a2e")).
+			Padding(1, 2)
+
+		renderedOverlay := overlayStyle.Render(content)
+
+		// Position in bottom-right corner with some padding
+		overlayWidth := lipgloss.Width(renderedOverlay)
+		overlayHeight := lipgloss.Height(renderedOverlay)
+		overlayX := m.Width - overlayWidth - 2
+		overlayY := m.Height - overlayHeight - 3 // Above status bar
+
+		whichKeyLayer := lipgloss.NewLayer(renderedOverlay).
+			X(overlayX).
+			Y(overlayY).
+			Z(1002). // Above other overlays
+			ID("whichkey")
+
+		layers = append(layers, whichKeyLayer)
 	}
 
 	// Render notifications
