@@ -81,6 +81,9 @@ func runLocal() {
 }
 
 func runSSHServer() {
+	// Set up the input handler to break circular dependency
+	app.SetInputHandler(input.HandleInput)
+
 	// SSH server implementation will be added here
 	log.Printf("Starting TUIOS SSH server on %s:%s", *sshHost, *sshPort)
 
