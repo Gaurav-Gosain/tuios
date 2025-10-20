@@ -1,0 +1,377 @@
+// Package input implements key mapping definitions and ANSI escape sequence builders for TUIOS.
+//
+// This module handles:
+// - Converting Bubble Tea KeyPressMsg to raw terminal bytes
+// - ANSI/VT escape sequence generation for terminal compatibility
+// - Function key support with modifier combinations
+// - macOS Option key character mappings
+package input
+
+import (
+	tea "github.com/charmbracelet/bubbletea/v2"
+)
+
+// getRawKeyBytes converts a Bubble Tea KeyPressMsg to raw bytes for PTY forwarding.
+//
+// Key improvements in this version:
+// - Leverages Bubble Tea v2 beta Key.Text field for better Unicode/international keyboard support
+// - Uses Key.Code and Key.Mod for more reliable modifier key handling
+// - Implements proper ANSI/VT escape sequence generation for terminal compatibility
+// - Better handling of complex key combinations (Ctrl+Shift+Alt combinations)
+// - Improved function key support with modifier combinations
+//
+// The function ensures applications like vim, emacs, etc. work correctly.
+func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
+	key := msg.Key()
+
+	// Handle modifier combinations first
+	if key.Mod != 0 {
+		// Handle Ctrl+letter combinations (standard control codes)
+		if key.Mod&tea.ModCtrl != 0 {
+			// Handle common Ctrl combinations
+			switch key.Code {
+			case tea.KeySpace:
+				return []byte{0x00} // Ctrl+Space = NUL
+			case tea.KeyBackspace:
+				return []byte{0x08} // Ctrl+H
+			case tea.KeyTab:
+				return []byte{0x09} // Ctrl+I
+			case tea.KeyEnter:
+				return []byte{0x0A} // Ctrl+J
+			case tea.KeyEscape:
+				return []byte{0x1B} // Ctrl+[
+			default:
+				// For Ctrl+letter, convert to control codes (1-26)
+				if key.Code >= 'a' && key.Code <= 'z' {
+					return []byte{byte(key.Code - 'a' + 1)}
+				}
+				if key.Code >= 'A' && key.Code <= 'Z' {
+					return []byte{byte(key.Code - 'A' + 1)}
+				}
+				// Handle other Ctrl+symbol combinations
+				switch key.Code {
+				case '@':
+					return []byte{0x00} // Ctrl+@
+				case '[':
+					return []byte{0x1B} // Ctrl+[
+				case '\\':
+					return []byte{0x1C} // Ctrl+\\
+				case ']':
+					return []byte{0x1D} // Ctrl+]
+				case '^':
+					return []byte{0x1E} // Ctrl+^
+				case '_':
+					return []byte{0x1F} // Ctrl+_
+				case '?':
+					return []byte{0x7F} // Ctrl+?
+				}
+			}
+		}
+
+		// Handle Alt+letter combinations (ESC prefix)
+		if key.Mod&tea.ModAlt != 0 {
+			switch key.Code {
+			case tea.KeyBackspace:
+				return []byte{0x1b, 0x7f}
+			default:
+				// Alt+character sends ESC followed by character
+				if key.Text != "" && len(key.Text) == 1 {
+					return []byte{0x1b, key.Text[0]}
+				}
+				if key.Code >= 32 && key.Code <= 126 {
+					return []byte{0x1b, byte(key.Code)}
+				}
+			}
+		}
+
+		// Handle other modifier combinations (function keys, etc.)
+		if modSeq := handleModifierKeys(key); len(modSeq) > 0 {
+			return modSeq
+		}
+	}
+
+	// Handle special keys (no modifiers)
+	switch key.Code {
+	case tea.KeyEnter:
+		return []byte{'\r'}
+	case tea.KeyTab:
+		return []byte{'\t'}
+	case tea.KeyBackspace:
+		return []byte{0x7f}
+	case tea.KeyEscape:
+		return []byte{0x1b}
+	case tea.KeySpace:
+		return []byte{' '}
+	case tea.KeyDelete:
+		return []byte{0x1b, '[', '3', '~'}
+	case tea.KeyInsert:
+		return []byte{0x1b, '[', '2', '~'}
+	case tea.KeyPgUp:
+		return []byte{0x1b, '[', '5', '~'}
+	case tea.KeyPgDown:
+		return []byte{0x1b, '[', '6', '~'}
+	case tea.KeyUp:
+		return []byte{0x1b, '[', 'A'}
+	case tea.KeyDown:
+		return []byte{0x1b, '[', 'B'}
+	case tea.KeyRight:
+		return []byte{0x1b, '[', 'C'}
+	case tea.KeyLeft:
+		return []byte{0x1b, '[', 'D'}
+	case tea.KeyHome:
+		return []byte{0x1b, '[', 'H'}
+	case tea.KeyEnd:
+		return []byte{0x1b, '[', 'F'}
+	}
+
+	// Handle function keys
+	if fnSeq := getFunctionKeyBytes(key.Code); len(fnSeq) > 0 {
+		return fnSeq
+	}
+
+	// For printable characters, use Key.Text if available (handles Unicode, shifted keys)
+	if key.Text != "" {
+		return []byte(key.Text)
+	}
+
+	// Fallback for simple printable characters
+	if key.Code >= 32 && key.Code <= 126 {
+		return []byte{byte(key.Code)}
+	}
+
+	return []byte{}
+}
+
+// handleModifierKeys handles keys with complex modifier combinations
+func handleModifierKeys(key tea.Key) []byte {
+	// Handle function keys with modifiers
+	if fnSeq := getFunctionKeySequence(key.Code, getModParam(key.Mod)); fnSeq != nil {
+		return fnSeq
+	}
+
+	// Handle cursor keys with modifiers
+	if cursorSeq := getCursorSequence(key.Code); cursorSeq != nil {
+		modParam := getModParam(key.Mod)
+		if modParam > 1 {
+			// Insert modifier parameter: ESC[1;{mod}{letter}
+			result := make([]byte, 0, 8)
+			result = append(result, 0x1b, '[', '1', ';', byte('0'+modParam))
+			result = append(result, cursorSeq[len(cursorSeq)-1]) // Last character (A,B,C,D,H,F)
+			return result
+		}
+	}
+
+	return []byte{}
+}
+
+// getModParam calculates modifier parameter for CSI sequences
+func getModParam(mod tea.KeyMod) int {
+	modParam := 1
+	if mod&tea.ModShift != 0 {
+		modParam++
+	}
+	if mod&tea.ModAlt != 0 {
+		modParam += 2
+	}
+	if mod&tea.ModCtrl != 0 {
+		modParam += 4
+	}
+	return modParam
+}
+
+// getFunctionKeyBytes returns bytes for function keys (no modifiers)
+func getFunctionKeyBytes(code rune) []byte {
+	switch code {
+	case tea.KeyF1:
+		return []byte{0x1b, 'O', 'P'}
+	case tea.KeyF2:
+		return []byte{0x1b, 'O', 'Q'}
+	case tea.KeyF3:
+		return []byte{0x1b, 'O', 'R'}
+	case tea.KeyF4:
+		return []byte{0x1b, 'O', 'S'}
+	case tea.KeyF5:
+		return []byte{0x1b, '[', '1', '5', '~'}
+	case tea.KeyF6:
+		return []byte{0x1b, '[', '1', '7', '~'}
+	case tea.KeyF7:
+		return []byte{0x1b, '[', '1', '8', '~'}
+	case tea.KeyF8:
+		return []byte{0x1b, '[', '1', '9', '~'}
+	case tea.KeyF9:
+		return []byte{0x1b, '[', '2', '0', '~'}
+	case tea.KeyF10:
+		return []byte{0x1b, '[', '2', '1', '~'}
+	case tea.KeyF11:
+		return []byte{0x1b, '[', '2', '3', '~'}
+	case tea.KeyF12:
+		return []byte{0x1b, '[', '2', '4', '~'}
+	}
+	return []byte{}
+}
+
+// getCursorSequence returns ANSI escape sequence for cursor movement keys
+func getCursorSequence(code rune) []byte {
+	switch code {
+	case tea.KeyUp:
+		return []byte{0x1b, '[', 'A'}
+	case tea.KeyDown:
+		return []byte{0x1b, '[', 'B'}
+	case tea.KeyRight:
+		return []byte{0x1b, '[', 'C'}
+	case tea.KeyLeft:
+		return []byte{0x1b, '[', 'D'}
+	case tea.KeyHome:
+		return []byte{0x1b, '[', 'H'}
+	case tea.KeyEnd:
+		return []byte{0x1b, '[', 'F'}
+	}
+	return nil
+}
+
+// getFunctionKeySequence returns ANSI sequence for function keys with optional modifiers
+func getFunctionKeySequence(code rune, modParam int) []byte {
+	var baseSeq []byte
+
+	switch code {
+	case tea.KeyF1:
+		baseSeq = []byte{0x1b, 'O', 'P'}
+	case tea.KeyF2:
+		baseSeq = []byte{0x1b, 'O', 'Q'}
+	case tea.KeyF3:
+		baseSeq = []byte{0x1b, 'O', 'R'}
+	case tea.KeyF4:
+		baseSeq = []byte{0x1b, 'O', 'S'}
+	case tea.KeyF5:
+		return buildCSISequence(15, modParam)
+	case tea.KeyF6:
+		return buildCSISequence(17, modParam)
+	case tea.KeyF7:
+		return buildCSISequence(18, modParam)
+	case tea.KeyF8:
+		return buildCSISequence(19, modParam)
+	case tea.KeyF9:
+		return buildCSISequence(20, modParam)
+	case tea.KeyF10:
+		return buildCSISequence(21, modParam)
+	case tea.KeyF11:
+		return buildCSISequence(23, modParam)
+	case tea.KeyF12:
+		return buildCSISequence(24, modParam)
+	default:
+		return nil
+	}
+
+	// F1-F4 with modifiers need different handling
+	if modParam > 1 && baseSeq != nil {
+		// Convert to CSI format: ESC[1;{mod}{P,Q,R,S}
+		result := []byte{0x1b, '[', '1', ';', byte('0' + modParam)}
+		result = append(result, baseSeq[len(baseSeq)-1]) // Last char (P,Q,R,S)
+		return result
+	}
+
+	return baseSeq
+}
+
+// buildCSISequence builds a CSI sequence like ESC[{num};{mod}~ or ESC[{num}~
+func buildCSISequence(num, modParam int) []byte {
+	seq := []byte{0x1b, '['}
+
+	// Add number
+	if num >= 10 {
+		seq = append(seq, byte('0'+num/10), byte('0'+num%10))
+	} else {
+		seq = append(seq, byte('0'+num))
+	}
+
+	// Add modifier if present
+	if modParam > 1 {
+		seq = append(seq, ';', byte('0'+modParam))
+	}
+
+	seq = append(seq, '~')
+	return seq
+}
+
+// ForwardKeyToTerminal is a convenience function that can be called to forward
+// a key directly to a terminal window. This is useful for implementing key
+// forwarding in other parts of the application.
+func ForwardKeyToTerminal(msg tea.KeyPressMsg, w interface{ SendInput([]byte) error }) tea.Cmd {
+	rawInput := getRawKeyBytes(msg)
+	if len(rawInput) > 0 {
+		if err := w.SendInput(rawInput); err != nil {
+			// Terminal unavailable
+			return nil
+		}
+	}
+	return nil
+}
+
+// BuildANSISequence is a public helper that builds an ANSI escape sequence for a key.
+// This can be useful for testing or debugging key sequences.
+func BuildANSISequence(msg tea.KeyPressMsg) string {
+	return string(getRawKeyBytes(msg))
+}
+
+// IsMacOSOptionKey checks if a rune represents a macOS Option+digit key press
+// and returns the digit (1-9) and true if it matches, or 0 and false otherwise.
+//
+// macOS Option key mappings:
+// Option+1 → ¡, Option+2 → ™, Option+3 → £, Option+4 → ¢, Option+5 → ∞
+// Option+6 → §, Option+7 → ¶, Option+8 → •, Option+9 → ª
+func IsMacOSOptionKey(r rune) (digit int, ok bool) {
+	switch r {
+	case '¡':
+		return 1, true
+	case '™':
+		return 2, true
+	case '£':
+		return 3, true
+	case '¢':
+		return 4, true
+	case '∞':
+		return 5, true
+	case '§':
+		return 6, true
+	case '¶':
+		return 7, true
+	case '•':
+		return 8, true
+	case 'ª':
+		return 9, true
+	default:
+		return 0, false
+	}
+}
+
+// IsMacOSOptionShiftKey checks if a rune represents a macOS Option+Shift+digit key press
+// and returns the digit (1-9) and true if it matches, or 0 and false otherwise.
+//
+// macOS Option+Shift key mappings:
+// Option+Shift+1 → ⁄, Option+Shift+2 → €, Option+Shift+3 → ‹, Option+Shift+4 → ›
+// Option+Shift+5 → ﬁ, Option+Shift+6 → ﬂ, Option+Shift+7 → ‡, Option+Shift+8 → °
+// Option+Shift+9 → ·
+func IsMacOSOptionShiftKey(r rune) (digit int, ok bool) {
+	switch r {
+	case '⁄':
+		return 1, true
+	case '€':
+		return 2, true
+	case '‹':
+		return 3, true
+	case '›':
+		return 4, true
+	case 'ﬁ':
+		return 5, true
+	case 'ﬂ':
+		return 6, true
+	case '‡':
+		return 7, true
+	case '°':
+		return 8, true
+	case '·':
+		return 9, true
+	default:
+		return 0, false
+	}
+}

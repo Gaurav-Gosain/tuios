@@ -2,3 +2,4 @@ tuios
 dist/
 *.mov
 .DS_Store
+!tuios/

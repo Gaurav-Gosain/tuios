@@ -1,0 +1,169 @@
+# GoReleaser configuration for TUIOS
+# Documentation: https://goreleaser.com
+
+version: 2
+
+before:
+  hooks:
+    # Ensure dependencies are up to date
+    - go mod tidy
+    # Run tests before building
+    # - go test ./...
+
+builds:
+  - id: tuios
+    main: ./cmd/tuios
+    binary: tuios
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+      - openbsd
+    goarch:
+      - amd64
+      - arm64
+      - arm
+      - "386"
+    goarm:
+      - "6"
+      - "7"
+    ignore:
+      # Windows ARM builds are not commonly needed
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      # FreeBSD/OpenBSD ARM builds
+      - goos: freebsd
+        goarch: arm
+      - goos: openbsd
+        goarch: arm
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
+archives:
+  - id: tuios-archive
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+  groups:
+    - title: "New Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Performance Improvements"
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "Documentation"
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: "Other Changes"
+      order: 999
+
+release:
+  github:
+    owner: Gaurav-Gosain
+    name: tuios
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## TUIOS {{ .Tag }} Release
+
+    A terminal-based window manager with tmux-style keybindings.
+
+    ### Installation
+
+    Download the appropriate binary for your platform below, extract it, and run:
+
+    ```bash
+    ./tuios
+    ```
+
+    Or install via Go:
+
+    ```bash
+    go install github.com/Gaurav-Gosain/tuios/cmd/tuios@{{ .Tag }}
+    ```
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/Gaurav-Gosain/tuios/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# Homebrew tap (optional - uncomment if you want to publish to Homebrew)
+# brews:
+#   - repository:
+#       owner: Gaurav-Gosain
+#       name: homebrew-tap
+#     directory: Formula
+#     homepage: https://github.com/Gaurav-Gosain/tuios
+#     description: "A terminal UI operating system with window management"
+#     license: MIT
+#     test: |
+#       system "#{bin}/tuios", "--version"
+#     install: |
+#       bin.install "tuios"
+
+# Docker images (optional - uncomment if you want automated Docker builds)
+# dockers:
+#   - image_templates:
+#       - "ghcr.io/gaurav-gosain/tuios:{{ .Tag }}"
+#       - "ghcr.io/gaurav-gosain/tuios:v{{ .Major }}"
+#       - "ghcr.io/gaurav-gosain/tuios:v{{ .Major }}.{{ .Minor }}"
+#       - "ghcr.io/gaurav-gosain/tuios:latest"
+#     dockerfile: Dockerfile
+#     build_flag_templates:
+#       - "--pull"
+#       - "--label=org.opencontainers.image.created={{.Date}}"
+#       - "--label=org.opencontainers.image.title={{.ProjectName}}"
+#       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+#       - "--label=org.opencontainers.image.version={{.Version}}"
+
+# Announce releases (optional - uncomment to enable)
+# announce:
+#   twitter:
+#     enabled: true
+#     message_template: "TUIOS {{ .Tag }} is out! Check it out at {{ .ReleaseURL }}"

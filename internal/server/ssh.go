@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish/v2"
@@ -15,8 +17,8 @@ import (
 	"github.com/charmbracelet/wish/v2/logging"
 )
 
-// startSSHServer initializes and runs the SSH server
-func startSSHServer(ctx context.Context, host, port, keyPath string) error {
+// StartSSHServer initializes and runs the SSH server
+func StartSSHServer(ctx context.Context, host, port, keyPath string) error {
 	// Determine host key path
 	var hostKeyPath string
 	if keyPath != "" {
@@ -36,7 +38,7 @@ func startSSHServer(ctx context.Context, host, port, keyPath string) error {
 		wish.WithHostKeyPath(hostKeyPath),
 		wish.WithMiddleware(
 			// Bubble Tea middleware for interactive sessions
-			bubbletea.Middleware(tuiosSSHHandler),
+			bubbletea.Middleware(teaHandler),
 			// Logging middleware for connection tracking
 			logging.Middleware(),
 		),
@@ -61,8 +63,8 @@ func startSSHServer(ctx context.Context, host, port, keyPath string) error {
 	return server.Shutdown(ctx)
 }
 
-// tuiosSSHHandler creates a TUIOS instance for each SSH session
-func tuiosSSHHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
+// teaHandler creates a TUIOS instance for each SSH session
+func teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
 	// Get PTY info from session
 	pty, _, active := session.Pty()
 	if !active {
@@ -71,7 +73,7 @@ func tuiosSSHHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
 	}
 
 	// Create a TUIOS instance for this session
-	tuiosInstance := &OS{
+	tuiosInstance := &app.OS{
 		FocusedWindow:    -1,                    // No focused window initially
 		WindowExitChan:   make(chan string, 10), // Buffer for window exit signals
 		MouseSnapping:    false,                 // Disable mouse snapping by default
@@ -88,6 +90,6 @@ func tuiosSSHHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
 	return tuiosInstance, []tea.ProgramOption{
 		tea.WithAltScreen(),
 		tea.WithMouseAllMotion(),
-		tea.WithFPS(NormalFPS),
+		tea.WithFPS(config.NormalFPS),
 	}
 }

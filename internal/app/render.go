@@ -1,13 +1,15 @@
-package main
+package app
 
 import (
 	"fmt"
 	"image/color"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/x/vt"
 )
@@ -25,42 +27,11 @@ const (
 	BorderHorizontal string = string(rune(0x2500))
 )
 
-var (
-	stringBuilderPool = sync.Pool{
-		New: func() any {
-			return &strings.Builder{}
-		},
-	}
-
-	layerPool = sync.Pool{
-		New: func() any {
-			layers := make([]*lipgloss.Layer, 0, 16)
-			return &layers
-		},
-	}
-
-	// Pool for byte slices used in I/O operations
-	byteSlicePool = sync.Pool{
-		New: func() any {
-			buf := make([]byte, 32*1024)
-			return &buf
-		},
-	}
-
-	// Pool for lipgloss.Style objects to reduce allocations
-	stylePool = sync.Pool{
-		New: func() any {
-			style := lipgloss.NewStyle()
-			return &style
-		},
-	}
-)
-
 // RightString returns a right-aligned string with decorative borders.
 func RightString(str string, width int, color color.Color) string {
 	spaces := width - lipgloss.Width(str)
-	style := stylePool.Get().(*lipgloss.Style)
-	defer stylePool.Put(style)
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
 	fg := style.Foreground(color)
 
 	if spaces < 0 {
@@ -73,14 +44,14 @@ func RightString(str string, width int, color color.Color) string {
 }
 
 func makeRounded(content string, color color.Color) string {
-	style := stylePool.Get().(*lipgloss.Style)
-	defer stylePool.Put(style)
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
 	render := style.Foreground(color).Render
 	content = render(LeftHalfCircle) + content + render(RightHalfCircle)
 	return content
 }
 
-func addToBorder(content string, color color.Color, window *Window, isRenaming bool, renameBuffer string, isTiling bool) string {
+func addToBorder(content string, color color.Color, window *terminal.Window, isRenaming bool, renameBuffer string, isTiling bool) string {
 	width := max(
 		// Ensure width is never negative
 		lipgloss.Width(content)-2, 0)
@@ -167,7 +138,7 @@ func addToBorder(content string, color color.Color, window *Window, isRenaming b
 	return strings.Join(lines, "\n")
 }
 
-func (m *OS) renderTerminal(window *Window, isFocused bool, inTerminalMode bool) string {
+func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalMode bool) string {
 	// Smart caching: use cache if window is being manipulated OR if content hasn't changed
 	if (window.IsBeingManipulated || !window.ContentDirty) && window.CachedContent != "" {
 		return window.CachedContent
@@ -199,11 +170,8 @@ func (m *OS) renderTerminal(window *Window, isFocused bool, inTerminalMode bool)
 	cursorY := cursor.Y
 
 	// Use string builder pool for efficient string building
-	builder := stringBuilderPool.Get().(*strings.Builder)
-	defer func() {
-		builder.Reset()
-		stringBuilderPool.Put(builder)
-	}()
+	builder := pool.GetStringBuilder()
+	defer pool.PutStringBuilder(builder)
 
 	// Pre-allocate capacity for better performance
 	estimatedSize := (window.Width - 2) * (window.Height - 2)
@@ -222,11 +190,8 @@ func (m *OS) renderTerminal(window *Window, isFocused bool, inTerminalMode bool)
 		}
 
 		// Use line builder for all windows to preserve styling
-		lineBuilder := stringBuilderPool.Get().(*strings.Builder)
-		defer func(lb *strings.Builder) {
-			lb.Reset()
-			stringBuilderPool.Put(lb)
-		}(lineBuilder)
+		lineBuilder := pool.GetStringBuilder()
+		defer pool.PutStringBuilder(lineBuilder)
 
 		for x := range maxX {
 			cell := screen.Cell(x, y)
@@ -385,12 +350,9 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	canvas := lipgloss.NewCanvas()
 
 	// Get layers slice from pool
-	layersPtr := layerPool.Get().(*[]*lipgloss.Layer)
+	layersPtr := pool.GetLayerSlice()
 	layers := (*layersPtr)[:0] // Reset length but keep capacity
-	defer func() {
-		*layersPtr = layers
-		layerPool.Put(layersPtr)
-	}()
+	defer pool.PutLayerSlice(layersPtr)
 
 	// Pre-compute viewport bounds for culling
 	viewportWidth := m.Width
@@ -415,7 +377,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		// Check if this window is being animated
 		isAnimating := false
 		for _, anim := range m.Animations {
-			if anim.WindowIndex == i && !anim.Complete {
+			if anim.Window == m.Windows[i] && !anim.Complete {
 				isAnimating = true
 				break
 			}
@@ -498,7 +460,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		// Give animating windows highest Z-index so they appear on top
 		zIndex := window.Z
 		if isAnimating {
-			zIndex = 999 // High z-index for animating windows
+			zIndex = config.ZIndexAnimating // High z-index for animating windows
 		}
 
 		// Cache the layer
@@ -559,7 +521,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	timeLayer := lipgloss.NewLayer(renderedTime).
 		X(timeX).
 		Y(0).
-		Z(1001). // High Z to appear above windows
+		Z(config.ZIndexTime). // High Z to appear above windows
 		ID("time")
 
 	layers = append(layers, timeLayer)
@@ -655,6 +617,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				Render
 			allHelpLines = append(allHelpLines, activeStyle("MINIMIZE PREFIX ACTIVE - Restore window (1-9)"))
 			allHelpLines = append(allHelpLines, "")
+		} else if m.TilingPrefixActive {
+			activeStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("10")).
+				Bold(true).
+				Render
+			allHelpLines = append(allHelpLines, activeStyle("WINDOW PREFIX ACTIVE - Terminal management"))
+			allHelpLines = append(allHelpLines, "")
 		} else if m.PrefixActive {
 			activeStyle := lipgloss.NewStyle().
 				Foreground(lipgloss.Color("10")).
@@ -732,14 +701,24 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		allHelpLines = append(allHelpLines, keyStyle("PREFIX (Ctrl+B) - Works in all modes:"))
 		allHelpLines = append(allHelpLines, keyStyle("c")+"              "+descStyle("Create window"))
 		allHelpLines = append(allHelpLines, keyStyle("x")+"              "+descStyle("Close window"))
-		allHelpLines = append(allHelpLines, keyStyle(",")+"              "+descStyle("Rename window"))
-		allHelpLines = append(allHelpLines, keyStyle("n/p")+"            "+descStyle("Next/Previous window"))
+		allHelpLines = append(allHelpLines, keyStyle(",/r")+"            "+descStyle("Rename window"))
+		allHelpLines = append(allHelpLines, keyStyle("n/Tab")+"          "+descStyle("Next window"))
+		allHelpLines = append(allHelpLines, keyStyle("p/Shift+Tab")+"    "+descStyle("Previous window"))
 		allHelpLines = append(allHelpLines, keyStyle("0-9")+"            "+descStyle("Jump to window"))
+		allHelpLines = append(allHelpLines, keyStyle("space")+"          "+descStyle("Toggle tiling"))
 		allHelpLines = append(allHelpLines, keyStyle("w")+"              "+descStyle("Workspace commands"))
 		allHelpLines = append(allHelpLines, keyStyle("m")+"              "+descStyle("Minimize commands"))
+		allHelpLines = append(allHelpLines, keyStyle("t")+"              "+descStyle("Window commands"))
 		allHelpLines = append(allHelpLines, keyStyle("d")+"              "+descStyle("Detach from terminal"))
 		allHelpLines = append(allHelpLines, keyStyle("s")+"              "+descStyle("Toggle selection mode"))
 		allHelpLines = append(allHelpLines, keyStyle("Ctrl+B")+"         "+descStyle("Send literal Ctrl+B"))
+		allHelpLines = append(allHelpLines, "")
+		allHelpLines = append(allHelpLines, keyStyle("WINDOW PREFIX (Ctrl+B, t):"))
+		allHelpLines = append(allHelpLines, keyStyle("n")+"              "+descStyle("New window"))
+		allHelpLines = append(allHelpLines, keyStyle("x")+"              "+descStyle("Close window"))
+		allHelpLines = append(allHelpLines, keyStyle("r")+"              "+descStyle("Rename window"))
+		allHelpLines = append(allHelpLines, keyStyle("Tab/Shift+Tab")+"  "+descStyle("Next/Previous window"))
+		allHelpLines = append(allHelpLines, keyStyle("t")+"              "+descStyle("Toggle tiling mode"))
 		allHelpLines = append(allHelpLines, "")
 		allHelpLines = append(allHelpLines, keyStyle("q, Ctrl+C")+"      "+descStyle("Quit"))
 
@@ -812,7 +791,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		)
 
 		helpLayer := lipgloss.NewLayer(centeredHelp).
-			X(0).Y(0).Z(1000).ID("help")
+			X(0).Y(0).Z(config.ZIndexHelp).ID("help")
 
 		layers = append(layers, helpLayer)
 	}
@@ -887,13 +866,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			lipgloss.Center, lipgloss.Center, logBox)
 
 		logLayer := lipgloss.NewLayer(centeredLogs).
-			X(0).Y(0).Z(1001).ID("logs")
+			X(0).Y(0).Z(config.ZIndexLogs).ID("logs")
 
 		layers = append(layers, logLayer)
 	}
 
 	// Which-key style overlay for prefix commands (appears after delay)
-	if m.PrefixActive && !m.ShowHelp && time.Since(m.LastPrefixTime) > 500*time.Millisecond {
+	if m.PrefixActive && !m.ShowHelp && time.Since(m.LastPrefixTime) > config.WhichKeyDelay {
 		keyStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("11")).
 			Bold(true)
@@ -928,6 +907,19 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				keyStyle.Render("Shift+M") + " " + descStyle.Render("Restore all"),
 				keyStyle.Render("Esc") + "     " + descStyle.Render("Cancel"),
 			}
+		} else if m.TilingPrefixActive {
+			// Window prefix commands
+			helpLines = []string{
+				keyStyle.Render("Window Commands:"),
+				"",
+				keyStyle.Render("n") + "         " + descStyle.Render("New window"),
+				keyStyle.Render("x") + "         " + descStyle.Render("Close window"),
+				keyStyle.Render("r") + "         " + descStyle.Render("Rename window"),
+				keyStyle.Render("Tab") + "       " + descStyle.Render("Next window"),
+				keyStyle.Render("Shift+Tab") + " " + descStyle.Render("Previous window"),
+				keyStyle.Render("t") + "         " + descStyle.Render("Toggle tiling mode"),
+				keyStyle.Render("Esc") + "       " + descStyle.Render("Cancel"),
+			}
 		} else {
 			// General prefix commands
 			helpLines = []string{
@@ -941,6 +933,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				keyStyle.Render("0-9") + " " + descStyle.Render("Jump to window"),
 				keyStyle.Render("w") + "   " + descStyle.Render("Workspace commands..."),
 				keyStyle.Render("m") + "   " + descStyle.Render("Minimize commands..."),
+				keyStyle.Render("t") + "   " + descStyle.Render("Window commands..."),
 				keyStyle.Render("d") + "   " + descStyle.Render("Detach (exit terminal)"),
 				keyStyle.Render("s") + "   " + descStyle.Render("Selection mode"),
 				keyStyle.Render("?") + "   " + descStyle.Render("Toggle help"),
@@ -967,7 +960,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		whichKeyLayer := lipgloss.NewLayer(renderedOverlay).
 			X(overlayX).
 			Y(overlayY).
-			Z(1002). // Above other overlays
+			Z(config.ZIndexWhichKey). // Above other overlays
 			ID("whichkey")
 
 		layers = append(layers, whichKeyLayer)
@@ -997,8 +990,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 			// Fade out in last 500ms
 			timeLeft := notif.Duration - time.Since(notif.StartTime)
-			if timeLeft < time.Duration(NotificationFadeOutDuration)*time.Millisecond {
-				opacity *= float64(timeLeft) / float64(time.Duration(NotificationFadeOutDuration)*time.Millisecond)
+			if timeLeft < config.NotificationFadeOutDuration {
+				opacity *= float64(timeLeft) / float64(config.NotificationFadeOutDuration)
 			}
 
 			// Skip if fully transparent
@@ -1070,7 +1063,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 			// Create notification layer
 			notifLayer := lipgloss.NewLayer(notifBox).
-				X(notifX).Y(currentY).Z(ZIndexNotifications).
+				X(notifX).Y(currentY).Z(config.ZIndexNotifications).
 				ID(fmt.Sprintf("notif-%s", notif.ID))
 
 			layers = append(layers, notifLayer)
@@ -1259,11 +1252,11 @@ func (m *OS) renderDock() *lipgloss.Layer {
 	)
 
 	// Return the dock layer positioned to show everything
-	return lipgloss.NewLayer(fullDock).X(0).Y(m.Height - DockHeight).Z(1000).ID("dock")
+	return lipgloss.NewLayer(fullDock).X(0).Y(m.Height - config.DockHeight).Z(config.ZIndexDock).ID("dock")
 }
 
 // isPositionInSelection checks if the given position is within the current text selection.
-func (m *OS) isPositionInSelection(window *Window, x, y int) bool {
+func (m *OS) isPositionInSelection(window *terminal.Window, x, y int) bool {
 	// Return false if there's no selection (either actively selecting or completed selection)
 	if !window.IsSelecting && window.SelectedText == "" {
 		return false

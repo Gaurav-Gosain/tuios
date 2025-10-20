@@ -48,6 +48,274 @@ interaction.
 - **SSH Server Mode**: Run TUIOS as SSH server for remote terminal multiplexing
 - **Session Isolation**: Each SSH connection gets dedicated TUIOS instance
 
+## Architecture
+
+### How TUIOS Works
+
+TUIOS manages multiple terminal sessions through a hierarchical system of workspaces, windows, and PTY processes. The diagram below illustrates the core concepts and data flow:
+
+```mermaid
+graph TB
+    %% User Interaction Layer
+    User([User Input<br/>Keyboard/Mouse])
+
+    %% Input Processing
+    Input[Input Handler<br/>Keyboard events<br/>Mouse events<br/>Clipboard ops]
+
+    %% Core OS
+    OS[TUIOS OS<br/>Main Orchestrator<br/>9 Workspaces<br/>Window management<br/>Animation system<br/>Rendering pipeline]
+
+    %% Workspaces
+    WS1[Workspace 1<br/>Windows: 1,2,3]
+    WS2[Workspace 2<br/>Windows: 4,5]
+    WS3[Workspace 3-9<br/>...]
+
+    %% Windows in Workspace 1
+    W1[Window 1<br/>Name: vim<br/>Pos: 10,5<br/>Size: 80x24<br/>Visible]
+    W2[Window 2<br/>Name: logs<br/>Pos: 90,5<br/>Size: 80x24<br/>Minimized]
+    W3[Window 3<br/>Pos: 10,30<br/>Size: 80x20<br/>Visible]
+
+    %% PTY Processes
+    PTY1[PTY 1<br/>bash PID:12345<br/>I/O goroutines]
+    PTY2[PTY 2<br/>zsh PID:12346<br/>I/O goroutines]
+    PTY3[PTY 3<br/>fish PID:12347<br/>I/O goroutines]
+
+    %% Virtual Terminals
+    VT1[Virtual Terminal 1<br/>Screen buffer<br/>ANSI parsing<br/>80x24 cells]
+    VT2[Virtual Terminal 2<br/>Screen buffer<br/>ANSI parsing<br/>80x24 cells]
+    VT3[Virtual Terminal 3<br/>Screen buffer<br/>ANSI parsing<br/>80x20 cells]
+
+    %% Shell Processes
+    Shell1[bash -i<br/>Running: vim]
+    Shell2[zsh -i<br/>Running: tail -f]
+    Shell3[fish -i<br/>Running: htop]
+
+    %% Rendering System
+    Render[Rendering Engine<br/>Layer composition<br/>Smart caching<br/>Viewport culling<br/>60 FPS updates]
+
+    Animations[Animation System<br/>Minimize/Restore<br/>Snap/Tile<br/>Smooth transitions]
+
+    Canvas[Lipgloss Canvas<br/>Terminal output<br/>ANSI codes]
+
+    Terminal([Physical Terminal<br/>User's screen])
+
+    %% Dock
+    Dock[Dock<br/>Minimized windows<br/>Pill-style items]
+
+    %% Data Flow
+    User -->|Key press/Click| Input
+    Input -->|Commands| OS
+
+    OS -.->|Manages| WS1
+    OS -.->|Manages| WS2
+    OS -.->|Manages| WS3
+
+    WS1 -->|Contains| W1
+    WS1 -->|Contains| W2
+    WS1 -->|Contains| W3
+
+    W1 -->|Owns| PTY1
+    W2 -->|Owns| PTY2
+    W3 -->|Owns| PTY3
+
+    PTY1 <-->|Bidirectional I/O| VT1
+    PTY2 <-->|Bidirectional I/O| VT2
+    PTY3 <-->|Bidirectional I/O| VT3
+
+    PTY1 <-->|stdin/stdout/stderr| Shell1
+    PTY2 <-->|stdin/stdout/stderr| Shell2
+    PTY3 <-->|stdin/stdout/stderr| Shell3
+
+    OS -->|Triggers| Animations
+    Animations -.->|Updates positions| W1
+    Animations -.->|Updates positions| W2
+
+    W2 -.->|When minimized| Dock
+
+    OS -->|Render request| Render
+    VT1 -->|Screen content| Render
+    VT2 -->|Screen content| Render
+    VT3 -->|Screen content| Render
+    Dock -->|Dock UI| Render
+
+    Render -->|Composites| Canvas
+    Canvas -->|ANSI output| Terminal
+
+    %% Styling
+    classDef user fill:#4865f2,stroke:#333,stroke-width:2px,color:#fff
+    classDef core fill:#8b5cf6,stroke:#333,stroke-width:3px,color:#fff
+    classDef workspace fill:#22c55e,stroke:#333,stroke-width:2px,color:#fff
+    classDef window fill:#f59e0b,stroke:#333,stroke-width:2px,color:#fff
+    classDef pty fill:#ec4899,stroke:#333,stroke-width:2px,color:#fff
+    classDef vt fill:#06b6d4,stroke:#333,stroke-width:2px,color:#fff
+    classDef shell fill:#64748b,stroke:#333,stroke-width:2px,color:#fff
+    classDef render fill:#a855f7,stroke:#333,stroke-width:2px,color:#fff
+
+    class User,Terminal user
+    class OS,Input core
+    class WS1,WS2,WS3 workspace
+    class W1,W2,W3 window
+    class PTY1,PTY2,PTY3 pty
+    class VT1,VT2,VT3 vt
+    class Shell1,Shell2,Shell3 shell
+    class Render,Animations,Canvas,Dock render
+```
+
+#### Key Concepts
+
+**Workspaces**: TUIOS provides 9 independent workspaces (like virtual desktops). Each workspace can contain multiple windows. You can switch between workspaces using <kbd>Alt</kbd>+<kbd>1-9</kbd>.
+
+**Windows**: Each window represents a terminal session with its own:
+
+- Position (X, Y coordinates)
+- Size (width × height in characters)
+- Custom name (optional, for easy identification)
+- Minimization state (visible or minimized to dock)
+- Workspace assignment (which workspace it belongs to)
+
+**PTY (Pseudo-Terminal)**: Each window owns a PTY that creates a bidirectional communication channel with a shell process. The PTY handles:
+
+- I/O operations through dedicated goroutines
+- Process lifecycle (spawn, monitor, cleanup)
+- Terminal size changes (SIGWINCH)
+
+**Virtual Terminal (VT)**: Processes ANSI escape sequences from the shell and maintains:
+
+- Screen buffer (grid of characters with attributes)
+- Cursor position
+- Text attributes (colors, bold, italic, etc.)
+- Scrollback history
+
+**Rendering Pipeline**:
+
+1. VT screen buffers are read (60 FPS polling)
+2. Windows are composed into layers with borders, titles, and content
+3. Smart caching skips unchanged windows
+4. Animations smoothly transition window positions
+5. Lipgloss canvas composites everything
+6. Final ANSI output is sent to the physical terminal
+
+**Animation System**: Handles smooth transitions for:
+
+- Minimize: Window → Dock (with easing)
+- Restore: Dock → Window position
+- Snap: Window → Screen edge/corner
+- Tiling: Multiple windows rearranging
+
+### Package Architecture
+
+TUIOS is built with a clean, modular architecture organized into focused packages with clear separation of concerns. The dependency graph below shows the relationship between all packages:
+
+```mermaid
+graph TB
+    %% Entry point
+    main[cmd/tuios<br/>Entry Point]
+
+    %% Low-level packages (no dependencies)
+    config[config<br/>Constants & Configuration]
+    pool[pool<br/>Memory Pools]
+
+    %% Mid-level packages
+    terminal[terminal<br/>Window & PTY Management]
+    system[system<br/>Platform-Specific<br/>System Info]
+    ui[ui<br/>Animations]
+
+    %% High-level packages
+    layout[layout<br/>Tiling Algorithms]
+    server[server<br/>SSH Server Mode]
+
+    %% Core application
+    app[app<br/>Core Orchestration]
+
+    %% Input handling
+    input[input<br/>Input Handlingo]
+
+    %% External dependencies
+    bubbletea[Bubble Tea v2<br/>TUI Framework]
+    lipgloss[Lipgloss v2<br/>Styling]
+    vt[Charm VT<br/>Virtual Terminal]
+    pty_lib[go-pty<br/>PTY Interface]
+    ssh_lib[Charm SSH/Wish<br/>SSH Server]
+
+    %% Dependencies - Level 1 to Level 2
+    terminal --> config
+    terminal --> pool
+    terminal --> pty_lib
+    terminal --> vt
+    ui --> terminal
+    ui --> config
+    system --> config
+
+    %% Dependencies - Level 2 to Level 3
+    layout --> terminal
+    layout --> ui
+    layout --> config
+    server --> config
+    server --> ssh_lib
+
+    %% Dependencies - Level 3 to Level 4 (app)
+    app --> terminal
+    app --> ui
+    app --> system
+    app --> config
+    app --> pool
+    app --> layout
+
+    %% Dependencies - Level 4 to Level 5 (input)
+    input --> app
+    input --> terminal
+    input --> config
+
+    %% Dependencies - Level 5 to Entry point
+    main --> app
+    main --> input
+    main --> server
+    main --> config
+
+    %% External library dependencies
+    main --> bubbletea
+    app --> bubbletea
+    app --> lipgloss
+    input --> bubbletea
+    server --> bubbletea
+
+    %% Styling
+    classDef entry fill:#4865f2,stroke:#333,stroke-width:3px,color:#fff
+    classDef lowLevel fill:#22c55e,stroke:#333,stroke-width:2px,color:#fff
+    classDef midLevel fill:#f59e0b,stroke:#333,stroke-width:2px,color:#fff
+    classDef highLevel fill:#ec4899,stroke:#333,stroke-width:2px,color:#fff
+    classDef core fill:#8b5cf6,stroke:#333,stroke-width:3px,color:#fff
+    classDef external fill:#64748b,stroke:#333,stroke-width:1px,color:#fff
+
+    class main entry
+    class config,pool lowLevel
+    class terminal,ui,system midLevel
+    class layout,server highLevel
+    class app,input core
+    class bubbletea,lipgloss,vt,pty_lib,ssh_lib external
+```
+
+### Package Responsibilities
+
+- **cmd/tuios**: Application entry point, CLI argument parsing, initialization
+- **config**: Centralized constants (100+ configuration values)
+- **pool**: Memory pool management for performance optimization
+- **terminal**: Window lifecycle, PTY management, shell detection
+- **ui**: Animation system for smooth transitions
+- **system**: Platform-specific system information (CPU monitoring)
+- **layout**: Tiling algorithms and window positioning
+- **server**: SSH server mode for remote access
+- **app**: Core application logic, window management, rendering, workspace management
+- **input**: Comprehensive input handling (keyboard, mouse, selection, clipboard)
+
+### Design Principles
+
+- **One-way dependencies**: Clear hierarchy prevents circular dependencies
+- **Platform abstraction**: Build tags for Linux/macOS/Windows support
+- **Separation of concerns**: Each package has a single, well-defined purpose
+- **Performance focused**: Memory pools, smart caching, viewport culling
+- **Testable architecture**: Focused packages enable comprehensive unit testing
+
 ## Installation
 
 You can install TUIOS using one of the following methods:
@@ -61,12 +329,12 @@ the archive to a location of your choice.
 ### Install using Go
 
 > [!NOTE]
-> Prerequisite: [Go](https://go.dev/) 1.21 or later installed on your system.
+> Prerequisite: [Go](https://go.dev/) 1.24 or later installed on your system.
 
 You can also install TUIOS using the `go install` command:
 
 ```bash
-go install github.com/gaurav-gosain/tuios@latest
+go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest
 ```
 
 ### Run using Docker
@@ -98,7 +366,7 @@ If you prefer to build from source, follow these steps:
 3. Build the executable:
 
    ```bash
-   go build
+   go build -o tuios ./cmd/tuios
    ```
 
 4. Run TUIOS:
@@ -107,9 +375,15 @@ If you prefer to build from source, follow these steps:
    ./tuios
    ```
 
+   Or check the version:
+
+   ```bash
+   ./tuios --version
+   ```
+
 ### Prerequisites
 
-- Go 1.21 or later (for building from source or using `go install`)
+- Go 1.24 or later (for building from source or using `go install`)
 - A terminal with true color support (most modern terminals)
 
 ### Dependencies
@@ -192,11 +466,11 @@ ssh -p 2222 your-server-ip
 > [!NOTE]
 > On macOS, use <kbd>Option</kbd> instead of <kbd>Alt</kbd>. The <kbd>Ctrl</kbd>+<kbd>B</kbd> prefix alternatives work universally and are recommended for tiling window managers like Aerospace.
 
-| Key                                                                | Action                                    |
-| ------------------------------------------------------------------ | ----------------------------------------- |
-| <kbd>Alt</kbd>+<kbd>1</kbd>-<kbd>9</kbd>                           | Switch to workspace 1-9                   |
-| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>9</kbd>          | Move window to workspace and follow       |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd>, <kbd>w</kbd>, <kbd>1</kbd>-<kbd>9</kbd> | Switch to workspace (prefix alternative)  |
+| Key                                                                                    | Action                                        |
+| -------------------------------------------------------------------------------------- | --------------------------------------------- |
+| <kbd>Alt</kbd>+<kbd>1</kbd>-<kbd>9</kbd>                                               | Switch to workspace 1-9                       |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>9</kbd>                              | Move window to workspace and follow           |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd>, <kbd>w</kbd>, <kbd>1</kbd>-<kbd>9</kbd>                  | Switch to workspace (prefix alternative)      |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd>, <kbd>w</kbd>, <kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>9</kbd> | Move window to workspace (prefix alternative) |
 
 #### Window Layout (Non-Tiling Mode)
@@ -255,24 +529,39 @@ ssh -p 2222 your-server-ip
 
 #### Prefix Mode (<kbd>Ctrl</kbd>+<kbd>B</kbd>)
 
-Similar to tmux, TUIOS supports a prefix key for advanced commands:
+Similar to tmux, TUIOS supports a prefix key for advanced commands. Press <kbd>Ctrl</kbd>+<kbd>B</kbd>, release, then press the command key:
 
-| Key Sequence                                              | Action                                    |
-| --------------------------------------------------------- | ----------------------------------------- |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>c</kbd>                 | Create new window                         |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>x</kbd>                 | Close current window                      |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>,</kbd>                 | Rename window                             |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>n</kbd>                 | Next window                               |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>p</kbd>                 | Previous window                           |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>0</kbd>-<kbd>9</kbd>    | Jump to window                            |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>w</kbd> <kbd>1</kbd>-<kbd>9</kbd> | Switch to workspace (universal alternative) |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>w</kbd> <kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>9</kbd> | Move window to workspace  |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>m</kbd> | Minimize focused window |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>1</kbd>-<kbd>9</kbd> | Restore minimized window by number |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>Shift</kbd>+<kbd>M</kbd> | Restore all minimized windows |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>d</kbd>                 | Detach from terminal (exit terminal mode) |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>s</kbd>                 | Toggle selection mode                     |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Ctrl</kbd>+<kbd>B</kbd> | Send literal Ctrl+B to terminal           |
+| Key Sequence                                                                         | Action                                      |
+| ------------------------------------------------------------------------------------ | ------------------------------------------- |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>c</kbd>                                            | Create new window                           |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>x</kbd>                                            | Close current window                        |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>,</kbd> / <kbd>r</kbd>                             | Rename window                               |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>n</kbd> / <kbd>Tab</kbd>                           | Next window                                 |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>p</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd>          | Previous window                             |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>0</kbd>-<kbd>9</kbd>                               | Jump to window                              |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Space</kbd>                                        | Toggle tiling mode                          |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>w</kbd> <kbd>1</kbd>-<kbd>9</kbd>                  | Switch to workspace (universal alternative) |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>w</kbd> <kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>9</kbd> | Move window to workspace                    |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>m</kbd>                               | Minimize focused window                     |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>1</kbd>-<kbd>9</kbd>                  | Restore minimized window by number          |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>Shift</kbd>+<kbd>M</kbd>              | Restore all minimized windows               |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> ...                                        | Window prefix (see below)                   |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>d</kbd>                                            | Detach from terminal (exit terminal mode)   |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>s</kbd>                                            | Toggle selection mode                       |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Ctrl</kbd>+<kbd>B</kbd>                            | Send literal Ctrl+B to terminal             |
+
+#### Window Prefix (<kbd>Ctrl</kbd>+<kbd>B</kbd>, <kbd>t</kbd>)
+
+For users who prefer prefix-based controls matching normal mode keybinds, the window prefix provides an alternative way to access common window management commands:
+
+| Key Sequence                                                               | Action                    |
+| -------------------------------------------------------------------------- | ------------------------- |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>n</kbd>                    | Create new window         |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>x</kbd>                    | Close window              |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>r</kbd>                    | Rename window             |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>Tab</kbd>                  | Next window               |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>Shift</kbd>+<kbd>Tab</kbd> | Previous window           |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>t</kbd>                    | Toggle tiling mode        |
 
 ### Mouse Controls
 
@@ -550,7 +839,32 @@ fix bugs, or improve documentation, feel free to open a pull request.
 git clone https://github.com/gaurav-gosain/tuios.git
 cd tuios
 go mod tidy
-go build
+go build -o tuios ./cmd/tuios
+```
+
+### Creating Releases
+
+TUIOS uses [GoReleaser](https://goreleaser.com/) for automated releases. To create a new release:
+
+1. Tag the commit with a semantic version:
+   ```bash
+   git tag -a v1.0.0 -m "Release v1.0.0"
+   ```
+
+2. Push the tag to trigger the release workflow:
+   ```bash
+   git push origin v1.0.0
+   ```
+
+The GitHub Actions workflow will automatically:
+- Build binaries for multiple platforms (Linux, macOS, Windows, FreeBSD, OpenBSD)
+- Create archives with checksums
+- Generate a changelog
+- Publish the release to GitHub
+
+You can test the release configuration locally (requires [goreleaser](https://goreleaser.com/install/) installed):
+```bash
+goreleaser release --snapshot --clean
 ```
 
 ## Star History

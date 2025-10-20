@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -7,6 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/ui"
 	"github.com/charmbracelet/ssh"
 	"github.com/google/uuid"
 )
@@ -59,57 +62,13 @@ const (
 	Unsnap
 )
 
-const (
-	// DefaultWindowWidth is the default width for new windows.
-	DefaultWindowWidth = 20
-	// DefaultWindowHeight is the default height for new windows.
-	DefaultWindowHeight = 5
-	// DockHeight is the height of the minimized window dock.
-	DockHeight = 2
-
-	// DefaultAnimationDuration is the standard animation duration in milliseconds.
-	DefaultAnimationDuration = 300
-	// FastAnimationDuration is the fast animation duration for snapping and swapping in milliseconds.
-	FastAnimationDuration = 200
-	// NotificationFadeOutDuration is the fade out duration for notifications in milliseconds.
-	NotificationFadeOutDuration = 500
-	// NotificationDuration is the default duration for notifications in milliseconds.
-	NotificationDuration = 1500
-	// CPUUpdateInterval is the CPU stats update interval in milliseconds.
-	CPUUpdateInterval = 500
-	// ProcessWaitDelay is the delay when waiting for process cleanup in milliseconds.
-	ProcessWaitDelay = 100
-
-	// MaxLogMessages is the maximum number of log messages to keep in memory.
-	MaxLogMessages = 100
-
-	// StatusBarLeftWidth is the width of the left section of status bar.
-	StatusBarLeftWidth = 30
-	// LogViewerWidth is the width of the log viewer overlay.
-	LogViewerWidth = 80
-
-	// ZIndexHelp is the z-index for help overlay.
-	ZIndexHelp = 1000
-	// ZIndexLogs is the z-index for log viewer overlay.
-	ZIndexLogs = 1001
-	// ZIndexNotifications is the z-index for notifications.
-	ZIndexNotifications = 2000
-	// ZIndexDock is the z-index for the dock.
-	ZIndexDock = 1000
-
-	// NormalFPS is the normal refresh rate in FPS.
-	NormalFPS = 60
-	// InteractionFPS is the refresh rate during user interactions.
-	InteractionFPS = 30
-)
-
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
 	Dragging              bool
 	Resizing              bool
 	ResizeCorner          ResizeCorner
-	PreResizeState        Window
+	PreResizeState        terminal.Window
 	ResizeStartX          int
 	ResizeStartY          int
 	DragOffsetX           int
@@ -121,7 +80,7 @@ type OS struct {
 	TiledWidth            int // Original tiled width
 	TiledHeight           int // Original tiled height
 	DraggedWindowIndex    int // Index of window being dragged
-	Windows               []*Window
+	Windows               []*terminal.Window
 	FocusedWindow         int
 	Width                 int
 	Height                int
@@ -133,29 +92,30 @@ type OS struct {
 	LastMouseY            int
 	HasActiveTerminals    bool
 	ShowHelp              bool
-	InteractionMode       bool           // True when actively dragging/resizing
-	MouseSnapping         bool           // Enable/disable mouse snapping
-	WindowExitChan        chan string    // Channel to signal window closure
-	Animations            []*Animation   // Active animations
-	CPUHistory            []float64      // CPU usage history for graph
-	LastCPUUpdate         time.Time      // Last time CPU was updated
-	AutoTiling            bool           // Automatic tiling mode enabled
-	RenamingWindow        bool           // True when renaming a window
-	RenameBuffer          string         // Buffer for new window name
-	PrefixActive          bool           // True when prefix key was pressed (tmux-style)
-	WorkspacePrefixActive bool           // True when Ctrl+B, w was pressed (workspace sub-prefix)
-	MinimizePrefixActive  bool           // True when Ctrl+B, m was pressed (minimize sub-prefix)
-	LastPrefixTime        time.Time      // Time when prefix was activated
-	HelpScrollOffset      int            // Scroll offset for help menu
-	CurrentWorkspace      int            // Current active workspace (1-9)
-	NumWorkspaces         int            // Total number of workspaces
-	WorkspaceFocus        map[int]int    // Remembers focused window per workspace
-	ShowLogs              bool           // True when showing log overlay
-	LogMessages           []LogMessage   // Store log messages
-	LogScrollOffset       int            // Scroll offset for log viewer
-	Notifications         []Notification // Active notifications
-	SelectionMode         bool           // True when in text selection mode
-	ClipboardContent      string         // Store clipboard content from tea.ClipboardMsg
+	InteractionMode       bool            // True when actively dragging/resizing
+	MouseSnapping         bool            // Enable/disable mouse snapping
+	WindowExitChan        chan string     // Channel to signal window closure
+	Animations            []*ui.Animation // Active animations
+	CPUHistory            []float64       // CPU usage history for graph
+	LastCPUUpdate         time.Time       // Last time CPU was updated
+	AutoTiling            bool            // Automatic tiling mode enabled
+	RenamingWindow        bool            // True when renaming a window
+	RenameBuffer          string          // Buffer for new window name
+	PrefixActive          bool            // True when prefix key was pressed (tmux-style)
+	WorkspacePrefixActive bool            // True when Ctrl+B, w was pressed (workspace sub-prefix)
+	MinimizePrefixActive  bool            // True when Ctrl+B, m was pressed (minimize sub-prefix)
+	TilingPrefixActive    bool            // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
+	LastPrefixTime        time.Time       // Time when prefix was activated
+	HelpScrollOffset      int             // Scroll offset for help menu
+	CurrentWorkspace      int             // Current active workspace (1-9)
+	NumWorkspaces         int             // Total number of workspaces
+	WorkspaceFocus        map[int]int     // Remembers focused window per workspace
+	ShowLogs              bool            // True when showing log overlay
+	LogMessages           []LogMessage    // Store log messages
+	LogScrollOffset       int             // Scroll offset for log viewer
+	Notifications         []Notification  // Active notifications
+	SelectionMode         bool            // True when in text selection mode
+	ClipboardContent      string          // Store clipboard content from tea.ClipboardMsg
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
@@ -168,7 +128,7 @@ type Notification struct {
 	Type      string // "info", "success", "warning", "error"
 	StartTime time.Time
 	Duration  time.Duration
-	Animation *Animation
+	Animation *ui.Animation
 }
 
 // LogMessage represents a log entry with timestamp and level.
@@ -193,8 +153,8 @@ func (m *OS) Log(level, format string, args ...interface{}) {
 
 	// Keep only last MaxLogMessages messages
 	m.LogMessages = append(m.LogMessages, logMsg)
-	if len(m.LogMessages) > MaxLogMessages {
-		m.LogMessages = m.LogMessages[len(m.LogMessages)-MaxLogMessages:]
+	if len(m.LogMessages) > config.MaxLogMessages {
+		m.LogMessages = m.LogMessages[len(m.LogMessages)-config.MaxLogMessages:]
 	}
 }
 
@@ -224,9 +184,9 @@ func (m *OS) ShowNotification(message, notifType string, duration time.Duration)
 	}
 
 	// Create fade-in animation
-	notif.Animation = &Animation{
+	notif.Animation = &ui.Animation{
 		StartTime: time.Now(),
-		Duration:  time.Duration(DefaultAnimationDuration) * time.Millisecond,
+		Duration:  config.DefaultAnimationDuration,
 		Progress:  0.0,
 		Complete:  false,
 	}
@@ -418,7 +378,7 @@ func (m *OS) AddWindow(title string) *OS {
 		y = screenHeight / 4
 	}
 
-	window := NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan)
+	window := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan)
 	if window == nil {
 		return m // Failed to create window
 	}
@@ -495,8 +455,8 @@ func (m *OS) Snap(i int, quarter SnapQuarter) *OS {
 		_, _, targetWidth, targetHeight := m.calculateSnapBounds(quarter)
 
 		// Enforce minimum size
-		targetWidth = max(targetWidth, DefaultWindowWidth)
-		targetHeight = max(targetHeight, DefaultWindowHeight)
+		targetWidth = max(targetWidth, config.DefaultWindowWidth)
+		targetHeight = max(targetHeight, config.DefaultWindowHeight)
 
 		// Make sure terminal is properly sized even if no animation
 		if win.Width != targetWidth || win.Height != targetHeight {
@@ -535,7 +495,7 @@ func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) 
 }
 
 // GetFocusedWindow returns the currently focused window.
-func (m *OS) GetFocusedWindow() *Window {
+func (m *OS) GetFocusedWindow() *terminal.Window {
 	if len(m.Windows) > 0 && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 		// Only return the focused window if it's in the current workspace
 		if m.Windows[m.FocusedWindow].Workspace == m.CurrentWorkspace {
@@ -580,45 +540,28 @@ func (m *OS) RestoreWindow(i int) {
 	if i >= 0 && i < len(m.Windows) && m.Windows[i].Minimized {
 		window := m.Windows[i]
 
-		// If in tiling mode, adjust the restore target to fit the tiling layout
+		// In tiling mode, skip animation and let TileAllWindows() handle positioning
+		// This prevents incorrect tiling calculations when restoring multiple windows
 		if m.AutoTiling {
-			// Mark as not minimized temporarily to include in tiling calculation
+			// Simply mark as not minimized and let TileAllWindows() position it
 			window.Minimized = false
 
-			// Calculate new tiling positions for all windows
-			var visibleCount int
-			for _, w := range m.Windows {
-				if !w.Minimized && !w.Minimizing {
-					visibleCount++
-				}
-			}
+			// Set to a temporary position (will be overridden by TileAllWindows)
+			window.X = 10
+			window.Y = 5
+			window.Width = config.DefaultWindowWidth
+			window.Height = config.DefaultWindowHeight
 
-			// Get the tiling layout
-			layouts := m.calculateTilingLayout(visibleCount)
+			// Bring the window to front and focus it
+			m.FocusWindow(i)
+			m.Mode = WindowManagementMode
 
-			// Find this window's position in the layout
-			layoutIndex := 0
-			for j := 0; j <= i; j++ {
-				if !m.Windows[j].Minimized && !m.Windows[j].Minimizing {
-					if j == i {
-						break
-					}
-					layoutIndex++
-				}
-			}
-
-			// Update restore target if we have a valid layout
-			if layoutIndex < len(layouts) {
-				window.PreMinimizeX = layouts[layoutIndex].x
-				window.PreMinimizeY = layouts[layoutIndex].y
-				window.PreMinimizeWidth = layouts[layoutIndex].width
-				window.PreMinimizeHeight = layouts[layoutIndex].height
-			}
-
-			// Mark as minimized again for the animation
-			window.Minimized = true
+			// Note: No animation in tiling mode. TileAllWindows() should be called
+			// by the caller after all restores are complete.
+			return
 		}
 
+		// Non-tiling mode: create smooth animation to PreMinimize position
 		// Create and start animation
 		anim := m.CreateRestoreAnimation(i)
 		if anim != nil {
@@ -638,11 +581,6 @@ func (m *OS) RestoreWindow(i int) {
 		m.FocusWindow(i)
 		// Enter window management mode to interact with the restored window
 		m.Mode = WindowManagementMode
-
-		// Retile all windows if in tiling mode
-		if m.AutoTiling {
-			m.TileAllWindows()
-		}
 	}
 }
 
@@ -691,7 +629,7 @@ func (m *OS) HasMinimizedWindows() bool {
 // GetUsableHeight returns the usable height excluding the dock.
 func (m *OS) GetUsableHeight() int {
 	// Always reserve space for the dock at the bottom
-	return m.Height - DockHeight
+	return m.Height - config.DockHeight
 }
 
 // MarkAllDirty marks all windows as dirty for re-rendering.
@@ -750,8 +688,8 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			hasChanges = true
 		} else {
 			// For background windows, throttle updates to reduce CPU usage
-			window.updateCounter++
-			if window.updateCounter%3 == 0 { // Update every 3rd cycle (~20Hz instead of 60Hz)
+			window.UpdateCounter++
+			if window.UpdateCounter%3 == 0 { // Update every 3rd cycle (~20Hz instead of 60Hz)
 				window.MarkContentDirty()
 				hasChanges = true
 			}
@@ -762,205 +700,87 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 	return hasChanges
 }
 
-// Workspace management methods
-
-// SwitchToWorkspace switches to the specified workspace.
-func (m *OS) SwitchToWorkspace(workspace int) {
-	if workspace < 1 || workspace > m.NumWorkspaces {
+// MoveSelectionCursor moves the selection cursor in the specified direction.
+// Parameters:
+//   - window: The window to operate on
+//   - dx, dy: Direction to move cursor (-1, 0, 1)
+//   - extending: true if extending selection (Shift+Arrow), false if just moving cursor
+func (m *OS) MoveSelectionCursor(window *terminal.Window, dx, dy int, extending bool) {
+	if window.Terminal == nil {
 		return
 	}
 
-	if workspace == m.CurrentWorkspace {
+	screen := window.Terminal.Screen()
+	if screen == nil {
 		return
 	}
 
-	// Save current workspace focus
-	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
-		if m.Windows[m.FocusedWindow].Workspace == m.CurrentWorkspace {
-			m.WorkspaceFocus[m.CurrentWorkspace] = m.FocusedWindow
+	// Get terminal dimensions (account for borders)
+	maxX := window.Width - 2
+	maxY := window.Height - 2
+
+	// Initialize selection cursor if not set (only for non-extending moves)
+	if !extending && !window.IsSelecting {
+		// Position at terminal cursor when starting cursor movement
+		cursor := screen.Cursor()
+		window.SelectionCursor.X = cursor.X
+		window.SelectionCursor.Y = cursor.Y
+	}
+
+	// Move cursor
+	newX := window.SelectionCursor.X + dx
+	newY := window.SelectionCursor.Y + dy
+
+	// Boundary checking
+	if newX < 0 {
+		newX = 0
+	}
+	if newX >= maxX {
+		newX = maxX - 1
+	}
+	if newY < 0 {
+		newY = 0
+	}
+	if newY >= maxY {
+		newY = maxY - 1
+	}
+
+	// Update cursor position
+	window.SelectionCursor.X = newX
+	window.SelectionCursor.Y = newY
+
+	if extending {
+		// Extending selection - update selection end
+		if !window.IsSelecting {
+			// Start selection
+			window.IsSelecting = true
+			window.SelectionStart = window.SelectionCursor
 		}
-	}
+		window.SelectionEnd = window.SelectionCursor
 
-	// Switch to new workspace
-	m.CurrentWorkspace = workspace
+		// Extract selected text
+		selectedText := m.extractSelectedText(window)
+		window.SelectedText = selectedText
 
-	// Try to restore previous focus for this workspace
-	focusedSet := false
-	if savedFocus, exists := m.WorkspaceFocus[workspace]; exists {
-		// Check if the saved focus is still valid
-		if savedFocus >= 0 && savedFocus < len(m.Windows) {
-			if m.Windows[savedFocus].Workspace == workspace && !m.Windows[savedFocus].Minimized {
-				m.FocusWindow(savedFocus)
-				focusedSet = true
-			}
+	} else {
+		// Just moving cursor - start new selection
+		if window.IsSelecting || window.SelectedText != "" {
+			// Clear existing selection
+			window.IsSelecting = false
+			window.SelectedText = ""
 		}
+
+		// Start new selection at cursor position
+		window.SelectionStart = window.SelectionCursor
+		window.SelectionEnd = window.SelectionCursor
+		window.IsSelecting = true
 	}
 
-	// If no saved focus or it's invalid, find first visible window in new workspace
-	if !focusedSet {
-		for i, w := range m.Windows {
-			if w.Workspace == workspace && !w.Minimized && !w.Minimizing {
-				m.FocusWindow(i)
-				focusedSet = true
-				break
-			}
-		}
-	}
-
-	// If no window to focus in new workspace, set focus to -1
-	if !focusedSet {
-		m.FocusedWindow = -1
-		// Exit terminal mode when switching to empty workspace
-		if m.Mode == TerminalMode {
-			m.Mode = WindowManagementMode
-		}
-	}
-
-	// Retile if in tiling mode
-	if m.AutoTiling {
-		m.TileVisibleWorkspaceWindows()
-	}
-
-	// Mark all windows in new workspace as dirty for immediate render
-	for _, w := range m.Windows {
-		if w.Workspace == workspace {
-			w.MarkPositionDirty()
-		}
-	}
-}
-
-// MoveWindowToWorkspace moves a window to the specified workspace without changing focus.
-func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
-	if windowIndex < 0 || windowIndex >= len(m.Windows) {
-		return
-	}
-	if workspace < 1 || workspace > m.NumWorkspaces {
-		return
-	}
-
-	window := m.Windows[windowIndex]
-	oldWorkspace := window.Workspace
-
-	if oldWorkspace == workspace {
-		return // Already in target workspace
-	}
-
-	// Move window to new workspace
-	window.Workspace = workspace
-	window.MarkPositionDirty()
-
-	// If we moved the focused window, find next window to focus in current workspace
-	if windowIndex == m.FocusedWindow {
-		m.FocusNextVisibleWindowInWorkspace()
-	}
-
-	// Retile both workspaces if in tiling mode
-	if m.AutoTiling {
-		m.TileVisibleWorkspaceWindows()
-	}
-}
-
-// MoveWindowToWorkspaceAndFollow moves a window to the specified workspace and switches to that workspace.
-func (m *OS) MoveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
-	if windowIndex < 0 || windowIndex >= len(m.Windows) {
-		return
-	}
-	if workspace < 1 || workspace > m.NumWorkspaces {
-		return
-	}
-
-	window := m.Windows[windowIndex]
-	oldWorkspace := window.Workspace
-
-	if oldWorkspace == workspace {
-		return // Already in target workspace
-	}
-
-	// Move window to new workspace
-	window.Workspace = workspace
-	window.MarkPositionDirty()
-
-	// Switch to the new workspace and focus the moved window
-	m.SwitchToWorkspace(workspace)
-	m.FocusWindow(windowIndex)
-
-	// Retile if in tiling mode
-	if m.AutoTiling {
-		m.TileVisibleWorkspaceWindows()
-	}
-}
-
-// FocusNextVisibleWindowInWorkspace focuses the next visible window in the workspace.
-func (m *OS) FocusNextVisibleWindowInWorkspace() {
-	// Find the next non-minimized window in current workspace to focus
-	for i := 0; i < len(m.Windows); i++ {
-		w := m.Windows[i]
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-			m.FocusWindow(i)
-			return
-		}
-	}
-
-	// No visible windows in workspace
-	m.FocusedWindow = -1
-	if m.Mode == TerminalMode {
-		m.Mode = WindowManagementMode
-	}
-}
-
-// GetVisibleWindows returns all visible windows in the current workspace.
-func (m *OS) GetVisibleWindows() []*Window {
-	visible := make([]*Window, 0)
-	for _, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-			visible = append(visible, w)
-		}
-	}
-	return visible
-}
-
-// GetWorkspaceWindowCount returns the number of windows in a workspace.
-func (m *OS) GetWorkspaceWindowCount(workspace int) int {
-	count := 0
-	for _, w := range m.Windows {
-		if w.Workspace == workspace {
-			count++
-		}
-	}
-	return count
-}
-
-// TileVisibleWorkspaceWindows tiles all visible windows in the current workspace.
-func (m *OS) TileVisibleWorkspaceWindows() {
-	// Only tile windows in current workspace
-	visibleWindows := make([]int, 0)
-	for i, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-			visibleWindows = append(visibleWindows, i)
-		}
-	}
-
-	if len(visibleWindows) == 0 {
-		return
-	}
-
-	// Use existing tiling logic but only for visible workspace windows
-	layouts := m.calculateTilingLayout(len(visibleWindows))
-
-	for i, windowIndex := range visibleWindows {
-		if i < len(layouts) {
-			window := m.Windows[windowIndex]
-			window.X = layouts[i].x
-			window.Y = layouts[i].y
-			window.Width = layouts[i].width
-			window.Height = layouts[i].height
-			window.PositionDirty = true
-		}
-	}
+	window.InvalidateCache()
 }
 
 // extractSelectedText extracts text from the terminal within the selected region.
-func (m *OS) extractSelectedText(window *Window) string {
+func (m *OS) extractSelectedText(window *terminal.Window) string {
 	if window.Terminal == nil {
 		return ""
 	}

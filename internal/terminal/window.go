@@ -1,4 +1,4 @@
-package main
+package terminal
 
 import (
 	"context"
@@ -14,6 +14,9 @@ import (
 	pty "github.com/aymanbagabas/go-pty"
 	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/x/vt"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/pool"
 )
 
 // Window represents a terminal window with its own shell process.
@@ -38,7 +41,7 @@ type Window struct {
 	CachedLayer        *lipgloss.Layer
 	LastTerminalSeq    int
 	IsBeingManipulated bool               // True when being dragged or resized
-	updateCounter      int                // Counter for throttling background updates
+	UpdateCounter      int                // Counter for throttling background updates
 	cancelFunc         context.CancelFunc // For graceful goroutine cleanup
 	ioMu               sync.RWMutex       // Protect I/O operations
 	Minimized          bool               // True when window is minimized to dock
@@ -145,7 +148,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		cancel()
 
 		// Give a small delay to ensure final output is captured
-		time.Sleep(time.Duration(ProcessWaitDelay) * time.Millisecond)
+		time.Sleep(config.ProcessWaitDelay)
 
 		// Notify exit channel
 		select {
@@ -237,9 +240,9 @@ func (w *Window) handleIOOperations() {
 		}()
 
 		// Get buffer from pool for better memory management
-		bufPtr := byteSlicePool.Get().(*[]byte)
+		bufPtr := pool.GetByteSlice()
 		buf := *bufPtr
-		defer byteSlicePool.Put(bufPtr)
+		defer pool.PutByteSlice(bufPtr)
 		for {
 			select {
 			case <-ctx.Done():
