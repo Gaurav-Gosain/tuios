@@ -198,7 +198,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 			// Get the character to display
 			char := " "
-			if cell.Rune != 0 {
+			if cell != nil && cell.Rune != 0 {
 				char = string(cell.Rune)
 			}
 
@@ -682,6 +682,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		allHelpLines = append(allHelpLines, keyStyle("TEXT SELECTION:"))
 		allHelpLines = append(allHelpLines, keyStyle("s")+"              "+descStyle("Toggle selection mode"))
 		allHelpLines = append(allHelpLines, keyStyle("Ctrl+S")+"         "+descStyle("Toggle selection (from terminal)"))
+		allHelpLines = append(allHelpLines, keyStyle("Single click")+"   "+descStyle("Character selection"))
+		allHelpLines = append(allHelpLines, keyStyle("Double click")+"   "+descStyle("Word selection"))
+		allHelpLines = append(allHelpLines, keyStyle("Triple click")+"   "+descStyle("Line selection"))
 		allHelpLines = append(allHelpLines, keyStyle("Mouse drag")+"     "+descStyle("Select text (mouse)"))
 		allHelpLines = append(allHelpLines, keyStyle("Arrow keys")+"     "+descStyle("Move cursor"))
 		allHelpLines = append(allHelpLines, keyStyle("Shift+Arrow")+"    "+descStyle("Extend selection"))

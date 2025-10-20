@@ -3,6 +3,7 @@ package input
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -146,10 +147,43 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// Start text selection
 			if terminalX >= 0 && terminalY >= 0 &&
 				terminalX < clickedWindow.Width-2 && terminalY < clickedWindow.Height-2 {
-				clickedWindow.IsSelecting = true
-				clickedWindow.SelectionStart.X = terminalX
-				clickedWindow.SelectionStart.Y = terminalY
-				clickedWindow.SelectionEnd = clickedWindow.SelectionStart
+				// Track consecutive clicks for double/triple-click selection
+				now := time.Now()
+				timeSinceLastClick := now.Sub(clickedWindow.LastClickTime)
+				samePosition := clickedWindow.LastClickX == terminalX && clickedWindow.LastClickY == terminalY
+
+				// Reset click count if too much time has passed or different position
+				if timeSinceLastClick > 500*time.Millisecond || !samePosition {
+					clickedWindow.ClickCount = 1
+				} else {
+					clickedWindow.ClickCount++
+				}
+
+				clickedWindow.LastClickTime = now
+				clickedWindow.LastClickX = terminalX
+				clickedWindow.LastClickY = terminalY
+
+				// Handle different selection modes based on click count
+				switch clickedWindow.ClickCount {
+				case 1:
+					// Single click - character selection
+					clickedWindow.IsSelecting = true
+					clickedWindow.SelectionStart.X = terminalX
+					clickedWindow.SelectionStart.Y = terminalY
+					clickedWindow.SelectionEnd = clickedWindow.SelectionStart
+					clickedWindow.SelectionMode = 0 // Character mode
+				case 2:
+					// Double click - word selection
+					selectWord(clickedWindow, terminalX, terminalY, o)
+					clickedWindow.SelectionMode = 1 // Word mode
+				case 3:
+					// Triple click - line selection
+					selectLine(clickedWindow, terminalY)
+					clickedWindow.SelectionMode = 2 // Line mode
+					// Reset click count after triple click
+					clickedWindow.ClickCount = 0
+				}
+
 				o.InteractionMode = false
 				return o, nil
 			}
@@ -407,6 +441,8 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Mouse wheel forwarding to terminals removed to prevent corruption
 	// Terminal applications handle their own scrolling when they need it
+	// NOTE: Scrollback buffer support is not currently implemented because the underlying
+	// charmbracelet/x/vt library does not yet support accessing scrollback history.
 
 	return o, nil
 }
@@ -529,4 +565,67 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// selectWord selects the word at the given position
+func selectWord(window *terminal.Window, x, y int, o *app.OS) {
+	if window.Terminal == nil || window.Terminal.Screen() == nil {
+		return
+	}
+
+	screen := window.Terminal.Screen()
+	maxX := window.Width - 2
+
+	// Find the start of the word (move left until we hit a non-word character)
+	startX := x
+	for startX > 0 {
+		cell := screen.Cell(startX-1, y)
+		if cell == nil || !isWordChar(cell.Rune) {
+			break
+		}
+		startX--
+	}
+
+	// Find the end of the word (move right until we hit a non-word character)
+	endX := x
+	for endX < maxX-1 {
+		cell := screen.Cell(endX+1, y)
+		if cell == nil || !isWordChar(cell.Rune) {
+			break
+		}
+		endX++
+	}
+
+	// Set the selection
+	window.IsSelecting = true
+	window.SelectionStart.X = startX
+	window.SelectionStart.Y = y
+	window.SelectionEnd.X = endX
+	window.SelectionEnd.Y = y
+
+	// Extract the selected text
+	window.SelectedText = extractSelectedText(window, o)
+	window.InvalidateCache()
+}
+
+// selectLine selects the entire line at the given Y position
+func selectLine(window *terminal.Window, y int) {
+	maxX := window.Width - 2
+
+	// Select the entire line
+	window.IsSelecting = true
+	window.SelectionStart.X = 0
+	window.SelectionStart.Y = y
+	window.SelectionEnd.X = maxX - 1
+	window.SelectionEnd.Y = y
+
+	window.InvalidateCache()
+}
+
+// isWordChar returns true if the rune is part of a word (alphanumeric or underscore)
+func isWordChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9') ||
+		r == '_' || r == '-' || r == '.'
 }

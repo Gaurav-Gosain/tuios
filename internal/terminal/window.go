@@ -21,6 +21,12 @@ import (
 
 // Window represents a terminal window with its own shell process.
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
+//
+// NOTE: Scrollback buffer support is not currently implemented because the underlying
+// charmbracelet/x/vt library does not yet support accessing scrollback history.
+// The VT terminal only maintains the visible screen buffer. When scrollback support
+// is added to the VT library, we can implement it here.
+// See: https://github.com/charmbracelet/x/blob/main/vt/handlers.go (TODO comments)
 type Window struct {
 	Title              string
 	CustomName         string // User-defined window name
@@ -57,6 +63,12 @@ type Window struct {
 	SelectedText       string             // Currently selected text
 	SelectionCursor    struct{ X, Y int } // Current cursor position in selection mode
 	ProcessExited      bool               // True when process has exited
+	// Enhanced text selection support
+	SelectionMode      int  // 0 = character, 1 = word, 2 = line
+	LastClickTime      time.Time
+	LastClickX         int
+	LastClickY         int
+	ClickCount         int // Track number of consecutive clicks for word/line selection
 }
 
 // NewWindow creates a new terminal window with the specified properties.
@@ -70,6 +82,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Create VT terminal with inner dimensions (accounting for borders)
 	terminalWidth := max(width-2, 1)
 	terminalHeight := max(height-2, 1)
+	// Create terminal - vt.Terminal maintains its own scrollback buffer internally
 	terminal := vt.NewTerminal(terminalWidth, terminalHeight)
 
 	// Detect shell

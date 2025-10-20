@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -126,7 +125,7 @@ func handleClipboardPaste(o *app.OS) {
 	}
 
 	if o.ClipboardContent == "" {
-		o.ShowNotification("Clipboard is empty", "warning", time.Duration(config.NotificationDuration)*time.Millisecond)
+		o.ShowNotification("Clipboard is empty", "warning", config.NotificationDuration)
 		return
 	}
 
@@ -150,8 +149,8 @@ func handleClipboardPaste(o *app.OS) {
 
 	err := focusedWindow.SendInput(inputData)
 	if err != nil {
-		o.ShowNotification(fmt.Sprintf("Failed to paste: %v", err), "error", time.Duration(config.NotificationDuration)*time.Millisecond)
+		o.ShowNotification(fmt.Sprintf("Failed to paste: %v", err), "error", config.NotificationDuration)
 	} else {
-		o.ShowNotification(fmt.Sprintf("Pasted %d characters", len(o.ClipboardContent)), "success", time.Duration(config.NotificationDuration)*time.Millisecond)
+		o.ShowNotification(fmt.Sprintf("Pasted %d characters", len(o.ClipboardContent)), "success", config.NotificationDuration)
 	}
 }

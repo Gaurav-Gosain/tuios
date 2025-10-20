@@ -295,7 +295,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 	case "d", "esc":
 		// Detach/exit terminal mode (like tmux detach)
 		o.Mode = app.WindowManagementMode
-		o.ShowNotification("Window Management Mode", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+		o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 			focusedWindow.InvalidateCache()
 		}
@@ -374,7 +374,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			// Currently in selection mode, disable it and return to terminal mode
 			o.SelectionMode = false
 			o.Mode = app.TerminalMode
-			o.ShowNotification("Terminal Mode", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+			o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
 			// Clear selection state when switching to terminal mode
 			if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 				focusedWindow.SelectedText = ""
@@ -385,7 +385,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			// Not in selection mode, enable it and switch to window management mode
 			o.Mode = app.WindowManagementMode
 			o.SelectionMode = true
-			o.ShowNotification("Selection Mode", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+			o.ShowNotification("Selection Mode", "info", config.NotificationDuration)
 		}
 		return o, nil
 
@@ -448,12 +448,12 @@ func handleTerminalSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	if o.SelectionMode {
 		// Currently in selection mode, toggle it off and stay in terminal mode
 		o.SelectionMode = false
-		o.ShowNotification("Selection Mode Disabled", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+		o.ShowNotification("Selection Mode Disabled", "info", config.NotificationDuration)
 	} else {
 		// Not in selection mode, enable it and switch to window management mode
 		o.Mode = app.WindowManagementMode
 		o.SelectionMode = true
-		o.ShowNotification("Selection Mode", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+		o.ShowNotification("Selection Mode", "info", config.NotificationDuration)
 	}
 	return o, nil
 }
@@ -540,7 +540,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		// Enter terminal/insert mode
 		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			o.Mode = app.TerminalMode
-			o.ShowNotification("Terminal Mode", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+			o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
 			// Clear selection state when entering terminal mode
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
@@ -555,9 +555,9 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		o.AutoTiling = !o.AutoTiling
 		if o.AutoTiling {
 			o.TileAllWindows()
-			o.ShowNotification("Tiling Mode Enabled [T]", "success", time.Duration(config.NotificationDuration)*time.Millisecond)
+			o.ShowNotification("Tiling Mode Enabled [T]", "success", config.NotificationDuration)
 		} else {
-			o.ShowNotification("Tiling Mode Disabled", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+			o.ShowNotification("Tiling Mode Disabled", "info", config.NotificationDuration)
 		}
 		return o, nil
 
@@ -829,9 +829,9 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 		o.AutoTiling = !o.AutoTiling
 		if o.AutoTiling {
 			o.TileAllWindows()
-			o.ShowNotification("Tiling Mode Enabled [T]", "success", time.Duration(config.NotificationDuration)*time.Millisecond)
+			o.ShowNotification("Tiling Mode Enabled [T]", "success", config.NotificationDuration)
 		} else {
-			o.ShowNotification("Tiling Mode Disabled", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+			o.ShowNotification("Tiling Mode Disabled", "info", config.NotificationDuration)
 		}
 		return o, nil
 	case "esc":
@@ -962,18 +962,20 @@ func handleSelectionModeToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 				// Reset selection when entering selection mode
 				focusedWindow.IsSelecting = false
 				focusedWindow.SelectedText = ""
+				focusedWindow.SelectionMode = 0 // Default to character mode
 				// Initialize selection cursor at terminal cursor position
 				if focusedWindow.Terminal != nil && focusedWindow.Terminal.Screen() != nil {
 					cursor := focusedWindow.Terminal.Screen().Cursor()
 					focusedWindow.SelectionCursor.X = cursor.X
 					focusedWindow.SelectionCursor.Y = cursor.Y
 				}
-				o.ShowNotification("Selection Mode", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+				o.ShowNotification("Selection Mode", "info", config.NotificationDuration)
 			} else {
 				// Clear selection when exiting
 				focusedWindow.IsSelecting = false
 				focusedWindow.SelectedText = ""
-				o.ShowNotification("Selection Mode Disabled", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+				focusedWindow.SelectionMode = 0
+				o.ShowNotification("Selection Mode Disabled", "info", config.NotificationDuration)
 			}
 		}
 	}
@@ -986,14 +988,14 @@ func handleCopyToClipboard(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if focusedWindow != nil && focusedWindow.SelectedText != "" {
 			// Copy to clipboard using Bubbletea's native support
 			textToCopy := focusedWindow.SelectedText
-			o.ShowNotification(fmt.Sprintf("Copied %d characters to clipboard", len(textToCopy)), "success", time.Duration(config.NotificationDuration)*time.Millisecond)
+			o.ShowNotification(fmt.Sprintf("Copied %d characters to clipboard", len(textToCopy)), "success", config.NotificationDuration)
 			// Auto-unselect text after successful copy
 			focusedWindow.SelectedText = ""
 			focusedWindow.IsSelecting = false
 			focusedWindow.InvalidateCache()
 			return o, tea.SetClipboard(textToCopy)
 		}
-		o.ShowNotification("No text selected", "warning", time.Duration(config.NotificationDuration)*time.Millisecond)
+		o.ShowNotification("No text selected", "warning", config.NotificationDuration)
 		return o, nil
 	}
 	// If not in selection mode, continue normal processing
@@ -1005,7 +1007,7 @@ func handleCtrlSSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		// Currently in selection mode, disable it and return to terminal mode
 		o.SelectionMode = false
 		o.Mode = app.TerminalMode
-		o.ShowNotification("Terminal Mode", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+		o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
 		// Clear selection state when switching to terminal mode
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 			focusedWindow.SelectedText = ""
@@ -1015,7 +1017,7 @@ func handleCtrlSSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	} else {
 		// Not in selection mode, enable it (already in window management mode)
 		o.SelectionMode = true
-		o.ShowNotification("Selection Mode", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+		o.ShowNotification("Selection Mode", "info", config.NotificationDuration)
 	}
 	return o, nil
 }
@@ -1027,7 +1029,7 @@ func handleEscapeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// Clear the selection
 			focusedWindow.SelectedText = ""
 			focusedWindow.IsSelecting = false
-			o.ShowNotification("Selection cleared", "info", time.Duration(config.NotificationDuration)*time.Millisecond)
+			o.ShowNotification("Selection cleared", "info", config.NotificationDuration)
 			return o, nil
 		}
 	}
@@ -1198,3 +1200,4 @@ func handleShiftRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	return o, nil
 }
+

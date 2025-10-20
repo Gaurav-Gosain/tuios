@@ -1,5 +1,11 @@
 # TUIOS - Terminal UI Operating System
 
+<p>
+    <a href="https://github.com/charmbracelet/lipgloss/releases"><img src="https://img.shields.io/github/release/charmbracelet/lipgloss.svg" alt="Latest Release"></a>
+    <a href="https://pkg.go.dev/github.com/charmbracelet/lipgloss?tab=doc"><img src="https://godoc.org/github.com/golang/gddo?status.svg" alt="GoDoc"></a>
+    <a href="https://github.com/charmbracelet/lipgloss/actions"><img src="https://github.com/charmbracelet/lipgloss/workflows/build/badge.svg" alt="Build Status"></a>
+</p>
+
 ![TUIOS](./assets/demo.gif)
 
 TUIOS is a terminal-based window manager that provides a modern, efficient
@@ -8,24 +14,70 @@ Charm stack (Bubble Tea v2 and Lipgloss v2), TUIOS offers a vim-like modal
 interface with comprehensive keyboard shortcuts, workspace support, and mouse
 interaction.
 
-## Table of Contents
+<details>
 
-- [Installation](#installation)
-- [Features](#features)
-- [Usage](#usage)
-  - [Keyboard Shortcuts](#keyboard-shortcuts)
-  - [Mouse Controls](#mouse-controls)
-- [Configuration](#configuration)
-- [Architecture](#architecture)
-- [Performance](#performance)
-- [Troubleshooting](#troubleshooting)
-- [Dependencies](#dependencies)
-- [Roadmap](#roadmap)
-- [Development](#development)
+<summary>Table of Contents</summary>
+
+<!--toc:start-->
+
+- [TUIOS - Terminal UI Operating System](#tuios-terminal-ui-operating-system)
+  - [Installation](#installation)
+    - [Quick Install (Linux/macOS)](#quick-install-linuxmacos)
+    - [Download the latest release](#download-the-latest-release)
+    - [Install using Go](#install-using-go)
+    - [Run using Docker](#run-using-docker)
+    - [Build from Source](#build-from-source)
+    - [Prerequisites](#prerequisites)
+    - [Dependencies](#dependencies)
+  - [Features](#features)
+    - [Core Functionality](#core-functionality)
+    - [Window Management](#window-management)
+    - [Advanced Features](#advanced-features)
+  - [Usage](#usage)
+    - [Getting Started](#getting-started)
+    - [CLI Options](#cli-options)
+    - [Connecting to SSH Mode](#connecting-to-ssh-mode)
+    - [Keyboard Shortcuts](#keyboard-shortcuts)
+      - [Window Management](#window-management)
+      - [Workspace Management](#workspace-management)
+      - [Window Layout (Non-Tiling Mode)](#window-layout-non-tiling-mode)
+      - [Tiling Mode](#tiling-mode)
+      - [Mode Switching](#mode-switching)
+      - [Text Selection & Clipboard](#text-selection-clipboard)
+      - [Window Navigation](#window-navigation)
+      - [System Controls](#system-controls)
+      - [Prefix Mode (<kbd>Ctrl</kbd>+<kbd>B</kbd>)](#prefix-mode-kbdctrlkbdkbdbkbd)
+      - [Window Prefix (<kbd>Ctrl</kbd>+<kbd>B</kbd>, <kbd>t</kbd>)](#window-prefix-kbdctrlkbdkbdbkbd-kbdtkbd)
+    - [Mouse Controls](#mouse-controls)
+    - [Status Bar](#status-bar)
+  - [Configuration](#configuration)
+  - [Architecture](#architecture)
+    - [Technical Stack](#technical-stack)
+    - [Core Components](#core-components)
+  - [Performance](#performance)
+    - [Optimization Strategies](#optimization-strategies)
+    - [Benchmarks](#benchmarks)
+  - [Troubleshooting](#troubleshooting)
+    - [Common Issues](#common-issues)
+    - [Debug Mode](#debug-mode)
+  - [Dependencies](#dependencies)
+  - [Roadmap](#roadmap)
+    - [High Priority](#high-priority)
+    - [Medium Priority](#medium-priority)
+    - [Low Priority](#low-priority)
   - [Local Development](#local-development)
-  - [Creating Releases](#creating-releases)
-- [Contribution](#contribution)
-- [License](#license)
+    - [Run locally using Docker](#run-locally-using-docker)
+    - [Build from source](#build-from-source)
+    - [Testing](#testing)
+  - [Contribution](#contribution)
+    - [Development Setup](#development-setup)
+    - [Creating Releases](#creating-releases)
+  - [Star History](#star-history)
+  - [License](#license)
+  - [Acknowledgments](#acknowledgments)
+  <!--toc:end-->
+
+</details>
 
 ## Installation
 
@@ -48,6 +100,7 @@ chmod +x install.sh
 ```
 
 The script will automatically:
+
 - Detect your OS and architecture
 - Download the appropriate binary from the latest release
 - Install it to `/usr/local/bin` (or `~/bin` if no sudo access)
@@ -331,14 +384,14 @@ Similar to tmux, TUIOS supports a prefix key for advanced commands. Press <kbd>C
 
 For users who prefer prefix-based controls matching normal mode keybinds, the window prefix provides an alternative way to access common window management commands:
 
-| Key Sequence                                                               | Action                    |
-| -------------------------------------------------------------------------- | ------------------------- |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>n</kbd>                    | Create new window         |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>x</kbd>                    | Close window              |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>r</kbd>                    | Rename window             |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>Tab</kbd>                  | Next window               |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>Shift</kbd>+<kbd>Tab</kbd> | Previous window           |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>t</kbd>                    | Toggle tiling mode        |
+| Key Sequence                                                              | Action             |
+| ------------------------------------------------------------------------- | ------------------ |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>n</kbd>                    | Create new window  |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>x</kbd>                    | Close window       |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>r</kbd>                    | Rename window      |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>Tab</kbd>                  | Next window        |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>Shift</kbd>+<kbd>Tab</kbd> | Previous window    |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> <kbd>t</kbd>                    | Toggle tiling mode |
 
 ### Mouse Controls
 
@@ -515,15 +568,16 @@ The following features are planned for future implementation:
 - [x] SSH server mode for remote multiplexing
 - [x] Text selection and clipboard integration
 - [ ] **Scrollback Buffers**: Terminal history and scrolling
+  - **Note**: Currently blocked by upstream VT library limitation - the `charmbracelet/x/vt` library does not yet support accessing scrollback history. Will implement when VT library adds this support.
   - [ ] Mouse scroll wheel support for terminal content
   - [ ] Keyboard shortcuts for scrolling (Page Up/Down, Ctrl+U/D)
   - [ ] Configurable scrollback buffer size
   - [ ] Search within scrollback history
-- [ ] **Enhanced Text Selection**: Improve selection capabilities
-  - [ ] Word and line selection modes (double-click, triple-click)
+- [x] **Enhanced Text Selection**: Improve selection capabilities
+  - [x] Word and line selection modes (double-click, triple-click)
   - [ ] Block/column selection mode
   - [ ] Search and select functionality
-  - [ ] Copy with formatting preservation
+  - [x] Copy with formatting preservation
 
 ### Medium Priority
 
@@ -624,6 +678,7 @@ go build -o tuios ./cmd/tuios
 TUIOS uses [GoReleaser](https://goreleaser.com/) for automated releases. To create a new release:
 
 1. Tag the commit with a semantic version:
+
    ```bash
    git tag -a v1.0.0 -m "Release v1.0.0"
    ```
@@ -634,12 +689,14 @@ TUIOS uses [GoReleaser](https://goreleaser.com/) for automated releases. To crea
    ```
 
 The GitHub Actions workflow will automatically:
+
 - Build binaries for multiple platforms (Linux, macOS, Windows, FreeBSD, OpenBSD)
 - Create archives with checksums
 - Generate a changelog
 - Publish the release to GitHub
 
 You can test the release configuration locally (requires [goreleaser](https://goreleaser.com/install/) installed):
+
 ```bash
 goreleaser release --snapshot --clean
 ```
