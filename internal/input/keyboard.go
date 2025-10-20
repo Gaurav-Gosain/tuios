@@ -523,9 +523,9 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		}
 		return o, nil
 	case "M", "shift+m":
-		// Restore all minimized windows
+		// Restore all minimized windows in current workspace
 		for i := range o.Windows {
-			if o.Windows[i].Minimized {
+			if o.Windows[i].Minimized && o.Windows[i].Workspace == o.CurrentWorkspace {
 				o.RestoreWindow(i)
 			}
 		}

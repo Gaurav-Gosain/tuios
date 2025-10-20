@@ -190,11 +190,11 @@ func (m *OS) SwapWindowsWithOriginal(draggedIndex, targetIndex int, origX, origY
 
 // TileRemainingWindows tiles all windows except the one being minimized
 func (m *OS) TileRemainingWindows(excludeIndex int) {
-	// Get list of visible windows (not minimized and not the one being minimized)
+	// Get list of visible windows in current workspace (not minimized and not the one being minimized)
 	var visibleWindows []*terminal.Window
 	var visibleIndices []int
 	for i, w := range m.Windows {
-		if i != excludeIndex && !w.Minimized && !w.Minimizing {
+		if i != excludeIndex && w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
 			visibleWindows = append(visibleWindows, w)
 			visibleIndices = append(visibleIndices, i)
 		}
