@@ -714,6 +714,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		allHelpLines = append(allHelpLines, keyStyle("t")+"              "+descStyle("Window commands"))
 		allHelpLines = append(allHelpLines, keyStyle("d/Esc")+"          "+descStyle("Detach from terminal"))
 		allHelpLines = append(allHelpLines, keyStyle("s")+"              "+descStyle("Toggle selection mode"))
+		allHelpLines = append(allHelpLines, keyStyle("q")+"              "+descStyle("Quit application"))
 		allHelpLines = append(allHelpLines, keyStyle("Ctrl+B")+"         "+descStyle("Send literal Ctrl+B"))
 		allHelpLines = append(allHelpLines, "")
 		allHelpLines = append(allHelpLines, keyStyle("WINDOW PREFIX (Ctrl+B, t):"))
@@ -939,6 +940,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				keyStyle.Render("t") + "   " + descStyle.Render("Window commands..."),
 				keyStyle.Render("d/Esc") + " " + descStyle.Render("Detach (exit terminal)"),
 				keyStyle.Render("s") + "   " + descStyle.Render("Selection mode"),
+				keyStyle.Render("q") + "   " + descStyle.Render("Quit application"),
 				keyStyle.Render("?") + "   " + descStyle.Render("Toggle help"),
 			}
 		}

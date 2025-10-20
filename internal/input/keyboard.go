@@ -395,6 +395,11 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		o.ShowHelp = !o.ShowHelp
 		return o, nil
 
+	case "q":
+		// Quit application
+		o.PrefixActive = false
+		return o, tea.Quit
+
 	default:
 		// Unknown prefix command, pass through the key
 		focusedWindow := o.GetFocusedWindow()
@@ -462,7 +467,16 @@ func handleTerminalSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Non-prefix keybindings (immediate actions)
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c":
+		// Quit
+		return o, tea.Quit
+
+	case "q":
+		// Close help if showing, otherwise quit
+		if o.ShowHelp {
+			o.ShowHelp = false
+			return o, nil
+		}
 		// Quit
 		return o, tea.Quit
 
@@ -1023,6 +1037,12 @@ func handleCtrlSSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 }
 
 func handleEscapeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Close help menu if showing
+	if o.ShowHelp {
+		o.ShowHelp = false
+		return o, nil
+	}
+
 	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.SelectedText != "" {

@@ -209,6 +209,10 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ShowHelp = !o.ShowHelp
 		return o, nil
 
+	case "q":
+		// Quit application
+		return o, tea.Quit
+
 	// Exit prefix mode
 	case "esc", "ctrl+c":
 		// Just cancel prefix mode

@@ -328,8 +328,8 @@ ssh -p 2222 your-server-ip
 | Key                                        | Action              |
 | ------------------------------------------ | ------------------- |
 | <kbd>i</kbd>, <kbd>Enter</kbd>             | Enter Terminal Mode |
-| <kbd>?</kbd>                               | Toggle help overlay |
-| <kbd>q</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd> | Quit application    |
+| <kbd>?</kbd>                               | Toggle help overlay (close with Esc) |
+| <kbd>q</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd> | Quit application (q closes help if showing) |
 
 #### Text Selection & Clipboard
 
@@ -377,6 +377,7 @@ Similar to tmux, TUIOS supports a prefix key for advanced commands. Press <kbd>C
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> ...                                        | Window prefix (see below)                   |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>d</kbd> / <kbd>Esc</kbd>                           | Detach from terminal (exit terminal mode)   |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>s</kbd>                                            | Toggle selection mode                       |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>q</kbd>                                            | Quit application                            |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Ctrl</kbd>+<kbd>B</kbd>                            | Send literal Ctrl+B to terminal             |
 
 #### Window Prefix (<kbd>Ctrl</kbd>+<kbd>B</kbd>, <kbd>t</kbd>)
