@@ -140,7 +140,7 @@ main() {
 
     # Create temporary directory
     TMP_DIR=$(mktemp -d)
-    trap "rm -rf $TMP_DIR" EXIT
+    trap 'rm -rf -- $TMP_DIR' EXIT
 
     print_info "Downloading $ARCHIVE_NAME..."
     if ! download_file "$DOWNLOAD_URL" "$TMP_DIR/$ARCHIVE_NAME"; then
