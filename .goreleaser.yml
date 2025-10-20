@@ -113,13 +113,31 @@ release:
 
     ### Installation
 
+    #### Quick Install (Linux/macOS)
+
+    ```bash
+    curl -sSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
+    ```
+
+    #### Nix
+
+    ```bash
+    # Run directly
+    nix run github:Gaurav-Gosain/tuios#tuios
+
+    # Or add to your configuration
+    nix-shell -p tuios
+    ```
+
+    #### Manual Download
+
     Download the appropriate binary for your platform below, extract it, and run:
 
     ```bash
     ./tuios
     ```
 
-    Or install via Go:
+    #### Go Install
 
     ```bash
     go install github.com/Gaurav-Gosain/tuios/cmd/tuios@{{ .Tag }}
