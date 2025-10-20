@@ -125,14 +125,17 @@ main() {
     print_success "Latest version: $VERSION"
 
     # Construct download URL
-    # Format: tuios_v0.0.6_Linux_x86_64.tar.gz
+    # Format: tuios_0.0.6_Linux_x86_64.tar.gz
+    # Note: GoReleaser uses version without 'v' prefix in filenames
+    VERSION_NO_V="${VERSION#v}"  # Remove leading 'v' from version
+
     if [ "$OS" = "Darwin" ]; then
         OS_FORMATTED="Darwin"
     else
         OS_FORMATTED="$OS"
     fi
 
-    ARCHIVE_NAME="${BINARY_NAME}_${VERSION}_${OS_FORMATTED}_${ARCH}.tar.gz"
+    ARCHIVE_NAME="${BINARY_NAME}_${VERSION_NO_V}_${OS_FORMATTED}_${ARCH}.tar.gz"
     DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE_NAME}"
 
     # Create temporary directory
