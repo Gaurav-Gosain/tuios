@@ -79,6 +79,14 @@ func SlowTickCmd() tea.Cmd {
 func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case TickerMsg:
+		// Proactively check for exited processes and clean them up
+		// This ensures windows close even if the exit channel message was missed
+		for i := len(m.Windows) - 1; i >= 0; i-- {
+			if m.Windows[i].ProcessExited {
+				m.DeleteWindow(i)
+			}
+		}
+
 		// Update animations
 		m.UpdateAnimations()
 

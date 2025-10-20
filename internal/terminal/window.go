@@ -431,13 +431,10 @@ func (w *Window) SendInput(input []byte) error {
 		return fmt.Errorf("partial write to PTY: wrote %d of %d bytes", n, len(input))
 	}
 
-	// Force immediate update
+	// Only mark as dirty - don't clear cache here for better input performance
+	// Cache will be invalidated during render if content actually changed
 	w.Dirty = true
 	w.ContentDirty = true
-
-	// Clear cached content to force re-render
-	w.CachedContent = ""
-	w.CachedLayer = nil
 
 	return nil
 }

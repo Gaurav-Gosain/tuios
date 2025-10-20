@@ -50,7 +50,7 @@ const (
 	CPUUpdateInterval = 500 * time.Millisecond
 
 	// ProcessWaitDelay is the delay when waiting for process cleanup
-	ProcessWaitDelay = 100 * time.Millisecond
+	ProcessWaitDelay = 50 * time.Millisecond
 
 	// WhichKeyDelay is the delay before showing which-key style overlay
 	WhichKeyDelay = 500 * time.Millisecond
