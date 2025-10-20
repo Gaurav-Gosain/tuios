@@ -241,12 +241,12 @@ func (o *OS) SwapWindowLeft() {
 
 	focusedWindow := o.Windows[o.FocusedWindow]
 
-	// Find the window to the left
+	// Find the window to the left in current workspace
 	targetIndex := -1
 	minDistance := o.Width
 
 	for i, window := range o.Windows {
-		if i == o.FocusedWindow || window.Minimized || window.Minimizing {
+		if i == o.FocusedWindow || window.Workspace != o.CurrentWorkspace || window.Minimized || window.Minimizing {
 			continue
 		}
 
@@ -284,12 +284,12 @@ func (o *OS) SwapWindowRight() {
 
 	focusedWindow := o.Windows[o.FocusedWindow]
 
-	// Find the window to the right
+	// Find the window to the right in current workspace
 	targetIndex := -1
 	minDistance := o.Width
 
 	for i, window := range o.Windows {
-		if i == o.FocusedWindow || window.Minimized || window.Minimizing {
+		if i == o.FocusedWindow || window.Workspace != o.CurrentWorkspace || window.Minimized || window.Minimizing {
 			continue
 		}
 
@@ -327,12 +327,12 @@ func (o *OS) SwapWindowUp() {
 
 	focusedWindow := o.Windows[o.FocusedWindow]
 
-	// Find the window above
+	// Find the window above in current workspace
 	targetIndex := -1
 	minDistance := o.Height
 
 	for i, window := range o.Windows {
-		if i == o.FocusedWindow || window.Minimized || window.Minimizing {
+		if i == o.FocusedWindow || window.Workspace != o.CurrentWorkspace || window.Minimized || window.Minimizing {
 			continue
 		}
 
@@ -370,12 +370,12 @@ func (o *OS) SwapWindowDown() {
 
 	focusedWindow := o.Windows[o.FocusedWindow]
 
-	// Find the window below
+	// Find the window below in current workspace
 	targetIndex := -1
 	minDistance := o.Height
 
 	for i, window := range o.Windows {
-		if i == o.FocusedWindow || window.Minimized || window.Minimizing {
+		if i == o.FocusedWindow || window.Workspace != o.CurrentWorkspace || window.Minimized || window.Minimizing {
 			continue
 		}
 
