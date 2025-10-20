@@ -320,6 +320,28 @@ graph TB
 
 You can install TUIOS using one of the following methods:
 
+### Quick Install (Linux/macOS)
+
+Install the latest release with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
+```
+
+Or if you prefer to inspect the script first:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh -o install.sh
+chmod +x install.sh
+./install.sh
+```
+
+The script will automatically:
+- Detect your OS and architecture
+- Download the appropriate binary from the latest release
+- Install it to `/usr/local/bin` (or `~/bin` if no sudo access)
+- Verify the installation
+
 ### Download the latest release
 
 Grab the latest release from the
