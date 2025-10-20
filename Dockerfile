@@ -1,4 +1,4 @@
-FROM golang:1.24 as tuios-build
+FROM golang:1.24 AS tuios-build
 
 WORKDIR /go/src/app
 COPY . .
