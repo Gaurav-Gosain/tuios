@@ -376,7 +376,7 @@ Similar to tmux, TUIOS supports a prefix key for advanced commands. Press <kbd>C
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>1</kbd>-<kbd>9</kbd>                  | Restore minimized window by number          |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>Shift</kbd>+<kbd>M</kbd>              | Restore all minimized windows               |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> ...                                        | Window prefix (see below)                   |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>d</kbd>                                            | Detach from terminal (exit terminal mode)   |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>d</kbd> / <kbd>Esc</kbd>                           | Detach from terminal (exit terminal mode)   |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>s</kbd>                                            | Toggle selection mode                       |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>Ctrl</kbd>+<kbd>B</kbd>                            | Send literal Ctrl+B to terminal             |
 

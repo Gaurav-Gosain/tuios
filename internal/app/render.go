@@ -712,7 +712,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		allHelpLines = append(allHelpLines, keyStyle("w")+"              "+descStyle("Workspace commands"))
 		allHelpLines = append(allHelpLines, keyStyle("m")+"              "+descStyle("Minimize commands"))
 		allHelpLines = append(allHelpLines, keyStyle("t")+"              "+descStyle("Window commands"))
-		allHelpLines = append(allHelpLines, keyStyle("d")+"              "+descStyle("Detach from terminal"))
+		allHelpLines = append(allHelpLines, keyStyle("d/Esc")+"          "+descStyle("Detach from terminal"))
 		allHelpLines = append(allHelpLines, keyStyle("s")+"              "+descStyle("Toggle selection mode"))
 		allHelpLines = append(allHelpLines, keyStyle("Ctrl+B")+"         "+descStyle("Send literal Ctrl+B"))
 		allHelpLines = append(allHelpLines, "")
@@ -937,7 +937,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				keyStyle.Render("w") + "   " + descStyle.Render("Workspace commands..."),
 				keyStyle.Render("m") + "   " + descStyle.Render("Minimize commands..."),
 				keyStyle.Render("t") + "   " + descStyle.Render("Window commands..."),
-				keyStyle.Render("d") + "   " + descStyle.Render("Detach (exit terminal)"),
+				keyStyle.Render("d/Esc") + " " + descStyle.Render("Detach (exit terminal)"),
 				keyStyle.Render("s") + "   " + descStyle.Render("Selection mode"),
 				keyStyle.Render("?") + "   " + descStyle.Render("Toggle help"),
 			}
