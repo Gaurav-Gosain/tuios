@@ -8,313 +8,24 @@ Charm stack (Bubble Tea v2 and Lipgloss v2), TUIOS offers a vim-like modal
 interface with comprehensive keyboard shortcuts, workspace support, and mouse
 interaction.
 
-## Features
-
-![TUIOS](./assets/tuios.gif)
-
-### Core Functionality
-
-- **Multiple Terminal Windows**: Create and manage multiple terminal sessions simultaneously
-- **Workspace Support**: Organize windows across 9 independent workspaces
-- **Modal Interface**: Vim-inspired design with Window Management Mode and
-  Terminal Mode
-- **Automatic Tiling**: Optional automatic window tiling with intelligent layouts
-- **Window Minimization**: Minimize windows to dock with smooth animations
-- **Real-time Updates**: 60Hz polling for responsive terminal content updates
-- **Mouse Support**: Full mouse interaction for window management, dragging,
-  and resizing
-
-### Window Management
-
-- **Dynamic Layouts**: Snap windows to screen edges, corners, or fullscreen
-- **Workspace Organization**: 9 workspaces for organizing terminal sessions
-- **Tiling Mode**: Automatic window arrangement with grid-based layouts
-- **Drag and Drop**: Move windows by dragging with mouse (with tiling swap support)
-- **Resize Support**: Right-click and drag to resize windows (disabled in tiling mode)
-- **Window Minimization**: Minimize to dock with pill-style indicators
-- **Z-index Management**: Automatic window layering and focus management
-- **Visual Feedback**: Clear border colors indicating focus state and mode
-
-### Advanced Features
-
-- **Tmux-style Prefix Mode**: <kbd>Ctrl</kbd>+<kbd>B</kbd> prefix for advanced commands
-- **Window Renaming**: Custom names for easy identification
-- **Smart Animations**: Smooth transitions for minimize/restore/snap operations
-- **CPU Monitoring**: Real-time CPU usage graph in status bar
-- **Comprehensive Help System**: Built-in contextual help overlay
-- **Text Selection & Copying**: Mouse and keyboard-based text selection with
-  clipboard integration
-- **Smart Notifications**: Responsive notification system with overflow protection
-- **SSH Server Mode**: Run TUIOS as SSH server for remote terminal multiplexing
-- **Session Isolation**: Each SSH connection gets dedicated TUIOS instance
-
-## Architecture
-
-### How TUIOS Works
-
-TUIOS manages multiple terminal sessions through a hierarchical system of workspaces, windows, and PTY processes. The diagram below illustrates the core concepts and data flow:
-
-```mermaid
-graph TB
-    %% User Interaction Layer
-    User([User Input<br/>Keyboard/Mouse])
-
-    %% Input Processing
-    Input[Input Handler<br/>Keyboard events<br/>Mouse events<br/>Clipboard ops]
-
-    %% Core OS
-    OS[TUIOS OS<br/>Main Orchestrator<br/>9 Workspaces<br/>Window management<br/>Animation system<br/>Rendering pipeline]
-
-    %% Workspaces
-    WS1[Workspace 1<br/>Windows: 1,2,3]
-    WS2[Workspace 2<br/>Windows: 4,5]
-    WS3[Workspace 3-9<br/>...]
-
-    %% Windows in Workspace 1
-    W1[Window 1<br/>Name: vim<br/>Pos: 10,5<br/>Size: 80x24<br/>Visible]
-    W2[Window 2<br/>Name: logs<br/>Pos: 90,5<br/>Size: 80x24<br/>Minimized]
-    W3[Window 3<br/>Pos: 10,30<br/>Size: 80x20<br/>Visible]
-
-    %% PTY Processes
-    PTY1[PTY 1<br/>bash PID:12345<br/>I/O goroutines]
-    PTY2[PTY 2<br/>zsh PID:12346<br/>I/O goroutines]
-    PTY3[PTY 3<br/>fish PID:12347<br/>I/O goroutines]
-
-    %% Virtual Terminals
-    VT1[Virtual Terminal 1<br/>Screen buffer<br/>ANSI parsing<br/>80x24 cells]
-    VT2[Virtual Terminal 2<br/>Screen buffer<br/>ANSI parsing<br/>80x24 cells]
-    VT3[Virtual Terminal 3<br/>Screen buffer<br/>ANSI parsing<br/>80x20 cells]
-
-    %% Shell Processes
-    Shell1[bash -i<br/>Running: vim]
-    Shell2[zsh -i<br/>Running: tail -f]
-    Shell3[fish -i<br/>Running: htop]
-
-    %% Rendering System
-    Render[Rendering Engine<br/>Layer composition<br/>Smart caching<br/>Viewport culling<br/>60 FPS updates]
-
-    Animations[Animation System<br/>Minimize/Restore<br/>Snap/Tile<br/>Smooth transitions]
-
-    Canvas[Lipgloss Canvas<br/>Terminal output<br/>ANSI codes]
-
-    Terminal([Physical Terminal<br/>User's screen])
-
-    %% Dock
-    Dock[Dock<br/>Minimized windows<br/>Pill-style items]
-
-    %% Data Flow
-    User -->|Key press/Click| Input
-    Input -->|Commands| OS
-
-    OS -.->|Manages| WS1
-    OS -.->|Manages| WS2
-    OS -.->|Manages| WS3
-
-    WS1 -->|Contains| W1
-    WS1 -->|Contains| W2
-    WS1 -->|Contains| W3
-
-    W1 -->|Owns| PTY1
-    W2 -->|Owns| PTY2
-    W3 -->|Owns| PTY3
-
-    PTY1 <-->|Bidirectional I/O| VT1
-    PTY2 <-->|Bidirectional I/O| VT2
-    PTY3 <-->|Bidirectional I/O| VT3
-
-    PTY1 <-->|stdin/stdout/stderr| Shell1
-    PTY2 <-->|stdin/stdout/stderr| Shell2
-    PTY3 <-->|stdin/stdout/stderr| Shell3
-
-    OS -->|Triggers| Animations
-    Animations -.->|Updates positions| W1
-    Animations -.->|Updates positions| W2
-
-    W2 -.->|When minimized| Dock
-
-    OS -->|Render request| Render
-    VT1 -->|Screen content| Render
-    VT2 -->|Screen content| Render
-    VT3 -->|Screen content| Render
-    Dock -->|Dock UI| Render
-
-    Render -->|Composites| Canvas
-    Canvas -->|ANSI output| Terminal
-
-    %% Styling
-    classDef user fill:#4865f2,stroke:#333,stroke-width:2px,color:#fff
-    classDef core fill:#8b5cf6,stroke:#333,stroke-width:3px,color:#fff
-    classDef workspace fill:#22c55e,stroke:#333,stroke-width:2px,color:#fff
-    classDef window fill:#f59e0b,stroke:#333,stroke-width:2px,color:#fff
-    classDef pty fill:#ec4899,stroke:#333,stroke-width:2px,color:#fff
-    classDef vt fill:#06b6d4,stroke:#333,stroke-width:2px,color:#fff
-    classDef shell fill:#64748b,stroke:#333,stroke-width:2px,color:#fff
-    classDef render fill:#a855f7,stroke:#333,stroke-width:2px,color:#fff
-
-    class User,Terminal user
-    class OS,Input core
-    class WS1,WS2,WS3 workspace
-    class W1,W2,W3 window
-    class PTY1,PTY2,PTY3 pty
-    class VT1,VT2,VT3 vt
-    class Shell1,Shell2,Shell3 shell
-    class Render,Animations,Canvas,Dock render
-```
-
-#### Key Concepts
-
-**Workspaces**: TUIOS provides 9 independent workspaces (like virtual desktops). Each workspace can contain multiple windows. You can switch between workspaces using <kbd>Alt</kbd>+<kbd>1-9</kbd>.
-
-**Windows**: Each window represents a terminal session with its own:
-
-- Position (X, Y coordinates)
-- Size (width × height in characters)
-- Custom name (optional, for easy identification)
-- Minimization state (visible or minimized to dock)
-- Workspace assignment (which workspace it belongs to)
-
-**PTY (Pseudo-Terminal)**: Each window owns a PTY that creates a bidirectional communication channel with a shell process. The PTY handles:
-
-- I/O operations through dedicated goroutines
-- Process lifecycle (spawn, monitor, cleanup)
-- Terminal size changes (SIGWINCH)
-
-**Virtual Terminal (VT)**: Processes ANSI escape sequences from the shell and maintains:
-
-- Screen buffer (grid of characters with attributes)
-- Cursor position
-- Text attributes (colors, bold, italic, etc.)
-- Scrollback history
-
-**Rendering Pipeline**:
-
-1. VT screen buffers are read (60 FPS polling)
-2. Windows are composed into layers with borders, titles, and content
-3. Smart caching skips unchanged windows
-4. Animations smoothly transition window positions
-5. Lipgloss canvas composites everything
-6. Final ANSI output is sent to the physical terminal
-
-**Animation System**: Handles smooth transitions for:
-
-- Minimize: Window → Dock (with easing)
-- Restore: Dock → Window position
-- Snap: Window → Screen edge/corner
-- Tiling: Multiple windows rearranging
-
-### Package Architecture
-
-TUIOS is built with a clean, modular architecture organized into focused packages with clear separation of concerns. The dependency graph below shows the relationship between all packages:
-
-```mermaid
-graph TB
-    %% Entry point
-    main[cmd/tuios<br/>Entry Point]
-
-    %% Low-level packages (no dependencies)
-    config[config<br/>Constants & Configuration]
-    pool[pool<br/>Memory Pools]
-
-    %% Mid-level packages
-    terminal[terminal<br/>Window & PTY Management]
-    system[system<br/>Platform-Specific<br/>System Info]
-    ui[ui<br/>Animations]
-
-    %% High-level packages
-    layout[layout<br/>Tiling Algorithms]
-    server[server<br/>SSH Server Mode]
-
-    %% Core application
-    app[app<br/>Core Orchestration]
-
-    %% Input handling
-    input[input<br/>Input Handlingo]
-
-    %% External dependencies
-    bubbletea[Bubble Tea v2<br/>TUI Framework]
-    lipgloss[Lipgloss v2<br/>Styling]
-    vt[Charm VT<br/>Virtual Terminal]
-    pty_lib[go-pty<br/>PTY Interface]
-    ssh_lib[Charm SSH/Wish<br/>SSH Server]
-
-    %% Dependencies - Level 1 to Level 2
-    terminal --> config
-    terminal --> pool
-    terminal --> pty_lib
-    terminal --> vt
-    ui --> terminal
-    ui --> config
-    system --> config
-
-    %% Dependencies - Level 2 to Level 3
-    layout --> terminal
-    layout --> ui
-    layout --> config
-    server --> config
-    server --> ssh_lib
-
-    %% Dependencies - Level 3 to Level 4 (app)
-    app --> terminal
-    app --> ui
-    app --> system
-    app --> config
-    app --> pool
-    app --> layout
-
-    %% Dependencies - Level 4 to Level 5 (input)
-    input --> app
-    input --> terminal
-    input --> config
-
-    %% Dependencies - Level 5 to Entry point
-    main --> app
-    main --> input
-    main --> server
-    main --> config
-
-    %% External library dependencies
-    main --> bubbletea
-    app --> bubbletea
-    app --> lipgloss
-    input --> bubbletea
-    server --> bubbletea
-
-    %% Styling
-    classDef entry fill:#4865f2,stroke:#333,stroke-width:3px,color:#fff
-    classDef lowLevel fill:#22c55e,stroke:#333,stroke-width:2px,color:#fff
-    classDef midLevel fill:#f59e0b,stroke:#333,stroke-width:2px,color:#fff
-    classDef highLevel fill:#ec4899,stroke:#333,stroke-width:2px,color:#fff
-    classDef core fill:#8b5cf6,stroke:#333,stroke-width:3px,color:#fff
-    classDef external fill:#64748b,stroke:#333,stroke-width:1px,color:#fff
-
-    class main entry
-    class config,pool lowLevel
-    class terminal,ui,system midLevel
-    class layout,server highLevel
-    class app,input core
-    class bubbletea,lipgloss,vt,pty_lib,ssh_lib external
-```
-
-### Package Responsibilities
-
-- **cmd/tuios**: Application entry point, CLI argument parsing, initialization
-- **config**: Centralized constants (100+ configuration values)
-- **pool**: Memory pool management for performance optimization
-- **terminal**: Window lifecycle, PTY management, shell detection
-- **ui**: Animation system for smooth transitions
-- **system**: Platform-specific system information (CPU monitoring)
-- **layout**: Tiling algorithms and window positioning
-- **server**: SSH server mode for remote access
-- **app**: Core application logic, window management, rendering, workspace management
-- **input**: Comprehensive input handling (keyboard, mouse, selection, clipboard)
-
-### Design Principles
-
-- **One-way dependencies**: Clear hierarchy prevents circular dependencies
-- **Platform abstraction**: Build tags for Linux/macOS/Windows support
-- **Separation of concerns**: Each package has a single, well-defined purpose
-- **Performance focused**: Memory pools, smart caching, viewport culling
-- **Testable architecture**: Focused packages enable comprehensive unit testing
+## Table of Contents
+
+- [Installation](#installation)
+- [Features](#features)
+- [Usage](#usage)
+  - [Keyboard Shortcuts](#keyboard-shortcuts)
+  - [Mouse Controls](#mouse-controls)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Performance](#performance)
+- [Troubleshooting](#troubleshooting)
+- [Dependencies](#dependencies)
+- [Roadmap](#roadmap)
+- [Development](#development)
+  - [Local Development](#local-development)
+  - [Creating Releases](#creating-releases)
+- [Contribution](#contribution)
+- [License](#license)
 
 ## Installation
 
@@ -412,11 +123,55 @@ If you prefer to build from source, follow these steps:
 
 TUIOS uses the following libraries:
 
-- [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) - Terminal UI framework
-- [Lipgloss v2](https://github.com/charmbracelet/lipgloss) - Styling library
-- [VT](https://github.com/charmbracelet/x/tree/main/vt) - Virtual terminal implementation
-- [PTY](https://github.com/creack/pty) - Pseudo-terminal interface
-- [Wish v2](https://github.com/charmbracelet/wish) - SSH server framework (for SSH mode)
+- **[Bubble Tea v2](https://github.com/charmbracelet/bubbletea)**: Terminal UI
+  framework
+- **[Lipgloss v2](https://github.com/charmbracelet/lipgloss)**: Terminal
+  styling library
+- **[Charm VT](https://github.com/charmbracelet/vt)**: Virtual terminal
+  emulator
+- **[go-pty](https://github.com/aymanbagabas/go-pty)**: Cross-platform PTY
+  interface
+- **[Wish v2](https://github.com/charmbracelet/wish)**: SSH server library
+
+## Features
+
+![TUIOS](./assets/tuios.gif)
+
+### Core Functionality
+
+- **Multiple Terminal Windows**: Create and manage multiple terminal sessions simultaneously
+- **Workspace Support**: Organize windows across 9 independent workspaces
+- **Modal Interface**: Vim-inspired design with Window Management Mode and
+  Terminal Mode
+- **Automatic Tiling**: Optional automatic window tiling with intelligent layouts
+- **Window Minimization**: Minimize windows to dock with smooth animations
+- **Real-time Updates**: 60Hz polling for responsive terminal content updates
+- **Mouse Support**: Full mouse interaction for window management, dragging,
+  and resizing
+
+### Window Management
+
+- **Dynamic Layouts**: Snap windows to screen edges, corners, or fullscreen
+- **Workspace Organization**: 9 workspaces for organizing terminal sessions
+- **Tiling Mode**: Automatic window arrangement with grid-based layouts
+- **Drag and Drop**: Move windows by dragging with mouse (with tiling swap support)
+- **Resize Support**: Right-click and drag to resize windows (disabled in tiling mode)
+- **Window Minimization**: Minimize to dock with pill-style indicators
+- **Z-index Management**: Automatic window layering and focus management
+- **Visual Feedback**: Clear border colors indicating focus state and mode
+
+### Advanced Features
+
+- **Tmux-style Prefix Mode**: <kbd>Ctrl</kbd>+<kbd>B</kbd> prefix for advanced commands
+- **Window Renaming**: Custom names for easy identification
+- **Smart Animations**: Smooth transitions for minimize/restore/snap operations
+- **CPU Monitoring**: Real-time CPU usage graph in status bar
+- **Comprehensive Help System**: Built-in contextual help overlay
+- **Text Selection & Copying**: Mouse and keyboard-based text selection with
+  clipboard integration
+- **Smart Notifications**: Responsive notification system with overflow protection
+- **SSH Server Mode**: Run TUIOS as SSH server for remote terminal multiplexing
+- **Session Isolation**: Each SSH connection gets dedicated TUIOS instance
 
 ## Usage
 
