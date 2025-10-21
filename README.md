@@ -4,6 +4,7 @@
     <a href="https://github.com/charmbracelet/lipgloss/releases"><img src="https://img.shields.io/github/release/charmbracelet/lipgloss.svg" alt="Latest Release"></a>
     <a href="https://pkg.go.dev/github.com/charmbracelet/lipgloss?tab=doc"><img src="https://godoc.org/github.com/golang/gddo?status.svg" alt="GoDoc"></a>
     <a href="https://github.com/charmbracelet/lipgloss/actions"><img src="https://github.com/charmbracelet/lipgloss/workflows/build/badge.svg" alt="Build Status"></a>
+    <a href="https://deepwiki.com/Gaurav-Gosain/tuios"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 </p>
 
 ![TUIOS](./assets/demo.gif)
@@ -663,8 +664,6 @@ go test ./...
 
 Contributions are welcome! Whether you want to add new features,
 fix bugs, or improve documentation, feel free to open a pull request.
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Gaurav-Gosain/tuios)
 
 ### Development Setup
 
