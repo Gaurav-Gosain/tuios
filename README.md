@@ -664,6 +664,8 @@ go test ./...
 Contributions are welcome! Whether you want to add new features,
 fix bugs, or improve documentation, feel free to open a pull request.
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Gaurav-Gosain/tuios)
+
 ### Development Setup
 
 ```bash
