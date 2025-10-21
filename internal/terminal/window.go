@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -103,6 +104,13 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		return nil
 	}
 
+	// Set initial PTY size to match terminal dimensions
+	// This is critical for shells like nushell that query terminal size
+	if err := ptyInstance.Resize(terminalWidth, terminalHeight); err != nil {
+		// Log error but continue - some systems may not support resize before start
+		_ = err
+	}
+
 	// Create command through PTY
 	ptyCmd := ptyInstance.Command(shell)
 	ptyCmd.Env = cmd.Env
@@ -111,6 +119,13 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	if err := ptyCmd.Start(); err != nil {
 		ptyInstance.Close()
 		return nil
+	}
+
+	// Resize PTY again after process starts to ensure size is properly set
+	// Some PTY implementations require the process to be running before accepting resize
+	if err := ptyInstance.Resize(terminalWidth, terminalHeight); err != nil {
+		// Not a critical error, continue
+		_ = err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -320,9 +335,35 @@ func (w *Window) handleIOOperations() {
 					return
 				}
 				if n > 0 {
+					data := buf[:n]
+
+					// Fix incorrect CPR responses from VT library for nushell compatibility
+					// The VT library responds to ESC[6n queries but returns stale/incorrect cursor positions
+					// This causes nushell to incorrectly clear the screen thinking it's at the wrong position
+					// We detect CPR responses (ESC[{row};{col}R) and replace with actual cursor position
+					if len(data) >= 6 && data[0] == '\x1b' && data[1] == '[' && data[len(data)-1] == 'R' {
+						// This looks like a CPR response, check if it contains semicolon
+						if bytes.Contains(data, []byte(";")) {
+							w.ioMu.RLock()
+							if w.Terminal != nil {
+								screen := w.Terminal.Screen()
+								if screen != nil {
+									cursor := screen.Cursor()
+									// Get the actual current cursor position (1-indexed for terminal protocol)
+									actualY := cursor.Y + 1
+									actualX := cursor.X + 1
+									// Replace with corrected cursor position
+									data = []byte(fmt.Sprintf("\x1b[%d;%dR", actualY, actualX))
+								}
+							}
+							w.ioMu.RUnlock()
+						}
+					}
+
+					// Write to PTY
 					w.ioMu.RLock()
 					if w.Pty != nil {
-						if _, err := w.Pty.Write(buf[:n]); err != nil {
+						if _, err := w.Pty.Write(data); err != nil {
 							// Ignore write errors during I/O operations
 							_ = err
 						}
