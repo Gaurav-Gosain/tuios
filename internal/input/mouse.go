@@ -448,19 +448,44 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if focusedWindow != nil {
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				wasInScrollback := focusedWindow.ScrollbackMode
-				HandleScrollbackMouseWheel(focusedWindow, true)
-				// Only show notification when entering scrollback mode (mode transition)
-				if !wasInScrollback && focusedWindow.ScrollbackMode && !o.SelectionMode {
-					o.ShowNotification("Scrollback Mode (↑/↓/PgUp/PgDn, q to exit)", "info", config.NotificationDuration)
+				if o.SelectionMode {
+					// In selection mode, scroll without entering scrollback mode
+					if focusedWindow.Terminal != nil {
+						scrollbackLen := focusedWindow.ScrollbackLen()
+						if scrollbackLen > 0 && focusedWindow.ScrollbackOffset < scrollbackLen {
+							focusedWindow.ScrollbackOffset += 3
+							if focusedWindow.ScrollbackOffset > scrollbackLen {
+								focusedWindow.ScrollbackOffset = scrollbackLen
+							}
+							focusedWindow.InvalidateCache()
+						}
+					}
+				} else {
+					// In terminal mode, use scrollback mode
+					wasInScrollback := focusedWindow.ScrollbackMode
+					HandleScrollbackMouseWheel(focusedWindow, true)
+					if !wasInScrollback && focusedWindow.ScrollbackMode {
+						o.ShowNotification("Scrollback Mode (↑/↓/PgUp/PgDn, q to exit)", "info", config.NotificationDuration)
+					}
 				}
 				return o, nil
 			case tea.MouseWheelDown:
-				wasInScrollback := focusedWindow.ScrollbackMode
-				HandleScrollbackMouseWheel(focusedWindow, false)
-				// Only show notification when exiting scrollback mode (mode transition)
-				if wasInScrollback && !focusedWindow.ScrollbackMode && o.Mode == app.TerminalMode {
-					o.ShowNotification("Scrollback Mode Exited", "info", config.NotificationDuration)
+				if o.SelectionMode {
+					// In selection mode, scroll without entering scrollback mode
+					if focusedWindow.ScrollbackOffset > 0 {
+						focusedWindow.ScrollbackOffset -= 3
+						if focusedWindow.ScrollbackOffset < 0 {
+							focusedWindow.ScrollbackOffset = 0
+						}
+						focusedWindow.InvalidateCache()
+					}
+				} else {
+					// In terminal mode, use scrollback mode
+					wasInScrollback := focusedWindow.ScrollbackMode
+					HandleScrollbackMouseWheel(focusedWindow, false)
+					if wasInScrollback && !focusedWindow.ScrollbackMode {
+						o.ShowNotification("Scrollback Mode Exited", "info", config.NotificationDuration)
+					}
 				}
 				return o, nil
 			}

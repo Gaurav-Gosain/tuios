@@ -184,9 +184,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// Use optimized rendering for background windows (preserve colors but skip expensive operations)
 	useOptimizedRendering := !isFocused && !inTerminalMode
 
-	// Determine if we're in scrollback mode
+	// Determine if we're in scrollback mode or viewing scrollback (e.g., in selection mode)
 	scrollbackLen := window.ScrollbackLen()
-	inScrollbackMode := window.ScrollbackMode && window.ScrollbackOffset > 0
+	inScrollbackMode := window.ScrollbackOffset > 0
 
 	for y := range maxY {
 		if y > 0 {
@@ -296,18 +296,19 @@ func buildOptimizedCellStyle(cell *uv.Cell) lipgloss.Style {
 	}
 
 	// Apply colors only (preserve the visual appearance)
+	// Check for nil and validate the color is usable
 	if cell.Style.Fg != nil {
 		if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
 			cellStyle = cellStyle.Foreground(ansiColor)
-		} else if color, ok := cell.Style.Fg.(color.Color); ok {
-			cellStyle = cellStyle.Foreground(color)
+		} else if c, ok := cell.Style.Fg.(color.Color); ok && isColorSafe(c) {
+			cellStyle = cellStyle.Foreground(c)
 		}
 	}
 	if cell.Style.Bg != nil {
 		if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
 			cellStyle = cellStyle.Background(ansiColor)
-		} else if color, ok := cell.Style.Bg.(color.Color); ok {
-			cellStyle = cellStyle.Background(color)
+		} else if c, ok := cell.Style.Bg.(color.Color); ok && isColorSafe(c) {
+			cellStyle = cellStyle.Background(c)
 		}
 	}
 
@@ -315,6 +316,19 @@ func buildOptimizedCellStyle(cell *uv.Cell) lipgloss.Style {
 	// This preserves colors while improving performance significantly
 
 	return cellStyle
+}
+
+// isColorSafe checks if a color can be safely used without panicking
+func isColorSafe(c color.Color) bool {
+	if c == nil {
+		return false
+	}
+	// Try to call RGBA safely with panic recovery
+	defer func() {
+		recover() // Silently catch any panic from nil pointer dereference
+	}()
+	_, _, _, _ = c.RGBA()
+	return true
 }
 
 func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
@@ -333,15 +347,15 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 		if cell.Style.Fg != nil {
 			if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
 				fg = ansiColor
-			} else if color, ok := cell.Style.Fg.(color.Color); ok {
-				fg = color
+			} else if c, ok := cell.Style.Fg.(color.Color); ok && isColorSafe(c) {
+				fg = c
 			}
 		}
 		if cell.Style.Bg != nil {
 			if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
 				bg = ansiColor
-			} else if color, ok := cell.Style.Bg.(color.Color); ok {
-				bg = color
+			} else if c, ok := cell.Style.Bg.(color.Color); ok && isColorSafe(c) {
+				bg = c
 			}
 		}
 		return cellStyle.Background(fg).Foreground(bg)
@@ -351,15 +365,15 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 	if cell.Style.Fg != nil {
 		if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
 			cellStyle = cellStyle.Foreground(ansiColor)
-		} else if color, ok := cell.Style.Fg.(color.Color); ok {
-			cellStyle = cellStyle.Foreground(color)
+		} else if c, ok := cell.Style.Fg.(color.Color); ok && isColorSafe(c) {
+			cellStyle = cellStyle.Foreground(c)
 		}
 	}
 	if cell.Style.Bg != nil {
 		if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
 			cellStyle = cellStyle.Background(ansiColor)
-		} else if color, ok := cell.Style.Bg.(color.Color); ok {
-			cellStyle = cellStyle.Background(color)
+		} else if c, ok := cell.Style.Bg.(color.Color); ok && isColorSafe(c) {
+			cellStyle = cellStyle.Background(c)
 		}
 	}
 
@@ -674,98 +688,52 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			allHelpLines = append(allHelpLines, "")
 		}
 
-		allHelpLines = append(allHelpLines, keyStyle("WINDOW MANAGEMENT"))
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("n")+"              "+descStyle("New window"))
-		allHelpLines = append(allHelpLines, keyStyle("x")+"              "+descStyle("Close window"))
-		allHelpLines = append(allHelpLines, keyStyle("r")+"              "+descStyle("Rename window"))
-		allHelpLines = append(allHelpLines, keyStyle("m")+"              "+descStyle("Minimize window"))
-		allHelpLines = append(allHelpLines, keyStyle("Shift+M")+"        "+descStyle("Restore all"))
-		allHelpLines = append(allHelpLines, keyStyle("Tab")+"            "+descStyle("Next window"))
-		allHelpLines = append(allHelpLines, keyStyle("Shift+Tab")+"      "+descStyle("Previous window"))
-		allHelpLines = append(allHelpLines, keyStyle("1-9")+"            "+descStyle("Select window"))
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("WORKSPACES"))
-		allHelpLines = append(allHelpLines, "")
-
 		// Detect OS and use appropriate modifier key name
 		modifierKey := "Alt"
 		if runtime.GOOS == "darwin" {
 			modifierKey = "Opt"
 		}
 
-		allHelpLines = append(allHelpLines, keyStyle(modifierKey+"+1-9")+"        "+descStyle("Switch workspace"))
-		allHelpLines = append(allHelpLines, keyStyle(modifierKey+"+Shift+1-9")+"  "+descStyle("Move window and follow"))
-		allHelpLines = append(allHelpLines, keyStyle("Ctrl+B, w, 1-9")+" "+descStyle("Switch workspace (prefix)"))
-		allHelpLines = append(allHelpLines, keyStyle("Ctrl+B, w, Shift+1-9")+" "+descStyle("Move window (prefix)"))
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("MODES"))
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("i, Enter")+"       "+descStyle("Insert mode"))
-		allHelpLines = append(allHelpLines, keyStyle("t")+"              "+descStyle("Toggle tiling"))
-		allHelpLines = append(allHelpLines, keyStyle("?")+"              "+descStyle("Toggle help"))
+		// Generate keybinding sections from structured data
+		sections := config.GetKeybindings()
+		for _, section := range sections {
+			// Check condition
+			if section.Condition == "tiling" && !m.AutoTiling {
+				continue
+			}
+			if section.Condition == "!tiling" && m.AutoTiling {
+				continue
+			}
 
-		if m.AutoTiling {
-			allHelpLines = append(allHelpLines, "")
-			allHelpLines = append(allHelpLines, keyStyle("TILING:"))
-			allHelpLines = append(allHelpLines, keyStyle("Shift+H/L, Ctrl+←/→")+" "+descStyle("Swap left/right"))
-			allHelpLines = append(allHelpLines, keyStyle("Shift+K/J, Ctrl+↑/↓")+" "+descStyle("Swap up/down"))
-		} else {
-			allHelpLines = append(allHelpLines, "")
-			allHelpLines = append(allHelpLines, keyStyle("WINDOW SNAPPING:"))
-			allHelpLines = append(allHelpLines, keyStyle("h, l")+"           "+descStyle("Snap left/right"))
-			allHelpLines = append(allHelpLines, keyStyle("1-4")+"            "+descStyle("Snap to corners"))
-			allHelpLines = append(allHelpLines, keyStyle("f")+"              "+descStyle("Fullscreen"))
-			allHelpLines = append(allHelpLines, keyStyle("u")+"              "+descStyle("Unsnap"))
+			// Add section title
+			if section.Title != "" {
+				allHelpLines = append(allHelpLines, "")
+				allHelpLines = append(allHelpLines, keyStyle(section.Title))
+			}
+
+			// Add blank line after title if there are bindings
+			if len(section.Bindings) > 0 && section.Title != "" {
+				allHelpLines = append(allHelpLines, "")
+			}
+
+			// Add bindings
+			for _, binding := range section.Bindings {
+				// Replace %s with modifier key if present
+				key := binding.Key
+				if strings.Contains(key, "%s") {
+					key = fmt.Sprintf(key, modifierKey)
+				}
+
+				// Calculate padding to align descriptions
+				padding := 14 - len(key)
+				if padding < 2 {
+					padding = 2
+				}
+				paddingStr := strings.Repeat(" ", padding)
+
+				allHelpLines = append(allHelpLines, keyStyle(key)+paddingStr+descStyle(binding.Description))
+			}
 		}
-
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("TEXT SELECTION:"))
-		allHelpLines = append(allHelpLines, keyStyle("s")+"              "+descStyle("Toggle selection mode"))
-		allHelpLines = append(allHelpLines, keyStyle("Ctrl+S")+"         "+descStyle("Toggle selection (from terminal)"))
-		allHelpLines = append(allHelpLines, keyStyle("Single click")+"   "+descStyle("Character selection"))
-		allHelpLines = append(allHelpLines, keyStyle("Double click")+"   "+descStyle("Word selection"))
-		allHelpLines = append(allHelpLines, keyStyle("Triple click")+"   "+descStyle("Line selection"))
-		allHelpLines = append(allHelpLines, keyStyle("Mouse drag")+"     "+descStyle("Select text (mouse)"))
-		allHelpLines = append(allHelpLines, keyStyle("Arrow keys")+"     "+descStyle("Move cursor"))
-		allHelpLines = append(allHelpLines, keyStyle("Shift+Arrow")+"    "+descStyle("Extend selection"))
-		allHelpLines = append(allHelpLines, keyStyle("c")+"              "+descStyle("Copy selected text"))
-		allHelpLines = append(allHelpLines, keyStyle("Ctrl+V")+"         "+descStyle("Paste from clipboard"))
-		allHelpLines = append(allHelpLines, keyStyle("Esc")+"            "+descStyle("Clear selection"))
-
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("WINDOW NAVIGATION:"))
-		allHelpLines = append(allHelpLines, keyStyle("Ctrl+↑/↓")+"       "+descStyle("Swap/maximize windows"))
-
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("SYSTEM:"))
-		allHelpLines = append(allHelpLines, keyStyle("Ctrl+L")+"         "+descStyle("Toggle log viewer"))
-
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("PREFIX (Ctrl+B) - Works in all modes:"))
-		allHelpLines = append(allHelpLines, keyStyle("c")+"              "+descStyle("Create window"))
-		allHelpLines = append(allHelpLines, keyStyle("x")+"              "+descStyle("Close window"))
-		allHelpLines = append(allHelpLines, keyStyle(",/r")+"            "+descStyle("Rename window"))
-		allHelpLines = append(allHelpLines, keyStyle("n/Tab")+"          "+descStyle("Next window"))
-		allHelpLines = append(allHelpLines, keyStyle("p/Shift+Tab")+"    "+descStyle("Previous window"))
-		allHelpLines = append(allHelpLines, keyStyle("0-9")+"            "+descStyle("Jump to window"))
-		allHelpLines = append(allHelpLines, keyStyle("space")+"          "+descStyle("Toggle tiling"))
-		allHelpLines = append(allHelpLines, keyStyle("w")+"              "+descStyle("Workspace commands"))
-		allHelpLines = append(allHelpLines, keyStyle("m")+"              "+descStyle("Minimize commands"))
-		allHelpLines = append(allHelpLines, keyStyle("t")+"              "+descStyle("Window commands"))
-		allHelpLines = append(allHelpLines, keyStyle("d/Esc")+"          "+descStyle("Detach from terminal"))
-		allHelpLines = append(allHelpLines, keyStyle("s")+"              "+descStyle("Toggle selection mode"))
-		allHelpLines = append(allHelpLines, keyStyle("q")+"              "+descStyle("Quit application"))
-		allHelpLines = append(allHelpLines, keyStyle("Ctrl+B")+"         "+descStyle("Send literal Ctrl+B"))
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("WINDOW PREFIX (Ctrl+B, t):"))
-		allHelpLines = append(allHelpLines, keyStyle("n")+"              "+descStyle("New window"))
-		allHelpLines = append(allHelpLines, keyStyle("x")+"              "+descStyle("Close window"))
-		allHelpLines = append(allHelpLines, keyStyle("r")+"              "+descStyle("Rename window"))
-		allHelpLines = append(allHelpLines, keyStyle("Tab/Shift+Tab")+"  "+descStyle("Next/Previous window"))
-		allHelpLines = append(allHelpLines, keyStyle("t")+"              "+descStyle("Toggle tiling mode"))
-		allHelpLines = append(allHelpLines, "")
-		allHelpLines = append(allHelpLines, keyStyle("q, Ctrl+C")+"      "+descStyle("Quit"))
 
 		// Apply scrolling
 		// Ensure scroll offset is within bounds
@@ -925,65 +893,56 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Foreground(lipgloss.Color("7"))
 
 		var helpLines []string
+		var title string
+		var bindings []config.Keybinding
 
 		if m.WorkspacePrefixActive {
-			// Workspace prefix commands
-			helpLines = []string{
-				keyStyle.Render("Workspace Commands:"),
-				"",
-				keyStyle.Render("1-9") + "        " + descStyle.Render("Switch to workspace"),
-				keyStyle.Render("Shift+1-9") + "  " + descStyle.Render("Move window to workspace"),
-				keyStyle.Render("Esc") + "        " + descStyle.Render("Cancel"),
-			}
+			title = "Workspace Commands:"
+			bindings = config.GetPrefixKeybindings("workspace")
 		} else if m.MinimizePrefixActive {
-			// Minimize prefix commands
-			// Count minimized windows in current workspace
+			title = "Minimize Commands:"
+			bindings = config.GetPrefixKeybindings("minimize")
+			// Add count of minimized windows to the 1-9 description
 			minimizedCount := 0
 			for _, win := range m.Windows {
 				if win.Minimized && win.Workspace == m.CurrentWorkspace {
 					minimizedCount++
 				}
 			}
-			helpLines = []string{
-				keyStyle.Render("Minimize Commands:"),
-				"",
-				keyStyle.Render("m") + "       " + descStyle.Render("Minimize focused window"),
-				keyStyle.Render("1-9") + "     " + descStyle.Render(fmt.Sprintf("Restore window (%d minimized)", minimizedCount)),
-				keyStyle.Render("Shift+M") + " " + descStyle.Render("Restore all"),
-				keyStyle.Render("Esc") + "     " + descStyle.Render("Cancel"),
+			// Update the description for 1-9 binding
+			for i := range bindings {
+				if bindings[i].Key == "1-9" {
+					bindings[i].Description = fmt.Sprintf("Restore window (%d minimized)", minimizedCount)
+					break
+				}
 			}
 		} else if m.TilingPrefixActive {
-			// Window prefix commands
-			helpLines = []string{
-				keyStyle.Render("Window Commands:"),
-				"",
-				keyStyle.Render("n") + "         " + descStyle.Render("New window"),
-				keyStyle.Render("x") + "         " + descStyle.Render("Close window"),
-				keyStyle.Render("r") + "         " + descStyle.Render("Rename window"),
-				keyStyle.Render("Tab") + "       " + descStyle.Render("Next window"),
-				keyStyle.Render("Shift+Tab") + " " + descStyle.Render("Previous window"),
-				keyStyle.Render("t") + "         " + descStyle.Render("Toggle tiling mode"),
-				keyStyle.Render("Esc") + "       " + descStyle.Render("Cancel"),
-			}
+			title = "Window Commands:"
+			bindings = config.GetPrefixKeybindings("window")
 		} else {
-			// General prefix commands
-			helpLines = []string{
-				keyStyle.Render("Prefix Commands:"),
-				"",
-				keyStyle.Render("c") + "   " + descStyle.Render("Create window"),
-				keyStyle.Render("x") + "   " + descStyle.Render("Close window"),
-				keyStyle.Render(",") + "   " + descStyle.Render("Rename window"),
-				keyStyle.Render("n") + "   " + descStyle.Render("Next window"),
-				keyStyle.Render("p") + "   " + descStyle.Render("Previous window"),
-				keyStyle.Render("0-9") + " " + descStyle.Render("Jump to window"),
-				keyStyle.Render("w") + "   " + descStyle.Render("Workspace commands..."),
-				keyStyle.Render("m") + "   " + descStyle.Render("Minimize commands..."),
-				keyStyle.Render("t") + "   " + descStyle.Render("Window commands..."),
-				keyStyle.Render("d/Esc") + " " + descStyle.Render("Detach (exit terminal)"),
-				keyStyle.Render("s") + "   " + descStyle.Render("Selection mode"),
-				keyStyle.Render("q") + "   " + descStyle.Render("Quit application"),
-				keyStyle.Render("?") + "   " + descStyle.Render("Toggle help"),
+			title = "Prefix Commands:"
+			bindings = config.GetPrefixKeybindings("")
+		}
+
+		// Build help lines from bindings
+		helpLines = append(helpLines, keyStyle.Render(title))
+		helpLines = append(helpLines, "")
+
+		// Find max key length for padding
+		maxKeyLen := 0
+		for _, binding := range bindings {
+			if len(binding.Key) > maxKeyLen {
+				maxKeyLen = len(binding.Key)
 			}
+		}
+
+		for _, binding := range bindings {
+			padding := maxKeyLen - len(binding.Key) + 2
+			if padding < 2 {
+				padding = 2
+			}
+			paddingStr := strings.Repeat(" ", padding)
+			helpLines = append(helpLines, keyStyle.Render(binding.Key)+paddingStr+descStyle.Render(binding.Description))
 		}
 
 		content := lipgloss.JoinVertical(lipgloss.Left, helpLines...)

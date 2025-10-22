@@ -57,6 +57,37 @@ func main() {
 	}
 }
 
+// filterMouseMotion filters out redundant mouse motion events to reduce CPU usage
+// Only passes through mouse motion during drag/resize operations
+func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
+	// Allow all non-motion events through
+	if _, ok := msg.(tea.MouseMotionMsg); !ok {
+		return msg
+	}
+
+	// Type assert to our OS model
+	os, ok := model.(*app.OS)
+	if !ok {
+		return msg
+	}
+
+	// Allow motion events during active interactions
+	if os.Dragging || os.Resizing {
+		return msg
+	}
+
+	// Allow motion events during text selection
+	if os.SelectionMode {
+		focusedWindow := os.GetFocusedWindow()
+		if focusedWindow != nil && focusedWindow.IsSelecting {
+			return msg
+		}
+	}
+
+	// Filter out motion events when not interacting
+	return nil
+}
+
 func runLocal() {
 	// Set up the input handler to break circular dependency
 	app.SetInputHandler(input.HandleInput)
@@ -72,7 +103,14 @@ func runLocal() {
 	}
 
 	// Initialize the Bubble Tea program with optimal settings
-	p := tea.NewProgram(initialOS, tea.WithAltScreen(), tea.WithMouseAllMotion(), tea.WithFPS(config.NormalFPS))
+	p := tea.NewProgram(
+		initialOS,
+		tea.WithAltScreen(),              // Use alternate screen buffer
+		tea.WithMouseAllMotion(),         // Enable mouse tracking
+		tea.WithFPS(config.NormalFPS),    // Set target FPS
+		tea.WithoutSignalHandler(),       // We handle signals ourselves
+		tea.WithFilter(filterMouseMotion), // Filter unnecessary mouse motion events
+	)
 	if _, err := p.Run(); err != nil {
 		log.Printf("Fatal error: %v", err)
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

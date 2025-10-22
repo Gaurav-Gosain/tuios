@@ -68,6 +68,7 @@ const (
 	NormalFPS = 60
 
 	// InteractionFPS is the refresh rate during user interactions (drag/resize)
+	// Lower FPS during interactions improves mouse responsiveness
 	InteractionFPS = 30
 
 	// BackgroundWindowUpdateCycle is the number of update cycles to skip for background windows

@@ -384,7 +384,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 				focusedWindow.SelectedText = ""
 				focusedWindow.IsSelecting = false
-				focusedWindow.ExitScrollbackMode()
+				focusedWindow.ScrollbackOffset = 0 // Reset scrollback offset
 				focusedWindow.InvalidateCache()
 			}
 		} else {
@@ -468,6 +468,11 @@ func handleTerminalSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		// Currently in selection mode, toggle it off and stay in terminal mode
 		o.SelectionMode = false
 		o.ShowNotification("Selection Mode Disabled", "info", config.NotificationDuration)
+		// Reset scrollback offset when exiting selection mode
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.ScrollbackOffset = 0
+			focusedWindow.InvalidateCache()
+		}
 	} else {
 		// Not in selection mode, enable it and switch to window management mode
 		o.Mode = app.WindowManagementMode
@@ -479,6 +484,13 @@ func handleTerminalSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 
 // HandleWindowManagementModeKey handles keyboard input in window management mode
 func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	focusedWindow := o.GetFocusedWindow()
+
+	// Handle scrollback mode navigation (works in both selection mode and normal mode)
+	if focusedWindow != nil && focusedWindow.ScrollbackMode {
+		return handleScrollbackModeKey(msg, o, focusedWindow)
+	}
+
 	// Non-prefix keybindings (immediate actions)
 	switch msg.String() {
 	case "ctrl+c":
@@ -486,12 +498,24 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return o, tea.Quit
 
 	case "q":
-		// Close help if showing, otherwise quit
+		// Close help if showing
 		if o.ShowHelp {
 			o.ShowHelp = false
 			return o, nil
 		}
-		// Quit
+		// Exit selection mode if active
+		if o.SelectionMode {
+			o.SelectionMode = false
+			o.ShowNotification("Selection Mode Exited", "info", config.NotificationDuration)
+			if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+				focusedWindow.SelectedText = ""
+				focusedWindow.IsSelecting = false
+				focusedWindow.ScrollbackOffset = 0
+				focusedWindow.InvalidateCache()
+			}
+			return o, nil
+		}
+		// Quit application
 		return o, tea.Quit
 
 	// Workspace switching with Alt+1-9
@@ -1040,6 +1064,7 @@ func handleCtrlSSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 			focusedWindow.SelectedText = ""
 			focusedWindow.IsSelecting = false
+			focusedWindow.ScrollbackOffset = 0 // Reset scrollback offset
 			focusedWindow.InvalidateCache()
 		}
 	} else {

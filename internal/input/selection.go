@@ -6,12 +6,14 @@ import (
 	"os"
 	"strings"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // extractSelectedText extracts selected text from terminal based on selection coordinates
+// This handles both current screen content and scrollback buffer
 func extractSelectedText(window *terminal.Window, o *app.OS) string {
 	if window.Terminal == nil {
 		return ""
@@ -49,6 +51,37 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		endY = screenHeight - 1
 	}
 
+	// Check if we're viewing scrollback
+	scrollbackLen := window.ScrollbackLen()
+	inScrollbackMode := window.ScrollbackOffset > 0
+
+	// Helper function to get cell at position (handles scrollback)
+	getCellAt := func(x, y int) *uv.Cell {
+		if inScrollbackMode {
+			if y < window.ScrollbackOffset {
+				// This line is from scrollback buffer
+				scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
+				if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
+					scrollbackLine := window.ScrollbackLine(scrollbackIndex)
+					if scrollbackLine != nil && x < len(scrollbackLine) {
+						return &scrollbackLine[x]
+					}
+				}
+				return nil
+			} else {
+				// This line is from current screen (below scrollback)
+				screenY := y - window.ScrollbackOffset
+				if screenY >= 0 && screenY < screenHeight {
+					return screen.CellAt(x, screenY)
+				}
+				return nil
+			}
+		} else {
+			// No scrollback, read from current screen
+			return screen.CellAt(x, y)
+		}
+	}
+
 	// Single line selection
 	if startY == endY {
 		// Clamp selection bounds to line length
@@ -60,7 +93,7 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		}
 
 		for x := startX; x <= endX && x < screenWidth; x++ {
-			cell := screen.CellAt(x, startY)
+			cell := getCellAt(x, startY)
 			if cell != nil && cell.Content != "" {
 				selectedText.WriteString(cell.Content)
 			} else {
@@ -75,7 +108,7 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		if y == startY {
 			// First line - from startX to end
 			for x := startX; x < screenWidth; x++ {
-				cell := screen.CellAt(x, y)
+				cell := getCellAt(x, y)
 				if cell != nil && cell.Content != "" {
 					selectedText.WriteString(cell.Content)
 				} else {
@@ -85,7 +118,7 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		} else if y == endY {
 			// Last line - from start to endX
 			for x := 0; x <= endX && x < screenWidth; x++ {
-				cell := screen.CellAt(x, y)
+				cell := getCellAt(x, y)
 				if cell != nil && cell.Content != "" {
 					selectedText.WriteString(cell.Content)
 				} else {
@@ -95,7 +128,7 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		} else {
 			// Middle lines - full line
 			for x := 0; x < screenWidth; x++ {
-				cell := screen.CellAt(x, y)
+				cell := getCellAt(x, y)
 				if cell != nil && cell.Content != "" {
 					selectedText.WriteString(cell.Content)
 				} else {

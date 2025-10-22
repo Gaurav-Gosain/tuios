@@ -731,18 +731,41 @@ func (m *OS) MoveSelectionCursor(window *terminal.Window, dx, dy int, extending 
 	newX := window.SelectionCursor.X + dx
 	newY := window.SelectionCursor.Y + dy
 
-	// Boundary checking
+	// Handle scrollback when cursor moves beyond visible area in selection mode
+	if newY < 0 {
+		// Trying to move up past the top - scroll up in scrollback
+		// Note: We DON'T enter scrollbackMode, we just adjust the offset
+		// This allows selection to work with scrollback seamlessly
+		if window.Terminal != nil {
+			scrollbackLen := window.ScrollbackLen()
+			if scrollbackLen > 0 && window.ScrollbackOffset < scrollbackLen {
+				// Scroll up by increasing offset
+				window.ScrollbackOffset++
+				if window.ScrollbackOffset > scrollbackLen {
+					window.ScrollbackOffset = scrollbackLen
+				}
+				window.InvalidateCache()
+			}
+		}
+		newY = 0 // Keep cursor at top
+	} else if newY >= maxY {
+		// Trying to move down past the bottom - scroll down in scrollback
+		if window.ScrollbackOffset > 0 {
+			window.ScrollbackOffset--
+			if window.ScrollbackOffset < 0 {
+				window.ScrollbackOffset = 0
+			}
+			window.InvalidateCache()
+		}
+		newY = maxY - 1 // Keep cursor at bottom
+	}
+
+	// X boundary checking
 	if newX < 0 {
 		newX = 0
 	}
 	if newX >= maxX {
 		newX = maxX - 1
-	}
-	if newY < 0 {
-		newY = 0
-	}
-	if newY >= maxY {
-		newY = maxY - 1
 	}
 
 	// Update cursor position

@@ -5,8 +5,9 @@ go 1.24.4
 require (
 	github.com/aymanbagabas/go-pty v0.2.2
 	github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.4
-	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta.2
+	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta.3
 	github.com/charmbracelet/ssh v0.0.0-20241211182756-4fe22b0f1b7c
+	github.com/charmbracelet/ultraviolet v0.0.0-20250911144506-c3463c079117
 	github.com/charmbracelet/wish/v2 v2.0.0-20250725031147-577d86ba3605
 	github.com/charmbracelet/x/vt v0.0.0-20250714123521-bc8a1995e079
 	github.com/google/uuid v1.6.0
@@ -17,7 +18,6 @@ require (
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/keygen v0.5.1 // indirect
 	github.com/charmbracelet/log/v2 v2.0.0-20250226163916-c379e29ff706 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20250911144506-c3463c079117 // indirect
 	github.com/charmbracelet/x/ansi v0.10.2 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.14-0.20250505150409-97991a1f17d1 // indirect
 	github.com/charmbracelet/x/conpty v0.1.0 // indirect
