@@ -14,16 +14,16 @@ import (
 
 	"github.com/charmbracelet/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/vt"
 	"github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // Window represents a terminal window with its own shell process.
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
-// Scrollback buffer support is provided by the underlying charmbracelet/x/vt library.
+// Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
 	Title              string
 	CustomName         string // User-defined window name
