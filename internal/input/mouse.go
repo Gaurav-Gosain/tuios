@@ -441,8 +441,31 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Mouse wheel forwarding to terminals removed to prevent corruption
 	// Terminal applications handle their own scrolling when they need it
-	// NOTE: Scrollback buffer support is not currently implemented because the underlying
-	// charmbracelet/x/vt library does not yet support accessing scrollback history.
+
+	// Handle scrollback in terminal mode or selection mode
+	if o.Mode == app.TerminalMode || o.SelectionMode {
+		focusedWindow := o.GetFocusedWindow()
+		if focusedWindow != nil {
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				wasInScrollback := focusedWindow.ScrollbackMode
+				HandleScrollbackMouseWheel(focusedWindow, true)
+				// Only show notification when entering scrollback mode (mode transition)
+				if !wasInScrollback && focusedWindow.ScrollbackMode && !o.SelectionMode {
+					o.ShowNotification("Scrollback Mode (↑/↓/PgUp/PgDn, q to exit)", "info", config.NotificationDuration)
+				}
+				return o, nil
+			case tea.MouseWheelDown:
+				wasInScrollback := focusedWindow.ScrollbackMode
+				HandleScrollbackMouseWheel(focusedWindow, false)
+				// Only show notification when exiting scrollback mode (mode transition)
+				if wasInScrollback && !focusedWindow.ScrollbackMode && o.Mode == app.TerminalMode {
+					o.ShowNotification("Scrollback Mode Exited", "info", config.NotificationDuration)
+				}
+				return o, nil
+			}
+		}
+	}
 
 	return o, nil
 }
@@ -569,18 +592,18 @@ func max(a, b int) int {
 
 // selectWord selects the word at the given position
 func selectWord(window *terminal.Window, x, y int, o *app.OS) {
-	if window.Terminal == nil || window.Terminal.Screen() == nil {
+	if window.Terminal == nil || window.Terminal == nil {
 		return
 	}
 
-	screen := window.Terminal.Screen()
+	screen := window.Terminal
 	maxX := window.Width - 2
 
 	// Find the start of the word (move left until we hit a non-word character)
 	startX := x
 	for startX > 0 {
-		cell := screen.Cell(startX-1, y)
-		if cell == nil || !isWordChar(cell.Rune) {
+		cell := screen.CellAt(startX-1, y)
+		if cell == nil || cell.Content == "" || !isWordChar(rune(cell.Content[0])) {
 			break
 		}
 		startX--
@@ -589,8 +612,8 @@ func selectWord(window *terminal.Window, x, y int, o *app.OS) {
 	// Find the end of the word (move right until we hit a non-word character)
 	endX := x
 	for endX < maxX-1 {
-		cell := screen.Cell(endX+1, y)
-		if cell == nil || !isWordChar(cell.Rune) {
+		cell := screen.CellAt(endX+1, y)
+		if cell == nil || cell.Content == "" || !isWordChar(rune(cell.Content[0])) {
 			break
 		}
 		endX++

@@ -13,12 +13,18 @@ import (
 
 // HandleTerminalModeKey handles keyboard input in terminal mode
 func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	focusedWindow := o.GetFocusedWindow()
+
+	// Handle scrollback mode navigation
+	if focusedWindow != nil && focusedWindow.ScrollbackMode {
+		return handleScrollbackModeKey(msg, o, focusedWindow)
+	}
+
 	// Check for prefix key in terminal mode
 	if msg.String() == "ctrl+b" {
 		// If prefix is already active, send Ctrl+B to terminal
 		if o.PrefixActive {
 			o.PrefixActive = false
-			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
 				// Send literal Ctrl+B
 				focusedWindow.SendInput([]byte{0x02})
@@ -72,7 +78,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Normal terminal mode - pass through all keys
-	focusedWindow := o.GetFocusedWindow()
 	if focusedWindow != nil {
 		rawInput := getRawKeyBytes(msg)
 		if len(rawInput) > 0 {
@@ -379,6 +384,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 				focusedWindow.SelectedText = ""
 				focusedWindow.IsSelecting = false
+				focusedWindow.ExitScrollbackMode()
 				focusedWindow.InvalidateCache()
 			}
 		} else {
@@ -386,6 +392,14 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			o.Mode = app.WindowManagementMode
 			o.SelectionMode = true
 			o.ShowNotification("Selection Mode", "info", config.NotificationDuration)
+		}
+		return o, nil
+
+	case "[":
+		// Enter scrollback mode (like tmux copy mode with [)
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.EnterScrollbackMode()
+			o.ShowNotification("Scrollback Mode (use ↑/↓/PgUp/PgDn, q to exit)", "info", config.NotificationDuration*2)
 		}
 		return o, nil
 
@@ -978,8 +992,8 @@ func handleSelectionModeToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 				focusedWindow.SelectedText = ""
 				focusedWindow.SelectionMode = 0 // Default to character mode
 				// Initialize selection cursor at terminal cursor position
-				if focusedWindow.Terminal != nil && focusedWindow.Terminal.Screen() != nil {
-					cursor := focusedWindow.Terminal.Screen().Cursor()
+				if focusedWindow.Terminal != nil && focusedWindow.Terminal != nil {
+					cursor := focusedWindow.Terminal.CursorPosition()
 					focusedWindow.SelectionCursor.X = cursor.X
 					focusedWindow.SelectionCursor.Y = cursor.Y
 				}

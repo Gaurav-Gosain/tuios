@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/lipgloss/v2"
-	"github.com/charmbracelet/x/vt"
 )
 
 const (
@@ -158,14 +158,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
-	screen := window.Terminal.Screen()
+	screen := window.Terminal
 	if screen == nil {
 		window.CachedContent = "No screen"
 		return window.CachedContent
 	}
 
 	// Get cursor position
-	cursor := screen.Cursor()
+	cursor := screen.CursorPosition()
 	cursorX := cursor.X
 	cursorY := cursor.Y
 
@@ -184,6 +184,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// Use optimized rendering for background windows (preserve colors but skip expensive operations)
 	useOptimizedRendering := !isFocused && !inTerminalMode
 
+	// Determine if we're in scrollback mode
+	scrollbackLen := window.ScrollbackLen()
+	inScrollbackMode := window.ScrollbackMode && window.ScrollbackOffset > 0
+
 	for y := range maxY {
 		if y > 0 {
 			builder.WriteRune('\n')
@@ -194,12 +198,41 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		defer pool.PutStringBuilder(lineBuilder)
 
 		for x := range maxX {
-			cell := screen.Cell(x, y)
+			var cell *uv.Cell
+
+			// Calculate which line to render based on scrollback offset
+			if inScrollbackMode {
+				// We're viewing scrollback
+				// ScrollbackOffset is how many lines back from the bottom we are
+				// Show scrollback at the top, current screen at the bottom
+
+				if y < window.ScrollbackOffset {
+					// Show scrollback content at the top
+					// y=0 shows the oldest line in our view (ScrollbackOffset lines back)
+					// y=ScrollbackOffset-1 shows the newest scrollback line
+					scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
+					if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
+						scrollbackLine := window.ScrollbackLine(scrollbackIndex)
+						if scrollbackLine != nil && x < len(scrollbackLine) {
+							cell = &scrollbackLine[x]
+						}
+					}
+				} else {
+					// Show current screen content at the bottom
+					screenY := y - window.ScrollbackOffset
+					if screenY >= 0 && screenY < screen.Height() {
+						cell = screen.CellAt(x, screenY)
+					}
+				}
+			} else {
+				// Normal mode - just render current screen
+				cell = screen.CellAt(x, y)
+			}
 
 			// Get the character to display
 			char := " "
-			if cell != nil && cell.Rune != 0 {
-				char = string(cell.Rune)
+			if cell != nil && cell.Content != "" {
+				char = string(cell.Content)
 			}
 
 			// Check if current position is within selection (either actively selecting or has selected text)
@@ -250,13 +283,17 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	return content
 }
 
-func shouldApplyStyle(cell *vt.Cell) bool {
-	return cell.Style.Fg != nil || cell.Style.Bg != nil || cell.Style.Attrs != 0
+func shouldApplyStyle(cell *uv.Cell) bool {
+	return cell != nil && (cell.Style.Fg != nil || cell.Style.Bg != nil || cell.Style.Attrs != 0)
 }
 
-func buildOptimizedCellStyle(cell *vt.Cell) lipgloss.Style {
+func buildOptimizedCellStyle(cell *uv.Cell) lipgloss.Style {
 	// Fast styling for background windows - only colors, skip expensive attributes
 	cellStyle := lipgloss.NewStyle()
+
+	if cell == nil {
+		return cellStyle
+	}
 
 	// Apply colors only (preserve the visual appearance)
 	if cell.Style.Fg != nil {
@@ -280,9 +317,13 @@ func buildOptimizedCellStyle(cell *vt.Cell) lipgloss.Style {
 	return cellStyle
 }
 
-func buildCellStyle(cell *vt.Cell, isCursor bool) lipgloss.Style {
+func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 	// Build style efficiently
 	cellStyle := lipgloss.NewStyle()
+
+	if cell == nil {
+		return cellStyle
+	}
 
 	// Handle cursor rendering first (most common fast path)
 	if isCursor {

@@ -710,7 +710,7 @@ func (m *OS) MoveSelectionCursor(window *terminal.Window, dx, dy int, extending 
 		return
 	}
 
-	screen := window.Terminal.Screen()
+	screen := window.Terminal
 	if screen == nil {
 		return
 	}
@@ -722,7 +722,7 @@ func (m *OS) MoveSelectionCursor(window *terminal.Window, dx, dy int, extending 
 	// Initialize selection cursor if not set (only for non-extending moves)
 	if !extending && !window.IsSelecting {
 		// Position at terminal cursor when starting cursor movement
-		cursor := screen.Cursor()
+		cursor := screen.CursorPosition()
 		window.SelectionCursor.X = cursor.X
 		window.SelectionCursor.Y = cursor.Y
 	}
@@ -817,9 +817,9 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 		// Extract characters from the terminal for this line
 		for x := lineStartX; x <= lineEndX && x < window.Width-2; x++ {
 			// Get the cell from the terminal at this position
-			cell := window.Terminal.Screen().Cell(x, y)
-			if cell != nil && cell.Rune != 0 {
-				line += string(cell.Rune)
+			cell := window.Terminal.CellAt(x, y)
+			if cell != nil && cell.Content != "" {
+				line += string(cell.Content)
 			} else {
 				line += " "
 			}

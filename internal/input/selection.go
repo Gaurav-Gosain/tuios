@@ -17,7 +17,7 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		return ""
 	}
 
-	screen := window.Terminal.Screen()
+	screen := window.Terminal
 	if screen == nil {
 		return ""
 	}
@@ -60,9 +60,9 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		}
 
 		for x := startX; x <= endX && x < screenWidth; x++ {
-			cell := screen.Cell(x, startY)
-			if cell != nil && cell.Rune != 0 {
-				selectedText.WriteRune(cell.Rune)
+			cell := screen.CellAt(x, startY)
+			if cell != nil && cell.Content != "" {
+				selectedText.WriteString(cell.Content)
 			} else {
 				selectedText.WriteRune(' ')
 			}
@@ -75,9 +75,9 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		if y == startY {
 			// First line - from startX to end
 			for x := startX; x < screenWidth; x++ {
-				cell := screen.Cell(x, y)
-				if cell != nil && cell.Rune != 0 {
-					selectedText.WriteRune(cell.Rune)
+				cell := screen.CellAt(x, y)
+				if cell != nil && cell.Content != "" {
+					selectedText.WriteString(cell.Content)
 				} else {
 					selectedText.WriteRune(' ')
 				}
@@ -85,9 +85,9 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		} else if y == endY {
 			// Last line - from start to endX
 			for x := 0; x <= endX && x < screenWidth; x++ {
-				cell := screen.Cell(x, y)
-				if cell != nil && cell.Rune != 0 {
-					selectedText.WriteRune(cell.Rune)
+				cell := screen.CellAt(x, y)
+				if cell != nil && cell.Content != "" {
+					selectedText.WriteString(cell.Content)
 				} else {
 					selectedText.WriteRune(' ')
 				}
@@ -95,9 +95,9 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 		} else {
 			// Middle lines - full line
 			for x := 0; x < screenWidth; x++ {
-				cell := screen.Cell(x, y)
-				if cell != nil && cell.Rune != 0 {
-					selectedText.WriteRune(cell.Rune)
+				cell := screen.CellAt(x, y)
+				if cell != nil && cell.Content != "" {
+					selectedText.WriteString(cell.Content)
 				} else {
 					selectedText.WriteRune(' ')
 				}
