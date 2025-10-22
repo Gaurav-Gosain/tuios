@@ -105,10 +105,10 @@ func runLocal() {
 	// Initialize the Bubble Tea program with optimal settings
 	p := tea.NewProgram(
 		initialOS,
-		tea.WithAltScreen(),              // Use alternate screen buffer
-		tea.WithMouseAllMotion(),         // Enable mouse tracking
-		tea.WithFPS(config.NormalFPS),    // Set target FPS
-		tea.WithoutSignalHandler(),       // We handle signals ourselves
+		tea.WithAltScreen(),               // Use alternate screen buffer
+		tea.WithMouseAllMotion(),          // Enable mouse tracking
+		tea.WithFPS(config.NormalFPS),     // Set target FPS
+		tea.WithoutSignalHandler(),        // We handle signals ourselves
 		tea.WithFilter(filterMouseMotion), // Filter unnecessary mouse motion events
 	)
 	if _, err := p.Run(); err != nil {

@@ -364,32 +364,40 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.Dragging && o.AutoTiling && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		mouse := msg.Mouse()
 
-		// Find which window is under the cursor (excluding the dragged window)
-		targetWindowIndex := -1
-		for i := range o.Windows {
-			if i == o.DraggedWindowIndex || o.Windows[i].Minimized || o.Windows[i].Minimizing {
-				continue
-			}
-			// Only consider windows in current workspace
-			if o.Windows[i].Workspace != o.CurrentWorkspace {
-				continue
+		// Calculate drag distance to determine if this was actually a drag or just a click
+		dragDistance := abs(mouse.X-o.DragStartX) + abs(mouse.Y-o.DragStartY)
+		const dragThreshold = 5 // pixels - must move at least this much to be considered a drag
+
+		if dragDistance >= dragThreshold {
+			// This was an actual drag, check for swap
+			// Find which window is under the cursor (excluding the dragged window)
+			targetWindowIndex := -1
+			for i := range o.Windows {
+				if i == o.DraggedWindowIndex || o.Windows[i].Minimized || o.Windows[i].Minimizing {
+					continue
+				}
+				// Only consider windows in current workspace
+				if o.Windows[i].Workspace != o.CurrentWorkspace {
+					continue
+				}
+
+				w := o.Windows[i]
+				if mouse.X >= w.X && mouse.X < w.X+w.Width &&
+					mouse.Y >= w.Y && mouse.Y < w.Y+w.Height {
+					targetWindowIndex = i
+					break
+				}
 			}
 
-			w := o.Windows[i]
-			if mouse.X >= w.X && mouse.X < w.X+w.Width &&
-				mouse.Y >= w.Y && mouse.Y < w.Y+w.Height {
-				targetWindowIndex = i
-				break
+			if targetWindowIndex >= 0 && targetWindowIndex != o.DraggedWindowIndex {
+				// Swap windows - dragged window goes to target's position, target goes to dragged window's original position
+				o.SwapWindowsWithOriginal(o.DraggedWindowIndex, targetWindowIndex, o.TiledX, o.TiledY, o.TiledWidth, o.TiledHeight)
+			} else {
+				// No swap, just retile to restore proper positions
+				o.TileAllWindows()
 			}
 		}
-
-		if targetWindowIndex >= 0 && targetWindowIndex != o.DraggedWindowIndex {
-			// Swap windows - dragged window goes to target's position, target goes to dragged window's original position
-			o.SwapWindowsWithOriginal(o.DraggedWindowIndex, targetWindowIndex, o.TiledX, o.TiledY, o.TiledWidth, o.TiledHeight)
-		} else {
-			// No swap, just retile to restore proper positions
-			o.TileAllWindows()
-		}
+		// If dragDistance < dragThreshold, it was just a click - do nothing
 		o.DraggedWindowIndex = -1
 	}
 
@@ -615,9 +623,17 @@ func max(a, b int) int {
 	return b
 }
 
+// abs returns the absolute value of an integer
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 // selectWord selects the word at the given position
 func selectWord(window *terminal.Window, x, y int, o *app.OS) {
-	if window.Terminal == nil || window.Terminal == nil {
+	if window.Terminal == nil {
 		return
 	}
 

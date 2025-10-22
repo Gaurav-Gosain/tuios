@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 const (

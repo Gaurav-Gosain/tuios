@@ -78,7 +78,7 @@ func GetKeybindings() []KeybindingSection {
 		{
 			Title: "WORKSPACES",
 			Bindings: []Keybinding{
-				{"%s+1-9", "Switch workspace"},        // %s will be replaced with modifier key
+				{"%s+1-9", "Switch workspace"},             // %s will be replaced with modifier key
 				{"%s+Shift+1-9", "Move window and follow"}, // %s will be replaced with modifier key
 				{"Ctrl+B, w, 1-9", "Switch workspace (prefix)"},
 				{"Ctrl+B, w, Shift+1-9", "Move window (prefix)"},

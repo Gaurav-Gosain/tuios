@@ -10,12 +10,13 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
-	pty "github.com/aymanbagabas/go-pty"
-	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/vt"
+	"github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
@@ -34,8 +35,8 @@ type Window struct {
 	Z                  int
 	ID                 string
 	Terminal           *vt.Emulator
-	Pty                pty.Pty
-	Cmd                *pty.Cmd
+	Pty                xpty.Pty
+	Cmd                *exec.Cmd
 	LastUpdate         time.Time
 	Dirty              bool
 	ContentDirty       bool
@@ -61,14 +62,16 @@ type Window struct {
 	SelectionCursor    struct{ X, Y int } // Current cursor position in selection mode
 	ProcessExited      bool               // True when process has exited
 	// Enhanced text selection support
-	SelectionMode      int  // 0 = character, 1 = word, 2 = line
-	LastClickTime      time.Time
-	LastClickX         int
-	LastClickY         int
-	ClickCount         int // Track number of consecutive clicks for word/line selection
+	SelectionMode int // 0 = character, 1 = word, 2 = line
+	LastClickTime time.Time
+	LastClickX    int
+	LastClickY    int
+	ClickCount    int // Track number of consecutive clicks for word/line selection
 	// Scrollback mode support
-	ScrollbackMode     bool // True when viewing scrollback history
-	ScrollbackOffset   int  // Number of lines scrolled back (0 = at bottom, viewing live output)
+	ScrollbackMode   bool // True when viewing scrollback history
+	ScrollbackOffset int  // Number of lines scrolled back (0 = at bottom, viewing live output)
+	// Alternate screen buffer tracking for TUI detection
+	IsAltScreen bool // True when application is using alternate screen buffer (nvim, vim, etc.)
 }
 
 // NewWindow creates a new terminal window with the specified properties.
@@ -87,50 +90,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Set scrollback buffer size (10000 lines by default, can be configured)
 	terminal.SetScrollbackMaxLines(10000)
 
-	// Detect shell
-	shell := detectShell()
-
-	// Set up environment
-	cmd := exec.Command(shell)
-	cmd.Env = append(os.Environ(),
-		"TERM=xterm-256color",
-		"COLORTERM=truecolor",
-		"TUIOS_WINDOW_ID="+id,
-	)
-
-	// Create PTY and start command
-	ptyInstance, err := pty.New()
-	if err != nil {
-		// Return nil to indicate failure - caller should handle this
-		return nil
-	}
-
-	// Set initial PTY size to match terminal dimensions
-	// This is critical for shells like nushell that query terminal size
-	if err := ptyInstance.Resize(terminalWidth, terminalHeight); err != nil {
-		// Log error but continue - some systems may not support resize before start
-		_ = err
-	}
-
-	// Create command through PTY
-	ptyCmd := ptyInstance.Command(shell)
-	ptyCmd.Env = cmd.Env
-
-	// Start the command
-	if err := ptyCmd.Start(); err != nil {
-		ptyInstance.Close()
-		return nil
-	}
-
-	// Resize PTY again after process starts to ensure size is properly set
-	// Some PTY implementations require the process to be running before accepting resize
-	if err := ptyInstance.Resize(terminalWidth, terminalHeight); err != nil {
-		// Not a critical error, continue
-		_ = err
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
+	// Create window struct early so we can reference it in callbacks
 	window := &Window{
 		Title:              title,
 		Width:              width,
@@ -140,8 +100,6 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		Z:                  z,
 		ID:                 id,
 		Terminal:           terminal,
-		Pty:                ptyInstance,
-		Cmd:                ptyCmd,
 		LastUpdate:         time.Now(),
 		Dirty:              true,
 		ContentDirty:       true,
@@ -149,8 +107,46 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		CachedContent:      "",
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
-		cancelFunc:         cancel,
+		IsAltScreen:        false,
 	}
+
+	// Set up callbacks to track alternate screen buffer state
+	terminal.SetCallbacks(vt.Callbacks{
+		AltScreen: func(enabled bool) {
+			window.IsAltScreen = enabled
+		},
+	})
+
+	// Detect shell
+	shell := detectShell()
+
+	// Create PTY with initial size
+	ptyInstance, err := xpty.NewPty(terminalWidth, terminalHeight)
+	if err != nil {
+		// Return nil to indicate failure - caller should handle this
+		return nil
+	}
+
+	// Set up command with environment
+	cmd := exec.Command(shell)
+	cmd.Env = append(os.Environ(),
+		"TERM=xterm-256color",
+		"COLORTERM=truecolor",
+		"TUIOS_WINDOW_ID="+id,
+	)
+
+	// Start the command through PTY
+	if err := ptyInstance.Start(cmd); err != nil {
+		ptyInstance.Close()
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Update window with PTY and command info
+	window.Pty = ptyInstance
+	window.Cmd = cmd
+	window.cancelFunc = cancel
 
 	// Start I/O handling
 	window.handleIOOperations()
@@ -167,8 +163,9 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 			}
 		}()
 
-		// Wait for process to exit
-		ptyCmd.Wait()
+		// Wait for process to exit using xpty.WaitProcess for cross-platform support
+		// This is especially important on Windows where cmd.Wait() doesn't work with ConPTY
+		xpty.WaitProcess(ctx, cmd)
 
 		// Mark process as exited
 		window.ProcessExited = true
@@ -382,6 +379,9 @@ func (w *Window) Resize(width, height int) {
 	termWidth := max(width-2, 1)
 	termHeight := max(height-2, 1)
 
+	// Check if size actually changed
+	sizeChanged := w.Width != width || w.Height != height
+
 	w.Terminal.Resize(termWidth, termHeight)
 	if w.Pty != nil {
 		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
@@ -396,6 +396,41 @@ func (w *Window) Resize(width, height int) {
 	// Mark both position and content dirty for resize operations
 	w.MarkPositionDirty()
 	w.MarkContentDirty()
+
+	// Trigger redraw if size changed to force applications to adapt
+	if sizeChanged && w.Pty != nil {
+		w.TriggerRedraw()
+	}
+}
+
+// TriggerRedraw ensures terminal applications properly respond to resize.
+// This sends SIGWINCH signal to notify applications of the size change.
+func (w *Window) TriggerRedraw() {
+	if w.Cmd == nil || w.Cmd.Process == nil {
+		return
+	}
+
+	// Send SIGWINCH signal after a small delay to ensure PTY resize has completed
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+
+		w.ioMu.RLock()
+		process := w.Cmd.Process
+		w.ioMu.RUnlock()
+
+		if process != nil {
+			// Send SIGWINCH (window change signal) to the process
+			// Applications should handle this and redraw as needed
+			process.Signal(os.Signal(syscall.SIGWINCH))
+		}
+	}()
+}
+
+// isLikelyTUI checks if the terminal is using the alternate screen buffer.
+// TUI applications like nvim, vim, htop, etc. use alternate screen buffer
+// which is a reliable indicator that the application can handle Ctrl+L for redraw.
+func (w *Window) isLikelyTUI() bool {
+	return w.IsAltScreen
 }
 
 // Close closes the window and cleans up resources.
@@ -438,7 +473,10 @@ func (w *Window) Close() {
 
 			// Best effort kill
 			w.Cmd.Process.Kill()
-			w.Cmd.Wait()
+			// Use xpty.WaitProcess for proper cleanup on all platforms
+			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+			defer cancel()
+			xpty.WaitProcess(ctx, w.Cmd)
 			done <- true
 		}()
 

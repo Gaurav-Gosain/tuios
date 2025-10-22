@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // extractSelectedText extracts selected text from terminal based on selection coordinates

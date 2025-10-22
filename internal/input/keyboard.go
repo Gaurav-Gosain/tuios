@@ -1259,4 +1259,3 @@ func handleShiftRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	return o, nil
 }
-

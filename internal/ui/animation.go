@@ -21,20 +21,21 @@ const (
 
 // Animation represents an animated transition for a window.
 type Animation struct {
-	Window      *terminal.Window
-	Type        AnimationType
-	StartTime   time.Time
-	Duration    time.Duration
-	StartX      int
-	StartY      int
-	StartWidth  int
-	StartHeight int
-	EndX        int
-	EndY        int
-	EndWidth    int
-	EndHeight   int
-	Progress    float64
-	Complete    bool
+	Window         *terminal.Window
+	Type           AnimationType
+	StartTime      time.Time
+	Duration       time.Duration
+	StartX         int
+	StartY         int
+	StartWidth     int
+	StartHeight    int
+	EndX           int
+	EndY           int
+	EndWidth       int
+	EndHeight      int
+	Progress       float64
+	Complete       bool
+	InitialResized bool // Track if we've done the initial resize
 }
 
 // NewMinimizeAnimation creates a minimize animation for the specified window.
@@ -113,6 +114,9 @@ func (a *Animation) Update() bool {
 		return true
 	}
 
+	// Don't resize the VT emulator during animation - wait until complete
+	// This prevents content overflow and size mismatch issues
+
 	now := time.Now()
 
 	// Calculate progress (0.0 to 1.0)
@@ -127,23 +131,16 @@ func (a *Animation) Update() bool {
 	// Apply easing function (smooth in/out)
 	a.Progress = easeInOutCubic(progress)
 
-	// Interpolate position and size
+	// Animate position and visual size for smooth animations
 	newX := interpolate(a.StartX, a.EndX, a.Progress)
 	newY := interpolate(a.StartY, a.EndY, a.Progress)
 	newWidth := interpolate(a.StartWidth, a.EndWidth, a.Progress)
 	newHeight := interpolate(a.StartHeight, a.EndHeight, a.Progress)
 
-	// Update window position and size
 	a.Window.X = newX
 	a.Window.Y = newY
-
-	// For snap animations, resize terminal during animation for smooth transition
-	if a.Type == AnimationSnap && (a.Window.Width != newWidth || a.Window.Height != newHeight) {
-		a.Window.Resize(newWidth, newHeight)
-	} else {
-		a.Window.Width = newWidth
-		a.Window.Height = newHeight
-	}
+	a.Window.Width = newWidth
+	a.Window.Height = newHeight
 
 	// Mark window as dirty for re-rendering
 	a.Window.MarkPositionDirty()
@@ -160,12 +157,15 @@ func (a *Animation) Update() bool {
 			a.Window.Y = a.Window.PreMinimizeY
 			a.Window.Width = a.Window.PreMinimizeWidth
 			a.Window.Height = a.Window.PreMinimizeHeight
-		case AnimationRestore:
-			// Window is already restored, just ensure proper state
-			a.Window.Minimized = false
-		case AnimationSnap:
-			// Resize terminal to match final window size
-			a.Window.Resize(a.Window.Width, a.Window.Height)
+		case AnimationRestore, AnimationSnap:
+			// Resize at completion for clean, one-time resize
+			a.Window.Resize(a.EndWidth, a.EndHeight)
+			// Ensure final position is exact
+			a.Window.X = a.EndX
+			a.Window.Y = a.EndY
+			if a.Type == AnimationRestore {
+				a.Window.Minimized = false
+			}
 		}
 	}
 
