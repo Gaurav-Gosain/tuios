@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20250911144506-c3463c079117
 	github.com/charmbracelet/wish/v2 v2.0.0-20250725031147-577d86ba3605
 	github.com/charmbracelet/x/vt v0.0.0-20250714123521-bc8a1995e079
-	github.com/charmbracelet/x/xpty v0.0.0-20251022142440-a3a28bdbbf50
+	github.com/charmbracelet/x/xpty v0.1.0
 	github.com/google/uuid v1.6.0
 )
 
@@ -40,7 +40,4 @@ require (
 	golang.org/x/sys v0.36.0 // indirect
 )
 
-replace (
-	github.com/charmbracelet/x/vt => github.com/Gaurav-Gosain/x/vt v0.0.0-20251022102440-a3a28bdbbf50
-	github.com/charmbracelet/x/xpty => ../x/xpty
-)
+replace github.com/charmbracelet/x/vt => github.com/Gaurav-Gosain/x/vt v0.0.0-20251022102440-a3a28bdbbf50
