@@ -224,6 +224,7 @@ TUIOS uses the following libraries:
 - **Comprehensive Help System**: Built-in contextual help overlay
 - **Text Selection & Copying**: Mouse and keyboard-based text selection with
   clipboard integration
+- **Scrollback Buffer**: Navigate terminal history with keyboard and mouse (10,000 line buffer)
 - **Smart Notifications**: Responsive notification system with overflow protection
 - **SSH Server Mode**: Run TUIOS as SSH server for remote terminal multiplexing
 - **Session Isolation**: Each SSH connection gets dedicated TUIOS instance
@@ -346,6 +347,21 @@ ssh -p 2222 your-server-ip
 | <kbd>Ctrl</kbd>+<kbd>V</kbd>           | Paste from clipboard (works in terminal mode) |
 | <kbd>Esc</kbd>                         | Clear current selection                       |
 
+#### Scrollback Navigation
+
+| Key                                      | Action                                   |
+| ---------------------------------------- | ---------------------------------------- |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>[</kbd> | Enter scrollback mode                    |
+| <kbd>Mouse wheel up</kbd>                | Enter scrollback and scroll up           |
+| <kbd>↑</kbd> / <kbd>k</kbd>              | Scroll up one line (in scrollback mode)  |
+| <kbd>↓</kbd> / <kbd>j</kbd>              | Scroll down one line (in scrollback mode)|
+| <kbd>PgUp</kbd> / <kbd>Ctrl</kbd>+<kbd>U</kbd> | Scroll up half screen              |
+| <kbd>PgDn</kbd> / <kbd>Ctrl</kbd>+<kbd>D</kbd> | Scroll down half screen            |
+| <kbd>Home</kbd> / <kbd>g</kbd>           | Jump to oldest line in scrollback        |
+| <kbd>End</kbd> / <kbd>G</kbd>            | Jump to newest line (exit scrollback)    |
+| <kbd>q</kbd> / <kbd>Esc</kbd>            | Exit scrollback mode                     |
+| <kbd>Mouse wheel down</kbd>              | Scroll down (auto-exit at bottom)        |
+
 #### Window Navigation
 
 | Key                                       | Action                          |
@@ -376,6 +392,7 @@ Similar to tmux, TUIOS supports a prefix key for advanced commands. Press <kbd>C
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>m</kbd>                               | Minimize focused window                     |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>1</kbd>-<kbd>9</kbd>                  | Restore minimized window by number          |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>m</kbd> <kbd>Shift</kbd>+<kbd>M</kbd>              | Restore all minimized windows               |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>[</kbd>                                            | Enter scrollback mode                       |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>t</kbd> ...                                        | Window prefix (see below)                   |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>d</kbd> / <kbd>Esc</kbd>                           | Detach from terminal (exit terminal mode)   |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>s</kbd>                                            | Toggle selection mode                       |
@@ -569,11 +586,10 @@ The following features are planned for future implementation:
 - [x] Mouse support for window management
 - [x] SSH server mode for remote multiplexing
 - [x] Text selection and clipboard integration
-- [ ] **Scrollback Buffers**: Terminal history and scrolling
-  - **Note**: Currently blocked by upstream VT library limitation - the `charmbracelet/x/vt` library does not yet support accessing scrollback history. Will implement when VT library adds this support.
-  - [ ] Mouse scroll wheel support for terminal content
-  - [ ] Keyboard shortcuts for scrolling (Page Up/Down, Ctrl+U/D)
-  - [ ] Configurable scrollback buffer size
+- [x] **Scrollback Buffers**: Terminal history and scrolling
+  - [x] Mouse scroll wheel support for terminal content
+  - [x] Keyboard shortcuts for scrolling (Page Up/Down, Ctrl+U/D, Arrow keys, Home/End)
+  - [x] Configurable scrollback buffer size (default 10,000 lines)
   - [ ] Search within scrollback history
 - [x] **Enhanced Text Selection**: Improve selection capabilities
   - [x] Word and line selection modes (double-click, triple-click)
