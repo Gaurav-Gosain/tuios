@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -138,6 +139,62 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 	return strings.Join(lines, "\n")
 }
 
+// styleToANSI converts a lipgloss.Style to ANSI codes using the internal ansi.Style
+// This bypasses all the border/padding/width/alignment logic in Style.Render()
+func styleToANSI(s lipgloss.Style) (prefix string, suffix string) {
+	var te ansi.Style
+
+	// Extract colors directly
+	fg := s.GetForeground()
+	bg := s.GetBackground()
+
+	if _, ok := fg.(lipgloss.NoColor); !ok && fg != nil {
+		te = te.ForegroundColor(ansi.Color(fg))
+	}
+	if _, ok := bg.(lipgloss.NoColor); !ok && bg != nil {
+		te = te.BackgroundColor(ansi.Color(bg))
+	}
+
+	// Extract text attributes
+	if s.GetBold() {
+		te = te.Bold()
+	}
+	if s.GetItalic() {
+		te = te.Italic()
+	}
+	if s.GetUnderline() {
+		te = te.Underline()
+	}
+	if s.GetStrikethrough() {
+		te = te.Strikethrough()
+	}
+	if s.GetBlink() {
+		te = te.SlowBlink()
+	}
+	if s.GetFaint() {
+		te = te.Faint()
+	}
+	if s.GetReverse() {
+		te = te.Reverse()
+	}
+
+	// Convert to string and split into prefix/suffix
+	ansiStr := te.String()
+	if ansiStr != "" {
+		return ansiStr, "\x1b[0m"
+	}
+	return "", ""
+}
+
+// renderStyledText applies ANSI styling to text without using Style.Render()
+func renderStyledText(style lipgloss.Style, text string) string {
+	prefix, suffix := styleToANSI(style)
+	if prefix == "" {
+		return text
+	}
+	return prefix + text + suffix
+}
+
 func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalMode bool) string {
 	// Smart caching: use cache if window is being manipulated OR if content hasn't changed
 	if (window.IsBeingManipulated || !window.ContentDirty) && window.CachedContent != "" {
@@ -188,6 +245,42 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	scrollbackLen := window.ScrollbackLen()
 	inScrollbackMode := window.ScrollbackOffset > 0
 
+	// Batching approach: accumulate runs of same-styled characters
+	var batchBuilder strings.Builder
+	var currentStyle lipgloss.Style
+	var batchHasStyle bool
+	var prevCell *uv.Cell
+	var prevIsCursor, prevIsSelected, prevIsSelectionCursor bool
+
+	// Helper to flush the current batch
+	flushBatch := func(lineBuilder *strings.Builder) {
+		if batchBuilder.Len() > 0 {
+			if batchHasStyle {
+				lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
+			} else {
+				lineBuilder.WriteString(batchBuilder.String())
+			}
+			batchBuilder.Reset()
+			batchHasStyle = false
+		}
+	}
+
+	// Helper to check if style matches previous
+	styleMatches := func(cell *uv.Cell, isCursorPos, isSelected, isSelectionCursor bool) bool {
+		if prevCell == nil && cell == nil {
+			return prevIsCursor == isCursorPos && prevIsSelected == isSelected && prevIsSelectionCursor == isSelectionCursor
+		}
+		if prevCell == nil || cell == nil {
+			return false
+		}
+		return prevIsCursor == isCursorPos &&
+			prevIsSelected == isSelected &&
+			prevIsSelectionCursor == isSelectionCursor &&
+			prevCell.Style.Fg == cell.Style.Fg &&
+			prevCell.Style.Bg == cell.Style.Bg &&
+			prevCell.Style.Attrs == cell.Style.Attrs
+	}
+
 	for y := range maxY {
 		if y > 0 {
 			builder.WriteRune('\n')
@@ -196,6 +289,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		// Use line builder for all windows to preserve styling
 		lineBuilder := pool.GetStringBuilder()
 		defer pool.PutStringBuilder(lineBuilder)
+
+		// Reset batch state at start of line
+		batchBuilder.Reset()
+		batchHasStyle = false
+		prevCell = nil
 
 		for x := range maxX {
 			var cell *uv.Cell
@@ -246,42 +344,58 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// Determine if we need styling
 			needsStyling := shouldApplyStyle(cell) || isCursorPos || isSelected || isSelectionCursor
 
+			// Check if style changed
+			if x > 0 && !styleMatches(cell, isCursorPos, isSelected, isSelectionCursor) {
+				flushBatch(lineBuilder)
+			}
+
 			if needsStyling {
-				var style lipgloss.Style
+				// Build style for this batch if starting new batch
+				if batchBuilder.Len() == 0 {
+					// Use cached styles for better performance
+					if isSelected || isSelectionCursor {
+						// Selection highlighting needs to be applied on top, so build base style first
+						if useOptimizedRendering {
+							currentStyle = buildOptimizedCellStyleCached(cell)
+						} else {
+							currentStyle = buildCellStyleCached(cell, isCursorPos)
+						}
 
-				// Use cached styles for better performance
-				if isSelected || isSelectionCursor {
-					// Selection highlighting needs to be applied on top, so build base style first
-					if useOptimizedRendering {
-						style = buildOptimizedCellStyleCached(cell)
+						// Apply selection highlighting
+						if isSelected {
+							currentStyle = currentStyle.Background(lipgloss.Color("62")).Foreground(lipgloss.Color("15")) // Blue background, white text
+						}
+
+						// Apply selection cursor highlighting
+						if isSelectionCursor {
+							currentStyle = currentStyle.Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0")) // Orange background, black text
+						}
 					} else {
-						style = buildCellStyleCached(cell, isCursorPos)
+						// Normal cell rendering - use cached styles directly
+						if useOptimizedRendering {
+							currentStyle = buildOptimizedCellStyleCached(cell)
+						} else {
+							currentStyle = buildCellStyleCached(cell, isCursorPos)
+						}
 					}
-
-					// Apply selection highlighting
-					if isSelected {
-						style = style.Background(lipgloss.Color("62")).Foreground(lipgloss.Color("15")) // Blue background, white text
-					}
-
-					// Apply selection cursor highlighting
-					if isSelectionCursor {
-						style = style.Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0")) // Orange background, black text
-					}
-				} else {
-					// Normal cell rendering - use cached styles directly
-					if useOptimizedRendering {
-						style = buildOptimizedCellStyleCached(cell)
-					} else {
-						style = buildCellStyleCached(cell, isCursorPos)
-					}
+					batchHasStyle = true
 				}
 
-				lineBuilder.WriteString(style.Render(char))
+				batchBuilder.WriteString(char)
 			} else {
-				lineBuilder.WriteString(char)
+				// No style - just accumulate plain text
+				batchBuilder.WriteString(char)
 			}
+
+			// Remember current cell state for next iteration
+			prevCell = cell
+			prevIsCursor = isCursorPos
+			prevIsSelected = isSelected
+			prevIsSelectionCursor = isSelectionCursor
 		}
 
+		// Flush remaining batch at end of line
+		flushBatch(lineBuilder)
 		builder.WriteString(lineBuilder.String())
 	}
 

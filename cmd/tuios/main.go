@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -35,6 +36,7 @@ var (
 	sshHost     = flag.String("host", "localhost", "SSH server host")
 	sshKeyPath  = flag.String("key-path", "", "Path to SSH host key (auto-generated if not specified)")
 	showVersion = flag.Bool("version", false, "Show version information")
+	cpuProfile  = flag.String("cpuprofile", "", "Write CPU profile to file")
 )
 
 func main() {
@@ -46,6 +48,20 @@ func main() {
 		fmt.Printf("  built at: %s\n", date)
 		fmt.Printf("  built by: %s\n", builtBy)
 		os.Exit(0)
+	}
+
+	// Start CPU profiling if requested
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			log.Fatalf("Could not create CPU profile: %v", err)
+		}
+		defer f.Close()
+
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatalf("Could not start CPU profile: %v", err)
+		}
+		defer pprof.StopCPUProfile()
 	}
 
 	if *sshMode {
