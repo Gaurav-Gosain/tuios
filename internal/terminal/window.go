@@ -13,6 +13,7 @@ import (
 	"time"
 
 	pty "github.com/aymanbagabas/go-pty"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/x/vt"
 
@@ -22,12 +23,7 @@ import (
 
 // Window represents a terminal window with its own shell process.
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
-//
-// NOTE: Scrollback buffer support is not currently implemented because the underlying
-// charmbracelet/x/vt library does not yet support accessing scrollback history.
-// The VT terminal only maintains the visible screen buffer. When scrollback support
-// is added to the VT library, we can implement it here.
-// See: https://github.com/charmbracelet/x/blob/main/vt/handlers.go (TODO comments)
+// Scrollback buffer support is provided by the underlying charmbracelet/x/vt library.
 type Window struct {
 	Title              string
 	CustomName         string // User-defined window name
@@ -37,7 +33,7 @@ type Window struct {
 	Y                  int
 	Z                  int
 	ID                 string
-	Terminal           *vt.Terminal
+	Terminal           *vt.Emulator
 	Pty                pty.Pty
 	Cmd                *pty.Cmd
 	LastUpdate         time.Time
@@ -70,6 +66,9 @@ type Window struct {
 	LastClickX         int
 	LastClickY         int
 	ClickCount         int // Track number of consecutive clicks for word/line selection
+	// Scrollback mode support
+	ScrollbackMode     bool // True when viewing scrollback history
+	ScrollbackOffset   int  // Number of lines scrolled back (0 = at bottom, viewing live output)
 }
 
 // NewWindow creates a new terminal window with the specified properties.
@@ -83,8 +82,10 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Create VT terminal with inner dimensions (accounting for borders)
 	terminalWidth := max(width-2, 1)
 	terminalHeight := max(height-2, 1)
-	// Create terminal - vt.Terminal maintains its own scrollback buffer internally
-	terminal := vt.NewTerminal(terminalWidth, terminalHeight)
+	// Create terminal with scrollback buffer support
+	terminal := vt.NewEmulator(terminalWidth, terminalHeight)
+	// Set scrollback buffer size (10000 lines by default, can be configured)
+	terminal.SetScrollbackMaxLines(10000)
 
 	// Detect shell
 	shell := detectShell()
@@ -346,15 +347,12 @@ func (w *Window) handleIOOperations() {
 						if bytes.Contains(data, []byte(";")) {
 							w.ioMu.RLock()
 							if w.Terminal != nil {
-								screen := w.Terminal.Screen()
-								if screen != nil {
-									cursor := screen.Cursor()
-									// Get the actual current cursor position (1-indexed for terminal protocol)
-									actualY := cursor.Y + 1
-									actualX := cursor.X + 1
-									// Replace with corrected cursor position
-									data = []byte(fmt.Sprintf("\x1b[%d;%dR", actualY, actualX))
-								}
+								pos := w.Terminal.CursorPosition()
+								// Get the actual current cursor position (1-indexed for terminal protocol)
+								actualY := pos.Y + 1
+								actualX := pos.X + 1
+								// Replace with corrected cursor position
+								data = []byte(fmt.Sprintf("\x1b[%d;%dR", actualY, actualX))
 							}
 							w.ioMu.RUnlock()
 						}
@@ -523,4 +521,75 @@ func (w *Window) ClearDirtyFlags() {
 func (w *Window) InvalidateCache() {
 	w.CachedLayer = nil
 	w.CachedContent = ""
+}
+
+// ScrollbackLen returns the number of lines in the scrollback buffer.
+func (w *Window) ScrollbackLen() int {
+	if w.Terminal == nil {
+		return 0
+	}
+	return w.Terminal.ScrollbackLen()
+}
+
+// ScrollbackLine returns a line from the scrollback buffer at the given index.
+// Index 0 is the oldest line. Returns nil if index is out of bounds.
+func (w *Window) ScrollbackLine(index int) []uv.Cell {
+	if w.Terminal == nil {
+		return nil
+	}
+	return w.Terminal.ScrollbackLine(index)
+}
+
+// ClearScrollback clears the scrollback buffer.
+func (w *Window) ClearScrollback() {
+	if w.Terminal != nil {
+		w.Terminal.ClearScrollback()
+	}
+}
+
+// SetScrollbackMaxLines sets the maximum number of lines for the scrollback buffer.
+func (w *Window) SetScrollbackMaxLines(maxLines int) {
+	if w.Terminal != nil {
+		w.Terminal.SetScrollbackMaxLines(maxLines)
+	}
+}
+
+// EnterScrollbackMode enters scrollback viewing mode.
+func (w *Window) EnterScrollbackMode() {
+	w.ScrollbackMode = true
+	w.ScrollbackOffset = 0 // Start at the bottom (most recent scrollback)
+	w.InvalidateCache()
+}
+
+// ExitScrollbackMode exits scrollback viewing mode.
+func (w *Window) ExitScrollbackMode() {
+	w.ScrollbackMode = false
+	w.ScrollbackOffset = 0
+	w.InvalidateCache()
+}
+
+// ScrollUp scrolls up in the scrollback buffer.
+func (w *Window) ScrollUp(lines int) {
+	if !w.ScrollbackMode || w.Terminal == nil {
+		return
+	}
+
+	maxOffset := w.ScrollbackLen()
+	w.ScrollbackOffset = min(w.ScrollbackOffset+lines, maxOffset)
+	w.InvalidateCache()
+}
+
+// ScrollDown scrolls down in the scrollback buffer.
+func (w *Window) ScrollDown(lines int) {
+	if !w.ScrollbackMode {
+		return
+	}
+
+	w.ScrollbackOffset = max(w.ScrollbackOffset-lines, 0)
+	if w.ScrollbackOffset == 0 {
+		// If we scrolled all the way down, exit scrollback mode
+		w.ExitScrollbackMode()
+	} else {
+		w.InvalidateCache()
+	}
 }
