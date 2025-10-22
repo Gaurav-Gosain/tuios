@@ -249,22 +249,31 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			if needsStyling {
 				var style lipgloss.Style
 
-				if useOptimizedRendering && !isSelected {
-					// Optimized styling for background windows - preserve colors but skip expensive attributes
-					style = buildOptimizedCellStyle(cell)
+				// Use cached styles for better performance
+				if isSelected || isSelectionCursor {
+					// Selection highlighting needs to be applied on top, so build base style first
+					if useOptimizedRendering {
+						style = buildOptimizedCellStyleCached(cell)
+					} else {
+						style = buildCellStyleCached(cell, isCursorPos)
+					}
+
+					// Apply selection highlighting
+					if isSelected {
+						style = style.Background(lipgloss.Color("62")).Foreground(lipgloss.Color("15")) // Blue background, white text
+					}
+
+					// Apply selection cursor highlighting
+					if isSelectionCursor {
+						style = style.Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0")) // Orange background, black text
+					}
 				} else {
-					// Full styling for focused windows or selected text
-					style = buildCellStyle(cell, isCursorPos)
-				}
-
-				// Apply selection highlighting
-				if isSelected {
-					style = style.Background(lipgloss.Color("62")).Foreground(lipgloss.Color("15")) // Blue background, white text
-				}
-
-				// Apply selection cursor highlighting
-				if isSelectionCursor {
-					style = style.Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0")) // Orange background, black text
+					// Normal cell rendering - use cached styles directly
+					if useOptimizedRendering {
+						style = buildOptimizedCellStyleCached(cell)
+					} else {
+						style = buildCellStyleCached(cell, isCursorPos)
+					}
 				}
 
 				lineBuilder.WriteString(style.Render(char))
@@ -285,6 +294,18 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 func shouldApplyStyle(cell *uv.Cell) bool {
 	return cell != nil && (cell.Style.Fg != nil || cell.Style.Bg != nil || cell.Style.Attrs != 0)
+}
+
+// buildOptimizedCellStyleCached is the cached version of buildOptimizedCellStyle.
+// It uses the global style cache to avoid rebuilding identical styles.
+func buildOptimizedCellStyleCached(cell *uv.Cell) lipgloss.Style {
+	return GetGlobalStyleCache().Get(cell, false, true)
+}
+
+// buildCellStyleCached is the cached version of buildCellStyle.
+// It uses the global style cache to avoid rebuilding identical styles.
+func buildCellStyleCached(cell *uv.Cell, isCursor bool) lipgloss.Style {
+	return GetGlobalStyleCache().Get(cell, isCursor, false)
 }
 
 func buildOptimizedCellStyle(cell *uv.Cell) lipgloss.Style {
@@ -807,6 +828,88 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			X(0).Y(0).Z(config.ZIndexHelp).ID("help")
 
 		layers = append(layers, helpLayer)
+	}
+
+	// Cache statistics overlay
+	if m.ShowCacheStats {
+		stats := GetGlobalStyleCache().GetStats()
+
+		// Styled cache stats content
+		statsTitle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("14")).
+			Bold(true).
+			Render("Style Cache Statistics")
+
+		labelStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("11")).
+			Render
+
+		valueStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("10")).
+			Bold(true).
+			Render
+
+		// Build stats lines
+		var statsLines []string
+		statsLines = append(statsLines, statsTitle)
+		statsLines = append(statsLines, "")
+		statsLines = append(statsLines, labelStyle("Hit Rate:      ")+valueStyle(fmt.Sprintf("%.2f%%", stats.HitRate)))
+		statsLines = append(statsLines, labelStyle("Cache Hits:    ")+valueStyle(fmt.Sprintf("%d", stats.Hits)))
+		statsLines = append(statsLines, labelStyle("Cache Misses:  ")+valueStyle(fmt.Sprintf("%d", stats.Misses)))
+		statsLines = append(statsLines, labelStyle("Total Lookups: ")+valueStyle(fmt.Sprintf("%d", stats.Hits+stats.Misses)))
+		statsLines = append(statsLines, labelStyle("Evictions:     ")+valueStyle(fmt.Sprintf("%d", stats.Evicts)))
+		statsLines = append(statsLines, "")
+		statsLines = append(statsLines, labelStyle("Cache Size:    ")+valueStyle(fmt.Sprintf("%d / %d entries", stats.Size, stats.Capacity)))
+		statsLines = append(statsLines, labelStyle("Fill Rate:     ")+valueStyle(fmt.Sprintf("%.1f%%", float64(stats.Size)/float64(stats.Capacity)*100.0)))
+		statsLines = append(statsLines, "")
+
+		// Performance indicators
+		perfLabel := "Performance: "
+		var perfText, perfColor string
+		if stats.HitRate >= 95.0 {
+			perfText = "Excellent"
+			perfColor = "10" // Green
+		} else if stats.HitRate >= 85.0 {
+			perfText = "Good"
+			perfColor = "11" // Yellow
+		} else if stats.HitRate >= 70.0 {
+			perfText = "Fair"
+			perfColor = "214" // Orange
+		} else {
+			perfText = "Poor"
+			perfColor = "9" // Red
+		}
+
+		statsLines = append(statsLines, labelStyle(perfLabel)+lipgloss.NewStyle().
+			Foreground(lipgloss.Color(perfColor)).
+			Bold(true).
+			Render(perfText))
+
+		// Add hint
+		statsLines = append(statsLines, "")
+		statsLines = append(statsLines, lipgloss.NewStyle().
+			Foreground(lipgloss.Color("8")).
+			Render("Press 'C' to toggle, 'r' to reset stats"))
+
+		// Join lines
+		statsContent := strings.Join(statsLines, "\n")
+
+		// Create bordered box
+		statsBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("13")). // Magenta border
+			Padding(1, 2).
+			Background(lipgloss.Color("#1a1a2a")).
+			Render(statsContent)
+
+		// Center the stats viewer
+		centeredStats := lipgloss.Place(m.Width, m.Height,
+			lipgloss.Center, lipgloss.Center, statsBox)
+
+		statsLayer := lipgloss.NewLayer(centeredStats).
+			X(0).Y(0).Z(config.ZIndexLogs).ID("cache-stats") // Use same Z as logs
+
+		layers = append(layers, statsLayer)
 	}
 
 	// Log viewer overlay

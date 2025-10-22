@@ -544,7 +544,13 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		}
 		return o, nil
 	case "r":
-		// Rename window
+		// Reset cache stats if showing cache stats overlay
+		if o.ShowCacheStats {
+			app.GetGlobalStyleCache().ResetStats()
+			o.ShowNotification("Cache statistics reset", "info", 2*time.Second)
+			return o, nil
+		}
+		// Otherwise, rename window
 		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
@@ -656,6 +662,14 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		if o.ShowLogs {
 			o.LogScrollOffset = 0 // Reset scroll when opening
 			o.LogInfo("Log viewer opened")
+		}
+		return o, nil
+
+	// Cache statistics viewer
+	case "C": // Capital C to toggle cache stats
+		o.ShowCacheStats = !o.ShowCacheStats
+		if o.ShowCacheStats {
+			o.LogInfo("Cache statistics viewer opened")
 		}
 		return o, nil
 
@@ -855,7 +869,13 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 		}
 		return o, nil
 	case "r":
-		// Rename window
+		// Reset cache stats if showing cache stats overlay
+		if o.ShowCacheStats {
+			app.GetGlobalStyleCache().ResetStats()
+			o.ShowNotification("Cache statistics reset", "info", 2*time.Second)
+			return o, nil
+		}
+		// Otherwise, rename window
 		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
@@ -1079,6 +1099,18 @@ func handleEscapeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Close help menu if showing
 	if o.ShowHelp {
 		o.ShowHelp = false
+		return o, nil
+	}
+
+	// Close cache stats if showing
+	if o.ShowCacheStats {
+		o.ShowCacheStats = false
+		return o, nil
+	}
+
+	// Close logs if showing
+	if o.ShowLogs {
+		o.ShowLogs = false
 		return o, nil
 	}
 

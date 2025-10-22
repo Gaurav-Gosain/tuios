@@ -116,6 +116,7 @@ type OS struct {
 	Notifications         []Notification  // Active notifications
 	SelectionMode         bool            // True when in text selection mode
 	ClipboardContent      string          // Store clipboard content from tea.ClipboardMsg
+	ShowCacheStats        bool            // True when showing style cache statistics overlay
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
