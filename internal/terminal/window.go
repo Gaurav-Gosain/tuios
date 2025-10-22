@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/charmbracelet/lipgloss/v2"
@@ -404,27 +403,7 @@ func (w *Window) Resize(width, height int) {
 }
 
 // TriggerRedraw ensures terminal applications properly respond to resize.
-// This sends SIGWINCH signal to notify applications of the size change.
-func (w *Window) TriggerRedraw() {
-	if w.Cmd == nil || w.Cmd.Process == nil {
-		return
-	}
-
-	// Send SIGWINCH signal after a small delay to ensure PTY resize has completed
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-
-		w.ioMu.RLock()
-		process := w.Cmd.Process
-		w.ioMu.RUnlock()
-
-		if process != nil {
-			// Send SIGWINCH (window change signal) to the process
-			// Applications should handle this and redraw as needed
-			process.Signal(os.Signal(syscall.SIGWINCH))
-		}
-	}()
-}
+// Platform-specific implementations in window_unix.go and window_windows.go
 
 // isLikelyTUI checks if the terminal is using the alternate screen buffer.
 // TUI applications like nvim, vim, htop, etc. use alternate screen buffer
