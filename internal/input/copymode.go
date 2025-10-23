@@ -2064,7 +2064,7 @@ func repeatCharSearch(cm *terminal.CopyMode, window *terminal.Window, reverse bo
 func HandleCopyModeMouseClick(cm *terminal.CopyMode, window *terminal.Window, clickX, clickY int) {
 	// Convert window-relative coordinates (with border) to terminal coordinates
 	terminalX := clickX - window.X - 1 // Account for left border
-	terminalY := clickY - window.Y - 1 // Account for top border
+	terminalY := clickY - window.Y      // Y coordinate relative to window
 
 	// Check bounds
 	if terminalX < 0 || terminalY < 0 || terminalX >= window.Width-2 || terminalY >= window.Height-2 {
@@ -2087,7 +2087,7 @@ func HandleCopyModeMouseClick(cm *terminal.CopyMode, window *terminal.Window, cl
 func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, startX, startY int) {
 	// Convert window-relative coordinates to terminal coordinates
 	terminalX := startX - window.X - 1
-	terminalY := startY - window.Y - 1
+	terminalY := startY - window.Y
 
 	// Check bounds
 	if terminalX < 0 || terminalY < 0 || terminalX >= window.Width-2 || terminalY >= window.Height-2 {
@@ -2119,7 +2119,7 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 
 	// Convert window-relative coordinates to terminal coordinates
 	terminalX := mouseX - window.X - 1
-	terminalY := mouseY - window.Y - 1
+	terminalY := mouseY - window.Y
 
 	// Check bounds
 	if terminalX < 0 || terminalY < 0 || terminalX >= window.Width-2 || terminalY >= window.Height-2 {
