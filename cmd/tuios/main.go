@@ -100,6 +100,14 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		}
 	}
 
+	// Allow motion events when in terminal mode with alt screen apps (vim, htop, etc.)
+	if os.Mode == app.TerminalMode {
+		focusedWindow := os.GetFocusedWindow()
+		if focusedWindow != nil && focusedWindow.IsAltScreen {
+			return msg
+		}
+	}
+
 	// Filter out motion events when not interacting
 	return nil
 }
