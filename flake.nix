@@ -75,6 +75,7 @@
         {
           packages = {
             tuios = callPackage ./tuios.nix { };
+            default = callPackage ./tuios.nix { };
           };
         };
 
