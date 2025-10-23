@@ -66,34 +66,28 @@ const (
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
-	Dragging           bool
-	Resizing           bool
-	ResizeCorner       ResizeCorner
-	PreResizeState     terminal.Window
-	ResizeStartX       int
-	ResizeStartY       int
-	DragOffsetX        int
-	DragOffsetY        int
-	DragStartX         int // Track where drag started
-	DragStartY         int // Track where drag started
-	TiledX             int // Original tiled position X
-	TiledY             int // Original tiled position Y
-	TiledWidth         int // Original tiled width
-	TiledHeight        int // Original tiled height
-	DraggedWindowIndex int // Index of window being dragged
-	Windows            []*terminal.Window
-	FocusedWindow      int
-	Width              int
-	Height             int
-	X                  int
-	Y                  int
-	Mode               Mode
-	RawReader          interface {
-		Start() error
-		Stop() error
-		ReadBytes() <-chan []byte
-		IsRunning() bool
-	} // Raw input reader for terminal mode
+	Dragging              bool
+	Resizing              bool
+	ResizeCorner          ResizeCorner
+	PreResizeState        terminal.Window
+	ResizeStartX          int
+	ResizeStartY          int
+	DragOffsetX           int
+	DragOffsetY           int
+	DragStartX            int // Track where drag started
+	DragStartY            int // Track where drag started
+	TiledX                int // Original tiled position X
+	TiledY                int // Original tiled position Y
+	TiledWidth            int // Original tiled width
+	TiledHeight           int // Original tiled height
+	DraggedWindowIndex    int // Index of window being dragged
+	Windows               []*terminal.Window
+	FocusedWindow         int
+	Width                 int
+	Height                int
+	X                     int
+	Y                     int
+	Mode                  Mode
 	terminalMu            sync.Mutex
 	LastMouseX            int
 	LastMouseY            int
@@ -870,10 +864,6 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 }
 
 // Cleanup performs cleanup operations when the application exits.
-// This ensures proper cleanup of resources like the raw input reader.
 func (m *OS) Cleanup() {
-	// Stop raw input reader if running
-	if m.RawReader != nil && m.RawReader.IsRunning() {
-		_ = m.RawReader.Stop()
-	}
+	// Reserved for future cleanup operations
 }

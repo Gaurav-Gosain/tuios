@@ -127,7 +127,8 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, ListenForWindowExits(m.WindowExitChan)
 
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseMotionMsg,
-		tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.ClipboardMsg:
+		tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.ClipboardMsg,
+		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
 		// Delegate to the registered input handler
 		if inputHandler != nil {
 			return inputHandler(msg, m)
@@ -160,46 +161,6 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Could be used to pause expensive operations
 		return m, nil
 
-	case SwitchToRawInputMsg:
-		// Start raw input reader for terminal mode
-		if m.RawReader != nil && !m.RawReader.IsRunning() {
-			if err := m.RawReader.Start(); err != nil {
-				// Failed to start raw reader, stay in window management mode
-				return m, nil
-			}
-			// Start listening for raw input
-			return m, WaitForRawInputCmd(m.RawReader.ReadBytes())
-		}
-		return m, nil
-
-	case SwitchToBubbletteaInputMsg:
-		// Stop raw input reader and return to Bubbletea input
-		if m.RawReader != nil && m.RawReader.IsRunning() {
-			_ = m.RawReader.Stop() // Ignore error
-		}
-		return m, nil
-
-	case RawInputMsg:
-		// Handle raw input bytes from /dev/tty
-		if len(msg.Bytes) == 0 {
-			// Empty bytes signal Ctrl+B Esc - exit terminal mode
-			return m, m.ExitTerminalMode()
-		}
-
-		// Forward bytes to focused terminal
-		focusedWindow := m.GetFocusedWindow()
-		if focusedWindow != nil && m.Mode == TerminalMode {
-			if err := focusedWindow.SendInput(msg.Bytes); err != nil {
-				// Terminal may have closed, exit terminal mode
-				return m, m.ExitTerminalMode()
-			}
-		}
-
-		// Continue listening for raw input
-		if m.RawReader != nil && m.RawReader.IsRunning() {
-			return m, WaitForRawInputCmd(m.RawReader.ReadBytes())
-		}
-		return m, nil
 	}
 
 	return m, nil

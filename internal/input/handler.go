@@ -18,6 +18,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return HandleKeyPress(msg, o)
+	case tea.PasteStartMsg:
+		return o, nil
+	case tea.PasteEndMsg:
+		return o, nil
 	case tea.MouseClickMsg:
 		return handleMouseClick(msg, o)
 	case tea.MouseMotionMsg:
@@ -26,13 +30,31 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		return handleMouseRelease(msg, o)
 	case tea.MouseWheelMsg:
 		return handleMouseWheel(msg, o)
+	case tea.PasteMsg:
+		// Handle bracketed paste from terminal (when pasting via Cmd+V in Ghostty, etc.)
+		// Only handle paste in terminal mode
+		if o.Mode == app.TerminalMode {
+			o.ClipboardContent = string(msg)
+			handleClipboardPaste(o)
+		}
+		return o, nil
 	case tea.ClipboardMsg:
-		// Handle clipboard paste
-		o.ClipboardContent = msg.String()
-		handleClipboardPaste(o)
+		// Handle OSC 52 clipboard read response (from tea.ReadClipboard)
+		// Only handle paste in terminal mode
+		if o.Mode == app.TerminalMode {
+			o.ClipboardContent = msg.String()
+			handleClipboardPaste(o)
+		}
 		return o, nil
 	}
 	return o, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers

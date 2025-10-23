@@ -161,15 +161,11 @@ func handleClipboardPaste(o *app.OS) {
 		return
 	}
 
-	// Direct paste without bracketed paste mode
-	// Bracketed paste (\x1b[200~ ... \x1b[201~) causes permission prompts in some terminals
-	// like ghostty, and most shells handle paste just fine without it
-	inputData := []byte(o.ClipboardContent)
-
-	err := focusedWindow.SendInput(inputData)
-	if err != nil {
-		o.ShowNotification(fmt.Sprintf("Failed to paste: %v", err), "error", config.NotificationDuration)
-	} else {
+	// Use the terminal's Paste method which automatically handles bracketed paste mode
+	// If the application running in the terminal has enabled bracketed paste mode,
+	// the text will be wrapped with \x1b[200~ ... \x1b[201~ escape sequences
+	if focusedWindow.Terminal != nil {
+		focusedWindow.Terminal.Paste(o.ClipboardContent)
 		o.ShowNotification(fmt.Sprintf("Pasted %d characters", len(o.ClipboardContent)), "success", config.NotificationDuration)
 	}
 }

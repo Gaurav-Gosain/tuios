@@ -69,11 +69,12 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleTerminalSelectionToggle(msg, o)
 	}
 
-	// Handle Ctrl+V and Cmd+V paste in terminal mode
-	if msg.String() == "ctrl+v" || msg.String() == "cmd+v" {
-		focusedWindow := o.GetFocusedWindow()
+	// Handle paste shortcuts - intercept and request clipboard via OSC 52
+	keyStr := msg.String()
+	if keyStr == "ctrl+v" || keyStr == "ctrl+shift+v" || keyStr == "super+v" || keyStr == "super+shift+v" {
 		if focusedWindow != nil {
-			// Request clipboard content from Bubbletea
+			// Use tea.ReadClipboard to request clipboard via OSC 52
+			// This will generate a tea.ClipboardMsg which we handle in handler.go
 			return o, tea.ReadClipboard
 		}
 		return o, nil
@@ -82,6 +83,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Normal terminal mode - pass through all keys
 	if focusedWindow != nil {
 		rawInput := getRawKeyBytes(msg)
+
 		if len(rawInput) > 0 {
 			if err := focusedWindow.SendInput(rawInput); err != nil {
 				// Terminal unavailable, switch back to window mode
@@ -562,7 +564,6 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	case "i", "enter":
 		// Enter terminal/insert mode
 		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.Mode = app.TerminalMode
 			o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
 			// Clear selection state when entering terminal mode
 			focusedWindow := o.GetFocusedWindow()
@@ -571,6 +572,8 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 				focusedWindow.IsSelecting = false
 				focusedWindow.InvalidateCache()
 			}
+			// Enter terminal mode and start raw input reader
+			return o, o.EnterTerminalMode()
 		}
 		return o, nil
 	case "t":
@@ -1073,7 +1076,6 @@ func handleCtrlSSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	if o.SelectionMode {
 		// Currently in selection mode, disable it and return to terminal mode
 		o.SelectionMode = false
-		o.Mode = app.TerminalMode
 		o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
 		// Clear selection state when switching to terminal mode
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
@@ -1082,6 +1084,8 @@ func handleCtrlSSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			focusedWindow.ScrollbackOffset = 0 // Reset scrollback offset
 			focusedWindow.InvalidateCache()
 		}
+		// Enter terminal mode and start raw input reader
+		return o, o.EnterTerminalMode()
 	} else {
 		// Not in selection mode, enable it (already in window management mode)
 		o.SelectionMode = true

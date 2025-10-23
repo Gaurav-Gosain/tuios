@@ -104,9 +104,9 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	case "i":
 		// Exit copy mode and enter terminal mode
 		window.ExitCopyMode()
-		o.Mode = app.TerminalMode
 		o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
-		return o, nil
+		// Enter terminal mode and start raw input reader
+		return o, o.EnterTerminalMode()
 
 	// Navigation - basic movement
 	case "h", "left":

@@ -7,8 +7,12 @@ import tea "github.com/charmbracelet/bubbletea/v2"
 func (m *OS) EnterTerminalMode() tea.Cmd {
 	m.Mode = TerminalMode
 
-	// Signal to main program to start raw input reader
-	return SwitchToRawInputCmd()
+	// Raw reader disabled - Bubbletea handles all input correctly including:
+	// - Bracketed paste for Cmd+V (via PasteMsg)
+	// - OSC 52 clipboard reading for Ctrl+V (via ClipboardMsg)
+	// - All key events properly parsed
+	// Raw reader conflicts with Bubbletea in modern terminals using CSI u encoding
+	return nil
 }
 
 // ExitTerminalMode switches from terminal to window management mode.
@@ -16,6 +20,6 @@ func (m *OS) EnterTerminalMode() tea.Cmd {
 func (m *OS) ExitTerminalMode() tea.Cmd {
 	m.Mode = WindowManagementMode
 
-	// Signal to main program to stop raw input reader
-	return SwitchToBubbletteaInputCmd()
+	// Raw reader disabled - Bubbletea handles all input correctly
+	return nil
 }
