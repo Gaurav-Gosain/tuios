@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+title: tuios
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Gaurav
+    family-names: Gosain
+    email: me@gaurav.zip
+    affiliation: DMT
+repository-code: 'https://github.com/Gaurav-Gosain/tuios'
+abstract: >-
+  A terminal-based window manager that provides a modern,
+  efficient interface for managing multiple terminal
+  sessions.
+keywords:
+  - terminal ui
+  - tuios
+  - Terminal OS
+  - operating system
+  - golang
+  - terminal
+license: MIT
+commit: cf11b0b7ca8673e515dd637cbb3b56921eb02b03
+version: v0.0.19
+date-released: '2025-10-23'
