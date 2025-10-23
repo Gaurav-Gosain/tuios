@@ -677,11 +677,26 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 	maxWidth := window.Width - 3
 	maxIterations := 1000 // Prevent infinite loops
 
-	// Phase 1: Skip current word (non-whitespace)
+	// Get current character type
+	cell := getCellAtCursor(cm, window)
+	var currentContent string
+	if cell != nil {
+		currentContent = cell.Content
+	}
+	currentType := getCharType(currentContent)
+
+	// Phase 1: Skip current word/punctuation group
 	for i := 0; i < maxIterations; i++ {
 		cell := getCellAtCursor(cm, window)
-		if cell == nil || cell.Content == "" || cell.Content == " " || cell.Content == "\t" {
-			break // Hit whitespace or empty, move to phase 2
+		var content string
+		if cell != nil {
+			content = cell.Content
+		}
+		charType := getCharType(content)
+
+		// Stop if we hit a different type (but continue through same type)
+		if charType != currentType || charType == 0 {
+			break
 		}
 
 		// Move right, potentially wrapping to next line
@@ -689,22 +704,22 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 			// Wrap to next line
 			cm.CursorX = 0
 			moveDown(cm, window)
-			// Check if we can't move down anymore
-			if i > 0 && cm.CursorX == 0 {
-				// Successfully wrapped
-				continue
-			}
 		} else {
 			cm.CursorX++
 		}
 	}
 
-	// Phase 2: Skip whitespace to next word
+	// Phase 2: Skip whitespace to next word/punctuation
 	for i := 0; i < maxIterations; i++ {
 		cell := getCellAtCursor(cm, window)
+		var content string
+		if cell != nil {
+			content = cell.Content
+		}
+		charType := getCharType(content)
 
 		// Found a non-whitespace character - we're at start of next word
-		if cell != nil && cell.Content != "" && cell.Content != " " && cell.Content != "\t" {
+		if charType != 0 {
 			break
 		}
 
@@ -737,9 +752,14 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 	// Phase 1: Skip whitespace backward
 	for i := 0; i < maxIterations; i++ {
 		cell := getCellAtCursor(cm, window)
+		var content string
+		if cell != nil {
+			content = cell.Content
+		}
+		charType := getCharType(content)
 
 		// Found non-whitespace - move to phase 2
-		if cell != nil && cell.Content != "" && cell.Content != " " && cell.Content != "\t" {
+		if charType != 0 {
 			break
 		}
 
@@ -754,7 +774,15 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 		}
 	}
 
-	// Phase 2: Move to start of current word
+	// Phase 2: Move to start of current word/punctuation group
+	// Get the type of the current (non-whitespace) character
+	cell := getCellAtCursor(cm, window)
+	var currentContent string
+	if cell != nil {
+		currentContent = cell.Content
+	}
+	currentType := getCharType(currentContent)
+
 	for i := 0; i < maxIterations; i++ {
 		if cm.CursorX == 0 {
 			// At start of line - this is the word start
@@ -777,12 +805,19 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 			prevCell = window.Terminal.CellAt(prevX, screenY)
 		}
 
-		// If previous char is whitespace/empty, we're at word start
-		if prevCell == nil || prevCell.Content == "" || prevCell.Content == " " || prevCell.Content == "\t" {
+		// Get previous character type
+		var prevContent string
+		if prevCell != nil {
+			prevContent = prevCell.Content
+		}
+		prevType := getCharType(prevContent)
+
+		// If previous char is different type, we're at word start
+		if prevType != currentType {
 			break
 		}
 
-		// Previous char is part of word, move back
+		// Previous char is same type, move back
 		cm.CursorX--
 	}
 }
@@ -1555,15 +1590,35 @@ func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 	if cm.State == terminal.CopyModeVisualChar {
 		cm.VisualEnd = terminal.Position{X: cm.CursorX, Y: absY}
 	} else if cm.State == terminal.CopyModeVisualLine {
-		// Get line content bounds for both start and end lines
-		startLineStartX, _ := getLineContentBounds(cm, window, cm.VisualStart.Y)
-		_, endLineEndX := getLineContentBounds(cm, window, absY)
+		// For visual line mode, we need to select entire lines
+		// Start Y stays fixed, we only update end Y
+		cm.VisualEnd.Y = absY
 
-		// Update start to be at the first content character of start line
-		cm.VisualStart.X = startLineStartX
+		// Determine which line is earlier and which is later
+		startY := cm.VisualStart.Y
+		endY := cm.VisualEnd.Y
 
-		// Update end to be at the last content character of end line
-		cm.VisualEnd = terminal.Position{X: endLineEndX, Y: absY}
+		// Normalize: make sure startY <= endY for bounds calculation
+		if startY > endY {
+			startY, endY = endY, startY
+		}
+
+		// Get line content bounds for both lines
+		startLineStartX, _ := getLineContentBounds(cm, window, startY)
+		_, endLineEndX := getLineContentBounds(cm, window, endY)
+
+		// If moving upwards (current Y < original start Y), we want:
+		// - Start to be at beginning of the upper line (current position)
+		// - End to be at end of the lower line (original start)
+		if absY < cm.VisualStart.Y {
+			// Moving upwards
+			cm.VisualEnd.X = startLineStartX
+			cm.VisualStart.X = endLineEndX
+		} else {
+			// Moving downwards or same line
+			cm.VisualStart.X = startLineStartX
+			cm.VisualEnd.X = endLineEndX
+		}
 	}
 }
 
@@ -1614,31 +1669,63 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 			endX = end.X
 		}
 
+		// Extract line content
+		var lineCells []uv.Cell
 		if y < scrollbackLen {
-			line := window.ScrollbackLine(y)
-			if line != nil {
-				for x := startX; x <= endX && x < len(line); x++ {
-					if line[x].Content != "" {
-						text.WriteString(line[x].Content)
-					} else {
-						text.WriteRune(' ')
-					}
-				}
-			}
+			lineCells = window.ScrollbackLine(y)
 		} else {
 			screenY := y - scrollbackLen
-			for x := startX; x <= endX && x < window.Width; x++ {
+			// Build cells array from screen
+			for x := 0; x < window.Width; x++ {
 				cell := window.Terminal.CellAt(x, screenY)
-				if cell != nil && cell.Content != "" {
-					text.WriteString(cell.Content)
+				if cell != nil {
+					lineCells = append(lineCells, *cell)
+				} else {
+					lineCells = append(lineCells, uv.Cell{})
+				}
+			}
+		}
+
+		// Append line content
+		if lineCells != nil {
+			for x := startX; x <= endX && x < len(lineCells); x++ {
+				if lineCells[x].Content != "" {
+					text.WriteString(lineCells[x].Content)
 				} else {
 					text.WriteRune(' ')
 				}
 			}
 		}
 
+		// Add newline only if this is NOT a soft-wrapped line
 		if y < end.Y {
-			text.WriteRune('\n')
+			// Check if this line is soft-wrapped (continues on next line)
+			// Heuristic: if line content extends to terminal width and doesn't end with whitespace,
+			// it's likely wrapped
+			isSoftWrapped := false
+			if lineCells != nil && len(lineCells) > 0 {
+				// Find last non-empty cell
+				lastNonEmptyX := -1
+				for x := len(lineCells) - 1; x >= 0; x-- {
+					if lineCells[x].Content != "" && lineCells[x].Content != " " {
+						lastNonEmptyX = x
+						break
+					}
+				}
+				// If line extends close to terminal width, it's probably wrapped
+				if lastNonEmptyX >= window.Width-5 {
+					isSoftWrapped = true
+				}
+			}
+
+			if isSoftWrapped {
+				// Remove trailing whitespace since this line continues on the next
+				currentText := text.String()
+				text.Reset()
+				text.WriteString(strings.TrimRight(currentText, " "))
+			} else {
+				text.WriteRune('\n')
+			}
 		}
 	}
 
@@ -1653,6 +1740,26 @@ func getAbsoluteY(cm *terminal.CopyMode, window *terminal.Window) int {
 		return scrollbackLen - cm.ScrollOffset + cm.CursorY
 	}
 	return scrollbackLen + cm.CursorY
+}
+
+// isVimWordChar returns true if the rune is part of a vim "word" (alphanumeric or underscore)
+func isVimWordChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9') ||
+		r == '_'
+}
+
+// getCharType returns the type of character: 0=whitespace, 1=word char, 2=punctuation
+func getCharType(content string) int {
+	if content == "" || content == " " || content == "\t" {
+		return 0 // whitespace
+	}
+	r := []rune(content)[0]
+	if isVimWordChar(r) {
+		return 1 // word character
+	}
+	return 2 // punctuation/special
 }
 
 func getCellAtCursor(cm *terminal.CopyMode, window *terminal.Window) *uv.Cell {
