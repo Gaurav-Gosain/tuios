@@ -157,8 +157,6 @@ aurs:
     license: MIT
     private_key: "{{ .Env.AUR_SSH_KEY }}"
     git_url: "ssh://aur@aur.archlinux.org/tuios-bin.git"
-    depends:
-      - glibc
     package: |
       # bin
       install -Dm755 "./tuios" "${pkgdir}/usr/bin/tuios"
