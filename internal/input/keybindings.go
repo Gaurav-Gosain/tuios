@@ -26,21 +26,21 @@ var ctrlKeyMap = map[rune]byte{
 
 // Special key codes (non-modifiers)
 var specialKeyMap = map[rune][]byte{
-	tea.KeyEnter:    {'\r'},
-	tea.KeyTab:      {'\t'},
+	tea.KeyEnter:     {'\r'},
+	tea.KeyTab:       {'\t'},
 	tea.KeyBackspace: {0x7f},
-	tea.KeyEscape:   {0x1b},
-	tea.KeySpace:    {' '},
-	tea.KeyDelete:   {0x1b, '[', '3', '~'},
-	tea.KeyInsert:   {0x1b, '[', '2', '~'},
-	tea.KeyPgUp:     {0x1b, '[', '5', '~'},
-	tea.KeyPgDown:   {0x1b, '[', '6', '~'},
-	tea.KeyUp:       {0x1b, '[', 'A'},
-	tea.KeyDown:     {0x1b, '[', 'B'},
-	tea.KeyRight:    {0x1b, '[', 'C'},
-	tea.KeyLeft:     {0x1b, '[', 'D'},
-	tea.KeyHome:     {0x1b, '[', 'H'},
-	tea.KeyEnd:      {0x1b, '[', 'F'},
+	tea.KeyEscape:    {0x1b},
+	tea.KeySpace:     {' '},
+	tea.KeyDelete:    {0x1b, '[', '3', '~'},
+	tea.KeyInsert:    {0x1b, '[', '2', '~'},
+	tea.KeyPgUp:      {0x1b, '[', '5', '~'},
+	tea.KeyPgDown:    {0x1b, '[', '6', '~'},
+	tea.KeyUp:        {0x1b, '[', 'A'},
+	tea.KeyDown:      {0x1b, '[', 'B'},
+	tea.KeyRight:     {0x1b, '[', 'C'},
+	tea.KeyLeft:      {0x1b, '[', 'D'},
+	tea.KeyHome:      {0x1b, '[', 'H'},
+	tea.KeyEnd:       {0x1b, '[', 'F'},
 }
 
 // Function keys F1-F12
@@ -184,37 +184,6 @@ func getModParam(mod tea.KeyMod) int {
 		modParam += 4
 	}
 	return modParam
-}
-
-// getFunctionKeyBytes returns bytes for function keys (no modifiers)
-func getFunctionKeyBytes(code rune) []byte {
-	switch code {
-	case tea.KeyF1:
-		return []byte{0x1b, 'O', 'P'}
-	case tea.KeyF2:
-		return []byte{0x1b, 'O', 'Q'}
-	case tea.KeyF3:
-		return []byte{0x1b, 'O', 'R'}
-	case tea.KeyF4:
-		return []byte{0x1b, 'O', 'S'}
-	case tea.KeyF5:
-		return []byte{0x1b, '[', '1', '5', '~'}
-	case tea.KeyF6:
-		return []byte{0x1b, '[', '1', '7', '~'}
-	case tea.KeyF7:
-		return []byte{0x1b, '[', '1', '8', '~'}
-	case tea.KeyF8:
-		return []byte{0x1b, '[', '1', '9', '~'}
-	case tea.KeyF9:
-		return []byte{0x1b, '[', '2', '0', '~'}
-	case tea.KeyF10:
-		return []byte{0x1b, '[', '2', '1', '~'}
-	case tea.KeyF11:
-		return []byte{0x1b, '[', '2', '3', '~'}
-	case tea.KeyF12:
-		return []byte{0x1b, '[', '2', '4', '~'}
-	}
-	return []byte{}
 }
 
 // getCursorSequence returns ANSI escape sequence for cursor movement keys

@@ -133,14 +133,14 @@ type CopyMode struct {
 	LastCommandTime time.Time     // For detecting 'gg' sequence
 
 	// Character search state (f/F/t/T commands)
-	PendingCharSearch   bool // Waiting for character after f/F/t/T
-	LastCharSearch      rune // Last searched character
-	LastCharSearchDir   int  // 1 for forward (f/t), -1 for backward (F/T)
-	LastCharSearchTill  bool // true for till (t/T), false for find (f/F)
+	PendingCharSearch  bool // Waiting for character after f/F/t/T
+	LastCharSearch     rune // Last searched character
+	LastCharSearchDir  int  // 1 for forward (f/t), -1 for backward (F/T)
+	LastCharSearchTill bool // true for till (t/T), false for find (f/F)
 
 	// Count prefix (e.g., 10j means move down 10 times)
-	PendingCount    int       // Accumulated count (0 means no count)
-	CountStartTime  time.Time // When count entry started (for timeout)
+	PendingCount   int       // Accumulated count (0 means no count)
+	CountStartTime time.Time // When count entry started (for timeout)
 }
 
 // NewWindow creates a new terminal window with the specified properties.
@@ -491,13 +491,6 @@ func (w *Window) Resize(width, height int) {
 
 // TriggerRedraw ensures terminal applications properly respond to resize.
 // Platform-specific implementations in window_unix.go and window_windows.go
-
-// isLikelyTUI checks if the terminal is using the alternate screen buffer.
-// TUI applications like nvim, vim, htop, etc. use alternate screen buffer
-// which is a reliable indicator that the application can handle Ctrl+L for redraw.
-func (w *Window) isLikelyTUI() bool {
-	return w.IsAltScreen
-}
 
 // Close closes the window and cleans up resources.
 func (w *Window) Close() {

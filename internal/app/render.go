@@ -262,8 +262,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	}
 
 	// Build search match highlight maps for copy mode
-	var searchHighlights map[int]map[int]bool       // All matches - yellow
-	var currentMatchHighlight map[int]map[int]bool  // Current match - orange
+	var searchHighlights map[int]map[int]bool      // All matches - yellow
+	var currentMatchHighlight map[int]map[int]bool // Current match - orange
 
 	if inCopyMode && len(window.CopyMode.SearchMatches) > 0 {
 		searchHighlights = make(map[int]map[int]bool)
@@ -725,15 +725,15 @@ func buildOptimizedCellStyle(cell *uv.Cell) lipgloss.Style {
 	if cell.Style.Fg != nil {
 		if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
 			cellStyle = cellStyle.Foreground(ansiColor)
-		} else if c, ok := cell.Style.Fg.(color.Color); ok && isColorSafe(c) {
-			cellStyle = cellStyle.Foreground(c)
+		} else if isColorSafe(cell.Style.Fg) {
+			cellStyle = cellStyle.Foreground(cell.Style.Fg)
 		}
 	}
 	if cell.Style.Bg != nil {
 		if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
 			cellStyle = cellStyle.Background(ansiColor)
-		} else if c, ok := cell.Style.Bg.(color.Color); ok && isColorSafe(c) {
-			cellStyle = cellStyle.Background(c)
+		} else if isColorSafe(cell.Style.Bg) {
+			cellStyle = cellStyle.Background(cell.Style.Bg)
 		}
 	}
 
@@ -772,15 +772,15 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 		if cell.Style.Fg != nil {
 			if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
 				fg = ansiColor
-			} else if c, ok := cell.Style.Fg.(color.Color); ok && isColorSafe(c) {
-				fg = c
+			} else if isColorSafe(cell.Style.Fg) {
+				fg = cell.Style.Fg
 			}
 		}
 		if cell.Style.Bg != nil {
 			if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
 				bg = ansiColor
-			} else if c, ok := cell.Style.Bg.(color.Color); ok && isColorSafe(c) {
-				bg = c
+			} else if isColorSafe(cell.Style.Bg) {
+				bg = cell.Style.Bg
 			}
 		}
 		return cellStyle.Background(fg).Foreground(bg)
@@ -790,15 +790,15 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 	if cell.Style.Fg != nil {
 		if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
 			cellStyle = cellStyle.Foreground(ansiColor)
-		} else if c, ok := cell.Style.Fg.(color.Color); ok && isColorSafe(c) {
-			cellStyle = cellStyle.Foreground(c)
+		} else if isColorSafe(cell.Style.Fg) {
+			cellStyle = cellStyle.Foreground(cell.Style.Fg)
 		}
 	}
 	if cell.Style.Bg != nil {
 		if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
 			cellStyle = cellStyle.Background(ansiColor)
-		} else if c, ok := cell.Style.Bg.(color.Color); ok && isColorSafe(c) {
-			cellStyle = cellStyle.Background(c)
+		} else if isColorSafe(cell.Style.Bg) {
+			cellStyle = cellStyle.Background(cell.Style.Bg)
 		}
 	}
 

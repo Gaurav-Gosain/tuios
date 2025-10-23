@@ -1703,7 +1703,7 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 			// Heuristic: if line content extends to terminal width and doesn't end with whitespace,
 			// it's likely wrapped
 			isSoftWrapped := false
-			if lineCells != nil && len(lineCells) > 0 {
+			if len(lineCells) > 0 {
 				// Find last non-empty cell
 				lastNonEmptyX := -1
 				for x := len(lineCells) - 1; x >= 0; x-- {
@@ -1861,11 +1861,12 @@ func getScreenLineCells(term *vt.Emulator, y int) []uv.Cell {
 // The cells array is structured so that each cell index IS the column position.
 // For wide characters (Width=2), the next cell is a continuation (Width=0).
 // Example:
-//   Columns:  0  1  2  3  4  5
-//   Cells:   [🎨][] [f][i][l][e]
-//   Width:    2  0  1  1  1  1
-//   Text (skipping Width=0): "🎨file"
-//   Character index 1 ('f') → Column 2
+//
+//	Columns:  0  1  2  3  4  5
+//	Cells:   [🎨][] [f][i][l][e]
+//	Width:    2  0  1  1  1  1
+//	Text (skipping Width=0): "🎨file"
+//	Character index 1 ('f') → Column 2
 func charIndexToColumn(cells []uv.Cell, charIndex int) int {
 	if charIndex <= 0 {
 		return 0

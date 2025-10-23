@@ -114,12 +114,6 @@ func (s *Screen) setCursorX(x int, margins bool) {
 	s.setCursor(x, s.cur.Y, margins)
 }
 
-// setCursorY sets the cursor Y position. If margins is true, the cursor is
-// only set if it is within the scroll margins.
-func (s *Screen) setCursorY(y int, margins bool) { //nolint:unused
-	s.setCursor(s.cur.X, y, margins)
-}
-
 // setCursor sets the cursor position. If margins is true, the cursor is only
 // set if it is within the scroll margins. This follows how [ansi.CUP] works.
 func (s *Screen) setCursor(x, y int, margins bool) {

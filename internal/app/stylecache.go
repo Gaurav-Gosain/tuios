@@ -2,7 +2,6 @@ package app
 
 import (
 	"hash/maphash"
-	"image/color"
 	"sync"
 	"sync/atomic"
 
@@ -82,16 +81,14 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool, isOptimized bo
 		if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
 			h.WriteByte(1)
 			h.WriteByte(byte(ansiColor))
-		} else if c, ok := cell.Style.Fg.(color.Color); ok {
-			r, g, b, a := c.RGBA()
+		} else {
+			r, g, b, a := cell.Style.Fg.RGBA()
 			h.WriteByte(2)
 			// Write RGBA values as bytes
 			h.WriteByte(byte(r >> 8))
 			h.WriteByte(byte(g >> 8))
 			h.WriteByte(byte(b >> 8))
 			h.WriteByte(byte(a >> 8))
-		} else {
-			h.WriteByte(0)
 		}
 	} else {
 		h.WriteByte(0)
@@ -102,16 +99,14 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool, isOptimized bo
 		if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
 			h.WriteByte(1)
 			h.WriteByte(byte(ansiColor))
-		} else if c, ok := cell.Style.Bg.(color.Color); ok {
-			r, g, b, a := c.RGBA()
+		} else {
+			r, g, b, a := cell.Style.Bg.RGBA()
 			h.WriteByte(2)
 			// Write RGBA values as bytes
 			h.WriteByte(byte(r >> 8))
 			h.WriteByte(byte(g >> 8))
 			h.WriteByte(byte(b >> 8))
 			h.WriteByte(byte(a >> 8))
-		} else {
-			h.WriteByte(0)
 		}
 	} else {
 		h.WriteByte(0)
