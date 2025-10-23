@@ -110,19 +110,19 @@ func runLocal() {
 
 	// Start with no windows - user will create the first one
 	initialOS := &app.OS{
-		FocusedWindow:    -1,                    // No focused window initially
-		WindowExitChan:   make(chan string, 10), // Buffer for window exit signals
-		MouseSnapping:    false,                 // Disable mouse snapping by default
-		CurrentWorkspace: 1,                     // Start on workspace 1
-		NumWorkspaces:    9,                     // Support 9 workspaces (1-9)
-		WorkspaceFocus:   make(map[int]int),     // Initialize workspace focus memory
+		FocusedWindow:    -1,                        // No focused window initially
+		WindowExitChan:   make(chan string, 10),     // Buffer for window exit signals
+		MouseSnapping:    false,                     // Disable mouse snapping by default
+		CurrentWorkspace: 1,                         // Start on workspace 1
+		NumWorkspaces:    9,                         // Support 9 workspaces (1-9)
+		WorkspaceFocus:   make(map[int]int),         // Initialize workspace focus memory
+		RawReader:        input.NewRawInputReader(), // Initialize raw input reader for terminal mode
 	}
 
 	// Initialize the Bubble Tea program with optimal settings
+	// Note: AltScreen, MouseMode, and ReportFocus are now configured in View() method
 	p := tea.NewProgram(
 		initialOS,
-		tea.WithAltScreen(),               // Use alternate screen buffer
-		tea.WithMouseAllMotion(),          // Enable mouse tracking
 		tea.WithFPS(config.NormalFPS),     // Set target FPS
 		tea.WithoutSignalHandler(),        // We handle signals ourselves
 		tea.WithFilter(filterMouseMotion), // Filter unnecessary mouse motion events

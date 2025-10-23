@@ -15,9 +15,9 @@ import (
 func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	focusedWindow := o.GetFocusedWindow()
 
-	// Handle scrollback mode navigation
-	if focusedWindow != nil && focusedWindow.ScrollbackMode {
-		return handleScrollbackModeKey(msg, o, focusedWindow)
+	// Handle copy mode (vim-style scrollback/selection)
+	if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+		return HandleCopyModeKey(msg, o, focusedWindow)
 	}
 
 	// Check for prefix key in terminal mode
@@ -58,7 +58,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Handle Alt+1-9 workspace switching in terminal mode
-	if cmd := handleWorkspaceSwitch(msg, o); cmd != nil {
+	// Don't send workspace switching keys to the PTY
+	handled := handleWorkspaceSwitch(msg, o)
+	if handled {
 		return o, nil
 	}
 
@@ -67,8 +69,8 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleTerminalSelectionToggle(msg, o)
 	}
 
-	// Handle Ctrl+V paste in terminal mode
-	if msg.String() == "ctrl+v" {
+	// Handle Ctrl+V and Cmd+V paste in terminal mode
+	if msg.String() == "ctrl+v" || msg.String() == "cmd+v" {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
 			// Request clipboard content from Bubbletea
@@ -98,63 +100,45 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleTerminalWorkspacePrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.WorkspacePrefixActive = false
 	o.PrefixActive = false
-	switch msg.String() {
-	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		num := int(msg.String()[0] - '0')
+
+	keyStr := msg.String()
+
+	// Handle digit keys for workspace switching
+	if len(keyStr) == 1 && keyStr[0] >= '1' && keyStr[0] <= '9' {
+		num := int(keyStr[0] - '0')
 		o.SwitchToWorkspace(num)
 		return o, nil
-	case "shift+1", "!":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, 1)
-		}
-		return o, nil
-	case "shift+2", "@":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, 2)
-		}
-		return o, nil
-	case "shift+3", "#":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, 3)
-		}
-		return o, nil
-	case "shift+4", "$":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, 4)
-		}
-		return o, nil
-	case "shift+5", "%":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, 5)
-		}
-		return o, nil
-	case "shift+6", "^":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, 6)
-		}
-		return o, nil
-	case "shift+7", "&":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, 7)
-		}
-		return o, nil
-	case "shift+8", "*":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, 8)
-		}
-		return o, nil
-	case "shift+9", "(":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, 9)
-		}
-		return o, nil
-	case "esc":
-		// Cancel workspace prefix mode
-		return o, nil
-	default:
-		// Unknown workspace command, ignore
-		return o, nil
 	}
+
+	// Handle Shift+digit for moving window to workspace
+	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
+		workspace := 0
+		switch keyStr {
+		case "shift+1", "!":
+			workspace = 1
+		case "shift+2", "@":
+			workspace = 2
+		case "shift+3", "#":
+			workspace = 3
+		case "shift+4", "$":
+			workspace = 4
+		case "shift+5", "%":
+			workspace = 5
+		case "shift+6", "^":
+			workspace = 6
+		case "shift+7", "&":
+			workspace = 7
+		case "shift+8", "*":
+			workspace = 8
+		case "shift+9", "(":
+			workspace = 9
+		}
+		if workspace > 0 {
+			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, workspace)
+		}
+	}
+
+	return o, nil
 }
 
 // handleTerminalMinimizePrefix handles minimize prefix commands in terminal mode
@@ -373,33 +357,11 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			o.Snap(o.FocusedWindow, app.SnapFullScreen)
 		}
 		return o, nil
-	case "s":
-		// Toggle selection mode (like tmux copy mode)
-		if o.SelectionMode {
-			// Currently in selection mode, disable it and return to terminal mode
-			o.SelectionMode = false
-			o.Mode = app.TerminalMode
-			o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
-			// Clear selection state when switching to terminal mode
-			if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-				focusedWindow.SelectedText = ""
-				focusedWindow.IsSelecting = false
-				focusedWindow.ScrollbackOffset = 0 // Reset scrollback offset
-				focusedWindow.InvalidateCache()
-			}
-		} else {
-			// Not in selection mode, enable it and switch to window management mode
-			o.Mode = app.WindowManagementMode
-			o.SelectionMode = true
-			o.ShowNotification("Selection Mode", "info", config.NotificationDuration)
-		}
-		return o, nil
-
-	case "[":
-		// Enter scrollback mode (like tmux copy mode with [)
+	case "s", "[":
+		// Enter copy mode (vim-style scrollback/selection, replaces old scrollback mode)
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-			focusedWindow.EnterScrollbackMode()
-			o.ShowNotification("Scrollback Mode (use ↑/↓/PgUp/PgDn, q to exit)", "info", config.NotificationDuration*2)
+			focusedWindow.EnterCopyMode()
+			o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration*2)
 		}
 		return o, nil
 
@@ -411,6 +373,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 
 	case "q":
 		// Quit application
+		o.Cleanup()
 		o.PrefixActive = false
 		return o, tea.Quit
 
@@ -486,15 +449,16 @@ func handleTerminalSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	focusedWindow := o.GetFocusedWindow()
 
-	// Handle scrollback mode navigation (works in both selection mode and normal mode)
-	if focusedWindow != nil && focusedWindow.ScrollbackMode {
-		return handleScrollbackModeKey(msg, o, focusedWindow)
+	// Handle copy mode (vim-style scrollback/selection) - takes priority
+	if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+		return HandleCopyModeKey(msg, o, focusedWindow)
 	}
 
 	// Non-prefix keybindings (immediate actions)
 	switch msg.String() {
 	case "ctrl+c":
 		// Quit
+		o.Cleanup()
 		return o, tea.Quit
 
 	case "q":
@@ -516,6 +480,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 			return o, nil
 		}
 		// Quit application
+		o.Cleanup()
 		return o, tea.Quit
 
 	// Workspace switching with Alt+1-9
@@ -916,30 +881,50 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 }
 
 // handleWorkspaceSwitch handles Alt+1-9 workspace switching (with macOS Option key support)
-func handleWorkspaceSwitch(msg tea.KeyPressMsg, o *app.OS) tea.Cmd {
-	switch msg.String() {
-	case "alt+1", "¡": // Option+1 on macOS generates ¡
-		o.SwitchToWorkspace(1)
-	case "alt+2", "™": // Option+2 on macOS generates ™
-		o.SwitchToWorkspace(2)
-	case "alt+3", "£": // Option+3 on macOS generates £
-		o.SwitchToWorkspace(3)
-	case "alt+4", "¢": // Option+4 on macOS generates ¢
-		o.SwitchToWorkspace(4)
-	case "alt+5", "∞": // Option+5 on macOS generates ∞
-		o.SwitchToWorkspace(5)
-	case "alt+6", "§": // Option+6 on macOS generates §
-		o.SwitchToWorkspace(6)
-	case "alt+7", "¶": // Option+7 on macOS generates ¶
-		o.SwitchToWorkspace(7)
-	case "alt+8", "•": // Option+8 on macOS generates •
-		o.SwitchToWorkspace(8)
-	case "alt+9", "ª": // Option+9 on macOS generates ª
-		o.SwitchToWorkspace(9)
-	default:
-		return nil
+func handleWorkspaceSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
+	keyStr := msg.String()
+
+	// Check for macOS Option+digit keys
+	if len(keyStr) > 0 {
+		firstRune := []rune(keyStr)[0]
+		if digit, ok := IsMacOSOptionKey(firstRune); ok {
+			o.SwitchToWorkspace(digit)
+			return true
+		}
 	}
-	return nil
+
+	// Check for standard Alt+digit keys
+	switch keyStr {
+	case "alt+1":
+		o.SwitchToWorkspace(1)
+		return true
+	case "alt+2":
+		o.SwitchToWorkspace(2)
+		return true
+	case "alt+3":
+		o.SwitchToWorkspace(3)
+		return true
+	case "alt+4":
+		o.SwitchToWorkspace(4)
+		return true
+	case "alt+5":
+		o.SwitchToWorkspace(5)
+		return true
+	case "alt+6":
+		o.SwitchToWorkspace(6)
+		return true
+	case "alt+7":
+		o.SwitchToWorkspace(7)
+		return true
+	case "alt+8":
+		o.SwitchToWorkspace(8)
+		return true
+	case "alt+9":
+		o.SwitchToWorkspace(9)
+		return true
+	default:
+		return false
+	}
 }
 
 // handleWorkspaceMoveAndFollow handles Alt+Shift+1-9 to move window to workspace and follow
@@ -948,28 +933,38 @@ func handleWorkspaceMoveAndFollow(msg tea.KeyPressMsg, o *app.OS) {
 		return
 	}
 
+	keyStr := msg.String()
 	workspace := 0
-	switch msg.String() {
-	case "alt+shift+1", "alt+!", "⁄": // Option+Shift+1 on macOS generates ⁄
-		workspace = 1
-	case "alt+shift+2", "alt+@", "€": // Option+Shift+2 on macOS generates €
-		workspace = 2
-	case "alt+shift+3", "alt+#", "‹": // Option+Shift+3 on macOS generates ‹
-		workspace = 3
-	case "alt+shift+4", "alt+$", "›": // Option+Shift+4 on macOS generates ›
-		workspace = 4
-	case "alt+shift+5", "alt+%", "ﬁ": // Option+Shift+5 on macOS generates ﬁ
-		workspace = 5
-	case "alt+shift+6", "alt+^", "ﬂ": // Option+Shift+6 on macOS generates ﬂ
-		workspace = 6
-	case "alt+shift+7", "alt+&", "‡": // Option+Shift+7 on macOS generates ‡
-		workspace = 7
-	case "alt+shift+8", "alt+*", "°": // Option+Shift+8 on macOS generates °
-		workspace = 8
-	case "alt+shift+9", "alt+(", "·": // Option+Shift+9 on macOS generates ·
-		workspace = 9
-	default:
-		return
+
+	// Check for macOS Option+Shift+digit keys
+	if len(keyStr) > 0 {
+		if digit, ok := IsMacOSOptionShiftKey([]rune(keyStr)[0]); ok {
+			workspace = digit
+		}
+	}
+
+	// Check for standard Alt+Shift+digit keys if not already matched
+	if workspace == 0 {
+		switch keyStr {
+		case "alt+shift+1", "alt+!":
+			workspace = 1
+		case "alt+shift+2", "alt+@":
+			workspace = 2
+		case "alt+shift+3", "alt+#":
+			workspace = 3
+		case "alt+shift+4", "alt+$":
+			workspace = 4
+		case "alt+shift+5", "alt+%":
+			workspace = 5
+		case "alt+shift+6", "alt+^":
+			workspace = 6
+		case "alt+shift+7", "alt+&":
+			workspace = 7
+		case "alt+shift+8", "alt+*":
+			workspace = 8
+		case "alt+shift+9", "alt+(":
+			workspace = 9
+		}
 	}
 
 	if workspace > 0 {
@@ -1036,7 +1031,7 @@ func handleSelectionModeToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 				focusedWindow.SelectedText = ""
 				focusedWindow.SelectionMode = 0 // Default to character mode
 				// Initialize selection cursor at terminal cursor position
-				if focusedWindow.Terminal != nil && focusedWindow.Terminal != nil {
+				if focusedWindow.Terminal != nil {
 					cursor := focusedWindow.Terminal.CursorPosition()
 					focusedWindow.SelectionCursor.X = cursor.X
 					focusedWindow.SelectionCursor.Y = cursor.Y

@@ -11,6 +11,54 @@ import (
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
 
+// Ctrl key combinations mapping
+// Maps the character code to its control code equivalent
+var ctrlKeyMap = map[rune]byte{
+	'@':  0x00, // Ctrl+@
+	'[':  0x1B, // Ctrl+[ (ESC)
+	'\\': 0x1C, // Ctrl+\
+	']':  0x1D, // Ctrl+]
+	'^':  0x1E, // Ctrl+^
+	'_':  0x1F, // Ctrl+_
+	'/':  0x1F, // Ctrl+/ (same as Ctrl+_)
+	'?':  0x7F, // Ctrl+? (DEL)
+}
+
+// Special key codes (non-modifiers)
+var specialKeyMap = map[rune][]byte{
+	tea.KeyEnter:    {'\r'},
+	tea.KeyTab:      {'\t'},
+	tea.KeyBackspace: {0x7f},
+	tea.KeyEscape:   {0x1b},
+	tea.KeySpace:    {' '},
+	tea.KeyDelete:   {0x1b, '[', '3', '~'},
+	tea.KeyInsert:   {0x1b, '[', '2', '~'},
+	tea.KeyPgUp:     {0x1b, '[', '5', '~'},
+	tea.KeyPgDown:   {0x1b, '[', '6', '~'},
+	tea.KeyUp:       {0x1b, '[', 'A'},
+	tea.KeyDown:     {0x1b, '[', 'B'},
+	tea.KeyRight:    {0x1b, '[', 'C'},
+	tea.KeyLeft:     {0x1b, '[', 'D'},
+	tea.KeyHome:     {0x1b, '[', 'H'},
+	tea.KeyEnd:      {0x1b, '[', 'F'},
+}
+
+// Function keys F1-F12
+var functionKeyMap = map[rune][]byte{
+	tea.KeyF1:  {0x1b, 'O', 'P'},
+	tea.KeyF2:  {0x1b, 'O', 'Q'},
+	tea.KeyF3:  {0x1b, 'O', 'R'},
+	tea.KeyF4:  {0x1b, 'O', 'S'},
+	tea.KeyF5:  {0x1b, '[', '1', '5', '~'},
+	tea.KeyF6:  {0x1b, '[', '1', '7', '~'},
+	tea.KeyF7:  {0x1b, '[', '1', '8', '~'},
+	tea.KeyF8:  {0x1b, '[', '1', '9', '~'},
+	tea.KeyF9:  {0x1b, '[', '2', '0', '~'},
+	tea.KeyF10: {0x1b, '[', '2', '1', '~'},
+	tea.KeyF11: {0x1b, '[', '2', '3', '~'},
+	tea.KeyF12: {0x1b, '[', '2', '4', '~'},
+}
+
 // getRawKeyBytes converts a Bubble Tea KeyPressMsg to raw bytes for PTY forwarding.
 //
 // Key improvements in this version:
@@ -28,7 +76,7 @@ func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
 	if key.Mod != 0 {
 		// Handle Ctrl+letter combinations (standard control codes)
 		if key.Mod&tea.ModCtrl != 0 {
-			// Handle common Ctrl combinations
+			// Special Ctrl key combinations
 			switch key.Code {
 			case tea.KeySpace:
 				return []byte{0x00} // Ctrl+Space = NUL
@@ -40,31 +88,19 @@ func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
 				return []byte{0x0A} // Ctrl+J
 			case tea.KeyEscape:
 				return []byte{0x1B} // Ctrl+[
-			default:
-				// For Ctrl+letter, convert to control codes (1-26)
-				if key.Code >= 'a' && key.Code <= 'z' {
-					return []byte{byte(key.Code - 'a' + 1)}
-				}
-				if key.Code >= 'A' && key.Code <= 'Z' {
-					return []byte{byte(key.Code - 'A' + 1)}
-				}
-				// Handle other Ctrl+symbol combinations
-				switch key.Code {
-				case '@':
-					return []byte{0x00} // Ctrl+@
-				case '[':
-					return []byte{0x1B} // Ctrl+[
-				case '\\':
-					return []byte{0x1C} // Ctrl+\\
-				case ']':
-					return []byte{0x1D} // Ctrl+]
-				case '^':
-					return []byte{0x1E} // Ctrl+^
-				case '_':
-					return []byte{0x1F} // Ctrl+_
-				case '?':
-					return []byte{0x7F} // Ctrl+?
-				}
+			}
+
+			// For Ctrl+letter, convert to control codes (1-26)
+			if key.Code >= 'a' && key.Code <= 'z' {
+				return []byte{byte(key.Code - 'a' + 1)}
+			}
+			if key.Code >= 'A' && key.Code <= 'Z' {
+				return []byte{byte(key.Code - 'A' + 1)}
+			}
+
+			// Check the Ctrl symbol map for other combinations
+			if ctrlCode, ok := ctrlKeyMap[key.Code]; ok {
+				return []byte{ctrlCode}
 			}
 		}
 
@@ -90,43 +126,14 @@ func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
 		}
 	}
 
-	// Handle special keys (no modifiers)
-	switch key.Code {
-	case tea.KeyEnter:
-		return []byte{'\r'}
-	case tea.KeyTab:
-		return []byte{'\t'}
-	case tea.KeyBackspace:
-		return []byte{0x7f}
-	case tea.KeyEscape:
-		return []byte{0x1b}
-	case tea.KeySpace:
-		return []byte{' '}
-	case tea.KeyDelete:
-		return []byte{0x1b, '[', '3', '~'}
-	case tea.KeyInsert:
-		return []byte{0x1b, '[', '2', '~'}
-	case tea.KeyPgUp:
-		return []byte{0x1b, '[', '5', '~'}
-	case tea.KeyPgDown:
-		return []byte{0x1b, '[', '6', '~'}
-	case tea.KeyUp:
-		return []byte{0x1b, '[', 'A'}
-	case tea.KeyDown:
-		return []byte{0x1b, '[', 'B'}
-	case tea.KeyRight:
-		return []byte{0x1b, '[', 'C'}
-	case tea.KeyLeft:
-		return []byte{0x1b, '[', 'D'}
-	case tea.KeyHome:
-		return []byte{0x1b, '[', 'H'}
-	case tea.KeyEnd:
-		return []byte{0x1b, '[', 'F'}
+	// Handle special keys (no modifiers) using lookup table
+	if seq, ok := specialKeyMap[key.Code]; ok {
+		return seq
 	}
 
-	// Handle function keys
-	if fnSeq := getFunctionKeyBytes(key.Code); len(fnSeq) > 0 {
-		return fnSeq
+	// Handle function keys using lookup table
+	if seq, ok := functionKeyMap[key.Code]; ok {
+		return seq
 	}
 
 	// For printable characters, use Key.Text if available (handles Unicode, shifted keys)

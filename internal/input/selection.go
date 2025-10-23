@@ -3,7 +3,6 @@ package input
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -162,23 +161,10 @@ func handleClipboardPaste(o *app.OS) {
 		return
 	}
 
-	// Use bracketed paste mode if supported (most modern terminals)
-	var inputData []byte
-
-	// Check if terminal likely supports bracketed paste
-	termEnv := os.Getenv("TERM")
-	supportsBracketedPaste := strings.Contains(termEnv, "xterm") ||
-		strings.Contains(termEnv, "screen") ||
-		strings.Contains(termEnv, "tmux") ||
-		termEnv == "alacritty" || termEnv == "kitty"
-
-	if supportsBracketedPaste {
-		// Use bracketed paste mode to preserve formatting and prevent command execution
-		inputData = []byte("\x1b[200~" + o.ClipboardContent + "\x1b[201~")
-	} else {
-		// Direct paste for terminals that don't support bracketed paste
-		inputData = []byte(o.ClipboardContent)
-	}
+	// Direct paste without bracketed paste mode
+	// Bracketed paste (\x1b[200~ ... \x1b[201~) causes permission prompts in some terminals
+	// like ghostty, and most shells handle paste just fine without it
+	inputData := []byte(o.ClipboardContent)
 
 	err := focusedWindow.SendInput(inputData)
 	if err != nil {

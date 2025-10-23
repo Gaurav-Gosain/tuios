@@ -32,13 +32,11 @@ func SetInputHandler(handler InputHandler) {
 }
 
 // Init initializes the TUIOS application and returns initial commands to run.
-// It enables mouse tracking, starts the tick timer, and listens for window exits.
+// It starts the tick timer and listens for window exits.
+// Note: Mouse tracking, bracketed paste, and focus reporting are now configured
+// in the View() method as per bubbletea v2.0.0-beta.5 API changes.
 func (m *OS) Init() tea.Cmd {
 	return tea.Batch(
-		tea.EnableMouseAllMotion,
-		tea.EnableBracketedPaste,     // Better paste handling for the main app
-		tea.EnableGraphemeClustering, // Better Unicode support
-		tea.EnableReportFocus,        // Track when terminal gains/loses focus
 		TickCmd(),
 		ListenForWindowExits(m.WindowExitChan),
 	)
@@ -92,6 +90,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Update system info
 		m.UpdateCPUHistory()
+		m.UpdateRAMUsage()
 
 		// Adaptive polling - slower during interactions for better mouse responsiveness
 		hasChanges := m.MarkTerminalsWithNewContent()
@@ -159,6 +158,47 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.BlurMsg:
 		// Terminal lost focus
 		// Could be used to pause expensive operations
+		return m, nil
+
+	case SwitchToRawInputMsg:
+		// Start raw input reader for terminal mode
+		if m.RawReader != nil && !m.RawReader.IsRunning() {
+			if err := m.RawReader.Start(); err != nil {
+				// Failed to start raw reader, stay in window management mode
+				return m, nil
+			}
+			// Start listening for raw input
+			return m, WaitForRawInputCmd(m.RawReader.ReadBytes())
+		}
+		return m, nil
+
+	case SwitchToBubbletteaInputMsg:
+		// Stop raw input reader and return to Bubbletea input
+		if m.RawReader != nil && m.RawReader.IsRunning() {
+			_ = m.RawReader.Stop() // Ignore error
+		}
+		return m, nil
+
+	case RawInputMsg:
+		// Handle raw input bytes from /dev/tty
+		if len(msg.Bytes) == 0 {
+			// Empty bytes signal Ctrl+B Esc - exit terminal mode
+			return m, m.ExitTerminalMode()
+		}
+
+		// Forward bytes to focused terminal
+		focusedWindow := m.GetFocusedWindow()
+		if focusedWindow != nil && m.Mode == TerminalMode {
+			if err := focusedWindow.SendInput(msg.Bytes); err != nil {
+				// Terminal may have closed, exit terminal mode
+				return m, m.ExitTerminalMode()
+			}
+		}
+
+		// Continue listening for raw input
+		if m.RawReader != nil && m.RawReader.IsRunning() {
+			return m, WaitForRawInputCmd(m.RawReader.ReadBytes())
+		}
 		return m, nil
 	}
 

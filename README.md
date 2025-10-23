@@ -174,19 +174,15 @@ If you prefer to build from source, follow these steps:
 - Go 1.24 or later (for building from source or using `go install`)
 - A terminal with true color support (most modern terminals)
 
-### Dependencies
+### Core Dependencies
 
-TUIOS uses the following libraries:
+TUIOS is built on the following libraries:
 
-- **[Bubble Tea v2](https://github.com/charmbracelet/bubbletea)**: Terminal UI
-  framework
-- **[Lipgloss v2](https://github.com/charmbracelet/lipgloss)**: Terminal
-  styling library
-- **[Charm VT](https://github.com/charmbracelet/vt)**: Virtual terminal
-  emulator
-- **[go-pty](https://github.com/aymanbagabas/go-pty)**: Cross-platform PTY
-  interface
-- **[Wish v2](https://github.com/charmbracelet/wish)**: SSH server library
+- **[Bubble Tea v2](https://github.com/charmbracelet/bubbletea)**: Event-driven terminal UI framework
+- **[Lipgloss v2](https://github.com/charmbracelet/lipgloss)**: Terminal styling and layout library
+- **[xpty](https://github.com/aymanbagabas/go-pty)**: Cross-platform pseudo-terminal (PTY) interface
+- **[Wish v2](https://github.com/charmbracelet/wish)**: SSH server library for remote multiplexing
+- **Vendored VT**: Virtual terminal emulator (vendored from charmbracelet/x/ansi)
 
 ## Features
 
@@ -224,7 +220,8 @@ TUIOS uses the following libraries:
 - **Comprehensive Help System**: Built-in contextual help overlay
 - **Text Selection & Copying**: Mouse and keyboard-based text selection with
   clipboard integration
-- **Scrollback Buffer**: Navigate terminal history with keyboard and mouse (10,000 line buffer)
+- **Vim-Style Copy Mode**: Comprehensive vim keybindings for scrollback navigation,
+  search, and text selection (10,000 line buffer)
 - **Smart Notifications**: Responsive notification system with overflow protection
 - **SSH Server Mode**: Run TUIOS as SSH server for remote terminal multiplexing
 - **Session Isolation**: Each SSH connection gets dedicated TUIOS instance
@@ -347,20 +344,71 @@ ssh -p 2222 your-server-ip
 | <kbd>Ctrl</kbd>+<kbd>V</kbd>           | Paste from clipboard (works in terminal mode) |
 | <kbd>Esc</kbd>                         | Clear current selection                       |
 
-#### Scrollback Navigation
+#### Copy Mode (Vim-Style Scrollback Navigation)
+
+Enter copy mode with <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>[</kbd> to navigate and select text using vim keybindings.
+
+**Basic Navigation**
 
 | Key                                      | Action                                   |
 | ---------------------------------------- | ---------------------------------------- |
-| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>[</kbd> | Enter scrollback mode                    |
-| <kbd>Mouse wheel up</kbd>                | Enter scrollback and scroll up           |
-| <kbd>↑</kbd> / <kbd>k</kbd>              | Scroll up one line (in scrollback mode)  |
-| <kbd>↓</kbd> / <kbd>j</kbd>              | Scroll down one line (in scrollback mode)|
-| <kbd>PgUp</kbd> / <kbd>Ctrl</kbd>+<kbd>U</kbd> | Scroll up half screen              |
-| <kbd>PgDn</kbd> / <kbd>Ctrl</kbd>+<kbd>D</kbd> | Scroll down half screen            |
-| <kbd>Home</kbd> / <kbd>g</kbd>           | Jump to oldest line in scrollback        |
-| <kbd>End</kbd> / <kbd>G</kbd>            | Jump to newest line (exit scrollback)    |
-| <kbd>q</kbd> / <kbd>Esc</kbd>            | Exit scrollback mode                     |
-| <kbd>Mouse wheel down</kbd>              | Scroll down (auto-exit at bottom)        |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>[</kbd> | Enter copy mode                          |
+| <kbd>h</kbd> / <kbd>j</kbd> / <kbd>k</kbd> / <kbd>l</kbd> | Move cursor left/down/up/right |
+| <kbd>w</kbd> / <kbd>b</kbd> / <kbd>e</kbd> | Word forward / word backward / word end |
+| <kbd>0</kbd> / <kbd>^</kbd>              | Start of line / first non-blank character |
+| <kbd>$</kbd>                             | End of line                              |
+| <kbd>g</kbd><kbd>g</kbd>                 | Jump to top of scrollback                |
+| <kbd>G</kbd>                             | Jump to bottom (live output)             |
+| <kbd>{number}</kbd><kbd>G</kbd>          | Jump to specific line number (e.g., 10G goes to line 10) |
+| <kbd>{</kbd> / <kbd>}</kbd>              | Jump to previous/next paragraph          |
+| <kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>D</kbd> | Half page up/down |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>Ctrl</kbd>+<kbd>F</kbd> | Full page up/down |
+
+**Count Prefix**
+
+Most motion commands can be prefixed with a count to repeat them (vim-style):
+- <kbd>10</kbd><kbd>j</kbd> - Move down 10 lines
+- <kbd>5</kbd><kbd>w</kbd> - Move forward 5 words
+- <kbd>3</kbd><kbd>{</kbd> - Jump up 3 paragraphs
+- <kbd>2</kbd><kbd>n</kbd> - Jump to 2nd next search match
+
+**Character Search**
+
+| Key                          | Action                                            |
+| ---------------------------- | ------------------------------------------------- |
+| <kbd>f</kbd>+char            | Find next occurrence of char on line (forward)    |
+| <kbd>F</kbd>+char            | Find previous occurrence of char on line (backward)|
+| <kbd>t</kbd>+char            | Till next char (cursor before char)               |
+| <kbd>T</kbd>+char            | Till previous char (cursor after char)            |
+| <kbd>;</kbd>                 | Repeat last character search                      |
+| <kbd>,</kbd>                 | Repeat last character search (opposite direction) |
+
+**Search**
+
+| Key                          | Action                                          |
+| ---------------------------- | ----------------------------------------------- |
+| <kbd>/</kbd>                 | Search forward (type query, press Enter)        |
+| <kbd>?</kbd>                 | Search backward (type query, press Enter)       |
+| <kbd>n</kbd>                 | Next match in search direction (down for /, up for ?) |
+| <kbd>N</kbd>                 | Previous match (opposite direction)             |
+| <kbd>Ctrl</kbd>+<kbd>L</kbd> | Clear search highlights                         |
+
+**Visual Selection**
+
+| Key                          | Action                                   |
+| ---------------------------- | ---------------------------------------- |
+| <kbd>v</kbd>                 | Enter visual mode (character-wise)       |
+| <kbd>V</kbd>                 | Enter visual line mode                   |
+| <kbd>y</kbd>                 | Yank (copy) selection to clipboard       |
+| <kbd>Esc</kbd>               | Exit visual mode                         |
+
+**Other Commands**
+
+| Key                          | Action                                   |
+| ---------------------------- | ---------------------------------------- |
+| <kbd>%</kbd>                 | Jump to matching bracket                 |
+| <kbd>i</kbd>                 | Return to terminal mode                  |
+| <kbd>q</kbd>                 | Exit copy mode                           |
 
 #### Window Navigation
 
@@ -440,47 +488,244 @@ TUIOS uses sensible defaults but can be customized through code constants:
 
 ## Architecture
 
-### Technical Stack
+TUIOS follows a layered architecture built on the Model-View-Update (MVU) pattern provided by Bubble Tea.
 
-| Component              | Technology    | Purpose                         |
-| ---------------------- | ------------- | ------------------------------- |
-| **UI Framework**       | Bubble Tea v2 | Event-driven terminal UI        |
-| **Styling**            | Lipgloss v2   | Terminal styling and layouts    |
-| **Terminal Emulation** | VT            | Virtual terminal implementation |
-| **Process Management** | PTY           | Pseudo-terminal interface       |
-| **Concurrency**        | Go Routines   | Parallel I/O and event handling |
+### System Architecture
+
+```mermaid
+graph TB
+    subgraph "User Interface Layer"
+        UI[Terminal Display]
+        Input[Keyboard & Mouse Input]
+    end
+
+    subgraph "Application Layer"
+        OS[OS - Window Manager]
+        IH[Input Handler]
+        WS[Workspace Manager 1-9]
+        ANI[Animation System]
+    end
+
+    subgraph "Window Management"
+        WIN[Terminal Windows]
+        LAYOUT[Layout System]
+        TILE[Tiling Manager]
+    end
+
+    subgraph "Terminal Emulation"
+        VT[VT Emulator]
+        PTY[PTY Interface]
+        SCROLL[Scrollback Buffer]
+    end
+
+    subgraph "Rendering Pipeline"
+        RENDER[Rendering Engine]
+        CACHE[Style Cache]
+        POOL[Object Pools]
+    end
+
+    subgraph "External Integration"
+        SSH[SSH Server Wish]
+        SHELL[Shell Process]
+    end
+
+    Input --> IH
+    IH --> OS
+    OS --> WS
+    OS --> WIN
+    OS --> ANI
+    WIN --> VT
+    WIN --> LAYOUT
+    LAYOUT --> TILE
+    VT --> PTY
+    VT --> SCROLL
+    PTY --> SHELL
+    OS --> RENDER
+    RENDER --> CACHE
+    RENDER --> POOL
+    RENDER --> UI
+    SSH --> OS
+
+    style OS fill:#1d3557
+    style VT fill:#2d6a4f
+    style RENDER fill:#9d0208
+    style SSH fill:#457b9d
+```
+
+### Data Flow Architecture
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Input
+    participant OS as Window Manager
+    participant Window
+    participant VT as VT Emulator
+    participant PTY
+    participant Shell
+    participant Render
+
+    User->>Input: Keyboard/Mouse Event
+    Input->>OS: Route Event
+
+    alt Terminal Mode
+        OS->>Window: Forward to Active Window
+        Window->>PTY: Write to stdin
+        PTY->>Shell: Execute Command
+        Shell-->>PTY: Output (ANSI)
+        PTY-->>VT: Parse ANSI Stream
+        VT-->>Window: Update Screen Buffer
+        Window-->>OS: Mark Content Dirty
+    else Window Management Mode
+        OS->>OS: Process WM Command
+        OS->>Window: Create/Close/Focus/Snap
+    end
+
+    OS->>Render: Generate View
+    Render->>Render: Cull Off-screen
+    Render->>Render: Apply Style Cache
+    Render->>Render: Compose Layers
+    Render-->>User: Display ANSI Output
+```
+
+### Terminal Emulation Stack
+
+```mermaid
+graph LR
+    subgraph "Shell Process"
+        SHELL[Shell stdout/stderr]
+    end
+
+    subgraph "PTY Layer"
+        PTY[Pseudo Terminal]
+    end
+
+    subgraph "VT Emulator"
+        PARSER[ANSI Parser]
+        STATE[State Machine]
+        SCREEN[Screen Buffer]
+        ALT[Alternate Screen]
+        SCROLL[Scrollback 10k lines]
+    end
+
+    subgraph "Window Layer"
+        CACHE[Content Cache]
+        SEL[Selection State]
+    end
+
+    subgraph "Rendering"
+        STYLE[Style Application]
+        LAYER[Layer Composition]
+    end
+
+    SHELL -->|ANSI Codes| PTY
+    PTY -->|Raw Bytes| PARSER
+    PARSER -->|Control Sequences| STATE
+    STATE -->|Updates| SCREEN
+    STATE -.->|TUI Apps| ALT
+    SCREEN -->|Overflow| SCROLL
+    SCREEN --> CACHE
+    CACHE --> SEL
+    SEL --> STYLE
+    STYLE --> LAYER
+
+    style PARSER fill:#457b9d
+    style SCREEN fill:#2d6a4f
+    style CACHE fill:#9d0208
+```
+
+### Rendering Pipeline
+
+```mermaid
+graph TD
+    START[OS.View Called] --> CULL[Viewport Culling]
+    CULL -->|Visible Windows| COMP[Layer Composition]
+    CULL -->|Skip| OFF[Off-screen Windows]
+
+    COMP --> CHECK{Content Dirty?}
+    CHECK -->|Yes| BUILD[Build Cell Content]
+    CHECK -->|No| REUSE[Reuse Cached Layer]
+
+    BUILD --> BORDER[Add Window Borders]
+    BORDER --> STYLE[Apply Styles]
+    STYLE -->|Cache Lookup| CACHE{Style in Cache?}
+    CACHE -->|Hit| APPLY[Apply Cached Style]
+    CACHE -->|Miss| CREATE[Create & Cache Style]
+    CREATE --> APPLY
+    APPLY --> STACK[Stack by Z-Index]
+    REUSE --> STACK
+
+    STACK --> OVERLAY[Add Overlays]
+    OVERLAY --> DOCK[Dock Minimized Windows]
+    DOCK --> STATUS[Status Bar]
+    STATUS --> NOTIF[Notifications]
+    NOTIF --> ANSI[Generate ANSI Codes]
+    ANSI --> OUTPUT[Return to Bubble Tea]
+
+    style CACHE fill:#7209b7
+    style APPLY fill:#2d6a4f
+    style ANSI fill:#9d0208
+```
+
+### SSH Server Architecture
+
+```mermaid
+graph TB
+    subgraph "SSH Clients"
+        C1[SSH Client 1]
+        C2[SSH Client 2]
+        C3[SSH Client N]
+    end
+
+    subgraph "TUIOS SSH Server :2222"
+        WISH[Wish v2 Middleware]
+        AUTH[Session Handler]
+    end
+
+    subgraph "Isolated Instances"
+        OS1[OS Instance 1]
+        OS2[OS Instance 2]
+        OS3[OS Instance N]
+    end
+
+    subgraph "Terminal Sessions"
+        W1[Windows + PTY + Shell]
+        W2[Windows + PTY + Shell]
+        W3[Windows + PTY + Shell]
+    end
+
+    C1 -->|SSH Connection| WISH
+    C2 -->|SSH Connection| WISH
+    C3 -->|SSH Connection| WISH
+
+    WISH --> AUTH
+    AUTH -->|Dedicated Context| OS1
+    AUTH -->|Dedicated Context| OS2
+    AUTH -->|Dedicated Context| OS3
+
+    OS1 --> W1
+    OS2 --> W2
+    OS3 --> W3
+
+    style WISH fill:#457b9d
+    style OS1 fill:#1d3557
+    style OS2 fill:#1d3557
+    style OS3 fill:#1d3557
+```
 
 ### Core Components
 
-1. **Window Manager** (`os.go`)
-   - Workspace management
-   - Window lifecycle
-   - Focus handling
-   - Event dispatching
-
-2. **Terminal Windows** (`window.go`)
-   - Process spawning
-   - I/O multiplexing
-   - Scrollback buffer
-   - Content caching
-
-3. **Input System** (`input.go`)
-   - Modal keyboard handling
-   - Mouse event processing
-   - Prefix command parsing
-   - Shortcut management
-
-4. **Rendering Engine** (`render.go`)
-   - Layer composition
-   - Efficient redrawing
-   - Animation frames
-   - UI element styling
-
-5. **Layout System** (`tiling.go`)
-   - Automatic tiling
-   - Window snapping
-   - Grid calculations
-   - Swap operations
+| Component | File | Purpose |
+|-----------|------|---------|
+| **Window Manager** | `app/os.go` | Central state management, workspace orchestration, mode handling |
+| **Terminal Windows** | `terminal/window.go` | PTY lifecycle, VT emulator integration, content caching |
+| **Input Handler** | `input/handler.go` | Modal routing, prefix commands, keyboard/mouse processing |
+| **VT Emulator** | `vt/emulator.go` | ANSI parsing, screen buffer management, scrollback |
+| **Rendering Engine** | `app/render.go` | Layer composition, viewport culling, ANSI generation |
+| **Layout System** | `layout/tiling.go` | Grid calculations, window positioning, tiling algorithms |
+| **SSH Server** | `server/server.go` | Wish middleware, per-session isolation |
+| **Style Cache** | `app/stylecache.go` | Lipgloss style pooling, 40-60% allocation reduction |
+| **Object Pools** | `pool/pool.go` | String/byte/layer pooling, GC pressure reduction |
 
 ## Performance
 
@@ -564,118 +809,66 @@ TUIOS uses sensible defaults but can be customized through code constants:
 
 Press <kbd>Ctrl</kbd>+<kbd>L</kbd> to open the log viewer and see system messages.
 
-## Dependencies
-
-TUIOS relies on the following third-party packages:
-
-- [bubbletea](https://github.com/charmbracelet/bubbletea): A powerful little TUI framework
-- [lipgloss](https://github.com/charmbracelet/lipgloss): Style definitions for nice terminal layouts
-- [x/vt](https://github.com/charmbracelet/x/tree/main/vt): Virtual terminal emulator
-- [pty](https://github.com/creack/pty): PTY interface for Go
-- [wish](https://github.com/charmbracelet/wish): Make SSH apps, just like that!
-
 ## Roadmap
 
-The following features are planned for future implementation:
+### Implemented Features ✓
 
-### High Priority
+TUIOS has successfully implemented:
+- Multiple terminal windows with workspace management (9 workspaces)
+- Automatic tiling and window snapping
+- Full mouse and keyboard control
+- SSH server mode for remote access
+- Text selection with clipboard integration
+- Scrollback buffers (10,000 lines) with vim-style copy mode navigation
+- Real-time performance optimizations (style caching, viewport culling, object pooling)
+- Search within scrollback history with match highlighting
+- Vim keybindings for text selection and copying
 
-- [x] Multiple terminal windows with tab support
-- [x] Workspace management across 9 workspaces
-- [x] Window tiling and snapping functionality
-- [x] Mouse support for window management
-- [x] SSH server mode for remote multiplexing
-- [x] Text selection and clipboard integration
-- [x] **Scrollback Buffers**: Terminal history and scrolling
-  - [x] Mouse scroll wheel support for terminal content
-  - [x] Keyboard shortcuts for scrolling (Page Up/Down, Ctrl+U/D, Arrow keys, Home/End)
-  - [x] Configurable scrollback buffer size (default 10,000 lines)
-  - [ ] Search within scrollback history
-- [x] **Enhanced Text Selection**: Improve selection capabilities
-  - [x] Word and line selection modes (double-click, triple-click)
-  - [ ] Block/column selection mode
-  - [ ] Search and select functionality
-  - [x] Copy with formatting preservation
+### Planned Features
 
-### Medium Priority
+#### High Priority
 
-- [ ] **Configuration System**: User-configurable settings
+- [x] **Search Functionality**
+  - [x] Search within scrollback history
+  - [x] Search and select in terminal output
+  - [x] Incremental search with highlighting
+- [ ] **Configuration System**
   - [ ] Custom key bindings
   - [ ] Theme and color customization
-  - [ ] Performance tuning options
   - [ ] Configuration file support (YAML/TOML)
-- [ ] **Session Management**: Save and restore terminal sessions
+  - [ ] Performance tuning options
+
+#### Medium Priority
+
+- [ ] **Session Management**
   - [ ] Workspace layouts persistence
   - [ ] Window state restoration
-  - [ ] Custom session profiles
-- [ ] **Advanced Terminal Features**:
+  - [ ] Session save/restore
+- [ ] **Advanced Selection**
+  - [ ] Block/column selection mode
+  - [ ] Regular expression search
+- [ ] **Terminal Features**
   - [ ] Split panes within windows
-  - [ ] Terminal tabs within windows
-  - [ ] Background/foreground job management
-  - [ ] Terminal bell notifications
+  - [ ] Terminal tabs
+  - [ ] Bell notifications
 
-### Low Priority
+#### Future Considerations
 
-- [ ] **Plugin System**: Support for user extensions and customizations
-  - [ ] Custom status bar widgets
-  - [ ] Theme plugins
-  - [ ] Custom layout algorithms
-- [ ] **Advanced SSH Features**:
-  - [ ] User authentication and authorization
-  - [ ] Session sharing and collaboration
-  - [ ] SSH tunneling support
-- [ ] **Performance Monitoring**:
-  - [ ] Memory usage graphs
-  - [ ] Network I/O monitoring
-  - [ ] Disk usage visualization
-- [ ] **Accessibility Features**:
-  - [ ] Screen reader support
-  - [ ] High contrast themes
-  - [ ] Keyboard navigation improvements
+- [ ] **Plugin System**: Extension support for custom widgets and themes
+- [ ] **SSH Enhancements**: Authentication, session sharing, tunneling
+- [ ] **Accessibility**: Screen reader support, high contrast themes
 
 ## Local Development
 
-### Run locally using Docker
-
-You can also run TUIOS locally using docker:
-
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/gaurav-gosain/tuios.git
-   ```
-
-2. Navigate to the project directory:
-
-   ```bash
-   cd tuios
-   ```
-
-3. Build the docker image:
-
-   ```bash
-   docker build -t tuios .
-   ```
-
-4. Run the docker image:
-
-   ```bash
-   docker run -it tuios
-   ```
-
-> [!NOTE]
-> The above commands build the docker image with the tag `tuios`.
-> You can replace `tuios` with any tag of your choice.
-
-### Build from source
-
-For building from source, refer to the [Build from Source](#build-from-source) section in the Installation guide above.
-
 ### Testing
+
+Run the test suite:
 
 ```bash
 go test ./...
 ```
+
+For building from source or running with Docker, see the [Installation](#installation) section.
 
 ## Contribution
 

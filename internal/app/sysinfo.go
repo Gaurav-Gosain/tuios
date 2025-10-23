@@ -10,61 +10,81 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // GetCPUGraph returns a formatted string with CPU usage graph and percentage.
-// Always returns a fixed-width string to prevent layout shifts.
 func (m *OS) GetCPUGraph() string {
-	// Always return a fixed-width string to prevent layout shifts
-
 	// Get current usage
 	current := 0.0
 	if len(m.CPUHistory) > 0 {
 		current = m.CPUHistory[len(m.CPUHistory)-1]
 	}
 
-	// Create a mini bar graph - always exactly 10 characters
-	graph := ""
+	// Create a mini bar graph
+	var graphBuilder strings.Builder
+	const maxBars = 10
 
-	// If we have less than 10 samples, pad with spaces on the left
-	startPadding := 10 - len(m.CPUHistory)
+	// If we have less samples, pad with spaces on the left
+	startPadding := maxBars - len(m.CPUHistory)
 	if startPadding > 0 {
-		graph = strings.Repeat(" ", startPadding)
+		graphBuilder.WriteString(strings.Repeat(" ", startPadding))
 	}
 
 	// Add the actual graph bars
 	for i, usage := range m.CPUHistory {
-		if i >= 10 { // Limit to 10 bars
+		if i >= maxBars {
 			break
 		}
 		// Convert to 0-8 scale for vertical bars
-		height := min(
-			// 100/8 = 12.5
-			int(usage/12.5), 8)
+		height := min(int(usage/12.5), 8)
 
 		// Use block characters for the graph
 		switch height {
 		case 0:
-			graph += "▁"
+			graphBuilder.WriteRune('▁')
 		case 1:
-			graph += "▂"
+			graphBuilder.WriteRune('▂')
 		case 2:
-			graph += "▃"
+			graphBuilder.WriteRune('▃')
 		case 3:
-			graph += "▄"
+			graphBuilder.WriteRune('▄')
 		case 4:
-			graph += "▅"
+			graphBuilder.WriteRune('▅')
 		case 5:
-			graph += "▆"
+			graphBuilder.WriteRune('▆')
 		case 6:
-			graph += "▇"
+			graphBuilder.WriteRune('▇')
 		case 7, 8:
-			graph += "█"
+			graphBuilder.WriteRune('█')
 		}
 	}
 
-	// Fixed width format: "CPU:" (4) + graph (10) + " " (1) + percentage (4) = 19 chars total
-	return fmt.Sprintf("CPU:%s %3.0f%%", graph, current)
+	return fmt.Sprintf("CPU:%s %3.0f%%", graphBuilder.String(), current)
+}
+
+// GetRAMUsage returns RAM usage as a formatted string.
+// Cached to avoid expensive gopsutil calls on every render.
+func (m *OS) GetRAMUsage() string {
+	return fmt.Sprintf("RAM:%5.1f%%", m.RAMUsage)
+}
+
+// UpdateRAMUsage updates the cached RAM usage.
+func (m *OS) UpdateRAMUsage() {
+	now := time.Now()
+	// Update every 2 seconds (RAM changes slowly)
+	if now.Sub(m.LastRAMUpdate) < 2*time.Second {
+		return
+	}
+
+	m.LastRAMUpdate = now
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		m.RAMUsage = 0
+		return
+	}
+	m.RAMUsage = v.UsedPercent
 }
 
 // UpdateCPUHistory updates the CPU usage history.
@@ -104,13 +124,20 @@ type CPUStats struct {
 var lastCPUStats *CPUStats
 
 // getCPUUsageSimple retrieves current CPU usage as a percentage.
-// This is a simplified version that will work on Linux systems.
+// This is a platform-specific implementation.
 func getCPUUsageSimple() float64 {
-	// Only works on Linux - for other platforms, return 0
-	if runtime.GOOS != "linux" {
+	switch runtime.GOOS {
+	case "linux":
+		return getCPUUsageLinux()
+	case "darwin":
+		return getCPUUsageDarwin()
+	default:
 		return 0.0
 	}
+}
 
+// getCPUUsageLinux retrieves CPU usage on Linux systems.
+func getCPUUsageLinux() float64 {
 	stats := getCPUStats()
 	if stats == nil {
 		return 0
@@ -144,6 +171,16 @@ func getCPUUsageSimple() float64 {
 	}
 
 	return usage
+}
+
+// getCPUUsageDarwin retrieves CPU usage on macOS systems using gopsutil.
+func getCPUUsageDarwin() float64 {
+	// Get CPU percent over a short interval
+	percentages, err := cpu.Percent(100*time.Millisecond, false)
+	if err != nil || len(percentages) == 0 {
+		return 0
+	}
+	return percentages[0]
 }
 
 // getCPUStats reads CPU statistics from /proc/stat (Linux only).

@@ -87,9 +87,8 @@ func teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
 	}
 
 	// Return the model and program options
+	// Note: AltScreen and MouseMode are now configured in View() method
 	return tuiosInstance, []tea.ProgramOption{
-		tea.WithAltScreen(),
-		tea.WithMouseAllMotion(),
 		tea.WithFPS(config.NormalFPS),
 	}
 }

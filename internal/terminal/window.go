@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	pty "github.com/aymanbagabas/go-pty"
 	"github.com/charmbracelet/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
@@ -34,8 +34,8 @@ type Window struct {
 	Z                  int
 	ID                 string
 	Terminal           *vt.Emulator
-	Pty                xpty.Pty
-	Cmd                *exec.Cmd
+	Pty                pty.Pty
+	Cmd                *pty.Cmd
 	LastUpdate         time.Time
 	Dirty              bool
 	ContentDirty       bool
@@ -71,6 +71,76 @@ type Window struct {
 	ScrollbackOffset int  // Number of lines scrolled back (0 = at bottom, viewing live output)
 	// Alternate screen buffer tracking for TUI detection
 	IsAltScreen bool // True when application is using alternate screen buffer (nvim, vim, etc.)
+	// Vim-style copy mode
+	CopyMode *CopyMode // Copy mode state (nil when not active)
+}
+
+// CopyModeState represents the current state within copy mode
+type CopyModeState int
+
+const (
+	// CopyModeNormal is the default navigation mode
+	CopyModeNormal CopyModeState = iota
+	// CopyModeSearch is active when typing a search query
+	CopyModeSearch
+	// CopyModeVisualChar is character-wise visual selection
+	CopyModeVisualChar
+	// CopyModeVisualLine is line-wise visual selection
+	CopyModeVisualLine
+)
+
+// Position represents a 2D coordinate
+type Position struct {
+	X, Y int
+}
+
+// SearchMatch represents a single search result
+type SearchMatch struct {
+	Line   int    // Absolute line number (scrollback + screen)
+	StartX int    // Start column
+	EndX   int    // End column (exclusive)
+	Text   string // Matched text
+}
+
+// SearchCache caches search results for performance
+type SearchCache struct {
+	Query     string
+	Matches   []SearchMatch
+	CacheTime time.Time
+	Valid     bool
+}
+
+// CopyMode holds all state for vim-style copy/scrollback mode
+type CopyMode struct {
+	Active       bool          // True when copy mode is active
+	State        CopyModeState // Current sub-state
+	CursorX      int           // Cursor X position (relative to viewport)
+	CursorY      int           // Cursor Y position (relative to viewport)
+	ScrollOffset int           // Lines scrolled back from bottom
+
+	// Visual selection state
+	VisualStart Position // Selection start (absolute coordinates)
+	VisualEnd   Position // Selection end (absolute coordinates)
+
+	// Search state
+	SearchQuery     string        // Current search query
+	SearchMatches   []SearchMatch // All search results
+	CurrentMatch    int           // Index of current match
+	CaseSensitive   bool          // Case-sensitive search
+	SearchBackward  bool          // True for ? (backward), false for / (forward)
+	SearchCache     SearchCache   // Cached search results (exported for copymode package)
+	PendingGCount   bool          // Waiting for second 'g' in 'gg'
+	LastCommandTime time.Time     // For detecting 'gg' sequence
+
+	// Character search state (f/F/t/T commands)
+	PendingCharSearch   bool // Waiting for character after f/F/t/T
+	LastCharSearch      rune // Last searched character
+	LastCharSearchDir   int  // 1 for forward (f/t), -1 for backward (F/T)
+	LastCharSearchTill  bool // true for till (t/T), false for find (f/F)
+
+	// Count prefix (e.g., 10j means move down 10 times)
+	PendingCount    int       // Accumulated count (0 means no count)
+	CountStartTime  time.Time // When count entry started (for timeout)
 }
 
 // NewWindow creates a new terminal window with the specified properties.
@@ -119,14 +189,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Detect shell
 	shell := detectShell()
 
-	// Create PTY with initial size
-	ptyInstance, err := xpty.NewPty(terminalWidth, terminalHeight)
-	if err != nil {
-		// Return nil to indicate failure - caller should handle this
-		return nil
-	}
-
-	// Set up command with environment
+	// Set up environment
 	cmd := exec.Command(shell)
 	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
@@ -134,17 +197,42 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		"TUIOS_WINDOW_ID="+id,
 	)
 
-	// Start the command through PTY
-	if err := ptyInstance.Start(cmd); err != nil {
+	// Create PTY and start command
+	ptyInstance, err := pty.New()
+	if err != nil {
+		// Return nil to indicate failure - caller should handle this
+		return nil
+	}
+
+	// Set initial PTY size to match terminal dimensions
+	// This is critical for shells like nushell that query terminal size
+	if err := ptyInstance.Resize(terminalWidth, terminalHeight); err != nil {
+		// Log error but continue - some systems may not support resize before start
+		_ = err
+	}
+
+	// Create command through PTY
+	ptyCmd := ptyInstance.Command(shell)
+	ptyCmd.Env = cmd.Env
+
+	// Start the command
+	if err := ptyCmd.Start(); err != nil {
 		ptyInstance.Close()
 		return nil
+	}
+
+	// Resize PTY again after process starts to ensure size is properly set
+	// Some PTY implementations require the process to be running before accepting resize
+	if err := ptyInstance.Resize(terminalWidth, terminalHeight); err != nil {
+		// Not a critical error, continue
+		_ = err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Update window with PTY and command info
 	window.Pty = ptyInstance
-	window.Cmd = cmd
+	window.Cmd = ptyCmd
 	window.cancelFunc = cancel
 
 	// Start I/O handling
@@ -162,9 +250,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 			}
 		}()
 
-		// Wait for process to exit using xpty.WaitProcess for cross-platform support
-		// This is especially important on Windows where cmd.Wait() doesn't work with ConPTY
-		xpty.WaitProcess(ctx, cmd)
+		// Wait for process to exit
+		ptyCmd.Wait()
 
 		// Mark process as exited
 		window.ProcessExited = true
@@ -452,10 +539,8 @@ func (w *Window) Close() {
 
 			// Best effort kill
 			w.Cmd.Process.Kill()
-			// Use xpty.WaitProcess for proper cleanup on all platforms
-			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
-			defer cancel()
-			xpty.WaitProcess(ctx, w.Cmd)
+			// Wait for process to exit
+			w.Cmd.Wait()
 			done <- true
 		}()
 
@@ -609,4 +694,45 @@ func (w *Window) ScrollDown(lines int) {
 	} else {
 		w.InvalidateCache()
 	}
+}
+
+// EnterCopyMode enters vim-style copy/scrollback mode.
+// This replaces both ScrollbackMode and SelectionMode with a unified vim interface.
+func (w *Window) EnterCopyMode() {
+	if w.CopyMode == nil {
+		w.CopyMode = &CopyMode{}
+	}
+
+	w.CopyMode.Active = true
+	w.CopyMode.State = CopyModeNormal
+	w.CopyMode.CursorX = 0
+	w.CopyMode.CursorY = w.Height / 2 // Start in MIDDLE (vim-style)
+	w.CopyMode.ScrollOffset = 0       // Start at live content
+	w.CopyMode.SearchQuery = ""
+	w.CopyMode.SearchMatches = nil
+	w.CopyMode.CurrentMatch = 0
+	w.CopyMode.CaseSensitive = false
+	w.CopyMode.PendingGCount = false
+
+	// Sync with window scrollback
+	w.ScrollbackOffset = 0
+
+	w.InvalidateCache()
+}
+
+// ExitCopyMode exits copy mode and returns to normal terminal mode.
+func (w *Window) ExitCopyMode() {
+	if w.CopyMode != nil {
+		w.CopyMode.Active = false
+		w.CopyMode.State = CopyModeNormal
+		w.CopyMode.ScrollOffset = 0
+		// Clear search state
+		w.CopyMode.SearchQuery = ""
+		w.CopyMode.SearchMatches = nil
+		w.CopyMode.SearchCache.Valid = false
+	}
+
+	// CRITICAL: Return to live content (bottom of scrollback)
+	w.ScrollbackOffset = 0
+	w.InvalidateCache()
 }

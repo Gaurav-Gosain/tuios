@@ -10,9 +10,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -26,6 +27,11 @@ const (
 	BorderTopRight string = string(rune(0x256e))
 	// BorderHorizontal is the Unicode character for a horizontal border.
 	BorderHorizontal string = string(rune(0x2500))
+)
+
+// Style cache for common border elements
+var (
+	baseButtonStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000"))
 )
 
 // RightString returns a right-aligned string with decorative borders.
@@ -56,22 +62,27 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 	width := max(
 		// Ensure width is never negative
 		lipgloss.Width(content)-2, 0)
-	buttonStyle := lipgloss.NewStyle().Background(color).Foreground(lipgloss.Color("#000000"))
+
+	// Use cached base style with color applied
+	buttonStyle := baseButtonStyle.Background(color)
 	cross := buttonStyle.Render(" ⤫ ")
 	dash := buttonStyle.Render(" — ")
 
 	// Only show maximize button if not in tiling mode
 	var border string
 	if isTiling {
-		border = makeRounded(lipgloss.JoinHorizontal(lipgloss.Top, dash, cross), color)
+		// Use string concatenation instead of JoinHorizontal
+		border = makeRounded(dash+cross, color)
 	} else {
 		square := buttonStyle.Render(" □ ")
-		border = makeRounded(lipgloss.JoinHorizontal(lipgloss.Top, dash, square, cross), color)
+		border = makeRounded(dash+square+cross, color)
 	}
 	centered := RightString(border, width, color)
 
 	// Add bottom border with window name
-	bottomBorderStyle := lipgloss.NewStyle().Foreground(color)
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
+	bottomBorderStyle := style.Foreground(color)
 
 	// Get the window name to display (only show custom names)
 	windowName := ""
@@ -97,10 +108,8 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 			}
 		}
 
-		// Create pill-style name badge
-		nameStyle := lipgloss.NewStyle().
-			Background(color).
-			Foreground(lipgloss.Color("#000000"))
+		// Create pill-style name badge using cached base style
+		nameStyle := baseButtonStyle.Background(color)
 
 		leftCircle := bottomBorderStyle.Render(LeftHalfCircle)
 		nameText := nameStyle.Render(" " + windowName + " ")
@@ -129,14 +138,13 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 		bottomBorder = bottomBorderStyle.Render("╰" + strings.Repeat("─", width) + "╯")
 	}
 
-	// Join top border, content, and bottom border
-	result := lipgloss.JoinVertical(lipgloss.Top, centered, content)
-	// Replace the last line (original bottom border) with our custom bottom border
-	lines := strings.Split(result, "\n")
+	// Use string concatenation instead of lipgloss.JoinVertical for better performance
+	// Replace the last line (original bottom border from box.Render) with our custom bottom border
+	lines := strings.Split(content, "\n")
 	if len(lines) > 0 {
 		lines[len(lines)-1] = bottomBorder
 	}
-	return strings.Join(lines, "\n")
+	return centered + "\n" + strings.Join(lines, "\n")
 }
 
 // styleToANSI converts a lipgloss.Style to ANSI codes using the internal ansi.Style
@@ -245,6 +253,133 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	scrollbackLen := window.ScrollbackLen()
 	inScrollbackMode := window.ScrollbackOffset > 0
 
+	// Check if in copy mode and get cursor position
+	inCopyMode := window.CopyMode != nil && window.CopyMode.Active
+	var copyModeCursorX, copyModeCursorY int
+	if inCopyMode {
+		copyModeCursorX = window.CopyMode.CursorX
+		copyModeCursorY = window.CopyMode.CursorY
+	}
+
+	// Build search match highlight maps for copy mode
+	var searchHighlights map[int]map[int]bool       // All matches - yellow
+	var currentMatchHighlight map[int]map[int]bool  // Current match - orange
+
+	if inCopyMode && len(window.CopyMode.SearchMatches) > 0 {
+		searchHighlights = make(map[int]map[int]bool)
+		currentMatchHighlight = make(map[int]map[int]bool)
+
+		for i, match := range window.CopyMode.SearchMatches {
+			// Convert absolute line to viewport Y
+			var viewportY int
+			if match.Line < scrollbackLen {
+				// Match in scrollback
+				if window.ScrollbackOffset > 0 {
+					if match.Line >= scrollbackLen-window.ScrollbackOffset {
+						viewportY = match.Line - (scrollbackLen - window.ScrollbackOffset)
+					} else {
+						continue // Not visible
+					}
+				} else {
+					continue // Scrollback not visible
+				}
+			} else {
+				// Match in current screen
+				screenLine := match.Line - scrollbackLen
+				if window.ScrollbackOffset > 0 {
+					viewportY = window.ScrollbackOffset + screenLine
+				} else {
+					viewportY = screenLine
+				}
+			}
+
+			// Check if visible
+			if viewportY >= 0 && viewportY < maxY {
+				isCurrentMatch := (i == window.CopyMode.CurrentMatch)
+
+				if isCurrentMatch {
+					if currentMatchHighlight[viewportY] == nil {
+						currentMatchHighlight[viewportY] = make(map[int]bool)
+					}
+				} else {
+					if searchHighlights[viewportY] == nil {
+						searchHighlights[viewportY] = make(map[int]bool)
+					}
+				}
+
+				// Mark all cells in match range
+				for x := match.StartX; x < match.EndX && x < maxX; x++ {
+					if isCurrentMatch {
+						currentMatchHighlight[viewportY][x] = true
+					} else {
+						searchHighlights[viewportY][x] = true
+					}
+				}
+			}
+		}
+	}
+
+	// Build visual selection map for copy mode
+	var visualSelection map[int]map[int]bool
+	inVisualMode := inCopyMode &&
+		(window.CopyMode.State == terminal.CopyModeVisualChar ||
+			window.CopyMode.State == terminal.CopyModeVisualLine)
+
+	if inVisualMode {
+		visualSelection = make(map[int]map[int]bool)
+
+		start := window.CopyMode.VisualStart
+		end := window.CopyMode.VisualEnd
+
+		// Normalize selection
+		if start.Y > end.Y || (start.Y == end.Y && start.X > end.X) {
+			start, end = end, start
+		}
+
+		for absY := start.Y; absY <= end.Y; absY++ {
+			// Convert absolute Y to viewport Y
+			var viewportY int
+			if absY < scrollbackLen {
+				// Selection in scrollback
+				if window.ScrollbackOffset > 0 {
+					if absY >= scrollbackLen-window.ScrollbackOffset {
+						viewportY = absY - (scrollbackLen - window.ScrollbackOffset)
+					} else {
+						continue
+					}
+				} else {
+					continue
+				}
+			} else {
+				// Selection in screen
+				screenY := absY - scrollbackLen
+				if window.ScrollbackOffset > 0 {
+					viewportY = window.ScrollbackOffset + screenY
+				} else {
+					viewportY = screenY
+				}
+			}
+
+			if viewportY >= 0 && viewportY < maxY {
+				if visualSelection[viewportY] == nil {
+					visualSelection[viewportY] = make(map[int]bool)
+				}
+
+				startX, endX := 0, maxX-1
+				if absY == start.Y {
+					startX = start.X
+				}
+				if absY == end.Y {
+					endX = end.X
+				}
+
+				for x := startX; x <= endX && x < maxX; x++ {
+					visualSelection[viewportY][x] = true
+				}
+			}
+		}
+	}
+
 	// Batching approach: accumulate runs of same-styled characters
 	var batchBuilder strings.Builder
 	var currentStyle lipgloss.Style
@@ -298,6 +433,72 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		for x := range maxX {
 			var cell *uv.Cell
 
+			// Render copy mode cursor as highlighted cell (takes priority over everything)
+			if inCopyMode && x == copyModeCursorX && y == copyModeCursorY {
+				// Skip getting cell from scrollback, just render cursor
+				char := " "
+
+				// Try to get the actual character at cursor position
+				// Calculate which line to render based on scrollback offset
+				if inScrollbackMode {
+					if y < window.ScrollbackOffset {
+						// Show scrollback content at the top
+						scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
+						if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
+							scrollbackLine := window.ScrollbackLine(scrollbackIndex)
+							if scrollbackLine != nil && x < len(scrollbackLine) {
+								if scrollbackLine[x].Content != "" {
+									char = scrollbackLine[x].Content
+								}
+							}
+						}
+					} else {
+						// Show current screen content at the bottom
+						screenY := y - window.ScrollbackOffset
+						if screenY >= 0 && screenY < screen.Height() {
+							cellAtCursor := screen.CellAt(x, screenY)
+							if cellAtCursor != nil && cellAtCursor.Content != "" {
+								char = cellAtCursor.Content
+							}
+						}
+					}
+				} else {
+					// Normal mode - just render current screen
+					cellAtCursor := screen.CellAt(x, y)
+					if cellAtCursor != nil && cellAtCursor.Content != "" {
+						char = cellAtCursor.Content
+					}
+				}
+
+				// Render cursor with cyan/teal background (less harsh than green)
+				cursorStyle := lipgloss.NewStyle().
+					Background(lipgloss.Color("#00D7FF")). // Bright cyan
+					Foreground(lipgloss.Color("#000000")).
+					Bold(true)
+
+				// Flush any pending batch before cursor
+				if batchBuilder.Len() > 0 {
+					if batchHasStyle {
+						lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
+					} else {
+						lineBuilder.WriteString(batchBuilder.String())
+					}
+					batchBuilder.Reset()
+					batchHasStyle = false
+				}
+
+				// Render cursor
+				lineBuilder.WriteString(renderStyledText(cursorStyle, char))
+
+				// Reset prev cell state
+				prevCell = nil
+				prevIsCursor = false
+				prevIsSelected = false
+				prevIsSelectionCursor = false
+
+				continue
+			}
+
 			// Calculate which line to render based on scrollback offset
 			if inScrollbackMode {
 				// We're viewing scrollback
@@ -333,9 +534,92 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				char = string(cell.Content)
 			}
 
+			// COPY MODE RENDERING (priority order: selection < search < cursor)
+
+			// Check visual selection highlighting (lowest priority)
+			if inVisualMode && visualSelection[y] != nil && visualSelection[y][x] {
+				selStyle := lipgloss.NewStyle().
+					Background(lipgloss.Color("#5F5FAF")). // Purple-ish blue
+					Foreground(lipgloss.Color("#FFFFFF")).
+					Bold(true)
+
+				// Flush any pending batch
+				if batchBuilder.Len() > 0 {
+					if batchHasStyle {
+						lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
+					} else {
+						lineBuilder.WriteString(batchBuilder.String())
+					}
+					batchBuilder.Reset()
+					batchHasStyle = false
+				}
+
+				lineBuilder.WriteString(renderStyledText(selStyle, char))
+				prevCell = cell
+				prevIsCursor = false
+				prevIsSelected = false
+				prevIsSelectionCursor = false
+				continue
+			}
+
+			// Check search highlighting (medium priority)
+			if inCopyMode && !inVisualMode {
+				if currentMatchHighlight[y] != nil && currentMatchHighlight[y][x] {
+					// Current match - bright magenta/pink
+					matchStyle := lipgloss.NewStyle().
+						Background(lipgloss.Color("#FF00FF")).
+						Foreground(lipgloss.Color("#000000")).
+						Bold(true)
+
+					// Flush any pending batch
+					if batchBuilder.Len() > 0 {
+						if batchHasStyle {
+							lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
+						} else {
+							lineBuilder.WriteString(batchBuilder.String())
+						}
+						batchBuilder.Reset()
+						batchHasStyle = false
+					}
+
+					lineBuilder.WriteString(renderStyledText(matchStyle, char))
+					prevCell = cell
+					prevIsCursor = false
+					prevIsSelected = false
+					prevIsSelectionCursor = false
+					continue
+				}
+
+				if searchHighlights[y] != nil && searchHighlights[y][x] {
+					// Other matches - orange
+					matchStyle := lipgloss.NewStyle().
+						Background(lipgloss.Color("#FF8700")).
+						Foreground(lipgloss.Color("#000000"))
+
+					// Flush any pending batch
+					if batchBuilder.Len() > 0 {
+						if batchHasStyle {
+							lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
+						} else {
+							lineBuilder.WriteString(batchBuilder.String())
+						}
+						batchBuilder.Reset()
+						batchHasStyle = false
+					}
+
+					lineBuilder.WriteString(renderStyledText(matchStyle, char))
+					prevCell = cell
+					prevIsCursor = false
+					prevIsSelected = false
+					prevIsSelectionCursor = false
+					continue
+				}
+			}
+
 			// Check if current position is within selection (either actively selecting or has selected text)
 			isSelected := (window.IsSelecting || window.SelectedText != "") && m.isPositionInSelection(window, x, y)
-			isCursorPos := isFocused && inTerminalMode && x == cursorX && y == cursorY
+			// Don't render terminal cursor when in copy mode
+			isCursorPos := isFocused && inTerminalMode && !inCopyMode && x == cursorX && y == cursorY
 
 			// Check if current position is the selection cursor (only in selection mode and NOT in terminal mode)
 			isSelectionCursor := m.SelectionMode && !inTerminalMode && isFocused &&
@@ -406,8 +690,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	return content
 }
 
+// shouldApplyStyle checks if a cell has styling (optimization #7: early exit for nil)
 func shouldApplyStyle(cell *uv.Cell) bool {
-	return cell != nil && (cell.Style.Fg != nil || cell.Style.Bg != nil || cell.Style.Attrs != 0)
+	// Most common case: cell is nil
+	if cell == nil {
+		return false
+	}
+	// Check in order of likelihood (Fg most common, Bg next, Attrs least)
+	return cell.Style.Fg != nil || cell.Style.Bg != nil || cell.Style.Attrs != 0
 }
 
 // buildOptimizedCellStyleCached is the cached version of buildOptimizedCellStyle.
@@ -1292,6 +1582,48 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 	}
 
+	// Copy mode search input overlay
+	focusedWindow := m.GetFocusedWindow()
+	if focusedWindow != nil && focusedWindow.CopyMode != nil &&
+		focusedWindow.CopyMode.Active &&
+		focusedWindow.CopyMode.State == terminal.CopyModeSearch {
+
+		searchQuery := focusedWindow.CopyMode.SearchQuery
+		matchCount := len(focusedWindow.CopyMode.SearchMatches)
+		currentMatch := focusedWindow.CopyMode.CurrentMatch
+
+		// Build search bar text
+		searchText := "/" + searchQuery + "█" // Block cursor
+		if matchCount > 0 {
+			searchText += fmt.Sprintf(" [%d/%d]", currentMatch+1, matchCount)
+		} else if searchQuery != "" {
+			searchText += " [0]"
+		}
+
+		// Style the search bar
+		searchStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color("#000000")).
+			Foreground(lipgloss.Color("#FFFF00")).
+			Bold(true).
+			Padding(0, 1)
+
+		renderedSearch := searchStyle.Render(searchText)
+
+		// Position at bottom of focused window
+		searchX := focusedWindow.X + 2
+		searchY := focusedWindow.Y + focusedWindow.Height - 2
+
+		searchLayer := lipgloss.NewLayer(renderedSearch).
+			X(searchX).
+			Y(searchY).
+			Z(config.ZIndexHelp + 1). // Above help
+			ID("copy-mode-search")
+
+		layers = append(layers, searchLayer)
+	}
+
+	// Copy mode help is now shown in the dock (bottom bar)
+
 	return layers
 }
 
@@ -1313,12 +1645,33 @@ func (m *OS) renderDock() *lipgloss.Layer {
 
 	// Get mode text
 	modeText := "[W]"
+	focusedWindow := m.GetFocusedWindow()
 	if m.Mode == TerminalMode {
 		modeText = "[T]"
+		// Add copy mode indicator
+		if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+			modeText = "[COPY]"
+			// Show cursor position
+			modeText += fmt.Sprintf(" %d:%d", focusedWindow.CopyMode.CursorY, focusedWindow.CopyMode.CursorX)
+		}
 	}
 	// Add tiling indicator
-	if m.AutoTiling {
-		modeText += " [T]" // Tiling mode icon
+	if m.AutoTiling && (focusedWindow == nil || focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active) {
+		modeText += " [T]" // Tiling mode icon (don't show in copy mode)
+	}
+
+	// Cache workspace styles for performance (optimization #8)
+	if m.workspaceActiveStyle == nil {
+		activeStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color("#4865f2")).
+			Foreground(lipgloss.Color("#ffffff")).
+			Bold(true)
+		m.workspaceActiveStyle = &activeStyle
+	}
+	if m.workspaceInactiveStyle == nil {
+		inactiveStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#808090"))
+		m.workspaceInactiveStyle = &inactiveStyle
 	}
 
 	// Add workspace indicator with window counts
@@ -1328,23 +1681,13 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		if i == m.CurrentWorkspace {
 			// Highlight current workspace
 			if count > 0 {
-				workspaceText += lipgloss.NewStyle().
-					Background(lipgloss.Color("#4865f2")).
-					Foreground(lipgloss.Color("#ffffff")).
-					Bold(true).
-					Render(fmt.Sprintf(" %d:%d ", i, count))
+				workspaceText += m.workspaceActiveStyle.Render(fmt.Sprintf(" %d:%d ", i, count))
 			} else {
-				workspaceText += lipgloss.NewStyle().
-					Background(lipgloss.Color("#4865f2")).
-					Foreground(lipgloss.Color("#ffffff")).
-					Bold(true).
-					Render(fmt.Sprintf(" %d ", i))
+				workspaceText += m.workspaceActiveStyle.Render(fmt.Sprintf(" %d ", i))
 			}
 		} else if count > 0 {
 			// Show workspaces with windows
-			workspaceText += lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#808090")).
-				Render(fmt.Sprintf(" %d:%d ", i, count))
+			workspaceText += m.workspaceInactiveStyle.Render(fmt.Sprintf(" %d:%d ", i, count))
 		}
 	}
 
@@ -1421,15 +1764,42 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		workspaceStyle.Render(workspaceText),
 	)
 
-	// Right side: CPU graph only
-	cpuGraph := m.GetCPUGraph()
-	rightInfo := sysInfoStyle.Render(cpuGraph)
+	// Right side: CPU/RAM stats OR copy mode help
+	var rightInfo string
+	var rightWidth int
 
-	// Use fixed widths to prevent layout shifts
+	// Check if in copy mode - show help instead of stats
+	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
+	if inCopyMode {
+		// Build help text based on copy mode state
+		var helpText string
+		switch focusedWindow.CopyMode.State {
+		case terminal.CopyModeNormal:
+			helpText = "hjkl:move w/b/e:word f/F/t/T:char /:search n/N:next/prev C-l:clear ;,:repeat v:visual y:yank i:term q:quit"
+		case terminal.CopyModeSearch:
+			helpText = "Type to search  n/N:next/prev  Enter:done  Esc:cancel"
+		case terminal.CopyModeVisualChar:
+			helpText = "hjkl:extend w/b/e:word f/F/t/T:char ;,:repeat {/}:para %:bracket y:yank Esc:cancel"
+		case terminal.CopyModeVisualLine:
+			helpText = "jk:extend  y:yank  Esc:cancel"
+		}
+
+		helpStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#a0a0b0")).
+			Background(lipgloss.Color("#1a1a2e")).
+			Padding(0, 1)
+		rightInfo = helpStyle.Render(helpText)
+		rightWidth = lipgloss.Width(rightInfo) + 2
+	} else {
+		// Show CPU and RAM stats
+		cpuGraph := m.GetCPUGraph()
+		ramUsage := m.GetRAMUsage()
+		rightInfo = sysInfoStyle.Render(cpuGraph + " " + ramUsage)
+		rightWidth = 32 // CPU graph (~19 chars) + space + RAM (~11 chars) = ~31 chars
+	}
+
 	// Left side needs more space for workspace indicators
 	leftWidth := 30 // Enough for mode + workspace indicators
-	// Right side is fixed width for CPU graph only
-	rightWidth := 20 // CPU graph (19 chars)
 
 	// Calculate center area
 	centerWidth := lipgloss.Width(dockItemsStr)
@@ -1461,11 +1831,17 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		paddedRightInfo,
 	)
 
+	// Cache separator string for performance (optimization #3)
+	if m.cachedSeparatorWidth != m.Width {
+		m.cachedSeparator = strings.Repeat("─", m.Width)
+		m.cachedSeparatorWidth = m.Width
+	}
+
 	// Add separator line above
 	separator := lipgloss.NewStyle().
 		Width(m.Width).
 		Foreground(lipgloss.Color("#303040")).
-		Render(strings.Repeat("─", m.Width))
+		Render(m.cachedSeparator)
 
 	// Combine separator and dock bar
 	fullDock := lipgloss.JoinVertical(lipgloss.Left,
@@ -1514,6 +1890,17 @@ func (m *OS) isPositionInSelection(window *terminal.Window, x, y int) bool {
 }
 
 // View returns the rendered view as a string.
-func (m *OS) View() string {
-	return lipgloss.Sprintln(m.GetCanvas(true).Render())
+func (m *OS) View() tea.View {
+	var view tea.View
+
+	// Set content
+	view.SetContent(lipgloss.Sprintln(m.GetCanvas(true).Render()))
+
+	// Configure view properties (moved from startup options and Init commands)
+	view.AltScreen = true
+	view.MouseMode = tea.MouseModeAllMotion
+	view.ReportFocus = true
+	view.DisableBracketedPasteMode = false
+
+	return view
 }

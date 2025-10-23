@@ -44,6 +44,28 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	clickedWindow := o.Windows[clickedWindowIndex]
+
+	// Handle copy mode mouse clicks
+	if clickedWindow.CopyMode != nil && clickedWindow.CopyMode.Active {
+		// In copy mode, handle mouse clicks for cursor movement and selection
+		if mouse.Button == tea.MouseLeft {
+			// Check if clicking in terminal content area
+			terminalX := X - clickedWindow.X - 1
+			terminalY := Y - clickedWindow.Y - 1
+			if terminalX >= 0 && terminalY >= 0 && terminalX < clickedWindow.Width-2 && terminalY < clickedWindow.Height-2 {
+				// Start drag for visual selection
+				HandleCopyModeMouseDrag(clickedWindow.CopyMode, clickedWindow, X, Y)
+				o.Dragging = true
+				o.DraggedWindowIndex = clickedWindowIndex
+				o.InteractionMode = true
+				return o, nil
+			}
+		}
+		// If not left click or outside content area, consume the event
+		return o, nil
+	}
+
 	// IMMEDIATELY focus the clicked window and bring to front Z-index
 	// This ensures instant visual feedback when clicking
 	o.FocusWindow(clickedWindowIndex)
@@ -54,7 +76,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Now set interaction mode to prevent expensive rendering during drag/resize
 	o.InteractionMode = true
 
-	clickedWindow := o.Windows[clickedWindowIndex]
 	leftMost := clickedWindow.X + clickedWindow.Width
 
 	// cross (close button) - rightmost button
@@ -219,6 +240,16 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Mouse motion forwarding removed to prevent terminal corruption
 	// Terminal applications will handle their own mouse tracking when needed
 
+	// Handle copy mode mouse motion
+	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
+		draggedWindow := o.Windows[o.DraggedWindowIndex]
+		if draggedWindow.CopyMode != nil && draggedWindow.CopyMode.Active {
+			// Update selection in copy mode
+			HandleCopyModeMouseMotion(draggedWindow.CopyMode, draggedWindow, mouse.X, mouse.Y)
+			return o, nil
+		}
+	}
+
 	// Handle text selection motion
 	if o.SelectionMode {
 		focusedWindow := o.GetFocusedWindow()
@@ -345,6 +376,18 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Always consume release events to prevent leaking to terminals
 
+	// Handle copy mode mouse release
+	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
+		draggedWindow := o.Windows[o.DraggedWindowIndex]
+		if draggedWindow.CopyMode != nil && draggedWindow.CopyMode.Active {
+			// Selection is complete, just clean up drag state
+			o.Dragging = false
+			o.DraggedWindowIndex = -1
+			o.InteractionMode = false
+			return o, nil
+		}
+	}
+
 	// Handle text selection completion
 	if o.SelectionMode {
 		focusedWindow := o.GetFocusedWindow()
@@ -469,11 +512,17 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						}
 					}
 				} else {
-					// In terminal mode, use scrollback mode
-					wasInScrollback := focusedWindow.ScrollbackMode
-					HandleScrollbackMouseWheel(focusedWindow, true)
-					if !wasInScrollback && focusedWindow.ScrollbackMode {
-						o.ShowNotification("Scrollback Mode (↑/↓/PgUp/PgDn, q to exit)", "info", config.NotificationDuration)
+					// In terminal mode, enter copy mode on wheel up
+					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
+						focusedWindow.EnterCopyMode()
+						o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration)
+					}
+					// Scroll up in copy mode
+					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+						for i := 0; i < 3; i++ {
+							MoveUp(focusedWindow.CopyMode, focusedWindow)
+						}
+						focusedWindow.InvalidateCache()
 					}
 				}
 				return o, nil
@@ -487,13 +536,17 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						}
 						focusedWindow.InvalidateCache()
 					}
-				} else {
-					// In terminal mode, use scrollback mode
-					wasInScrollback := focusedWindow.ScrollbackMode
-					HandleScrollbackMouseWheel(focusedWindow, false)
-					if wasInScrollback && !focusedWindow.ScrollbackMode {
-						o.ShowNotification("Scrollback Mode Exited", "info", config.NotificationDuration)
+				} else if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+					// In copy mode, scroll down
+					for i := 0; i < 3; i++ {
+						MoveDown(focusedWindow.CopyMode, focusedWindow)
 					}
+					// Exit copy mode if at bottom
+					if focusedWindow.CopyMode.ScrollOffset == 0 && focusedWindow.CopyMode.CursorY >= focusedWindow.Height-3 {
+						focusedWindow.ExitCopyMode()
+						o.ShowNotification("Copy Mode Exited", "info", config.NotificationDuration)
+					}
+					focusedWindow.InvalidateCache()
 				}
 				return o, nil
 			}

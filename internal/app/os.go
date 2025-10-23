@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
+	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/ssh"
 	"github.com/google/uuid"
 )
@@ -65,28 +66,34 @@ const (
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
-	Dragging              bool
-	Resizing              bool
-	ResizeCorner          ResizeCorner
-	PreResizeState        terminal.Window
-	ResizeStartX          int
-	ResizeStartY          int
-	DragOffsetX           int
-	DragOffsetY           int
-	DragStartX            int // Track where drag started
-	DragStartY            int // Track where drag started
-	TiledX                int // Original tiled position X
-	TiledY                int // Original tiled position Y
-	TiledWidth            int // Original tiled width
-	TiledHeight           int // Original tiled height
-	DraggedWindowIndex    int // Index of window being dragged
-	Windows               []*terminal.Window
-	FocusedWindow         int
-	Width                 int
-	Height                int
-	X                     int
-	Y                     int
-	Mode                  Mode
+	Dragging           bool
+	Resizing           bool
+	ResizeCorner       ResizeCorner
+	PreResizeState     terminal.Window
+	ResizeStartX       int
+	ResizeStartY       int
+	DragOffsetX        int
+	DragOffsetY        int
+	DragStartX         int // Track where drag started
+	DragStartY         int // Track where drag started
+	TiledX             int // Original tiled position X
+	TiledY             int // Original tiled position Y
+	TiledWidth         int // Original tiled width
+	TiledHeight        int // Original tiled height
+	DraggedWindowIndex int // Index of window being dragged
+	Windows            []*terminal.Window
+	FocusedWindow      int
+	Width              int
+	Height             int
+	X                  int
+	Y                  int
+	Mode               Mode
+	RawReader          interface {
+		Start() error
+		Stop() error
+		ReadBytes() <-chan []byte
+		IsRunning() bool
+	} // Raw input reader for terminal mode
 	terminalMu            sync.Mutex
 	LastMouseX            int
 	LastMouseY            int
@@ -98,6 +105,8 @@ type OS struct {
 	Animations            []*ui.Animation // Active animations
 	CPUHistory            []float64       // CPU usage history for graph
 	LastCPUUpdate         time.Time       // Last time CPU was updated
+	RAMUsage              float64         // Cached RAM usage percentage
+	LastRAMUpdate         time.Time       // Last time RAM was updated
 	AutoTiling            bool            // Automatic tiling mode enabled
 	RenamingWindow        bool            // True when renaming a window
 	RenameBuffer          string          // Buffer for new window name
@@ -117,6 +126,11 @@ type OS struct {
 	SelectionMode         bool            // True when in text selection mode
 	ClipboardContent      string          // Store clipboard content from tea.ClipboardMsg
 	ShowCacheStats        bool            // True when showing style cache statistics overlay
+	// Performance optimization caches
+	cachedSeparator        string // Cached dock separator string
+	cachedSeparatorWidth   int    // Width of cached separator
+	workspaceActiveStyle   *lipgloss.Style
+	workspaceInactiveStyle *lipgloss.Style
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
@@ -853,4 +867,13 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 	}
 
 	return strings.Join(selectedLines, "\n")
+}
+
+// Cleanup performs cleanup operations when the application exits.
+// This ensures proper cleanup of resources like the raw input reader.
+func (m *OS) Cleanup() {
+	// Stop raw input reader if running
+	if m.RawReader != nil && m.RawReader.IsRunning() {
+		_ = m.RawReader.Stop()
+	}
 }

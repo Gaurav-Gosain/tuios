@@ -17,14 +17,18 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int) []TileLayou
 
 	layouts := make([]TileLayout, 0, n)
 
+	// Reserve 1 line at top for status bar to prevent clipping
+	const topMargin = 1
+	adjustedHeight := usableHeight - topMargin
+
 	switch n {
 	case 1:
 		// Single window - full screen
 		layouts = append(layouts, TileLayout{
 			X:      0,
-			Y:      0,
+			Y:      topMargin,
 			Width:  screenWidth,
-			Height: usableHeight,
+			Height: adjustedHeight,
 		})
 
 	case 2:
@@ -33,71 +37,71 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int) []TileLayou
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
-				Y:      0,
+				Y:      topMargin,
 				Width:  halfWidth,
-				Height: usableHeight,
+				Height: adjustedHeight,
 			},
 			TileLayout{
 				X:      halfWidth,
-				Y:      0,
+				Y:      topMargin,
 				Width:  screenWidth - halfWidth,
-				Height: usableHeight,
+				Height: adjustedHeight,
 			},
 		)
 
 	case 3:
 		// Three windows - one left, two right stacked
 		halfWidth := screenWidth / 2
-		halfHeight := usableHeight / 2
+		halfHeight := adjustedHeight / 2
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
-				Y:      0,
+				Y:      topMargin,
 				Width:  halfWidth,
-				Height: usableHeight,
+				Height: adjustedHeight,
 			},
 			TileLayout{
 				X:      halfWidth,
-				Y:      0,
+				Y:      topMargin,
 				Width:  screenWidth - halfWidth,
 				Height: halfHeight,
 			},
 			TileLayout{
 				X:      halfWidth,
-				Y:      halfHeight,
+				Y:      topMargin + halfHeight,
 				Width:  screenWidth - halfWidth,
-				Height: usableHeight - halfHeight,
+				Height: adjustedHeight - halfHeight,
 			},
 		)
 
 	case 4:
 		// Four windows - 2x2 grid
 		halfWidth := screenWidth / 2
-		halfHeight := usableHeight / 2
+		halfHeight := adjustedHeight / 2
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
-				Y:      0,
+				Y:      topMargin,
 				Width:  halfWidth,
 				Height: halfHeight,
 			},
 			TileLayout{
 				X:      halfWidth,
-				Y:      0,
+				Y:      topMargin,
 				Width:  screenWidth - halfWidth,
 				Height: halfHeight,
 			},
 			TileLayout{
 				X:      0,
-				Y:      halfHeight,
+				Y:      topMargin + halfHeight,
 				Width:  halfWidth,
-				Height: usableHeight - halfHeight,
+				Height: adjustedHeight - halfHeight,
 			},
 			TileLayout{
 				X:      halfWidth,
-				Y:      halfHeight,
+				Y:      topMargin + halfHeight,
 				Width:  screenWidth - halfWidth,
-				Height: usableHeight - halfHeight,
+				Height: adjustedHeight - halfHeight,
 			},
 		)
 
@@ -111,7 +115,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int) []TileLayou
 		rows := (n + cols - 1) / cols // Ceiling division
 
 		cellWidth := screenWidth / cols
-		cellHeight := usableHeight / rows
+		cellHeight := adjustedHeight / rows
 
 		for i := range n {
 			row := i / cols
@@ -129,7 +133,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int) []TileLayou
 
 			layout := TileLayout{
 				X:      col * cellWidth,
-				Y:      row * cellHeight,
+				Y:      topMargin + row*cellHeight,
 				Width:  cellWidth,
 				Height: cellHeight,
 			}
@@ -140,7 +144,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int) []TileLayou
 			}
 			// Adjust last row height to fill screen
 			if row == rows-1 {
-				layout.Height = usableHeight - layout.Y
+				layout.Height = adjustedHeight + topMargin - layout.Y
 			}
 
 			layouts = append(layouts, layout)

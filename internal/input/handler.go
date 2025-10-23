@@ -203,6 +203,15 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 
+	// Copy mode
+	case "[":
+		// Enter copy mode (vim-style scrollback/selection)
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.EnterCopyMode()
+			o.ShowNotification("COPY MODE (hjkl/q)", "info", 2*time.Second)
+		}
+		return o, nil
+
 	// Help
 	case "?":
 		// Toggle help
@@ -211,6 +220,7 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	case "q":
 		// Quit application
+		o.Cleanup()
 		return o, tea.Quit
 
 	// Exit prefix mode
