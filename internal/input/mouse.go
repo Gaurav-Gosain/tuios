@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // handleMouseClick handles mouse click events
@@ -17,9 +18,35 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	X := mouse.X
 	Y := mouse.Y
 
-	// Note: Mouse forwarding to terminals removed to prevent corruption
-	// Applications that need mouse support (vim, less) will handle it themselves
-	// when they enable mouse tracking modes
+	// Forward mouse events to terminal if in terminal mode and alt screen
+	if o.Mode == app.TerminalMode {
+		// Find which window was clicked
+		clickedWindowIndex := findClickedWindow(X, Y, o)
+		if clickedWindowIndex != -1 {
+			clickedWindow := o.Windows[clickedWindowIndex]
+			if clickedWindow.IsAltScreen && clickedWindow.Terminal != nil {
+				// Convert to terminal-relative coordinates (0-based)
+				termX := X - clickedWindow.X - 1
+				termY := Y - clickedWindow.Y
+				// Check if click is within terminal content area
+				if termX >= 0 && termY >= 0 && termX < clickedWindow.Width-2 && termY < clickedWindow.Height-2 {
+					// Focus the window first so subsequent events work
+					o.FocusWindow(clickedWindowIndex)
+
+					// Create adjusted mouse event with terminal-relative coordinates
+					adjustedMouse := uv.MouseClickEvent{
+						X:      termX,
+						Y:      termY,
+						Button: uv.MouseButton(mouse.Button),
+						Mod:    uv.KeyMod(mouse.Mod),
+					}
+					// Send to the terminal emulator
+					clickedWindow.Terminal.SendMouse(adjustedMouse)
+					return o, nil
+				}
+			}
+		}
+	}
 
 	// Check if click is in the dock area (always reserved)
 	if Y >= o.Height-config.DockHeight {
@@ -237,8 +264,28 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 
-	// Mouse motion forwarding removed to prevent terminal corruption
-	// Terminal applications will handle their own mouse tracking when needed
+	// Forward mouse motion to terminal if in terminal mode and alt screen
+	if o.Mode == app.TerminalMode {
+		focusedWindow := o.GetFocusedWindow()
+		if focusedWindow != nil && focusedWindow.IsAltScreen && focusedWindow.Terminal != nil {
+			// Convert to terminal-relative coordinates (0-based)
+			termX := mouse.X - focusedWindow.X - 1
+			termY := mouse.Y - focusedWindow.Y
+			// Check if motion is within terminal content area
+			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
+				// Create adjusted mouse event with terminal-relative coordinates
+				adjustedMouse := uv.MouseMotionEvent{
+					X:      termX,
+					Y:      termY,
+					Button: uv.MouseButton(mouse.Button),
+					Mod:    uv.KeyMod(mouse.Mod),
+				}
+				// Send to the terminal emulator
+				focusedWindow.Terminal.SendMouse(adjustedMouse)
+				return o, nil
+			}
+		}
+	}
 
 	// Handle copy mode mouse motion
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
@@ -372,9 +419,29 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // handleMouseRelease handles mouse release events
 func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Mouse release forwarding removed to prevent terminal corruption
-
-	// Always consume release events to prevent leaking to terminals
+	// Forward mouse release to terminal if in terminal mode and alt screen
+	if o.Mode == app.TerminalMode {
+		focusedWindow := o.GetFocusedWindow()
+		if focusedWindow != nil && focusedWindow.IsAltScreen && focusedWindow.Terminal != nil {
+			mouse := msg.Mouse()
+			// Convert to terminal-relative coordinates (0-based)
+			termX := mouse.X - focusedWindow.X - 1
+			termY := mouse.Y - focusedWindow.Y
+			// Check if release is within terminal content area
+			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
+				// Create adjusted mouse event with terminal-relative coordinates
+				adjustedMouse := uv.MouseReleaseEvent{
+					X:      termX,
+					Y:      termY,
+					Button: uv.MouseButton(mouse.Button),
+					Mod:    uv.KeyMod(mouse.Mod),
+				}
+				// Send to the terminal emulator
+				focusedWindow.Terminal.SendMouse(adjustedMouse)
+				return o, nil
+			}
+		}
+	}
 
 	// Handle copy mode mouse release
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
@@ -490,8 +557,30 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Mouse wheel forwarding to terminals removed to prevent corruption
-	// Terminal applications handle their own scrolling when they need it
+	// Forward mouse wheel to terminal if in terminal mode and alt screen
+	// This allows applications like vim, less, htop to handle their own scrolling
+	if o.Mode == app.TerminalMode {
+		focusedWindow := o.GetFocusedWindow()
+		if focusedWindow != nil && focusedWindow.IsAltScreen && focusedWindow.Terminal != nil {
+			mouse := msg.Mouse()
+			// Convert to terminal-relative coordinates (0-based)
+			termX := mouse.X - focusedWindow.X - 1
+			termY := mouse.Y - focusedWindow.Y
+			// Check if wheel is within terminal content area
+			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
+				// Create adjusted mouse event with terminal-relative coordinates
+				adjustedMouse := uv.MouseWheelEvent{
+					X:      termX,
+					Y:      termY,
+					Button: uv.MouseButton(mouse.Button),
+					Mod:    uv.KeyMod(mouse.Mod),
+				}
+				// Send to the terminal emulator
+				focusedWindow.Terminal.SendMouse(adjustedMouse)
+				return o, nil
+			}
+		}
+	}
 
 	// Handle scrollback in terminal mode or selection mode
 	if o.Mode == app.TerminalMode || o.SelectionMode {
