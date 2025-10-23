@@ -1,0 +1,3 @@
+*.sh linguist-detectable=false
+Dockerfile linguist-detectable=false
+*.nix linguist-detectable=false
