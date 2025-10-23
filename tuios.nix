@@ -8,5 +8,5 @@ pkgs.buildGoModule {
 
   # This has to be updated each time dependencies are updated.
   # Use pkgs.lib.fakeHash
-  vendorHash = "sha256-4w+XFFCrr/XakF3KTA6oKiseEDtGrgUAXaeaI6qWdys=";
+  vendorHash = "sha256-yF7sYqAvrajrQllJXU0VZwxuXtSJZPuCl/cvZTD2WJA=";
 }
