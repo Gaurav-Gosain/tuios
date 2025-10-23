@@ -147,6 +147,28 @@ release:
 
     **Full Changelog**: https://github.com/Gaurav-Gosain/tuios/compare/{{ .PreviousTag }}...{{ .Tag }}
 
+# AUR (Arch User Repository)
+aurs:
+  - name: tuios-bin
+    homepage: https://github.com/Gaurav-Gosain/tuios
+    description: "Terminal UI Operating System - A terminal-based window manager with tmux-style keybindings"
+    maintainers:
+      - "Gaurav Gosain <itsgauravgosain@gmail.com>"
+    license: MIT
+    private_key: "{{ .Env.AUR_SSH_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/tuios-bin.git"
+    depends:
+      - glibc
+    package: |
+      # bin
+      install -Dm755 "./tuios" "${pkgdir}/usr/bin/tuios"
+
+      # license
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+
+      # documentation
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+
 # Homebrew tap (optional - uncomment if you want to publish to Homebrew)
 # brews:
 #   - repository:
