@@ -3,7 +3,9 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"os"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -78,6 +80,18 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 		border = makeRounded(dash+square+cross, color)
 	}
 	centered := RightString(border, width, color)
+
+	// DEBUG: Log button positions
+	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+		if f, err := os.OpenFile("/tmp/tuios-render-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			borderWidth := lipgloss.Width(border)
+			buttonStartX := window.X + 1 + (width - borderWidth)
+			fmt.Fprintf(f, "[RENDER DEBUG] Window %s at X=%d Y=%d Width=%d, border width=%d, buttons start at X=%d\n",
+				window.ID, window.X, window.Y, window.Width, borderWidth, buttonStartX)
+			fmt.Fprintf(f, "[RENDER DEBUG] Title bar is at Y=%d, dash=%q cross=%q\n", window.Y, dash, cross)
+			f.Close()
+		}
+	}
 
 	// Add bottom border with window name
 	style := pool.GetStyle()
@@ -867,6 +881,9 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		if window.Minimized && !isAnimating {
 			continue
 		}
+
+		// Skip minimized windows (they're shown in the dock)
+		// No animation needed - minimize is instant
 
 		// Enhanced visibility culling with tighter bounds for better performance
 		// Skip windows completely outside viewport (with small margin for animations)
@@ -1702,6 +1719,11 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		}
 	}
 
+	// Sort dock windows by minimize order (oldest first)
+	sort.Slice(dockWindows, func(i, j int) bool {
+		return m.Windows[dockWindows[i]].MinimizeOrder < m.Windows[dockWindows[j]].MinimizeOrder
+	})
+
 	// Build pill-style dock items
 	var dockItemsStr string
 	itemNumber := 1
@@ -1712,7 +1734,24 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		// Colors for active vs inactive
 		bgColor := "#2a2a3e"
 		fgColor := "#a0a0a8"
-		if windowIndex == m.FocusedWindow && !window.Minimizing {
+
+		// Check if window should be highlighted (newly minimized)
+		isHighlighted := time.Now().Before(window.MinimizeHighlightUntil)
+
+		// DEBUG: Log dock rendering
+		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" && isHighlighted {
+			if f, err := os.OpenFile("/tmp/tuios-minimize-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+				fmt.Fprintf(f, "[RENDER] Dock item #%d, windowIndex=%d, ID=%s, CustomName=%s, isHighlighted=%v, HighlightUntil=%s\n",
+					itemNumber, windowIndex, window.ID, window.CustomName, isHighlighted, window.MinimizeHighlightUntil.Format("15:04:05.000"))
+				f.Close()
+			}
+		}
+
+		if isHighlighted {
+			// Bright highlight for newly minimized window
+			bgColor = "#66ff66" // Bright green highlight
+			fgColor = "#000000"
+		} else if windowIndex == m.FocusedWindow && !window.Minimizing {
 			bgColor = "#4865f2"
 			fgColor = "#ffffff"
 		}
@@ -1741,7 +1780,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		nameLabel := lipgloss.NewStyle().
 			Background(lipgloss.Color(bgColor)).
 			Foreground(lipgloss.Color(fgColor)).
-			Bold(windowIndex == m.FocusedWindow).
+			Bold(isHighlighted || windowIndex == m.FocusedWindow).
 			Render(labelText)
 
 		rightCircle := lipgloss.NewStyle().
@@ -1893,8 +1932,8 @@ func (m *OS) isPositionInSelection(window *terminal.Window, x, y int) bool {
 func (m *OS) View() tea.View {
 	var view tea.View
 
-	// Set content
-	view.SetContent(lipgloss.Sprintln(m.GetCanvas(true).Render()))
+	// Set content (use Sprint instead of Sprintln to avoid extra newline)
+	view.SetContent(lipgloss.Sprint(m.GetCanvas(true).Render()))
 
 	// Configure view properties (moved from startup options and Init commands)
 	view.AltScreen = true

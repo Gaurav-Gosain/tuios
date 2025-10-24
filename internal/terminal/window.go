@@ -47,13 +47,15 @@ type Window struct {
 	UpdateCounter      int                // Counter for throttling background updates
 	cancelFunc         context.CancelFunc // For graceful goroutine cleanup
 	ioMu               sync.RWMutex       // Protect I/O operations
-	Minimized          bool               // True when window is minimized to dock
-	Minimizing         bool               // True when window is being minimized (animation playing)
-	PreMinimizeX       int                // Store position before minimizing
-	PreMinimizeY       int                // Store position before minimizing
-	PreMinimizeWidth   int                // Store size before minimizing
-	PreMinimizeHeight  int                // Store size before minimizing
-	Workspace          int                // Workspace this window belongs to
+	Minimized              bool      // True when window is minimized to dock
+	Minimizing             bool      // True when window is being minimized (animation playing)
+	MinimizeHighlightUntil time.Time // Highlight dock tab until this time
+	MinimizeOrder          int64     // Unix nano timestamp when minimized (for dock ordering)
+	PreMinimizeX           int       // Store position before minimizing
+	PreMinimizeY           int       // Store position before minimizing
+	PreMinimizeWidth       int       // Store size before minimizing
+	PreMinimizeHeight      int       // Store size before minimizing
+	Workspace              int       // Workspace this window belongs to
 	SelectionStart     struct{ X, Y int } // Selection start position
 	SelectionEnd       struct{ X, Y int } // Selection end position
 	IsSelecting        bool               // True when selecting text
@@ -548,8 +550,23 @@ func (w *Window) Close() {
 		w.Cmd = nil
 	}
 
-	// Clear terminal reference
-	w.Terminal = nil
+	// Close terminal emulator to free memory
+	if w.Terminal != nil {
+		w.Terminal.Close()
+		w.Terminal = nil
+	}
+
+	// Clear caches to free memory
+	w.CachedContent = ""
+	w.CachedLayer = nil
+	w.SelectedText = ""
+
+	// Clear copy mode to free memory
+	if w.CopyMode != nil {
+		w.CopyMode.SearchMatches = nil
+		w.CopyMode.SearchCache.Matches = nil
+		w.CopyMode = nil
+	}
 }
 
 // SendInput sends input to the window's terminal with enhanced error handling.

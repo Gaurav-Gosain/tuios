@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -415,9 +416,19 @@ func (m *OS) DeleteWindow(i int) *OS {
 	}
 
 	// Clean up window resources
-	m.Windows[i].Close()
+	deletedWindow := m.Windows[i]
+	deletedWindow.Close()
 
-	movedZ := m.Windows[i].Z
+	// Remove any animations referencing this window to prevent memory leaks
+	cleanedAnimations := make([]*ui.Animation, 0, len(m.Animations))
+	for _, anim := range m.Animations {
+		if anim.Window != deletedWindow {
+			cleanedAnimations = append(cleanedAnimations, anim)
+		}
+	}
+	m.Animations = cleanedAnimations
+
+	movedZ := deletedWindow.Z
 	for j := range m.Windows {
 		if m.Windows[j].Z > movedZ {
 			m.Windows[j].Z--
@@ -427,6 +438,9 @@ func (m *OS) DeleteWindow(i int) *OS {
 	}
 
 	m.Windows = slices.Delete(m.Windows, i, i+1)
+
+	// Explicitly clear the deleted window pointer to help GC
+	deletedWindow = nil
 
 	// Update focused window index
 	if len(m.Windows) == 0 {
@@ -517,28 +531,40 @@ func (m *OS) GetFocusedWindow() *terminal.Window {
 // MinimizeWindow minimizes the window at the specified index.
 func (m *OS) MinimizeWindow(i int) {
 	if i >= 0 && i < len(m.Windows) && !m.Windows[i].Minimized && !m.Windows[i].Minimizing {
-		// Store current position before minimizing
+		// Get pointer to the actual window (not a copy)
 		window := m.Windows[i]
+
+		// Store current position before minimizing
 		window.PreMinimizeX = window.X
 		window.PreMinimizeY = window.Y
 		window.PreMinimizeWidth = window.Width
 		window.PreMinimizeHeight = window.Height
 
-		// Mark as minimizing (for dock placeholder)
-		window.Minimizing = true
+		// Immediately minimize without animation
+		now := time.Now()
+		window.Minimized = true
+		window.Minimizing = false
+		window.MinimizeOrder = now.UnixNano() // Track order for dock sorting
 
-		// Create and start animation
-		anim := m.CreateMinimizeAnimation(i)
-		if anim != nil {
-			m.Animations = append(m.Animations, anim)
+		// Set highlight timestamp for dock tab
+		window.MinimizeHighlightUntil = now.Add(1 * time.Second)
+
+		// DEBUG: Log minimize action
+		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+			if f, err := os.OpenFile("/tmp/tuios-minimize-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+				fmt.Fprintf(f, "[MINIMIZE] Window index=%d, ID=%s, CustomName=%s, Highlight set until %s\n",
+					i, window.ID, window.CustomName, window.MinimizeHighlightUntil.Format("15:04:05.000"))
+				f.Close()
+			}
 		}
 
-		// Don't change focus yet - wait for animation to complete
+		// Change focus to next visible window
+		if i == m.FocusedWindow {
+			m.FocusNextVisibleWindow()
+		}
 
 		// Retile remaining windows if in tiling mode
 		if m.AutoTiling {
-			// Schedule retiling after the minimize animation
-			// We do this by creating tiling animations for other windows
 			m.TileRemainingWindows(i)
 		}
 	}

@@ -3,6 +3,8 @@ package input
 
 import (
 	"fmt"
+	"os"
+	"sort"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -73,13 +75,61 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	clickedWindow := o.Windows[clickedWindowIndex]
 
-	// Handle copy mode mouse clicks
+	leftMost := clickedWindow.X + clickedWindow.Width
+
+	// DEBUG: Log click attempts
+	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+		if f, err := os.OpenFile("/tmp/tuios-mouse-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			fmt.Fprintf(f, "[CLICK] X=%d Y=%d, Window X=%d Y=%d W=%d H=%d, leftMost=%d\n",
+				X, Y, clickedWindow.X, clickedWindow.Y, clickedWindow.Width, clickedWindow.Height, leftMost)
+			f.Close()
+		}
+	}
+
+	// Check button clicks FIRST before mode switching or focus changes
+	// Title bar is at window.Y (buttons are on the first line of the window)
+	titleBarY := clickedWindow.Y
+
+	// Button hitbox: slightly wider range based on empirical testing
+	// Close button is rightmost, minimize is to its left
+
+	// cross (close button) - rightmost area
+	if mouse.Button == tea.MouseLeft && X >= leftMost-4 && X <= leftMost-1 && Y == titleBarY {
+		o.DeleteWindow(clickedWindowIndex)
+		o.InteractionMode = false
+		return o, nil
+	}
+
+	if o.AutoTiling {
+		// Tiling mode: minimize button
+		if mouse.Button == tea.MouseLeft && X >= leftMost-7 && X <= leftMost-5 && Y == titleBarY {
+			o.MinimizeWindow(clickedWindowIndex)
+			o.InteractionMode = false
+			return o, nil
+		}
+	} else {
+		// Non-tiling: maximize button in middle
+		if mouse.Button == tea.MouseLeft && X >= leftMost-7 && X <= leftMost-5 && Y == titleBarY {
+			o.Snap(clickedWindowIndex, app.SnapFullScreen)
+			o.InteractionMode = false
+			return o, nil
+		}
+
+		// Non-tiling: minimize button leftmost
+		if mouse.Button == tea.MouseLeft && X >= leftMost-10 && X <= leftMost-8 && Y == titleBarY {
+			o.MinimizeWindow(clickedWindowIndex)
+			o.InteractionMode = false
+			return o, nil
+		}
+	}
+
+	// Handle copy mode mouse clicks AFTER button checks
 	if clickedWindow.CopyMode != nil && clickedWindow.CopyMode.Active {
 		// In copy mode, handle mouse clicks for cursor movement and selection
 		if mouse.Button == tea.MouseLeft {
-			// Check if clicking in terminal content area
+			// Check if clicking in terminal content area (not on title bar or buttons)
 			terminalX := X - clickedWindow.X - 1
-			terminalY := Y - clickedWindow.Y - 1
+			terminalY := Y - clickedWindow.Y      // Fixed: Y coordinate relative to window
 			if terminalX >= 0 && terminalY >= 0 && terminalX < clickedWindow.Width-2 && terminalY < clickedWindow.Height-2 {
 				// Start drag for visual selection
 				HandleCopyModeMouseDrag(clickedWindow.CopyMode, clickedWindow, X, Y)
@@ -89,56 +139,18 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				return o, nil
 			}
 		}
-		// If not left click or outside content area, consume the event
-		return o, nil
+		// If click is outside content area, fall through to normal window interaction
 	}
 
-	// IMMEDIATELY focus the clicked window and bring to front Z-index
-	// This ensures instant visual feedback when clicking
+	// Focus the clicked window and bring to front Z-index
+	// This happens AFTER button and copy mode checks
 	o.FocusWindow(clickedWindowIndex)
 	if o.Mode == app.TerminalMode {
 		o.Mode = app.WindowManagementMode
 	}
 
-	// Now set interaction mode to prevent expensive rendering during drag/resize
+	// Set interaction mode to prevent expensive rendering during drag/resize
 	o.InteractionMode = true
-
-	leftMost := clickedWindow.X + clickedWindow.Width
-
-	// cross (close button) - rightmost button
-	if mouse.Button == tea.MouseLeft && X >= leftMost-5 && X <= leftMost-3 && Y == clickedWindow.Y {
-		o.DeleteWindow(clickedWindowIndex)
-		o.InteractionMode = false
-		return o, nil
-	}
-
-	// square (maximize button) - middle button
-	// In tiling mode, buttons are positioned differently (no maximize button)
-	if o.AutoTiling {
-		// Tiling mode: only dash (minimize) and cross (close) buttons
-		// dash (minimize button) - leftmost button
-		if mouse.Button == tea.MouseLeft && X >= leftMost-8 && X <= leftMost-6 && Y == clickedWindow.Y {
-			o.MinimizeWindow(clickedWindowIndex)
-			o.InteractionMode = false
-			return o, nil
-		}
-	} else {
-		// Non-tiling mode: dash, square (maximize), and cross buttons
-		// square (maximize button) - middle button
-		if mouse.Button == tea.MouseLeft && X >= leftMost-8 && X <= leftMost-6 && Y == clickedWindow.Y {
-			// Toggle fullscreen for now (maximize functionality)
-			o.Snap(clickedWindowIndex, app.SnapFullScreen)
-			o.InteractionMode = false
-			return o, nil
-		}
-
-		// dash (minimize button) - leftmost button
-		if mouse.Button == tea.MouseLeft && X >= leftMost-11 && X <= leftMost-9 && Y == clickedWindow.Y {
-			o.MinimizeWindow(clickedWindowIndex)
-			o.InteractionMode = false
-			return o, nil
-		}
-	}
 
 	// Calculate drag offset based on the clicked window
 	o.DragOffsetX = X - clickedWindow.X
@@ -693,6 +705,11 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 		return -1
 	}
 
+	// Sort by minimize order to match renderDock
+	sort.Slice(minimizedWindows, func(i, j int) bool {
+		return o.Windows[minimizedWindows[i]].MinimizeOrder < o.Windows[minimizedWindows[j]].MinimizeOrder
+	})
+
 	// Calculate actual dock item widths (matching render.go logic)
 	dockItemsWidth := 0
 	itemNumber := 1
@@ -731,27 +748,84 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 	}
 
 	// Calculate center position considering system info on sides
-	leftInfoWidth := 30  // Mode + workspace indicators (matching render.go)
-	rightInfoWidth := 20 // CPU graph (matching render.go)
+	leftInfoWidth := 30 // Mode + workspace indicators (matching render.go)
+
+	// Calculate rightInfoWidth based on whether we're in copy mode (matching render.go exactly)
+	focusedWindow := o.GetFocusedWindow()
+	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
+
+	var rightInfoWidth int
+	if inCopyMode {
+		// In copy mode, help text can be very long - estimate based on copy mode state
+		// These widths match the actual help text lengths in render.go
+		switch focusedWindow.CopyMode.State {
+		case terminal.CopyModeNormal:
+			rightInfoWidth = 110 // Length of normal mode help text + padding
+		case terminal.CopyModeSearch:
+			rightInfoWidth = 60 // Length of search mode help text + padding
+		case terminal.CopyModeVisualChar:
+			rightInfoWidth = 90 // Length of visual char mode help text + padding
+		case terminal.CopyModeVisualLine:
+			rightInfoWidth = 35 // Length of visual line mode help text + padding
+		default:
+			rightInfoWidth = 32
+		}
+	} else {
+		rightInfoWidth = 32 // CPU graph (~19 chars) + space + RAM (~11 chars) = ~31 chars (matching render.go line 1819)
+	}
+
 	availableSpace := o.Width - leftInfoWidth - rightInfoWidth - dockItemsWidth
 	leftSpacer := max(availableSpace/2, 0)
 
 	startX := leftInfoWidth + leftSpacer
 
+	// DEBUG: Log dock click attempts
+	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+		if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			fmt.Fprintf(f, "[DOCK CLICK] X=%d Y=%d, Height=%d, startX=%d, dockItemsWidth=%d, numItems=%d\n",
+				x, y, o.Height, startX, dockItemsWidth, len(minimizedWindows))
+			f.Close()
+		}
+	}
+
 	// Check which item was clicked
 	currentX := startX
 	for i, windowIndex := range minimizedWindows {
+		// Add space BEFORE item (matching renderDock logic where space comes before item)
+		if i > 0 {
+			currentX++ // Space between items comes BEFORE this item
+		}
+
 		itemWidth := itemWidths[i]
 
-		// Check if click is within this dock item (single line dock at bottom)
-		if x >= currentX && x < currentX+itemWidth && y == o.Height-1 {
+		// Dock items are rendered as: leftCircle (1 cell) + label + rightCircle (1 cell)
+		// The entire item including circles should be clickable
+		clickableStart := currentX
+		clickableEnd := currentX + itemWidth
+
+		// DEBUG: Log each item bounds
+		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+			if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+				fmt.Fprintf(f, "[DOCK ITEM %d] windowIndex=%d, Full range [%d,%d), Clickable [%d,%d), Y=%d (checking Y==%d)\n",
+					i, windowIndex, currentX, currentX+itemWidth, clickableStart, clickableEnd, o.Height-1, y)
+				f.Close()
+			}
+		}
+
+		// Check if click is within this dock item (dock bar is at o.Height-1)
+		if x >= clickableStart && x < clickableEnd && y == o.Height-1 {
+			// DEBUG: Log successful match
+			if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+				if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+					fmt.Fprintf(f, "[DOCK MATCH] Item %d (windowIndex=%d) matched! Click X=%d in range [%d,%d)\n",
+						i, windowIndex, x, clickableStart, clickableEnd)
+					f.Close()
+				}
+			}
 			return windowIndex
 		}
 
 		currentX += itemWidth
-		if i < len(minimizedWindows)-1 {
-			currentX++ // Space between items
-		}
 	}
 
 	return -1

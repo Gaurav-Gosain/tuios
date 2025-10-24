@@ -37,10 +37,16 @@ var (
 	sshKeyPath  = flag.String("key-path", "", "Path to SSH host key (auto-generated if not specified)")
 	showVersion = flag.Bool("version", false, "Show version information")
 	cpuProfile  = flag.String("cpuprofile", "", "Write CPU profile to file")
+	debugMode   = flag.Bool("debug", false, "Enable debug logging")
 )
 
 func main() {
 	flag.Parse()
+
+	if *debugMode {
+		os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		fmt.Println("Debug mode enabled")
+	}
 
 	if *showVersion {
 		fmt.Printf("TUIOS %s\n", version)

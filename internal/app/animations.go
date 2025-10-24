@@ -1,6 +1,9 @@
 package app
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
@@ -91,17 +94,27 @@ func (m *OS) UpdateAnimations() {
 func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
 	// Find all minimized/minimizing windows in current workspace
 	dockWindows := []int{}
-	targetDockIndex := -1
 
 	for i, window := range m.Windows {
 		if window.Workspace == m.CurrentWorkspace && (window.Minimized || window.Minimizing) {
-			if i == windowIndex {
-				targetDockIndex = len(dockWindows)
-			}
 			dockWindows = append(dockWindows, i)
 			if len(dockWindows) >= 9 {
 				break
 			}
+		}
+	}
+
+	// Sort by minimize order to match renderDock
+	sort.Slice(dockWindows, func(i, j int) bool {
+		return m.Windows[dockWindows[i]].MinimizeOrder < m.Windows[dockWindows[j]].MinimizeOrder
+	})
+
+	// Find target window's position in sorted dock
+	targetDockIndex := -1
+	for idx, winIdx := range dockWindows {
+		if winIdx == windowIndex {
+			targetDockIndex = idx
+			break
 		}
 	}
 
@@ -113,26 +126,81 @@ func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
 	// Dock is at the bottom of the screen
 	dockY := m.Height - config.DockHeight + 1 // +1 for the separator line
 
-	// Calculate dock layout (mirroring renderDock logic)
+	// Calculate dock layout matching renderDock() logic EXACTLY
 	leftWidth := 30
-	rightWidth := 20
+	// Right width changes based on copy mode, but during animation use default
+	rightWidth := 32 // CPU graph + RAM stats
 
-	// Estimate dock items width (each pill is approximately 6-16 chars depending on name)
-	// Use conservative estimate: 8 chars per item + 1 space between
-	estimatedItemWidth := 8
-	estimatedTotalWidth := len(dockWindows) * estimatedItemWidth
-	if len(dockWindows) > 1 {
-		estimatedTotalWidth += (len(dockWindows) - 1) // spaces between items
+	// Calculate actual width of each dock item (matching renderDock pill rendering)
+	var dockItemsWidth int
+	for idx, winIdx := range dockWindows {
+		window := m.Windows[winIdx]
+		windowName := window.CustomName
+
+		// Match the exact label format from renderDock
+		var labelWidth int
+		if windowName != "" {
+			if len(windowName) > 12 {
+				windowName = windowName[:9] + "..."
+			}
+			labelWidth = len(fmt.Sprintf(" %d:%s ", idx+1, windowName))
+		} else {
+			labelWidth = len(fmt.Sprintf(" %d ", idx+1))
+		}
+
+		// Add left circle (1) + label + right circle (1)
+		itemWidth := 1 + labelWidth + 1
+		dockItemsWidth += itemWidth
+
+		// Add space between items
+		if idx > 0 {
+			dockItemsWidth += 1
+		}
 	}
 
-	availableSpace := m.Width - leftWidth - rightWidth - estimatedTotalWidth
+	// Calculate center positioning
+	availableSpace := m.Width - leftWidth - rightWidth - dockItemsWidth
 	if availableSpace < 0 {
 		availableSpace = 0
 	}
 	leftSpacer := availableSpace / 2
 
-	// Calculate X position: start of dock items + offset for this item
-	dockX := leftWidth + leftSpacer + (targetDockIndex * (estimatedItemWidth + 1))
+	// Calculate X position for target dock item
+	dockX := leftWidth + leftSpacer
+	for idx, winIdx := range dockWindows {
+		if idx == targetDockIndex {
+			// Add half the item width to center on it
+			window := m.Windows[winIdx]
+			windowName := window.CustomName
+			var labelWidth int
+			if windowName != "" {
+				if len(windowName) > 12 {
+					windowName = windowName[:9] + "..."
+				}
+				labelWidth = len(fmt.Sprintf(" %d:%s ", idx+1, windowName))
+			} else {
+				labelWidth = len(fmt.Sprintf(" %d ", idx+1))
+			}
+			itemWidth := 1 + labelWidth + 1
+			dockX += itemWidth / 2
+			break
+		}
+
+		// Add width of previous items
+		window := m.Windows[winIdx]
+		windowName := window.CustomName
+		var labelWidth int
+		if windowName != "" {
+			if len(windowName) > 12 {
+				windowName = windowName[:9] + "..."
+			}
+			labelWidth = len(fmt.Sprintf(" %d:%s ", idx+1, windowName))
+		} else {
+			labelWidth = len(fmt.Sprintf(" %d ", idx+1))
+		}
+		itemWidth := 1 + labelWidth + 1
+		dockX += itemWidth + 1 // +1 for space between items
+	}
 
 	return dockX, dockY
 }
