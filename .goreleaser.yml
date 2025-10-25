@@ -119,6 +119,16 @@ release:
     curl -sSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
     ```
 
+    #### Arch Linux (AUR)
+
+    ```bash
+    # Using yay
+    yay -S tuios-bin
+
+    # Using paru
+    paru -S tuios-bin
+    ```
+
     #### Nix
 
     ```bash
