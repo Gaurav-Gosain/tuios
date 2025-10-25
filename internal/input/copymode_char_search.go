@@ -7,6 +7,47 @@ import (
 
 // Character search-related functions for copy mode (f/F/t/T and ;/,)
 
+// convertColumnToRuneIndex converts a column position to a rune index in the text
+// accounting for wide characters (emoji, nerd fonts, CJK, etc.)
+func convertColumnToRuneIndex(window *terminal.Window, absY int, col int) int {
+	scrollbackLen := window.ScrollbackLen()
+	runeIndex := 0
+	currentCol := 0
+
+	if absY < scrollbackLen {
+		line := window.ScrollbackLine(absY)
+		for _, cell := range line {
+			if currentCol >= col {
+				break
+			}
+			if cell.Width > 0 { // Skip continuation cells
+				// Count runes in this cell's content
+				for range cell.Content {
+					runeIndex++
+				}
+				currentCol += cell.Width
+			}
+		}
+	} else {
+		screenY := absY - scrollbackLen
+		for x := 0; x < window.Terminal.Width(); x++ {
+			if currentCol >= col {
+				break
+			}
+			cell := window.Terminal.CellAt(x, screenY)
+			if cell != nil && cell.Width > 0 { // Skip continuation cells
+				// Count runes in this cell's content
+				for range cell.Content {
+					runeIndex++
+				}
+				currentCol += cell.Width
+			}
+		}
+	}
+
+	return runeIndex
+}
+
 // findCharOnLine searches for a character across multiple lines
 // direction: 1 for forward, -1 for backward
 // till: true to stop before the character, false to land on it
@@ -37,8 +78,9 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 			// Determine starting position
 			startCharIdx := 0
 			if lineOffset == 0 {
-				// On current line, start from cursor + 1
-				startCharIdx = 1 // Skip current character
+				// On current line, get cursor's rune position and start from next rune
+				currentRuneIdx := convertColumnToRuneIndex(window, absY, cm.CursorX)
+				startCharIdx = currentRuneIdx + 1
 			}
 
 			// Search this line
@@ -85,8 +127,9 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 			// Determine starting position
 			endCharIdx := len(runes) - 1
 			if lineOffset == 0 {
-				// On current line, start from cursor - 1
-				endCharIdx = -1 // Start searching from previous character
+				// On current line, get cursor's rune position and start from previous rune
+				currentRuneIdx := convertColumnToRuneIndex(window, absY, cm.CursorX)
+				endCharIdx = currentRuneIdx - 1
 			}
 
 			// Search this line backward
@@ -147,27 +190,36 @@ func convertRuneIndexToColumn(window *terminal.Window, absY int, runeIndex int) 
 
 	if absY < scrollbackLen {
 		line := window.ScrollbackLine(absY)
-		if line != nil {
-			for _, cell := range line {
-				if runeCount >= runeIndex {
-					break
+		for _, cell := range line {
+			if runeCount >= runeIndex {
+				break
+			}
+			if cell.Width > 0 { // Skip continuation cells
+				// Count runes in this cell's content
+				for range cell.Content {
+					runeCount++
+					if runeCount > runeIndex {
+						return col
+					}
 				}
-				if cell.Width > 0 { // Skip continuation cells
-					runeCount += len(cell.Content)
-					col++
-				}
+				// Advance column by cell width (handles wide chars like CJK)
+				col += cell.Width
 			}
 		}
 	} else {
 		screenY := absY - scrollbackLen
 		for x := 0; x < window.Terminal.Width(); x++ {
 			cell := window.Terminal.CellAt(x, screenY)
-			if runeCount >= runeIndex {
-				break
-			}
 			if cell != nil && cell.Width > 0 { // Skip continuation cells
-				runeCount += len(cell.Content)
-				col++
+				// Count runes in this cell's content
+				for range cell.Content {
+					runeCount++
+					if runeCount > runeIndex {
+						return col
+					}
+				}
+				// Advance column by cell width (handles wide chars like CJK)
+				col += cell.Width
 			}
 		}
 	}

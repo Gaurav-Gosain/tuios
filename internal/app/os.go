@@ -109,8 +109,12 @@ type OS struct {
 	WorkspacePrefixActive bool            // True when Ctrl+B, w was pressed (workspace sub-prefix)
 	MinimizePrefixActive  bool            // True when Ctrl+B, m was pressed (minimize sub-prefix)
 	TilingPrefixActive    bool            // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
+	DebugPrefixActive     bool            // True when Ctrl+B, D was pressed (debug sub-prefix)
 	LastPrefixTime        time.Time       // Time when prefix was activated
 	HelpScrollOffset      int             // Scroll offset for help menu
+	HelpCategory          int             // Current help category index (for left/right navigation)
+	HelpSearchMode        bool            // True when help search is active
+	HelpSearchQuery       string          // Current search query in help menu
 	CurrentWorkspace      int             // Current active workspace (1-9)
 	NumWorkspaces         int             // Total number of workspaces
 	WorkspaceFocus        map[int]int     // Remembers focused window per workspace
@@ -129,6 +133,8 @@ type OS struct {
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
+	// Keybind registry for user-configurable keybindings
+	KeybindRegistry *config.KeybindRegistry
 }
 
 // Notification represents a temporary notification message.
@@ -161,10 +167,55 @@ func (m *OS) Log(level, format string, args ...interface{}) {
 		Message: message,
 	}
 
+	// Check if we're at the bottom before adding new log
+	wasAtBottom := false
+	if m.ShowLogs {
+		maxDisplayHeight := max(m.Height-8, 8)
+		totalLogs := len(m.LogMessages)
+
+		// Fixed overhead: title (1) + blank after title (1) + blank before hint (1) + hint (1) = 4
+		fixedLines := 4
+		// If scrollable, add scroll indicator: blank (1) + indicator (1) = 2
+		if totalLogs > maxDisplayHeight-fixedLines {
+			fixedLines = 6
+		}
+		logsPerPage := maxDisplayHeight - fixedLines
+		if logsPerPage < 1 {
+			logsPerPage = 1
+		}
+
+		maxScroll := totalLogs - logsPerPage
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		// Consider "at bottom" if within 2 lines of the end (to handle edge cases)
+		wasAtBottom = m.LogScrollOffset >= maxScroll-2
+	}
+
 	// Keep only last MaxLogMessages messages
 	m.LogMessages = append(m.LogMessages, logMsg)
 	if len(m.LogMessages) > config.MaxLogMessages {
 		m.LogMessages = m.LogMessages[len(m.LogMessages)-config.MaxLogMessages:]
+	}
+
+	// Auto-scroll to bottom if we were already at bottom (sticky scroll)
+	if wasAtBottom && m.ShowLogs {
+		// Recalculate maxScroll with the new log added
+		maxDisplayHeight := max(m.Height-8, 8)
+		totalLogs := len(m.LogMessages)
+		fixedLines := 4
+		if totalLogs > maxDisplayHeight-fixedLines {
+			fixedLines = 6
+		}
+		logsPerPage := maxDisplayHeight - fixedLines
+		if logsPerPage < 1 {
+			logsPerPage = 1
+		}
+		maxScroll := totalLogs - logsPerPage
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		m.LogScrollOffset = maxScroll
 	}
 }
 
@@ -348,6 +399,8 @@ func (m *OS) AddWindow(title string) *OS {
 		title = fmt.Sprintf("Terminal %s", newID[:8])
 	}
 
+	m.LogInfo("Creating new window: %s (workspace %d)", title, m.CurrentWorkspace)
+
 	// Handle case where screen dimensions aren't available yet
 	screenWidth := m.Width
 	screenHeight := m.GetUsableHeight()
@@ -356,6 +409,7 @@ func (m *OS) AddWindow(title string) *OS {
 		// Use sensible defaults when screen size is unknown
 		screenWidth = 80
 		screenHeight = 24
+		m.LogWarn("Screen dimensions unknown, using defaults (%dx%d)", screenWidth, screenHeight)
 	}
 
 	width := screenWidth / 2
@@ -390,6 +444,7 @@ func (m *OS) AddWindow(title string) *OS {
 
 	window := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan)
 	if window == nil {
+		m.LogError("Failed to create window %s (PTY creation failed)", title)
 		return m // Failed to create window
 	}
 
@@ -397,12 +452,14 @@ func (m *OS) AddWindow(title string) *OS {
 	window.Workspace = m.CurrentWorkspace
 
 	m.Windows = append(m.Windows, window)
+	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))
 
 	// Focus the new window, which will bring it to the front
 	m.FocusWindow(len(m.Windows) - 1)
 
 	// Auto-tile if in tiling mode
 	if m.AutoTiling {
+		m.LogInfo("Auto-tiling triggered for new window")
 		m.TileAllWindows()
 	}
 
@@ -412,21 +469,29 @@ func (m *OS) AddWindow(title string) *OS {
 // DeleteWindow removes the window at the specified index.
 func (m *OS) DeleteWindow(i int) *OS {
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
+		m.LogWarn("Cannot delete window: invalid index %d (total windows: %d)", i, len(m.Windows))
 		return m
 	}
 
 	// Clean up window resources
 	deletedWindow := m.Windows[i]
+	m.LogInfo("Deleting window: %s (index: %d, ID: %s)", deletedWindow.Title, i, deletedWindow.ID[:8])
 	deletedWindow.Close()
 
 	// Remove any animations referencing this window to prevent memory leaks
 	cleanedAnimations := make([]*ui.Animation, 0, len(m.Animations))
+	animsCleaned := 0
 	for _, anim := range m.Animations {
 		if anim.Window != deletedWindow {
 			cleanedAnimations = append(cleanedAnimations, anim)
+		} else {
+			animsCleaned++
 		}
 	}
 	m.Animations = cleanedAnimations
+	if animsCleaned > 0 {
+		m.LogInfo("Cleaned up %d animations for deleted window", animsCleaned)
+	}
 
 	movedZ := deletedWindow.Z
 	for j := range m.Windows {
@@ -442,9 +507,12 @@ func (m *OS) DeleteWindow(i int) *OS {
 	// Explicitly clear the deleted window pointer to help GC
 	deletedWindow = nil
 
+	m.LogInfo("Window deleted successfully (remaining windows: %d)", len(m.Windows))
+
 	// Update focused window index
 	if len(m.Windows) == 0 {
 		m.FocusedWindow = -1
+		m.LogInfo("No windows remaining, switching to window management mode")
 		// Reset to window management mode when no windows are left
 		m.Mode = WindowManagementMode
 	} else if i < m.FocusedWindow {
@@ -456,6 +524,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 
 	// Retile if in tiling mode
 	if m.AutoTiling && len(m.Windows) > 0 {
+		m.LogInfo("Auto-tiling triggered after window deletion")
 		m.TileAllWindows()
 	}
 

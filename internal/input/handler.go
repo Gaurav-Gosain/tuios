@@ -89,6 +89,11 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleTilingPrefixCommand(msg, o)
 	}
 
+	// Handle debug prefix commands (Ctrl+B, D, ...)
+	if o.DebugPrefixActive {
+		return HandleDebugPrefixCommand(msg, o)
+	}
+
 	// Handle prefix commands in window management mode
 	if o.PrefixActive {
 		return HandlePrefixCommand(msg, o)
@@ -168,6 +173,12 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "t":
 		// Activate tiling/window prefix mode
 		o.TilingPrefixActive = true
+		o.PrefixActive = true // Keep prefix active for the next key
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "D":
+		// Activate debug prefix mode (Ctrl+B, Shift+D)
+		o.DebugPrefixActive = true
 		o.PrefixActive = true // Keep prefix active for the next key
 		o.LastPrefixTime = time.Now()
 		return o, nil

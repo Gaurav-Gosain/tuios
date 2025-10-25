@@ -72,6 +72,14 @@ func teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
 		return nil, nil
 	}
 
+	// Load user configuration and create keybind registry
+	userConfig, err := config.LoadUserConfig()
+	if err != nil {
+		log.Printf("Warning: Failed to load config for SSH session, using defaults: %v", err)
+		userConfig = config.DefaultConfig()
+	}
+	keybindRegistry := config.NewKeybindRegistry(userConfig)
+
 	// Create a TUIOS instance for this session
 	tuiosInstance := &app.OS{
 		FocusedWindow:    -1,                    // No focused window initially
@@ -84,6 +92,7 @@ func teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
 		Height:           pty.Window.Height,     // Set initial height from SSH session
 		SSHSession:       session,               // Store SSH session reference
 		IsSSHMode:        true,                  // Flag to indicate SSH mode
+		KeybindRegistry:  keybindRegistry,       // User-configurable keybindings
 	}
 
 	// Return the model and program options

@@ -430,7 +430,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	}()
 
 	switch keyStr {
-	case "esc":
+	case "esc", "q":
 		cm.State = terminal.CopyModeNormal
 		o.ShowNotification("", "info", 0)
 	case "y", "c":
@@ -605,7 +605,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 func HandleCopyModeMouseClick(cm *terminal.CopyMode, window *terminal.Window, clickX, clickY int) {
 	// Convert window-relative coordinates (with border) to terminal coordinates
 	terminalX := clickX - window.X - 1 // Account for left border
-	terminalY := clickY - window.Y      // Y coordinate relative to window
+	terminalY := clickY - window.Y - 1 // Account for top border (title bar)
 
 	// Check bounds
 	if terminalX < 0 || terminalY < 0 || terminalX >= window.Width-2 || terminalY >= window.Height-2 {
@@ -615,6 +615,16 @@ func HandleCopyModeMouseClick(cm *terminal.CopyMode, window *terminal.Window, cl
 	// Move cursor to clicked position
 	cm.CursorX = terminalX
 	cm.CursorY = terminalY
+
+	// Adjust cursor to avoid landing on continuation cells of wide characters
+	// Move left until we find a cell with Width > 0
+	for cm.CursorX > 0 {
+		cell := getCellAtCursor(cm, window)
+		if cell == nil || cell.Width > 0 {
+			break
+		}
+		cm.CursorX--
+	}
 
 	// If in visual mode, update selection end
 	if cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualLine {
@@ -628,7 +638,7 @@ func HandleCopyModeMouseClick(cm *terminal.CopyMode, window *terminal.Window, cl
 func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, startX, startY int) {
 	// Convert window-relative coordinates to terminal coordinates
 	terminalX := startX - window.X - 1
-	terminalY := startY - window.Y
+	terminalY := startY - window.Y - 1 // Account for top border
 
 	// Check bounds
 	if terminalX < 0 || terminalY < 0 || terminalX >= window.Width-2 || terminalY >= window.Height-2 {
@@ -645,6 +655,16 @@ func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, sta
 	cm.CursorX = terminalX
 	cm.CursorY = terminalY
 
+	// Adjust cursor to avoid landing on continuation cells of wide characters
+	// Move left until we find a cell with Width > 0
+	for cm.CursorX > 0 {
+		cell := getCellAtCursor(cm, window)
+		if cell == nil || cell.Width > 0 {
+			break
+		}
+		cm.CursorX--
+	}
+
 	// Enter visual character mode for new selection
 	enterVisualChar(cm, window)
 
@@ -660,7 +680,7 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 
 	// Convert window-relative coordinates to terminal coordinates
 	terminalX := mouseX - window.X - 1
-	terminalY := mouseY - window.Y
+	terminalY := mouseY - window.Y - 1 // Account for top border (title bar)
 
 	// Check bounds
 	if terminalX < 0 || terminalY < 0 || terminalX >= window.Width-2 || terminalY >= window.Height-2 {
@@ -670,6 +690,16 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 	// Update cursor position
 	cm.CursorX = terminalX
 	cm.CursorY = terminalY
+
+	// Adjust cursor to avoid landing on continuation cells of wide characters
+	// Move left until we find a cell with Width > 0
+	for cm.CursorX > 0 {
+		cell := getCellAtCursor(cm, window)
+		if cell == nil || cell.Width > 0 {
+			break
+		}
+		cm.CursorX--
+	}
 
 	// Update visual selection end
 	updateVisualEnd(cm, window)

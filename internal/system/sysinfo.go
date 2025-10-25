@@ -8,21 +8,21 @@ import (
 
 // CPUStats holds CPU usage statistics.
 type CPUStats struct {
-	user    uint64
-	nice    uint64
-	system  uint64
-	idle    uint64
-	iowait  uint64
-	irq     uint64
-	softirq uint64
-	steal   uint64
+	User    uint64
+	Nice    uint64
+	System  uint64
+	Idle    uint64
+	Iowait  uint64
+	Irq     uint64
+	Softirq uint64
+	Steal   uint64
 }
 
 // CPUMonitor manages CPU usage tracking and display.
 type CPUMonitor struct {
 	CPUHistory    []float64
 	LastCPUUpdate time.Time
-	lastCPUStats  *CPUStats
+	LastCPUStats  *CPUStats
 }
 
 // NewCPUMonitor creates a new CPU monitor.

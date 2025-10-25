@@ -26,7 +26,7 @@ func (w *Window) TriggerRedraw() {
 		if process != nil {
 			// Send SIGWINCH (window change signal) to the process
 			// Applications should handle this and redraw as needed
-			process.Signal(os.Signal(syscall.SIGWINCH))
+			_ = process.Signal(os.Signal(syscall.SIGWINCH)) // Best effort, ignore error
 		}
 	}()
 }

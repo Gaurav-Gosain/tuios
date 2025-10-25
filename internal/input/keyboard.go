@@ -2,7 +2,6 @@
 package input
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -14,6 +13,198 @@ import (
 // HandleTerminalModeKey handles keyboard input in terminal mode
 func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	focusedWindow := o.GetFocusedWindow()
+
+	// Handle help menu first (takes priority over everything in terminal mode)
+	if o.ShowHelp {
+		key := msg.String()
+
+		// Handle escape - exit search first if active, then close help
+		if key == "esc" {
+			if o.HelpSearchMode {
+				// Exit search mode first
+				o.HelpSearchMode = false
+				o.HelpSearchQuery = ""
+				o.HelpScrollOffset = 0
+				return o, nil
+			}
+			// Close help menu
+			o.ShowHelp = false
+			o.HelpScrollOffset = 0
+			o.HelpCategory = -1
+			return o, nil
+		}
+
+		// Handle ? to close help
+		if key == "?" {
+			o.ShowHelp = false
+			o.HelpScrollOffset = 0
+			o.HelpCategory = -1 // Reset to trigger auto-selection next time
+			o.HelpSearchQuery = ""
+			o.HelpSearchMode = false
+			return o, nil
+		}
+
+		// Handle up/down arrows for scrolling
+		// Scroll by 2 rows at a time (1 entry + 1 gap row)
+		if key == "up" {
+			if o.HelpScrollOffset > 0 {
+				o.HelpScrollOffset -= 2
+				if o.HelpScrollOffset < 0 {
+					o.HelpScrollOffset = 0
+				}
+			}
+			return o, nil
+		}
+		if key == "down" {
+			o.HelpScrollOffset += 2
+			return o, nil
+		}
+
+		// Handle left/right arrows for category navigation
+		if key == "left" {
+			o.HelpScrollOffset = 0 // Reset scroll when changing categories
+			return handleLeftKey(msg, o)
+		}
+		if key == "right" {
+			o.HelpScrollOffset = 0 // Reset scroll when changing categories
+			return handleRightKey(msg, o)
+		}
+
+		// Toggle search mode with "/"
+		if key == "/" {
+			o.HelpSearchMode = !o.HelpSearchMode
+			o.HelpScrollOffset = 0 // Reset scroll when toggling search
+			if !o.HelpSearchMode {
+				o.HelpSearchQuery = "" // Clear query when exiting search
+			}
+			return o, nil
+		}
+
+		// Handle typing in search mode
+		if o.HelpSearchMode {
+			// Handle backspace
+			if key == "backspace" {
+				if len(o.HelpSearchQuery) > 0 {
+					o.HelpSearchQuery = o.HelpSearchQuery[:len(o.HelpSearchQuery)-1]
+					o.HelpScrollOffset = 0 // Reset scroll when query changes
+				}
+				return o, nil
+			}
+
+			// Handle regular character input (single printable characters)
+			if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
+				o.HelpSearchQuery += key
+				o.HelpScrollOffset = 0 // Reset scroll when query changes
+				return o, nil
+			}
+		}
+
+		// Help is showing but key wasn't handled - ignore it
+		return o, nil
+	}
+
+	// Handle log viewer (takes priority in terminal mode)
+	if o.ShowLogs {
+		key := msg.String()
+
+		// Close log viewer with q, esc, or Ctrl+B D l
+		if key == "q" || key == "esc" {
+			o.ShowLogs = false
+			o.LogScrollOffset = 0
+			return o, nil
+		}
+
+		// Calculate how many logs can fit on screen (matching render logic)
+		// Height - 8 for margins/borders, minimum 8
+		maxDisplayHeight := max(o.Height-8, 8)
+		totalLogs := len(o.LogMessages)
+
+		// Fixed overhead: title (1) + blank after title (1) + blank before hint (1) + hint (1) = 4
+		fixedLines := 4
+		// If scrollable, add scroll indicator: blank (1) + indicator (1) = 2
+		if totalLogs > maxDisplayHeight-fixedLines {
+			fixedLines = 6
+		}
+		logsPerPage := maxDisplayHeight - fixedLines
+		if logsPerPage < 1 {
+			logsPerPage = 1
+		}
+
+		// Calculate max scroll position based on visible capacity
+		// Can only scroll if there are more logs than fit on screen
+		maxScroll := totalLogs - logsPerPage
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+
+		// Scroll up/down
+		if key == "up" || key == "k" {
+			if o.LogScrollOffset > 0 {
+				o.LogScrollOffset--
+			}
+			return o, nil
+		}
+		if key == "down" || key == "j" {
+			if o.LogScrollOffset < maxScroll {
+				o.LogScrollOffset++
+			}
+			return o, nil
+		}
+
+		// Page up/down (scroll by half page)
+		pageSize := logsPerPage / 2
+		if pageSize < 1 {
+			pageSize = 1
+		}
+		if key == "pgup" || key == "ctrl+u" {
+			o.LogScrollOffset -= pageSize
+			if o.LogScrollOffset < 0 {
+				o.LogScrollOffset = 0
+			}
+			return o, nil
+		}
+		if key == "pgdown" || key == "ctrl+d" {
+			o.LogScrollOffset += pageSize
+			if o.LogScrollOffset > maxScroll {
+				o.LogScrollOffset = maxScroll
+			}
+			return o, nil
+		}
+
+		// Go to top/bottom
+		if key == "g" || key == "home" {
+			o.LogScrollOffset = 0
+			return o, nil
+		}
+		if key == "G" || key == "end" {
+			o.LogScrollOffset = maxScroll
+			return o, nil
+		}
+
+		// Ignore other keys when log viewer is active
+		return o, nil
+	}
+
+	// Handle cache stats viewer (takes priority in terminal mode)
+	if o.ShowCacheStats {
+		key := msg.String()
+
+		// Close cache stats with q, esc, or c
+		if key == "q" || key == "esc" || key == "c" {
+			o.ShowCacheStats = false
+			return o, nil
+		}
+
+		// Reset cache stats with r
+		if key == "r" {
+			app.GetGlobalStyleCache().ResetStats()
+			o.ShowNotification("Cache statistics reset", "info", 2*time.Second)
+			return o, nil
+		}
+
+		// Ignore other keys when cache stats is active
+		return o, nil
+	}
 
 	// Handle copy mode (vim-style scrollback/selection)
 	if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
@@ -52,6 +243,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleTerminalTilingPrefix(msg, o)
 	}
 
+	// Handle debug prefix commands (Ctrl+B, D, ...)
+	if o.DebugPrefixActive {
+		return handleTerminalDebugPrefix(msg, o)
+	}
+
 	// Handle prefix commands in terminal mode
 	if o.PrefixActive {
 		return handleTerminalPrefixCommand(msg, o)
@@ -62,11 +258,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	handled := handleWorkspaceSwitch(msg, o)
 	if handled {
 		return o, nil
-	}
-
-	// Handle Ctrl+S to toggle selection mode from terminal mode
-	if msg.String() == "ctrl+s" {
-		return handleTerminalSelectionToggle(msg, o)
 	}
 
 	// Handle paste shortcuts - intercept and request clipboard via OSC 52
@@ -261,6 +452,39 @@ func handleTerminalTilingPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	}
 }
 
+// handleTerminalDebugPrefix handles debug prefix commands (Ctrl+B, D, ...)
+func handleTerminalDebugPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.DebugPrefixActive = false
+	o.PrefixActive = false
+
+	switch msg.String() {
+	case "l":
+		// Toggle log viewer
+		o.ShowLogs = !o.ShowLogs
+		if o.ShowLogs {
+			o.ShowNotification("Log Viewer: ON", "info", config.NotificationDuration)
+		} else {
+			o.ShowNotification("Log Viewer: OFF", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "c":
+		// Toggle cache statistics
+		o.ShowCacheStats = !o.ShowCacheStats
+		if o.ShowCacheStats {
+			o.ShowNotification("Cache Stats: ON", "info", config.NotificationDuration)
+		} else {
+			o.ShowNotification("Cache Stats: OFF", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "esc":
+		// Cancel debug prefix mode
+		return o, nil
+	default:
+		// Unknown debug command, ignore
+		return o, nil
+	}
+}
+
 // handleTerminalPrefixCommand handles prefix commands in terminal mode
 func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.PrefixActive = false
@@ -280,6 +504,12 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 	case "t":
 		// Activate tiling/window prefix mode
 		o.TilingPrefixActive = true
+		o.PrefixActive = true // Keep prefix active for the next key
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "D":
+		// Activate debug prefix mode (Ctrl+B, Shift+D)
+		o.DebugPrefixActive = true
 		o.PrefixActive = true // Keep prefix active for the next key
 		o.LastPrefixTime = time.Now()
 		return o, nil
@@ -359,8 +589,8 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			o.Snap(o.FocusedWindow, app.SnapFullScreen)
 		}
 		return o, nil
-	case "s", "[":
-		// Enter copy mode (vim-style scrollback/selection, replaces old scrollback mode)
+	case "[":
+		// Enter copy mode (vim-style scrollback/selection)
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 			focusedWindow.EnterCopyMode()
 			o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration*2)
@@ -427,26 +657,6 @@ func handleTerminalWindowSelection(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	return o, nil
 }
 
-// handleTerminalSelectionToggle toggles selection mode from terminal mode
-func handleTerminalSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.SelectionMode {
-		// Currently in selection mode, toggle it off and stay in terminal mode
-		o.SelectionMode = false
-		o.ShowNotification("Selection Mode Disabled", "info", config.NotificationDuration)
-		// Reset scrollback offset when exiting selection mode
-		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-			focusedWindow.ScrollbackOffset = 0
-			focusedWindow.InvalidateCache()
-		}
-	} else {
-		// Not in selection mode, enable it and switch to window management mode
-		o.Mode = app.WindowManagementMode
-		o.SelectionMode = true
-		o.ShowNotification("Selection Mode", "info", config.NotificationDuration)
-	}
-	return o, nil
-}
-
 // HandleWindowManagementModeKey handles keyboard input in window management mode
 func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	focusedWindow := o.GetFocusedWindow()
@@ -456,309 +666,207 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return HandleCopyModeKey(msg, o, focusedWindow)
 	}
 
-	// Non-prefix keybindings (immediate actions)
-	switch msg.String() {
-	case "ctrl+c":
-		// Quit
-		o.Cleanup()
-		return o, tea.Quit
+	key := msg.String()
 
-	case "q":
-		// Close help if showing
-		if o.ShowHelp {
+	// Handle help menu interactions before general keybind dispatch
+	if o.ShowHelp {
+		// Handle escape - exit search first if active, then close help
+		if key == "esc" || key == "q" || key == "?" {
+			if o.HelpSearchMode {
+				// Exit search mode first
+				o.HelpSearchMode = false
+				o.HelpSearchQuery = ""
+				o.HelpScrollOffset = 0
+				return o, nil
+			}
+			// Close help menu
 			o.ShowHelp = false
+			o.HelpScrollOffset = 0
+			o.HelpCategory = -1
+			o.HelpSearchQuery = ""
+			o.HelpSearchMode = false
 			return o, nil
 		}
-		// Exit selection mode if active
-		if o.SelectionMode {
-			o.SelectionMode = false
-			o.ShowNotification("Selection Mode Exited", "info", config.NotificationDuration)
-			if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-				focusedWindow.SelectedText = ""
-				focusedWindow.IsSelecting = false
-				focusedWindow.ScrollbackOffset = 0
-				focusedWindow.InvalidateCache()
+
+		// Handle up/down arrows for scrolling
+		// Scroll by 2 rows at a time (1 entry + 1 gap row)
+		if key == "up" {
+			if o.HelpScrollOffset > 0 {
+				o.HelpScrollOffset -= 2
+				if o.HelpScrollOffset < 0 {
+					o.HelpScrollOffset = 0
+				}
 			}
 			return o, nil
 		}
-		// Quit application
-		o.Cleanup()
-		return o, tea.Quit
-
-	// Workspace switching with Alt+1-9
-	// On macOS, Option+number generates special characters, so we handle both
-	case "alt+1", "¡", "alt+2", "™", "alt+3", "£", "alt+4", "¢", "alt+5", "∞",
-		"alt+6", "§", "alt+7", "¶", "alt+8", "•", "alt+9", "ª":
-		handleWorkspaceSwitch(msg, o)
-		return o, nil
-
-	// Move window to workspace and follow with Alt+Shift+1-9
-	case "alt+shift+1", "alt+!", "⁄", "alt+shift+2", "alt+@", "€", "alt+shift+3", "alt+#", "‹",
-		"alt+shift+4", "alt+$", "›", "alt+shift+5", "alt+%", "ﬁ", "alt+shift+6", "alt+^", "ﬂ",
-		"alt+shift+7", "alt+&", "‡", "alt+shift+8", "alt+*", "°", "alt+shift+9", "alt+(", "·":
-		handleWorkspaceMoveAndFollow(msg, o)
-		return o, nil
-
-	// Window management
-	case "n":
-		// New window
-		o.AddWindow("")
-		return o, nil
-	case "w", "x":
-		// Close window
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.DeleteWindow(o.FocusedWindow)
+		if key == "down" {
+			o.HelpScrollOffset += 2
+			return o, nil
 		}
+
+		// Handle left/right arrows for category navigation (reset scroll)
+		if key == "left" {
+			o.HelpScrollOffset = 0
+			return handleLeftKey(msg, o)
+		}
+		if key == "right" {
+			o.HelpScrollOffset = 0
+			return handleRightKey(msg, o)
+		}
+
+		// Toggle search mode with "/"
+		if key == "/" {
+			o.HelpSearchMode = !o.HelpSearchMode
+			o.HelpScrollOffset = 0 // Reset scroll when toggling search
+			if !o.HelpSearchMode {
+				o.HelpSearchQuery = "" // Clear query when exiting search
+			}
+			return o, nil
+		}
+
+		// Handle typing in search mode
+		if o.HelpSearchMode {
+			// Handle backspace
+			if key == "backspace" {
+				if len(o.HelpSearchQuery) > 0 {
+					o.HelpSearchQuery = o.HelpSearchQuery[:len(o.HelpSearchQuery)-1]
+					o.HelpScrollOffset = 0 // Reset scroll when query changes
+				}
+				return o, nil
+			}
+
+			// Handle regular character input (single printable characters)
+			if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
+				o.HelpSearchQuery += key
+				o.HelpScrollOffset = 0 // Reset scroll when query changes
+				return o, nil
+			}
+		}
+	}
+
+	// Handle log viewer (takes priority in window management mode)
+	if o.ShowLogs {
+		// Close log viewer with q, esc, or Ctrl+B D l
+		if key == "q" || key == "esc" {
+			o.ShowLogs = false
+			o.LogScrollOffset = 0
+			return o, nil
+		}
+
+		// Calculate how many logs can fit on screen (matching render logic)
+		// Height - 8 for margins/borders, minimum 8
+		maxDisplayHeight := max(o.Height-8, 8)
+		totalLogs := len(o.LogMessages)
+
+		// Fixed overhead: title (1) + blank after title (1) + blank before hint (1) + hint (1) = 4
+		fixedLines := 4
+		// If scrollable, add scroll indicator: blank (1) + indicator (1) = 2
+		if totalLogs > maxDisplayHeight-fixedLines {
+			fixedLines = 6
+		}
+		logsPerPage := maxDisplayHeight - fixedLines
+		if logsPerPage < 1 {
+			logsPerPage = 1
+		}
+
+		// Calculate max scroll position based on visible capacity
+		// Can only scroll if there are more logs than fit on screen
+		maxScroll := totalLogs - logsPerPage
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+
+		// Scroll up/down
+		if key == "up" || key == "k" {
+			if o.LogScrollOffset > 0 {
+				o.LogScrollOffset--
+			}
+			return o, nil
+		}
+		if key == "down" || key == "j" {
+			if o.LogScrollOffset < maxScroll {
+				o.LogScrollOffset++
+			}
+			return o, nil
+		}
+
+		// Page up/down (scroll by half page)
+		pageSize := logsPerPage / 2
+		if pageSize < 1 {
+			pageSize = 1
+		}
+		if key == "pgup" || key == "ctrl+u" {
+			o.LogScrollOffset -= pageSize
+			if o.LogScrollOffset < 0 {
+				o.LogScrollOffset = 0
+			}
+			return o, nil
+		}
+		if key == "pgdown" || key == "ctrl+d" {
+			o.LogScrollOffset += pageSize
+			if o.LogScrollOffset > maxScroll {
+				o.LogScrollOffset = maxScroll
+			}
+			return o, nil
+		}
+
+		// Go to top/bottom
+		if key == "g" || key == "home" {
+			o.LogScrollOffset = 0
+			return o, nil
+		}
+		if key == "G" || key == "end" {
+			o.LogScrollOffset = maxScroll
+			return o, nil
+		}
+
+		// Ignore other keys when log viewer is active
 		return o, nil
-	case "r":
-		// Reset cache stats if showing cache stats overlay
-		if o.ShowCacheStats {
+	}
+
+	// Handle cache stats viewer (takes priority in window management mode)
+	if o.ShowCacheStats {
+		// Close cache stats with q, esc, or c
+		if key == "q" || key == "esc" || key == "c" {
+			o.ShowCacheStats = false
+			return o, nil
+		}
+
+		// Reset cache stats with r
+		if key == "r" {
 			app.GetGlobalStyleCache().ResetStats()
 			o.ShowNotification("Cache statistics reset", "info", 2*time.Second)
 			return o, nil
 		}
-		// Otherwise, rename window
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			focusedWindow := o.GetFocusedWindow()
-			if focusedWindow != nil {
-				o.RenamingWindow = true
-				o.RenameBuffer = focusedWindow.CustomName
+
+		// Ignore other keys when cache stats is active
+		return o, nil
+	}
+
+	// Try config-based dispatch first (if registry is available)
+	if o.KeybindRegistry != nil {
+		action := o.KeybindRegistry.GetAction(key)
+		if action != "" {
+			dispatcher := GetDispatcher()
+			if dispatcher.HasAction(action) {
+				return dispatcher.Dispatch(action, msg, o)
 			}
 		}
-		return o, nil
+	}
 
-	// Window navigation
-	case "tab":
-		// Next window
-		o.CycleToNextVisibleWindow()
-		return o, nil
-	case "shift+tab":
-		// Previous window
-		o.CycleToPreviousVisibleWindow()
-		return o, nil
+	// Emergency/safety keybindings that bypass the config system
+	// Only Ctrl+C is kept as emergency quit
+	switch key {
+	case "ctrl+c":
+		// Emergency quit - always works regardless of config
+		o.Cleanup()
+		return o, tea.Quit
 
-	// Window manipulation
-	case "m":
-		// Minimize window
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			focusedWindow := o.GetFocusedWindow()
-			if focusedWindow != nil && !focusedWindow.Minimized {
-				o.MinimizeWindow(o.FocusedWindow)
-			}
-		}
-		return o, nil
-	case "M", "shift+m":
-		// Restore all minimized windows in current workspace
-		for i := range o.Windows {
-			if o.Windows[i].Minimized && o.Windows[i].Workspace == o.CurrentWorkspace {
-				o.RestoreWindow(i)
-			}
-		}
-		// Retile if in tiling mode
-		if o.AutoTiling {
-			o.TileAllWindows()
-		}
-		return o, nil
-
-	// Mode switching
-	case "i", "enter":
-		// Enter terminal/insert mode
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
-			// Clear selection state when entering terminal mode
-			focusedWindow := o.GetFocusedWindow()
-			if focusedWindow != nil {
-				focusedWindow.SelectedText = ""
-				focusedWindow.IsSelecting = false
-				focusedWindow.InvalidateCache()
-			}
-			// Enter terminal mode and start raw input reader
-			return o, o.EnterTerminalMode()
-		}
-		return o, nil
-	case "t":
-		// Toggle tiling mode
-		o.AutoTiling = !o.AutoTiling
-		if o.AutoTiling {
-			o.TileAllWindows()
-			o.ShowNotification("Tiling Mode Enabled [T]", "success", config.NotificationDuration)
-		} else {
-			o.ShowNotification("Tiling Mode Disabled", "info", config.NotificationDuration)
-		}
-		return o, nil
-
-	// Help
-	case "?":
-		// Toggle help
-		o.ShowHelp = !o.ShowHelp
-		if o.ShowHelp {
-			o.HelpScrollOffset = 0 // Reset scroll when opening
-		}
-		return o, nil
-
-	// Selection mode
-	case "s":
-		return handleSelectionModeToggle(msg, o)
-
-	// Copy selected text to clipboard (only in selection mode)
-	case "c":
-		return handleCopyToClipboard(msg, o)
-
-	// Toggle selection mode from window management mode (return to terminal mode when disabling)
-	case "ctrl+s":
-		return handleCtrlSSelectionToggle(msg, o)
-
-	// Paste from clipboard to terminal (both window management and selection mode)
-	case "ctrl+v":
-		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-			focusedWindow := o.GetFocusedWindow()
-			if focusedWindow != nil {
-				// Request clipboard content from Bubbletea
-				return o, tea.ReadClipboard
-			}
-		}
-		return o, nil
-
-	// Clear selection in selection mode
-	case "esc":
-		return handleEscapeKey(msg, o)
-
-	// Log viewer
-	case "ctrl+l":
-		// Toggle log viewer
-		o.ShowLogs = !o.ShowLogs
-		if o.ShowLogs {
-			o.LogScrollOffset = 0 // Reset scroll when opening
-			o.LogInfo("Log viewer opened")
-		}
-		return o, nil
-
-	// Cache statistics viewer
-	case "C": // Capital C to toggle cache stats
-		o.ShowCacheStats = !o.ShowCacheStats
-		if o.ShowCacheStats {
-			o.LogInfo("Cache statistics viewer opened")
-		}
-		return o, nil
-
-	// Arrow keys for scrolling help/logs when they're open, or selection
-	case "up":
-		return handleUpKey(msg, o)
-	case "down":
-		return handleDownKey(msg, o)
-	case "left":
-		return handleLeftKey(msg, o)
-	case "right":
-		return handleRightKey(msg, o)
-
-	// Ctrl+Arrow keys for snapping or swapping
-	case "ctrl+up":
-		return handleCtrlUpKey(msg, o)
-	case "ctrl+down":
-		return handleCtrlDownKey(msg, o)
-	case "ctrl+left":
-		return handleCtrlLeftKey(msg, o)
-	case "ctrl+right":
-		return handleCtrlRightKey(msg, o)
-
-	// Shift+Arrow keys for extending selection
-	case "shift+up":
-		return handleShiftUpKey(msg, o)
-	case "shift+down":
-		return handleShiftDownKey(msg, o)
-	case "shift+left":
-		return handleShiftLeftKey(msg, o)
-	case "shift+right":
-		return handleShiftRightKey(msg, o)
-
-	// Snapping (non-tiling mode only)
-	case "h":
-		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.Snap(o.FocusedWindow, app.SnapLeft)
-		}
-		return o, nil
-	case "l":
-		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.Snap(o.FocusedWindow, app.SnapRight)
-		}
-		return o, nil
-	case "k":
-		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.Snap(o.FocusedWindow, app.SnapFullScreen)
-		}
-		return o, nil
-	case "j":
-		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.Snap(o.FocusedWindow, app.Unsnap)
-		}
-		return o, nil
-	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		return handleNumberKey(msg, o)
-	case "f":
-		// Fullscreen
-		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.Snap(o.FocusedWindow, app.SnapFullScreen)
-		}
-		return o, nil
-	case "u":
-		// Unsnap/restore window position
-		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.Snap(o.FocusedWindow, app.Unsnap)
-		}
-		return o, nil
-	// Shift+1 through Shift+9 to restore minimized windows
-	case "!", "shift+1":
-		o.RestoreMinimizedByIndex(0)
-		return o, nil
-	case "@", "shift+2":
-		o.RestoreMinimizedByIndex(1)
-		return o, nil
-	case "#", "shift+3":
-		o.RestoreMinimizedByIndex(2)
-		return o, nil
-	case "$", "shift+4":
-		o.RestoreMinimizedByIndex(3)
-		return o, nil
-	case "%", "shift+5":
-		o.RestoreMinimizedByIndex(4)
-		return o, nil
-	case "^", "shift+6":
-		o.RestoreMinimizedByIndex(5)
-		return o, nil
-	case "&", "shift+7":
-		o.RestoreMinimizedByIndex(6)
-		return o, nil
-	case "*", "shift+8":
-		o.RestoreMinimizedByIndex(7)
-		return o, nil
-	case "(", "shift+9":
-		o.RestoreMinimizedByIndex(8)
-		return o, nil
-	case "H", "shift+h":
-		// In tiling mode, swap with window to the left
-		if o.AutoTiling && o.FocusedWindow >= 0 {
-			o.SwapWindowLeft()
-		}
-		return o, nil
-	case "L", "shift+l":
-		// In tiling mode, swap with window to the right
-		if o.AutoTiling && o.FocusedWindow >= 0 {
-			o.SwapWindowRight()
-		}
-		return o, nil
-	case "K", "shift+k":
-		// In tiling mode, swap with window above
-		if o.AutoTiling && o.FocusedWindow >= 0 {
-			o.SwapWindowUp()
-		}
-		return o, nil
-	case "J", "shift+j":
-		// In tiling mode, swap with window below
-		if o.AutoTiling && o.FocusedWindow >= 0 {
-			o.SwapWindowDown()
-		}
-		return o, nil
 	default:
+		// All other keybindings are handled by the config system above
+		// Workspace switching (opt+1-9, opt+shift+1-9) is now fully configurable
+		// The KeyNormalizer handles macOS unicode character expansion (¡, ™, £, etc.)
+		// If a key isn't bound in the config, it does nothing (which is correct behavior)
 		return o, nil
 	}
 }
@@ -879,6 +987,39 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 		return o, nil
 	default:
 		// Unknown tiling command, ignore
+		return o, nil
+	}
+}
+
+// HandleDebugPrefixCommand handles debug prefix commands (Ctrl+B, D, ...) in window management mode
+func HandleDebugPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.DebugPrefixActive = false
+	o.PrefixActive = false
+
+	switch msg.String() {
+	case "l":
+		// Toggle log viewer
+		o.ShowLogs = !o.ShowLogs
+		if o.ShowLogs {
+			o.ShowNotification("Log Viewer: ON", "info", config.NotificationDuration)
+		} else {
+			o.ShowNotification("Log Viewer: OFF", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "c":
+		// Toggle cache statistics
+		o.ShowCacheStats = !o.ShowCacheStats
+		if o.ShowCacheStats {
+			o.ShowNotification("Cache Stats: ON", "info", config.NotificationDuration)
+		} else {
+			o.ShowNotification("Cache Stats: OFF", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "esc":
+		// Cancel debug prefix mode
+		return o, nil
+	default:
+		// Unknown debug command, ignore
 		return o, nil
 	}
 }
@@ -1023,79 +1164,21 @@ func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleSelectionModeToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.SelectionMode = !o.SelectionMode
-			if o.SelectionMode {
-				// Reset selection when entering selection mode
-				focusedWindow.IsSelecting = false
-				focusedWindow.SelectedText = ""
-				focusedWindow.SelectionMode = 0 // Default to character mode
-				// Initialize selection cursor at terminal cursor position
-				if focusedWindow.Terminal != nil {
-					cursor := focusedWindow.Terminal.CursorPosition()
-					focusedWindow.SelectionCursor.X = cursor.X
-					focusedWindow.SelectionCursor.Y = cursor.Y
-				}
-				o.ShowNotification("Selection Mode", "info", config.NotificationDuration)
-			} else {
-				// Clear selection when exiting
-				focusedWindow.IsSelecting = false
-				focusedWindow.SelectedText = ""
-				focusedWindow.SelectionMode = 0
-				o.ShowNotification("Selection Mode Disabled", "info", config.NotificationDuration)
-			}
-		}
-	}
-	return o, nil
-}
-
-func handleCopyToClipboard(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.SelectedText != "" {
-			// Copy to clipboard using Bubbletea's native support
-			textToCopy := focusedWindow.SelectedText
-			o.ShowNotification(fmt.Sprintf("Copied %d characters to clipboard", len(textToCopy)), "success", config.NotificationDuration)
-			// Auto-unselect text after successful copy
-			focusedWindow.SelectedText = ""
-			focusedWindow.IsSelecting = false
-			focusedWindow.InvalidateCache()
-			return o, tea.SetClipboard(textToCopy)
-		}
-		o.ShowNotification("No text selected", "warning", config.NotificationDuration)
-		return o, nil
-	}
-	// If not in selection mode, continue normal processing
-	return o, nil
-}
-
-func handleCtrlSSelectionToggle(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.SelectionMode {
-		// Currently in selection mode, disable it and return to terminal mode
-		o.SelectionMode = false
-		o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
-		// Clear selection state when switching to terminal mode
-		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-			focusedWindow.SelectedText = ""
-			focusedWindow.IsSelecting = false
-			focusedWindow.ScrollbackOffset = 0 // Reset scrollback offset
-			focusedWindow.InvalidateCache()
-		}
-		// Enter terminal mode and start raw input reader
-		return o, o.EnterTerminalMode()
-	} else {
-		// Not in selection mode, enable it (already in window management mode)
-		o.SelectionMode = true
-		o.ShowNotification("Selection Mode", "info", config.NotificationDuration)
-	}
-	return o, nil
-}
-
 func handleEscapeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Close help menu if showing
+	// If help is showing and search is active, clear search first
+	if o.ShowHelp && o.HelpSearchMode {
+		if o.HelpSearchQuery != "" {
+			// Clear the search query first
+			o.HelpSearchQuery = ""
+			return o, nil
+		} else {
+			// Search query is empty, exit search mode
+			o.HelpSearchMode = false
+			return o, nil
+		}
+	}
+
+	// Close help menu if showing (and not in search mode)
 	if o.ShowHelp {
 		o.ShowHelp = false
 		return o, nil
@@ -1128,12 +1211,8 @@ func handleEscapeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleUpKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.ShowHelp {
-		if o.HelpScrollOffset > 0 {
-			o.HelpScrollOffset--
-		}
-		return o, nil
-	}
+	// Note: help menu scrolling is handled in HandleTerminalModeKey and HandleWindowManagementModeKey
+	// This function is only for selection mode and logs when NOT in help mode
 	if o.ShowLogs {
 		if o.LogScrollOffset > 0 {
 			o.LogScrollOffset--
@@ -1152,10 +1231,8 @@ func handleUpKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleDownKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.ShowHelp {
-		o.HelpScrollOffset++
-		return o, nil
-	}
+	// Note: help menu scrolling is handled in HandleTerminalModeKey and HandleWindowManagementModeKey
+	// This function is only for selection mode and logs when NOT in help mode
 	if o.ShowLogs {
 		o.LogScrollOffset++
 		return o, nil
@@ -1172,6 +1249,14 @@ func handleDownKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Help menu category navigation
+	if o.ShowHelp && !o.HelpSearchMode {
+		if o.HelpCategory > 0 {
+			o.HelpCategory--
+		}
+		return o, nil
+	}
+
 	// Keyboard-based text selection in selection mode
 	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
@@ -1184,6 +1269,15 @@ func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Help menu category navigation
+	if o.ShowHelp && !o.HelpSearchMode {
+		categories := app.GetHelpCategories(o.KeybindRegistry)
+		if o.HelpCategory < len(categories)-1 {
+			o.HelpCategory++
+		}
+		return o, nil
+	}
+
 	// Keyboard-based text selection in selection mode
 	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()

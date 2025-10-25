@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image/color"
 	"os"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -444,13 +443,15 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		batchHasStyle = false
 		prevCell = nil
 
-		for x := range maxX {
+		for x := 0; x < maxX; {
 			var cell *uv.Cell
 
 			// Render copy mode cursor as highlighted cell (takes priority over everything)
 			if inCopyMode && x == copyModeCursorX && y == copyModeCursorY {
 				// Skip getting cell from scrollback, just render cursor
 				char := " "
+				var cursorCell *uv.Cell
+				charWidth := 1
 
 				// Try to get the actual character at cursor position
 				// Calculate which line to render based on scrollback offset
@@ -461,8 +462,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 						if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
 							scrollbackLine := window.ScrollbackLine(scrollbackIndex)
 							if scrollbackLine != nil && x < len(scrollbackLine) {
-								if scrollbackLine[x].Content != "" {
-									char = scrollbackLine[x].Content
+								cursorCell = &scrollbackLine[x]
+								if cursorCell.Content != "" {
+									char = cursorCell.Content
+								}
+								if cursorCell.Width > 0 {
+									charWidth = cursorCell.Width
 								}
 							}
 						}
@@ -470,17 +475,23 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 						// Show current screen content at the bottom
 						screenY := y - window.ScrollbackOffset
 						if screenY >= 0 && screenY < screen.Height() {
-							cellAtCursor := screen.CellAt(x, screenY)
-							if cellAtCursor != nil && cellAtCursor.Content != "" {
-								char = cellAtCursor.Content
+							cursorCell = screen.CellAt(x, screenY)
+							if cursorCell != nil && cursorCell.Content != "" {
+								char = cursorCell.Content
+							}
+							if cursorCell != nil && cursorCell.Width > 0 {
+								charWidth = cursorCell.Width
 							}
 						}
 					}
 				} else {
 					// Normal mode - just render current screen
-					cellAtCursor := screen.CellAt(x, y)
-					if cellAtCursor != nil && cellAtCursor.Content != "" {
-						char = cellAtCursor.Content
+					cursorCell = screen.CellAt(x, y)
+					if cursorCell != nil && cursorCell.Content != "" {
+						char = cursorCell.Content
+					}
+					if cursorCell != nil && cursorCell.Width > 0 {
+						charWidth = cursorCell.Width
 					}
 				}
 
@@ -510,6 +521,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				prevIsSelected = false
 				prevIsSelectionCursor = false
 
+				// Increment x by character width (handles wide characters correctly)
+				x += charWidth
 				continue
 			}
 
@@ -573,6 +586,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				prevIsCursor = false
 				prevIsSelected = false
 				prevIsSelectionCursor = false
+				// Increment x before continuing (prevent infinite loop)
+				cellWidth := 1
+				if cell != nil && cell.Width > 1 {
+					cellWidth = cell.Width
+				}
+				x += cellWidth
 				continue
 			}
 
@@ -601,6 +620,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					prevIsCursor = false
 					prevIsSelected = false
 					prevIsSelectionCursor = false
+					// Increment x before continuing (prevent infinite loop)
+					cellWidth := 1
+					if cell != nil && cell.Width > 1 {
+						cellWidth = cell.Width
+					}
+					x += cellWidth
 					continue
 				}
 
@@ -626,6 +651,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					prevIsCursor = false
 					prevIsSelected = false
 					prevIsSelectionCursor = false
+					// Increment x before continuing (prevent infinite loop)
+					cellWidth := 1
+					if cell != nil && cell.Width > 1 {
+						cellWidth = cell.Width
+					}
+					x += cellWidth
 					continue
 				}
 			}
@@ -690,6 +721,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			prevIsCursor = isCursorPos
 			prevIsSelected = isSelected
 			prevIsSelectionCursor = isSelectionCursor
+
+			// Increment x by cell width to handle wide characters (e.g., CJK)
+			// Wide characters occupy multiple cells but should only be rendered once
+			cellWidth := 1
+			if cell != nil && cell.Width > 1 {
+				cellWidth = cell.Width
+			}
+			x += cellWidth
 		}
 
 		// Flush remaining batch at end of line
@@ -764,7 +803,7 @@ func isColorSafe(c color.Color) bool {
 	}
 	// Try to call RGBA safely with panic recovery
 	defer func() {
-		recover() // Silently catch any panic from nil pointer dereference
+		_ = recover() // Silently catch any panic from nil pointer dereference
 	}()
 	_, _, _, _ = c.RGBA()
 	return true
@@ -1076,176 +1115,10 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 	// Help overlay - always available regardless of windows
 	if m.ShowHelp {
-		// Styled help content
-		helpTitle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("14")).
-			Bold(true).
-			Render("Help")
+		// Use new table-based help menu (it handles its own sizing and centering)
+		helpContent := m.RenderHelpMenu(m.Width, m.Height)
 
-		keyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("11")).
-			Render
-
-		descStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("7")).
-			Render
-
-		// Calculate available height for help content
-		// Account for border (2), padding (2 vertical), and centering margins
-		maxDisplayHeight := max(m.Height-8, 8)
-
-		// Build ALL help lines with pre-allocated capacity to reduce allocations
-		allHelpLines := make([]string, 0, 50) // Pre-allocate capacity for ~50 help lines
-		allHelpLines = append(allHelpLines, helpTitle)
-		allHelpLines = append(allHelpLines, "")
-
-		// Show prefix status
-		if m.WorkspacePrefixActive {
-			activeStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("10")).
-				Bold(true).
-				Render
-			allHelpLines = append(allHelpLines, activeStyle("WORKSPACE PREFIX ACTIVE - Select workspace (1-9)"))
-			allHelpLines = append(allHelpLines, "")
-		} else if m.MinimizePrefixActive {
-			activeStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("10")).
-				Bold(true).
-				Render
-			allHelpLines = append(allHelpLines, activeStyle("MINIMIZE PREFIX ACTIVE - Restore window (1-9)"))
-			allHelpLines = append(allHelpLines, "")
-		} else if m.TilingPrefixActive {
-			activeStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("10")).
-				Bold(true).
-				Render
-			allHelpLines = append(allHelpLines, activeStyle("WINDOW PREFIX ACTIVE - Terminal management"))
-			allHelpLines = append(allHelpLines, "")
-		} else if m.PrefixActive {
-			activeStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("10")).
-				Bold(true).
-				Render
-			allHelpLines = append(allHelpLines, activeStyle("PREFIX MODE ACTIVE - Enter command"))
-			allHelpLines = append(allHelpLines, "")
-		}
-
-		// Detect OS and use appropriate modifier key name
-		modifierKey := "Alt"
-		if runtime.GOOS == "darwin" {
-			modifierKey = "Opt"
-		}
-
-		// Generate keybinding sections from structured data
-		sections := config.GetKeybindings()
-		for _, section := range sections {
-			// Check condition
-			if section.Condition == "tiling" && !m.AutoTiling {
-				continue
-			}
-			if section.Condition == "!tiling" && m.AutoTiling {
-				continue
-			}
-
-			// Add section title
-			if section.Title != "" {
-				allHelpLines = append(allHelpLines, "")
-				allHelpLines = append(allHelpLines, keyStyle(section.Title))
-			}
-
-			// Add blank line after title if there are bindings
-			if len(section.Bindings) > 0 && section.Title != "" {
-				allHelpLines = append(allHelpLines, "")
-			}
-
-			// Add bindings
-			for _, binding := range section.Bindings {
-				// Replace %s with modifier key if present
-				key := binding.Key
-				if strings.Contains(key, "%s") {
-					key = fmt.Sprintf(key, modifierKey)
-				}
-
-				// Calculate padding to align descriptions
-				padding := 14 - len(key)
-				if padding < 2 {
-					padding = 2
-				}
-				paddingStr := strings.Repeat(" ", padding)
-
-				allHelpLines = append(allHelpLines, keyStyle(key)+paddingStr+descStyle(binding.Description))
-			}
-		}
-
-		// Apply scrolling
-		// Ensure scroll offset is within bounds
-		maxScroll := max(len(allHelpLines)-maxDisplayHeight, 0)
-		if m.HelpScrollOffset > maxScroll {
-			m.HelpScrollOffset = maxScroll
-		}
-		if m.HelpScrollOffset < 0 {
-			m.HelpScrollOffset = 0
-		}
-
-		// Get the visible portion based on scroll
-		var helpLines []string
-		startIdx := m.HelpScrollOffset
-		endIdx := min(startIdx+maxDisplayHeight, len(allHelpLines))
-
-		helpLines = allHelpLines[startIdx:endIdx]
-
-		// Add scroll indicators
-		if m.HelpScrollOffset > 0 {
-			// Can scroll up
-			helpLines[0] = keyStyle("↑") + "              " + descStyle("(scroll up for more)")
-		}
-		if endIdx < len(allHelpLines) {
-			// Can scroll down
-			helpLines[len(helpLines)-1] = keyStyle("↓") + "              " + descStyle("(scroll down for more)")
-		}
-
-		content := lipgloss.JoinVertical(lipgloss.Left, helpLines...)
-
-		// Simple border with subtle color
-		helpStyle := lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("6")).
-			Padding(1, 2)
-
-		renderedHelp := helpStyle.Render(content)
-
-		// Calculate the actual height of the rendered help
-		helpHeight := lipgloss.Height(renderedHelp)
-
-		// If help is too tall, reduce content and re-render
-		if helpHeight > m.Height-2 {
-			// Recalculate with less content
-			maxDisplayHeight = max(m.Height-10, 5)
-
-			// Re-slice the content
-			endIdx := min(m.HelpScrollOffset+maxDisplayHeight, len(allHelpLines))
-			helpLines = allHelpLines[m.HelpScrollOffset:endIdx]
-
-			// Re-add scroll indicators
-			if m.HelpScrollOffset > 0 && len(helpLines) > 0 {
-				helpLines[0] = keyStyle("↑") + "              " + descStyle("(scroll up for more)")
-			}
-			if endIdx < len(allHelpLines) && len(helpLines) > 0 {
-				helpLines[len(helpLines)-1] = keyStyle("↓") + "              " + descStyle("(scroll down for more)")
-			}
-
-			content = lipgloss.JoinVertical(lipgloss.Left, helpLines...)
-			renderedHelp = helpStyle.Render(content)
-		}
-
-		// Use lipgloss.Place for proper centering
-		centeredHelp := lipgloss.Place(
-			m.Width, m.Height,
-			lipgloss.Center, lipgloss.Center,
-			renderedHelp,
-		)
-
-		helpLayer := lipgloss.NewLayer(centeredHelp).
+		helpLayer := lipgloss.NewLayer(helpContent).
 			X(0).Y(0).Z(config.ZIndexHelp).ID("help")
 
 		layers = append(layers, helpLayer)
@@ -1310,7 +1183,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		statsLines = append(statsLines, "")
 		statsLines = append(statsLines, lipgloss.NewStyle().
 			Foreground(lipgloss.Color("8")).
-			Render("Press 'C' to toggle, 'r' to reset stats"))
+			Render("Press 'q'/'esc' to exit, 'r' to reset stats"))
 
 		// Join lines
 		statsContent := strings.Join(statsLines, "\n")
@@ -1341,18 +1214,46 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Bold(true).
 			Render("System Logs")
 
-		// Calculate available height
+		// Calculate available height for content inside the box
+		// Border (2) + Padding top/bottom (2) + some margin for centering (4) = 8
 		maxDisplayHeight := max(m.Height-8, 8)
+		totalLogs := len(m.LogMessages)
+
+		// Calculate how many log lines can fit
+		// Fixed overhead: title (1) + blank after title (1) + blank before hint (1) + hint (1) = 4
+		fixedLines := 4
+
+		// If scrollable, add scroll indicator: blank (1) + indicator (1) = 2
+		if totalLogs > maxDisplayHeight-fixedLines {
+			fixedLines = 6 // Add scroll indicator lines
+		}
+
+		logsPerPage := maxDisplayHeight - fixedLines
+		if logsPerPage < 1 {
+			logsPerPage = 1 // Ensure at least 1 log is visible
+		}
+
+		// Clamp scroll offset to valid range
+		maxScroll := totalLogs - logsPerPage
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		if m.LogScrollOffset > maxScroll {
+			m.LogScrollOffset = maxScroll
+		}
+		if m.LogScrollOffset < 0 {
+			m.LogScrollOffset = 0
+		}
 
 		var logLines []string
 		logLines = append(logLines, logTitle)
 		logLines = append(logLines, "")
 
 		// Add log messages with color coding
-		startIdx := max(m.LogScrollOffset, 0)
+		startIdx := m.LogScrollOffset
 
 		displayCount := 0
-		for i := startIdx; i < len(m.LogMessages) && displayCount < maxDisplayHeight-3; i++ {
+		for i := startIdx; i < len(m.LogMessages) && displayCount < logsPerPage; i++ {
 			msg := m.LogMessages[i]
 
 			// Color code by level
@@ -1377,7 +1278,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 
 		// Add scroll indicator if needed
-		if len(m.LogMessages) > maxDisplayHeight-3 {
+		if maxScroll > 0 {
 			scrollInfo := fmt.Sprintf("Showing %d-%d of %d logs (↑/↓ to scroll)",
 				startIdx+1, startIdx+displayCount, len(m.LogMessages))
 			logLines = append(logLines, "")
@@ -1385,6 +1286,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				Foreground(lipgloss.Color("8")).
 				Render(scrollInfo))
 		}
+
+		// Add navigation hint
+		logLines = append(logLines, "")
+		logLines = append(logLines, lipgloss.NewStyle().
+			Foreground(lipgloss.Color("8")).
+			Render("Press 'q'/'esc' to exit, j/k or ↑/↓ to scroll"))
 
 		// Join and style
 		logContent := strings.Join(logLines, "\n")
@@ -1443,6 +1350,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		} else if m.TilingPrefixActive {
 			title = "Window Commands:"
 			bindings = config.GetPrefixKeybindings("window")
+		} else if m.DebugPrefixActive {
+			title = "Debug Commands:"
+			bindings = config.GetPrefixKeybindings("debug")
 		} else {
 			title = "Prefix Commands:"
 			bindings = config.GetPrefixKeybindings("")
@@ -1661,10 +1571,10 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		MarginRight(2)
 
 	// Get mode text
-	modeText := "[W]"
+	modeText := "[W]" // Window management mode
 	focusedWindow := m.GetFocusedWindow()
 	if m.Mode == TerminalMode {
-		modeText = "[T]"
+		modeText = "[I]" // Insert/Terminal mode (like vim)
 		// Add copy mode indicator
 		if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
 			modeText = "[COPY]"
@@ -1674,7 +1584,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 	}
 	// Add tiling indicator
 	if m.AutoTiling && (focusedWindow == nil || focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active) {
-		modeText += " [T]" // Tiling mode icon (don't show in copy mode)
+		modeText += " [TILE]" // Tiling mode icon (don't show in copy mode)
 	}
 
 	// Cache workspace styles for performance (optimization #8)
@@ -1837,33 +1747,60 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		rightWidth = 32 // CPU graph (~19 chars) + space + RAM (~11 chars) = ~31 chars
 	}
 
-	// Left side needs more space for workspace indicators
-	leftWidth := 30 // Enough for mode + workspace indicators
-
-	// Calculate center area
+	// Calculate actual widths to prevent overflow
+	actualLeftWidth := lipgloss.Width(leftInfo)
 	centerWidth := lipgloss.Width(dockItemsStr)
-	availableSpace := m.Width - leftWidth - rightWidth - centerWidth
 
-	// Create spacers to center the dock items
+	// Ensure we have space for all components on one line
+	minRequiredWidth := actualLeftWidth + centerWidth + rightWidth + 4 // +4 for minimal spacing
+
+	// If content is too wide, truncate dock items to prevent wrapping
+	if minRequiredWidth > m.Width {
+		// Calculate how many dock items we can show
+		maxDockWidth := m.Width - actualLeftWidth - rightWidth - 4
+		if maxDockWidth < 0 {
+			maxDockWidth = 0
+		}
+
+		// Truncate dockItemsStr if needed
+		if lipgloss.Width(dockItemsStr) > maxDockWidth {
+			// Show as many complete items as possible
+			truncated := ""
+			for i := range dockItemsStr {
+				if lipgloss.Width(truncated+string(dockItemsStr[i])) > maxDockWidth-3 { // -3 for "..."
+					truncated += "..."
+					break
+				}
+				truncated += string(dockItemsStr[i])
+			}
+			dockItemsStr = truncated
+			centerWidth = lipgloss.Width(dockItemsStr)
+		}
+	}
+
+	// Use actual left width (no padding to fixed width)
+	leftWidth := actualLeftWidth
+
+	// Calculate spacing to center dock items
+	availableSpace := m.Width - leftWidth - rightWidth - centerWidth
 	leftSpacer := availableSpace / 2
 	rightSpacer := availableSpace - leftSpacer
 
 	// Ensure non-negative spacers
 	if leftSpacer < 0 {
 		leftSpacer = 0
+		rightSpacer = 0
 	}
 	if rightSpacer < 0 {
 		rightSpacer = 0
 	}
 
 	// Build the complete dock bar on a single line
-	// Pad left and right info to fixed widths
-	paddedLeftInfo := lipgloss.NewStyle().Width(leftWidth).Align(lipgloss.Left).Render(leftInfo)
 	paddedRightInfo := lipgloss.NewStyle().Width(rightWidth).Align(lipgloss.Right).Render(rightInfo)
 
 	dockBar := lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		paddedLeftInfo,
+		leftInfo,
 		lipgloss.NewStyle().Width(leftSpacer).Render(""),
 		lipgloss.NewStyle().Render(dockItemsStr),
 		lipgloss.NewStyle().Width(rightSpacer).Render(""),

@@ -31,11 +31,34 @@ func MoveDown(cm *terminal.CopyMode, window *terminal.Window) {
 // Internal movement functions
 
 func moveLeft(cm *terminal.CopyMode, window *terminal.Window) {
-	cm.CursorX = max(0, cm.CursorX-1)
+	if cm.CursorX > 0 {
+		cm.CursorX--
+		// Skip continuation cells (Width=0) of wide characters
+		// Move left until we find a cell with Width > 0
+		for cm.CursorX > 0 {
+			cell := getCellAtCursor(cm, window)
+			if cell == nil || cell.Width > 0 {
+				break
+			}
+			cm.CursorX--
+		}
+	}
 }
 
 func moveRight(cm *terminal.CopyMode, window *terminal.Window) {
-	cm.CursorX = min(window.Width-3, cm.CursorX+1)
+	maxX := window.Width - 3
+	if cm.CursorX < maxX {
+		cm.CursorX++
+		// Skip continuation cells (Width=0) of wide characters
+		// Move right until we find a cell with Width > 0
+		for cm.CursorX < maxX {
+			cell := getCellAtCursor(cm, window)
+			if cell == nil || cell.Width > 0 {
+				break
+			}
+			cm.CursorX++
+		}
+	}
 }
 
 // moveUp moves cursor up (k key) - keeps cursor in middle of viewport when possible

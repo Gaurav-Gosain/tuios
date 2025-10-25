@@ -25,43 +25,43 @@ import (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
-	Title              string
-	CustomName         string // User-defined window name
-	Width              int
-	Height             int
-	X                  int
-	Y                  int
-	Z                  int
-	ID                 string
-	Terminal           *vt.Emulator
-	Pty                pty.Pty
-	Cmd                *pty.Cmd
-	LastUpdate         time.Time
-	Dirty              bool
-	ContentDirty       bool
-	PositionDirty      bool
-	CachedContent      string
-	CachedLayer        *lipgloss.Layer
-	LastTerminalSeq    int
-	IsBeingManipulated bool               // True when being dragged or resized
-	UpdateCounter      int                // Counter for throttling background updates
-	cancelFunc         context.CancelFunc // For graceful goroutine cleanup
-	ioMu               sync.RWMutex       // Protect I/O operations
-	Minimized              bool      // True when window is minimized to dock
-	Minimizing             bool      // True when window is being minimized (animation playing)
-	MinimizeHighlightUntil time.Time // Highlight dock tab until this time
-	MinimizeOrder          int64     // Unix nano timestamp when minimized (for dock ordering)
-	PreMinimizeX           int       // Store position before minimizing
-	PreMinimizeY           int       // Store position before minimizing
-	PreMinimizeWidth       int       // Store size before minimizing
-	PreMinimizeHeight      int       // Store size before minimizing
-	Workspace              int       // Workspace this window belongs to
-	SelectionStart     struct{ X, Y int } // Selection start position
-	SelectionEnd       struct{ X, Y int } // Selection end position
-	IsSelecting        bool               // True when selecting text
-	SelectedText       string             // Currently selected text
-	SelectionCursor    struct{ X, Y int } // Current cursor position in selection mode
-	ProcessExited      bool               // True when process has exited
+	Title                  string
+	CustomName             string // User-defined window name
+	Width                  int
+	Height                 int
+	X                      int
+	Y                      int
+	Z                      int
+	ID                     string
+	Terminal               *vt.Emulator
+	Pty                    pty.Pty
+	Cmd                    *pty.Cmd
+	LastUpdate             time.Time
+	Dirty                  bool
+	ContentDirty           bool
+	PositionDirty          bool
+	CachedContent          string
+	CachedLayer            *lipgloss.Layer
+	LastTerminalSeq        int
+	IsBeingManipulated     bool               // True when being dragged or resized
+	UpdateCounter          int                // Counter for throttling background updates
+	cancelFunc             context.CancelFunc // For graceful goroutine cleanup
+	ioMu                   sync.RWMutex       // Protect I/O operations
+	Minimized              bool               // True when window is minimized to dock
+	Minimizing             bool               // True when window is being minimized (animation playing)
+	MinimizeHighlightUntil time.Time          // Highlight dock tab until this time
+	MinimizeOrder          int64              // Unix nano timestamp when minimized (for dock ordering)
+	PreMinimizeX           int                // Store position before minimizing
+	PreMinimizeY           int                // Store position before minimizing
+	PreMinimizeWidth       int                // Store size before minimizing
+	PreMinimizeHeight      int                // Store size before minimizing
+	Workspace              int                // Workspace this window belongs to
+	SelectionStart         struct{ X, Y int } // Selection start position
+	SelectionEnd           struct{ X, Y int } // Selection end position
+	IsSelecting            bool               // True when selecting text
+	SelectedText           string             // Currently selected text
+	SelectionCursor        struct{ X, Y int } // Current cursor position in selection mode
+	ProcessExited          bool               // True when process has exited
 	// Enhanced text selection support
 	SelectionMode int // 0 = character, 1 = word, 2 = line
 	LastClickTime time.Time
@@ -253,7 +253,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		}()
 
 		// Wait for process to exit
-		ptyCmd.Wait()
+		_ = ptyCmd.Wait() // Ignore error as we're just monitoring exit
 
 		// Mark process as exited
 		window.ProcessExited = true
@@ -381,7 +381,7 @@ func (w *Window) handleIOOperations() {
 					// Write to terminal with mutex protection
 					w.ioMu.RLock()
 					if w.Terminal != nil {
-						w.Terminal.Write(buf[:n])
+						_, _ = w.Terminal.Write(buf[:n]) // Ignore write errors in read loop
 					}
 					w.ioMu.RUnlock()
 				}
@@ -533,9 +533,9 @@ func (w *Window) Close() {
 			}()
 
 			// Best effort kill
-			w.Cmd.Process.Kill()
+			_ = w.Cmd.Process.Kill() // Best effort, ignore error
 			// Wait for process to exit
-			w.Cmd.Wait()
+			_ = w.Cmd.Wait() // Best effort, ignore error
 			done <- true
 		}()
 

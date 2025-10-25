@@ -26,22 +26,22 @@ func getCPUStats() *CPUStats {
 			}
 
 			stats := &CPUStats{}
-			stats.user, _ = strconv.ParseUint(fields[1], 10, 64)
-			stats.nice, _ = strconv.ParseUint(fields[2], 10, 64)
-			stats.system, _ = strconv.ParseUint(fields[3], 10, 64)
-			stats.idle, _ = strconv.ParseUint(fields[4], 10, 64)
+			stats.User, _ = strconv.ParseUint(fields[1], 10, 64)
+			stats.Nice, _ = strconv.ParseUint(fields[2], 10, 64)
+			stats.System, _ = strconv.ParseUint(fields[3], 10, 64)
+			stats.Idle, _ = strconv.ParseUint(fields[4], 10, 64)
 
 			if len(fields) > 5 {
-				stats.iowait, _ = strconv.ParseUint(fields[5], 10, 64)
+				stats.Iowait, _ = strconv.ParseUint(fields[5], 10, 64)
 			}
 			if len(fields) > 6 {
-				stats.irq, _ = strconv.ParseUint(fields[6], 10, 64)
+				stats.Irq, _ = strconv.ParseUint(fields[6], 10, 64)
 			}
 			if len(fields) > 7 {
-				stats.softirq, _ = strconv.ParseUint(fields[7], 10, 64)
+				stats.Softirq, _ = strconv.ParseUint(fields[7], 10, 64)
 			}
 			if len(fields) > 8 {
-				stats.steal, _ = strconv.ParseUint(fields[8], 10, 64)
+				stats.Steal, _ = strconv.ParseUint(fields[8], 10, 64)
 			}
 
 			return stats
@@ -57,25 +57,25 @@ func (c *CPUMonitor) readCPUUsage() (float64, error) {
 		return 0, nil
 	}
 
-	if c.lastCPUStats == nil {
-		c.lastCPUStats = stats
+	if c.LastCPUStats == nil {
+		c.LastCPUStats = stats
 		return 0, nil
 	}
 
 	// Calculate deltas
-	totalDelta := float64((stats.user + stats.nice + stats.system + stats.idle + stats.iowait +
-		stats.irq + stats.softirq + stats.steal) -
-		(c.lastCPUStats.user + c.lastCPUStats.nice + c.lastCPUStats.system + c.lastCPUStats.idle +
-			c.lastCPUStats.iowait + c.lastCPUStats.irq + c.lastCPUStats.softirq + c.lastCPUStats.steal))
+	totalDelta := float64((stats.User + stats.Nice + stats.System + stats.Idle + stats.Iowait +
+		stats.Irq + stats.Softirq + stats.Steal) -
+		(c.LastCPUStats.User + c.LastCPUStats.Nice + c.LastCPUStats.System + c.LastCPUStats.Idle +
+			c.LastCPUStats.Iowait + c.LastCPUStats.Irq + c.LastCPUStats.Softirq + c.LastCPUStats.Steal))
 
-	idleDelta := float64(stats.idle - c.lastCPUStats.idle)
+	idleDelta := float64(stats.Idle - c.LastCPUStats.Idle)
 
 	if totalDelta == 0 {
 		return 0, nil
 	}
 
 	usage := 100.0 * (1.0 - idleDelta/totalDelta)
-	c.lastCPUStats = stats
+	c.LastCPUStats = stats
 
 	if usage < 0 {
 		return 0, nil

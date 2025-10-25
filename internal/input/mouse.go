@@ -28,8 +28,8 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			clickedWindow := o.Windows[clickedWindowIndex]
 			if clickedWindow.IsAltScreen && clickedWindow.Terminal != nil {
 				// Convert to terminal-relative coordinates (0-based)
-				termX := X - clickedWindow.X - 1
-				termY := Y - clickedWindow.Y
+				termX := X - clickedWindow.X - 1 // Account for left border
+				termY := Y - clickedWindow.Y - 1 // Account for top border
 				// Check if click is within terminal content area
 				if termX >= 0 && termY >= 0 && termX < clickedWindow.Width-2 && termY < clickedWindow.Height-2 {
 					// Focus the window first so subsequent events work
@@ -129,7 +129,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if mouse.Button == tea.MouseLeft {
 			// Check if clicking in terminal content area (not on title bar or buttons)
 			terminalX := X - clickedWindow.X - 1
-			terminalY := Y - clickedWindow.Y      // Fixed: Y coordinate relative to window
+			terminalY := Y - clickedWindow.Y // Fixed: Y coordinate relative to window
 			if terminalX >= 0 && terminalY >= 0 && terminalX < clickedWindow.Width-2 && terminalY < clickedWindow.Height-2 {
 				// Start drag for visual selection
 				HandleCopyModeMouseDrag(clickedWindow.CopyMode, clickedWindow, X, Y)
@@ -281,8 +281,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.IsAltScreen && focusedWindow.Terminal != nil {
 			// Convert to terminal-relative coordinates (0-based)
-			termX := mouse.X - focusedWindow.X - 1
-			termY := mouse.Y - focusedWindow.Y
+			termX := mouse.X - focusedWindow.X - 1 // Account for left border
+			termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
 			// Check if motion is within terminal content area
 			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
 				// Create adjusted mouse event with terminal-relative coordinates
@@ -437,8 +437,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if focusedWindow != nil && focusedWindow.IsAltScreen && focusedWindow.Terminal != nil {
 			mouse := msg.Mouse()
 			// Convert to terminal-relative coordinates (0-based)
-			termX := mouse.X - focusedWindow.X - 1
-			termY := mouse.Y - focusedWindow.Y
+			termX := mouse.X - focusedWindow.X - 1 // Account for left border
+			termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
 			// Check if release is within terminal content area
 			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
 				// Create adjusted mouse event with terminal-relative coordinates
@@ -548,23 +548,50 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ShowHelp {
 		switch msg.Button {
 		case tea.MouseWheelUp:
+			// Scroll by 2 rows at a time (1 entry + 1 gap row)
 			if o.HelpScrollOffset > 0 {
-				o.HelpScrollOffset--
+				o.HelpScrollOffset -= 2
+				if o.HelpScrollOffset < 0 {
+					o.HelpScrollOffset = 0
+				}
 			}
 		case tea.MouseWheelDown:
-			o.HelpScrollOffset++
+			// Scroll by 2 rows at a time (1 entry + 1 gap row)
+			o.HelpScrollOffset += 2
 		}
 		return o, nil
 	}
 
 	if o.ShowLogs {
+		// Calculate scroll bounds (same logic as keyboard handler)
+		maxDisplayHeight := max(o.Height-8, 8)
+		totalLogs := len(o.LogMessages)
+
+		// Fixed overhead: title (1) + blank after title (1) + blank before hint (1) + hint (1) = 4
+		fixedLines := 4
+		// If scrollable, add scroll indicator: blank (1) + indicator (1) = 2
+		if totalLogs > maxDisplayHeight-fixedLines {
+			fixedLines = 6
+		}
+		logsPerPage := maxDisplayHeight - fixedLines
+		if logsPerPage < 1 {
+			logsPerPage = 1
+		}
+
+		maxScroll := totalLogs - logsPerPage
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+
 		switch msg.Button {
 		case tea.MouseWheelUp:
 			if o.LogScrollOffset > 0 {
 				o.LogScrollOffset--
 			}
 		case tea.MouseWheelDown:
-			o.LogScrollOffset++
+			if o.LogScrollOffset < maxScroll {
+				o.LogScrollOffset++
+			}
 		}
 		return o, nil
 	}
@@ -576,8 +603,8 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if focusedWindow != nil && focusedWindow.IsAltScreen && focusedWindow.Terminal != nil {
 			mouse := msg.Mouse()
 			// Convert to terminal-relative coordinates (0-based)
-			termX := mouse.X - focusedWindow.X - 1
-			termY := mouse.Y - focusedWindow.Y
+			termX := mouse.X - focusedWindow.X - 1 // Account for left border
+			termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
 			// Check if wheel is within terminal content area
 			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
 				// Create adjusted mouse event with terminal-relative coordinates

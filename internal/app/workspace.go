@@ -9,12 +9,17 @@ import (
 // SwitchToWorkspace switches to the specified workspace.
 func (m *OS) SwitchToWorkspace(workspace int) {
 	if workspace < 1 || workspace > m.NumWorkspaces {
+		m.LogWarn("Cannot switch to workspace %d: out of range (1-%d)", workspace, m.NumWorkspaces)
 		return
 	}
 
 	if workspace == m.CurrentWorkspace {
 		return
 	}
+
+	oldWorkspace := m.CurrentWorkspace
+	windowsInNew := m.GetWorkspaceWindowCount(workspace)
+	m.LogInfo("Switching workspace: %d → %d (%d windows)", oldWorkspace, workspace, windowsInNew)
 
 	// Save current workspace focus
 	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
@@ -33,6 +38,7 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 		if savedFocus >= 0 && savedFocus < len(m.Windows) {
 			if m.Windows[savedFocus].Workspace == workspace && !m.Windows[savedFocus].Minimized {
 				m.FocusWindow(savedFocus)
+				m.LogInfo("Restored focus to saved window (index: %d)", savedFocus)
 				focusedSet = true
 			}
 		}
@@ -43,6 +49,7 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 		for i, w := range m.Windows {
 			if w.Workspace == workspace && !w.Minimized && !w.Minimizing {
 				m.FocusWindow(i)
+				m.LogInfo("Focused first visible window (index: %d)", i)
 				focusedSet = true
 				break
 			}
@@ -52,14 +59,17 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	// If no window to focus in new workspace, set focus to -1
 	if !focusedSet {
 		m.FocusedWindow = -1
+		m.LogInfo("No visible windows in workspace %d", workspace)
 		// Exit terminal mode when switching to empty workspace
 		if m.Mode == TerminalMode {
 			m.Mode = WindowManagementMode
+			m.LogInfo("Switched to window management mode (empty workspace)")
 		}
 	}
 
 	// Retile if in tiling mode
 	if m.AutoTiling {
+		m.LogInfo("Auto-tiling workspace %d", workspace)
 		m.TileVisibleWorkspaceWindows()
 	}
 
@@ -74,9 +84,11 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 // MoveWindowToWorkspace moves a window to the specified workspace without changing focus.
 func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 	if windowIndex < 0 || windowIndex >= len(m.Windows) {
+		m.LogWarn("Cannot move window: invalid index %d", windowIndex)
 		return
 	}
 	if workspace < 1 || workspace > m.NumWorkspaces {
+		m.LogWarn("Cannot move window: workspace %d out of range (1-%d)", workspace, m.NumWorkspaces)
 		return
 	}
 
@@ -87,17 +99,21 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 		return // Already in target workspace
 	}
 
+	m.LogInfo("Moving window %s: workspace %d → %d", window.Title, oldWorkspace, workspace)
+
 	// Move window to new workspace
 	window.Workspace = workspace
 	window.MarkPositionDirty()
 
 	// If we moved the focused window, find next window to focus in current workspace
 	if windowIndex == m.FocusedWindow {
+		m.LogInfo("Moved focused window, finding next in workspace %d", m.CurrentWorkspace)
 		m.FocusNextVisibleWindowInWorkspace()
 	}
 
 	// Retile both workspaces if in tiling mode
 	if m.AutoTiling {
+		m.LogInfo("Auto-tiling after window move")
 		m.TileVisibleWorkspaceWindows()
 	}
 }

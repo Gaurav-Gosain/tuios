@@ -1,5 +1,7 @@
 package config
 
+import "fmt"
+
 // Keybinding represents a single keybinding entry
 type Keybinding struct {
 	Key         string
@@ -39,6 +41,12 @@ func GetPrefixKeybindings(prefixType string) []Keybinding {
 			{"t", "Toggle tiling mode"},
 			{"Esc", "Cancel"},
 		}
+	case "debug":
+		return []Keybinding{
+			{"l", "Toggle log viewer"},
+			{"c", "Toggle cache statistics"},
+			{"Esc", "Cancel"},
+		}
 	default: // general prefix
 		return []Keybinding{
 			{"c", "Create window"},
@@ -50,18 +58,95 @@ func GetPrefixKeybindings(prefixType string) []Keybinding {
 			{"w", "Workspace commands..."},
 			{"m", "Minimize commands..."},
 			{"t", "Window commands..."},
+			{"D", "Debug commands..."},
 			{"d/Esc", "Detach (exit terminal)"},
-			{"s", "Selection mode"},
 			{"[", "Scrollback mode"},
-			{"q", "Quit application"},
 			{"?", "Toggle help"},
+			{"q", "Quit application"},
 		}
 	}
 }
 
 // GetKeybindings returns all keybinding sections for the help menu
-func GetKeybindings() []KeybindingSection {
-	return []KeybindingSection{
+// If registry is provided, it generates bindings dynamically from user config
+// If registry is nil, it falls back to hard-coded defaults
+func GetKeybindings(registry *KeybindRegistry) []KeybindingSection {
+	// If no registry provided, use static defaults
+	if registry == nil {
+		return getDefaultKeybindings()
+	}
+
+	// Generate dynamic help from config
+	sections := []KeybindingSection{}
+
+	// Window Management section
+	windowMgmt := KeybindingSection{
+		Title:    "WINDOW MANAGEMENT",
+		Bindings: []Keybinding{},
+	}
+	addBinding(&windowMgmt, registry, "new_window", "New window")
+	addBinding(&windowMgmt, registry, "close_window", "Close window")
+	addBinding(&windowMgmt, registry, "rename_window", "Rename window")
+	addBinding(&windowMgmt, registry, "minimize_window", "Minimize window")
+	addBinding(&windowMgmt, registry, "restore_all", "Restore all")
+	addBinding(&windowMgmt, registry, "next_window", "Next window")
+	addBinding(&windowMgmt, registry, "prev_window", "Previous window")
+	if len(windowMgmt.Bindings) > 0 {
+		sections = append(sections, windowMgmt)
+	}
+
+	// Workspaces section
+	workspaces := KeybindingSection{
+		Title:    "WORKSPACES",
+		Bindings: []Keybinding{},
+	}
+	// Show all workspace switches (1-9)
+	for i := 1; i <= 9; i++ {
+		actionSwitch := fmt.Sprintf("switch_workspace_%d", i)
+		descSwitch := fmt.Sprintf("Switch to workspace %d", i)
+		addBinding(&workspaces, registry, actionSwitch, descSwitch)
+	}
+	// Show all move and follow (1-9)
+	for i := 1; i <= 9; i++ {
+		actionMove := fmt.Sprintf("move_and_follow_%d", i)
+		descMove := fmt.Sprintf("Move to workspace %d and follow", i)
+		addBinding(&workspaces, registry, actionMove, descMove)
+	}
+	if len(workspaces.Bindings) > 0 {
+		sections = append(sections, workspaces)
+	}
+
+	// Modes section
+	modes := KeybindingSection{
+		Title:    "MODES",
+		Bindings: []Keybinding{},
+	}
+	addBinding(&modes, registry, "enter_terminal_mode", "Insert mode")
+	addBinding(&modes, registry, "toggle_tiling", "Toggle tiling")
+	addBinding(&modes, registry, "toggle_help", "Toggle help")
+	if len(modes.Bindings) > 0 {
+		sections = append(sections, modes)
+	}
+
+	// Return the rest as static for now (tiling, selection, etc.)
+	sections = append(sections, getStaticHelpSections()...)
+	return sections
+}
+
+// addBinding adds a keybinding to a section if the action has keys configured
+func addBinding(section *KeybindingSection, registry *KeybindRegistry, action, description string) {
+	keys := registry.GetKeysForDisplay(action)
+	if keys != "" {
+		section.Bindings = append(section.Bindings, Keybinding{
+			Key:         keys,
+			Description: description,
+		})
+	}
+}
+
+// getDefaultKeybindings returns the original hard-coded keybindings (used as fallback)
+func getDefaultKeybindings() []KeybindingSection {
+	sections := []KeybindingSection{
 		{
 			Title: "WINDOW MANAGEMENT",
 			Bindings: []Keybinding{
@@ -92,6 +177,15 @@ func GetKeybindings() []KeybindingSection {
 				{"?", "Toggle help"},
 			},
 		},
+	}
+	sections = append(sections, getStaticHelpSections()...)
+	return sections
+}
+
+// getStaticHelpSections returns help sections that don't need dynamic binding info
+// (mouse actions, special modes, etc.)
+func getStaticHelpSections() []KeybindingSection {
+	return []KeybindingSection{
 		{
 			Title:     "TILING:",
 			Condition: "tiling",
@@ -108,22 +202,6 @@ func GetKeybindings() []KeybindingSection {
 				{"1-4", "Snap to corners"},
 				{"f", "Fullscreen"},
 				{"u", "Unsnap"},
-			},
-		},
-		{
-			Title: "TEXT SELECTION:",
-			Bindings: []Keybinding{
-				{"s", "Toggle selection mode"},
-				{"Ctrl+S", "Toggle selection (from terminal)"},
-				{"Single click", "Character selection"},
-				{"Double click", "Word selection"},
-				{"Triple click", "Line selection"},
-				{"Mouse drag", "Select text (mouse)"},
-				{"Arrow keys", "Move cursor"},
-				{"Shift+Arrow", "Extend selection"},
-				{"c", "Copy selected text"},
-				{"Ctrl+V", "Paste from clipboard"},
-				{"Esc", "Clear selection"},
 			},
 		},
 		{
@@ -165,7 +243,6 @@ func GetKeybindings() []KeybindingSection {
 				{"m", "Minimize commands"},
 				{"t", "Window commands"},
 				{"d/Esc", "Detach from terminal"},
-				{"s", "Toggle selection mode"},
 				{"[", "Enter scrollback mode"},
 				{"q", "Quit application"},
 				{"Ctrl+B", "Send literal Ctrl+B"},

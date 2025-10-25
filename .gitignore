@@ -5,3 +5,7 @@ dist/
 !tuios/
 .direnv/
 result
+*.backup
+*.prof
+cpu.prof
+mem.prof
