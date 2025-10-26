@@ -443,6 +443,51 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		batchHasStyle = false
 		prevCell = nil
 
+		// Calculate line end position once per line for visual selection highlighting
+		var lineEndX int = maxX - 1
+		if inVisualMode && visualSelection[y] != nil {
+			// Find the last non-empty character on this line by checking cells directly
+			// We need to determine which line we're rendering
+			if inScrollbackMode {
+				if y < window.ScrollbackOffset {
+					// Scrollback line
+					scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
+					if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
+						lineCells := window.ScrollbackLine(scrollbackIndex)
+						if lineCells != nil {
+							for i := len(lineCells) - 1; i >= 0; i-- {
+								if lineCells[i].Width > 0 && lineCells[i].Content != "" && lineCells[i].Content != " " {
+									lineEndX = i
+									break
+								}
+							}
+						}
+					}
+				} else {
+					// Screen line
+					screenY := y - window.ScrollbackOffset
+					if screenY >= 0 && screenY < screen.Height() {
+						for i := maxX - 1; i >= 0; i-- {
+							cell := screen.CellAt(i, screenY)
+							if cell != nil && cell.Width > 0 && cell.Content != "" && cell.Content != " " {
+								lineEndX = i
+								break
+							}
+						}
+					}
+				}
+			} else {
+				// Normal mode - just current screen
+				for i := maxX - 1; i >= 0; i-- {
+					cell := screen.CellAt(i, y)
+					if cell != nil && cell.Width > 0 && cell.Content != "" && cell.Content != " " {
+						lineEndX = i
+						break
+					}
+				}
+			}
+		}
+
 		for x := 0; x < maxX; {
 			var cell *uv.Cell
 
@@ -564,7 +609,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// COPY MODE RENDERING (priority order: selection < search < cursor)
 
 			// Check visual selection highlighting (lowest priority)
-			if inVisualMode && visualSelection[y] != nil && visualSelection[y][x] {
+			// Only highlight if we're at or before the last non-empty character (no trailing empty cells)
+			if inVisualMode && visualSelection[y] != nil && visualSelection[y][x] && x <= lineEndX {
 				selStyle := lipgloss.NewStyle().
 					Background(lipgloss.Color("#5F5FAF")). // Purple-ish blue
 					Foreground(lipgloss.Color("#FFFFFF")).

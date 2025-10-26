@@ -83,22 +83,28 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 
 	// Single line
 	if start.Y == end.Y {
+		// Clamp selection to line content bounds to avoid copying empty cells
+		_, lineEndX := getLineContentBounds(cm, window, start.Y)
+		clampedEndX := min(end.X, lineEndX)
+
 		if start.Y < scrollbackLen {
 			line := window.ScrollbackLine(start.Y)
-			for x := start.X; x <= end.X && line != nil && x < len(line); x++ {
-				if line[x].Content != "" {
+			for x := start.X; x <= clampedEndX && line != nil && x < len(line); x++ {
+				if line[x].Content != "" && line[x].Content != " " {
 					text.WriteString(line[x].Content)
-				} else {
+				} else if line[x].Content == " " {
+					// Preserve internal spaces but not empty cells
 					text.WriteRune(' ')
 				}
 			}
 		} else {
 			screenY := start.Y - scrollbackLen
-			for x := start.X; x <= end.X && x < window.Width; x++ {
+			for x := start.X; x <= clampedEndX && x < window.Width; x++ {
 				cell := window.Terminal.CellAt(x, screenY)
-				if cell != nil && cell.Content != "" {
+				if cell != nil && cell.Content != "" && cell.Content != " " {
 					text.WriteString(cell.Content)
-				} else {
+				} else if cell != nil && cell.Content == " " {
+					// Preserve internal spaces but not empty cells
 					text.WriteRune(' ')
 				}
 			}
@@ -115,6 +121,20 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 		}
 		if y == end.Y {
 			endX = end.X
+		}
+
+		// Clamp to line content bounds to avoid copying empty cells at end
+		lineStartX, lineEndX := getLineContentBounds(cm, window, y)
+		if y == start.Y {
+			// First line: keep user's start but clamp end to content
+			endX = min(endX, lineEndX)
+		} else if y == end.Y {
+			// Last line: keep user's end but clamp to content
+			endX = min(endX, lineEndX)
+		} else {
+			// Middle lines: use full content bounds
+			startX = lineStartX
+			endX = lineEndX
 		}
 
 		// Extract line content
@@ -137,9 +157,10 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 		// Append line content
 		if lineCells != nil {
 			for x := startX; x <= endX && x < len(lineCells); x++ {
-				if lineCells[x].Content != "" {
+				if lineCells[x].Content != "" && lineCells[x].Content != " " {
 					text.WriteString(lineCells[x].Content)
-				} else {
+				} else if lineCells[x].Content == " " {
+					// Preserve internal spaces but not empty cells
 					text.WriteRune(' ')
 				}
 			}
