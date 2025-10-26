@@ -80,8 +80,8 @@ jobs:
         run: |
           HASH="${{ steps.hash.outputs.hash }}"
 
-          # Update the vendor hash
-          sed -i "s/vendorHash = pkgs.lib.fakeHash;/vendorHash = \"${HASH}\";/" tuios.nix
+          # Update the vendor hash (use | as delimiter to avoid issues with / in hash)
+          sed -i "s|vendorHash = pkgs.lib.fakeHash;|vendorHash = \"${HASH}\";|" tuios.nix
 
           echo "Updated vendorHash to ${HASH}"
 
