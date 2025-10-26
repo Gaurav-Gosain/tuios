@@ -44,9 +44,12 @@ TUIOS is a terminal-based window manager that provides a modern, efficient inter
 
 ## Installation
 
-**Quick Install (Linux/macOS):**
+### Package Managers
+
+**Homebrew (macOS/Linux):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
+brew tap Gaurav-Gosain/tap
+brew install tuios
 ```
 
 **Arch Linux (AUR):**
@@ -58,7 +61,24 @@ yay -S tuios-bin
 paru -S tuios-bin
 ```
 
-**Alternative Methods:**
+**Nix:**
+```bash
+# Run directly
+nix run github:Gaurav-Gosain/tuios#tuios
+
+# Or add to your configuration
+nix-shell -p tuios
+```
+
+### Quick Install Script
+
+**Linux/macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
+```
+
+### Alternative Methods
+
 - **[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)** - Download pre-built binaries
 - **Go Install:** `go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest`
 - **Docker:** `docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest`

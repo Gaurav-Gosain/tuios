@@ -1,0 +1,107 @@
+name: Update Nix Package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-nix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Get the tag from the release
+          VERSION="${{ github.event.release.tag_name }}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Update tuios.nix version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Update version in tuios.nix
+          sed -i "s/version = \"v[0-9]*\.[0-9]*\.[0-9]*\";/version = \"${VERSION}\";/" tuios.nix
+
+          echo "Updated version to ${VERSION}"
+
+      - name: Calculate vendor hash
+        id: hash
+        run: |
+          # Try to build with fake hash to get the real hash
+          # This will fail but give us the correct hash in the error
+
+          # First try with lib.fakeHash to get the error
+          sed -i 's/vendorHash = "sha256-[^"]*";/vendorHash = pkgs.lib.fakeHash;/' tuios.nix
+
+          # Build and capture output (will fail with hash mismatch)
+          set +e
+          BUILD_OUTPUT=$(nix build .#tuios 2>&1)
+          set -e
+
+          # Extract the hash from the error message
+          # Look for pattern like "got: sha256-XXXXX"
+          HASH=$(echo "$BUILD_OUTPUT" | grep -oP "got:\s+\Ksha256-[A-Za-z0-9+/=]+" | head -1)
+
+          if [ -z "$HASH" ]; then
+            echo "Failed to extract hash from build output"
+            echo "$BUILD_OUTPUT"
+            exit 1
+          fi
+
+          echo "Extracted hash: $HASH"
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+
+      - name: Update tuios.nix hash
+        run: |
+          HASH="${{ steps.hash.outputs.hash }}"
+
+          # Update the vendor hash
+          sed -i "s/vendorHash = pkgs.lib.fakeHash;/vendorHash = \"${HASH}\";/" tuios.nix
+
+          echo "Updated vendorHash to ${HASH}"
+
+      - name: Verify build works
+        run: |
+          echo "Verifying the build works with new hash..."
+          nix build .#tuios
+          echo "Build successful!"
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          git add tuios.nix
+          git commit -m "chore: update nix package to ${{ steps.version.outputs.version }}"
+          git push
+
+      - name: Create Pull Request (fallback)
+        if: failure()
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: update nix package to ${{ steps.version.outputs.version }}"
+          title: "chore: update nix package to ${{ steps.version.outputs.version }}"
+          body: |
+            Automated Nix package update for release ${{ steps.version.outputs.version }}
+
+            - Updated version to `${{ steps.version.outputs.version }}`
+            - Updated vendorHash to `${{ steps.hash.outputs.hash }}`
+
+            This PR was created automatically by the update-nix workflow.
+          branch: update-nix-${{ steps.version.outputs.version }}
+          base: main

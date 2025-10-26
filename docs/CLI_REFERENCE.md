@@ -10,6 +10,53 @@ TUIOS uses a modern command-line interface built with Cobra and Fang, providing:
 - Shell completion generation
 - Man page generation support
 
+## Installation
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap Gaurav-Gosain/tap
+brew install tuios
+```
+
+### Arch Linux (AUR)
+
+```bash
+# Using yay
+yay -S tuios-bin
+
+# Using paru
+paru -S tuios-bin
+```
+
+### Nix
+
+```bash
+# Run directly
+nix run github:Gaurav-Gosain/tuios#tuios
+
+# Or add to your configuration
+nix-shell -p tuios
+```
+
+### Quick Install Script (Linux/macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
+```
+
+### Go Install
+
+```bash
+go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest
+```
+
+### Pre-built Binaries
+
+Download from [GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)
+
+---
+
 ## Usage
 
 ```bash

@@ -119,6 +119,13 @@ release:
     curl -sSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
     ```
 
+    #### Homebrew (macOS/Linux)
+
+    ```bash
+    brew tap Gaurav-Gosain/tap
+    brew install tuios
+    ```
+
     #### Arch Linux (AUR)
 
     ```bash
@@ -177,19 +184,24 @@ aurs:
       # documentation
       install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
 
-# Homebrew tap (optional - uncomment if you want to publish to Homebrew)
-# brews:
-#   - repository:
-#       owner: Gaurav-Gosain
-#       name: homebrew-tap
-#     directory: Formula
-#     homepage: https://github.com/Gaurav-Gosain/tuios
-#     description: "A terminal UI operating system with window management"
-#     license: MIT
-#     test: |
-#       system "#{bin}/tuios", "--version"
-#     install: |
-#       bin.install "tuios"
+# Homebrew tap
+brews:
+  - repository:
+      owner: Gaurav-Gosain
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/Gaurav-Gosain/tuios
+    description: "Terminal UI Operating System - A terminal-based window manager with tmux-style keybindings"
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    test: |
+      system "#{bin}/tuios", "--version"
+    install: |
+      bin.install "tuios"
 
 # Docker images (optional - uncomment if you want automated Docker builds)
 # dockers:
