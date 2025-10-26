@@ -92,26 +92,14 @@ jobs:
           echo "Build successful!"
 
       - name: Commit and push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
           git add tuios.nix
           git commit -m "chore: update nix package to ${{ steps.version.outputs.version }}"
-          git push
 
-      - name: Create Pull Request (fallback)
-        if: failure()
-        uses: peter-evans/create-pull-request@v6
-        with:
-          commit-message: "chore: update nix package to ${{ steps.version.outputs.version }}"
-          title: "chore: update nix package to ${{ steps.version.outputs.version }}"
-          body: |
-            Automated Nix package update for release ${{ steps.version.outputs.version }}
-
-            - Updated version to `${{ steps.version.outputs.version }}`
-            - Updated vendorHash to `${{ steps.hash.outputs.hash }}`
-
-            This PR was created automatically by the update-nix workflow.
-          branch: update-nix-${{ steps.version.outputs.version }}
-          base: main
+          # Push using the GitHub token
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/Gaurav-Gosain/tuios.git HEAD:main
