@@ -3,6 +3,12 @@ name: Update Nix Package
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.0.24)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -26,8 +32,12 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          # Get the tag from the release
-          VERSION="${{ github.event.release.tag_name }}"
+          # Get the tag from either release event or manual input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.tag }}"
+          else
+            VERSION="${{ github.event.release.tag_name }}"
+          fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Update tuios.nix version
