@@ -4,12 +4,12 @@ package input
 import (
 	"fmt"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/ui"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -79,10 +79,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// DEBUG: Log click attempts
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		if f, err := os.OpenFile("/tmp/tuios-mouse-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		if f, err := os.OpenFile("/tmp/tuios-mouse-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
 			fmt.Fprintf(f, "[CLICK] X=%d Y=%d, Window X=%d Y=%d W=%d H=%d, leftMost=%d\n",
 				X, Y, clickedWindow.X, clickedWindow.Y, clickedWindow.Width, clickedWindow.Height, leftMost)
-			f.Close()
+			_ = f.Close()
 		}
 	}
 
@@ -256,8 +256,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.Windows[clickedWindowIndex].IsBeingManipulated = true
 		o.DraggedWindowIndex = clickedWindowIndex
 
-		// Store original position for tiling mode swaps
+		// In tiling mode, complete ALL pending animations to avoid state conflicts
+		// This ensures all windows are in their final positions before starting a new drag
 		if o.AutoTiling {
+			o.CompleteAllAnimations()
+
+			// Store current position (after completing all animations) for tiling mode swaps
 			o.TiledX = clickedWindow.X
 			o.TiledY = clickedWindow.Y
 			o.TiledWidth = clickedWindow.Width
@@ -341,18 +345,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Dragging && o.InteractionMode {
-		// Allow windows to go outside screen bounds but not into dock area
-		newX := mouse.X - o.DragOffsetX
-		newY := mouse.Y - o.DragOffsetY
-
-		// Prevent dragging into dock area
-		maxY := o.GetUsableHeight() - focusedWindow.Height
-		if newY > maxY {
-			newY = maxY
-		}
-
-		focusedWindow.X = newX
-		focusedWindow.Y = newY
+		// Allow windows to move completely freely - no bounds checking
+		// Rendering will handle clipping naturally
+		focusedWindow.X = mouse.X - o.DragOffsetX
+		focusedWindow.Y = mouse.Y - o.DragOffsetY
 		focusedWindow.MarkPositionDirty()
 		return o, nil
 	}
@@ -515,8 +511,16 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				// Swap windows - dragged window goes to target's position, target goes to dragged window's original position
 				o.SwapWindowsWithOriginal(o.DraggedWindowIndex, targetWindowIndex, o.TiledX, o.TiledY, o.TiledWidth, o.TiledHeight)
 			} else {
-				// No swap, just retile to restore proper positions
-				o.TileAllWindows()
+				// No swap - snap dragged window back to its original tiled position
+				draggedWindow := o.Windows[o.DraggedWindowIndex]
+				anim := ui.NewSnapAnimation(
+					draggedWindow,
+					o.TiledX, o.TiledY, o.TiledWidth, o.TiledHeight,
+					config.FastAnimationDuration,
+				)
+				if anim != nil {
+					o.Animations = append(o.Animations, anim)
+				}
 			}
 		}
 		// If dragDistance < dragThreshold, it was just a click - do nothing
@@ -717,142 +721,41 @@ func findClickedWindow(x, y int, o *app.OS) int {
 
 // findDockItemClicked finds which dock item was clicked
 func findDockItemClicked(x, y int, o *app.OS) int {
-	// Count minimized windows in current workspace
-	minimizedWindows := make([]int, 0)
-	for i, window := range o.Windows {
-		if window.Workspace == o.CurrentWorkspace && window.Minimized {
-			minimizedWindows = append(minimizedWindows, i)
-			if len(minimizedWindows) >= 9 {
-				break // Only first 9 items are shown
-			}
-		}
-	}
-
-	if len(minimizedWindows) == 0 {
-		return -1
-	}
-
-	// Sort by minimize order to match renderDock
-	sort.Slice(minimizedWindows, func(i, j int) bool {
-		return o.Windows[minimizedWindows[i]].MinimizeOrder < o.Windows[minimizedWindows[j]].MinimizeOrder
-	})
-
-	// Calculate actual dock item widths (matching render.go logic)
-	dockItemsWidth := 0
-	itemNumber := 1
-	itemWidths := make([]int, 0, len(minimizedWindows))
-
-	for _, windowIndex := range minimizedWindows {
-		window := o.Windows[windowIndex]
-
-		// Get window name (only custom names)
-		windowName := window.CustomName
-
-		// Format label based on whether we have a custom name
-		var labelText string
-		if windowName != "" {
-			// Truncate if too long (max 12 chars for dock item)
-			if len(windowName) > 12 {
-				windowName = windowName[:9] + "..."
-			}
-			labelText = fmt.Sprintf(" %d:%s ", itemNumber, windowName)
-		} else {
-			// Just show the number if no custom name
-			labelText = fmt.Sprintf(" %d ", itemNumber)
-		}
-
-		// Calculate width: 2 for circles + label width
-		itemWidth := 2 + len(labelText)
-		itemWidths = append(itemWidths, itemWidth)
-
-		// Add spacing between items
-		if itemNumber > 1 {
-			dockItemsWidth++ // Space between items
-		}
-		dockItemsWidth += itemWidth
-
-		itemNumber++
-	}
-
-	// Calculate center position considering system info on sides
-	leftInfoWidth := 30 // Mode + workspace indicators (matching render.go)
-
-	// Calculate rightInfoWidth based on whether we're in copy mode (matching render.go exactly)
-	focusedWindow := o.GetFocusedWindow()
-	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
-
-	var rightInfoWidth int
-	if inCopyMode {
-		// In copy mode, help text can be very long - estimate based on copy mode state
-		// These widths match the actual help text lengths in render.go
-		switch focusedWindow.CopyMode.State {
-		case terminal.CopyModeNormal:
-			rightInfoWidth = 110 // Length of normal mode help text + padding
-		case terminal.CopyModeSearch:
-			rightInfoWidth = 60 // Length of search mode help text + padding
-		case terminal.CopyModeVisualChar:
-			rightInfoWidth = 90 // Length of visual char mode help text + padding
-		case terminal.CopyModeVisualLine:
-			rightInfoWidth = 35 // Length of visual line mode help text + padding
-		default:
-			rightInfoWidth = 32
-		}
-	} else {
-		rightInfoWidth = 32 // CPU graph (~19 chars) + space + RAM (~11 chars) = ~31 chars (matching render.go line 1819)
-	}
-
-	availableSpace := o.Width - leftInfoWidth - rightInfoWidth - dockItemsWidth
-	leftSpacer := max(availableSpace/2, 0)
-
-	startX := leftInfoWidth + leftSpacer
+	// Use shared layout calculation to ensure positions match rendering exactly
+	layout := o.CalculateDockLayout()
 
 	// DEBUG: Log dock click attempts
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-			fmt.Fprintf(f, "[DOCK CLICK] X=%d Y=%d, Height=%d, startX=%d, dockItemsWidth=%d, numItems=%d\n",
-				x, y, o.Height, startX, dockItemsWidth, len(minimizedWindows))
-			f.Close()
+		if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
+			fmt.Fprintf(f, "[DOCK CLICK] X=%d Y=%d, Height=%d, CenterStartX=%d, numItems=%d, numVisible=%d\n",
+				x, y, o.Height, layout.CenterStartX, len(layout.ItemPositions), len(layout.VisibleItems))
+			_ = f.Close()
 		}
 	}
 
-	// Check which item was clicked
-	currentX := startX
-	for i, windowIndex := range minimizedWindows {
-		// Add space BEFORE item (matching renderDock logic where space comes before item)
-		if i > 0 {
-			currentX++ // Space between items comes BEFORE this item
-		}
-
-		itemWidth := itemWidths[i]
-
-		// Dock items are rendered as: leftCircle (1 cell) + label + rightCircle (1 cell)
-		// The entire item including circles should be clickable
-		clickableStart := currentX
-		clickableEnd := currentX + itemWidth
-
+	// Check which item was clicked using the calculated positions
+	for i, itemPos := range layout.ItemPositions {
 		// DEBUG: Log each item bounds
 		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-			if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-				fmt.Fprintf(f, "[DOCK ITEM %d] windowIndex=%d, Full range [%d,%d), Clickable [%d,%d), Y=%d (checking Y==%d)\n",
-					i, windowIndex, currentX, currentX+itemWidth, clickableStart, clickableEnd, o.Height-1, y)
-				f.Close()
+			if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
+				fmt.Fprintf(f, "[DOCK ITEM %d] windowIndex=%d, Clickable [%d,%d), Y=%d (checking Y==%d)\n",
+					i, itemPos.WindowIndex, itemPos.StartX, itemPos.EndX, o.Height-1, y)
+				_ = f.Close()
 			}
 		}
 
 		// Check if click is within this dock item (dock bar is at o.Height-1)
-		if x >= clickableStart && x < clickableEnd && y == o.Height-1 {
+		if x >= itemPos.StartX && x < itemPos.EndX && y == o.Height-1 {
 			// DEBUG: Log successful match
 			if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-				if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+				if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
 					fmt.Fprintf(f, "[DOCK MATCH] Item %d (windowIndex=%d) matched! Click X=%d in range [%d,%d)\n",
-						i, windowIndex, x, clickableStart, clickableEnd)
-					f.Close()
+						i, itemPos.WindowIndex, x, itemPos.StartX, itemPos.EndX)
+					_ = f.Close()
 				}
 			}
-			return windowIndex
+			return itemPos.WindowIndex
 		}
-
-		currentX += itemWidth
 	}
 
 	return -1

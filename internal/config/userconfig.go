@@ -259,6 +259,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	}
 
 	// Read and parse config file
+	// #nosec G304 - configPath is from XDG search, reading user config is intentional
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -304,7 +305,7 @@ func createDefaultConfig() (*UserConfig, error) {
 	}
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0750); err != nil {
 		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -323,10 +324,12 @@ func createDefaultConfig() (*UserConfig, error) {
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	sb.Write(data)
+	if _, err := sb.Write(data); err != nil {
+		return nil, fmt.Errorf("failed to write config data: %w", err)
+	}
 
 	// Write to file
-	if err := os.WriteFile(configPath, []byte(sb.String()), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(sb.String()), 0600); err != nil {
 		return nil, fmt.Errorf("failed to write config file: %w", err)
 	}
 

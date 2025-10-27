@@ -84,17 +84,17 @@ func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 			case 10: // Query foreground color
 				xrgb.Color = e.ForegroundColor()
 				if xrgb.Color != nil {
-					io.WriteString(e.pw, ansi.SetForegroundColor(xrgb.String())) //nolint:errcheck,gosec
+					_, _ = io.WriteString(e.pw, ansi.SetForegroundColor(xrgb.String()))
 				}
 			case 11: // Query background color
 				xrgb.Color = e.BackgroundColor()
 				if xrgb.Color != nil {
-					io.WriteString(e.pw, ansi.SetBackgroundColor(xrgb.String())) //nolint:errcheck,gosec
+					_, _ = io.WriteString(e.pw, ansi.SetBackgroundColor(xrgb.String()))
 				}
 			case 12: // Query cursor color
 				xrgb.Color = e.CursorColor()
 				if xrgb.Color != nil {
-					io.WriteString(e.pw, ansi.SetCursorColor(xrgb.String())) //nolint:errcheck,gosec
+					_, _ = io.WriteString(e.pw, ansi.SetCursorColor(xrgb.String()))
 				}
 			}
 		} else if c := ansi.XParseColor(arg); c != nil {

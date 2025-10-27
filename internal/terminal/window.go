@@ -192,6 +192,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	shell := detectShell()
 
 	// Set up environment
+	// #nosec G204 - shell is intentionally user-controlled for terminal functionality
 	cmd := exec.Command(shell)
 	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
@@ -219,7 +220,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 
 	// Start the command
 	if err := ptyCmd.Start(); err != nil {
-		ptyInstance.Close()
+		_ = ptyInstance.Close()
 		return nil
 	}
 
@@ -517,7 +518,7 @@ func (w *Window) Close() {
 	// Close PTY first to stop I/O operations
 	if w.Pty != nil {
 		// Best effort close - ignore errors
-		w.Pty.Close()
+		_ = w.Pty.Close()
 		w.Pty = nil
 	}
 
@@ -552,7 +553,7 @@ func (w *Window) Close() {
 
 	// Close terminal emulator to free memory
 	if w.Terminal != nil {
-		w.Terminal.Close()
+		_ = w.Terminal.Close()
 		w.Terminal = nil
 	}
 

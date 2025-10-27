@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image/color"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -17,23 +16,34 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// Deprecated: Use config.GetWindowPillLeft() instead
 const (
 	// LeftHalfCircle is the Unicode character for a left half circle.
 	LeftHalfCircle string = string(rune(0xe0b6))
 	// RightHalfCircle is the Unicode character for a right half circle.
 	RightHalfCircle string = string(rune(0xe0b4))
-	// BorderTopLeft is the Unicode character for the top-left border.
-	BorderTopLeft string = string(rune(0x256d))
-	// BorderTopRight is the Unicode character for the top-right border.
-	BorderTopRight string = string(rune(0x256e))
-	// BorderHorizontal is the Unicode character for a horizontal border.
-	BorderHorizontal string = string(rune(0x2500))
 )
 
 // Style cache for common border elements
 var (
 	baseButtonStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000"))
 )
+
+// getBorder returns the appropriate border style based on ASCII mode
+func getBorder() lipgloss.Border {
+	if config.UseASCIIOnly {
+		return lipgloss.ASCIIBorder()
+	}
+	return lipgloss.RoundedBorder()
+}
+
+// getNormalBorder returns a simple border style based on ASCII mode
+func getNormalBorder() lipgloss.Border {
+	if config.UseASCIIOnly {
+		return lipgloss.ASCIIBorder()
+	}
+	return lipgloss.NormalBorder()
+}
 
 // RightString returns a right-aligned string with decorative borders.
 func RightString(str string, width int, color color.Color) string {
@@ -46,16 +56,16 @@ func RightString(str string, width int, color color.Color) string {
 		return ""
 	}
 
-	return fg.Render(BorderTopLeft+strings.Repeat(BorderHorizontal, spaces)) +
+	return fg.Render(config.GetWindowBorderTopLeft()+strings.Repeat(config.GetWindowBorderHorizontal(), spaces)) +
 		str +
-		fg.Render(BorderTopRight)
+		fg.Render(config.GetWindowBorderTopRight())
 }
 
 func makeRounded(content string, color color.Color) string {
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
 	render := style.Foreground(color).Render
-	content = render(LeftHalfCircle) + content + render(RightHalfCircle)
+	content = render(config.GetWindowPillLeft()) + content + render(config.GetWindowPillRight())
 	return content
 }
 
@@ -66,7 +76,7 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 
 	// Use cached base style with color applied
 	buttonStyle := baseButtonStyle.Background(color)
-	cross := buttonStyle.Render(" ⤫ ")
+	cross := buttonStyle.Render(config.GetWindowButtonClose())
 	dash := buttonStyle.Render(" — ")
 
 	// Only show maximize button if not in tiling mode
@@ -82,13 +92,13 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 
 	// DEBUG: Log button positions
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		if f, err := os.OpenFile("/tmp/tuios-render-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		if f, err := os.OpenFile("/tmp/tuios-render-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
 			borderWidth := lipgloss.Width(border)
 			buttonStartX := window.X + 1 + (width - borderWidth)
 			fmt.Fprintf(f, "[RENDER DEBUG] Window %s at X=%d Y=%d Width=%d, border width=%d, buttons start at X=%d\n",
 				window.ID, window.X, window.Y, window.Width, borderWidth, buttonStartX)
 			fmt.Fprintf(f, "[RENDER DEBUG] Title bar is at Y=%d, dash=%q cross=%q\n", window.Y, dash, cross)
-			f.Close()
+			_ = f.Close()
 		}
 	}
 
@@ -124,9 +134,9 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 		// Create pill-style name badge using cached base style
 		nameStyle := baseButtonStyle.Background(color)
 
-		leftCircle := bottomBorderStyle.Render(LeftHalfCircle)
+		leftCircle := bottomBorderStyle.Render(config.GetWindowPillLeft())
 		nameText := nameStyle.Render(" " + windowName + " ")
-		rightCircle := bottomBorderStyle.Render(RightHalfCircle)
+		rightCircle := bottomBorderStyle.Render(config.GetWindowPillRight())
 		nameBadge := leftCircle + nameText + rightCircle
 
 		// Calculate padding for centering the badge
@@ -136,19 +146,19 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 		// Ensure padding is never negative
 		if totalPadding < 0 {
 			// If badge is too wide, just use plain border
-			bottomBorder = bottomBorderStyle.Render("╰" + strings.Repeat("─", width) + "╯")
+			bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderHorizontal(), width) + config.GetWindowBorderBottomRight())
 		} else {
 			leftPadding := totalPadding / 2
 			rightPadding := totalPadding - leftPadding
 
 			// Create bottom border with centered name badge
-			bottomBorder = bottomBorderStyle.Render("╰"+strings.Repeat("─", leftPadding)) +
+			bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft()+strings.Repeat(config.GetWindowBorderHorizontal(), leftPadding)) +
 				nameBadge +
-				bottomBorderStyle.Render(strings.Repeat("─", rightPadding)+"╯")
+				bottomBorderStyle.Render(strings.Repeat(config.GetWindowBorderHorizontal(), rightPadding)+config.GetWindowBorderBottomRight())
 		}
 	} else {
 		// Plain bottom border without name
-		bottomBorder = bottomBorderStyle.Render("╰" + strings.Repeat("─", width) + "╯")
+		bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderHorizontal(), width) + config.GetWindowBorderBottomRight())
 	}
 
 	// Use string concatenation instead of lipgloss.JoinVertical for better performance
@@ -924,7 +934,165 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 	return cellStyle
 }
 
+// stripANSI removes ANSI escape codes from a string
+func stripANSI(s string) string {
+	var result strings.Builder
+	inEscape := false
+
+	for _, ch := range s {
+		if ch == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+		result.WriteRune(ch)
+	}
+	return result.String()
+}
+
+// extractVisiblePortion extracts a substring while preserving ANSI codes
+// startPos and endPos are character positions (not byte positions)
+func extractVisiblePortion(s string, startPos, endPos int) string {
+	if startPos < 0 {
+		startPos = 0
+	}
+	if endPos <= startPos {
+		return ""
+	}
+
+	var result strings.Builder
+	var prefixCodes strings.Builder // Collect ANSI codes before visible portion
+	var currentPos int
+	inEscape := false
+	var escapeSeq strings.Builder
+
+	for _, ch := range s {
+		if ch == '\x1b' {
+			inEscape = true
+			escapeSeq.Reset()
+			escapeSeq.WriteRune(ch)
+			continue
+		}
+
+		if inEscape {
+			escapeSeq.WriteRune(ch)
+			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
+				// End of escape sequence
+				inEscape = false
+
+				if currentPos < startPos {
+					// Save formatting codes that appear before the visible portion
+					prefixCodes.WriteString(escapeSeq.String())
+				} else if currentPos >= startPos && currentPos < endPos {
+					// Include escape sequences within visible range
+					result.WriteString(escapeSeq.String())
+				}
+			}
+			continue
+		}
+
+		// Regular character
+		if currentPos == startPos && prefixCodes.Len() > 0 {
+			// Prepend saved formatting codes at start of visible portion
+			result.WriteString(prefixCodes.String())
+		}
+
+		if currentPos >= startPos && currentPos < endPos {
+			result.WriteRune(ch)
+		}
+		currentPos++
+
+		if currentPos >= endPos {
+			break
+		}
+	}
+
+	return result.String()
+}
+
 // GetCanvas returns the main rendering canvas with all layers.
+// clipToViewport clips rendered content to viewport bounds to prevent canvas expansion
+// Returns clipped content and adjusted screen coordinates
+func clipToViewport(content string, x, y, viewportWidth, viewportHeight int) (string, int, int) {
+	// Calculate clipping offsets
+	clipTop := 0
+	clipLeft := 0
+	screenX := x
+	screenY := y
+
+	if y < 0 {
+		clipTop = -y
+		screenY = 0
+	}
+	if x < 0 {
+		clipLeft = -x
+		screenX = 0
+	}
+
+	// Calculate maximum visible dimensions
+	maxWidth := viewportWidth - screenX
+	maxHeight := viewportHeight - screenY
+
+	if maxWidth <= 0 || maxHeight <= 0 {
+		return "", screenX, screenY
+	}
+
+	// Split into lines and clip vertically
+	lines := strings.Split(content, "\n")
+	if clipTop >= len(lines) {
+		return "", screenX, screenY
+	}
+
+	// Extract visible lines (clip top and bottom)
+	endLine := len(lines)
+	if clipTop+maxHeight < endLine {
+		endLine = clipTop + maxHeight
+	}
+	visibleLines := lines[clipTop:endLine]
+
+	// Clip each line horizontally
+	clippedLines := make([]string, len(visibleLines))
+	for i, line := range visibleLines {
+		// Strip ANSI codes for width calculation and clipping
+		cleaned := stripANSI(line)
+		cleanedRunes := []rune(cleaned)
+		lineWidth := len(cleanedRunes)
+
+		if clipLeft >= lineWidth {
+			clippedLines[i] = ""
+			continue
+		}
+
+		// Calculate visible width
+		targetWidth := lineWidth - clipLeft
+		if targetWidth > maxWidth {
+			targetWidth = maxWidth
+		}
+
+		if targetWidth <= 0 {
+			clippedLines[i] = ""
+			continue
+		}
+
+		// Extract visible portion by character positions
+		startPos := clipLeft
+		endPos := clipLeft + targetWidth
+		if endPos > lineWidth {
+			endPos = lineWidth
+		}
+
+		// Extract substring preserving ANSI codes
+		clippedLines[i] = extractVisiblePortion(line, startPos, endPos)
+	}
+
+	return strings.Join(clippedLines, "\n"), screenX, screenY
+}
+
 func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	canvas := lipgloss.NewCanvas()
 
@@ -942,7 +1110,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		Align(lipgloss.Left).
 		AlignVertical(lipgloss.Top).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Border(lipgloss.RoundedBorder()).
+		Border(getBorder()).
 		BorderTop(false)
 
 	for i := range m.Windows {
@@ -1016,7 +1184,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.CachedLayer.GetZ() != window.Z
 
 		// Background window optimization: defer expensive redraws unless critical
-		if !needsRedraw || (!isFocused && !isFullyVisible && !window.ContentDirty && window.CachedLayer != nil) {
+		// Always redraw windows being manipulated to avoid border glitches when dragging
+		if !needsRedraw || (!isFocused && !isFullyVisible && !window.ContentDirty && !window.IsBeingManipulated && window.CachedLayer != nil) {
 			layers = append(layers, window.CachedLayer)
 			continue
 		}
@@ -1039,14 +1208,21 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			m.AutoTiling,
 		)
 
+		// Clip content to viewport bounds to prevent canvas expansion
+		clippedContent, clippedX, clippedY := clipToViewport(
+			boxContent,
+			window.X, window.Y,
+			viewportWidth, viewportHeight,
+		)
+
 		// Give animating windows highest Z-index so they appear on top
 		zIndex := window.Z
 		if isAnimating {
 			zIndex = config.ZIndexAnimating // High z-index for animating windows
 		}
 
-		// Cache the layer
-		window.CachedLayer = lipgloss.NewLayer(boxContent).X(window.X).Y(window.Y).Z(zIndex).ID(window.ID)
+		// Cache the layer with clipped content and adjusted position
+		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(clippedX).Y(clippedY).Z(zIndex).ID(window.ID)
 		layers = append(layers, window.CachedLayer)
 
 		// Clear dirty flags after rendering
@@ -1142,7 +1318,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		// Simple border with subtle color
 		boxStyle := lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
+			Border(getNormalBorder()).
 			BorderForeground(lipgloss.Color("6")).
 			Padding(1, 2)
 
@@ -1236,7 +1412,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		// Create bordered box
 		statsBox := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
+			Border(getBorder()).
 			BorderForeground(lipgloss.Color("13")). // Magenta border
 			Padding(1, 2).
 			Background(lipgloss.Color("#1a1a2a")).
@@ -1344,7 +1520,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		// Create bordered box
 		logBox := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
+			Border(getBorder()).
 			BorderForeground(lipgloss.Color("12")).
 			Padding(1, 2).
 			Width(80).
@@ -1429,7 +1605,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		// Style the overlay with border
 		overlayStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
+			Border(getBorder()).
 			BorderForeground(lipgloss.Color("#ff6b6b")).
 			Background(lipgloss.Color("#1a1a2e")).
 			Padding(1, 2)
@@ -1533,7 +1709,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 			// Style the notification with border
 			notifBox := lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
+				Border(getBorder()).
 				BorderForeground(lipgloss.Color(borderColor)).
 				Background(lipgloss.Color(bgColor)).
 				Foreground(lipgloss.Color(fgColor)).
@@ -1601,6 +1777,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 }
 
 func (m *OS) renderDock() *lipgloss.Layer {
+	// Calculate dock layout using shared function
+	layout := m.CalculateDockLayout()
+
 	// System info styles
 	sysInfoStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#808090")).
@@ -1611,28 +1790,6 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		Bold(true).
 		MarginRight(2)
 
-	workspaceStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#b0b0c0")).
-		Bold(true).
-		MarginRight(2)
-
-	// Get mode text
-	modeText := "[W]" // Window management mode
-	focusedWindow := m.GetFocusedWindow()
-	if m.Mode == TerminalMode {
-		modeText = "[I]" // Insert/Terminal mode (like vim)
-		// Add copy mode indicator
-		if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-			modeText = "[COPY]"
-			// Show cursor position
-			modeText += fmt.Sprintf(" %d:%d", focusedWindow.CopyMode.CursorY, focusedWindow.CopyMode.CursorX)
-		}
-	}
-	// Add tiling indicator
-	if m.AutoTiling && (focusedWindow == nil || focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active) {
-		modeText += " [TILE]" // Tiling mode icon (don't show in copy mode)
-	}
-
 	// Cache workspace styles for performance (optimization #8)
 	if m.workspaceActiveStyle == nil {
 		activeStyle := lipgloss.NewStyle().
@@ -1641,50 +1798,97 @@ func (m *OS) renderDock() *lipgloss.Layer {
 			Bold(true)
 		m.workspaceActiveStyle = &activeStyle
 	}
-	if m.workspaceInactiveStyle == nil {
-		inactiveStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#808090"))
-		m.workspaceInactiveStyle = &inactiveStyle
-	}
 
-	// Add workspace indicator with window counts
-	workspaceText := ""
-	for i := 1; i <= m.NumWorkspaces; i++ {
-		count := m.GetWorkspaceWindowCount(i)
-		if i == m.CurrentWorkspace {
-			// Highlight current workspace
-			if count > 0 {
-				workspaceText += m.workspaceActiveStyle.Render(fmt.Sprintf(" %d:%d ", i, count))
-			} else {
-				workspaceText += m.workspaceActiveStyle.Render(fmt.Sprintf(" %d ", i))
-			}
-		} else if count > 0 {
-			// Show workspaces with windows
-			workspaceText += m.workspaceInactiveStyle.Render(fmt.Sprintf(" %d:%d ", i, count))
+	// Parse layout.LeftText to extract mode indicator and workspace info
+	leftText := layout.LeftText
+
+	// The format is: DockPillLeftChar + modeLabel + DockPillRightChar + workspaceText
+	leftCircle := config.GetDockPillLeftChar()
+	rightCircle := config.GetDockPillRightChar()
+
+	var styledModeText, styledWorkspaceText string
+
+	// Only parse if pill characters are configured (not empty)
+	if leftCircle != "" && rightCircle != "" {
+		// Find the mode indicator (between pill characters)
+		startIdx := strings.Index(leftText, leftCircle)
+		endIdx := strings.Index(leftText, rightCircle)
+
+		if startIdx != -1 && endIdx > startIdx {
+			// Extract workspace part (after the right circle)
+			workspacePart := leftText[endIdx+len(rightCircle):]
+
+			// Style the mode indicator as a pill with the mode color
+			modeColor := layout.ModeInfo.Color
+			modeLabel := leftText[startIdx+len(leftCircle) : endIdx]
+
+			// Create pill-style mode indicator
+			styledLeftCircle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(modeColor)).
+				Render(leftCircle)
+
+			styledLabel := lipgloss.NewStyle().
+				Background(lipgloss.Color(modeColor)).
+				Foreground(lipgloss.Color("#ffffff")).
+				Bold(true).
+				Render(modeLabel)
+
+			styledRightCircle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(modeColor)).
+				Render(rightCircle)
+
+			styledModeText = styledLeftCircle + styledLabel + styledRightCircle
+
+			// Style workspace info
+			styledWorkspaceText = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#b0b0c0")).
+				Bold(true).
+				Render(workspacePart)
+		} else {
+			// Fallback if parsing fails
+			styledModeText = modeStyle.Render(leftText)
+			styledWorkspaceText = ""
 		}
-	}
+	} else {
+		// No pill characters - render as simple colored block
+		modeColor := layout.ModeInfo.Color
 
-	// Count minimized AND minimizing windows in current workspace
-	dockWindows := []int{}
-	for i, window := range m.Windows {
-		if window.Workspace == m.CurrentWorkspace && (window.Minimized || window.Minimizing) {
-			dockWindows = append(dockWindows, i)
-			if len(dockWindows) >= 9 {
-				break // Only show up to 9 items
+		// Find where the mode indicator ends (before workspace text)
+		// Mode indicator is just the label without semicircles
+		var modeLabel, workspacePart string
+		if idx := strings.Index(leftText, " "); idx != -1 {
+			// Find the workspace part (starts with a number after space)
+			for i := 1; i < len(leftText); i++ {
+				if leftText[i] >= '0' && leftText[i] <= '9' {
+					modeLabel = leftText[:i]
+					workspacePart = leftText[i:]
+					break
+				}
 			}
 		}
+
+		if modeLabel == "" {
+			modeLabel = leftText
+		}
+
+		styledModeText = lipgloss.NewStyle().
+			Background(lipgloss.Color(modeColor)).
+			Foreground(lipgloss.Color("#ffffff")).
+			Bold(true).
+			Render(modeLabel)
+
+		styledWorkspaceText = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#b0b0c0")).
+			Bold(true).
+			Render(workspacePart)
 	}
 
-	// Sort dock windows by minimize order (oldest first)
-	sort.Slice(dockWindows, func(i, j int) bool {
-		return m.Windows[dockWindows[i]].MinimizeOrder < m.Windows[dockWindows[j]].MinimizeOrder
-	})
-
-	// Build pill-style dock items
+	// Build pill-style dock items from layout
 	var dockItemsStr string
 	itemNumber := 1
 
-	for _, windowIndex := range dockWindows {
+	for _, dockItem := range layout.VisibleItems {
+		windowIndex := dockItem.WindowIndex
 		window := m.Windows[windowIndex]
 
 		// Colors for active vs inactive
@@ -1696,10 +1900,10 @@ func (m *OS) renderDock() *lipgloss.Layer {
 
 		// DEBUG: Log dock rendering
 		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" && isHighlighted {
-			if f, err := os.OpenFile("/tmp/tuios-minimize-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			if f, err := os.OpenFile("/tmp/tuios-minimize-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
 				fmt.Fprintf(f, "[RENDER] Dock item #%d, windowIndex=%d, ID=%s, CustomName=%s, isHighlighted=%v, HighlightUntil=%s\n",
 					itemNumber, windowIndex, window.ID, window.CustomName, isHighlighted, window.MinimizeHighlightUntil.Format("15:04:05.000"))
-				f.Close()
+				_ = f.Close()
 			}
 		}
 
@@ -1712,26 +1916,13 @@ func (m *OS) renderDock() *lipgloss.Layer {
 			fgColor = "#ffffff"
 		}
 
-		// Get window name (only custom names)
-		windowName := window.CustomName
-
-		// Format label based on whether we have a custom name
-		var labelText string
-		if windowName != "" {
-			// Truncate if too long (max 12 chars for dock item)
-			if len(windowName) > 12 {
-				windowName = windowName[:9] + "..."
-			}
-			labelText = fmt.Sprintf(" %d:%s ", itemNumber, windowName)
-		} else {
-			// Just show the number if no custom name
-			labelText = fmt.Sprintf(" %d ", itemNumber)
-		}
+		// Use label from DockItem (already formatted)
+		labelText := dockItem.Label
 
 		// Create pill-style item with circles and label
 		leftCircle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(bgColor)).
-			Render(LeftHalfCircle)
+			Render(config.GetDockPillLeftChar())
 
 		nameLabel := lipgloss.NewStyle().
 			Background(lipgloss.Color(bgColor)).
@@ -1741,7 +1932,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 
 		rightCircle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(bgColor)).
-			Render(RightHalfCircle)
+			Render(config.GetDockPillRightChar())
 
 		// Add spacing between items
 		if itemNumber > 1 {
@@ -1752,16 +1943,23 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		itemNumber++
 	}
 
+	// Add truncation indicator if items were cut off
+	if layout.TruncatedCount > 0 {
+		truncStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#808090"))
+		dockItemsStr += truncStyle.Render(" ...")
+	}
+
 	// Build system info content
-	// Left side: Mode, workspace, and window count
+	// Left side: Mode and workspace (using styled versions)
 	leftInfo := lipgloss.JoinHorizontal(lipgloss.Top,
-		modeStyle.Render(modeText),
-		workspaceStyle.Render(workspaceText),
+		styledModeText,
+		styledWorkspaceText,
 	)
 
 	// Right side: CPU/RAM stats OR copy mode help
 	var rightInfo string
-	var rightWidth int
+	focusedWindow := m.GetFocusedWindow()
 
 	// Check if in copy mode - show help instead of stats
 	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
@@ -1784,51 +1982,20 @@ func (m *OS) renderDock() *lipgloss.Layer {
 			Background(lipgloss.Color("#1a1a2e")).
 			Padding(0, 1)
 		rightInfo = helpStyle.Render(helpText)
-		rightWidth = lipgloss.Width(rightInfo) + 2
 	} else {
 		// Show CPU and RAM stats
 		cpuGraph := m.GetCPUGraph()
 		ramUsage := m.GetRAMUsage()
 		rightInfo = sysInfoStyle.Render(cpuGraph + " " + ramUsage)
-		rightWidth = 32 // CPU graph (~19 chars) + space + RAM (~11 chars) = ~31 chars
 	}
 
-	// Calculate actual widths to prevent overflow
+	// Use calculated widths from layout
 	actualLeftWidth := lipgloss.Width(leftInfo)
 	centerWidth := lipgloss.Width(dockItemsStr)
+	rightWidth := layout.RightWidth
 
-	// Ensure we have space for all components on one line
-	minRequiredWidth := actualLeftWidth + centerWidth + rightWidth + 4 // +4 for minimal spacing
-
-	// If content is too wide, truncate dock items to prevent wrapping
-	if minRequiredWidth > m.Width {
-		// Calculate how many dock items we can show
-		maxDockWidth := m.Width - actualLeftWidth - rightWidth - 4
-		if maxDockWidth < 0 {
-			maxDockWidth = 0
-		}
-
-		// Truncate dockItemsStr if needed
-		if lipgloss.Width(dockItemsStr) > maxDockWidth {
-			// Show as many complete items as possible
-			truncated := ""
-			for i := range dockItemsStr {
-				if lipgloss.Width(truncated+string(dockItemsStr[i])) > maxDockWidth-3 { // -3 for "..."
-					truncated += "..."
-					break
-				}
-				truncated += string(dockItemsStr[i])
-			}
-			dockItemsStr = truncated
-			centerWidth = lipgloss.Width(dockItemsStr)
-		}
-	}
-
-	// Use actual left width (no padding to fixed width)
-	leftWidth := actualLeftWidth
-
-	// Calculate spacing to center dock items
-	availableSpace := m.Width - leftWidth - rightWidth - centerWidth
+	// Calculate spacing to center dock items (layout already handles truncation)
+	availableSpace := m.Width - actualLeftWidth - rightWidth - centerWidth
 	leftSpacer := availableSpace / 2
 	rightSpacer := availableSpace - leftSpacer
 
@@ -1855,7 +2022,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 
 	// Cache separator string for performance (optimization #3)
 	if m.cachedSeparatorWidth != m.Width {
-		m.cachedSeparator = strings.Repeat("─", m.Width)
+		m.cachedSeparator = strings.Repeat(config.GetWindowSeparatorChar(), m.Width)
 		m.cachedSeparatorWidth = m.Width
 	}
 

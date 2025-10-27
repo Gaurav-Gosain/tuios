@@ -202,12 +202,6 @@ func formatActionName(action string) string {
 
 // formatKeysWithStyle styles individual key combos with pill-shaped background
 func formatKeysWithStyle(keys []string) string {
-	// Unicode half circles for pill shape
-	const (
-		LeftHalfCircle  = string(rune(0xe0b6))
-		RightHalfCircle = string(rune(0xe0b4))
-	)
-
 	styledKeys := []string{}
 	for _, key := range keys {
 		// Create pill-style key badge
@@ -216,7 +210,7 @@ func formatKeysWithStyle(keys []string) string {
 
 		leftCircle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(bgColor)).
-			Render(LeftHalfCircle)
+			Render(config.GetWindowPillLeft())
 
 		keyLabel := lipgloss.NewStyle().
 			Background(lipgloss.Color(bgColor)).
@@ -225,7 +219,7 @@ func formatKeysWithStyle(keys []string) string {
 
 		rightCircle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(bgColor)).
-			Render(RightHalfCircle)
+			Render(config.GetWindowPillRight())
 
 		styledKeys = append(styledKeys, leftCircle+keyLabel+rightCircle)
 	}

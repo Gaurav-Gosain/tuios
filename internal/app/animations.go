@@ -59,6 +59,53 @@ func (m *OS) HasActiveAnimations() bool {
 	return len(m.Animations) > 0
 }
 
+// CompleteWindowAnimations immediately completes all animations for a specific window
+// This is used when starting a new drag to avoid conflicts with pending animations
+func (m *OS) CompleteWindowAnimations(windowIndex int) {
+	if windowIndex < 0 || windowIndex >= len(m.Windows) {
+		return
+	}
+
+	window := m.Windows[windowIndex]
+
+	// Find and complete all animations for this window
+	for i := len(m.Animations) - 1; i >= 0; i-- {
+		anim := m.Animations[i]
+		if anim.Window == window {
+			// Snap window to final position immediately
+			anim.Window.X = anim.EndX
+			anim.Window.Y = anim.EndY
+			anim.Window.Width = anim.EndWidth
+			anim.Window.Height = anim.EndHeight
+
+			// Mark as complete and remove
+			anim.Complete = true
+			m.Animations = append(m.Animations[:i], m.Animations[i+1:]...)
+		}
+	}
+}
+
+// CompleteAllAnimations immediately completes all active animations
+// This is used in tiling mode to prevent state conflicts when starting a new drag
+func (m *OS) CompleteAllAnimations() {
+	// Complete all animations by snapping windows to their final positions
+	for i := len(m.Animations) - 1; i >= 0; i-- {
+		anim := m.Animations[i]
+
+		// Snap window to final position immediately
+		anim.Window.X = anim.EndX
+		anim.Window.Y = anim.EndY
+		anim.Window.Width = anim.EndWidth
+		anim.Window.Height = anim.EndHeight
+
+		// Mark as complete
+		anim.Complete = true
+	}
+
+	// Clear all animations
+	m.Animations = m.Animations[:0]
+}
+
 // UpdateAnimations updates all active animations and applies their effects.
 func (m *OS) UpdateAnimations() {
 	// Update animations in reverse order so we can safely remove completed ones

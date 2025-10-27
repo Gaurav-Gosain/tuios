@@ -45,71 +45,71 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool, isOptimized bo
 
 	// Hash cursor state (1 bit)
 	if isCursor {
-		h.WriteByte(1)
+		_ = h.WriteByte(1)
 	} else {
-		h.WriteByte(0)
+		_ = h.WriteByte(0)
 	}
 
 	// Hash optimized flag (1 bit)
 	if isOptimized {
-		h.WriteByte(1)
+		_ = h.WriteByte(1)
 	} else {
-		h.WriteByte(0)
+		_ = h.WriteByte(0)
 	}
 
 	if cell == nil {
-		h.WriteByte(0)
+		_ = h.WriteByte(0)
 		return h.Sum64()
 	}
 
-	h.WriteByte(1)
+	_ = h.WriteByte(1)
 
 	// Hash text attributes (bold, italic, etc.)
 	// Write as bytes to avoid alignment issues
 	attrs := uint64(cell.Style.Attrs)
-	h.WriteByte(byte(attrs))
-	h.WriteByte(byte(attrs >> 8))
-	h.WriteByte(byte(attrs >> 16))
-	h.WriteByte(byte(attrs >> 24))
-	h.WriteByte(byte(attrs >> 32))
-	h.WriteByte(byte(attrs >> 40))
-	h.WriteByte(byte(attrs >> 48))
-	h.WriteByte(byte(attrs >> 56))
+	_ = h.WriteByte(byte(attrs))
+	_ = h.WriteByte(byte(attrs >> 8))
+	_ = h.WriteByte(byte(attrs >> 16))
+	_ = h.WriteByte(byte(attrs >> 24))
+	_ = h.WriteByte(byte(attrs >> 32))
+	_ = h.WriteByte(byte(attrs >> 40))
+	_ = h.WriteByte(byte(attrs >> 48))
+	_ = h.WriteByte(byte(attrs >> 56))
 
 	// Hash foreground color
 	if cell.Style.Fg != nil {
 		if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
-			h.WriteByte(1)
-			h.WriteByte(byte(ansiColor))
+			_ = h.WriteByte(1)
+			_ = h.WriteByte(byte(ansiColor))
 		} else {
 			r, g, b, a := cell.Style.Fg.RGBA()
-			h.WriteByte(2)
+			_ = h.WriteByte(2)
 			// Write RGBA values as bytes
-			h.WriteByte(byte(r >> 8))
-			h.WriteByte(byte(g >> 8))
-			h.WriteByte(byte(b >> 8))
-			h.WriteByte(byte(a >> 8))
+			_ = h.WriteByte(byte(r >> 8))
+			_ = h.WriteByte(byte(g >> 8))
+			_ = h.WriteByte(byte(b >> 8))
+			_ = h.WriteByte(byte(a >> 8))
 		}
 	} else {
-		h.WriteByte(0)
+		_ = h.WriteByte(0)
 	}
 
 	// Hash background color
 	if cell.Style.Bg != nil {
 		if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
-			h.WriteByte(1)
-			h.WriteByte(byte(ansiColor))
+			_ = h.WriteByte(1)
+			_ = h.WriteByte(byte(ansiColor))
 		} else {
 			r, g, b, a := cell.Style.Bg.RGBA()
-			h.WriteByte(2)
+			_ = h.WriteByte(2)
 			// Write RGBA values as bytes
-			h.WriteByte(byte(r >> 8))
-			h.WriteByte(byte(g >> 8))
-			h.WriteByte(byte(b >> 8))
-			h.WriteByte(byte(a >> 8))
+			_ = h.WriteByte(byte(r >> 8))
+			_ = h.WriteByte(byte(g >> 8))
+			_ = h.WriteByte(byte(b >> 8))
+			_ = h.WriteByte(byte(a >> 8))
 		}
 	} else {
-		h.WriteByte(0)
+		_ = h.WriteByte(0)
 	}
 
 	return h.Sum64()
@@ -169,7 +169,9 @@ func (sc *StyleCache) evictHalf() {
 		}
 	}
 
-	sc.evicts.Add(uint64(evicted))
+	if evicted > 0 {
+		sc.evicts.Add(uint64(evicted))
+	}
 }
 
 // Clear removes all entries from the cache.

@@ -620,10 +620,10 @@ func (m *OS) MinimizeWindow(i int) {
 
 		// DEBUG: Log minimize action
 		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-			if f, err := os.OpenFile("/tmp/tuios-minimize-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			if f, err := os.OpenFile("/tmp/tuios-minimize-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
 				fmt.Fprintf(f, "[MINIMIZE] Window index=%d, ID=%s, CustomName=%s, Highlight set until %s\n",
 					i, window.ID, window.CustomName, window.MinimizeHighlightUntil.Format("15:04:05.000"))
-				f.Close()
+				_ = f.Close()
 			}
 		}
 
@@ -732,7 +732,7 @@ func (m *OS) HasMinimizedWindows() bool {
 
 // GetUsableHeight returns the usable height excluding the dock.
 func (m *OS) GetUsableHeight() int {
-	// Always reserve space for the dock at the bottom
+	// Reserve space for the dock at the bottom
 	return m.Height - config.DockHeight
 }
 

@@ -424,8 +424,9 @@ func (e *Emulator) IndexedColor(i int) color.Color {
 
 	c := e.colors[i]
 	if c == nil {
-		// Return the default color.
-		return ansi.IndexedColor(i) //nolint:gosec
+		// Return the default color. Safe conversion: i is already validated to be in [0, 255]
+		// #nosec G115 - false positive, i is validated to be in valid uint8 range above
+		return ansi.IndexedColor(uint8(i))
 	}
 
 	return c

@@ -40,24 +40,41 @@ func (m *OS) GetCPUGraph() string {
 		// Convert to 0-8 scale for vertical bars
 		height := min(int(usage/12.5), 8)
 
-		// Use block characters for the graph
-		switch height {
-		case 0:
-			graphBuilder.WriteRune('▁')
-		case 1:
-			graphBuilder.WriteRune('▂')
-		case 2:
-			graphBuilder.WriteRune('▃')
-		case 3:
-			graphBuilder.WriteRune('▄')
-		case 4:
-			graphBuilder.WriteRune('▅')
-		case 5:
-			graphBuilder.WriteRune('▆')
-		case 6:
-			graphBuilder.WriteRune('▇')
-		case 7, 8:
-			graphBuilder.WriteRune('█')
+		// Use block characters for the graph (or ASCII equivalents)
+		if config.UseASCIIOnly {
+			// ASCII fallback: use simple characters
+			switch height {
+			case 0:
+				graphBuilder.WriteRune('_')
+			case 1, 2:
+				graphBuilder.WriteRune('.')
+			case 3, 4:
+				graphBuilder.WriteRune(':')
+			case 5, 6:
+				graphBuilder.WriteRune('|')
+			case 7, 8:
+				graphBuilder.WriteRune('#')
+			}
+		} else {
+			// Unicode block characters
+			switch height {
+			case 0:
+				graphBuilder.WriteRune('▁')
+			case 1:
+				graphBuilder.WriteRune('▂')
+			case 2:
+				graphBuilder.WriteRune('▃')
+			case 3:
+				graphBuilder.WriteRune('▄')
+			case 4:
+				graphBuilder.WriteRune('▅')
+			case 5:
+				graphBuilder.WriteRune('▆')
+			case 6:
+				graphBuilder.WriteRune('▇')
+			case 7, 8:
+				graphBuilder.WriteRune('█')
+			}
 		}
 	}
 

@@ -218,7 +218,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.PrefixActive = false
 			if focusedWindow != nil {
 				// Send literal Ctrl+B
-				focusedWindow.SendInput([]byte{0x02})
+				_ = focusedWindow.SendInput([]byte{0x02})
 			}
 			return o, nil
 		}
@@ -615,7 +615,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		if focusedWindow != nil {
 			rawInput := getRawKeyBytes(msg)
 			if len(rawInput) > 0 {
-				focusedWindow.SendInput(rawInput)
+				_ = focusedWindow.SendInput(rawInput)
 			}
 		}
 	}

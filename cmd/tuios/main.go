@@ -39,6 +39,7 @@ var (
 var (
 	debugMode  bool
 	cpuProfile string
+	asciiOnly  bool
 )
 
 func main() {
@@ -56,6 +57,9 @@ comprehensive keyboard/mouse interactions.`,
 
   # Run with debug logging
   tuios --debug
+
+  # Run with ASCII-only mode (no Nerd Font icons)
+  tuios --ascii-only
 
   # Run with CPU profiling
   tuios --cpuprofile cpu.prof
@@ -78,6 +82,7 @@ comprehensive keyboard/mouse interactions.`,
 	// Global flags
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
 	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "Write CPU profile to file")
+	rootCmd.PersistentFlags().BoolVar(&asciiOnly, "ascii-only", false, "Use ASCII characters instead of Nerd Font icons")
 
 	// SSH command variables
 	var sshPort, sshHost, sshKeyPath string
@@ -232,12 +237,18 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 func runLocal() error {
 	// Handle global flags
 	if debugMode {
-		os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
 		fmt.Println("Debug mode enabled")
+	}
+
+	// Set ASCII-only mode if requested
+	if asciiOnly {
+		config.UseASCIIOnly = true
 	}
 
 	// Start CPU profiling if requested
 	if cpuProfile != "" {
+		// #nosec G304 - cpuProfile is user-provided flag for profiling, intentional
 		f, err := os.Create(cpuProfile)
 		if err != nil {
 			return fmt.Errorf("could not create CPU profile: %w", err)
@@ -262,8 +273,10 @@ func runLocal() error {
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	// Log config path for user reference
-	configPath, _ := config.GetConfigPath()
-	log.Printf("Configuration: %s", configPath)
+	if debugMode {
+		configPath, _ := config.GetConfigPath()
+		log.Printf("Configuration: %s", configPath)
+	}
 
 	// Start with no windows - user will create the first one
 	initialOS := &app.OS{
@@ -293,8 +306,13 @@ func runLocal() error {
 func runSSHServer(sshHost, sshPort, sshKeyPath string) error {
 	// Handle global flags
 	if debugMode {
-		os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
 		fmt.Println("Debug mode enabled")
+	}
+
+	// Set ASCII-only mode if requested
+	if asciiOnly {
+		config.UseASCIIOnly = true
 	}
 
 	// Set up the input handler to break circular dependency
@@ -369,6 +387,7 @@ func editConfigFile() error {
 	}
 
 	// Open editor
+	// #nosec G204 - editor is intentionally user-controlled via $EDITOR
 	cmd := exec.Command(editor, configPath)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -395,7 +414,7 @@ func resetConfigToDefaults() error {
 		fmt.Printf("Are you sure you want to reset to defaults? (yes/no): ")
 
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		response = strings.ToLower(strings.TrimSpace(response))
 
 		if response != "yes" && response != "y" {
@@ -422,10 +441,12 @@ func resetConfigToDefaults() error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	sb.Write(data)
+	if _, err := sb.Write(data); err != nil {
+		return fmt.Errorf("failed to write config data: %w", err)
+	}
 
 	// Write to file
-	if err := os.WriteFile(configPath, []byte(sb.String()), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(sb.String()), 0o600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

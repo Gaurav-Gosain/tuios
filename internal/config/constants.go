@@ -137,6 +137,272 @@ const (
 )
 
 // =============================================================================
+// Dock Visual Characters - Nerd Font Icons (Default)
+// =============================================================================
+
+const (
+	// DockPillLeftChar is the left character for pill-style indicators
+	// Set to "" to disable, or use custom characters
+	DockPillLeftChar = string(rune(0xe0b6)) // Powerline left semicircle
+
+	// DockPillRightChar is the right character for pill-style indicators
+	// Set to "" to disable, or use custom characters
+	DockPillRightChar = string(rune(0xe0b4)) // Powerline right semicircle
+
+	// DockModeIconWindow is the icon for window mode (Nerd Font: nf-fa-window_restore)
+	DockModeIconWindow = " " + string(rune(0xf2d2)) + " " //
+
+	// DockModeIconTerminal is the icon for terminal mode (Nerd Font: nf-fa-terminal)
+	DockModeIconTerminal = " " + string(rune(0xf120)) + " " //
+
+	// DockModeIconTiling is the icon for tiling mode (Nerd Font: nf-fa-th - 3x3 grid)
+	DockModeIconTiling = " " + string(rune(0xf00a)) + " " //
+
+	// DockIconTerminalCount is the icon for terminal count (Nerd Font: nf-fa-terminal)
+	DockIconTerminalCount = string(rune(0xf120)) //
+
+	// DockIconWorkspaceCount is the icon for workspace count (Nerd Font: nf-fa-th_large - 2x2 grid)
+	DockIconWorkspaceCount = string(rune(0xf009)) //
+
+	// DockSeparator is the separator between dock sections
+	DockSeparator = "  " // Two spaces for breathing room
+)
+
+// =============================================================================
+// Dock Visual Characters - ASCII Fallback
+// =============================================================================
+
+const (
+	// ASCII fallback characters (used when --ascii-only flag is set)
+
+	// DockPillLeftCharASCII is the ASCII fallback for pill left
+	DockPillLeftCharASCII = "["
+
+	// DockPillRightCharASCII is the ASCII fallback for pill right
+	DockPillRightCharASCII = "]"
+
+	// DockModeIconWindowASCII is the ASCII fallback for window mode
+	DockModeIconWindowASCII = " W "
+
+	// DockModeIconTerminalASCII is the ASCII fallback for terminal mode
+	DockModeIconTerminalASCII = " T "
+
+	// DockModeIconTilingASCII is the ASCII fallback for tiling mode
+	DockModeIconTilingASCII = " # "
+
+	// DockIconTerminalCountASCII is the ASCII fallback for terminal count
+	DockIconTerminalCountASCII = "win"
+
+	// DockIconWorkspaceCountASCII is the ASCII fallback for workspace count
+	DockIconWorkspaceCountASCII = "ws"
+
+	// DockSeparatorASCII is the ASCII fallback separator
+	DockSeparatorASCII = " | "
+)
+
+// Dock Mode Colors
+const (
+	// DockColorWindow is the color for window mode indicator
+	DockColorWindow = "#4865f2" // Blue
+
+	// DockColorTerminal is the color for terminal mode indicator
+	DockColorTerminal = "#4ade80" // Green
+
+	// DockColorCopy is the color for copy mode indicator
+	DockColorCopy = "#fb923c" // Orange
+)
+
+// =============================================================================
+// Runtime Configuration
+// =============================================================================
+
+// UseASCIIOnly controls whether to use ASCII fallback characters instead of Nerd Fonts
+// Set via --ascii-only command-line flag
+var UseASCIIOnly = false
+
+// GetDockPillLeftChar returns the appropriate pill left character based on UseASCIIOnly
+func GetDockPillLeftChar() string {
+	if UseASCIIOnly {
+		return DockPillLeftCharASCII
+	}
+	return DockPillLeftChar
+}
+
+// GetDockPillRightChar returns the appropriate pill right character based on UseASCIIOnly
+func GetDockPillRightChar() string {
+	if UseASCIIOnly {
+		return DockPillRightCharASCII
+	}
+	return DockPillRightChar
+}
+
+// GetDockModeIconWindow returns the appropriate window mode icon based on UseASCIIOnly
+func GetDockModeIconWindow() string {
+	if UseASCIIOnly {
+		return DockModeIconWindowASCII
+	}
+	return DockModeIconWindow
+}
+
+// GetDockModeIconTerminal returns the appropriate terminal mode icon based on UseASCIIOnly
+func GetDockModeIconTerminal() string {
+	if UseASCIIOnly {
+		return DockModeIconTerminalASCII
+	}
+	return DockModeIconTerminal
+}
+
+// GetDockModeIconTiling returns the appropriate tiling mode icon based on UseASCIIOnly
+func GetDockModeIconTiling() string {
+	if UseASCIIOnly {
+		return DockModeIconTilingASCII
+	}
+	return DockModeIconTiling
+}
+
+// GetDockIconTerminalCount returns the appropriate terminal count icon based on UseASCIIOnly
+func GetDockIconTerminalCount() string {
+	if UseASCIIOnly {
+		return DockIconTerminalCountASCII
+	}
+	return DockIconTerminalCount
+}
+
+// GetDockIconWorkspaceCount returns the appropriate workspace count icon based on UseASCIIOnly
+func GetDockIconWorkspaceCount() string {
+	if UseASCIIOnly {
+		return DockIconWorkspaceCountASCII
+	}
+	return DockIconWorkspaceCount
+}
+
+// GetDockSeparator returns the appropriate separator based on UseASCIIOnly
+func GetDockSeparator() string {
+	if UseASCIIOnly {
+		return DockSeparatorASCII
+	}
+	return DockSeparator
+}
+
+// =============================================================================
+// Window Decoration Characters
+// =============================================================================
+
+const (
+	// Window border characters (Nerd Font / Unicode)
+	WindowBorderTopLeft     = "╭" // U+256D
+	WindowBorderTopRight    = "╮" // U+256E
+	WindowBorderBottomLeft  = "╰" // U+2570
+	WindowBorderBottomRight = "╯" // U+256F
+	WindowBorderHorizontal  = "─" // U+2500
+	WindowBorderVertical    = "│" // U+2502
+
+	// Window button characters
+	WindowButtonClose     = " ⤫ " // Close/kill window
+	WindowPillLeft        = string(rune(0xe0b6))
+	WindowPillRight       = string(rune(0xe0b4))
+	WindowSeparatorChar   = "─" // U+2500
+)
+
+const (
+	// Window border characters (ASCII fallback)
+	WindowBorderTopLeftASCII     = "+"
+	WindowBorderTopRightASCII    = "+"
+	WindowBorderBottomLeftASCII  = "+"
+	WindowBorderBottomRightASCII = "+"
+	WindowBorderHorizontalASCII  = "-"
+	WindowBorderVerticalASCII    = "|"
+
+	// Window button characters (ASCII fallback)
+	WindowButtonCloseASCII   = " X "
+	WindowPillLeftASCII      = "["
+	WindowPillRightASCII     = "]"
+	WindowSeparatorCharASCII = "-"
+)
+
+// Window decoration getter functions
+
+// GetWindowBorderTopLeft returns the appropriate top-left border character
+func GetWindowBorderTopLeft() string {
+	if UseASCIIOnly {
+		return WindowBorderTopLeftASCII
+	}
+	return WindowBorderTopLeft
+}
+
+// GetWindowBorderTopRight returns the appropriate top-right border character
+func GetWindowBorderTopRight() string {
+	if UseASCIIOnly {
+		return WindowBorderTopRightASCII
+	}
+	return WindowBorderTopRight
+}
+
+// GetWindowBorderBottomLeft returns the appropriate bottom-left border character
+func GetWindowBorderBottomLeft() string {
+	if UseASCIIOnly {
+		return WindowBorderBottomLeftASCII
+	}
+	return WindowBorderBottomLeft
+}
+
+// GetWindowBorderBottomRight returns the appropriate bottom-right border character
+func GetWindowBorderBottomRight() string {
+	if UseASCIIOnly {
+		return WindowBorderBottomRightASCII
+	}
+	return WindowBorderBottomRight
+}
+
+// GetWindowBorderHorizontal returns the appropriate horizontal border character
+func GetWindowBorderHorizontal() string {
+	if UseASCIIOnly {
+		return WindowBorderHorizontalASCII
+	}
+	return WindowBorderHorizontal
+}
+
+// GetWindowBorderVertical returns the appropriate vertical border character
+func GetWindowBorderVertical() string {
+	if UseASCIIOnly {
+		return WindowBorderVerticalASCII
+	}
+	return WindowBorderVertical
+}
+
+// GetWindowButtonClose returns the appropriate close button character
+func GetWindowButtonClose() string {
+	if UseASCIIOnly {
+		return WindowButtonCloseASCII
+	}
+	return WindowButtonClose
+}
+
+// GetWindowPillLeft returns the appropriate pill left character
+func GetWindowPillLeft() string {
+	if UseASCIIOnly {
+		return WindowPillLeftASCII
+	}
+	return WindowPillLeft
+}
+
+// GetWindowPillRight returns the appropriate pill right character
+func GetWindowPillRight() string {
+	if UseASCIIOnly {
+		return WindowPillRightASCII
+	}
+	return WindowPillRight
+}
+
+// GetWindowSeparatorChar returns the appropriate separator character
+func GetWindowSeparatorChar() string {
+	if UseASCIIOnly {
+		return WindowSeparatorCharASCII
+	}
+	return WindowSeparatorChar
+}
+
+// =============================================================================
 // Button Positions (relative offsets)
 // =============================================================================
 
