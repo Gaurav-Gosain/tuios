@@ -1,6 +1,9 @@
 name: Update Nix Package
 
 on:
+  push:
+    tags:
+      - 'v*.*.*'
   release:
     types: [published]
   workflow_dispatch:
@@ -32,9 +35,11 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          # Get the tag from either release event or manual input
+          # Get the tag from push event, release event, or manual input
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ inputs.tag }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${{ github.ref_name }}"
           else
             VERSION="${{ github.event.release.tag_name }}"
           fi
