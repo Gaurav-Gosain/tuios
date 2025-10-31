@@ -2,7 +2,7 @@
 
 pkgs.buildGoModule {
   pname = "tuios";
-  version = "v0.0.26";
+  version = "v0.1.0";
 
   src = ./.;
 
