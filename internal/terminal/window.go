@@ -13,12 +13,21 @@ import (
 	"time"
 
 	pty "github.com/aymanbagabas/go-pty"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+)
+
+// Cache for local terminal environment variables (detect once, reuse for local windows)
+// SSH sessions will detect per-connection based on their environment
+var (
+	localTermType string
+	localColorTerm string
+	localEnvOnce  sync.Once
 )
 
 // Window represents a terminal window with its own shell process.
@@ -194,9 +203,13 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Set up environment
 	// #nosec G204 - shell is intentionally user-controlled for terminal functionality
 	cmd := exec.Command(shell)
+
+	// Get cached terminal environment (detected once on first window creation)
+	termType, colorTerm := getTerminalEnv()
+
 	cmd.Env = append(os.Environ(),
-		"TERM=xterm-256color",
-		"COLORTERM=truecolor",
+		"TERM="+termType,
+		"COLORTERM="+colorTerm,
 		"TUIOS_WINDOW_ID="+id,
 	)
 
@@ -310,6 +323,79 @@ func detectShell() string {
 	}
 	// Unix fallback
 	return "/bin/sh"
+}
+
+// getTerminalEnv returns TERM and COLORTERM values for the current environment.
+// For local sessions, this is cached after first detection.
+// The environment is detected from os.Environ() which includes SSH forwarded vars.
+func getTerminalEnv() (termType, colorTerm string) {
+	// Use sync.Once to cache local terminal detection
+	// This runs once per process lifetime for efficiency
+	localEnvOnce.Do(func() {
+		// Detect terminal capabilities using colorprofile (from charm)
+		// This handles TERM, COLORTERM, NO_COLOR, CLICOLOR, terminfo, and tmux detection
+		// For SSH sessions, os.Environ() will include the SSH client's environment
+		profile := colorprofile.Detect(os.Stdout, os.Environ())
+		localTermType, localColorTerm = profileToEnv(profile)
+	})
+	return localTermType, localColorTerm
+}
+
+// profileToEnv converts a colorprofile.Profile to TERM and COLORTERM environment variables.
+// Returns (termType, colorTerm) where colorTerm may be empty string.
+func profileToEnv(profile colorprofile.Profile) (termType, colorTerm string) {
+	// Get parent TERM for preserving specific terminal types
+	parentTerm := os.Getenv("TERM")
+
+	switch profile {
+	case colorprofile.TrueColor:
+		// For TrueColor, preserve parent TERM if it's already good, otherwise upgrade
+		if parentTerm != "" && (strings.Contains(parentTerm, "256color") ||
+			strings.Contains(parentTerm, "truecolor") ||
+			parentTerm == "xterm-direct" ||
+			parentTerm == "alacritty" ||
+			parentTerm == "kitty" ||
+			strings.HasPrefix(parentTerm, "kitty-")) {
+			termType = parentTerm
+		} else {
+			termType = "xterm-256color"
+		}
+		colorTerm = "truecolor"
+
+	case colorprofile.ANSI256:
+		// 256 color support
+		if parentTerm != "" && strings.Contains(parentTerm, "256color") {
+			termType = parentTerm
+		} else if strings.HasPrefix(parentTerm, "screen") {
+			termType = "screen-256color"
+		} else if strings.HasPrefix(parentTerm, "tmux") {
+			termType = "tmux-256color"
+		} else {
+			termType = "xterm-256color"
+		}
+		colorTerm = "" // Don't set COLORTERM for 256 color
+
+	case colorprofile.ANSI:
+		// Basic 16 color support
+		if parentTerm != "" && parentTerm != "dumb" {
+			termType = parentTerm
+		} else {
+			termType = "xterm"
+		}
+		colorTerm = ""
+
+	case colorprofile.Ascii, colorprofile.NoTTY:
+		// No color support or not a TTY
+		termType = "dumb"
+		colorTerm = ""
+
+	default:
+		// Fallback to sensible default
+		termType = "xterm-256color"
+		colorTerm = ""
+	}
+
+	return termType, colorTerm
 }
 
 // enableTerminalFeatures enables advanced terminal features

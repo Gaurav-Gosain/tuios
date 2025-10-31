@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/ui"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -79,7 +78,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// DEBUG: Log click attempts
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		if f, err := os.OpenFile("/tmp/tuios-mouse-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
+		if f, err := os.OpenFile("/tmp/tuios-mouse-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
 			fmt.Fprintf(f, "[CLICK] X=%d Y=%d, Window X=%d Y=%d W=%d H=%d, leftMost=%d\n",
 				X, Y, clickedWindow.X, clickedWindow.Y, clickedWindow.Width, clickedWindow.Height, leftMost)
 			_ = f.Close()
@@ -486,6 +485,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		dragDistance := abs(mouse.X-o.DragStartX) + abs(mouse.Y-o.DragStartY)
 		const dragThreshold = 5 // pixels - must move at least this much to be considered a drag
 
+		draggedWindow := o.Windows[o.DraggedWindowIndex]
+
 		if dragDistance >= dragThreshold {
 			// This was an actual drag, check for swap
 			// Find which window is under the cursor (excluding the dragged window)
@@ -512,18 +513,26 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				o.SwapWindowsWithOriginal(o.DraggedWindowIndex, targetWindowIndex, o.TiledX, o.TiledY, o.TiledWidth, o.TiledHeight)
 			} else {
 				// No swap - snap dragged window back to its original tiled position
-				draggedWindow := o.Windows[o.DraggedWindowIndex]
-				anim := ui.NewSnapAnimation(
-					draggedWindow,
-					o.TiledX, o.TiledY, o.TiledWidth, o.TiledHeight,
-					config.FastAnimationDuration,
-				)
-				if anim != nil {
-					o.Animations = append(o.Animations, anim)
-				}
+				// Immediately set window back to tiled position to prevent layout corruption
+				draggedWindow.X = o.TiledX
+				draggedWindow.Y = o.TiledY
+				draggedWindow.Width = o.TiledWidth
+				draggedWindow.Height = o.TiledHeight
+				draggedWindow.Resize(o.TiledWidth, o.TiledHeight)
+				draggedWindow.MarkPositionDirty()
+				draggedWindow.InvalidateCache()
 			}
+		} else {
+			// Drag distance below threshold - snap back to prevent layout corruption from micro-drags
+			// Even small mouse movements can displace the window during motion events
+			draggedWindow.X = o.TiledX
+			draggedWindow.Y = o.TiledY
+			draggedWindow.Width = o.TiledWidth
+			draggedWindow.Height = o.TiledHeight
+			draggedWindow.Resize(o.TiledWidth, o.TiledHeight)
+			draggedWindow.MarkPositionDirty()
+			draggedWindow.InvalidateCache()
 		}
-		// If dragDistance < dragThreshold, it was just a click - do nothing
 		o.DraggedWindowIndex = -1
 	}
 
@@ -726,7 +735,7 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 
 	// DEBUG: Log dock click attempts
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
+		if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
 			fmt.Fprintf(f, "[DOCK CLICK] X=%d Y=%d, Height=%d, CenterStartX=%d, numItems=%d, numVisible=%d\n",
 				x, y, o.Height, layout.CenterStartX, len(layout.ItemPositions), len(layout.VisibleItems))
 			_ = f.Close()
@@ -737,7 +746,7 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 	for i, itemPos := range layout.ItemPositions {
 		// DEBUG: Log each item bounds
 		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-			if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
+			if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
 				fmt.Fprintf(f, "[DOCK ITEM %d] windowIndex=%d, Clickable [%d,%d), Y=%d (checking Y==%d)\n",
 					i, itemPos.WindowIndex, itemPos.StartX, itemPos.EndX, o.Height-1, y)
 				_ = f.Close()
@@ -748,7 +757,7 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 		if x >= itemPos.StartX && x < itemPos.EndX && y == o.Height-1 {
 			// DEBUG: Log successful match
 			if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-				if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
+				if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
 					fmt.Fprintf(f, "[DOCK MATCH] Item %d (windowIndex=%d) matched! Click X=%d in range [%d,%d)\n",
 						i, itemPos.WindowIndex, x, itemPos.StartX, itemPos.EndX)
 					_ = f.Close()

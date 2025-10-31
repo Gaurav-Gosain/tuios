@@ -423,6 +423,19 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
+	// Helper to safely compare colors (handles nil interface values)
+	safeColorEquals := func(a, b color.Color) bool {
+		// Handle nil cases
+		if a == nil && b == nil {
+			return true
+		}
+		if a == nil || b == nil {
+			return false
+		}
+		// Both non-nil, safe to compare
+		return a == b
+	}
+
 	// Helper to check if style matches previous
 	styleMatches := func(cell *uv.Cell, isCursorPos, isSelected, isSelectionCursor bool) bool {
 		if prevCell == nil && cell == nil {
@@ -434,8 +447,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return prevIsCursor == isCursorPos &&
 			prevIsSelected == isSelected &&
 			prevIsSelectionCursor == isSelectionCursor &&
-			prevCell.Style.Fg == cell.Style.Fg &&
-			prevCell.Style.Bg == cell.Style.Bg &&
+			safeColorEquals(prevCell.Style.Fg, cell.Style.Fg) &&
+			safeColorEquals(prevCell.Style.Bg, cell.Style.Bg) &&
 			prevCell.Style.Attrs == cell.Style.Attrs
 	}
 
