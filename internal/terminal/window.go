@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
@@ -228,6 +229,16 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	if err != nil {
 		// Return nil to indicate failure - caller should handle this
 		return nil
+	}
+
+	// Set up the command to use the PTY as controlling terminal
+	// This is required for shells like fish to work properly
+	// Note: Ctty is the FD number in the child process (0 = stdin)
+	// xpty.Start() will set stdin to the PTY slave
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setsid:  true, // Create new session
+		Setctty: true, // Set controlling terminal
+		Ctty:    0,    // Use stdin (which will be the PTY slave)
 	}
 
 	// Start the command with PTY
