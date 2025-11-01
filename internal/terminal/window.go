@@ -19,6 +19,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -169,6 +170,14 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	terminal := vt.NewEmulator(terminalWidth, terminalHeight)
 	// Set scrollback buffer size (10000 lines by default, can be configured)
 	terminal.SetScrollbackMaxLines(10000)
+
+	// Apply theme colors to the terminal
+	terminal.SetThemeColors(
+		theme.TerminalFg(),
+		theme.TerminalBg(),
+		theme.TerminalCursor(),
+		theme.GetANSIPalette(),
+	)
 
 	// Create window struct early so we can reference it in callbacks
 	window := &Window{

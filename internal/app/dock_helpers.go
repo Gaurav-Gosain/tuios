@@ -6,6 +6,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/lipgloss/v2"
 )
 
@@ -81,12 +82,12 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 	if m.Mode == TerminalMode {
 		if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
 			// Copy mode
-			modeInfo.Color = config.DockColorCopy
+			modeInfo.Color = theme.ColorToString(theme.DockColorCopy())
 			modeInfo.CursorPos = fmt.Sprintf("%d:%d", focusedWindow.CopyMode.CursorY, focusedWindow.CopyMode.CursorX)
 			modeLabel = " " + modeInfo.CursorPos + " "
 		} else {
 			// Terminal mode
-			modeInfo.Color = config.DockColorTerminal
+			modeInfo.Color = theme.ColorToString(theme.DockColorTerminal())
 			// Add tiling indicator for terminal mode
 			if m.AutoTiling {
 				modeLabel = config.GetDockModeIconTiling()
@@ -96,7 +97,7 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 		}
 	} else {
 		// Window mode
-		modeInfo.Color = config.DockColorWindow
+		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
 		// Add tiling indicator for window mode
 		if m.AutoTiling {
 			modeLabel = config.GetDockModeIconTiling()

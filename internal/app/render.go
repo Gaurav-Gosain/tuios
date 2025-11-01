@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -1174,12 +1175,15 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		// Ensure focused window index is valid
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
-		borderColor := "#FAAAAA"
+		var borderColorObj color.Color
 		if isFocused {
-			borderColor = "#AFFFFF"
 			if m.Mode == TerminalMode {
-				borderColor = "#AAFFAA" // Green when in terminal mode
+				borderColorObj = theme.BorderFocusedTerminal() // Green when in terminal mode
+			} else {
+				borderColorObj = theme.BorderFocusedWindow()
 			}
+		} else {
+			borderColorObj = theme.BorderUnfocused()
 		}
 
 		// Enhanced cache checking with early exit for clean windows
@@ -1212,9 +1216,9 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		boxContent := addToBorder(
 			box.Width(window.Width).
 				Height(window.Height-1).
-				BorderForeground(lipgloss.Color(borderColor)).
+				BorderForeground(borderColorObj).
 				Render(content),
-			lipgloss.Color(borderColor),
+			borderColorObj,
 			window,
 			isRenaming,
 			m.RenameBuffer,

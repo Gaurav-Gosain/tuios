@@ -442,6 +442,20 @@ func (e *Emulator) SetIndexedColor(i int, c color.Color) {
 	e.colors[i] = c
 }
 
+// SetThemeColors sets the terminal's color palette from a theme.
+// This sets the default foreground, background, cursor colors and the
+// first 16 ANSI colors (0-15) which are used by terminal applications.
+func (e *Emulator) SetThemeColors(fg, bg, cur color.Color, ansiPalette [16]color.Color) {
+	e.SetDefaultForegroundColor(fg)
+	e.SetDefaultBackgroundColor(bg)
+	e.SetDefaultCursorColor(cur)
+
+	// Set the first 16 ANSI colors
+	for i := 0; i < 16; i++ {
+		e.SetIndexedColor(i, ansiPalette[i])
+	}
+}
+
 // resetTabStops resets the terminal tab stops to the default set.
 func (e *Emulator) resetTabStops() {
 	e.tabstops = uv.DefaultTabStops(e.Width())
