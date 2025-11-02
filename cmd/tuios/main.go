@@ -337,9 +337,46 @@ func runLocal() error {
 		tea.WithoutSignalHandler(),        // We handle signals ourselves
 		tea.WithFilter(filterMouseMotion), // Filter unnecessary mouse motion events
 	)
-	if _, err := p.Run(); err != nil {
+
+	// Handle shutdown signals for graceful cleanup
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		// Signal received - trigger graceful shutdown
+		// Send quit message to the program
+		p.Send(tea.QuitMsg{})
+	}()
+
+	// Run the program
+	finalModel, err := p.Run()
+
+	// Cleanup after program exits (before checking error)
+	// This ensures cleanup happens even if p.Run() returns an error
+	if finalOS, ok := finalModel.(*app.OS); ok {
+		finalOS.Cleanup()
+	}
+
+	// Restore terminal to sane state after cleanup
+	// This handles cases where bubbletea's cleanup might not be complete
+	// Send reset sequence: ESC c (full reset)
+	// Also explicitly disable any remaining modes
+	fmt.Print("\033c")        // Full terminal reset
+	fmt.Print("\033[?1000l")  // Disable mouse tracking
+	fmt.Print("\033[?1002l")  // Disable button event mouse tracking
+	fmt.Print("\033[?1003l")  // Disable all motion mouse tracking
+	fmt.Print("\033[?1004l")  // Disable focus reporting
+	fmt.Print("\033[?1006l")  // Disable SGR mouse mode
+	fmt.Print("\033[?25h")    // Show cursor
+	fmt.Print("\033[?47l")    // Exit alternate screen (if still active)
+	fmt.Print("\033[0m")      // Reset text attributes
+	fmt.Print("\r\n")         // Newline to prevent prompt corruption
+	os.Stdout.Sync()          // Ensure all output is flushed
+
+	if err != nil {
 		return fmt.Errorf("program error: %w", err)
 	}
+
 	return nil
 }
 
