@@ -39,12 +39,15 @@ var (
 
 // Global flags
 var (
-	debugMode    bool
-	cpuProfile   string
-	asciiOnly    bool
-	themeName    string
-	listThemes   bool
-	previewTheme string
+	debugMode         bool
+	cpuProfile        string
+	asciiOnly         bool
+	themeName         string
+	listThemes        bool
+	previewTheme      string
+	borderStyle       string
+	hideWindowButtons bool
+	scrollbackLines   int
 )
 
 func main() {
@@ -117,6 +120,9 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().StringVar(&themeName, "theme", "tokyonight", "Color theme to use (e.g., dracula, nord, tokyonight)")
 	rootCmd.PersistentFlags().BoolVar(&listThemes, "list-themes", false, "List all available themes and exit")
 	rootCmd.PersistentFlags().StringVar(&previewTheme, "preview-theme", "", "Preview a theme's 16 ANSI colors")
+	rootCmd.PersistentFlags().StringVar(&borderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)")
+	rootCmd.PersistentFlags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
+	rootCmd.PersistentFlags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
 
 	// SSH command variables
 	var sshPort, sshHost, sshKeyPath string
@@ -280,6 +286,42 @@ func runLocal() error {
 		config.UseASCIIOnly = true
 	}
 
+	// Load user configuration first to get defaults
+	userConfig, err := config.LoadUserConfig()
+	if err != nil {
+		log.Printf("Warning: Failed to load config, using defaults: %v", err)
+		userConfig = config.DefaultConfig()
+	}
+
+	// Apply appearance settings from config
+	if borderStyle == "" {
+		// Use config file setting if flag not provided
+		config.BorderStyle = userConfig.Appearance.BorderStyle
+	} else {
+		// CLI flag overrides config
+		config.BorderStyle = borderStyle
+	}
+
+	// Apply hide window buttons setting
+	// CLI flag OR config setting will hide buttons
+	config.HideWindowButtons = hideWindowButtons || userConfig.Appearance.HideWindowButtons
+
+	// Apply scrollback lines setting
+	// CLI flag overrides config, with validation
+	finalScrollbackLines := userConfig.Appearance.ScrollbackLines
+	if scrollbackLines > 0 {
+		// CLI flag provided, validate and use it
+		if scrollbackLines < 100 {
+			finalScrollbackLines = 100
+		} else if scrollbackLines > 1000000 {
+			finalScrollbackLines = 1000000
+		} else {
+			finalScrollbackLines = scrollbackLines
+		}
+	}
+	// Store in a variable that will be used when creating windows
+	config.ScrollbackLines = finalScrollbackLines
+
 	// Start CPU profiling if requested
 	if cpuProfile != "" {
 		// #nosec G304 - cpuProfile is user-provided flag for profiling, intentional
@@ -298,12 +340,7 @@ func runLocal() error {
 	// Set up the input handler to break circular dependency
 	app.SetInputHandler(input.HandleInput)
 
-	// Load user configuration and create keybind registry
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		log.Printf("Warning: Failed to load config, using defaults: %v", err)
-		userConfig = config.DefaultConfig()
-	}
+	// Create keybind registry from loaded config
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	// Log config path for user reference

@@ -30,20 +30,15 @@ var (
 	baseButtonStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000"))
 )
 
-// getBorder returns the appropriate border style based on ASCII mode
+// getBorder returns the appropriate border style based on configuration
 func getBorder() lipgloss.Border {
-	if config.UseASCIIOnly {
-		return lipgloss.ASCIIBorder()
-	}
-	return lipgloss.RoundedBorder()
+	return config.GetBorderForStyle()
 }
 
 // getNormalBorder returns a simple border style based on ASCII mode
 func getNormalBorder() lipgloss.Border {
-	if config.UseASCIIOnly {
-		return lipgloss.ASCIIBorder()
-	}
-	return lipgloss.NormalBorder()
+	// Use the same configured border for consistency
+	return getBorder()
 }
 
 // RightString returns a right-aligned string with decorative borders.
@@ -57,7 +52,7 @@ func RightString(str string, width int, color color.Color) string {
 		return ""
 	}
 
-	return fg.Render(config.GetWindowBorderTopLeft()+strings.Repeat(config.GetWindowBorderHorizontal(), spaces)) +
+	return fg.Render(config.GetWindowBorderTopLeft()+strings.Repeat(config.GetWindowBorderTop(), spaces)) +
 		str +
 		fg.Render(config.GetWindowBorderTopRight())
 }
@@ -75,19 +70,25 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 		// Ensure width is never negative
 		lipgloss.Width(content)-2, 0)
 
-	// Use cached base style with color applied
-	buttonStyle := baseButtonStyle.Background(color)
-	cross := buttonStyle.Render(config.GetWindowButtonClose())
-	dash := buttonStyle.Render(" — ")
-
-	// Only show maximize button if not in tiling mode
+	// Conditionally render window control buttons
 	var border string
-	if isTiling {
-		// Use string concatenation instead of JoinHorizontal
-		border = makeRounded(dash+cross, color)
+	if config.HideWindowButtons {
+		// No buttons and no pill decorations - completely empty
+		border = ""
 	} else {
-		square := buttonStyle.Render(" □ ")
-		border = makeRounded(dash+square+cross, color)
+		// Use cached base style with color applied
+		buttonStyle := baseButtonStyle.Background(color)
+		cross := buttonStyle.Render(config.GetWindowButtonClose())
+		dash := buttonStyle.Render(" — ")
+
+		// Only show maximize button if not in tiling mode
+		if isTiling {
+			// Use string concatenation instead of JoinHorizontal
+			border = makeRounded(dash+cross, color)
+		} else {
+			square := buttonStyle.Render(" □ ")
+			border = makeRounded(dash+square+cross, color)
+		}
 	}
 	centered := RightString(border, width, color)
 
@@ -98,7 +99,11 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 			buttonStartX := window.X + 1 + (width - borderWidth)
 			fmt.Fprintf(f, "[RENDER DEBUG] Window %s at X=%d Y=%d Width=%d, border width=%d, buttons start at X=%d\n",
 				window.ID, window.X, window.Y, window.Width, borderWidth, buttonStartX)
-			fmt.Fprintf(f, "[RENDER DEBUG] Title bar is at Y=%d, dash=%q cross=%q\n", window.Y, dash, cross)
+			if !config.HideWindowButtons {
+				fmt.Fprintf(f, "[RENDER DEBUG] Title bar is at Y=%d, buttons visible\n", window.Y)
+			} else {
+				fmt.Fprintf(f, "[RENDER DEBUG] Title bar is at Y=%d, buttons hidden\n", window.Y)
+			}
 			_ = f.Close()
 		}
 	}
@@ -147,19 +152,19 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 		// Ensure padding is never negative
 		if totalPadding < 0 {
 			// If badge is too wide, just use plain border
-			bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderHorizontal(), width) + config.GetWindowBorderBottomRight())
+			bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderBottom(), width) + config.GetWindowBorderBottomRight())
 		} else {
 			leftPadding := totalPadding / 2
 			rightPadding := totalPadding - leftPadding
 
 			// Create bottom border with centered name badge
-			bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft()+strings.Repeat(config.GetWindowBorderHorizontal(), leftPadding)) +
+			bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft()+strings.Repeat(config.GetWindowBorderBottom(), leftPadding)) +
 				nameBadge +
-				bottomBorderStyle.Render(strings.Repeat(config.GetWindowBorderHorizontal(), rightPadding)+config.GetWindowBorderBottomRight())
+				bottomBorderStyle.Render(strings.Repeat(config.GetWindowBorderBottom(), rightPadding)+config.GetWindowBorderBottomRight())
 		}
 	} else {
 		// Plain bottom border without name
-		bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderHorizontal(), width) + config.GetWindowBorderBottomRight())
+		bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderBottom(), width) + config.GetWindowBorderBottomRight())
 	}
 
 	// Use string concatenation instead of lipgloss.JoinVertical for better performance
@@ -733,8 +738,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 			// Check if current position is within selection (either actively selecting or has selected text)
 			isSelected := (window.IsSelecting || window.SelectedText != "") && m.isPositionInSelection(window, x, y)
-			// Don't render terminal cursor when in copy mode
-			isCursorPos := isFocused && inTerminalMode && !inCopyMode && x == cursorX && y == cursorY
+			// Don't render terminal cursor when in copy mode or when the application has hidden it
+			isCursorPos := isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
 
 			// Check if current position is the selection cursor (only in selection mode and NOT in terminal mode)
 			isSelectionCursor := m.SelectionMode && !inTerminalMode && isFocused &&

@@ -86,39 +86,42 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check button clicks FIRST before mode switching or focus changes
-	// Title bar is at window.Y (buttons are on the first line of the window)
-	titleBarY := clickedWindow.Y
+	// Only check if buttons are not hidden
+	if !config.HideWindowButtons {
+		// Title bar is at window.Y (buttons are on the first line of the window)
+		titleBarY := clickedWindow.Y
 
-	// Button hitbox: slightly wider range based on empirical testing
-	// Close button is rightmost, minimize is to its left
+		// Button hitbox: slightly wider range based on empirical testing
+		// Close button is rightmost, minimize is to its left
 
-	// cross (close button) - rightmost area
-	if mouse.Button == tea.MouseLeft && X >= leftMost-4 && X <= leftMost-1 && Y == titleBarY {
-		o.DeleteWindow(clickedWindowIndex)
-		o.InteractionMode = false
-		return o, nil
-	}
-
-	if o.AutoTiling {
-		// Tiling mode: minimize button
-		if mouse.Button == tea.MouseLeft && X >= leftMost-7 && X <= leftMost-5 && Y == titleBarY {
-			o.MinimizeWindow(clickedWindowIndex)
-			o.InteractionMode = false
-			return o, nil
-		}
-	} else {
-		// Non-tiling: maximize button in middle
-		if mouse.Button == tea.MouseLeft && X >= leftMost-7 && X <= leftMost-5 && Y == titleBarY {
-			o.Snap(clickedWindowIndex, app.SnapFullScreen)
+		// cross (close button) - rightmost area
+		if mouse.Button == tea.MouseLeft && X >= leftMost-4 && X <= leftMost-1 && Y == titleBarY {
+			o.DeleteWindow(clickedWindowIndex)
 			o.InteractionMode = false
 			return o, nil
 		}
 
-		// Non-tiling: minimize button leftmost
-		if mouse.Button == tea.MouseLeft && X >= leftMost-10 && X <= leftMost-8 && Y == titleBarY {
-			o.MinimizeWindow(clickedWindowIndex)
-			o.InteractionMode = false
-			return o, nil
+		if o.AutoTiling {
+			// Tiling mode: minimize button
+			if mouse.Button == tea.MouseLeft && X >= leftMost-7 && X <= leftMost-5 && Y == titleBarY {
+				o.MinimizeWindow(clickedWindowIndex)
+				o.InteractionMode = false
+				return o, nil
+			}
+		} else {
+			// Non-tiling: maximize button in middle
+			if mouse.Button == tea.MouseLeft && X >= leftMost-7 && X <= leftMost-5 && Y == titleBarY {
+				o.Snap(clickedWindowIndex, app.SnapFullScreen)
+				o.InteractionMode = false
+				return o, nil
+			}
+
+			// Non-tiling: minimize button leftmost
+			if mouse.Button == tea.MouseLeft && X >= leftMost-10 && X <= leftMost-8 && Y == titleBarY {
+				o.MinimizeWindow(clickedWindowIndex)
+				o.InteractionMode = false
+				return o, nil
+			}
 		}
 	}
 

@@ -168,8 +168,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	terminalHeight := max(height-2, 1)
 	// Create terminal with scrollback buffer support
 	terminal := vt.NewEmulator(terminalWidth, terminalHeight)
-	// Set scrollback buffer size (10000 lines by default, can be configured)
-	terminal.SetScrollbackMaxLines(10000)
+	// Set scrollback buffer size from config (default: 10000, configurable via --scrollback-lines or config file)
+	terminal.SetScrollbackMaxLines(config.ScrollbackLines)
 
 	// Apply theme colors to the terminal
 	terminal.SetThemeColors(
