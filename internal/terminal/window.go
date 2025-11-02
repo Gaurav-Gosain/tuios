@@ -10,15 +10,17 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
-	pty "github.com/aymanbagabas/go-pty"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
+	xpty "github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -43,8 +45,8 @@ type Window struct {
 	Z                      int
 	ID                     string
 	Terminal               *vt.Emulator
-	Pty                    pty.Pty
-	Cmd                    *pty.Cmd
+	Pty                    xpty.Pty
+	Cmd                    *exec.Cmd
 	LastUpdate             time.Time
 	Dirty                  bool
 	ContentDirty           bool
@@ -170,6 +172,14 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Set scrollback buffer size (10000 lines by default, can be configured)
 	terminal.SetScrollbackMaxLines(10000)
 
+	// Apply theme colors to the terminal
+	terminal.SetThemeColors(
+		theme.TerminalFg(),
+		theme.TerminalBg(),
+		theme.TerminalCursor(),
+		theme.GetANSIPalette(),
+	)
+
 	// Create window struct early so we can reference it in callbacks
 	window := &Window{
 		Title:              title,
@@ -213,31 +223,32 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		"TUIOS_WINDOW_ID="+id,
 	)
 
-	// Create PTY and start command
-	ptyInstance, err := pty.New()
+	// Create PTY with initial size
+	// xpty requires dimensions at creation time
+	ptyInstance, err := xpty.NewPty(terminalWidth, terminalHeight)
 	if err != nil {
 		// Return nil to indicate failure - caller should handle this
 		return nil
 	}
 
-	// Set initial PTY size to match terminal dimensions
-	// This is critical for shells like nushell that query terminal size
-	if err := ptyInstance.Resize(terminalWidth, terminalHeight); err != nil {
-		// Log error but continue - some systems may not support resize before start
-		_ = err
+	// Set up the command to use the PTY as controlling terminal
+	// This is required for shells like fish to work properly
+	// Note: Ctty is the FD number in the child process (0 = stdin)
+	// xpty.Start() will set stdin to the PTY slave
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setsid:  true, // Create new session
+		Setctty: true, // Set controlling terminal
+		Ctty:    0,    // Use stdin (which will be the PTY slave)
 	}
 
-	// Create command through PTY
-	ptyCmd := ptyInstance.Command(shell)
-	ptyCmd.Env = cmd.Env
-
-	// Start the command
-	if err := ptyCmd.Start(); err != nil {
+	// Start the command with PTY
+	// xpty handles command connection internally
+	if err := ptyInstance.Start(cmd); err != nil {
 		_ = ptyInstance.Close()
 		return nil
 	}
 
-	// Resize PTY again after process starts to ensure size is properly set
+	// Resize PTY after process starts to ensure size is properly set
 	// Some PTY implementations require the process to be running before accepting resize
 	if err := ptyInstance.Resize(terminalWidth, terminalHeight); err != nil {
 		// Not a critical error, continue
@@ -248,7 +259,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 
 	// Update window with PTY and command info
 	window.Pty = ptyInstance
-	window.Cmd = ptyCmd
+	window.Cmd = cmd
 	window.cancelFunc = cancel
 
 	// Start I/O handling
@@ -267,7 +278,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		}()
 
 		// Wait for process to exit
-		_ = ptyCmd.Wait() // Ignore error as we're just monitoring exit
+		// Use xpty.WaitProcess for cross-platform compatibility (Windows ConPTY requirement)
+		_ = xpty.WaitProcess(ctx, cmd) // Ignore error as we're just monitoring exit
 
 		// Mark process as exited
 		window.ProcessExited = true

@@ -183,7 +183,7 @@ TUIOS is built on the Bubble Tea v2 framework following the Model-View-Update pa
 **Optimization Strategies:**
 - Smart caching with sequence-based change detection
 - Viewport culling for off-screen windows
-- Adaptive refresh rates (60Hz focused, 20Hz background)
+- Adaptive refresh rates (60Hz focused, 30Hz background)
 - Memory pooling for strings, buffers, and styles
 - LRU style cache (40-60% allocation reduction)
 - Frame skipping when no changes detected

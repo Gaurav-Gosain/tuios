@@ -19,10 +19,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/fang"
 	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/lipgloss/v2/table"
+	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 )
@@ -37,9 +39,12 @@ var (
 
 // Global flags
 var (
-	debugMode  bool
-	cpuProfile string
-	asciiOnly  bool
+	debugMode    bool
+	cpuProfile   string
+	asciiOnly    bool
+	themeName    string
+	listThemes   bool
+	previewTheme string
 )
 
 func main() {
@@ -64,6 +69,18 @@ comprehensive keyboard/mouse interactions.`,
   # Run with CPU profiling
   tuios --cpuprofile cpu.prof
 
+  # Run with a specific theme
+  tuios --theme dracula
+
+  # List all available themes
+  tuios --list-themes
+
+  # Preview a theme's colors
+  tuios --preview-theme dracula
+
+  # Interactively select theme with fzf and preview
+  tuios --theme $(tuios --list-themes | fzf --preview 'tuios --preview-theme {}')
+
   # Run as SSH server
   tuios ssh --port 2222
 
@@ -74,6 +91,20 @@ comprehensive keyboard/mouse interactions.`,
   tuios keybinds list`,
 		Version: version,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Handle --preview-theme flag
+			if previewTheme != "" {
+				return previewThemeColors(previewTheme)
+			}
+
+			// Handle --list-themes flag
+			if listThemes {
+				tint.NewDefaultRegistry()
+				themes := tint.TintIDs()
+				for _, theme := range themes {
+					fmt.Println(theme)
+				}
+				return nil
+			}
 			return runLocal()
 		},
 		SilenceUsage: true,
@@ -83,6 +114,9 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
 	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "Write CPU profile to file")
 	rootCmd.PersistentFlags().BoolVar(&asciiOnly, "ascii-only", false, "Use ASCII characters instead of Nerd Font icons")
+	rootCmd.PersistentFlags().StringVar(&themeName, "theme", "tokyonight", "Color theme to use (e.g., dracula, nord, tokyonight)")
+	rootCmd.PersistentFlags().BoolVar(&listThemes, "list-themes", false, "List all available themes and exit")
+	rootCmd.PersistentFlags().StringVar(&previewTheme, "preview-theme", "", "Preview a theme's 16 ANSI colors")
 
 	// SSH command variables
 	var sshPort, sshHost, sshKeyPath string
@@ -278,6 +312,12 @@ func runLocal() error {
 		log.Printf("Configuration: %s", configPath)
 	}
 
+	// Initialize theme before starting Bubble Tea
+	if err := theme.Initialize(themeName); err != nil {
+		log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
+		log.Printf("Falling back to default theme")
+	}
+
 	// Start with no windows - user will create the first one
 	initialOS := &app.OS{
 		FocusedWindow:    -1,                    // No focused window initially
@@ -297,9 +337,46 @@ func runLocal() error {
 		tea.WithoutSignalHandler(),        // We handle signals ourselves
 		tea.WithFilter(filterMouseMotion), // Filter unnecessary mouse motion events
 	)
-	if _, err := p.Run(); err != nil {
+
+	// Handle shutdown signals for graceful cleanup
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		// Signal received - trigger graceful shutdown
+		// Send quit message to the program
+		p.Send(tea.QuitMsg{})
+	}()
+
+	// Run the program
+	finalModel, err := p.Run()
+
+	// Cleanup after program exits (before checking error)
+	// This ensures cleanup happens even if p.Run() returns an error
+	if finalOS, ok := finalModel.(*app.OS); ok {
+		finalOS.Cleanup()
+	}
+
+	// Restore terminal to sane state after cleanup
+	// This handles cases where bubbletea's cleanup might not be complete
+	// Send reset sequence: ESC c (full reset)
+	// Also explicitly disable any remaining modes
+	fmt.Print("\033c")        // Full terminal reset
+	fmt.Print("\033[?1000l")  // Disable mouse tracking
+	fmt.Print("\033[?1002l")  // Disable button event mouse tracking
+	fmt.Print("\033[?1003l")  // Disable all motion mouse tracking
+	fmt.Print("\033[?1004l")  // Disable focus reporting
+	fmt.Print("\033[?1006l")  // Disable SGR mouse mode
+	fmt.Print("\033[?25h")    // Show cursor
+	fmt.Print("\033[?47l")    // Exit alternate screen (if still active)
+	fmt.Print("\033[0m")      // Reset text attributes
+	fmt.Print("\r\n")         // Newline to prevent prompt corruption
+	os.Stdout.Sync()          // Ensure all output is flushed
+
+	if err != nil {
 		return fmt.Errorf("program error: %w", err)
 	}
+
 	return nil
 }
 
@@ -317,6 +394,12 @@ func runSSHServer(sshHost, sshPort, sshKeyPath string) error {
 
 	// Set up the input handler to break circular dependency
 	app.SetInputHandler(input.HandleInput)
+
+	// Initialize theme before starting SSH server
+	if err := theme.Initialize(themeName); err != nil {
+		log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
+		log.Printf("Falling back to default theme")
+	}
 
 	// SSH server implementation
 	log.Printf("Starting TUIOS SSH server on %s:%s", sshHost, sshPort)
@@ -338,6 +421,60 @@ func runSSHServer(sshHost, sshPort, sshKeyPath string) error {
 	if err := server.StartSSHServer(ctx, sshHost, sshPort, sshKeyPath); err != nil {
 		return fmt.Errorf("SSH server error: %w", err)
 	}
+	return nil
+}
+
+// previewThemeColors displays a preview of the theme's 16 ANSI colors
+func previewThemeColors(themeName string) error {
+	// Initialize theme
+	if err := theme.Initialize(themeName); err != nil {
+		return fmt.Errorf("failed to initialize theme: %w", err)
+	}
+
+	// Get current theme
+	currentTheme := theme.Current()
+	if currentTheme == nil {
+		return fmt.Errorf("theme '%s' not found", themeName)
+	}
+
+	// Print theme name
+	fmt.Printf("Theme: %s\n\n", themeName)
+
+	// Get ANSI palette
+	palette := theme.GetANSIPalette()
+
+	// Color names for the 16 ANSI colors
+	colorNames := []string{
+		"Black", "Red", "Green", "Yellow",
+		"Blue", "Magenta", "Cyan", "White",
+		"Bright Black", "Bright Red", "Bright Green", "Bright Yellow",
+		"Bright Blue", "Bright Magenta", "Bright Cyan", "Bright White",
+	}
+
+	// Print normal colors (0-7)
+	fmt.Println("Normal Colors (0-7):")
+	for i := 0; i < 8; i++ {
+		c := palette[i]
+		r, g, b, _ := c.RGBA()
+		r8, g8, b8 := uint8(r>>8), uint8(g>>8), uint8(b>>8)
+
+		// Use true color (24-bit RGB) escape codes to show the actual theme colors
+		fmt.Printf("  \033[48;2;%d;%d;%dm    \033[0m  %-14s #%02x%02x%02x\n", r8, g8, b8, colorNames[i], r8, g8, b8)
+	}
+
+	fmt.Println()
+
+	// Print bright colors (8-15)
+	fmt.Println("Bright Colors (8-15):")
+	for i := 8; i < 16; i++ {
+		c := palette[i]
+		r, g, b, _ := c.RGBA()
+		r8, g8, b8 := uint8(r>>8), uint8(g>>8), uint8(b>>8)
+
+		// Use true color (24-bit RGB) escape codes to show the actual theme colors
+		fmt.Printf("  \033[48;2;%d;%d;%dm    \033[0m  %-14s #%02x%02x%02x\n", r8, g8, b8, colorNames[i], r8, g8, b8)
+	}
+
 	return nil
 }
 
