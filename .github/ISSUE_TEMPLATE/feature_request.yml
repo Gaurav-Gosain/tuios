@@ -1,0 +1,47 @@
+name: Feature Request
+description: Suggest a new feature, enhancement or improvement.
+title: "[FEATURE]: "
+labels: ["enhancement", "needs discussion"]
+body:
+  - type: input
+    attributes:
+      label: What is the feature?
+      description: A concise description of the feature you would like to see.
+    validations:
+      required: true
+
+  - type: input
+    id: motivation
+    attributes:
+      label: Why do you want this?
+      description: What problem does this feature solve or improvement does it bring?
+      placeholder: e.g. “I often …, and this would help me …”
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How do you envision the feature working?
+      placeholder: ex. “Add `--auto-tile` flag that triggers …”
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Are there other ways to solve the problem? Why were they rejected?
+      placeholder: ex. “I considered using split-pane in tmux but …”
+    validations:
+      required: false
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Who benefits? What use-cases gain most? Are there any trade-offs?
+      placeholder: ex. “Users on ARM-based Macs will be able to …”
+    validations:
+      required: false
