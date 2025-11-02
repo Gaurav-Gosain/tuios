@@ -7,7 +7,6 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## 🐞 Bug Report
         Thank you for taking the time to report a bug.
 
         Before submitting, please:
