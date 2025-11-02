@@ -468,7 +468,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		prevCell = nil
 
 		// Calculate line end position once per line for visual selection highlighting
-		var lineEndX int = maxX - 1
+		lineEndX := maxX - 1
 		if inVisualMode && visualSelection[y] != nil {
 			// Find the last non-empty character on this line by checking cells directly
 			// We need to determine which line we're rendering
@@ -948,163 +948,148 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 	return cellStyle
 }
 
-// stripANSI removes ANSI escape codes from a string
-func stripANSI(s string) string {
-	var result strings.Builder
-	inEscape := false
+// clipWindowContent clips window content to viewport bounds using a line-based approach.
+// This function properly handles ANSI escape sequences by working with complete lines.
+func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) (string, int, int) {
+	// If the window is completely off-screen, return empty
+	lines := strings.Split(content, "\n")
+	windowHeight := len(lines)
 
-	for _, ch := range s {
-		if ch == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
-				inEscape = false
-			}
-			continue
-		}
-		result.WriteRune(ch)
-	}
-	return result.String()
-}
-
-// extractVisiblePortion extracts a substring while preserving ANSI codes
-// startPos and endPos are character positions (not byte positions)
-func extractVisiblePortion(s string, startPos, endPos int) string {
-	if startPos < 0 {
-		startPos = 0
-	}
-	if endPos <= startPos {
-		return ""
+	// Use ansi.StringWidth to get the actual width of the first line (more reliable)
+	windowWidth := 0
+	if len(lines) > 0 {
+		windowWidth = ansi.StringWidth(lines[0])
 	}
 
-	var result strings.Builder
-	var prefixCodes strings.Builder // Collect ANSI codes before visible portion
-	var currentPos int
-	inEscape := false
-	var escapeSeq strings.Builder
-
-	for _, ch := range s {
-		if ch == '\x1b' {
-			inEscape = true
-			escapeSeq.Reset()
-			escapeSeq.WriteRune(ch)
-			continue
-		}
-
-		if inEscape {
-			escapeSeq.WriteRune(ch)
-			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
-				// End of escape sequence
-				inEscape = false
-
-				if currentPos < startPos {
-					// Save formatting codes that appear before the visible portion
-					prefixCodes.WriteString(escapeSeq.String())
-				} else if currentPos >= startPos && currentPos < endPos {
-					// Include escape sequences within visible range
-					result.WriteString(escapeSeq.String())
-				}
-			}
-			continue
-		}
-
-		// Regular character
-		if currentPos == startPos && prefixCodes.Len() > 0 {
-			// Prepend saved formatting codes at start of visible portion
-			result.WriteString(prefixCodes.String())
-		}
-
-		if currentPos >= startPos && currentPos < endPos {
-			result.WriteRune(ch)
-		}
-		currentPos++
-
-		if currentPos >= endPos {
-			break
-		}
+	// Check if completely off-screen
+	if x+windowWidth <= 0 || x >= viewportWidth || y+windowHeight <= 0 || y >= viewportHeight {
+		return "", max(x, 0), max(y, 0)
 	}
 
-	return result.String()
-}
-
-// GetCanvas returns the main rendering canvas with all layers.
-// clipToViewport clips rendered content to viewport bounds to prevent canvas expansion
-// Returns clipped content and adjusted screen coordinates
-func clipToViewport(content string, x, y, viewportWidth, viewportHeight int) (string, int, int) {
 	// Calculate clipping offsets
 	clipTop := 0
 	clipLeft := 0
-	screenX := x
-	screenY := y
+	finalX := x
+	finalY := y
 
+	// Vertical clipping: adjust which lines to include
 	if y < 0 {
 		clipTop = -y
-		screenY = 0
+		finalY = 0
 	}
+
+	// Horizontal clipping: adjust starting column
 	if x < 0 {
 		clipLeft = -x
-		screenX = 0
+		finalX = 0
 	}
 
-	// Calculate maximum visible dimensions
-	maxWidth := viewportWidth - screenX
-	maxHeight := viewportHeight - screenY
-
-	if maxWidth <= 0 || maxHeight <= 0 {
-		return "", screenX, screenY
-	}
-
-	// Split into lines and clip vertically
-	lines := strings.Split(content, "\n")
+	// Clip lines vertically (top)
 	if clipTop >= len(lines) {
-		return "", screenX, screenY
+		return "", finalX, finalY
+	}
+	visibleLines := lines[clipTop:]
+
+	// Clip lines vertically (bottom)
+	maxVisibleLines := viewportHeight - finalY
+	if maxVisibleLines < len(visibleLines) {
+		visibleLines = visibleLines[:maxVisibleLines]
 	}
 
-	// Extract visible lines (clip top and bottom)
-	endLine := len(lines)
-	if clipTop+maxHeight < endLine {
-		endLine = clipTop + maxHeight
+	// Horizontal clipping using ANSI-aware width functions
+	if clipLeft > 0 || finalX+windowWidth > viewportWidth {
+		maxWidth := viewportWidth - finalX
+		clippedLines := make([]string, len(visibleLines))
+
+		for lineIdx, line := range visibleLines {
+			lineWidth := ansi.StringWidth(line)
+
+			// Skip this line if it starts beyond what we need to clip
+			if clipLeft >= lineWidth {
+				clippedLines[lineIdx] = ""
+				continue
+			}
+
+			// For each line, we need to:
+			// 1. Skip the first clipLeft characters
+			// 2. Keep only maxWidth characters
+
+			// Use ansi.Truncate to handle ANSI codes properly
+			// First, truncate from the right to maxWidth + clipLeft
+			tempLine := line
+			if lineWidth > maxWidth+clipLeft {
+				tempLine = ansi.Truncate(line, maxWidth+clipLeft, "")
+			}
+
+			// Then skip the first clipLeft characters by removing them
+			if clipLeft > 0 {
+				// Convert to runes, skip ANSI codes, and take from clipLeft onwards
+				result := strings.Builder{}
+				pos := 0
+				skipCount := clipLeft
+
+				runes := []rune(tempLine)
+				runeIdx := 0
+				for runeIdx < len(runes) {
+					// Check for ANSI escape sequence
+					if runes[runeIdx] == '\x1b' {
+						// Found escape sequence - copy it without counting position
+						seqStart := runeIdx
+						runeIdx++
+
+						// Skip to end of sequence
+						if runeIdx < len(runes) && runes[runeIdx] == '[' {
+							runeIdx++
+							for runeIdx < len(runes) && !(runes[runeIdx] >= 0x40 && runes[runeIdx] <= 0x7E) {
+								runeIdx++
+							}
+							if runeIdx < len(runes) {
+								runeIdx++
+							}
+						} else if runeIdx < len(runes) && runes[runeIdx] == ']' {
+							runeIdx++
+							for runeIdx < len(runes) {
+								if runes[runeIdx] == '\x07' || (runes[runeIdx] == '\x1b' && runeIdx+1 < len(runes) && runes[runeIdx+1] == '\\') {
+									runeIdx++
+									if runeIdx < len(runes) && runes[runeIdx-1] == '\x1b' {
+										runeIdx++
+									}
+									break
+								}
+								runeIdx++
+							}
+						}
+
+						// Always include ANSI sequences in output (they don't count as positions)
+						if pos >= skipCount {
+							result.WriteString(string(runes[seqStart:runeIdx]))
+						}
+						continue
+					}
+
+					// Regular character
+					if pos >= skipCount {
+						result.WriteRune(runes[runeIdx])
+					}
+					pos++
+					runeIdx++
+				}
+
+				// Add reset code to prevent leakage
+				clippedLines[lineIdx] = result.String() + "\x1b[0m"
+			} else {
+				clippedLines[lineIdx] = tempLine
+				if lineWidth > maxWidth {
+					clippedLines[lineIdx] += "\x1b[0m"
+				}
+			}
+		}
+
+		return strings.Join(clippedLines, "\n"), finalX, finalY
 	}
-	visibleLines := lines[clipTop:endLine]
 
-	// Clip each line horizontally
-	clippedLines := make([]string, len(visibleLines))
-	for i, line := range visibleLines {
-		// Strip ANSI codes for width calculation and clipping
-		cleaned := stripANSI(line)
-		cleanedRunes := []rune(cleaned)
-		lineWidth := len(cleanedRunes)
-
-		if clipLeft >= lineWidth {
-			clippedLines[i] = ""
-			continue
-		}
-
-		// Calculate visible width
-		targetWidth := lineWidth - clipLeft
-		if targetWidth > maxWidth {
-			targetWidth = maxWidth
-		}
-
-		if targetWidth <= 0 {
-			clippedLines[i] = ""
-			continue
-		}
-
-		// Extract visible portion by character positions
-		startPos := clipLeft
-		endPos := clipLeft + targetWidth
-		if endPos > lineWidth {
-			endPos = lineWidth
-		}
-
-		// Extract substring preserving ANSI codes
-		clippedLines[i] = extractVisiblePortion(line, startPos, endPos)
-	}
-
-	return strings.Join(clippedLines, "\n"), screenX, screenY
+	// No horizontal clipping needed
+	return strings.Join(visibleLines, "\n"), finalX, finalY
 }
 
 func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
@@ -1225,21 +1210,22 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			m.AutoTiling,
 		)
 
-		// Clip content to viewport bounds to prevent canvas expansion
-		clippedContent, clippedX, clippedY := clipToViewport(
-			boxContent,
-			window.X, window.Y,
-			viewportWidth, viewportHeight,
-		)
-
 		// Give animating windows highest Z-index so they appear on top
 		zIndex := window.Z
 		if isAnimating {
 			zIndex = config.ZIndexAnimating // High z-index for animating windows
 		}
 
-		// Cache the layer with clipped content and adjusted position
-		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(clippedX).Y(clippedY).Z(zIndex).ID(window.ID)
+		// ROBUST CLIPPING: Clip content to viewport bounds using line-based approach
+		// This avoids ANSI parsing issues by working with complete lines and using
+		// the ansi package's width-aware functions for horizontal clipping
+		clippedContent, finalX, finalY := clipWindowContent(
+			boxContent,
+			window.X, window.Y,
+			viewportWidth, viewportHeight,
+		)
+
+		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
 		layers = append(layers, window.CachedLayer)
 
 		// Clear dirty flags after rendering

@@ -13,6 +13,14 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 - [Best Practices](#best-practices)
 - [Troubleshooting](#troubleshooting)
 
+## Related Documentation
+
+- **Command-Line Options**: See CLI documentation for runtime flags like `--theme` and `--ascii-only`
+- **Keybinding Reference**: See [KEYBINDINGS.md](KEYBINDINGS.md) for complete list of default keybindings
+- **Architecture Overview**: See [ARCHITECTURE.md](ARCHITECTURE.md) for system internals and component structure
+
+**Note**: Many system constants (window sizes, animation speeds, refresh rates) are currently hardcoded in `internal/config/constants.go` and cannot be configured via TOML.
+
 ## Quick Start
 
 ### Find Your Configuration
@@ -147,7 +155,7 @@ Arrow key navigation for window movement and selection extension.
 
 **Available actions:**
 - `nav_up`, `nav_down`, `nav_left`, `nav_right` - Arrow key navigation
-- `select_up`, `select_down`, `select_left`, `select_right` - Shift + arrow keys for selection extension
+- `extend_up`, `extend_down`, `extend_left`, `extend_right` - Shift + arrow keys for selection extension
 
 ### restore_minimized
 Individual minimized window restoration by number.

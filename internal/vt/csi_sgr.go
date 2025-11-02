@@ -83,6 +83,21 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 		case 30, 31, 32, 33, 34, 35, 36, 37: // Set foreground - USE THEME COLORS
 			*pen = pen.Foreground(e.IndexedColor(int(param - 30)))
 		case 38: // Set foreground 256 or truecolor
+			// Check if this is indexed color format (38;5;n) and if n is 0-15
+			if i+2 < len(params) {
+				next, _, _ := params.Param(i+1, -1)
+				if next == 5 {
+					// This is indexed color format
+					colorIndex, _, _ := params.Param(i+2, -1)
+					if colorIndex >= 0 && colorIndex <= 15 {
+						// Use our themed color for indices 0-15
+						*pen = pen.Foreground(e.IndexedColor(int(colorIndex)))
+						i += 2 // Skip the 5 and color index parameters
+						continue
+					}
+				}
+			}
+			// For all other cases (indices 16-255, RGB colors, etc), use standard reading
 			var c color.Color
 			n := ansi.ReadStyleColor(params[i:], &c)
 			if n > 0 {
@@ -94,6 +109,21 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 		case 40, 41, 42, 43, 44, 45, 46, 47: // Set background - USE THEME COLORS
 			*pen = pen.Background(e.IndexedColor(int(param - 40)))
 		case 48: // Set background 256 or truecolor
+			// Check if this is indexed color format (48;5;n) and if n is 0-15
+			if i+2 < len(params) {
+				next, _, _ := params.Param(i+1, -1)
+				if next == 5 {
+					// This is indexed color format
+					colorIndex, _, _ := params.Param(i+2, -1)
+					if colorIndex >= 0 && colorIndex <= 15 {
+						// Use our themed color for indices 0-15
+						*pen = pen.Background(e.IndexedColor(int(colorIndex)))
+						i += 2 // Skip the 5 and color index parameters
+						continue
+					}
+				}
+			}
+			// For all other cases (indices 16-255, RGB colors, etc), use standard reading
 			var c color.Color
 			n := ansi.ReadStyleColor(params[i:], &c)
 			if n > 0 {
@@ -103,6 +133,21 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 		case 49: // Default Background
 			*pen = pen.Background(e.defaultBg)
 		case 58: // Set underline color
+			// Check if this is indexed color format (58;5;n) and if n is 0-15
+			if i+2 < len(params) {
+				next, _, _ := params.Param(i+1, -1)
+				if next == 5 {
+					// This is indexed color format
+					colorIndex, _, _ := params.Param(i+2, -1)
+					if colorIndex >= 0 && colorIndex <= 15 {
+						// Use our themed color for indices 0-15
+						*pen = pen.Underline(e.IndexedColor(int(colorIndex)))
+						i += 2 // Skip the 5 and color index parameters
+						continue
+					}
+				}
+			}
+			// For all other cases (indices 16-255, RGB colors, etc), use standard reading
 			var c color.Color
 			n := ansi.ReadStyleColor(params[i:], &c)
 			if n > 0 {

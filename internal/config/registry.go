@@ -6,9 +6,9 @@ import (
 
 // KeybindRegistry manages the mapping between keys and actions
 type KeybindRegistry struct {
-	keyToAction  map[string]string // Maps key string to action name
-	config       *UserConfig
-	normalizer   *KeyNormalizer
+	keyToAction map[string]string // Maps key string to action name
+	config      *UserConfig
+	normalizer  *KeyNormalizer
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -181,13 +181,13 @@ func (r *KeybindRegistry) IsActionExplicitlyConfigured(action string) bool {
 
 	// Map action names to their sections
 	actionToSection := map[string]string{
-		"new_window": "window_management",
-		"close_window": "window_management",
-		"rename_window": "window_management",
+		"new_window":      "window_management",
+		"close_window":    "window_management",
+		"rename_window":   "window_management",
 		"minimize_window": "window_management",
-		"restore_all": "window_management",
-		"next_window": "window_management",
-		"prev_window": "window_management",
+		"restore_all":     "window_management",
+		"next_window":     "window_management",
+		"prev_window":     "window_management",
 		// Add more as needed
 	}
 

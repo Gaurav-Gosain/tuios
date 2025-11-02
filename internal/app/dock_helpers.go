@@ -19,14 +19,14 @@ type DockItem struct {
 
 // DockLayout contains calculated layout information for the dock
 type DockLayout struct {
-	LeftText        string
-	LeftWidth       int
-	RightWidth      int
-	CenterStartX    int
-	ItemPositions   []ItemPosition // Position of each dock item
-	TruncatedCount  int            // Number of items that don't fit
-	VisibleItems    []DockItem     // Items that fit and should be displayed
-	ModeInfo        ModeInfo       // Mode display information for styling
+	LeftText       string
+	LeftWidth      int
+	RightWidth     int
+	CenterStartX   int
+	ItemPositions  []ItemPosition // Position of each dock item
+	TruncatedCount int            // Number of items that don't fit
+	VisibleItems   []DockItem     // Items that fit and should be displayed
+	ModeInfo       ModeInfo       // Mode display information for styling
 }
 
 // ItemPosition holds the position and size of a dock item
@@ -59,10 +59,10 @@ func (m *OS) CalculateDockLayout() DockLayout {
 
 // ModeInfo contains mode display information
 type ModeInfo struct {
-	Block      string // The character to display (e.g., "█")
-	Color      string // Hex color for the block
-	CursorPos  string // Cursor position for copy mode (empty otherwise)
-	IsTiling   bool   // Whether tiling mode is active
+	Block     string // The character to display (e.g., "█")
+	Color     string // Hex color for the block
+	CursorPos string // Cursor position for copy mode (empty otherwise)
+	IsTiling  bool   // Whether tiling mode is active
 }
 
 // buildDockLeftText builds the left side of the dock (mode + workspace info)
