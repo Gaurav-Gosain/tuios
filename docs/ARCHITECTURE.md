@@ -8,6 +8,7 @@ This document provides a comprehensive overview of TUIOS's internal architecture
 - [System Architecture](#system-architecture)
 - [Data Flow](#data-flow)
 - [Terminal Emulation Stack](#terminal-emulation-stack)
+- [Theme Color System](#theme-color-system)
 - [Rendering Pipeline](#rendering-pipeline)
 - [SSH Server Architecture](#ssh-server-architecture)
 - [Core Components](#core-components)
@@ -81,27 +82,32 @@ graph TB
 ### Component Responsibilities
 
 **User Interface Layer:**
+
 - Handles raw terminal I/O via Bubble Tea
 - Processes keyboard and mouse events
 - Displays rendered ANSI output
 
 **Application Layer:**
+
 - **OS (Window Manager)**: Central state coordinator, workspace management, mode switching
 - **Input Handler**: Routes events based on current mode (Window Management, Terminal, Copy Mode)
 - **Workspace Manager**: Manages 9 independent workspaces
 - **Animation System**: Smooth transitions for minimize/restore/snap operations
 
 **Window Management:**
+
 - **Terminal Windows**: Individual terminal session containers
 - **Layout System**: Window positioning and sizing
 - **Tiling Manager**: Automatic grid-based layout algorithms
 
 **Terminal Emulation:**
+
 - **VT Emulator**: ANSI/VT100 escape sequence parser
 - **PTY Interface**: Pseudo-terminal communication with shell
 - **Scrollback Buffer**: 10,000 line history
 
 **Rendering Pipeline:**
+
 - **Rendering Engine**: Composites all visual layers
 - **Style Cache**: LRU cache for Lipgloss styles (40-60% allocation reduction)
 - **Object Pools**: Reusable buffers for strings, bytes, and layers
@@ -212,6 +218,125 @@ graph LR
 8. **Styling**: Lipgloss styles applied
 9. **Composition**: Final layer composited for rendering
 
+## Theme Color System
+
+TUIOS implements a comprehensive theming system that allows terminals to use
+configurable color palettes while maintaining compatibility with standard ANSI
+color codes.
+
+### Color Resolution Architecture
+
+```mermaid
+graph LR
+    subgraph "ANSI Input"
+        SGR[SGR Sequences]
+        BASIC["Basic: ESC 30-37m"]
+        INDEXED["Indexed: ESC 38;5;nm"]
+        RGB["RGB: ESC 38;2;r;g;bm"]
+    end
+
+    subgraph "Theme Layer"
+        PALETTE[ANSI Palette 0-15]
+        DEFAULT[Default Fg/Bg]
+        CURSOR[Cursor Color]
+    end
+
+    subgraph "Color Resolution"
+        CHECK{Color Index?}
+        THEME[Use Theme Color]
+        PASSTHRU[Use Original Color]
+    end
+
+    SGR --> BASIC
+    SGR --> INDEXED
+    SGR --> RGB
+
+    BASIC -->|0-7, 90-97| THEME
+    INDEXED --> CHECK
+    CHECK -->|0-15| THEME
+    CHECK -->|16-255| PASSTHRU
+    RGB --> PASSTHRU
+
+    THEME --> PALETTE
+    THEME --> DEFAULT
+    THEME --> CURSOR
+
+    style PALETTE fill:#2d6a4f
+    style THEME fill:#457b9d
+    style PASSTHRU fill:#9d0208
+```
+
+### Theme Color Handling
+
+**Basic ANSI Colors (30-37, 40-47, 90-97, 100-107):**
+
+- Automatically mapped to theme's 16-color palette
+- Indices 0-7: standard colors (black, red, green, yellow, blue, magenta, cyan, white)
+- Indices 8-15: bright variants
+
+**Indexed Colors (38;5;n, 48;5;n, 58;5;n):**
+
+- Colors 0-15: Routed through theme palette for consistency
+- Colors 16-255: Pass through unchanged (256-color compatibility)
+- Allows TUI apps to benefit from theming while preserving extended colors
+
+**RGB/Truecolor (38;2;r;g;b):**
+
+- Always pass through unchanged
+- Preserves application-specified exact colors
+- Full 24-bit color support
+
+### SGR Sequence Processing
+
+The VT emulator's SGR handler (`internal/vt/csi_sgr.go`) implements smart color routing:
+
+```go
+// Example: Foreground indexed color ESC[38;5;nm
+case 38:
+    if colorIndex >= 0 && colorIndex <= 15 {
+        // Use themed color for base ANSI palette
+        pen.Foreground(e.IndexedColor(colorIndex))
+    } else {
+        // Pass through 256-color and RGB
+        pen.Foreground(originalColor)
+    }
+```
+
+This ensures:
+
+- Consistent color schemes across all windows
+- Respect for application-specific color choices (256-color, RGB)
+- Compatibility with legacy and modern terminal applications
+
+### Dynamic Theme Updates
+
+TUIOS supports live theme switching without restarting windows:
+
+**Update Flow:**
+
+1. Theme change triggered (user action or config reload)
+2. `OS.UpdateAllWindowThemes()` called (`internal/app/os.go`)
+3. For each window: `Window.UpdateThemeColors()` (`internal/terminal/window.go`)
+4. VT emulator's theme colors refreshed via `Terminal.SetThemeColors()`
+5. Windows marked dirty to trigger re-render
+6. New theme colors immediately visible
+
+**Theme Components:**
+
+- **Foreground**: Default text color (ESC[39m)
+- **Background**: Default background color (ESC[49m)
+- **Cursor**: Cursor block color
+- **ANSI Palette**: 16 colors (indices 0-15) for SGR sequences
+
+### Implementation Files
+
+| Component         | File                          | Responsibility                             |
+| ----------------- | ----------------------------- | ------------------------------------------ |
+| **SGR Handler**   | `internal/vt/csi_sgr.go`      | Parse SGR sequences, route to theme colors |
+| **Theme Colors**  | `internal/terminal/window.go` | Initialize and update window theme colors  |
+| **Theme Manager** | `internal/app/os.go`          | Propagate theme changes to all windows     |
+| **Theme Config**  | `internal/theme/theme.go`     | Define color palettes and theme variants   |
+
 ## Rendering Pipeline
 
 ```mermaid
@@ -249,11 +374,13 @@ graph TD
 
 1. **Viewport Culling**: Off-screen windows skipped entirely
 2. **Content Caching**: Unchanged window content reused from cache
-3. **Style Caching**: Lipgloss styles pooled and reused (LRU cache)
-4. **Object Pooling**: String builders, byte buffers, and layer objects pooled
-5. **Z-Index Sorting**: Windows stacked by priority (focused, animating, minimized)
-6. **Frame Skipping**: No render when no changes and no animations
-7. **Adaptive Refresh**: 60Hz focused window, 20Hz background windows
+3. **Viewport Clipping**: Window content clipped to viewport bounds using ANSI-aware line-based approach
+4. **Drag Bounds Checking**: Mouse operations prevent windows from going off-screen during drag (improves UX and prevents ANSI clipping edge cases)
+5. **Style Caching**: Lipgloss styles pooled and reused (LRU cache)
+6. **Object Pooling**: String builders, byte buffers, and layer objects pooled
+7. **Z-Index Sorting**: Windows stacked by priority (focused, animating, minimized)
+8. **Frame Skipping**: No render when no changes and no animations
+9. **Adaptive Refresh**: 60Hz base rate, 30Hz during interactions, 20Hz for background windows
 
 ## SSH Server Architecture
 
@@ -304,6 +431,7 @@ graph TB
 ### SSH Session Isolation
 
 Each SSH connection receives:
+
 - Dedicated OS instance (window manager state)
 - Independent workspace configuration
 - Isolated window collection
@@ -311,6 +439,7 @@ Each SSH connection receives:
 - Own terminal size and capabilities
 
 This ensures:
+
 - No cross-session interference
 - Individual user preferences
 - Clean session teardown
@@ -318,42 +447,44 @@ This ensures:
 
 ## Core Components
 
-| Component | File | Purpose | Key Responsibilities |
-|-----------|------|---------|---------------------|
-| **Window Manager** | `internal/app/os.go` | Central state management | Workspace orchestration, mode handling, window lifecycle |
-| **Terminal Windows** | `internal/terminal/window.go` | Terminal session container | PTY lifecycle, VT emulator integration, content caching |
-| **Input Handler** | `internal/input/keyboard.go` | Event dispatcher | Modal routing, prefix commands, keyboard/mouse processing |
-| **Action Registry** | `internal/input/actions.go` | Command execution | 40+ action handlers for window management and navigation |
-| **VT Emulator** | `internal/vt/emulator.go` | ANSI parser | Screen buffer management, scrollback, escape sequence handling |
-| **Rendering Engine** | `internal/app/render.go` | View generation | Layer composition, viewport culling, ANSI generation |
-| **Layout System** | `internal/layout/tiling.go` | Window positioning | Grid calculations, tiling algorithms, snap positions |
-| **SSH Server** | `internal/server/ssh.go` | Remote access | Wish middleware, per-session isolation, authentication |
-| **Config System** | `internal/config/userconfig.go` | Configuration | TOML parsing, keybinding validation, defaults management |
-| **Keybind Registry** | `internal/config/registry.go` | Keybinding mapping | Action lookup, conflict detection, help generation |
-| **Style Cache** | `internal/app/stylecache.go` | Performance optimization | Lipgloss style pooling, LRU cache (40-60% allocation reduction) |
-| **Object Pools** | `internal/pool/pool.go` | Memory management | String/byte/layer pooling, GC pressure reduction |
-| **Copy Mode** | `internal/input/copymode_*.go` | Vim navigation | 50+ vim motions, search, visual selection, character search |
-| **Workspace Manager** | `internal/app/workspace.go` | Multi-workspace support | Workspace switching, window movement, focus memory |
-| **Animation System** | `internal/app/animations.go` | Visual transitions | Minimize/restore/snap animations, easing functions |
+| Component             | File                            | Purpose                    | Key Responsibilities                                            |
+| --------------------- | ------------------------------- | -------------------------- | --------------------------------------------------------------- |
+| **Window Manager**    | `internal/app/os.go`            | Central state management   | Workspace orchestration, mode handling, window lifecycle        |
+| **Terminal Windows**  | `internal/terminal/window.go`   | Terminal session container | PTY lifecycle, VT emulator integration, content caching         |
+| **Input Handler**     | `internal/input/keyboard.go`    | Event dispatcher           | Modal routing, prefix commands, keyboard/mouse processing       |
+| **Action Registry**   | `internal/input/actions.go`     | Command execution          | 40+ action handlers for window management and navigation        |
+| **VT Emulator**       | `internal/vt/emulator.go`       | ANSI parser                | Screen buffer management, scrollback, escape sequence handling  |
+| **Rendering Engine**  | `internal/app/render.go`        | View generation            | Layer composition, viewport culling, ANSI generation            |
+| **Layout System**     | `internal/layout/tiling.go`     | Window positioning         | Grid calculations, tiling algorithms, snap positions            |
+| **SSH Server**        | `internal/server/ssh.go`        | Remote access              | Wish middleware, per-session isolation, authentication          |
+| **Config System**     | `internal/config/userconfig.go` | Configuration              | TOML parsing, keybinding validation, defaults management        |
+| **Keybind Registry**  | `internal/config/registry.go`   | Keybinding mapping         | Action lookup, conflict detection, help generation              |
+| **Style Cache**       | `internal/app/stylecache.go`    | Performance optimization   | Lipgloss style pooling, LRU cache (40-60% allocation reduction) |
+| **Object Pools**      | `internal/pool/pool.go`         | Memory management          | String/byte/layer pooling, GC pressure reduction                |
+| **Copy Mode**         | `internal/input/copymode_*.go`  | Vim navigation             | 50+ vim motions, search, visual selection, character search     |
+| **Workspace Manager** | `internal/app/workspace.go`     | Multi-workspace support    | Workspace switching, window movement, focus memory              |
+| **Animation System**  | `internal/app/animations.go`    | Visual transitions         | Minimize/restore/snap animations, easing functions              |
 
 ### Component Interactions
 
 **Startup Flow:**
+
 1. Parse CLI flags and load configuration
 2. Initialize Bubble Tea program
-3. Create OS model with default workspace
-4. Start PTY polling goroutines
-5. Enter main event loop
+3. Create OS model with default workspace (no windows initially)
+4. Enter main event loop
 
 **Window Creation Flow:**
+
 1. User triggers new window command
 2. OS allocates window with PTY
-3. PTY spawns shell process
+3. PTY spawns shell process and starts I/O polling goroutines
 4. Window added to current workspace
 5. Layout recalculated (if tiling enabled)
 6. Focus transferred to new window
 
 **Rendering Flow:**
+
 1. Bubble Tea calls OS.View()
 2. Viewport culling filters visible windows
 3. Each window renders content from cache or VT buffer
@@ -365,12 +496,14 @@ This ensures:
 ## Performance Characteristics
 
 **Memory Management:**
+
 - Style cache hit rate: 40-60%
 - Object pool reuse: Reduces GC pressure
 - Scrollback limit: 10,000 lines per window
 - Content caching: Prevents redundant terminal parsing
 
 **Concurrency:**
+
 - Per-window PTY polling goroutines
 - Context-based cancellation for cleanup
 - Mutex-protected shared state

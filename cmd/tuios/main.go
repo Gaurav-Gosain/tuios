@@ -361,17 +361,17 @@ func runLocal() error {
 	// This handles cases where bubbletea's cleanup might not be complete
 	// Send reset sequence: ESC c (full reset)
 	// Also explicitly disable any remaining modes
-	fmt.Print("\033c")        // Full terminal reset
-	fmt.Print("\033[?1000l")  // Disable mouse tracking
-	fmt.Print("\033[?1002l")  // Disable button event mouse tracking
-	fmt.Print("\033[?1003l")  // Disable all motion mouse tracking
-	fmt.Print("\033[?1004l")  // Disable focus reporting
-	fmt.Print("\033[?1006l")  // Disable SGR mouse mode
-	fmt.Print("\033[?25h")    // Show cursor
-	fmt.Print("\033[?47l")    // Exit alternate screen (if still active)
-	fmt.Print("\033[0m")      // Reset text attributes
-	fmt.Print("\r\n")         // Newline to prevent prompt corruption
-	os.Stdout.Sync()          // Ensure all output is flushed
+	fmt.Print("\033c")       // Full terminal reset
+	fmt.Print("\033[?1000l") // Disable mouse tracking
+	fmt.Print("\033[?1002l") // Disable button event mouse tracking
+	fmt.Print("\033[?1003l") // Disable all motion mouse tracking
+	fmt.Print("\033[?1004l") // Disable focus reporting
+	fmt.Print("\033[?1006l") // Disable SGR mouse mode
+	fmt.Print("\033[?25h")   // Show cursor
+	fmt.Print("\033[?47l")   // Exit alternate screen (if still active)
+	fmt.Print("\033[0m")     // Reset text attributes
+	fmt.Print("\r\n")        // Newline to prevent prompt corruption
+	os.Stdout.Sync()         // Ensure all output is flushed
 
 	if err != nil {
 		return fmt.Errorf("program error: %w", err)

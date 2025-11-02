@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
@@ -27,9 +26,9 @@ import (
 // Cache for local terminal environment variables (detect once, reuse for local windows)
 // SSH sessions will detect per-connection based on their environment
 var (
-	localTermType string
+	localTermType  string
 	localColorTerm string
-	localEnvOnce  sync.Once
+	localEnvOnce   sync.Once
 )
 
 // Window represents a terminal window with its own shell process.
@@ -232,14 +231,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	}
 
 	// Set up the command to use the PTY as controlling terminal
-	// This is required for shells like fish to work properly
-	// Note: Ctty is the FD number in the child process (0 = stdin)
-	// xpty.Start() will set stdin to the PTY slave
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid:  true, // Create new session
-		Setctty: true, // Set controlling terminal
-		Ctty:    0,    // Use stdin (which will be the PTY slave)
-	}
+	// This is platform-specific (see pty_unix.go and pty_windows.go)
+	setupPTYCommand(cmd)
 
 	// Start the command with PTY
 	// xpty handles command connection internally
@@ -301,6 +294,21 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	}()
 
 	return window
+}
+
+// UpdateThemeColors updates the terminal colors when the theme changes
+func (w *Window) UpdateThemeColors() {
+	if w.Terminal != nil {
+		w.Terminal.SetThemeColors(
+			theme.TerminalFg(),
+			theme.TerminalBg(),
+			theme.TerminalCursor(),
+			theme.GetANSIPalette(),
+		)
+		// Mark the window as dirty to trigger a redraw
+		w.Dirty = true
+		w.ContentDirty = true
+	}
 }
 
 func detectShell() string {

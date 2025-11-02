@@ -2,6 +2,27 @@
 
 This document provides a complete reference for TUIOS command-line interface.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Commands](#commands)
+  - [Root Command](#root-command)
+  - [Theming](#theming)
+  - [tuios ssh](#tuios-ssh)
+  - [tuios config](#tuios-config)
+  - [tuios keybinds](#tuios-keybinds)
+  - [tuios completion](#tuios-completion)
+  - [tuios help](#tuios-help)
+- [Global Flags](#global-flags)
+- [Common Usage Examples](#common-usage-examples)
+- [Environment Variables](#environment-variables)
+- [Exit Codes](#exit-codes)
+- [Version Information](#version-information)
+- [Command Migration Guide](#command-migration-guide)
+- [Related Documentation](#related-documentation)
+
 ## Overview
 
 TUIOS uses a modern command-line interface built with Cobra and Fang, providing:
@@ -74,16 +95,100 @@ tuios
 ```
 
 **Flags:**
+- `--theme <name>` - Set color theme (default: "tokyonight")
+- `--list-themes` - List all available themes and exit
+- `--preview-theme <name>` - Preview a theme's 16 ANSI colors and exit
+- `--ascii-only` - Use ASCII characters instead of Nerd Font icons
 - `--debug` - Enable debug logging
 - `--cpuprofile <file>` - Write CPU profile to file
 - `-h, --help` - Show help for tuios
 - `-v, --version` - Show version information
 
-**Example:**
+**Examples:**
 ```bash
-tuios                      # Start TUIOS normally
-tuios --debug              # Start with debug logging
-tuios --cpuprofile cpu.prof  # Start with CPU profiling
+tuios                          # Start TUIOS normally (tokyonight theme)
+tuios --theme dracula          # Start with Dracula theme
+tuios --ascii-only             # Start without Nerd Font icons
+tuios --list-themes            # List all available themes
+tuios --preview-theme nord     # Preview Nord theme colors
+tuios --debug                  # Start with debug logging
+tuios --cpuprofile cpu.prof    # Start with CPU profiling
+
+# Interactive theme selection with fzf
+tuios --theme $(tuios --list-themes | fzf --preview 'tuios --preview-theme {}')
+```
+
+---
+
+## Theming
+
+TUIOS includes 300+ built-in color themes from various sources including Gogh, iTerm2, and custom themes.
+
+### Available Themes
+
+List all available themes:
+```bash
+tuios --list-themes
+```
+
+**Popular themes include:**
+- `tokyonight` (default) - A clean, dark theme with vibrant colors
+- `dracula` - Dark theme with purple accent
+- `nord` - An arctic, north-bluish color palette
+- `gruvbox_dark` - Retro groove color scheme
+- `catppuccin_mocha` - Soothing pastel theme
+- `monokai_pro` - Professional dark theme
+- `solarized_dark` - Precision colors for machines and people
+- `github` - GitHub's light theme
+- `one_dark` - Atom's iconic dark theme
+
+### Preview Themes
+
+Preview a theme's 16 ANSI colors before using it:
+```bash
+tuios --preview-theme dracula
+```
+
+The preview shows all 16 colors (8 standard + 8 bright variants) with their color codes.
+
+### Using Themes
+
+Set a theme at startup:
+```bash
+tuios --theme nord
+```
+
+The theme affects:
+- Terminal text colors (ANSI 0-15)
+- Window borders
+- UI elements (status bar, dock, overlays)
+- Default foreground/background colors
+
+**Note:** The theme only affects the 16 base ANSI colors. Applications using 256-color or true color (RGB) will display those colors unchanged.
+
+### Interactive Theme Selection
+
+Use `fzf` for interactive theme selection with live preview:
+```bash
+tuios --theme $(tuios --list-themes | fzf --preview 'tuios --preview-theme {}')
+```
+
+This allows you to browse all themes with a live color preview before selecting one.
+
+### Theme Persistence
+
+Themes are set via command-line flag and not currently stored in configuration. To always use a specific theme:
+
+**Shell alias:**
+```bash
+# Add to ~/.bashrc, ~/.zshrc, etc.
+alias tuios='tuios --theme nord'
+```
+
+**Script wrapper:**
+```bash
+#!/bin/bash
+exec tuios --theme dracula "$@"
 ```
 
 ---
@@ -286,8 +391,12 @@ tuios help config edit  # Show help for config edit subcommand
 
 ## Global Flags
 
-These flags are available on all commands:
+These flags are available on the root command:
 
+- `--theme <name>` - Set color theme (default: "tokyonight")
+- `--list-themes` - List all available themes and exit
+- `--preview-theme <name>` - Preview a theme's colors and exit
+- `--ascii-only` - Use ASCII characters instead of Nerd Font icons
 - `--debug` - Enable debug logging
 - `--cpuprofile <file>` - Write CPU profile to file
 - `-h, --help` - Show help
@@ -301,6 +410,28 @@ These flags are available on all commands:
 Start TUIOS normally:
 ```bash
 tuios
+```
+
+### Theming
+
+```bash
+# Start with a specific theme
+tuios --theme dracula
+
+# List all available themes
+tuios --list-themes
+
+# Preview a theme before using it
+tuios --preview-theme nord
+
+# Interactive theme selection with fzf
+tuios --theme $(tuios --list-themes | fzf --preview 'tuios --preview-theme {}')
+
+# Use ASCII mode (no Nerd Font required)
+tuios --ascii-only
+
+# Combine theme with ASCII mode
+tuios --theme gruvbox_dark --ascii-only
 ```
 
 ### Configuration Management

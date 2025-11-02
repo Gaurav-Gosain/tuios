@@ -298,10 +298,10 @@ const (
 	WindowBorderVertical    = "│" // U+2502
 
 	// Window button characters
-	WindowButtonClose     = " ⤫ " // Close/kill window
-	WindowPillLeft        = string(rune(0xe0b6))
-	WindowPillRight       = string(rune(0xe0b4))
-	WindowSeparatorChar   = "─" // U+2500
+	WindowButtonClose   = " ⤫ " // Close/kill window
+	WindowPillLeft      = string(rune(0xe0b6))
+	WindowPillRight     = string(rune(0xe0b4))
+	WindowSeparatorChar = "─" // U+2500
 )
 
 const (

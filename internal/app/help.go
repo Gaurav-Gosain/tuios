@@ -35,7 +35,7 @@ type HelpDimensions struct {
 func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 	categories := []HelpCategory{
 		{
-			Name:     "Window Management",
+			Name: "Window Management",
 			Bindings: generateCategoryBindings(registry, "Window Management", []string{
 				"new_window", "close_window", "rename_window",
 				"minimize_window", "restore_all",
@@ -47,21 +47,21 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 			Bindings: generateWorkspaceBindings(registry),
 		},
 		{
-			Name:     "Layout",
+			Name: "Layout",
 			Bindings: generateCategoryBindings(registry, "Layout", []string{
 				"snap_left", "snap_right", "snap_fullscreen", "unsnap",
 				"toggle_tiling", "swap_left", "swap_right", "swap_up", "swap_down",
 			}),
 		},
 		{
-			Name:     "Modes",
+			Name: "Modes",
 			Bindings: generateCategoryBindings(registry, "Modes", []string{
 				"enter_terminal_mode", "enter_window_mode",
 				"toggle_help", "quit",
 			}),
 		},
 		{
-			Name:     "System",
+			Name: "System",
 			Bindings: generateCategoryBindings(registry, "System", []string{
 				"toggle_logs", "toggle_cache_stats",
 			}),
@@ -242,10 +242,10 @@ func truncateString(s string, maxLen int) string {
 // This ensures all tables have consistent sizes and don't jump when switching tabs/searching
 func CalculateHelpDimensions(categories []HelpCategory) HelpDimensions {
 	dims := HelpDimensions{
-		MaxKeyWidth:      len("Keys"),      // Start with header width
-		MaxActionWidth:   len("Action"),    // Start with header width
-		MaxCategoryWidth: len("Category"),  // Start with header width
-		FixedRows:        15,               // Always display 15 rows
+		MaxKeyWidth:      len("Keys"),     // Start with header width
+		MaxActionWidth:   len("Action"),   // Start with header width
+		MaxCategoryWidth: len("Category"), // Start with header width
+		FixedRows:        15,              // Always display 15 rows
 	}
 
 	// Scan ALL bindings in ALL categories to find maximum widths

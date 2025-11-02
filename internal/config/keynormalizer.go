@@ -181,8 +181,8 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 			"ctrl":   true,
 			"alt":    true,
 			"shift":  true,
-			"opt":    kn.isMacOS,    // opt only valid on macOS
-			"option": kn.isMacOS,    // option only valid on macOS
+			"opt":    kn.isMacOS, // opt only valid on macOS
+			"option": kn.isMacOS, // option only valid on macOS
 		}
 
 		// Check each modifier

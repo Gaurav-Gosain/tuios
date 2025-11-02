@@ -344,10 +344,36 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Dragging && o.InteractionMode {
-		// Allow windows to move completely freely - no bounds checking
-		// Rendering will handle clipping naturally
-		focusedWindow.X = mouse.X - o.DragOffsetX
-		focusedWindow.Y = mouse.Y - o.DragOffsetY
+		// Calculate new position
+		newX := mouse.X - o.DragOffsetX
+		newY := mouse.Y - o.DragOffsetY
+
+		// Apply bounds checking to prevent windows from going off-screen
+		// This prevents ANSI clipping issues and provides better UX
+
+		// Left edge: prevent negative X
+		if newX < 0 {
+			newX = 0
+		}
+
+		// Right edge: prevent window from going beyond viewport width
+		if newX+focusedWindow.Width > o.Width {
+			newX = o.Width - focusedWindow.Width
+		}
+
+		// Top edge: prevent negative Y
+		if newY < 0 {
+			newY = 0
+		}
+
+		// Bottom edge: prevent window from going into dock area
+		maxY := o.GetUsableHeight()
+		if newY+focusedWindow.Height > maxY {
+			newY = maxY - focusedWindow.Height
+		}
+
+		focusedWindow.X = newX
+		focusedWindow.Y = newY
 		focusedWindow.MarkPositionDirty()
 		return o, nil
 	}
@@ -385,6 +411,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			newHeight = o.PreResizeState.Height + yOffset
 		}
 
+		// Apply minimum size constraints
 		if newWidth < config.DefaultWindowWidth {
 			newWidth = config.DefaultWindowWidth
 			if o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft {
@@ -398,22 +425,61 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
-		// Prevent resizing into dock area
+		// Apply viewport bounds checking to prevent windows from going off-screen
+		// This is consistent with drag bounds checking and prevents layout issues
+
+		// Left edge: prevent negative X
+		if newX < 0 {
+			// If resizing from left, adjust width to compensate
+			if o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft {
+				newWidth += newX // Add the negative offset back to width
+			}
+			newX = 0
+		}
+
+		// Top edge: prevent negative Y
+		if newY < 0 {
+			// If resizing from top, adjust height to compensate
+			if o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.TopRight {
+				newHeight += newY // Add the negative offset back to height
+			}
+			newY = 0
+		}
+
+		// Right edge: prevent window from exceeding viewport width
+		if newX+newWidth > o.Width {
+			if o.ResizeCorner == app.TopRight || o.ResizeCorner == app.BottomRight {
+				// Resizing from right edge - constrain width
+				newWidth = o.Width - newX
+			} else {
+				// Resizing from left edge - constrain X position
+				newX = o.Width - newWidth
+			}
+		}
+
+		// Bottom edge: prevent window from exceeding usable height (dock area)
 		maxY := o.GetUsableHeight()
 		if newY+newHeight > maxY {
 			if o.ResizeCorner == app.BottomLeft || o.ResizeCorner == app.BottomRight {
+				// Resizing from bottom edge - constrain height
 				newHeight = maxY - newY
+			} else {
+				// Resizing from top edge - constrain Y position
+				newY = maxY - newHeight
 			}
 		}
-		if newY+newHeight > maxY {
-			newY = maxY - newHeight
-		}
+
+		// Final safety check: ensure dimensions stay within bounds after all adjustments
+		newWidth = max(newWidth, config.DefaultWindowWidth)
+		newHeight = max(newHeight, config.DefaultWindowHeight)
+		newWidth = min(newWidth, o.Width-newX)
+		newHeight = min(newHeight, maxY-newY)
 
 		// Apply the resize
 		focusedWindow.X = newX
 		focusedWindow.Y = newY
-		focusedWindow.Width = max(newWidth, config.DefaultWindowWidth)
-		focusedWindow.Height = max(newHeight, config.DefaultWindowHeight)
+		focusedWindow.Width = newWidth
+		focusedWindow.Height = newHeight
 
 		focusedWindow.Resize(focusedWindow.Width, focusedWindow.Height)
 		focusedWindow.MarkPositionDirty()

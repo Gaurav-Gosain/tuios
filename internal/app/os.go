@@ -466,6 +466,16 @@ func (m *OS) AddWindow(title string) *OS {
 	return m
 }
 
+// UpdateAllWindowThemes updates the terminal colors for all windows when the theme changes
+func (m *OS) UpdateAllWindowThemes() {
+	m.LogInfo("Updating terminal colors for all windows after theme change")
+	for _, window := range m.Windows {
+		if window != nil {
+			window.UpdateThemeColors()
+		}
+	}
+}
+
 // DeleteWindow removes the window at the specified index.
 func (m *OS) DeleteWindow(i int) *OS {
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
