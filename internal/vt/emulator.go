@@ -233,6 +233,12 @@ func (e *Emulator) CursorPosition() uv.Position {
 	return uv.Pos(x, y)
 }
 
+// IsCursorHidden returns whether the cursor is currently hidden.
+// Applications can hide the cursor using ANSI escape sequences (DECTCEM mode).
+func (e *Emulator) IsCursorHidden() bool {
+	return e.scr.Cursor().Hidden
+}
+
 // Resize resizes the terminal.
 func (e *Emulator) Resize(width int, height int) {
 	x, y := e.scr.CursorPosition()

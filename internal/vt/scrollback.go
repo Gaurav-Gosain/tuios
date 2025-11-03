@@ -6,11 +6,18 @@ import (
 
 // Scrollback represents a scrollback buffer that stores lines that have
 // scrolled off the top of the visible screen.
+// Uses a ring buffer for O(1) insertions instead of O(n) slice reallocations.
 type Scrollback struct {
-	// lines stores the scrollback lines, with the oldest at index 0
+	// lines stores the scrollback lines in a ring buffer
 	lines [][]uv.Cell
 	// maxLines is the maximum number of lines to keep in scrollback
 	maxLines int
+	// head is the index of the oldest line in the ring buffer
+	head int
+	// tail is the index where the next line will be inserted
+	tail int
+	// full indicates whether the ring buffer is at capacity
+	full bool
 }
 
 // NewScrollback creates a new scrollback buffer with the specified maximum
@@ -20,13 +27,17 @@ func NewScrollback(maxLines int) *Scrollback {
 		maxLines = 10000 // Default scrollback size
 	}
 	return &Scrollback{
-		lines:    make([][]uv.Cell, 0, min(maxLines, 1000)), // Pre-allocate reasonable amount
+		lines:    make([][]uv.Cell, maxLines), // Pre-allocate full ring buffer
 		maxLines: maxLines,
+		head:     0,
+		tail:     0,
+		full:     false,
 	}
 }
 
 // PushLine adds a line to the scrollback buffer. If the buffer is full,
-// the oldest line is removed.
+// the oldest line is removed (by overwriting it in the ring buffer).
+// This is now an O(1) operation instead of O(n).
 func (sb *Scrollback) PushLine(line []uv.Cell) {
 	if len(line) == 0 {
 		return
@@ -36,38 +47,73 @@ func (sb *Scrollback) PushLine(line []uv.Cell) {
 	lineCopy := make([]uv.Cell, len(line))
 	copy(lineCopy, line)
 
-	// If we're at capacity, remove the oldest line
-	if len(sb.lines) >= sb.maxLines {
-		sb.lines = sb.lines[1:]
+	// Insert at tail position
+	sb.lines[sb.tail] = lineCopy
+
+	// Advance tail (wraps around at maxLines)
+	sb.tail = (sb.tail + 1) % sb.maxLines
+
+	// If buffer is full, advance head (oldest line pointer) as well
+	if sb.full {
+		sb.head = (sb.head + 1) % sb.maxLines
 	}
 
-	sb.lines = append(sb.lines, lineCopy)
+	// Mark as full when tail catches up to head
+	if sb.tail == sb.head && len(lineCopy) > 0 {
+		sb.full = true
+	}
 }
 
 // Len returns the number of lines currently in the scrollback buffer.
 func (sb *Scrollback) Len() int {
-	return len(sb.lines)
+	if sb.full {
+		return sb.maxLines
+	}
+	if sb.tail >= sb.head {
+		return sb.tail - sb.head
+	}
+	return sb.maxLines - sb.head + sb.tail
 }
 
 // Line returns the line at the specified index in the scrollback buffer.
 // Index 0 is the oldest line, and Len()-1 is the newest (most recently scrolled).
 // Returns nil if the index is out of bounds.
 func (sb *Scrollback) Line(index int) []uv.Cell {
-	if index < 0 || index >= len(sb.lines) {
+	length := sb.Len()
+	if index < 0 || index >= length {
 		return nil
 	}
-	return sb.lines[index]
+	// Map logical index to physical ring buffer index
+	physicalIndex := (sb.head + index) % sb.maxLines
+	return sb.lines[physicalIndex]
 }
 
 // Lines returns a slice of all lines in the scrollback buffer, from oldest
 // to newest. The returned slice should not be modified.
 func (sb *Scrollback) Lines() [][]uv.Cell {
-	return sb.lines
+	length := sb.Len()
+	if length == 0 {
+		return nil
+	}
+
+	// Build a slice in correct order from the ring buffer
+	result := make([][]uv.Cell, length)
+	for i := 0; i < length; i++ {
+		physicalIndex := (sb.head + i) % sb.maxLines
+		result[i] = sb.lines[physicalIndex]
+	}
+	return result
 }
 
 // Clear removes all lines from the scrollback buffer.
 func (sb *Scrollback) Clear() {
-	sb.lines = sb.lines[:0] // Keep capacity, just reset length
+	sb.head = 0
+	sb.tail = 0
+	sb.full = false
+	// Optionally nil out the lines to help GC, but keep the slice
+	for i := range sb.lines {
+		sb.lines[i] = nil
+	}
 }
 
 // MaxLines returns the maximum number of lines this scrollback can hold.
@@ -82,12 +128,38 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	if maxLines <= 0 {
 		maxLines = 10000 // Default scrollback size
 	}
-	sb.maxLines = maxLines
 
-	// If we have too many lines, trim from the front (oldest)
-	if len(sb.lines) > maxLines {
-		sb.lines = sb.lines[len(sb.lines)-maxLines:]
+	if maxLines == sb.maxLines {
+		return // No change needed
 	}
+
+	oldLen := sb.Len()
+	if oldLen == 0 {
+		// Empty buffer, just resize
+		sb.lines = make([][]uv.Cell, maxLines)
+		sb.maxLines = maxLines
+		sb.head = 0
+		sb.tail = 0
+		sb.full = false
+		return
+	}
+
+	// Create new ring buffer and copy existing lines
+	newLines := make([][]uv.Cell, maxLines)
+	newLen := min(oldLen, maxLines)
+
+	// Copy the most recent newLen lines
+	startIndex := oldLen - newLen // Skip oldest lines if downsizing
+	for i := 0; i < newLen; i++ {
+		physicalIndex := (sb.head + startIndex + i) % sb.maxLines
+		newLines[i] = sb.lines[physicalIndex]
+	}
+
+	sb.lines = newLines
+	sb.maxLines = maxLines
+	sb.head = 0
+	sb.tail = newLen % maxLines
+	sb.full = (newLen == maxLines)
 }
 
 // extractLine extracts a complete line from the buffer at the given Y coordinate.

@@ -13,7 +13,15 @@ import (
 
 // UserConfig represents the user's custom configuration
 type UserConfig struct {
+	Appearance  AppearanceConfig  `toml:"appearance"`
 	Keybindings KeybindingsConfig `toml:"keybindings"`
+}
+
+// AppearanceConfig holds appearance-related settings
+type AppearanceConfig struct {
+	BorderStyle       string `toml:"border_style"`        // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
+	HideWindowButtons bool   `toml:"hide_window_buttons"` // Hide window control buttons (minimize, maximize, close)
+	ScrollbackLines   int    `toml:"scrollback_lines"`    // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 }
 
 // KeybindingsConfig holds all keybinding configurations
@@ -35,6 +43,11 @@ type KeybindingsConfig struct {
 // DefaultConfig returns the default configuration
 func DefaultConfig() *UserConfig {
 	cfg := &UserConfig{
+		Appearance: AppearanceConfig{
+			BorderStyle:       "rounded",
+			HideWindowButtons: false,
+			ScrollbackLines:   10000,
+		},
 		Keybindings: KeybindingsConfig{
 			WindowManagement: map[string][]string{
 				"new_window":      {"n"},
@@ -272,6 +285,7 @@ func LoadUserConfig() (*UserConfig, error) {
 
 	// Validate and fill in missing sections with defaults
 	defaultCfg := DefaultConfig()
+	fillMissingAppearance(&cfg, defaultCfg)
 	fillMissingKeybinds(&cfg, defaultCfg)
 
 	// Validate configuration
@@ -309,20 +323,37 @@ func createDefaultConfig() (*UserConfig, error) {
 		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Marshal to TOML with comments
-	var sb strings.Builder
-	sb.WriteString("# TUIOS Configuration File\n")
-	sb.WriteString("# This file allows you to customize keybindings\n")
-	sb.WriteString("# Edit keybindings by modifying the arrays of keys for each action\n")
-	sb.WriteString("# Multiple keys can be bound to the same action\n")
-	sb.WriteString("#\n")
-	sb.WriteString("# Configuration location: " + configPath + "\n")
-	sb.WriteString("# Documentation: https://github.com/Gaurav-Gosain/tuios\n\n")
-
+	// Marshal config to TOML
 	data, err := toml.Marshal(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
+
+	// Build config file with header comments and marshaled data
+	var sb strings.Builder
+	sb.WriteString("# TUIOS Configuration File\n")
+	sb.WriteString("# This file allows you to customize appearance and keybindings\n")
+	sb.WriteString("#\n")
+	sb.WriteString("# Configuration location: " + configPath + "\n")
+	sb.WriteString("# Documentation: https://github.com/Gaurav-Gosain/tuios\n")
+	sb.WriteString("# For keybindings documentation, run: tuios keybinds list\n\n")
+
+	sb.WriteString("# ============================================================================\n")
+	sb.WriteString("# APPEARANCE SETTINGS\n")
+	sb.WriteString("# ============================================================================\n")
+	sb.WriteString("# border_style: Window border style\n")
+	sb.WriteString("#   Options: rounded, normal, thick, double, hidden, block, ascii,\n")
+	sb.WriteString("#            outer-half-block, inner-half-block\n")
+	sb.WriteString("#   Default: rounded\n")
+	sb.WriteString("#\n")
+	sb.WriteString("# hide_window_buttons: Hide window control buttons (minimize, maximize, close)\n")
+	sb.WriteString("#   Options: true, false\n")
+	sb.WriteString("#   Default: false\n")
+	sb.WriteString("#\n")
+	sb.WriteString("# scrollback_lines: Number of lines to keep in scrollback buffer\n")
+	sb.WriteString("#   Range: 100 to 1000000\n")
+	sb.WriteString("#   Default: 10000\n")
+	sb.WriteString("# ============================================================================\n\n")
 
 	if _, err := sb.Write(data); err != nil {
 		return nil, fmt.Errorf("failed to write config data: %w", err)
@@ -334,6 +365,24 @@ func createDefaultConfig() (*UserConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// fillMissingAppearance fills in any missing appearance settings with defaults
+func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
+	if cfg.Appearance.BorderStyle == "" {
+		cfg.Appearance.BorderStyle = defaultCfg.Appearance.BorderStyle
+	}
+	// Note: HideWindowButtons defaults to false (zero value)
+	// In borderless mode, buttons are hidden automatically regardless of this setting
+
+	// Validate and set scrollback lines (min: 100, max: 1000000)
+	if cfg.Appearance.ScrollbackLines <= 0 {
+		cfg.Appearance.ScrollbackLines = defaultCfg.Appearance.ScrollbackLines
+	} else if cfg.Appearance.ScrollbackLines < 100 {
+		cfg.Appearance.ScrollbackLines = 100
+	} else if cfg.Appearance.ScrollbackLines > 1000000 {
+		cfg.Appearance.ScrollbackLines = 1000000
+	}
 }
 
 // fillMissingKeybinds fills in any missing keybindings with defaults

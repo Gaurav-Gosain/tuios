@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/charmbracelet/lipgloss/v2"
+)
 
 // =============================================================================
 // Window Defaults
@@ -220,6 +224,18 @@ const (
 // Set via --ascii-only command-line flag
 var UseASCIIOnly = false
 
+// BorderStyle controls which border style to use for windows
+// Set via --border-style flag or appearance.border_style config
+var BorderStyle = "rounded"
+
+// HideWindowButtons controls whether to hide window control buttons
+// Set via --hide-window-buttons flag or appearance.hide_window_buttons config
+var HideWindowButtons = false
+
+// ScrollbackLines controls the number of lines to keep in scrollback buffer
+// Set via --scrollback-lines flag or appearance.scrollback_lines config
+var ScrollbackLines = 10000
+
 // GetDockPillLeftChar returns the appropriate pill left character based on UseASCIIOnly
 func GetDockPillLeftChar() string {
 	if UseASCIIOnly {
@@ -320,54 +336,85 @@ const (
 	WindowSeparatorCharASCII = "-"
 )
 
+// GetBorderForStyle returns the lipgloss Border for the current style
+func GetBorderForStyle() lipgloss.Border {
+	if UseASCIIOnly || BorderStyle == "ascii" {
+		return lipgloss.ASCIIBorder()
+	}
+	switch BorderStyle {
+	case "normal":
+		return lipgloss.NormalBorder()
+	case "thick":
+		return lipgloss.ThickBorder()
+	case "double":
+		return lipgloss.DoubleBorder()
+	case "hidden":
+		return lipgloss.HiddenBorder()
+	case "block":
+		return lipgloss.BlockBorder()
+	case "outer-half-block":
+		return lipgloss.OuterHalfBlockBorder()
+	case "inner-half-block":
+		return lipgloss.InnerHalfBlockBorder()
+	case "rounded":
+		fallthrough
+	default:
+		return lipgloss.RoundedBorder()
+	}
+}
+
 // Window decoration getter functions
 
 // GetWindowBorderTopLeft returns the appropriate top-left border character
 func GetWindowBorderTopLeft() string {
-	if UseASCIIOnly {
-		return WindowBorderTopLeftASCII
-	}
-	return WindowBorderTopLeft
+	return GetBorderForStyle().TopLeft
 }
 
 // GetWindowBorderTopRight returns the appropriate top-right border character
 func GetWindowBorderTopRight() string {
-	if UseASCIIOnly {
-		return WindowBorderTopRightASCII
-	}
-	return WindowBorderTopRight
+	return GetBorderForStyle().TopRight
 }
 
 // GetWindowBorderBottomLeft returns the appropriate bottom-left border character
 func GetWindowBorderBottomLeft() string {
-	if UseASCIIOnly {
-		return WindowBorderBottomLeftASCII
-	}
-	return WindowBorderBottomLeft
+	return GetBorderForStyle().BottomLeft
 }
 
 // GetWindowBorderBottomRight returns the appropriate bottom-right border character
 func GetWindowBorderBottomRight() string {
-	if UseASCIIOnly {
-		return WindowBorderBottomRightASCII
-	}
-	return WindowBorderBottomRight
+	return GetBorderForStyle().BottomRight
+}
+
+// GetWindowBorderTop returns the appropriate top border character
+func GetWindowBorderTop() string {
+	return GetBorderForStyle().Top
+}
+
+// GetWindowBorderBottom returns the appropriate bottom border character
+func GetWindowBorderBottom() string {
+	return GetBorderForStyle().Bottom
+}
+
+// GetWindowBorderLeft returns the appropriate left border character
+func GetWindowBorderLeft() string {
+	return GetBorderForStyle().Left
+}
+
+// GetWindowBorderRight returns the appropriate right border character
+func GetWindowBorderRight() string {
+	return GetBorderForStyle().Right
 }
 
 // GetWindowBorderHorizontal returns the appropriate horizontal border character
+// Deprecated: Use GetWindowBorderTop() or GetWindowBorderBottom() for half-block borders
 func GetWindowBorderHorizontal() string {
-	if UseASCIIOnly {
-		return WindowBorderHorizontalASCII
-	}
-	return WindowBorderHorizontal
+	return GetWindowBorderTop()
 }
 
 // GetWindowBorderVertical returns the appropriate vertical border character
+// Deprecated: Use GetWindowBorderLeft() or GetWindowBorderRight() for half-block borders
 func GetWindowBorderVertical() string {
-	if UseASCIIOnly {
-		return WindowBorderVerticalASCII
-	}
-	return WindowBorderVertical
+	return GetWindowBorderLeft()
 }
 
 // GetWindowButtonClose returns the appropriate close button character
