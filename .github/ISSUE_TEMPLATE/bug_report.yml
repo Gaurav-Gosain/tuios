@@ -58,6 +58,7 @@ body:
         - Go Install (go install ...)
         - Nix
         - Manual Build from Source
+        - Docker
         - Other
       default: 0
     validations:
