@@ -1,0 +1,122 @@
+name: 🐞 Bug Report
+description: Report a bug or unexpected behavior in the project.
+title: "[BUG]: "
+labels: ["bug", "needs triage"]
+assignees: ["Gaurav-Gosain"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug.
+
+        Before submitting, please:
+        - Ensure this issue has not already been reported.
+        - Provide as much context as possible, including your platform, version, and steps to reproduce.
+        - Attach logs or screenshots when applicable.
+
+  - type: input
+    id: bug-summary
+    attributes:
+      label: Brief Description
+      description: A short description of the bug or issue.
+      placeholder: ex. App crashes when saving configuration.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Select the platform or environment where the bug occurred.
+      options:
+        - Linux (arm64)
+        - Linux (armv6)
+        - Linux (armv7)
+        - Linux (i386)
+        - Linux (x86_64)
+        - Darwin (arm64)
+        - Darwin (x86_64)
+        - FreeBSD (arm64)
+        - FreeBSD (i386)
+        - FreeBSD (x86_64)
+        - Windows (x86_64)
+        - Windows (i386)
+        - Docker
+      default: 0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation Method
+      description: How did you install the application?
+      options:
+        - Bash Script (curl / wget)
+        - Homebrew (macOS/Linux)
+        - Arch Linux (AUR)
+        - Go Install (go install ...)
+        - Nix
+        - Manual Build from Source
+        - Docker
+        - Other
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or Commit
+      description: Enter the version tag (e.g. v0.0.23) or Git commit hash where the issue occurs.
+      placeholder: ex. v0.0.23 or 9ce8fe6
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current Behavior
+      description: Describe what is currently happening.
+      placeholder: ex. The CLI exits with a non-zero code and no output.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: Describe what you expected to happen instead.
+      placeholder: ex. The CLI should display a success message and exit with code 0.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps To Reproduce
+      description: Provide detailed steps to reproduce the issue.
+      placeholder: |
+        1. Install version v1.2.0
+        2. Run `tuios`
+        3. Observe error message
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-logs
+    attributes:
+      label: Error Logs
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Attach screenshots or images that help illustrate the issue.
+      placeholder: Drag and drop images here or paste them directly.
+    validations:
+      required: false

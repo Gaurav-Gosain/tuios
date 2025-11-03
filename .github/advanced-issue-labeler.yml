@@ -1,0 +1,25 @@
+policy:
+  - section:
+      - id: [platform]
+        label:
+          - name: 'kind: linux'
+            keys: ['Linux (arm64)', 'Linux (armv6)', '`Linux (armv7)', 'Linux (i386)', 'Linux (x86_64)']
+          - name: 'kind: darwin'
+            keys: ['Darwin (arm64)', 'Darwin (x86_64)']
+          - name: 'kind: FreeBSD'
+            keys: ['FreeBSD (arm64)', 'FreeBSD (i386)', 'FreeBSD (x86_64)']
+          - name: 'kind: ew windows'
+            keys: ['Windows (x86_64)', 'Windows (i386)']
+          - name: 'kind: ew docker'
+            keys: ['Docker']
+
+      - id: [install-method]
+        label:
+          - name: 'kind: bash script'
+            keys: ['Bash Script (curl / wget)']
+          - name: 'kind: arch btw'
+            keys: ['Arch Linux (AUR)']
+          - name: 'kind: nix'
+            keys: ['Nix']
+          - name: 'kind: ew docker'
+            keys: ['Docker']
