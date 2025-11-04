@@ -80,6 +80,7 @@ snap_left = ["h"]
 
 [appearance]
 border_style = "rounded"
+dockbar_position = "bottom"
 hide_window_buttons = false
 scrollback_lines = 10000
 ```
@@ -193,6 +194,7 @@ The `[appearance]` section controls the visual presentation of TUIOS.
 ```toml
 [appearance]
 border_style = "rounded"
+dockbar_position = "bottom"
 hide_window_buttons = false
 scrollback_lines = 10000
 ```
@@ -215,6 +217,19 @@ Controls the style of window borders.
 **Default:** `"rounded"`
 
 **CLI override:** `--border-style <style>`
+
+### dockbar_position
+
+Controls the position of the dockbar.
+
+**Valid values:**
+- `"bottom"` - Position dockbar at the bottom (default)
+- `"top"` - Position dockbar at the top
+- `"hidden"` - Hide dockbar
+
+**Default:** `"bottom"`
+
+**CLI override:** `--dockbar-position <position>`
 
 ### hide_window_buttons
 

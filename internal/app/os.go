@@ -585,26 +585,27 @@ func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) 
 	usableHeight := m.GetUsableHeight()
 	halfWidth := m.Width / 2
 	halfHeight := usableHeight / 2
+	topMargin := m.GetTopMargin()
 
 	switch quarter {
 	case SnapLeft:
-		return 0, 0, halfWidth, usableHeight
+		return 0, topMargin, halfWidth, usableHeight
 	case SnapRight:
-		return halfWidth, 0, m.Width - halfWidth, usableHeight
+		return halfWidth, topMargin, m.Width - halfWidth, usableHeight
 	case SnapTopLeft:
-		return 0, 0, halfWidth, halfHeight
+		return 0, topMargin, halfWidth, halfHeight
 	case SnapTopRight:
-		return halfWidth, 0, halfWidth, halfHeight
+		return halfWidth, topMargin, halfWidth, halfHeight
 	case SnapBottomLeft:
-		return 0, halfHeight, halfWidth, usableHeight - halfHeight
+		return 0, halfHeight+topMargin, halfWidth, usableHeight - halfHeight
 	case SnapBottomRight:
-		return halfWidth, halfHeight, halfWidth, usableHeight - halfHeight
+		return halfWidth, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
 	case SnapFullScreen:
-		return 0, 0, m.Width, usableHeight
+		return 0, topMargin, m.Width, usableHeight
 	case Unsnap:
-		return m.Width / 4, usableHeight / 4, halfWidth, halfHeight
+		return m.Width / 4, usableHeight / 4 + topMargin, halfWidth, halfHeight
 	default:
-		return m.Width / 4, usableHeight / 4, halfWidth, halfHeight
+		return m.Width / 4, usableHeight / 4 + topMargin, halfWidth, halfHeight
 	}
 }
 
@@ -752,10 +753,41 @@ func (m *OS) HasMinimizedWindows() bool {
 	return false
 }
 
+// GetTopMargin returns the margin at the top (possibly reserved space for the dockbar)
+func (m *OS) GetTopMargin() int {
+	if (config.DockbarPosition == "top") {
+		return config.DockHeight
+	}
+	
+	return 0;
+}
+
+// GetDockbarContentYPosition returns the Y position of the dockbar
+func (m *OS) GetDockbarContentYPosition() int {
+	if (config.DockbarPosition == "top") {
+		return 0
+	}
+	
+	return m.Height - 1;
+}
+
+// GetTimeYPosition returns the Y position of the time display
+func (m *OS) GetTimeYPosition() int {
+	if (config.DockbarPosition == "top") {
+		return m.Height - 1
+	}
+	
+	return 0;
+}
+
 // GetUsableHeight returns the usable height excluding the dock.
 func (m *OS) GetUsableHeight() int {
-	// Reserve space for the dock at the bottom
-	return m.Height - config.DockHeight
+	if (config.DockbarPosition == "hidden") {
+		return m.Height
+	} else {
+		// Reserve space for the dock at the bottom
+		return m.Height - config.DockHeight
+	}
 }
 
 // MarkAllDirty marks all windows as dirty for re-rendering.

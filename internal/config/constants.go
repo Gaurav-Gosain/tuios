@@ -228,6 +228,10 @@ var UseASCIIOnly = false
 // Set via --border-style flag or appearance.border_style config
 var BorderStyle = "rounded"
 
+// DockbarPosition controls the position of the dockbar
+// Set via --dockbar-position flag or appearance.dockbar_position config
+var DockbarPosition = "bottom"
+
 // HideWindowButtons controls whether to hide window control buttons
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config
 var HideWindowButtons = false

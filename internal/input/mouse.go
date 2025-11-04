@@ -50,7 +50,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check if click is in the dock area (always reserved)
-	if Y >= o.Height-config.DockHeight {
+	if ((config.DockbarPosition == "bottom") && (Y >= o.Height-config.DockHeight)) || ((config.DockbarPosition == "top") && (Y <= config.DockHeight)) {
 		// Handle dock click only if there are minimized windows
 		if o.HasMinimizedWindows() {
 			dockIndex := findDockItemClicked(X, Y, o)
@@ -340,6 +340,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	topMargin := o.GetTopMargin()
 	if o.Dragging && o.InteractionMode {
 		// Calculate new position
 		newX := mouse.X - o.DragOffsetX
@@ -359,12 +360,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 
 		// Top edge: prevent negative Y
-		if newY < 0 {
-			newY = 0
+		if newY < topMargin {
+			newY = topMargin
 		}
 
 		// Bottom edge: prevent window from going into dock area
-		maxY := o.GetUsableHeight()
+		maxY := topMargin + o.GetUsableHeight()
 		if newY+focusedWindow.Height > maxY {
 			newY = maxY - focusedWindow.Height
 		}
@@ -867,8 +868,8 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 			}
 		}
 
-		// Check if click is within this dock item (dock bar is at o.Height-1)
-		if x >= itemPos.StartX && x < itemPos.EndX && y == o.Height-1 {
+		// Check if click is within this dock item 
+		if x >= itemPos.StartX && x < itemPos.EndX && y == o.GetDockbarContentYPosition() {
 			// DEBUG: Log successful match
 			if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 				if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {

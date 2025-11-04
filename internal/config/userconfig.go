@@ -22,6 +22,7 @@ type AppearanceConfig struct {
 	BorderStyle       string `toml:"border_style"`        // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
 	HideWindowButtons bool   `toml:"hide_window_buttons"` // Hide window control buttons (minimize, maximize, close)
 	ScrollbackLines   int    `toml:"scrollback_lines"`    // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
+	DockbarPosition   string `toml:"dockbar_position"`    // Dockbar position: bottom, top, hidden
 }
 
 // KeybindingsConfig holds all keybinding configurations
@@ -47,6 +48,7 @@ func DefaultConfig() *UserConfig {
 			BorderStyle:       "rounded",
 			HideWindowButtons: false,
 			ScrollbackLines:   10000,
+			DockbarPosition:   "bottom",
 		},
 		Keybindings: KeybindingsConfig{
 			WindowManagement: map[string][]string{
@@ -354,6 +356,10 @@ func createDefaultConfig() (*UserConfig, error) {
 	sb.WriteString("#            outer-half-block, inner-half-block\n")
 	sb.WriteString("#   Default: rounded\n")
 	sb.WriteString("#\n")
+	sb.WriteString("# dockbar_position: Position of the dockbar\n")
+	sb.WriteString("#   Options: bottom, top, hidden\n")
+	sb.WriteString("#   Default: bottom\n")
+	sb.WriteString("#\n")
 	sb.WriteString("# hide_window_buttons: Hide window control buttons (minimize, maximize, close)\n")
 	sb.WriteString("#   Options: true, false\n")
 	sb.WriteString("#   Default: false\n")
@@ -380,6 +386,11 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.BorderStyle == "" {
 		cfg.Appearance.BorderStyle = defaultCfg.Appearance.BorderStyle
 	}
+
+	if cfg.Appearance.DockbarPosition == "" {
+		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
+	}
+	
 	// Note: HideWindowButtons defaults to false (zero value)
 	// In borderless mode, buttons are hidden automatically regardless of this setting
 

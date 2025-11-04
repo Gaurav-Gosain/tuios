@@ -14,7 +14,7 @@ type tileLayout struct {
 
 // calculateTilingLayout is a wrapper around layout.CalculateTilingLayout for internal use
 func (m *OS) calculateTilingLayout(n int) []tileLayout {
-	layouts := layout.CalculateTilingLayout(n, m.Width, m.GetUsableHeight(), m.MasterRatio)
+	layouts := layout.CalculateTilingLayout(n, m.Width, m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
 	result := make([]tileLayout, len(layouts))
 	for i, l := range layouts {
 		result[i] = tileLayout{
@@ -44,7 +44,7 @@ func (m *OS) TileAllWindows() {
 	}
 
 	// Calculate tiling layout based on number of windows
-	layouts := layout.CalculateTilingLayout(len(visibleWindows), m.Width, m.GetUsableHeight(), m.MasterRatio)
+	layouts := layout.CalculateTilingLayout(len(visibleWindows), m.Width, m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
 
 	// Apply layout with animations
 	for i, idx := range visibleIndices {
@@ -205,7 +205,7 @@ func (m *OS) TileRemainingWindows(excludeIndex int) {
 	}
 
 	// Calculate tiling layout based on number of remaining windows
-	layouts := layout.CalculateTilingLayout(len(visibleWindows), m.Width, m.GetUsableHeight(), m.MasterRatio)
+	layouts := layout.CalculateTilingLayout(len(visibleWindows), m.Width, m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
 
 	// Apply layout with animations
 	for i, idx := range visibleIndices {
@@ -661,7 +661,8 @@ func (o *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 
 	const minWidth = config.DefaultWindowWidth
 	const minHeight = config.DefaultWindowHeight
-	maxY := o.GetUsableHeight()
+	minY := o.GetTopMargin()
+	maxY := minY + o.GetUsableHeight()
 
 	// Handle right edge movement (vertical split line)
 	if newRight != oldRight {
@@ -784,7 +785,7 @@ func (o *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 		constrainedBottom := newBottom
 
 		// Find minimum valid Y
-		minValidY := 0
+		minValidY := minY
 		for _, win := range topWindows {
 			minRequired := win.Y + minHeight
 			if minRequired > minValidY {
@@ -835,7 +836,7 @@ func (o *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 		constrainedY := newY
 
 		// Find minimum valid Y
-		minValidY := 0
+		minValidY := minY
 		for _, win := range topWindows {
 			minRequired := win.Y + minHeight
 			if minRequired > minValidY {
@@ -887,7 +888,7 @@ func (o *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 		resized.Width = max(minWidth, min(resized.Width, o.Width-resized.X))
 		resized.Height = max(minHeight, min(resized.Height, maxY-resized.Y))
 		resized.X = max(0, min(resized.X, o.Width-minWidth))
-		resized.Y = max(0, min(resized.Y, maxY-minHeight))
+		resized.Y = max(minY, min(resized.Y, maxY-minHeight))
 	}
 
 	resized.Resize(resized.Width, resized.Height)
