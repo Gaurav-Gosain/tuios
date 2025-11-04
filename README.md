@@ -1,12 +1,12 @@
-# TUIOS - Terminal UI Operating System
+<div align="center">
+  <h1>TUIOS - Terminal UI Operating System</h1>
 
-<p>
-    <a href="https://github.com/Gaurav-Gosain/tuios/releases"><img src="https://img.shields.io/github/release/Gaurav-Gosain/tuios.svg" alt="Latest Release"></a>
-    <a href="https://pkg.go.dev/github.com/Gaurav-Gosain/tuios?tab=doc"><img src="https://godoc.org/github.com/Gaurav-Gosain/tuios?status.svg" alt="GoDoc"></a>
-    <a href="https://deepwiki.com/Gaurav-Gosain/tuios"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
-</p>
-
-<a title="This tool is Tool of The Week on Terminal Trove, The $HOME of all things in the terminal" href="https://terminaltrove.com/"><img src="https://cdn.terminaltrove.com/media/badges/tool_of_the_week/png/terminal_trove_tool_of_the_week_green_on_dark_grey_bg.png" alt="Terminal Trove Tool of The Week" style="width: 250px;" /></a>
+  <a href="https://github.com/Gaurav-Gosain/tuios/releases"><img src="https://img.shields.io/github/release/Gaurav-Gosain/tuios.svg" alt="Latest Release"></a>
+  <a href="https://pkg.go.dev/github.com/Gaurav-Gosain/tuios?tab=doc"><img src="https://godoc.org/github.com/Gaurav-Gosain/tuios?status.svg" alt="GoDoc"></a>
+  <a href="https://deepwiki.com/Gaurav-Gosain/tuios"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <br>
+  <a title="This tool is Tool of The Week on Terminal Trove, The $HOME of all things in the terminal" href="https://terminaltrove.com/"><img src="https://cdn.terminaltrove.com/media/badges/tool_of_the_week/png/terminal_trove_tool_of_the_week_green_on_dark_grey_bg.png" alt="Terminal Trove Tool of The Week" style="width: 250px;" /></a>
+</div>
 
 ![TUIOS](./assets/demo.gif)
 
@@ -112,20 +112,20 @@ tuios
 **Essential Keys:**
 
 *Window Management Mode (default):*
-- `n` - Create new window
-- `i` or `Enter` - Enter Terminal Mode
+- <kbd>n</kbd> - Create new window
+- <kbd>i</kbd> or <kbd>Enter</kbd> - Enter Terminal Mode
 
 *Works from any mode:*
-- `Ctrl+B c` - Create new window
-- `Ctrl+B ?` - Toggle help overlay
-- `Ctrl+B [` - Enter copy mode (vim-style scrollback)
-- `Ctrl+B d` or `Esc` - Return to Window Management Mode
-- `Ctrl+B q` - Quit
+- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>c</kbd> - Create new window
+- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>?</kbd> - Toggle help overlay
+- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>[</kbd> - Enter copy mode (vim-style scrollback)
+- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>d</kbd> or <kbd>Esc</kbd> - Return to Window Management Mode
+- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>q</kbd> - Quit
 
 *Alternative (Ctrl+B t submenu):*
-- `Ctrl+B t n` - Create new window
-- `Ctrl+B t x` - Close window
-- `Ctrl+B t r` - Rename window
+- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>n</kbd> - Create new window
+- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>x</kbd> - Close window
+- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>r</kbd> - Rename window
 
 **SSH Server Mode:**
 ```bash
