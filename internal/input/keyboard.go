@@ -271,6 +271,17 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Handle tiling resize keys in terminal mode - don't send to PTY
+	if o.AutoTiling && (keyStr == "<" || keyStr == ">" || keyStr == "{" || keyStr == "}") {
+		// Dispatch to action handler
+		if o.KeybindRegistry != nil {
+			action := o.KeybindRegistry.GetAction(keyStr)
+			if action != "" {
+				return HandleWindowManagementModeKey(msg, o)
+			}
+		}
+	}
+
 	// Normal terminal mode - pass through all keys
 	if focusedWindow != nil {
 		rawInput := getRawKeyBytes(msg)
@@ -1071,51 +1082,6 @@ func handleWorkspaceSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
 	}
 }
 
-// handleWorkspaceMoveAndFollow handles Alt+Shift+1-9 to move window to workspace and follow
-func handleWorkspaceMoveAndFollow(msg tea.KeyPressMsg, o *app.OS) {
-	if o.FocusedWindow < 0 || o.FocusedWindow >= len(o.Windows) {
-		return
-	}
-
-	keyStr := msg.String()
-	workspace := 0
-
-	// Check for macOS Option+Shift+digit keys
-	if len(keyStr) > 0 {
-		if digit, ok := IsMacOSOptionShiftKey([]rune(keyStr)[0]); ok {
-			workspace = digit
-		}
-	}
-
-	// Check for standard Alt+Shift+digit keys if not already matched
-	if workspace == 0 {
-		switch keyStr {
-		case "alt+shift+1", "alt+!":
-			workspace = 1
-		case "alt+shift+2", "alt+@":
-			workspace = 2
-		case "alt+shift+3", "alt+#":
-			workspace = 3
-		case "alt+shift+4", "alt+$":
-			workspace = 4
-		case "alt+shift+5", "alt+%":
-			workspace = 5
-		case "alt+shift+6", "alt+^":
-			workspace = 6
-		case "alt+shift+7", "alt+&":
-			workspace = 7
-		case "alt+shift+8", "alt+*":
-			workspace = 8
-		case "alt+shift+9", "alt+(":
-			workspace = 9
-		}
-	}
-
-	if workspace > 0 {
-		o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, workspace)
-	}
-}
-
 // Helper functions for handling various key combinations
 
 func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -1161,52 +1127,6 @@ func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.Snap(o.FocusedWindow, app.SnapBottomRight)
 		}
 	}
-	return o, nil
-}
-
-func handleEscapeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// If help is showing and search is active, clear search first
-	if o.ShowHelp && o.HelpSearchMode {
-		if o.HelpSearchQuery != "" {
-			// Clear the search query first
-			o.HelpSearchQuery = ""
-			return o, nil
-		} else {
-			// Search query is empty, exit search mode
-			o.HelpSearchMode = false
-			return o, nil
-		}
-	}
-
-	// Close help menu if showing (and not in search mode)
-	if o.ShowHelp {
-		o.ShowHelp = false
-		return o, nil
-	}
-
-	// Close cache stats if showing
-	if o.ShowCacheStats {
-		o.ShowCacheStats = false
-		return o, nil
-	}
-
-	// Close logs if showing
-	if o.ShowLogs {
-		o.ShowLogs = false
-		return o, nil
-	}
-
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.SelectedText != "" {
-			// Clear the selection
-			focusedWindow.SelectedText = ""
-			focusedWindow.IsSelecting = false
-			o.ShowNotification("Selection cleared", "info", config.NotificationDuration)
-			return o, nil
-		}
-	}
-	// If not in selection mode with text, continue normal processing (exit terminal mode)
 	return o, nil
 }
 
@@ -1285,58 +1205,6 @@ func handleRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.MoveSelectionCursor(focusedWindow, 1, 0, false)
 		}
 		return o, nil
-	}
-	return o, nil
-}
-
-func handleCtrlUpKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		if o.AutoTiling {
-			// In tiling mode, swap with window above (same as Shift+K)
-			o.SwapWindowUp()
-		} else {
-			// In manual mode, maximize window
-			o.Snap(o.FocusedWindow, app.SnapFullScreen)
-		}
-	}
-	return o, nil
-}
-
-func handleCtrlDownKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		if o.AutoTiling {
-			// In tiling mode, swap with window below (same as Shift+J)
-			o.SwapWindowDown()
-		} else {
-			// In manual mode, unsnap window
-			o.Snap(o.FocusedWindow, app.Unsnap)
-		}
-	}
-	return o, nil
-}
-
-func handleCtrlLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-		if o.AutoTiling {
-			// In tiling mode, swap with window to the left (same as Shift+H)
-			o.SwapWindowLeft()
-		} else {
-			// In manual mode, snap to left half
-			o.Snap(o.FocusedWindow, app.SnapLeft)
-		}
-	}
-	return o, nil
-}
-
-func handleCtrlRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-		if o.AutoTiling {
-			// In tiling mode, swap with window to the right (same as Shift+L)
-			o.SwapWindowRight()
-		} else {
-			// In manual mode, snap to right half
-			o.Snap(o.FocusedWindow, app.SnapRight)
-		}
 	}
 	return o, nil
 }

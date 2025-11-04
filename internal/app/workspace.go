@@ -21,15 +21,17 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	windowsInNew := m.GetWorkspaceWindowCount(workspace)
 	m.LogInfo("Switching workspace: %d → %d (%d windows)", oldWorkspace, workspace, windowsInNew)
 
-	// Save current workspace focus
+	// Save current workspace focus and layout
 	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 		if m.Windows[m.FocusedWindow].Workspace == m.CurrentWorkspace {
 			m.WorkspaceFocus[m.CurrentWorkspace] = m.FocusedWindow
 		}
 	}
+	m.SaveCurrentLayout() // Save layout before switching
 
 	// Switch to new workspace
 	m.CurrentWorkspace = workspace
+	m.RestoreWorkspaceLayout(workspace) // Restore layout after switching
 
 	// Try to restore previous focus for this workspace
 	focusedSet := false
@@ -67,9 +69,9 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 		}
 	}
 
-	// Retile if in tiling mode
-	if m.AutoTiling {
-		m.LogInfo("Auto-tiling workspace %d", workspace)
+	// Retile if in tiling mode and no custom layout
+	if m.AutoTiling && !m.WorkspaceHasCustom[workspace] {
+		m.LogInfo("Auto-tiling workspace %d (no custom layout)", workspace)
 		m.TileVisibleWorkspaceWindows()
 	}
 
@@ -101,7 +103,7 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 
 	m.LogInfo("Moving window %s: workspace %d → %d", window.Title, oldWorkspace, workspace)
 
-	// Move window to new workspace
+	// Move window to new workspace FIRST
 	window.Workspace = workspace
 	window.MarkPositionDirty()
 
@@ -111,10 +113,15 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 		m.FocusNextVisibleWindowInWorkspace()
 	}
 
-	// Retile both workspaces if in tiling mode
+	// Retile current workspace AFTER moving (if in tiling mode)
+	// Now the filter excludes the moved window, so we tile N-1 windows correctly
 	if m.AutoTiling {
-		m.LogInfo("Auto-tiling after window move")
+		m.LogInfo("Auto-tiling workspace %d after window move", m.CurrentWorkspace)
 		m.TileVisibleWorkspaceWindows()
+		// Save the layout immediately to capture the correct window positions
+		m.SaveCurrentLayout()
+		// Mark as non-custom so it can be retiled later if needed
+		m.WorkspaceHasCustom[m.CurrentWorkspace] = false
 	}
 }
 
@@ -134,17 +141,30 @@ func (m *OS) MoveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
 		return // Already in target workspace
 	}
 
-	// Move window to new workspace
+	// Move window to new workspace FIRST
 	window.Workspace = workspace
 	window.MarkPositionDirty()
+
+	// Retile old workspace AFTER moving (while still on it)
+	// Now the filter excludes the moved window, so we tile N-1 windows correctly
+	if m.AutoTiling && m.CurrentWorkspace == oldWorkspace {
+		m.TileVisibleWorkspaceWindows()
+		// Save the layout immediately to capture the correct window positions
+		m.SaveCurrentLayout()
+		// Mark as non-custom so it can be retiled later if needed
+		m.WorkspaceHasCustom[m.CurrentWorkspace] = false
+	}
 
 	// Switch to the new workspace and focus the moved window
 	m.SwitchToWorkspace(workspace)
 	m.FocusWindow(windowIndex)
 
-	// Retile if in tiling mode
+	// Retile new workspace if in tiling mode
 	if m.AutoTiling {
 		m.TileVisibleWorkspaceWindows()
+		// Save the layout for the new workspace too
+		m.SaveCurrentLayout()
+		m.WorkspaceHasCustom[m.CurrentWorkspace] = false
 	}
 }
 

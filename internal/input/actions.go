@@ -62,6 +62,14 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("swap_right", handleSwapRight)
 	d.Register("swap_up", handleSwapUp)
 	d.Register("swap_down", handleSwapDown)
+	d.Register("resize_master_shrink", handleResizeMasterShrink)
+	d.Register("resize_master_grow", handleResizeMasterGrow)
+	d.Register("resize_height_shrink", handleResizeHeightShrink)
+	d.Register("resize_height_grow", handleResizeHeightGrow)
+	d.Register("resize_master_shrink_left", handleResizeMasterShrinkLeft)
+	d.Register("resize_master_grow_left", handleResizeMasterGrowLeft)
+	d.Register("resize_height_shrink_top", handleResizeHeightShrinkTop)
+	d.Register("resize_height_grow_top", handleResizeHeightGrowTop)
 
 	// Mode control actions
 	d.Register("enter_terminal_mode", handleEnterTerminalMode)
@@ -293,6 +301,62 @@ func handleSwapUp(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleSwapDown(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.FocusedWindow >= 0 {
 		o.SwapWindowDown()
+	}
+	return o, nil
+}
+
+func handleResizeMasterShrink(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.ResizeFocusedWindowWidth(-4) // Shrink by 4 columns (split-line based)
+	}
+	return o, nil
+}
+
+func handleResizeMasterGrow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.ResizeFocusedWindowWidth(4) // Grow by 4 columns (split-line based)
+	}
+	return o, nil
+}
+
+func handleResizeHeightShrink(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.ResizeFocusedWindowHeight(-2) // Shrink by 2 rows (faster)
+	}
+	return o, nil
+}
+
+func handleResizeHeightGrow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.ResizeFocusedWindowHeight(2) // Grow by 2 rows (faster)
+	}
+	return o, nil
+}
+
+func handleResizeMasterShrinkLeft(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.ResizeFocusedWindowWidthLeft(4) // Shrink from left by 4 columns
+	}
+	return o, nil
+}
+
+func handleResizeMasterGrowLeft(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.ResizeFocusedWindowWidthLeft(-4) // Grow from left by 4 columns (negative shrinks left edge)
+	}
+	return o, nil
+}
+
+func handleResizeHeightShrinkTop(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.ResizeFocusedWindowHeightTop(2) // Shrink from top by 2 rows
+	}
+	return o, nil
+}
+
+func handleResizeHeightGrowTop(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.ResizeFocusedWindowHeightTop(-2) // Grow from top by 2 rows (negative shrinks top edge)
 	}
 	return o, nil
 }

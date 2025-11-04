@@ -10,6 +10,12 @@ import (
 // handleSgr handles SGR escape sequences.
 // handleSgr handles Select Graphic Rendition (SGR) escape sequences.
 func (e *Emulator) handleSgr(params ansi.Params) {
+	// If theming is disabled or no theme colors are set, use standard ultraviolet handling
+	if !e.hasThemeColors() {
+		uv.ReadStyle(params, &e.scr.cur.Pen)
+		return
+	}
+
 	e.readStyleWithTheme(params, &e.scr.cur.Pen)
 }
 

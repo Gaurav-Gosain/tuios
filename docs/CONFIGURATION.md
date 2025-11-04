@@ -78,7 +78,10 @@ switch_workspace_1 = ["alt+1"]
 snap_left = ["h"]
 # ... more layouts
 
-# ... additional sections
+[appearance]
+border_style = "rounded"
+hide_window_buttons = false
+scrollback_lines = 10000
 ```
 
 ### Minimal Configuration (Recommended)
@@ -135,6 +138,10 @@ Window positioning and tiling.
 - `snap_corner_1` through `snap_corner_4` - Snap to corners (TL, TR, BL, BR)
 - `toggle_tiling` - Toggle automatic tiling mode
 - `swap_left`, `swap_right`, `swap_up`, `swap_down` - Swap windows in tiling mode
+- `resize_master_shrink` - Decrease master window width in tiling mode
+- `resize_master_grow` - Increase master window width in tiling mode
+- `resize_height_shrink` - Decrease focused window height in tiling mode
+- `resize_height_grow` - Increase focused window height in tiling mode
 
 ### mode_control
 Mode switching and application control.
@@ -176,6 +183,64 @@ Debug and development tools submenu (Ctrl+B + D).
 - `debug_prefix_logs` - Toggle log viewer (Ctrl+B D l)
 - `debug_prefix_cache` - Toggle cache statistics (Ctrl+B D c)
 - `debug_prefix_cancel` - Cancel debug prefix mode (Esc)
+
+## Appearance Configuration
+
+The `[appearance]` section controls the visual presentation of TUIOS.
+
+**Available options:**
+
+```toml
+[appearance]
+border_style = "rounded"
+hide_window_buttons = false
+scrollback_lines = 10000
+```
+
+### border_style
+
+Controls the style of window borders.
+
+**Valid values:**
+- `"rounded"` - Rounded corners (default)
+- `"normal"` - Standard straight borders
+- `"thick"` - Bold/thick borders
+- `"double"` - Double-line borders
+- `"hidden"` - No borders (automatically hides window buttons)
+- `"block"` - Block-style borders
+- `"ascii"` - ASCII-only characters for compatibility
+- `"outer-half-block"` - Half-block style (outer)
+- `"inner-half-block"` - Half-block style (inner)
+
+**Default:** `"rounded"`
+
+**CLI override:** `--border-style <style>`
+
+### hide_window_buttons
+
+Controls whether window control buttons (minimize, maximize, close) are displayed in the title bar.
+
+**Valid values:**
+- `false` - Show window buttons (default)
+- `true` - Hide window buttons
+
+**Default:** `false`
+
+**Note:** Window buttons are automatically hidden when `border_style = "hidden"` regardless of this setting.
+
+**CLI override:** `--hide-window-buttons`
+
+### scrollback_lines
+
+Controls the number of lines stored in the scrollback buffer for each terminal window.
+
+**Valid values:** Integer between 100 and 1,000,000
+
+**Default:** `10000`
+
+**Note:** Values outside the valid range are automatically clamped. Higher values consume more memory.
+
+**CLI override:** `--scrollback-lines <number>`
 
 ## Key Syntax
 

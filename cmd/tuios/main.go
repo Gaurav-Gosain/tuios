@@ -117,7 +117,7 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
 	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "Write CPU profile to file")
 	rootCmd.PersistentFlags().BoolVar(&asciiOnly, "ascii-only", false, "Use ASCII characters instead of Nerd Font icons")
-	rootCmd.PersistentFlags().StringVar(&themeName, "theme", "tokyonight", "Color theme to use (e.g., dracula, nord, tokyonight)")
+	rootCmd.PersistentFlags().StringVar(&themeName, "theme", "", "Color theme to use (e.g., dracula, nord, tokyonight). Leave empty to use standard terminal colors without theming")
 	rootCmd.PersistentFlags().BoolVar(&listThemes, "list-themes", false, "List all available themes and exit")
 	rootCmd.PersistentFlags().StringVar(&previewTheme, "preview-theme", "", "Preview a theme's 16 ANSI colors")
 	rootCmd.PersistentFlags().StringVar(&borderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)")
@@ -329,7 +329,11 @@ func runLocal() error {
 		if err != nil {
 			return fmt.Errorf("could not create CPU profile: %w", err)
 		}
-		defer f.Close()
+		defer func() {
+			if closeErr := f.Close(); closeErr != nil {
+				log.Printf("Warning: failed to close CPU profile file: %v", closeErr)
+			}
+		}()
 
 		if err := pprof.StartCPUProfile(f); err != nil {
 			return fmt.Errorf("could not start CPU profile: %w", err)
@@ -357,13 +361,17 @@ func runLocal() error {
 
 	// Start with no windows - user will create the first one
 	initialOS := &app.OS{
-		FocusedWindow:    -1,                    // No focused window initially
-		WindowExitChan:   make(chan string, 10), // Buffer for window exit signals
-		MouseSnapping:    false,                 // Disable mouse snapping by default
-		CurrentWorkspace: 1,                     // Start on workspace 1
-		NumWorkspaces:    9,                     // Support 9 workspaces (1-9)
-		WorkspaceFocus:   make(map[int]int),     // Initialize workspace focus memory
-		KeybindRegistry:  keybindRegistry,       // User-configurable keybindings
+		FocusedWindow:        -1,                               // No focused window initially
+		WindowExitChan:       make(chan string, 10),            // Buffer for window exit signals
+		MouseSnapping:        false,                            // Disable mouse snapping by default
+		MasterRatio:          0.5,                              // Default 50/50 split for tiling
+		CurrentWorkspace:     1,                                // Start on workspace 1
+		NumWorkspaces:        9,                                // Support 9 workspaces (1-9)
+		WorkspaceFocus:       make(map[int]int),                // Initialize workspace focus memory
+		WorkspaceLayouts:     make(map[int][]app.WindowLayout), // Initialize layout storage
+		WorkspaceHasCustom:   make(map[int]bool),               // Initialize custom layout tracker
+		WorkspaceMasterRatio: make(map[int]float64),            // Initialize per-workspace master ratio
+		KeybindRegistry:      keybindRegistry,                  // User-configurable keybindings
 	}
 
 	// Initialize the Bubble Tea program with optimal settings
@@ -408,7 +416,7 @@ func runLocal() error {
 	fmt.Print("\033[?47l")   // Exit alternate screen (if still active)
 	fmt.Print("\033[0m")     // Reset text attributes
 	fmt.Print("\r\n")        // Newline to prevent prompt corruption
-	os.Stdout.Sync()         // Ensure all output is flushed
+	_ = os.Stdout.Sync()     // Ensure all output is flushed
 
 	if err != nil {
 		return fmt.Errorf("program error: %w", err)

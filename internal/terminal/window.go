@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image/color"
 	"io"
 	"os"
 	"os/exec"
@@ -171,15 +172,10 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Set scrollback buffer size from config (default: 10000, configurable via --scrollback-lines or config file)
 	terminal.SetScrollbackMaxLines(config.ScrollbackLines)
 
-	// Apply theme colors to the terminal
-	terminal.SetThemeColors(
-		theme.TerminalFg(),
-		theme.TerminalBg(),
-		theme.TerminalCursor(),
-		theme.GetANSIPalette(),
-	)
+	// Set cell size for XTWINOPS terminal size reporting
+	// Using 10x20 pixels as reasonable defaults for a typical monospace font
+	terminal.SetCellSize(10, 20)
 
-	// Create window struct early so we can reference it in callbacks
 	window := &Window{
 		Title:              title,
 		Width:              width,
@@ -197,6 +193,19 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
 		IsAltScreen:        false,
+	}
+
+	// Apply theme colors to the terminal (only if theming is enabled)
+	if theme.IsEnabled() {
+		terminal.SetThemeColors(
+			theme.TerminalFg(),
+			nil, // Always use transparent background so TUI apps render correctly
+			theme.TerminalCursor(),
+			theme.GetANSIPalette(),
+		)
+	} else {
+		// When theming is disabled, just set nil colors to use terminal defaults
+		terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
 	}
 
 	// Set up callbacks to track alternate screen buffer state
@@ -219,6 +228,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	cmd.Env = append(os.Environ(),
 		"TERM="+termType,
 		"COLORTERM="+colorTerm,
+		"TERM_PROGRAM=TUIOS",         // Identify as TUIOS terminal emulator
+		"TERM_PROGRAM_VERSION=0.1.0", // Version for compatibility checking
 		"TUIOS_WINDOW_ID="+id,
 	)
 
@@ -299,12 +310,16 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 // UpdateThemeColors updates the terminal colors when the theme changes
 func (w *Window) UpdateThemeColors() {
 	if w.Terminal != nil {
-		w.Terminal.SetThemeColors(
-			theme.TerminalFg(),
-			theme.TerminalBg(),
-			theme.TerminalCursor(),
-			theme.GetANSIPalette(),
-		)
+		if theme.IsEnabled() {
+			w.Terminal.SetThemeColors(
+				theme.TerminalFg(),
+				nil, // Always use transparent background so TUI apps render correctly
+				theme.TerminalCursor(),
+				theme.GetANSIPalette(),
+			)
+		} else {
+			w.Terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
+		}
 		// Mark the window as dirty to trigger a redraw
 		w.Dirty = true
 		w.ContentDirty = true
@@ -369,13 +384,10 @@ func profileToEnv(profile colorprofile.Profile) (termType, colorTerm string) {
 
 	switch profile {
 	case colorprofile.TrueColor:
-		// For TrueColor, preserve parent TERM if it's already good, otherwise upgrade
-		if parentTerm != "" && (strings.Contains(parentTerm, "256color") ||
-			strings.Contains(parentTerm, "truecolor") ||
-			parentTerm == "xterm-direct" ||
-			parentTerm == "alacritty" ||
-			parentTerm == "kitty" ||
-			strings.HasPrefix(parentTerm, "kitty-")) {
+		// Prefer parent TERM, fallback to xterm-256color
+		// Note: We support XTWINOPS but xterm-256color terminfo doesn't advertise it
+		// Applications must query the terminal directly (which works via our CSI 't' handler)
+		if parentTerm != "" {
 			termType = parentTerm
 		} else {
 			termType = "xterm-256color"
@@ -485,6 +497,18 @@ func (w *Window) handleIOOperations() {
 					return
 				}
 				if n > 0 {
+					// Debug: Log all data from PTY (applications sending queries)
+					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+						if len(buf[:n]) >= 2 && buf[0] == '\x1b' {
+							debugMsg := fmt.Sprintf("[%s] PTY->Terminal query: %q (hex: % x)\n",
+								time.Now().Format("15:04:05.000"), string(buf[:n]), buf[:n])
+							if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+								_, _ = f.WriteString(debugMsg)
+								_ = f.Close()
+							}
+						}
+					}
+
 					// Write to terminal with mutex protection
 					w.ioMu.RLock()
 					if w.Terminal != nil {
@@ -530,6 +554,18 @@ func (w *Window) handleIOOperations() {
 				if n > 0 {
 					data := buf[:n]
 
+					// Debug: Log all escape sequences from terminal when debug mode is enabled
+					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+						if len(data) >= 2 && data[0] == '\x1b' {
+							debugMsg := fmt.Sprintf("[%s] Terminal->PTY escape seq: %q (hex: % x)\n",
+								time.Now().Format("15:04:05.000"), string(data), data)
+							if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+								_, _ = f.WriteString(debugMsg)
+								_ = f.Close()
+							}
+						}
+					}
+
 					// Fix incorrect CPR responses from VT library for nushell compatibility
 					// The VT library responds to ESC[6n queries but returns stale/incorrect cursor positions
 					// This causes nushell to incorrectly clear the screen thinking it's at the wrong position
@@ -547,6 +583,20 @@ func (w *Window) handleIOOperations() {
 								data = []byte(fmt.Sprintf("\x1b[%d;%dR", actualY, actualX))
 							}
 							w.ioMu.RUnlock()
+						}
+					}
+
+					// Debug: Log XTWINOPS responses when debug mode is enabled
+					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+						if len(data) >= 6 && data[0] == '\x1b' && data[1] == '[' && data[len(data)-1] == 't' {
+							// This looks like an XTWINOPS response
+							debugMsg := fmt.Sprintf("[%s] XTWINOPS response to PTY: %q (hex: % x)\n",
+								time.Now().Format("15:04:05.000"), string(data), data)
+							// Append to debug log file
+							if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+								_, _ = f.WriteString(debugMsg)
+								_ = f.Close()
+							}
 						}
 					}
 

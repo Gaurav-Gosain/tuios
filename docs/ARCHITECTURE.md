@@ -288,25 +288,79 @@ graph LR
 
 ### SGR Sequence Processing
 
-The VT emulator's SGR handler (`internal/vt/csi_sgr.go`) implements smart color routing:
+The VT emulator's SGR handler (`internal/vt/csi_sgr.go`) implements conditional theme routing with fallback to standard processing:
 
 ```go
-// Example: Foreground indexed color ESC[38;5;nm
+func (e *Emulator) handleSgr(params ansi.Params) {
+    // When theming is disabled, use standard ANSI color processing
+    if !e.hasThemeColors() {
+        uv.ReadStyle(params, &e.scr.cur.Pen)
+        return
+    }
+
+    // When theming is enabled, route colors through theme palette
+    e.readStyleWithTheme(params, &e.scr.cur.Pen)
+}
+```
+
+**Format Detection and Parameter Handling:**
+
+The handler distinguishes between different color formats by examining the parameter sequence:
+
+```go
+// Example: Indexed foreground color ESC[38;5;nm
 case 38:
-    if colorIndex >= 0 && colorIndex <= 15 {
-        // Use themed color for base ANSI palette
-        pen.Foreground(e.IndexedColor(colorIndex))
-    } else {
-        // Pass through 256-color and RGB
-        pen.Foreground(originalColor)
+    if i+2 < len(params) {
+        next, _, _ := params.Param(i+1, -1)
+        if next == 5 { // Indexed color format
+            colorIndex, _, _ := params.Param(i+2, -1)
+            if colorIndex >= 0 && colorIndex <= 15 {
+                // Use themed color for base ANSI palette
+                pen.Foreground(e.IndexedColor(colorIndex))
+                i += 2  // Skip format indicator and color index
+                continue
+            }
+        }
+    }
+    // Standard processing for 256-color (16-255) and RGB
+    var c color.Color
+    n := ansi.ReadStyleColor(params[i:], &c)
+    if n > 0 {
+        pen.Foreground(c)
+        i += n - 1
     }
 ```
 
-This ensures:
+This approach ensures:
 
-- Consistent color schemes across all windows
+- Conditional theme application (only when theme is enabled)
+- Consistent color schemes across themed windows
 - Respect for application-specific color choices (256-color, RGB)
 - Compatibility with legacy and modern terminal applications
+
+### Background Color Treatment
+
+TUIOS uses transparent backgrounds (`nil`) for the terminal's default background to ensure TUI applications render correctly:
+
+```go
+// In internal/terminal/window.go
+terminal.SetThemeColors(
+    theme.TerminalFg(),
+    nil,  // Transparent background allows TUI apps to control their own bg
+    theme.TerminalCursor(),
+    theme.GetANSIPalette(),
+)
+```
+
+**Design Rationale:**
+
+Most TUI applications (vim, tmux, htop, etc.) expect to control their own background rendering. Setting the terminal's default background to an opaque color would:
+
+- Override application-intended backgrounds
+- Break visual elements expecting transparency
+- Cause rendering issues with box-drawing characters
+
+By keeping the background transparent, applications can freely use indexed background colors while the outer terminal's background shows through, providing the expected visual appearance.
 
 ### Dynamic Theme Updates
 
@@ -332,8 +386,8 @@ TUIOS supports live theme switching without restarting windows:
 
 | Component         | File                          | Responsibility                             |
 | ----------------- | ----------------------------- | ------------------------------------------ |
-| **SGR Handler**   | `internal/vt/csi_sgr.go`      | Parse SGR sequences, route to theme colors |
-| **Theme Colors**  | `internal/terminal/window.go` | Initialize and update window theme colors  |
+| **SGR Handler**   | `internal/vt/csi_sgr.go`      | Parse SGR sequences with conditional theme routing; fallback to standard ANSI when theming disabled |
+| **Theme Colors**  | `internal/terminal/window.go` | Initialize and update window theme colors with transparent backgrounds |
 | **Theme Manager** | `internal/app/os.go`          | Propagate theme changes to all windows     |
 | **Theme Config**  | `internal/theme/theme.go`     | Define color palettes and theme variants   |
 

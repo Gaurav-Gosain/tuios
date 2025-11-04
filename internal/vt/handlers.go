@@ -1,7 +1,10 @@
 package vt
 
 import (
+	"fmt"
 	"io"
+	"os"
+	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -691,6 +694,9 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			62, // VT220
 			1,  // 132 columns
 			6,  // Selective Erase
+			9,  // National Replacement Character sets
+			15, // Technical characters
+			18, // Windowing capability (XTWINOPS)
 			22, // ANSI color
 		))
 		return true
@@ -820,6 +826,60 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			x, y := e.scr.CursorPosition()
 			_, _ = io.WriteString(e.pw, ansi.ExtendedCursorPositionReport(x+1, y+1, 0)) // We don't support page numbers //nolint:errcheck
 		default:
+			return false
+		}
+
+		return true
+	})
+
+	e.RegisterCsiHandler('t', func(params ansi.Params) bool {
+		// XTWINOPS - Window Manipulation
+		// See: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
+		n, _, ok := params.Param(0, 0)
+
+		// Debug logging
+		debugLog := func(msg string) {
+			if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+				if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+					_, _ = fmt.Fprintf(f, "[%s] VT-XTWINOPS: %s\n", time.Now().Format("15:04:05.000"), msg)
+					_ = f.Close()
+				}
+			}
+			if e.logger != nil {
+				e.logger.Printf("XTWINOPS: %s", msg)
+			}
+		}
+
+		if !ok || n == 0 {
+			debugLog(fmt.Sprintf("invalid params ok=%v n=%d", ok, n))
+			return false
+		}
+
+		cellWidth, cellHeight := e.CellSize()
+		debugLog(fmt.Sprintf("handling CSI %d t (cellSize=%dx%d, termSize=%dx%d)",
+			n, cellWidth, cellHeight, e.Width(), e.Height()))
+
+		switch n {
+		case 14: // Report terminal window size in pixels
+			// Respond with: CSI 4 ; height ; width t
+			pixelHeight := e.Height() * cellHeight
+			pixelWidth := e.Width() * cellWidth
+			response := ansi.WindowOp(4, pixelHeight, pixelWidth)
+			debugLog(fmt.Sprintf("responding to CSI 14 t with: %q (pixels: %dx%d)", response, pixelWidth, pixelHeight))
+			_, _ = io.WriteString(e.pw, response)
+		case 16: // Report cell size in pixels
+			// Respond with: CSI 6 ; cellHeight ; cellWidth t
+			response := ansi.WindowOp(6, cellHeight, cellWidth)
+			debugLog(fmt.Sprintf("responding to CSI 16 t with: %q", response))
+			_, _ = io.WriteString(e.pw, response)
+		case 18: // Report text area size in characters
+			// Respond with: CSI 8 ; rows ; cols t
+			response := ansi.WindowOp(8, e.Height(), e.Width())
+			debugLog(fmt.Sprintf("responding to CSI 18 t with: %q", response))
+			_, _ = io.WriteString(e.pw, response)
+		default:
+			// Other XTWINOPS commands are not supported
+			debugLog(fmt.Sprintf("unsupported command CSI %d t", n))
 			return false
 		}
 

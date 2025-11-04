@@ -97,12 +97,12 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 		if f, err := os.OpenFile("/tmp/tuios-render-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
 			borderWidth := lipgloss.Width(border)
 			buttonStartX := window.X + 1 + (width - borderWidth)
-			fmt.Fprintf(f, "[RENDER DEBUG] Window %s at X=%d Y=%d Width=%d, border width=%d, buttons start at X=%d\n",
+			_, _ = fmt.Fprintf(f, "[RENDER DEBUG] Window %s at X=%d Y=%d Width=%d, border width=%d, buttons start at X=%d\n",
 				window.ID, window.X, window.Y, window.Width, borderWidth, buttonStartX)
 			if !config.HideWindowButtons {
-				fmt.Fprintf(f, "[RENDER DEBUG] Title bar is at Y=%d, buttons visible\n", window.Y)
+				_, _ = fmt.Fprintf(f, "[RENDER DEBUG] Title bar is at Y=%d, buttons visible\n", window.Y)
 			} else {
-				fmt.Fprintf(f, "[RENDER DEBUG] Title bar is at Y=%d, buttons hidden\n", window.Y)
+				_, _ = fmt.Fprintf(f, "[RENDER DEBUG] Title bar is at Y=%d, buttons hidden\n", window.Y)
 			}
 			_ = f.Close()
 		}
@@ -1045,7 +1045,7 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 						// Skip to end of sequence
 						if runeIdx < len(runes) && runes[runeIdx] == '[' {
 							runeIdx++
-							for runeIdx < len(runes) && !(runes[runeIdx] >= 0x40 && runes[runeIdx] <= 0x7E) {
+							for runeIdx < len(runes) && (runes[runeIdx] < 0x40 || runes[runeIdx] > 0x7E) {
 								runeIdx++
 							}
 							if runeIdx < len(runes) {
@@ -1909,7 +1909,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		// DEBUG: Log dock rendering
 		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" && isHighlighted {
 			if f, err := os.OpenFile("/tmp/tuios-minimize-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
-				fmt.Fprintf(f, "[RENDER] Dock item #%d, windowIndex=%d, ID=%s, CustomName=%s, isHighlighted=%v, HighlightUntil=%s\n",
+				_, _ = fmt.Fprintf(f, "[RENDER] Dock item #%d, windowIndex=%d, ID=%s, CustomName=%s, isHighlighted=%v, HighlightUntil=%s\n",
 					itemNumber, windowIndex, window.ID, window.CustomName, isHighlighted, window.MinimizeHighlightUntil.Format("15:04:05.000"))
 				_ = f.Close()
 			}

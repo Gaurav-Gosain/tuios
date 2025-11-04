@@ -64,6 +64,15 @@ const (
 	Unsnap
 )
 
+// WindowLayout stores a window's position and size for workspace persistence
+type WindowLayout struct {
+	WindowID string
+	X        int
+	Y        int
+	Width    int
+	Height   int
+}
+
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
@@ -94,42 +103,45 @@ type OS struct {
 	LastMouseY            int
 	HasActiveTerminals    bool
 	ShowHelp              bool
-	InteractionMode       bool            // True when actively dragging/resizing
-	MouseSnapping         bool            // Enable/disable mouse snapping
-	WindowExitChan        chan string     // Channel to signal window closure
-	Animations            []*ui.Animation // Active animations
-	CPUHistory            []float64       // CPU usage history for graph
-	LastCPUUpdate         time.Time       // Last time CPU was updated
-	RAMUsage              float64         // Cached RAM usage percentage
-	LastRAMUpdate         time.Time       // Last time RAM was updated
-	AutoTiling            bool            // Automatic tiling mode enabled
-	RenamingWindow        bool            // True when renaming a window
-	RenameBuffer          string          // Buffer for new window name
-	PrefixActive          bool            // True when prefix key was pressed (tmux-style)
-	WorkspacePrefixActive bool            // True when Ctrl+B, w was pressed (workspace sub-prefix)
-	MinimizePrefixActive  bool            // True when Ctrl+B, m was pressed (minimize sub-prefix)
-	TilingPrefixActive    bool            // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
-	DebugPrefixActive     bool            // True when Ctrl+B, D was pressed (debug sub-prefix)
-	LastPrefixTime        time.Time       // Time when prefix was activated
-	HelpScrollOffset      int             // Scroll offset for help menu
-	HelpCategory          int             // Current help category index (for left/right navigation)
-	HelpSearchMode        bool            // True when help search is active
-	HelpSearchQuery       string          // Current search query in help menu
-	CurrentWorkspace      int             // Current active workspace (1-9)
-	NumWorkspaces         int             // Total number of workspaces
-	WorkspaceFocus        map[int]int     // Remembers focused window per workspace
-	ShowLogs              bool            // True when showing log overlay
-	LogMessages           []LogMessage    // Store log messages
-	LogScrollOffset       int             // Scroll offset for log viewer
-	Notifications         []Notification  // Active notifications
-	SelectionMode         bool            // True when in text selection mode
-	ClipboardContent      string          // Store clipboard content from tea.ClipboardMsg
-	ShowCacheStats        bool            // True when showing style cache statistics overlay
+	InteractionMode       bool                   // True when actively dragging/resizing
+	MouseSnapping         bool                   // Enable/disable mouse snapping
+	WindowExitChan        chan string            // Channel to signal window closure
+	Animations            []*ui.Animation        // Active animations
+	CPUHistory            []float64              // CPU usage history for graph
+	LastCPUUpdate         time.Time              // Last time CPU was updated
+	RAMUsage              float64                // Cached RAM usage percentage
+	LastRAMUpdate         time.Time              // Last time RAM was updated
+	AutoTiling            bool                   // Automatic tiling mode enabled
+	MasterRatio           float64                // Master window width ratio for tiling (0.3-0.7)
+	RenamingWindow        bool                   // True when renaming a window
+	RenameBuffer          string                 // Buffer for new window name
+	PrefixActive          bool                   // True when prefix key was pressed (tmux-style)
+	WorkspacePrefixActive bool                   // True when Ctrl+B, w was pressed (workspace sub-prefix)
+	MinimizePrefixActive  bool                   // True when Ctrl+B, m was pressed (minimize sub-prefix)
+	TilingPrefixActive    bool                   // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
+	DebugPrefixActive     bool                   // True when Ctrl+B, D was pressed (debug sub-prefix)
+	LastPrefixTime        time.Time              // Time when prefix was activated
+	HelpScrollOffset      int                    // Scroll offset for help menu
+	HelpCategory          int                    // Current help category index (for left/right navigation)
+	HelpSearchMode        bool                   // True when help search is active
+	HelpSearchQuery       string                 // Current search query in help menu
+	CurrentWorkspace      int                    // Current active workspace (1-9)
+	NumWorkspaces         int                    // Total number of workspaces
+	WorkspaceFocus        map[int]int            // Remembers focused window per workspace
+	WorkspaceLayouts      map[int][]WindowLayout // Stores custom layouts per workspace
+	WorkspaceHasCustom    map[int]bool           // Tracks if workspace has custom layout
+	WorkspaceMasterRatio  map[int]float64        // Stores master ratio per workspace
+	ShowLogs              bool                   // True when showing log overlay
+	LogMessages           []LogMessage           // Store log messages
+	LogScrollOffset       int                    // Scroll offset for log viewer
+	Notifications         []Notification         // Active notifications
+	SelectionMode         bool                   // True when in text selection mode
+	ClipboardContent      string                 // Store clipboard content from tea.ClipboardMsg
+	ShowCacheStats        bool                   // True when showing style cache statistics overlay
 	// Performance optimization caches
-	cachedSeparator        string // Cached dock separator string
-	cachedSeparatorWidth   int    // Width of cached separator
-	workspaceActiveStyle   *lipgloss.Style
-	workspaceInactiveStyle *lipgloss.Style
+	cachedSeparator      string // Cached dock separator string
+	cachedSeparatorWidth int    // Width of cached separator
+	workspaceActiveStyle *lipgloss.Style
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
@@ -631,7 +643,7 @@ func (m *OS) MinimizeWindow(i int) {
 		// DEBUG: Log minimize action
 		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 			if f, err := os.OpenFile("/tmp/tuios-minimize-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
-				fmt.Fprintf(f, "[MINIMIZE] Window index=%d, ID=%s, CustomName=%s, Highlight set until %s\n",
+				_, _ = fmt.Fprintf(f, "[MINIMIZE] Window index=%d, ID=%s, CustomName=%s, Highlight set until %s\n",
 					i, window.ID, window.CustomName, window.MinimizeHighlightUntil.Format("15:04:05.000"))
 				_ = f.Close()
 			}

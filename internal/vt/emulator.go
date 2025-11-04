@@ -73,6 +73,10 @@ type Emulator struct {
 	// atPhantom indicates if the cursor is out of bounds.
 	// When true, and a character is written, the cursor is moved to the next line.
 	atPhantom bool
+
+	// Cell size in pixels for size reporting (XTWINOPS)
+	cellWidth  int
+	cellHeight int
 }
 
 // NewEmulator creates a new virtual terminal emulator.
@@ -225,6 +229,22 @@ func (e *Emulator) Height() int {
 // Width returns the width of the terminal.
 func (e *Emulator) Width() int {
 	return e.scr.Width()
+}
+
+// SetCellSize sets the pixel dimensions of a single character cell.
+// Used for XTWINOPS terminal size reporting.
+func (e *Emulator) SetCellSize(width, height int) {
+	e.cellWidth = width
+	e.cellHeight = height
+}
+
+// CellSize returns the pixel dimensions of a single character cell.
+func (e *Emulator) CellSize() (width, height int) {
+	// Default to 8x16 pixels if not set (common VGA text mode dimensions)
+	if e.cellWidth == 0 || e.cellHeight == 0 {
+		return 8, 16
+	}
+	return e.cellWidth, e.cellHeight
 }
 
 // CursorPosition returns the terminal's cursor position.
@@ -451,15 +471,27 @@ func (e *Emulator) SetIndexedColor(i int, c color.Color) {
 // SetThemeColors sets the terminal's color palette from a theme.
 // This sets the default foreground, background, cursor colors and the
 // first 16 ANSI colors (0-15) which are used by terminal applications.
+// If fg, bg, and cur are all nil, theming is disabled and only default colors are set.
 func (e *Emulator) SetThemeColors(fg, bg, cur color.Color, ansiPalette [16]color.Color) {
 	e.SetDefaultForegroundColor(fg)
 	e.SetDefaultBackgroundColor(bg)
 	e.SetDefaultCursorColor(cur)
 
-	// Set the first 16 ANSI colors
-	for i := 0; i < 16; i++ {
-		e.SetIndexedColor(i, ansiPalette[i])
+	// Only set indexed colors if we have a theme (fg/bg are not nil)
+	// This prevents overriding standard terminal colors when theming is disabled
+	if fg != nil || bg != nil {
+		// Set the first 16 ANSI colors
+		for i := 0; i < 16; i++ {
+			e.SetIndexedColor(i, ansiPalette[i])
+		}
 	}
+}
+
+// hasThemeColors returns true if theme colors have been set
+func (e *Emulator) hasThemeColors() bool {
+	// Check if any indexed colors have been set
+	// If colors[0] is nil, no theme has been applied
+	return e.colors[0] != nil
 }
 
 // resetTabStops resets the terminal tab stops to the default set.

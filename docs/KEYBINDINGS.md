@@ -75,6 +75,14 @@ TUIOS supports 9 workspaces for organizing windows.
 | `Shift+L` or `Ctrl+Right` | Swap with window to the right |
 | `Shift+K` or `Ctrl+Up` | Swap with window above |
 | `Shift+J` or `Ctrl+Down` | Swap with window below |
+| `<` or `Shift+,` | Decrease master window width (from right edge) |
+| `>` or `Shift+.` | Increase master window width (from right edge) |
+| `{` or `Shift+[` | Decrease focused window height (from bottom edge) |
+| `}` or `Shift+]` | Increase focused window height (from bottom edge) |
+| `,` | Decrease master window width (from left edge) |
+| `.` | Increase master window width (from left edge) |
+| `[` | Decrease focused window height (from top edge) |
+| `]` | Increase focused window height (from top edge) |
 
 ## Copy Mode
 

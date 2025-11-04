@@ -340,20 +340,20 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		searchPrefix = "?"
 	}
 
-	switch {
-	case key.Code == tea.KeyEnter:
+	switch key.Code {
+	case tea.KeyEnter:
 		cm.State = terminal.CopyModeNormal
 		matchInfo := ""
 		if len(cm.SearchMatches) > 0 {
 			matchInfo = fmt.Sprintf(" (%d matches)", len(cm.SearchMatches))
 		}
 		o.ShowNotification(fmt.Sprintf("%s%s%s", searchPrefix, cm.SearchQuery, matchInfo), "info", config.NotificationDuration)
-	case key.Code == tea.KeyEscape:
+	case tea.KeyEscape:
 		cm.State = terminal.CopyModeNormal
 		cm.SearchQuery = ""
 		cm.SearchMatches = nil
 		o.ShowNotification("", "info", 0)
-	case key.Code == tea.KeyBackspace:
+	case tea.KeyBackspace:
 		if len(cm.SearchQuery) > 0 {
 			cm.SearchQuery = cm.SearchQuery[:len(cm.SearchQuery)-1]
 			executeSearch(cm, window)

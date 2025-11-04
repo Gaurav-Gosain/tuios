@@ -10,12 +10,20 @@ type TileLayout struct {
 }
 
 // CalculateTilingLayout returns optimal positions for n windows
-func CalculateTilingLayout(n int, screenWidth int, usableHeight int) []TileLayout {
+// masterRatio controls the width ratio of the master (left) pane (0.3-0.7)
+func CalculateTilingLayout(n int, screenWidth int, usableHeight int, masterRatio float64) []TileLayout {
 	if n == 0 {
 		return nil
 	}
 
 	layouts := make([]TileLayout, 0, n)
+
+	// Clamp master ratio to reasonable bounds (30%-70%)
+	if masterRatio < 0.3 {
+		masterRatio = 0.3
+	} else if masterRatio > 0.7 {
+		masterRatio = 0.7
+	}
 
 	// Status bar is an overlay, windows use full usable height starting at Y=0
 	switch n {
@@ -29,44 +37,46 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int) []TileLayou
 		})
 
 	case 2:
-		// Two windows - side by side
-		halfWidth := screenWidth / 2
+		// Two windows - side by side with configurable ratio
+		masterWidth := int(float64(screenWidth) * masterRatio)
+		slaveWidth := screenWidth - masterWidth
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
 				Y:      0,
-				Width:  halfWidth,
+				Width:  masterWidth,
 				Height: usableHeight,
 			},
 			TileLayout{
-				X:      halfWidth,
+				X:      masterWidth,
 				Y:      0,
-				Width:  screenWidth - halfWidth,
+				Width:  slaveWidth,
 				Height: usableHeight,
 			},
 		)
 
 	case 3:
-		// Three windows - one left, two right stacked
-		halfWidth := screenWidth / 2
+		// Three windows - one left (master), two right stacked
+		masterWidth := int(float64(screenWidth) * masterRatio)
+		slaveWidth := screenWidth - masterWidth
 		halfHeight := usableHeight / 2
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
 				Y:      0,
-				Width:  halfWidth,
+				Width:  masterWidth,
 				Height: usableHeight,
 			},
 			TileLayout{
-				X:      halfWidth,
+				X:      masterWidth,
 				Y:      0,
-				Width:  screenWidth - halfWidth,
+				Width:  slaveWidth,
 				Height: halfHeight,
 			},
 			TileLayout{
-				X:      halfWidth,
+				X:      masterWidth,
 				Y:      halfHeight,
-				Width:  screenWidth - halfWidth,
+				Width:  slaveWidth,
 				Height: usableHeight - halfHeight,
 			},
 		)

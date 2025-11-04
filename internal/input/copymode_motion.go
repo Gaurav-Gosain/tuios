@@ -710,9 +710,10 @@ func moveToMatchingBracket(cm *terminal.CopyMode, window *terminal.Window) {
 		currentCell := getCellAtCursor(cm, window)
 		if currentCell != nil && currentCell.Content != "" {
 			currentChar := currentCell.Content
-			if currentChar == char {
+			switch currentChar {
+			case char:
 				depth++
-			} else if currentChar == matchChar {
+			case matchChar:
 				depth--
 			}
 		}

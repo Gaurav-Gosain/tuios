@@ -79,7 +79,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// DEBUG: Log click attempts
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 		if f, err := os.OpenFile("/tmp/tuios-mouse-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-			fmt.Fprintf(f, "[CLICK] X=%d Y=%d, Window X=%d Y=%d W=%d H=%d, leftMost=%d\n",
+			_, _ = fmt.Fprintf(f, "[CLICK] X=%d Y=%d, Window X=%d Y=%d W=%d H=%d, leftMost=%d\n",
 				X, Y, clickedWindow.X, clickedWindow.Y, clickedWindow.Width, clickedWindow.Height, leftMost)
 			_ = f.Close()
 		}
@@ -160,12 +160,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	switch mouse.Button {
 	case tea.MouseRight:
-		// Prevent resizing in tiling mode
-		if o.AutoTiling {
-			o.InteractionMode = false
-			return o, nil
-		}
-
 		// Already in interaction mode, now set resize-specific flags
 		o.Resizing = true
 		o.Windows[clickedWindowIndex].IsBeingManipulated = true
@@ -382,11 +376,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Resizing && o.InteractionMode {
-		// Prevent resizing in tiling mode
-		if o.AutoTiling {
-			return o, nil
-		}
-
 		xOffset := mouse.X - o.ResizeStartX
 		yOffset := mouse.Y - o.ResizeStartY
 
@@ -478,14 +467,64 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		newWidth = min(newWidth, o.Width-newX)
 		newHeight = min(newHeight, maxY-newY)
 
-		// Apply the resize
-		focusedWindow.X = newX
-		focusedWindow.Y = newY
-		focusedWindow.Width = newWidth
-		focusedWindow.Height = newHeight
+		// In tiling mode, block resizing edges at screen boundaries
+		if o.AutoTiling {
+			const edgeTolerance = 2 // Small tolerance for detecting screen edges
 
-		focusedWindow.Resize(focusedWindow.Width, focusedWindow.Height)
-		focusedWindow.MarkPositionDirty()
+			// Check which edges are at screen boundaries
+			atLeftEdge := focusedWindow.X <= edgeTolerance
+			atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (o.Width - edgeTolerance)
+			atTopEdge := focusedWindow.Y <= edgeTolerance
+			atBottomEdge := (focusedWindow.Y + focusedWindow.Height) >= (maxY - edgeTolerance)
+
+			// Block resizing edges that are at screen boundaries
+			switch o.ResizeCorner {
+			case app.TopLeft:
+				if atLeftEdge {
+					newX = focusedWindow.X
+					newWidth = focusedWindow.Width
+				}
+				if atTopEdge {
+					newY = focusedWindow.Y
+					newHeight = focusedWindow.Height
+				}
+			case app.TopRight:
+				if atRightEdge {
+					newWidth = focusedWindow.Width
+				}
+				if atTopEdge {
+					newY = focusedWindow.Y
+					newHeight = focusedWindow.Height
+				}
+			case app.BottomLeft:
+				if atLeftEdge {
+					newX = focusedWindow.X
+					newWidth = focusedWindow.Width
+				}
+				if atBottomEdge {
+					newHeight = focusedWindow.Height
+				}
+			case app.BottomRight:
+				if atRightEdge {
+					newWidth = focusedWindow.Width
+				}
+				if atBottomEdge {
+					newHeight = focusedWindow.Height
+				}
+			}
+
+			o.AdjustTilingNeighbors(focusedWindow, newX, newY, newWidth, newHeight)
+			// AdjustTilingNeighbors updates the resized window with constrained values
+		} else {
+			// In floating mode, apply the resize directly
+			focusedWindow.X = newX
+			focusedWindow.Y = newY
+			focusedWindow.Width = newWidth
+			focusedWindow.Height = newHeight
+
+			focusedWindow.Resize(focusedWindow.Width, focusedWindow.Height)
+			focusedWindow.MarkPositionDirty()
+		}
 
 		return o, nil
 	}
@@ -607,9 +646,15 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Clean up interaction state on mouse release
 	if o.Dragging || o.Resizing {
+		wasResizing := o.Resizing
 		o.Dragging = false
 		o.Resizing = false
 		o.InteractionMode = false
+
+		// Mark layout as custom if resizing in tiling mode
+		if wasResizing && o.AutoTiling {
+			o.MarkLayoutCustom()
+		}
 
 		for i := range o.Windows {
 			o.Windows[i].IsBeingManipulated = false
@@ -805,7 +850,7 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 	// DEBUG: Log dock click attempts
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 		if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-			fmt.Fprintf(f, "[DOCK CLICK] X=%d Y=%d, Height=%d, CenterStartX=%d, numItems=%d, numVisible=%d\n",
+			_, _ = fmt.Fprintf(f, "[DOCK CLICK] X=%d Y=%d, Height=%d, CenterStartX=%d, numItems=%d, numVisible=%d\n",
 				x, y, o.Height, layout.CenterStartX, len(layout.ItemPositions), len(layout.VisibleItems))
 			_ = f.Close()
 		}
@@ -816,7 +861,7 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 		// DEBUG: Log each item bounds
 		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 			if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-				fmt.Fprintf(f, "[DOCK ITEM %d] windowIndex=%d, Clickable [%d,%d), Y=%d (checking Y==%d)\n",
+				_, _ = fmt.Fprintf(f, "[DOCK ITEM %d] windowIndex=%d, Clickable [%d,%d), Y=%d (checking Y==%d)\n",
 					i, itemPos.WindowIndex, itemPos.StartX, itemPos.EndX, o.Height-1, y)
 				_ = f.Close()
 			}
@@ -827,7 +872,7 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 			// DEBUG: Log successful match
 			if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 				if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-					fmt.Fprintf(f, "[DOCK MATCH] Item %d (windowIndex=%d) matched! Click X=%d in range [%d,%d)\n",
+					_, _ = fmt.Fprintf(f, "[DOCK MATCH] Item %d (windowIndex=%d) matched! Click X=%d in range [%d,%d)\n",
 						i, itemPos.WindowIndex, x, itemPos.StartX, itemPos.EndX)
 					_ = f.Close()
 				}

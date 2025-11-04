@@ -51,6 +51,8 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 			Bindings: generateCategoryBindings(registry, "Layout", []string{
 				"snap_left", "snap_right", "snap_fullscreen", "unsnap",
 				"toggle_tiling", "swap_left", "swap_right", "swap_up", "swap_down",
+				"resize_master_shrink", "resize_master_grow", "resize_height_shrink", "resize_height_grow",
+				"resize_master_shrink_left", "resize_master_grow_left", "resize_height_shrink_top", "resize_height_grow_top",
 			}),
 		},
 		{
@@ -224,18 +226,6 @@ func formatKeysWithStyle(keys []string) string {
 		styledKeys = append(styledKeys, leftCircle+keyLabel+rightCircle)
 	}
 	return strings.Join(styledKeys, " ")
-}
-
-// truncateString safely truncates a string to maxLen, accounting for multi-byte chars
-func truncateString(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	if maxLen < 3 {
-		return s
-	}
-	return string(runes[:maxLen-3]) + "..."
 }
 
 // CalculateHelpDimensions scans all categories and calculates fixed dimensions
@@ -690,7 +680,7 @@ func renderSearchResults(results []HelpBinding, scrollOffset int, dims HelpDimen
 
 // renderHelpFooter renders the help menu footer with instructions
 func renderHelpFooter(searchMode bool, hasScroll bool) string {
-	instructions := []string{}
+	var instructions []string
 
 	if searchMode {
 		instructions = []string{

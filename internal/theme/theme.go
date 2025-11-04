@@ -8,28 +8,42 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
+var enabled bool
+
 // Initialize sets up the theme registry with the specified theme name.
 // Call this once at application startup.
+// If themeName is empty, theming will be disabled and standard terminal colors will be used.
 func Initialize(themeName string) error {
+	// If no theme specified, disable theming
+	if themeName == "" {
+		enabled = false
+		return nil
+	}
+
+	enabled = true
 	tint.NewDefaultRegistry()
 
 	// Try to set the theme by ID
-	if themeName != "" {
-		ok := tint.SetTintID(themeName)
-		if !ok {
-			// Theme not found, set to default
-			tint.SetTintID("default")
-		}
-	} else {
-		// Set default theme if none specified
+	ok := tint.SetTintID(themeName)
+	if !ok {
+		// Theme not found, set to default
 		tint.SetTintID("default")
 	}
 
 	return nil
 }
 
+// IsEnabled returns true if theming is enabled
+func IsEnabled() bool {
+	return enabled
+}
+
 // Current returns the currently active theme.
+// Returns nil if theming is disabled.
 func Current() *tint.Tint {
+	if !enabled {
+		return nil
+	}
 	return tint.Current()
 }
 

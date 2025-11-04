@@ -192,6 +192,8 @@ func getStaticHelpSections() []KeybindingSection {
 			Bindings: []Keybinding{
 				{"Shift+H/L, Ctrl+←/→", "Swap left/right"},
 				{"Shift+K/J, Ctrl+↑/↓", "Swap up/down"},
+				{"< / >", "Resize master width"},
+				{"{ / }", "Resize focused window height"},
 			},
 		},
 		{

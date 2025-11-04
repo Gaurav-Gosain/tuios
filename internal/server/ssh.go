@@ -82,17 +82,21 @@ func teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
 
 	// Create a TUIOS instance for this session
 	tuiosInstance := &app.OS{
-		FocusedWindow:    -1,                    // No focused window initially
-		WindowExitChan:   make(chan string, 10), // Buffer for window exit signals
-		MouseSnapping:    false,                 // Disable mouse snapping by default
-		CurrentWorkspace: 1,                     // Start on workspace 1
-		NumWorkspaces:    9,                     // Support 9 workspaces (1-9)
-		WorkspaceFocus:   make(map[int]int),     // Initialize workspace focus memory
-		Width:            pty.Window.Width,      // Set initial width from SSH session
-		Height:           pty.Window.Height,     // Set initial height from SSH session
-		SSHSession:       session,               // Store SSH session reference
-		IsSSHMode:        true,                  // Flag to indicate SSH mode
-		KeybindRegistry:  keybindRegistry,       // User-configurable keybindings
+		FocusedWindow:        -1,                               // No focused window initially
+		WindowExitChan:       make(chan string, 10),            // Buffer for window exit signals
+		MouseSnapping:        false,                            // Disable mouse snapping by default
+		MasterRatio:          0.5,                              // Default 50/50 split for tiling
+		CurrentWorkspace:     1,                                // Start on workspace 1
+		NumWorkspaces:        9,                                // Support 9 workspaces (1-9)
+		WorkspaceFocus:       make(map[int]int),                // Initialize workspace focus memory
+		WorkspaceLayouts:     make(map[int][]app.WindowLayout), // Initialize layout storage
+		WorkspaceHasCustom:   make(map[int]bool),               // Initialize custom layout tracker
+		WorkspaceMasterRatio: make(map[int]float64),            // Initialize per-workspace master ratio
+		Width:                pty.Window.Width,                 // Set initial width from SSH session
+		Height:               pty.Window.Height,                // Set initial height from SSH session
+		SSHSession:           session,                          // Store SSH session reference
+		IsSSHMode:            true,                             // Flag to indicate SSH mode
+		KeybindRegistry:      keybindRegistry,                  // User-configurable keybindings
 	}
 
 	// Return the model and program options

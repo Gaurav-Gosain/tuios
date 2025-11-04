@@ -34,9 +34,10 @@ func enterVisualLine(cm *terminal.CopyMode, window *terminal.Window) {
 func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 	absY := getAbsoluteY(cm, window)
 
-	if cm.State == terminal.CopyModeVisualChar {
+	switch cm.State {
+	case terminal.CopyModeVisualChar:
 		cm.VisualEnd = terminal.Position{X: cm.CursorX, Y: absY}
-	} else if cm.State == terminal.CopyModeVisualLine {
+	case terminal.CopyModeVisualLine:
 		// For visual line mode, we need to select entire lines
 		// Start Y stays fixed, we only update end Y
 		cm.VisualEnd.Y = absY
