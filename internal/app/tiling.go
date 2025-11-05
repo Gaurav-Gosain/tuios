@@ -898,6 +898,205 @@ func (o *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 	o.MarkLayoutCustom()
 }
 
+// AdjustTilingNeighborsVisual is like AdjustTilingNeighbors but uses visual-only resize.
+// This defers PTY resize operations until the drag completes, improving responsiveness
+// during mouse resize operations while still constraining window sizes appropriately.
+func (o *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, newWidth, newHeight int) {
+	oldX := resized.X
+	oldY := resized.Y
+	oldRight := resized.X + resized.Width
+	oldBottom := resized.Y + resized.Height
+	newRight := newX + newWidth
+	newBottom := newY + newHeight
+
+	const minWidth = config.DefaultWindowWidth
+	const minHeight = config.DefaultWindowHeight
+	minY := o.GetTopMargin()
+	maxY := minY + o.GetUsableHeight()
+
+	// Handle right edge movement (vertical split line)
+	if newRight != oldRight {
+		leftWindows, rightWindows := findWindowsOnVerticalSplitAll(o, oldRight)
+		leftWindows = removeWindowFromList(leftWindows, resized)
+		rightWindows = removeWindowFromList(rightWindows, resized)
+
+		constrainedRight := newRight
+		minValidX := 0
+		for _, win := range leftWindows {
+			minRequired := win.X + minWidth
+			if minRequired > minValidX {
+				minValidX = minRequired
+			}
+		}
+
+		maxValidX := o.Width
+		for _, win := range rightWindows {
+			maxAllowed := win.X + win.Width - minWidth
+			if maxAllowed < maxValidX {
+				maxValidX = maxAllowed
+			}
+		}
+
+		constrainedRight = max(minValidX, min(constrainedRight, maxValidX))
+
+		for _, win := range leftWindows {
+			win.ResizeVisual(constrainedRight-win.X, win.Height)
+			win.MarkPositionDirty()
+			o.PendingResizes[win.ID] = [2]int{constrainedRight - win.X, win.Height}
+		}
+		for _, win := range rightWindows {
+			oldWinRight := win.X + win.Width
+			win.X = constrainedRight
+			win.ResizeVisual(oldWinRight-constrainedRight, win.Height)
+			win.MarkPositionDirty()
+			o.PendingResizes[win.ID] = [2]int{oldWinRight - constrainedRight, win.Height}
+		}
+
+		newRight = constrainedRight
+	}
+
+	// Handle left edge movement (vertical split line)
+	if newX != oldX {
+		leftWindows, rightWindows := findWindowsOnVerticalSplitAll(o, oldX)
+		leftWindows = removeWindowFromList(leftWindows, resized)
+		rightWindows = removeWindowFromList(rightWindows, resized)
+
+		constrainedX := newX
+		minValidX := 0
+		for _, win := range leftWindows {
+			minRequired := win.X + minWidth
+			if minRequired > minValidX {
+				minValidX = minRequired
+			}
+		}
+
+		maxValidX := o.Width
+		for _, win := range rightWindows {
+			maxAllowed := win.X + win.Width - minWidth
+			if maxAllowed < maxValidX {
+				maxValidX = maxAllowed
+			}
+		}
+
+		constrainedX = max(minValidX, min(constrainedX, maxValidX))
+
+		for _, win := range leftWindows {
+			win.ResizeVisual(constrainedX-win.X, win.Height)
+			win.MarkPositionDirty()
+			o.PendingResizes[win.ID] = [2]int{constrainedX - win.X, win.Height}
+		}
+		for _, win := range rightWindows {
+			oldWinRight := win.X + win.Width
+			win.X = constrainedX
+			win.ResizeVisual(oldWinRight-constrainedX, win.Height)
+			win.MarkPositionDirty()
+			o.PendingResizes[win.ID] = [2]int{oldWinRight - constrainedX, win.Height}
+		}
+
+		newX = constrainedX
+	}
+
+	// Handle bottom edge movement (horizontal split line)
+	if newBottom != oldBottom {
+		topWindows, bottomWindows := findWindowsOnHorizontalSplitAll(o, oldBottom)
+		topWindows = removeWindowFromList(topWindows, resized)
+		bottomWindows = removeWindowFromList(bottomWindows, resized)
+
+		constrainedBottom := newBottom
+		minValidY := minY
+		for _, win := range topWindows {
+			minRequired := win.Y + minHeight
+			if minRequired > minValidY {
+				minValidY = minRequired
+			}
+		}
+
+		maxValidY := maxY
+		for _, win := range bottomWindows {
+			maxAllowed := win.Y + win.Height - minHeight
+			if maxAllowed < maxValidY {
+				maxValidY = maxAllowed
+			}
+		}
+
+		constrainedBottom = max(minValidY, min(constrainedBottom, maxValidY))
+
+		for _, win := range topWindows {
+			win.ResizeVisual(win.Width, constrainedBottom-win.Y)
+			win.MarkPositionDirty()
+			o.PendingResizes[win.ID] = [2]int{win.Width, constrainedBottom - win.Y}
+		}
+		for _, win := range bottomWindows {
+			oldWinBottom := win.Y + win.Height
+			win.Y = constrainedBottom
+			win.ResizeVisual(win.Width, oldWinBottom-constrainedBottom)
+			win.MarkPositionDirty()
+			o.PendingResizes[win.ID] = [2]int{win.Width, oldWinBottom - constrainedBottom}
+		}
+
+		newBottom = constrainedBottom
+	}
+
+	// Handle top edge movement (horizontal split line)
+	if newY != oldY {
+		topWindows, bottomWindows := findWindowsOnHorizontalSplitAll(o, oldY)
+		topWindows = removeWindowFromList(topWindows, resized)
+		bottomWindows = removeWindowFromList(bottomWindows, resized)
+
+		constrainedY := newY
+		minValidY := minY
+		for _, win := range topWindows {
+			minRequired := win.Y + minHeight
+			if minRequired > minValidY {
+				minValidY = minRequired
+			}
+		}
+
+		maxValidY := maxY
+		for _, win := range bottomWindows {
+			maxAllowed := win.Y + win.Height - minHeight
+			if maxAllowed < maxValidY {
+				maxValidY = maxAllowed
+			}
+		}
+
+		constrainedY = max(minValidY, min(constrainedY, maxValidY))
+
+		for _, win := range topWindows {
+			win.ResizeVisual(win.Width, constrainedY-win.Y)
+			win.MarkPositionDirty()
+			o.PendingResizes[win.ID] = [2]int{win.Width, constrainedY - win.Y}
+		}
+		for _, win := range bottomWindows {
+			oldWinBottom := win.Y + win.Height
+			win.Y = constrainedY
+			win.ResizeVisual(win.Width, oldWinBottom-constrainedY)
+			win.MarkPositionDirty()
+			o.PendingResizes[win.ID] = [2]int{win.Width, oldWinBottom - constrainedY}
+		}
+
+		newY = constrainedY
+	}
+
+	resized.X = newX
+	resized.Y = newY
+	resized.Width = newRight - newX
+	resized.Height = newBottom - newY
+
+	if resized.Width < minWidth || resized.Height < minHeight ||
+		resized.X < 0 || resized.Y < 0 ||
+		resized.X+resized.Width > o.Width || resized.Y+resized.Height > maxY {
+		resized.Width = max(minWidth, min(resized.Width, o.Width-resized.X))
+		resized.Height = max(minHeight, min(resized.Height, maxY-resized.Y))
+		resized.X = max(0, min(resized.X, o.Width-minWidth))
+		resized.Y = max(minY, min(resized.Y, maxY-minHeight))
+	}
+
+	resized.ResizeVisual(resized.Width, resized.Height)
+	o.PendingResizes[resized.ID] = [2]int{resized.Width, resized.Height}
+	resized.MarkPositionDirty()
+}
+
 // findWindowsOnVerticalSplitAll finds all windows on a vertical split line (not excluding any window)
 func findWindowsOnVerticalSplitAll(o *OS, splitX int) (leftWindows, rightWindows []*terminal.Window) {
 	const tolerance = 1

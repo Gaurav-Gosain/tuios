@@ -648,6 +648,17 @@ func (w *Window) Resize(width, height int) {
 	}
 }
 
+// ResizeVisual updates the window dimensions without triggering PTY resize.
+// This is used during mouse drag to provide immediate visual feedback while
+// deferring expensive PTY resize operations until the drag completes.
+func (w *Window) ResizeVisual(width, height int) {
+	w.Width = width
+	w.Height = height
+	w.MarkPositionDirty()
+	// Note: NOT marking ContentDirty to preserve cached content during drag
+	// This improves responsiveness during resize operations
+}
+
 // TriggerRedraw ensures terminal applications properly respond to resize.
 // Platform-specific implementations in window_unix.go and window_windows.go
 

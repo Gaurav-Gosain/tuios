@@ -92,6 +92,7 @@ func teaHandler(session ssh.Session) (tea.Model, []tea.ProgramOption) {
 		WorkspaceLayouts:     make(map[int][]app.WindowLayout), // Initialize layout storage
 		WorkspaceHasCustom:   make(map[int]bool),               // Initialize custom layout tracker
 		WorkspaceMasterRatio: make(map[int]float64),            // Initialize per-workspace master ratio
+		PendingResizes:       make(map[string][2]int),          // Track pending PTY resizes
 		Width:                pty.Window.Width,                 // Set initial width from SSH session
 		Height:               pty.Window.Height,                // Set initial height from SSH session
 		SSHSession:           session,                          // Store SSH session reference

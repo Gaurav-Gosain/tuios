@@ -140,6 +140,8 @@ type OS struct {
 	ShowCacheStats        bool                   // True when showing style cache statistics overlay
 	ShowQuitConfirm       bool                   // True when showing quit confirmation dialog
 	QuitConfirmSelection  int                    // 0 = Yes (left), 1 = No (right)
+	// Pending resize tracking for debouncing PTY resize during mouse drag
+	PendingResizes       map[string][2]int      // windowID -> [width, height] of pending PTY resize
 	// Performance optimization caches
 	cachedSeparator      string // Cached dock separator string
 	cachedSeparatorWidth int    // Width of cached separator

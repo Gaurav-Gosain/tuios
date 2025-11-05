@@ -381,6 +381,7 @@ func runLocal() error {
 		WorkspaceLayouts:     make(map[int][]app.WindowLayout), // Initialize layout storage
 		WorkspaceHasCustom:   make(map[int]bool),               // Initialize custom layout tracker
 		WorkspaceMasterRatio: make(map[int]float64),            // Initialize per-workspace master ratio
+		PendingResizes:       make(map[string][2]int),          // Track pending PTY resizes
 		KeybindRegistry:      keybindRegistry,                  // User-configurable keybindings
 	}
 

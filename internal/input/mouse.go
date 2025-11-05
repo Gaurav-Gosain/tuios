@@ -516,16 +516,14 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 			}
 
-			o.AdjustTilingNeighbors(focusedWindow, newX, newY, newWidth, newHeight)
-			// AdjustTilingNeighbors updates the resized window with constrained values
+			// In tiling mode, update visual state but defer PTY resize until drag completes
+			// Store pending resizes for all affected windows
+			o.AdjustTilingNeighborsVisual(focusedWindow, newX, newY, newWidth, newHeight)
 		} else {
-			// In floating mode, apply the resize directly
+			// In floating mode, apply visual resize only (defer PTY resize until drag completes)
 			focusedWindow.X = newX
 			focusedWindow.Y = newY
-			focusedWindow.Width = newWidth
-			focusedWindow.Height = newHeight
-
-			focusedWindow.Resize(focusedWindow.Width, focusedWindow.Height)
+			focusedWindow.ResizeVisual(newWidth, newHeight) // Visual resize only
 			focusedWindow.MarkPositionDirty()
 		}
 
@@ -653,6 +651,17 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.Dragging = false
 		o.Resizing = false
 		o.InteractionMode = false
+
+		// Apply all pending PTY resizes that were deferred during drag/resize
+		if wasResizing && len(o.PendingResizes) > 0 {
+			for i := range o.Windows {
+				if dimensions, exists := o.PendingResizes[o.Windows[i].ID]; exists {
+					o.Windows[i].Resize(dimensions[0], dimensions[1])
+				}
+			}
+			// Clear pending resizes after applying them
+			o.PendingResizes = make(map[string][2]int)
+		}
 
 		// Mark layout as custom if resizing in tiling mode
 		if wasResizing && o.AutoTiling {
