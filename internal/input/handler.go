@@ -34,7 +34,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Handle bracketed paste from terminal (when pasting via Cmd+V in Ghostty, etc.)
 		// Only handle paste in terminal mode
 		if o.Mode == app.TerminalMode {
-			o.ClipboardContent = msg.String()
+			o.ClipboardContent = string(msg)
 			handleClipboardPaste(o)
 		}
 		return o, nil
@@ -42,7 +42,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Handle OSC 52 clipboard read response (from tea.ReadClipboard)
 		// Only handle paste in terminal mode
 		if o.Mode == app.TerminalMode {
-			o.ClipboardContent = msg.String()
+			o.ClipboardContent = msg.Content
 			handleClipboardPaste(o)
 		}
 		return o, nil
