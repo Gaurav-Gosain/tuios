@@ -5,7 +5,6 @@ package terminal
 import (
 	"os"
 	"syscall"
-	"time"
 )
 
 // TriggerRedraw ensures terminal applications properly respond to resize.
