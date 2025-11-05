@@ -386,6 +386,7 @@ func runLocal() error {
 
 	// Initialize the Bubble Tea program with optimal settings
 	// Note: AltScreen, MouseMode, and ReportFocus are now configured in View() method
+	// Note: Keyboard enhancements and uniform key layout are automatically negotiated with the terminal
 	p := tea.NewProgram(
 		initialOS,
 		tea.WithFPS(config.NormalFPS),     // Set target FPS

@@ -161,6 +161,15 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Could be used to pause expensive operations
 		return m, nil
 
+	case tea.KeyboardEnhancementsMsg:
+		// Keyboard enhancements enabled - terminal supports Kitty protocol
+		// This enables better key disambiguation and international keyboard support
+		m.KeyboardEnhancementsEnabled = msg.SupportsKeyDisambiguation()
+		if m.KeyboardEnhancementsEnabled {
+			m.ShowNotification("Keyboard enhancements enabled", "info", config.NotificationDuration)
+		}
+		return m, nil
+
 	}
 
 	return m, nil

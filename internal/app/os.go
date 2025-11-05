@@ -145,6 +145,8 @@ type OS struct {
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
+	// Keyboard enhancement support (Kitty protocol)
+	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// Keybind registry for user-configurable keybindings
 	KeybindRegistry *config.KeybindRegistry
 }

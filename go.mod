@@ -4,14 +4,14 @@ go 1.24.4
 
 require (
 	github.com/adrg/xdg v0.5.3
-	github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.6
+	github.com/charmbracelet/bubbletea/v2 v2.0.0-rc.1
 	github.com/charmbracelet/colorprofile v0.3.2
 	github.com/charmbracelet/fang v0.4.3
 	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta.3.0.20250917201909-41ff0bf215ea
 	github.com/charmbracelet/ssh v0.0.0-20250826160808-ebfa259c7309
-	github.com/charmbracelet/ultraviolet v0.0.0-20251027184610-54aaed923e4e
+	github.com/charmbracelet/ultraviolet v0.0.0-20251104185819-20e68c88fe84
 	github.com/charmbracelet/wish/v2 v2.0.0-20250725031147-577d86ba3605
-	github.com/charmbracelet/x/ansi v0.10.2
+	github.com/charmbracelet/x/ansi v0.10.3
 	github.com/charmbracelet/x/xpty v0.1.3
 	github.com/google/uuid v1.6.0
 	github.com/lrstanley/bubbletint/v2 v2.0.0-alpha.9
@@ -33,7 +33,9 @@ require (
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
-	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
+	github.com/clipperhouse/displaywidth v0.4.1 // indirect
+	github.com/clipperhouse/stringish v0.1.1 // indirect
+	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/creack/pty v1.1.24 // indirect
 	github.com/ebitengine/purego v0.9.0 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
@@ -59,3 +61,5 @@ require (
 	golang.org/x/term v0.36.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 )
+
+replace github.com/charmbracelet/bubbletea/v2 => charm.land/bubbletea/v2 v2.0.0-rc.1
