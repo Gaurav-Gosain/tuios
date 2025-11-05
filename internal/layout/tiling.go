@@ -151,7 +151,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 			}
 			// Adjust last row height to fill screen
 			if row == rows-1 {
-				layout.Height = usableHeight - layout.Y
+				layout.Height = usableHeight - (row * cellHeight)
 			}
 
 			layouts = append(layouts, layout)

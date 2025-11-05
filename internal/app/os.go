@@ -785,7 +785,7 @@ func (m *OS) GetUsableHeight() int {
 	if (config.DockbarPosition == "hidden") {
 		return m.Height
 	} else {
-		// Reserve space for the dock at the bottom
+		// Reserve space for the dock (at top or bottom)
 		return m.Height - config.DockHeight
 	}
 }

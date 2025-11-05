@@ -271,17 +271,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Handle tiling resize keys in terminal mode - don't send to PTY
-	if o.AutoTiling && (keyStr == "<" || keyStr == ">" || keyStr == "{" || keyStr == "}") {
-		// Dispatch to action handler
-		if o.KeybindRegistry != nil {
-			action := o.KeybindRegistry.GetAction(keyStr)
-			if action != "" {
-				return HandleWindowManagementModeKey(msg, o)
-			}
-		}
-	}
-
 	// Normal terminal mode - pass through all keys
 	if focusedWindow != nil {
 		rawInput := getRawKeyBytes(msg)
