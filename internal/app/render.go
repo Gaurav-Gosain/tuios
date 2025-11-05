@@ -233,6 +233,12 @@ func renderStyledText(style lipgloss.Style, text string) string {
 }
 
 func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalMode bool) string {
+	// Show resize indicator message during active resize operation
+	// This provides clear visual feedback of the new dimensions
+	if window.IsBeingManipulated && m.Resizing {
+		return m.renderResizeIndicator(window)
+	}
+
 	// Smart caching: use cache if window is being manipulated OR if content hasn't changed
 	if (window.IsBeingManipulated || !window.ContentDirty) && window.CachedContent != "" {
 		return window.CachedContent
@@ -816,6 +822,51 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	window.CachedContent = content
 	window.ContentDirty = false // Mark content as clean after rendering
 	return content
+}
+
+// renderResizeIndicator generates a centered message showing the current resize dimensions.
+// This provides clear visual feedback during mouse resize operations.
+func (m *OS) renderResizeIndicator(window *terminal.Window) string {
+	// Get terminal dimensions (accounting for borders)
+	termWidth := max(window.Width-2, 1)
+	termHeight := max(window.Height-2, 1)
+
+	// Build the resize message: "Resizing... WxH"
+	resizeMsg := fmt.Sprintf("Resizing... %dx%d", termWidth, termHeight)
+
+	// Create a builder for the output
+	var builder strings.Builder
+
+	// Calculate centering
+	centerY := termHeight / 2
+	centerX := (termWidth - len(resizeMsg)) / 2
+	if centerX < 0 {
+		centerX = 0
+	}
+
+	// Build output line by line
+	for y := 0; y < termHeight; y++ {
+		for x := 0; x < termWidth; x++ {
+			if y == centerY && x >= centerX && x < centerX+len(resizeMsg) {
+				// Part of the resize message
+				msgIdx := x - centerX
+				if msgIdx < len(resizeMsg) {
+					builder.WriteRune(rune(resizeMsg[msgIdx]))
+				} else {
+					builder.WriteRune(' ')
+				}
+			} else {
+				builder.WriteRune(' ')
+			}
+		}
+
+		// Add newline after each line (except last)
+		if y < termHeight-1 {
+			builder.WriteRune('\n')
+		}
+	}
+
+	return builder.String()
 }
 
 // shouldApplyStyle checks if a cell has styling (optimization #7: early exit for nil)
