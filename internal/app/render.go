@@ -1106,6 +1106,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	defer pool.PutLayerSlice(layersPtr)
 
 	// Pre-compute viewport bounds for culling
+	topMargin := m.GetTopMargin()
 	viewportWidth := m.Width
 	viewportHeight := m.GetUsableHeight()
 
@@ -1152,16 +1153,16 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		isVisible := window.X+window.Width >= -margin &&
 			window.X <= viewportWidth+margin &&
 			window.Y+window.Height >= -margin &&
-			window.Y <= viewportHeight+margin
+			window.Y <= viewportHeight+topMargin+margin
 
 		if !isVisible {
 			continue
 		}
 
 		// Additional optimization: skip expensive operations for barely visible windows
-		isFullyVisible := window.X >= 0 && window.Y >= 0 &&
+		isFullyVisible := window.X >= 0 && window.Y >= topMargin &&
 			window.X+window.Width <= viewportWidth &&
-			window.Y+window.Height <= viewportHeight
+			window.Y+window.Height <= viewportHeight+topMargin
 
 		// Ensure focused window index is valid
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
@@ -1227,7 +1228,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		clippedContent, finalX, finalY := clipWindowContent(
 			boxContent,
 			window.X, window.Y,
-			viewportWidth, viewportHeight,
+			viewportWidth, viewportHeight+topMargin,
 		)
 
 		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
@@ -1242,9 +1243,10 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		overlays := m.renderOverlays()
 		layers = append(layers, overlays...)
 
-		// Always add dock layer (shows empty dock area when no minimized windows)
-		dockLayer := m.renderDock()
-		layers = append(layers, dockLayer)
+		if (config.DockbarPosition != "hidden") {
+			dockLayer := m.renderDock()
+			layers = append(layers, dockLayer)
+		}
 	}
 
 	canvas.AddLayers(layers...)
@@ -1286,7 +1288,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	timeX := 1
 	timeLayer := lipgloss.NewLayer(renderedTime).
 		X(timeX).
-		Y(0).
+		Y(m.GetTimeYPosition()).
 		Z(config.ZIndexTime). // High Z to appear above windows
 		ID("time")
 
@@ -2041,13 +2043,15 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		Render(m.cachedSeparator)
 
 	// Combine separator and dock bar
-	fullDock := lipgloss.JoinVertical(lipgloss.Left,
-		separator,
-		dockBar,
-	)
+	dockbarYPos := m.Height - config.DockHeight
+	dockbarParts := []string{separator, dockBar}
+	if (config.DockbarPosition == "top") {
+		dockbarYPos = 0
+		dockbarParts[0], dockbarParts[1] = dockbarParts[1], dockbarParts[0]
+	}
 
-	// Return the dock layer positioned to show everything
-	return lipgloss.NewLayer(fullDock).X(0).Y(m.Height - config.DockHeight).Z(config.ZIndexDock).ID("dock")
+	fullDock := lipgloss.JoinVertical(lipgloss.Left, dockbarParts...)
+	return lipgloss.NewLayer(fullDock).X(0).Y(dockbarYPos).Z(config.ZIndexDock).ID("dock")
 }
 
 // isPositionInSelection checks if the given position is within the current text selection.

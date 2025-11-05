@@ -11,7 +11,7 @@ type TileLayout struct {
 
 // CalculateTilingLayout returns optimal positions for n windows
 // masterRatio controls the width ratio of the master (left) pane (0.3-0.7)
-func CalculateTilingLayout(n int, screenWidth int, usableHeight int, masterRatio float64) []TileLayout {
+func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio float64) []TileLayout {
 	if n == 0 {
 		return nil
 	}
@@ -31,7 +31,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, masterRatio
 		// Single window - full screen
 		layouts = append(layouts, TileLayout{
 			X:      0,
-			Y:      0,
+			Y:      topMargin,
 			Width:  screenWidth,
 			Height: usableHeight,
 		})
@@ -43,13 +43,13 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, masterRatio
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
-				Y:      0,
+				Y:      topMargin,
 				Width:  masterWidth,
 				Height: usableHeight,
 			},
 			TileLayout{
 				X:      masterWidth,
-				Y:      0,
+				Y:      topMargin,
 				Width:  slaveWidth,
 				Height: usableHeight,
 			},
@@ -63,19 +63,19 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, masterRatio
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
-				Y:      0,
+				Y:      topMargin,
 				Width:  masterWidth,
 				Height: usableHeight,
 			},
 			TileLayout{
 				X:      masterWidth,
-				Y:      0,
+				Y:      topMargin,
 				Width:  slaveWidth,
 				Height: halfHeight,
 			},
 			TileLayout{
 				X:      masterWidth,
-				Y:      halfHeight,
+				Y:      topMargin + halfHeight,
 				Width:  slaveWidth,
 				Height: usableHeight - halfHeight,
 			},
@@ -88,25 +88,25 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, masterRatio
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
-				Y:      0,
+				Y:      topMargin,
 				Width:  halfWidth,
 				Height: halfHeight,
 			},
 			TileLayout{
 				X:      halfWidth,
-				Y:      0,
+				Y:      topMargin,
 				Width:  screenWidth - halfWidth,
 				Height: halfHeight,
 			},
 			TileLayout{
 				X:      0,
-				Y:      halfHeight,
+				Y:      topMargin + halfHeight,
 				Width:  halfWidth,
 				Height: usableHeight - halfHeight,
 			},
 			TileLayout{
 				X:      halfWidth,
-				Y:      halfHeight,
+				Y:      topMargin + halfHeight,
 				Width:  screenWidth - halfWidth,
 				Height: usableHeight - halfHeight,
 			},
@@ -140,7 +140,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, masterRatio
 
 			layout := TileLayout{
 				X:      col * cellWidth,
-				Y:      row * cellHeight,
+				Y:      topMargin + row * cellHeight,
 				Width:  cellWidth,
 				Height: cellHeight,
 			}

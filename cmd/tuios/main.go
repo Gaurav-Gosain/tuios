@@ -46,6 +46,7 @@ var (
 	listThemes        bool
 	previewTheme      string
 	borderStyle       string
+	dockbarPosition   string
 	hideWindowButtons bool
 	scrollbackLines   int
 )
@@ -121,6 +122,7 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&listThemes, "list-themes", false, "List all available themes and exit")
 	rootCmd.PersistentFlags().StringVar(&previewTheme, "preview-theme", "", "Preview a theme's 16 ANSI colors")
 	rootCmd.PersistentFlags().StringVar(&borderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)")
+	rootCmd.PersistentFlags().StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden (default: from config or bottom)")
 	rootCmd.PersistentFlags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
 	rootCmd.PersistentFlags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
 
@@ -300,6 +302,14 @@ func runLocal() error {
 	} else {
 		// CLI flag overrides config
 		config.BorderStyle = borderStyle
+	}
+
+	if (dockbarPosition == "") {
+		// Use config file setting if flag not provided
+		config.DockbarPosition = userConfig.Appearance.DockbarPosition
+	} else {
+		// CLI flag overrides config
+		config.DockbarPosition = dockbarPosition
 	}
 
 	// Apply hide window buttons setting
