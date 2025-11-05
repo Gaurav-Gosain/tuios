@@ -942,6 +942,7 @@ func (o *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 		for _, win := range leftWindows {
 			win.ResizeVisual(constrainedRight-win.X, win.Height)
 			win.MarkPositionDirty()
+			win.IsBeingManipulated = true // Show resize indicator for neighbor windows
 			o.PendingResizes[win.ID] = [2]int{constrainedRight - win.X, win.Height}
 		}
 		for _, win := range rightWindows {
@@ -949,6 +950,7 @@ func (o *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 			win.X = constrainedRight
 			win.ResizeVisual(oldWinRight-constrainedRight, win.Height)
 			win.MarkPositionDirty()
+			win.IsBeingManipulated = true // Show resize indicator for neighbor windows
 			o.PendingResizes[win.ID] = [2]int{oldWinRight - constrainedRight, win.Height}
 		}
 
@@ -983,6 +985,7 @@ func (o *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 		for _, win := range leftWindows {
 			win.ResizeVisual(constrainedX-win.X, win.Height)
 			win.MarkPositionDirty()
+			win.IsBeingManipulated = true // Show resize indicator for neighbor windows
 			o.PendingResizes[win.ID] = [2]int{constrainedX - win.X, win.Height}
 		}
 		for _, win := range rightWindows {
@@ -990,6 +993,7 @@ func (o *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 			win.X = constrainedX
 			win.ResizeVisual(oldWinRight-constrainedX, win.Height)
 			win.MarkPositionDirty()
+			win.IsBeingManipulated = true // Show resize indicator for neighbor windows
 			o.PendingResizes[win.ID] = [2]int{oldWinRight - constrainedX, win.Height}
 		}
 
@@ -1024,6 +1028,7 @@ func (o *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 		for _, win := range topWindows {
 			win.ResizeVisual(win.Width, constrainedBottom-win.Y)
 			win.MarkPositionDirty()
+			win.IsBeingManipulated = true // Show resize indicator for neighbor windows
 			o.PendingResizes[win.ID] = [2]int{win.Width, constrainedBottom - win.Y}
 		}
 		for _, win := range bottomWindows {
@@ -1031,6 +1036,7 @@ func (o *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 			win.Y = constrainedBottom
 			win.ResizeVisual(win.Width, oldWinBottom-constrainedBottom)
 			win.MarkPositionDirty()
+			win.IsBeingManipulated = true // Show resize indicator for neighbor windows
 			o.PendingResizes[win.ID] = [2]int{win.Width, oldWinBottom - constrainedBottom}
 		}
 
@@ -1065,6 +1071,7 @@ func (o *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 		for _, win := range topWindows {
 			win.ResizeVisual(win.Width, constrainedY-win.Y)
 			win.MarkPositionDirty()
+			win.IsBeingManipulated = true // Show resize indicator for neighbor windows
 			o.PendingResizes[win.ID] = [2]int{win.Width, constrainedY - win.Y}
 		}
 		for _, win := range bottomWindows {
@@ -1072,6 +1079,7 @@ func (o *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 			win.Y = constrainedY
 			win.ResizeVisual(win.Width, oldWinBottom-constrainedY)
 			win.MarkPositionDirty()
+			win.IsBeingManipulated = true // Show resize indicator for neighbor windows
 			o.PendingResizes[win.ID] = [2]int{win.Width, oldWinBottom - constrainedY}
 		}
 

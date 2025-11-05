@@ -677,11 +677,17 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.Windows[i].IsBeingManipulated = false
 		}
 
-		// Clear interaction mode with a small delay to allow buffered content to be processed
-		// This prevents rapid content updates from interfering with the resize completion
+		// Clear interaction mode with a delay to allow shell prompts to fully redraw.
+		// This gives shells like bash/zsh/starship time to:
+		// 1. Receive SIGWINCH signal
+		// 2. Query new terminal dimensions
+		// 3. Recalculate and redraw the prompt for the new width
+		// 4. Write the new prompt to the PTY
+		// Without this delay, content polling resumes before the shell finishes,
+		// resulting in incomplete or stale prompt displays.
 		if wasResizing {
 			go func() {
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(150 * time.Millisecond)
 				o.InteractionMode = false
 			}()
 		} else {
