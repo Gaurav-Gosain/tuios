@@ -902,7 +902,7 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 			}
 		}
 
-		// Check if click is within this dock item 
+		// Check if click is within this dock item
 		if x >= itemPos.StartX && x < itemPos.EndX && y == o.GetDockbarContentYPosition() {
 			// DEBUG: Log successful match
 			if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {

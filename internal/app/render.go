@@ -1294,7 +1294,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		overlays := m.renderOverlays()
 		layers = append(layers, overlays...)
 
-		if (config.DockbarPosition != "hidden") {
+		if config.DockbarPosition != "hidden" {
 			dockLayer := m.renderDock()
 			layers = append(layers, dockLayer)
 		}
@@ -2107,7 +2107,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 	// Combine separator and dock bar
 	dockbarYPos := m.Height - config.DockHeight
 	dockbarParts := []string{separator, dockBar}
-	if (config.DockbarPosition == "top") {
+	if config.DockbarPosition == "top" {
 		dockbarYPos = 0
 		dockbarParts[0], dockbarParts[1] = dockbarParts[1], dockbarParts[0]
 	}

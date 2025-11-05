@@ -140,7 +140,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 
 			layout := TileLayout{
 				X:      col * cellWidth,
-				Y:      topMargin + row * cellHeight,
+				Y:      topMargin + row*cellHeight,
 				Width:  cellWidth,
 				Height: cellHeight,
 			}

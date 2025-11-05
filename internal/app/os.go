@@ -141,7 +141,7 @@ type OS struct {
 	ShowQuitConfirm       bool                   // True when showing quit confirmation dialog
 	QuitConfirmSelection  int                    // 0 = Yes (left), 1 = No (right)
 	// Pending resize tracking for debouncing PTY resize during mouse drag
-	PendingResizes       map[string][2]int      // windowID -> [width, height] of pending PTY resize
+	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
 	// Performance optimization caches
 	cachedSeparator      string // Cached dock separator string
 	cachedSeparatorWidth int    // Width of cached separator
@@ -603,15 +603,15 @@ func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) 
 	case SnapTopRight:
 		return halfWidth, topMargin, halfWidth, halfHeight
 	case SnapBottomLeft:
-		return 0, halfHeight+topMargin, halfWidth, usableHeight - halfHeight
+		return 0, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
 	case SnapBottomRight:
 		return halfWidth, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
 	case SnapFullScreen:
 		return 0, topMargin, m.Width, usableHeight
 	case Unsnap:
-		return m.Width / 4, usableHeight / 4 + topMargin, halfWidth, halfHeight
+		return m.Width / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
 	default:
-		return m.Width / 4, usableHeight / 4 + topMargin, halfWidth, halfHeight
+		return m.Width / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
 	}
 }
 
@@ -761,34 +761,34 @@ func (m *OS) HasMinimizedWindows() bool {
 
 // GetTopMargin returns the margin at the top (possibly reserved space for the dockbar)
 func (m *OS) GetTopMargin() int {
-	if (config.DockbarPosition == "top") {
+	if config.DockbarPosition == "top" {
 		return config.DockHeight
 	}
-	
-	return 0;
+
+	return 0
 }
 
 // GetDockbarContentYPosition returns the Y position of the dockbar
 func (m *OS) GetDockbarContentYPosition() int {
-	if (config.DockbarPosition == "top") {
+	if config.DockbarPosition == "top" {
 		return 0
 	}
-	
-	return m.Height - 1;
+
+	return m.Height - 1
 }
 
 // GetTimeYPosition returns the Y position of the time display
 func (m *OS) GetTimeYPosition() int {
-	if (config.DockbarPosition == "top") {
+	if config.DockbarPosition == "top" {
 		return m.Height - 1
 	}
-	
-	return 0;
+
+	return 0
 }
 
 // GetUsableHeight returns the usable height excluding the dock.
 func (m *OS) GetUsableHeight() int {
-	if (config.DockbarPosition == "hidden") {
+	if config.DockbarPosition == "hidden" {
 		return m.Height
 	} else {
 		// Reserve space for the dock (at top or bottom)

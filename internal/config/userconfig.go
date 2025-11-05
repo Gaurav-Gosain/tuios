@@ -71,19 +71,19 @@ func DefaultConfig() *UserConfig {
 			},
 			Workspaces: getDefaultWorkspaceKeybinds(),
 			Layout: map[string][]string{
-				"snap_left":            {"h"},
-				"snap_right":           {"l"},
-				"snap_fullscreen":      {"f"},
-				"unsnap":               {"u"},
-				"snap_corner_1":        {"1"},
-				"snap_corner_2":        {"2"},
-				"snap_corner_3":        {"3"},
-				"snap_corner_4":        {"4"},
-				"toggle_tiling":        {"t"},
-				"swap_left":            {"H", "ctrl+left"},
-				"swap_right":           {"L", "ctrl+right"},
-				"swap_up":              {"K", "ctrl+up"},
-				"swap_down":            {"J", "ctrl+down"},
+				"snap_left":                 {"h"},
+				"snap_right":                {"l"},
+				"snap_fullscreen":           {"f"},
+				"unsnap":                    {"u"},
+				"snap_corner_1":             {"1"},
+				"snap_corner_2":             {"2"},
+				"snap_corner_3":             {"3"},
+				"snap_corner_4":             {"4"},
+				"toggle_tiling":             {"t"},
+				"swap_left":                 {"H", "ctrl+left"},
+				"swap_right":                {"L", "ctrl+right"},
+				"swap_up":                   {"K", "ctrl+up"},
+				"swap_down":                 {"J", "ctrl+down"},
 				"resize_master_shrink":      {"<", "shift+,"},
 				"resize_master_grow":        {">", "shift+."},
 				"resize_height_shrink":      {"{", "shift+["},
@@ -390,7 +390,7 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.DockbarPosition == "" {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
 	}
-	
+
 	// Note: HideWindowButtons defaults to false (zero value)
 	// In borderless mode, buttons are hidden automatically regardless of this setting
 

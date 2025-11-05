@@ -304,7 +304,7 @@ func runLocal() error {
 		config.BorderStyle = borderStyle
 	}
 
-	if (dockbarPosition == "") {
+	if dockbarPosition == "" {
 		// Use config file setting if flag not provided
 		config.DockbarPosition = userConfig.Appearance.DockbarPosition
 	} else {
