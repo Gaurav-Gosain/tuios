@@ -430,13 +430,14 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			newX = 0
 		}
 
-		// Top edge: prevent negative Y
-		if newY < 0 {
+		// Top edge: prevent window from moving into dock area or above screen
+		topMargin := o.GetTopMargin()
+		if newY < topMargin {
 			// If resizing from top, adjust height to compensate
 			if o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.TopRight {
-				newHeight += newY // Add the negative offset back to height
+				newHeight += newY - topMargin // Add the offset back to height
 			}
-			newY = 0
+			newY = topMargin
 		}
 
 		// Right edge: prevent window from exceeding viewport width
@@ -451,7 +452,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 
 		// Bottom edge: prevent window from exceeding usable height (dock area)
-		maxY := o.GetUsableHeight()
+		// maxY is the absolute bottom boundary accounting for dock position
+		maxY := topMargin + o.GetUsableHeight()
 		if newY+newHeight > maxY {
 			if o.ResizeCorner == app.BottomLeft || o.ResizeCorner == app.BottomRight {
 				// Resizing from bottom edge - constrain height
