@@ -864,6 +864,28 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 	return hasChanges
 }
 
+// FlushPTYBuffersAfterResize flushes buffered PTY content and forces content polling
+// after a resize operation completes. This ensures that shell prompt redraws in response
+// to SIGWINCH are properly processed and displayed.
+func (m *OS) FlushPTYBuffersAfterResize() {
+	m.terminalMu.Lock()
+	defer m.terminalMu.Unlock()
+
+	// Mark all windows as dirty to force full redraw
+	for i := range m.Windows {
+		window := m.Windows[i]
+		if window == nil || window.Terminal == nil || window.Pty == nil {
+			continue
+		}
+
+		// Mark content as dirty to trigger re-rendering
+		window.MarkContentDirty()
+
+		// Invalidate cache to force fresh render
+		window.InvalidateCache()
+	}
+}
+
 // MoveSelectionCursor moves the selection cursor in the specified direction.
 // Parameters:
 //   - window: The window to operate on

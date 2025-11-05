@@ -16,8 +16,9 @@ func (w *Window) TriggerRedraw() {
 	}
 
 	// Send SIGWINCH signal after a small delay to ensure PTY resize has completed
+	// and give the shell time to process the new size before the signal arrives
 	go func() {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 
 		w.ioMu.RLock()
 		process := w.Cmd.Process

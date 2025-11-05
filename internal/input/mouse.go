@@ -650,7 +650,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		wasResizing := o.Resizing
 		o.Dragging = false
 		o.Resizing = false
-		o.InteractionMode = false
+		// NOTE: Keep InteractionMode=true for now to prevent content polling until
+		// we've had a chance to process all buffered PTY data after resize
 
 		// Apply all pending PTY resizes that were deferred during drag/resize
 		if wasResizing && len(o.PendingResizes) > 0 {
@@ -661,6 +662,10 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 			// Clear pending resizes after applying them
 			o.PendingResizes = make(map[string][2]int)
+
+			// Flush PTY buffers and force content re-render after resize
+			// This ensures shell prompt redraws in response to SIGWINCH are processed
+			o.FlushPTYBuffersAfterResize()
 		}
 
 		// Mark layout as custom if resizing in tiling mode
@@ -670,6 +675,17 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		for i := range o.Windows {
 			o.Windows[i].IsBeingManipulated = false
+		}
+
+		// Clear interaction mode with a small delay to allow buffered content to be processed
+		// This prevents rapid content updates from interfering with the resize completion
+		if wasResizing {
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				o.InteractionMode = false
+			}()
+		} else {
+			o.InteractionMode = false
 		}
 	} else {
 		// Even if we weren't dragging/resizing, clear interaction mode from click
