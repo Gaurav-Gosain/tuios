@@ -23,11 +23,36 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	windowsInNew := m.GetWorkspaceWindowCount(workspace)
 	m.LogInfo("Switching workspace: %d → %d (%d windows)", oldWorkspace, workspace, windowsInNew)
 
-	// Complete all active animations BEFORE switching to prevent windows from getting stuck mid-animation
-	// This snaps all animating windows to their final positions
+	// Clear all animations BEFORE switching to prevent windows from getting stuck mid-animation
+	// Then directly position windows to correct tiled layout WITHOUT creating new animations
 	if len(m.Animations) > 0 {
-		m.CompleteAllAnimations()
-		m.LogInfo("Completed %d animations during workspace switch", len(m.Animations))
+		m.Animations = m.Animations[:0] // Cancel all animations without snapping to potentially wrong end positions
+		m.LogInfo("Cancelled animations during workspace switch")
+
+		// For tiling mode: directly position windows to correct tiled layout
+		if m.AutoTiling {
+			visibleWindows := make([]int, 0)
+			for i, w := range m.Windows {
+				if w.Workspace == oldWorkspace && !w.Minimized && !w.Minimizing {
+					visibleWindows = append(visibleWindows, i)
+				}
+			}
+
+			if len(visibleWindows) > 0 {
+				layouts := m.calculateTilingLayout(len(visibleWindows))
+				for i, windowIndex := range visibleWindows {
+					if i < len(layouts) {
+						window := m.Windows[windowIndex]
+						window.X = layouts[i].x
+						window.Y = layouts[i].y
+						window.Width = layouts[i].width
+						window.Height = layouts[i].height
+						window.PositionDirty = true
+					}
+				}
+				m.LogInfo("Repositioned windows in workspace %d to correct tiled layout", oldWorkspace)
+			}
+		}
 	}
 
 	// Save current workspace focus and layout
