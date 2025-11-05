@@ -1,7 +1,9 @@
 package app
 
 import (
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // Workspace management methods
@@ -208,7 +210,7 @@ func (m *OS) GetWorkspaceWindowCount(workspace int) int {
 	return count
 }
 
-// TileVisibleWorkspaceWindows tiles all visible windows in the current workspace.
+// TileVisibleWorkspaceWindows tiles all visible windows in the current workspace with animations.
 func (m *OS) TileVisibleWorkspaceWindows() {
 	// Only tile windows in current workspace
 	visibleWindows := make([]int, 0)
@@ -225,14 +227,31 @@ func (m *OS) TileVisibleWorkspaceWindows() {
 	// Use existing tiling logic but only for visible workspace windows
 	layouts := m.calculateTilingLayout(len(visibleWindows))
 
+	// Create animations for smooth transitions (matching TileAllWindows behavior)
 	for i, windowIndex := range visibleWindows {
 		if i < len(layouts) {
 			window := m.Windows[windowIndex]
-			window.X = layouts[i].x
-			window.Y = layouts[i].y
-			window.Width = layouts[i].width
-			window.Height = layouts[i].height
-			window.PositionDirty = true
+
+			// Create animation for smooth transition
+			anim := ui.NewSnapAnimation(
+				window,
+				layouts[i].x,
+				layouts[i].y,
+				layouts[i].width,
+				layouts[i].height,
+				config.DefaultAnimationDuration,
+			)
+
+			if anim != nil {
+				m.Animations = append(m.Animations, anim)
+			} else {
+				// Fallback if animation creation fails
+				window.X = layouts[i].x
+				window.Y = layouts[i].y
+				window.Width = layouts[i].width
+				window.Height = layouts[i].height
+				window.PositionDirty = true
+			}
 		}
 	}
 }
