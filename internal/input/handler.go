@@ -57,8 +57,63 @@ func min(a, b int) int {
 	return b
 }
 
+// shouldShowQuitDialog checks if there are any terminals to show quit confirmation for
+func shouldShowQuitDialog(o *app.OS) bool {
+	return len(o.Windows) > 0
+}
+
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers
 func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Handle quit confirmation dialog (highest priority - works in any mode)
+	if o.ShowQuitConfirm {
+		key := msg.String()
+
+		// Close dialog with escape
+		if key == "esc" {
+			o.ShowQuitConfirm = false
+			o.QuitConfirmSelection = 0
+			return o, nil
+		}
+
+		// Navigate with arrow keys or vim keys
+		if key == "left" || key == "h" {
+			o.QuitConfirmSelection = 0 // Yes (left)
+			return o, nil
+		}
+		if key == "right" || key == "l" {
+			o.QuitConfirmSelection = 1 // No (right)
+			return o, nil
+		}
+
+		// Quick selection with y/n keys
+		if key == "y" {
+			o.QuitConfirmSelection = 0 // Yes
+			o.Cleanup()
+			return o, tea.Quit
+		}
+		if key == "n" {
+			o.QuitConfirmSelection = 1 // No
+			o.ShowQuitConfirm = false
+			return o, nil
+		}
+
+		// Confirm selection with enter
+		if key == "enter" {
+			if o.QuitConfirmSelection == 0 {
+				// Yes selected - quit
+				o.Cleanup()
+				return o, tea.Quit
+			} else {
+				// No selected - close dialog
+				o.ShowQuitConfirm = false
+				return o, nil
+			}
+		}
+
+		// Quit dialog is showing but key wasn't handled - ignore it
+		return o, nil
+	}
+
 	// Handle rename mode
 	if o.RenamingWindow {
 		return handleRenameMode(msg, o)
@@ -252,9 +307,16 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 
 	case "q":
-		// Quit application
-		o.Cleanup()
-		return o, tea.Quit
+		// Show quit confirmation dialog (only if there are terminals)
+		if shouldShowQuitDialog(o) {
+			o.ShowQuitConfirm = true
+			o.QuitConfirmSelection = 0 // Default to Yes
+		} else {
+			// No terminals - just quit
+			o.Cleanup()
+			return o, tea.Quit
+		}
+		return o, nil
 
 	// Exit prefix mode
 	case "esc", "ctrl+c":

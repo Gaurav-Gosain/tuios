@@ -422,9 +422,16 @@ func handleQuit(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-	// Quit application
-	o.Cleanup()
-	return o, tea.Quit
+	// Show quit confirmation dialog (only if there are terminals)
+	if shouldShowQuitDialog(o) {
+		o.ShowQuitConfirm = true
+		o.QuitConfirmSelection = 0 // Default to Yes
+	} else {
+		// No terminals - just quit
+		o.Cleanup()
+		return o, tea.Quit
+	}
+	return o, nil
 }
 
 // ============================================================================

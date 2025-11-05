@@ -1345,6 +1345,17 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, welcomeLayer)
 	}
 
+	// Quit confirmation dialog (highest priority overlay)
+	if m.ShowQuitConfirm {
+		quitContent, width, height := m.renderQuitConfirmDialog()
+		// Calculate centered position
+		x := (m.Width - width) / 2
+		y := (m.Height - height) / 2
+		quitLayer := lipgloss.NewLayer(quitContent).
+			X(x).Y(y).Z(config.ZIndexHelp + 1).ID("quit-confirm")
+		layers = append(layers, quitLayer)
+	}
+
 	// Help overlay - always available regardless of windows
 	if m.ShowHelp {
 		// Use new table-based help menu (it handles its own sizing and centering)
@@ -2088,6 +2099,86 @@ func (m *OS) isPositionInSelection(window *terminal.Window, x, y int) bool {
 		// Middle lines of multi-line selection
 		return true
 	}
+}
+
+// renderQuitConfirmDialog returns the dialog box and its dimensions
+func (m *OS) renderQuitConfirmDialog() (string, int, int) {
+	// Get theme colors
+	borderColor := theme.HelpBorder()
+	selectedColor := theme.HelpTabActive()
+	unselectedColor := theme.HelpGray()
+
+	// Create the dialog title
+	title := lipgloss.NewStyle().
+		Foreground(selectedColor).
+		Bold(true).
+		Render("Quit TUIOS?")
+
+	// Create button styles with borders
+	yesButtonContent := "yes"
+	noButtonContent := "no"
+
+	var yesButton, noButton string
+
+	if m.QuitConfirmSelection == 0 {
+		// Yes is selected - colored border
+		yesButton = lipgloss.NewStyle().
+			Foreground(selectedColor).
+			Bold(true).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(selectedColor).
+			Padding(0, 1).
+			Render(yesButtonContent)
+
+		// No is unselected - gray border
+		noButton = lipgloss.NewStyle().
+			Foreground(unselectedColor).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(unselectedColor).
+			Padding(0, 1).
+			Render(noButtonContent)
+	} else {
+		// Yes is unselected - gray border
+		yesButton = lipgloss.NewStyle().
+			Foreground(unselectedColor).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(unselectedColor).
+			Padding(0, 1).
+			Render(yesButtonContent)
+
+		// No is selected - colored border
+		noButton = lipgloss.NewStyle().
+			Foreground(selectedColor).
+			Bold(true).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(selectedColor).
+			Padding(0, 1).
+			Render(noButtonContent)
+	}
+
+	// Create button row (Yes on left, No on right) with spacing
+	buttonRow := lipgloss.JoinHorizontal(lipgloss.Center, yesButton, "   ", noButton)
+
+	// Build the dialog content
+	dialogContent := lipgloss.JoinVertical(
+		lipgloss.Center,
+		title,
+		"",
+		buttonRow,
+	)
+
+	// Create the dialog box with fancy border (no background)
+	dialogBox := lipgloss.NewStyle().
+		Border(getBorder()).
+		BorderForeground(borderColor).
+		Padding(1, 3).
+		Render(dialogContent)
+
+	// Get dialog dimensions
+	width := lipgloss.Width(dialogBox)
+	height := lipgloss.Height(dialogBox)
+
+	return dialogBox, width, height
 }
 
 // View returns the rendered view as a string.

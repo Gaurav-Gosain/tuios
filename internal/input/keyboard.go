@@ -604,10 +604,17 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		return o, nil
 
 	case "q":
-		// Quit application
-		o.Cleanup()
+		// Show quit confirmation dialog (only if there are terminals)
 		o.PrefixActive = false
-		return o, tea.Quit
+		if shouldShowQuitDialog(o) {
+			o.ShowQuitConfirm = true
+			o.QuitConfirmSelection = 0 // Default to Yes
+		} else {
+			// No terminals - just quit
+			o.Cleanup()
+			return o, tea.Quit
+		}
+		return o, nil
 
 	default:
 		// Unknown prefix command, pass through the key
@@ -858,9 +865,16 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	// Only Ctrl+C is kept as emergency quit
 	switch key {
 	case "ctrl+c":
-		// Emergency quit - always works regardless of config
-		o.Cleanup()
-		return o, tea.Quit
+		// Emergency quit - show confirmation dialog (only if there are terminals)
+		if shouldShowQuitDialog(o) {
+			o.ShowQuitConfirm = true
+			o.QuitConfirmSelection = 0 // Default to Yes
+		} else {
+			// No terminals - just quit
+			o.Cleanup()
+			return o, tea.Quit
+		}
+		return o, nil
 
 	default:
 		// All other keybindings are handled by the config system above
