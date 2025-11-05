@@ -23,6 +23,13 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	windowsInNew := m.GetWorkspaceWindowCount(workspace)
 	m.LogInfo("Switching workspace: %d → %d (%d windows)", oldWorkspace, workspace, windowsInNew)
 
+	// Complete all active animations BEFORE switching to prevent windows from getting stuck mid-animation
+	// This snaps all animating windows to their final positions
+	if len(m.Animations) > 0 {
+		m.CompleteAllAnimations()
+		m.LogInfo("Completed %d animations during workspace switch", len(m.Animations))
+	}
+
 	// Save current workspace focus and layout
 	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 		if m.Windows[m.FocusedWindow].Workspace == m.CurrentWorkspace {
