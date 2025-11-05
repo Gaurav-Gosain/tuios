@@ -262,6 +262,8 @@ func (e *Emulator) IsCursorHidden() bool {
 // Resize resizes the terminal.
 func (e *Emulator) Resize(width int, height int) {
 	x, y := e.scr.CursorPosition()
+	oldHeight := e.Height()
+
 	if e.atPhantom {
 		if x < width-1 {
 			e.atPhantom = false
@@ -272,9 +274,19 @@ func (e *Emulator) Resize(width int, height int) {
 	if y < 0 {
 		y = 0
 	}
-	if y >= height {
+
+	// Auto-scroll to keep cursor visible when height is reduced.
+	// This prevents the prompt from going off-screen below the viewport.
+	if y >= height && oldHeight > height {
+		linesToScroll := y - (height - 1)
+		// Scroll content up (pushes lines to scrollback)
+		e.scr.ScrollUp(linesToScroll)
+		// Cursor moves to bottom of new viewport
+		y = height - 1
+	} else if y >= height {
 		y = height - 1
 	}
+
 	if x < 0 {
 		x = 0
 	}

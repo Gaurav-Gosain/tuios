@@ -651,9 +651,20 @@ func (w *Window) Resize(width, height int) {
 // ResizeVisual updates the window dimensions without triggering PTY resize.
 // This is used during mouse drag to provide immediate visual feedback while
 // deferring expensive PTY resize operations until the drag completes.
+// The terminal emulator dimensions are updated to ensure correct rendering.
 func (w *Window) ResizeVisual(width, height int) {
 	w.Width = width
 	w.Height = height
+
+	// Critical: Update terminal emulator dimensions so rendering uses correct bounds.
+	// This prevents the "stuck" height and dimension mismatch issues during drag.
+	// PTY resize is still deferred until mouse release (via pending resizes).
+	if w.Terminal != nil {
+		termWidth := max(width-2, 1)
+		termHeight := max(height-2, 1)
+		w.Terminal.Resize(termWidth, termHeight)
+	}
+
 	w.MarkPositionDirty()
 	// Note: NOT marking ContentDirty to preserve cached content during drag
 	// This improves responsiveness during resize operations
