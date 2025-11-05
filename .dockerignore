@@ -1,0 +1,14 @@
+.github/*
+assets/
+docs/
+nix/
+
+CITATION.cff
+.goreleaser.yml
+FUNDING.yml
+LICENSE
+SECURITY.md
+tuios.nix
+.gitattributes
+Dockerfile
+flake.lock
