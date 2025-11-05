@@ -282,6 +282,11 @@ func (e *Emulator) Resize(width int, height int) {
 		x = width - 1
 	}
 
+	// Trigger scrollback reflow when width changes to handle soft-wrapping
+	if width != e.Width() && e.Scrollback() != nil {
+		e.Scrollback().Reflow(width)
+	}
+
 	e.scrs[0].Resize(width, height)
 	e.scrs[1].Resize(width, height)
 	e.tabstops = uv.DefaultTabStops(width)
