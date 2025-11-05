@@ -675,6 +675,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		for i := range o.Windows {
 			o.Windows[i].IsBeingManipulated = false
+			o.Windows[i].ContentDirty = true // Invalidate cache when exiting resize mode
 		}
 
 		// Clear interaction mode with a delay to allow shell prompts to fully redraw.
