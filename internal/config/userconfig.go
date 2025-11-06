@@ -23,6 +23,7 @@ type AppearanceConfig struct {
 	HideWindowButtons bool   `toml:"hide_window_buttons"` // Hide window control buttons (minimize, maximize, close)
 	ScrollbackLines   int    `toml:"scrollback_lines"`    // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 	DockbarPosition   string `toml:"dockbar_position"`    // Dockbar position: bottom, top, hidden
+	PreferredShell    string `toml:"preferred_shell"`     // Preferred shell: if empty, auto-detect based on platform.
 }
 
 // KeybindingsConfig holds all keybinding configurations
@@ -49,6 +50,7 @@ func DefaultConfig() *UserConfig {
 			HideWindowButtons: false,
 			ScrollbackLines:   10000,
 			DockbarPosition:   "bottom",
+			PreferredShell:    "",
 		},
 		Keybindings: KeybindingsConfig{
 			WindowManagement: map[string][]string{
