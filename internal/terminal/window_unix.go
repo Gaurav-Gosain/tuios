@@ -5,6 +5,9 @@ package terminal
 import (
 	"os"
 	"syscall"
+	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 // TriggerRedraw ensures terminal applications properly respond to resize.
@@ -26,4 +29,41 @@ func (w *Window) TriggerRedraw() {
 		// Applications should handle this and redraw as needed
 		_ = process.Signal(os.Signal(syscall.SIGWINCH)) // Best effort, ignore error
 	}
+}
+
+// getPgid gets the process group ID of a given process ID.
+// Returns the PGID or an error if unable to determine it.
+func getPgid(pid int) (int, error) {
+	return syscall.Getpgid(pid)
+}
+
+// HasForegroundProcess checks if the window's terminal has an active foreground process.
+// Returns true if there's a foreground process different from the shell itself.
+// Returns false if only the shell is running or if unable to determine.
+func (w *Window) HasForegroundProcess() bool {
+	if w.Pty == nil || w.ShellPgid <= 0 {
+		return false
+	}
+
+	// Get the PTY file descriptor
+	ptyFd := w.Pty.Fd()
+
+	// Get the foreground process group of the PTY
+	// Using tcgetpgrp syscall via ioctl
+	var fgpgrp int
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		ptyFd,
+		uintptr(unix.TIOCGPGRP),
+		uintptr(unsafe.Pointer(&fgpgrp)),
+	)
+
+	if errno != 0 {
+		// If we can't determine, assume no foreground process
+		return false
+	}
+
+	// If foreground process group is different from shell's process group,
+	// there's an active foreground process running
+	return fgpgrp != w.ShellPgid
 }

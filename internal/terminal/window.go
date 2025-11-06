@@ -47,6 +47,7 @@ type Window struct {
 	Terminal               *vt.Emulator
 	Pty                    xpty.Pty
 	Cmd                    *exec.Cmd
+	ShellPgid              int // Process group ID of the shell
 	LastUpdate             time.Time
 	Dirty                  bool
 	ContentDirty           bool
@@ -265,6 +266,13 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	window.Pty = ptyInstance
 	window.Cmd = cmd
 	window.cancelFunc = cancel
+
+	// Store shell's process group ID for later detection of foreground processes
+	if cmd.Process != nil {
+		if pgid, err := getPgid(cmd.Process.Pid); err == nil {
+			window.ShellPgid = pgid
+		}
+	}
 
 	// Start I/O handling
 	window.handleIOOperations()

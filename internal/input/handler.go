@@ -57,9 +57,17 @@ func min(a, b int) int {
 	return b
 }
 
-// shouldShowQuitDialog checks if there are any terminals to show quit confirmation for
+// shouldShowQuitDialog checks if there are any terminals with active foreground processes
+// to show quit confirmation for. Returns true if any window has a foreground process
+// (besides the shell itself), or if we're unable to detect (falls back to true).
 func shouldShowQuitDialog(o *app.OS) bool {
-	return len(o.Windows) > 0
+	// Check each window for active foreground processes
+	for _, win := range o.Windows {
+		if win != nil && win.HasForegroundProcess() {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers

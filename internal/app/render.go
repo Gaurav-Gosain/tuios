@@ -1345,8 +1345,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 	layers = append(layers, timeLayer)
 
-	// Welcome message when no windows exist
-	if len(m.Windows) == 0 {
+	// Welcome message when no visible windows in current workspace
+	if len(m.GetVisibleWindows()) == 0 {
 		// Clean ASCII art with Unicode
 		asciiArt := `████████╗██╗   ██╗██╗ ██████╗ ███████╗
 ╚══██╔══╝██║   ██║██║██╔═══██╗██╔════╝
