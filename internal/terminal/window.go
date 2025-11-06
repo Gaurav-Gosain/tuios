@@ -335,7 +335,31 @@ func (w *Window) UpdateThemeColors() {
 }
 
 func detectShell() string {
-	// Check environment variable first
+	// Check user configuration first
+	if cfg, err := config.LoadUserConfig(); err == nil && cfg.Appearance.PreferredShell != "" {
+		preferredShell := cfg.Appearance.PreferredShell
+
+		// just do a check in case
+		if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(preferredShell), ".exe") {
+			preferredShell += ".exe"
+		}
+
+		shellExists := false
+		if runtime.GOOS == "windows" {
+			_, err = exec.LookPath(preferredShell)
+			shellExists = err == nil
+		} else {
+			_, err = os.Stat(preferredShell)
+			shellExists = err == nil
+		}
+
+		if shellExists {
+			return preferredShell
+		}
+		fmt.Fprintf(os.Stderr, "Warning: Configured shell '%s' not found. Falling back to defaults.\n", preferredShell)
+	}
+
+	// Check environment variable
 	if shell := os.Getenv("SHELL"); shell != "" {
 		return shell
 	}
