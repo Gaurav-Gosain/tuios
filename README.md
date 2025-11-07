@@ -172,11 +172,11 @@ TUIOS is built on the Bubble Tea v2 framework following the Model-View-Update pa
 - **Vendored VT** - ANSI/VT100 terminal emulator
 
 **Core Components:**
-- **Window Manager** (`internal/app/os.go`) - Central state and workspace orchestration
-- **Terminal Emulation** (`internal/vt/`) - ANSI parser with 10,000 line scrollback
-- **Rendering Engine** (`internal/app/render.go`) - Layer composition with viewport culling
-- **Input System** (`internal/input/`) - Modal routing and 100+ configurable keybindings
-- **Configuration** (`internal/config/`) - TOML-based keybinding customization
+- **Window Manager** ([`internal/app/os.go`](./internal/app/os.go)) - Central state and workspace orchestration
+- **Terminal Emulation** ([`internal/vt/`](./internal/vt/)) - ANSI parser with 10,000 line scrollback
+- **Rendering Engine** ([`internal/app/render.go`](./internal/app/render.go)) - Layer composition with viewport culling
+- **Input System** ([`internal/input/`](./internal/input/)) - Modal routing and 100+ configurable keybindings
+- **Configuration** ([`internal/config/`](./internal/config/)) - TOML-based keybinding customization
 
 ## Performance
 
@@ -193,9 +193,9 @@ TUIOS is built on the Bubble Tea v2 framework following the Model-View-Update pa
 **Common Issues:**
 - **Colors not displaying**: Set `COLORTERM=truecolor` environment variable
 - **SSH connection issues**: Use `--host 0.0.0.0` for remote access, check firewall settings
-- **Performance with many windows**: Enable tiling mode (`t` key)
+- **Performance with many windows**: Enable tiling mode (<kbd>t</kbd> key)
 
-**Debug Mode:** Press `Ctrl+L` to view system logs.
+**Debug Mode:** Press <kbd>Ctrl</kbd> + <kbd>L</kbd> to view system logs.
 
 ## Roadmap
 
