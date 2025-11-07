@@ -153,6 +153,10 @@ type OS struct {
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// Keybind registry for user-configurable keybindings
 	KeybindRegistry *config.KeybindRegistry
+	// Showkeys feature
+	ShowKeys          bool       // True when showkeys overlay is enabled
+	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
+	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
 }
 
 // Notification represents a temporary notification message.
@@ -170,6 +174,15 @@ type LogMessage struct {
 	Time    time.Time
 	Level   string // INFO, WARN, ERROR
 	Message string
+}
+
+// KeyEvent represents a captured keyboard event for the showkeys overlay.
+type KeyEvent struct {
+	Key       string        // The key string representation
+	Modifiers []string      // Modifier names (Ctrl, Shift, Alt, Cmd)
+	Timestamp time.Time     // When the key was pressed
+	Count     int           // Number of consecutive identical keys
+	Action    string        // Resolved action name (optional)
 }
 
 func createID() string {

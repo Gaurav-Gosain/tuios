@@ -49,6 +49,7 @@ var (
 	dockbarPosition   string
 	hideWindowButtons bool
 	scrollbackLines   int
+	showKeys          bool
 )
 
 func main() {
@@ -125,6 +126,7 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden (default: from config or bottom)")
 	rootCmd.PersistentFlags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
 	rootCmd.PersistentFlags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
+	rootCmd.PersistentFlags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
 
 	// SSH command variables
 	var sshPort, sshHost, sshKeyPath string
@@ -383,6 +385,9 @@ func runLocal() error {
 		WorkspaceMasterRatio: make(map[int]float64),            // Initialize per-workspace master ratio
 		PendingResizes:       make(map[string][2]int),          // Track pending PTY resizes
 		KeybindRegistry:      keybindRegistry,                  // User-configurable keybindings
+		ShowKeys:             showKeys,                          // Enable showkeys overlay if flag set
+		RecentKeys:           []app.KeyEvent{},                 // Initialize empty key history
+		KeyHistoryMaxSize:    5,                                // Default: show last 5 keys
 	}
 
 	// Initialize the Bubble Tea program with optimal settings

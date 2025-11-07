@@ -1845,6 +1845,30 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 	// Copy mode help is now shown in the dock (bottom bar)
 
+	// Showkeys overlay (bottom right)
+	if m.ShowKeys && len(m.RecentKeys) > 0 {
+		m.CleanupExpiredKeys(1 * time.Second)
+		if len(m.RecentKeys) > 0 {
+			showkeysContent := m.renderShowkeys()
+			contentWidth := lipgloss.Width(showkeysContent)
+			contentHeight := lipgloss.Height(showkeysContent)
+
+			// Position at bottom right
+			rightMargin := 3
+			bottomMargin := 3
+			x := m.Width - contentWidth - rightMargin
+			y := m.Height - contentHeight - bottomMargin
+
+			showkeysLayer := lipgloss.NewLayer(showkeysContent).
+				X(x).
+				Y(y).
+				Z(config.ZIndexNotifications + 1).
+				ID("showkeys")
+
+			layers = append(layers, showkeysLayer)
+		}
+	}
+
 	return layers
 }
 

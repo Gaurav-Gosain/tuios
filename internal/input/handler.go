@@ -72,6 +72,11 @@ func shouldShowQuitDialog(o *app.OS) bool {
 
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers
 func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Capture key event for showkeys overlay if enabled
+	if o.ShowKeys {
+		o.CaptureKeyEvent(msg)
+	}
+
 	// Handle quit confirmation dialog (highest priority - works in any mode)
 	if o.ShowQuitConfirm {
 		key := msg.String()
