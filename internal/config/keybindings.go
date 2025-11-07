@@ -45,6 +45,7 @@ func GetPrefixKeybindings(prefixType string) []Keybinding {
 		return []Keybinding{
 			{"l", "Toggle log viewer"},
 			{"c", "Toggle cache statistics"},
+			{"k", "Toggle showkeys overlay"},
 			{"Esc", "Cancel"},
 		}
 	default: // general prefix
