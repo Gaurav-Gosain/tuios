@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/charmbracelet/lipgloss/v2"
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
@@ -168,15 +169,21 @@ func (m *OS) renderShowkeys() string {
 		return ""
 	}
 
-	// Style for individual key pills - just background, no border
+	// Use a muted but slightly more colorful background
+	// #3a3a5e is a nice muted purple-blue, warmer than the pure dark gray
+	keyBgColor := lipgloss.Color("#3a3a5e")
+	pillColor := lipgloss.Color("#3a3a5e")
+
+	// Style for individual key pills - background with text
 	keyPillStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#2a2a4e")).
+		Background(keyBgColor).
 		Foreground(lipgloss.Color("#ffffff")).
 		Bold(true)
 
-	// Style for the pill characters (matching the background color for the pill effect)
+	// Style for the pill characters (Powerline semicircles)
+	// Colored to match the background so they blend nicely
 	pillStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#2a2a4e"))
+		Foreground(pillColor)
 
 	var renderedKeys []string
 
@@ -195,17 +202,17 @@ func (m *OS) renderShowkeys() string {
 			keyStr += fmt.Sprintf(" ×%d", keyEvent.Count)
 		}
 
-		// Create pill-style element: « key »
-		left := pillStyle.Render("「")
-		content := keyPillStyle.Render(keyStr)
-		right := pillStyle.Render("」")
+		// Create pill-style element using Powerline semicircles: ▌ key ▐
+		left := pillStyle.Render(config.GetWindowPillLeft())
+		content := keyPillStyle.Render(" " + keyStr + " ")
+		right := pillStyle.Render(config.GetWindowPillRight())
 
 		renderedKeys = append(renderedKeys, left+content+right)
 	}
 
-	// Join keys horizontally with minimal spacing
+	// Join keys horizontally with spacing
 	keysContent := lipgloss.JoinHorizontal(lipgloss.Center, renderedKeys...)
 
-	// Return just the styled keys content without extra container padding
+	// Return just the styled keys content
 	return keysContent
 }
