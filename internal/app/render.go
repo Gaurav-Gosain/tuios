@@ -1853,16 +1853,26 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			contentWidth := lipgloss.Width(showkeysContent)
 			contentHeight := lipgloss.Height(showkeysContent)
 
-			// Position at bottom right
-			rightMargin := 3
-			bottomMargin := 3
+			// Position at bottom right, accounting for dock
+			rightMargin := 2
+			dockOffset := 0
+			if config.DockbarPosition == "bottom" {
+				dockOffset = config.DockHeight
+			}
+
 			x := m.Width - contentWidth - rightMargin
-			y := m.Height - contentHeight - bottomMargin
+			y := m.Height - contentHeight - dockOffset - 1
+
+			// Use higher Z-index when help is shown to avoid overlap
+			zIndex := config.ZIndexNotifications + 1
+			if m.ShowHelp {
+				zIndex = config.ZIndexHelp + 1
+			}
 
 			showkeysLayer := lipgloss.NewLayer(showkeysContent).
 				X(x).
 				Y(y).
-				Z(config.ZIndexNotifications + 1).
+				Z(zIndex).
 				ID("showkeys")
 
 			layers = append(layers, showkeysLayer)

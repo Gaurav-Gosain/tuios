@@ -160,6 +160,18 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		"prefix_help", "prefix_quit", "prefix_fullscreen",
 	}
 
+	// Add debug commands (Ctrl+B D ...)
+	debugCommands := []string{"d_logs", "d_cache_stats", "d_showkeys"}
+	for _, cmd := range debugCommands {
+		// Add debug commands with special display format
+		bindings = append(bindings, HelpBinding{
+			Action:      "debug_" + cmd,
+			Keys:        []string{"ctrl+b, d, " + cmd[2:]}, // Extract the command part (logs, cache_stats, showkeys)
+			Description: getDebugCommandDescription(cmd),
+			Category:    "Prefix Commands",
+		})
+	}
+
 	for _, action := range prefixActions {
 		keys := registry.GetKeys(action)
 		if len(keys) == 0 {
@@ -186,6 +198,20 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 	}
 
 	return bindings
+}
+
+// getDebugCommandDescription returns the description for debug commands
+func getDebugCommandDescription(cmd string) string {
+	switch cmd {
+	case "d_logs":
+		return "Toggle log viewer"
+	case "d_cache_stats":
+		return "Toggle cache statistics"
+	case "d_showkeys":
+		return "Toggle showkeys overlay"
+	default:
+		return formatActionName(cmd)
+	}
 }
 
 // formatActionName formats an action name for display

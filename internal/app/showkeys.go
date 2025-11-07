@@ -168,66 +168,44 @@ func (m *OS) renderShowkeys() string {
 		return ""
 	}
 
-	// Style for individual key pills
+	// Style for individual key pills - just background, no border
 	keyPillStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("#2a2a4e")).
 		Foreground(lipgloss.Color("#ffffff")).
-		Bold(true).
-		Padding(0, 1).
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#6b7adb"))
-
-	// Style for modifiers
-	modifierStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#a8d4ff")).
 		Bold(true)
 
-	// Style for separator
-	separatorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666699"))
+	// Style for the pill characters (matching the background color for the pill effect)
+	pillStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#2a2a4e"))
 
 	var renderedKeys []string
 
 	for _, keyEvent := range m.RecentKeys {
-		var keyDisplayStr string
+		var keyStr string
 
 		// Build the key display with modifiers
 		if len(keyEvent.Modifiers) > 0 {
-			// Style modifiers and key separately for prettier output
-			modifierStr := modifierStyle.Render(strings.Join(keyEvent.Modifiers, "+"))
-			separator := separatorStyle.Render(" + ")
-			keyStr := keyEvent.Key
-
-			// Add count indicator if > 1
-			if keyEvent.Count > 1 {
-				keyStr += fmt.Sprintf(" ×%d", keyEvent.Count)
-			}
-
-			keyDisplayStr = keyPillStyle.Render(modifierStr + separator + keyStr)
+			keyStr = strings.Join(keyEvent.Modifiers, "+") + " + " + keyEvent.Key
 		} else {
-			// Just the key
-			keyStr := keyEvent.Key
-
-			// Add count indicator if > 1
-			if keyEvent.Count > 1 {
-				keyStr += fmt.Sprintf(" ×%d", keyEvent.Count)
-			}
-
-			keyDisplayStr = keyPillStyle.Render(keyStr)
+			keyStr = keyEvent.Key
 		}
 
-		renderedKeys = append(renderedKeys, keyDisplayStr)
+		// Add count indicator if > 1
+		if keyEvent.Count > 1 {
+			keyStr += fmt.Sprintf(" ×%d", keyEvent.Count)
+		}
+
+		// Create pill-style element: « key »
+		left := pillStyle.Render("「")
+		content := keyPillStyle.Render(keyStr)
+		right := pillStyle.Render("」")
+
+		renderedKeys = append(renderedKeys, left+content+right)
 	}
 
-	// Join keys horizontally with spacing
+	// Join keys horizontally with minimal spacing
 	keysContent := lipgloss.JoinHorizontal(lipgloss.Center, renderedKeys...)
 
-	// Style the showkeys container with a subtle background
-	containerStyle := lipgloss.NewStyle().
-		Padding(1, 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#4865f2")).
-		Background(lipgloss.Color("#0f0f1e"))
-
-	return containerStyle.Render(keysContent)
+	// Return just the styled keys content without extra container padding
+	return keysContent
 }
