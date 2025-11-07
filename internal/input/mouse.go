@@ -678,6 +678,15 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.Windows[i].ContentDirty = true // Invalidate cache when exiting resize mode
 		}
 
+		// Comprehensive state cleanup to prevent stale values from affecting subsequent operations
+		o.DragOffsetX = 0
+		o.DragOffsetY = 0
+		o.ResizeStartX = 0
+		o.ResizeStartY = 0
+		o.DragStartX = 0
+		o.DragStartY = 0
+		o.DraggedWindowIndex = -1
+
 		// Clear interaction mode with a delay to allow shell prompts to fully redraw.
 		// This gives shells like bash/zsh/starship time to:
 		// 1. Receive SIGWINCH signal
@@ -689,7 +698,13 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if wasResizing {
 			go func() {
 				time.Sleep(150 * time.Millisecond)
-				o.InteractionMode = false
+				// Only clear if no new interaction has started in the meantime
+				// This prevents a race condition where a user quickly switches from
+				// resizing to dragging, and the delayed goroutine would incorrectly
+				// clear InteractionMode during the active drag operation.
+				if !o.Dragging && !o.Resizing {
+					o.InteractionMode = false
+				}
 			}()
 		} else {
 			o.InteractionMode = false
