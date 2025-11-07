@@ -171,9 +171,6 @@ TUIOS supports multiple platforms. If possible, test your changes on:
 # Run all tests
 go test ./...
 
-# Run tests with coverage
-go test -cover ./...
-
 # Run specific package tests
 go test ./internal/config/...
 ```
