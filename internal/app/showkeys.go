@@ -210,8 +210,8 @@ func (m *OS) renderShowkeys() string {
 		renderedKeys = append(renderedKeys, left+content+right)
 	}
 
-	// Join keys horizontally with spacing
-	keysContent := lipgloss.JoinHorizontal(lipgloss.Center, renderedKeys...)
+	// Join keys horizontally with 1 cell padding between them
+	keysContent := strings.Join(renderedKeys, " ")
 
 	// Return just the styled keys content
 	return keysContent
