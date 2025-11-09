@@ -1847,7 +1847,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 	// Showkeys overlay (bottom right)
 	if m.ShowKeys && len(m.RecentKeys) > 0 {
-		m.CleanupExpiredKeys(1 * time.Second)
+		m.CleanupExpiredKeys(3 * time.Second)
 		if len(m.RecentKeys) > 0 {
 			showkeysContent := m.renderShowkeys()
 			contentWidth := lipgloss.Width(showkeysContent)

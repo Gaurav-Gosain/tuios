@@ -32,10 +32,12 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	displayKey := formatKeyDisplay(keyStr, modifiers)
 
 	// Check if the last key in history is the same as this one
+	// Must match both the key AND the modifiers
 	if len(m.RecentKeys) > 0 {
 		lastKey := m.RecentKeys[len(m.RecentKeys)-1]
-		if lastKey.Key == displayKey {
-			// Same key pressed again, increment count
+		// Check if key is the same AND modifiers match
+		if lastKey.Key == displayKey && modifiersMatch(lastKey.Modifiers, modifiers) {
+			// Same key with same modifiers pressed again, increment count
 			m.RecentKeys[len(m.RecentKeys)-1].Count++
 			m.RecentKeys[len(m.RecentKeys)-1].Timestamp = time.Now()
 			return
@@ -56,6 +58,19 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	if len(m.RecentKeys) > m.KeyHistoryMaxSize {
 		m.RecentKeys = m.RecentKeys[1:]
 	}
+}
+
+// modifiersMatch checks if two modifier slices are equal
+func modifiersMatch(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // formatKeyDisplay formats a key string for display in the showkeys overlay.
