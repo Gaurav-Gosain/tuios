@@ -122,7 +122,7 @@ tuios
 - <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>d</kbd> or <kbd>Esc</kbd> - Return to Window Management Mode
 - <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>q</kbd> - Quit
 
-*Alternative (Ctrl+B t submenu):*
+*Alternative (<kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> submenu):*
 - <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>n</kbd> - Create new window
 - <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>x</kbd> - Close window
 - <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>r</kbd> - Rename window
