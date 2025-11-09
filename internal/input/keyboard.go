@@ -212,12 +212,14 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check for prefix key in terminal mode
-	if msg.String() == "ctrl+b" {
-		// If prefix is already active, send Ctrl+B to terminal
+	msgStr := strings.ToLower(msg.String())
+	leaderKey := strings.ToLower(config.LeaderKey)
+	if msgStr == leaderKey {
+		// If prefix is already active, send the leader key to terminal
 		if o.PrefixActive {
 			o.PrefixActive = false
 			if focusedWindow != nil {
-				// Send literal Ctrl+B
+				// Send literal leader key (default Ctrl+B = 0x02)
 				_ = focusedWindow.SendInput([]byte{0x02})
 			}
 			return o, nil

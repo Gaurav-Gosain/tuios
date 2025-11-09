@@ -240,6 +240,10 @@ var HideWindowButtons = false
 // Set via --scrollback-lines flag or appearance.scrollback_lines config
 var ScrollbackLines = 10000
 
+// LeaderKey is the prefix key for commands (default: ctrl+b)
+// Set via appearance.leader_key config
+var LeaderKey = "ctrl+b"
+
 // GetDockPillLeftChar returns the appropriate pill left character based on UseASCIIOnly
 func GetDockPillLeftChar() string {
 	if UseASCIIOnly {

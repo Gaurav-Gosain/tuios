@@ -334,6 +334,11 @@ func runLocal() error {
 	// Store in a variable that will be used when creating windows
 	config.ScrollbackLines = finalScrollbackLines
 
+	// Apply leader key setting from config
+	if userConfig.Keybindings.LeaderKey != "" {
+		config.LeaderKey = userConfig.Keybindings.LeaderKey
+	}
+
 	// Start CPU profiling if requested
 	if cpuProfile != "" {
 		// #nosec G304 - cpuProfile is user-provided flag for profiling, intentional
@@ -385,7 +390,7 @@ func runLocal() error {
 		WorkspaceMasterRatio: make(map[int]float64),            // Initialize per-workspace master ratio
 		PendingResizes:       make(map[string][2]int),          // Track pending PTY resizes
 		KeybindRegistry:      keybindRegistry,                  // User-configurable keybindings
-		ShowKeys:             showKeys,                          // Enable showkeys overlay if flag set
+		ShowKeys:             showKeys,                         // Enable showkeys overlay if flag set
 		RecentKeys:           []app.KeyEvent{},                 // Initialize empty key history
 		KeyHistoryMaxSize:    5,                                // Default: show last 5 keys
 	}
@@ -515,7 +520,7 @@ func previewThemeColors(themeName string) error {
 
 	// Print normal colors (0-7)
 	fmt.Println("Normal Colors (0-7):")
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		c := palette[i]
 		r, g, b, _ := c.RGBA()
 		r8, g8, b8 := uint8(r>>8), uint8(g>>8), uint8(b>>8)

@@ -4,9 +4,11 @@
 package input
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
 
@@ -138,7 +140,9 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check for prefix key activation in window management mode
-	if msg.String() == "ctrl+b" {
+	msgStr := strings.ToLower(msg.String())
+	leaderKey := strings.ToLower(config.LeaderKey)
+	if msgStr == leaderKey {
 		return handlePrefixKey(msg, o)
 	}
 
@@ -209,7 +213,7 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // handlePrefixKey handles Ctrl+B prefix key activation
 func handlePrefixKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// If prefix is already active, deactivate it (double Ctrl+B cancels)
+	// If prefix is already active, deactivate it (double leader key cancels)
 	if o.PrefixActive {
 		o.PrefixActive = false
 		return o, nil

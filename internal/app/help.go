@@ -160,13 +160,13 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		"prefix_help", "prefix_quit", "prefix_fullscreen",
 	}
 
-	// Add debug commands (Ctrl+B D ...)
+	// Add debug commands (Leader Key + D ...)
 	debugCommands := []string{"d_logs", "d_cache_stats", "d_showkeys"}
 	for _, cmd := range debugCommands {
 		// Add debug commands with special display format
 		bindings = append(bindings, HelpBinding{
 			Action:      "debug_" + cmd,
-			Keys:        []string{"ctrl+b, d, " + cmd[2:]}, // Extract the command part (logs, cache_stats, showkeys)
+			Keys:        []string{config.LeaderKey + ", d, " + cmd[2:]}, // Extract the command part (logs, cache_stats, showkeys)
 			Description: getDebugCommandDescription(cmd),
 			Category:    "Prefix Commands",
 		})
@@ -183,10 +183,10 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 			desc = formatActionName(action)
 		}
 
-		// Prefix all keys with "Ctrl+B, " for display
+		// Prefix all keys with the leader key for display
 		prefixedKeys := []string{}
 		for _, key := range keys {
-			prefixedKeys = append(prefixedKeys, "ctrl+b, "+key)
+			prefixedKeys = append(prefixedKeys, config.LeaderKey+", "+key)
 		}
 
 		bindings = append(bindings, HelpBinding{
@@ -418,10 +418,7 @@ func (m *OS) RenderHelpMenu(width, height int) string {
 	}
 
 	// Constrain scroll offset
-	maxScroll := rowCount - dims.FixedRows
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
+	maxScroll := max(rowCount-dims.FixedRows, 0)
 	if m.HelpScrollOffset > maxScroll {
 		m.HelpScrollOffset = maxScroll
 	}
@@ -568,10 +565,7 @@ func renderCategoryTable(category HelpCategory, scrollOffset int, dims HelpDimen
 	startIdx := scrollOffset
 	endIdx := scrollOffset + dims.FixedRows
 	if startIdx >= totalRows {
-		startIdx = totalRows - 1
-		if startIdx < 0 {
-			startIdx = 0
-		}
+		startIdx = max(totalRows-1, 0)
 	}
 	if endIdx > totalRows {
 		endIdx = totalRows
@@ -643,10 +637,7 @@ func renderSearchResults(results []HelpBinding, scrollOffset int, dims HelpDimen
 	startIdx := scrollOffset
 	endIdx := scrollOffset + dims.FixedRows
 	if startIdx >= totalRows {
-		startIdx = totalRows - 1
-		if startIdx < 0 {
-			startIdx = 0
-		}
+		startIdx = max(totalRows-1, 0)
 	}
 	if endIdx > totalRows {
 		endIdx = totalRows

@@ -28,6 +28,7 @@ type AppearanceConfig struct {
 
 // KeybindingsConfig holds all keybinding configurations
 type KeybindingsConfig struct {
+	LeaderKey        string              `toml:"leader_key"`             // Leader key for prefix commands (default: ctrl+b)
 	WindowManagement map[string][]string `toml:"window_management"`
 	Workspaces       map[string][]string `toml:"workspaces"`
 	Layout           map[string][]string `toml:"layout"`
@@ -53,6 +54,7 @@ func DefaultConfig() *UserConfig {
 			PreferredShell:    "",
 		},
 		Keybindings: KeybindingsConfig{
+			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
 				"new_window":      {"n"},
 				"close_window":    {"w", "x"},
@@ -444,6 +446,11 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	}
 	if cfg.Keybindings.DebugPrefix == nil {
 		cfg.Keybindings.DebugPrefix = make(map[string][]string)
+	}
+
+	// Set default leader key if not specified
+	if cfg.Keybindings.LeaderKey == "" {
+		cfg.Keybindings.LeaderKey = defaultCfg.Keybindings.LeaderKey
 	}
 
 	// Fill in missing keys with defaults

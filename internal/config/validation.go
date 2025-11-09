@@ -65,6 +65,18 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		}
 	}
 
+	// Validate leader key
+	if cfg.Keybindings.LeaderKey != "" {
+		valid, errMsg := normalizer.ValidateKey(cfg.Keybindings.LeaderKey)
+		if !valid {
+			result.Errors = append(result.Errors, ValidationError{
+				Field:   "keybindings",
+				Key:     "leader_key",
+				Message: errMsg,
+			})
+		}
+	}
+
 	// Validate all sections
 	validateSection("window_management", cfg.Keybindings.WindowManagement)
 	validateSection("workspaces", cfg.Keybindings.Workspaces)

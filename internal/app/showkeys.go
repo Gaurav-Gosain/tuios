@@ -24,7 +24,9 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	if key.Mod&tea.ModAlt != 0 {
 		modifiers = append(modifiers, "Alt")
 	}
-	if key.Mod&tea.ModShift != 0 {
+	// Skip Shift modifier for single letter keys - it's implied by uppercase
+	// We only show Shift for non-letter keys (like Shift+Space, Shift+Tab, etc.)
+	if key.Mod&tea.ModShift != 0 && !isSingleLetter(keyStr) {
 		modifiers = append(modifiers, "Shift")
 	}
 
@@ -58,6 +60,11 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	if len(m.RecentKeys) > m.KeyHistoryMaxSize {
 		m.RecentKeys = m.RecentKeys[1:]
 	}
+}
+
+// isSingleLetter checks if a key string is a single letter (for shift detection)
+func isSingleLetter(keyStr string) bool {
+	return len(keyStr) == 1 && ((keyStr[0] >= 'a' && keyStr[0] <= 'z') || (keyStr[0] >= 'A' && keyStr[0] <= 'Z'))
 }
 
 // modifiersMatch checks if two modifier slices are equal
@@ -189,10 +196,20 @@ func (m *OS) renderShowkeys() string {
 	keyBgColor := lipgloss.Color("#3a3a5e")
 	pillColor := lipgloss.Color("#3a3a5e")
 
+	// Accent color for the leader key (bright cyan for visibility)
+	leaderKeyBgColor := lipgloss.Color("#00d9ff")
+	leaderKeyPillColor := lipgloss.Color("#00d9ff")
+
 	// Style for individual key pills - background with text
 	keyPillStyle := lipgloss.NewStyle().
 		Background(keyBgColor).
 		Foreground(lipgloss.Color("#ffffff")).
+		Bold(true)
+
+	// Style for leader key pills
+	leaderKeyPillStyle := lipgloss.NewStyle().
+		Background(leaderKeyBgColor).
+		Foreground(lipgloss.Color("#000000")).
 		Bold(true)
 
 	// Style for the pill characters (Powerline semicircles)
@@ -200,16 +217,30 @@ func (m *OS) renderShowkeys() string {
 	pillStyle := lipgloss.NewStyle().
 		Foreground(pillColor)
 
+	leaderKeyPillStyle2 := lipgloss.NewStyle().
+		Foreground(leaderKeyPillColor)
+
 	var renderedKeys []string
 
 	for _, keyEvent := range m.RecentKeys {
 		var keyStr string
+		var modifierStr string
 
 		// Build the key display with modifiers
 		if len(keyEvent.Modifiers) > 0 {
-			keyStr = strings.Join(keyEvent.Modifiers, "+") + " + " + keyEvent.Key
+			modifierStr = strings.Join(keyEvent.Modifiers, "+") + " + "
+			keyStr = modifierStr + keyEvent.Key
 		} else {
 			keyStr = keyEvent.Key
+		}
+
+		// Build the normalized key combination (without display formatting) for leader key comparison
+		// e.g., "ctrl+a" instead of "Ctrl + A"
+		var normalizedKeyCombination string
+		if len(keyEvent.Modifiers) > 0 {
+			normalizedKeyCombination = strings.ToLower(strings.Join(keyEvent.Modifiers, "+")) + "+" + strings.ToLower(keyEvent.Key)
+		} else {
+			normalizedKeyCombination = strings.ToLower(keyEvent.Key)
 		}
 
 		// Add count indicator if > 1
@@ -217,10 +248,22 @@ func (m *OS) renderShowkeys() string {
 			keyStr += fmt.Sprintf(" ×%d", keyEvent.Count)
 		}
 
+		// Check if this is the leader key
+		isLeaderKey := normalizedKeyCombination == strings.ToLower(config.LeaderKey)
+
 		// Create pill-style element using Powerline semicircles: ▌ key ▐
-		left := pillStyle.Render(config.GetWindowPillLeft())
-		content := keyPillStyle.Render(" " + keyStr + " ")
-		right := pillStyle.Render(config.GetWindowPillRight())
+		var left, content, right string
+		if isLeaderKey {
+			// Use accent colors for leader key
+			left = leaderKeyPillStyle2.Render(config.GetWindowPillLeft())
+			content = leaderKeyPillStyle.Render(" " + keyStr + " ")
+			right = leaderKeyPillStyle2.Render(config.GetWindowPillRight())
+		} else {
+			// Use default colors for regular keys
+			left = pillStyle.Render(config.GetWindowPillLeft())
+			content = keyPillStyle.Render(" " + keyStr + " ")
+			right = pillStyle.Render(config.GetWindowPillRight())
+		}
 
 		renderedKeys = append(renderedKeys, left+content+right)
 	}

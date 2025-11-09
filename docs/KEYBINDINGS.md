@@ -152,6 +152,8 @@ Prefix any motion with a number to repeat it:
 
 Press `Ctrl+B`, release, then press the command key (tmux-style).
 
+**Note:** The leader key (`Ctrl+B` by default) is configurable. See [Configuration Guide](CONFIGURATION.md) for details on customizing the `leader_key` option.
+
 ### Main Prefix (`Ctrl+B`)
 
 | Key Sequence | Action |
@@ -213,6 +215,7 @@ Access debug and development tools:
 |--------------|--------|
 | `Ctrl+B` `D` `l` | Toggle log viewer |
 | `Ctrl+B` `D` `c` | Toggle cache statistics |
+| `Ctrl+B` `D` `k` | Toggle showkeys overlay |
 | `Ctrl+B` `D` `Esc` | Cancel |
 
 **Log Viewer Keys:**

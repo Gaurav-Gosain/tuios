@@ -99,6 +99,7 @@ tuios
 - `--list-themes` - List all available themes and exit
 - `--preview-theme <name>` - Preview a theme's 16 ANSI colors and exit
 - `--ascii-only` - Use ASCII characters instead of Nerd Font icons
+- `--show-keys` - Enable showkeys overlay (screencaster-style key display)
 - `--debug` - Enable debug logging
 - `--cpuprofile <file>` - Write CPU profile to file
 - `-h, --help` - Show help for tuios
@@ -109,10 +110,14 @@ tuios
 tuios                          # Start TUIOS normally (tokyonight theme)
 tuios --theme dracula          # Start with Dracula theme
 tuios --ascii-only             # Start without Nerd Font icons
+tuios --show-keys              # Start with showkeys overlay enabled
 tuios --list-themes            # List all available themes
 tuios --preview-theme nord     # Preview Nord theme colors
 tuios --debug                  # Start with debug logging
 tuios --cpuprofile cpu.prof    # Start with CPU profiling
+
+# Combine multiple flags
+tuios --theme nord --show-keys # Use Nord theme with showkeys enabled
 
 # Interactive theme selection with fzf
 tuios --theme $(tuios --list-themes | fzf --preview 'tuios --preview-theme {}')
@@ -397,6 +402,7 @@ These flags are available on the root command:
 - `--list-themes` - List all available themes and exit
 - `--preview-theme <name>` - Preview a theme's colors and exit
 - `--ascii-only` - Use ASCII characters instead of Nerd Font icons
+- `--show-keys` - Enable showkeys overlay (screencaster-style key display)
 - `--debug` - Enable debug logging
 - `--cpuprofile <file>` - Write CPU profile to file
 - `-h, --help` - Show help
@@ -410,6 +416,9 @@ These flags are available on the root command:
 Start TUIOS normally:
 ```bash
 tuios
+
+# Start with showkeys overlay for screencasting
+tuios --show-keys
 ```
 
 ### Theming
@@ -477,6 +486,10 @@ tuios --debug
 tuios --cpuprofile cpu.prof
 # Use the application, then exit
 go tool pprof cpu.prof
+
+# Screencasting with showkeys overlay
+tuios --show-keys
+# Or toggle during runtime with: Ctrl+B D k
 ```
 
 ### Shell Completions

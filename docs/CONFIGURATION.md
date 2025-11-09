@@ -257,6 +257,42 @@ Controls the number of lines stored in the scrollback buffer for each terminal w
 
 **CLI override:** `--scrollback-lines <number>`
 
+## Keybindings Prefix Configuration
+
+### leader_key
+
+Controls the prefix key for window management commands (the tmux-style leader key).
+
+**Valid values:** Any valid key combination (see [Key Syntax](#key-syntax) section)
+
+**Default:** `"ctrl+b"`
+
+**Examples:**
+```toml
+[keybindings]
+# Use Ctrl+A instead of Ctrl+B (like GNU Screen)
+leader_key = "ctrl+a"
+
+# Use Alt+Space
+leader_key = "alt+space"
+
+# Use Ctrl+Space
+leader_key = "ctrl+space"
+```
+
+**Note:** When using a custom leader key, you'll need to press it twice to send the literal key to the terminal (e.g., press `ctrl+a` twice to send `ctrl+a` to the terminal if `ctrl+a` is your leader key).
+
+**Affected keybindings:**
+This changes the prefix key for all prefix-based commands:
+- Window management: `leader + c` (new window), `leader + x` (close), etc.
+- Workspaces: `leader + w` submenu
+- Tiling: `leader + t` submenu
+- Minimize: `leader + m` submenu
+- Debug: `leader + D` submenu
+- Copy mode: `leader + [`
+
+**CLI override:** Currently no CLI override exists; must be set in config file.
+
 ## Key Syntax
 
 ### Modifier Keys
