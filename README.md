@@ -48,7 +48,6 @@ TUIOS is a terminal-based window manager that provides a modern, efficient inter
 
 **Homebrew (macOS/Linux):**
 ```bash
-brew tap Gaurav-Gosain/tap
 brew install tuios
 ```
 
