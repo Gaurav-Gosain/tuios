@@ -1,3 +1,4 @@
+// Package tape provides functionality for parsing, storing, and executing automation scripts in .tape format.
 package tape
 
 import (

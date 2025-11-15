@@ -1,3 +1,4 @@
+// Package terminal provides terminal window management and PTY abstraction.
 package terminal
 
 import (

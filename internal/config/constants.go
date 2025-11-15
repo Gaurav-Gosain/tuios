@@ -1,3 +1,4 @@
+// Package config provides configuration constants, keybinding management, and user settings.
 package config
 
 import (

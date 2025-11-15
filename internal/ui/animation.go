@@ -1,3 +1,4 @@
+// Package ui provides UI component animations and visual effects.
 package ui
 
 import (

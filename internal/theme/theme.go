@@ -1,3 +1,4 @@
+// Package theme provides color themes and styling for the TUIOS terminal.
 package theme
 
 import (

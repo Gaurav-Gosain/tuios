@@ -1,3 +1,4 @@
+// Package pool provides object pooling for reusable components to reduce memory allocations.
 package pool
 
 import (
