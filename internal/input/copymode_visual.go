@@ -126,13 +126,14 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 
 		// Clamp to line content bounds to avoid copying empty cells at end
 		lineStartX, lineEndX := getLineContentBounds(cm, window, y)
-		if y == start.Y {
+		switch y {
+		case start.Y:
 			// First line: keep user's start but clamp end to content
 			endX = min(endX, lineEndX)
-		} else if y == end.Y {
+		case end.Y:
 			// Last line: keep user's end but clamp to content
 			endX = min(endX, lineEndX)
-		} else {
+		default:
 			// Middle lines: use full content bounds
 			startX = lineStartX
 			endX = lineEndX

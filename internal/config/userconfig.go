@@ -28,7 +28,7 @@ type AppearanceConfig struct {
 
 // KeybindingsConfig holds all keybinding configurations
 type KeybindingsConfig struct {
-	LeaderKey        string              `toml:"leader_key"`             // Leader key for prefix commands (default: ctrl+b)
+	LeaderKey        string              `toml:"leader_key"` // Leader key for prefix commands (default: ctrl+b)
 	WindowManagement map[string][]string `toml:"window_management"`
 	Workspaces       map[string][]string `toml:"workspaces"`
 	Layout           map[string][]string `toml:"layout"`

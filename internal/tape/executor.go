@@ -139,21 +139,21 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	case CommandType_SwitchWS:
 		if len(cmd.Args) > 0 {
 			ws := 0
-			fmt.Sscanf(cmd.Args[0], "%d", &ws)
+			_, _ = fmt.Sscanf(cmd.Args[0], "%d", &ws)
 			return ce.executor.SwitchWorkspace(ws)
 		}
 
 	case CommandType_MoveToWS:
 		if len(cmd.Args) > 0 {
 			ws := 0
-			fmt.Sscanf(cmd.Args[0], "%d", &ws)
+			_, _ = fmt.Sscanf(cmd.Args[0], "%d", &ws)
 			return ce.executor.MoveWindowToWorkspaceByID(ce.executor.GetFocusedWindowID(), ws)
 		}
 
 	case CommandType_MoveAndFollowWS:
 		if len(cmd.Args) > 0 {
 			ws := 0
-			fmt.Sscanf(cmd.Args[0], "%d", &ws)
+			_, _ = fmt.Sscanf(cmd.Args[0], "%d", &ws)
 			return ce.executor.MoveAndFollowWorkspaceByID(ce.executor.GetFocusedWindowID(), ws)
 		}
 

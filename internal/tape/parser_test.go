@@ -84,9 +84,9 @@ func TestParserTypeCommand(t *testing.T) {
 
 func TestParserSleepCommand(t *testing.T) {
 	tests := []struct {
-		name            string
-		input           string
-		expectedArg     string
+		name             string
+		input            string
+		expectedArg      string
 		expectedDuration time.Duration
 	}{
 		{
@@ -180,8 +180,8 @@ func TestParserKeyCombo(t *testing.T) {
 
 func TestParserTuiosActions(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
+		name         string
+		input        string
 		expectedType CommandType
 	}{
 		{
@@ -290,10 +290,10 @@ Enter`
 
 func TestParserErrorHandling(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
-		expectError    bool
-		errorCount     int
+		name        string
+		input       string
+		expectError bool
+		errorCount  int
 	}{
 		{
 			name:        "Valid script",

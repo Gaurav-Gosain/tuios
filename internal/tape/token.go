@@ -5,10 +5,10 @@ type TokenType string
 
 const (
 	// Special tokens
-	TOKEN_EOF       TokenType = "EOF"
-	TOKEN_ILLEGAL   TokenType = "ILLEGAL"
-	TOKEN_COMMENT   TokenType = "COMMENT"
-	TOKEN_NEWLINE   TokenType = "NEWLINE"
+	TOKEN_EOF     TokenType = "EOF"
+	TOKEN_ILLEGAL TokenType = "ILLEGAL"
+	TOKEN_COMMENT TokenType = "COMMENT"
+	TOKEN_NEWLINE TokenType = "NEWLINE"
 
 	// Literals
 	TOKEN_STRING     TokenType = "STRING"
@@ -17,12 +17,12 @@ const (
 	TOKEN_IDENTIFIER TokenType = "IDENTIFIER"
 
 	// Symbols
-	TOKEN_PLUS    TokenType = "PLUS"
-	TOKEN_AT      TokenType = "AT"
-	TOKEN_COMMA   TokenType = "COMMA"
-	TOKEN_SLASH   TokenType = "SLASH"
-	TOKEN_LPAREN  TokenType = "LPAREN"
-	TOKEN_RPAREN  TokenType = "RPAREN"
+	TOKEN_PLUS   TokenType = "PLUS"
+	TOKEN_AT     TokenType = "AT"
+	TOKEN_COMMA  TokenType = "COMMA"
+	TOKEN_SLASH  TokenType = "SLASH"
+	TOKEN_LPAREN TokenType = "LPAREN"
+	TOKEN_RPAREN TokenType = "RPAREN"
 
 	// Commands - Basic
 	TOKEN_TYPE      TokenType = "Type"
@@ -48,8 +48,8 @@ const (
 	TOKEN_SHIFT TokenType = "Shift"
 
 	// Commands - Mode Switching
-	TOKEN_TERMINAL_MODE           TokenType = "TerminalMode"
-	TOKEN_WINDOW_MANAGEMENT_MODE  TokenType = "WindowManagementMode"
+	TOKEN_TERMINAL_MODE          TokenType = "TerminalMode"
+	TOKEN_WINDOW_MANAGEMENT_MODE TokenType = "WindowManagementMode"
 
 	// Commands - Window Management
 	TOKEN_NEW_WINDOW      TokenType = "NewWindow"
@@ -62,25 +62,25 @@ const (
 	TOKEN_RESTORE_WINDOW  TokenType = "RestoreWindow"
 
 	// Commands - Tiling
-	TOKEN_TOGGLE_TILING  TokenType = "ToggleTiling"
-	TOKEN_ENABLE_TILING  TokenType = "EnableTiling"
-	TOKEN_DISABLE_TILING TokenType = "DisableTiling"
-	TOKEN_SNAP_LEFT      TokenType = "SnapLeft"
-	TOKEN_SNAP_RIGHT     TokenType = "SnapRight"
+	TOKEN_TOGGLE_TILING   TokenType = "ToggleTiling"
+	TOKEN_ENABLE_TILING   TokenType = "EnableTiling"
+	TOKEN_DISABLE_TILING  TokenType = "DisableTiling"
+	TOKEN_SNAP_LEFT       TokenType = "SnapLeft"
+	TOKEN_SNAP_RIGHT      TokenType = "SnapRight"
 	TOKEN_SNAP_FULLSCREEN TokenType = "SnapFullscreen"
 
 	// Commands - Workspace
-	TOKEN_SWITCH_WS           TokenType = "SwitchWorkspace"
-	TOKEN_MOVE_TO_WS          TokenType = "MoveToWorkspace"
-	TOKEN_MOVE_AND_FOLLOW_WS  TokenType = "MoveAndFollowWorkspace"
+	TOKEN_SWITCH_WS          TokenType = "SwitchWorkspace"
+	TOKEN_MOVE_TO_WS         TokenType = "MoveToWorkspace"
+	TOKEN_MOVE_AND_FOLLOW_WS TokenType = "MoveAndFollowWorkspace"
 
 	// Commands - Other Actions
 	TOKEN_SPLIT TokenType = "Split"
 	TOKEN_FOCUS TokenType = "Focus"
 
 	// Commands - Synchronization
-	TOKEN_WAIT               TokenType = "Wait"
-	TOKEN_WAIT_UNTIL_REGEX   TokenType = "WaitUntilRegex"
+	TOKEN_WAIT             TokenType = "Wait"
+	TOKEN_WAIT_UNTIL_REGEX TokenType = "WaitUntilRegex"
 
 	// Commands - Settings (for future use)
 	TOKEN_SET    TokenType = "Set"
@@ -142,14 +142,14 @@ func (tt TokenType) IsNavigationKey() bool {
 // KeywordTokenMap maps string keywords to token types
 var KeywordTokenMap = map[string]TokenType{
 	// Basic commands
-	"Type":          TOKEN_TYPE,
-	"Sleep":         TOKEN_SLEEP,
-	"Enter":         TOKEN_ENTER,
-	"Space":         TOKEN_SPACE,
-	"Backspace":     TOKEN_BACKSPACE,
-	"Delete":        TOKEN_DELETE,
-	"Tab":           TOKEN_TAB,
-	"Escape":        TOKEN_ESCAPE,
+	"Type":      TOKEN_TYPE,
+	"Sleep":     TOKEN_SLEEP,
+	"Enter":     TOKEN_ENTER,
+	"Space":     TOKEN_SPACE,
+	"Backspace": TOKEN_BACKSPACE,
+	"Delete":    TOKEN_DELETE,
+	"Tab":       TOKEN_TAB,
+	"Escape":    TOKEN_ESCAPE,
 
 	// Navigation
 	"Up":    TOKEN_UP,
@@ -165,8 +165,8 @@ var KeywordTokenMap = map[string]TokenType{
 	"Shift": TOKEN_SHIFT,
 
 	// Mode switching
-	"TerminalMode":          TOKEN_TERMINAL_MODE,
-	"WindowManagementMode":  TOKEN_WINDOW_MANAGEMENT_MODE,
+	"TerminalMode":         TOKEN_TERMINAL_MODE,
+	"WindowManagementMode": TOKEN_WINDOW_MANAGEMENT_MODE,
 
 	// Window management
 	"NewWindow":      TOKEN_NEW_WINDOW,
@@ -187,8 +187,8 @@ var KeywordTokenMap = map[string]TokenType{
 	"SnapFullscreen": TOKEN_SNAP_FULLSCREEN,
 
 	// Workspace
-	"SwitchWorkspace":      TOKEN_SWITCH_WS,
-	"MoveToWorkspace":      TOKEN_MOVE_TO_WS,
+	"SwitchWorkspace":        TOKEN_SWITCH_WS,
+	"MoveToWorkspace":        TOKEN_MOVE_TO_WS,
 	"MoveAndFollowWorkspace": TOKEN_MOVE_AND_FOLLOW_WS,
 
 	// Other actions
@@ -196,8 +196,8 @@ var KeywordTokenMap = map[string]TokenType{
 	"Focus": TOKEN_FOCUS,
 
 	// Synchronization
-	"Wait":             TOKEN_WAIT,
-	"WaitUntilRegex":   TOKEN_WAIT_UNTIL_REGEX,
+	"Wait":           TOKEN_WAIT,
+	"WaitUntilRegex": TOKEN_WAIT_UNTIL_REGEX,
 
 	// Settings
 	"Set":    TOKEN_SET,

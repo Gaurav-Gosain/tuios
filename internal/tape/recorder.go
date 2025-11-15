@@ -213,8 +213,7 @@ func (r *Recorder) keyToCommand(key string) *Command {
 // isModifierCombo checks if a key string is a modifier combination
 func isModifierCombo(key string) bool {
 	// Simple check for Ctrl+, Alt+, Shift+ prefixes
-	return len(key) > 0 && (
-		(len(key) > 5 && key[:5] == "ctrl+") ||
+	return len(key) > 0 && ((len(key) > 5 && key[:5] == "ctrl+") ||
 		(len(key) > 4 && key[:4] == "alt+") ||
 		(len(key) > 6 && key[:6] == "shift+"))
 }

@@ -551,46 +551,6 @@ func (o *OS) ResizeFocusedWindowWidth(deltaPixels int) {
 	o.AdjustTilingNeighbors(focusedWindow, newX, newY, newWidth, newHeight)
 }
 
-// findWindowsOnVerticalSplitForResize finds windows on a vertical split, excluding the source window
-func findWindowsOnVerticalSplitForResize(o *OS, splitX int, sourceWindow *terminal.Window) (leftWindows, rightWindows []*terminal.Window) {
-	const tolerance = 1
-
-	for _, win := range o.Windows {
-		if win == sourceWindow || win.Workspace != o.CurrentWorkspace || win.Minimized {
-			continue
-		}
-
-		winRight := win.X + win.Width
-		if abs(winRight-splitX) <= tolerance {
-			leftWindows = append(leftWindows, win)
-		} else if abs(win.X-splitX) <= tolerance {
-			rightWindows = append(rightWindows, win)
-		}
-	}
-
-	return leftWindows, rightWindows
-}
-
-// findWindowsOnHorizontalSplitForResize finds windows on a horizontal split, excluding the source window
-func findWindowsOnHorizontalSplitForResize(o *OS, splitY int, sourceWindow *terminal.Window) (topWindows, bottomWindows []*terminal.Window) {
-	const tolerance = 1
-
-	for _, win := range o.Windows {
-		if win == sourceWindow || win.Workspace != o.CurrentWorkspace || win.Minimized {
-			continue
-		}
-
-		winBottom := win.Y + win.Height
-		if abs(winBottom-splitY) <= tolerance {
-			topWindows = append(topWindows, win)
-		} else if abs(win.Y-splitY) <= tolerance {
-			bottomWindows = append(bottomWindows, win)
-		}
-	}
-
-	return topWindows, bottomWindows
-}
-
 // ResizeFocusedWindowWidthLeft resizes the focused window's width by moving the LEFT edge
 // delta is in pixels (positive = shrink from left, negative = grow from left)
 func (o *OS) ResizeFocusedWindowWidthLeft(deltaPixels int) {

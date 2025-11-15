@@ -159,13 +159,13 @@ type OS struct {
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
 	// Tape scripting support
-	ScriptPlayer       interface{}           // *tape.Player - script playback engine
-	ScriptMode         bool                  // True when running a tape script
-	ScriptPaused       bool                  // True when script playback is paused
-	ScriptConverter    interface{}           // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
-	ScriptExecutor     interface{}           // *tape.CommandExecutor - executes tape commands
-	ScriptSleepUntil   time.Time             // When to resume after a sleep command
-	ScriptFinishedTime time.Time             // When the script finished (for auto-hide)
+	ScriptPlayer       interface{} // *tape.Player - script playback engine
+	ScriptMode         bool        // True when running a tape script
+	ScriptPaused       bool        // True when script playback is paused
+	ScriptConverter    interface{} // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
+	ScriptExecutor     interface{} // *tape.CommandExecutor - executes tape commands
+	ScriptSleepUntil   time.Time   // When to resume after a sleep command
+	ScriptFinishedTime time.Time   // When the script finished (for auto-hide)
 }
 
 // Notification represents a temporary notification message.
@@ -187,11 +187,11 @@ type LogMessage struct {
 
 // KeyEvent represents a captured keyboard event for the showkeys overlay.
 type KeyEvent struct {
-	Key       string        // The key string representation
-	Modifiers []string      // Modifier names (Ctrl, Shift, Alt, Cmd)
-	Timestamp time.Time     // When the key was pressed
-	Count     int           // Number of consecutive identical keys
-	Action    string        // Resolved action name (optional)
+	Key       string    // The key string representation
+	Modifiers []string  // Modifier names (Ctrl, Shift, Alt, Cmd)
+	Timestamp time.Time // When the key was pressed
+	Count     int       // Number of consecutive identical keys
+	Action    string    // Resolved action name (optional)
 }
 
 func createID() string {

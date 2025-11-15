@@ -31,39 +31,39 @@ const (
 	CommandType_KeyCombo CommandType = "KeyCombo"
 
 	// Mode switching
-	CommandType_TerminalMode          CommandType = "TerminalMode"
-	CommandType_WindowManagementMode  CommandType = "WindowManagementMode"
+	CommandType_TerminalMode         CommandType = "TerminalMode"
+	CommandType_WindowManagementMode CommandType = "WindowManagementMode"
 
 	// Window management
-	CommandType_NewWindow     CommandType = "NewWindow"
-	CommandType_CloseWindow   CommandType = "CloseWindow"
-	CommandType_NextWindow    CommandType = "NextWindow"
-	CommandType_PrevWindow    CommandType = "PrevWindow"
-	CommandType_FocusWindow   CommandType = "FocusWindow"
-	CommandType_RenameWindow  CommandType = "RenameWindow"
+	CommandType_NewWindow      CommandType = "NewWindow"
+	CommandType_CloseWindow    CommandType = "CloseWindow"
+	CommandType_NextWindow     CommandType = "NextWindow"
+	CommandType_PrevWindow     CommandType = "PrevWindow"
+	CommandType_FocusWindow    CommandType = "FocusWindow"
+	CommandType_RenameWindow   CommandType = "RenameWindow"
 	CommandType_MinimizeWindow CommandType = "MinimizeWindow"
-	CommandType_RestoreWindow CommandType = "RestoreWindow"
+	CommandType_RestoreWindow  CommandType = "RestoreWindow"
 
 	// Tiling
-	CommandType_ToggleTiling CommandType = "ToggleTiling"
-	CommandType_EnableTiling CommandType = "EnableTiling"
-	CommandType_DisableTiling CommandType = "DisableTiling"
-	CommandType_SnapLeft      CommandType = "SnapLeft"
-	CommandType_SnapRight     CommandType = "SnapRight"
+	CommandType_ToggleTiling   CommandType = "ToggleTiling"
+	CommandType_EnableTiling   CommandType = "EnableTiling"
+	CommandType_DisableTiling  CommandType = "DisableTiling"
+	CommandType_SnapLeft       CommandType = "SnapLeft"
+	CommandType_SnapRight      CommandType = "SnapRight"
 	CommandType_SnapFullscreen CommandType = "SnapFullscreen"
 
 	// Workspace
-	CommandType_SwitchWS          CommandType = "SwitchWorkspace"
-	CommandType_MoveToWS          CommandType = "MoveToWorkspace"
-	CommandType_MoveAndFollowWS   CommandType = "MoveAndFollowWorkspace"
+	CommandType_SwitchWS        CommandType = "SwitchWorkspace"
+	CommandType_MoveToWS        CommandType = "MoveToWorkspace"
+	CommandType_MoveAndFollowWS CommandType = "MoveAndFollowWorkspace"
 
 	// Other actions
 	CommandType_Split CommandType = "Split"
 	CommandType_Focus CommandType = "Focus"
 
 	// Synchronization
-	CommandType_Wait            CommandType = "Wait"
-	CommandType_WaitUntilRegex  CommandType = "WaitUntilRegex"
+	CommandType_Wait           CommandType = "Wait"
+	CommandType_WaitUntilRegex CommandType = "WaitUntilRegex"
 
 	// Settings
 	CommandType_Set    CommandType = "Set"
@@ -76,12 +76,12 @@ const (
 
 // Command represents a parsed tape command
 type Command struct {
-	Type       CommandType
-	Args       []string      // Command arguments
-	Delay      time.Duration // Delay after this command
-	Line       int           // Source line number
-	Column     int           // Source column number
-	Raw        string        // Original raw command text
+	Type   CommandType
+	Args   []string      // Command arguments
+	Delay  time.Duration // Delay after this command
+	Line   int           // Source line number
+	Column int           // Source column number
+	Raw    string        // Original raw command text
 }
 
 // String returns a string representation of the command

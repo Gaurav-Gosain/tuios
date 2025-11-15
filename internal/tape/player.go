@@ -122,11 +122,11 @@ type TapeTickMsg time.Time
 
 // ScriptPlaybackMsg contains state information about script playback
 type ScriptPlaybackMsg struct {
-	State    string        // "playing", "paused", "finished"
-	Index    int           // Current command index
-	Total    int           // Total commands
-	Progress int           // 0-100
-	Current  string        // Current command display string
+	State    string // "playing", "paused", "finished"
+	Index    int    // Current command index
+	Total    int    // Total commands
+	Progress int    // 0-100
+	Current  string // Current command display string
 }
 
 // CommandToMsg converts a Command to appropriate Bubble Tea message(s)

@@ -170,25 +170,3 @@ func (c *ScriptMessageConverter) cmdTypeToKeyName(cmdType CommandType) string {
 		return ""
 	}
 }
-
-// cmdTypeToActionName converts a CommandType to its tuios action name
-func (c *ScriptMessageConverter) cmdTypeToActionName(cmdType CommandType) string {
-	switch cmdType {
-	case CommandType_NewWindow:
-		return "new_window"
-	case CommandType_CloseWindow:
-		return "close_window"
-	case CommandType_Split:
-		return "split"
-	case CommandType_Focus:
-		return "focus"
-	case CommandType_ToggleTiling:
-		return "toggle_tiling"
-	case CommandType_SwitchWS:
-		return "switch_workspace"
-	case CommandType_MoveToWS:
-		return "move_to_workspace"
-	default:
-		return ""
-	}
-}

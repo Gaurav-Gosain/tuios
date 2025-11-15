@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/charmbracelet/lipgloss/v2"
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss/v2"
 )
 
 // CaptureKeyEvent captures a keyboard event for the showkeys overlay.

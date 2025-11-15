@@ -104,7 +104,8 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 
 	// Multi-line selection
 	for y := startY; y <= endY; y++ {
-		if y == startY {
+		switch y {
+		case startY:
 			// First line - from startX to end
 			for x := startX; x < screenWidth; x++ {
 				cell := getCellAt(x, y)
@@ -114,7 +115,7 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 					selectedText.WriteRune(' ')
 				}
 			}
-		} else if y == endY {
+		case endY:
 			// Last line - from start to endX
 			for x := 0; x <= endX && x < screenWidth; x++ {
 				cell := getCellAt(x, y)
@@ -124,7 +125,7 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 					selectedText.WriteRune(' ')
 				}
 			}
-		} else {
+		default:
 			// Middle lines - full line
 			for x := 0; x < screenWidth; x++ {
 				cell := getCellAt(x, y)

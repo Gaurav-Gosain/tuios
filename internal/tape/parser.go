@@ -68,90 +68,88 @@ func (p *Parser) parseCommand() (Command, bool) {
 		return cmd, false
 	}
 
-	tt := p.curTok.Type
-
-	switch {
-	case tt == TOKEN_TYPE:
+	switch p.curTok.Type {
+	case TOKEN_TYPE:
 		return p.parseTypeCommand()
-	case tt == TOKEN_SLEEP:
+	case TOKEN_SLEEP:
 		return p.parseSleepCommand()
-	case tt == TOKEN_ENTER:
+	case TOKEN_ENTER:
 		return p.parseBasicCommand(CommandType_Enter)
-	case tt == TOKEN_SPACE:
+	case TOKEN_SPACE:
 		return p.parseBasicCommand(CommandType_Space)
-	case tt == TOKEN_BACKSPACE:
+	case TOKEN_BACKSPACE:
 		return p.parseBasicCommand(CommandType_Backspace)
-	case tt == TOKEN_DELETE:
+	case TOKEN_DELETE:
 		return p.parseBasicCommand(CommandType_Delete)
-	case tt == TOKEN_TAB:
+	case TOKEN_TAB:
 		return p.parseBasicCommand(CommandType_Tab)
-	case tt == TOKEN_ESCAPE:
+	case TOKEN_ESCAPE:
 		return p.parseBasicCommand(CommandType_Escape)
-	case tt == TOKEN_UP:
+	case TOKEN_UP:
 		return p.parseBasicCommand(CommandType_Up)
-	case tt == TOKEN_DOWN:
+	case TOKEN_DOWN:
 		return p.parseBasicCommand(CommandType_Down)
-	case tt == TOKEN_LEFT:
+	case TOKEN_LEFT:
 		return p.parseBasicCommand(CommandType_Left)
-	case tt == TOKEN_RIGHT:
+	case TOKEN_RIGHT:
 		return p.parseBasicCommand(CommandType_Right)
-	case tt == TOKEN_HOME:
+	case TOKEN_HOME:
 		return p.parseBasicCommand(CommandType_Home)
-	case tt == TOKEN_END:
+	case TOKEN_END:
 		return p.parseBasicCommand(CommandType_End)
-	case tt == TOKEN_CTRL, tt == TOKEN_ALT, tt == TOKEN_SHIFT:
+	case TOKEN_CTRL, TOKEN_ALT, TOKEN_SHIFT:
 		return p.parseKeyComboCommand()
-	case tt == TOKEN_TERMINAL_MODE:
+	case TOKEN_TERMINAL_MODE:
 		return p.parseBasicCommand(CommandType_TerminalMode)
-	case tt == TOKEN_WINDOW_MANAGEMENT_MODE:
+	case TOKEN_WINDOW_MANAGEMENT_MODE:
 		return p.parseBasicCommand(CommandType_WindowManagementMode)
-	case tt == TOKEN_NEW_WINDOW:
+	case TOKEN_NEW_WINDOW:
 		return p.parseBasicCommand(CommandType_NewWindow)
-	case tt == TOKEN_CLOSE_WINDOW:
+	case TOKEN_CLOSE_WINDOW:
 		return p.parseBasicCommand(CommandType_CloseWindow)
-	case tt == TOKEN_NEXT_WINDOW:
+	case TOKEN_NEXT_WINDOW:
 		return p.parseBasicCommand(CommandType_NextWindow)
-	case tt == TOKEN_PREV_WINDOW:
+	case TOKEN_PREV_WINDOW:
 		return p.parseBasicCommand(CommandType_PrevWindow)
-	case tt == TOKEN_FOCUS_WINDOW:
+	case TOKEN_FOCUS_WINDOW:
 		return p.parseWindowIDCommand(CommandType_FocusWindow)
-	case tt == TOKEN_RENAME_WINDOW:
+	case TOKEN_RENAME_WINDOW:
 		return p.parseWindowRenameCommand()
-	case tt == TOKEN_MINIMIZE_WINDOW:
+	case TOKEN_MINIMIZE_WINDOW:
 		return p.parseBasicCommand(CommandType_MinimizeWindow)
-	case tt == TOKEN_RESTORE_WINDOW:
+	case TOKEN_RESTORE_WINDOW:
 		return p.parseBasicCommand(CommandType_RestoreWindow)
-	case tt == TOKEN_TOGGLE_TILING:
+	case TOKEN_TOGGLE_TILING:
 		return p.parseBasicCommand(CommandType_ToggleTiling)
-	case tt == TOKEN_ENABLE_TILING:
+	case TOKEN_ENABLE_TILING:
 		return p.parseBasicCommand(CommandType_EnableTiling)
-	case tt == TOKEN_DISABLE_TILING:
+	case TOKEN_DISABLE_TILING:
 		return p.parseBasicCommand(CommandType_DisableTiling)
-	case tt == TOKEN_SNAP_LEFT:
+	case TOKEN_SNAP_LEFT:
 		return p.parseBasicCommand(CommandType_SnapLeft)
-	case tt == TOKEN_SNAP_RIGHT:
+	case TOKEN_SNAP_RIGHT:
 		return p.parseBasicCommand(CommandType_SnapRight)
-	case tt == TOKEN_SNAP_FULLSCREEN:
+	case TOKEN_SNAP_FULLSCREEN:
 		return p.parseBasicCommand(CommandType_SnapFullscreen)
-	case tt == TOKEN_SWITCH_WS:
+	case TOKEN_SWITCH_WS:
 		return p.parseSwitchWorkspaceCommand()
-	case tt == TOKEN_MOVE_TO_WS:
+	case TOKEN_MOVE_TO_WS:
 		return p.parseMoveToWorkspaceCommand()
-	case tt == TOKEN_MOVE_AND_FOLLOW_WS:
+	case TOKEN_MOVE_AND_FOLLOW_WS:
 		return p.parseMoveAndFollowWorkspaceCommand()
-	case tt == TOKEN_SPLIT:
+	case TOKEN_SPLIT:
 		return p.parseBasicCommand(CommandType_Split)
-	case tt == TOKEN_FOCUS:
+	case TOKEN_FOCUS:
 		return p.parseFocusCommand()
-	case tt == TOKEN_WAIT:
+	case TOKEN_WAIT:
 		return p.parseWaitCommand()
-	case tt == TOKEN_WAIT_UNTIL_REGEX:
+	case TOKEN_WAIT_UNTIL_REGEX:
 		return p.parseWaitUntilRegexCommand()
-	case tt == TOKEN_SET:
+	case TOKEN_SET:
 		return p.parseSetCommand()
-	case tt == TOKEN_OUTPUT:
+	case TOKEN_OUTPUT:
 		return p.parseOutputCommand()
-	case tt == TOKEN_SOURCE:
+	case TOKEN_SOURCE:
 		return p.parseSourceCommand()
 	default:
 		p.addError(fmt.Sprintf("unexpected token: %v", p.curTok.Type))
@@ -439,15 +437,12 @@ func (p *Parser) parseWindowIDCommand(cmdType CommandType) (Command, bool) {
 
 	p.nextToken() // consume command name
 
-	if p.curTok.Type == TOKEN_IDENTIFIER {
+	switch p.curTok.Type {
+	case TOKEN_IDENTIFIER, TOKEN_NUMBER:
 		cmd.Args = []string{p.curTok.Literal}
 		cmd.Raw = fmt.Sprintf("%s %s", cmdType, p.curTok.Literal)
 		p.nextToken()
-	} else if p.curTok.Type == TOKEN_NUMBER {
-		cmd.Args = []string{p.curTok.Literal}
-		cmd.Raw = fmt.Sprintf("%s %s", cmdType, p.curTok.Literal)
-		p.nextToken()
-	} else {
+	default:
 		p.addError(fmt.Sprintf("%s expects a window ID, got %v", cmdType, p.curTok.Type))
 		p.skipToNextLine()
 		return cmd, false
@@ -470,15 +465,16 @@ func (p *Parser) parseWindowRenameCommand() (Command, bool) {
 
 	p.nextToken() // consume RenameWindow
 
-	if p.curTok.Type == TOKEN_STRING {
+	switch p.curTok.Type {
+	case TOKEN_STRING:
 		cmd.Args = []string{p.curTok.Literal}
 		cmd.Raw = fmt.Sprintf("RenameWindow %q", p.curTok.Literal)
 		p.nextToken()
-	} else if p.curTok.Type == TOKEN_IDENTIFIER {
+	case TOKEN_IDENTIFIER:
 		cmd.Args = []string{p.curTok.Literal}
 		cmd.Raw = fmt.Sprintf("RenameWindow %s", p.curTok.Literal)
 		p.nextToken()
-	} else {
+	default:
 		p.addError("RenameWindow expects a window name")
 		p.skipToNextLine()
 		return cmd, false
@@ -667,4 +663,3 @@ func ParseFile(content string) ([]Command, []string) {
 	commands := p.Parse()
 	return commands, p.Errors()
 }
-

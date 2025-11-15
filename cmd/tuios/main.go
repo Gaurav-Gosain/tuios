@@ -1051,11 +1051,11 @@ func runTapeInteractive(tapeFile string) error {
 		RecentKeys:           []app.KeyEvent{},
 		KeyHistoryMaxSize:    5,
 		// Tape scripting fields
-		ScriptMode:    true,
-		ScriptPlayer:  player,
-		ScriptPaused:  false,
+		ScriptMode:      true,
+		ScriptPlayer:    player,
+		ScriptPaused:    false,
 		ScriptConverter: converter,
-		ScriptExecutor: tape.NewCommandExecutor(nil), // Will be set after initialization
+		ScriptExecutor:  tape.NewCommandExecutor(nil), // Will be set after initialization
 	}
 
 	// Set the executor's reference to the OS model so it can manipulate app state

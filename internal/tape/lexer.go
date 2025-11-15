@@ -7,22 +7,22 @@ import (
 
 // Lexer tokenizes .tape file input
 type Lexer struct {
-	input  string
-	pos    int    // current position
-	nextPos int   // next position
-	ch     byte   // current character
-	line   int    // current line
-	column int    // current column
+	input   string
+	pos     int  // current position
+	nextPos int  // next position
+	ch      byte // current character
+	line    int  // current line
+	column  int  // current column
 }
 
 // New creates a new Lexer for the given input
 func New(input string) *Lexer {
 	l := &Lexer{
-		input:  input,
-		pos:    0,
+		input:   input,
+		pos:     0,
 		nextPos: 0,
-		line:   1,
-		column: 0,
+		line:    1,
+		column:  0,
 	}
 	l.readChar()
 	return l
@@ -52,15 +52,6 @@ func (l *Lexer) peekChar() byte {
 		return 0
 	}
 	return l.input[l.nextPos]
-}
-
-// peekCharN peeks n characters ahead
-func (l *Lexer) peekCharN(n int) byte {
-	pos := l.nextPos + n - 1
-	if pos >= len(l.input) {
-		return 0
-	}
-	return l.input[pos]
 }
 
 // skipWhitespace skips spaces and tabs (not newlines)
@@ -130,21 +121,6 @@ func (l *Lexer) readIdentifier() string {
 func (l *Lexer) readNumber() string {
 	var sb strings.Builder
 	for isDigit(l.ch) {
-		sb.WriteByte(l.ch)
-		l.readChar()
-	}
-	return sb.String()
-}
-
-// readDuration reads a duration literal (e.g., 500ms, 1s, 2.5s)
-func (l *Lexer) readDuration() string {
-	var sb strings.Builder
-	for isDigit(l.ch) || l.ch == '.' {
-		sb.WriteByte(l.ch)
-		l.readChar()
-	}
-	// Read the unit (ms, s, etc.)
-	for unicode.IsLetter(rune(l.ch)) {
 		sb.WriteByte(l.ch)
 		l.readChar()
 	}
