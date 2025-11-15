@@ -159,15 +159,13 @@ type OS struct {
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
 	// Tape scripting support
-	ScriptPlayer         interface{}           // *tape.Player - script playback engine
-	ScriptMode           bool                  // True when running a tape script
-	ScriptPaused         bool                  // True when script playback is paused
-	ScriptConverter      interface{}           // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
-	ScriptOutput         string                // Output file path for headless mode
-	ScriptHeadless       bool                  // True when running in headless mode (no display)
-	ScriptExecutor       interface{}           // *tape.CommandExecutor - executes tape commands
-	ScriptSleepUntil     time.Time             // When to resume after a sleep command
-	ScriptFinishedTime   time.Time             // When the script finished (for auto-hide)
+	ScriptPlayer       interface{}           // *tape.Player - script playback engine
+	ScriptMode         bool                  // True when running a tape script
+	ScriptPaused       bool                  // True when script playback is paused
+	ScriptConverter    interface{}           // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
+	ScriptExecutor     interface{}           // *tape.CommandExecutor - executes tape commands
+	ScriptSleepUntil   time.Time             // When to resume after a sleep command
+	ScriptFinishedTime time.Time             // When the script finished (for auto-hide)
 }
 
 // Notification represents a temporary notification message.

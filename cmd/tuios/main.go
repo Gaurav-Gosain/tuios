@@ -228,7 +228,6 @@ Shows a comparison of default and custom keybindings.`,
 	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd)
 
 	// Tape command group - for running automation scripts
-	var tapeOutputFile string
 	var tapeVisible bool
 
 	tapeCmd := &cobra.Command{
@@ -237,29 +236,13 @@ Shows a comparison of default and custom keybindings.`,
 		Long: `Manage and execute .tape automation scripts for TUIOS
 
 Tape files allow you to automate interactions with TUIOS by specifying
-sequences of commands, key presses, and delays. They can be executed in
-headless mode (background) or in interactive mode (visible TUI).`,
-		Example: `  # Run tape in headless mode (background)
-  tuios tape run demo.tape
-
-  # Run tape with visible TUI (watch it happen)
+sequences of commands, key presses, and delays. Execute scripts in
+interactive mode (visible TUI) to watch automation happen in real-time.`,
+		Example: `  # Run tape with visible TUI (watch it happen)
   tuios tape play demo.tape
 
   # Validate tape file syntax
   tuios tape validate demo.tape`,
-	}
-
-	tapeRunCmd := &cobra.Command{
-		Use:   "run <file.tape>",
-		Short: "Run a tape file in headless mode",
-		Long: `Execute a tape script in headless (background) mode
-
-In headless mode, TUIOS runs the script without displaying the TUI,
-useful for automation and CI/CD pipelines.`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTapeHeadless(args[0], tapeOutputFile)
-		},
 	}
 
 	tapePlayCmd := &cobra.Command{
@@ -286,10 +269,9 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 	}
 
 	// Tape command flags
-	tapeRunCmd.Flags().StringVarP(&tapeOutputFile, "output", "o", "", "Output file for script results (optional)")
 	tapePlayCmd.Flags().BoolVarP(&tapeVisible, "visible", "v", true, "Show TUI during playback")
 
-	tapeCmd.AddCommand(tapeRunCmd, tapePlayCmd, tapeValidateCmd)
+	tapeCmd.AddCommand(tapePlayCmd, tapeValidateCmd)
 
 	// Add subcommands to root
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd)
@@ -1006,57 +988,6 @@ func formatActionName(action string) string {
 	return strings.ReplaceAll(action, "_", " ")
 }
 
-// runTapeHeadless executes a tape file in headless (background) mode
-func runTapeHeadless(tapeFile, outputFile string) error {
-	// Read the tape file
-	content, err := os.ReadFile(tapeFile)
-	if err != nil {
-		return fmt.Errorf("failed to read tape file: %w", err)
-	}
-
-	// Parse the tape file
-	commands, parseErrors := tape.ParseFile(string(content))
-	if len(parseErrors) > 0 {
-		fmt.Fprintf(os.Stderr, "Tape parsing errors:\n")
-		for _, err := range parseErrors {
-			fmt.Fprintf(os.Stderr, "  %s\n", err)
-		}
-		return fmt.Errorf("failed to parse tape file")
-	}
-
-	fmt.Printf("Executing tape script: %s\n", tapeFile)
-	fmt.Printf("Total commands: %d\n\n", len(commands))
-
-	// Create headless runner
-	runner := tape.NewHeadlessRunner(commands, outputFile)
-	runner.SetVerbose(true)
-
-	// Create context with timeout (optional)
-	ctx := context.Background()
-
-	// Execute the script
-	if err := runner.Run(ctx); err != nil {
-		return fmt.Errorf("script execution failed: %w", err)
-	}
-
-	// Print output
-	fmt.Println("\n=== Script Output ===")
-	output := runner.GetOutput()
-	fmt.Print(output)
-
-	// Save to output file if specified
-	if outputFile != "" {
-		if err := os.WriteFile(outputFile, []byte(output), 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write output file: %v\n", err)
-		} else {
-			fmt.Printf("\nOutput saved to: %s\n", outputFile)
-		}
-	}
-
-	fmt.Println("\nScript execution completed successfully!")
-	return nil
-}
-
 // runTapeInteractive executes a tape file in interactive mode (with visible TUI)
 func runTapeInteractive(tapeFile string) error {
 	// Read the tape file
@@ -1182,18 +1113,7 @@ func validateTapeFile(tapeFile string) error {
 		return fmt.Errorf("failed to read tape file: %w", err)
 	}
 
-	// Validate
-	valid, errors := tape.ValidateScript(string(content))
-
-	if !valid {
-		fmt.Fprintf(os.Stderr, "Tape validation failed:\n")
-		for _, err := range errors {
-			fmt.Fprintf(os.Stderr, "  ✗ %s\n", err)
-		}
-		return fmt.Errorf("tape file is invalid")
-	}
-
-	// Parse and check
+	// Parse and validate
 	commands, parseErrors := tape.ParseFile(string(content))
 	if len(parseErrors) > 0 {
 		fmt.Fprintf(os.Stderr, "Parsing errors found:\n")
