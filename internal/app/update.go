@@ -19,6 +19,12 @@ type WindowExitMsg struct {
 	WindowID string
 }
 
+// ScriptCommandMsg represents a command from a tape script to be executed.
+// This allows tape commands to be processed through the normal message handling flow.
+type ScriptCommandMsg struct {
+	Command *tape.Command
+}
+
 // InputHandler is a function type that handles input messages.
 // This allows the Update method to delegate to the input package without creating a circular dependency.
 type InputHandler func(msg tea.Msg, o *OS) (tea.Model, tea.Cmd)
@@ -95,44 +101,39 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.UpdateRAMUsage()
 
 		// Handle script playback if in script mode
+		cmds := []tea.Cmd{TickCmd()}
 		if m.ScriptMode && !m.ScriptPaused && m.ScriptPlayer != nil {
 			player, ok := m.ScriptPlayer.(*tape.Player)
-			if ok {
-				if player.IsFinished() {
-					// Script just finished - record the time if not already set
-					if m.ScriptFinishedTime.IsZero() {
-						m.ScriptFinishedTime = time.Now()
-					}
-				} else {
-					// Script is still running
-					// Check if we're waiting for a sleep to finish
-					if !m.ScriptSleepUntil.IsZero() && time.Now().Before(m.ScriptSleepUntil) {
-						// Still waiting, don't advance yet
-						return m, TickCmd()
-					}
-					// Sleep finished or wasn't waiting, clear the sleep time
-					m.ScriptSleepUntil = time.Time{}
+			if ok && !player.IsFinished() {
+				// Check if we're waiting for a sleep to finish
+				if !m.ScriptSleepUntil.IsZero() && time.Now().Before(m.ScriptSleepUntil) {
+					// Still waiting, don't advance yet
+					return m, TickCmd()
+				}
+				// Sleep finished or wasn't waiting, clear the sleep time
+				m.ScriptSleepUntil = time.Time{}
 
-					nextCmd := player.NextCommand()
-					if nextCmd != nil {
-						// Handle Sleep commands specially
-						if nextCmd.Type == tape.CommandType_Sleep && nextCmd.Delay > 0 {
-							// Set the sleep deadline
-							m.ScriptSleepUntil = time.Now().Add(nextCmd.Delay)
-							// Advance to next command but don't execute anything yet
-							player.Advance()
-						} else {
-							// Execute the command via the executor
-							if executor, ok := m.ScriptExecutor.(*tape.CommandExecutor); ok {
-								if err := executor.Execute(nextCmd); err != nil {
-									// Log error but continue playback
-									m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", config.NotificationDuration)
-								}
-							}
-							// Advance to next command
-							player.Advance()
-						}
+				nextCmd := player.NextCommand()
+				if nextCmd != nil {
+					// Handle Sleep commands specially
+					if nextCmd.Type == tape.CommandType_Sleep && nextCmd.Delay > 0 {
+						// Set the sleep deadline
+						m.ScriptSleepUntil = time.Now().Add(nextCmd.Delay)
+						// Advance to next command but don't execute anything yet
+						player.Advance()
+					} else {
+						// Queue the command as a message instead of executing directly
+						cmds = append(cmds, func() tea.Msg {
+							return ScriptCommandMsg{Command: nextCmd}
+						})
+						// Advance to next command
+						player.Advance()
 					}
+				}
+			} else if ok && player.IsFinished() {
+				// Script just finished - record the time if not already set
+				if m.ScriptFinishedTime.IsZero() {
+					m.ScriptFinishedTime = time.Now()
 				}
 			}
 		}
@@ -152,9 +153,15 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Skip rendering if no changes, no animations, and not in interaction mode (frame skipping)
 		if !hasChanges && !hasAnimations && !m.InteractionMode && len(m.Windows) > 0 {
 			// Continue ticking but don't trigger render
+			if len(cmds) > 1 {
+				return m, tea.Sequence(cmds...)
+			}
 			return m, nextTick
 		}
 
+		if len(cmds) > 1 {
+			return m, tea.Sequence(cmds...)
+		}
 		return m, nextTick
 
 	case WindowExitMsg:
@@ -212,6 +219,16 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.KeyboardEnhancementsEnabled = msg.SupportsKeyDisambiguation()
 		if m.KeyboardEnhancementsEnabled {
 			m.ShowNotification("Keyboard enhancements enabled", "info", config.NotificationDuration)
+		}
+		return m, nil
+
+	case ScriptCommandMsg:
+		// Execute tape command through the executor
+		if executor, ok := m.ScriptExecutor.(*tape.CommandExecutor); ok {
+			if err := executor.Execute(msg.Command); err != nil {
+				// Log error but continue playback
+				m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", config.NotificationDuration)
+			}
 		}
 		return m, nil
 
