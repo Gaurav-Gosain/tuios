@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 	"github.com/charmbracelet/lipgloss/v2"
@@ -157,6 +158,16 @@ type OS struct {
 	ShowKeys          bool       // True when showkeys overlay is enabled
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
+	// Tape scripting support
+	ScriptPlayer         interface{}           // *tape.Player - script playback engine
+	ScriptMode           bool                  // True when running a tape script
+	ScriptPaused         bool                  // True when script playback is paused
+	ScriptConverter      interface{}           // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
+	ScriptOutput         string                // Output file path for headless mode
+	ScriptHeadless       bool                  // True when running in headless mode (no display)
+	ScriptExecutor       interface{}           // *tape.CommandExecutor - executes tape commands
+	ScriptSleepUntil     time.Time             // When to resume after a sleep command
+	ScriptFinishedTime   time.Time             // When the script finished (for auto-hide)
 }
 
 // Notification represents a temporary notification message.
@@ -1056,4 +1067,240 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 // Cleanup performs cleanup operations when the application exits.
 func (m *OS) Cleanup() {
 	// Reserved for future cleanup operations
+}
+
+// ExecuteCommand executes a tape command (implements tape.Executor interface)
+func (m *OS) ExecuteCommand(cmd *tape.Command) error {
+	return nil // Basic implementation
+}
+
+// GetFocusedWindowID returns the ID of the focused window (implements tape.Executor interface)
+func (m *OS) GetFocusedWindowID() string {
+	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+		return m.Windows[m.FocusedWindow].ID
+	}
+	return ""
+}
+
+// SendToWindow sends bytes to a window's PTY (implements tape.Executor interface)
+func (m *OS) SendToWindow(windowID string, data []byte) error {
+	for _, w := range m.Windows {
+		if w.ID == windowID {
+			_, err := w.Pty.Write(data)
+			return err
+		}
+	}
+	return nil
+}
+
+// CreateNewWindow creates a new window (implements tape.Executor interface)
+func (m *OS) CreateNewWindow() error {
+	m.AddWindow("Window")
+	m.MarkAllDirty()
+	return nil
+}
+
+// CloseWindow closes a window (implements tape.Executor interface)
+func (m *OS) CloseWindow(windowID string) error {
+	for i, w := range m.Windows {
+		if w.ID == windowID {
+			m.DeleteWindow(i)
+			m.MarkAllDirty()
+			return nil
+		}
+	}
+	return nil
+}
+
+// SwitchWorkspace switches to a workspace (implements tape.Executor interface)
+func (m *OS) SwitchWorkspace(workspace int) error {
+	if workspace >= 1 && workspace <= m.NumWorkspaces {
+		m.CurrentWorkspace = workspace
+		m.MarkAllDirty()
+	}
+	return nil
+}
+
+// ToggleTiling toggles tiling mode (implements tape.Executor interface)
+func (m *OS) ToggleTiling() error {
+	m.AutoTiling = !m.AutoTiling
+	if m.AutoTiling {
+		m.TileAllWindows()
+	}
+	m.MarkAllDirty()
+	return nil
+}
+
+// SetMode sets the interaction mode (implements tape.Executor interface)
+func (m *OS) SetMode(mode string) error {
+	switch mode {
+	case "terminal", "Terminal", "TerminalMode":
+		m.Mode = TerminalMode
+	case "window", "Window", "WindowManagementMode":
+		m.Mode = WindowManagementMode
+	}
+	return nil
+}
+
+// NextWindow focuses the next window (implements tape.Executor interface)
+func (m *OS) NextWindow() error {
+	if len(m.Windows) == 0 {
+		return nil
+	}
+	m.CycleToNextVisibleWindow()
+	m.MarkAllDirty()
+	return nil
+}
+
+// PrevWindow focuses the previous window (implements tape.Executor interface)
+func (m *OS) PrevWindow() error {
+	if len(m.Windows) == 0 {
+		return nil
+	}
+	m.CycleToPreviousVisibleWindow()
+	m.MarkAllDirty()
+	return nil
+}
+
+// FocusWindowByID focuses a specific window by ID (implements tape.Executor interface)
+func (m *OS) FocusWindowByID(windowID string) error {
+	for i, w := range m.Windows {
+		if w.ID == windowID {
+			m.FocusWindow(i)
+			m.MarkAllDirty()
+			return nil
+		}
+	}
+	return nil
+}
+
+// RenameWindow renames a window (implements tape.Executor interface)
+func (m *OS) RenameWindowByID(windowID, name string) error {
+	for _, w := range m.Windows {
+		if w.ID == windowID {
+			w.Title = name
+			m.MarkAllDirty()
+			return nil
+		}
+	}
+	return nil
+}
+
+// MinimizeWindowByID minimizes a window (implements tape.Executor interface)
+func (m *OS) MinimizeWindowByID(windowID string) error {
+	for i, w := range m.Windows {
+		if w.ID == windowID {
+			m.MinimizeWindow(i)
+			m.MarkAllDirty()
+			return nil
+		}
+	}
+	return nil
+}
+
+// RestoreWindowByID restores a minimized window (implements tape.Executor interface)
+func (m *OS) RestoreWindowByID(windowID string) error {
+	for i, w := range m.Windows {
+		if w.ID == windowID {
+			m.RestoreWindow(i)
+			m.MarkAllDirty()
+			return nil
+		}
+	}
+	return nil
+}
+
+// EnableTiling enables tiling mode (implements tape.Executor interface)
+func (m *OS) EnableTiling() error {
+	if !m.AutoTiling {
+		m.AutoTiling = true
+		m.TileAllWindows()
+		m.MarkAllDirty()
+	}
+	return nil
+}
+
+// DisableTiling disables tiling mode (implements tape.Executor interface)
+func (m *OS) DisableTiling() error {
+	m.AutoTiling = false
+	m.MarkAllDirty()
+	return nil
+}
+
+// SnapByDirection snaps a window to a direction (implements tape.Executor interface)
+func (m *OS) SnapByDirection(direction string) error {
+	// Cannot snap windows while tiling mode is enabled
+	if m.AutoTiling {
+		return fmt.Errorf("cannot snap windows while tiling mode is enabled")
+	}
+
+	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+		return nil
+	}
+
+	// Convert direction string to SnapQuarter if possible
+	quarter := SnapTopLeft
+	switch direction {
+	case "left":
+		quarter = SnapLeft
+	case "right":
+		quarter = SnapRight
+	case "fullscreen":
+		// Fullscreen is handled separately
+		m.Snap(m.FocusedWindow, SnapTopLeft)
+		m.MarkAllDirty()
+		return nil
+	}
+
+	m.Snap(m.FocusedWindow, quarter)
+	m.MarkAllDirty()
+	return nil
+}
+
+// MoveWindowToWorkspaceByID moves a window to a workspace (implements tape.Executor interface)
+func (m *OS) MoveWindowToWorkspaceByID(windowID string, workspace int) error {
+	if workspace < 1 || workspace > m.NumWorkspaces {
+		return nil
+	}
+
+	for i, w := range m.Windows {
+		if w.ID == windowID {
+			w.Workspace = workspace
+			// Remove from current layout if in managed window
+			if m.FocusedWindow == i {
+				m.FocusedWindow = -1
+			}
+			// Retile if in tiling mode
+			if m.AutoTiling {
+				m.TileAllWindows()
+			}
+			m.MarkAllDirty()
+			return nil
+		}
+	}
+
+	return nil
+}
+
+// MoveAndFollowWorkspaceByID moves a window to a workspace and switches to it (implements tape.Executor interface)
+func (m *OS) MoveAndFollowWorkspaceByID(windowID string, workspace int) error {
+	if workspace < 1 || workspace > m.NumWorkspaces {
+		return nil
+	}
+
+	for _, w := range m.Windows {
+		if w.ID == windowID {
+			w.Workspace = workspace
+			m.CurrentWorkspace = workspace
+			m.FocusedWindow = -1
+			// Retile if in tiling mode
+			if m.AutoTiling {
+				m.TileAllWindows()
+			}
+			m.MarkAllDirty()
+			return nil
+		}
+	}
+
+	return nil
 }

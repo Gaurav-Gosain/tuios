@@ -30,6 +30,7 @@ TUIOS is a terminal-based window manager that provides a modern, efficient inter
   - [Installation](#installation)
   - [Features](#features)
   - [Quick Start](#quick-start)
+  - [Tape Scripting](#tape-scripting)
   - [Architecture](#architecture)
   - [Performance](#performance)
   - [Troubleshooting](#troubleshooting)
@@ -133,6 +134,18 @@ tuios ssh --host 0.0.0.0 --port 8022 # Custom host/port
 ssh -p 2222 localhost                # Connect
 ```
 
+**Tape Scripting (Automation):**
+```bash
+# Run tape script in headless mode (background)
+tuios tape run examples/demo.tape
+
+# Run tape script with visible TUI (watch automation)
+tuios tape play examples/demo.tape
+
+# Validate tape file syntax
+tuios tape validate examples/demo.tape
+```
+
 **Configuration:**
 ```bash
 tuios config edit                    # Edit keybindings in $EDITOR
@@ -158,6 +171,67 @@ tuios completion powershell > tuios.ps1
 ```
 
 For complete keybindings, configuration options, and CLI flags, see the [Documentation](#documentation) section above.
+
+## Tape Scripting
+
+TUIOS supports automation through `.tape` files - a simple, declarative format for automating interactions. Perfect for:
+- Recording and replaying terminal workflows
+- Automated testing
+- Demo recording
+- CI/CD automation
+- Terminal workflow documentation
+
+**Basic Tape File Syntax:**
+```tape
+# Create windows and windows
+NewWindow
+Sleep 500ms
+
+# Type text with delays
+Type "echo 'Hello, TUIOS!'"
+Enter
+
+# Key presses and combinations
+Ctrl+B
+Type "n"
+
+# Navigation and window management
+SwitchWorkspace 2
+Sleep 1s
+
+# Sleep between commands
+Sleep 500ms
+```
+
+**Supported Commands:**
+- `Type "text"` - Type text
+- `Type@100ms "text"` - Type with custom speed
+- `Enter`, `Space`, `Tab`, `Escape` - Special keys
+- `Backspace`, `Delete` - Editing keys
+- `Up`, `Down`, `Left`, `Right` - Navigation
+- `Ctrl+X`, `Alt+X`, `Shift+X` - Key combinations
+- `Sleep 500ms` or `Sleep 2s` - Delays
+- `NewWindow`, `CloseWindow`, `ToggleTiling` - Window management
+- `SwitchWorkspace N` - Switch to workspace
+- `MoveToWorkspace N` - Move window to workspace
+- `Focus`, `Split` - Window manipulation
+
+**Running Tape Scripts:**
+```bash
+# Headless mode (background) - useful for automation
+tuios tape run script.tape
+
+# Interactive mode (visible TUI) - watch it happen
+tuios tape play script.tape
+
+# Validate syntax
+tuios tape validate script.tape
+```
+
+**Example Tapes:**
+- `examples/simple.tape` - Basic tape file
+- `examples/demo.tape` - Comprehensive demo
+- `examples/advanced.tape` - Complex scenarios
 
 ## Architecture
 

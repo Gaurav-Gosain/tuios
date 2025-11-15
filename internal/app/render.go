@@ -9,6 +9,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -1607,6 +1608,70 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			X(0).Y(0).Z(config.ZIndexLogs).ID("logs")
 
 		layers = append(layers, logLayer)
+	}
+
+	// Script mode indicator with clean progress display
+	// Auto-hide after 2 seconds when script is finished
+	showScriptIndicator := true
+	if m.ScriptMode && !m.ScriptFinishedTime.IsZero() {
+		elapsed := time.Since(m.ScriptFinishedTime)
+		if elapsed > 2*time.Second {
+			showScriptIndicator = false
+		}
+	}
+
+	if m.ScriptMode && showScriptIndicator {
+		var scriptStatus string
+
+		if m.ScriptPlayer != nil {
+			if player, ok := m.ScriptPlayer.(*tape.Player); ok {
+				progress := player.Progress()
+				currentCmd := player.CurrentIndex()
+				totalCmds := player.TotalCommands()
+
+				// Build clean status line
+				if player.IsFinished() {
+					scriptStatus = fmt.Sprintf("DONE • %d/%d commands", totalCmds, totalCmds)
+				} else {
+					// Create simple clean progress bar
+					barWidth := 15
+					filledWidth := (progress * barWidth) / 100
+					bar := ""
+					for i := 0; i < barWidth; i++ {
+						if i < filledWidth {
+							bar += "█"
+						} else {
+							bar += "░"
+						}
+					}
+
+					if m.ScriptPaused {
+						scriptStatus = fmt.Sprintf("PAUSED • %s %d%% • %d/%d", bar, progress, currentCmd, totalCmds)
+					} else {
+						scriptStatus = fmt.Sprintf("RUNNING • %s %d%% • %d/%d", bar, progress, currentCmd, totalCmds)
+					}
+				}
+			} else {
+				scriptStatus = "TAPE"
+			}
+		} else {
+			scriptStatus = "TAPE"
+		}
+
+		// Clean style with purple background
+		scriptStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("255")).
+			Background(lipgloss.Color("55")).
+			Padding(0, 1)
+
+		scriptIndicator := scriptStyle.Render(scriptStatus)
+		scriptLayer := lipgloss.NewLayer(scriptIndicator).
+			X(m.Width - lipgloss.Width(scriptIndicator) - 2).
+			Y(1).
+			Z(config.ZIndexNotifications).
+			ID("script-mode")
+
+		layers = append(layers, scriptLayer)
 	}
 
 	// Which-key style overlay for prefix commands (appears after delay)

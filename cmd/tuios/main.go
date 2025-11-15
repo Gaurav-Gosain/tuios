@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
+	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/fang"
@@ -226,8 +227,72 @@ Shows a comparison of default and custom keybindings.`,
 
 	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd)
 
+	// Tape command group - for running automation scripts
+	var tapeOutputFile string
+	var tapeVisible bool
+
+	tapeCmd := &cobra.Command{
+		Use:   "tape",
+		Short: "Manage and run .tape automation scripts",
+		Long: `Manage and execute .tape automation scripts for TUIOS
+
+Tape files allow you to automate interactions with TUIOS by specifying
+sequences of commands, key presses, and delays. They can be executed in
+headless mode (background) or in interactive mode (visible TUI).`,
+		Example: `  # Run tape in headless mode (background)
+  tuios tape run demo.tape
+
+  # Run tape with visible TUI (watch it happen)
+  tuios tape play demo.tape
+
+  # Validate tape file syntax
+  tuios tape validate demo.tape`,
+	}
+
+	tapeRunCmd := &cobra.Command{
+		Use:   "run <file.tape>",
+		Short: "Run a tape file in headless mode",
+		Long: `Execute a tape script in headless (background) mode
+
+In headless mode, TUIOS runs the script without displaying the TUI,
+useful for automation and CI/CD pipelines.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTapeHeadless(args[0], tapeOutputFile)
+		},
+	}
+
+	tapePlayCmd := &cobra.Command{
+		Use:   "play <file.tape>",
+		Short: "Run a tape file in interactive mode",
+		Long: `Execute a tape script while displaying the TUIOS TUI
+
+In interactive mode, you can see the automation happening in real-time
+in the terminal UI. Press Ctrl+P to pause/resume playback.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTapeInteractive(args[0])
+		},
+	}
+
+	tapeValidateCmd := &cobra.Command{
+		Use:   "validate <file.tape>",
+		Short: "Validate a tape file without running it",
+		Long:  `Check if a tape file is syntactically correct`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return validateTapeFile(args[0])
+		},
+	}
+
+	// Tape command flags
+	tapeRunCmd.Flags().StringVarP(&tapeOutputFile, "output", "o", "", "Output file for script results (optional)")
+	tapePlayCmd.Flags().BoolVarP(&tapeVisible, "visible", "v", true, "Show TUI during playback")
+
+	tapeCmd.AddCommand(tapeRunCmd, tapePlayCmd, tapeValidateCmd)
+
 	// Add subcommands to root
-	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd)
+	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd)
 
 	// Execute with fang
 	if err := fang.Execute(
@@ -939,4 +1004,246 @@ func formatActionName(action string) string {
 	}
 	// Otherwise format the action name
 	return strings.ReplaceAll(action, "_", " ")
+}
+
+// runTapeHeadless executes a tape file in headless (background) mode
+func runTapeHeadless(tapeFile, outputFile string) error {
+	// Read the tape file
+	content, err := os.ReadFile(tapeFile)
+	if err != nil {
+		return fmt.Errorf("failed to read tape file: %w", err)
+	}
+
+	// Parse the tape file
+	commands, parseErrors := tape.ParseFile(string(content))
+	if len(parseErrors) > 0 {
+		fmt.Fprintf(os.Stderr, "Tape parsing errors:\n")
+		for _, err := range parseErrors {
+			fmt.Fprintf(os.Stderr, "  %s\n", err)
+		}
+		return fmt.Errorf("failed to parse tape file")
+	}
+
+	fmt.Printf("Executing tape script: %s\n", tapeFile)
+	fmt.Printf("Total commands: %d\n\n", len(commands))
+
+	// Create headless runner
+	runner := tape.NewHeadlessRunner(commands, outputFile)
+	runner.SetVerbose(true)
+
+	// Create context with timeout (optional)
+	ctx := context.Background()
+
+	// Execute the script
+	if err := runner.Run(ctx); err != nil {
+		return fmt.Errorf("script execution failed: %w", err)
+	}
+
+	// Print output
+	fmt.Println("\n=== Script Output ===")
+	output := runner.GetOutput()
+	fmt.Print(output)
+
+	// Save to output file if specified
+	if outputFile != "" {
+		if err := os.WriteFile(outputFile, []byte(output), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write output file: %v\n", err)
+		} else {
+			fmt.Printf("\nOutput saved to: %s\n", outputFile)
+		}
+	}
+
+	fmt.Println("\nScript execution completed successfully!")
+	return nil
+}
+
+// runTapeInteractive executes a tape file in interactive mode (with visible TUI)
+func runTapeInteractive(tapeFile string) error {
+	// Read the tape file
+	content, err := os.ReadFile(tapeFile)
+	if err != nil {
+		return fmt.Errorf("failed to read tape file: %w", err)
+	}
+
+	// Parse the tape file
+	commands, parseErrors := tape.ParseFile(string(content))
+	if len(parseErrors) > 0 {
+		fmt.Fprintf(os.Stderr, "Tape parsing errors:\n")
+		for _, err := range parseErrors {
+			fmt.Fprintf(os.Stderr, "  %s\n", err)
+		}
+		return fmt.Errorf("failed to parse tape file")
+	}
+
+	fmt.Printf("Preparing tape script: %s\n", tapeFile)
+	fmt.Printf("Total commands: %d\n", len(commands))
+	fmt.Println("Press Ctrl+C to cancel, Ctrl+P to pause/resume playback")
+	fmt.Println("\nStarting TUIOS with tape playback...")
+
+	// Load user configuration
+	userConfig, err := config.LoadUserConfig()
+	if err != nil {
+		log.Printf("Warning: Failed to load config, using defaults: %v", err)
+		userConfig = config.DefaultConfig()
+	}
+
+	// Initialize theme
+	if err := theme.Initialize(themeName); err != nil {
+		log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
+	}
+
+	// Set up the input handler
+	app.SetInputHandler(input.HandleInput)
+
+	// Create keybind registry
+	keybindRegistry := config.NewKeybindRegistry(userConfig)
+
+	// Create the script player
+	player := tape.NewPlayer(commands)
+	converter := tape.NewScriptMessageConverter()
+
+	// Create OS model with script mode enabled
+	initialOS := &app.OS{
+		FocusedWindow:        -1,
+		WindowExitChan:       make(chan string, 10),
+		MouseSnapping:        false,
+		MasterRatio:          0.5,
+		CurrentWorkspace:     1,
+		NumWorkspaces:        9,
+		WorkspaceFocus:       make(map[int]int),
+		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
+		WorkspaceHasCustom:   make(map[int]bool),
+		WorkspaceMasterRatio: make(map[int]float64),
+		PendingResizes:       make(map[string][2]int),
+		KeybindRegistry:      keybindRegistry,
+		ShowKeys:             showKeys,
+		RecentKeys:           []app.KeyEvent{},
+		KeyHistoryMaxSize:    5,
+		// Tape scripting fields
+		ScriptMode:    true,
+		ScriptPlayer:  player,
+		ScriptPaused:  false,
+		ScriptConverter: converter,
+		ScriptExecutor: tape.NewCommandExecutor(nil), // Will be set after initialization
+	}
+
+	// Set the executor's reference to the OS model so it can manipulate app state
+	initialOS.ScriptExecutor = tape.NewCommandExecutor(initialOS)
+
+	// Create Bubble Tea program
+	p := tea.NewProgram(
+		initialOS,
+		tea.WithFPS(config.NormalFPS),
+		tea.WithoutSignalHandler(),
+		tea.WithFilter(filterMouseMotion),
+	)
+
+	// Handle shutdown signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		p.Send(tea.QuitMsg{})
+	}()
+
+	// Run the program
+	finalModel, err := p.Run()
+
+	// Cleanup
+	if finalOS, ok := finalModel.(*app.OS); ok {
+		finalOS.Cleanup()
+	}
+
+	// Restore terminal
+	fmt.Print("\033c")
+	fmt.Print("\033[?1000l")
+	fmt.Print("\033[?1002l")
+	fmt.Print("\033[?1003l")
+	fmt.Print("\033[?1004l")
+	fmt.Print("\033[?1006l")
+	fmt.Print("\033[?25h")
+	fmt.Print("\033[?47l")
+	fmt.Print("\033[0m")
+	fmt.Print("\r\n")
+	_ = os.Stdout.Sync()
+
+	if err != nil {
+		return fmt.Errorf("program error: %w", err)
+	}
+
+	return nil
+}
+
+// validateTapeFile checks if a tape file is syntactically valid
+func validateTapeFile(tapeFile string) error {
+	// Read the tape file
+	content, err := os.ReadFile(tapeFile)
+	if err != nil {
+		return fmt.Errorf("failed to read tape file: %w", err)
+	}
+
+	// Validate
+	valid, errors := tape.ValidateScript(string(content))
+
+	if !valid {
+		fmt.Fprintf(os.Stderr, "Tape validation failed:\n")
+		for _, err := range errors {
+			fmt.Fprintf(os.Stderr, "  ✗ %s\n", err)
+		}
+		return fmt.Errorf("tape file is invalid")
+	}
+
+	// Parse and check
+	commands, parseErrors := tape.ParseFile(string(content))
+	if len(parseErrors) > 0 {
+		fmt.Fprintf(os.Stderr, "Parsing errors found:\n")
+		for _, err := range parseErrors {
+			fmt.Fprintf(os.Stderr, "  ✗ %s\n", err)
+		}
+		return fmt.Errorf("tape file has parsing errors")
+	}
+
+	// Print validation result with lipgloss styling
+	checkmark := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("✓")
+	validText := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("Tape file is valid")
+
+	fmt.Printf("%s %s\n", checkmark, validText)
+
+	// Header styling
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
+
+	fmt.Printf("  %s: %s\n", labelStyle.Render("File"), valueStyle.Render(tapeFile))
+	fmt.Printf("  %s: %s\n", labelStyle.Render("Commands"), valueStyle.Render(fmt.Sprintf("%d", len(commands))))
+
+	// Print command summary
+	if len(commands) > 0 {
+		fmt.Print("\n  ")
+		fmt.Print(headerStyle.Render("Command Summary:"))
+		fmt.Println()
+
+		// Create command display with colors
+		numberStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+		cmdNameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
+		argsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
+
+		for i, cmd := range commands {
+			parts := strings.Split(cmd.String(), " ")
+			if len(parts) > 1 {
+				cmdName := parts[0]
+				args := strings.Join(parts[1:], " ")
+				fmt.Printf("    %s %s %s\n",
+					numberStyle.Render(fmt.Sprintf("[%d]", i+1)),
+					cmdNameStyle.Render(cmdName),
+					argsStyle.Render(args))
+			} else {
+				fmt.Printf("    %s %s\n",
+					numberStyle.Render(fmt.Sprintf("[%d]", i+1)),
+					cmdNameStyle.Render(parts[0]))
+			}
+		}
+	}
+
+	return nil
 }

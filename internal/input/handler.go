@@ -129,6 +129,12 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Handle script pause/resume (Ctrl+P)
+	if msg.String() == "ctrl+p" && o.ScriptMode {
+		o.ScriptPaused = !o.ScriptPaused
+		return o, nil
+	}
+
 	// Handle rename mode
 	if o.RenamingWindow {
 		return handleRenameMode(msg, o)
