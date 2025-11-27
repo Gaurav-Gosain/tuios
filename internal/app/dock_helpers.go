@@ -250,10 +250,7 @@ func (layout *DockLayout) calculateItemPositions(screenWidth int, allItems []Doc
 	}
 
 	// All items fit - calculate center positioning
-	leftSpacer := availableSpace / 2
-	if leftSpacer < 0 {
-		leftSpacer = 0
-	}
+	leftSpacer := max(availableSpace / 2, 0)
 
 	layout.CenterStartX = layout.LeftWidth + leftSpacer
 	layout.VisibleItems = allItems
@@ -284,10 +281,7 @@ func (layout *DockLayout) truncateItems(screenWidth int, allItems []DockItem) {
 	const truncationIndicatorWidth = 4 // " ..." width
 
 	// Calculate max width available for items
-	maxItemsWidth := screenWidth - layout.LeftWidth - layout.RightWidth - truncationIndicatorWidth - 4 // -4 for spacing
-	if maxItemsWidth < 0 {
-		maxItemsWidth = 0
-	}
+	maxItemsWidth := max(screenWidth - layout.LeftWidth - layout.RightWidth - truncationIndicatorWidth - 4, 0)
 
 	// Find how many complete items fit
 	currentWidth := 0

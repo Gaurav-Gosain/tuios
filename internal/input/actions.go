@@ -9,7 +9,7 @@ import (
 )
 
 // ActionHandler is a function that handles a specific action
-type ActionHandler func(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
+type ActionHandler func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 
 // ActionDispatcher maps action names to handler functions
 type ActionDispatcher struct {
@@ -97,7 +97,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("extend_right", handleShiftRightKey)
 
 	// Restore minimized by index (shift+1-9)
-	for i := 0; i < 9; i++ {
+	for i := range 9 {
 		d.Register("restore_minimized_"+string(rune('1'+i)), makeRestoreMinimizedHandler(i))
 	}
 }
@@ -133,19 +133,19 @@ func GetDispatcher() *ActionDispatcher {
 // Window Management Action Handlers
 // ============================================================================
 
-func handleNewWindow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.AddWindow("")
 	return o, nil
 }
 
-func handleCloseWindow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		o.DeleteWindow(o.FocusedWindow)
 	}
 	return o, nil
 }
 
-func handleRenameWindow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// If showing cache stats, reset them instead
 	if o.ShowCacheStats {
 		app.GetGlobalStyleCache().ResetStats()
@@ -164,7 +164,7 @@ func handleRenameWindow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleMinimizeWindow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleMinimizeWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && !focusedWindow.Minimized {
@@ -174,7 +174,7 @@ func handleMinimizeWindow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleRestoreAll(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleRestoreAll(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Restore all minimized windows in current workspace
 	for i := range o.Windows {
 		if o.Windows[i].Minimized && o.Windows[i].Workspace == o.CurrentWorkspace {
@@ -188,18 +188,18 @@ func handleRestoreAll(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleNextWindow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CycleToNextVisibleWindow()
 	return o, nil
 }
 
-func handlePrevWindow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handlePrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CycleToPreviousVisibleWindow()
 	return o, nil
 }
 
 // makeSelectWindowHandler creates a handler for selecting a window by index
-func makeSelectWindowHandler(index int) ActionHandler {
+func makeSelectWindowHandler(_ int) ActionHandler {
 	return func(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleNumberKey(msg, o)
 	}
@@ -210,14 +210,14 @@ func makeSelectWindowHandler(index int) ActionHandler {
 // ============================================================================
 
 func makeSwitchWorkspaceHandler(workspace int) ActionHandler {
-	return func(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SwitchToWorkspace(workspace)
 		return o, nil
 	}
 }
 
 func makeMoveAndFollowHandler(workspace int) ActionHandler {
-	return func(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, workspace)
 		}
@@ -229,28 +229,28 @@ func makeMoveAndFollowHandler(workspace int) ActionHandler {
 // Layout Action Handlers
 // ============================================================================
 
-func handleSnapLeft(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleSnapLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		o.Snap(o.FocusedWindow, app.SnapLeft)
 	}
 	return o, nil
 }
 
-func handleSnapRight(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleSnapRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		o.Snap(o.FocusedWindow, app.SnapRight)
 	}
 	return o, nil
 }
 
-func handleSnapFullscreen(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleSnapFullscreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		o.Snap(o.FocusedWindow, app.SnapFullScreen)
 	}
 	return o, nil
 }
 
-func handleUnsnap(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleUnsnap(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		o.Snap(o.FocusedWindow, app.Unsnap)
 	}
@@ -258,7 +258,7 @@ func handleUnsnap(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func makeSnapCornerHandler(corner app.SnapQuarter) ActionHandler {
-	return func(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			o.Snap(o.FocusedWindow, corner)
 		}
@@ -266,7 +266,7 @@ func makeSnapCornerHandler(corner app.SnapQuarter) ActionHandler {
 	}
 }
 
-func handleToggleTiling(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleToggleTiling(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.AutoTiling = !o.AutoTiling
 	if o.AutoTiling {
 		o.TileAllWindows()
@@ -277,84 +277,84 @@ func handleToggleTiling(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleSwapLeft(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleSwapLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.FocusedWindow >= 0 {
 		o.SwapWindowLeft()
 	}
 	return o, nil
 }
 
-func handleSwapRight(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleSwapRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.FocusedWindow >= 0 {
 		o.SwapWindowRight()
 	}
 	return o, nil
 }
 
-func handleSwapUp(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleSwapUp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.FocusedWindow >= 0 {
 		o.SwapWindowUp()
 	}
 	return o, nil
 }
 
-func handleSwapDown(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleSwapDown(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.FocusedWindow >= 0 {
 		o.SwapWindowDown()
 	}
 	return o, nil
 }
 
-func handleResizeMasterShrink(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleResizeMasterShrink(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.ResizeFocusedWindowWidth(-4) // Shrink by 4 columns (split-line based)
 	}
 	return o, nil
 }
 
-func handleResizeMasterGrow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleResizeMasterGrow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.ResizeFocusedWindowWidth(4) // Grow by 4 columns (split-line based)
 	}
 	return o, nil
 }
 
-func handleResizeHeightShrink(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleResizeHeightShrink(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.ResizeFocusedWindowHeight(-2) // Shrink by 2 rows (faster)
 	}
 	return o, nil
 }
 
-func handleResizeHeightGrow(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleResizeHeightGrow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.ResizeFocusedWindowHeight(2) // Grow by 2 rows (faster)
 	}
 	return o, nil
 }
 
-func handleResizeMasterShrinkLeft(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleResizeMasterShrinkLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.ResizeFocusedWindowWidthLeft(4) // Shrink from left by 4 columns
 	}
 	return o, nil
 }
 
-func handleResizeMasterGrowLeft(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleResizeMasterGrowLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.ResizeFocusedWindowWidthLeft(-4) // Grow from left by 4 columns (negative shrinks left edge)
 	}
 	return o, nil
 }
 
-func handleResizeHeightShrinkTop(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleResizeHeightShrinkTop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.ResizeFocusedWindowHeightTop(2) // Shrink from top by 2 rows
 	}
 	return o, nil
 }
 
-func handleResizeHeightGrowTop(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleResizeHeightGrowTop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.ResizeFocusedWindowHeightTop(-2) // Grow from top by 2 rows (negative shrinks top edge)
 	}
@@ -365,7 +365,7 @@ func handleResizeHeightGrowTop(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 // Mode Control Action Handlers
 // ============================================================================
 
-func handleEnterTerminalMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
@@ -385,7 +385,7 @@ func handleEnterTerminalMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	return o, nil
 }
 
-func handleEnterWindowMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleEnterWindowMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LogInfo("Entering window management mode")
 	// Exit terminal mode to window management mode
 	o.Mode = app.WindowManagementMode
@@ -396,7 +396,7 @@ func handleEnterWindowMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleToggleHelp(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleToggleHelp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ShowHelp = !o.ShowHelp
 	if o.ShowHelp {
 		o.HelpScrollOffset = 0 // Reset scroll when opening
@@ -404,7 +404,7 @@ func handleToggleHelp(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleQuit(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Close help if showing
 	if o.ShowHelp {
 		o.ShowHelp = false
@@ -438,7 +438,7 @@ func handleQuit(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // System Action Handlers
 // ============================================================================
 
-func handleToggleLogs(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleToggleLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	wasShowing := o.ShowLogs
 	o.ShowLogs = !o.ShowLogs
 	if o.ShowLogs && !wasShowing {
@@ -452,20 +452,14 @@ func handleToggleLogs(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if totalLogs > maxDisplayHeight-fixedLines {
 			fixedLines = 6
 		}
-		logsPerPage := maxDisplayHeight - fixedLines
-		if logsPerPage < 1 {
-			logsPerPage = 1
-		}
-		maxScroll := totalLogs - logsPerPage
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
+		logsPerPage := max(maxDisplayHeight - fixedLines, 1)
+		maxScroll := max(totalLogs - logsPerPage, 0)
 		o.LogScrollOffset = maxScroll
 	}
 	return o, nil
 }
 
-func handleToggleCacheStats(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleToggleCacheStats(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ShowCacheStats = !o.ShowCacheStats
 	if o.ShowCacheStats {
 		o.LogInfo("Cache statistics viewer opened")
@@ -473,7 +467,7 @@ func handleToggleCacheStats(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handlePasteClipboard(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
@@ -489,7 +483,7 @@ func handlePasteClipboard(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // ============================================================================
 
 func makeRestoreMinimizedHandler(index int) ActionHandler {
-	return func(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.RestoreMinimizedByIndex(index)
 		return o, nil
 	}

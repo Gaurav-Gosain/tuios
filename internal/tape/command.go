@@ -10,69 +10,100 @@ import (
 type CommandType string
 
 const (
-	// Basic commands
-	CommandType_Type      CommandType = "Type"
-	CommandType_Sleep     CommandType = "Sleep"
-	CommandType_Enter     CommandType = "Enter"
-	CommandType_Space     CommandType = "Space"
-	CommandType_Backspace CommandType = "Backspace"
-	CommandType_Delete    CommandType = "Delete"
-	CommandType_Tab       CommandType = "Tab"
-	CommandType_Escape    CommandType = "Escape"
+	// CommandTypeType represents the Type command for text input.
+	CommandTypeType CommandType = "Type"
+	// CommandTypeSleep represents the Sleep command for delays.
+	CommandTypeSleep CommandType = "Sleep"
+	// CommandTypeEnter represents the Enter key command.
+	CommandTypeEnter CommandType = "Enter"
+	// CommandTypeSpace represents the Space key command.
+	CommandTypeSpace CommandType = "Space"
+	// CommandTypeBackspace represents the Backspace key command.
+	CommandTypeBackspace CommandType = "Backspace"
+	// CommandTypeDelete represents the Delete key command.
+	CommandTypeDelete CommandType = "Delete"
+	// CommandTypeTab represents the Tab key command.
+	CommandTypeTab CommandType = "Tab"
+	// CommandTypeEscape represents the Escape key command.
+	CommandTypeEscape CommandType = "Escape"
 
-	// Navigation keys
-	CommandType_Up    CommandType = "Up"
-	CommandType_Down  CommandType = "Down"
-	CommandType_Left  CommandType = "Left"
-	CommandType_Right CommandType = "Right"
-	CommandType_Home  CommandType = "Home"
-	CommandType_End   CommandType = "End"
+	// CommandTypeUp represents the Up navigation key command.
+	CommandTypeUp CommandType = "Up"
+	// CommandTypeDown represents the Down navigation key command.
+	CommandTypeDown CommandType = "Down"
+	// CommandTypeLeft represents the Left navigation key command.
+	CommandTypeLeft CommandType = "Left"
+	// CommandTypeRight represents the Right navigation key command.
+	CommandTypeRight CommandType = "Right"
+	// CommandTypeHome represents the Home navigation key command.
+	CommandTypeHome CommandType = "Home"
+	// CommandTypeEnd represents the End navigation key command.
+	CommandTypeEnd CommandType = "End"
 
-	// Key combinations (Ctrl+X, Alt+X, etc.)
-	CommandType_KeyCombo CommandType = "KeyCombo"
+	// CommandTypeKeyCombo represents a key combination command (Ctrl+X, Alt+X, etc.).
+	CommandTypeKeyCombo CommandType = "KeyCombo"
 
-	// Mode switching
-	CommandType_TerminalMode         CommandType = "TerminalMode"
-	CommandType_WindowManagementMode CommandType = "WindowManagementMode"
+	// CommandTypeTerminalMode represents the TerminalMode command.
+	CommandTypeTerminalMode CommandType = "TerminalMode"
+	// CommandTypeWindowManagementMode represents the WindowManagementMode command.
+	CommandTypeWindowManagementMode CommandType = "WindowManagementMode"
 
-	// Window management
-	CommandType_NewWindow      CommandType = "NewWindow"
-	CommandType_CloseWindow    CommandType = "CloseWindow"
-	CommandType_NextWindow     CommandType = "NextWindow"
-	CommandType_PrevWindow     CommandType = "PrevWindow"
-	CommandType_FocusWindow    CommandType = "FocusWindow"
-	CommandType_RenameWindow   CommandType = "RenameWindow"
-	CommandType_MinimizeWindow CommandType = "MinimizeWindow"
-	CommandType_RestoreWindow  CommandType = "RestoreWindow"
+	// CommandTypeNewWindow represents the NewWindow command.
+	CommandTypeNewWindow CommandType = "NewWindow"
+	// CommandTypeCloseWindow represents the CloseWindow command.
+	CommandTypeCloseWindow CommandType = "CloseWindow"
+	// CommandTypeNextWindow represents the NextWindow command.
+	CommandTypeNextWindow CommandType = "NextWindow"
+	// CommandTypePrevWindow represents the PrevWindow command.
+	CommandTypePrevWindow CommandType = "PrevWindow"
+	// CommandTypeFocusWindow represents the FocusWindow command.
+	CommandTypeFocusWindow CommandType = "FocusWindow"
+	// CommandTypeRenameWindow represents the RenameWindow command.
+	CommandTypeRenameWindow CommandType = "RenameWindow"
+	// CommandTypeMinimizeWindow represents the MinimizeWindow command.
+	CommandTypeMinimizeWindow CommandType = "MinimizeWindow"
+	// CommandTypeRestoreWindow represents the RestoreWindow command.
+	CommandTypeRestoreWindow CommandType = "RestoreWindow"
 
-	// Tiling
-	CommandType_ToggleTiling   CommandType = "ToggleTiling"
-	CommandType_EnableTiling   CommandType = "EnableTiling"
-	CommandType_DisableTiling  CommandType = "DisableTiling"
-	CommandType_SnapLeft       CommandType = "SnapLeft"
-	CommandType_SnapRight      CommandType = "SnapRight"
-	CommandType_SnapFullscreen CommandType = "SnapFullscreen"
+	// CommandTypeToggleTiling represents the ToggleTiling command.
+	CommandTypeToggleTiling CommandType = "ToggleTiling"
+	// CommandTypeEnableTiling represents the EnableTiling command.
+	CommandTypeEnableTiling CommandType = "EnableTiling"
+	// CommandTypeDisableTiling represents the DisableTiling command.
+	CommandTypeDisableTiling CommandType = "DisableTiling"
+	// CommandTypeSnapLeft represents the SnapLeft command.
+	CommandTypeSnapLeft CommandType = "SnapLeft"
+	// CommandTypeSnapRight represents the SnapRight command.
+	CommandTypeSnapRight CommandType = "SnapRight"
+	// CommandTypeSnapFullscreen represents the SnapFullscreen command.
+	CommandTypeSnapFullscreen CommandType = "SnapFullscreen"
 
-	// Workspace
-	CommandType_SwitchWS        CommandType = "SwitchWorkspace"
-	CommandType_MoveToWS        CommandType = "MoveToWorkspace"
-	CommandType_MoveAndFollowWS CommandType = "MoveAndFollowWorkspace"
+	// CommandTypeSwitchWS represents the SwitchWorkspace command.
+	CommandTypeSwitchWS CommandType = "SwitchWorkspace"
+	// CommandTypeMoveToWS represents the MoveToWorkspace command.
+	CommandTypeMoveToWS CommandType = "MoveToWorkspace"
+	// CommandTypeMoveAndFollowWS represents the MoveAndFollowWorkspace command.
+	CommandTypeMoveAndFollowWS CommandType = "MoveAndFollowWorkspace"
 
-	// Other actions
-	CommandType_Split CommandType = "Split"
-	CommandType_Focus CommandType = "Focus"
+	// CommandTypeSplit represents the Split command.
+	CommandTypeSplit CommandType = "Split"
+	// CommandTypeFocus represents the Focus command.
+	CommandTypeFocus CommandType = "Focus"
 
-	// Synchronization
-	CommandType_Wait           CommandType = "Wait"
-	CommandType_WaitUntilRegex CommandType = "WaitUntilRegex"
+	// CommandTypeWait represents the Wait command.
+	CommandTypeWait CommandType = "Wait"
+	// CommandTypeWaitUntilRegex represents the WaitUntilRegex command.
+	CommandTypeWaitUntilRegex CommandType = "WaitUntilRegex"
 
-	// Settings
-	CommandType_Set    CommandType = "Set"
-	CommandType_Output CommandType = "Output"
-	CommandType_Source CommandType = "Source"
+	// CommandTypeSet represents the Set command.
+	CommandTypeSet CommandType = "Set"
+	// CommandTypeOutput represents the Output command.
+	CommandTypeOutput CommandType = "Output"
+	// CommandTypeSource represents the Source command.
+	CommandTypeSource CommandType = "Source"
 
-	// Comment
-	CommandType_Comment CommandType = "Comment"
+	// CommandTypeComment represents a comment line.
+	CommandTypeComment CommandType = "Comment"
 )
 
 // Command represents a parsed tape command
@@ -88,13 +119,13 @@ type Command struct {
 // String returns a string representation of the command
 func (c *Command) String() string {
 	switch c.Type {
-	case CommandType_Type:
+	case CommandTypeType:
 		return fmt.Sprintf("Type %q", c.Args)
-	case CommandType_Sleep:
+	case CommandTypeSleep:
 		return fmt.Sprintf("Sleep %v", c.Args)
-	case CommandType_KeyCombo:
+	case CommandTypeKeyCombo:
 		return fmt.Sprintf("%s", c.Args)
-	case CommandType_SwitchWS:
+	case CommandTypeSwitchWS:
 		return fmt.Sprintf("SwitchWorkspace %s", c.Args)
 	default:
 		return fmt.Sprintf("%s %v", c.Type, c.Args)
@@ -104,21 +135,21 @@ func (c *Command) String() string {
 // IsCommand returns true if the command type is a valid command
 func (ct CommandType) IsCommand() bool {
 	switch ct {
-	case CommandType_Type, CommandType_Sleep, CommandType_Enter, CommandType_Space,
-		CommandType_Backspace, CommandType_Delete, CommandType_Tab, CommandType_Escape,
-		CommandType_Up, CommandType_Down, CommandType_Left, CommandType_Right,
-		CommandType_Home, CommandType_End, CommandType_KeyCombo,
-		CommandType_TerminalMode, CommandType_WindowManagementMode,
-		CommandType_NewWindow, CommandType_CloseWindow, CommandType_NextWindow,
-		CommandType_PrevWindow, CommandType_FocusWindow, CommandType_RenameWindow,
-		CommandType_MinimizeWindow, CommandType_RestoreWindow,
-		CommandType_ToggleTiling, CommandType_EnableTiling, CommandType_DisableTiling,
-		CommandType_SnapLeft, CommandType_SnapRight, CommandType_SnapFullscreen,
-		CommandType_SwitchWS, CommandType_MoveToWS, CommandType_MoveAndFollowWS,
-		CommandType_Split, CommandType_Focus,
-		CommandType_Wait, CommandType_WaitUntilRegex,
-		CommandType_Set, CommandType_Output, CommandType_Source,
-		CommandType_Comment:
+	case CommandTypeType, CommandTypeSleep, CommandTypeEnter, CommandTypeSpace,
+		CommandTypeBackspace, CommandTypeDelete, CommandTypeTab, CommandTypeEscape,
+		CommandTypeUp, CommandTypeDown, CommandTypeLeft, CommandTypeRight,
+		CommandTypeHome, CommandTypeEnd, CommandTypeKeyCombo,
+		CommandTypeTerminalMode, CommandTypeWindowManagementMode,
+		CommandTypeNewWindow, CommandTypeCloseWindow, CommandTypeNextWindow,
+		CommandTypePrevWindow, CommandTypeFocusWindow, CommandTypeRenameWindow,
+		CommandTypeMinimizeWindow, CommandTypeRestoreWindow,
+		CommandTypeToggleTiling, CommandTypeEnableTiling, CommandTypeDisableTiling,
+		CommandTypeSnapLeft, CommandTypeSnapRight, CommandTypeSnapFullscreen,
+		CommandTypeSwitchWS, CommandTypeMoveToWS, CommandTypeMoveAndFollowWS,
+		CommandTypeSplit, CommandTypeFocus,
+		CommandTypeWait, CommandTypeWaitUntilRegex,
+		CommandTypeSet, CommandTypeOutput, CommandTypeSource,
+		CommandTypeComment:
 		return true
 	}
 	return false
@@ -166,7 +197,7 @@ func ParseKeyCombo(s string) (*KeyCombo, error) {
 	kc.Key = parts[len(parts)-1]
 
 	// All parts before the last are modifiers
-	for i := 0; i < len(parts)-1; i++ {
+	for i := range len(parts)-1 {
 		switch parts[i] {
 		case "Ctrl":
 			kc.Ctrl = true
@@ -186,7 +217,7 @@ func ParseKeyCombo(s string) (*KeyCombo, error) {
 func splitKeyComboParts(s string) []string {
 	var parts []string
 	var current string
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == '+' {
 			if current != "" {
 				parts = append(parts, current)

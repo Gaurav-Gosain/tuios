@@ -96,7 +96,7 @@ comprehensive keyboard/mouse interactions.`,
   # List all keybindings
   tuios keybinds list`,
 		Version: version,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			// Handle --preview-theme flag
 			if previewTheme != "" {
 				return previewThemeColors(previewTheme)
@@ -147,7 +147,7 @@ a host key automatically if not specified.`,
 
   # Specify custom host key
   tuios ssh --key-path /path/to/host_key`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return runSSHServer(sshHost, sshPort, sshKeyPath)
 		},
 	}
@@ -167,7 +167,7 @@ a host key automatically if not specified.`,
 		Use:   "path",
 		Short: "Print configuration file path",
 		Long:  `Print the path to the TUIOS configuration file`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return printConfigPath()
 		},
 	}
@@ -179,7 +179,7 @@ a host key automatically if not specified.`,
 
 The editor is determined by checking $EDITOR, $VISUAL, or common editors
 like vim, vi, nano, and emacs in that order.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _  []string) error {
 			return editConfigFile()
 		},
 	}
@@ -190,7 +190,7 @@ like vim, vi, nano, and emacs in that order.`,
 		Long: `Reset the TUIOS configuration file to default settings
 
 This will overwrite your existing configuration after confirmation.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _  []string) error {
 			return resetConfigToDefaults()
 		},
 	}
@@ -209,7 +209,7 @@ This will overwrite your existing configuration after confirmation.`,
 		Use:   "list",
 		Short: "List all keybindings",
 		Long:  `Display all configured keybindings in a formatted table`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _  []string) error {
 			return listKeybindings()
 		},
 	}
@@ -220,7 +220,7 @@ This will overwrite your existing configuration after confirmation.`,
 		Long: `Display only keybindings that differ from defaults
 
 Shows a comparison of default and custom keybindings.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return listCustomKeybindings()
 		},
 	}
@@ -253,7 +253,7 @@ interactive mode (visible TUI) to watch automation happen in real-time.`,
 In interactive mode, you can see the automation happening in real-time
 in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			return runTapeInteractive(args[0])
 		},
 	}
@@ -263,7 +263,7 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 		Short: "Validate a tape file without running it",
 		Long:  `Check if a tape file is syntactically correct`,
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			return validateTapeFile(args[0])
 		},
 	}
@@ -372,10 +372,8 @@ func runLocal() error {
 		// CLI flag provided, validate and use it
 		if scrollbackLines < 100 {
 			finalScrollbackLines = 100
-		} else if scrollbackLines > 1000000 {
-			finalScrollbackLines = 1000000
 		} else {
-			finalScrollbackLines = scrollbackLines
+			finalScrollbackLines = min(scrollbackLines, 1000000)
 		}
 	}
 	// Store in a variable that will be used when creating windows
@@ -831,7 +829,7 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
 			Headers("Keys", "Action").
 			Rows(rows...).
-			StyleFunc(func(row, col int) lipgloss.Style {
+			StyleFunc(func(row, _  int) lipgloss.Style {
 				if row == -1 {
 					return headerStyle
 				}
@@ -903,7 +901,7 @@ func listCustomKeybindings() error {
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
 		Headers("Action", "Default", "Custom").
 		Rows(rows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
+		StyleFunc(func(row, _  int) lipgloss.Style {
 			if row == -1 {
 				return headerStyle
 			}

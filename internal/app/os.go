@@ -160,11 +160,11 @@ type OS struct {
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
 	// Tape scripting support
-	ScriptPlayer       interface{} // *tape.Player - script playback engine
+	ScriptPlayer       any // *tape.Player - script playback engine
 	ScriptMode         bool        // True when running a tape script
 	ScriptPaused       bool        // True when script playback is paused
-	ScriptConverter    interface{} // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
-	ScriptExecutor     interface{} // *tape.CommandExecutor - executes tape commands
+	ScriptConverter    any // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
+	ScriptExecutor     any // *tape.CommandExecutor - executes tape commands
 	ScriptSleepUntil   time.Time   // When to resume after a sleep command
 	ScriptFinishedTime time.Time   // When the script finished (for auto-hide)
 }
@@ -200,7 +200,7 @@ func createID() string {
 }
 
 // Log adds a new log message to the log buffer.
-func (m *OS) Log(level, format string, args ...interface{}) {
+func (m *OS) Log(level, format string, args ...any) {
 	message := fmt.Sprintf(format, args...)
 	logMsg := LogMessage{
 		Time:    time.Now(),
@@ -220,15 +220,9 @@ func (m *OS) Log(level, format string, args ...interface{}) {
 		if totalLogs > maxDisplayHeight-fixedLines {
 			fixedLines = 6
 		}
-		logsPerPage := maxDisplayHeight - fixedLines
-		if logsPerPage < 1 {
-			logsPerPage = 1
-		}
+		logsPerPage := max(maxDisplayHeight - fixedLines, 1)
 
-		maxScroll := totalLogs - logsPerPage
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
+		maxScroll := max(totalLogs - logsPerPage, 0)
 		// Consider "at bottom" if within 2 lines of the end (to handle edge cases)
 		wasAtBottom = m.LogScrollOffset >= maxScroll-2
 	}
@@ -261,17 +255,17 @@ func (m *OS) Log(level, format string, args ...interface{}) {
 }
 
 // LogInfo logs an informational message.
-func (m *OS) LogInfo(format string, args ...interface{}) {
+func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
 }
 
 // LogWarn logs a warning message.
-func (m *OS) LogWarn(format string, args ...interface{}) {
+func (m *OS) LogWarn(format string, args ...any) {
 	m.Log("WARN", format, args...)
 }
 
 // LogError logs an error message.
-func (m *OS) LogError(format string, args ...interface{}) {
+func (m *OS) LogError(format string, args ...any) {
 	m.Log("ERROR", format, args...)
 }
 
@@ -761,7 +755,7 @@ func (m *OS) FocusNextVisibleWindow() {
 	// Start from the beginning to find any visible window
 
 	// First pass: find any visible window in current workspace
-	for i := 0; i < len(m.Windows); i++ {
+	for i := range len(m.Windows) {
 		if m.Windows[i].Workspace == m.CurrentWorkspace && !m.Windows[i].Minimized && !m.Windows[i].Minimizing {
 			m.FocusWindow(i)
 			return
@@ -813,10 +807,9 @@ func (m *OS) GetTimeYPosition() int {
 func (m *OS) GetUsableHeight() int {
 	if config.DockbarPosition == "hidden" {
 		return m.Height
-	} else {
-		// Reserve space for the dock (at top or bottom)
-		return m.Height - config.DockHeight
 	}
+	// Reserve space for the dock (at top or bottom)
+	return m.Height - config.DockHeight
 }
 
 // MarkAllDirty marks all windows as dirty for re-rendering.
@@ -1068,8 +1061,8 @@ func (m *OS) Cleanup() {
 	// Reserved for future cleanup operations
 }
 
-// ExecuteCommand executes a tape command (implements tape.Executor interface)
-func (m *OS) ExecuteCommand(cmd *tape.Command) error {
+// ExecuteCommand executes a tape command (implements tape.Executor interface).
+func (m *OS) ExecuteCommand(_ *tape.Command) error {
 	return nil // Basic implementation
 }
 
@@ -1173,7 +1166,7 @@ func (m *OS) FocusWindowByID(windowID string) error {
 	return nil
 }
 
-// RenameWindow renames a window (implements tape.Executor interface)
+// RenameWindowByID renames a window by its ID (implements tape.Executor interface).
 func (m *OS) RenameWindowByID(windowID, name string) error {
 	for _, w := range m.Windows {
 		if w.ID == windowID {

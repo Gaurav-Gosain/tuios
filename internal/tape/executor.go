@@ -60,104 +60,104 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	}
 
 	switch cmd.Type {
-	case CommandType_Type:
+	case CommandTypeType:
 		if len(cmd.Args) > 0 {
 			return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte(cmd.Args[0]))
 		}
 
-	case CommandType_Enter:
+	case CommandTypeEnter:
 		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\n'})
 
-	case CommandType_Space:
+	case CommandTypeSpace:
 		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{' '})
 
-	case CommandType_Backspace:
+	case CommandTypeBackspace:
 		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\b'})
 
-	case CommandType_Tab:
+	case CommandTypeTab:
 		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\t'})
 
-	case CommandType_Escape:
+	case CommandTypeEscape:
 		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b})
 
 	// Mode switching
-	case CommandType_TerminalMode:
+	case CommandTypeTerminalMode:
 		return ce.executor.SetMode("terminal")
 
-	case CommandType_WindowManagementMode:
+	case CommandTypeWindowManagementMode:
 		return ce.executor.SetMode("window")
 
 	// Window management
-	case CommandType_NewWindow:
+	case CommandTypeNewWindow:
 		return ce.executor.CreateNewWindow()
 
-	case CommandType_CloseWindow:
+	case CommandTypeCloseWindow:
 		return ce.executor.CloseWindow(ce.executor.GetFocusedWindowID())
 
-	case CommandType_NextWindow:
+	case CommandTypeNextWindow:
 		return ce.executor.NextWindow()
 
-	case CommandType_PrevWindow:
+	case CommandTypePrevWindow:
 		return ce.executor.PrevWindow()
 
-	case CommandType_FocusWindow:
+	case CommandTypeFocusWindow:
 		if len(cmd.Args) > 0 {
 			return ce.executor.FocusWindowByID(cmd.Args[0])
 		}
 
-	case CommandType_RenameWindow:
+	case CommandTypeRenameWindow:
 		if len(cmd.Args) > 0 {
 			return ce.executor.RenameWindowByID(ce.executor.GetFocusedWindowID(), cmd.Args[0])
 		}
 
-	case CommandType_MinimizeWindow:
+	case CommandTypeMinimizeWindow:
 		return ce.executor.MinimizeWindowByID(ce.executor.GetFocusedWindowID())
 
-	case CommandType_RestoreWindow:
+	case CommandTypeRestoreWindow:
 		return ce.executor.RestoreWindowByID(ce.executor.GetFocusedWindowID())
 
 	// Tiling
-	case CommandType_ToggleTiling:
+	case CommandTypeToggleTiling:
 		return ce.executor.ToggleTiling()
 
-	case CommandType_EnableTiling:
+	case CommandTypeEnableTiling:
 		return ce.executor.EnableTiling()
 
-	case CommandType_DisableTiling:
+	case CommandTypeDisableTiling:
 		return ce.executor.DisableTiling()
 
-	case CommandType_SnapLeft:
+	case CommandTypeSnapLeft:
 		return ce.executor.SnapByDirection("left")
 
-	case CommandType_SnapRight:
+	case CommandTypeSnapRight:
 		return ce.executor.SnapByDirection("right")
 
-	case CommandType_SnapFullscreen:
+	case CommandTypeSnapFullscreen:
 		return ce.executor.SnapByDirection("fullscreen")
 
 	// Workspace
-	case CommandType_SwitchWS:
+	case CommandTypeSwitchWS:
 		if len(cmd.Args) > 0 {
 			ws := 0
 			_, _ = fmt.Sscanf(cmd.Args[0], "%d", &ws)
 			return ce.executor.SwitchWorkspace(ws)
 		}
 
-	case CommandType_MoveToWS:
+	case CommandTypeMoveToWS:
 		if len(cmd.Args) > 0 {
 			ws := 0
 			_, _ = fmt.Sscanf(cmd.Args[0], "%d", &ws)
 			return ce.executor.MoveWindowToWorkspaceByID(ce.executor.GetFocusedWindowID(), ws)
 		}
 
-	case CommandType_MoveAndFollowWS:
+	case CommandTypeMoveAndFollowWS:
 		if len(cmd.Args) > 0 {
 			ws := 0
 			_, _ = fmt.Sscanf(cmd.Args[0], "%d", &ws)
 			return ce.executor.MoveAndFollowWorkspaceByID(ce.executor.GetFocusedWindowID(), ws)
 		}
 
-	case CommandType_KeyCombo:
+	case CommandTypeKeyCombo:
 		if len(cmd.Args) > 0 {
 			comboStr := cmd.Args[0]
 			// Handle Alt+N for workspace switching
@@ -173,7 +173,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), keyBytes)
 		}
 
-	case CommandType_WaitUntilRegex:
+	case CommandTypeWaitUntilRegex:
 		// WaitUntilRegex requires special handling - it needs to be processed in a different way
 		// by the script playback system since it requires checking PTY output
 		// For now, we return a special error to signal this to the playback system
@@ -201,7 +201,7 @@ func convertKeyComboToBytes(comboStr string) []byte {
 	var keyStr string
 
 	// Parse modifiers and key
-	for i := 0; i < len(parts); i++ {
+	for i := range len(parts) {
 		part := strings.TrimSpace(parts[i])
 		switch part {
 		case "Ctrl":

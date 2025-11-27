@@ -217,7 +217,7 @@ func (r *KeybindRegistry) IsActionExplicitlyConfigured(action string) bool {
 	return exists
 }
 
-// Action name descriptions for help menu generation
+// ActionDescriptions maps action names to their descriptions for help menu generation.
 var ActionDescriptions = map[string]string{
 	// Window Management
 	"new_window":      "New window",

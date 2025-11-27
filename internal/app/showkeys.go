@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -159,7 +160,7 @@ func (m *OS) GetShowkeysDisplayText() string {
 			sb.WriteRune('×')
 			sb.WriteString(" ")
 			// Use a simple count representation
-			for j := 0; j < keyEvent.Count; j++ {
+			for range keyEvent.Count {
 				sb.WriteRune('·')
 			}
 		} else {
@@ -177,7 +178,7 @@ func (m *OS) CleanupExpiredKeys(timeout time.Duration) {
 	for i := 0; i < len(m.RecentKeys); {
 		if now.Sub(m.RecentKeys[i].Timestamp) > timeout {
 			// Remove expired key
-			m.RecentKeys = append(m.RecentKeys[:i], m.RecentKeys[i+1:]...)
+			m.RecentKeys = slices.Delete(m.RecentKeys, i, i+1)
 		} else {
 			i++
 		}

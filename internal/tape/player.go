@@ -117,8 +117,8 @@ type ActionScriptMsg struct {
 	Args   []string // Optional arguments
 }
 
-// TapeTickMsg is sent periodically to check for next command execution
-type TapeTickMsg time.Time
+// TickMsg is sent periodically to check for next script command execution
+type TickMsg time.Time
 
 // ScriptPlaybackMsg contains state information about script playback
 type ScriptPlaybackMsg struct {
@@ -131,13 +131,13 @@ type ScriptPlaybackMsg struct {
 
 // CommandToMsg converts a Command to appropriate Bubble Tea message(s)
 // This is used by the player to generate messages for the app.Update() handler
-func (p *Player) CommandToMsg(cmd *Command) interface{} {
+func (p *Player) CommandToMsg(cmd *Command) any {
 	if cmd == nil {
 		return nil
 	}
 
 	switch cmd.Type {
-	case CommandType_Type:
+	case CommandTypeType:
 		if len(cmd.Args) > 0 {
 			return TypedScriptMsg{
 				Text: cmd.Args[0],
@@ -145,7 +145,7 @@ func (p *Player) CommandToMsg(cmd *Command) interface{} {
 			}
 		}
 
-	case CommandType_Sleep:
+	case CommandTypeSleep:
 		if len(cmd.Args) > 0 {
 			return ScriptMsg{
 				Command: cmd,
@@ -153,78 +153,78 @@ func (p *Player) CommandToMsg(cmd *Command) interface{} {
 			}
 		}
 
-	case CommandType_Enter:
+	case CommandTypeEnter:
 		return KeyPressScriptMsg{Key: "enter"}
 
-	case CommandType_Space:
+	case CommandTypeSpace:
 		return KeyPressScriptMsg{Key: "space"}
 
-	case CommandType_Backspace:
+	case CommandTypeBackspace:
 		return KeyPressScriptMsg{Key: "backspace"}
 
-	case CommandType_Delete:
+	case CommandTypeDelete:
 		return KeyPressScriptMsg{Key: "delete"}
 
-	case CommandType_Tab:
+	case CommandTypeTab:
 		return KeyPressScriptMsg{Key: "tab"}
 
-	case CommandType_Escape:
+	case CommandTypeEscape:
 		return KeyPressScriptMsg{Key: "escape"}
 
-	case CommandType_Up:
+	case CommandTypeUp:
 		return KeyPressScriptMsg{Key: "up"}
 
-	case CommandType_Down:
+	case CommandTypeDown:
 		return KeyPressScriptMsg{Key: "down"}
 
-	case CommandType_Left:
+	case CommandTypeLeft:
 		return KeyPressScriptMsg{Key: "left"}
 
-	case CommandType_Right:
+	case CommandTypeRight:
 		return KeyPressScriptMsg{Key: "right"}
 
-	case CommandType_Home:
+	case CommandTypeHome:
 		return KeyPressScriptMsg{Key: "home"}
 
-	case CommandType_End:
+	case CommandTypeEnd:
 		return KeyPressScriptMsg{Key: "end"}
 
-	case CommandType_KeyCombo:
+	case CommandTypeKeyCombo:
 		if len(cmd.Args) > 0 {
 			return KeyPressScriptMsg{Key: cmd.Args[0]}
 		}
 
-	case CommandType_NewWindow:
+	case CommandTypeNewWindow:
 		return ActionScriptMsg{Action: "new_window"}
 
-	case CommandType_CloseWindow:
+	case CommandTypeCloseWindow:
 		return ActionScriptMsg{Action: "close_window"}
 
-	case CommandType_Split:
+	case CommandTypeSplit:
 		return ActionScriptMsg{Action: "split"}
 
-	case CommandType_Focus:
+	case CommandTypeFocus:
 		return ActionScriptMsg{
 			Action: "focus",
 			Args:   cmd.Args,
 		}
 
-	case CommandType_ToggleTiling:
+	case CommandTypeToggleTiling:
 		return ActionScriptMsg{Action: "toggle_tiling"}
 
-	case CommandType_SwitchWS:
+	case CommandTypeSwitchWS:
 		return ActionScriptMsg{
 			Action: "switch_workspace",
 			Args:   cmd.Args,
 		}
 
-	case CommandType_MoveToWS:
+	case CommandTypeMoveToWS:
 		return ActionScriptMsg{
 			Action: "move_to_workspace",
 			Args:   cmd.Args,
 		}
 
-	case CommandType_Wait:
+	case CommandTypeWait:
 		// Wait command - could be enhanced for pattern matching
 		if len(cmd.Args) > 0 {
 			return ScriptMsg{
@@ -233,7 +233,7 @@ func (p *Player) CommandToMsg(cmd *Command) interface{} {
 			}
 		}
 
-	case CommandType_Set, CommandType_Output, CommandType_Source:
+	case CommandTypeSet, CommandTypeOutput, CommandTypeSource:
 		// Configuration commands - handle specially if needed
 		return ScriptMsg{Command: cmd}
 	}

@@ -205,7 +205,7 @@ func (m *OS) MoveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
 // FocusNextVisibleWindowInWorkspace focuses the next visible window in the workspace.
 func (m *OS) FocusNextVisibleWindowInWorkspace() {
 	// Find the next non-minimized window in current workspace to focus
-	for i := 0; i < len(m.Windows); i++ {
+	for i := range m.Windows {
 		w := m.Windows[i]
 		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
 			m.FocusWindow(i)

@@ -117,12 +117,21 @@ func (l *Lexer) readIdentifier() string {
 	return sb.String()
 }
 
-// readNumber reads a number literal
-func (l *Lexer) readNumber() string {
+// readNumberWithDecimal reads a number literal including decimals
+func (l *Lexer) readNumberWithDecimal() string {
 	var sb strings.Builder
 	for isDigit(l.ch) {
 		sb.WriteByte(l.ch)
 		l.readChar()
+	}
+	// Check for decimal point
+	if l.ch == '.' && isDigit(l.peekChar()) {
+		sb.WriteByte(l.ch)
+		l.readChar()
+		for isDigit(l.ch) {
+			sb.WriteByte(l.ch)
+			l.readChar()
+		}
 	}
 	return sb.String()
 }
@@ -163,11 +172,11 @@ func (l *Lexer) NextToken() Token {
 
 	switch l.ch {
 	case 0:
-		tok.Type = TOKEN_EOF
+		tok.Type = TokenEOF
 		tok.Literal = ""
 
 	case '\n':
-		tok.Type = TOKEN_NEWLINE
+		tok.Type = TokenNewline
 		tok.Literal = "\n"
 		l.readChar()
 
@@ -176,17 +185,17 @@ func (l *Lexer) NextToken() Token {
 		return l.NextToken() // Skip comments and get next token
 
 	case '+':
-		tok.Type = TOKEN_PLUS
+		tok.Type = TokenPlus
 		tok.Literal = "+"
 		l.readChar()
 
 	case '@':
-		tok.Type = TOKEN_AT
+		tok.Type = TokenAt
 		tok.Literal = "@"
 		l.readChar()
 
 	case ',':
-		tok.Type = TOKEN_COMMA
+		tok.Type = TokenComma
 		tok.Literal = ","
 		l.readChar()
 
@@ -195,34 +204,34 @@ func (l *Lexer) NextToken() Token {
 		if l.peekChar() == '/' || isIdentifierChar(l.peekChar()) {
 			// Likely regex for Wait command
 			regex := l.readRegex()
-			tok.Type = TOKEN_SLASH
+			tok.Type = TokenSlash
 			tok.Literal = regex
 		} else {
-			tok.Type = TOKEN_SLASH
+			tok.Type = TokenSlash
 			tok.Literal = "/"
 			l.readChar()
 		}
 
 	case '(':
-		tok.Type = TOKEN_LPAREN
+		tok.Type = TokenLParen
 		tok.Literal = "("
 		l.readChar()
 
 	case ')':
-		tok.Type = TOKEN_RPAREN
+		tok.Type = TokenRParen
 		tok.Literal = ")"
 		l.readChar()
 
 	case '"', '\'', '`':
 		quote := l.ch
 		literal := l.readString(quote)
-		tok.Type = TOKEN_STRING
+		tok.Type = TokenString
 		tok.Literal = literal
 
 	default:
 		if isDigit(l.ch) {
 			// Could be a number or duration
-			num := l.readNumber()
+			num := l.readNumberWithDecimal()
 
 			// Check if it's a duration (has a letter after the number)
 			if unicode.IsLetter(rune(l.ch)) {
@@ -231,10 +240,10 @@ func (l *Lexer) NextToken() Token {
 					unit += string(l.ch)
 					l.readChar()
 				}
-				tok.Type = TOKEN_DURATION
+				tok.Type = TokenDuration
 				tok.Literal = num + unit
 			} else {
-				tok.Type = TOKEN_NUMBER
+				tok.Type = TokenNumber
 				tok.Literal = num
 			}
 		} else if isIdentifierChar(l.ch) {
@@ -242,7 +251,7 @@ func (l *Lexer) NextToken() Token {
 			tok.Type = LookupKeyword(literal)
 			tok.Literal = literal
 		} else {
-			tok.Type = TOKEN_ILLEGAL
+			tok.Type = TokenIllegal
 			tok.Literal = string(l.ch)
 			l.readChar()
 		}
@@ -268,7 +277,7 @@ func Tokenize(input string) []Token {
 	for {
 		tok := l.NextToken()
 		tokens = append(tokens, tok)
-		if tok.Type == TOKEN_EOF {
+		if tok.Type == TokenEOF {
 			break
 		}
 	}

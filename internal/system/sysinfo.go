@@ -1,3 +1,4 @@
+// Package system provides system information and resource monitoring.
 package system
 
 import (

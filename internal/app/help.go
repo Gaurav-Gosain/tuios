@@ -477,13 +477,6 @@ func (m *OS) RenderHelpMenu(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, helpBox)
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // renderCategoryTabs renders the category navigation tabs
 func renderCategoryTabs(categories []HelpCategory, activeIdx int) string {
 	if len(categories) == 0 {

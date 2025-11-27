@@ -115,7 +115,7 @@ func (sb *Scrollback) Lines() [][]uv.Cell {
 
 	// Build a slice in correct order from the ring buffer
 	result := make([][]uv.Cell, length)
-	for i := 0; i < length; i++ {
+	for i := range length {
 		physicalIndex := (sb.head + i) % sb.maxLines
 		result[i] = sb.lines[physicalIndex]
 	}
@@ -206,7 +206,7 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 
 	// Copy the most recent newLen lines
 	startIndex := oldLen - newLen // Skip oldest lines if downsizing
-	for i := 0; i < newLen; i++ {
+	for i := range newLen {
 		physicalIndex := (sb.head + startIndex + i) % sb.maxLines
 		newLines[i] = sb.lines[physicalIndex]
 		newSoftWrapped[i] = sb.softWrapped[physicalIndex]
@@ -224,7 +224,7 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 // This is a helper function to copy cells from a buffer line.
 func extractLine(buf *uv.Buffer, y, width int) []uv.Cell {
 	line := make([]uv.Cell, width)
-	for x := 0; x < width; x++ {
+	for x := range width {
 		if cell := buf.CellAt(x, y); cell != nil {
 			line[x] = *cell
 		} else {

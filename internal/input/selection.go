@@ -127,7 +127,7 @@ func extractSelectedText(window *terminal.Window, o *app.OS) string {
 			}
 		default:
 			// Middle lines - full line
-			for x := 0; x < screenWidth; x++ {
+			for x := range screenWidth {
 				cell := getCellAt(x, y)
 				if cell != nil && cell.Content != "" {
 					selectedText.WriteString(cell.Content)

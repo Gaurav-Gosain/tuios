@@ -102,7 +102,7 @@ func extractLineTextFromCells(cells []uv.Cell) string {
 func extractScreenLineText(term *vt.Emulator, y int) string {
 	var result []rune
 	width := term.Width()
-	for x := 0; x < width; x++ {
+	for x := range width {
 		cell := term.CellAt(x, y)
 		// Skip continuation cells (Width=0) of wide characters
 		// These are placeholder cells for emoji, CJK, nerd fonts, etc.
@@ -125,7 +125,7 @@ func getScreenLineCells(term *vt.Emulator, y int) []uv.Cell {
 	width := term.Width()
 	cells := make([]uv.Cell, width)
 
-	for x := 0; x < width; x++ {
+	for x := range width {
 		cell := term.CellAt(x, y)
 		if cell != nil {
 			cells[x] = *cell

@@ -146,7 +146,7 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 		} else {
 			screenY := y - scrollbackLen
 			// Build cells array from screen
-			for x := 0; x < window.Width; x++ {
+			for x := range window.Width {
 				cell := window.Terminal.CellAt(x, screenY)
 				if cell != nil {
 					lineCells = append(lineCells, *cell)
@@ -204,7 +204,7 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 }
 
 // getLineContentBounds returns the X positions of the first and last non-empty characters on a line
-func getLineContentBounds(cm *terminal.CopyMode, window *terminal.Window, absY int) (int, int) {
+func getLineContentBounds(_ *terminal.CopyMode, window *terminal.Window, absY int) (int, int) {
 	scrollbackLen := window.ScrollbackLen()
 
 	// Get cells for this line
@@ -247,7 +247,7 @@ func getLineContentBounds(cm *terminal.CopyMode, window *terminal.Window, absY i
 }
 
 // getLineText retrieves the text content of a line
-func getLineText(cm *terminal.CopyMode, window *terminal.Window, absY int) string {
+func getLineText(_ *terminal.CopyMode, window *terminal.Window, absY int) string {
 	scrollbackLen := window.ScrollbackLen()
 
 	if absY < scrollbackLen {

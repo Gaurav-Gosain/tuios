@@ -13,27 +13,27 @@ func TestLexerBasicTokens(t *testing.T) {
 		{
 			name:     "Type command",
 			input:    `Type "hello"`,
-			expected: []TokenType{TOKEN_TYPE, TOKEN_STRING, TOKEN_EOF},
+			expected: []TokenType{TokenTypeCmd, TokenString, TokenEOF},
 		},
 		{
 			name:     "Sleep command",
 			input:    `Sleep 500ms`,
-			expected: []TokenType{TOKEN_SLEEP, TOKEN_DURATION, TOKEN_EOF},
+			expected: []TokenType{TokenSleep, TokenDuration, TokenEOF},
 		},
 		{
 			name:     "Enter command",
 			input:    `Enter`,
-			expected: []TokenType{TOKEN_ENTER, TOKEN_EOF},
+			expected: []TokenType{TokenEnter, TokenEOF},
 		},
 		{
 			name:     "Space command",
 			input:    `Space`,
-			expected: []TokenType{TOKEN_SPACE, TOKEN_EOF},
+			expected: []TokenType{TokenSpace, TokenEOF},
 		},
 		{
 			name:     "Key combination",
 			input:    `Ctrl+B`,
-			expected: []TokenType{TOKEN_CTRL, TOKEN_PLUS, TOKEN_IDENTIFIER, TOKEN_EOF},
+			expected: []TokenType{TokenCtrl, TokenPlus, TokenIdentifier, TokenEOF},
 		},
 	}
 
@@ -89,7 +89,7 @@ func TestLexerStrings(t *testing.T) {
 			// Find the string token
 			var stringToken Token
 			for _, tok := range tokens {
-				if tok.Type == TOKEN_STRING {
+				if tok.Type == TokenString {
 					stringToken = tok
 					break
 				}
@@ -132,7 +132,7 @@ func TestLexerDurations(t *testing.T) {
 			// Find the duration token
 			var durationToken Token
 			for _, tok := range tokens {
-				if tok.Type == TOKEN_DURATION {
+				if tok.Type == TokenDuration {
 					durationToken = tok
 					break
 				}
@@ -153,13 +153,13 @@ Enter`
 
 	tokens := Tokenize(input)
 
-	// Should skip comments
+	// Should skip comments but include newlines
 	var types []TokenType
 	for _, tok := range tokens {
 		types = append(types, tok.Type)
 	}
 
-	expected := []TokenType{TOKEN_TYPE, TOKEN_STRING, TOKEN_ENTER, TOKEN_EOF}
+	expected := []TokenType{TokenNewline, TokenTypeCmd, TokenString, TokenNewline, TokenNewline, TokenEnter, TokenEOF}
 
 	if len(types) != len(expected) {
 		t.Errorf("Expected %d tokens, got %d", len(expected), len(types))
@@ -181,13 +181,16 @@ SwitchWorkspace 2`
 	tokens := Tokenize(input)
 
 	expectedTypes := []TokenType{
-		TOKEN_NEW_WINDOW,
-		TOKEN_CLOSE_WINDOW,
-		TOKEN_FOCUS,
-		TOKEN_NUMBER,
-		TOKEN_SWITCH_WS,
-		TOKEN_NUMBER,
-		TOKEN_EOF,
+		TokenNewWindow,
+		TokenNewline,
+		TokenCloseWindow,
+		TokenNewline,
+		TokenFocus,
+		TokenNumber,
+		TokenNewline,
+		TokenSwitchWS,
+		TokenNumber,
+		TokenEOF,
 	}
 
 	if len(tokens) != len(expectedTypes) {
@@ -211,7 +214,7 @@ Type "line3"`
 	// Filter out newlines to check line numbers
 	var typeTokens []Token
 	for _, tok := range tokens {
-		if tok.Type == TOKEN_TYPE {
+		if tok.Type == TokenTypeCmd {
 			typeTokens = append(typeTokens, tok)
 		}
 	}
@@ -238,7 +241,7 @@ Sleep@2s 500ms`
 	// Check for @ tokens
 	atCount := 0
 	for _, tok := range tokens {
-		if tok.Type == TOKEN_AT {
+		if tok.Type == TokenAt {
 			atCount++
 		}
 	}
@@ -254,11 +257,11 @@ func TestKeywordTokenMap(t *testing.T) {
 		keyword  string
 		expected TokenType
 	}{
-		{"Type", "Type", TOKEN_TYPE},
-		{"Sleep", "Sleep", TOKEN_SLEEP},
-		{"Enter", "Enter", TOKEN_ENTER},
-		{"NewWindow", "NewWindow", TOKEN_NEW_WINDOW},
-		{"Unknown", "UnknownKeyword", TOKEN_IDENTIFIER},
+		{"Type", "Type", TokenTypeCmd},
+		{"Sleep", "Sleep", TokenSleep},
+		{"Enter", "Enter", TokenEnter},
+		{"NewWindow", "NewWindow", TokenNewWindow},
+		{"Unknown", "UnknownKeyword", TokenIdentifier},
 	}
 
 	for _, tt := range tests {
@@ -273,35 +276,35 @@ func TestKeywordTokenMap(t *testing.T) {
 
 func TestTokenTypeHelpers(t *testing.T) {
 	t.Run("IsCommand", func(t *testing.T) {
-		if !TOKEN_TYPE.IsCommand() {
-			t.Error("TOKEN_TYPE should be a command")
+		if !TokenTypeCmd.IsCommand() {
+			t.Error("TokenType should be a command")
 		}
-		if TOKEN_STRING.IsCommand() {
-			t.Error("TOKEN_STRING should not be a command")
+		if TokenString.IsCommand() {
+			t.Error("TokenString should not be a command")
 		}
 	})
 
 	t.Run("IsModifier", func(t *testing.T) {
-		if !TOKEN_CTRL.IsModifier() {
-			t.Error("TOKEN_CTRL should be a modifier")
+		if !TokenCtrl.IsModifier() {
+			t.Error("TokenCtrl should be a modifier")
 		}
-		if !TOKEN_ALT.IsModifier() {
-			t.Error("TOKEN_ALT should be a modifier")
+		if !TokenAlt.IsModifier() {
+			t.Error("TokenAlt should be a modifier")
 		}
-		if TOKEN_TYPE.IsModifier() {
-			t.Error("TOKEN_TYPE should not be a modifier")
+		if TokenTypeCmd.IsModifier() {
+			t.Error("TokenType should not be a modifier")
 		}
 	})
 
 	t.Run("IsNavigationKey", func(t *testing.T) {
-		if !TOKEN_UP.IsNavigationKey() {
-			t.Error("TOKEN_UP should be a navigation key")
+		if !TokenUp.IsNavigationKey() {
+			t.Error("TokenUp should be a navigation key")
 		}
-		if !TOKEN_DOWN.IsNavigationKey() {
-			t.Error("TOKEN_DOWN should be a navigation key")
+		if !TokenDown.IsNavigationKey() {
+			t.Error("TokenDown should be a navigation key")
 		}
-		if TOKEN_TYPE.IsNavigationKey() {
-			t.Error("TOKEN_TYPE should not be a navigation key")
+		if TokenTypeCmd.IsNavigationKey() {
+			t.Error("TokenType should not be a navigation key")
 		}
 	})
 }

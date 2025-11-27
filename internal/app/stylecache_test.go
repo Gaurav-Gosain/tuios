@@ -128,7 +128,7 @@ func TestStyleCacheEviction(t *testing.T) {
 
 	// Fill cache beyond capacity with truly unique cells
 	// We need to vary multiple attributes to ensure unique hashes
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		// Create unique cells by varying both color and cursor state
 		cell := &uv.Cell{
 			Style: uv.Style{
@@ -169,7 +169,7 @@ func TestStyleCacheHitRate(t *testing.T) {
 	// First access: miss
 	cache.Get(cell, false, false)
 	// Next 9 accesses: hits
-	for i := 0; i < 9; i++ {
+	for range 9 {
 		cache.Get(cell, false, false)
 	}
 
@@ -185,7 +185,7 @@ func TestStyleCacheClear(t *testing.T) {
 	cache := NewStyleCache(10)
 
 	// Add some entries
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		cell := &uv.Cell{
 			Style: uv.Style{
 				Attrs: uv.StyleAttrs(i),
@@ -298,7 +298,7 @@ func BenchmarkStyleCacheHit(b *testing.B) {
 	cache.Get(cell, false, false)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		cache.Get(cell, false, false)
 	}
 }
@@ -308,7 +308,7 @@ func BenchmarkStyleCacheMiss(b *testing.B) {
 	cache := NewStyleCache(1024)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		cell := &uv.Cell{
 			Style: uv.Style{
 				Fg:    lipgloss.Color("15"),
@@ -330,7 +330,7 @@ func BenchmarkStyleNoCacheBaseline(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		buildCellStyle(cell, false)
 	}
 }

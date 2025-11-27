@@ -136,8 +136,9 @@ const (
 	// MaxNameLengthDock is the maximum length of window name in dock
 	MaxNameLengthDock = 12
 
-	// MinimizedDockWindowSize is the size of minimized window visual
-	MinimizedDockWidth  = 5
+	// MinimizedDockWidth is the width of minimized window visual in the dock.
+	MinimizedDockWidth = 5
+	// MinimizedDockHeight is the height of minimized window visual in the dock.
 	MinimizedDockHeight = 3
 )
 
@@ -314,34 +315,50 @@ func GetDockSeparator() string {
 // =============================================================================
 
 const (
-	// Window border characters (Nerd Font / Unicode)
-	WindowBorderTopLeft     = "╭" // U+256D
-	WindowBorderTopRight    = "╮" // U+256E
-	WindowBorderBottomLeft  = "╰" // U+2570
+	// WindowBorderTopLeft is the top-left corner character for window borders (Nerd Font / Unicode).
+	WindowBorderTopLeft = "╭" // U+256D
+	// WindowBorderTopRight is the top-right corner character for window borders.
+	WindowBorderTopRight = "╮" // U+256E
+	// WindowBorderBottomLeft is the bottom-left corner character for window borders.
+	WindowBorderBottomLeft = "╰" // U+2570
+	// WindowBorderBottomRight is the bottom-right corner character for window borders.
 	WindowBorderBottomRight = "╯" // U+256F
-	WindowBorderHorizontal  = "─" // U+2500
-	WindowBorderVertical    = "│" // U+2502
+	// WindowBorderHorizontal is the horizontal line character for window borders.
+	WindowBorderHorizontal = "─" // U+2500
+	// WindowBorderVertical is the vertical line character for window borders.
+	WindowBorderVertical = "│" // U+2502
 
-	// Window button characters
-	WindowButtonClose   = " ⤫ " // Close/kill window
-	WindowPillLeft      = string(rune(0xe0b6))
-	WindowPillRight     = string(rune(0xe0b4))
+	// WindowButtonClose is the close/kill window button character.
+	WindowButtonClose = " ⤫ " // Close/kill window
+	// WindowPillLeft is the left pill-style character for window decorations.
+	WindowPillLeft = string(rune(0xe0b6))
+	// WindowPillRight is the right pill-style character for window decorations.
+	WindowPillRight = string(rune(0xe0b4))
+	// WindowSeparatorChar is the separator character for window elements.
 	WindowSeparatorChar = "─" // U+2500
 )
 
 const (
-	// Window border characters (ASCII fallback)
-	WindowBorderTopLeftASCII     = "+"
-	WindowBorderTopRightASCII    = "+"
-	WindowBorderBottomLeftASCII  = "+"
+	// WindowBorderTopLeftASCII is the top-left corner character for window borders (ASCII fallback).
+	WindowBorderTopLeftASCII = "+"
+	// WindowBorderTopRightASCII is the top-right corner character for window borders (ASCII fallback).
+	WindowBorderTopRightASCII = "+"
+	// WindowBorderBottomLeftASCII is the bottom-left corner character for window borders (ASCII fallback).
+	WindowBorderBottomLeftASCII = "+"
+	// WindowBorderBottomRightASCII is the bottom-right corner character for window borders (ASCII fallback).
 	WindowBorderBottomRightASCII = "+"
-	WindowBorderHorizontalASCII  = "-"
-	WindowBorderVerticalASCII    = "|"
+	// WindowBorderHorizontalASCII is the horizontal line character for window borders (ASCII fallback).
+	WindowBorderHorizontalASCII = "-"
+	// WindowBorderVerticalASCII is the vertical line character for window borders (ASCII fallback).
+	WindowBorderVerticalASCII = "|"
 
-	// Window button characters (ASCII fallback)
-	WindowButtonCloseASCII   = " X "
-	WindowPillLeftASCII      = "["
-	WindowPillRightASCII     = "]"
+	// WindowButtonCloseASCII is the close/kill window button character (ASCII fallback).
+	WindowButtonCloseASCII = " X "
+	// WindowPillLeftASCII is the left pill-style character for window decorations (ASCII fallback).
+	WindowPillLeftASCII = "["
+	// WindowPillRightASCII is the right pill-style character for window decorations (ASCII fallback).
+	WindowPillRightASCII = "]"
+	// WindowSeparatorCharASCII is the separator character for window elements (ASCII fallback).
 	WindowSeparatorCharASCII = "-"
 )
 
@@ -463,18 +480,23 @@ func GetWindowSeparatorChar() string {
 // =============================================================================
 
 const (
-	// Button positions for non-tiling mode (3 buttons: minimize, maximize, close)
-	MinimizeButtonLeftNonTiling  = -11
+	// MinimizeButtonLeftNonTiling is the left position offset for minimize button in non-tiling mode.
+	MinimizeButtonLeftNonTiling = -11
+	// MinimizeButtonRightNonTiling is the right position offset for minimize button in non-tiling mode.
 	MinimizeButtonRightNonTiling = -9
-	MaximizeButtonLeft           = -8
-	MaximizeButtonRight          = -6
+	// MaximizeButtonLeft is the left position offset for maximize button.
+	MaximizeButtonLeft = -8
+	// MaximizeButtonRight is the right position offset for maximize button.
+	MaximizeButtonRight = -6
 
-	// Button positions for tiling mode (2 buttons: minimize, close)
-	MinimizeButtonLeftTiling  = -8
+	// MinimizeButtonLeftTiling is the left position offset for minimize button in tiling mode.
+	MinimizeButtonLeftTiling = -8
+	// MinimizeButtonRightTiling is the right position offset for minimize button in tiling mode.
 	MinimizeButtonRightTiling = -6
 
-	// Close button position (same for both modes)
-	CloseButtonLeft  = -5
+	// CloseButtonLeft is the left position offset for close button (same for both modes).
+	CloseButtonLeft = -5
+	// CloseButtonRight is the right position offset for close button (same for both modes).
 	CloseButtonRight = -3
 )
 

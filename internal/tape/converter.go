@@ -118,16 +118,16 @@ type SleepMessage struct {
 // Returns the key string and delay in milliseconds
 func (c *ScriptMessageConverter) ConvertCommandToKeyString(cmd *Command) (keyStr string, delayMs int) {
 	switch cmd.Type {
-	case CommandType_Enter, CommandType_Space, CommandType_Backspace,
-		CommandType_Delete, CommandType_Tab, CommandType_Escape,
-		CommandType_Up, CommandType_Down, CommandType_Left, CommandType_Right,
-		CommandType_Home, CommandType_End:
+	case CommandTypeEnter, CommandTypeSpace, CommandTypeBackspace,
+		CommandTypeDelete, CommandTypeTab, CommandTypeEscape,
+		CommandTypeUp, CommandTypeDown, CommandTypeLeft, CommandTypeRight,
+		CommandTypeHome, CommandTypeEnd:
 		keyStr = c.ConvertKeyCommand(c.cmdTypeToKeyName(cmd.Type))
 		if cmd.Delay > 0 {
 			delayMs = int(cmd.Delay.Milliseconds())
 		}
 
-	case CommandType_KeyCombo:
+	case CommandTypeKeyCombo:
 		if len(cmd.Args) > 0 {
 			keyStr = c.ConvertKeyCombinationCommand(cmd.Args[0])
 		}
@@ -142,29 +142,29 @@ func (c *ScriptMessageConverter) ConvertCommandToKeyString(cmd *Command) (keyStr
 // cmdTypeToKeyName converts a CommandType to its key name
 func (c *ScriptMessageConverter) cmdTypeToKeyName(cmdType CommandType) string {
 	switch cmdType {
-	case CommandType_Enter:
+	case CommandTypeEnter:
 		return "enter"
-	case CommandType_Space:
+	case CommandTypeSpace:
 		return "space"
-	case CommandType_Backspace:
+	case CommandTypeBackspace:
 		return "backspace"
-	case CommandType_Delete:
+	case CommandTypeDelete:
 		return "delete"
-	case CommandType_Tab:
+	case CommandTypeTab:
 		return "tab"
-	case CommandType_Escape:
+	case CommandTypeEscape:
 		return "esc"
-	case CommandType_Up:
+	case CommandTypeUp:
 		return "up"
-	case CommandType_Down:
+	case CommandTypeDown:
 		return "down"
-	case CommandType_Left:
+	case CommandTypeLeft:
 		return "left"
-	case CommandType_Right:
+	case CommandTypeRight:
 		return "right"
-	case CommandType_Home:
+	case CommandTypeHome:
 		return "home"
-	case CommandType_End:
+	case CommandTypeEnd:
 		return "end"
 	default:
 		return ""

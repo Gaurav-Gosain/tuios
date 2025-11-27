@@ -6,6 +6,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
+	"slices"
 )
 
 // CreateMinimizeAnimation creates a minimize animation for the window at index i
@@ -80,7 +81,7 @@ func (m *OS) CompleteWindowAnimations(windowIndex int) {
 
 			// Mark as complete and remove
 			anim.Complete = true
-			m.Animations = append(m.Animations[:i], m.Animations[i+1:]...)
+			m.Animations = slices.Delete(m.Animations, i, i+1)
 		}
 	}
 }
@@ -201,15 +202,12 @@ func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
 
 		// Add space between items
 		if idx > 0 {
-			dockItemsWidth += 1
+			dockItemsWidth++
 		}
 	}
 
 	// Calculate center positioning
-	availableSpace := m.Width - leftWidth - rightWidth - dockItemsWidth
-	if availableSpace < 0 {
-		availableSpace = 0
-	}
+	availableSpace := max(m.Width - leftWidth - rightWidth - dockItemsWidth, 0)
 	leftSpacer := availableSpace / 2
 
 	// Calculate X position for target dock item

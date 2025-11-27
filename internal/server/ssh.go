@@ -1,3 +1,4 @@
+// Package server provides SSH server functionality for TUIOS.
 package server
 
 import (

@@ -81,7 +81,7 @@ func GetANSIPalette() [16]color.Color {
 	}
 }
 
-// Terminal colors for the emulator
+// TerminalFg returns the foreground color for terminal text.
 func TerminalFg() color.Color {
 	t := Current()
 	if t == nil {
@@ -90,6 +90,7 @@ func TerminalFg() color.Color {
 	return t.Fg
 }
 
+// TerminalBg returns the background color for terminal emulator.
 func TerminalBg() color.Color {
 	t := Current()
 	if t == nil {
@@ -98,6 +99,7 @@ func TerminalBg() color.Color {
 	return t.Bg
 }
 
+// TerminalCursor returns the color for the terminal cursor.
 func TerminalCursor() color.Color {
 	t := Current()
 	if t == nil {
@@ -106,7 +108,7 @@ func TerminalCursor() color.Color {
 	return t.Cursor
 }
 
-// Window border colors
+// BorderUnfocused returns the color for unfocused window borders.
 func BorderUnfocused() color.Color {
 	t := Current()
 	if t == nil {
@@ -117,6 +119,7 @@ func BorderUnfocused() color.Color {
 	return t.Red
 }
 
+// BorderFocusedWindow returns the color for focused window borders in window management mode.
 func BorderFocusedWindow() color.Color {
 	t := Current()
 	if t == nil {
@@ -126,6 +129,7 @@ func BorderFocusedWindow() color.Color {
 	return t.BrightCyan
 }
 
+// BorderFocusedTerminal returns the color for focused window borders in terminal mode.
 func BorderFocusedTerminal() color.Color {
 	t := Current()
 	if t == nil {
@@ -135,7 +139,7 @@ func BorderFocusedTerminal() color.Color {
 	return t.BrightGreen
 }
 
-// Dock mode indicator colors
+// DockColorWindow returns the dock indicator color for window management mode.
 func DockColorWindow() color.Color {
 	t := Current()
 	if t == nil {
@@ -144,6 +148,7 @@ func DockColorWindow() color.Color {
 	return t.BrightBlue
 }
 
+// DockColorTerminal returns the dock indicator color for terminal mode.
 func DockColorTerminal() color.Color {
 	t := Current()
 	if t == nil {
@@ -152,6 +157,7 @@ func DockColorTerminal() color.Color {
 	return t.BrightGreen
 }
 
+// DockColorCopy returns the dock indicator color for copy mode.
 func DockColorCopy() color.Color {
 	t := Current()
 	if t == nil {
@@ -160,7 +166,7 @@ func DockColorCopy() color.Color {
 	return t.Yellow
 }
 
-// Copy mode colors
+// CopyModeCursor returns background and foreground colors for the copy mode cursor.
 func CopyModeCursor() (bg color.Color, fg color.Color) {
 	t := Current()
 	if t == nil {
@@ -169,6 +175,7 @@ func CopyModeCursor() (bg color.Color, fg color.Color) {
 	return t.BrightCyan, t.Black
 }
 
+// CopyModeVisualSelection returns colors for visually selected text in copy mode.
 func CopyModeVisualSelection() (bg color.Color, fg color.Color) {
 	t := Current()
 	if t == nil {
@@ -177,6 +184,7 @@ func CopyModeVisualSelection() (bg color.Color, fg color.Color) {
 	return t.Purple, t.BrightWhite
 }
 
+// CopyModeSearchCurrent returns colors for the current search match in copy mode.
 func CopyModeSearchCurrent() (bg color.Color, fg color.Color) {
 	t := Current()
 	if t == nil {
@@ -185,6 +193,7 @@ func CopyModeSearchCurrent() (bg color.Color, fg color.Color) {
 	return t.BrightPurple, t.Black
 }
 
+// CopyModeSearchOther returns colors for other search matches in copy mode.
 func CopyModeSearchOther() (bg color.Color, fg color.Color) {
 	t := Current()
 	if t == nil {
@@ -193,14 +202,17 @@ func CopyModeSearchOther() (bg color.Color, fg color.Color) {
 	return t.Yellow, t.Black
 }
 
+// CopyModeTextSelection returns background and foreground colors for text selection in copy mode.
 func CopyModeTextSelection() (bg color.Color, fg color.Color) {
 	return lipgloss.Color("62"), lipgloss.Color("15")
 }
 
+// CopyModeSelectionCursor returns background and foreground colors for the selection cursor in copy mode.
 func CopyModeSelectionCursor() (bg color.Color, fg color.Color) {
 	return lipgloss.Color("208"), lipgloss.Color("0")
 }
 
+// CopyModeSearchBar returns colors for the search bar in copy mode.
 func CopyModeSearchBar() (bg color.Color, fg color.Color) {
 	t := Current()
 	if t == nil {
@@ -209,7 +221,7 @@ func CopyModeSearchBar() (bg color.Color, fg color.Color) {
 	return t.Yellow, t.Black
 }
 
-// Terminal cursor for rendering
+// TerminalCursorColors returns foreground and background colors for the terminal cursor rendering.
 func TerminalCursorColors() (fg color.Color, bg color.Color) {
 	t := Current()
 	if t == nil {
@@ -218,7 +230,7 @@ func TerminalCursorColors() (fg color.Color, bg color.Color) {
 	return t.Cursor, t.Black
 }
 
-// Button colors
+// ButtonFg returns the foreground color for buttons.
 func ButtonFg() color.Color {
 	t := Current()
 	if t == nil {
@@ -227,15 +239,17 @@ func ButtonFg() color.Color {
 	return t.Black
 }
 
-// Time overlay colors
+// TimeOverlayBg returns the background color for the time overlay.
 func TimeOverlayBg() color.Color {
 	return lipgloss.Color("#1a1a2e")
 }
 
+// TimeOverlayFg returns the foreground color for the time overlay.
 func TimeOverlayFg() color.Color {
 	return lipgloss.Color("#a0a0b0")
 }
 
+// TimeOverlayPrefixActive returns the color for active prefix commands in the time overlay.
 func TimeOverlayPrefixActive() color.Color {
 	t := Current()
 	if t == nil {
@@ -244,87 +258,102 @@ func TimeOverlayPrefixActive() color.Color {
 	return t.Red
 }
 
+// TimeOverlayPrefixInactive returns the color for inactive prefix commands in the time overlay.
 func TimeOverlayPrefixInactive() color.Color {
 	return lipgloss.Color("#ffffff")
 }
 
-// Welcome screen colors
+// WelcomeTitle returns the color for welcome screen titles.
 func WelcomeTitle() color.Color {
 	return lipgloss.Color("14") // Bright cyan
 }
 
+// WelcomeSubtitle returns the color for welcome screen subtitles.
 func WelcomeSubtitle() color.Color {
 	return lipgloss.Color("11") // Bright yellow
 }
 
+// WelcomeText returns the color for welcome screen text.
 func WelcomeText() color.Color {
 	return lipgloss.Color("7") // White
 }
 
+// WelcomeHighlight returns the color for highlighted elements on the welcome screen.
 func WelcomeHighlight() color.Color {
 	return lipgloss.Color("6") // Cyan
 }
 
-// Cache stats overlay colors
+// CacheStatsTitle returns the color for cache stats overlay titles.
 func CacheStatsTitle() color.Color {
 	return lipgloss.Color("14")
 }
 
+// CacheStatsLabel returns the color for cache stats overlay labels.
 func CacheStatsLabel() color.Color {
 	return lipgloss.Color("11")
 }
 
+// CacheStatsValue returns the color for cache stats overlay values.
 func CacheStatsValue() color.Color {
 	return lipgloss.Color("10")
 }
 
+// CacheStatsAccent returns the accent color for cache stats overlay.
 func CacheStatsAccent() color.Color {
 	return lipgloss.Color("13")
 }
 
-// Log viewer colors
+// LogViewerTitle returns the color for log viewer titles.
 func LogViewerTitle() color.Color {
 	return lipgloss.Color("14")
 }
 
+// LogViewerError returns the color for error messages in the log viewer.
 func LogViewerError() color.Color {
 	return lipgloss.Color("9")
 }
 
+// LogViewerWarn returns the color for warning messages in the log viewer.
 func LogViewerWarn() color.Color {
 	return lipgloss.Color("11")
 }
 
+// LogViewerInfo returns the color for info messages in the log viewer.
 func LogViewerInfo() color.Color {
 	return lipgloss.Color("10")
 }
 
+// LogViewerDebug returns the color for debug messages in the log viewer.
 func LogViewerDebug() color.Color {
 	return lipgloss.Color("12")
 }
 
+// LogViewerBg returns the background color for the log viewer.
 func LogViewerBg() color.Color {
 	return lipgloss.Color("#1a1a2a")
 }
 
-// Which-key overlay colors
+// WhichKeyTitle returns the color for which-key overlay titles.
 func WhichKeyTitle() color.Color {
 	return lipgloss.Color("11")
 }
 
+// WhichKeyText returns the color for which-key overlay text.
 func WhichKeyText() color.Color {
 	return lipgloss.Color("7")
 }
 
+// WhichKeyHighlight returns the highlight color for which-key overlay.
 func WhichKeyHighlight() color.Color {
 	return lipgloss.Color("#ff6b6b")
 }
 
+// WhichKeyBg returns the background color for which-key overlay.
 func WhichKeyBg() color.Color {
 	return lipgloss.Color("#1a1a2e")
 }
 
-// Notification colors
+// NotificationError returns the color for error notifications.
 func NotificationError() color.Color {
 	t := Current()
 	if t == nil {
@@ -333,6 +362,7 @@ func NotificationError() color.Color {
 	return t.Red
 }
 
+// NotificationWarning returns the color for warning notifications.
 func NotificationWarning() color.Color {
 	t := Current()
 	if t == nil {
@@ -341,6 +371,7 @@ func NotificationWarning() color.Color {
 	return t.Yellow
 }
 
+// NotificationSuccess returns the color for success notifications.
 func NotificationSuccess() color.Color {
 	t := Current()
 	if t == nil {
@@ -349,6 +380,7 @@ func NotificationSuccess() color.Color {
 	return t.Green
 }
 
+// NotificationInfo returns the color for info notifications.
 func NotificationInfo() color.Color {
 	t := Current()
 	if t == nil {
@@ -357,6 +389,7 @@ func NotificationInfo() color.Color {
 	return t.Blue
 }
 
+// NotificationBg returns the background color for notifications.
 func NotificationBg() color.Color {
 	t := Current()
 	if t == nil {
@@ -365,6 +398,7 @@ func NotificationBg() color.Color {
 	return t.Bg
 }
 
+// NotificationFg returns the foreground color for notifications.
 func NotificationFg() color.Color {
 	t := Current()
 	if t == nil {
@@ -373,15 +407,17 @@ func NotificationFg() color.Color {
 	return t.Fg
 }
 
-// Dock styling colors
+// DockBg returns the background color for the dock.
 func DockBg() color.Color {
 	return lipgloss.Color("#2a2a3e")
 }
 
+// DockFg returns the foreground color for the dock.
 func DockFg() color.Color {
 	return lipgloss.Color("#a0a0a8")
 }
 
+// DockHighlight returns the highlight color for the dock.
 func DockHighlight() color.Color {
 	t := Current()
 	if t == nil {
@@ -390,76 +426,92 @@ func DockHighlight() color.Color {
 	return t.BrightGreen
 }
 
+// DockDimmed returns the dimmed color for the dock.
 func DockDimmed() color.Color {
 	return lipgloss.Color("#808090")
 }
 
+// DockAccent returns the accent color for the dock.
 func DockAccent() color.Color {
 	return lipgloss.Color("#a0a0b0")
 }
 
+// DockSeparator returns the separator color for the dock.
 func DockSeparator() color.Color {
 	return lipgloss.Color("#303040")
 }
 
-// Help menu colors
+// HelpKeyBadge returns the color for key badges in help menu.
 func HelpKeyBadge() color.Color {
 	return lipgloss.Color("5") // Purple/magenta
 }
 
+// HelpKeyBadgeBg returns the background color for key badges in help menu.
 func HelpKeyBadgeBg() color.Color {
 	return lipgloss.Color("0") // Black
 }
 
+// HelpGray returns the gray color for help menu elements.
 func HelpGray() color.Color {
 	return lipgloss.Color("8")
 }
 
+// HelpBorder returns the border color for help menu.
 func HelpBorder() color.Color {
 	return lipgloss.Color("14")
 }
 
+// HelpTabActive returns the color for active tabs in help menu.
 func HelpTabActive() color.Color {
 	return lipgloss.Color("12")
 }
 
+// HelpTabInactive returns the color for inactive tabs in help menu.
 func HelpTabInactive() color.Color {
 	return lipgloss.Color("8")
 }
 
+// HelpTabBg returns the background color for tabs in help menu.
 func HelpTabBg() color.Color {
 	return lipgloss.Color("0")
 }
 
+// HelpSearchFg returns the foreground color for search in help menu.
 func HelpSearchFg() color.Color {
 	return lipgloss.Color("11")
 }
 
+// HelpSearchBg returns the background color for search in help menu.
 func HelpSearchBg() color.Color {
 	return lipgloss.Color("15")
 }
 
+// HelpTableHeader returns the color for table headers in help menu.
 func HelpTableHeader() color.Color {
 	return lipgloss.Color("12")
 }
 
+// HelpTableRow returns the color for table rows in help menu.
 func HelpTableRow() color.Color {
 	return lipgloss.Color("8")
 }
 
-// CLI table colors
+// CLITableHeader returns the color for CLI table headers.
 func CLITableHeader() color.Color {
 	return lipgloss.Color("12")
 }
 
+// CLITableBorder returns the color for CLI table borders.
 func CLITableBorder() color.Color {
 	return lipgloss.Color("14")
 }
 
+// CLITableKey returns the color for CLI table keys.
 func CLITableKey() color.Color {
 	return lipgloss.Color("11")
 }
 
+// CLITableDim returns the dimmed color for CLI table elements.
 func CLITableDim() color.Color {
 	return lipgloss.Color("8")
 }

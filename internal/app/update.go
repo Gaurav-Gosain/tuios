@@ -116,7 +116,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				nextCmd := player.NextCommand()
 				if nextCmd != nil {
 					// Handle Sleep commands specially
-					if nextCmd.Type == tape.CommandType_Sleep && nextCmd.Delay > 0 {
+					if nextCmd.Type == tape.CommandTypeSleep && nextCmd.Delay > 0 {
 						// Set the sleep deadline
 						m.ScriptSleepUntil = time.Now().Add(nextCmd.Delay)
 						// Advance to next command but don't execute anything yet

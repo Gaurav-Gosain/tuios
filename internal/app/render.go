@@ -840,14 +840,11 @@ func (m *OS) renderResizeIndicator(window *terminal.Window) string {
 
 	// Calculate centering
 	centerY := termHeight / 2
-	centerX := (termWidth - len(resizeMsg)) / 2
-	if centerX < 0 {
-		centerX = 0
-	}
+	centerX := max((termWidth - len(resizeMsg)) / 2, 0)
 
 	// Build output line by line
-	for y := 0; y < termHeight; y++ {
-		for x := 0; x < termWidth; x++ {
+	for y := range termHeight {
+		for x := range termWidth {
 			if y == centerY && x >= centerX && x < centerX+len(resizeMsg) {
 				// Part of the resize message
 				msgIdx := x - centerX
@@ -1523,22 +1520,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			fixedLines = 6 // Add scroll indicator lines
 		}
 
-		logsPerPage := maxDisplayHeight - fixedLines
-		if logsPerPage < 1 {
-			logsPerPage = 1 // Ensure at least 1 log is visible
-		}
+		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
 
 		// Clamp scroll offset to valid range
-		maxScroll := totalLogs - logsPerPage
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
-		if m.LogScrollOffset > maxScroll {
-			m.LogScrollOffset = maxScroll
-		}
-		if m.LogScrollOffset < 0 {
-			m.LogScrollOffset = 0
-		}
+		maxScroll := max(totalLogs-logsPerPage, 0)
+		m.LogScrollOffset = max(0, min(m.LogScrollOffset, maxScroll))
 
 		var logLines []string
 		logLines = append(logLines, logTitle)
@@ -1637,7 +1623,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 					barWidth := 15
 					filledWidth := (progress * barWidth) / 100
 					bar := ""
-					for i := 0; i < barWidth; i++ {
+					for i := range barWidth {
 						if i < filledWidth {
 							bar += "█"
 						} else {
@@ -1730,10 +1716,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 
 		for _, binding := range bindings {
-			padding := maxKeyLen - len(binding.Key) + 2
-			if padding < 2 {
-				padding = 2
-			}
+			padding := max(maxKeyLen-len(binding.Key)+2, 2)
 			paddingStr := strings.Repeat(" ", padding)
 			helpLines = append(helpLines, keyStyle.Render(binding.Key)+paddingStr+descStyle.Render(binding.Description))
 		}

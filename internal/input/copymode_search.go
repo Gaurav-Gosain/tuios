@@ -36,7 +36,7 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 	screenHeight := window.Terminal.Height()
 
 	// Search scrollback
-	for i := 0; i < scrollbackLen; i++ {
+	for i := range scrollbackLen {
 		line := window.ScrollbackLine(i)
 		if line == nil {
 			continue
@@ -89,7 +89,7 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 
 	// Search current screen
 	if len(cm.SearchMatches) < 1000 {
-		for y := 0; y < screenHeight; y++ {
+		for y := range screenHeight {
 			lineText := extractScreenLineText(window.Terminal, y)
 
 			if !cm.CaseSensitive {
@@ -168,7 +168,7 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 		} else {
 			// For forward search (/), find the closest match after current position
 			foundMatch := -1
-			for i := 0; i < len(cm.SearchMatches); i++ {
+			for i := range len(cm.SearchMatches) {
 				match := cm.SearchMatches[i]
 				if match.Line > currentAbsY || (match.Line == currentAbsY && match.StartX > cm.CursorX) {
 					foundMatch = i

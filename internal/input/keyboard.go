@@ -125,17 +125,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if totalLogs > maxDisplayHeight-fixedLines {
 			fixedLines = 6
 		}
-		logsPerPage := maxDisplayHeight - fixedLines
-		if logsPerPage < 1 {
-			logsPerPage = 1
-		}
+		logsPerPage := max(maxDisplayHeight - fixedLines, 1)
 
 		// Calculate max scroll position based on visible capacity
 		// Can only scroll if there are more logs than fit on screen
-		maxScroll := totalLogs - logsPerPage
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
+		maxScroll := max(totalLogs - logsPerPage, 0)
 
 		// Scroll up/down
 		if key == "up" || key == "k" {
@@ -1153,7 +1147,7 @@ func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleUpKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleUpKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Note: help menu scrolling is handled in HandleTerminalModeKey and HandleWindowManagementModeKey
 	// This function is only for selection mode and logs when NOT in help mode
 	if o.ShowLogs {
@@ -1173,7 +1167,7 @@ func handleUpKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleDownKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleDownKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Note: help menu scrolling is handled in HandleTerminalModeKey and HandleWindowManagementModeKey
 	// This function is only for selection mode and logs when NOT in help mode
 	if o.ShowLogs {
@@ -1191,7 +1185,7 @@ func handleDownKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleLeftKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Help menu category navigation
 	if o.ShowHelp && !o.HelpSearchMode {
 		if o.HelpCategory > 0 {
@@ -1211,7 +1205,7 @@ func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleRightKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Help menu category navigation
 	if o.ShowHelp && !o.HelpSearchMode {
 		categories := app.GetHelpCategories(o.KeybindRegistry)
@@ -1232,7 +1226,7 @@ func handleRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleShiftUpKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleShiftUpKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
@@ -1243,7 +1237,7 @@ func handleShiftUpKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleShiftDownKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleShiftDownKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
@@ -1254,7 +1248,7 @@ func handleShiftDownKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleShiftLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleShiftLeftKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
@@ -1265,7 +1259,7 @@ func handleShiftLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleShiftRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleShiftRightKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {

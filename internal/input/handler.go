@@ -52,13 +52,6 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	return o, nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // shouldShowQuitDialog checks if there are any terminals with active foreground processes
 // to show quit confirmation for. Returns true if any window has a foreground process
 // (besides the shell itself), or if we're unable to detect (falls back to true).
@@ -118,11 +111,10 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				// Yes selected - quit
 				o.Cleanup()
 				return o, tea.Quit
-			} else {
-				// No selected - close dialog
-				o.ShowQuitConfirm = false
-				return o, nil
 			}
+			// No selected - close dialog
+			o.ShowQuitConfirm = false
+			return o, nil
 		}
 
 		// Quit dialog is showing but key wasn't handled - ignore it
@@ -218,7 +210,7 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 // handlePrefixKey handles Ctrl+B prefix key activation
-func handlePrefixKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// If prefix is already active, deactivate it (double leader key cancels)
 	if o.PrefixActive {
 		o.PrefixActive = false

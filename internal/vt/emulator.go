@@ -498,7 +498,7 @@ func (e *Emulator) SetThemeColors(fg, bg, cur color.Color, ansiPalette [16]color
 	// This prevents overriding standard terminal colors when theming is disabled
 	if fg != nil || bg != nil {
 		// Set the first 16 ANSI colors
-		for i := 0; i < 16; i++ {
+		for i := range 16 {
 			e.SetIndexedColor(i, ansiPalette[i])
 		}
 	}

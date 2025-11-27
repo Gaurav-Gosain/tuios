@@ -184,7 +184,7 @@ func (sc *StyleCache) Clear() {
 	sc.evicts.Add(uint64(len(sc.cache)))
 }
 
-// Stats returns cache statistics for monitoring and debugging.
+// StyleCacheStats holds cache statistics for monitoring and debugging.
 type StyleCacheStats struct {
 	Hits     uint64  // Number of cache hits
 	Misses   uint64  // Number of cache misses

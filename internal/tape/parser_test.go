@@ -23,10 +23,10 @@ Space`
 
 	// Check types
 	expectedTypes := []CommandType{
-		CommandType_Type,
-		CommandType_Enter,
-		CommandType_Sleep,
-		CommandType_Space,
+		CommandTypeType,
+		CommandTypeEnter,
+		CommandTypeSleep,
+		CommandTypeSpace,
 	}
 
 	for i, expectedType := range expectedTypes {
@@ -67,8 +67,8 @@ func TestParserTypeCommand(t *testing.T) {
 				t.Fatal("No commands parsed")
 			}
 
-			if commands[0].Type != CommandType_Type {
-				t.Errorf("Expected CommandType_Type, got %v", commands[0].Type)
+			if commands[0].Type != CommandTypeType {
+				t.Errorf("Expected CommandTypeType, got %v", commands[0].Type)
 			}
 
 			if len(commands[0].Args) == 0 {
@@ -112,8 +112,8 @@ func TestParserSleepCommand(t *testing.T) {
 			}
 
 			cmd := commands[0]
-			if cmd.Type != CommandType_Sleep {
-				t.Errorf("Expected CommandType_Sleep, got %v", cmd.Type)
+			if cmd.Type != CommandTypeSleep {
+				t.Errorf("Expected CommandTypeSleep, got %v", cmd.Type)
 			}
 
 			if len(cmd.Args) == 0 {
@@ -163,8 +163,8 @@ func TestParserKeyCombo(t *testing.T) {
 			}
 
 			cmd := commands[0]
-			if cmd.Type != CommandType_KeyCombo {
-				t.Errorf("Expected CommandType_KeyCombo, got %v", cmd.Type)
+			if cmd.Type != CommandTypeKeyCombo {
+				t.Errorf("Expected CommandTypeKeyCombo, got %v", cmd.Type)
 			}
 
 			if len(cmd.Args) == 0 {
@@ -187,17 +187,17 @@ func TestParserTuiosActions(t *testing.T) {
 		{
 			name:         "NewWindow",
 			input:        `NewWindow`,
-			expectedType: CommandType_NewWindow,
+			expectedType: CommandTypeNewWindow,
 		},
 		{
 			name:         "CloseWindow",
 			input:        `CloseWindow`,
-			expectedType: CommandType_CloseWindow,
+			expectedType: CommandTypeCloseWindow,
 		},
 		{
 			name:         "ToggleTiling",
 			input:        `ToggleTiling`,
-			expectedType: CommandType_ToggleTiling,
+			expectedType: CommandTypeToggleTiling,
 		},
 	}
 
@@ -226,8 +226,8 @@ func TestParserSwitchWorkspace(t *testing.T) {
 	}
 
 	cmd := commands[0]
-	if cmd.Type != CommandType_SwitchWS {
-		t.Errorf("Expected CommandType_SwitchWS, got %v", cmd.Type)
+	if cmd.Type != CommandTypeSwitchWS {
+		t.Errorf("Expected CommandTypeSwitchWS, got %v", cmd.Type)
 	}
 
 	if len(cmd.Args) == 0 {
@@ -251,12 +251,12 @@ Enter`
 		t.Errorf("Expected 2 commands, got %d", len(commands))
 	}
 
-	if commands[0].Type != CommandType_Type {
-		t.Errorf("Expected CommandType_Type, got %v", commands[0].Type)
+	if commands[0].Type != CommandTypeType {
+		t.Errorf("Expected CommandTypeType, got %v", commands[0].Type)
 	}
 
-	if commands[1].Type != CommandType_Enter {
-		t.Errorf("Expected CommandType_Enter, got %v", commands[1].Type)
+	if commands[1].Type != CommandTypeEnter {
+		t.Errorf("Expected CommandTypeEnter, got %v", commands[1].Type)
 	}
 }
 

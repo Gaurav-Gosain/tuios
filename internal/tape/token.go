@@ -4,92 +4,124 @@ package tape
 type TokenType string
 
 const (
-	// Special tokens
-	TOKEN_EOF     TokenType = "EOF"
-	TOKEN_ILLEGAL TokenType = "ILLEGAL"
-	TOKEN_COMMENT TokenType = "COMMENT"
-	TOKEN_NEWLINE TokenType = "NEWLINE"
-
-	// Literals
-	TOKEN_STRING     TokenType = "STRING"
-	TOKEN_NUMBER     TokenType = "NUMBER"
-	TOKEN_DURATION   TokenType = "DURATION"
-	TOKEN_IDENTIFIER TokenType = "IDENTIFIER"
-
-	// Symbols
-	TOKEN_PLUS   TokenType = "PLUS"
-	TOKEN_AT     TokenType = "AT"
-	TOKEN_COMMA  TokenType = "COMMA"
-	TOKEN_SLASH  TokenType = "SLASH"
-	TOKEN_LPAREN TokenType = "LPAREN"
-	TOKEN_RPAREN TokenType = "RPAREN"
-
-	// Commands - Basic
-	TOKEN_TYPE      TokenType = "Type"
-	TOKEN_SLEEP     TokenType = "Sleep"
-	TOKEN_ENTER     TokenType = "Enter"
-	TOKEN_SPACE     TokenType = "Space"
-	TOKEN_BACKSPACE TokenType = "Backspace"
-	TOKEN_DELETE    TokenType = "Delete"
-	TOKEN_TAB       TokenType = "Tab"
-	TOKEN_ESCAPE    TokenType = "Escape"
-
-	// Commands - Navigation
-	TOKEN_UP    TokenType = "Up"
-	TOKEN_DOWN  TokenType = "Down"
-	TOKEN_LEFT  TokenType = "Left"
-	TOKEN_RIGHT TokenType = "Right"
-	TOKEN_HOME  TokenType = "Home"
-	TOKEN_END   TokenType = "End"
-
-	// Commands - Modifiers
-	TOKEN_CTRL  TokenType = "Ctrl"
-	TOKEN_ALT   TokenType = "Alt"
-	TOKEN_SHIFT TokenType = "Shift"
-
-	// Commands - Mode Switching
-	TOKEN_TERMINAL_MODE          TokenType = "TerminalMode"
-	TOKEN_WINDOW_MANAGEMENT_MODE TokenType = "WindowManagementMode"
-
-	// Commands - Window Management
-	TOKEN_NEW_WINDOW      TokenType = "NewWindow"
-	TOKEN_CLOSE_WINDOW    TokenType = "CloseWindow"
-	TOKEN_NEXT_WINDOW     TokenType = "NextWindow"
-	TOKEN_PREV_WINDOW     TokenType = "PrevWindow"
-	TOKEN_FOCUS_WINDOW    TokenType = "FocusWindow"
-	TOKEN_RENAME_WINDOW   TokenType = "RenameWindow"
-	TOKEN_MINIMIZE_WINDOW TokenType = "MinimizeWindow"
-	TOKEN_RESTORE_WINDOW  TokenType = "RestoreWindow"
-
-	// Commands - Tiling
-	TOKEN_TOGGLE_TILING   TokenType = "ToggleTiling"
-	TOKEN_ENABLE_TILING   TokenType = "EnableTiling"
-	TOKEN_DISABLE_TILING  TokenType = "DisableTiling"
-	TOKEN_SNAP_LEFT       TokenType = "SnapLeft"
-	TOKEN_SNAP_RIGHT      TokenType = "SnapRight"
-	TOKEN_SNAP_FULLSCREEN TokenType = "SnapFullscreen"
-
-	// Commands - Workspace
-	TOKEN_SWITCH_WS          TokenType = "SwitchWorkspace"
-	TOKEN_MOVE_TO_WS         TokenType = "MoveToWorkspace"
-	TOKEN_MOVE_AND_FOLLOW_WS TokenType = "MoveAndFollowWorkspace"
-
-	// Commands - Other Actions
-	TOKEN_SPLIT TokenType = "Split"
-	TOKEN_FOCUS TokenType = "Focus"
-
-	// Commands - Synchronization
-	TOKEN_WAIT             TokenType = "Wait"
-	TOKEN_WAIT_UNTIL_REGEX TokenType = "WaitUntilRegex"
-
-	// Commands - Settings (for future use)
-	TOKEN_SET    TokenType = "Set"
-	TOKEN_OUTPUT TokenType = "Output"
-	TOKEN_SOURCE TokenType = "Source"
-
-	// Keywords
-	TOKEN_TRUE  TokenType = "true"
-	TOKEN_FALSE TokenType = "false"
+	// TokenEOF represents end of file token.
+	TokenEOF TokenType = "EOF"
+	// TokenIllegal represents an illegal token.
+	TokenIllegal TokenType = "ILLEGAL"
+	// TokenComment represents a comment token.
+	TokenComment TokenType = "COMMENT"
+	// TokenNewline represents a newline token.
+	TokenNewline TokenType = "NEWLINE"
+	// TokenString represents a string literal token.
+	TokenString TokenType = "STRING"
+	// TokenNumber represents a numeric literal token.
+	TokenNumber TokenType = "NUMBER"
+	// TokenDuration represents a duration token.
+	TokenDuration TokenType = "DURATION"
+	// TokenIdentifier represents an identifier token.
+	TokenIdentifier TokenType = "IDENTIFIER"
+	// TokenPlus represents the plus operator token.
+	TokenPlus TokenType = "PLUS"
+	// TokenAt represents the at operator token.
+	TokenAt TokenType = "AT"
+	// TokenComma represents the comma token.
+	TokenComma TokenType = "COMMA"
+	// TokenSlash represents the slash operator token.
+	TokenSlash TokenType = "SLASH"
+	// TokenLParen represents the left parenthesis token.
+	TokenLParen TokenType = "LPAREN"
+	// TokenRParen represents the right parenthesis token.
+	TokenRParen TokenType = "RPAREN"
+	// TokenTypeCmd represents the Type command token.
+	TokenTypeCmd TokenType = "Type"
+	// TokenSleep represents the Sleep command token.
+	TokenSleep TokenType = "Sleep"
+	// TokenEnter represents the Enter key command token.
+	TokenEnter TokenType = "Enter"
+	// TokenSpace represents the Space key command token.
+	TokenSpace TokenType = "Space"
+	// TokenBackspace represents the Backspace key command token.
+	TokenBackspace TokenType = "Backspace"
+	// TokenDelete represents the Delete key command token.
+	TokenDelete TokenType = "Delete"
+	// TokenTab represents the Tab key command token.
+	TokenTab TokenType = "Tab"
+	// TokenEscape represents the Escape key command token.
+	TokenEscape TokenType = "Escape"
+	// TokenUp represents the Up navigation key token.
+	TokenUp TokenType = "Up"
+	// TokenDown represents the Down navigation key token.
+	TokenDown TokenType = "Down"
+	// TokenLeft represents the Left navigation key token.
+	TokenLeft TokenType = "Left"
+	// TokenRight represents the Right navigation key token.
+	TokenRight TokenType = "Right"
+	// TokenHome represents the Home navigation key token.
+	TokenHome TokenType = "Home"
+	// TokenEnd represents the End navigation key token.
+	TokenEnd TokenType = "End"
+	// TokenCtrl represents the Ctrl modifier token.
+	TokenCtrl TokenType = "Ctrl"
+	// TokenAlt represents the Alt modifier token.
+	TokenAlt TokenType = "Alt"
+	// TokenShift represents the Shift modifier token.
+	TokenShift TokenType = "Shift"
+	// TokenTerminalMode represents the TerminalMode command token.
+	TokenTerminalMode TokenType = "TerminalMode"
+	// TokenWindowManagementMode represents the WindowManagementMode command token.
+	TokenWindowManagementMode TokenType = "WindowManagementMode"
+	// TokenNewWindow represents the NewWindow command token.
+	TokenNewWindow TokenType = "NewWindow"
+	// TokenCloseWindow represents the CloseWindow command token.
+	TokenCloseWindow TokenType = "CloseWindow"
+	// TokenNextWindow represents the NextWindow command token.
+	TokenNextWindow TokenType = "NextWindow"
+	// TokenPrevWindow represents the PrevWindow command token.
+	TokenPrevWindow TokenType = "PrevWindow"
+	// TokenFocusWindow represents the FocusWindow command token.
+	TokenFocusWindow TokenType = "FocusWindow"
+	// TokenRenameWindow represents the RenameWindow command token.
+	TokenRenameWindow TokenType = "RenameWindow"
+	// TokenMinimizeWindow represents the MinimizeWindow command token.
+	TokenMinimizeWindow TokenType = "MinimizeWindow"
+	// TokenRestoreWindow represents the RestoreWindow command token.
+	TokenRestoreWindow TokenType = "RestoreWindow"
+	// TokenToggleTiling represents the ToggleTiling command token.
+	TokenToggleTiling TokenType = "ToggleTiling"
+	// TokenEnableTiling represents the EnableTiling command token.
+	TokenEnableTiling TokenType = "EnableTiling"
+	// TokenDisableTiling represents the DisableTiling command token.
+	TokenDisableTiling TokenType = "DisableTiling"
+	// TokenSnapLeft represents the SnapLeft command token.
+	TokenSnapLeft TokenType = "SnapLeft"
+	// TokenSnapRight represents the SnapRight command token.
+	TokenSnapRight TokenType = "SnapRight"
+	// TokenSnapFullscreen represents the SnapFullscreen command token.
+	TokenSnapFullscreen TokenType = "SnapFullscreen"
+	// TokenSwitchWS represents the SwitchWorkspace command token.
+	TokenSwitchWS TokenType = "SwitchWorkspace"
+	// TokenMoveToWS represents the MoveToWorkspace command token.
+	TokenMoveToWS TokenType = "MoveToWorkspace"
+	// TokenMoveAndFollowWS represents the MoveAndFollowWorkspace command token.
+	TokenMoveAndFollowWS TokenType = "MoveAndFollowWorkspace"
+	// TokenSplit represents the Split command token.
+	TokenSplit TokenType = "Split"
+	// TokenFocus represents the Focus command token.
+	TokenFocus TokenType = "Focus"
+	// TokenWait represents the Wait command token.
+	TokenWait TokenType = "Wait"
+	// TokenWaitUntilRegex represents the WaitUntilRegex command token.
+	TokenWaitUntilRegex TokenType = "WaitUntilRegex"
+	// TokenSet represents the Set command token.
+	TokenSet TokenType = "Set"
+	// TokenOutput represents the Output command token.
+	TokenOutput TokenType = "Output"
+	// TokenSource represents the Source command token.
+	TokenSource TokenType = "Source"
+	// TokenTrue represents the true keyword token.
+	TokenTrue TokenType = "true"
+	// TokenFalse represents the false keyword token.
+	TokenFalse TokenType = "false"
 )
 
 // Token represents a lexical token
@@ -103,19 +135,19 @@ type Token struct {
 // IsCommand returns true if the token type is a command
 func (tt TokenType) IsCommand() bool {
 	switch tt {
-	case TOKEN_TYPE, TOKEN_SLEEP, TOKEN_ENTER, TOKEN_SPACE, TOKEN_BACKSPACE,
-		TOKEN_DELETE, TOKEN_TAB, TOKEN_ESCAPE,
-		TOKEN_UP, TOKEN_DOWN, TOKEN_LEFT, TOKEN_RIGHT, TOKEN_HOME, TOKEN_END,
-		TOKEN_CTRL, TOKEN_ALT, TOKEN_SHIFT,
-		TOKEN_TERMINAL_MODE, TOKEN_WINDOW_MANAGEMENT_MODE,
-		TOKEN_NEW_WINDOW, TOKEN_CLOSE_WINDOW, TOKEN_NEXT_WINDOW, TOKEN_PREV_WINDOW,
-		TOKEN_FOCUS_WINDOW, TOKEN_RENAME_WINDOW, TOKEN_MINIMIZE_WINDOW, TOKEN_RESTORE_WINDOW,
-		TOKEN_TOGGLE_TILING, TOKEN_ENABLE_TILING, TOKEN_DISABLE_TILING,
-		TOKEN_SNAP_LEFT, TOKEN_SNAP_RIGHT, TOKEN_SNAP_FULLSCREEN,
-		TOKEN_SWITCH_WS, TOKEN_MOVE_TO_WS, TOKEN_MOVE_AND_FOLLOW_WS,
-		TOKEN_SPLIT, TOKEN_FOCUS,
-		TOKEN_WAIT, TOKEN_WAIT_UNTIL_REGEX,
-		TOKEN_SET, TOKEN_OUTPUT, TOKEN_SOURCE:
+	case TokenTypeCmd, TokenSleep, TokenEnter, TokenSpace, TokenBackspace,
+		TokenDelete, TokenTab, TokenEscape,
+		TokenUp, TokenDown, TokenLeft, TokenRight, TokenHome, TokenEnd,
+		TokenCtrl, TokenAlt, TokenShift,
+		TokenTerminalMode, TokenWindowManagementMode,
+		TokenNewWindow, TokenCloseWindow, TokenNextWindow, TokenPrevWindow,
+		TokenFocusWindow, TokenRenameWindow, TokenMinimizeWindow, TokenRestoreWindow,
+		TokenToggleTiling, TokenEnableTiling, TokenDisableTiling,
+		TokenSnapLeft, TokenSnapRight, TokenSnapFullscreen,
+		TokenSwitchWS, TokenMoveToWS, TokenMoveAndFollowWS,
+		TokenSplit, TokenFocus,
+		TokenWait, TokenWaitUntilRegex,
+		TokenSet, TokenOutput, TokenSource:
 		return true
 	}
 	return false
@@ -124,7 +156,7 @@ func (tt TokenType) IsCommand() bool {
 // IsModifier returns true if the token is a modifier key
 func (tt TokenType) IsModifier() bool {
 	switch tt {
-	case TOKEN_CTRL, TOKEN_ALT, TOKEN_SHIFT:
+	case TokenCtrl, TokenAlt, TokenShift:
 		return true
 	}
 	return false
@@ -133,7 +165,7 @@ func (tt TokenType) IsModifier() bool {
 // IsNavigationKey returns true if the token is a navigation key
 func (tt TokenType) IsNavigationKey() bool {
 	switch tt {
-	case TOKEN_UP, TOKEN_DOWN, TOKEN_LEFT, TOKEN_RIGHT, TOKEN_HOME, TOKEN_END:
+	case TokenUp, TokenDown, TokenLeft, TokenRight, TokenHome, TokenEnd:
 		return true
 	}
 	return false
@@ -142,77 +174,77 @@ func (tt TokenType) IsNavigationKey() bool {
 // KeywordTokenMap maps string keywords to token types
 var KeywordTokenMap = map[string]TokenType{
 	// Basic commands
-	"Type":      TOKEN_TYPE,
-	"Sleep":     TOKEN_SLEEP,
-	"Enter":     TOKEN_ENTER,
-	"Space":     TOKEN_SPACE,
-	"Backspace": TOKEN_BACKSPACE,
-	"Delete":    TOKEN_DELETE,
-	"Tab":       TOKEN_TAB,
-	"Escape":    TOKEN_ESCAPE,
+	"Type":      TokenTypeCmd,
+	"Sleep":     TokenSleep,
+	"Enter":     TokenEnter,
+	"Space":     TokenSpace,
+	"Backspace": TokenBackspace,
+	"Delete":    TokenDelete,
+	"Tab":       TokenTab,
+	"Escape":    TokenEscape,
 
 	// Navigation
-	"Up":    TOKEN_UP,
-	"Down":  TOKEN_DOWN,
-	"Left":  TOKEN_LEFT,
-	"Right": TOKEN_RIGHT,
-	"Home":  TOKEN_HOME,
-	"End":   TOKEN_END,
+	"Up":    TokenUp,
+	"Down":  TokenDown,
+	"Left":  TokenLeft,
+	"Right": TokenRight,
+	"Home":  TokenHome,
+	"End":   TokenEnd,
 
 	// Modifiers
-	"Ctrl":  TOKEN_CTRL,
-	"Alt":   TOKEN_ALT,
-	"Shift": TOKEN_SHIFT,
+	"Ctrl":  TokenCtrl,
+	"Alt":   TokenAlt,
+	"Shift": TokenShift,
 
 	// Mode switching
-	"TerminalMode":         TOKEN_TERMINAL_MODE,
-	"WindowManagementMode": TOKEN_WINDOW_MANAGEMENT_MODE,
+	"TerminalMode":         TokenTerminalMode,
+	"WindowManagementMode": TokenWindowManagementMode,
 
 	// Window management
-	"NewWindow":      TOKEN_NEW_WINDOW,
-	"CloseWindow":    TOKEN_CLOSE_WINDOW,
-	"NextWindow":     TOKEN_NEXT_WINDOW,
-	"PrevWindow":     TOKEN_PREV_WINDOW,
-	"FocusWindow":    TOKEN_FOCUS_WINDOW,
-	"RenameWindow":   TOKEN_RENAME_WINDOW,
-	"MinimizeWindow": TOKEN_MINIMIZE_WINDOW,
-	"RestoreWindow":  TOKEN_RESTORE_WINDOW,
+	"NewWindow":      TokenNewWindow,
+	"CloseWindow":    TokenCloseWindow,
+	"NextWindow":     TokenNextWindow,
+	"PrevWindow":     TokenPrevWindow,
+	"FocusWindow":    TokenFocusWindow,
+	"RenameWindow":   TokenRenameWindow,
+	"MinimizeWindow": TokenMinimizeWindow,
+	"RestoreWindow":  TokenRestoreWindow,
 
 	// Tiling
-	"ToggleTiling":   TOKEN_TOGGLE_TILING,
-	"EnableTiling":   TOKEN_ENABLE_TILING,
-	"DisableTiling":  TOKEN_DISABLE_TILING,
-	"SnapLeft":       TOKEN_SNAP_LEFT,
-	"SnapRight":      TOKEN_SNAP_RIGHT,
-	"SnapFullscreen": TOKEN_SNAP_FULLSCREEN,
+	"ToggleTiling":   TokenToggleTiling,
+	"EnableTiling":   TokenEnableTiling,
+	"DisableTiling":  TokenDisableTiling,
+	"SnapLeft":       TokenSnapLeft,
+	"SnapRight":      TokenSnapRight,
+	"SnapFullscreen": TokenSnapFullscreen,
 
 	// Workspace
-	"SwitchWorkspace":        TOKEN_SWITCH_WS,
-	"MoveToWorkspace":        TOKEN_MOVE_TO_WS,
-	"MoveAndFollowWorkspace": TOKEN_MOVE_AND_FOLLOW_WS,
+	"SwitchWorkspace":        TokenSwitchWS,
+	"MoveToWorkspace":        TokenMoveToWS,
+	"MoveAndFollowWorkspace": TokenMoveAndFollowWS,
 
 	// Other actions
-	"Split": TOKEN_SPLIT,
-	"Focus": TOKEN_FOCUS,
+	"Split": TokenSplit,
+	"Focus": TokenFocus,
 
 	// Synchronization
-	"Wait":           TOKEN_WAIT,
-	"WaitUntilRegex": TOKEN_WAIT_UNTIL_REGEX,
+	"Wait":           TokenWait,
+	"WaitUntilRegex": TokenWaitUntilRegex,
 
 	// Settings
-	"Set":    TOKEN_SET,
-	"Output": TOKEN_OUTPUT,
-	"Source": TOKEN_SOURCE,
+	"Set":    TokenSet,
+	"Output": TokenOutput,
+	"Source": TokenSource,
 
 	// Literals
-	"true":  TOKEN_TRUE,
-	"false": TOKEN_FALSE,
+	"true":  TokenTrue,
+	"false": TokenFalse,
 }
 
-// LookupKeyword returns the token type for a keyword, or TOKEN_IDENTIFIER if not a keyword
+// LookupKeyword returns the token type for a keyword, or TokenIdentifier if not a keyword
 func LookupKeyword(ident string) TokenType {
 	if tt, ok := KeywordTokenMap[ident]; ok {
 		return tt
 	}
-	return TOKEN_IDENTIFIER
+	return TokenIdentifier
 }

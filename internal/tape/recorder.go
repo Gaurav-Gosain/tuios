@@ -78,7 +78,7 @@ func (r *Recorder) RecordType(text string) {
 	delay := now.Sub(r.lastEventTime)
 
 	cmd := Command{
-		Type:   CommandType_Type,
+		Type:   CommandTypeType,
 		Args:   []string{text},
 		Delay:  delay,
 		Line:   len(r.commands) + 1,
@@ -98,7 +98,7 @@ func (r *Recorder) RecordSleep(duration time.Duration) {
 
 	now := time.Now()
 	cmd := Command{
-		Type:   CommandType_Sleep,
+		Type:   CommandTypeSleep,
 		Args:   []string{duration.String()},
 		Delay:  duration,
 		Line:   len(r.commands) + 1,
@@ -155,45 +155,45 @@ func (r *Recorder) keyToCommand(key string) *Command {
 
 	switch key {
 	case "enter":
-		cmdType = CommandType_Enter
+		cmdType = CommandTypeEnter
 		raw = "Enter"
 	case " ":
-		cmdType = CommandType_Space
+		cmdType = CommandTypeSpace
 		raw = "Space"
 	case "backspace":
-		cmdType = CommandType_Backspace
+		cmdType = CommandTypeBackspace
 		raw = "Backspace"
 	case "delete":
-		cmdType = CommandType_Delete
+		cmdType = CommandTypeDelete
 		raw = "Delete"
 	case "tab":
-		cmdType = CommandType_Tab
+		cmdType = CommandTypeTab
 		raw = "Tab"
 	case "esc":
-		cmdType = CommandType_Escape
+		cmdType = CommandTypeEscape
 		raw = "Escape"
 	case "up":
-		cmdType = CommandType_Up
+		cmdType = CommandTypeUp
 		raw = "Up"
 	case "down":
-		cmdType = CommandType_Down
+		cmdType = CommandTypeDown
 		raw = "Down"
 	case "left":
-		cmdType = CommandType_Left
+		cmdType = CommandTypeLeft
 		raw = "Left"
 	case "right":
-		cmdType = CommandType_Right
+		cmdType = CommandTypeRight
 		raw = "Right"
 	case "home":
-		cmdType = CommandType_Home
+		cmdType = CommandTypeHome
 		raw = "Home"
 	case "end":
-		cmdType = CommandType_End
+		cmdType = CommandTypeEnd
 		raw = "End"
 	default:
 		// Check if it's a modifier combination
 		if isModifierCombo(key) {
-			cmdType = CommandType_KeyCombo
+			cmdType = CommandTypeKeyCombo
 			raw = key
 		} else {
 			// Unknown key

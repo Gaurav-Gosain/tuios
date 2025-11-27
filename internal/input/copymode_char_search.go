@@ -30,7 +30,7 @@ func convertColumnToRuneIndex(window *terminal.Window, absY int, col int) int {
 		}
 	} else {
 		screenY := absY - scrollbackLen
-		for x := 0; x < window.Terminal.Width(); x++ {
+		for x := range window.Terminal.Width() {
 			if currentCol >= col {
 				break
 			}
@@ -61,7 +61,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 
 	if direction > 0 {
 		// Search forward across lines
-		for lineOffset := 0; lineOffset < maxIterations; lineOffset++ {
+		for lineOffset := range maxIterations {
 			absY := startAbsY + lineOffset
 			if absY >= totalLines {
 				break
@@ -98,7 +98,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 					// Move to the target line using step-by-step movement
 					// This ensures scroll offset is handled correctly
 					linesToMove := absY - startAbsY
-					for i := 0; i < linesToMove; i++ {
+					for range linesToMove {
 						moveDown(cm, window)
 					}
 
@@ -110,7 +110,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 		}
 	} else {
 		// Search backward across lines
-		for lineOffset := 0; lineOffset < maxIterations; lineOffset++ {
+		for lineOffset := range maxIterations {
 			absY := startAbsY - lineOffset
 			if absY < 0 {
 				break
@@ -147,7 +147,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 					// Move to the target line using step-by-step movement
 					// This ensures scroll offset is handled correctly
 					linesToMove := startAbsY - absY
-					for i := 0; i < linesToMove; i++ {
+					for range linesToMove {
 						moveUp(cm, window)
 					}
 
@@ -208,7 +208,7 @@ func convertRuneIndexToColumn(window *terminal.Window, absY int, runeIndex int) 
 		}
 	} else {
 		screenY := absY - scrollbackLen
-		for x := 0; x < window.Terminal.Width(); x++ {
+		for x := range window.Terminal.Width() {
 			cell := window.Terminal.CellAt(x, screenY)
 			if cell != nil && cell.Width > 0 { // Skip continuation cells
 				// Count runes in this cell's content
