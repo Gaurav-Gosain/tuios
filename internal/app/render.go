@@ -1309,7 +1309,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	currentTime := time.Now().Format("15:04:05")
 	var statusText string
 
-	if m.PrefixActive {
+	// Check if tape is recording
+	isRecording := m.TapeRecorder != nil && m.TapeRecorder.IsRecording()
+
+	if isRecording {
+		// Show recording indicator with time
+		statusText = config.TapeRecordingIndicator + " | " + currentTime
+	} else if m.PrefixActive {
 		// Show prefix indicator with time
 		statusText = "PREFIX | " + currentTime
 	} else {
@@ -1321,8 +1327,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		Bold(true).
 		Padding(0, 1)
 
-	// Highlight when prefix is active
-	if m.PrefixActive {
+	// Highlight based on state
+	if isRecording {
+		timeStyle = timeStyle.
+			Background(lipgloss.Color("#cc0000")).
+			Foreground(lipgloss.Color("#ffffff"))
+	} else if m.PrefixActive {
 		timeStyle = timeStyle.
 			Background(lipgloss.Color("#ff6b6b")).
 			Foreground(lipgloss.Color("#ffffff"))
@@ -1414,6 +1424,14 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			X(0).Y(0).Z(config.ZIndexHelp).ID("help")
 
 		layers = append(layers, helpLayer)
+	}
+
+	// Tape manager overlay
+	if m.ShowTapeManager {
+		tapeContent := m.RenderTapeManager(m.Width, m.Height)
+		tapeLayer := lipgloss.NewLayer(tapeContent).
+			X(0).Y(0).Z(config.ZIndexHelp).ID("tape-manager")
+		layers = append(layers, tapeLayer)
 	}
 
 	// Cache statistics overlay
@@ -1698,6 +1716,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		} else if m.DebugPrefixActive {
 			title = "Debug Commands:"
 			bindings = config.GetPrefixKeybindings("debug")
+		} else if m.TapePrefixActive {
+			title = "Tape Commands:"
+			bindings = config.GetPrefixKeybindings("tape")
 		} else {
 			title = "Prefix Commands:"
 			bindings = config.GetPrefixKeybindings("")
@@ -1787,22 +1808,22 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				bgColor = "#2a1515"
 				borderColor = "#ff4444"
 				fgColor = "#ff6666"
-				icon = "✕"
+				icon = config.NotificationIconError
 			case "warning":
 				bgColor = "#2a2515"
 				borderColor = "#ffaa00"
 				fgColor = "#ffcc00"
-				icon = "⚠"
+				icon = config.NotificationIconWarning
 			case "success":
 				bgColor = "#152a15"
 				borderColor = "#44ff44"
 				fgColor = "#66ff66"
-				icon = "✓"
+				icon = config.NotificationIconSuccess
 			default:
 				bgColor = "#151a2a"
 				borderColor = "#4488ff"
 				fgColor = "#66aaff"
-				icon = "ℹ"
+				icon = config.NotificationIconInfo
 			}
 
 			// Calculate dynamic max width based on screen size (leave space for margins)

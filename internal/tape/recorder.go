@@ -12,7 +12,11 @@ type Recorder struct {
 	startTime     time.Time
 	lastEventTime time.Time
 	enabled       bool
-	minDelayMs    int // Minimum delay to record between events (to filter out very fast inputs)
+	minDelayMs    int    // Minimum delay to record between events (to filter out very fast inputs)
+	typingBuffer  string // Buffer for accumulating typed characters
+	initialMode   string // Initial mode when recording started
+	initialWorkspace int // Initial workspace when recording started
+	initialTiling bool   // Initial tiling state when recording started
 }
 
 // NewRecorder creates a new tape recorder
@@ -34,8 +38,69 @@ func (r *Recorder) Start() {
 	r.commands = []Command{} // Reset commands
 }
 
+// StartWithState begins recording and records the initial state
+func (r *Recorder) StartWithState(mode string, workspace int, tilingEnabled bool) {
+	r.enabled = true
+	r.startTime = time.Now()
+	r.lastEventTime = time.Now()
+	r.commands = []Command{} // Reset commands
+	r.initialMode = mode
+	r.initialWorkspace = workspace
+	r.initialTiling = tilingEnabled
+
+	// Record initial workspace if not workspace 1
+	if workspace > 1 {
+		r.commands = append(r.commands, Command{
+			Type:   CommandTypeSwitchWS,
+			Args:   []string{fmt.Sprintf("%d", workspace)},
+			Line:   1,
+			Column: 1,
+			Raw:    fmt.Sprintf("SwitchWorkspace %d", workspace),
+		})
+	}
+
+	// Record initial tiling state
+	if tilingEnabled {
+		r.commands = append(r.commands, Command{
+			Type:   CommandTypeEnableTiling,
+			Args:   []string{},
+			Line:   len(r.commands) + 1,
+			Column: 1,
+			Raw:    "EnableTiling",
+		})
+	} else {
+		r.commands = append(r.commands, Command{
+			Type:   CommandTypeDisableTiling,
+			Args:   []string{},
+			Line:   len(r.commands) + 1,
+			Column: 1,
+			Raw:    "DisableTiling",
+		})
+	}
+
+	// Record initial mode
+	if mode == "terminal" {
+		r.commands = append(r.commands, Command{
+			Type:   CommandTypeTerminalMode,
+			Args:   []string{},
+			Line:   len(r.commands) + 1,
+			Column: 1,
+			Raw:    "TerminalMode",
+		})
+	} else {
+		r.commands = append(r.commands, Command{
+			Type:   CommandTypeWindowManagementMode,
+			Args:   []string{},
+			Line:   len(r.commands) + 1,
+			Column: 1,
+			Raw:    "WindowManagementMode",
+		})
+	}
+}
+
 // Stop ends recording
 func (r *Recorder) Stop() {
+	r.flushTypingBuffer() // Flush any pending typed text
 	r.enabled = false
 }
 
@@ -50,14 +115,12 @@ func (r *Recorder) RecordKey(key string) {
 		return
 	}
 
+	// Flush any pending typed text first
+	r.flushTypingBuffer()
+
 	// Calculate delay since last event
 	now := time.Now()
 	delay := now.Sub(r.lastEventTime)
-
-	// Check minimum delay to avoid recording too many events
-	if delay.Milliseconds() < int64(r.minDelayMs) {
-		return
-	}
 
 	// Convert key to command
 	cmd := r.keyToCommand(key)
@@ -68,22 +131,153 @@ func (r *Recorder) RecordKey(key string) {
 	}
 }
 
-// RecordType records typing text
+// RecordType records typing text - accumulates consecutive characters
 func (r *Recorder) RecordType(text string) {
 	if !r.enabled {
 		return
 	}
 
+	// Accumulate typed characters
+	r.typingBuffer += text
+	r.lastEventTime = time.Now()
+}
+
+// flushTypingBuffer writes accumulated typed text as a Type command
+func (r *Recorder) flushTypingBuffer() {
+	if r.typingBuffer == "" {
+		return
+	}
+
+	cmd := Command{
+		Type:   CommandTypeType,
+		Args:   []string{r.typingBuffer},
+		Delay:  0, // Delay is captured between commands
+		Line:   len(r.commands) + 1,
+		Column: 1,
+		Raw:    fmt.Sprintf(`Type "%s"`, r.typingBuffer),
+	}
+
+	r.commands = append(r.commands, cmd)
+	r.typingBuffer = ""
+}
+
+// RecordModeSwitch records a mode switch command and flushes the typing buffer
+func (r *Recorder) RecordModeSwitch(cmdType CommandType) {
+	if !r.enabled {
+		return
+	}
+
+	// Flush any pending typed text first
+	r.flushTypingBuffer()
+
+	now := time.Now()
+	delay := now.Sub(r.lastEventTime)
+
+	raw := string(cmdType)
+	cmd := Command{
+		Type:   cmdType,
+		Args:   []string{},
+		Delay:  delay,
+		Line:   len(r.commands) + 1,
+		Column: 1,
+		Raw:    raw,
+	}
+
+	r.commands = append(r.commands, cmd)
+	r.lastEventTime = now
+}
+
+// actionToCommand maps action names to tape command types and raw output
+var actionToCommand = map[string]struct {
+	cmdType CommandType
+	raw     string
+}{
+	"new_window":       {CommandTypeNewWindow, "NewWindow"},
+	"close_window":     {CommandTypeCloseWindow, "CloseWindow"},
+	"next_window":      {CommandTypeNextWindow, "NextWindow"},
+	"prev_window":      {CommandTypePrevWindow, "PrevWindow"},
+	"minimize_window":  {CommandTypeMinimizeWindow, "MinimizeWindow"},
+	"restore_all":      {CommandTypeRestoreWindow, "RestoreWindow"},
+	"toggle_tiling":    {CommandTypeToggleTiling, "ToggleTiling"},
+	"snap_left":        {CommandTypeSnapLeft, "SnapLeft"},
+	"snap_right":       {CommandTypeSnapRight, "SnapRight"},
+	"snap_fullscreen":  {CommandTypeSnapFullscreen, "SnapFullscreen"},
+}
+
+// RecordAction records a window management action
+func (r *Recorder) RecordAction(action string, args ...string) {
+	if !r.enabled {
+		return
+	}
+
+	// Skip tape control actions and mode switch actions (mode switches are recorded separately)
+	switch action {
+	case "toggle_tape_manager", "stop_recording", "enter_terminal_mode", "enter_window_mode":
+		return
+	}
+
+	// Flush any pending typed text first
+	r.flushTypingBuffer()
+
+	now := time.Now()
+	delay := now.Sub(r.lastEventTime)
+
+	var cmdType CommandType
+	var raw string
+
+	// Check if we have a mapping for this action
+	if mapping, ok := actionToCommand[action]; ok {
+		cmdType = mapping.cmdType
+		raw = mapping.raw
+	} else if len(action) > 17 && action[:17] == "switch_workspace_" {
+		// Handle workspace switching: switch_workspace_1 -> SwitchWorkspace 1
+		ws := action[17:]
+		cmdType = CommandTypeSwitchWS
+		raw = "SwitchWorkspace " + ws
+		args = []string{ws}
+	} else if len(action) > 14 && action[:14] == "select_window_" {
+		// Handle window selection: select_window_1 -> FocusWindow 1
+		win := action[14:]
+		cmdType = CommandTypeFocusWindow
+		raw = "FocusWindow " + win
+		args = []string{win}
+	} else {
+		// Unknown action, skip
+		return
+	}
+
+	cmd := Command{
+		Type:   cmdType,
+		Args:   args,
+		Delay:  delay,
+		Line:   len(r.commands) + 1,
+		Column: 1,
+		Raw:    raw,
+	}
+
+	r.commands = append(r.commands, cmd)
+	r.lastEventTime = now
+}
+
+// RecordWorkspaceSwitch records a workspace switch command
+func (r *Recorder) RecordWorkspaceSwitch(workspace int) {
+	if !r.enabled {
+		return
+	}
+
+	// Flush any pending typed text first
+	r.flushTypingBuffer()
+
 	now := time.Now()
 	delay := now.Sub(r.lastEventTime)
 
 	cmd := Command{
-		Type:   CommandTypeType,
-		Args:   []string{text},
+		Type:   CommandTypeSwitchWS,
+		Args:   []string{fmt.Sprintf("%d", workspace)},
 		Delay:  delay,
 		Line:   len(r.commands) + 1,
 		Column: 1,
-		Raw:    fmt.Sprintf(`Type "%s"`, text),
+		Raw:    fmt.Sprintf("SwitchWorkspace %d", workspace),
 	}
 
 	r.commands = append(r.commands, cmd)
@@ -195,6 +389,17 @@ func (r *Recorder) keyToCommand(key string) *Command {
 		if isModifierCombo(key) {
 			cmdType = CommandTypeKeyCombo
 			raw = key
+		} else if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
+			// Single printable character - record as Type command
+			cmdType = CommandTypeType
+			raw = fmt.Sprintf(`Type "%s"`, key)
+			return &Command{
+				Type:   cmdType,
+				Args:   []string{key},
+				Line:   len(r.commands) + 1,
+				Column: 1,
+				Raw:    raw,
+			}
 		} else {
 			// Unknown key
 			return nil
@@ -242,6 +447,7 @@ func (r *Recorder) GetStats() RecordingStats {
 // Clear clears all recorded commands
 func (r *Recorder) Clear() {
 	r.commands = []Command{}
+	r.typingBuffer = ""
 	r.startTime = time.Now()
 	r.lastEventTime = time.Now()
 }

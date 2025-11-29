@@ -1,5 +1,7 @@
 package tape
 
+import "strings"
+
 // TokenType represents the type of a token in a .tape file
 type TokenType string
 
@@ -241,9 +243,24 @@ var KeywordTokenMap = map[string]TokenType{
 	"false": TokenFalse,
 }
 
+// keywordTokenMapLower is a lowercase version of KeywordTokenMap for case-insensitive lookup
+var keywordTokenMapLower = make(map[string]TokenType)
+
+func init() {
+	for k, v := range KeywordTokenMap {
+		keywordTokenMapLower[strings.ToLower(k)] = v
+	}
+}
+
 // LookupKeyword returns the token type for a keyword, or TokenIdentifier if not a keyword
+// This function is case-insensitive
 func LookupKeyword(ident string) TokenType {
+	// Try exact match first
 	if tt, ok := KeywordTokenMap[ident]; ok {
+		return tt
+	}
+	// Try case-insensitive match
+	if tt, ok := keywordTokenMapLower[strings.ToLower(ident)]; ok {
 		return tt
 	}
 	return TokenIdentifier

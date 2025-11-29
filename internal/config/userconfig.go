@@ -41,6 +41,7 @@ type KeybindingsConfig struct {
 	MinimizePrefix   map[string][]string `toml:"minimize_prefix"`
 	WorkspacePrefix  map[string][]string `toml:"workspace_prefix"`
 	DebugPrefix      map[string][]string `toml:"debug_prefix"`
+	TapePrefix       map[string][]string `toml:"tape_prefix"`
 }
 
 // DefaultConfig returns the default configuration
@@ -152,6 +153,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_selection":     {"["},
 				"prefix_help":          {"?"},
 				"prefix_debug":         {"D"},
+				"prefix_tape":          {"T"},
 				"prefix_quit":          {"q"},
 				"prefix_fullscreen":    {"z"},
 			},
@@ -203,6 +205,12 @@ func DefaultConfig() *UserConfig {
 				"debug_prefix_logs":   {"l"},
 				"debug_prefix_cache":  {"c"},
 				"debug_prefix_cancel": {"esc"},
+			},
+			TapePrefix: map[string][]string{
+				"tape_prefix_manager": {"m"},
+				"tape_prefix_record":  {"r"},
+				"tape_prefix_stop":    {"s"},
+				"tape_prefix_cancel":  {"esc"},
 			},
 		},
 	}
@@ -447,6 +455,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.DebugPrefix == nil {
 		cfg.Keybindings.DebugPrefix = make(map[string][]string)
 	}
+	if cfg.Keybindings.TapePrefix == nil {
+		cfg.Keybindings.TapePrefix = make(map[string][]string)
+	}
 
 	// Set default leader key if not specified
 	if cfg.Keybindings.LeaderKey == "" {
@@ -466,6 +477,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.MinimizePrefix, defaultCfg.Keybindings.MinimizePrefix)
 	fillMapDefaults(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
 	fillMapDefaults(cfg.Keybindings.DebugPrefix, defaultCfg.Keybindings.DebugPrefix)
+	fillMapDefaults(cfg.Keybindings.TapePrefix, defaultCfg.Keybindings.TapePrefix)
 }
 
 func fillMapDefaults(target, defaults map[string][]string) {

@@ -83,6 +83,16 @@ func (r *KeybindRegistry) GetWorkspacePrefixAction(key string) string {
 	return r.lookupKeyInSection(key, r.config.Keybindings.WorkspacePrefix)
 }
 
+// GetDebugPrefixAction returns the action name for a given key in debug prefix mode (Ctrl+B, D)
+func (r *KeybindRegistry) GetDebugPrefixAction(key string) string {
+	return r.lookupKeyInSection(key, r.config.Keybindings.DebugPrefix)
+}
+
+// GetTapePrefixAction returns the action name for a given key in tape prefix mode (Ctrl+B, T)
+func (r *KeybindRegistry) GetTapePrefixAction(key string) string {
+	return r.lookupKeyInSection(key, r.config.Keybindings.TapePrefix)
+}
+
 // lookupKeyInSection looks up a key in a specific config section
 func (r *KeybindRegistry) lookupKeyInSection(key string, section map[string][]string) string {
 	// Build a temporary map for this section
@@ -319,6 +329,17 @@ var ActionDescriptions = map[string]string{
 	"prefix_help":          "Toggle help",
 	"prefix_logs":          "Toggle log viewer",
 	"prefix_debug":         "Enter debug prefix",
+	"prefix_tape":          "Enter tape manager prefix",
 	"prefix_quit":          "Quit TUIOS",
 	"prefix_fullscreen":    "Fullscreen current window",
+
+	// Tape Prefix
+	"tape_prefix_manager": "Open tape manager",
+	"tape_prefix_record":  "Start recording",
+	"tape_prefix_stop":    "Stop recording",
+	"tape_prefix_cancel":  "Cancel tape prefix",
+
+	// Tape Actions
+	"toggle_tape_manager": "Toggle tape manager",
+	"stop_recording":      "Stop tape recording",
 }

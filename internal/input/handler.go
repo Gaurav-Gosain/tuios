@@ -121,6 +121,31 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Record keystrokes when recording is active (before any other handling)
+	// Only record in terminal mode - WM mode actions are recorded at dispatch time
+	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() && !o.ShowTapeManager {
+		if o.Mode == app.TerminalMode {
+			keyStr := msg.String()
+			// Skip workspace switch keys - they're recorded by SwitchToWorkspace
+			if isWorkspaceSwitchKey(keyStr) {
+				// Don't record - will be captured by SwitchToWorkspace
+			} else if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] < 127 {
+				// Accumulate printable characters as Type command
+				o.TapeRecorder.RecordType(keyStr)
+			} else {
+				o.TapeRecorder.RecordKey(keyStr)
+			}
+		}
+	}
+
+	// Handle tape manager overlay (high priority - intercepts keys when shown)
+	if o.ShowTapeManager {
+		if o.HandleTapeManagerInput(msg.String()) {
+			return o, nil
+		}
+		// Key not handled by tape manager, fall through
+	}
+
 	// Handle script pause/resume (Ctrl+P)
 	if msg.String() == "ctrl+p" && o.ScriptMode {
 		o.ScriptPaused = !o.ScriptPaused
@@ -162,6 +187,11 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Handle debug prefix commands (Ctrl+B, D, ...)
 	if o.DebugPrefixActive {
 		return HandleDebugPrefixCommand(msg, o)
+	}
+
+	// Handle tape prefix commands (Ctrl+B, T, ...)
+	if o.TapePrefixActive {
+		return HandleTapePrefixCommand(msg, o)
 	}
 
 	// Handle prefix commands in window management mode
@@ -249,6 +279,12 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "D":
 		// Activate debug prefix mode (Ctrl+B, Shift+D)
 		o.DebugPrefixActive = true
+		o.PrefixActive = true // Keep prefix active for the next key
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "T":
+		// Activate tape prefix mode (Ctrl+B, Shift+T)
+		o.TapePrefixActive = true
 		o.PrefixActive = true // Keep prefix active for the next key
 		o.LastPrefixTime = time.Now()
 		return o, nil
@@ -373,4 +409,15 @@ func handlePrefixWindowSelection(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		}
 	}
 	return o, nil
+}
+
+// isWorkspaceSwitchKey returns true if the key is a workspace switch shortcut
+// These are recorded separately by SwitchToWorkspace, not as raw keystrokes
+func isWorkspaceSwitchKey(key string) bool {
+	switch key {
+	case "alt+1", "alt+2", "alt+3", "alt+4", "alt+5", "alt+6", "alt+7", "alt+8", "alt+9",
+		"opt+1", "opt+2", "opt+3", "opt+4", "opt+5", "opt+6", "opt+7", "opt+8", "opt+9":
+		return true
+	}
+	return false
 }

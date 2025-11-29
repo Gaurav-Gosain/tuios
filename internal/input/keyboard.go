@@ -244,6 +244,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleTerminalDebugPrefix(msg, o)
 	}
 
+	// Handle tape prefix commands (Ctrl+B, T, ...)
+	if o.TapePrefixActive {
+		return handleTerminalTapePrefix(msg, o)
+	}
+
 	// Handle prefix commands in terminal mode
 	if o.PrefixActive {
 		return handleTerminalPrefixCommand(msg, o)
@@ -490,6 +495,42 @@ func handleTerminalDebugPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 	}
 }
 
+// handleTerminalTapePrefix handles tape prefix commands (Ctrl+B, T, ...)
+func handleTerminalTapePrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.TapePrefixActive = false
+	o.PrefixActive = false
+
+	switch msg.String() {
+	case "m":
+		// Open tape manager
+		o.ToggleTapeManager()
+		return o, nil
+	case "r":
+		// Start recording - show naming prompt
+		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
+			o.ShowNotification("Already recording", "warning", config.NotificationDuration)
+		} else {
+			o.TapeManagerStartRecording()
+			o.ShowTapeManager = true // Show the UI for naming
+		}
+		return o, nil
+	case "s":
+		// Stop recording
+		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
+			o.TapeManagerStopRecording()
+		} else {
+			o.ShowNotification("Not recording", "warning", config.NotificationDuration)
+		}
+		return o, nil
+	case "esc":
+		// Cancel tape prefix mode
+		return o, nil
+	default:
+		// Unknown tape command, ignore
+		return o, nil
+	}
+}
+
 // handleTerminalPrefixCommand handles prefix commands in terminal mode
 func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.PrefixActive = false
@@ -515,6 +556,12 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 	case "D":
 		// Activate debug prefix mode (Ctrl+B, Shift+D)
 		o.DebugPrefixActive = true
+		o.PrefixActive = true // Keep prefix active for the next key
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "T":
+		// Activate tape prefix mode (Ctrl+B, Shift+T)
+		o.TapePrefixActive = true
 		o.PrefixActive = true // Keep prefix active for the next key
 		o.LastPrefixTime = time.Now()
 		return o, nil
@@ -1048,6 +1095,42 @@ func HandleDebugPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 		return o, nil
 	default:
 		// Unknown debug command, ignore
+		return o, nil
+	}
+}
+
+// HandleTapePrefixCommand handles tape prefix commands (Ctrl+B, T, ...) in window management mode
+func HandleTapePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.TapePrefixActive = false
+	o.PrefixActive = false
+
+	switch msg.String() {
+	case "m":
+		// Open tape manager
+		o.ToggleTapeManager()
+		return o, nil
+	case "r":
+		// Start recording - show naming prompt
+		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
+			o.ShowNotification("Already recording", "warning", config.NotificationDuration)
+		} else {
+			o.TapeManagerStartRecording()
+			o.ShowTapeManager = true // Show the UI for naming
+		}
+		return o, nil
+	case "s":
+		// Stop recording
+		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
+			o.TapeManagerStopRecording()
+		} else {
+			o.ShowNotification("Not recording", "warning", config.NotificationDuration)
+		}
+		return o, nil
+	case "esc":
+		// Cancel tape prefix mode
+		return o, nil
+	default:
+		// Unknown tape command, ignore
 		return o, nil
 	}
 }

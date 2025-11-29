@@ -48,6 +48,13 @@ func GetPrefixKeybindings(prefixType string) []Keybinding {
 			{"k", "Toggle showkeys overlay"},
 			{"Esc", "Cancel"},
 		}
+	case "tape":
+		return []Keybinding{
+			{"m", "Open tape manager"},
+			{"r", "Start recording"},
+			{"s", "Stop recording"},
+			{"Esc", "Cancel"},
+		}
 	default: // general prefix
 		return []Keybinding{
 			{"c", "Create window"},
@@ -60,6 +67,7 @@ func GetPrefixKeybindings(prefixType string) []Keybinding {
 			{"m", "Minimize commands..."},
 			{"t", "Window commands..."},
 			{"D", "Debug commands..."},
+			{"T", "Tape manager..."},
 			{"d/Esc", "Detach (exit terminal)"},
 			{"[", "Scrollback mode"},
 			{"?", "Toggle help"},
@@ -259,6 +267,14 @@ func getStaticHelpSections() []KeybindingSection {
 				{"r", "Rename window"},
 				{"Tab/Shift+Tab", "Next/Previous window"},
 				{"t", "Toggle tiling mode"},
+			},
+		},
+		{
+			Title: "TAPE PREFIX (Ctrl+B, T):",
+			Bindings: []Keybinding{
+				{"m", "Open tape manager"},
+				{"r", "Start recording"},
+				{"s", "Stop recording"},
 			},
 		},
 		{

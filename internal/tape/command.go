@@ -3,6 +3,7 @@ package tape
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -196,14 +197,14 @@ func ParseKeyCombo(s string) (*KeyCombo, error) {
 	// Last part is always the key
 	kc.Key = parts[len(parts)-1]
 
-	// All parts before the last are modifiers
-	for i := range len(parts)-1 {
-		switch parts[i] {
-		case "Ctrl":
+	// All parts before the last are modifiers (case-insensitive)
+	for i := range len(parts) - 1 {
+		switch strings.ToLower(parts[i]) {
+		case "ctrl":
 			kc.Ctrl = true
-		case "Alt":
+		case "alt", "opt":
 			kc.Alt = true
-		case "Shift":
+		case "shift":
 			kc.Shift = true
 		default:
 			return nil, fmt.Errorf("unknown modifier: %s", parts[i])

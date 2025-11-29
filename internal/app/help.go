@@ -69,6 +69,10 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 			}),
 		},
 		{
+			Name:     "Tape Scripting",
+			Bindings: generateTapeBindings(),
+		},
+		{
 			Name:     "Prefix Commands",
 			Bindings: generatePrefixBindings(registry),
 		},
@@ -140,6 +144,33 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry) []HelpBinding {
 			})
 		}
 	}
+
+	return bindings
+}
+
+// generateTapeBindings generates tape scripting bindings
+func generateTapeBindings() []HelpBinding {
+	bindings := []HelpBinding{}
+
+	// Add tape commands with prefix notation
+	bindings = append(bindings, HelpBinding{
+		Action:      "tape_manager",
+		Keys:        []string{config.LeaderKey + ", T, m"},
+		Description: "Open tape manager",
+		Category:    "Tape Scripting",
+	})
+	bindings = append(bindings, HelpBinding{
+		Action:      "tape_record",
+		Keys:        []string{config.LeaderKey + ", T, r"},
+		Description: "Start recording",
+		Category:    "Tape Scripting",
+	})
+	bindings = append(bindings, HelpBinding{
+		Action:      "tape_stop",
+		Keys:        []string{config.LeaderKey + ", T, s"},
+		Description: "Stop recording",
+		Category:    "Tape Scripting",
+	})
 
 	return bindings
 }

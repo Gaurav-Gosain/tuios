@@ -84,6 +84,10 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("toggle_logs", handleToggleLogs)
 	d.Register("toggle_cache_stats", handleToggleCacheStats)
 
+	// Tape manager actions
+	d.Register("toggle_tape_manager", handleToggleTapeManager)
+	d.Register("stop_recording", handleStopRecording)
+
 	// Navigation actions (arrow keys)
 	d.Register("nav_up", handleUpKey)
 	d.Register("nav_down", handleDownKey)
@@ -110,6 +114,10 @@ func (d *ActionDispatcher) Register(action string, handler ActionHandler) {
 // Dispatch executes the handler for a given action
 func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if handler, ok := d.handlers[action]; ok {
+		// Record the action if tape recording is active
+		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
+			o.TapeRecorder.RecordAction(action)
+		}
 		return handler(msg, o)
 	}
 	return o, nil
@@ -388,12 +396,12 @@ func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleEnterWindowMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LogInfo("Entering window management mode")
 	// Exit terminal mode to window management mode
-	o.Mode = app.WindowManagementMode
+	cmd := o.ExitTerminalMode()
 	o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
 	if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 		focusedWindow.InvalidateCache()
 	}
-	return o, nil
+	return o, cmd
 }
 
 func handleToggleHelp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -487,4 +495,20 @@ func makeRestoreMinimizedHandler(index int) ActionHandler {
 		o.RestoreMinimizedByIndex(index)
 		return o, nil
 	}
+}
+
+// ============================================================================
+// Tape Manager Action Handlers
+// ============================================================================
+
+func handleToggleTapeManager(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.ToggleTapeManager()
+	return o, nil
+}
+
+func handleStopRecording(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
+		o.TapeManagerStopRecording()
+	}
+	return o, nil
 }

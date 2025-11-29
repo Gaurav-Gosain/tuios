@@ -160,11 +160,12 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	case CommandTypeKeyCombo:
 		if len(cmd.Args) > 0 {
 			comboStr := cmd.Args[0]
-			// Handle Alt+N for workspace switching
-			if len(comboStr) >= 5 && comboStr[:4] == "Alt+" {
+			// Handle Alt+N / alt+N for workspace switching (case-insensitive)
+			lowerCombo := strings.ToLower(comboStr)
+			if len(lowerCombo) >= 5 && (lowerCombo[:4] == "alt+" || lowerCombo[:4] == "opt+") {
 				wsStr := comboStr[4:]
 				ws := 0
-				if _, err := fmt.Sscanf(wsStr, "%d", &ws); err == nil {
+				if _, err := fmt.Sscanf(wsStr, "%d", &ws); err == nil && ws >= 1 && ws <= 9 {
 					return ce.executor.SwitchWorkspace(ws)
 				}
 			}
@@ -203,12 +204,12 @@ func convertKeyComboToBytes(comboStr string) []byte {
 	// Parse modifiers and key
 	for i := range len(parts) {
 		part := strings.TrimSpace(parts[i])
-		switch part {
-		case "Ctrl":
+		switch strings.ToLower(part) {
+		case "ctrl":
 			ctrlModifier = true
-		case "Alt":
+		case "alt", "opt":
 			altModifier = true
-		case "Shift":
+		case "shift":
 			// Shift is harder to handle without more context, just ignore for now
 		default:
 			keyStr = part

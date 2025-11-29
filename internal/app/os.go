@@ -160,13 +160,19 @@ type OS struct {
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
 	// Tape scripting support
-	ScriptPlayer       any // *tape.Player - script playback engine
+	ScriptPlayer       any         // *tape.Player - script playback engine
 	ScriptMode         bool        // True when running a tape script
 	ScriptPaused       bool        // True when script playback is paused
-	ScriptConverter    any // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
-	ScriptExecutor     any // *tape.CommandExecutor - executes tape commands
+	ScriptConverter    any         // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
+	ScriptExecutor     any         // *tape.CommandExecutor - executes tape commands
 	ScriptSleepUntil   time.Time   // When to resume after a sleep command
 	ScriptFinishedTime time.Time   // When the script finished (for auto-hide)
+	// Tape manager UI
+	ShowTapeManager   bool                // True when showing tape manager overlay
+	TapeManager       *TapeManagerState   // Tape manager state
+	TapeRecorder      *tape.Recorder      // Tape recorder for recording sessions
+	TapeRecordingName string              // Name of current recording
+	TapePrefixActive  bool                // True when Ctrl+B, T was pressed (tape sub-prefix)
 }
 
 // Notification represents a temporary notification message.
@@ -1107,7 +1113,12 @@ func (m *OS) CloseWindow(windowID string) error {
 // SwitchWorkspace switches to a workspace (implements tape.Executor interface)
 func (m *OS) SwitchWorkspace(workspace int) error {
 	if workspace >= 1 && workspace <= m.NumWorkspaces {
-		m.CurrentWorkspace = workspace
+		// Use the full SwitchToWorkspace which handles focus, mode, etc.
+		// But disable recording during playback to avoid re-recording
+		recorder := m.TapeRecorder
+		m.TapeRecorder = nil
+		m.SwitchToWorkspace(workspace)
+		m.TapeRecorder = recorder
 		m.MarkAllDirty()
 	}
 	return nil
@@ -1128,6 +1139,16 @@ func (m *OS) SetMode(mode string) error {
 	switch mode {
 	case "terminal", "Terminal", "TerminalMode":
 		m.Mode = TerminalMode
+		// Ensure a window is focused when entering terminal mode
+		if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+			// Find first visible window in current workspace to focus
+			for i, w := range m.Windows {
+				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+					m.FocusWindow(i)
+					break
+				}
+			}
+		}
 	case "window", "Window", "WindowManagementMode":
 		m.Mode = WindowManagementMode
 	}

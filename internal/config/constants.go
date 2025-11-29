@@ -206,6 +206,42 @@ const (
 	DockSeparatorASCII = " | "
 )
 
+// =============================================================================
+// Tape Manager Icons
+// =============================================================================
+
+const (
+	// TapeManagerTitle is the title icon for the tape manager
+	TapeManagerTitle = "Tape Manager"
+
+	// TapeRecordingIndicator is the recording indicator
+	TapeRecordingIndicator = "[REC]"
+
+	// TapeSuccessIcon is the success checkmark
+	TapeSuccessIcon = "[OK]"
+
+	// TapeSelectedIcon is the selection arrow
+	TapeSelectedIcon = ">"
+)
+
+// =============================================================================
+// Notification Icons (ASCII-safe)
+// =============================================================================
+
+const (
+	// NotificationIconError is the error notification icon
+	NotificationIconError = "[X]"
+
+	// NotificationIconWarning is the warning notification icon
+	NotificationIconWarning = "[!]"
+
+	// NotificationIconSuccess is the success notification icon
+	NotificationIconSuccess = "[OK]"
+
+	// NotificationIconInfo is the info notification icon
+	NotificationIconInfo = "[i]"
+)
+
 // Dock Mode Colors
 const (
 	// DockColorWindow is the color for window mode indicator

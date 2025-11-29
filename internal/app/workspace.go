@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
@@ -17,6 +18,11 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 
 	if workspace == m.CurrentWorkspace {
 		return
+	}
+
+	// Record workspace switch for tape recording
+	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
+		m.TapeRecorder.RecordWorkspaceSwitch(workspace)
 	}
 
 	oldWorkspace := m.CurrentWorkspace
@@ -98,8 +104,22 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 		m.LogInfo("No visible windows in workspace %d", workspace)
 		// Exit terminal mode when switching to empty workspace
 		if m.Mode == TerminalMode {
+			// Record mode switch for tape recording
+			if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
+				m.TapeRecorder.RecordModeSwitch(tape.CommandTypeWindowManagementMode)
+			}
 			m.Mode = WindowManagementMode
 			m.LogInfo("Switched to window management mode (empty workspace)")
+		}
+	} else {
+		// Record the preserved mode after workspace switch (for consistent playback)
+		// This ensures playback maintains the correct mode even if window state differs
+		if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
+			if m.Mode == TerminalMode {
+				m.TapeRecorder.RecordModeSwitch(tape.CommandTypeTerminalMode)
+			} else {
+				m.TapeRecorder.RecordModeSwitch(tape.CommandTypeWindowManagementMode)
+			}
 		}
 	}
 

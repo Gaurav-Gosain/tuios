@@ -268,10 +268,48 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 		},
 	}
 
+	tapeListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all saved tape recordings",
+		Long:  `Display all tape files in the TUIOS data directory`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return listTapeFiles()
+		},
+	}
+
+	tapeDirCmd := &cobra.Command{
+		Use:   "dir",
+		Short: "Show the tape recordings directory path",
+		Long:  `Print the path where tape recordings are stored`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return showTapeDirectory()
+		},
+	}
+
+	tapeDeleteCmd := &cobra.Command{
+		Use:   "delete <name>",
+		Short: "Delete a tape recording",
+		Long:  `Delete a tape file from the recordings directory`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return deleteTapeFile(args[0])
+		},
+	}
+
+	tapeShowCmd := &cobra.Command{
+		Use:   "show <name>",
+		Short: "Display the contents of a tape file",
+		Long:  `Print the contents of a tape recording to stdout`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return showTapeFile(args[0])
+		},
+	}
+
 	// Tape command flags
 	tapePlayCmd.Flags().BoolVarP(&tapeVisible, "visible", "v", true, "Show TUI during playback")
 
-	tapeCmd.AddCommand(tapePlayCmd, tapeValidateCmd)
+	tapeCmd.AddCommand(tapePlayCmd, tapeValidateCmd, tapeListCmd, tapeDirCmd, tapeDeleteCmd, tapeShowCmd)
 
 	// Add subcommands to root
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd)
@@ -1164,4 +1202,143 @@ func validateTapeFile(tapeFile string) error {
 	}
 
 	return nil
+}
+
+// listTapeFiles lists all tape files in the recordings directory
+func listTapeFiles() error {
+	files, err := app.LoadTapeFiles()
+	if err != nil {
+		return fmt.Errorf("failed to load tape files: %w", err)
+	}
+
+	tapeDir, _ := app.GetTapeDirectory()
+
+	// Print header
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
+	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	fmt.Printf("%s\n", headerStyle.Render("Tape Recordings"))
+	fmt.Printf("%s\n\n", pathStyle.Render("Location: "+tapeDir))
+
+	if len(files) == 0 {
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+		fmt.Printf("%s\n", dimStyle.Render("No tape recordings found"))
+		fmt.Printf("%s\n", dimStyle.Render("Use Ctrl+B, T, r in TUIOS to start recording"))
+		return nil
+	}
+
+	// Create a table
+	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	sizeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+
+	for _, file := range files {
+		sizeStr := formatFileSize(file.Size)
+		dateStr := file.Modified.Format("2006-01-02 15:04")
+		fmt.Printf("  %s  %s  %s\n",
+			nameStyle.Render(fmt.Sprintf("%-30s", file.Name)),
+			sizeStyle.Render(fmt.Sprintf("%8s", sizeStr)),
+			dateStyle.Render(dateStr))
+	}
+
+	fmt.Printf("\n%d tape(s) found\n", len(files))
+	return nil
+}
+
+// showTapeDirectory prints the tape recordings directory path
+func showTapeDirectory() error {
+	tapeDir, err := app.GetTapeDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to get tape directory: %w", err)
+	}
+	fmt.Println(tapeDir)
+	return nil
+}
+
+// deleteTapeFile deletes a tape recording by name
+func deleteTapeFile(name string) error {
+	files, err := app.LoadTapeFiles()
+	if err != nil {
+		return fmt.Errorf("failed to load tape files: %w", err)
+	}
+
+	// Find the file
+	var targetFile *app.TapeFile
+	for i := range files {
+		if files[i].Name == name || files[i].Name == strings.TrimSuffix(name, ".tape") {
+			targetFile = &files[i]
+			break
+		}
+	}
+
+	if targetFile == nil {
+		return fmt.Errorf("tape file '%s' not found", name)
+	}
+
+	// Confirm deletion
+	fmt.Printf("Delete '%s'? (yes/no): ", targetFile.Name)
+	var response string
+	_, _ = fmt.Scanln(&response)
+	response = strings.ToLower(strings.TrimSpace(response))
+
+	if response != "yes" && response != "y" {
+		fmt.Println("Deletion cancelled.")
+		return nil
+	}
+
+	// Delete the file
+	if err := app.DeleteTapeFile(targetFile.Path); err != nil {
+		return fmt.Errorf("failed to delete tape file: %w", err)
+	}
+
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	fmt.Printf("%s\n", successStyle.Render("Deleted: "+targetFile.Name))
+	return nil
+}
+
+// showTapeFile displays the contents of a tape file
+func showTapeFile(name string) error {
+	files, err := app.LoadTapeFiles()
+	if err != nil {
+		return fmt.Errorf("failed to load tape files: %w", err)
+	}
+
+	// Find the file
+	var targetFile *app.TapeFile
+	for i := range files {
+		if files[i].Name == name || files[i].Name == strings.TrimSuffix(name, ".tape") {
+			targetFile = &files[i]
+			break
+		}
+	}
+
+	if targetFile == nil {
+		return fmt.Errorf("tape file '%s' not found", name)
+	}
+
+	// Read and display contents
+	content, err := os.ReadFile(targetFile.Path)
+	if err != nil {
+		return fmt.Errorf("failed to read tape file: %w", err)
+	}
+
+	// Print header
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
+	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	fmt.Printf("%s\n", headerStyle.Render(targetFile.Name+".tape"))
+	fmt.Printf("%s\n\n", pathStyle.Render(targetFile.Path))
+
+	// Print content
+	fmt.Print(string(content))
+
+	return nil
+}
+
+// formatFileSize formats a file size in human-readable form
+func formatFileSize(size int64) string {
+	if size < 1024 {
+		return fmt.Sprintf("%dB", size)
+	} else if size < 1024*1024 {
+		return fmt.Sprintf("%.1fKB", float64(size)/1024)
+	}
+	return fmt.Sprintf("%.1fMB", float64(size)/(1024*1024))
 }
