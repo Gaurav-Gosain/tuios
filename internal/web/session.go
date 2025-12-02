@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // Session represents a terminal session running a TUIOS instance.
@@ -94,12 +95,14 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 	inputReader, inputWriter := io.Pipe()
 	outputReader, outputWriter := io.Pipe()
 
-	// Create the Bubble Tea program with pipe I/O
+	// Create the Bubble Tea program with pipe I/O and proper terminal settings
 	program := tea.NewProgram(
 		tuiosInstance,
 		tea.WithFPS(config.NormalFPS),
 		tea.WithInput(inputReader),
 		tea.WithOutput(outputWriter),
+		tea.WithColorProfile(colorprofile.TrueColor), // 24-bit color support
+		tea.WithWindowSize(cols, rows),
 	)
 
 	sessionCtx, cancel := context.WithCancel(ctx)
@@ -118,6 +121,10 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 	// Start the Bubble Tea program in a goroutine
 	go func() {
 		logger.Debug("starting TUIOS program", "session", session.ID)
+		
+		// Send initial window size to ensure proper rendering
+		program.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
+		
 		if _, err := program.Run(); err != nil {
 			logger.Error("TUIOS program error", "session", session.ID, "error", err)
 		}
