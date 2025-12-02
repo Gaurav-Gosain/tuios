@@ -18,6 +18,7 @@ import (
 type Session struct {
 	ID           string
 	Program      *tea.Program
+	Model        *app.OS         // Direct reference to the TUIOS model
 	InputWriter  *io.PipeWriter  // Write input to this to send to Bubble Tea
 	OutputReader *io.PipeReader  // Read from this to get Bubble Tea's output
 	Cols         int
@@ -27,6 +28,7 @@ type Session struct {
 	mu           sync.Mutex
 	closed       bool
 	startTime    time.Time
+	started      chan struct{} // Signals when program has started
 }
 
 // Done returns a channel that is closed when the session ends.
@@ -37,21 +39,36 @@ func (s *Session) Done() <-chan struct{} {
 // Resize changes the terminal dimensions.
 func (s *Session) Resize(cols, rows int) {
 	s.mu.Lock()
-	oldCols, oldRows := s.Cols, s.Rows
 	s.Cols = cols
 	s.Rows = rows
 	s.mu.Unlock()
-	
-	logger.Debug("resizing session", "session", s.ID, "from", []int{oldCols, oldRows}, "to", []int{cols, rows})
-	
-	// Send window size message to Bubble Tea
+
+	// Update the model directly AND send the message
+	// This ensures both Bubble Tea's internal state and our model are in sync
+	if s.Model != nil {
+		s.Model.Width = cols
+		s.Model.Height = rows
+	}
+
 	if s.Program != nil {
 		s.Program.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
 	}
 }
 
-func (s *Server) createSession(ctx context.Context) (*Session, error) {
-	cols, rows := 80, 24
+// WaitForStart blocks until the program has started
+func (s *Session) WaitForStart() {
+	<-s.started
+}
+
+func (s *Server) createSession(ctx context.Context, initialCols, initialRows int) (*Session, error) {
+	// Use provided dimensions (from browser) or defaults
+	cols, rows := initialCols, initialRows
+	if cols <= 0 {
+		cols = 80
+	}
+	if rows <= 0 {
+		rows = 24
+	}
 
 	logger.Debug("creating session", "cols", cols, "rows", rows)
 
@@ -72,50 +89,47 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	// Create a TUIOS instance for this web session
+	// Use the ACTUAL dimensions from the start
 	tuiosInstance := &app.OS{
-		FocusedWindow:        -1,                               // No focused window initially
-		WindowExitChan:       make(chan string, 10),            // Buffer for window exit signals
-		MouseSnapping:        false,                            // Disable mouse snapping by default
-		MasterRatio:          0.5,                              // Default 50/50 split for tiling
-		CurrentWorkspace:     1,                                // Start on workspace 1
-		NumWorkspaces:        9,                                // Support 9 workspaces (1-9)
-		WorkspaceFocus:       make(map[int]int),                // Initialize workspace focus memory
-		WorkspaceLayouts:     make(map[int][]app.WindowLayout), // Initialize layout storage
-		WorkspaceHasCustom:   make(map[int]bool),               // Initialize custom layout tracker
-		WorkspaceMasterRatio: make(map[int]float64),            // Initialize per-workspace master ratio
-		PendingResizes:       make(map[string][2]int),          // Track pending PTY resizes
-		Width:                cols,                             // Set initial width
-		Height:               rows,                             // Set initial height
-		KeybindRegistry:      keybindRegistry,                  // User-configurable keybindings
-		RecentKeys:           []app.KeyEvent{},                 // Initialize empty key history
-		KeyHistoryMaxSize:    5,                                // Default: show last 5 keys
-		IsSSHMode:            false,                            // Not SSH mode
+		FocusedWindow:        -1,
+		WindowExitChan:       make(chan string, 10),
+		MouseSnapping:        false,
+		MasterRatio:          0.5,
+		CurrentWorkspace:     1,
+		NumWorkspaces:        9,
+		WorkspaceFocus:       make(map[int]int),
+		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
+		WorkspaceHasCustom:   make(map[int]bool),
+		WorkspaceMasterRatio: make(map[int]float64),
+		PendingResizes:       make(map[string][2]int),
+		Width:                cols,
+		Height:               rows,
+		KeybindRegistry:      keybindRegistry,
+		RecentKeys:           []app.KeyEvent{},
+		KeyHistoryMaxSize:    5,
+		IsSSHMode:            false,
 	}
 
 	// Create pipes for Bubble Tea I/O
-	// Input: we write to inputWriter, Bubble Tea reads from inputReader
-	// Output: Bubble Tea writes to outputWriter, we read from outputReader
 	inputReader, inputWriter := io.Pipe()
 	outputReader, outputWriter := io.Pipe()
 
-	// Create the Bubble Tea program with pipe I/O and proper terminal settings
+	// Create the Bubble Tea program - minimal options like SSH mode
 	program := tea.NewProgram(
 		tuiosInstance,
 		tea.WithFPS(config.NormalFPS),
 		tea.WithInput(inputReader),
 		tea.WithOutput(outputWriter),
-		tea.WithColorProfile(colorprofile.TrueColor), // 24-bit color support
-		tea.WithWindowSize(cols, rows),
-		tea.WithEnvironment([]string{
-			"TERM=xterm-256color",
-			"COLORTERM=truecolor",
-		}),
+		tea.WithColorProfile(colorprofile.TrueColor),
 	)
 
 	sessionCtx, cancel := context.WithCancel(ctx)
+	started := make(chan struct{})
+
 	session := &Session{
 		ID:           fmt.Sprintf("%d", time.Now().UnixNano()),
 		Program:      program,
+		Model:        tuiosInstance,
 		InputWriter:  inputWriter,
 		OutputReader: outputReader,
 		Cols:         cols,
@@ -123,34 +137,27 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 		cancelFunc:   cancel,
 		ctx:          sessionCtx,
 		startTime:    time.Now(),
+		started:      started,
 	}
 
 	// Start the Bubble Tea program in a goroutine
 	go func() {
 		defer func() {
-			// Close pipes when program exits
 			_ = inputReader.Close()
 			_ = outputWriter.Close()
 			cancel()
 		}()
-		
-		logger.Debug("calling program.Run()", "session", session.ID)
-		model, err := program.Run()
-		if err != nil {
+
+		logger.Debug("starting TUIOS program", "session", session.ID, "cols", cols, "rows", rows)
+		close(started) // Signal that we're starting
+
+		if _, err := program.Run(); err != nil {
 			logger.Error("TUIOS program error", "session", session.ID, "error", err)
-		} else {
-			logger.Debug("TUIOS program exited normally", "session", session.ID, "model", fmt.Sprintf("%T", model))
 		}
+		logger.Debug("TUIOS program exited", "session", session.ID)
 	}()
 
-	// Give the program a moment to start
-	time.Sleep(10 * time.Millisecond)
-	
-	// Don't send initial size - wait for browser to send actual terminal size
-	// This prevents rendering at wrong dimensions (80x24) before browser resize
-
 	s.sessions.Store(session.ID, session)
-
 	logger.Debug("session created", "session", session.ID)
 
 	return session, nil
@@ -167,14 +174,12 @@ func (s *Server) closeSession(session *Session) {
 
 	duration := time.Since(session.startTime)
 
-	// Stop the Bubble Tea program
 	if session.Program != nil {
 		session.Program.Quit()
 	}
 
 	session.cancelFunc()
 
-	// Close pipes
 	if session.InputWriter != nil {
 		_ = session.InputWriter.Close()
 	}
@@ -192,7 +197,6 @@ func (s *Server) closeSession(session *Session) {
 
 // applyTuiosArgs parses and applies TUIOS CLI arguments to the configuration
 func applyTuiosArgs(args []string, userConfig *config.UserConfig) {
-	// Parse arguments and apply to global config
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--debug":
@@ -201,8 +205,6 @@ func applyTuiosArgs(args []string, userConfig *config.UserConfig) {
 			config.UseASCIIOnly = true
 		case "--theme":
 			if i+1 < len(args) {
-				// Theme initialization will be handled by the caller
-				// We just note it here for completeness
 				i++
 			}
 		case "--border-style":
@@ -235,7 +237,7 @@ func applyTuiosArgs(args []string, userConfig *config.UserConfig) {
 		}
 	}
 
-	// Apply config file settings as defaults if not overridden by CLI
+	// Apply config file settings as defaults
 	if config.BorderStyle == "" {
 		config.BorderStyle = userConfig.Appearance.BorderStyle
 	}

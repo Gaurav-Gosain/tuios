@@ -95,8 +95,27 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
+	// Wait for first message to get initial terminal size
+	// The browser should send a resize message immediately after connecting
+	cols, rows := 80, 24 // defaults
+	
+	// Read first message with timeout
+	readCtx, readCancel := context.WithTimeout(ctx, 5*time.Second)
+	_, data, err := conn.Read(readCtx)
+	readCancel()
+	
+	if err == nil && len(data) > 0 && data[0] == MsgResize {
+		var resize ResizeMessage
+		if err := json.Unmarshal(data[1:], &resize); err == nil {
+			cols = resize.Cols
+			rows = resize.Rows
+			logger.Debug("got initial size from browser", "cols", cols, "rows", rows)
+		}
+	}
+
 	startTime := time.Now()
-	session, err := s.createSession(ctx)
+	// Create session with actual dimensions from browser
+	session, err := s.createSession(ctx, cols, rows)
 	if err != nil {
 		logger.Error("session creation failed", "err", err, "remote", r.RemoteAddr)
 		_ = conn.Close(websocket.StatusInternalError, err.Error())
@@ -125,14 +144,14 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	// PTY -> WebSocket
+	// Output -> WebSocket
 	go func() {
 		defer wg.Done()
 		defer cancel()
 		s.streamPTYToWebSocket(ctx, conn, session)
 	}()
 
-	// WebSocket -> PTY
+	// WebSocket -> Input
 	go func() {
 		defer wg.Done()
 		defer cancel()
@@ -164,8 +183,36 @@ func (s *Server) handleWebTransport(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
+	stream, err := wtSession.AcceptStream(ctx)
+	if err != nil {
+		logger.Error("stream accept failed", "err", err)
+		return
+	}
+	defer func() { _ = stream.Close() }()
+
+	// Wait for first message to get initial terminal size
+	cols, rows := 80, 24 // defaults
+	
+	// Read first framed message
+	lenBuf := make([]byte, 4)
+	if _, err := io.ReadFull(stream, lenBuf); err == nil {
+		length := binary.BigEndian.Uint32(lenBuf)
+		if length < 1024 {
+			data := make([]byte, length)
+			if _, err := io.ReadFull(stream, data); err == nil && len(data) > 0 && data[0] == MsgResize {
+				var resize ResizeMessage
+				if err := json.Unmarshal(data[1:], &resize); err == nil {
+					cols = resize.Cols
+					rows = resize.Rows
+					logger.Debug("got initial size from browser (WT)", "cols", cols, "rows", rows)
+				}
+			}
+		}
+	}
+
 	startTime := time.Now()
-	session, err := s.createSession(ctx)
+	// Create session with actual dimensions from browser
+	session, err := s.createSession(ctx, cols, rows)
 	if err != nil {
 		logger.Error("session creation failed", "err", err, "remote", r.RemoteAddr)
 		return
@@ -178,13 +225,6 @@ func (s *Server) handleWebTransport(w http.ResponseWriter, r *http.Request) {
 			"duration", time.Since(startTime).Round(time.Second),
 		)
 	}()
-
-	stream, err := wtSession.AcceptStream(ctx)
-	if err != nil {
-		logger.Error("stream accept failed", "err", err, "session", session.ID)
-		return
-	}
-	defer func() { _ = stream.Close() }()
 
 	logger.Info("WebTransport session started",
 		"session", session.ID,
@@ -200,14 +240,14 @@ func (s *Server) handleWebTransport(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	// PTY -> WebTransport
+	// Output -> WebTransport
 	go func() {
 		defer wg.Done()
 		defer cancel()
 		s.streamPTYToWebTransport(ctx, stream, session)
 	}()
 
-	// WebTransport -> PTY
+	// WebTransport -> Input
 	go func() {
 		defer wg.Done()
 		defer cancel()
