@@ -11,6 +11,7 @@ This document provides a complete reference for TUIOS command-line interface.
   - [Root Command](#root-command)
   - [Theming](#theming)
   - [tuios ssh](#tuios-ssh)
+  - [tuios web](#tuios-web)
   - [tuios config](#tuios-config)
   - [tuios keybinds](#tuios-keybinds)
   - [tuios completion](#tuios-completion)
@@ -231,6 +232,68 @@ tuios ssh --key-path /path/to/host_key
 ```bash
 ssh -p 2222 localhost
 ```
+
+---
+
+### `tuios web`
+
+Run TUIOS as a web-based terminal server (similar to ttyd).
+
+**Usage:**
+```bash
+tuios web [flags]
+```
+
+**Flags:**
+- `--host <string>` - Web server host (default: "localhost")
+- `--port <string>` - Web server port (default: "7681")
+- `--shell <string>` - Shell to execute (default: auto-detect)
+- `--read-only` - Disable input from clients (view only mode)
+- `--max-connections <int>` - Maximum concurrent connections (default: 0 = unlimited)
+
+**Features:**
+- Full terminal emulation with xterm.js
+- Mouse support (click, scroll, selection, drag)
+- WebSocket and WebTransport (HTTP/3 over QUIC) protocols
+- Bundled JetBrains Mono Nerd Font for proper icon rendering
+- No CGO dependencies (pure Go, statically compiled)
+- Self-signed TLS certificate for development
+- Catppuccin Mocha theme by default
+
+**Examples:**
+```bash
+# Start web server on default port
+tuios web
+
+# Start on custom port
+tuios web --port 8080
+
+# Bind to all interfaces
+tuios web --host 0.0.0.0 --port 7681
+
+# Start in read-only mode (view only)
+tuios web --read-only
+
+# Limit concurrent connections
+tuios web --max-connections 10
+
+# Specify shell
+tuios web --shell /bin/zsh
+```
+
+**Accessing:**
+```bash
+# Open in browser
+open https://localhost:7681
+
+# Note: Your browser will show a security warning for the self-signed certificate.
+# Click "Advanced" and proceed to accept the certificate.
+```
+
+**Protocol Selection:**
+The client automatically selects the best available transport:
+1. **WebTransport (HTTP/3 over QUIC)** - Lower latency, better multiplexing
+2. **WebSocket (fallback)** - Broad browser compatibility
 
 ---
 
@@ -473,6 +536,25 @@ tuios ssh --host 0.0.0.0 --port 8022
 
 # Connect from another machine
 ssh -p 8022 your-server-hostname
+```
+
+### Web Terminal Setup
+
+```bash
+# Start web terminal on default port
+tuios web
+
+# Start on custom port with remote access
+tuios web --host 0.0.0.0 --port 8080
+
+# Open in browser
+open https://localhost:7681
+
+# Start in read-only mode for demonstrations
+tuios web --read-only
+
+# Limit connections for production use
+tuios web --max-connections 50 --host 0.0.0.0
 ```
 
 ### Development & Debugging

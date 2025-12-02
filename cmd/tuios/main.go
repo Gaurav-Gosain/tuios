@@ -21,6 +21,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/server"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/web"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/fang"
 	"github.com/charmbracelet/lipgloss/v2"
@@ -155,6 +156,56 @@ a host key automatically if not specified.`,
 	sshCmd.Flags().StringVar(&sshPort, "port", "2222", "SSH server port")
 	sshCmd.Flags().StringVar(&sshHost, "host", "localhost", "SSH server host")
 	sshCmd.Flags().StringVar(&sshKeyPath, "key-path", "", "Path to SSH host key (auto-generated if not specified)")
+
+	// Web command variables
+	var webPort, webHost string
+	var webReadOnly bool
+	var webMaxConnections int
+
+	webCmd := &cobra.Command{
+		Use:   "web",
+		Short: "Run TUIOS as web terminal server",
+		Long: `Run TUIOS as a web-based terminal server
+
+Provides a web interface to access TUIOS through your browser.
+Features include:
+  - Full TUIOS experience in the browser
+  - WebSocket and WebTransport (QUIC) connections
+  - Bundled JetBrains Mono Nerd Font
+  - WebGL-accelerated rendering
+  - No CGO dependencies (pure Go)
+
+All TUIOS flags (--theme, --show-keys, --ascii-only, etc.) are forwarded
+to the TUIOS instance running in the browser.`,
+		Example: `  # Start web server on default port
+  tuios web
+
+  # Start on custom port
+  tuios web --port 8080
+
+  # Bind to all interfaces for remote access
+  tuios web --host 0.0.0.0
+
+  # Start with show-keys overlay
+  tuios web --show-keys
+
+  # Start with a specific theme
+  tuios web --theme dracula
+
+  # Start in read-only mode (view only)
+  tuios web --read-only
+
+  # Limit concurrent connections
+  tuios web --max-connections 10`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runWebServer(webHost, webPort, webReadOnly, webMaxConnections)
+		},
+	}
+
+	webCmd.Flags().StringVar(&webPort, "port", "7681", "Web server port")
+	webCmd.Flags().StringVar(&webHost, "host", "localhost", "Web server host")
+	webCmd.Flags().BoolVar(&webReadOnly, "read-only", false, "Disable input from clients (view only)")
+	webCmd.Flags().IntVar(&webMaxConnections, "max-connections", 0, "Maximum concurrent connections (0 = unlimited)")
 
 	// Config command group
 	configCmd := &cobra.Command{
@@ -312,7 +363,7 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 	tapeCmd.AddCommand(tapePlayCmd, tapeValidateCmd, tapeListCmd, tapeDirCmd, tapeDeleteCmd, tapeShowCmd)
 
 	// Add subcommands to root
-	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd)
+	rootCmd.AddCommand(sshCmd, webCmd, configCmd, keybindsCmd, tapeCmd)
 
 	// Execute with fang
 	if err := fang.Execute(
@@ -570,6 +621,67 @@ func runSSHServer(sshHost, sshPort, sshKeyPath string) error {
 	// Start SSH server
 	if err := server.StartSSHServer(ctx, sshHost, sshPort, sshKeyPath); err != nil {
 		return fmt.Errorf("SSH server error: %w", err)
+	}
+	return nil
+}
+
+func runWebServer(webHost, webPort string, readOnly bool, maxConnections int) error {
+	// Handle global flags
+	if debugMode {
+		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+	}
+
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle shutdown signals
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		cancel()
+	}()
+
+	// Build TUIOS args from global flags
+	var tuiosArgs []string
+	if debugMode {
+		tuiosArgs = append(tuiosArgs, "--debug")
+	}
+	if asciiOnly {
+		tuiosArgs = append(tuiosArgs, "--ascii-only")
+	}
+	if themeName != "" {
+		tuiosArgs = append(tuiosArgs, "--theme", themeName)
+	}
+	if borderStyle != "" {
+		tuiosArgs = append(tuiosArgs, "--border-style", borderStyle)
+	}
+	if dockbarPosition != "" {
+		tuiosArgs = append(tuiosArgs, "--dockbar-position", dockbarPosition)
+	}
+	if hideWindowButtons {
+		tuiosArgs = append(tuiosArgs, "--hide-window-buttons")
+	}
+	if scrollbackLines > 0 {
+		tuiosArgs = append(tuiosArgs, "--scrollback-lines", fmt.Sprintf("%d", scrollbackLines))
+	}
+	if showKeys {
+		tuiosArgs = append(tuiosArgs, "--show-keys")
+	}
+
+	// Create and start web server
+	config := web.DefaultConfig()
+	config.Host = webHost
+	config.Port = webPort
+	config.ReadOnly = readOnly
+	config.MaxConnections = maxConnections
+	config.TuiosArgs = tuiosArgs
+	config.Debug = debugMode
+
+	server := web.NewServer(config)
+	if err := server.Start(ctx); err != nil {
+		return fmt.Errorf("web server error: %w", err)
 	}
 	return nil
 }

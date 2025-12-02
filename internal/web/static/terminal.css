@@ -1,0 +1,304 @@
+/* TUIOS Web Terminal Styles */
+
+@font-face {
+    font-family: 'JetBrainsMono Nerd Font Mono';
+    src: url('/static/fonts/JetBrainsMonoNerdFontMono-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: block;
+}
+
+@font-face {
+    font-family: 'JetBrainsMono Nerd Font Mono';
+    src: url('/static/fonts/JetBrainsMonoNerdFontMono-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+    font-display: block;
+}
+
+@font-face {
+    font-family: 'JetBrainsMono Nerd Font Mono';
+    src: url('/static/fonts/JetBrainsMonoNerdFontMono-Italic.ttf') format('truetype');
+    font-weight: 400;
+    font-style: italic;
+    font-display: block;
+}
+
+@font-face {
+    font-family: 'JetBrainsMono Nerd Font Mono';
+    src: url('/static/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf') format('truetype');
+    font-weight: 700;
+    font-style: italic;
+    font-display: block;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #1e1e2e;
+    font-family: 'JetBrainsMono Nerd Font Mono', monospace;
+}
+
+#terminal-container {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    background-color: #1e1e2e;
+}
+
+#terminal {
+    width: 100%;
+    height: 100%;
+}
+
+/* Critical: Force xterm.js to use our monospace font */
+.xterm {
+    font-family: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', Menlo, Monaco, 'Courier New', monospace !important;
+    font-variant-ligatures: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+.xterm-screen {
+    font-family: inherit !important;
+}
+
+.xterm-rows {
+    font-family: inherit !important;
+}
+
+.xterm-viewport {
+    overflow-y: auto !important;
+}
+
+.xterm-screen {
+    cursor: text;
+}
+
+/* Scrollbar styling */
+.xterm-viewport::-webkit-scrollbar {
+    width: 10px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+    background: #1e1e2e;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+    background: #45475a;
+    border-radius: 5px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background: #585b70;
+}
+
+/* Connection status indicator */
+#connection-status {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(30, 30, 46, 0.95);
+    border: 1px solid #45475a;
+    border-radius: 8px;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrainsMono Nerd Font Mono', monospace;
+    font-size: 12px;
+    color: #cdd6f4;
+    z-index: 1000;
+    transition: opacity 0.3s ease;
+}
+
+#connection-status.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#connection-status.connecting #status-icon {
+    color: #f9e2af;
+    animation: pulse 1s infinite;
+}
+
+#connection-status.connected #status-icon {
+    color: #a6e3a1;
+}
+
+#connection-status.disconnected #status-icon {
+    color: #f38ba8;
+}
+
+#connection-status.webtransport #status-icon {
+    color: #89b4fa;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Settings toggle button */
+#settings-toggle {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid #45475a;
+    background: rgba(30, 30, 46, 0.9);
+    color: #cdd6f4;
+    font-size: 16px;
+    cursor: pointer;
+    z-index: 1001;
+    transition: background 0.2s, opacity 0.3s;
+    opacity: 0.5;
+}
+
+#settings-toggle:hover {
+    background: #45475a;
+    opacity: 1;
+}
+
+/* Settings panel */
+#settings-panel {
+    position: fixed;
+    top: 50px;
+    right: 10px;
+    width: 280px;
+    background: rgba(30, 30, 46, 0.98);
+    border: 1px solid #45475a;
+    border-radius: 8px;
+    padding: 16px;
+    z-index: 1002;
+    font-family: 'JetBrainsMono Nerd Font Mono', monospace;
+    font-size: 12px;
+    color: #cdd6f4;
+}
+
+#settings-panel.hidden {
+    display: none;
+}
+
+#settings-panel h3 {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    color: #89b4fa;
+    border-bottom: 1px solid #45475a;
+    padding-bottom: 8px;
+}
+
+.setting-group {
+    margin-bottom: 12px;
+}
+
+.setting-group label {
+    display: block;
+    margin-bottom: 4px;
+    color: #a6adc8;
+}
+
+.setting-group select,
+.setting-group input[type="range"] {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid #45475a;
+    background: #313244;
+    color: #cdd6f4;
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.setting-group select:focus,
+.setting-group input:focus {
+    outline: none;
+    border-color: #89b4fa;
+}
+
+.setting-group input[type="range"] {
+    padding: 0;
+    height: 24px;
+}
+
+.setting-info {
+    margin: 16px 0;
+    padding: 8px;
+    background: #313244;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #a6adc8;
+}
+
+.setting-info div {
+    margin-bottom: 4px;
+}
+
+.setting-info div:last-child {
+    margin-bottom: 0;
+}
+
+#settings-panel button {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #45475a;
+    background: #313244;
+    color: #cdd6f4;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 0.2s;
+}
+
+#settings-panel button:hover {
+    background: #45475a;
+}
+
+#settings-panel button.primary {
+    background: #89b4fa;
+    border-color: #89b4fa;
+    color: #1e1e2e;
+}
+
+#settings-panel button.primary:hover {
+    background: #b4befe;
+}
+
+/* Selection styling */
+.xterm .xterm-selection div {
+    background-color: rgba(88, 91, 112, 0.5) !important;
+}
+
+/* Cursor styling */
+.xterm-cursor-block {
+    background-color: #f5e0dc !important;
+}
+
+.xterm-cursor-bar {
+    background-color: #f5e0dc !important;
+}
+
+.xterm-cursor-underline {
+    border-bottom-color: #f5e0dc !important;
+}
+
+/* Focus indicator */
+#terminal:focus-within .xterm-cursor-layer {
+    opacity: 1;
+}
+
+#terminal:not(:focus-within) .xterm-cursor-layer {
+    opacity: 0.6;
+}

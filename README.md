@@ -17,6 +17,7 @@ TUIOS is a terminal-based window manager that provides a modern, efficient inter
 - **[Keybindings Reference](docs/KEYBINDINGS.md)** - Complete keyboard shortcut reference
 - **[Configuration Guide](docs/CONFIGURATION.md)** - Customize keybindings and settings
 - **[CLI Reference](docs/CLI_REFERENCE.md)** - Command-line options and flags
+- **[Web Terminal](docs/WEB.md)** - Browser-based terminal access
 - **[Architecture Guide](docs/ARCHITECTURE.md)** - Technical architecture and design
 
 <details>
@@ -100,6 +101,7 @@ curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh
 - **Customizable Keybindings**: TOML configuration file with full keybinding customization (Kitty protocol support)
 - **Mouse Support**: Click, drag, and resize with full mouse interaction
 - **SSH Server Mode**: Remote terminal multiplexing with per-connection isolation
+- **Web Terminal Mode**: Access TUIOS from any browser with WebGL rendering
 - **Smart Performance**: Style caching, viewport culling, adaptive refresh (60Hz/30Hz)
 
 ## Quick Start
@@ -133,6 +135,16 @@ tuios ssh                            # Start on localhost:2222
 tuios ssh --host 0.0.0.0 --port 8022 # Custom host/port
 ssh -p 2222 localhost                # Connect
 ```
+
+**Web Terminal Mode:**
+```bash
+tuios web                            # Start on http://localhost:7681
+tuios web --port 8080                # Custom port
+tuios web --theme dracula            # With theme
+open http://localhost:7681           # Open in browser
+```
+
+Features: WebGL rendering, WebTransport/WebSocket, bundled Nerd Fonts, settings panel.
 
 **Tape Scripting (Automation):**
 ```bash

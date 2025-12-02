@@ -525,6 +525,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			focusedWindow.Y = newY
 			focusedWindow.ResizeVisual(newWidth, newHeight) // Visual resize only
 			focusedWindow.MarkPositionDirty()
+			// Store pending resize so PTY gets resized on mouse release
+			o.PendingResizes[focusedWindow.ID] = [2]int{newWidth, newHeight}
 		}
 
 		return o, nil
