@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -42,18 +43,33 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 	}
 
 	// Run TUIOS with forwarded arguments
+	// Find the tuios binary (sibling to tuios-web)
 	executable, err := os.Executable()
 	if err != nil {
 		_ = pty.Close()
-		return nil, fmt.Errorf("failed to find TUIOS executable: %w", err)
+		return nil, fmt.Errorf("failed to find executable: %w", err)
+	}
+
+	// Get the directory containing tuios-web and look for tuios
+	execDir := filepath.Dir(executable)
+	tuiosBinary := filepath.Join(execDir, "tuios")
+	
+	// Check if tuios exists in the same directory
+	if _, err := os.Stat(tuiosBinary); err != nil {
+		// Fallback: try to find tuios in PATH
+		tuiosBinary, err = exec.LookPath("tuios")
+		if err != nil {
+			_ = pty.Close()
+			return nil, fmt.Errorf("failed to find tuios binary (looked in %s and PATH): %w", execDir, err)
+		}
 	}
 
 	// Build command with forwarded args
 	args := s.config.TuiosArgs
-	cmd := exec.Command(executable, args...)
+	cmd := exec.Command(tuiosBinary, args...)
 
 	logger.Debug("starting TUIOS",
-		"executable", executable,
+		"executable", tuiosBinary,
 		"args", args,
 	)
 
