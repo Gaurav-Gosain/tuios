@@ -3,21 +3,21 @@ package web
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/colorprofile"
+	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/input"
+	tea "github.com/charmbracelet/bubbletea/v2"
 	xpty "github.com/charmbracelet/x/xpty"
 )
 
-// Session represents a terminal session.
+// Session represents a terminal session running a TUIOS instance.
 type Session struct {
 	ID         string
 	Pty        xpty.Pty
-	Cmd        *exec.Cmd
+	Program    *tea.Program
 	Cols       int
 	Rows       int
 	cancelFunc context.CancelFunc
@@ -42,59 +42,58 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 		return nil, fmt.Errorf("failed to create PTY: %w", err)
 	}
 
-	// Run TUIOS with forwarded arguments
-	// Find the tuios binary (sibling to tuios-web)
-	executable, err := os.Executable()
+	// Load user configuration and create keybind registry
+	userConfig, err := config.LoadUserConfig()
 	if err != nil {
-		_ = pty.Close()
-		return nil, fmt.Errorf("failed to find executable: %w", err)
+		logger.Warn("failed to load config, using defaults", "error", err)
+		userConfig = config.DefaultConfig()
 	}
 
-	// Get the directory containing tuios-web and look for tuios
-	execDir := filepath.Dir(executable)
-	tuiosBinary := filepath.Join(execDir, "tuios")
-	
-	// Check if tuios exists in the same directory
-	if _, err := os.Stat(tuiosBinary); err != nil {
-		// Fallback: try to find tuios in PATH
-		tuiosBinary, err = exec.LookPath("tuios")
-		if err != nil {
-			_ = pty.Close()
-			return nil, fmt.Errorf("failed to find tuios binary (looked in %s and PATH): %w", execDir, err)
-		}
+	// Apply TUIOS args from config (theme, border style, etc.)
+	// These should have been parsed from CLI flags in cmd/tuios-web/main.go
+	// and stored in s.config.TuiosArgs - we'll need to parse them and apply
+	applyTuiosArgs(s.config.TuiosArgs, userConfig)
+
+	// Set up the input handler
+	app.SetInputHandler(input.HandleInput)
+
+	// Create keybind registry
+	keybindRegistry := config.NewKeybindRegistry(userConfig)
+
+	// Create a TUIOS instance for this web session
+	tuiosInstance := &app.OS{
+		FocusedWindow:        -1,                               // No focused window initially
+		WindowExitChan:       make(chan string, 10),            // Buffer for window exit signals
+		MouseSnapping:        false,                            // Disable mouse snapping by default
+		MasterRatio:          0.5,                              // Default 50/50 split for tiling
+		CurrentWorkspace:     1,                                // Start on workspace 1
+		NumWorkspaces:        9,                                // Support 9 workspaces (1-9)
+		WorkspaceFocus:       make(map[int]int),                // Initialize workspace focus memory
+		WorkspaceLayouts:     make(map[int][]app.WindowLayout), // Initialize layout storage
+		WorkspaceHasCustom:   make(map[int]bool),               // Initialize custom layout tracker
+		WorkspaceMasterRatio: make(map[int]float64),            // Initialize per-workspace master ratio
+		PendingResizes:       make(map[string][2]int),          // Track pending PTY resizes
+		Width:                cols,                             // Set initial width
+		Height:               rows,                             // Set initial height
+		KeybindRegistry:      keybindRegistry,                  // User-configurable keybindings
+		RecentKeys:           []app.KeyEvent{},                 // Initialize empty key history
+		KeyHistoryMaxSize:    5,                                // Default: show last 5 keys
+		IsSSHMode:            false,                            // Not SSH mode
 	}
 
-	// Build command with forwarded args
-	args := s.config.TuiosArgs
-	cmd := exec.Command(tuiosBinary, args...)
-
-	logger.Debug("starting TUIOS",
-		"executable", tuiosBinary,
-		"args", args,
+	// Create the Bubble Tea program with PTY I/O
+	program := tea.NewProgram(
+		tuiosInstance,
+		tea.WithFPS(config.NormalFPS),
+		tea.WithInput(pty),
+		tea.WithOutput(pty),
 	)
-
-	// Platform-specific PTY setup
-	setupPTYCommand(cmd)
-
-	// Set terminal environment
-	termType, colorTerm := getTerminalEnv()
-	cmd.Env = append(os.Environ(),
-		"TERM="+termType,
-		"COLORTERM="+colorTerm,
-		"TERM_PROGRAM=TUIOS-Web",
-		"TERM_PROGRAM_VERSION=0.1.0",
-	)
-
-	if err := pty.Start(cmd); err != nil {
-		_ = pty.Close()
-		return nil, fmt.Errorf("failed to start TUIOS: %w", err)
-	}
 
 	sessionCtx, cancel := context.WithCancel(ctx)
 	session := &Session{
 		ID:         fmt.Sprintf("%d", time.Now().UnixNano()),
 		Pty:        pty,
-		Cmd:        cmd,
+		Program:    program,
 		Cols:       cols,
 		Rows:       rows,
 		cancelFunc: cancel,
@@ -102,19 +101,19 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 		startTime:  time.Now(),
 	}
 
-	// Monitor process exit and cancel context when done
+	// Start the Bubble Tea program in a goroutine
 	go func() {
-		_ = xpty.WaitProcess(sessionCtx, cmd)
-		logger.Debug("TUIOS process exited", "session", session.ID)
+		logger.Debug("starting TUIOS program", "session", session.ID)
+		if _, err := program.Run(); err != nil {
+			logger.Error("TUIOS program error", "session", session.ID, "error", err)
+		}
+		logger.Debug("TUIOS program exited", "session", session.ID)
 		cancel()
 	}()
 
 	s.sessions.Store(session.ID, session)
 
-	logger.Debug("session created",
-		"session", session.ID,
-		"pid", cmd.Process.Pid,
-	)
+	logger.Debug("session created", "session", session.ID)
 
 	return session, nil
 }
@@ -130,14 +129,17 @@ func (s *Server) closeSession(session *Session) {
 
 	duration := time.Since(session.startTime)
 
+	// Stop the Bubble Tea program
+	if session.Program != nil {
+		session.Program.Quit()
+		// Give the program a moment to exit gracefully
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	session.cancelFunc()
 
 	if session.Pty != nil {
 		_ = session.Pty.Close()
-	}
-
-	if session.Cmd != nil && session.Cmd.Process != nil {
-		_ = session.Cmd.Process.Kill()
 	}
 
 	s.sessions.Delete(session.ID)
@@ -148,17 +150,65 @@ func (s *Server) closeSession(session *Session) {
 	)
 }
 
-func getTerminalEnv() (termType, colorTerm string) {
-	profile := colorprofile.Detect(os.Stdout, os.Environ())
+// applyTuiosArgs parses and applies TUIOS CLI arguments to the configuration
+func applyTuiosArgs(args []string, userConfig *config.UserConfig) {
+	// Parse arguments and apply to global config
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--debug":
+			// Debug mode already set via environment variable
+		case "--ascii-only":
+			config.UseASCIIOnly = true
+		case "--theme":
+			if i+1 < len(args) {
+				// Theme initialization will be handled by the caller
+				// We just note it here for completeness
+				i++
+			}
+		case "--border-style":
+			if i+1 < len(args) {
+				config.BorderStyle = args[i+1]
+				i++
+			}
+		case "--dockbar-position":
+			if i+1 < len(args) {
+				config.DockbarPosition = args[i+1]
+				i++
+			}
+		case "--hide-window-buttons":
+			config.HideWindowButtons = true
+		case "--scrollback-lines":
+			if i+1 < len(args) {
+				var lines int
+				if _, err := fmt.Sscanf(args[i+1], "%d", &lines); err == nil {
+					if lines < 100 {
+						lines = 100
+					} else if lines > 1000000 {
+						lines = 1000000
+					}
+					config.ScrollbackLines = lines
+				}
+				i++
+			}
+		case "--show-keys":
+			// ShowKeys is handled per-session in OS struct
+		}
+	}
 
-	switch profile {
-	case colorprofile.TrueColor:
-		return "xterm-256color", "truecolor"
-	case colorprofile.ANSI256:
-		return "xterm-256color", ""
-	case colorprofile.ANSI:
-		return "xterm", ""
-	default:
-		return "xterm-256color", "truecolor"
+	// Apply config file settings as defaults if not overridden by CLI
+	if config.BorderStyle == "" {
+		config.BorderStyle = userConfig.Appearance.BorderStyle
+	}
+	if config.DockbarPosition == "" {
+		config.DockbarPosition = userConfig.Appearance.DockbarPosition
+	}
+	if !config.HideWindowButtons {
+		config.HideWindowButtons = userConfig.Appearance.HideWindowButtons
+	}
+	if config.ScrollbackLines == 0 {
+		config.ScrollbackLines = userConfig.Appearance.ScrollbackLines
+	}
+	if config.LeaderKey == "" && userConfig.Keybindings.LeaderKey != "" {
+		config.LeaderKey = userConfig.Keybindings.LeaderKey
 	}
 }
