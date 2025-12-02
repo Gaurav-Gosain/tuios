@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -10,21 +11,21 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	tea "github.com/charmbracelet/bubbletea/v2"
-	xpty "github.com/charmbracelet/x/xpty"
 )
 
 // Session represents a terminal session running a TUIOS instance.
 type Session struct {
-	ID         string
-	Pty        xpty.Pty
-	Program    *tea.Program
-	Cols       int
-	Rows       int
-	cancelFunc context.CancelFunc
-	ctx        context.Context
-	mu         sync.Mutex
-	closed     bool
-	startTime  time.Time
+	ID           string
+	Program      *tea.Program
+	InputWriter  *io.PipeWriter  // Write input to this to send to Bubble Tea
+	OutputReader *io.PipeReader  // Read from this to get Bubble Tea's output
+	Cols         int
+	Rows         int
+	cancelFunc   context.CancelFunc
+	ctx          context.Context
+	mu           sync.Mutex
+	closed       bool
+	startTime    time.Time
 }
 
 // Done returns a channel that is closed when the session ends.
@@ -32,15 +33,23 @@ func (s *Session) Done() <-chan struct{} {
 	return s.ctx.Done()
 }
 
+// Resize changes the terminal dimensions.
+func (s *Session) Resize(cols, rows int) {
+	s.mu.Lock()
+	s.Cols = cols
+	s.Rows = rows
+	s.mu.Unlock()
+	
+	// Send window size message to Bubble Tea
+	if s.Program != nil {
+		s.Program.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
+	}
+}
+
 func (s *Server) createSession(ctx context.Context) (*Session, error) {
 	cols, rows := 80, 24
 
-	logger.Debug("creating PTY", "cols", cols, "rows", rows)
-
-	pty, err := xpty.NewPty(cols, rows)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create PTY: %w", err)
-	}
+	logger.Debug("creating session", "cols", cols, "rows", rows)
 
 	// Load user configuration and create keybind registry
 	userConfig, err := config.LoadUserConfig()
@@ -50,8 +59,6 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 	}
 
 	// Apply TUIOS args from config (theme, border style, etc.)
-	// These should have been parsed from CLI flags in cmd/tuios-web/main.go
-	// and stored in s.config.TuiosArgs - we'll need to parse them and apply
 	applyTuiosArgs(s.config.TuiosArgs, userConfig)
 
 	// Set up the input handler
@@ -81,24 +88,31 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 		IsSSHMode:            false,                            // Not SSH mode
 	}
 
-	// Create the Bubble Tea program with PTY I/O
+	// Create pipes for Bubble Tea I/O
+	// Input: we write to inputWriter, Bubble Tea reads from inputReader
+	// Output: Bubble Tea writes to outputWriter, we read from outputReader
+	inputReader, inputWriter := io.Pipe()
+	outputReader, outputWriter := io.Pipe()
+
+	// Create the Bubble Tea program with pipe I/O
 	program := tea.NewProgram(
 		tuiosInstance,
 		tea.WithFPS(config.NormalFPS),
-		tea.WithInput(pty),
-		tea.WithOutput(pty),
+		tea.WithInput(inputReader),
+		tea.WithOutput(outputWriter),
 	)
 
 	sessionCtx, cancel := context.WithCancel(ctx)
 	session := &Session{
-		ID:         fmt.Sprintf("%d", time.Now().UnixNano()),
-		Pty:        pty,
-		Program:    program,
-		Cols:       cols,
-		Rows:       rows,
-		cancelFunc: cancel,
-		ctx:        sessionCtx,
-		startTime:  time.Now(),
+		ID:           fmt.Sprintf("%d", time.Now().UnixNano()),
+		Program:      program,
+		InputWriter:  inputWriter,
+		OutputReader: outputReader,
+		Cols:         cols,
+		Rows:         rows,
+		cancelFunc:   cancel,
+		ctx:          sessionCtx,
+		startTime:    time.Now(),
 	}
 
 	// Start the Bubble Tea program in a goroutine
@@ -108,6 +122,9 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 			logger.Error("TUIOS program error", "session", session.ID, "error", err)
 		}
 		logger.Debug("TUIOS program exited", "session", session.ID)
+		// Close pipes when program exits
+		_ = inputReader.Close()
+		_ = outputWriter.Close()
 		cancel()
 	}()
 
@@ -132,14 +149,16 @@ func (s *Server) closeSession(session *Session) {
 	// Stop the Bubble Tea program
 	if session.Program != nil {
 		session.Program.Quit()
-		// Give the program a moment to exit gracefully
-		time.Sleep(100 * time.Millisecond)
 	}
 
 	session.cancelFunc()
 
-	if session.Pty != nil {
-		_ = session.Pty.Close()
+	// Close pipes
+	if session.InputWriter != nil {
+		_ = session.InputWriter.Close()
+	}
+	if session.OutputReader != nil {
+		_ = session.OutputReader.Close()
 	}
 
 	s.sessions.Delete(session.ID)

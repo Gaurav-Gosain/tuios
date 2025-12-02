@@ -244,9 +244,9 @@ func (s *Server) streamPTYToWebSocket(ctx context.Context, conn *websocket.Conn,
 		default:
 		}
 
-		n, err := session.Pty.Read(buf)
+		n, err := session.OutputReader.Read(buf)
 		if err != nil {
-			logger.Debug("PTY closed", "session", session.ID, "bytes_sent", totalBytes)
+			logger.Debug("output closed", "session", session.ID, "bytes_sent", totalBytes, "error", err)
 			_ = conn.Write(ctx, websocket.MessageBinary, []byte{MsgClose})
 			return
 		}
@@ -288,9 +288,9 @@ func (s *Server) streamPTYToWebTransport(ctx context.Context, stream *webtranspo
 		default:
 		}
 
-		n, err := session.Pty.Read(buf)
+		n, err := session.OutputReader.Read(buf)
 		if err != nil {
-			logger.Debug("PTY closed", "session", session.ID, "bytes_sent", totalBytes)
+			logger.Debug("output closed", "session", session.ID, "bytes_sent", totalBytes)
 			_ = writeFramed(stream, []byte{MsgClose})
 			return
 		}
@@ -394,7 +394,7 @@ func (s *Server) processInput(data []byte, session *Session) {
 	switch msgType {
 	case MsgInput:
 		if !s.config.ReadOnly {
-			_, _ = session.Pty.Write(payload)
+			_, _ = session.InputWriter.Write(payload)
 		}
 
 	case MsgResize:
@@ -403,16 +403,10 @@ func (s *Server) processInput(data []byte, session *Session) {
 			logger.Warn("invalid resize message", "session", session.ID, "err", err)
 			return
 		}
-		session.mu.Lock()
-		oldCols, oldRows := session.Cols, session.Rows
-		session.Cols = resize.Cols
-		session.Rows = resize.Rows
-		_ = session.Pty.Resize(resize.Cols, resize.Rows)
-		session.mu.Unlock()
+		session.Resize(resize.Cols, resize.Rows)
 
 		logger.Debug("terminal resized",
 			"session", session.ID,
-			"from", []int{oldCols, oldRows},
 			"to", []int{resize.Cols, resize.Rows},
 		)
 
