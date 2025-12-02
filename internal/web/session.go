@@ -3,7 +3,8 @@ package web
 import (
 	"context"
 	"fmt"
-	"io"
+	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -12,23 +13,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
+	xpty "github.com/charmbracelet/x/xpty"
 )
 
 // Session represents a terminal session running a TUIOS instance.
 type Session struct {
-	ID           string
-	Program      *tea.Program
-	Model        *app.OS         // Direct reference to the TUIOS model
-	InputWriter  *io.PipeWriter  // Write input to this to send to Bubble Tea
-	OutputReader *io.PipeReader  // Read from this to get Bubble Tea's output
-	Cols         int
-	Rows         int
-	cancelFunc   context.CancelFunc
-	ctx          context.Context
-	mu           sync.Mutex
-	closed       bool
-	startTime    time.Time
-	started      chan struct{} // Signals when program has started
+	ID         string
+	Program    *tea.Program
+	Model      *app.OS  // Direct reference to the TUIOS model
+	Pty        xpty.Pty // PTY interface for terminal semantics
+	PtyMaster  *os.File // PTY master - handlers read/write here (Unix only)
+	PtySlave   *os.File // PTY slave - Bubble Tea uses this (Unix only)
+	Cols       int
+	Rows       int
+	cancelFunc context.CancelFunc
+	ctx        context.Context
+	mu         sync.Mutex
+	closed     bool
+	startTime  time.Time
+	started    chan struct{} // Signals when program has started
 }
 
 // Done returns a channel that is closed when the session ends.
@@ -43,8 +46,12 @@ func (s *Session) Resize(cols, rows int) {
 	s.Rows = rows
 	s.mu.Unlock()
 
+	// Resize the PTY
+	if s.Pty != nil {
+		_ = s.Pty.Resize(cols, rows)
+	}
+
 	// Update the model directly AND send the message
-	// This ensures both Bubble Tea's internal state and our model are in sync
 	if s.Model != nil {
 		s.Model.Width = cols
 		s.Model.Height = rows
@@ -89,7 +96,6 @@ func (s *Server) createSession(ctx context.Context, initialCols, initialRows int
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	// Create a TUIOS instance for this web session
-	// Use the ACTUAL dimensions from the start
 	tuiosInstance := &app.OS{
 		FocusedWindow:        -1,
 		WindowExitChan:       make(chan string, 10),
@@ -110,46 +116,76 @@ func (s *Server) createSession(ctx context.Context, initialCols, initialRows int
 		IsSSHMode:            false,
 	}
 
-	// Create pipes for Bubble Tea I/O
-	inputReader, inputWriter := io.Pipe()
-	outputReader, outputWriter := io.Pipe()
+	// Create a PTY for proper terminal semantics
+	// This gives Bubble Tea a real terminal-like file descriptor
+	ptyInstance, err := xpty.NewPty(cols, rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open PTY: %w", err)
+	}
 
-	// Create the Bubble Tea program - minimal options like SSH mode
+	// Get master/slave file descriptors (Unix only)
+	var ptyMaster, ptySlave *os.File
+	if runtime.GOOS != "windows" {
+		unixPty, ok := ptyInstance.(*xpty.UnixPty)
+		if !ok {
+			_ = ptyInstance.Close()
+			return nil, fmt.Errorf("expected UnixPty on %s", runtime.GOOS)
+		}
+		ptyMaster = unixPty.Master()
+		ptySlave = unixPty.Slave()
+	}
+
+	// Environment setup
+	envs := []string{
+		"TERM=xterm-256color",
+		"COLORTERM=truecolor",
+	}
+
+	// Create the Bubble Tea program using the PTY slave
+	// The PTY slave provides proper terminal semantics that Bubble Tea expects
 	program := tea.NewProgram(
 		tuiosInstance,
 		tea.WithFPS(config.NormalFPS),
-		tea.WithInput(inputReader),
-		tea.WithOutput(outputWriter),
-		tea.WithColorProfile(colorprofile.TrueColor),
+		tea.WithInput(ptySlave),
+		tea.WithOutput(ptySlave),
+		tea.WithColorProfile(colorprofile.Env(envs)),
+		tea.WithEnvironment(envs),
+		tea.WithWindowSize(cols, rows),
+		tea.WithFilter(func(_ tea.Model, msg tea.Msg) tea.Msg {
+			if _, ok := msg.(tea.SuspendMsg); ok {
+				return tea.ResumeMsg{}
+			}
+			return msg
+		}),
 	)
 
 	sessionCtx, cancel := context.WithCancel(ctx)
 	started := make(chan struct{})
 
 	session := &Session{
-		ID:           fmt.Sprintf("%d", time.Now().UnixNano()),
-		Program:      program,
-		Model:        tuiosInstance,
-		InputWriter:  inputWriter,
-		OutputReader: outputReader,
-		Cols:         cols,
-		Rows:         rows,
-		cancelFunc:   cancel,
-		ctx:          sessionCtx,
-		startTime:    time.Now(),
-		started:      started,
+		ID:         fmt.Sprintf("%d", time.Now().UnixNano()),
+		Program:    program,
+		Model:      tuiosInstance,
+		Pty:        ptyInstance,
+		PtyMaster:  ptyMaster,
+		PtySlave:   ptySlave,
+		Cols:       cols,
+		Rows:       rows,
+		cancelFunc: cancel,
+		ctx:        sessionCtx,
+		startTime:  time.Now(),
+		started:    started,
 	}
 
 	// Start the Bubble Tea program in a goroutine
 	go func() {
 		defer func() {
-			_ = inputReader.Close()
-			_ = outputWriter.Close()
+			_ = ptyInstance.Close()
 			cancel()
 		}()
 
 		logger.Debug("starting TUIOS program", "session", session.ID, "cols", cols, "rows", rows)
-		close(started) // Signal that we're starting
+		close(started)
 
 		if _, err := program.Run(); err != nil {
 			logger.Error("TUIOS program error", "session", session.ID, "error", err)
@@ -180,11 +216,8 @@ func (s *Server) closeSession(session *Session) {
 
 	session.cancelFunc()
 
-	if session.InputWriter != nil {
-		_ = session.InputWriter.Close()
-	}
-	if session.OutputReader != nil {
-		_ = session.OutputReader.Close()
+	if session.Pty != nil {
+		_ = session.Pty.Close()
 	}
 
 	s.sessions.Delete(session.ID)

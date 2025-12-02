@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -284,7 +285,7 @@ func (s *Server) streamPTYToWebSocket(ctx context.Context, conn *websocket.Conn,
 		default:
 		}
 
-		n, err := session.OutputReader.Read(buf)
+		n, err := session.PtyMaster.Read(buf)
 		if err != nil {
 			logger.Debug("output closed", "session", session.ID, "bytes_sent", totalBytes, "error", err)
 			_ = conn.Write(ctx, websocket.MessageBinary, []byte{MsgClose})
@@ -332,7 +333,7 @@ func (s *Server) streamPTYToWebTransport(ctx context.Context, stream *webtranspo
 		default:
 		}
 
-		n, err := session.OutputReader.Read(buf)
+		n, err := session.PtyMaster.Read(buf)
 		if err != nil {
 			logger.Debug("output closed", "session", session.ID, "bytes_sent", totalBytes, "error", err)
 			_ = writeFramed(stream, []byte{MsgClose})
@@ -343,7 +344,12 @@ func (s *Server) streamPTYToWebTransport(ctx context.Context, stream *webtranspo
 		}
 
 		if totalBytes == 0 {
-			logger.Debug("first output received (WT)", "session", session.ID, "bytes", n)
+			// Show first 100 bytes (or all if less) for debugging
+			debugBytes := n
+			if debugBytes > 100 {
+				debugBytes = 100
+			}
+			logger.Debug("first output received (WT)", "session", session.ID, "bytes", n, "first_bytes", fmt.Sprintf("%q", string(buf[:debugBytes])))
 		}
 
 		totalBytes += int64(n)
@@ -442,7 +448,7 @@ func (s *Server) processInput(data []byte, session *Session) {
 	switch msgType {
 	case MsgInput:
 		if !s.config.ReadOnly {
-			_, _ = session.InputWriter.Write(payload)
+			_, _ = session.PtyMaster.Write(payload)
 		}
 
 	case MsgResize:

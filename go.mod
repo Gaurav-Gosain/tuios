@@ -3,11 +3,13 @@ module github.com/Gaurav-Gosain/tuios
 go 1.24.4
 
 require (
+	github.com/Gaurav-Gosain/sip v0.1.2
 	github.com/adrg/xdg v0.5.3
 	github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.6
 	github.com/charmbracelet/colorprofile v0.3.2
 	github.com/charmbracelet/fang v0.4.3
 	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta.3.0.20250917201909-41ff0bf215ea
+	github.com/charmbracelet/log v0.4.2
 	github.com/charmbracelet/ssh v0.0.0-20250826160808-ebfa259c7309
 	github.com/charmbracelet/ultraviolet v0.0.0-20251027184610-54aaed923e4e
 	github.com/charmbracelet/wish/v2 v2.0.0-20250725031147-577d86ba3605
@@ -31,7 +33,6 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/keygen v0.5.4 // indirect
 	github.com/charmbracelet/lipgloss v1.1.0 // indirect
-	github.com/charmbracelet/log v0.4.2 // indirect
 	github.com/charmbracelet/log/v2 v2.0.0-20250226163916-c379e29ff706 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.14-0.20250505150409-97991a1f17d1 // indirect
 	github.com/charmbracelet/x/conpty v0.1.1 // indirect

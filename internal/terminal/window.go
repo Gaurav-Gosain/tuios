@@ -227,6 +227,16 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Get cached terminal environment (detected once on first window creation)
 	termType, colorTerm := getTerminalEnv()
 
+	// Debug logging for terminal environment
+	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+		debugMsg := fmt.Sprintf("[%s] NewWindow TERM=%s COLORTERM=%s (envTERM=%s envCOLORTERM=%s)\n",
+			time.Now().Format("15:04:05.000"), termType, colorTerm, os.Getenv("TERM"), os.Getenv("COLORTERM"))
+		if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			_, _ = f.WriteString(debugMsg)
+			_ = f.Close()
+		}
+	}
+
 	cmd.Env = append(os.Environ(),
 		"TERM="+termType,
 		"COLORTERM="+colorTerm,
@@ -400,6 +410,20 @@ func getTerminalEnv() (termType, colorTerm string) {
 	// Use sync.Once to cache local terminal detection
 	// This runs once per process lifetime for efficiency
 	localEnvOnce.Do(func() {
+		// First check if TERM/COLORTERM are already set in the environment
+		// This handles the case where tuios-web sets them explicitly because
+		// os.Stdout is not a TTY in web mode
+		envTerm := os.Getenv("TERM")
+		envColorTerm := os.Getenv("COLORTERM")
+
+		// If COLORTERM=truecolor is set, trust the environment
+		// This is the case for web sessions where we explicitly set these
+		if envColorTerm == "truecolor" && envTerm != "" && envTerm != "dumb" {
+			localTermType = envTerm
+			localColorTerm = envColorTerm
+			return
+		}
+
 		// Detect terminal capabilities using colorprofile (from charm)
 		// This handles TERM, COLORTERM, NO_COLOR, CLICOLOR, terminfo, and tmux detection
 		// For SSH sessions, os.Environ() will include the SSH client's environment

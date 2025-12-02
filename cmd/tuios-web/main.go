@@ -1,6 +1,5 @@
 // Package main implements tuios-web - a web-based terminal server for TUIOS.
-// This is a separate binary to isolate the web server functionality from the main TUIOS binary
-// for security and modularity reasons.
+// This uses the sip library to serve TUIOS through the browser.
 package main
 
 import (
@@ -10,7 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Gaurav-Gosain/tuios/internal/web"
+	"github.com/Gaurav-Gosain/sip"
+	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/input"
+	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
 )
@@ -47,6 +50,7 @@ func main() {
 		Long: `tuios-web - Web Terminal Server for TUIOS
 
 Serves TUIOS through the browser with full terminal emulation capabilities.
+Powered by sip (github.com/Gaurav-Gosain/sip).
 
 Server features:
   - Dual protocol support: WebTransport (HTTP/3 over QUIC) for low latency
@@ -62,10 +66,7 @@ Client features:
   - Settings panel for transport, renderer, and font size preferences
   - Cell-based mouse event deduplication reducing network traffic by 80-95%
   - requestAnimationFrame batching for efficient screen updates
-  - Automatic reconnection with exponential backoff
-
-This is a separate binary from the main TUIOS to isolate web server functionality
-for security purposes, preventing the web server from being used as a backdoor.`,
+  - Automatic reconnection with exponential backoff`,
 		Example: `  # Start web server on default port (7681)
   tuios-web
 
@@ -120,7 +121,10 @@ for security purposes, preventing the web server from being used as a backdoor.`
 }
 
 func runWebServer() error {
-	// Handle debug flag
+	// CRITICAL: Set terminal environment BEFORE any TUIOS code runs
+	_ = os.Setenv("TERM", "xterm-256color")
+	_ = os.Setenv("COLORTERM", "truecolor")
+
 	if debugMode {
 		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
 	}
@@ -129,7 +133,6 @@ func runWebServer() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle shutdown signals
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -137,45 +140,86 @@ func runWebServer() error {
 		cancel()
 	}()
 
-	// Build TUIOS args from global flags
-	var tuiosArgs []string
-	if debugMode {
-		tuiosArgs = append(tuiosArgs, "--debug")
+	// Apply global config options
+	applyGlobalConfig()
+
+	// Create sip server
+	sipConfig := sip.DefaultConfig()
+	sipConfig.Host = webHost
+	sipConfig.Port = webPort
+	sipConfig.ReadOnly = webReadOnly
+	sipConfig.MaxConnections = webMaxConnections
+	sipConfig.Debug = debugMode
+
+	server := sip.NewServer(sipConfig)
+
+	// Serve TUIOS using sip
+	return server.Serve(ctx, createTUIOSHandler)
+}
+
+// createTUIOSHandler creates a TUIOS instance for each web session.
+func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
+	pty := sess.Pty()
+
+	// Load user configuration
+	userConfig, err := config.LoadUserConfig()
+	if err != nil {
+		userConfig = config.DefaultConfig()
 	}
+
+	// Set up the input handler
+	app.SetInputHandler(input.HandleInput)
+
+	// Create keybind registry
+	keybindRegistry := config.NewKeybindRegistry(userConfig)
+
+	// Create TUIOS instance
+	tuiosInstance := &app.OS{
+		FocusedWindow:        -1,
+		WindowExitChan:       make(chan string, 10),
+		MouseSnapping:        false,
+		MasterRatio:          0.5,
+		CurrentWorkspace:     1,
+		NumWorkspaces:        9,
+		WorkspaceFocus:       make(map[int]int),
+		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
+		WorkspaceHasCustom:   make(map[int]bool),
+		WorkspaceMasterRatio: make(map[int]float64),
+		PendingResizes:       make(map[string][2]int),
+		Width:                pty.Width,
+		Height:               pty.Height,
+		KeybindRegistry:      keybindRegistry,
+		RecentKeys:           []app.KeyEvent{},
+		KeyHistoryMaxSize:    5,
+		IsSSHMode:            false,
+		ShowKeys:             showKeys,
+	}
+
+	return tuiosInstance, []tea.ProgramOption{
+		tea.WithFPS(config.NormalFPS),
+	}
+}
+
+// applyGlobalConfig applies CLI flags to global configuration.
+func applyGlobalConfig() {
 	if asciiOnly {
-		tuiosArgs = append(tuiosArgs, "--ascii-only")
-	}
-	if themeName != "" {
-		tuiosArgs = append(tuiosArgs, "--theme", themeName)
+		config.UseASCIIOnly = true
 	}
 	if borderStyle != "" {
-		tuiosArgs = append(tuiosArgs, "--border-style", borderStyle)
+		config.BorderStyle = borderStyle
 	}
 	if dockbarPosition != "" {
-		tuiosArgs = append(tuiosArgs, "--dockbar-position", dockbarPosition)
+		config.DockbarPosition = dockbarPosition
 	}
 	if hideWindowButtons {
-		tuiosArgs = append(tuiosArgs, "--hide-window-buttons")
+		config.HideWindowButtons = true
 	}
 	if scrollbackLines > 0 {
-		tuiosArgs = append(tuiosArgs, "--scrollback-lines", fmt.Sprintf("%d", scrollbackLines))
+		if scrollbackLines < 100 {
+			scrollbackLines = 100
+		} else if scrollbackLines > 1000000 {
+			scrollbackLines = 1000000
+		}
+		config.ScrollbackLines = scrollbackLines
 	}
-	if showKeys {
-		tuiosArgs = append(tuiosArgs, "--show-keys")
-	}
-
-	// Create and start web server
-	config := web.DefaultConfig()
-	config.Host = webHost
-	config.Port = webPort
-	config.ReadOnly = webReadOnly
-	config.MaxConnections = webMaxConnections
-	config.TuiosArgs = tuiosArgs
-	config.Debug = debugMode
-
-	server := web.NewServer(config)
-	if err := server.Start(ctx); err != nil {
-		return fmt.Errorf("web server error: %w", err)
-	}
-	return nil
 }
