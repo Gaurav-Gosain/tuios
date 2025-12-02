@@ -1,6 +1,8 @@
 # Sip - Drinking Tea Through the Browser
 
-> **Tagline**: "Drinking tea through the browser"
+> **Repository:** https://github.com/Gaurav-Gosain/sip  
+> **Status:** Planning Phase (v0.1.0)  
+> **Tagline:** "Drinking tea through the browser"
 
 ## Vision
 
