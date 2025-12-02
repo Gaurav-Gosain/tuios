@@ -254,6 +254,10 @@ func (s *Server) streamPTYToWebSocket(ctx context.Context, conn *websocket.Conn,
 			continue
 		}
 
+		if totalBytes == 0 {
+			logger.Debug("first output received", "session", session.ID, "bytes", n)
+		}
+		
 		totalBytes += int64(n)
 		copy(msg[1:], buf[:n])
 		if err := conn.Write(ctx, websocket.MessageBinary, msg[:n+1]); err != nil {
@@ -290,12 +294,16 @@ func (s *Server) streamPTYToWebTransport(ctx context.Context, stream *webtranspo
 
 		n, err := session.OutputReader.Read(buf)
 		if err != nil {
-			logger.Debug("output closed", "session", session.ID, "bytes_sent", totalBytes)
+			logger.Debug("output closed", "session", session.ID, "bytes_sent", totalBytes, "error", err)
 			_ = writeFramed(stream, []byte{MsgClose})
 			return
 		}
 		if n == 0 {
 			continue
+		}
+
+		if totalBytes == 0 {
+			logger.Debug("first output received (WT)", "session", session.ID, "bytes", n)
 		}
 
 		totalBytes += int64(n)

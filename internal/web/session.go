@@ -103,6 +103,10 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 		tea.WithOutput(outputWriter),
 		tea.WithColorProfile(colorprofile.TrueColor), // 24-bit color support
 		tea.WithWindowSize(cols, rows),
+		tea.WithEnvironment([]string{
+			"TERM=xterm-256color",
+			"COLORTERM=truecolor",
+		}),
 	)
 
 	sessionCtx, cancel := context.WithCancel(ctx)
@@ -120,20 +124,27 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 
 	// Start the Bubble Tea program in a goroutine
 	go func() {
-		logger.Debug("starting TUIOS program", "session", session.ID)
+		defer func() {
+			// Close pipes when program exits
+			_ = inputReader.Close()
+			_ = outputWriter.Close()
+			cancel()
+		}()
 		
-		// Send initial window size to ensure proper rendering
-		program.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
-		
-		if _, err := program.Run(); err != nil {
+		logger.Debug("calling program.Run()", "session", session.ID)
+		model, err := program.Run()
+		if err != nil {
 			logger.Error("TUIOS program error", "session", session.ID, "error", err)
+		} else {
+			logger.Debug("TUIOS program exited normally", "session", session.ID, "model", fmt.Sprintf("%T", model))
 		}
-		logger.Debug("TUIOS program exited", "session", session.ID)
-		// Close pipes when program exits
-		_ = inputReader.Close()
-		_ = outputWriter.Close()
-		cancel()
 	}()
+
+	// Give the program a moment to start before sending messages
+	time.Sleep(10 * time.Millisecond)
+	
+	// Send initial window size to ensure proper rendering
+	program.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
 
 	s.sessions.Store(session.ID, session)
 
