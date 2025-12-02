@@ -1,9 +1,12 @@
 tuios
+tuios-web
 tuios.exe
 dist/
 *.mov
 .DS_Store
 !tuios/
+!cmd/tuios/
+!cmd/tuios-web/
 .direnv/
 result
 *.backup

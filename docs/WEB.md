@@ -1,9 +1,12 @@
-# Web Terminal Mode
+# Web Terminal Mode (tuios-web)
 
-TUIOS can run as a web-based terminal server, providing access to TUIOS through any modern web browser.
+**Security Notice:** The web terminal functionality is provided as a separate binary (`tuios-web`) to isolate the web server from the main TUIOS binary. This prevents the web server from being used as a potential backdoor.
+
+TUIOS can be accessed through any modern web browser using the `tuios-web` binary.
 
 ## Table of Contents
 
+- [Installation](#installation)
 - [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Features](#features)
@@ -17,9 +20,32 @@ TUIOS can run as a web-based terminal server, providing access to TUIOS through 
 
 ---
 
+## Installation
+
+**Separate Binary Required:**
+
+```bash
+# Homebrew (macOS/Linux)
+brew install tuios-web
+
+# Arch Linux (AUR)
+yay -S tuios-web-bin
+# or
+paru -S tuios-web-bin
+
+# Go Install
+go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@latest
+
+# From GitHub Releases
+# Download tuios-web_*_<platform>_<arch>.tar.gz
+# Extract and run ./tuios-web
+```
+
+---
+
 ## Overview
 
-The `tuios web` command starts a web server that serves a full TUIOS experience in the browser. It uses:
+The `tuios-web` command starts a web server that serves a full TUIOS experience in the browser. It uses:
 
 - **xterm.js** for terminal emulation
 - **WebGL/Canvas** for hardware-accelerated rendering
@@ -30,16 +56,16 @@ The `tuios web` command starts a web server that serves a full TUIOS experience 
 
 ```bash
 # Start web server on default port (7681)
-tuios web
+tuios-web
 
 # Open in browser
 open http://localhost:7681
 
 # With custom port
-tuios web --port 8080
+tuios-web --port 8080
 
 # With TUIOS flags forwarded
-tuios web --theme dracula --show-keys
+tuios-web --theme dracula --show-keys
 ```
 
 ## Features
@@ -121,13 +147,13 @@ All TUIOS flags are forwarded to the spawned instance:
 
 ```bash
 # Theme and appearance
-tuios web --theme nord --border-style rounded
+tuios-web --theme nord --border-style rounded
 
 # Debug mode
-tuios web --debug --show-keys
+tuios-web --debug --show-keys
 
 # ASCII-only mode
-tuios web --ascii-only
+tuios-web --ascii-only
 ```
 
 ### Client Settings
@@ -259,7 +285,7 @@ If pressing `q` doesn't close the web session:
 
 ```bash
 # Enable verbose logging
-tuios web --debug
+tuios-web --debug
 ```
 
 Server logs include:

@@ -4,6 +4,8 @@
 
 TUIOS (Terminal UI Operating System) is a terminal-based window manager built in Go using the Charm stack (Bubble Tea v2, Lipgloss v2). It provides vim-like modal interface, workspace support, mouse interaction, and SSH server mode.
 
+**Note:** The web terminal functionality (`tuios web`) has been extracted into a separate `tuios-web` binary for security isolation. See `cmd/tuios-web/` and [docs/WEB_MIGRATION.md](docs/WEB_MIGRATION.md) for details.
+
 ## Essential Commands
 
 ### Build & Run
@@ -11,12 +13,15 @@ TUIOS (Terminal UI Operating System) is a terminal-based window manager built in
 ```bash
 # Build from source
 go build -o tuios ./cmd/tuios
+go build -o tuios-web ./cmd/tuios-web
 
 # Run directly
 go run ./cmd/tuios
+go run ./cmd/tuios-web
 
 # Run with debug logging
 go run ./cmd/tuios --debug
+go run ./cmd/tuios-web --debug
 
 # Run tests
 go test ./...
@@ -49,6 +54,7 @@ docker run -it --rm tuios
 ```
 tuios/
 ├── cmd/tuios/              # CLI entry point (main.go with cobra commands)
+├── cmd/tuios-web/          # Web terminal server binary (separate for security)
 ├── internal/
 │   ├── app/                # Core window manager, OS model, rendering
 │   │   ├── os.go           # Central state (OS struct), window lifecycle
@@ -282,3 +288,6 @@ Releases are automated via GitHub Actions with GoReleaser:
 - **Configuration**: `docs/CONFIGURATION.md` - TOML config options
 - **Contributing**: `docs/CONTRIBUTING.md` - Contribution guidelines
 - **Tape Scripting**: `docs/TAPE_SCRIPTING.md` - Automation script syntax
+- **Web Terminal**: `docs/WEB.md` - Web terminal documentation (tuios-web binary)
+- **Web Migration**: `docs/WEB_MIGRATION.md` - Migration guide from `tuios web` to `tuios-web`
+- **Sip Library**: `docs/SIP_LIBRARY.md` - Future library for serving Bubble Tea apps as web apps

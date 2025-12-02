@@ -50,6 +50,45 @@ builds:
     flags:
       - -trimpath
 
+  - id: tuios-web
+    main: ./cmd/tuios-web
+    binary: tuios-web
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+      - openbsd
+    goarch:
+      - amd64
+      - arm64
+      - arm
+      - "386"
+    goarm:
+      - "6"
+      - "7"
+    ignore:
+      # Windows ARM builds are not commonly needed
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      # FreeBSD/OpenBSD ARM builds
+      - goos: freebsd
+        goarch: arm
+      - goos: openbsd
+        goarch: arm
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
 archives:
   - id: tuios-archive
     name_template: >-
@@ -60,6 +99,23 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
+    builds:
+      - tuios
+    files:
+      - README.md
+      - LICENSE*
+
+  - id: tuios-web-archive
+    name_template: >-
+      {{ .ProjectName }}-web_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    builds:
+      - tuios-web
     files:
       - README.md
       - LICENSE*
@@ -111,23 +167,27 @@ release:
 
     A terminal-based window manager with tmux-style keybindings.
 
+    ### What's New
+
+    **tuios-web** is now released as a separate binary! This provides better security isolation
+    by separating the web server functionality from the main TUIOS binary.
+
     ### Installation
 
-    #### Quick Install (Linux/macOS)
+    #### TUIOS (Terminal Window Manager)
 
+    **Quick Install (Linux/macOS):**
     ```bash
     curl -sSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
     ```
 
-    #### Homebrew (macOS/Linux)
-
+    **Homebrew (macOS/Linux):**
     ```bash
     brew tap Gaurav-Gosain/tap
     brew install tuios
     ```
 
-    #### Arch Linux (AUR)
-
+    **Arch Linux (AUR):**
     ```bash
     # Using yay
     yay -S tuios-bin
@@ -136,8 +196,7 @@ release:
     paru -S tuios-bin
     ```
 
-    #### Nix
-
+    **Nix:**
     ```bash
     # Run directly
     nix run github:Gaurav-Gosain/tuios#tuios
@@ -146,19 +205,35 @@ release:
     nix-shell -p tuios
     ```
 
-    #### Manual Download
-
-    Download the appropriate binary for your platform below, extract it, and run:
-
-    ```bash
-    ./tuios
-    ```
-
-    #### Go Install
-
+    **Go Install:**
     ```bash
     go install github.com/Gaurav-Gosain/tuios/cmd/tuios@{{ .Tag }}
     ```
+
+    #### tuios-web (Web Terminal Server)
+
+    **Homebrew (macOS/Linux):**
+    ```bash
+    brew tap Gaurav-Gosain/tap
+    brew install tuios-web
+    ```
+
+    **Arch Linux (AUR):**
+    ```bash
+    # Using yay
+    yay -S tuios-web-bin
+
+    # Using paru
+    paru -S tuios-web-bin
+    ```
+
+    **Go Install:**
+    ```bash
+    go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@{{ .Tag }}
+    ```
+
+    **Manual Download:**
+    Download the appropriate `tuios_*` or `tuios-web_*` archive for your platform below, extract it, and run.
   footer: |
     ---
 
@@ -167,6 +242,8 @@ release:
 # AUR (Arch User Repository)
 aurs:
   - name: tuios-bin
+    ids:
+      - tuios-archive
     homepage: https://github.com/Gaurav-Gosain/tuios
     description: "Terminal UI Operating System - A terminal-based window manager with tmux-style keybindings"
     maintainers:
@@ -177,6 +254,26 @@ aurs:
     package: |
       # bin
       install -Dm755 "./tuios" "${pkgdir}/usr/bin/tuios"
+
+      # license
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+
+      # documentation
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+
+  - name: tuios-web-bin
+    ids:
+      - tuios-web-archive
+    homepage: https://github.com/Gaurav-Gosain/tuios
+    description: "Web terminal server for TUIOS - Serves TUIOS through the browser"
+    maintainers:
+      - "Gaurav Gosain <itsgauravgosain@gmail.com>"
+    license: MIT
+    private_key: "{{ .Env.AUR_SSH_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/tuios-web-bin.git"
+    package: |
+      # bin
+      install -Dm755 "./tuios-web" "${pkgdir}/usr/bin/tuios-web"
 
       # license
       install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
@@ -199,6 +296,20 @@ homebrew_casks:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+
+  - name: tuios-web
+    ids:
+      - tuios-web-archive
+    repository:
+      owner: Gaurav-Gosain
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/Gaurav-Gosain/tuios
+    description: "Web terminal server for TUIOS - Serves TUIOS through the browser"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew cask update for {{ .ProjectName }}-web version {{ .Tag }}"
 
 # Docker images (optional - uncomment if you want automated Docker builds)
 # dockers:

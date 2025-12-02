@@ -50,16 +50,20 @@ TUIOS is a terminal-based window manager that provides a modern, efficient inter
 
 **Homebrew (macOS/Linux):**
 ```bash
+# TUIOS terminal window manager
 brew install tuios
+
+# tuios-web (separate binary for web terminal server)
+brew install tuios-web
 ```
 
 **Arch Linux (AUR):**
 ```bash
-# Using yay
+# TUIOS terminal window manager
 yay -S tuios-bin
 
-# Using paru
-paru -S tuios-bin
+# tuios-web (separate binary for web terminal server)
+yay -S tuios-web-bin
 ```
 
 **Nix:**
@@ -78,10 +82,11 @@ nix-shell -p tuios
 curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
 ```
 
-### Alternative Methods
-
-- **[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)** - Download pre-built binaries
-- **Go Install:** `go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest`
+**Alternative Methods:**
+- **[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)** - Download pre-built binaries for both `tuios` and `tuios-web`
+- **Go Install:** 
+  - `go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest` (main binary)
+  - `go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@latest` (web server)
 - **Docker:** `docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest`
 - **Build from Source:** See [Development](#development) section below
 
@@ -136,15 +141,27 @@ tuios ssh --host 0.0.0.0 --port 8022 # Custom host/port
 ssh -p 2222 localhost                # Connect
 ```
 
-**Web Terminal Mode:**
+**Web Terminal Mode** (requires separate `tuios-web` binary):
 ```bash
-tuios web                            # Start on http://localhost:7681
-tuios web --port 8080                # Custom port
-tuios web --theme dracula            # With theme
+tuios-web                            # Start on http://localhost:7681
+tuios-web --port 8080                # Custom port
+tuios-web --theme dracula            # With theme
 open http://localhost:7681           # Open in browser
 ```
 
 Features: WebGL rendering, WebTransport/WebSocket, bundled Nerd Fonts, settings panel.
+
+**Install tuios-web:**
+```bash
+# Homebrew
+brew install tuios-web
+
+# AUR
+yay -S tuios-web-bin
+
+# Go install
+go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@latest
+```
 
 **Tape Scripting (Automation):**
 ```bash

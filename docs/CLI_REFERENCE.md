@@ -11,7 +11,7 @@ This document provides a complete reference for TUIOS command-line interface.
   - [Root Command](#root-command)
   - [Theming](#theming)
   - [tuios ssh](#tuios-ssh)
-  - [tuios web](#tuios-web)
+  - [tuios-web (separate binary)](#tuios-web-separate-binary)
   - [tuios config](#tuios-config)
   - [tuios keybinds](#tuios-keybinds)
   - [tuios completion](#tuios-completion)
@@ -235,55 +235,79 @@ ssh -p 2222 localhost
 
 ---
 
-### `tuios web`
+## `tuios-web` (Separate Binary)
 
-Run TUIOS as a web-based terminal server (similar to ttyd).
+**Security Notice:** The web terminal functionality has been extracted to a separate binary (`tuios-web`) to provide better security isolation. This prevents the web server from being used as a potential backdoor in the main TUIOS binary.
+
+**Installation:**
+```bash
+# Homebrew
+brew install tuios-web
+
+# AUR
+yay -S tuios-web-bin
+
+# Go install
+go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@latest
+```
 
 **Usage:**
 ```bash
-tuios web [flags]
+tuios-web [flags]
 ```
 
 **Flags:**
 - `--host <string>` - Web server host (default: "localhost")
 - `--port <string>` - Web server port (default: "7681")
-- `--shell <string>` - Shell to execute (default: auto-detect)
 - `--read-only` - Disable input from clients (view only mode)
 - `--max-connections <int>` - Maximum concurrent connections (default: 0 = unlimited)
+- `--theme <name>` - Color theme forwarded to TUIOS instances
+- `--show-keys` - Enable showkeys overlay
+- `--ascii-only` - Use ASCII characters instead of Nerd Font icons
+- `--border-style <style>` - Window border style
+- `--dockbar-position <pos>` - Dockbar position
+- `--hide-window-buttons` - Hide window control buttons
+- `--scrollback-lines <int>` - Scrollback buffer size
+- `--debug` - Enable debug logging
 
 **Features:**
-- Full terminal emulation with xterm.js
-- Mouse support (click, scroll, selection, drag)
+- Full TUIOS experience in the browser
+- WebGL-accelerated rendering via xterm.js for smooth 60fps
 - WebSocket and WebTransport (HTTP/3 over QUIC) protocols
 - Bundled JetBrains Mono Nerd Font for proper icon rendering
-- No CGO dependencies (pure Go, statically compiled)
-- Self-signed TLS certificate for development
-- Catppuccin Mocha theme by default
+- Settings panel for transport, renderer, and font size preferences
+- Cell-based mouse event deduplication (80-95% traffic reduction)
+- Automatic reconnection with exponential backoff
+- Self-signed TLS certificate generation for development
+- No CGO dependencies (pure Go)
 
 **Examples:**
 ```bash
 # Start web server on default port
-tuios web
+tuios-web
 
 # Start on custom port
-tuios web --port 8080
+tuios-web --port 8080
 
-# Bind to all interfaces
-tuios web --host 0.0.0.0 --port 7681
+# Bind to all interfaces for remote access
+tuios-web --host 0.0.0.0 --port 7681
 
 # Start in read-only mode (view only)
-tuios web --read-only
+tuios-web --read-only
+
+# Start with theme and show-keys overlay
+tuios-web --theme dracula --show-keys
 
 # Limit concurrent connections
-tuios web --max-connections 10
-
-# Specify shell
-tuios web --shell /bin/zsh
+tuios-web --max-connections 10
 ```
 
 **Accessing:**
 ```bash
 # Open in browser
+open http://localhost:7681
+
+# For HTTPS/WebTransport (development with self-signed cert)
 open https://localhost:7681
 
 # Note: Your browser will show a security warning for the self-signed certificate.
@@ -292,8 +316,10 @@ open https://localhost:7681
 
 **Protocol Selection:**
 The client automatically selects the best available transport:
-1. **WebTransport (HTTP/3 over QUIC)** - Lower latency, better multiplexing
+1. **WebTransport (HTTP/3 over QUIC)** - Lower latency, better multiplexing (requires HTTPS)
 2. **WebSocket (fallback)** - Broad browser compatibility
+
+For complete documentation, see [Web Terminal Mode](WEB.md).
 
 ---
 
@@ -538,23 +564,26 @@ tuios ssh --host 0.0.0.0 --port 8022
 ssh -p 8022 your-server-hostname
 ```
 
-### Web Terminal Setup
+### Web Terminal Setup (tuios-web)
 
 ```bash
 # Start web terminal on default port
-tuios web
+tuios-web
 
 # Start on custom port with remote access
-tuios web --host 0.0.0.0 --port 8080
+tuios-web --host 0.0.0.0 --port 8080
 
 # Open in browser
-open https://localhost:7681
+open http://localhost:7681
 
 # Start in read-only mode for demonstrations
-tuios web --read-only
+tuios-web --read-only
+
+# Start with theme and overlay
+tuios-web --theme dracula --show-keys
 
 # Limit connections for production use
-tuios web --max-connections 50 --host 0.0.0.0
+tuios-web --max-connections 50 --host 0.0.0.0
 ```
 
 ### Development & Debugging
