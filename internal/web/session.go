@@ -37,9 +37,12 @@ func (s *Session) Done() <-chan struct{} {
 // Resize changes the terminal dimensions.
 func (s *Session) Resize(cols, rows int) {
 	s.mu.Lock()
+	oldCols, oldRows := s.Cols, s.Rows
 	s.Cols = cols
 	s.Rows = rows
 	s.mu.Unlock()
+	
+	logger.Debug("resizing session", "session", s.ID, "from", []int{oldCols, oldRows}, "to", []int{cols, rows})
 	
 	// Send window size message to Bubble Tea
 	if s.Program != nil {
@@ -140,11 +143,11 @@ func (s *Server) createSession(ctx context.Context) (*Session, error) {
 		}
 	}()
 
-	// Give the program a moment to start before sending messages
+	// Give the program a moment to start
 	time.Sleep(10 * time.Millisecond)
 	
-	// Send initial window size to ensure proper rendering
-	program.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
+	// Don't send initial size - wait for browser to send actual terminal size
+	// This prevents rendering at wrong dimensions (80x24) before browser resize
 
 	s.sessions.Store(session.ID, session)
 
