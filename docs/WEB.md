@@ -45,12 +45,15 @@ go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@latest
 
 ## Overview
 
-The `tuios-web` command starts a web server that serves a full TUIOS experience in the browser. It uses:
+The `tuios-web` command starts a web server that serves a full TUIOS experience in the browser. It is powered by [**sip**](https://github.com/Gaurav-Gosain/sip), a standalone library for serving Bubble Tea apps through the browser.
 
+**Key technologies:**
 - **xterm.js** for terminal emulation
 - **WebGL/Canvas** for hardware-accelerated rendering
 - **WebTransport (QUIC)** or **WebSocket** for real-time communication
 - **JetBrains Mono Nerd Font** for proper icon rendering
+
+> **Note:** The web terminal functionality has been extracted into the [sip library](SIP_LIBRARY.md), which can be used to serve any Bubble Tea application through the browser.
 
 ## Quick Start
 

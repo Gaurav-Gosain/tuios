@@ -1,91 +1,188 @@
-# Sip - Drinking Tea Through the Browser
+# Sip - Serve Bubble Tea Apps in the Browser
 
 > **Repository:** https://github.com/Gaurav-Gosain/sip  
-> **Status:** Planning Phase (v0.1.0)  
+> **Status:** Released (v0.1.7+)  
 > **Tagline:** "Drinking tea through the browser"
 
-## Vision
+## Overview
 
-Sip is a planned library that will abstract the web terminal functionality from tuios-web into a standalone, reusable package for the Bubble Tea ecosystem. It will allow any Bubble Tea application to be served through a web browser with minimal code changes.
+Sip is a Go library that serves any Bubble Tea application through a web browser. It provides the web terminal infrastructure that powers `tuios-web`, extracted into a reusable package for the entire Bubble Tea ecosystem.
 
-## Motivation
+## Installation
 
-The web terminal implementation in `tuios-web` provides:
-- Full terminal emulation via xterm.js
-- WebGL-accelerated rendering for 60fps
-- Dual transport (WebTransport/WebSocket)
-- Bundled Nerd Font support
-- Settings panel for customization
-- Mouse event optimization
+```bash
+go get github.com/Gaurav-Gosain/sip@latest
+```
 
-This functionality should be available to **all** Bubble Tea developers, not just TUIOS users.
-
-## Proposed API
+## Quick Start
 
 ```go
 package main
 
 import (
+    "context"
+    
     tea "github.com/charmbracelet/bubbletea/v2"
-    "github.com/your-org/sip"
+    "github.com/Gaurav-Gosain/sip"
 )
 
+// Your Bubble Tea model
+type model struct {
+    count int
+}
+
+func (m model) Init() tea.Cmd { return nil }
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    switch msg := msg.(type) {
+    case tea.KeyPressMsg:
+        switch msg.String() {
+        case "q":
+            return m, tea.Quit
+        case " ":
+            m.count++
+        }
+    }
+    return m, nil
+}
+
+func (m model) View() string {
+    return fmt.Sprintf("Count: %d\n\nPress SPACE to increment, q to quit", m.count)
+}
+
 func main() {
-    // Your existing Bubble Tea app
-    myApp := NewMyBubbleTeaApp()
-    
-    // Option 1: Simple wrapper
-    sip.Serve(myApp, sip.Config{
-        Host: "localhost",
-        Port: "8080",
-    })
-    
-    // Option 2: Explicit control
     server := sip.NewServer(sip.Config{
-        Host:           "localhost",
-        Port:           "8080",
-        ReadOnly:       false,
-        MaxConnections: 100,
+        Host: "localhost",
+        Port: "7681",
     })
     
-    server.ServeApp(func() tea.Model {
-        return NewMyBubbleTeaApp()
+    // Serve your app - handler is called for each browser connection
+    server.Serve(context.Background(), func(sess sip.Session) (tea.Model, []tea.ProgramOption) {
+        pty := sess.Pty()
+        return model{}, []tea.ProgramOption{
+            tea.WithAltScreen(),
+        }
     })
 }
 ```
 
 ## Features
 
-### Core Functionality
-- ✅ xterm.js integration for terminal emulation
-- ✅ WebGL rendering via xterm-addon-webgl
-- ✅ WebTransport (QUIC) support with WebSocket fallback
-- ✅ Bundled JetBrains Mono Nerd Font
-- ✅ Settings panel (transport, renderer, font size)
-- ✅ Cell-based mouse event deduplication
-- ✅ Automatic reconnection with exponential backoff
-- ✅ Self-signed TLS certificate generation
-
 ### Server Features
-- ✅ Pure Go (no CGO dependencies)
-- ✅ Embedded static assets (go:embed)
-- ✅ Configurable read-only mode
-- ✅ Connection limits
-- ✅ Graceful shutdown
-- ✅ Structured logging
+- **Dual Transport**: WebTransport (HTTP/3 over QUIC) with WebSocket fallback
+- **Self-signed TLS**: Automatic certificate generation for development
+- **Connection Limits**: Configurable max connections
+- **Read-only Mode**: Disable input for view-only deployments
+- **Structured Logging**: Via charmbracelet/log
 
-### Client Features
-- ✅ Responsive settings panel
-- ✅ Transport selection (Auto/WebTransport/WebSocket)
-- ✅ Renderer selection (Auto/WebGL/Canvas/DOM)
-- ✅ Font size adjustment (10-24px)
-- ✅ localStorage preferences persistence
+### Client Features (Bundled)
+- **xterm.js**: Full terminal emulation
+- **WebGL Rendering**: Hardware-accelerated 60fps rendering
+- **JetBrains Mono Nerd Font**: Bundled for icon support
+- **Settings Panel**: Transport, renderer, and font size preferences
+- **Mouse Optimization**: Cell-based deduplication (80-95% traffic reduction)
+- **Auto-reconnect**: Exponential backoff on disconnect
+
+## API Reference
+
+### Types
+
+```go
+// Handler creates a model for each new browser session
+type Handler func(sess Session) (tea.Model, []tea.ProgramOption)
+
+// ProgramHandler for more control over tea.Program creation
+type ProgramHandler func(sess Session) *tea.Program
+
+// Session provides access to terminal info and I/O
+type Session interface {
+    Pty() Pty                         // Terminal dimensions
+    Context() context.Context         // Session lifecycle
+    Read(p []byte) (n int, err error) // Read input
+    Write(p []byte) (n int, err error)// Write output
+    Fd() uintptr                      // File descriptor for TTY detection
+    PtySlave() *os.File               // Underlying PTY for raw mode
+    WindowChanges() <-chan WindowSize // Resize events
+}
+
+// Config for server setup
+type Config struct {
+    Host           string        // Default: "localhost"
+    Port           string        // Default: "7681"
+    ReadOnly       bool          // Disable input
+    MaxConnections int           // 0 = unlimited
+    IdleTimeout    time.Duration // 0 = no timeout
+    AllowOrigins   []string      // CORS origins
+    TLSCert        string        // Custom TLS cert path
+    TLSKey         string        // Custom TLS key path
+    Debug          bool          // Verbose logging
+}
+```
+
+### Functions
+
+```go
+// Create a new server
+func NewServer(config Config) *Server
+
+// Serve with simple handler
+func (s *Server) Serve(ctx context.Context, handler Handler) error
+
+// Serve with custom program handler
+func (s *Server) ServeWithProgram(ctx context.Context, handler ProgramHandler) error
+
+// Get default options for tea.NewProgram (sets up PTY I/O correctly)
+func MakeOptions(sess Session) []tea.ProgramOption
+```
+
+## Usage in TUIOS
+
+`tuios-web` uses sip internally:
+
+```go
+// From cmd/tuios-web/main.go
+server := sip.NewServer(sip.Config{
+    Host: webHost,
+    Port: webPort,
+    Debug: debugMode,
+})
+
+server.Serve(ctx, func(sess sip.Session) (tea.Model, []tea.ProgramOption) {
+    pty := sess.Pty()
+    tuiosInstance := &app.OS{
+        Width:  pty.Width,
+        Height: pty.Height,
+        // ... other fields
+    }
+    return tuiosInstance, []tea.ProgramOption{
+        tea.WithFPS(60),
+    }
+})
+```
+
+## Important: Color Support
+
+When running a web server, `os.Stdout` is not a TTY, so lipgloss defaults to no colors. You must force TrueColor before creating any styles:
+
+```go
+import (
+    "github.com/charmbracelet/colorprofile"
+    "github.com/charmbracelet/lipgloss/v2"
+)
+
+func main() {
+    // MUST be called before any lipgloss.NewStyle()
+    lipgloss.Writer.Profile = colorprofile.TrueColor
+    
+    // Now start server...
+}
+```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
-│  Developer's Bubble Tea App             │
+│  Your Bubble Tea App                    │
 │  (implements tea.Model)                 │
 └────────────────┬────────────────────────┘
                  │
@@ -93,148 +190,62 @@ func main() {
 ┌─────────────────────────────────────────┐
 │         Sip Library                     │
 ├─────────────────────────────────────────┤
-│  • HTTP Server (static files)           │
-│  • WebTransport Server (QUIC)           │
-│  • WebSocket Server                     │
-│  • Session Manager                      │
-│  • PTY → xterm.js adapter               │
+│  • HTTP Server (embedded static files)  │
+│  • WebTransport Server (QUIC/UDP)       │
+│  • WebSocket Server (fallback)          │
+│  • PTY management (xpty)                │
+│  • Session lifecycle                    │
 └────────────────┬────────────────────────┘
                  │
                  ▼
 ┌─────────────────────────────────────────┐
-│         Browser (Client)                │
+│         Browser Client                  │
 ├─────────────────────────────────────────┤
-│  • xterm.js (terminal emulator)         │
-│  • terminal.js (client logic)           │
-│  • WebGL/Canvas renderer                │
-│  • WebTransport/WebSocket transport     │
+│  • xterm.js terminal emulator           │
+│  • WebGL/Canvas/DOM renderer            │
+│  • WebTransport or WebSocket            │
+│  • Settings panel                       │
 └─────────────────────────────────────────┘
-```
-
-## Repository Structure
-
-```
-sip/
-├── cmd/
-│   └── example/           # Example Bubble Tea apps using sip
-│       ├── basic/
-│       ├── chat/
-│       └── editor/
-├── pkg/
-│   └── sip/
-│       ├── server.go      # Main server implementation
-│       ├── session.go     # Session management
-│       ├── handlers.go    # HTTP/WS/WT handlers
-│       ├── pty.go         # PTY integration
-│       └── static/        # Embedded web assets
-│           ├── index.html
-│           ├── terminal.js
-│           ├── terminal.css
-│           └── fonts/
-├── examples/              # Full example applications
-├── docs/                  # Documentation
-├── README.md
-├── LICENSE
-└── go.mod
 ```
 
 ## Use Cases
 
-### 1. Dev Tools
-Transform CLI dev tools into web-accessible dashboards:
+### 1. Interactive Demos
 ```go
-// Dashboard for your logs, metrics, etc.
-sip.Serve(NewDashboard(), sip.Config{Port: "3000"})
+// Live demo of your TUI on your docs site
+server := sip.NewServer(sip.Config{
+    Port:     "8080",
+    ReadOnly: true,  // Users can only view
+    MaxConnections: 100,
+})
+server.Serve(ctx, demoHandler)
 ```
 
-### 2. Remote TUIs
-Make any TUI app remotely accessible:
+### 2. Remote Tools
 ```go
-// Remote monitoring tool
-sip.Serve(NewMonitoringApp(), sip.Config{
-    Host:     "0.0.0.0",
-    ReadOnly: true,
+// Access your monitoring TUI from anywhere
+server := sip.NewServer(sip.Config{
+    Host: "0.0.0.0",  // Listen on all interfaces
+    Port: "7681",
+})
+server.Serve(ctx, monitorHandler)
+```
+
+### 3. Collaborative Apps
+```go
+// Shared terminal experience
+server.Serve(ctx, func(sess sip.Session) (tea.Model, []tea.ProgramOption) {
+    return sharedModel, nil  // Same model for all connections
 })
 ```
-
-### 3. Demos & Documentation
-Interactive documentation for TUI apps:
-```go
-// Live demo of your app
-sip.Serve(NewDemoApp(), sip.Config{
-    MaxConnections: 50,
-    ReadOnly:       true,
-})
-```
-
-## Roadmap
-
-### Phase 1: Extraction (Current)
-- [x] Extract web functionality from tuios into tuios-web
-- [ ] Identify reusable components
-- [ ] Design public API
-
-### Phase 2: Library Development
-- [ ] Create standalone sip repository
-- [ ] Implement core server functionality
-- [ ] Add comprehensive tests
-- [ ] Write documentation and examples
-
-### Phase 3: Integration
-- [ ] Update tuios-web to use sip library
-- [ ] Create example apps
-- [ ] Publish to GitHub
-- [ ] Announce to Charm community
-
-### Phase 4: Community
-- [ ] Gather feedback from Bubble Tea developers
-- [ ] Add requested features
-- [ ] Create more examples
-- [ ] Build ecosystem integrations
-
-## Technical Considerations
-
-### PTY Abstraction
-The library needs to abstract PTY handling to work with any Bubble Tea app:
-- Spawn app in PTY
-- Capture stdout/stderr
-- Forward input from browser
-- Handle window resize signals
-
-### State Management
-- Session lifecycle management
-- Connection pooling
-- Graceful shutdown
-- Memory cleanup
-
-### Performance
-- Buffer pools (sync.Pool)
-- Atomic counters
-- Efficient message batching
-- Mouse event deduplication
-
-### Security
-- Input sanitization
-- Rate limiting
-- CORS configuration
-- TLS certificate handling
-- Read-only mode enforcement
-
-## License
-
-MIT (same as TUIOS)
-
-## Contributing
-
-This is a future project. Contributions and ideas are welcome! Please open an issue in the TUIOS repository to discuss features or implementation details.
 
 ## Related Projects
 
-- [ttyd](https://github.com/tsl0922/ttyd) - Share terminal over the web (C, libwebsockets)
-- [gotty](https://github.com/yudai/gotty) - Share terminal as web application (Go, older)
-- [xterm.js](https://xtermjs.org/) - Terminal emulator in browser
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) - TUI framework for Go
+- [Wish](https://github.com/charmbracelet/wish) - SSH server for Bubble Tea apps
+- [xterm.js](https://xtermjs.org/) - Terminal emulator for browsers
+- [TUIOS](https://github.com/Gaurav-Gosain/tuios) - Terminal window manager using sip
 
-## Acknowledgments
+## License
 
-The sip library will build on the web terminal work done in tuios-web, which itself was inspired by projects like ttyd and gotty. Special thanks to the Charm team for creating the Bubble Tea framework that makes all of this possible.
+MIT

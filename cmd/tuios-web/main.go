@@ -14,7 +14,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/fang"
+	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -121,7 +123,12 @@ Client features:
 }
 
 func runWebServer() error {
-	// CRITICAL: Set terminal environment BEFORE any TUIOS code runs
+	// CRITICAL: Force lipgloss to use TrueColor BEFORE any styles are created.
+	// By default, lipgloss detects color profile from os.Stdout, which isn't a TTY
+	// when running as a web server. This causes all colors to be stripped.
+	lipgloss.Writer.Profile = colorprofile.TrueColor
+
+	// Set terminal environment variables
 	_ = os.Setenv("TERM", "xterm-256color")
 	_ = os.Setenv("COLORTERM", "truecolor")
 
