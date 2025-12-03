@@ -2,11 +2,11 @@
 
 pkgs.buildGoModule {
   pname = "tuios";
-  version = "v0.4.1";
+  version = "v0.4.2";
 
   src = ./.;
 
   # This has to be updated each time dependencies are updated.
   # Use pkgs.lib.fakeHash
-  vendorHash = "sha256-t4U0o1hKoCGu52ad/N3wfoOHl8pNYT0/zcsRaZ/fefA=";
+  vendorHash = "sha256-uhqa850dHRHNZLXUMGg9Hb8skEY/5CrGmxSmnBytW/s=";
 }
