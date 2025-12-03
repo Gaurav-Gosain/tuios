@@ -1,5 +1,7 @@
 github.com/Gaurav-Gosain/sip v0.1.7 h1:yaAR+OchqVx1Z8X8PZfYCbQR1lyAoV5QNmtTbYEWYD4=
 github.com/Gaurav-Gosain/sip v0.1.7/go.mod h1:5yIbKzyCWLzDV0LhacOD6VMxw6OQmE+Cb7Wb3XUl/mg=
+github.com/Gaurav-Gosain/sip v0.1.8 h1:43J6cDD3cCRth3YIxCrQ3HBCktU4pub8/9J/N/bYEQM=
+github.com/Gaurav-Gosain/sip v0.1.8/go.mod h1:YlTGUUGCjQ62U611HatbXPDhbf/nGbH7V5oEA3E5W+Q=
 github.com/adrg/xdg v0.5.3 h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=
 github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be h1:9AeTilPcZAjCFIImctFaOjnTIavg87rW78vTPkQqLI8=
@@ -12,6 +14,8 @@ github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.6 h1:nXNg4TmtfoQXFdF2BSSjTxFp9
 github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.6/go.mod h1:SUTLq+/pGQ5qntHgt0JswfVJFfgJgWDqyvyiSLVlmbo=
 github.com/charmbracelet/colorprofile v0.3.2 h1:9J27WdztfJQVAQKX2WOlSSRB+5gaKqqITmrvb1uTIiI=
 github.com/charmbracelet/colorprofile v0.3.2/go.mod h1:mTD5XzNeWHj8oqHb+S1bssQb7vIHbepiebQ2kPKVKbI=
+github.com/charmbracelet/colorprofile v0.3.3 h1:DjJzJtLP6/NZ8p7Cgjno0CKGr7wwRJGxWUwh2IyhfAI=
+github.com/charmbracelet/colorprofile v0.3.3/go.mod h1:nB1FugsAbzq284eJcjfah2nhdSLppN2NqvfotkfRYP4=
 github.com/charmbracelet/fang v0.4.3 h1:qXeMxnL4H6mSKBUhDefHu8NfikFbP/MBNTfqTrXvzmY=
 github.com/charmbracelet/fang v0.4.3/go.mod h1:wHJKQYO5ReYsxx+yZl+skDtrlKO/4LLEQ6EXsdHhRhg=
 github.com/charmbracelet/keygen v0.5.4 h1:XQYgf6UEaTGgQSSmiPpIQ78WfseNQp4Pz8N/c1OsrdA=

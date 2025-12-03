@@ -3,10 +3,10 @@ module github.com/Gaurav-Gosain/tuios
 go 1.24.4
 
 require (
-	github.com/Gaurav-Gosain/sip v0.1.7
+	github.com/Gaurav-Gosain/sip v0.1.8
 	github.com/adrg/xdg v0.5.3
 	github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.6
-	github.com/charmbracelet/colorprofile v0.3.2
+	github.com/charmbracelet/colorprofile v0.3.3
 	github.com/charmbracelet/fang v0.4.3
 	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta.3.0.20250917201909-41ff0bf215ea
 	github.com/charmbracelet/ssh v0.0.0-20250826160808-ebfa259c7309
