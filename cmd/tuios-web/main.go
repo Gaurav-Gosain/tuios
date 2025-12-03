@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/fang"
@@ -228,5 +229,10 @@ func applyGlobalConfig() {
 			scrollbackLines = 1000000
 		}
 		config.ScrollbackLines = scrollbackLines
+	}
+	if themeName != "" {
+		if err := theme.Initialize(themeName); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to load theme '%s': %v\n", themeName, err)
+		}
 	}
 }
