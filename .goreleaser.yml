@@ -251,6 +251,10 @@ aurs:
     license: MIT
     private_key: "{{ .Env.AUR_SSH_KEY }}"
     git_url: "ssh://aur@aur.archlinux.org/tuios-bin.git"
+    provides:
+      - tuios
+    conflicts:
+      - tuios
     package: |
       # bin
       install -Dm755 "./tuios" "${pkgdir}/usr/bin/tuios"
@@ -271,6 +275,10 @@ aurs:
     license: MIT
     private_key: "{{ .Env.AUR_SSH_KEY }}"
     git_url: "ssh://aur@aur.archlinux.org/tuios-web-bin.git"
+    provides:
+      - tuios-web
+    conflicts:
+      - tuios-web
     package: |
       # bin
       install -Dm755 "./tuios-web" "${pkgdir}/usr/bin/tuios-web"
