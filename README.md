@@ -209,6 +209,7 @@ TUIOS supports automation through `.tape` files - a simple, declarative format f
 - Demo recording
 - CI/CD automation
 - Terminal workflow documentation
+- Setup of development environments
 
 **Basic Tape File Syntax:**
 ```tape
