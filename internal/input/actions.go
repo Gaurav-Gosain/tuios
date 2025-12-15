@@ -5,6 +5,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
 
@@ -70,6 +71,16 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("resize_master_grow_left", handleResizeMasterGrowLeft)
 	d.Register("resize_height_shrink_top", handleResizeHeightShrinkTop)
 	d.Register("resize_height_grow_top", handleResizeHeightGrowTop)
+
+	// BSP tiling actions
+	d.Register("split_horizontal", handleSplitHorizontal)
+	d.Register("split_vertical", handleSplitVertical)
+	d.Register("rotate_split", handleRotateSplit)
+	d.Register("equalize_splits", handleEqualizeSplits)
+	d.Register("preselect_left", handlePreselectLeft)
+	d.Register("preselect_right", handlePreselectRight)
+	d.Register("preselect_up", handlePreselectUp)
+	d.Register("preselect_down", handlePreselectDown)
 
 	// Mode control actions
 	d.Register("enter_terminal_mode", handleEnterTerminalMode)
@@ -370,6 +381,70 @@ func handleResizeHeightGrowTop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 }
 
 // ============================================================================
+// BSP Tiling Action Handlers
+// ============================================================================
+
+func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.SplitFocusedHorizontal()
+		o.ShowNotification("Split Horizontal", "info", config.NotificationDuration)
+	}
+	return o, nil
+}
+
+func handleSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.SplitFocusedVertical()
+		o.ShowNotification("Split Vertical", "info", config.NotificationDuration)
+	}
+	return o, nil
+}
+
+func handleRotateSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.RotateFocusedSplit()
+		o.ShowNotification("Split Rotated", "info", config.NotificationDuration)
+	}
+	return o, nil
+}
+
+func handleEqualizeSplits(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.EqualizeSplits()
+		o.ShowNotification("Splits Equalized", "info", config.NotificationDuration)
+	}
+	return o, nil
+}
+
+func handlePreselectLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.SetPreselection(layout.PreselectionLeft)
+	}
+	return o, nil
+}
+
+func handlePreselectRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.SetPreselection(layout.PreselectionRight)
+	}
+	return o, nil
+}
+
+func handlePreselectUp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.SetPreselection(layout.PreselectionUp)
+	}
+	return o, nil
+}
+
+func handlePreselectDown(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.SetPreselection(layout.PreselectionDown)
+	}
+	return o, nil
+}
+
+// ============================================================================
 // Mode Control Action Handlers
 // ============================================================================
 
@@ -460,8 +535,8 @@ func handleToggleLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if totalLogs > maxDisplayHeight-fixedLines {
 			fixedLines = 6
 		}
-		logsPerPage := max(maxDisplayHeight - fixedLines, 1)
-		maxScroll := max(totalLogs - logsPerPage, 0)
+		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
+		maxScroll := max(totalLogs-logsPerPage, 0)
 		o.LogScrollOffset = maxScroll
 	}
 	return o, nil

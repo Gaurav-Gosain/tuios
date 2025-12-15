@@ -74,6 +74,12 @@ func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
 
 	// Handle modifier combinations first
 	if key.Mod != 0 {
+		// Handle Shift+Tab (backtab) - sends CSI Z
+		// Use bitwise check since Mod may have additional flags (e.g., 129 instead of 1)
+		if key.Mod&tea.ModShift != 0 && key.Code == tea.KeyTab {
+			return []byte{0x1b, '[', 'Z'}
+		}
+
 		// Handle Ctrl+letter combinations (standard control codes)
 		if key.Mod&tea.ModCtrl != 0 {
 			// Special Ctrl key combinations

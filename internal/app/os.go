@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -78,70 +79,77 @@ type WindowLayout struct {
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
-	Dragging              bool
-	Resizing              bool
-	ResizeCorner          ResizeCorner
-	PreResizeState        terminal.Window
-	ResizeStartX          int
-	ResizeStartY          int
-	DragOffsetX           int
-	DragOffsetY           int
-	DragStartX            int // Track where drag started
-	DragStartY            int // Track where drag started
-	TiledX                int // Original tiled position X
-	TiledY                int // Original tiled position Y
-	TiledWidth            int // Original tiled width
-	TiledHeight           int // Original tiled height
-	DraggedWindowIndex    int // Index of window being dragged
-	Windows               []*terminal.Window
-	FocusedWindow         int
-	Width                 int
-	Height                int
-	X                     int
-	Y                     int
-	Mode                  Mode
-	terminalMu            sync.Mutex
-	LastMouseX            int
-	LastMouseY            int
-	HasActiveTerminals    bool
-	ShowHelp              bool
-	InteractionMode       bool                   // True when actively dragging/resizing
-	MouseSnapping         bool                   // Enable/disable mouse snapping
-	WindowExitChan        chan string            // Channel to signal window closure
-	Animations            []*ui.Animation        // Active animations
-	CPUHistory            []float64              // CPU usage history for graph
-	LastCPUUpdate         time.Time              // Last time CPU was updated
-	RAMUsage              float64                // Cached RAM usage percentage
-	LastRAMUpdate         time.Time              // Last time RAM was updated
-	AutoTiling            bool                   // Automatic tiling mode enabled
-	MasterRatio           float64                // Master window width ratio for tiling (0.3-0.7)
-	RenamingWindow        bool                   // True when renaming a window
-	RenameBuffer          string                 // Buffer for new window name
-	PrefixActive          bool                   // True when prefix key was pressed (tmux-style)
-	WorkspacePrefixActive bool                   // True when Ctrl+B, w was pressed (workspace sub-prefix)
-	MinimizePrefixActive  bool                   // True when Ctrl+B, m was pressed (minimize sub-prefix)
-	TilingPrefixActive    bool                   // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
-	DebugPrefixActive     bool                   // True when Ctrl+B, D was pressed (debug sub-prefix)
-	LastPrefixTime        time.Time              // Time when prefix was activated
-	HelpScrollOffset      int                    // Scroll offset for help menu
-	HelpCategory          int                    // Current help category index (for left/right navigation)
-	HelpSearchMode        bool                   // True when help search is active
-	HelpSearchQuery       string                 // Current search query in help menu
-	CurrentWorkspace      int                    // Current active workspace (1-9)
-	NumWorkspaces         int                    // Total number of workspaces
-	WorkspaceFocus        map[int]int            // Remembers focused window per workspace
-	WorkspaceLayouts      map[int][]WindowLayout // Stores custom layouts per workspace
-	WorkspaceHasCustom    map[int]bool           // Tracks if workspace has custom layout
-	WorkspaceMasterRatio  map[int]float64        // Stores master ratio per workspace
-	ShowLogs              bool                   // True when showing log overlay
-	LogMessages           []LogMessage           // Store log messages
-	LogScrollOffset       int                    // Scroll offset for log viewer
-	Notifications         []Notification         // Active notifications
-	SelectionMode         bool                   // True when in text selection mode
-	ClipboardContent      string                 // Store clipboard content from tea.ClipboardMsg
-	ShowCacheStats        bool                   // True when showing style cache statistics overlay
-	ShowQuitConfirm       bool                   // True when showing quit confirmation dialog
-	QuitConfirmSelection  int                    // 0 = Yes (left), 1 = No (right)
+	Dragging           bool
+	Resizing           bool
+	ResizeCorner       ResizeCorner
+	PreResizeState     terminal.Window
+	ResizeStartX       int
+	ResizeStartY       int
+	DragOffsetX        int
+	DragOffsetY        int
+	DragStartX         int // Track where drag started
+	DragStartY         int // Track where drag started
+	TiledX             int // Original tiled position X
+	TiledY             int // Original tiled position Y
+	TiledWidth         int // Original tiled width
+	TiledHeight        int // Original tiled height
+	DraggedWindowIndex int // Index of window being dragged
+	Windows            []*terminal.Window
+	FocusedWindow      int
+	Width              int
+	Height             int
+	X                  int
+	Y                  int
+	Mode               Mode
+	terminalMu         sync.Mutex
+	LastMouseX         int
+	LastMouseY         int
+	HasActiveTerminals bool
+	ShowHelp           bool
+	InteractionMode    bool            // True when actively dragging/resizing
+	MouseSnapping      bool            // Enable/disable mouse snapping
+	WindowExitChan     chan string     // Channel to signal window closure
+	Animations         []*ui.Animation // Active animations
+	CPUHistory         []float64       // CPU usage history for graph
+	LastCPUUpdate      time.Time       // Last time CPU was updated
+	RAMUsage           float64         // Cached RAM usage percentage
+	LastRAMUpdate      time.Time       // Last time RAM was updated
+	AutoTiling         bool            // Automatic tiling mode enabled
+	MasterRatio        float64         // Master window width ratio for tiling (0.3-0.7)
+	// BSP tiling state
+	WorkspaceTrees        map[int]*layout.BSPTree // BSP tree per workspace
+	PreselectionDir       layout.PreselectionDir  // Pending preselection direction (0 = none)
+	TilingScheme          layout.AutoScheme       // Default auto-insertion scheme
+	SplitTargetWindowID   string                  // Window ID to split (set before AddWindow for splits)
+	WindowToBSPID         map[string]int          // Maps window UUID to stable BSP integer ID
+	NextBSPWindowID       int                     // Next BSP window ID to assign (starts at 1)
+	RenamingWindow        bool                    // True when renaming a window
+	RenameBuffer          string                  // Buffer for new window name
+	PrefixActive          bool                    // True when prefix key was pressed (tmux-style)
+	WorkspacePrefixActive bool                    // True when Ctrl+B, w was pressed (workspace sub-prefix)
+	MinimizePrefixActive  bool                    // True when Ctrl+B, m was pressed (minimize sub-prefix)
+	TilingPrefixActive    bool                    // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
+	DebugPrefixActive     bool                    // True when Ctrl+B, D was pressed (debug sub-prefix)
+	LastPrefixTime        time.Time               // Time when prefix was activated
+	HelpScrollOffset      int                     // Scroll offset for help menu
+	HelpCategory          int                     // Current help category index (for left/right navigation)
+	HelpSearchMode        bool                    // True when help search is active
+	HelpSearchQuery       string                  // Current search query in help menu
+	CurrentWorkspace      int                     // Current active workspace (1-9)
+	NumWorkspaces         int                     // Total number of workspaces
+	WorkspaceFocus        map[int]int             // Remembers focused window per workspace
+	WorkspaceLayouts      map[int][]WindowLayout  // Stores custom layouts per workspace
+	WorkspaceHasCustom    map[int]bool            // Tracks if workspace has custom layout
+	WorkspaceMasterRatio  map[int]float64         // Stores master ratio per workspace
+	ShowLogs              bool                    // True when showing log overlay
+	LogMessages           []LogMessage            // Store log messages
+	LogScrollOffset       int                     // Scroll offset for log viewer
+	Notifications         []Notification          // Active notifications
+	SelectionMode         bool                    // True when in text selection mode
+	ClipboardContent      string                  // Store clipboard content from tea.ClipboardMsg
+	ShowCacheStats        bool                    // True when showing style cache statistics overlay
+	ShowQuitConfirm       bool                    // True when showing quit confirmation dialog
+	QuitConfirmSelection  int                     // 0 = Yes (left), 1 = No (right)
 	// Pending resize tracking for debouncing PTY resize during mouse drag
 	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
 	// Performance optimization caches
@@ -160,19 +168,19 @@ type OS struct {
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
 	// Tape scripting support
-	ScriptPlayer       any         // *tape.Player - script playback engine
-	ScriptMode         bool        // True when running a tape script
-	ScriptPaused       bool        // True when script playback is paused
-	ScriptConverter    any         // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
-	ScriptExecutor     any         // *tape.CommandExecutor - executes tape commands
-	ScriptSleepUntil   time.Time   // When to resume after a sleep command
-	ScriptFinishedTime time.Time   // When the script finished (for auto-hide)
+	ScriptPlayer       any       // *tape.Player - script playback engine
+	ScriptMode         bool      // True when running a tape script
+	ScriptPaused       bool      // True when script playback is paused
+	ScriptConverter    any       // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
+	ScriptExecutor     any       // *tape.CommandExecutor - executes tape commands
+	ScriptSleepUntil   time.Time // When to resume after a sleep command
+	ScriptFinishedTime time.Time // When the script finished (for auto-hide)
 	// Tape manager UI
-	ShowTapeManager   bool                // True when showing tape manager overlay
-	TapeManager       *TapeManagerState   // Tape manager state
-	TapeRecorder      *tape.Recorder      // Tape recorder for recording sessions
-	TapeRecordingName string              // Name of current recording
-	TapePrefixActive  bool                // True when Ctrl+B, T was pressed (tape sub-prefix)
+	ShowTapeManager   bool              // True when showing tape manager overlay
+	TapeManager       *TapeManagerState // Tape manager state
+	TapeRecorder      *tape.Recorder    // Tape recorder for recording sessions
+	TapeRecordingName string            // Name of current recording
+	TapePrefixActive  bool              // True when Ctrl+B, T was pressed (tape sub-prefix)
 }
 
 // Notification represents a temporary notification message.
@@ -226,9 +234,9 @@ func (m *OS) Log(level, format string, args ...any) {
 		if totalLogs > maxDisplayHeight-fixedLines {
 			fixedLines = 6
 		}
-		logsPerPage := max(maxDisplayHeight - fixedLines, 1)
+		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
 
-		maxScroll := max(totalLogs - logsPerPage, 0)
+		maxScroll := max(totalLogs-logsPerPage, 0)
 		// Consider "at bottom" if within 2 lines of the end (to handle edge cases)
 		wasAtBottom = m.LogScrollOffset >= maxScroll-2
 	}
@@ -501,7 +509,13 @@ func (m *OS) AddWindow(title string) *OS {
 	// Auto-tile if in tiling mode
 	if m.AutoTiling {
 		m.LogInfo("Auto-tiling triggered for new window")
-		m.TileAllWindows()
+		// Use BSP tree if available
+		tree := m.GetOrCreateBSPTree()
+		if tree != nil {
+			m.AddWindowToBSPTree(window)
+		} else {
+			m.TileAllWindows()
+		}
 	}
 
 	return m
@@ -527,6 +541,16 @@ func (m *OS) DeleteWindow(i int) *OS {
 	// Clean up window resources
 	deletedWindow := m.Windows[i]
 	m.LogInfo("Deleting window: %s (index: %d, ID: %s)", deletedWindow.Title, i, deletedWindow.ID[:8])
+
+	// Get the window int ID BEFORE deleting (for BSP tree removal)
+	windowIntID := m.getWindowIntID(deletedWindow.ID)
+
+	// Clean up the BSP ID mapping
+	if m.WindowToBSPID != nil {
+		delete(m.WindowToBSPID, deletedWindow.ID)
+		m.LogInfo("BSP: Removed ID mapping for window %s (int ID %d)", deletedWindow.ID[:8], windowIntID)
+	}
+
 	deletedWindow.Close()
 
 	// Remove any animations referencing this window to prevent memory leaks
@@ -574,9 +598,35 @@ func (m *OS) DeleteWindow(i int) *OS {
 	}
 
 	// Retile if in tiling mode
-	if m.AutoTiling && len(m.Windows) > 0 {
-		m.LogInfo("Auto-tiling triggered after window deletion")
-		m.TileAllWindows()
+	if m.AutoTiling {
+		// Use BSP tree if available
+		tree := m.WorkspaceTrees[m.CurrentWorkspace]
+		if tree != nil && windowIntID > 0 {
+			tree.RemoveWindow(windowIntID)
+			m.LogInfo("BSP: Removed window from tree, tree now has %d windows", tree.WindowCount())
+
+			// If tree is now empty, clear it completely so next window starts fresh
+			if tree.IsEmpty() {
+				m.LogInfo("BSP: Tree is now empty, clearing workspace tree")
+				m.WorkspaceTrees[m.CurrentWorkspace] = nil
+			} else if len(m.Windows) > 0 {
+				m.ApplyBSPLayout()
+			}
+		}
+
+		// If there are still visible windows in this workspace, retile them
+		if len(m.Windows) > 0 {
+			hasVisibleInWorkspace := false
+			for _, w := range m.Windows {
+				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+					hasVisibleInWorkspace = true
+					break
+				}
+			}
+			if hasVisibleInWorkspace && (tree == nil || tree.IsEmpty()) {
+				m.TileAllWindows()
+			}
+		}
 	}
 
 	return m
@@ -1315,5 +1365,65 @@ func (m *OS) MoveAndFollowWorkspaceByID(windowID string, workspace int) error {
 		}
 	}
 
+	return nil
+}
+
+// SplitHorizontal splits the focused window horizontally (implements tape.Executor interface)
+func (m *OS) SplitHorizontal() error {
+	if !m.AutoTiling {
+		return nil
+	}
+	m.SplitFocusedHorizontal()
+	m.MarkAllDirty()
+	return nil
+}
+
+// SplitVertical splits the focused window vertically (implements tape.Executor interface)
+func (m *OS) SplitVertical() error {
+	if !m.AutoTiling {
+		return nil
+	}
+	m.SplitFocusedVertical()
+	m.MarkAllDirty()
+	return nil
+}
+
+// RotateSplit rotates the split direction at the focused window (implements tape.Executor interface)
+func (m *OS) RotateSplit() error {
+	if !m.AutoTiling {
+		return nil
+	}
+	m.RotateFocusedSplit()
+	m.MarkAllDirty()
+	return nil
+}
+
+// EqualizeSplitsExec equalizes all split ratios (implements tape.Executor interface)
+func (m *OS) EqualizeSplitsExec() error {
+	if !m.AutoTiling {
+		return nil
+	}
+	m.EqualizeSplits()
+	m.MarkAllDirty()
+	return nil
+}
+
+// Preselect sets the preselection direction for the next window (implements tape.Executor interface)
+func (m *OS) Preselect(direction string) error {
+	if !m.AutoTiling {
+		return nil
+	}
+	switch direction {
+	case "left":
+		m.SetPreselection(layout.PreselectionLeft)
+	case "right":
+		m.SetPreselection(layout.PreselectionRight)
+	case "up":
+		m.SetPreselection(layout.PreselectionUp)
+	case "down":
+		m.SetPreselection(layout.PreselectionDown)
+	default:
+		m.ClearPreselection()
+	}
 	return nil
 }

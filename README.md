@@ -101,7 +101,7 @@ curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh
 - **Multiple Terminal Windows**: Create and manage multiple terminal sessions
 - **9 Workspaces**: Organize windows across independent workspaces
 - **Modal Interface**: Vim-inspired Window Management and Terminal modes
-- **Automatic Tiling**: Optional grid-based window layouts
+- **BSP Tiling**: Binary Space Partitioning with automatic spiral layout (alternating V/H splits)
 - **Vim-Style Copy Mode**: Navigate scrollback (10,000 lines), search, and select text with vim keybindings
 - **Customizable Keybindings**: TOML configuration file with full keybinding customization (Kitty protocol support)
 - **Mouse Support**: Click, drag, and resize with full mouse interaction

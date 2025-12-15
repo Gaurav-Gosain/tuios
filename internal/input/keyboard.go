@@ -125,11 +125,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if totalLogs > maxDisplayHeight-fixedLines {
 			fixedLines = 6
 		}
-		logsPerPage := max(maxDisplayHeight - fixedLines, 1)
+		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
 
 		// Calculate max scroll position based on visible capacity
 		// Can only scroll if there are more logs than fit on screen
-		maxScroll := max(totalLogs - logsPerPage, 0)
+		maxScroll := max(totalLogs-logsPerPage, 0)
 
 		// Scroll up/down
 		if key == "up" || key == "k" {
@@ -639,6 +639,34 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		// Toggle fullscreen for current window
 		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			o.Snap(o.FocusedWindow, app.SnapFullScreen)
+		}
+		return o, nil
+	case "-":
+		// Split focused window horizontally (top/bottom)
+		if o.AutoTiling {
+			o.SplitFocusedHorizontal()
+			o.ShowNotification("Split Horizontal", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "|", "\\":
+		// Split focused window vertically (left/right)
+		if o.AutoTiling {
+			o.SplitFocusedVertical()
+			o.ShowNotification("Split Vertical", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "R":
+		// Rotate split direction at focused window
+		if o.AutoTiling {
+			o.RotateFocusedSplit()
+			o.ShowNotification("Split Rotated", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "=":
+		// Equalize all split ratios
+		if o.AutoTiling {
+			o.EqualizeSplits()
+			o.ShowNotification("Splits Equalized", "info", config.NotificationDuration)
 		}
 		return o, nil
 	case "[":

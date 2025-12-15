@@ -37,6 +37,13 @@ type Executor interface {
 	DisableTiling() error
 	SnapByDirection(direction string) error // "left", "right", "fullscreen"
 
+	// BSP Tiling
+	SplitHorizontal() error
+	SplitVertical() error
+	RotateSplit() error
+	EqualizeSplitsExec() error
+	Preselect(direction string) error // "left", "right", "up", "down"
+
 	// Workspace
 	SwitchWorkspace(workspace int) error
 	MoveWindowToWorkspaceByID(windowID string, workspace int) error
@@ -134,6 +141,31 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 
 	case CommandTypeSnapFullscreen:
 		return ce.executor.SnapByDirection("fullscreen")
+
+	// BSP Tiling
+	case CommandTypeSplit:
+		if len(cmd.Args) > 0 {
+			direction := strings.ToLower(cmd.Args[0])
+			switch direction {
+			case "horizontal", "h":
+				return ce.executor.SplitHorizontal()
+			case "vertical", "v":
+				return ce.executor.SplitVertical()
+			}
+		}
+		return nil
+
+	case CommandTypeRotateSplit:
+		return ce.executor.RotateSplit()
+
+	case CommandTypeEqualizeSplits:
+		return ce.executor.EqualizeSplitsExec()
+
+	case CommandTypePreselect:
+		if len(cmd.Args) > 0 {
+			return ce.executor.Preselect(strings.ToLower(cmd.Args[0]))
+		}
+		return nil
 
 	// Workspace
 	case CommandTypeSwitchWS:

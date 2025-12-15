@@ -63,6 +63,7 @@ type ModeInfo struct {
 	Color     string // Hex color for the block
 	CursorPos string // Cursor position for copy mode (empty otherwise)
 	IsTiling  bool   // Whether tiling mode is active
+	NextSplit string // Next split direction when tiling ("V" or "H")
 }
 
 // buildDockLeftText builds the left side of the dock (mode + workspace info)
@@ -74,6 +75,16 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 	modeInfo := ModeInfo{
 		Block:    "█",
 		IsTiling: m.AutoTiling,
+	}
+
+	// Get next split direction if tiling is active
+	if m.AutoTiling {
+		tree := m.WorkspaceTrees[m.CurrentWorkspace]
+		if tree != nil {
+			modeInfo.NextSplit = tree.GetNextSplitDirection()
+		} else {
+			modeInfo.NextSplit = "V" // Default to vertical
+		}
 	}
 
 	var modeText string
@@ -88,9 +99,9 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 		} else {
 			// Terminal mode
 			modeInfo.Color = theme.ColorToString(theme.DockColorTerminal())
-			// Add tiling indicator for terminal mode
+			// Add tiling indicator for terminal mode (with split direction)
 			if m.AutoTiling {
-				modeLabel = config.GetDockModeIconTiling()
+				modeLabel = config.GetDockModeIconTiling() + modeInfo.NextSplit
 			} else {
 				modeLabel = config.GetDockModeIconTerminal()
 			}
@@ -98,9 +109,9 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 	} else {
 		// Window mode
 		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
-		// Add tiling indicator for window mode
+		// Add tiling indicator for window mode (with split direction)
 		if m.AutoTiling {
-			modeLabel = config.GetDockModeIconTiling()
+			modeLabel = config.GetDockModeIconTiling() + modeInfo.NextSplit
 		} else {
 			modeLabel = config.GetDockModeIconWindow()
 		}
@@ -250,7 +261,7 @@ func (layout *DockLayout) calculateItemPositions(screenWidth int, allItems []Doc
 	}
 
 	// All items fit - calculate center positioning
-	leftSpacer := max(availableSpace / 2, 0)
+	leftSpacer := max(availableSpace/2, 0)
 
 	layout.CenterStartX = layout.LeftWidth + leftSpacer
 	layout.VisibleItems = allItems
@@ -281,7 +292,7 @@ func (layout *DockLayout) truncateItems(screenWidth int, allItems []DockItem) {
 	const truncationIndicatorWidth = 4 // " ..." width
 
 	// Calculate max width available for items
-	maxItemsWidth := max(screenWidth - layout.LeftWidth - layout.RightWidth - truncationIndicatorWidth - 4, 0)
+	maxItemsWidth := max(screenWidth-layout.LeftWidth-layout.RightWidth-truncationIndicatorWidth-4, 0)
 
 	// Find how many complete items fit
 	currentWidth := 0

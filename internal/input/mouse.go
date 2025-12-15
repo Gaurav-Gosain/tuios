@@ -673,6 +673,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Mark layout as custom if resizing in tiling mode
 		if wasResizing && o.AutoTiling {
 			o.MarkLayoutCustom()
+			// Sync BSP tree ratios to match the new window positions after resize
+			o.SyncBSPTreeFromGeometry()
 		}
 
 		for i := range o.Windows {

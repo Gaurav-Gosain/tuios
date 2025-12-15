@@ -53,6 +53,7 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 				"toggle_tiling", "swap_left", "swap_right", "swap_up", "swap_down",
 				"resize_master_shrink", "resize_master_grow", "resize_height_shrink", "resize_height_grow",
 				"resize_master_shrink_left", "resize_master_grow_left", "resize_height_shrink_top", "resize_height_grow_top",
+				"split_horizontal", "split_vertical", "rotate_split",
 			}),
 		},
 		{
@@ -189,6 +190,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		"prefix_toggle_tiling", "prefix_workspace", "prefix_minimize",
 		"prefix_window", "prefix_detach", "prefix_selection",
 		"prefix_help", "prefix_quit", "prefix_fullscreen",
+		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split",
 	}
 
 	// Add debug commands (Leader Key + D ...)

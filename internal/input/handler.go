@@ -341,6 +341,34 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.Snap(o.FocusedWindow, app.SnapFullScreen)
 		}
 		return o, nil
+	case "-":
+		// Split focused window horizontally (top/bottom)
+		if o.AutoTiling {
+			o.SplitFocusedHorizontal()
+			o.ShowNotification("Split Horizontal", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "|", "\\":
+		// Split focused window vertically (left/right)
+		if o.AutoTiling {
+			o.SplitFocusedVertical()
+			o.ShowNotification("Split Vertical", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "R":
+		// Rotate split direction at focused window
+		if o.AutoTiling {
+			o.RotateFocusedSplit()
+			o.ShowNotification("Split Rotated", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "=":
+		// Equalize all split ratios
+		if o.AutoTiling {
+			o.EqualizeSplits()
+			o.ShowNotification("Splits Equalized", "info", config.NotificationDuration)
+		}
+		return o, nil
 
 	// Copy mode
 	case "[":

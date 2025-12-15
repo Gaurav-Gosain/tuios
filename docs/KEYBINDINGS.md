@@ -68,6 +68,8 @@ TUIOS supports 9 workspaces for organizing windows.
 
 ### Tiling Mode
 
+TUIOS uses Binary Space Partitioning (BSP) for automatic tiling. Windows are arranged in an alternating vertical/horizontal split pattern (spiral layout).
+
 | Key | Action |
 |-----|--------|
 | `t` | Toggle automatic tiling mode |
@@ -83,6 +85,18 @@ TUIOS supports 9 workspaces for organizing windows.
 | `.` | Increase master window width (from left edge) |
 | `[` | Decrease focused window height (from top edge) |
 | `]` | Increase focused window height (from top edge) |
+
+### BSP Split Controls
+
+These commands are available in tiling mode via the prefix key:
+
+| Key Sequence | Action |
+|--------------|--------|
+| `Ctrl+B` `-` | Split focused window horizontally (top/bottom) |
+| `Ctrl+B` `\|` or `\` | Split focused window vertically (left/right) |
+| `Ctrl+B` `R` | Rotate split direction at focused window |
+
+The dock shows the next split direction (V for vertical, H for horizontal) when tiling mode is active.
 
 ## Copy Mode
 

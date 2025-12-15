@@ -86,10 +86,16 @@ const (
 	// CommandTypeMoveAndFollowWS represents the MoveAndFollowWorkspace command.
 	CommandTypeMoveAndFollowWS CommandType = "MoveAndFollowWorkspace"
 
-	// CommandTypeSplit represents the Split command.
+	// CommandTypeSplit represents the Split command (horizontal/vertical).
 	CommandTypeSplit CommandType = "Split"
 	// CommandTypeFocus represents the Focus command.
 	CommandTypeFocus CommandType = "Focus"
+	// CommandTypeRotateSplit represents the RotateSplit command.
+	CommandTypeRotateSplit CommandType = "RotateSplit"
+	// CommandTypeEqualizeSplits represents the EqualizeSplits command.
+	CommandTypeEqualizeSplits CommandType = "EqualizeSplits"
+	// CommandTypePreselect represents the Preselect command.
+	CommandTypePreselect CommandType = "Preselect"
 
 	// CommandTypeWait represents the Wait command.
 	CommandTypeWait CommandType = "Wait"
@@ -147,7 +153,8 @@ func (ct CommandType) IsCommand() bool {
 		CommandTypeToggleTiling, CommandTypeEnableTiling, CommandTypeDisableTiling,
 		CommandTypeSnapLeft, CommandTypeSnapRight, CommandTypeSnapFullscreen,
 		CommandTypeSwitchWS, CommandTypeMoveToWS, CommandTypeMoveAndFollowWS,
-		CommandTypeSplit, CommandTypeFocus,
+		CommandTypeSplit, CommandTypeFocus, CommandTypeRotateSplit,
+		CommandTypeEqualizeSplits, CommandTypePreselect,
 		CommandTypeWait, CommandTypeWaitUntilRegex,
 		CommandTypeSet, CommandTypeOutput, CommandTypeSource,
 		CommandTypeComment:
