@@ -230,6 +230,7 @@ Access debug and development tools:
 | `Ctrl+B` `D` `l` | Toggle log viewer |
 | `Ctrl+B` `D` `c` | Toggle cache statistics |
 | `Ctrl+B` `D` `k` | Toggle showkeys overlay |
+| `Ctrl+B` `D` `a` | Toggle animations |
 | `Ctrl+B` `D` `Esc` | Cancel |
 
 **Log Viewer Keys:**

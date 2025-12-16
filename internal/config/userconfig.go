@@ -24,6 +24,7 @@ type AppearanceConfig struct {
 	ScrollbackLines   int    `toml:"scrollback_lines"`    // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 	DockbarPosition   string `toml:"dockbar_position"`    // Dockbar position: bottom, top, hidden
 	PreferredShell    string `toml:"preferred_shell"`     // Preferred shell: if empty, auto-detect based on platform.
+	AnimationsEnabled *bool  `toml:"animations_enabled"`  // Enable UI animations (default: true). Set to false for instant transitions.
 }
 
 // KeybindingsConfig holds all keybinding configurations
@@ -215,9 +216,10 @@ func DefaultConfig() *UserConfig {
 				"workspace_prefix_cancel":   {"esc"},
 			},
 			DebugPrefix: map[string][]string{
-				"debug_prefix_logs":   {"l"},
-				"debug_prefix_cache":  {"c"},
-				"debug_prefix_cancel": {"esc"},
+				"debug_prefix_logs":       {"l"},
+				"debug_prefix_cache":      {"c"},
+				"debug_prefix_animations": {"a"},
+				"debug_prefix_cancel":     {"esc"},
 			},
 			TapePrefix: map[string][]string{
 				"tape_prefix_manager": {"m"},
@@ -426,6 +428,12 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.ScrollbackLines = 100
 	} else if cfg.Appearance.ScrollbackLines > 1000000 {
 		cfg.Appearance.ScrollbackLines = 1000000
+	}
+
+	// AnimationsEnabled defaults to true (nil means use default)
+	// Only set global if explicitly configured
+	if cfg.Appearance.AnimationsEnabled != nil {
+		AnimationsEnabled = *cfg.Appearance.AnimationsEnabled
 	}
 }
 

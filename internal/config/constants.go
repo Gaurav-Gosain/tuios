@@ -262,6 +262,28 @@ const (
 // Set via --ascii-only command-line flag
 var UseASCIIOnly = false
 
+// AnimationsEnabled controls whether UI animations are enabled
+// Set via --no-animations command-line flag or appearance.animations_enabled config
+var AnimationsEnabled = true
+
+// GetAnimationDuration returns the animation duration for standard operations.
+// Returns 0 if animations are disabled, causing instant transitions.
+func GetAnimationDuration() time.Duration {
+	if !AnimationsEnabled {
+		return 0
+	}
+	return DefaultAnimationDuration
+}
+
+// GetFastAnimationDuration returns the animation duration for fast operations.
+// Returns 0 if animations are disabled, causing instant transitions.
+func GetFastAnimationDuration() time.Duration {
+	if !AnimationsEnabled {
+		return 0
+	}
+	return FastAnimationDuration
+}
+
 // BorderStyle controls which border style to use for windows
 // Set via --border-style flag or appearance.border_style config
 var BorderStyle = "rounded"

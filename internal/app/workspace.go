@@ -291,7 +291,7 @@ func (m *OS) TileVisibleWorkspaceWindows() {
 				layouts[i].y,
 				layouts[i].width,
 				layouts[i].height,
-				config.DefaultAnimationDuration,
+				config.GetAnimationDuration(),
 			)
 
 			if anim != nil {

@@ -109,6 +109,13 @@ const (
 	// CommandTypeSource represents the Source command.
 	CommandTypeSource CommandType = "Source"
 
+	// CommandTypeEnableAnimations represents the EnableAnimations command.
+	CommandTypeEnableAnimations CommandType = "EnableAnimations"
+	// CommandTypeDisableAnimations represents the DisableAnimations command.
+	CommandTypeDisableAnimations CommandType = "DisableAnimations"
+	// CommandTypeToggleAnimations represents the ToggleAnimations command.
+	CommandTypeToggleAnimations CommandType = "ToggleAnimations"
+
 	// CommandTypeComment represents a comment line.
 	CommandTypeComment CommandType = "Comment"
 )
@@ -157,6 +164,7 @@ func (ct CommandType) IsCommand() bool {
 		CommandTypeEqualizeSplits, CommandTypePreselect,
 		CommandTypeWait, CommandTypeWaitUntilRegex,
 		CommandTypeSet, CommandTypeOutput, CommandTypeSource,
+		CommandTypeEnableAnimations, CommandTypeDisableAnimations, CommandTypeToggleAnimations,
 		CommandTypeComment:
 		return true
 	}

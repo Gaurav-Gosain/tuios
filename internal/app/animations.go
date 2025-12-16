@@ -20,7 +20,7 @@ func (m *OS) CreateMinimizeAnimation(i int) *ui.Animation {
 	// Calculate dock position for this window
 	dockX, dockY := m.calculateDockPosition(i)
 
-	return ui.NewMinimizeAnimation(window, dockX, dockY, config.DefaultAnimationDuration)
+	return ui.NewMinimizeAnimation(window, dockX, dockY, config.GetAnimationDuration())
 }
 
 // CreateRestoreAnimation creates a restore animation for the window at index i
@@ -34,7 +34,7 @@ func (m *OS) CreateRestoreAnimation(i int) *ui.Animation {
 	// Calculate dock position for this window
 	dockX, dockY := m.calculateDockPosition(i)
 
-	return ui.NewRestoreAnimation(window, dockX, dockY, config.DefaultAnimationDuration)
+	return ui.NewRestoreAnimation(window, dockX, dockY, config.GetAnimationDuration())
 }
 
 // CreateSnapAnimation creates a snap animation for the window at index i
@@ -52,7 +52,7 @@ func (m *OS) CreateSnapAnimation(i int, quarter SnapQuarter) *ui.Animation {
 	targetWidth = max(targetWidth, config.DefaultWindowWidth)
 	targetHeight = max(targetHeight, config.DefaultWindowHeight)
 
-	return ui.NewSnapAnimation(window, targetX, targetY, targetWidth, targetHeight, config.DefaultAnimationDuration)
+	return ui.NewSnapAnimation(window, targetX, targetY, targetWidth, targetHeight, config.GetAnimationDuration())
 }
 
 // HasActiveAnimations returns true if there are any active animations
@@ -207,7 +207,7 @@ func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
 	}
 
 	// Calculate center positioning
-	availableSpace := max(m.Width - leftWidth - rightWidth - dockItemsWidth, 0)
+	availableSpace := max(m.Width-leftWidth-rightWidth-dockItemsWidth, 0)
 	leftSpacer := availableSpace / 2
 
 	// Calculate X position for target dock item

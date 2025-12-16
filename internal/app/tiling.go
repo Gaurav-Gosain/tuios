@@ -212,13 +212,13 @@ func (m *OS) SwapWindows(index1, index2 int) {
 	anim1 := ui.NewSnapAnimation(
 		window1,
 		x2, y2, width2, height2,
-		config.FastAnimationDuration,
+		config.GetFastAnimationDuration(),
 	)
 
 	anim2 := ui.NewSnapAnimation(
 		window2,
 		x1, y1, width1, height1,
-		config.FastAnimationDuration,
+		config.GetFastAnimationDuration(),
 	)
 
 	m.Animations = append(m.Animations, anim1, anim2)
@@ -268,14 +268,14 @@ func (m *OS) SwapWindowsWithOriginal(draggedIndex, targetIndex int, origX, origY
 	anim1 := ui.NewSnapAnimation(
 		draggedWindow,
 		targetWindow.X, targetWindow.Y, targetWindow.Width, targetWindow.Height,
-		config.FastAnimationDuration,
+		config.GetFastAnimationDuration(),
 	)
 
 	// Target window goes to dragged window's ORIGINAL position
 	anim2 := ui.NewSnapAnimation(
 		targetWindow,
 		origX, origY, origWidth, origHeight,
-		config.FastAnimationDuration,
+		config.GetFastAnimationDuration(),
 	)
 
 	if anim1 != nil {
@@ -317,7 +317,7 @@ func (m *OS) TileRemainingWindows(excludeIndex int) {
 		anim := ui.NewSnapAnimation(
 			m.Windows[idx],
 			l.X, l.Y, l.Width, l.Height,
-			config.DefaultAnimationDuration,
+			config.GetAnimationDuration(),
 		)
 
 		if anim != nil {
@@ -1361,7 +1361,7 @@ func (m *OS) ApplyBSPLayout() {
 		anim := ui.NewSnapAnimation(
 			win,
 			rect.X, rect.Y, rect.W, rect.H,
-			config.DefaultAnimationDuration,
+			config.GetAnimationDuration(),
 		)
 
 		if anim != nil {

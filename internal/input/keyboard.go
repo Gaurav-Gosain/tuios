@@ -486,6 +486,15 @@ func handleTerminalDebugPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 			o.ShowNotification("Showkeys: OFF", "info", config.NotificationDuration)
 		}
 		return o, nil
+	case "a":
+		// Toggle animations
+		config.AnimationsEnabled = !config.AnimationsEnabled
+		if config.AnimationsEnabled {
+			o.ShowNotification("Animations: ON", "info", config.NotificationDuration)
+		} else {
+			o.ShowNotification("Animations: OFF", "info", config.NotificationDuration)
+		}
+		return o, nil
 	case "esc":
 		// Cancel debug prefix mode
 		return o, nil
@@ -1116,6 +1125,15 @@ func HandleDebugPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 			o.ShowNotification("Showkeys: ON", "info", config.NotificationDuration)
 		} else {
 			o.ShowNotification("Showkeys: OFF", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "a":
+		// Toggle animations
+		config.AnimationsEnabled = !config.AnimationsEnabled
+		if config.AnimationsEnabled {
+			o.ShowNotification("Animations: ON", "info", config.NotificationDuration)
+		} else {
+			o.ShowNotification("Animations: OFF", "info", config.NotificationDuration)
 		}
 		return o, nil
 	case "esc":

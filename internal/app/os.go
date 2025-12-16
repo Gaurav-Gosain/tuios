@@ -293,10 +293,10 @@ func (m *OS) ShowNotification(message, notifType string, duration time.Duration)
 		Duration:  duration,
 	}
 
-	// Create fade-in animation
+	// Create fade-in animation (uses getter so it's instant when animations disabled)
 	notif.Animation = &ui.Animation{
 		StartTime: time.Now(),
-		Duration:  config.DefaultAnimationDuration,
+		Duration:  config.GetAnimationDuration(),
 		Progress:  0.0,
 		Complete:  false,
 	}
@@ -1424,6 +1424,31 @@ func (m *OS) Preselect(direction string) error {
 		m.SetPreselection(layout.PreselectionDown)
 	default:
 		m.ClearPreselection()
+	}
+	return nil
+}
+
+// EnableAnimations enables UI animations (implements tape.Executor interface)
+func (m *OS) EnableAnimations() error {
+	config.AnimationsEnabled = true
+	m.ShowNotification("Animations: ON", "info", config.NotificationDuration)
+	return nil
+}
+
+// DisableAnimations disables UI animations (implements tape.Executor interface)
+func (m *OS) DisableAnimations() error {
+	config.AnimationsEnabled = false
+	m.ShowNotification("Animations: OFF", "info", config.NotificationDuration)
+	return nil
+}
+
+// ToggleAnimations toggles UI animations (implements tape.Executor interface)
+func (m *OS) ToggleAnimations() error {
+	config.AnimationsEnabled = !config.AnimationsEnabled
+	if config.AnimationsEnabled {
+		m.ShowNotification("Animations: ON", "info", config.NotificationDuration)
+	} else {
+		m.ShowNotification("Animations: OFF", "info", config.NotificationDuration)
 	}
 	return nil
 }

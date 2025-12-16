@@ -356,4 +356,10 @@ var ActionDescriptions = map[string]string{
 	// Tape Actions
 	"toggle_tape_manager": "Toggle tape manager",
 	"stop_recording":      "Stop tape recording",
+
+	// Debug Prefix
+	"debug_prefix_logs":       "Toggle log viewer",
+	"debug_prefix_cache":      "Toggle cache statistics",
+	"debug_prefix_animations": "Toggle animations",
+	"debug_prefix_cancel":     "Cancel debug prefix",
 }

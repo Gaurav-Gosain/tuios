@@ -46,6 +46,7 @@ func GetPrefixKeybindings(prefixType string) []Keybinding {
 			{"l", "Toggle log viewer"},
 			{"c", "Toggle cache statistics"},
 			{"k", "Toggle showkeys overlay"},
+			{"a", "Toggle animations"},
 			{"Esc", "Cancel"},
 		}
 	case "tape":

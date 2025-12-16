@@ -105,6 +105,12 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.ScriptMode && !m.ScriptPaused && m.ScriptPlayer != nil {
 			player, ok := m.ScriptPlayer.(*tape.Player)
 			if ok && !player.IsFinished() {
+				// Wait for animations to complete before executing next command
+				// This ensures visual consistency during script playback
+				if m.HasActiveAnimations() {
+					return m, TickCmd()
+				}
+
 				// Check if we're waiting for a sleep to finish
 				if !m.ScriptSleepUntil.IsZero() && time.Now().Before(m.ScriptSleepUntil) {
 					// Still waiting, don't advance yet

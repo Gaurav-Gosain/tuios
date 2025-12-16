@@ -151,6 +151,12 @@ func (p *Parser) parseCommand() (Command, bool) {
 		return p.parseOutputCommand()
 	case TokenSource:
 		return p.parseSourceCommand()
+	case TokenEnableAnimations:
+		return p.parseBasicCommand(CommandTypeEnableAnimations)
+	case TokenDisableAnimations:
+		return p.parseBasicCommand(CommandTypeDisableAnimations)
+	case TokenToggleAnimations:
+		return p.parseBasicCommand(CommandTypeToggleAnimations)
 	default:
 		p.addError(fmt.Sprintf("unexpected token: %v", p.curTok.Type))
 		p.skipToNextLine()

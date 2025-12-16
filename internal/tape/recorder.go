@@ -8,15 +8,15 @@ import (
 
 // Recorder records user interactions as tape commands
 type Recorder struct {
-	commands      []Command
-	startTime     time.Time
-	lastEventTime time.Time
-	enabled       bool
-	minDelayMs    int    // Minimum delay to record between events (to filter out very fast inputs)
-	typingBuffer  string // Buffer for accumulating typed characters
-	initialMode   string // Initial mode when recording started
-	initialWorkspace int // Initial workspace when recording started
-	initialTiling bool   // Initial tiling state when recording started
+	commands         []Command
+	startTime        time.Time
+	lastEventTime    time.Time
+	enabled          bool
+	minDelayMs       int    // Minimum delay to record between events (to filter out very fast inputs)
+	typingBuffer     string // Buffer for accumulating typed characters
+	initialMode      string // Initial mode when recording started
+	initialWorkspace int    // Initial workspace when recording started
+	initialTiling    bool   // Initial tiling state when recording started
 }
 
 // NewRecorder creates a new tape recorder
@@ -192,16 +192,16 @@ var actionToCommand = map[string]struct {
 	cmdType CommandType
 	raw     string
 }{
-	"new_window":       {CommandTypeNewWindow, "NewWindow"},
-	"close_window":     {CommandTypeCloseWindow, "CloseWindow"},
-	"next_window":      {CommandTypeNextWindow, "NextWindow"},
-	"prev_window":      {CommandTypePrevWindow, "PrevWindow"},
-	"minimize_window":  {CommandTypeMinimizeWindow, "MinimizeWindow"},
-	"restore_all":      {CommandTypeRestoreWindow, "RestoreWindow"},
-	"toggle_tiling":    {CommandTypeToggleTiling, "ToggleTiling"},
-	"snap_left":        {CommandTypeSnapLeft, "SnapLeft"},
-	"snap_right":       {CommandTypeSnapRight, "SnapRight"},
-	"snap_fullscreen":  {CommandTypeSnapFullscreen, "SnapFullscreen"},
+	"new_window":      {CommandTypeNewWindow, "NewWindow"},
+	"close_window":    {CommandTypeCloseWindow, "CloseWindow"},
+	"next_window":     {CommandTypeNextWindow, "NextWindow"},
+	"prev_window":     {CommandTypePrevWindow, "PrevWindow"},
+	"minimize_window": {CommandTypeMinimizeWindow, "MinimizeWindow"},
+	"restore_all":     {CommandTypeRestoreWindow, "RestoreWindow"},
+	"toggle_tiling":   {CommandTypeToggleTiling, "ToggleTiling"},
+	"snap_left":       {CommandTypeSnapLeft, "SnapLeft"},
+	"snap_right":      {CommandTypeSnapRight, "SnapRight"},
+	"snap_fullscreen": {CommandTypeSnapFullscreen, "SnapFullscreen"},
 }
 
 // RecordAction records a window management action
@@ -325,6 +325,11 @@ func (r *Recorder) String(header string) string {
 		result += fmt.Sprintf("# Recorded: %s\n\n", r.startTime.Format(time.RFC3339))
 	}
 
+	// Always start with DisableAnimations for reproducibility
+	// This ensures tape playback is consistent regardless of user's animation settings
+	result += "# Disable animations for consistent playback\n"
+	result += "DisableAnimations\n\n"
+
 	// Write commands
 	for _, cmd := range r.commands {
 		if cmd.Delay > 0 && cmd.Delay.Milliseconds() > 100 {
@@ -333,6 +338,10 @@ func (r *Recorder) String(header string) string {
 
 		result += cmd.Raw + "\n"
 	}
+
+	// Re-enable animations at the end to restore user's preference
+	result += "\n# Re-enable animations\n"
+	result += "EnableAnimations\n"
 
 	return result
 }

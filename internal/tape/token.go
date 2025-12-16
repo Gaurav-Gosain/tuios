@@ -120,6 +120,12 @@ const (
 	TokenOutput TokenType = "Output"
 	// TokenSource represents the Source command token.
 	TokenSource TokenType = "Source"
+	// TokenEnableAnimations represents the EnableAnimations command token.
+	TokenEnableAnimations TokenType = "EnableAnimations"
+	// TokenDisableAnimations represents the DisableAnimations command token.
+	TokenDisableAnimations TokenType = "DisableAnimations"
+	// TokenToggleAnimations represents the ToggleAnimations command token.
+	TokenToggleAnimations TokenType = "ToggleAnimations"
 	// TokenTrue represents the true keyword token.
 	TokenTrue TokenType = "true"
 	// TokenFalse represents the false keyword token.
@@ -149,7 +155,8 @@ func (tt TokenType) IsCommand() bool {
 		TokenSwitchWS, TokenMoveToWS, TokenMoveAndFollowWS,
 		TokenSplit, TokenFocus,
 		TokenWait, TokenWaitUntilRegex,
-		TokenSet, TokenOutput, TokenSource:
+		TokenSet, TokenOutput, TokenSource,
+		TokenEnableAnimations, TokenDisableAnimations, TokenToggleAnimations:
 		return true
 	}
 	return false
@@ -237,6 +244,11 @@ var KeywordTokenMap = map[string]TokenType{
 	"Set":    TokenSet,
 	"Output": TokenOutput,
 	"Source": TokenSource,
+
+	// Animations
+	"EnableAnimations":  TokenEnableAnimations,
+	"DisableAnimations": TokenDisableAnimations,
+	"ToggleAnimations":  TokenToggleAnimations,
 
 	// Literals
 	"true":  TokenTrue,

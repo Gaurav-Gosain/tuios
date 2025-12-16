@@ -42,6 +42,13 @@ type Animation struct {
 // NewMinimizeAnimation creates a minimize animation for the specified window.
 // dockX and dockY specify the target dock position for the minimized window.
 func NewMinimizeAnimation(w *terminal.Window, dockX, dockY int, duration time.Duration) *Animation {
+	// If duration is 0, instantly minimize without animation
+	if duration == 0 {
+		w.Minimized = true
+		w.Minimizing = false
+		return nil
+	}
+
 	return &Animation{
 		Window:      w,
 		Type:        AnimationMinimize,
@@ -63,6 +70,17 @@ func NewMinimizeAnimation(w *terminal.Window, dockX, dockY int, duration time.Du
 // NewRestoreAnimation creates a restore animation for the specified window.
 // dockX and dockY specify the current dock position of the minimized window.
 func NewRestoreAnimation(w *terminal.Window, dockX, dockY int, duration time.Duration) *Animation {
+	// If duration is 0, instantly restore without animation
+	if duration == 0 {
+		w.Minimized = false
+		w.X = w.PreMinimizeX
+		w.Y = w.PreMinimizeY
+		w.Resize(w.PreMinimizeWidth, w.PreMinimizeHeight)
+		w.MarkPositionDirty()
+		w.InvalidateCache()
+		return nil
+	}
+
 	return &Animation{
 		Window:      w,
 		Type:        AnimationRestore,
@@ -87,6 +105,16 @@ func NewSnapAnimation(w *terminal.Window, targetX, targetY, targetWidth, targetH
 	// Don't animate if already at target
 	if w.X == targetX && w.Y == targetY &&
 		w.Width == targetWidth && w.Height == targetHeight {
+		return nil
+	}
+
+	// If duration is 0, instantly apply the position without animation
+	if duration == 0 {
+		w.X = targetX
+		w.Y = targetY
+		w.Resize(targetWidth, targetHeight)
+		w.MarkPositionDirty()
+		w.InvalidateCache()
 		return nil
 	}
 

@@ -51,6 +51,7 @@ var (
 	hideWindowButtons bool
 	scrollbackLines   int
 	showKeys          bool
+	noAnimations      bool
 )
 
 func main() {
@@ -128,6 +129,7 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
 	rootCmd.PersistentFlags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
 	rootCmd.PersistentFlags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
+	rootCmd.PersistentFlags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
 
 	// SSH command variables
 	var sshPort, sshHost, sshKeyPath string
@@ -179,7 +181,7 @@ a host key automatically if not specified.`,
 
 The editor is determined by checking $EDITOR, $VISUAL, or common editors
 like vim, vi, nano, and emacs in that order.`,
-		RunE: func(_ *cobra.Command, _  []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return editConfigFile()
 		},
 	}
@@ -190,7 +192,7 @@ like vim, vi, nano, and emacs in that order.`,
 		Long: `Reset the TUIOS configuration file to default settings
 
 This will overwrite your existing configuration after confirmation.`,
-		RunE: func(_ *cobra.Command, _  []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return resetConfigToDefaults()
 		},
 	}
@@ -209,7 +211,7 @@ This will overwrite your existing configuration after confirmation.`,
 		Use:   "list",
 		Short: "List all keybindings",
 		Long:  `Display all configured keybindings in a formatted table`,
-		RunE: func(_ *cobra.Command, _  []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return listKeybindings()
 		},
 	}
@@ -421,6 +423,13 @@ func runLocal() error {
 	if userConfig.Keybindings.LeaderKey != "" {
 		config.LeaderKey = userConfig.Keybindings.LeaderKey
 	}
+
+	// Apply animations setting (CLI flag overrides config)
+	// noAnimations flag disables animations; config can also disable them
+	if noAnimations {
+		config.AnimationsEnabled = false
+	}
+	// Note: config file setting is already applied in fillMissingAppearance()
 
 	// Start CPU profiling if requested
 	if cpuProfile != "" {
@@ -867,7 +876,7 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
 			Headers("Keys", "Action").
 			Rows(rows...).
-			StyleFunc(func(row, _  int) lipgloss.Style {
+			StyleFunc(func(row, _ int) lipgloss.Style {
 				if row == -1 {
 					return headerStyle
 				}
@@ -939,7 +948,7 @@ func listCustomKeybindings() error {
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
 		Headers("Action", "Default", "Custom").
 		Rows(rows...).
-		StyleFunc(func(row, _  int) lipgloss.Style {
+		StyleFunc(func(row, _ int) lipgloss.Style {
 			if row == -1 {
 				return headerStyle
 			}

@@ -48,6 +48,11 @@ type Executor interface {
 	SwitchWorkspace(workspace int) error
 	MoveWindowToWorkspaceByID(windowID string, workspace int) error
 	MoveAndFollowWorkspaceByID(windowID string, workspace int) error
+
+	// Animations
+	EnableAnimations() error
+	DisableAnimations() error
+	ToggleAnimations() error
 }
 
 // CommandExecutor provides a default implementation
@@ -212,6 +217,15 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		// For now, we return a special error to signal this to the playback system
 		// The actual implementation will be handled in the playback loop
 		return nil
+
+	case CommandTypeEnableAnimations:
+		return ce.executor.EnableAnimations()
+
+	case CommandTypeDisableAnimations:
+		return ce.executor.DisableAnimations()
+
+	case CommandTypeToggleAnimations:
+		return ce.executor.ToggleAnimations()
 
 	// Other command types are handled elsewhere or ignored
 	default:
