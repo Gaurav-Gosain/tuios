@@ -44,6 +44,7 @@ var (
 	hideWindowButtons bool
 	scrollbackLines   int
 	showKeys          bool
+	noAnimations      bool
 )
 
 func main() {
@@ -112,6 +113,7 @@ Client features:
 	rootCmd.Flags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
 	rootCmd.Flags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)")
 	rootCmd.Flags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
+	rootCmd.Flags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
 
 	// Execute with fang
 	if err := fang.Execute(
@@ -234,5 +236,8 @@ func applyGlobalConfig() {
 		if err := theme.Initialize(themeName); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to load theme '%s': %v\n", themeName, err)
 		}
+	}
+	if noAnimations {
+		config.AnimationsEnabled = false
 	}
 }

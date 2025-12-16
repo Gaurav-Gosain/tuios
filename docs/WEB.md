@@ -157,6 +157,9 @@ tuios-web --debug --show-keys
 
 # ASCII-only mode
 tuios-web --ascii-only
+
+# Disable animations for instant transitions
+tuios-web --no-animations
 ```
 
 ### Client Settings
