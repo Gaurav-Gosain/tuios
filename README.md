@@ -308,10 +308,10 @@ TUIOS is built on the Bubble Tea v2 framework following the Model-View-Update pa
 - ✓ Vim-style copy mode with search
 - ✓ SSH server mode
 - ✓ Performance optimizations
+- ✓ Theme and color customization
 - ✓ TOML configuration system with custom keybindings
 
 **Planned:**
-- [ ] Theme and color customization
 - [ ] Session persistence
 - [ ] Split panes and tabs
 - [ ] Plugin system
