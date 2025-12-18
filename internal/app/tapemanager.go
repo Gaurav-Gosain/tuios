@@ -509,8 +509,6 @@ func (m *OS) RenderTapeManager(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
-// Helper functions
-
 func formatFileSize(size int64) string {
 	if size < 1024 {
 		return fmt.Sprintf("%dB", size)

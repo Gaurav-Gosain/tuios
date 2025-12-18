@@ -505,12 +505,15 @@ func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-	// Show quit confirmation dialog (only if there are terminals)
+	// Show quit confirmation dialog (only if there are terminals with foreground processes)
 	if shouldShowQuitDialog(o) {
 		o.ShowQuitConfirm = true
 		o.QuitConfirmSelection = 0 // Default to Yes
 	} else {
-		// No terminals - just quit
+		// No foreground processes - quit and kill daemon session
+		if o.IsDaemonSession && o.DaemonClient != nil {
+			_ = o.DaemonClient.KillSession()
+		}
 		o.Cleanup()
 		return o, tea.Quit
 	}

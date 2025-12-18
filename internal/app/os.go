@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -159,6 +160,11 @@ type OS struct {
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
+	// Daemon mode fields
+	IsDaemonSession   bool               // True when running as part of a persistent daemon session
+	DaemonClient      *session.TUIClient // Client for daemon communication (nil in local mode)
+	SessionName       string             // Name of the daemon session (if attached)
+	RestoredFromState bool               // True after RestoreFromState, cleared after first resize
 	// Keyboard enhancement support (Kitty protocol)
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// Keybind registry for user-configurable keybindings
@@ -442,7 +448,13 @@ func (m *OS) FocusWindow(i int) *OS {
 }
 
 // AddWindow adds a new window to the current workspace.
+// In daemon mode, this creates a daemon-managed PTY and window.
 func (m *OS) AddWindow(title string) *OS {
+	// In daemon mode, use daemon PTY management
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		return m.AddDaemonWindow(title)
+	}
+
 	newID := createID()
 	if title == "" {
 		title = fmt.Sprintf("Terminal %s", newID[:8])
@@ -532,6 +544,7 @@ func (m *OS) UpdateAllWindowThemes() {
 }
 
 // DeleteWindow removes the window at the specified index.
+// In daemon mode, this also cleans up the daemon-managed PTY.
 func (m *OS) DeleteWindow(i int) *OS {
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
 		m.LogWarn("Cannot delete window: invalid index %d (total windows: %d)", i, len(m.Windows))
@@ -541,6 +554,14 @@ func (m *OS) DeleteWindow(i int) *OS {
 	// Clean up window resources
 	deletedWindow := m.Windows[i]
 	m.LogInfo("Deleting window: %s (index: %d, ID: %s)", deletedWindow.Title, i, deletedWindow.ID[:8])
+
+	// In daemon mode, clean up daemon-managed PTY
+	if deletedWindow.DaemonMode && deletedWindow.PTYID != "" && m.DaemonClient != nil {
+		m.DaemonClient.UnsubscribePTY(deletedWindow.PTYID)
+		if err := m.DaemonClient.ClosePTY(deletedWindow.PTYID); err != nil {
+			m.LogError("Failed to close daemon PTY: %v", err)
+		}
+	}
 
 	// Get the window int ID BEFORE deleting (for BSP tree removal)
 	windowIntID := m.getWindowIntID(deletedWindow.ID)
@@ -628,6 +649,9 @@ func (m *OS) DeleteWindow(i int) *OS {
 			}
 		}
 	}
+
+	// Sync state to daemon after window deletion
+	m.SyncStateToDaemon()
 
 	return m
 }
@@ -903,7 +927,11 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 		window := m.Windows[i]
 
 		// Skip invalid terminals
-		if window.Terminal == nil || window.Pty == nil {
+		// For daemon-mode windows, we don't have a local PTY but still need to update
+		if window.Terminal == nil {
+			continue
+		}
+		if window.Pty == nil && !window.DaemonMode {
 			continue
 		}
 
@@ -946,7 +974,11 @@ func (m *OS) FlushPTYBuffersAfterResize() {
 	// Mark all windows as dirty to force full redraw
 	for i := range m.Windows {
 		window := m.Windows[i]
-		if window == nil || window.Terminal == nil || window.Pty == nil {
+		if window == nil || window.Terminal == nil {
+			continue
+		}
+		// For daemon-mode windows, we don't have a local PTY but still need to update
+		if window.Pty == nil && !window.DaemonMode {
 			continue
 		}
 
@@ -1115,340 +1147,4 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 // Cleanup performs cleanup operations when the application exits.
 func (m *OS) Cleanup() {
 	// Reserved for future cleanup operations
-}
-
-// ExecuteCommand executes a tape command (implements tape.Executor interface).
-func (m *OS) ExecuteCommand(_ *tape.Command) error {
-	return nil // Basic implementation
-}
-
-// GetFocusedWindowID returns the ID of the focused window (implements tape.Executor interface)
-func (m *OS) GetFocusedWindowID() string {
-	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
-		return m.Windows[m.FocusedWindow].ID
-	}
-	return ""
-}
-
-// SendToWindow sends bytes to a window's PTY (implements tape.Executor interface)
-func (m *OS) SendToWindow(windowID string, data []byte) error {
-	for _, w := range m.Windows {
-		if w.ID == windowID {
-			_, err := w.Pty.Write(data)
-			return err
-		}
-	}
-	return nil
-}
-
-// CreateNewWindow creates a new window (implements tape.Executor interface)
-func (m *OS) CreateNewWindow() error {
-	m.AddWindow("Window")
-	m.MarkAllDirty()
-	return nil
-}
-
-// CloseWindow closes a window (implements tape.Executor interface)
-func (m *OS) CloseWindow(windowID string) error {
-	for i, w := range m.Windows {
-		if w.ID == windowID {
-			m.DeleteWindow(i)
-			m.MarkAllDirty()
-			return nil
-		}
-	}
-	return nil
-}
-
-// SwitchWorkspace switches to a workspace (implements tape.Executor interface)
-func (m *OS) SwitchWorkspace(workspace int) error {
-	if workspace >= 1 && workspace <= m.NumWorkspaces {
-		// Use the full SwitchToWorkspace which handles focus, mode, etc.
-		// But disable recording during playback to avoid re-recording
-		recorder := m.TapeRecorder
-		m.TapeRecorder = nil
-		m.SwitchToWorkspace(workspace)
-		m.TapeRecorder = recorder
-		m.MarkAllDirty()
-	}
-	return nil
-}
-
-// ToggleTiling toggles tiling mode (implements tape.Executor interface)
-func (m *OS) ToggleTiling() error {
-	m.AutoTiling = !m.AutoTiling
-	if m.AutoTiling {
-		m.TileAllWindows()
-	}
-	m.MarkAllDirty()
-	return nil
-}
-
-// SetMode sets the interaction mode (implements tape.Executor interface)
-func (m *OS) SetMode(mode string) error {
-	switch mode {
-	case "terminal", "Terminal", "TerminalMode":
-		m.Mode = TerminalMode
-		// Ensure a window is focused when entering terminal mode
-		if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
-			// Find first visible window in current workspace to focus
-			for i, w := range m.Windows {
-				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-					m.FocusWindow(i)
-					break
-				}
-			}
-		}
-	case "window", "Window", "WindowManagementMode":
-		m.Mode = WindowManagementMode
-	}
-	return nil
-}
-
-// NextWindow focuses the next window (implements tape.Executor interface)
-func (m *OS) NextWindow() error {
-	if len(m.Windows) == 0 {
-		return nil
-	}
-	m.CycleToNextVisibleWindow()
-	m.MarkAllDirty()
-	return nil
-}
-
-// PrevWindow focuses the previous window (implements tape.Executor interface)
-func (m *OS) PrevWindow() error {
-	if len(m.Windows) == 0 {
-		return nil
-	}
-	m.CycleToPreviousVisibleWindow()
-	m.MarkAllDirty()
-	return nil
-}
-
-// FocusWindowByID focuses a specific window by ID (implements tape.Executor interface)
-func (m *OS) FocusWindowByID(windowID string) error {
-	for i, w := range m.Windows {
-		if w.ID == windowID {
-			m.FocusWindow(i)
-			m.MarkAllDirty()
-			return nil
-		}
-	}
-	return nil
-}
-
-// RenameWindowByID renames a window by its ID (implements tape.Executor interface).
-func (m *OS) RenameWindowByID(windowID, name string) error {
-	for _, w := range m.Windows {
-		if w.ID == windowID {
-			w.Title = name
-			m.MarkAllDirty()
-			return nil
-		}
-	}
-	return nil
-}
-
-// MinimizeWindowByID minimizes a window (implements tape.Executor interface)
-func (m *OS) MinimizeWindowByID(windowID string) error {
-	for i, w := range m.Windows {
-		if w.ID == windowID {
-			m.MinimizeWindow(i)
-			m.MarkAllDirty()
-			return nil
-		}
-	}
-	return nil
-}
-
-// RestoreWindowByID restores a minimized window (implements tape.Executor interface)
-func (m *OS) RestoreWindowByID(windowID string) error {
-	for i, w := range m.Windows {
-		if w.ID == windowID {
-			m.RestoreWindow(i)
-			m.MarkAllDirty()
-			return nil
-		}
-	}
-	return nil
-}
-
-// EnableTiling enables tiling mode (implements tape.Executor interface)
-func (m *OS) EnableTiling() error {
-	if !m.AutoTiling {
-		m.AutoTiling = true
-		m.TileAllWindows()
-		m.MarkAllDirty()
-	}
-	return nil
-}
-
-// DisableTiling disables tiling mode (implements tape.Executor interface)
-func (m *OS) DisableTiling() error {
-	m.AutoTiling = false
-	m.MarkAllDirty()
-	return nil
-}
-
-// SnapByDirection snaps a window to a direction (implements tape.Executor interface)
-func (m *OS) SnapByDirection(direction string) error {
-	// Cannot snap windows while tiling mode is enabled
-	if m.AutoTiling {
-		return fmt.Errorf("cannot snap windows while tiling mode is enabled")
-	}
-
-	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
-		return nil
-	}
-
-	// Convert direction string to SnapQuarter if possible
-	quarter := SnapTopLeft
-	switch direction {
-	case "left":
-		quarter = SnapLeft
-	case "right":
-		quarter = SnapRight
-	case "fullscreen":
-		// Fullscreen is handled separately
-		m.Snap(m.FocusedWindow, SnapTopLeft)
-		m.MarkAllDirty()
-		return nil
-	}
-
-	m.Snap(m.FocusedWindow, quarter)
-	m.MarkAllDirty()
-	return nil
-}
-
-// MoveWindowToWorkspaceByID moves a window to a workspace (implements tape.Executor interface)
-func (m *OS) MoveWindowToWorkspaceByID(windowID string, workspace int) error {
-	if workspace < 1 || workspace > m.NumWorkspaces {
-		return nil
-	}
-
-	for i, w := range m.Windows {
-		if w.ID == windowID {
-			w.Workspace = workspace
-			// Remove from current layout if in managed window
-			if m.FocusedWindow == i {
-				m.FocusedWindow = -1
-			}
-			// Retile if in tiling mode
-			if m.AutoTiling {
-				m.TileAllWindows()
-			}
-			m.MarkAllDirty()
-			return nil
-		}
-	}
-
-	return nil
-}
-
-// MoveAndFollowWorkspaceByID moves a window to a workspace and switches to it (implements tape.Executor interface)
-func (m *OS) MoveAndFollowWorkspaceByID(windowID string, workspace int) error {
-	if workspace < 1 || workspace > m.NumWorkspaces {
-		return nil
-	}
-
-	for _, w := range m.Windows {
-		if w.ID == windowID {
-			w.Workspace = workspace
-			m.CurrentWorkspace = workspace
-			m.FocusedWindow = -1
-			// Retile if in tiling mode
-			if m.AutoTiling {
-				m.TileAllWindows()
-			}
-			m.MarkAllDirty()
-			return nil
-		}
-	}
-
-	return nil
-}
-
-// SplitHorizontal splits the focused window horizontally (implements tape.Executor interface)
-func (m *OS) SplitHorizontal() error {
-	if !m.AutoTiling {
-		return nil
-	}
-	m.SplitFocusedHorizontal()
-	m.MarkAllDirty()
-	return nil
-}
-
-// SplitVertical splits the focused window vertically (implements tape.Executor interface)
-func (m *OS) SplitVertical() error {
-	if !m.AutoTiling {
-		return nil
-	}
-	m.SplitFocusedVertical()
-	m.MarkAllDirty()
-	return nil
-}
-
-// RotateSplit rotates the split direction at the focused window (implements tape.Executor interface)
-func (m *OS) RotateSplit() error {
-	if !m.AutoTiling {
-		return nil
-	}
-	m.RotateFocusedSplit()
-	m.MarkAllDirty()
-	return nil
-}
-
-// EqualizeSplitsExec equalizes all split ratios (implements tape.Executor interface)
-func (m *OS) EqualizeSplitsExec() error {
-	if !m.AutoTiling {
-		return nil
-	}
-	m.EqualizeSplits()
-	m.MarkAllDirty()
-	return nil
-}
-
-// Preselect sets the preselection direction for the next window (implements tape.Executor interface)
-func (m *OS) Preselect(direction string) error {
-	if !m.AutoTiling {
-		return nil
-	}
-	switch direction {
-	case "left":
-		m.SetPreselection(layout.PreselectionLeft)
-	case "right":
-		m.SetPreselection(layout.PreselectionRight)
-	case "up":
-		m.SetPreselection(layout.PreselectionUp)
-	case "down":
-		m.SetPreselection(layout.PreselectionDown)
-	default:
-		m.ClearPreselection()
-	}
-	return nil
-}
-
-// EnableAnimations enables UI animations (implements tape.Executor interface)
-func (m *OS) EnableAnimations() error {
-	config.AnimationsEnabled = true
-	m.ShowNotification("Animations: ON", "info", config.NotificationDuration)
-	return nil
-}
-
-// DisableAnimations disables UI animations (implements tape.Executor interface)
-func (m *OS) DisableAnimations() error {
-	config.AnimationsEnabled = false
-	m.ShowNotification("Animations: OFF", "info", config.NotificationDuration)
-	return nil
-}
-
-// ToggleAnimations toggles UI animations (implements tape.Executor interface)
-func (m *OS) ToggleAnimations() error {
-	config.AnimationsEnabled = !config.AnimationsEnabled
-	if config.AnimationsEnabled {
-		m.ShowNotification("Animations: ON", "info", config.NotificationDuration)
-	} else {
-		m.ShowNotification("Animations: OFF", "info", config.NotificationDuration)
-	}
-	return nil
 }

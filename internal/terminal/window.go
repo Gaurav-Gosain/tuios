@@ -25,6 +25,47 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
+// passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
+// and writes them directly to stdout to pass through to the parent terminal.
+// The VT emulator absorbs these sequences, so we need to re-emit them.
+// DECSCUSR format: CSI Ps SP q (ESC [ Ps SPACE q) where Ps is optional (0-6)
+func passThroughCursorStyle(data []byte) {
+	// Look for DECSCUSR pattern: \x1b[N q where N is 0-6 (or no digit)
+	idx := 0
+	for idx < len(data) {
+		// Find ESC [
+		escIdx := bytes.Index(data[idx:], []byte("\x1b["))
+		if escIdx == -1 {
+			break
+		}
+		escIdx += idx
+
+		// Check if this could be DECSCUSR
+		// Need at least ESC [ SP q (4 bytes from escIdx)
+		if escIdx+4 > len(data) {
+			idx = escIdx + 1
+			continue
+		}
+
+		// Check for pattern: optional digit(s) followed by space and 'q'
+		numEnd := escIdx + 2
+		for numEnd < len(data) && data[numEnd] >= '0' && data[numEnd] <= '9' {
+			numEnd++
+		}
+
+		// Check if followed by " q" (space then q)
+		if numEnd+1 < len(data) && data[numEnd] == ' ' && data[numEnd+1] == 'q' {
+			// Found DECSCUSR sequence - write it to stdout
+			seq := data[escIdx : numEnd+2]
+			_, _ = os.Stdout.Write(seq)
+			idx = numEnd + 2
+			continue
+		}
+
+		idx = escIdx + 1
+	}
+}
+
 // Cache for local terminal environment variables (detect once, reuse for local windows)
 // SSH sessions will detect per-connection based on their environment
 var (
@@ -86,8 +127,21 @@ type Window struct {
 	ScrollbackOffset int  // Number of lines scrolled back (0 = at bottom, viewing live output)
 	// Alternate screen buffer tracking for TUI detection
 	IsAltScreen bool // True when application is using alternate screen buffer (nvim, vim, etc.)
+	// Cursor style tracking for passthrough to parent terminal
+	CursorStyle vt.CursorStyle // Current cursor style (block, underline, bar)
+	CursorBlink bool           // Whether cursor should blink
 	// Vim-style copy mode
 	CopyMode *CopyMode // Copy mode state (nil when not active)
+	// Daemon session support
+	PTYID             string               // ID of daemon-managed PTY (empty for local PTYs)
+	DaemonMode        bool                 // True when PTY is managed by daemon
+	DaemonWriteFunc   func([]byte) error   // Callback for sending input to daemon PTY
+	DaemonResizeFunc  func(w, h int) error // Callback for resizing daemon PTY
+	DaemonCloseFunc   func()               // Callback when window is closed (to notify daemon)
+	OnProcessExit     func()               // Callback when PTY process exits (to close window)
+	outputChan        chan []byte          // Channel for serializing daemon PTY output writes
+	outputDone        chan struct{}        // Signal to stop output writer goroutine
+	suppressCallbacks bool                 // Suppress VT emulator callbacks during state restoration (prevents race conditions)
 }
 
 // CopyModeState represents the current state within copy mode
@@ -210,10 +264,26 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
 	}
 
-	// Set up callbacks to track alternate screen buffer state
+	// Set up callbacks to track terminal state changes
 	terminal.SetCallbacks(vt.Callbacks{
 		AltScreen: func(enabled bool) {
-			window.IsAltScreen = enabled
+			// Suppress callback during state restoration to prevent race conditions
+			// where buffered PTY output overwrites restored state
+			if !window.suppressCallbacks {
+				window.IsAltScreen = enabled
+			}
+		},
+		CursorStyle: func(style vt.CursorStyle, steady bool) {
+			// Note: the callback receives "steady" value (true = NOT blinking)
+			// despite the parameter being named "blink" in the Callbacks struct
+			window.CursorStyle = style
+			window.CursorBlink = !steady // Invert: steady=false means blinking=true
+		},
+		Title: func(title string) {
+			// Update window title from terminal escape sequence
+			if title != "" {
+				window.Title = title
+			}
 		},
 	})
 
@@ -324,6 +394,169 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	}()
 
 	return window
+}
+
+// NewDaemonWindow creates a new terminal window that uses a daemon-managed PTY.
+// Unlike NewWindow, this doesn't spawn a local PTY - I/O is proxied through the daemon.
+// The caller is responsible for subscribing to PTY output and handling I/O.
+func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string) *Window {
+	if title == "" {
+		title = "Terminal " + id[:8]
+	}
+
+	// Create VT terminal with inner dimensions (accounting for borders)
+	terminalWidth := max(width-2, 1)
+	terminalHeight := max(height-2, 1)
+	terminal := vt.NewEmulator(terminalWidth, terminalHeight)
+	terminal.SetScrollbackMaxLines(config.ScrollbackLines)
+	terminal.SetCellSize(10, 20)
+
+	window := &Window{
+		Title:              title,
+		Width:              width,
+		Height:             height,
+		X:                  x,
+		Y:                  y,
+		Z:                  z,
+		ID:                 id,
+		Terminal:           terminal,
+		LastUpdate:         time.Now(),
+		Dirty:              true,
+		ContentDirty:       true,
+		PositionDirty:      true,
+		CachedContent:      "",
+		CachedLayer:        nil,
+		IsBeingManipulated: false,
+		IsAltScreen:        false,
+		PTYID:              ptyID,
+		DaemonMode:         true,
+		outputChan:         make(chan []byte, 1000), // Buffered channel for output
+		outputDone:         make(chan struct{}),
+		suppressCallbacks:  false, // Callbacks enabled by default, suppressed only during restore
+	}
+
+	// Start output writer goroutine to serialize writes
+	go window.outputWriter()
+
+	// Apply theme colors to the terminal (only if theming is enabled)
+	if theme.IsEnabled() {
+		terminal.SetThemeColors(
+			theme.TerminalFg(),
+			nil, // Always use transparent background so TUI apps render correctly
+			theme.TerminalCursor(),
+			theme.GetANSIPalette(),
+		)
+	} else {
+		terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
+	}
+
+	// Set up callbacks to track terminal state changes
+	terminal.SetCallbacks(vt.Callbacks{
+		AltScreen: func(enabled bool) {
+			// Suppress callback during state restoration to prevent race conditions
+			// where buffered PTY output overwrites restored state
+			if !window.suppressCallbacks {
+				window.IsAltScreen = enabled
+			}
+		},
+		CursorStyle: func(style vt.CursorStyle, steady bool) {
+			// Note: the callback receives "steady" value (true = NOT blinking)
+			// despite the parameter being named "blink" in the Callbacks struct
+			window.CursorStyle = style
+			window.CursorBlink = !steady // Invert: steady=false means blinking=true
+		},
+		Title: func(title string) {
+			// Update window title from terminal escape sequence
+			if title != "" {
+				window.Title = title
+			}
+		},
+	})
+
+	return window
+}
+
+// outputWriter is a goroutine that serializes writes to the terminal emulator.
+// This ensures output is written in order for daemon mode windows.
+func (w *Window) outputWriter() {
+	// Nil channel check - if channels aren't initialized, exit
+	if w.outputDone == nil || w.outputChan == nil {
+		return
+	}
+
+	for {
+		select {
+		case <-w.outputDone:
+			return
+		case data, ok := <-w.outputChan:
+			if !ok {
+				// Channel closed
+				return
+			}
+			if w.Terminal != nil {
+				w.ioMu.Lock()
+				_, _ = w.Terminal.Write(data)
+				w.ioMu.Unlock()
+				w.MarkContentDirty()
+			}
+		}
+	}
+}
+
+// StartDaemonResponseReader starts a goroutine to read responses from the terminal
+// emulator (like DA1 responses) and send them back to the daemon PTY.
+// This must be called after DaemonWriteFunc is set.
+func (w *Window) StartDaemonResponseReader() {
+	if !w.DaemonMode || w.DaemonWriteFunc == nil || w.Terminal == nil {
+		return
+	}
+
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			// Terminal.Read() blocks, so we can't use select here.
+			// The goroutine will exit when Terminal is closed (returns error).
+			n, err := w.Terminal.Read(buf)
+			if err != nil {
+				return
+			}
+			if n > 0 {
+				// Send response back to daemon PTY
+				_ = w.DaemonWriteFunc(buf[:n])
+			}
+		}
+	}()
+}
+
+// WriteOutput writes output data to the terminal emulator.
+// Used in daemon mode to process PTY output received from the daemon.
+func (w *Window) WriteOutput(data []byte) {
+	if w.Terminal != nil {
+		w.ioMu.Lock()
+		_, _ = w.Terminal.Write(data)
+		w.ioMu.Unlock()
+		w.MarkContentDirty()
+	}
+}
+
+// WriteOutputAsync writes output data to the terminal emulator without blocking.
+// Used in daemon mode to process PTY output received from the daemon.
+// Data is queued to a channel and written in order by the outputWriter goroutine.
+func (w *Window) WriteOutputAsync(data []byte) {
+	if w.Terminal == nil || w.outputChan == nil {
+		return
+	}
+	// Copy data since the caller's buffer may be reused
+	dataCopy := make([]byte, len(data))
+	copy(dataCopy, data)
+
+	// Queue to channel - non-blocking with buffered channel
+	select {
+	case w.outputChan <- dataCopy:
+		// Successfully queued
+	default:
+		// Channel full - drop data (shouldn't happen with large buffer)
+	}
 }
 
 // UpdateThemeColors updates the terminal colors when the theme changes
@@ -566,6 +799,10 @@ func (w *Window) handleIOOperations() {
 						}
 					}
 
+					// Pass through cursor style sequences to parent terminal
+					// The VT emulator absorbs DECSCUSR, so we re-emit them
+					passThroughCursorStyle(buf[:n])
+
 					// Write to terminal with mutex protection
 					w.ioMu.RLock()
 					if w.Terminal != nil {
@@ -691,6 +928,11 @@ func (w *Window) Resize(width, height int) {
 			// This is not fatal as the terminal can still function
 			_ = err // Acknowledge error but don't break functionality
 		}
+	} else if w.DaemonMode && w.DaemonResizeFunc != nil {
+		// In daemon mode, use the resize callback to notify the daemon
+		if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
+			_ = err // Acknowledge error but don't break functionality
+		}
 	}
 	w.Width = width
 	w.Height = height
@@ -739,6 +981,17 @@ func (w *Window) Close() {
 
 	// Disable terminal features before closing
 	w.disableTerminalFeatures()
+
+	// Stop daemon output writer goroutine if running
+	if w.outputDone != nil {
+		close(w.outputDone)
+		w.outputDone = nil
+	}
+	// Close output channel to unblock any pending writes
+	if w.outputChan != nil {
+		close(w.outputChan)
+		w.outputChan = nil
+	}
 
 	// Cancel all goroutines first
 	if w.cancelFunc != nil {
@@ -811,15 +1064,30 @@ func (w *Window) SendInput(input []byte) error {
 		return fmt.Errorf("window is nil")
 	}
 
+	if len(input) == 0 {
+		return nil // Nothing to send
+	}
+
+	// In daemon mode, use the callback to send input to daemon PTY
+	if w.DaemonMode {
+		if w.DaemonWriteFunc == nil {
+			// Debug: this might be why input fails
+			if f, _ := os.OpenFile("/tmp/tuios-input-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); f != nil {
+				fmt.Fprintf(f, "[%s] SendInput: DaemonWriteFunc is nil! PTYID=%s\n",
+					time.Now().Format("15:04:05.000"), w.PTYID)
+				f.Close()
+			}
+			return fmt.Errorf("daemon write function not set")
+		}
+		return w.DaemonWriteFunc(input)
+	}
+
+	// Local mode - write directly to PTY
 	w.ioMu.RLock()
 	defer w.ioMu.RUnlock()
 
 	if w.Pty == nil {
 		return fmt.Errorf("no PTY available")
-	}
-
-	if len(input) == 0 {
-		return nil // Nothing to send
 	}
 
 	n, err := w.Pty.Write(input)
@@ -981,4 +1249,17 @@ func (w *Window) ExitCopyMode() {
 	// CRITICAL: Return to live content (bottom of scrollback)
 	w.ScrollbackOffset = 0
 	w.InvalidateCache()
+}
+
+// EnableCallbacks re-enables VT emulator callbacks after state restoration.
+// This is used to prevent race conditions where buffered PTY output overwrites
+// restored state during daemon session reattachment.
+func (w *Window) EnableCallbacks() {
+	w.suppressCallbacks = false
+}
+
+// DisableCallbacks temporarily disables VT emulator callbacks.
+// This is used during state restoration to prevent race conditions.
+func (w *Window) DisableCallbacks() {
+	w.suppressCallbacks = true
 }

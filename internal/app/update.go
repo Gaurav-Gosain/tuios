@@ -44,10 +44,20 @@ func SetInputHandler(handler InputHandler) {
 // Note: Mouse tracking, bracketed paste, and focus reporting are now configured
 // in the View() method as per bubbletea v2.0.0-beta.5 API changes.
 func (m *OS) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		TickCmd(),
 		ListenForWindowExits(m.WindowExitChan),
-	)
+	}
+
+	// If this is a restored daemon session, enable callbacks after a delay
+	// This allows buffered PTY output to settle before callbacks start tracking changes
+	if m.IsDaemonSession && m.RestoredFromState {
+		cmds = append(cmds, EnableCallbacksAfterDelay())
+		// Trigger alt screen redraws immediately to force apps like btop to redraw
+		cmds = append(cmds, TriggerAltScreenRedrawCmd())
+	}
+
+	return tea.Batch(cmds...)
 }
 
 // ListenForWindowExits creates a command that listens for window process exits.
@@ -78,6 +88,29 @@ func SlowTickCmd() tea.Cmd {
 	return tea.Tick(time.Second/config.InteractionFPS, func(t time.Time) tea.Msg {
 		return TickerMsg(t)
 	})
+}
+
+// EnableCallbacksMsg is sent after a delay to re-enable VT emulator callbacks
+// after restoring a daemon session.
+type EnableCallbacksMsg struct{}
+
+// EnableCallbacksAfterDelay returns a command that waits briefly then sends
+// a message to re-enable callbacks after buffered output has settled.
+func EnableCallbacksAfterDelay() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+		return EnableCallbacksMsg{}
+	})
+}
+
+// TriggerAltScreenRedrawMsg triggers alt screen apps to redraw.
+type TriggerAltScreenRedrawMsg struct{}
+
+// TriggerAltScreenRedrawCmd returns a command that immediately triggers
+// alt screen apps (vim, htop, btop) to redraw via SIGWINCH.
+func TriggerAltScreenRedrawCmd() tea.Cmd {
+	return func() tea.Msg {
+		return TriggerAltScreenRedrawMsg{}
+	}
 }
 
 // Update handles all incoming messages and updates the application state.
@@ -171,9 +204,9 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nextTick
 
 	case WindowExitMsg:
-		// Handle window exit - find and close the window
-		for i := range m.Windows {
-			if m.Windows[i].ID == msg.WindowID {
+		windowID := msg.WindowID
+		for i, w := range m.Windows {
+			if w.ID == windowID {
 				m.DeleteWindow(i)
 				break
 			}
@@ -183,6 +216,44 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Mode = WindowManagementMode
 		}
 		return m, ListenForWindowExits(m.WindowExitChan)
+
+	case EnableCallbacksMsg:
+		// Re-enable VT emulator callbacks after buffered output has settled
+		// This prevents the race condition where buffered PTY output overwrites
+		// the restored IsAltScreen state
+		m.LogInfo("[CALLBACKS] Re-enabling callbacks for all windows")
+		for _, w := range m.Windows {
+			if w.DaemonMode {
+				w.EnableCallbacks()
+				m.LogInfo("[CALLBACKS] Enabled for window %s (IsAltScreen=%v)", w.ID[:8], w.IsAltScreen)
+			}
+		}
+		return m, nil
+
+	case TriggerAltScreenRedrawMsg:
+		// Force alt screen apps to redraw by sending resize (fake then real)
+		// This triggers SIGWINCH which makes apps like vim/htop/btop redraw
+		m.LogInfo("[REDRAW] Triggering alt screen redraws")
+		for _, w := range m.Windows {
+			if w.DaemonMode && w.IsAltScreen && w.DaemonResizeFunc != nil {
+				termWidth := max(w.Width-2, 1)
+				termHeight := max(w.Height-2, 1)
+
+				// Do a fake resize to slightly smaller, then back to real size
+				// This ensures SIGWINCH is sent even if size "hasn't changed"
+				fakeWidth := max(termWidth-1, 1)
+				fakeHeight := max(termHeight-1, 1)
+
+				_ = w.DaemonResizeFunc(fakeWidth, fakeHeight)
+				_ = w.DaemonResizeFunc(termWidth, termHeight)
+
+				w.InvalidateCache()
+				w.MarkContentDirty()
+				m.LogInfo("[REDRAW] Sent resize to window %s (%dx%d)", w.ID[:8], termWidth, termHeight)
+			}
+		}
+		m.MarkAllDirty()
+		return m, nil
 
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseMotionMsg,
 		tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.ClipboardMsg,
@@ -194,9 +265,23 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.WindowSizeMsg:
+		oldWidth, oldHeight := m.Width, m.Height
 		m.Width = msg.Width
 		m.Height = msg.Height
 		m.MarkAllDirty()
+
+		// When restored from state, we need to retile if tiling is enabled
+		// to properly fit windows to the new terminal size.
+		// The BSP tree structure is preserved, only positions/sizes are recalculated.
+		if m.RestoredFromState {
+			m.RestoredFromState = false
+			if m.AutoTiling {
+				m.LogInfo("[RESIZE] Retiling restored session to fit new terminal size (%dx%d -> %dx%d)",
+					oldWidth, oldHeight, msg.Width, msg.Height)
+				m.TileAllWindows()
+			}
+			return m, nil
+		}
 
 		// Retile windows if in tiling mode
 		if m.AutoTiling {

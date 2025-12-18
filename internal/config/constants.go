@@ -266,6 +266,15 @@ var UseASCIIOnly = false
 // Set via --no-animations command-line flag or appearance.animations_enabled config
 var AnimationsEnabled = true
 
+// WhichKeyEnabled controls whether the which-key popup is shown after pressing leader key
+// Set via appearance.whichkey_enabled config
+var WhichKeyEnabled = true
+
+// WhichKeyPosition controls where the which-key popup appears
+// Options: bottom-right, bottom-left, top-right, top-left, center
+// Set via appearance.whichkey_position config
+var WhichKeyPosition = "bottom-right"
+
 // GetAnimationDuration returns the animation duration for standard operations.
 // Returns 0 if animations are disabled, causing instant transitions.
 func GetAnimationDuration() time.Duration {

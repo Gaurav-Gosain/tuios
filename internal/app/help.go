@@ -50,11 +50,26 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 			Name: "Layout",
 			Bindings: generateCategoryBindings(registry, "Layout", []string{
 				"snap_left", "snap_right", "snap_fullscreen", "unsnap",
+				"snap_corner_1", "snap_corner_2", "snap_corner_3", "snap_corner_4",
+			}),
+		},
+		{
+			Name: "Tiling",
+			Bindings: generateCategoryBindings(registry, "Tiling", []string{
 				"toggle_tiling", "swap_left", "swap_right", "swap_up", "swap_down",
 				"resize_master_shrink", "resize_master_grow", "resize_height_shrink", "resize_height_grow",
 				"resize_master_shrink_left", "resize_master_grow_left", "resize_height_shrink_top", "resize_height_grow_top",
+			}),
+		},
+		{
+			Name: "BSP",
+			Bindings: generateCategoryBindings(registry, "BSP", []string{
 				"split_horizontal", "split_vertical", "rotate_split",
 			}),
+		},
+		{
+			Name:     "Copy Mode",
+			Bindings: generateCopyModeBindings(),
 		},
 		{
 			Name: "Modes",
@@ -64,17 +79,15 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 			}),
 		},
 		{
-			Name: "System",
-			Bindings: generateCategoryBindings(registry, "System", []string{
-				"toggle_logs", "toggle_cache_stats",
-			}),
+			Name:     "Debug",
+			Bindings: generateDebugBindings(),
 		},
 		{
-			Name:     "Tape Scripting",
+			Name:     "Tape",
 			Bindings: generateTapeBindings(),
 		},
 		{
-			Name:     "Prefix Commands",
+			Name:     "Prefix",
 			Bindings: generatePrefixBindings(registry),
 		},
 	}
@@ -149,6 +162,32 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry) []HelpBinding {
 	return bindings
 }
 
+// generateCopyModeBindings generates copy mode keybindings
+func generateCopyModeBindings() []HelpBinding {
+	return []HelpBinding{
+		{Keys: []string{config.LeaderKey + ", ["}, Description: "Enter copy mode", Category: "Copy Mode"},
+		{Keys: []string{"h, j, k, l"}, Description: "Move cursor", Category: "Copy Mode"},
+		{Keys: []string{"w, b, e"}, Description: "Word fwd/back/end", Category: "Copy Mode"},
+		{Keys: []string{"0, ^, $"}, Description: "Line start/first/end", Category: "Copy Mode"},
+		{Keys: []string{"gg, G"}, Description: "Jump top/bottom", Category: "Copy Mode"},
+		{Keys: []string{"ctrl+u, ctrl+d"}, Description: "Half page up/down", Category: "Copy Mode"},
+		{Keys: []string{"/, ?, n, N"}, Description: "Search", Category: "Copy Mode"},
+		{Keys: []string{"v, V"}, Description: "Visual char/line", Category: "Copy Mode"},
+		{Keys: []string{"y, c"}, Description: "Yank to clipboard", Category: "Copy Mode"},
+		{Keys: []string{"i, q, Esc"}, Description: "Exit copy mode", Category: "Copy Mode"},
+	}
+}
+
+// generateDebugBindings generates debug keybindings
+func generateDebugBindings() []HelpBinding {
+	return []HelpBinding{
+		{Keys: []string{config.LeaderKey + ", D, l"}, Description: "Toggle log viewer", Category: "Debug"},
+		{Keys: []string{config.LeaderKey + ", D, c"}, Description: "Toggle cache stats", Category: "Debug"},
+		{Keys: []string{config.LeaderKey + ", D, k"}, Description: "Toggle showkeys", Category: "Debug"},
+		{Keys: []string{config.LeaderKey + ", D, a"}, Description: "Toggle animations", Category: "Debug"},
+	}
+}
+
 // generateTapeBindings generates tape scripting bindings
 func generateTapeBindings() []HelpBinding {
 	bindings := []HelpBinding{}
@@ -190,7 +229,6 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		"prefix_toggle_tiling", "prefix_workspace", "prefix_minimize",
 		"prefix_window", "prefix_detach", "prefix_selection",
 		"prefix_help", "prefix_quit", "prefix_fullscreen",
-		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split",
 	}
 
 	// Add debug commands (Leader Key + D ...)
@@ -262,9 +300,27 @@ func formatActionName(action string) string {
 }
 
 // formatKeysWithStyle styles individual key combos with pill-shaped background
-func formatKeysWithStyle(keys []string) string {
+// Truncates to maxWidth to prevent table overflow
+func formatKeysWithStyle(keys []string, maxWidth int) string {
 	styledKeys := []string{}
+	currentWidth := 0
+
 	for _, key := range keys {
+		// Each pill adds: left_char(1) + " " + key + " " + right_char(1)
+		// Approximate styled width
+		styledWidth := len(key) + 4 // 2 for padding, 2 for pill chars
+
+		// Check if adding this key would exceed max width
+		if currentWidth > 0 {
+			styledWidth += 1 // Add space separator
+		}
+
+		if currentWidth+styledWidth > maxWidth && currentWidth > 0 {
+			// Would exceed, truncate here
+			styledKeys = append(styledKeys, "...")
+			break
+		}
+
 		// Create pill-style key badge
 		bgColor := "5" // Darker purple/magenta
 		fgColor := "0" // Black text
@@ -283,6 +339,7 @@ func formatKeysWithStyle(keys []string) string {
 			Render(config.GetWindowPillRight())
 
 		styledKeys = append(styledKeys, leftCircle+keyLabel+rightCircle)
+		currentWidth += styledWidth
 	}
 	return strings.Join(styledKeys, " ")
 }
@@ -436,14 +493,8 @@ func (m *OS) RenderHelpMenu(width, height int) string {
 		results := SearchBindings(m.HelpSearchQuery, categories)
 		bindingsTable, rowCount = renderSearchResults(results, m.HelpScrollOffset, dims)
 	} else if m.HelpSearchMode {
-		// Search mode but no query - show placeholder centered
-		placeholder := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")).
-			Italic(true).
-			Align(lipgloss.Center).
-			Render("Type to search across all keybindings...")
-		bindingsTable = placeholder
-		rowCount = 0
+		// Search mode but no query - render empty table with placeholder to maintain height
+		bindingsTable, rowCount = renderEmptySearchTable(dims)
 	} else {
 		if m.HelpCategory < len(categories) {
 			bindingsTable, rowCount = renderCategoryTable(categories[m.HelpCategory], m.HelpScrollOffset, dims)
@@ -574,10 +625,13 @@ func renderCategoryTable(category HelpCategory, scrollOffset int, dims HelpDimen
 	allRows := [][]string{}
 	for _, binding := range category.Bindings {
 		// Format keys with styling (each key gets purple background)
-		keysStr := formatKeysWithStyle(binding.Keys)
+		keysStr := formatKeysWithStyle(binding.Keys, dims.MaxKeyWidth)
 
-		// Don't truncate - let it overflow
+		// Truncate description to fit within max width
 		desc := binding.Description
+		if len(desc) > dims.MaxActionWidth {
+			desc = desc[:dims.MaxActionWidth-3] + "..."
+		}
 
 		// Add the actual row
 		allRows = append(allRows, []string{keysStr, desc})
@@ -638,6 +692,48 @@ func renderCategoryTable(category HelpCategory, scrollOffset int, dims HelpDimen
 	return t.Render(), totalRows
 }
 
+// renderEmptySearchTable renders an empty table with placeholder text to maintain fixed height
+func renderEmptySearchTable(dims HelpDimensions) (string, int) {
+	// Create empty rows to maintain fixed height
+	displayRows := [][]string{}
+	for i := 0; i < dims.FixedRows; i++ {
+		if i == dims.FixedRows/2 {
+			// Put placeholder in middle row
+			displayRows = append(displayRows, []string{"", "Type to search across all keybindings...", ""})
+		} else {
+			displayRows = append(displayRows, []string{"", "", ""})
+		}
+	}
+
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("12")).
+		Padding(0, 1)
+
+	placeholderStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Italic(true).
+		Padding(0, 1).
+		Align(lipgloss.Center)
+
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
+		Headers("Keys", "Action", "Category").
+		Rows(displayRows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == -1 {
+				return headerStyle
+			}
+			if col == 1 {
+				return placeholderStyle
+			}
+			return lipgloss.NewStyle().Padding(0, 1)
+		})
+
+	return t.Render(), 0
+}
+
 // renderSearchResults renders search results using FIXED dimensions
 // This ensures the table NEVER changes size regardless of content
 func renderSearchResults(results []HelpBinding, scrollOffset int, dims HelpDimensions) (string, int) {
@@ -645,11 +741,19 @@ func renderSearchResults(results []HelpBinding, scrollOffset int, dims HelpDimen
 	allRows := [][]string{}
 	for _, binding := range results {
 		// Format keys with styling (each key gets purple background)
-		keysStr := formatKeysWithStyle(binding.Keys)
+		keysStr := formatKeysWithStyle(binding.Keys, dims.MaxKeyWidth)
 
-		// Don't truncate - let it overflow
+		// Truncate description to fit within max width
 		desc := binding.Description
+		if len(desc) > dims.MaxActionWidth {
+			desc = desc[:dims.MaxActionWidth-3] + "..."
+		}
+
+		// Truncate category to fit
 		cat := binding.Category
+		if len(cat) > dims.MaxCategoryWidth {
+			cat = cat[:dims.MaxCategoryWidth-3] + "..."
+		}
 
 		// Add the actual row
 		allRows = append(allRows, []string{keysStr, desc, cat})

@@ -15,8 +15,10 @@ type KeybindingSection struct {
 	Bindings  []Keybinding
 }
 
-// GetPrefixKeybindings returns keybindings for the prefix overlay
-func GetPrefixKeybindings(prefixType string) []Keybinding {
+// GetPrefixKeybindings returns keybindings for the prefix overlay.
+// isDaemonSession indicates whether we're running in daemon mode (affects detach/quit descriptions).
+func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybinding {
+	daemonMode := len(isDaemonSession) > 0 && isDaemonSession[0]
 	switch prefixType {
 	case "workspace":
 		return []Keybinding{
@@ -57,7 +59,7 @@ func GetPrefixKeybindings(prefixType string) []Keybinding {
 			{"Esc", "Cancel"},
 		}
 	default: // general prefix
-		return []Keybinding{
+		bindings := []Keybinding{
 			{"c", "Create window"},
 			{"x", "Close window"},
 			{",", "Rename window"},
@@ -72,11 +74,34 @@ func GetPrefixKeybindings(prefixType string) []Keybinding {
 			{"t", "Window commands..."},
 			{"D", "Debug commands..."},
 			{"T", "Tape manager..."},
-			{"d/Esc", "Detach (exit terminal)"},
-			{"[", "Scrollback mode"},
-			{"?", "Toggle help"},
-			{"q", "Quit application"},
 		}
+
+		// In daemon mode, d and Esc have different behaviors
+		if daemonMode {
+			bindings = append(bindings,
+				Keybinding{"d", "Detach (session keeps running)"},
+				Keybinding{"Esc", "Window management mode"},
+			)
+		} else {
+			// In local mode, both d and Esc do the same thing
+			bindings = append(bindings,
+				Keybinding{"d/Esc", "Window management mode"},
+			)
+		}
+
+		bindings = append(bindings,
+			Keybinding{"[", "Scrollback mode"},
+			Keybinding{"?", "Toggle help"},
+		)
+
+		// Quit description differs based on mode
+		if daemonMode {
+			bindings = append(bindings, Keybinding{"q", "Quit and kill session"})
+		} else {
+			bindings = append(bindings, Keybinding{"q", "Quit application"})
+		}
+
+		return bindings
 	}
 }
 
@@ -263,9 +288,10 @@ func getStaticHelpSections() []KeybindingSection {
 				{"w", "Workspace commands"},
 				{"m", "Minimize commands"},
 				{"t", "Window commands"},
-				{"d/Esc", "Detach from terminal"},
+				{"d", "Detach (daemon) / Window mode (local)"},
+				{"Esc", "Window management mode"},
 				{"[", "Enter scrollback mode"},
-				{"q", "Quit application"},
+				{"q", "Quit"},
 				{"Ctrl+B", "Send literal Ctrl+B"},
 			},
 		},

@@ -2,6 +2,7 @@
 package input
 
 import (
+	"log"
 	"strings"
 	"time"
 
@@ -275,7 +276,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Normal terminal mode - pass through all keys
 	if focusedWindow != nil {
 		rawInput := getRawKeyBytes(msg)
-
 		if len(rawInput) > 0 {
 			if err := focusedWindow.SendInput(rawInput); err != nil {
 				// Terminal unavailable, switch back to window mode
@@ -574,8 +574,28 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		o.PrefixActive = true // Keep prefix active for the next key
 		o.LastPrefixTime = time.Now()
 		return o, nil
-	case "d", "esc":
-		// Detach/exit terminal mode (like tmux detach)
+	case "d":
+		// Detach from daemon session - quit client but leave session running
+		log.Printf("[DEBUG] Ctrl+B d pressed, IsDaemonSession=%v, DaemonClient=%v", o.IsDaemonSession, o.DaemonClient != nil)
+		if o.IsDaemonSession {
+			log.Printf("[DEBUG] Detaching from daemon session...")
+			// Sync state to daemon before detaching
+			o.SyncStateToDaemon()
+			log.Printf("[DEBUG] State synced, returning tea.Quit")
+			// Don't call Cleanup() - we want the session to persist
+			// Don't show notification - just quit immediately
+			return o, tea.Quit
+		}
+		// Not in daemon mode, just switch to window management mode
+		log.Printf("[DEBUG] Not in daemon mode, switching to window management mode")
+		o.Mode = app.WindowManagementMode
+		o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.InvalidateCache()
+		}
+		return o, nil
+	case "esc":
+		// Escape always just exits terminal mode (doesn't detach)
 		o.Mode = app.WindowManagementMode
 		o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
@@ -693,13 +713,16 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		return o, nil
 
 	case "q":
-		// Show quit confirmation dialog (only if there are terminals)
+		// Show quit confirmation dialog (only if there are terminals with foreground processes)
 		o.PrefixActive = false
 		if shouldShowQuitDialog(o) {
 			o.ShowQuitConfirm = true
 			o.QuitConfirmSelection = 0 // Default to Yes
 		} else {
-			// No terminals - just quit
+			// No foreground processes - quit and kill daemon session
+			if o.IsDaemonSession && o.DaemonClient != nil {
+				_ = o.DaemonClient.KillSession()
+			}
 			o.Cleanup()
 			return o, tea.Quit
 		}
@@ -1227,8 +1250,6 @@ func handleWorkspaceSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
 		return false
 	}
 }
-
-// Helper functions for handling various key combinations
 
 func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	num := int(msg.String()[0] - '0')

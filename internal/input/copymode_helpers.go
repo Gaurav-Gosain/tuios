@@ -7,8 +7,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// Helper functions for copy mode operations
-
 // getAbsoluteY calculates the absolute Y position in the entire scrollback+screen
 func getAbsoluteY(cm *terminal.CopyMode, window *terminal.Window) int {
 	scrollbackLen := window.ScrollbackLen()

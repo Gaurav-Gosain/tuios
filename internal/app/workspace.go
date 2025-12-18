@@ -135,6 +135,9 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 			w.MarkPositionDirty()
 		}
 	}
+
+	// Sync state to daemon after workspace switch
+	m.SyncStateToDaemon()
 }
 
 // MoveWindowToWorkspace moves a window to the specified workspace without changing focus.

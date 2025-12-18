@@ -259,6 +259,94 @@ func (e *Emulator) IsCursorHidden() bool {
 	return e.scr.Cursor().Hidden
 }
 
+// IsAltScreen returns whether the terminal is currently using the alternate screen buffer.
+// The alternate screen is used by full-screen applications like vim, less, htop, btop, etc.
+// This is important for mouse event forwarding - mouse events should only be forwarded
+// to applications when they are in alternate screen mode.
+func (e *Emulator) IsAltScreen() bool {
+	return e.isModeSet(ansi.AltScreenMode) || e.isModeSet(ansi.AltScreenSaveCursorMode)
+}
+
+// RestoreAltScreenMode restores the alternate screen mode state.
+// This is used when reconnecting to a daemon session to restore the emulator state
+// without re-sending the escape sequences that would trigger the mode change.
+// This method ONLY switches the screen buffer pointer - it does NOT modify the
+// modes map to avoid concurrent map access issues.
+func (e *Emulator) RestoreAltScreenMode(enabled bool) {
+	if enabled {
+		// Switch to alt screen buffer if not already there
+		// Don't clear it - we want to preserve any content that gets restored
+		if e.scr != &e.scrs[1] {
+			e.scr = &e.scrs[1]
+		}
+	} else {
+		// Switch to main screen buffer if not already there
+		if e.scr != &e.scrs[0] {
+			e.scr = &e.scrs[0]
+		}
+	}
+	// NOTE: We don't modify e.modes[] here to avoid concurrent map access.
+	// The modes will be updated naturally when PTY output is processed.
+}
+
+// GetModes returns a copy of the current terminal modes.
+// This is used for session state serialization to preserve terminal modes
+// across reconnections (mouse tracking, bracketed paste, etc.).
+func (e *Emulator) GetModes() map[int]bool {
+	modes := make(map[int]bool)
+
+	// Important modes to preserve for session restoration:
+	modesToCapture := []ansi.Mode{
+		// Mouse tracking modes
+		ansi.X10MouseMode,         // ?9
+		ansi.NormalMouseMode,      // ?1000
+		ansi.HighlightMouseMode,   // ?1001
+		ansi.ButtonEventMouseMode, // ?1002
+		ansi.AnyEventMouseMode,    // ?1003
+		ansi.SgrExtMouseMode,      // ?1006 - SGR mouse encoding
+
+		// Screen and cursor modes
+		ansi.AltScreenMode,           // ?1047
+		ansi.AltScreenSaveCursorMode, // ?1049
+
+		// Other important modes
+		ansi.BracketedPasteMode, // ?2004
+		ansi.FocusEventMode,     // ?1004
+		ansi.AutoWrapMode,       // ?7
+	}
+
+	for _, mode := range modesToCapture {
+		if e.isModeSet(mode) {
+			// Store mode number as int for JSON serialization
+			modes[int(mode.Mode())] = true
+		}
+	}
+
+	return modes
+}
+
+// RestoreModes restores terminal modes from a saved state.
+// This is used when reconnecting to a daemon session to restore mouse tracking
+// and other terminal modes without triggering mode change side effects.
+func (e *Emulator) RestoreModes(modes map[int]bool) {
+	if modes == nil {
+		return
+	}
+
+	// Restore each mode by directly updating the modes map
+	// This avoids triggering side effects like screen clearing
+	for modeNum, enabled := range modes {
+		// Convert int back to Mode
+		mode := ansi.DECMode(modeNum)
+
+		if enabled {
+			e.modes[mode] = ansi.ModeSet
+		} else {
+			e.modes[mode] = ansi.ModeReset
+		}
+	}
+}
+
 // Resize resizes the terminal.
 func (e *Emulator) Resize(width int, height int) {
 	x, y := e.scr.CursorPosition()

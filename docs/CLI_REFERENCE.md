@@ -10,6 +10,7 @@ This document provides a complete reference for TUIOS command-line interface.
 - [Commands](#commands)
   - [Root Command](#root-command)
   - [Theming](#theming)
+  - [Daemon Mode (Session Persistence)](#daemon-mode-session-persistence)
   - [tuios ssh](#tuios-ssh)
   - [tuios-web (separate binary)](#tuios-web-separate-binary)
   - [tuios config](#tuios-config)
@@ -195,6 +196,135 @@ alias tuios='tuios --theme nord'
 ```bash
 #!/bin/bash
 exec tuios --theme dracula "$@"
+```
+
+---
+
+## Daemon Mode (Session Persistence)
+
+TUIOS supports persistent sessions through a daemon process, similar to tmux or screen. Sessions continue running in the background even when you disconnect, allowing you to reattach later with all windows and content preserved.
+
+### `tuios new`
+
+Create a new persistent session.
+
+**Usage:**
+```bash
+tuios new [session-name] [flags]
+```
+
+**Flags:**
+- `--theme <name>` - Set color theme for the session
+- `--ascii-only` - Use ASCII characters instead of Nerd Font icons
+- `--show-keys` - Enable showkeys overlay
+- `--no-animations` - Disable UI animations
+
+**Examples:**
+```bash
+tuios new                      # Create session with auto-generated name
+tuios new mysession            # Create session named "mysession"
+tuios new work --theme dracula # Create session with Dracula theme
+```
+
+### `tuios attach`
+
+Attach to an existing session.
+
+**Usage:**
+```bash
+tuios attach [session-name] [flags]
+```
+
+**Flags:**
+- Same as `tuios new` (theme, ascii-only, etc.)
+
+**Examples:**
+```bash
+tuios attach                   # Attach to most recent session (or only session)
+tuios attach mysession         # Attach to session named "mysession"
+tuios attach mysession --theme nord  # Attach with different theme
+```
+
+### `tuios ls`
+
+List all TUIOS sessions.
+
+**Usage:**
+```bash
+tuios ls
+```
+
+**Output:**
+Shows a table with:
+- Session name
+- Number of windows
+- Status (attached/detached)
+- Creation time
+- Last activity time
+
+**Example output:**
+```
+╭───────────────┬─────────┬──────────┬───────────────┬─────────────────╮
+│ NAME          │ WINDOWS │ STATUS   │ CREATED       │ LAST ACTIVE     │
+├───────────────┼─────────┼──────────┼───────────────┼─────────────────┤
+│ work          │ 3       │ detached │ 2 hours ago   │ 5 mins ago      │
+│ dev           │ 2       │ attached │ 1 day ago     │ just now        │
+╰───────────────┴─────────┴──────────┴───────────────┴─────────────────╯
+```
+
+### `tuios kill-session`
+
+Kill a specific session.
+
+**Usage:**
+```bash
+tuios kill-session <session-name>
+```
+
+**Examples:**
+```bash
+tuios kill-session mysession   # Kill session named "mysession"
+```
+
+### `tuios kill-server`
+
+Stop the TUIOS daemon process. This kills all sessions.
+
+**Usage:**
+```bash
+tuios kill-server
+```
+
+### `tuios daemon`
+
+Run the daemon in the foreground (for debugging).
+
+**Usage:**
+```bash
+tuios daemon [flags]
+```
+
+**Flags:**
+- `--socket <path>` - Custom socket path
+
+**Note:** This is primarily for debugging. Normal usage creates the daemon automatically when you run `tuios new`.
+
+### Workflow Example
+
+```bash
+# Start a new session for work
+tuios new work
+
+# ... do some work, then detach with Ctrl+B d ...
+
+# Later, list your sessions
+tuios ls
+
+# Reattach to continue working
+tuios attach work
+
+# When done, kill the session
+tuios kill-session work
 ```
 
 ---
@@ -549,6 +679,28 @@ tuios keybinds list-custom
 
 # Reset to defaults
 tuios config reset
+```
+
+### Daemon Mode (Session Persistence)
+
+```bash
+# Create a new persistent session
+tuios new mysession
+
+# List all sessions
+tuios ls
+
+# Attach to an existing session
+tuios attach mysession
+
+# Detach from session (inside TUIOS)
+# Press Ctrl+B d
+
+# Kill a session
+tuios kill-session mysession
+
+# Stop the daemon (kills all sessions)
+tuios kill-server
 ```
 
 ### SSH Server Setup

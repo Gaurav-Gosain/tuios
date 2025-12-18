@@ -54,8 +54,11 @@ func (m *OS) TileAllWindows() {
 		treeIDs := tree.GetAllWindowIDs()
 		visibleIDs := make(map[int]bool)
 		for _, win := range visibleWindows {
-			visibleIDs[m.getWindowIntID(win.ID)] = true
+			intID := m.getWindowIntID(win.ID)
+			visibleIDs[intID] = true
+			m.LogInfo("BSP: Visible window %s has int ID %d", win.ID[:8], intID)
 		}
+		m.LogInfo("BSP: Tree has IDs: %v, visible IDs: %v", treeIDs, visibleIDs)
 
 		hasStaleWindows := false
 		for _, id := range treeIDs {

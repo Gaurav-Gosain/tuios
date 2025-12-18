@@ -823,3 +823,77 @@ func cloneNode(node *TileNode, parent *TileNode, windowMap map[int]*TileNode) *T
 
 	return newNode
 }
+
+// SerializedNode represents a BSP tree node in a serializable format
+type SerializedNode struct {
+	WindowID   int             `json:"window_id"`       // -1 for internal nodes
+	SplitType  int             `json:"split_type"`      // 0=none, 1=vertical, 2=horizontal
+	SplitRatio float64         `json:"split_ratio"`     // Position of split (0.0-1.0)
+	Left       *SerializedNode `json:"left,omitempty"`  // Left/Top child
+	Right      *SerializedNode `json:"right,omitempty"` // Right/Bottom child
+}
+
+// SerializedBSPTree represents a BSP tree in a serializable format
+type SerializedBSPTree struct {
+	Root         *SerializedNode `json:"root,omitempty"`
+	AutoScheme   int             `json:"auto_scheme"` // 0=longest_side, 1=alternate, 2=spiral
+	DefaultRatio float64         `json:"default_ratio"`
+}
+
+// Serialize converts the BSP tree to a serializable format
+func (t *BSPTree) Serialize() *SerializedBSPTree {
+	if t == nil {
+		return nil
+	}
+	return &SerializedBSPTree{
+		Root:         serializeNode(t.Root),
+		AutoScheme:   int(t.AutoScheme),
+		DefaultRatio: t.DefaultRatio,
+	}
+}
+
+func serializeNode(node *TileNode) *SerializedNode {
+	if node == nil {
+		return nil
+	}
+	return &SerializedNode{
+		WindowID:   node.WindowID,
+		SplitType:  int(node.SplitType),
+		SplitRatio: node.SplitRatio,
+		Left:       serializeNode(node.Left),
+		Right:      serializeNode(node.Right),
+	}
+}
+
+// Deserialize converts a serialized BSP tree back to a BSPTree
+func (s *SerializedBSPTree) Deserialize() *BSPTree {
+	if s == nil {
+		return NewBSPTree()
+	}
+	tree := &BSPTree{
+		WindowToNode: make(map[int]*TileNode),
+		AutoScheme:   AutoScheme(s.AutoScheme),
+		DefaultRatio: s.DefaultRatio,
+	}
+	tree.Root = deserializeNode(s.Root, nil, tree.WindowToNode)
+	return tree
+}
+
+func deserializeNode(s *SerializedNode, parent *TileNode, windowMap map[int]*TileNode) *TileNode {
+	if s == nil {
+		return nil
+	}
+	node := &TileNode{
+		ID:         newNodeID(),
+		Parent:     parent,
+		WindowID:   s.WindowID,
+		SplitType:  SplitType(s.SplitType),
+		SplitRatio: s.SplitRatio,
+	}
+	if node.IsLeaf() && node.WindowID >= 0 {
+		windowMap[node.WindowID] = node
+	}
+	node.Left = deserializeNode(s.Left, node, windowMap)
+	node.Right = deserializeNode(s.Right, node, windowMap)
+	return node
+}

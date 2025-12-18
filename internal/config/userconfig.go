@@ -15,6 +15,14 @@ import (
 type UserConfig struct {
 	Appearance  AppearanceConfig  `toml:"appearance"`
 	Keybindings KeybindingsConfig `toml:"keybindings"`
+	Daemon      DaemonConfig      `toml:"daemon"`
+}
+
+// DaemonConfig holds daemon-related settings
+type DaemonConfig struct {
+	LogLevel     string `toml:"log_level"`     // Debug log level: off, errors, basic, messages, verbose, trace (default: off)
+	DefaultCodec string `toml:"default_codec"` // Default protocol codec: gob, json (default: gob)
+	SocketPath   string `toml:"socket_path"`   // Custom socket path (default: $XDG_RUNTIME_DIR/tuios/daemon.sock)
 }
 
 // AppearanceConfig holds appearance-related settings
@@ -25,6 +33,8 @@ type AppearanceConfig struct {
 	DockbarPosition   string `toml:"dockbar_position"`    // Dockbar position: bottom, top, hidden
 	PreferredShell    string `toml:"preferred_shell"`     // Preferred shell: if empty, auto-detect based on platform.
 	AnimationsEnabled *bool  `toml:"animations_enabled"`  // Enable UI animations (default: true). Set to false for instant transitions.
+	WhichKeyEnabled   *bool  `toml:"whichkey_enabled"`    // Show which-key popup after pressing leader key (default: true)
+	WhichKeyPosition  string `toml:"whichkey_position"`   // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
 }
 
 // KeybindingsConfig holds all keybinding configurations
@@ -54,6 +64,11 @@ func DefaultConfig() *UserConfig {
 			ScrollbackLines:   10000,
 			DockbarPosition:   "bottom",
 			PreferredShell:    "",
+		},
+		Daemon: DaemonConfig{
+			LogLevel:     "off",
+			DefaultCodec: "gob",
+			SocketPath:   "", // Empty means use default XDG path
 		},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
@@ -323,6 +338,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	// Validate and fill in missing sections with defaults
 	defaultCfg := DefaultConfig()
 	fillMissingAppearance(&cfg, defaultCfg)
+	fillMissingDaemon(&cfg, defaultCfg)
 	fillMissingKeybinds(&cfg, defaultCfg)
 
 	// Validate configuration
@@ -435,6 +451,27 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.AnimationsEnabled != nil {
 		AnimationsEnabled = *cfg.Appearance.AnimationsEnabled
 	}
+
+	// WhichKeyEnabled defaults to true (nil means use default)
+	if cfg.Appearance.WhichKeyEnabled != nil {
+		WhichKeyEnabled = *cfg.Appearance.WhichKeyEnabled
+	}
+
+	// WhichKeyPosition defaults to bottom-right
+	if cfg.Appearance.WhichKeyPosition != "" {
+		WhichKeyPosition = cfg.Appearance.WhichKeyPosition
+	}
+}
+
+// fillMissingDaemon fills in any missing daemon settings with defaults
+func fillMissingDaemon(cfg, defaultCfg *UserConfig) {
+	if cfg.Daemon.LogLevel == "" {
+		cfg.Daemon.LogLevel = defaultCfg.Daemon.LogLevel
+	}
+	if cfg.Daemon.DefaultCodec == "" {
+		cfg.Daemon.DefaultCodec = defaultCfg.Daemon.DefaultCodec
+	}
+	// SocketPath defaults to empty (use XDG default), so we don't override it
 }
 
 // fillMissingKeybinds fills in any missing keybindings with defaults

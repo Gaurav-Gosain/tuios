@@ -105,6 +105,7 @@ curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh
 - **Vim-Style Copy Mode**: Navigate scrollback (10,000 lines), search, and select text with vim keybindings
 - **Customizable Keybindings**: TOML configuration file with full keybinding customization (Kitty protocol support)
 - **Mouse Support**: Click, drag, and resize with full mouse interaction
+- **Daemon Mode**: Persistent sessions with detach/reattach (like tmux)
 - **SSH Server Mode**: Remote terminal multiplexing with per-connection isolation
 - **Web Terminal Mode**: Access TUIOS from any browser with WebGL rendering
 - **Smart Performance**: Style caching, viewport culling, adaptive refresh (60Hz/30Hz)
@@ -133,6 +134,15 @@ tuios
 - <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>n</kbd> - Create new window
 - <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>x</kbd> - Close window
 - <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>r</kbd> - Rename window
+
+**Daemon Mode (Session Persistence):**
+```bash
+tuios new mysession                  # Create a new persistent session
+tuios attach mysession               # Attach to existing session
+tuios ls                             # List all sessions
+tuios kill-session mysession         # Kill a session
+tuios kill-server                    # Stop the daemon
+```
 
 **SSH Server Mode:**
 ```bash
@@ -309,10 +319,10 @@ TUIOS is built on the Bubble Tea v2 framework following the Model-View-Update pa
 - ✓ SSH server mode
 - ✓ Performance optimizations
 - ✓ TOML configuration system with custom keybindings
+- ✓ Session persistence (daemon mode)
 
 **Planned:**
 - [ ] Theme and color customization
-- [ ] Session persistence
 - [ ] Split panes and tabs
 - [ ] Plugin system
 
