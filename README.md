@@ -14,11 +14,20 @@ TUIOS is a terminal-based window manager that provides a modern, efficient inter
 
 ## Documentation
 
+### User Guides
 - **[Keybindings Reference](docs/KEYBINDINGS.md)** - Complete keyboard shortcut reference
+- **[BSP Tiling Guide](docs/BSP_TILING.md)** - Advanced tiling with preselection and split control
 - **[Configuration Guide](docs/CONFIGURATION.md)** - Customize keybindings and settings
 - **[CLI Reference](docs/CLI_REFERENCE.md)** - Command-line options and flags
+- **[Tape Scripting](docs/TAPE_SCRIPTING.md)** - Automate workflows with DSL
+- **[Tape Recording](docs/TAPE_RECORDING.md)** - Record and replay sessions
+- **[Showkeys Overlay](docs/SHOWKEYS.md)** - Display keys for presentations
+
+### Advanced Topics
 - **[Web Terminal](docs/WEB.md)** - Browser-based terminal access
 - **[Architecture Guide](docs/ARCHITECTURE.md)** - Technical architecture and design
+- **[Library Usage](docs/LIBRARY.md)** - Use TUIOS as a Go library
+- **[Contributing](docs/CONTRIBUTING.md)** - Contribution guidelines
 
 <details>
 
@@ -102,10 +111,21 @@ curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh
 - **9 Workspaces**: Organize windows across independent workspaces
 - **Modal Interface**: Vim-inspired Window Management and Terminal modes
 - **BSP Tiling**: Binary Space Partitioning with automatic spiral layout (alternating V/H splits)
+  - **Manual Split Control**: Create horizontal/vertical splits, rotate split direction
+  - **Preselection**: Control where next window spawns (left, right, up, down)
+  - **Equalize Splits**: Reset all splits to balanced 50/50 ratios
+  - **Edge-Based Resizing**: Precise control with left/right/top/bottom edge resizing
 - **Vim-Style Copy Mode**: Navigate scrollback (10,000 lines), search, and select text with vim keybindings
+- **Tape Scripting**: Automate workflows with DSL for recording and playback
+  - **Tape Recording**: Record live sessions with <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>T</kbd> <kbd>r</kbd>
+  - **Headless Execution**: Run scripts in CI/CD with `tuios tape run`
+  - **Interactive Playback**: Watch automation with `tuios tape play`
+- **Showkeys Overlay**: Display pressed keys on screen for presentations and screencasts
 - **Customizable Keybindings**: TOML configuration file with full keybinding customization (Kitty protocol support)
 - **Mouse Support**: Click, drag, and resize with full mouse interaction
 - **Daemon Mode**: Persistent sessions with detach/reattach (like tmux)
+  - **Session Management**: Create, list, attach, kill sessions
+  - **State Persistence**: Window positions, workspaces, and terminal content preserved
 - **SSH Server Mode**: Remote terminal multiplexing with per-connection isolation
 - **Web Terminal Mode**: Access TUIOS from any browser with WebGL rendering
 - **Smart Performance**: Style caching, viewport culling, adaptive refresh (60Hz/30Hz)
@@ -175,15 +195,23 @@ go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@latest
 
 **Tape Scripting (Automation):**
 ```bash
-# Run tape script in headless mode (background)
-tuios tape run examples/demo.tape
+# Record a session (Ctrl+B T r while in TUIOS)
+# Stop recording (Ctrl+B T s)
+
+# List recordings
+tuios tape list
+
+# Show recording contents
+tuios tape show my-recording
 
 # Run tape script with visible TUI (watch automation)
-tuios tape play examples/demo.tape
+tuios tape play my-recording.tape
 
 # Validate tape file syntax
-tuios tape validate examples/demo.tape
+tuios tape validate my-recording.tape
 ```
+
+See [Tape Recording Guide](docs/TAPE_RECORDING.md) for details.
 
 **Configuration:**
 ```bash

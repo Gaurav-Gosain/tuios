@@ -1,6 +1,9 @@
 # Simple TUIOS Tape Script
 # Basic example of tape syntax
 
+# Disable animations for consistent playback
+DisableAnimations
+
 # Create a new window
 NewWindow
 
@@ -15,3 +18,6 @@ Enter
 
 # Wait a bit
 Sleep 1s
+
+# Re-enable animations
+EnableAnimations

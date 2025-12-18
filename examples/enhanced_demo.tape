@@ -2,6 +2,9 @@
 # This script demonstrates the enhanced scripting language with explicit mode switching
 # and full window management capabilities
 
+# Disable animations for consistent playback
+DisableAnimations
+
 # Start in window management mode (default)
 WindowManagementMode
 Sleep 500ms
@@ -113,3 +116,6 @@ Sleep 200ms
 # Exit with Escape
 Escape
 Sleep 2s
+
+# Re-enable animations
+EnableAnimations

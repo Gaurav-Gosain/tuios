@@ -95,8 +95,26 @@ These commands are available in tiling mode via the prefix key:
 | `Ctrl+B` `-` | Split focused window horizontally (top/bottom) |
 | `Ctrl+B` `\|` or `\` | Split focused window vertically (left/right) |
 | `Ctrl+B` `R` | Rotate split direction at focused window |
+| `Ctrl+B` `=` | Equalize all splits (reset to 50/50 ratios) |
 
 The dock shows the next split direction (V for vertical, H for horizontal) when tiling mode is active.
+
+### BSP Preselection
+
+Control where the next window spawns relative to the focused window:
+
+| Key Sequence | Action |
+|--------------|--------|
+| `Alt+h` | Next window appears left of focused |
+| `Alt+l` | Next window appears right of focused |
+| `Alt+k` | Next window appears above focused |
+| `Alt+j` | Next window appears below focused |
+
+After preselecting a direction, create a new window with `n` or `Ctrl+B` `c`. The preselection is consumed after one window creation.
+
+**Note**: Preselection only works when tiling mode is enabled (press `t` to enable).
+
+**Use Case**: Creating asymmetric layouts (sidebars, specific window placement).
 
 ## Copy Mode
 
@@ -220,6 +238,18 @@ Alternative prefix-based access to window commands:
 | `Ctrl+B` `t` `Shift+Tab` | Previous window |
 | `Ctrl+B` `t` `t` | Toggle tiling mode |
 | `Ctrl+B` `t` `Esc` | Cancel |
+
+### Tape Prefix (`Ctrl+B` `T`)
+
+Record and manage tape sessions:
+
+| Key Sequence | Action |
+|--------------|--------|
+| `Ctrl+B` `T` `r` | Start recording (prompts for name) |
+| `Ctrl+B` `T` `s` | Stop recording and save |
+| `Ctrl+B` `T` `Esc` | Cancel tape menu |
+
+See [Tape Recording Guide](TAPE_RECORDING.md) for details on recording workflows.
 
 ### Debug Prefix (`Ctrl+B` `D`)
 

@@ -1,6 +1,9 @@
 # TUIOS Advanced Demo Script
 # Demonstrates advanced features: mouse interactions, loops, variables, and assertions
 
+# Disable animations for consistent playback
+DisableAnimations
+
 # Initialize workspace
 WindowManagementMode
 Sleep 500ms
@@ -121,3 +124,6 @@ Sleep 600ms
 # Cleanup and end
 DisableTiling
 Sleep 500ms
+
+# Re-enable animations
+EnableAnimations

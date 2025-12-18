@@ -2,6 +2,9 @@
 # This script demonstrates the enhanced scripting language with explicit mode switching
 # and full window management capabilities
 
+# Disable animations for consistent playback
+DisableAnimations
+
 # Start in window management mode (default)
 WindowManagementMode
 EnableTiling
@@ -27,3 +30,6 @@ Sleep 1s
 
 Type "cat test.py"
 Enter
+
+# Re-enable animations
+EnableAnimations

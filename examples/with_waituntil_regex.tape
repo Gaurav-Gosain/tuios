@@ -1,6 +1,9 @@
 # TUIOS Demo with WaitUntilRegex
 # This script demonstrates the WaitUntilRegex command for conditional execution
 
+# Disable animations for consistent playback
+DisableAnimations
+
 WindowManagementMode
 NewWindow
 Sleep 500ms
@@ -26,3 +29,6 @@ WaitUntilRegex "/.*"
 
 Type "exit"
 Enter
+
+# Re-enable animations
+EnableAnimations

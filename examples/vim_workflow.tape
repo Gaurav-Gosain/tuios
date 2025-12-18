@@ -1,6 +1,9 @@
 # TUIOS Vim Workflow Demo
 # Demonstrates a realistic development workflow with vim
 
+# Disable animations for consistent playback
+DisableAnimations
+
 WindowManagementMode
 Sleep 300ms
 
@@ -123,3 +126,6 @@ Sleep 500ms
 
 # End demo
 Sleep 1s
+
+# Re-enable animations
+EnableAnimations

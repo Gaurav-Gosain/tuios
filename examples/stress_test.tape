@@ -1,6 +1,9 @@
 # TUIOS Stress Test
 # Tests rapid window creation, switching, and management
 
+# Disable animations for consistent playback
+DisableAnimations
+
 WindowManagementMode
 Sleep 200ms
 
@@ -96,3 +99,6 @@ Sleep 200ms
 Sleep 500ms
 DisableTiling
 Sleep 300ms
+
+# Re-enable animations
+EnableAnimations

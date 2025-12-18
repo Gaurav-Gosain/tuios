@@ -2,6 +2,9 @@
 # This script demonstrates the enhanced tape scripting language with explicit mode switching
 # and comprehensive window/workspace management
 
+# Disable animations for consistent, reproducible playback
+DisableAnimations
+
 # Start in window management mode (default)
 WindowManagementMode
 Sleep 300ms
@@ -86,3 +89,6 @@ Sleep 500ms
 
 # Exit gracefully
 Sleep 1s
+
+# Re-enable animations
+EnableAnimations
