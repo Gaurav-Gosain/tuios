@@ -289,7 +289,6 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 
 	tapeCmd.AddCommand(tapePlayCmd, tapeValidateCmd, tapeListCmd, tapeDirCmd, tapeDeleteCmd, tapeShowCmd)
 
-	var sessionName string
 	var createIfMissing bool
 
 	attachCmd := &cobra.Command{
@@ -305,49 +304,45 @@ This requires the TUIOS daemon to be running.`,
   tuios attach
 
   # Attach to a named session
-  tuios attach -t mysession
+  tuios attach mysession
 
-  # Attach and create if it doesn't exist
-  tuios attach -t mysession -c`,
+  # Attach and create if session doesn't exist
+  tuios attach mysession -c`,
 		Aliases: []string{"a"},
 		RunE: func(_ *cobra.Command, args []string) error {
-			name := sessionName
+			name := ""
 			if len(args) > 0 {
 				name = args[0]
 			}
 			return runAttach(name, createIfMissing)
 		},
 	}
-	attachCmd.Flags().StringVarP(&sessionName, "target", "t", "", "Target session name")
 	attachCmd.Flags().BoolVarP(&createIfMissing, "create", "c", false, "Create session if it doesn't exist")
 
 	newCmd := &cobra.Command{
 		Use:   "new [session-name]",
 		Short: "Create a new TUIOS session",
-		Long: `Create a new persistent TUIOS session.
+		Long: `Create a new persistent TUIOS session and attach to it.
 
-This starts a new session in the daemon (starting the daemon if needed).
-You can optionally attach to the session immediately.
+This starts a new session in the daemon (starting the daemon if needed)
+and immediately attaches you to it.
 
-Sessions persist even when you detach, allowing you to reconnect later.`,
+Sessions persist even when you detach, allowing you to reconnect later
+with 'tuios attach'.`,
 		Example: `  # Create a new session with auto-generated name
   tuios new
 
   # Create a named session
-  tuios new -s mysession
-
-  # Create and attach immediately
-  tuios new -s mysession -a`,
+  tuios new mysession`,
 		Aliases: []string{"n"},
 		RunE: func(_ *cobra.Command, args []string) error {
-			name := sessionName
+			name := ""
 			if len(args) > 0 {
 				name = args[0]
 			}
 			return runNewSession(name)
 		},
 	}
-	newCmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session name")
 
 	lsCmd := &cobra.Command{
 		Use:   "ls",

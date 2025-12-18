@@ -236,12 +236,14 @@ tuios attach [session-name] [flags]
 ```
 
 **Flags:**
+- `-c, --create` - Create session if it doesn't exist
 - Same as `tuios new` (theme, ascii-only, etc.)
 
 **Examples:**
 ```bash
 tuios attach                   # Attach to most recent session (or only session)
 tuios attach mysession         # Attach to session named "mysession"
+tuios attach mysession -c      # Attach or create if doesn't exist
 tuios attach mysession --theme nord  # Attach with different theme
 ```
 
