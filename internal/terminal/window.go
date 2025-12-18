@@ -1073,9 +1073,9 @@ func (w *Window) SendInput(input []byte) error {
 		if w.DaemonWriteFunc == nil {
 			// Debug: this might be why input fails
 			if f, _ := os.OpenFile("/tmp/tuios-input-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); f != nil {
-				fmt.Fprintf(f, "[%s] SendInput: DaemonWriteFunc is nil! PTYID=%s\n",
+				_, _ = fmt.Fprintf(f, "[%s] SendInput: DaemonWriteFunc is nil! PTYID=%s\n",
 					time.Now().Format("15:04:05.000"), w.PTYID)
-				f.Close()
+				_ = f.Close()
 			}
 			return fmt.Errorf("daemon write function not set")
 		}

@@ -31,11 +31,9 @@ func (m *OS) calculateTilingLayout(n int) []tileLayout {
 func (m *OS) TileAllWindows() {
 	// Get list of visible windows in current workspace (not minimized)
 	var visibleWindows []*terminal.Window
-	var visibleIndices []int
-	for i, w := range m.Windows {
+	for _, w := range m.Windows {
 		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
 			visibleWindows = append(visibleWindows, w)
-			visibleIndices = append(visibleIndices, i)
 		}
 	}
 
@@ -83,7 +81,7 @@ func (m *OS) TileAllWindows() {
 		tree = m.GetOrCreateBSPTree()
 
 		bounds := m.GetBSPBounds()
-		var lastInsertedID int = 0
+		var lastInsertedID = 0
 
 		for i, win := range visibleWindows {
 			windowIntID := m.getWindowIntID(win.ID)
@@ -157,7 +155,7 @@ func (m *OS) ToggleAutoTiling() {
 		}
 
 		bounds := m.GetBSPBounds()
-		var lastInsertedID int = 0 // Track the last inserted window for proper chaining
+		var lastInsertedID = 0 // Track the last inserted window for proper chaining
 
 		for i, win := range visibleWindows {
 			windowIntID := m.getWindowIntID(win.ID)

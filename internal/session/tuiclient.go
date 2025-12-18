@@ -76,31 +76,31 @@ func (c *TUIClient) Connect(version string, width, height int) error {
 		PreferredCodec: "gob",
 	}, c.codec)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return err
 	}
 
 	if err := c.send(msg); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return err
 	}
 
 	// Wait for welcome
 	resp, err := c.recv()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return err
 	}
 
 	if resp.Type != MsgWelcome {
-		conn.Close()
+		_ = conn.Close()
 		return fmt.Errorf("expected welcome, got %d", resp.Type)
 	}
 
 	// Parse welcome to get negotiated codec
 	var welcome WelcomePayload
 	if err := resp.ParsePayloadWithCodec(&welcome, c.codec); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return fmt.Errorf("failed to parse welcome: %w", err)
 	}
 

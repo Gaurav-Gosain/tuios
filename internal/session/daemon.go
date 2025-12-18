@@ -253,7 +253,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 
 		if err := d.handleMessage(cs, msg); err != nil {
 			LogError("Error handling message from %s: %v", clientID, err)
-			d.sendError(cs, ErrCodeInternal, err.Error())
+			_ = d.sendError(cs, ErrCodeInternal, err.Error())
 		}
 	}
 }

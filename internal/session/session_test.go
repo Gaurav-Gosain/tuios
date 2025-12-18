@@ -199,8 +199,8 @@ func TestSessionNameGeneration(t *testing.T) {
 
 	// Generate first name
 	name1 := mgr.GenerateSessionName()
-	if name1 != "0" {
-		t.Errorf("First generated name: got %s, want 0", name1)
+	if name1 != "session-0" {
+		t.Errorf("First generated name: got %s, want session-0", name1)
 	}
 
 	// Create a session with that name
@@ -208,8 +208,8 @@ func TestSessionNameGeneration(t *testing.T) {
 
 	// Generate next name
 	name2 := mgr.GenerateSessionName()
-	if name2 != "1" {
-		t.Errorf("Second generated name: got %s, want 1", name2)
+	if name2 != "session-1" {
+		t.Errorf("Second generated name: got %s, want session-1", name2)
 	}
 }
 

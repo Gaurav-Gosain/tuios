@@ -52,11 +52,9 @@ func (f *FakeShell) Read(p []byte) (n int, err error) {
 	f.mu.Unlock()
 
 	// Wait for new data
-	select {
-	case data := <-f.readCh:
-		copy(p, data)
-		return len(data), nil
-	}
+	data := <-f.readCh
+	copy(p, data)
+	return len(data), nil
 }
 
 // Write implements io.Writer, receiving input from the terminal.

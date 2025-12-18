@@ -14,7 +14,7 @@ import (
 
 func TestFakeShell_WriteRead(t *testing.T) {
 	shell := testutil.NewFakeShell()
-	defer shell.Close()
+	defer func() { _ = shell.Close() }()
 
 	// Send output from the "shell"
 	shell.SendOutput("Hello from shell\n")
@@ -34,7 +34,7 @@ func TestFakeShell_WriteRead(t *testing.T) {
 
 func TestFakeShell_Input(t *testing.T) {
 	shell := testutil.NewFakeShell()
-	defer shell.Close()
+	defer func() { _ = shell.Close() }()
 
 	// Write input to the shell
 	_, err := shell.Write([]byte("ls -la\n"))
@@ -57,7 +57,7 @@ func TestFakeShell_Input(t *testing.T) {
 
 func TestFakeShell_ClearInput(t *testing.T) {
 	shell := testutil.NewFakeShell()
-	defer shell.Close()
+	defer func() { _ = shell.Close() }()
 
 	_, _ = shell.Write([]byte("test"))
 	shell.ClearInput()
@@ -556,7 +556,7 @@ func TestTerminalSizeResponse(t *testing.T) {
 
 func TestFakeShell_Concurrent(t *testing.T) {
 	shell := testutil.NewFakeShell()
-	defer shell.Close()
+	defer func() { _ = shell.Close() }()
 
 	// Send output in a goroutine
 	go func() {
@@ -577,7 +577,7 @@ func TestFakeShell_Concurrent(t *testing.T) {
 	// Read from shell
 	buf := make([]byte, 100)
 	for i := 0; i < 10; i++ {
-		shell.Read(buf)
+		_, _ = shell.Read(buf)
 	}
 
 	// Should not panic or deadlock
@@ -611,7 +611,7 @@ func BenchmarkANSIBuilder_Complex(b *testing.B) {
 
 func BenchmarkFakeShell_SendOutput(b *testing.B) {
 	shell := testutil.NewFakeShell()
-	defer shell.Close()
+	defer func() { _ = shell.Close() }()
 
 	for range b.N {
 		shell.SendOutput("test output\n")

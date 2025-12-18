@@ -477,9 +477,7 @@ func (c *Client) readFromTerminal(errCh chan<- error) {
 					c.prefixActive = false
 					if b == 'd' || b == 'D' {
 						// Detach sequence detected (Ctrl+B, d)
-						if err := c.Detach(); err != nil {
-							// Detach failed, but we should still exit
-						}
+						_ = c.Detach() // Ignore error, we're exiting anyway
 						errCh <- nil
 						return
 					}
@@ -612,26 +610,6 @@ func (c *Client) getTerminalSize() (width, height int) {
 		return 80, 24 // Default
 	}
 	return width, height
-}
-
-// watchResize monitors for terminal resize events and sends them to the daemon.
-// This is used when the client is in streaming mode (future feature).
-// nolint:unused // Reserved for future streaming mode implementation
-func (c *Client) watchResize() {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.done:
-			return
-		case <-ticker.C:
-			w, h := c.getTerminalSize()
-			if w != c.width || h != c.height {
-				_ = c.SendResize(w, h)
-			}
-		}
-	}
 }
 
 // IsAttached returns true if client is attached to a session.

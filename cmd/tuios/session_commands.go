@@ -50,7 +50,7 @@ func runNewSession(sessionName string) error {
 		}
 
 		existingNames := client.AvailableSessionNames()
-		client.Close()
+		_ = client.Close()
 
 		sessionName = generateUniqueSessionName(existingNames)
 		fmt.Printf("Creating session '%s'\n", sessionName)
@@ -141,7 +141,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	log.Printf("[CLIENT] Attaching to session '%s' (createNew=%v)", sessionName, createNew)
 	state, err := client.AttachSession(sessionName, createNew, width, height)
 	if err != nil {
-		client.Close()
+		_ = client.Close()
 		return fmt.Errorf("failed to attach to session: %w", err)
 	}
 	log.Printf("[CLIENT] Attached to session, got state")
@@ -218,7 +218,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		finalOS.Cleanup()
 	}
 
-	client.Close()
+	_ = client.Close()
 
 	fmt.Print("\033c")
 	fmt.Print("\033[?1000l")
@@ -240,12 +240,6 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	return nil
 }
 
-func runLocalWithSession(sessionName string) error {
-	_ = os.Setenv("TUIOS_SESSION", sessionName)
-
-	return runLocal()
-}
-
 func runListSessions() error {
 	if !session.IsDaemonRunning() {
 		fmt.Println("TUIOS daemon is not running. No sessions available.")
@@ -259,7 +253,7 @@ func runListSessions() error {
 	if err := client.Connect(); err != nil {
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	sessions, err := client.ListSessions()
 	if err != nil {
@@ -365,7 +359,7 @@ func runKillSession(sessionName string) error {
 	if err := client.Connect(); err != nil {
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := client.KillSession(sessionName); err != nil {
 		return err

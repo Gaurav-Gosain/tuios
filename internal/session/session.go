@@ -120,8 +120,6 @@ type PTY struct {
 // Session represents a persistent TUIOS session.
 // The daemon manages PTYs and stores state; the client runs the TUI.
 type Session struct {
-	mu sync.RWMutex
-
 	// Identity
 	ID   string
 	Name string
@@ -213,7 +211,7 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 
 	// Start command in PTY
 	if err := ptyInstance.Start(cmd); err != nil {
-		ptyInstance.Close()
+		_ = ptyInstance.Close()
 		cancel()
 		return nil, fmt.Errorf("failed to start shell: %w", err)
 	}
@@ -518,23 +516,23 @@ type TerminalState struct {
 	CursorY       int           `json:"cursor_y"`
 	ScrollbackLen int           `json:"scrollback_len"`
 	IsAltScreen   bool          `json:"is_alt_screen,omitempty"` // Alternate screen buffer active (for mouse event forwarding)
-	Modes         map[int]bool  `json:"modes,omitempty"`          // Terminal modes (mouse tracking, bracketed paste, etc.)
+	Modes         map[int]bool  `json:"modes,omitempty"`         // Terminal modes (mouse tracking, bracketed paste, etc.)
 	Screen        [][]CellState `json:"screen"`
 	Scrollback    [][]CellState `json:"scrollback,omitempty"`
 }
 
 // CellState represents a single terminal cell with full styling information.
 type CellState struct {
-	Content   string `json:"c,omitempty"`   // Cell content (character or grapheme)
-	Width     int    `json:"w,omitempty"`   // Cell width (1 for normal, 2 for wide chars, 0 for continuation)
-	FgColor   string `json:"fg,omitempty"`  // Foreground color (hex format like "#ff0000" or empty for default)
-	BgColor   string `json:"bg,omitempty"`  // Background color (hex format or empty)
-	Bold      bool   `json:"b,omitempty"`   // Bold attribute
-	Italic    bool   `json:"i,omitempty"`   // Italic attribute
-	Underline bool   `json:"u,omitempty"`   // Underline attribute
-	Reverse   bool   `json:"r,omitempty"`   // Reverse video attribute
-	Blink     bool   `json:"bl,omitempty"`  // Blink attribute
-	Faint     bool   `json:"f,omitempty"`   // Faint/dim attribute
+	Content   string `json:"c,omitempty"`  // Cell content (character or grapheme)
+	Width     int    `json:"w,omitempty"`  // Cell width (1 for normal, 2 for wide chars, 0 for continuation)
+	FgColor   string `json:"fg,omitempty"` // Foreground color (hex format like "#ff0000" or empty for default)
+	BgColor   string `json:"bg,omitempty"` // Background color (hex format or empty)
+	Bold      bool   `json:"b,omitempty"`  // Bold attribute
+	Italic    bool   `json:"i,omitempty"`  // Italic attribute
+	Underline bool   `json:"u,omitempty"`  // Underline attribute
+	Reverse   bool   `json:"r,omitempty"`  // Reverse video attribute
+	Blink     bool   `json:"bl,omitempty"` // Blink attribute
+	Faint     bool   `json:"f,omitempty"`  // Faint/dim attribute
 }
 
 // cellToState converts a VT cell to a serializable CellState.
