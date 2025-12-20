@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/adrg/xdg"
+	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -91,38 +92,7 @@ func DefaultConfig() *UserConfig {
 				"select_window_9": {"9"},
 			},
 			Workspaces: getDefaultWorkspaceKeybinds(),
-			Layout: map[string][]string{
-				"snap_left":                 {"h"},
-				"snap_right":                {"l"},
-				"snap_fullscreen":           {"f"},
-				"unsnap":                    {"u"},
-				"snap_corner_1":             {"1"},
-				"snap_corner_2":             {"2"},
-				"snap_corner_3":             {"3"},
-				"snap_corner_4":             {"4"},
-				"toggle_tiling":             {"t"},
-				"swap_left":                 {"H", "ctrl+left"},
-				"swap_right":                {"L", "ctrl+right"},
-				"swap_up":                   {"K", "ctrl+up"},
-				"swap_down":                 {"J", "ctrl+down"},
-				"resize_master_shrink":      {"<", "shift+,"},
-				"resize_master_grow":        {">", "shift+."},
-				"resize_height_shrink":      {"{", "shift+["},
-				"resize_height_grow":        {"}", "shift+]"},
-				"resize_master_shrink_left": {","},
-				"resize_master_grow_left":   {"."},
-				"resize_height_shrink_top":  {"["},
-				"resize_height_grow_top":    {"]"},
-				// BSP tiling
-				"split_horizontal": {"-"},
-				"split_vertical":   {"|", "\\"},
-				"rotate_split":     {"R"},
-				"equalize_splits":  {"="},
-				"preselect_left":   {"alt+h"},
-				"preselect_right":  {"alt+l"},
-				"preselect_up":     {"alt+k"},
-				"preselect_down":   {"alt+j"},
-			},
+			Layout:     getDefaultLayoutKeybinds(),
 			ModeControl: map[string][]string{
 				"enter_terminal_mode": {"i", "enter"},
 				"enter_window_mode":   {"esc"},
@@ -303,6 +273,54 @@ func getDefaultWorkspaceKeybinds() map[string][]string {
 	return base
 }
 
+// getDefaultLayoutKeybinds returns platform-specific layout keybindings
+func getDefaultLayoutKeybinds() map[string][]string {
+	// Base layout keybindings (common to all platforms)
+	layout := map[string][]string{
+		"snap_left":                 {"h"},
+		"snap_right":                {"l"},
+		"snap_fullscreen":           {"f"},
+		"unsnap":                    {"u"},
+		"snap_corner_1":             {"1"},
+		"snap_corner_2":             {"2"},
+		"snap_corner_3":             {"3"},
+		"snap_corner_4":             {"4"},
+		"toggle_tiling":             {"t"},
+		"swap_left":                 {"H", "ctrl+left"},
+		"swap_right":                {"L", "ctrl+right"},
+		"swap_up":                   {"K", "ctrl+up"},
+		"swap_down":                 {"J", "ctrl+down"},
+		"resize_master_shrink":      {"<", "shift+,"},
+		"resize_master_grow":        {">", "shift+."},
+		"resize_height_shrink":      {"{", "shift+["},
+		"resize_height_grow":        {"}", "shift+]"},
+		"resize_master_shrink_left": {","},
+		"resize_master_grow_left":   {"."},
+		"resize_height_shrink_top":  {"["},
+		"resize_height_grow_top":    {"]"},
+		// BSP tiling
+		"split_horizontal": {"-"},
+		"split_vertical":   {"|", "\\"},
+		"rotate_split":     {"R"},
+		"equalize_splits":  {"="},
+	}
+
+	// Add platform-specific BSP preselect bindings
+	if isMacOS() {
+		layout["preselect_left"] = []string{"opt+h"}
+		layout["preselect_right"] = []string{"opt+l"}
+		layout["preselect_up"] = []string{"opt+k"}
+		layout["preselect_down"] = []string{"opt+j"}
+	} else {
+		layout["preselect_left"] = []string{"alt+h"}
+		layout["preselect_right"] = []string{"alt+l"}
+		layout["preselect_up"] = []string{"alt+k"}
+		layout["preselect_down"] = []string{"alt+j"}
+	}
+
+	return layout
+}
+
 // isMacOS detects if the current platform is macOS
 func isMacOS() bool {
 	// Check runtime.GOOS first (most reliable)
@@ -354,7 +372,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	// Log warnings (non-fatal)
 	if validation.HasWarnings() {
 		for _, warn := range validation.Warnings {
-			fmt.Fprintf(os.Stderr, "Config warning in [%s]: %s - %s\n", warn.Field, warn.Key, warn.Message)
+			tea.Println(fmt.Sprintf("Config warning in [%s]: %s - %s", warn.Field, warn.Key, warn.Message))
 		}
 	}
 
