@@ -263,8 +263,12 @@ const (
 var UseASCIIOnly = false
 
 // AnimationsEnabled controls whether UI animations are enabled
-// Set via --no-animations command-line flag or appearance.animations_enabled config
+// Set via --no-animations flag or appearance.animations_enabled config
 var AnimationsEnabled = true
+
+// AnimationsSuppressed is set to true temporarily to disable animations
+// (e.g., during remote command processing). This takes precedence over AnimationsEnabled.
+var AnimationsSuppressed = false
 
 // WhichKeyEnabled controls whether the which-key popup is shown after pressing leader key
 // Set via appearance.whichkey_enabled config
@@ -276,18 +280,18 @@ var WhichKeyEnabled = true
 var WhichKeyPosition = "bottom-right"
 
 // GetAnimationDuration returns the animation duration for standard operations.
-// Returns 0 if animations are disabled, causing instant transitions.
+// Returns 0 if animations are disabled or suppressed, causing instant transitions.
 func GetAnimationDuration() time.Duration {
-	if !AnimationsEnabled {
+	if !AnimationsEnabled || AnimationsSuppressed {
 		return 0
 	}
 	return DefaultAnimationDuration
 }
 
 // GetFastAnimationDuration returns the animation duration for fast operations.
-// Returns 0 if animations are disabled, causing instant transitions.
+// Returns 0 if animations are disabled or suppressed, causing instant transitions.
 func GetFastAnimationDuration() time.Duration {
-	if !AnimationsEnabled {
+	if !AnimationsEnabled || AnimationsSuppressed {
 		return 0
 	}
 	return FastAnimationDuration
@@ -304,6 +308,15 @@ var DockbarPosition = "bottom"
 // HideWindowButtons controls whether to hide window control buttons
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config
 var HideWindowButtons = false
+
+// WindowTitlePosition controls where window titles are displayed
+// Options: bottom, top, hidden
+// Set via --window-title-position flag or appearance.window_title_position config
+var WindowTitlePosition = "bottom"
+
+// HideClock controls whether the clock overlay is hidden
+// Set via --hide-clock flag or appearance.hide_clock config
+var HideClock = false
 
 // ScrollbackLines controls the number of lines to keep in scrollback buffer
 // Set via --scrollback-lines flag or appearance.scrollback_lines config

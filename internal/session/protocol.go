@@ -31,6 +31,9 @@ const (
 	MsgUpdateState                             // Update session state
 	MsgSubscribePTY                            // Subscribe to PTY output
 	MsgGetTerminalState                        // Get terminal state for a PTY
+	MsgExecuteCommand                          // Execute a tape command (routed to TUI)
+	MsgSendKeys                                // Send keystrokes to focused window
+	MsgSetConfig                               // Set a config option at runtime
 
 	// Server -> Client messages
 	MsgWelcome       // Response to Hello with server info
@@ -48,6 +51,14 @@ const (
 	MsgPTYOutput     // Output from a specific PTY
 	MsgStateData     // Session state data
 	MsgTerminalState // Terminal state for a PTY (screen + scrollback)
+	MsgCommandResult // Result of a remote command execution
+	MsgRemoteCommand // Remote command from daemon to TUI client for execution
+	MsgGetLogs       // Request to retrieve daemon logs
+	MsgLogsData      // Response with log entries
+	MsgQueryWindows  // Query window list from TUI
+	MsgWindowList    // Response with window list
+	MsgQuerySession  // Query session info from TUI
+	MsgSessionInfo   // Response with session info
 )
 
 // Message is the base protocol message structure.
@@ -214,6 +225,134 @@ type TerminalStatePayload struct {
 	State *TerminalState `json:"state"`
 }
 
+// ExecuteCommandPayload requests execution of a tape command.
+// The command is routed to the TUI client attached to the session.
+type ExecuteCommandPayload struct {
+	SessionName string   `json:"session_name,omitempty"` // Target session (empty = most recently active)
+	CommandType string   `json:"command_type"`           // Tape command type (e.g., "NewWindow", "SwitchWorkspace")
+	Args        []string `json:"args,omitempty"`         // Command arguments
+	TapeScript  string   `json:"tape_script,omitempty"`  // Raw tape script to execute (alternative to CommandType)
+	RequestID   string   `json:"request_id,omitempty"`   // Optional ID for matching responses
+}
+
+// SendKeysPayload requests sending keystrokes to a session.
+type SendKeysPayload struct {
+	SessionName string `json:"session_name,omitempty"` // Target session (empty = most recently active)
+	Keys        string `json:"keys"`                   // Key sequence (e.g., "ctrl+b,n" or "Hello World")
+	Literal     bool   `json:"literal,omitempty"`      // If true, send keys literally to PTY (no parsing)
+	Raw         bool   `json:"raw,omitempty"`          // If true, treat each character as a separate key (no splitting on space/comma)
+	RequestID   string `json:"request_id,omitempty"`   // Optional ID for matching responses
+}
+
+// SetConfigPayload requests changing a configuration option at runtime.
+type SetConfigPayload struct {
+	SessionName string `json:"session_name,omitempty"` // Target session (empty = most recently active)
+	Path        string `json:"path"`                   // Config path (e.g., "appearance.dockbar_position")
+	Value       string `json:"value"`                  // New value
+	RequestID   string `json:"request_id,omitempty"`   // Optional ID for matching responses
+}
+
+// CommandResultPayload contains the result of a remote command execution.
+type CommandResultPayload struct {
+	RequestID string                 `json:"request_id,omitempty"` // Matches the request
+	Success   bool                   `json:"success"`              // Whether the command succeeded
+	Message   string                 `json:"message,omitempty"`    // Result message or error
+	Data      map[string]interface{} `json:"data,omitempty"`       // Structured data (window_id, etc.)
+}
+
+// RemoteCommandPayload is sent from daemon to TUI client for execution.
+// This is the routed version of ExecuteCommand/SendKeys/SetConfig.
+type RemoteCommandPayload struct {
+	RequestID   string   `json:"request_id,omitempty"`
+	CommandType string   `json:"command_type"`           // "tape_command", "send_keys", "set_config"
+	TapeCommand string   `json:"tape_command,omitempty"` // For tape commands
+	TapeArgs    []string `json:"tape_args,omitempty"`    // Arguments for tape command
+	TapeScript  string   `json:"tape_script,omitempty"`  // Raw tape script
+	Keys        string   `json:"keys,omitempty"`         // For send_keys
+	Literal     bool     `json:"literal,omitempty"`      // For send_keys (send to PTY)
+	Raw         bool     `json:"raw,omitempty"`          // For send_keys (no splitting)
+	ConfigPath  string   `json:"config_path,omitempty"`  // For set_config
+	ConfigValue string   `json:"config_value,omitempty"` // For set_config
+}
+
+// GetLogsPayload requests log entries from the daemon.
+type GetLogsPayload struct {
+	Count int  `json:"count,omitempty"` // Number of entries to return (0 = all)
+	Clear bool `json:"clear,omitempty"` // Clear logs after retrieval
+}
+
+// LogsDataPayload contains log entries from the daemon.
+type LogsDataPayload struct {
+	Entries []LogEntry `json:"entries"`
+}
+
+// QueryWindowsPayload requests window list from the TUI.
+type QueryWindowsPayload struct {
+	SessionName string `json:"session_name,omitempty"` // Target session (empty = most recently active)
+	RequestID   string `json:"request_id,omitempty"`
+}
+
+// WindowInfo contains detailed information about a single window.
+type WindowInfo struct {
+	ID              string `json:"id"`                         // Unique window ID
+	Title           string `json:"title"`                      // Window title (from PTY)
+	CustomName      string `json:"custom_name,omitempty"`      // User-defined name
+	DisplayName     string `json:"display_name"`               // CustomName if set, else Title
+	Workspace       int    `json:"workspace"`                  // Workspace number (1-9)
+	Focused         bool   `json:"focused"`                    // Is this the focused window
+	Minimized       bool   `json:"minimized"`                  // Is window minimized
+	Fullscreen      bool   `json:"fullscreen"`                 // Is window fullscreen
+	X               int    `json:"x"`                          // X position
+	Y               int    `json:"y"`                          // Y position
+	Width           int    `json:"width"`                      // Width in columns
+	Height          int    `json:"height"`                     // Height in rows
+	PTYID           string `json:"pty_id,omitempty"`           // PTY ID (daemon mode)
+	ForegroundPID   int    `json:"foreground_pid,omitempty"`   // PID of foreground process
+	ForegroundCmd   string `json:"foreground_cmd,omitempty"`   // Command of foreground process
+	ShellPID        int    `json:"shell_pid,omitempty"`        // PID of the shell
+	ScrollbackLines int    `json:"scrollback_lines,omitempty"` // Lines in scrollback buffer
+	CursorX         int    `json:"cursor_x"`                   // Cursor column
+	CursorY         int    `json:"cursor_y"`                   // Cursor row
+	CursorVisible   bool   `json:"cursor_visible"`             // Is cursor visible
+}
+
+// WindowListPayload contains the list of windows.
+type WindowListPayload struct {
+	RequestID string       `json:"request_id,omitempty"`
+	Windows   []WindowInfo `json:"windows"`
+	Total     int          `json:"total"`             // Total window count
+	Focused   int          `json:"focused"`           // Index of focused window (-1 if none)
+	Workspace int          `json:"current_workspace"` // Current workspace
+}
+
+// QuerySessionPayload requests session state from the TUI.
+type QuerySessionPayload struct {
+	SessionName string `json:"session_name,omitempty"` // Target session (empty = most recently active)
+	RequestID   string `json:"request_id,omitempty"`
+}
+
+// SessionInfoPayload contains detailed session information.
+type SessionInfoPayload struct {
+	RequestID        string `json:"request_id,omitempty"`
+	SessionName      string `json:"session_name"`
+	SessionID        string `json:"session_id"`
+	CurrentWorkspace int    `json:"current_workspace"` // Current workspace (1-9)
+	TotalWindows     int    `json:"total_windows"`     // Total windows across all workspaces
+	FocusedWindowID  string `json:"focused_window_id,omitempty"`
+	Mode             string `json:"mode"`                      // "terminal" or "window_management"
+	TilingEnabled    bool   `json:"tiling_enabled"`            // Is auto-tiling enabled
+	TilingMode       string `json:"tiling_mode"`               // "bsp", "master-stack", etc.
+	Theme            string `json:"theme"`                     // Current theme name
+	DockbarPosition  string `json:"dockbar_position"`          // "top", "bottom", "hidden"
+	AnimationsOn     bool   `json:"animations_enabled"`        // Are animations enabled
+	ScriptMode       bool   `json:"script_mode"`               // Is a tape script running
+	ScriptPaused     bool   `json:"script_paused"`             // Is script paused
+	ScriptProgress   int    `json:"script_progress,omitempty"` // Script progress 0-100
+	Width            int    `json:"width"`                     // Terminal width
+	Height           int    `json:"height"`                    // Terminal height
+	WorkspaceWindows []int  `json:"workspace_windows"`         // Window count per workspace [ws1, ws2, ...]
+}
+
 // Error codes
 const (
 	ErrCodeUnknown         = 1
@@ -223,6 +362,8 @@ const (
 	ErrCodeInternal        = 5
 	ErrCodeNotAttached     = 6
 	ErrCodePTYNotFound     = 7
+	ErrCodeNoTUIAttached   = 8 // No TUI client attached to handle the command
+	ErrCodeCommandFailed   = 9 // Command execution failed
 )
 
 // Protocol version for compatibility checking.

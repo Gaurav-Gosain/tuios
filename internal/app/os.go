@@ -187,6 +187,11 @@ type OS struct {
 	TapeRecorder      *tape.Recorder    // Tape recorder for recording sessions
 	TapeRecordingName string            // Name of current recording
 	TapePrefixActive  bool              // True when Ctrl+B, T was pressed (tape sub-prefix)
+	// Remote command processing
+	ProcessingRemoteKeys bool // True when processing remote send-keys (disables animations)
+	// Remote tape script progress (used instead of ScriptPlayer for tape exec)
+	RemoteScriptIndex int // Current command index (0-based)
+	RemoteScriptTotal int // Total commands in remote script
 }
 
 // Notification represents a temporary notification message.
@@ -709,6 +714,81 @@ func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) 
 		return m.Width / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
 	default:
 		return m.Width / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
+	}
+}
+
+// ClampWindowsToView ensures all floating windows are visible within the current terminal bounds.
+// This is called when reattaching with a smaller terminal or when the terminal shrinks.
+// Windows that would be off-screen are repositioned to remain visible.
+func (m *OS) ClampWindowsToView() {
+	if m.AutoTiling {
+		return // Tiling mode handles its own layout
+	}
+
+	usableHeight := m.GetUsableHeight()
+	topMargin := m.GetTopMargin()
+	minVisibleX := 20 // Minimum visible horizontal pixels (matches mouse.go)
+	minVisibleY := 3  // Minimum visible vertical rows (matches mouse.go)
+	clampedCount := 0
+
+	for _, win := range m.Windows {
+		if win.Workspace != m.CurrentWorkspace || win.Minimized {
+			continue
+		}
+
+		originalX, originalY := win.X, win.Y
+		needsResize := false
+
+		// Clamp window size to fit within terminal if larger
+		if win.Width > m.Width {
+			win.Width = m.Width
+			needsResize = true
+		}
+		if win.Height > usableHeight {
+			win.Height = usableHeight
+			needsResize = true
+		}
+
+		// Ensure minimum size
+		if win.Width < config.DefaultWindowWidth {
+			win.Width = config.DefaultWindowWidth
+			needsResize = true
+		}
+		if win.Height < config.DefaultWindowHeight {
+			win.Height = config.DefaultWindowHeight
+			needsResize = true
+		}
+
+		// Clamp X position: ensure at least minVisibleX pixels are visible
+		if win.X+win.Width < minVisibleX {
+			win.X = minVisibleX - win.Width
+		}
+		if win.X > m.Width-minVisibleX {
+			win.X = m.Width - minVisibleX
+		}
+
+		// Clamp Y position: ensure at least minVisibleY rows visible, and can't go behind dock
+		if win.Y < topMargin {
+			win.Y = topMargin
+		}
+		maxY := topMargin + usableHeight - minVisibleY
+		if win.Y > maxY {
+			win.Y = maxY
+		}
+
+		// If position changed, mark as dirty and log
+		if win.X != originalX || win.Y != originalY || needsResize {
+			win.MarkPositionDirty()
+			if needsResize {
+				win.Resize(win.Width, win.Height)
+			}
+			clampedCount++
+		}
+	}
+
+	if clampedCount > 0 {
+		m.LogInfo("[CLAMP] Repositioned %d windows to fit terminal bounds (%dx%d)", clampedCount, m.Width, m.Height)
+		m.SyncStateToDaemon()
 	}
 }
 

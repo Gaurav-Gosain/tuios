@@ -28,14 +28,16 @@ type DaemonConfig struct {
 
 // AppearanceConfig holds appearance-related settings
 type AppearanceConfig struct {
-	BorderStyle       string `toml:"border_style"`        // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
-	HideWindowButtons bool   `toml:"hide_window_buttons"` // Hide window control buttons (minimize, maximize, close)
-	ScrollbackLines   int    `toml:"scrollback_lines"`    // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
-	DockbarPosition   string `toml:"dockbar_position"`    // Dockbar position: bottom, top, hidden
-	PreferredShell    string `toml:"preferred_shell"`     // Preferred shell: if empty, auto-detect based on platform.
-	AnimationsEnabled *bool  `toml:"animations_enabled"`  // Enable UI animations (default: true). Set to false for instant transitions.
-	WhichKeyEnabled   *bool  `toml:"whichkey_enabled"`    // Show which-key popup after pressing leader key (default: true)
-	WhichKeyPosition  string `toml:"whichkey_position"`   // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
+	BorderStyle         string `toml:"border_style"`          // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
+	HideWindowButtons   bool   `toml:"hide_window_buttons"`   // Hide window control buttons (minimize, maximize, close)
+	ScrollbackLines     int    `toml:"scrollback_lines"`      // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
+	DockbarPosition     string `toml:"dockbar_position"`      // Dockbar position: bottom, top, hidden
+	PreferredShell      string `toml:"preferred_shell"`       // Preferred shell: if empty, auto-detect based on platform.
+	AnimationsEnabled   *bool  `toml:"animations_enabled"`    // Enable UI animations (default: true). Set to false for instant transitions.
+	WhichKeyEnabled     *bool  `toml:"whichkey_enabled"`      // Show which-key popup after pressing leader key (default: true)
+	WhichKeyPosition    string `toml:"whichkey_position"`     // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
+	WindowTitlePosition string `toml:"window_title_position"` // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
+	HideClock           bool   `toml:"hide_clock"`            // Hide the clock overlay (default: false)
 }
 
 // KeybindingsConfig holds all keybinding configurations
@@ -479,6 +481,14 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.WhichKeyPosition != "" {
 		WhichKeyPosition = cfg.Appearance.WhichKeyPosition
 	}
+
+	// WindowTitlePosition defaults to bottom
+	if cfg.Appearance.WindowTitlePosition != "" {
+		WindowTitlePosition = cfg.Appearance.WindowTitlePosition
+	}
+
+	// HideClock defaults to false
+	HideClock = cfg.Appearance.HideClock
 }
 
 // fillMissingDaemon fills in any missing daemon settings with defaults

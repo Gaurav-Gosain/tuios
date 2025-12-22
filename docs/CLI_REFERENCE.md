@@ -11,6 +11,9 @@ This document provides a complete reference for TUIOS command-line interface.
   - [Root Command](#root-command)
   - [Theming](#theming)
   - [Daemon Mode (Session Persistence)](#daemon-mode-session-persistence)
+  - [Remote Control Commands](#remote-control-commands)
+  - [Inspection Commands](#inspection-commands)
+  - [Scripting Examples](#scripting-examples)
   - [tuios ssh](#tuios-ssh)
   - [tuios-web (separate binary)](#tuios-web-separate-binary)
   - [tuios config](#tuios-config)
@@ -102,6 +105,13 @@ tuios
 - `--preview-theme <name>` - Preview a theme's 16 ANSI colors and exit
 - `--ascii-only` - Use ASCII characters instead of Nerd Font icons
 - `--show-keys` - Enable showkeys overlay (screencaster-style key display)
+- `--border-style <style>` - Window border style (rounded, normal, thick, double, hidden, block, ascii)
+- `--dockbar-position <pos>` - Dockbar position (bottom, top, hidden)
+- `--hide-window-buttons` - Hide window control buttons (minimize, maximize, close)
+- `--scrollback-lines <num>` - Number of lines in scrollback buffer (100-1000000)
+- `--window-title-position <pos>` - Window title position (bottom, top, hidden)
+- `--hide-clock` - Hide the clock overlay
+- `--no-animations` - Disable UI animations for instant transitions
 - `--debug` - Enable debug logging
 - `--cpuprofile <file>` - Write CPU profile to file
 - `-h, --help` - Show help for tuios
@@ -327,6 +337,403 @@ tuios attach work
 
 # When done, kill the session
 tuios kill-session work
+```
+
+---
+
+## Remote Control Commands
+
+TUIOS provides commands to control a running session from external scripts and tools. These commands communicate with the TUIOS daemon to send keystrokes, execute commands, and query state. This enables powerful scripting, automation, and integration with external tools.
+
+### `tuios send-keys`
+
+Send keystrokes to a TUIOS session.
+
+**Usage:**
+```bash
+tuios send-keys <keys> [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `-l, --literal` - Send keys directly to terminal PTY (bypass TUIOS key handling)
+- `-r, --raw` - Treat each character as a separate key (no splitting on space/comma)
+
+**Key Format:**
+- Single keys: `i`, `n`, `Enter`, `Escape`, `Space`
+- Key combos: `ctrl+b`, `alt+1`, `shift+Enter` (case-insensitive)
+- Sequences: space or comma separated, e.g. `"ctrl+b q"` or `"ctrl+b,q"`
+- Special token: `$PREFIX` or `PREFIX` expands to configured leader key
+
+**Special Keys:** `Enter`, `Return`, `Space`, `Tab`, `Escape`, `Esc`, `Backspace`, `Delete`, `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`, `F1`-`F12`
+
+**Modifiers:** `ctrl`, `alt`, `shift`, `super`, `meta`
+
+**Examples:**
+```bash
+# Enter terminal mode (press 'i')
+tuios send-keys i
+
+# Press Enter
+tuios send-keys Enter
+
+# Trigger prefix key followed by 'q' (quit)
+tuios send-keys "ctrl+b q"
+tuios send-keys "\$PREFIX q"
+
+# Send Ctrl+C to TUIOS
+tuios send-keys ctrl+c
+
+# Send literal text directly to terminal PTY
+tuios send-keys --literal "echo hello"
+
+# Send to a specific session
+tuios send-keys --session mysession Escape
+tuios send-keys -s mysession Escape
+```
+
+### `tuios run-command`
+
+Execute a TUIOS command (same commands available via tape scripts).
+
+**Usage:**
+```bash
+tuios run-command <command> [args...] [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `--json` - Output result as JSON (useful for scripting)
+- `--list` - List all available commands
+
+**Available Commands:**
+| Command | Arguments | Description |
+|---------|-----------|-------------|
+| `NewWindow` | `[name]` | Create a new terminal window |
+| `CloseWindow` | | Close the focused window |
+| `FocusNext` | | Focus the next window |
+| `FocusPrev` | | Focus the previous window |
+| `FocusWindow` | `<id-or-name>` | Focus a specific window |
+| `ToggleFullscreen` | | Toggle fullscreen mode |
+| `ToggleTiling` | | Toggle tiling mode |
+| `SetTheme` | `<theme>` | Change the color theme |
+| `SwitchWorkspace` | `<1-9>` | Switch to workspace |
+| `MoveToWorkspace` | `<1-9>` | Move focused window to workspace |
+| `MinimizeWindow` | | Minimize focused window |
+| `RestoreWindow` | `<id-or-name>` | Restore a minimized window |
+| `SetDockbarPosition` | `<position>` | Set dockbar position (top/bottom/left/right) |
+
+**Examples:**
+```bash
+# List all available commands
+tuios run-command --list
+
+# Create a new window
+tuios run-command NewWindow "my-terminal"
+
+# Create window and get JSON output with window ID
+tuios run-command --json NewWindow "my-terminal"
+# Output: {"success":true,"message":"Created window 'my-terminal'","data":{"window_id":"abc123","name":"my-terminal"}}
+
+# Switch workspace
+tuios run-command SwitchWorkspace 2
+
+# Toggle tiling
+tuios run-command ToggleTiling
+
+# Close focused window
+tuios run-command CloseWindow
+
+# Target a specific session
+tuios run-command -s mysession NewWindow "dev"
+```
+
+### `tuios set-config`
+
+Change TUIOS configuration at runtime.
+
+**Usage:**
+```bash
+tuios set-config <path> <value> [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+
+**Available Paths:**
+| Path | Values | Description |
+|------|--------|-------------|
+| `dockbar_position` | `top`, `bottom`, `left`, `right` | Dockbar position |
+| `border_style` | `rounded`, `normal`, `thick`, `double`, `hidden`, `block`, `ascii` | Border style |
+| `animations` | `true`, `false`, `toggle` | Enable/disable animations |
+| `hide_window_buttons` | `true`, `false` | Hide window buttons |
+
+**Examples:**
+```bash
+# Change dockbar position
+tuios set-config dockbar_position top
+
+# Change border style
+tuios set-config border_style rounded
+
+# Toggle animations
+tuios set-config animations toggle
+
+# Hide window buttons
+tuios set-config hide_window_buttons true
+
+# Target a specific session
+tuios set-config -s mysession dockbar_position bottom
+```
+
+---
+
+## Inspection Commands
+
+Query the state of a running TUIOS session. These commands are designed for scripting and return structured data about windows and session state.
+
+**Note:** These commands query the daemon's stored state directly and work even when no TUI client is attached to the session. This makes them ideal for background scripting and monitoring.
+
+### `tuios list-windows`
+
+List all windows in a TUIOS session.
+
+**Usage:**
+```bash
+tuios list-windows [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `--json` - Output as JSON (default is human-readable table)
+
+**Examples:**
+```bash
+# List windows in table format
+tuios list-windows
+
+# Output as JSON for scripting
+tuios list-windows --json
+
+# Query a specific session
+tuios list-windows -s mysession --json
+```
+
+**JSON Output Structure:**
+```json
+{
+  "windows": [
+    {
+      "id": "a1b2c3d4",
+      "title": "Terminal a1b2c3d4",
+      "custom_name": "dev",
+      "display_name": "dev",
+      "workspace": 1,
+      "focused": true,
+      "minimized": false,
+      "fullscreen": false,
+      "x": 0,
+      "y": 0,
+      "width": 120,
+      "height": 40,
+      "cursor_x": 5,
+      "cursor_y": 10,
+      "cursor_visible": true,
+      "scrollback_lines": 1000,
+      "shell_pid": 12345,
+      "has_foreground_process": false
+    }
+  ],
+  "total": 1,
+  "focused_id": "a1b2c3d4"
+}
+```
+
+### `tuios get-window`
+
+Get detailed information about a specific window.
+
+**Usage:**
+```bash
+tuios get-window [id-or-name] [flags]
+```
+
+**Arguments:**
+- `id-or-name` - Window ID or custom name. If omitted, returns the focused window.
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `--json` - Output as JSON (default is human-readable)
+
+**Examples:**
+```bash
+# Get focused window info
+tuios get-window
+
+# Get focused window as JSON
+tuios get-window --json
+
+# Get specific window by name
+tuios get-window dev --json
+
+# Get window by ID
+tuios get-window a1b2c3d4 --json
+
+# Query a specific session
+tuios get-window -s mysession dev --json
+```
+
+**JSON Output Structure:**
+```json
+{
+  "id": "a1b2c3d4",
+  "title": "Terminal a1b2c3d4",
+  "custom_name": "dev",
+  "display_name": "dev",
+  "workspace": 1,
+  "focused": true,
+  "minimized": false,
+  "fullscreen": false,
+  "x": 0,
+  "y": 0,
+  "width": 120,
+  "height": 40,
+  "cursor_x": 5,
+  "cursor_y": 10,
+  "cursor_visible": true,
+  "scrollback_lines": 1000,
+  "shell_pid": 12345,
+  "has_foreground_process": false
+}
+```
+
+### `tuios session-info`
+
+Get information about the TUIOS session state.
+
+**Usage:**
+```bash
+tuios session-info [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `--json` - Output as JSON (default is human-readable)
+
+**Examples:**
+```bash
+# Get session info in human-readable format
+tuios session-info
+
+# Get session info as JSON
+tuios session-info --json
+
+# Query a specific session
+tuios session-info -s mysession --json
+```
+
+**JSON Output Structure:**
+```json
+{
+  "current_workspace": 1,
+  "total_windows": 3,
+  "mode": "terminal",
+  "tiling_enabled": true,
+  "tiling_mode": "bsp",
+  "theme": "tokyonight",
+  "dockbar_position": "bottom",
+  "animations_enabled": true,
+  "script_mode": false,
+  "workspace_windows": [2, 1, 0, 0, 0, 0, 0, 0, 0]
+}
+```
+
+**Fields:**
+| Field | Description |
+|-------|-------------|
+| `current_workspace` | Active workspace number (1-9) |
+| `total_windows` | Total number of windows across all workspaces |
+| `mode` | Current input mode: `terminal` or `window_management` |
+| `tiling_enabled` | Whether tiling mode is active |
+| `tiling_mode` | Tiling algorithm: `bsp`, `horizontal`, `vertical` |
+| `theme` | Current color theme |
+| `dockbar_position` | Dockbar location: `top`, `bottom`, `left`, `right` |
+| `animations_enabled` | Whether animations are enabled |
+| `script_mode` | Whether in tape script execution mode |
+| `workspace_windows` | Array of window counts per workspace (indices 0-8 for workspaces 1-9) |
+
+---
+
+## Scripting Examples
+
+These remote control and inspection commands enable powerful scripting workflows.
+
+### Create and Focus Windows
+
+```bash
+#!/bin/bash
+# Create a development layout
+
+# Create windows and capture their IDs
+EDITOR_ID=$(tuios run-command --json NewWindow "editor" | jq -r '.data.window_id')
+TERMINAL_ID=$(tuios run-command --json NewWindow "terminal" | jq -r '.data.window_id')
+LOGS_ID=$(tuios run-command --json NewWindow "logs" | jq -r '.data.window_id')
+
+# Enable tiling
+tuios run-command ToggleTiling
+
+# Send commands to each window
+tuios send-keys "nvim ." Enter
+tuios run-command FocusWindow "$TERMINAL_ID"
+tuios run-command FocusWindow "$LOGS_ID"
+tuios send-keys "tail -f /var/log/system.log" Enter
+```
+
+### Query and React to State
+
+```bash
+#!/bin/bash
+# Wait for a specific condition
+
+# Wait until there are at least 3 windows
+while true; do
+    WINDOW_COUNT=$(tuios session-info --json | jq '.total_windows')
+    if [ "$WINDOW_COUNT" -ge 3 ]; then
+        echo "Ready with $WINDOW_COUNT windows"
+        break
+    fi
+    sleep 0.5
+done
+```
+
+### Integration with Other Tools
+
+```bash
+#!/bin/bash
+# Use fzf to select and focus a window
+
+WINDOW=$(tuios list-windows --json | \
+    jq -r '.windows[] | "\(.display_name)\t\(.id)"' | \
+    fzf --with-nth=1 | \
+    cut -f2)
+
+if [ -n "$WINDOW" ]; then
+    tuios run-command FocusWindow "$WINDOW"
+fi
+```
+
+### Automated Testing
+
+```bash
+#!/bin/bash
+# Run a command and verify output
+
+tuios send-keys "echo 'test-marker-12345'" Enter
+sleep 0.5
+
+# Check if command completed (cursor moved)
+CURSOR_Y=$(tuios get-window --json | jq '.cursor_y')
+echo "Cursor at line: $CURSOR_Y"
 ```
 
 ---

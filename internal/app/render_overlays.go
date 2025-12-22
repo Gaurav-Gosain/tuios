@@ -15,47 +15,50 @@ import (
 func (m *OS) renderOverlays() []*lipgloss.Layer {
 	var layers []*lipgloss.Layer
 
-	currentTime := time.Now().Format("15:04:05")
-	var statusText string
-
 	isRecording := m.TapeRecorder != nil && m.TapeRecorder.IsRecording()
 
-	if isRecording {
-		statusText = config.TapeRecordingIndicator + " | " + currentTime
-	} else if m.PrefixActive {
-		statusText = "PREFIX | " + currentTime
-	} else {
-		statusText = currentTime
+	// Show clock/status unless hidden (but always show if recording or prefix active)
+	if !config.HideClock || isRecording || m.PrefixActive {
+		currentTime := time.Now().Format("15:04:05")
+		var statusText string
+
+		if isRecording {
+			statusText = config.TapeRecordingIndicator + " | " + currentTime
+		} else if m.PrefixActive {
+			statusText = "PREFIX | " + currentTime
+		} else {
+			statusText = currentTime
+		}
+
+		timeStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#a0a0b0")).
+			Bold(true).
+			Padding(0, 1)
+
+		if isRecording {
+			timeStyle = timeStyle.
+				Background(lipgloss.Color("#cc0000")).
+				Foreground(lipgloss.Color("#ffffff"))
+		} else if m.PrefixActive {
+			timeStyle = timeStyle.
+				Background(lipgloss.Color("#ff6b6b")).
+				Foreground(lipgloss.Color("#ffffff"))
+		} else {
+			timeStyle = timeStyle.
+				Background(lipgloss.Color("#1a1a2e"))
+		}
+
+		renderedTime := timeStyle.Render(statusText)
+
+		timeX := 1
+		timeLayer := lipgloss.NewLayer(renderedTime).
+			X(timeX).
+			Y(m.GetTimeYPosition()).
+			Z(config.ZIndexTime).
+			ID("time")
+
+		layers = append(layers, timeLayer)
 	}
-
-	timeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#a0a0b0")).
-		Bold(true).
-		Padding(0, 1)
-
-	if isRecording {
-		timeStyle = timeStyle.
-			Background(lipgloss.Color("#cc0000")).
-			Foreground(lipgloss.Color("#ffffff"))
-	} else if m.PrefixActive {
-		timeStyle = timeStyle.
-			Background(lipgloss.Color("#ff6b6b")).
-			Foreground(lipgloss.Color("#ffffff"))
-	} else {
-		timeStyle = timeStyle.
-			Background(lipgloss.Color("#1a1a2e"))
-	}
-
-	renderedTime := timeStyle.Render(statusText)
-
-	timeX := 1
-	timeLayer := lipgloss.NewLayer(renderedTime).
-		X(timeX).
-		Y(m.GetTimeYPosition()).
-		Z(config.ZIndexTime).
-		ID("time")
-
-	layers = append(layers, timeLayer)
 
 	if len(m.GetVisibleWindows()) == 0 {
 		asciiArt := `████████╗██╗   ██╗██╗ ██████╗ ███████╗
@@ -296,34 +299,54 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ScriptMode && showScriptIndicator {
 		var scriptStatus string
 
-		if m.ScriptPlayer != nil {
+		// Check for remote script progress first (tape exec), then local player (tape play)
+		var currentCmd, totalCmds, progress int
+		var isFinished bool
+
+		if m.RemoteScriptTotal > 0 {
+			// Remote script execution (tape exec)
+			currentCmd = m.RemoteScriptIndex
+			totalCmds = m.RemoteScriptTotal
+			if totalCmds > 0 {
+				progress = (currentCmd * 100) / totalCmds
+			}
+			isFinished = !m.ScriptFinishedTime.IsZero()
+		} else if m.ScriptPlayer != nil {
+			// Local script playback (tape play)
 			if player, ok := m.ScriptPlayer.(*tape.Player); ok {
-				progress := player.Progress()
-				currentCmd := player.CurrentIndex()
-				totalCmds := player.TotalCommands()
+				progress = player.Progress()
+				currentCmd = player.CurrentIndex()
+				totalCmds = player.TotalCommands()
+				isFinished = player.IsFinished()
+			}
+		}
 
-				if player.IsFinished() {
-					scriptStatus = fmt.Sprintf("DONE • %d/%d commands", totalCmds, totalCmds)
-				} else {
-					barWidth := 15
-					filledWidth := (progress * barWidth) / 100
-					bar := ""
-					for i := range barWidth {
-						if i < filledWidth {
-							bar += "█"
-						} else {
-							bar += "░"
-						}
-					}
-
-					if m.ScriptPaused {
-						scriptStatus = fmt.Sprintf("PAUSED • %s %d%% • %d/%d", bar, progress, currentCmd, totalCmds)
+		if totalCmds > 0 {
+			if isFinished {
+				scriptStatus = fmt.Sprintf("DONE • %d/%d commands", totalCmds, totalCmds)
+			} else {
+				barWidth := 15
+				filledWidth := (progress * barWidth) / 100
+				bar := ""
+				for i := range barWidth {
+					if i < filledWidth {
+						bar += "█"
 					} else {
-						scriptStatus = fmt.Sprintf("RUNNING • %s %d%% • %d/%d", bar, progress, currentCmd, totalCmds)
+						bar += "░"
 					}
 				}
-			} else {
-				scriptStatus = "TAPE"
+
+				// Display 1-based index for human readability (command 1 of N, not 0 of N)
+				displayCmd := currentCmd + 1
+				if displayCmd > totalCmds {
+					displayCmd = totalCmds
+				}
+
+				if m.ScriptPaused {
+					scriptStatus = fmt.Sprintf("PAUSED • %s %d%% • %d/%d", bar, progress, displayCmd, totalCmds)
+				} else {
+					scriptStatus = fmt.Sprintf("RUNNING • %s %d%% • %d/%d", bar, progress, displayCmd, totalCmds)
+				}
 			}
 		} else {
 			scriptStatus = "TAPE"

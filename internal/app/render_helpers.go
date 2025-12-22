@@ -54,79 +54,204 @@ func makeRounded(content string, color color.Color) string {
 	return content
 }
 
-func addToBorder(content string, color color.Color, window *terminal.Window, isRenaming bool, renameBuffer string, isTiling bool) string {
-	width := max(lipgloss.Width(content)-2, 0)
-
-	var border string
-	if config.HideWindowButtons {
-		border = ""
-	} else {
-		buttonStyle := baseButtonStyle.Background(color)
-		cross := buttonStyle.Render(config.GetWindowButtonClose())
-		dash := buttonStyle.Render(" — ")
-
-		if isTiling {
-			border = makeRounded(dash+cross, color)
-		} else {
-			square := buttonStyle.Render(" □ ")
-			border = makeRounded(dash+square+cross, color)
-		}
+// isDefaultTitle checks if the title is the auto-generated default (e.g., "Terminal 8bf1c038").
+func isDefaultTitle(title, windowID string) bool {
+	if len(windowID) < 8 {
+		return false
 	}
-	centered := RightString(border, width, color)
+	return title == "Terminal "+windowID[:8]
+}
 
-	style := pool.GetStyle()
-	defer pool.PutStyle(style)
-	bottomBorderStyle := style.Foreground(color)
-
+// getWindowTitle returns the display name for a window, truncated to fit within maxWidth.
+// Returns empty string if title should be hidden or doesn't fit.
+func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer string, maxWidth int) string {
 	windowName := ""
 	if window.CustomName != "" {
 		windowName = window.CustomName
+	} else if window.Title != "" && !isDefaultTitle(window.Title, window.ID) {
+		// Only show terminal-set title if it's not the default "Terminal <id>" format
+		windowName = window.Title
 	}
 
 	if isRenaming {
 		windowName = renameBuffer + "_"
 	}
 
-	var bottomBorder string
-	if windowName != "" {
-		maxNameLen := width - 6
-		if maxNameLen > 0 && len(windowName) > maxNameLen {
-			if maxNameLen > 3 {
-				windowName = windowName[:maxNameLen-3] + "..."
-			} else {
-				windowName = "..."
+	if windowName == "" {
+		return ""
+	}
+
+	maxNameLen := maxWidth - 6
+	if maxNameLen < 0 {
+		maxNameLen = 0
+	}
+	nameWidth := ansi.StringWidth(windowName)
+	if nameWidth > maxNameLen {
+		if maxNameLen > 3 {
+			// Truncate by runes to handle unicode properly
+			runes := []rune(windowName)
+			truncated := string(runes)
+			for ansi.StringWidth(truncated) > maxNameLen-3 && len(runes) > 0 {
+				runes = runes[:len(runes)-1]
+				truncated = string(runes)
 			}
-		}
-
-		nameStyle := baseButtonStyle.Background(color)
-
-		leftCircle := bottomBorderStyle.Render(config.GetWindowPillLeft())
-		nameText := nameStyle.Render(" " + windowName + " ")
-		rightCircle := bottomBorderStyle.Render(config.GetWindowPillRight())
-		nameBadge := leftCircle + nameText + rightCircle
-
-		badgeWidth := lipgloss.Width(nameBadge)
-		totalPadding := width - badgeWidth
-
-		if totalPadding < 0 {
-			bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderBottom(), width) + config.GetWindowBorderBottomRight())
+			windowName = truncated + "..."
 		} else {
-			leftPadding := totalPadding / 2
-			rightPadding := totalPadding - leftPadding
-
-			bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft()+strings.Repeat(config.GetWindowBorderBottom(), leftPadding)) +
-				nameBadge +
-				bottomBorderStyle.Render(strings.Repeat(config.GetWindowBorderBottom(), rightPadding)+config.GetWindowBorderBottomRight())
+			return ""
 		}
+	}
+	return windowName
+}
+
+// renderTitleWithButtons renders a title badge on the left with buttons on the right of a border line.
+func renderTitleWithButtons(windowName string, buttons string, width int, color color.Color, isTop bool) string {
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
+	borderStyle := style.Foreground(color)
+	nameStyle := baseButtonStyle.Background(color)
+
+	var borderLeft, borderChar, borderRight string
+	if isTop {
+		borderLeft = config.GetWindowBorderTopLeft()
+		borderChar = config.GetWindowBorderTop()
+		borderRight = config.GetWindowBorderTopRight()
 	} else {
-		bottomBorder = bottomBorderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderBottom(), width) + config.GetWindowBorderBottomRight())
+		borderLeft = config.GetWindowBorderBottomLeft()
+		borderChar = config.GetWindowBorderBottom()
+		borderRight = config.GetWindowBorderBottomRight()
+	}
+
+	// Build name badge
+	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
+	nameText := nameStyle.Render(" " + windowName + " ")
+	rightCircle := borderStyle.Render(config.GetWindowPillRight())
+	nameBadge := leftCircle + nameText + rightCircle
+
+	nameBadgeWidth := lipgloss.Width(nameBadge)
+	buttonsWidth := lipgloss.Width(buttons)
+
+	// Calculate padding between title and buttons
+	middlePadding := width - nameBadgeWidth - buttonsWidth
+	if middlePadding < 0 {
+		// Not enough space, just show buttons
+		return RightString(buttons, width, color)
+	}
+
+	return borderStyle.Render(borderLeft) +
+		nameBadge +
+		borderStyle.Render(strings.Repeat(borderChar, middlePadding)) +
+		buttons +
+		borderStyle.Render(borderRight)
+}
+
+// renderTitleBadge renders a centered title badge on a border line.
+func renderTitleBadge(windowName string, width int, color color.Color, isTop bool) string {
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
+	borderStyle := style.Foreground(color)
+	nameStyle := baseButtonStyle.Background(color)
+
+	var borderLeft, borderChar, borderRight string
+	if isTop {
+		borderLeft = config.GetWindowBorderTopLeft()
+		borderChar = config.GetWindowBorderTop()
+		borderRight = config.GetWindowBorderTopRight()
+	} else {
+		borderLeft = config.GetWindowBorderBottomLeft()
+		borderChar = config.GetWindowBorderBottom()
+		borderRight = config.GetWindowBorderBottomRight()
+	}
+
+	if windowName == "" {
+		return borderStyle.Render(borderLeft + strings.Repeat(borderChar, width) + borderRight)
+	}
+
+	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
+	nameText := nameStyle.Render(" " + windowName + " ")
+	rightCircle := borderStyle.Render(config.GetWindowPillRight())
+	nameBadge := leftCircle + nameText + rightCircle
+
+	badgeWidth := lipgloss.Width(nameBadge)
+	totalPadding := width - badgeWidth
+
+	if totalPadding < 0 {
+		return borderStyle.Render(borderLeft + strings.Repeat(borderChar, width) + borderRight)
+	}
+
+	leftPadding := totalPadding / 2
+	rightPadding := totalPadding - leftPadding
+
+	return borderStyle.Render(borderLeft+strings.Repeat(borderChar, leftPadding)) +
+		nameBadge +
+		borderStyle.Render(strings.Repeat(borderChar, rightPadding)+borderRight)
+}
+
+func addToBorder(content string, color color.Color, window *terminal.Window, isRenaming bool, renameBuffer string, isTiling bool) string {
+	width := max(lipgloss.Width(content)-2, 0)
+	titlePos := config.WindowTitlePosition
+
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
+
+	// Build window buttons first so we know their width
+	var buttons string
+	var buttonsWidth int
+	if config.HideWindowButtons {
+		buttons = ""
+		buttonsWidth = 0
+	} else {
+		buttonStyle := baseButtonStyle.Background(color)
+		cross := buttonStyle.Render(config.GetWindowButtonClose())
+		dash := buttonStyle.Render(" — ")
+
+		if isTiling {
+			buttons = makeRounded(dash+cross, color)
+		} else {
+			square := buttonStyle.Render(" □ ")
+			buttons = makeRounded(dash+square+cross, color)
+		}
+		buttonsWidth = lipgloss.Width(buttons)
+	}
+
+	// Calculate available width for title based on position
+	var titleMaxWidth int
+	if titlePos == "top" {
+		// Title on top shares space with buttons
+		titleMaxWidth = width - buttonsWidth - 2 // -2 for some padding
+	} else {
+		titleMaxWidth = width
+	}
+
+	windowName := ""
+	if titlePos != "hidden" {
+		windowName = getWindowTitle(window, isRenaming, renameBuffer, titleMaxWidth)
+	}
+
+	borderStyle := style.Foreground(color)
+
+	// Build top border
+	var topBorder string
+	if titlePos == "top" && windowName != "" {
+		// Title on top with buttons on the right
+		topBorder = renderTitleWithButtons(windowName, buttons, width, color, true)
+	} else {
+		// Normal top border with buttons on right
+		topBorder = RightString(buttons, width, color)
+	}
+
+	// Build bottom border
+	var bottomBorder string
+	if titlePos == "bottom" && windowName != "" {
+		bottomBorder = renderTitleBadge(windowName, width, color, false)
+	} else {
+		bottomBorder = borderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderBottom(), width) + config.GetWindowBorderBottomRight())
 	}
 
 	lines := strings.Split(content, "\n")
 	if len(lines) > 0 {
 		lines[len(lines)-1] = bottomBorder
 	}
-	return centered + "\n" + strings.Join(lines, "\n")
+	return topBorder + "\n" + strings.Join(lines, "\n")
 }
 
 func styleToANSI(s lipgloss.Style) (prefix string, suffix string) {

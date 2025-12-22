@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // DebugLevel controls the verbosity of protocol logging.
@@ -68,15 +69,113 @@ func ParseDebugLevel(s string) DebugLevel {
 	}
 }
 
+// LogEntry represents a single log entry in the ring buffer.
+type LogEntry struct {
+	Timestamp int64  `json:"timestamp"`
+	Level     string `json:"level"`
+	Message   string `json:"message"`
+}
+
+// LogBuffer is a ring buffer for storing recent log entries.
+type LogBuffer struct {
+	entries []LogEntry
+	size    int
+	head    int
+	count   int
+	mu      sync.RWMutex
+}
+
+// NewLogBuffer creates a new log buffer with the specified capacity.
+func NewLogBuffer(capacity int) *LogBuffer {
+	return &LogBuffer{
+		entries: make([]LogEntry, capacity),
+		size:    capacity,
+	}
+}
+
+// Add adds a new entry to the buffer.
+func (b *LogBuffer) Add(level, message string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	entry := LogEntry{
+		Timestamp: timeNow().UnixMilli(),
+		Level:     level,
+		Message:   message,
+	}
+
+	b.entries[b.head] = entry
+	b.head = (b.head + 1) % b.size
+	if b.count < b.size {
+		b.count++
+	}
+}
+
+// GetAll returns all entries in chronological order.
+func (b *LogBuffer) GetAll() []LogEntry {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.count == 0 {
+		return nil
+	}
+
+	result := make([]LogEntry, b.count)
+	start := (b.head - b.count + b.size) % b.size
+
+	for i := range b.count {
+		result[i] = b.entries[(start+i)%b.size]
+	}
+
+	return result
+}
+
+// GetLast returns the last n entries in chronological order.
+func (b *LogBuffer) GetLast(n int) []LogEntry {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if n > b.count {
+		n = b.count
+	}
+	if n == 0 {
+		return nil
+	}
+
+	result := make([]LogEntry, n)
+	start := (b.head - n + b.size) % b.size
+
+	for i := range n {
+		result[i] = b.entries[(start+i)%b.size]
+	}
+
+	return result
+}
+
+// Clear clears the buffer.
+func (b *LogBuffer) Clear() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.head = 0
+	b.count = 0
+}
+
+// timeNow is a variable to allow testing
+var timeNow = time.Now
+
 var (
 	currentDebugLevel DebugLevel = DebugOff
 	debugMu           sync.RWMutex
 	debugLogger       *log.Logger
+	logBuffer         *LogBuffer
 )
 
 func init() {
 	// Initialize default logger
 	debugLogger = log.New(os.Stderr, "[TUIOS] ", log.LstdFlags|log.Lmicroseconds)
+
+	// Initialize log buffer with 1000 entries
+	logBuffer = NewLogBuffer(1000)
 
 	// Check environment variable for initial debug level
 	if level := os.Getenv("TUIOS_LOG_LEVEL"); level != "" {
@@ -107,11 +206,19 @@ func SetDebugOutput(w io.Writer) {
 
 // ProtocolLog logs a message at the specified level.
 func ProtocolLog(level DebugLevel, format string, args ...any) {
+	message := fmt.Sprintf(format, args...)
+
+	// Always store in buffer (regardless of debug level)
+	if logBuffer != nil {
+		logBuffer.Add(level.String(), message)
+	}
+
+	// Only print if debug level is high enough
 	if GetDebugLevel() >= level {
 		debugMu.RLock()
 		logger := debugLogger
 		debugMu.RUnlock()
-		logger.Printf(format, args...)
+		logger.Print(message)
 	}
 }
 
@@ -189,6 +296,9 @@ func MessageTypeName(t MessageType) string {
 		MsgUpdateState:      "UpdateState",
 		MsgSubscribePTY:     "SubscribePTY",
 		MsgGetTerminalState: "GetTerminalState",
+		MsgExecuteCommand:   "ExecuteCommand",
+		MsgSendKeys:         "SendKeys",
+		MsgSetConfig:        "SetConfig",
 		MsgWelcome:          "Welcome",
 		MsgAttached:         "Attached",
 		MsgDetached:         "Detached",
@@ -204,6 +314,10 @@ func MessageTypeName(t MessageType) string {
 		MsgPTYOutput:        "PTYOutput",
 		MsgStateData:        "StateData",
 		MsgTerminalState:    "TerminalState",
+		MsgCommandResult:    "CommandResult",
+		MsgRemoteCommand:    "RemoteCommand",
+		MsgGetLogs:          "GetLogs",
+		MsgLogsData:         "LogsData",
 	}
 	if name, ok := names[t]; ok {
 		return name
@@ -306,4 +420,23 @@ func truncateID(id string) string {
 		return id[:8]
 	}
 	return id
+}
+
+// GetLogEntries returns the last n log entries.
+// If n <= 0, returns all entries.
+func GetLogEntries(n int) []LogEntry {
+	if logBuffer == nil {
+		return nil
+	}
+	if n <= 0 {
+		return logBuffer.GetAll()
+	}
+	return logBuffer.GetLast(n)
+}
+
+// ClearLogBuffer clears all log entries.
+func ClearLogBuffer() {
+	if logBuffer != nil {
+		logBuffer.Clear()
+	}
 }

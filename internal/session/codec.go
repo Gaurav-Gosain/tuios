@@ -164,4 +164,21 @@ func init() {
 	gob.Register(map[int]string{})
 	gob.Register(map[string]int{})
 	gob.Register(map[int]*SerializedBSPTree{})
+	gob.Register(map[string]interface{}{})
+	// Slice types used in command result Data field
+	gob.Register([]map[string]interface{}{})
+	gob.Register([]int{})
+	gob.Register([]string{})
+
+	// Remote command payloads
+	gob.Register(ExecuteCommandPayload{})
+	gob.Register(SendKeysPayload{})
+	gob.Register(SetConfigPayload{})
+	gob.Register(RemoteCommandPayload{})
+	gob.Register(CommandResultPayload{})
+	gob.Register(GetLogsPayload{})
+	gob.Register(LogsDataPayload{})
+	gob.Register(WindowListPayload{})
+	gob.Register(QueryWindowsPayload{})
+	gob.Register(QuerySessionPayload{})
 }

@@ -15,6 +15,8 @@ TUIOS Tape is a domain-specific language (DSL) for automating terminal window ma
 7. [Timing and Synchronization](#timing-and-synchronization)
 8. [Best Practices](#best-practices)
 9. [Examples](#examples)
+10. [Running Tape Scripts](#running-tape-scripts)
+11. [Remote Tape Execution](#remote-tape-execution)
 
 ---
 
@@ -690,6 +692,97 @@ Create scripts from live interactions (coming soon):
 ```bash
 tuios tape record output.tape
 ```
+
+---
+
+## Remote Tape Execution
+
+The `tuios tape exec` command allows you to run tape scripts against an already running TUIOS session. This enables automation workflows where TUIOS is running in daemon mode or in another terminal.
+
+### Basic Usage
+
+```bash
+# Execute a tape script against the current session
+tuios tape exec script.tape
+
+# Execute against a specific session
+tuios tape exec --session mysession script.tape
+tuios tape exec -s mysession script.tape
+```
+
+### Progress Display
+
+Remote execution shows a progress indicator during script execution:
+
+```
+Executing script.tape...
+Progress: 5/12 [███████░░░░░░░░░░░░░] 41%
+```
+
+### Use Cases
+
+**Automation pipelines:**
+```bash
+# Start a session in the background
+tuios new automation &
+sleep 2
+
+# Execute setup script
+tuios tape exec -s automation setup.tape
+
+# Run tests
+tuios tape exec -s automation test-workflow.tape
+
+# Cleanup
+tuios kill-session automation
+```
+
+**Development workflows:**
+```bash
+# In terminal 1: Start TUIOS
+tuios new dev
+
+# In terminal 2: Send scripts to configure environment
+tuios tape exec -s dev environment-setup.tape
+```
+
+**Integration testing:**
+```bash
+#!/bin/bash
+# Run multiple scripts and check results
+
+tuios tape exec test-suite-1.tape
+tuios tape exec test-suite-2.tape
+
+# Query state after tests
+WINDOWS=$(tuios list-windows --json | jq '.total')
+echo "Test created $WINDOWS windows"
+```
+
+### Combining with CLI Commands
+
+Remote tape execution works seamlessly with other CLI commands:
+
+```bash
+# Execute script then query state
+tuios tape exec setup.tape
+tuios session-info --json | jq '.total_windows'
+
+# Execute script and capture window ID
+tuios tape exec create-window.tape
+WINDOW_ID=$(tuios get-window --json | jq -r '.id')
+echo "Created window: $WINDOW_ID"
+```
+
+### Differences from `tape play`
+
+| Feature | `tape play` | `tape exec` |
+|---------|-------------|-------------|
+| Starts TUIOS | Yes | No (requires running session) |
+| Shows TUI | Yes | No (progress bar only) |
+| Interactive | Yes | No |
+| For automation | No | Yes |
+| Session persistence | No | Yes (works with daemon) |
 
 ---
 

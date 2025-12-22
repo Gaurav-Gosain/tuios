@@ -103,6 +103,16 @@ func runDaemonSession(sessionName string, createNew bool) error {
 
 	config.HideWindowButtons = hideWindowButtons || userConfig.Appearance.HideWindowButtons
 
+	if windowTitlePosition == "" {
+		if userConfig.Appearance.WindowTitlePosition != "" {
+			config.WindowTitlePosition = userConfig.Appearance.WindowTitlePosition
+		}
+	} else {
+		config.WindowTitlePosition = windowTitlePosition
+	}
+
+	config.HideClock = hideClock || userConfig.Appearance.HideClock
+
 	finalScrollbackLines := userConfig.Appearance.ScrollbackLines
 	if scrollbackLines > 0 {
 		if scrollbackLines < 100 {
@@ -203,6 +213,29 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(filterMouseMotion),
 	)
+
+	// Set up remote command handler for CLI-initiated commands
+	// This handler sends messages to the Bubble Tea program which processes them in the main loop
+	log.Printf("[CLIENT] Setting up remote command handler")
+	client.OnRemoteCommand(func(payload *session.RemoteCommandPayload) error {
+		// Send a Bubble Tea message to handle the command in the main loop
+		// Use Send which is safe to call from any goroutine
+		go func() {
+			p.Send(app.RemoteCommandMsg{
+				CommandType: payload.CommandType,
+				TapeCommand: payload.TapeCommand,
+				TapeArgs:    payload.TapeArgs,
+				TapeScript:  payload.TapeScript,
+				Keys:        payload.Keys,
+				Literal:     payload.Literal,
+				Raw:         payload.Raw,
+				ConfigPath:  payload.ConfigPath,
+				ConfigValue: payload.ConfigValue,
+				RequestID:   payload.RequestID,
+			})
+		}()
+		return nil // Don't report error here - it will be handled by the Update loop
+	})
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)

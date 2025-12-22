@@ -349,3 +349,373 @@ func BenchmarkMessageDecode(b *testing.B) {
 		_, _ = ReadMessage(reader)
 	}
 }
+
+// TestExecuteCommandPayload tests execute command payload encoding
+func TestExecuteCommandPayload(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload *ExecuteCommandPayload
+	}{
+		{
+			name: "simple command",
+			payload: &ExecuteCommandPayload{
+				SessionName: "test",
+				CommandType: "NewWindow",
+				RequestID:   "req-123",
+			},
+		},
+		{
+			name: "command with args",
+			payload: &ExecuteCommandPayload{
+				SessionName: "test",
+				CommandType: "SwitchWorkspace",
+				Args:        []string{"2"},
+				RequestID:   "req-456",
+			},
+		},
+		{
+			name: "tape script",
+			payload: &ExecuteCommandPayload{
+				SessionName: "",
+				TapeScript:  "NewWindow\nType hello\nEnter",
+				RequestID:   "req-789",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, err := NewMessage(MsgExecuteCommand, tt.payload)
+			if err != nil {
+				t.Fatalf("NewMessage failed: %v", err)
+			}
+
+			var buf bytes.Buffer
+			if err := WriteMessage(&buf, msg); err != nil {
+				t.Fatalf("WriteMessage failed: %v", err)
+			}
+
+			readMsg, err := ReadMessage(&buf)
+			if err != nil {
+				t.Fatalf("ReadMessage failed: %v", err)
+			}
+
+			var decoded ExecuteCommandPayload
+			if err := readMsg.ParsePayload(&decoded); err != nil {
+				t.Fatalf("ParsePayload failed: %v", err)
+			}
+
+			if decoded.CommandType != tt.payload.CommandType {
+				t.Errorf("CommandType mismatch: got %s, want %s", decoded.CommandType, tt.payload.CommandType)
+			}
+			if decoded.RequestID != tt.payload.RequestID {
+				t.Errorf("RequestID mismatch: got %s, want %s", decoded.RequestID, tt.payload.RequestID)
+			}
+		})
+	}
+}
+
+// TestCommandResultPayload tests command result payload with data
+func TestCommandResultPayload(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload *CommandResultPayload
+	}{
+		{
+			name: "success without data",
+			payload: &CommandResultPayload{
+				RequestID: "req-123",
+				Success:   true,
+				Message:   "command executed",
+			},
+		},
+		{
+			name: "success with window data",
+			payload: &CommandResultPayload{
+				RequestID: "req-456",
+				Success:   true,
+				Message:   "window created",
+				Data: map[string]interface{}{
+					"window_id": "win-abc123",
+					"name":      "My Terminal",
+				},
+			},
+		},
+		{
+			name: "failure",
+			payload: &CommandResultPayload{
+				RequestID: "req-789",
+				Success:   false,
+				Message:   "window not found",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, err := NewMessage(MsgCommandResult, tt.payload)
+			if err != nil {
+				t.Fatalf("NewMessage failed: %v", err)
+			}
+
+			var buf bytes.Buffer
+			if err := WriteMessage(&buf, msg); err != nil {
+				t.Fatalf("WriteMessage failed: %v", err)
+			}
+
+			readMsg, err := ReadMessage(&buf)
+			if err != nil {
+				t.Fatalf("ReadMessage failed: %v", err)
+			}
+
+			var decoded CommandResultPayload
+			if err := readMsg.ParsePayload(&decoded); err != nil {
+				t.Fatalf("ParsePayload failed: %v", err)
+			}
+
+			if decoded.Success != tt.payload.Success {
+				t.Errorf("Success mismatch: got %v, want %v", decoded.Success, tt.payload.Success)
+			}
+			if decoded.Message != tt.payload.Message {
+				t.Errorf("Message mismatch: got %s, want %s", decoded.Message, tt.payload.Message)
+			}
+
+			// Check data if present
+			if tt.payload.Data != nil {
+				if decoded.Data == nil {
+					t.Fatal("Expected Data to be present")
+				}
+				for k, v := range tt.payload.Data {
+					if decoded.Data[k] != v {
+						t.Errorf("Data[%s] mismatch: got %v, want %v", k, decoded.Data[k], v)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestSendKeysPayload tests send keys payload encoding
+func TestSendKeysPayload(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload *SendKeysPayload
+	}{
+		{
+			name: "normal keys",
+			payload: &SendKeysPayload{
+				SessionName: "",
+				Keys:        "ctrl+b q",
+				RequestID:   "req-123",
+			},
+		},
+		{
+			name: "literal mode",
+			payload: &SendKeysPayload{
+				SessionName: "",
+				Keys:        "echo hello",
+				Literal:     true,
+				RequestID:   "req-456",
+			},
+		},
+		{
+			name: "raw mode",
+			payload: &SendKeysPayload{
+				SessionName: "",
+				Keys:        "hello world",
+				Raw:         true,
+				RequestID:   "req-789",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, err := NewMessage(MsgSendKeys, tt.payload)
+			if err != nil {
+				t.Fatalf("NewMessage failed: %v", err)
+			}
+
+			var buf bytes.Buffer
+			if err := WriteMessage(&buf, msg); err != nil {
+				t.Fatalf("WriteMessage failed: %v", err)
+			}
+
+			readMsg, err := ReadMessage(&buf)
+			if err != nil {
+				t.Fatalf("ReadMessage failed: %v", err)
+			}
+
+			var decoded SendKeysPayload
+			if err := readMsg.ParsePayload(&decoded); err != nil {
+				t.Fatalf("ParsePayload failed: %v", err)
+			}
+
+			if decoded.Keys != tt.payload.Keys {
+				t.Errorf("Keys mismatch: got %s, want %s", decoded.Keys, tt.payload.Keys)
+			}
+			if decoded.Literal != tt.payload.Literal {
+				t.Errorf("Literal mismatch: got %v, want %v", decoded.Literal, tt.payload.Literal)
+			}
+			if decoded.Raw != tt.payload.Raw {
+				t.Errorf("Raw mismatch: got %v, want %v", decoded.Raw, tt.payload.Raw)
+			}
+		})
+	}
+}
+
+// TestRemoteCommandPayload tests remote command payload encoding
+func TestRemoteCommandPayload(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload *RemoteCommandPayload
+	}{
+		{
+			name: "tape command",
+			payload: &RemoteCommandPayload{
+				RequestID:   "req-123",
+				CommandType: "tape_command",
+				TapeCommand: "NewWindow",
+				TapeArgs:    []string{"My Window"},
+			},
+		},
+		{
+			name: "send keys",
+			payload: &RemoteCommandPayload{
+				RequestID:   "req-456",
+				CommandType: "send_keys",
+				Keys:        "ctrl+b n",
+				Raw:         false,
+			},
+		},
+		{
+			name: "send keys raw",
+			payload: &RemoteCommandPayload{
+				RequestID:   "req-789",
+				CommandType: "send_keys",
+				Keys:        "hello world",
+				Raw:         true,
+			},
+		},
+		{
+			name: "set config",
+			payload: &RemoteCommandPayload{
+				RequestID:   "req-abc",
+				CommandType: "set_config",
+				ConfigPath:  "dockbar_position",
+				ConfigValue: "top",
+			},
+		},
+		{
+			name: "tape script",
+			payload: &RemoteCommandPayload{
+				RequestID:   "req-def",
+				CommandType: "tape_script",
+				TapeScript:  "NewWindow\nSleep 500ms\nType hello",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, err := NewMessage(MsgRemoteCommand, tt.payload)
+			if err != nil {
+				t.Fatalf("NewMessage failed: %v", err)
+			}
+
+			var buf bytes.Buffer
+			if err := WriteMessage(&buf, msg); err != nil {
+				t.Fatalf("WriteMessage failed: %v", err)
+			}
+
+			readMsg, err := ReadMessage(&buf)
+			if err != nil {
+				t.Fatalf("ReadMessage failed: %v", err)
+			}
+
+			var decoded RemoteCommandPayload
+			if err := readMsg.ParsePayload(&decoded); err != nil {
+				t.Fatalf("ParsePayload failed: %v", err)
+			}
+
+			if decoded.CommandType != tt.payload.CommandType {
+				t.Errorf("CommandType mismatch: got %s, want %s", decoded.CommandType, tt.payload.CommandType)
+			}
+			if decoded.TapeCommand != tt.payload.TapeCommand {
+				t.Errorf("TapeCommand mismatch: got %s, want %s", decoded.TapeCommand, tt.payload.TapeCommand)
+			}
+			if decoded.Keys != tt.payload.Keys {
+				t.Errorf("Keys mismatch: got %s, want %s", decoded.Keys, tt.payload.Keys)
+			}
+			if decoded.Raw != tt.payload.Raw {
+				t.Errorf("Raw mismatch: got %v, want %v", decoded.Raw, tt.payload.Raw)
+			}
+		})
+	}
+}
+
+// TestCodecNegotiation tests codec negotiation logic
+func TestCodecNegotiation(t *testing.T) {
+	tests := []struct {
+		preferred string
+		expected  CodecType
+	}{
+		{"gob", CodecGob},
+		{"GOB", CodecGob},
+		{"json", CodecJSON},
+		{"JSON", CodecJSON},
+		{"", CodecGob},        // default
+		{"unknown", CodecGob}, // unknown defaults to gob
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.preferred, func(t *testing.T) {
+			codec := NegotiateCodec(tt.preferred)
+			if codec.Type() != tt.expected {
+				t.Errorf("NegotiateCodec(%s) = %v, want %v", tt.preferred, codec.Type(), tt.expected)
+			}
+		})
+	}
+}
+
+// TestJSONCodec tests JSON codec encoding/decoding
+func TestJSONCodec(t *testing.T) {
+	codec := GetCodec(CodecJSON)
+
+	payload := &HelloPayload{
+		Version:        "1.0.0",
+		Term:           "xterm-256color",
+		PreferredCodec: "json",
+	}
+
+	// Encode
+	msg, err := NewMessageWithCodec(MsgHello, payload, codec)
+	if err != nil {
+		t.Fatalf("NewMessageWithCodec failed: %v", err)
+	}
+
+	// Write and read
+	var buf bytes.Buffer
+	if err := WriteMessageWithCodec(&buf, msg, codec); err != nil {
+		t.Fatalf("WriteMessageWithCodec failed: %v", err)
+	}
+
+	readMsg, codecType, err := ReadMessageWithCodec(&buf)
+	if err != nil {
+		t.Fatalf("ReadMessageWithCodec failed: %v", err)
+	}
+
+	if codecType != CodecJSON {
+		t.Errorf("Expected JSON codec, got %v", codecType)
+	}
+
+	// Decode
+	var decoded HelloPayload
+	if err := readMsg.ParsePayloadWithCodec(&decoded, codec); err != nil {
+		t.Fatalf("ParsePayloadWithCodec failed: %v", err)
+	}
+
+	if decoded.Version != payload.Version {
+		t.Errorf("Version mismatch: got %s, want %s", decoded.Version, payload.Version)
+	}
+}

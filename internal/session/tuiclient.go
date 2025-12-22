@@ -9,6 +9,18 @@ import (
 	"time"
 )
 
+// RemoteCommandHandler is a callback for handling remote commands from the CLI.
+// It receives the command payload and returns success/error.
+type RemoteCommandHandler func(payload *RemoteCommandPayload) error
+
+// QueryWindowsHandler is a callback for handling window queries from the CLI.
+// It receives the query payload and should return a WindowListPayload.
+type QueryWindowsHandler func(requestID string) *WindowListPayload
+
+// QuerySessionHandler is a callback for handling session queries from the CLI.
+// It receives the query payload and should return a SessionInfoPayload.
+type QuerySessionHandler func(requestID string) *SessionInfoPayload
+
 // TUIClient is used by the TUIOS TUI to communicate with the daemon.
 // It handles PTY I/O and state synchronization.
 type TUIClient struct {
@@ -32,6 +44,15 @@ type TUIClient struct {
 	// PTY closed handlers - called when a PTY process exits
 	ptyClosedHandlers   map[string]func()
 	ptyClosedHandlersMu sync.RWMutex
+
+	// Remote command handler - called when a remote command is received
+	remoteCommandHandler RemoteCommandHandler
+	remoteCommandMu      sync.RWMutex
+
+	// Query handlers - called when the CLI queries for information
+	queryWindowsHandler QueryWindowsHandler
+	querySessionHandler QuerySessionHandler
+	queryHandlersMu     sync.RWMutex
 
 	// Request/response handling for synchronous calls after readLoop starts
 	pendingResponses   map[MessageType]chan *Message
@@ -234,6 +255,65 @@ func (c *TUIClient) OnPTYClosed(ptyID string, handler func()) {
 	c.ptyClosedHandlersMu.Unlock()
 }
 
+// OnRemoteCommand registers a handler for remote commands from the CLI.
+// The handler should execute the command and return an error if it fails.
+func (c *TUIClient) OnRemoteCommand(handler RemoteCommandHandler) {
+	c.remoteCommandMu.Lock()
+	c.remoteCommandHandler = handler
+	c.remoteCommandMu.Unlock()
+}
+
+// OnQueryWindows registers a handler for window list queries.
+func (c *TUIClient) OnQueryWindows(handler QueryWindowsHandler) {
+	c.queryHandlersMu.Lock()
+	c.queryWindowsHandler = handler
+	c.queryHandlersMu.Unlock()
+}
+
+// OnQuerySession registers a handler for session info queries.
+func (c *TUIClient) OnQuerySession(handler QuerySessionHandler) {
+	c.queryHandlersMu.Lock()
+	c.querySessionHandler = handler
+	c.queryHandlersMu.Unlock()
+}
+
+// SendWindowList sends a window list response back to the daemon.
+func (c *TUIClient) SendWindowList(payload *WindowListPayload) error {
+	msg, err := NewMessageWithCodec(MsgWindowList, payload, c.codec)
+	if err != nil {
+		return err
+	}
+	return c.send(msg)
+}
+
+// SendSessionInfo sends a session info response back to the daemon.
+func (c *TUIClient) SendSessionInfo(payload *SessionInfoPayload) error {
+	msg, err := NewMessageWithCodec(MsgSessionInfo, payload, c.codec)
+	if err != nil {
+		return err
+	}
+	return c.send(msg)
+}
+
+// SendCommandResult sends the result of a remote command execution back to the daemon.
+func (c *TUIClient) SendCommandResult(requestID string, success bool, message string) error {
+	return c.SendCommandResultWithData(requestID, success, message, nil)
+}
+
+// SendCommandResultWithData sends the result with optional structured data.
+func (c *TUIClient) SendCommandResultWithData(requestID string, success bool, message string, data map[string]interface{}) error {
+	msg, err := NewMessageWithCodec(MsgCommandResult, &CommandResultPayload{
+		RequestID: requestID,
+		Success:   success,
+		Message:   message,
+		Data:      data,
+	}, c.codec)
+	if err != nil {
+		return err
+	}
+	return c.send(msg)
+}
+
 // WritePTY sends input to a PTY.
 func (c *TUIClient) WritePTY(ptyID string, data []byte) error {
 	c.mu.Lock()
@@ -427,6 +507,71 @@ func (c *TUIClient) handleMessage(msg *Message) {
 	case MsgSessionEnded:
 		// Session ended
 		close(c.done)
+
+	case MsgRemoteCommand:
+		// Remote command from CLI routed through daemon
+		var payload RemoteCommandPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[REMOTE] Failed to parse remote command: %v", err)
+			return
+		}
+
+		debugLog("[REMOTE] Received command: type=%s, tapeCmd=%s, args=%v, keys=%s", payload.CommandType, payload.TapeCommand, payload.TapeArgs, payload.Keys)
+
+		c.remoteCommandMu.RLock()
+		handler := c.remoteCommandHandler
+		c.remoteCommandMu.RUnlock()
+
+		if handler != nil {
+			debugLog("[REMOTE] Executing command with handler")
+			if err := handler(&payload); err != nil {
+				debugLog("[REMOTE] Command handler error: %v", err)
+				// Only send error result here - success results are sent by the actual command handler
+				// in update.go after the command executes (with proper data)
+				_ = c.SendCommandResult(payload.RequestID, false, err.Error())
+			}
+			// Don't send success result here - let update.go send it with the actual data
+		} else {
+			debugLog("[REMOTE] No handler registered for remote commands")
+		}
+
+	case MsgQueryWindows:
+		// Query for window list
+		var payload QueryWindowsPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[QUERY] Failed to parse query windows: %v", err)
+			return
+		}
+
+		c.queryHandlersMu.RLock()
+		handler := c.queryWindowsHandler
+		c.queryHandlersMu.RUnlock()
+
+		if handler != nil {
+			result := handler(payload.RequestID)
+			if result != nil {
+				_ = c.SendWindowList(result)
+			}
+		}
+
+	case MsgQuerySession:
+		// Query for session info
+		var payload QuerySessionPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[QUERY] Failed to parse query session: %v", err)
+			return
+		}
+
+		c.queryHandlersMu.RLock()
+		handler := c.querySessionHandler
+		c.queryHandlersMu.RUnlock()
+
+		if handler != nil {
+			result := handler(payload.RequestID)
+			if result != nil {
+				_ = c.SendSessionInfo(result)
+			}
+		}
 	}
 }
 

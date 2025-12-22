@@ -23,13 +23,19 @@ type Executor interface {
 
 	// Window management
 	CreateNewWindow() error
+	CreateNewWindowWithName(name string) error
 	CloseWindow(windowID string) error
+	CloseWindowByName(name string) error // Closes all windows with matching name
 	NextWindow() error
 	PrevWindow() error
 	FocusWindowByID(windowID string) error
+	FocusWindowByName(name string) error // Errors if multiple matches
 	RenameWindowByID(windowID, name string) error
+	RenameWindowByName(oldName, newName string) error // Errors if multiple matches
 	MinimizeWindowByID(windowID string) error
+	MinimizeWindowByName(name string) error // Errors if multiple matches
 	RestoreWindowByID(windowID string) error
+	RestoreWindowByName(name string) error // Errors if multiple matches
 
 	// Tiling
 	ToggleTiling() error
@@ -53,6 +59,14 @@ type Executor interface {
 	EnableAnimations() error
 	DisableAnimations() error
 	ToggleAnimations() error
+
+	// Config commands for runtime configuration
+	SetConfig(path, value string) error
+	SetTheme(themeName string) error
+	SetDockbarPosition(position string) error
+	SetBorderStyle(style string) error
+	ShowNotificationCmd(message, notificationType string) error
+	FocusDirection(direction string) error
 }
 
 // CommandExecutor provides a default implementation
@@ -101,9 +115,15 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 
 	// Window management
 	case CommandTypeNewWindow:
+		if len(cmd.Args) > 0 && cmd.Args[0] != "" {
+			return ce.executor.CreateNewWindowWithName(cmd.Args[0])
+		}
 		return ce.executor.CreateNewWindow()
 
 	case CommandTypeCloseWindow:
+		if len(cmd.Args) > 0 && cmd.Args[0] != "" {
+			return ce.executor.CloseWindowByName(cmd.Args[0])
+		}
 		return ce.executor.CloseWindow(ce.executor.GetFocusedWindowID())
 
 	case CommandTypeNextWindow:
@@ -113,19 +133,34 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		return ce.executor.PrevWindow()
 
 	case CommandTypeFocusWindow:
-		if len(cmd.Args) > 0 {
-			return ce.executor.FocusWindowByID(cmd.Args[0])
+		if len(cmd.Args) > 0 && cmd.Args[0] != "" {
+			// Try as name first (more user-friendly), fall back to ID
+			if err := ce.executor.FocusWindowByName(cmd.Args[0]); err != nil {
+				// If name lookup fails, try as ID
+				return ce.executor.FocusWindowByID(cmd.Args[0])
+			}
+			return nil
 		}
 
 	case CommandTypeRenameWindow:
-		if len(cmd.Args) > 0 {
+		if len(cmd.Args) >= 2 {
+			// Two args: old name, new name
+			return ce.executor.RenameWindowByName(cmd.Args[0], cmd.Args[1])
+		} else if len(cmd.Args) == 1 {
+			// One arg: rename focused window
 			return ce.executor.RenameWindowByID(ce.executor.GetFocusedWindowID(), cmd.Args[0])
 		}
 
 	case CommandTypeMinimizeWindow:
+		if len(cmd.Args) > 0 && cmd.Args[0] != "" {
+			return ce.executor.MinimizeWindowByName(cmd.Args[0])
+		}
 		return ce.executor.MinimizeWindowByID(ce.executor.GetFocusedWindowID())
 
 	case CommandTypeRestoreWindow:
+		if len(cmd.Args) > 0 && cmd.Args[0] != "" {
+			return ce.executor.RestoreWindowByName(cmd.Args[0])
+		}
 		return ce.executor.RestoreWindowByID(ce.executor.GetFocusedWindowID())
 
 	// Tiling
@@ -226,6 +261,47 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 
 	case CommandTypeToggleAnimations:
 		return ce.executor.ToggleAnimations()
+
+	// Config commands
+	case CommandTypeSetConfig:
+		if len(cmd.Args) >= 2 {
+			return ce.executor.SetConfig(cmd.Args[0], cmd.Args[1])
+		}
+		return nil
+
+	case CommandTypeSetTheme:
+		if len(cmd.Args) > 0 {
+			return ce.executor.SetTheme(cmd.Args[0])
+		}
+		return nil
+
+	case CommandTypeSetDockbarPosition:
+		if len(cmd.Args) > 0 {
+			return ce.executor.SetDockbarPosition(cmd.Args[0])
+		}
+		return nil
+
+	case CommandTypeSetBorderStyle:
+		if len(cmd.Args) > 0 {
+			return ce.executor.SetBorderStyle(cmd.Args[0])
+		}
+		return nil
+
+	case CommandTypeShowNotification:
+		if len(cmd.Args) > 0 {
+			notifType := "info"
+			if len(cmd.Args) > 1 {
+				notifType = cmd.Args[1]
+			}
+			return ce.executor.ShowNotificationCmd(cmd.Args[0], notifType)
+		}
+		return nil
+
+	case CommandTypeFocusDirection:
+		if len(cmd.Args) > 0 {
+			return ce.executor.FocusDirection(strings.ToLower(cmd.Args[0]))
+		}
+		return nil
 
 	// Other command types are handled elsewhere or ignored
 	default:

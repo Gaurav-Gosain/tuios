@@ -622,6 +622,27 @@ func (c *Client) SessionName() string {
 	return c.sessionName
 }
 
+// SendControlMessage sends a control message to the daemon and waits for a response.
+// This is used for CLI commands that need to send messages without attaching to a session.
+func (c *Client) SendControlMessage(msg *Message) (*Message, error) {
+	if err := c.send(msg); err != nil {
+		return nil, fmt.Errorf("failed to send message: %w", err)
+	}
+
+	// Wait for response
+	resp, err := c.recv()
+	if err != nil {
+		return nil, fmt.Errorf("failed to receive response: %w", err)
+	}
+
+	return resp, nil
+}
+
+// GetCodec returns the negotiated codec for this client.
+func (c *Client) GetCodec() Codec {
+	return c.codec
+}
+
 // detectTerminalEnv detects TERM and COLORTERM values.
 func detectTerminalEnv() (termType, colorTerm string) {
 	// Check environment first

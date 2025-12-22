@@ -172,6 +172,11 @@ func handleRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Don't allow rename if window titles are hidden
+	if config.WindowTitlePosition == "hidden" {
+		return o, nil
+	}
+
 	// Otherwise, rename window
 	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		focusedWindow := o.GetFocusedWindow()

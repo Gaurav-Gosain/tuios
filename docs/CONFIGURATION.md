@@ -257,6 +257,47 @@ Controls the number of lines stored in the scrollback buffer for each terminal w
 
 **CLI override:** `--scrollback-lines <number>`
 
+### window_title_position
+
+Controls where window titles are displayed. Titles show the custom name if set by the user, otherwise the terminal's title (e.g., from shell prompt).
+
+**Valid values:**
+- `"bottom"` - Show title centered on the bottom border (default)
+- `"top"` - Show title centered on the top border (with window buttons on the right)
+- `"hidden"` - Hide window titles entirely
+
+**Default:** `"bottom"`
+
+**Note:** When set to `"hidden"`, the rename window keybinding (`r`) is disabled since there's no visible title to rename.
+
+**CLI override:** `--window-title-position <position>`
+
+### hide_clock
+
+Controls whether the clock/status overlay is hidden.
+
+**Valid values:**
+- `false` - Show clock (default)
+- `true` - Hide clock
+
+**Default:** `false`
+
+**Note:** The clock will still appear when recording a tape (red background) or when prefix mode is active (shows "PREFIX | time").
+
+**CLI override:** `--hide-clock`
+
+### animations_enabled
+
+Controls whether UI animations are enabled.
+
+**Valid values:**
+- `true` - Enable animations (default)
+- `false` - Disable animations for instant transitions
+
+**Default:** `true`
+
+**CLI override:** `--no-animations`
+
 ## Keybindings Prefix Configuration
 
 ### leader_key

@@ -55,6 +55,8 @@ TUIOS supports 9 workspaces for organizing windows.
 
 ### Manual Snapping (Non-Tiling Mode)
 
+#### Keyboard Snapping
+
 | Key | Action |
 |-----|--------|
 | `h` | Snap window to left half |
@@ -65,6 +67,22 @@ TUIOS supports 9 workspaces for organizing windows.
 | `2` | Snap to top-right corner |
 | `3` | Snap to bottom-left corner |
 | `4` | Snap to bottom-right corner |
+
+#### Mouse Edge Snapping
+
+In floating mode (non-tiling), drag a window to the screen edges to snap it:
+
+| Edge | Action |
+|------|--------|
+| Top center | Fullscreen |
+| Left edge | Snap to left half |
+| Right edge | Snap to right half |
+| Top-left corner | Snap to top-left quarter |
+| Top-right corner | Snap to top-right quarter |
+| Bottom-left corner | Snap to bottom-left quarter |
+| Bottom-right corner | Snap to bottom-right quarter |
+
+The edge detection zone is 5 pixels from the screen edge. Simply drag a window by its title bar and release when the cursor reaches the desired edge.
 
 ### Tiling Mode
 

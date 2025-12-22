@@ -80,6 +80,16 @@ func runLocal() error {
 
 	config.HideWindowButtons = hideWindowButtons || userConfig.Appearance.HideWindowButtons
 
+	if windowTitlePosition == "" {
+		if userConfig.Appearance.WindowTitlePosition != "" {
+			config.WindowTitlePosition = userConfig.Appearance.WindowTitlePosition
+		}
+	} else {
+		config.WindowTitlePosition = windowTitlePosition
+	}
+
+	config.HideClock = hideClock || userConfig.Appearance.HideClock
+
 	finalScrollbackLines := userConfig.Appearance.ScrollbackLines
 	if scrollbackLines > 0 {
 		if scrollbackLines < 100 {

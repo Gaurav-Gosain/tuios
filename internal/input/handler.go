@@ -308,7 +308,8 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	case ",", "r":
 		// Rename window (like tmux with ',' or like normal mode with 'r')
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+		// Skip if window titles are hidden
+		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
 				o.RenamingWindow = true

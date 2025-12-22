@@ -25,6 +25,50 @@ type ScriptCommandMsg struct {
 	Command *tape.Command
 }
 
+// RemoteCommandMsg represents a remote command from the CLI.
+// This allows remote commands to be processed through the normal message handling flow.
+type RemoteCommandMsg struct {
+	CommandType string   // "tape_command", "send_keys", "set_config", "tape_script"
+	TapeCommand string   // For tape commands (single command)
+	TapeArgs    []string // Arguments for tape command
+	TapeScript  string   // For tape_script (full script content)
+	Keys        string   // For send_keys
+	Literal     bool     // For send_keys (send to PTY)
+	Raw         bool     // For send_keys (no splitting on space/comma)
+	ConfigPath  string   // For set_config
+	ConfigValue string   // For set_config
+	RequestID   string   // For response tracking
+}
+
+// RemoteKeyMsg represents a single key to be processed from a remote send-keys command.
+// Keys are sent one at a time to allow proper sequential processing.
+type RemoteKeyMsg struct {
+	Key           tea.KeyPressMsg   // The key to process
+	RemainingKeys []tea.KeyPressMsg // Keys still to be processed
+	RequestID     string            // For response tracking on last key
+}
+
+// RemoteKeysDoneMsg signals that all remote keys have been processed.
+// This triggers a final cleanup/retile.
+type RemoteKeysDoneMsg struct {
+	RequestID string
+}
+
+// RemoteTapeCommandMsg represents a single tape command from a remote script.
+// Commands are processed one at a time to allow proper sequential execution.
+type RemoteTapeCommandMsg struct {
+	Command           tape.Command   // The command to execute
+	RemainingCommands []tape.Command // Commands still to be processed
+	RequestID         string         // For response tracking on last command
+	CommandIndex      int            // 0-based index of current command (for progress display)
+	TotalCommands     int            // Total number of commands in script
+}
+
+// RemoteTapeScriptDoneMsg signals that all tape commands have been processed.
+type RemoteTapeScriptDoneMsg struct {
+	RequestID string
+}
+
 // InputHandler is a function type that handles input messages.
 // This allows the Update method to delegate to the input package without creating a circular dependency.
 type InputHandler func(msg tea.Msg, o *OS) (tea.Model, tea.Cmd)
@@ -279,6 +323,9 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.LogInfo("[RESIZE] Retiling restored session to fit new terminal size (%dx%d -> %dx%d)",
 					oldWidth, oldHeight, msg.Width, msg.Height)
 				m.TileAllWindows()
+			} else {
+				// In floating mode, clamp windows back into view
+				m.ClampWindowsToView()
 			}
 			return m, nil
 		}
@@ -286,6 +333,9 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Retile windows if in tiling mode
 		if m.AutoTiling {
 			m.TileAllWindows()
+		} else if msg.Width < oldWidth || msg.Height < oldHeight {
+			// Terminal got smaller in floating mode - clamp windows back into view
+			m.ClampWindowsToView()
 		}
 
 		return m, nil
@@ -321,6 +371,309 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", config.NotificationDuration)
 			}
 		}
+		return m, nil
+
+	case RemoteCommandMsg:
+		// Execute remote command from CLI
+		var err error
+		var cmd tea.Cmd
+		var notificationMsg string
+		var resultData map[string]interface{} // Rich data to return
+
+		switch msg.CommandType {
+		case "tape_command":
+			// Show what command is being run
+			if len(msg.TapeArgs) > 0 {
+				notificationMsg = fmt.Sprintf("Remote: %s %s", msg.TapeCommand, msg.TapeArgs[0])
+			} else {
+				notificationMsg = fmt.Sprintf("Remote: %s", msg.TapeCommand)
+			}
+
+			// Handle query/inspection commands first (these are read-only, no side effects)
+			switch msg.TapeCommand {
+			case "ListWindows":
+				// Return list of all windows (read-only, no notification)
+				resultData = m.GetWindowListData()
+				// Send result directly and return early to avoid side effects
+				if m.DaemonClient != nil && msg.RequestID != "" {
+					_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
+				}
+				return m, nil
+			case "GetSessionInfo":
+				// Return session information (read-only, no notification)
+				resultData = m.GetSessionInfoData()
+				if m.DaemonClient != nil && msg.RequestID != "" {
+					_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
+				}
+				return m, nil
+			case "GetWindow":
+				// Return info about a specific window (read-only, no notification)
+				if len(msg.TapeArgs) > 0 {
+					resultData, err = m.GetWindowData(msg.TapeArgs[0])
+				} else {
+					// Return focused window
+					resultData, err = m.GetFocusedWindowData()
+				}
+				if m.DaemonClient != nil && msg.RequestID != "" {
+					if err != nil {
+						_ = m.DaemonClient.SendCommandResult(msg.RequestID, false, err.Error())
+					} else {
+						_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
+					}
+				}
+				return m, nil
+			default:
+				// Handle tape commands that return data specially
+				switch tape.CommandType(msg.TapeCommand) {
+				case tape.CommandTypeNewWindow:
+					// Create window and capture ID
+					name := ""
+					if len(msg.TapeArgs) > 0 {
+						name = msg.TapeArgs[0]
+					}
+					windowID, displayName, createErr := m.CreateNewWindowReturningID(name)
+					if createErr != nil {
+						err = createErr
+					} else {
+						resultData = map[string]interface{}{
+							"window_id": windowID,
+							"name":      displayName,
+						}
+					}
+				default:
+					// Execute normally for other commands
+					tapeCmd := &tape.Command{
+						Type: tape.CommandType(msg.TapeCommand),
+						Args: msg.TapeArgs,
+					}
+					executor := tape.NewCommandExecutor(m)
+					err = executor.Execute(tapeCmd)
+				}
+			}
+			// Retile if in tiling mode after command execution
+			if m.AutoTiling {
+				m.TileAllWindows()
+			}
+		case "send_keys":
+			// Show what keys are being sent
+			notificationMsg = fmt.Sprintf("Remote: send-keys %s", msg.Keys)
+
+			// Parse keys and start sequential processing
+			cmd, err = m.startRemoteSendKeys(msg.Keys, msg.Literal, msg.Raw, msg.RequestID)
+			if err == nil {
+				// Keys will be processed sequentially via RemoteKeyMsg
+				// Show notification now, result will be sent after all keys processed
+				m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
+				return m, cmd
+			}
+		case "set_config":
+			// Show what config is being changed
+			notificationMsg = fmt.Sprintf("Remote: set %s=%s", msg.ConfigPath, msg.ConfigValue)
+
+			err = m.SetConfig(msg.ConfigPath, msg.ConfigValue)
+			// Retile if in tiling mode after config change
+			if m.AutoTiling {
+				m.TileAllWindows()
+			}
+		case "tape_script":
+			// Execute a full tape script
+			notificationMsg = "Remote: executing tape script"
+
+			// Parse and execute the tape script
+			cmd, err = m.executeTapeScript(msg.TapeScript, msg.RequestID)
+			if err == nil {
+				// Script will be processed via RemoteTapeCommandMsg
+				m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
+				return m, cmd
+			}
+		default:
+			err = fmt.Errorf("unknown remote command type: %s", msg.CommandType)
+		}
+
+		m.MarkAllDirty()
+
+		// Show notification for the remote command
+		if err != nil {
+			m.ShowNotification(fmt.Sprintf("Remote error: %v", err), "error", config.NotificationDuration)
+		} else if notificationMsg != "" {
+			m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
+		}
+
+		// Send result back if we have a daemon client
+		if m.DaemonClient != nil && msg.RequestID != "" {
+			if err != nil {
+				_ = m.DaemonClient.SendCommandResult(msg.RequestID, false, err.Error())
+			} else {
+				_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
+			}
+		}
+
+		return m, cmd
+
+	case RemoteKeyMsg:
+		// Process a single key from a remote send-keys command
+		var cmd tea.Cmd
+
+		// Process this key through the input handler
+		if inputHandler != nil {
+			newModel, keyCmd := inputHandler(msg.Key, m)
+			if newOS, ok := newModel.(*OS); ok {
+				*m = *newOS
+			}
+			cmd = keyCmd
+		}
+
+		// If there are more keys, schedule the next one
+		if len(msg.RemainingKeys) > 0 {
+			nextKey := msg.RemainingKeys[0]
+			remaining := msg.RemainingKeys[1:]
+			nextCmd := func() tea.Msg {
+				return RemoteKeyMsg{
+					Key:           nextKey,
+					RemainingKeys: remaining,
+					RequestID:     msg.RequestID,
+				}
+			}
+			// Use Sequence to ensure keys are processed in order, not concurrently
+			if cmd != nil {
+				return m, tea.Sequence(cmd, nextCmd)
+			}
+			return m, nextCmd
+		}
+
+		// Last key - schedule cleanup
+		doneCmd := func() tea.Msg {
+			return RemoteKeysDoneMsg{RequestID: msg.RequestID}
+		}
+		if cmd != nil {
+			return m, tea.Sequence(cmd, doneCmd)
+		}
+		return m, doneCmd
+
+	case RemoteKeysDoneMsg:
+		// All remote keys have been processed - do final cleanup
+		// Re-enable animations
+		m.ProcessingRemoteKeys = false
+		config.AnimationsSuppressed = false
+
+		if m.AutoTiling {
+			// Clear the BSP tree for current workspace to force a full rebuild
+			// This ensures consistent state after multiple rapid operations
+			if m.WorkspaceTrees != nil {
+				m.WorkspaceTrees[m.CurrentWorkspace] = nil
+			}
+			m.TileAllWindows()
+		}
+		m.MarkAllDirty()
+
+		// Send result back
+		if m.DaemonClient != nil && msg.RequestID != "" {
+			_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "keys sent")
+		}
+
+		return m, nil
+
+	case RemoteTapeCommandMsg:
+		// Process a single tape command from a remote script
+		var cmd tea.Cmd
+
+		// Update progress tracking for display
+		m.RemoteScriptIndex = msg.CommandIndex
+		m.RemoteScriptTotal = msg.TotalCommands
+
+		// Handle Sleep commands specially - they just wait
+		if msg.Command.Type == tape.CommandTypeSleep && msg.Command.Delay > 0 {
+			// For remote execution, we use tea.Tick to wait
+			nextIndex := msg.CommandIndex + 1
+			waitCmd := tea.Tick(msg.Command.Delay, func(t time.Time) tea.Msg {
+				// After sleep, continue with remaining commands or done
+				if len(msg.RemainingCommands) > 0 {
+					nextCmd := msg.RemainingCommands[0]
+					remaining := msg.RemainingCommands[1:]
+					return RemoteTapeCommandMsg{
+						Command:           nextCmd,
+						RemainingCommands: remaining,
+						RequestID:         msg.RequestID,
+						CommandIndex:      nextIndex,
+						TotalCommands:     msg.TotalCommands,
+					}
+				}
+				return RemoteTapeScriptDoneMsg{RequestID: msg.RequestID}
+			})
+			return m, waitCmd
+		}
+
+		// Execute the tape command
+		executor := tape.NewCommandExecutor(m)
+		if err := executor.Execute(&msg.Command); err != nil {
+			// Log error but continue with remaining commands
+			m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", config.NotificationDuration)
+		}
+
+		// Retile if in tiling mode after command execution
+		if m.AutoTiling {
+			m.TileAllWindows()
+		}
+
+		// If there are more commands, schedule the next one with a delay
+		// The delay allows the UI to render the current command's effects before moving on
+		if len(msg.RemainingCommands) > 0 {
+			nextCmd := msg.RemainingCommands[0]
+			remaining := msg.RemainingCommands[1:]
+			nextIndex := msg.CommandIndex + 1
+			// Use tea.Tick with a delay to allow rendering to catch up
+			// 50ms gives enough time for window creation and basic rendering
+			nextCmdFunc := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+				return RemoteTapeCommandMsg{
+					Command:           nextCmd,
+					RemainingCommands: remaining,
+					RequestID:         msg.RequestID,
+					CommandIndex:      nextIndex,
+					TotalCommands:     msg.TotalCommands,
+				}
+			})
+			// Use Sequence to ensure commands are processed in order
+			if cmd != nil {
+				return m, tea.Sequence(cmd, nextCmdFunc)
+			}
+			return m, nextCmdFunc
+		}
+
+		// Last command - schedule cleanup with a delay for final render
+		doneCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+			return RemoteTapeScriptDoneMsg{RequestID: msg.RequestID}
+		})
+		if cmd != nil {
+			return m, tea.Sequence(cmd, doneCmd)
+		}
+		return m, doneCmd
+
+	case RemoteTapeScriptDoneMsg:
+		// All tape commands have been processed - do final cleanup
+		// Re-enable animations
+		m.ProcessingRemoteKeys = false
+		config.AnimationsSuppressed = false
+
+		// Mark script finish time for progress display
+		m.ScriptFinishedTime = time.Now()
+
+		// Update progress to show completion
+		m.RemoteScriptIndex = m.RemoteScriptTotal
+
+		if m.AutoTiling {
+			// Clear the BSP tree for current workspace to force a full rebuild
+			if m.WorkspaceTrees != nil {
+				m.WorkspaceTrees[m.CurrentWorkspace] = nil
+			}
+			m.TileAllWindows()
+		}
+		m.MarkAllDirty()
+
+		// Send result back
+		if m.DaemonClient != nil && msg.RequestID != "" {
+			_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "script executed")
+		}
+
 		return m, nil
 
 	}

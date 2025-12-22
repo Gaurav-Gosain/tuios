@@ -254,6 +254,22 @@ func (m *OS) SwapWindowsInstant(index1, index2 int) {
 	window2.Resize(w1, h1)
 	window2.MarkPositionDirty()
 	window2.InvalidateCache()
+
+	// Swap windows in the BSP tree so the layout is preserved on retile
+	m.SwapWindowsInBSPTree(window1, window2)
+
+	// Swap windows in the slice so the order is persisted
+	m.Windows[index1], m.Windows[index2] = m.Windows[index2], m.Windows[index1]
+
+	// Update focused window index if needed
+	if m.FocusedWindow == index1 {
+		m.FocusedWindow = index2
+	} else if m.FocusedWindow == index2 {
+		m.FocusedWindow = index1
+	}
+
+	// Sync state to daemon
+	m.SyncStateToDaemon()
 }
 
 // SwapWindowsWithOriginal swaps windows where the dragged window's original position is provided
@@ -265,14 +281,33 @@ func (m *OS) SwapWindowsWithOriginal(draggedIndex, targetIndex int, origX, origY
 	draggedWindow := m.Windows[draggedIndex]
 	targetWindow := m.Windows[targetIndex]
 
-	// Dragged window goes to target's position
+	// Store target's current position before any modifications
+	targetX, targetY, targetW, targetH := targetWindow.X, targetWindow.Y, targetWindow.Width, targetWindow.Height
+
+	// Swap windows in the BSP tree FIRST so the layout is preserved on retile
+	m.SwapWindowsInBSPTree(draggedWindow, targetWindow)
+
+	// Swap windows in the slice
+	m.Windows[draggedIndex], m.Windows[targetIndex] = m.Windows[targetIndex], m.Windows[draggedIndex]
+
+	// Update focused window index if needed
+	if m.FocusedWindow == draggedIndex {
+		m.FocusedWindow = targetIndex
+	} else if m.FocusedWindow == targetIndex {
+		m.FocusedWindow = draggedIndex
+	}
+
+	// Now create animations - note: after slice swap, indices are swapped
+	// draggedWindow is now at targetIndex, targetWindow is now at draggedIndex
+
+	// Dragged window goes to target's original position (with animation)
 	anim1 := ui.NewSnapAnimation(
 		draggedWindow,
-		targetWindow.X, targetWindow.Y, targetWindow.Width, targetWindow.Height,
+		targetX, targetY, targetW, targetH,
 		config.GetFastAnimationDuration(),
 	)
 
-	// Target window goes to dragged window's ORIGINAL position
+	// Target window goes to dragged window's ORIGINAL position (with animation)
 	anim2 := ui.NewSnapAnimation(
 		targetWindow,
 		origX, origY, origWidth, origHeight,
@@ -285,6 +320,10 @@ func (m *OS) SwapWindowsWithOriginal(draggedIndex, targetIndex int, origX, origY
 	if anim2 != nil {
 		m.Animations = append(m.Animations, anim2)
 	}
+
+	// Sync state to daemon after animations are set up
+	// The animation will update positions, and we sync again when complete
+	m.SyncStateToDaemon()
 }
 
 // TileRemainingWindows tiles all windows except the one being minimized

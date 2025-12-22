@@ -118,6 +118,20 @@ const (
 
 	// CommandTypeComment represents a comment line.
 	CommandTypeComment CommandType = "Comment"
+
+	// Config commands for runtime configuration changes
+	// CommandTypeSetConfig sets a configuration option at runtime.
+	CommandTypeSetConfig CommandType = "SetConfig"
+	// CommandTypeSetTheme changes the active theme.
+	CommandTypeSetTheme CommandType = "SetTheme"
+	// CommandTypeSetDockbarPosition changes the dockbar position.
+	CommandTypeSetDockbarPosition CommandType = "SetDockbarPosition"
+	// CommandTypeSetBorderStyle changes the window border style.
+	CommandTypeSetBorderStyle CommandType = "SetBorderStyle"
+	// CommandTypeShowNotification displays a notification.
+	CommandTypeShowNotification CommandType = "ShowNotification"
+	// CommandTypeFocusDirection focuses a window in a direction.
+	CommandTypeFocusDirection CommandType = "FocusDirection"
 )
 
 // Command represents a parsed tape command
@@ -165,7 +179,10 @@ func (ct CommandType) IsCommand() bool {
 		CommandTypeWait, CommandTypeWaitUntilRegex,
 		CommandTypeSet, CommandTypeOutput, CommandTypeSource,
 		CommandTypeEnableAnimations, CommandTypeDisableAnimations, CommandTypeToggleAnimations,
-		CommandTypeComment:
+		CommandTypeComment,
+		// Config commands
+		CommandTypeSetConfig, CommandTypeSetTheme, CommandTypeSetDockbarPosition,
+		CommandTypeSetBorderStyle, CommandTypeShowNotification, CommandTypeFocusDirection:
 		return true
 	}
 	return false

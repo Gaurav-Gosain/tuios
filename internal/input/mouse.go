@@ -340,34 +340,36 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	topMargin := o.GetTopMargin()
 	if o.Dragging && o.InteractionMode {
-		// Calculate new position
+		// Calculate new position - allow windows to go partially off-screen for edge snapping
 		newX := mouse.X - o.DragOffsetX
 		newY := mouse.Y - o.DragOffsetY
 
-		// Apply bounds checking to prevent windows from going off-screen
-		// This prevents ANSI clipping issues and provides better UX
+		// Minimal bounds to prevent rendering issues and windows disappearing behind dock
+		// Keep at least some of the window visible (title bar area)
+		minVisibleX := 20 // Keep at least 20px visible on the right
+		minVisibleY := 3  // Keep at least title bar visible at bottom
 
-		// Left edge: prevent negative X
-		if newX < 0 {
-			newX = 0
+		// Prevent window from going too far left (causes ANSI rendering issues)
+		if newX < -(focusedWindow.Width - minVisibleX) {
+			newX = -(focusedWindow.Width - minVisibleX)
 		}
 
-		// Right edge: prevent window from going beyond viewport width
-		if newX+focusedWindow.Width > o.Width {
-			newX = o.Width - focusedWindow.Width
+		// Prevent window from going too far right
+		if newX > o.Width-minVisibleX {
+			newX = o.Width - minVisibleX
 		}
 
-		// Top edge: prevent negative Y
-		if newY < topMargin {
-			newY = topMargin
+		// Prevent window from going too far up
+		topMargin := o.GetTopMargin()
+		if newY < topMargin-(focusedWindow.Height-minVisibleY) {
+			newY = topMargin - (focusedWindow.Height - minVisibleY)
 		}
 
-		// Bottom edge: prevent window from going into dock area
-		maxY := topMargin + o.GetUsableHeight()
-		if newY+focusedWindow.Height > maxY {
-			newY = maxY - focusedWindow.Height
+		// Prevent window from going behind dock
+		maxY := topMargin + o.GetUsableHeight() - minVisibleY
+		if newY > maxY {
+			newY = maxY
 		}
 
 		focusedWindow.X = newX
@@ -643,6 +645,57 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			draggedWindow.Resize(o.TiledWidth, o.TiledHeight)
 			draggedWindow.MarkPositionDirty()
 			draggedWindow.InvalidateCache()
+		}
+		o.DraggedWindowIndex = -1
+	}
+
+	// Handle window edge snapping in floating mode (non-tiling)
+	if o.Dragging && !o.AutoTiling && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
+		mouse := msg.Mouse()
+		dragDistance := abs(mouse.X-o.DragStartX) + abs(mouse.Y-o.DragStartY)
+		const dragThreshold = 5
+
+		if dragDistance >= dragThreshold {
+			// Detect edge zones for snapping
+			// Edge zone is within edgeSize pixels of screen edge
+			const edgeSize = 5
+			topMargin := o.GetTopMargin()
+			usableHeight := o.GetUsableHeight()
+			bottomEdge := topMargin + usableHeight
+
+			atLeft := mouse.X <= edgeSize
+			atRight := mouse.X >= o.Width-edgeSize
+			atTop := mouse.Y <= topMargin+edgeSize
+			atBottom := mouse.Y >= bottomEdge-edgeSize
+
+			var snapTo app.SnapQuarter = app.NoSnap
+
+			if atTop && !atLeft && !atRight {
+				// Top center - fullscreen
+				snapTo = app.SnapFullScreen
+			} else if atLeft && !atTop && !atBottom {
+				// Left middle - snap left half
+				snapTo = app.SnapLeft
+			} else if atRight && !atTop && !atBottom {
+				// Right middle - snap right half
+				snapTo = app.SnapRight
+			} else if atTop && atLeft {
+				// Top-left corner - quarter
+				snapTo = app.SnapTopLeft
+			} else if atTop && atRight {
+				// Top-right corner - quarter
+				snapTo = app.SnapTopRight
+			} else if atBottom && atLeft {
+				// Bottom-left corner - quarter
+				snapTo = app.SnapBottomLeft
+			} else if atBottom && atRight {
+				// Bottom-right corner - quarter
+				snapTo = app.SnapBottomRight
+			}
+
+			if snapTo != app.NoSnap {
+				o.Snap(o.DraggedWindowIndex, snapTo)
+			}
 		}
 		o.DraggedWindowIndex = -1
 	}

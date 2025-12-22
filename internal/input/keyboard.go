@@ -411,8 +411,8 @@ func handleTerminalTilingPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		}
 		return o, nil
 	case "r":
-		// Rename window - exit terminal mode for this
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+		// Rename window - exit terminal mode for this (unless titles are hidden)
+		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
 				o.Mode = app.WindowManagementMode
@@ -646,7 +646,8 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		return o, nil
 	case ",", "r":
 		// Rename window - exit terminal mode for this (like tmux with ',' or like normal mode with 'r')
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+		// Skip if window titles are hidden
+		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
 				o.Mode = app.WindowManagementMode
@@ -1077,8 +1078,8 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 			o.ShowNotification("Cache statistics reset", "info", 2*time.Second)
 			return o, nil
 		}
-		// Otherwise, rename window
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+		// Otherwise, rename window (unless titles are hidden)
+		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
 				o.RenamingWindow = true
