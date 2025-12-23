@@ -266,6 +266,7 @@ func createEphemeralTUIOSInstance(width, height int) (tea.Model, []tea.ProgramOp
 		FocusedWindow:        -1,
 		WindowExitChan:       make(chan string, 10),
 		StateSyncChan:        make(chan *session.SessionState, 10),
+		ClientEventChan:      make(chan app.ClientEvent, 10),
 		MouseSnapping:        false,
 		MasterRatio:          0.5,
 		CurrentWorkspace:     1,
@@ -345,6 +346,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model
 		FocusedWindow:        -1,
 		WindowExitChan:       make(chan string, 10),
 		StateSyncChan:        make(chan *session.SessionState, 10),
+		ClientEventChan:      make(chan app.ClientEvent, 10),
 		MouseSnapping:        false,
 		MasterRatio:          0.5,
 		CurrentWorkspace:     1,
@@ -453,16 +455,28 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 		}
 	})
 
-	// Handle client join notifications
+	// Handle client join notifications via channel (thread-safe)
 	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
 		log.Printf("[WEB] Client joined: %s (total: %d, size: %dx%d)", clientID[:8], clientCount, width, height)
-		m.ShowNotification(fmt.Sprintf("Client joined (%d connected)", clientCount), "info", 2000)
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height}:
+			default:
+				log.Printf("[WEB] Warning: ClientEventChan full, dropping client joined event")
+			}
+		}
 	})
 
-	// Handle client leave notifications
+	// Handle client leave notifications via channel (thread-safe)
 	client.OnClientLeft(func(clientID string, clientCount int) {
 		log.Printf("[WEB] Client left: %s (remaining: %d)", clientID[:8], clientCount)
-		m.ShowNotification(fmt.Sprintf("Client left (%d connected)", clientCount), "info", 2000)
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount}:
+			default:
+				log.Printf("[WEB] Warning: ClientEventChan full, dropping client left event")
+			}
+		}
 	})
 
 	// Handle session resize (min of all clients)

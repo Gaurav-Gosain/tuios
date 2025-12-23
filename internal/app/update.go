@@ -93,6 +93,15 @@ type ClientLeftMsg struct {
 	ClientCount int
 }
 
+// ClientEvent represents a client join or leave event for channel-based notification.
+type ClientEvent struct {
+	Type        string // "joined" or "left"
+	ClientID    string
+	ClientCount int
+	Width       int // only for "joined"
+	Height      int // only for "joined"
+}
+
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
 type SessionResizeMsg struct {
 	Width       int
@@ -134,6 +143,11 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, ListenForStateSync(m.StateSyncChan))
 	}
 
+	// Listen for client join/leave events (daemon/SSH/web mode)
+	if m.ClientEventChan != nil {
+		cmds = append(cmds, ListenForClientEvents(m.ClientEventChan))
+	}
+
 	// If this is a restored daemon session, enable callbacks after a delay
 	// This allows buffered PTY output to settle before callbacks start tracking changes
 	if m.IsDaemonSession && m.RestoredFromState {
@@ -173,6 +187,34 @@ func ListenForStateSync(syncChan chan *session.SessionState) tea.Cmd {
 			return nil
 		}
 		return StateSyncMsg{State: state}
+	}
+}
+
+// ListenForClientEvents creates a command that listens for client join/leave events.
+// It safely reads from the event channel and converts events to messages for the update loop.
+func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
+	if eventChan == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		// Safe channel read with protection against closed channel
+		event, ok := <-eventChan
+		if !ok {
+			// Channel closed, return nil to stop listening
+			return nil
+		}
+		if event.Type == "joined" {
+			return ClientJoinedMsg{
+				ClientID:    event.ClientID,
+				ClientCount: event.ClientCount,
+				Width:       event.Width,
+				Height:      event.Height,
+			}
+		}
+		return ClientLeftMsg{
+			ClientID:    event.ClientID,
+			ClientCount: event.ClientCount,
+		}
 	}
 }
 
@@ -437,8 +479,39 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StateSyncMsg:
 		// Another client updated state - apply incrementally
 		if msg.State != nil {
+			// Track what changed for notifications
+			oldMode := m.Mode
+			oldWindowCount := len(m.Windows)
+			oldWorkspace := m.CurrentWorkspace
+
 			if err := m.ApplyStateSync(msg.State); err != nil {
 				m.LogError("Failed to apply state sync: %v", err)
+			} else {
+				// Show notifications for significant changes
+				newMode := m.Mode
+				newWindowCount := len(m.Windows)
+				newWorkspace := m.CurrentWorkspace
+
+				// Mode change notification
+				if oldMode != newMode {
+					if newMode == TerminalMode {
+						m.ShowNotification("Switched to Terminal mode", "info", 2*time.Second)
+					} else {
+						m.ShowNotification("Switched to Window mode", "info", 2*time.Second)
+					}
+				}
+
+				// Window count change notification
+				if newWindowCount > oldWindowCount {
+					m.ShowNotification(fmt.Sprintf("Window created (%d total)", newWindowCount), "info", 2*time.Second)
+				} else if newWindowCount < oldWindowCount {
+					m.ShowNotification(fmt.Sprintf("Window closed (%d remaining)", newWindowCount), "info", 2*time.Second)
+				}
+
+				// Workspace change notification
+				if oldWorkspace != newWorkspace {
+					m.ShowNotification(fmt.Sprintf("Switched to workspace %d", newWorkspace), "info", 2*time.Second)
+				}
 			}
 		}
 		// Continue listening for more state syncs
@@ -446,13 +519,15 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ClientJoinedMsg:
 		// Another client joined the session
-		m.ShowNotification(fmt.Sprintf("Client joined (%d connected)", msg.ClientCount), "info", 2000)
-		return m, nil
+		m.ShowNotification(fmt.Sprintf("Client joined (%d connected)", msg.ClientCount), "info", 2*time.Second)
+		// Continue listening for more client events
+		return m, ListenForClientEvents(m.ClientEventChan)
 
 	case ClientLeftMsg:
 		// Another client left the session
-		m.ShowNotification(fmt.Sprintf("Client left (%d connected)", msg.ClientCount), "info", 2000)
-		return m, nil
+		m.ShowNotification(fmt.Sprintf("Client left (%d connected)", msg.ClientCount), "info", 2*time.Second)
+		// Continue listening for more client events
+		return m, ListenForClientEvents(m.ClientEventChan)
 
 	case SessionResizeMsg:
 		// Effective session size changed (min of all clients)
@@ -465,7 +540,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.AutoTiling {
 				m.TileAllWindows()
 			}
-			m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2000)
+			m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
 		}
 		return m, nil
 

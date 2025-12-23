@@ -296,6 +296,7 @@ func newModel(options Options) *Model {
 		FocusedWindow:        -1,
 		WindowExitChan:       make(chan string, 10),
 		StateSyncChan:        make(chan *session.SessionState, 10),
+		ClientEventChan:      make(chan app.ClientEvent, 10),
 		MouseSnapping:        false,
 		MasterRatio:          0.5,
 		CurrentWorkspace:     1,

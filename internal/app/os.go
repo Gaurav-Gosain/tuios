@@ -111,6 +111,7 @@ type OS struct {
 	MouseSnapping      bool                       // Enable/disable mouse snapping
 	WindowExitChan     chan string                // Channel to signal window closure
 	StateSyncChan      chan *session.SessionState // Channel for thread-safe state sync from callbacks
+	ClientEventChan    chan ClientEvent           // Channel for thread-safe client join/leave notifications
 	Animations         []*ui.Animation            // Active animations
 	CPUHistory         []float64                  // CPU usage history for graph
 	LastCPUUpdate      time.Time                  // Last time CPU was updated
