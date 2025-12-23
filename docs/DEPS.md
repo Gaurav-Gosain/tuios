@@ -117,8 +117,8 @@ click 36 href "https://godoc.org/github.com/adrg/xdg/internal/userdirs"
 37[github.com/anmitsu/go-shlex]
 click 37 href "https://godoc.org/github.com/anmitsu/go-shlex"
 
-7[github.com/charmbracelet/bubbletea/v2]
-click 7 href "https://godoc.org/github.com/charmbracelet/bubbletea/v2"
+7[charm.land/bubbletea/v2]
+click 7 href "https://godoc.org/charm.land/bubbletea/v2"
 7 --> 29
 7 --> 19
 7 --> 20
@@ -151,8 +151,8 @@ click 8 href "https://godoc.org/github.com/charmbracelet/fang"
 click 49 href "https://godoc.org/github.com/charmbracelet/keygen"
 49 --> 50
 
-9[github.com/charmbracelet/lipgloss/v2]
-click 9 href "https://godoc.org/github.com/charmbracelet/lipgloss/v2"
+9[charm.land/lipgloss/v2]
+click 9 href "https://godoc.org/charm.land/lipgloss/v2"
 9 --> 29
 9 --> 19
 9 --> 20
@@ -161,13 +161,13 @@ click 9 href "https://godoc.org/github.com/charmbracelet/lipgloss/v2"
 9 --> 39
 9 --> 34
 
-10[github.com/charmbracelet/lipgloss/v2/table]
-click 10 href "https://godoc.org/github.com/charmbracelet/lipgloss/v2/table"
+10[charm.land/lipgloss/v2/table]
+click 10 href "https://godoc.org/charm.land/lipgloss/v2/table"
 10 --> 9
 10 --> 20
 
-52[github.com/charmbracelet/log/v2]
-click 52 href "https://godoc.org/github.com/charmbracelet/log/v2"
+52[charm.land/log/v2]
+click 52 href "https://godoc.org/charm.land/log/v2"
 52 --> 29
 52 --> 9
 52 --> 53
@@ -199,24 +199,24 @@ click 19 href "https://godoc.org/github.com/charmbracelet/ultraviolet"
 click 31 href "https://godoc.org/github.com/charmbracelet/ultraviolet/screen"
 31 --> 19
 
-26[github.com/charmbracelet/wish/v2]
-click 26 href "https://godoc.org/github.com/charmbracelet/wish/v2"
+26[charm.land/wish/v2]
+click 26 href "https://godoc.org/charm.land/wish/v2"
 26 --> 7
 26 --> 49
 26 --> 52
 26 --> 18
 26 --> 50
 
-27[github.com/charmbracelet/wish/v2/bubbletea]
-click 27 href "https://godoc.org/github.com/charmbracelet/wish/v2/bubbletea"
+27[charm.land/wish/v2/bubbletea]
+click 27 href "https://godoc.org/charm.land/wish/v2/bubbletea"
 27 --> 7
 27 --> 29
 27 --> 52
 27 --> 18
 27 --> 26
 
-28[github.com/charmbracelet/wish/v2/logging]
-click 28 href "https://godoc.org/github.com/charmbracelet/wish/v2/logging"
+28[charm.land/wish/v2/logging]
+click 28 href "https://godoc.org/charm.land/wish/v2/logging"
 28 --> 52
 28 --> 18
 28 --> 26

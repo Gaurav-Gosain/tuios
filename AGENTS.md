@@ -136,12 +136,14 @@ Leader key (`Ctrl+B` by default) activates prefix mode with sub-menus:
 
 ## Key Dependencies
 
-- **Bubble Tea v2** (`github.com/charmbracelet/bubbletea/v2`) - TUI framework
-- **Lipgloss v2** (`github.com/charmbracelet/lipgloss/v2`) - Styling
+- **Bubble Tea v2** (`charm.land/bubbletea/v2`) - TUI framework
+- **Lipgloss v2** (`charm.land/lipgloss/v2`) - Styling
+- **Wish v2** (`charm.land/wish/v2`) - SSH server
 - **Ultraviolet** (`github.com/charmbracelet/ultraviolet`) - Terminal emulation base
-- **Wish v2** (`github.com/charmbracelet/wish/v2`) - SSH server
 - **Cobra** (`github.com/spf13/cobra`) - CLI commands
 - **xpty** (`github.com/charmbracelet/x/xpty`) - Cross-platform PTY
+
+> **Note:** As of December 2025, the Charm stack packages have migrated from `github.com/charmbracelet/*` to `charm.land/*` module paths.
 
 ## Coding Conventions
 

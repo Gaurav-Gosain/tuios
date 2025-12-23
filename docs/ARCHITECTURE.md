@@ -436,6 +436,67 @@ graph TD
 8. **Frame Skipping**: No render when no changes and no animations
 9. **Adaptive Refresh**: 60Hz base rate, 30Hz during interactions, 20Hz for background windows
 
+## Multi-Client Architecture
+
+TUIOS supports multiple clients connecting to the same daemon session simultaneously. All clients see synchronized state updates in real-time.
+
+### Thread-Safe Event Channels
+
+The multi-client system uses channel-based message passing to prevent race conditions:
+
+```mermaid
+graph LR
+    subgraph "Network Goroutine"
+        CB[Callback Handler]
+    end
+
+    subgraph "Channels"
+        SSC[StateSyncChan]
+        CEC[ClientEventChan]
+    end
+
+    subgraph "Bubble Tea Event Loop"
+        LSS[ListenForStateSync]
+        LCE[ListenForClientEvents]
+        UPD[Update Handler]
+    end
+
+    CB -->|Non-blocking send| SSC
+    CB -->|Non-blocking send| CEC
+    SSC -->|Blocking read| LSS
+    CEC -->|Blocking read| LCE
+    LSS -->|Message| UPD
+    LCE -->|Message| UPD
+
+    style SSC fill:#2d6a4f
+    style CEC fill:#2d6a4f
+    style UPD fill:#1d3557
+```
+
+**Event Channels:**
+
+| Channel | Purpose | Events |
+|---------|---------|--------|
+| `StateSyncChan` | State synchronization from other clients | Mode changes, window updates, workspace switches |
+| `ClientEventChan` | Client join/leave notifications | Join with size, leave with count |
+| `WindowExitChan` | Window process termination | PTY exit signals |
+
+**Thread Safety:**
+
+- Callbacks from network goroutines send to channels (non-blocking with `select/default`)
+- Listener commands read from channels (blocking)
+- Messages processed in Bubble Tea's single-threaded Update loop
+- Prevents race conditions when iterating over `m.Windows`
+
+### Client Notifications
+
+When clients join, leave, or sync state, notifications are displayed:
+
+- **Client joined/left**: Shows connection count
+- **Mode changes**: "Switched to Terminal/Window mode"
+- **Window changes**: "Window created/closed (N total)"
+- **Workspace changes**: "Switched to workspace N"
+
 ## SSH Server Architecture
 
 ```mermaid
