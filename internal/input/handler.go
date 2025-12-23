@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	tea "github.com/charmbracelet/bubbletea/v2"
 )
 
 // PrefixKeyTimeout is the duration after which prefix mode times out
@@ -40,7 +40,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Handle bracketed paste from terminal (when pasting via Cmd+V in Ghostty, etc.)
 		// Only handle paste in terminal mode
 		if o.Mode == app.TerminalMode {
-			o.ClipboardContent = string(msg)
+			o.ClipboardContent = msg.Content
 			handleClipboardPaste(o)
 		}
 		return o, nil

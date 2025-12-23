@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
-	tea "github.com/charmbracelet/bubbletea/v2"
 )
 
 // TickerMsg represents a periodic tick event for updating the UI.

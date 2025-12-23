@@ -4,7 +4,7 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // TestInitialize_Empty tests initialization with empty theme name

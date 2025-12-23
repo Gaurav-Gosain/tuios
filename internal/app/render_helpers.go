@@ -4,10 +4,10 @@ import (
 	"image/color"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/charmbracelet/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -271,22 +271,22 @@ func styleToANSI(s lipgloss.Style) (prefix string, suffix string) {
 		te = te.Bold()
 	}
 	if s.GetItalic() {
-		te = te.Italic()
+		te = te.Italic(true)
 	}
 	if s.GetUnderline() {
-		te = te.Underline()
+		te = te.Underline(true)
 	}
 	if s.GetStrikethrough() {
-		te = te.Strikethrough()
+		te = te.Strikethrough(true)
 	}
 	if s.GetBlink() {
-		te = te.SlowBlink()
+		te = te.Blink(true)
 	}
 	if s.GetFaint() {
 		te = te.Faint()
 	}
 	if s.GetReverse() {
-		te = te.Reverse()
+		te = te.Reverse(true)
 	}
 
 	ansiStr := te.String()

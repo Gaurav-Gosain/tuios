@@ -4,7 +4,7 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -133,7 +133,7 @@ func TestStyleCacheEviction(t *testing.T) {
 		cell := &uv.Cell{
 			Style: uv.Style{
 				Fg:    lipgloss.ANSIColor(uint8(i)), // Different color for each
-				Attrs: uv.StyleAttrs(i % 16),        // Different attributes
+				Attrs: uint8(i % 16),        // Different attributes
 			},
 		}
 		// Alternate cursor state to create even more unique entries
@@ -188,7 +188,7 @@ func TestStyleCacheClear(t *testing.T) {
 	for i := range 5 {
 		cell := &uv.Cell{
 			Style: uv.Style{
-				Attrs: uv.StyleAttrs(i),
+				Attrs: uint8(i),
 			},
 		}
 		cache.Get(cell, false, false)
@@ -312,7 +312,7 @@ func BenchmarkStyleCacheMiss(b *testing.B) {
 		cell := &uv.Cell{
 			Style: uv.Style{
 				Fg:    lipgloss.Color("15"),
-				Attrs: uv.StyleAttrs(1 << uint(i%10)), // Vary attributes to force misses
+				Attrs: uint8(1 << uint(i%10)), // Vary attributes to force misses
 			},
 		}
 		cache.Get(cell, false, false)

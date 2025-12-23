@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // SessionPickerResult represents the user's choice from the session picker.

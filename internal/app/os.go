@@ -9,13 +9,13 @@ import (
 	"sync"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
-	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/ssh"
 	"github.com/google/uuid"
 )

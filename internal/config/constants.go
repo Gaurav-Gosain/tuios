@@ -4,7 +4,7 @@ package config
 import (
 	"time"
 
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // =============================================================================

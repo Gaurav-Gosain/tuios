@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/charmbracelet/lipgloss/v2"
-	"github.com/charmbracelet/lipgloss/v2/table"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 )
 
 // HelpBinding represents a single keybinding for the help menu

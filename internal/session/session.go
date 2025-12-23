@@ -578,12 +578,12 @@ func cellToState(cell *uv.Cell) CellState {
 	}
 
 	// Copy style attributes from bitmask
-	// Attrs bitmask: bit 0=Bold, bit 1=Faint, bit 2=Italic, bit 5=Reverse, bit 7=Strikethrough
-	cs.Bold = cell.Style.Attrs&1 != 0
-	cs.Faint = cell.Style.Attrs&2 != 0
-	cs.Italic = cell.Style.Attrs&4 != 0
-	cs.Reverse = cell.Style.Attrs&32 != 0
-	cs.Underline = cell.Style.UlStyle != 0 // Any underline style (single, double, curly, etc.)
+	// Attrs bitmask using uv.Attr* constants
+	cs.Bold = cell.Style.Attrs&uv.AttrBold != 0
+	cs.Faint = cell.Style.Attrs&uv.AttrFaint != 0
+	cs.Italic = cell.Style.Attrs&uv.AttrItalic != 0
+	cs.Reverse = cell.Style.Attrs&uv.AttrReverse != 0
+	cs.Underline = cell.Style.Underline != ansi.UnderlineNone // Any underline style (single, double, curly, etc.)
 	// Note: Blink not commonly used in modern terminals, omitting for now
 
 	return cs
@@ -610,24 +610,22 @@ func StateToCell(cs CellState) *uv.Cell {
 		}
 	}
 
-	// Restore style attributes using the builder pattern
-	style := cell.Style
+	// Restore style attributes using direct field assignment
 	if cs.Bold {
-		style = style.Bold(true)
+		cell.Style.Attrs |= uv.AttrBold
 	}
 	if cs.Faint {
-		style = style.Faint(true)
+		cell.Style.Attrs |= uv.AttrFaint
 	}
 	if cs.Italic {
-		style = style.Italic(true)
+		cell.Style.Attrs |= uv.AttrItalic
 	}
 	if cs.Reverse {
-		style = style.Reverse(true)
+		cell.Style.Attrs |= uv.AttrReverse
 	}
 	if cs.Underline {
-		style = style.UnderlineStyle(uv.SingleUnderline)
+		cell.Style.Underline = ansi.UnderlineSingle
 	}
-	cell.Style = style
 
 	return cell
 }

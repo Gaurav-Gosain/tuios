@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // TestStringBuilderPool tests the string builder pool

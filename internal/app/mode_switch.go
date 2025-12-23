@@ -2,7 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
-	tea "github.com/charmbracelet/bubbletea/v2"
+	tea "charm.land/bubbletea/v2"
 )
 
 // EnterTerminalMode switches from window management to terminal mode.
