@@ -17,21 +17,25 @@ const PrefixKeyTimeout = 2 * time.Second
 
 // HandleInput is the main input coordinator that routes messages to appropriate handlers
 func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
+	var result tea.Model
+	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		return HandleKeyPress(msg, o)
+		result, cmd = HandleKeyPress(msg, o)
 	case tea.PasteStartMsg:
 		return o, nil
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
-		return handleMouseClick(msg, o)
+		result, cmd = handleMouseClick(msg, o)
 	case tea.MouseMotionMsg:
+		// Don't sync on motion - too frequent
 		return handleMouseMotion(msg, o)
 	case tea.MouseReleaseMsg:
-		return handleMouseRelease(msg, o)
+		result, cmd = handleMouseRelease(msg, o)
 	case tea.MouseWheelMsg:
-		return handleMouseWheel(msg, o)
+		result, cmd = handleMouseWheel(msg, o)
 	case tea.PasteMsg:
 		// Handle bracketed paste from terminal (when pasting via Cmd+V in Ghostty, etc.)
 		// Only handle paste in terminal mode
@@ -48,8 +52,17 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			handleClipboardPaste(o)
 		}
 		return o, nil
+	default:
+		return o, nil
 	}
-	return o, nil
+
+	// Sync state to daemon after any input that might have changed state
+	// This ensures state persists across reconnects without explicit save
+	if o.IsDaemonSession {
+		o.SyncStateToDaemon()
+	}
+
+	return result, cmd
 }
 
 // shouldShowQuitDialog checks if there are any terminals with active foreground processes

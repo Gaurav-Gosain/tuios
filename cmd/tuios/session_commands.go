@@ -162,6 +162,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	initialOS := &app.OS{
 		FocusedWindow:        -1,
 		WindowExitChan:       make(chan string, 10),
+		StateSyncChan:        make(chan *session.SessionState, 10),
 		MouseSnapping:        false,
 		MasterRatio:          0.5,
 		CurrentWorkspace:     1,
@@ -178,6 +179,9 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		IsDaemonSession:      true,
 		DaemonClient:         client,
 		SessionName:          client.SessionName(),
+		// Don't set EffectiveWidth/Height here - let the daemon broadcast
+		// the effective size via SessionResizeMsg when there are multiple clients.
+		// Single client uses full terminal dimensions.
 	}
 
 	windowCount := 0
@@ -235,6 +239,45 @@ func runDaemonSession(sessionName string, createNew bool) error {
 			})
 		}()
 		return nil // Don't report error here - it will be handled by the Update loop
+	})
+
+	// Set up multi-client handlers for state sync, join/leave notifications, and resize
+	log.Printf("[CLIENT] Setting up multi-client handlers")
+
+	// Handle state sync from other clients
+	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
+		// Send a message to apply state in the main loop
+		go func() {
+			p.Send(app.StateSyncMsg{State: state, TriggerType: triggerType, SourceID: sourceID})
+		}()
+	})
+
+	// Handle client join notifications
+	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
+		go func() {
+			p.Send(app.ClientJoinedMsg{ClientID: clientID, ClientCount: clientCount, Width: width, Height: height})
+		}()
+	})
+
+	// Handle client leave notifications
+	client.OnClientLeft(func(clientID string, clientCount int) {
+		go func() {
+			p.Send(app.ClientLeftMsg{ClientID: clientID, ClientCount: clientCount})
+		}()
+	})
+
+	// Handle session resize (min of all clients)
+	client.OnSessionResize(func(width, height, clientCount int) {
+		go func() {
+			p.Send(app.SessionResizeMsg{Width: width, Height: height, ClientCount: clientCount})
+		}()
+	})
+
+	// Handle force refresh
+	client.OnForceRefresh(func(reason string) {
+		go func() {
+			p.Send(app.ForceRefreshMsg{Reason: reason})
+		}()
 	})
 
 	sigChan := make(chan os.Signal, 1)

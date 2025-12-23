@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
@@ -69,6 +70,41 @@ type RemoteTapeScriptDoneMsg struct {
 	RequestID string
 }
 
+// Multi-client message types for daemon mode
+
+// StateSyncMsg is sent when another client updates session state.
+type StateSyncMsg struct {
+	State       *session.SessionState
+	TriggerType string
+	SourceID    string
+}
+
+// ClientJoinedMsg is sent when another client joins the session.
+type ClientJoinedMsg struct {
+	ClientID    string
+	ClientCount int
+	Width       int
+	Height      int
+}
+
+// ClientLeftMsg is sent when another client leaves the session.
+type ClientLeftMsg struct {
+	ClientID    string
+	ClientCount int
+}
+
+// SessionResizeMsg is sent when the effective session size changes (min of all clients).
+type SessionResizeMsg struct {
+	Width       int
+	Height      int
+	ClientCount int
+}
+
+// ForceRefreshMsg is sent to force all clients to re-render.
+type ForceRefreshMsg struct {
+	Reason string
+}
+
 // InputHandler is a function type that handles input messages.
 // This allows the Update method to delegate to the input package without creating a circular dependency.
 type InputHandler func(msg tea.Msg, o *OS) (tea.Model, tea.Cmd)
@@ -93,6 +129,11 @@ func (m *OS) Init() tea.Cmd {
 		ListenForWindowExits(m.WindowExitChan),
 	}
 
+	// Listen for state sync from other clients (daemon/SSH/web mode)
+	if m.StateSyncChan != nil {
+		cmds = append(cmds, ListenForStateSync(m.StateSyncChan))
+	}
+
 	// If this is a restored daemon session, enable callbacks after a delay
 	// This allows buffered PTY output to settle before callbacks start tracking changes
 	if m.IsDaemonSession && m.RestoredFromState {
@@ -115,6 +156,23 @@ func ListenForWindowExits(exitChan chan string) tea.Cmd {
 			return nil
 		}
 		return WindowExitMsg{WindowID: windowID}
+	}
+}
+
+// ListenForStateSync creates a command that listens for state sync from other clients.
+// It safely reads from the sync channel and converts state to messages for the update loop.
+func ListenForStateSync(syncChan chan *session.SessionState) tea.Cmd {
+	if syncChan == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		// Safe channel read with protection against closed channel
+		state, ok := <-syncChan
+		if !ok {
+			// Channel closed, return nil to stop listening
+			return nil
+		}
+		return StateSyncMsg{State: state}
 	}
 }
 
@@ -314,18 +372,30 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Height = msg.Height
 		m.MarkAllDirty()
 
+		// Notify daemon of our terminal size for multi-client size calculation
+		// This allows the daemon to compute effective size = min(all clients)
+		if m.IsDaemonSession && m.DaemonClient != nil {
+			_ = m.DaemonClient.NotifyTerminalSize(msg.Width, msg.Height)
+		}
+
 		// When restored from state, we need to retile if tiling is enabled
 		// to properly fit windows to the new terminal size.
 		// The BSP tree structure is preserved, only positions/sizes are recalculated.
+		// However, if the size is the same (e.g., web reload), skip retiling to preserve layout.
 		if m.RestoredFromState {
 			m.RestoredFromState = false
-			if m.AutoTiling {
-				m.LogInfo("[RESIZE] Retiling restored session to fit new terminal size (%dx%d -> %dx%d)",
-					oldWidth, oldHeight, msg.Width, msg.Height)
-				m.TileAllWindows()
+			sizeChanged := oldWidth != msg.Width || oldHeight != msg.Height
+			if sizeChanged {
+				if m.AutoTiling {
+					m.LogInfo("[RESIZE] Retiling restored session to fit new terminal size (%dx%d -> %dx%d)",
+						oldWidth, oldHeight, msg.Width, msg.Height)
+					m.TileAllWindows()
+				} else {
+					// In floating mode, clamp windows back into view
+					m.ClampWindowsToView()
+				}
 			} else {
-				// In floating mode, clamp windows back into view
-				m.ClampWindowsToView()
+				m.LogInfo("[RESIZE] Restored session, same size (%dx%d), preserving layout", msg.Width, msg.Height)
 			}
 			return m, nil
 		}
@@ -361,6 +431,47 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.KeyboardEnhancementsEnabled {
 			m.ShowNotification("Keyboard enhancements enabled", "info", config.NotificationDuration)
 		}
+		return m, nil
+
+	// Multi-client daemon messages
+	case StateSyncMsg:
+		// Another client updated state - apply incrementally
+		if msg.State != nil {
+			if err := m.ApplyStateSync(msg.State); err != nil {
+				m.LogError("Failed to apply state sync: %v", err)
+			}
+		}
+		// Continue listening for more state syncs
+		return m, ListenForStateSync(m.StateSyncChan)
+
+	case ClientJoinedMsg:
+		// Another client joined the session
+		m.ShowNotification(fmt.Sprintf("Client joined (%d connected)", msg.ClientCount), "info", 2000)
+		return m, nil
+
+	case ClientLeftMsg:
+		// Another client left the session
+		m.ShowNotification(fmt.Sprintf("Client left (%d connected)", msg.ClientCount), "info", 2000)
+		return m, nil
+
+	case SessionResizeMsg:
+		// Effective session size changed (min of all clients)
+		// Set the effective size - GetRenderWidth/Height will use min(terminal, effective)
+		if m.EffectiveWidth != msg.Width || m.EffectiveHeight != msg.Height {
+			m.EffectiveWidth = msg.Width
+			m.EffectiveHeight = msg.Height
+			m.MarkAllDirty()
+			// Retile if the effective render size changed
+			if m.AutoTiling {
+				m.TileAllWindows()
+			}
+			m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2000)
+		}
+		return m, nil
+
+	case ForceRefreshMsg:
+		// Force re-render
+		m.MarkAllDirty()
 		return m, nil
 
 	case ScriptCommandMsg:

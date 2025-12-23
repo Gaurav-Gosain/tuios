@@ -21,6 +21,13 @@ type QueryWindowsHandler func(requestID string) *WindowListPayload
 // It receives the query payload and should return a SessionInfoPayload.
 type QuerySessionHandler func(requestID string) *SessionInfoPayload
 
+// Multi-client handler types
+type StateSyncHandler func(state *SessionState, triggerType, sourceID string)
+type ClientJoinedHandler func(clientID string, clientCount int, width, height int)
+type ClientLeftHandler func(clientID string, clientCount int)
+type SessionResizeHandler func(width, height, clientCount int)
+type ForceRefreshHandler func(reason string)
+
 // TUIClient is used by the TUIOS TUI to communicate with the daemon.
 // It handles PTY I/O and state synchronization.
 type TUIClient struct {
@@ -30,6 +37,10 @@ type TUIClient struct {
 
 	sessionID   string
 	sessionName string
+
+	// Effective session dimensions (min of all connected clients)
+	effectiveWidth  int
+	effectiveHeight int
 
 	// Available session names from daemon
 	availableSessionNames []string
@@ -53,6 +64,14 @@ type TUIClient struct {
 	queryWindowsHandler QueryWindowsHandler
 	querySessionHandler QuerySessionHandler
 	queryHandlersMu     sync.RWMutex
+
+	// Multi-client handlers
+	stateSyncHandler     StateSyncHandler
+	clientJoinedHandler  ClientJoinedHandler
+	clientLeftHandler    ClientLeftHandler
+	sessionResizeHandler SessionResizeHandler
+	forceRefreshHandler  ForceRefreshHandler
+	multiClientMu        sync.RWMutex
 
 	// Request/response handling for synchronous calls after readLoop starts
 	pendingResponses   map[MessageType]chan *Message
@@ -164,6 +183,8 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		}
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
+		c.effectiveWidth = payload.Width
+		c.effectiveHeight = payload.Height
 		return payload.State, nil
 
 	case MsgError:
@@ -277,6 +298,42 @@ func (c *TUIClient) OnQuerySession(handler QuerySessionHandler) {
 	c.queryHandlersMu.Unlock()
 }
 
+// OnStateSync registers a handler for state sync messages from other clients.
+func (c *TUIClient) OnStateSync(handler StateSyncHandler) {
+	c.multiClientMu.Lock()
+	c.stateSyncHandler = handler
+	c.multiClientMu.Unlock()
+}
+
+// OnClientJoined registers a handler for when another client joins the session.
+func (c *TUIClient) OnClientJoined(handler ClientJoinedHandler) {
+	c.multiClientMu.Lock()
+	c.clientJoinedHandler = handler
+	c.multiClientMu.Unlock()
+}
+
+// OnClientLeft registers a handler for when another client leaves the session.
+func (c *TUIClient) OnClientLeft(handler ClientLeftHandler) {
+	c.multiClientMu.Lock()
+	c.clientLeftHandler = handler
+	c.multiClientMu.Unlock()
+}
+
+// OnSessionResize registers a handler for session resize messages.
+// This is called when the effective session size changes (min of all clients).
+func (c *TUIClient) OnSessionResize(handler SessionResizeHandler) {
+	c.multiClientMu.Lock()
+	c.sessionResizeHandler = handler
+	c.multiClientMu.Unlock()
+}
+
+// OnForceRefresh registers a handler for force refresh messages.
+func (c *TUIClient) OnForceRefresh(handler ForceRefreshHandler) {
+	c.multiClientMu.Lock()
+	c.forceRefreshHandler = handler
+	c.multiClientMu.Unlock()
+}
+
 // SendWindowList sends a window list response back to the daemon.
 func (c *TUIClient) SendWindowList(payload *WindowListPayload) error {
 	msg, err := NewMessageWithCodec(MsgWindowList, payload, c.codec)
@@ -327,6 +384,22 @@ func (c *TUIClient) WritePTY(ptyID string, data []byte) error {
 func (c *TUIClient) ResizePTY(ptyID string, width, height int) error {
 	msg, err := NewMessageWithCodec(MsgResize, &ResizePTYPayload{
 		PTYID:  ptyID,
+		Width:  width,
+		Height: height,
+	}, c.codec)
+	if err != nil {
+		return err
+	}
+	return c.send(msg)
+}
+
+// NotifyTerminalSize notifies the daemon of this client's terminal size.
+// This is used for multi-client size calculation (effective size = min of all clients).
+// Called when the terminal is resized.
+func (c *TUIClient) NotifyTerminalSize(width, height int) error {
+	// Send resize with empty PTYID to indicate client terminal resize
+	msg, err := NewMessageWithCodec(MsgResize, &ResizePTYPayload{
+		PTYID:  "", // Empty = client terminal resize, not PTY resize
 		Width:  width,
 		Height: height,
 	}, c.codec)
@@ -572,6 +645,90 @@ func (c *TUIClient) handleMessage(msg *Message) {
 				_ = c.SendSessionInfo(result)
 			}
 		}
+
+	case MsgStateSync:
+		// Another client updated the session state
+		var payload StateSyncPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[MULTICLIENT] Failed to parse state sync: %v", err)
+			return
+		}
+
+		c.multiClientMu.RLock()
+		handler := c.stateSyncHandler
+		c.multiClientMu.RUnlock()
+
+		if handler != nil {
+			handler(payload.State, payload.TriggerType, payload.SourceID)
+		}
+
+	case MsgClientJoined:
+		// Another client joined the session
+		var payload ClientJoinedPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[MULTICLIENT] Failed to parse client joined: %v", err)
+			return
+		}
+
+		c.multiClientMu.RLock()
+		handler := c.clientJoinedHandler
+		c.multiClientMu.RUnlock()
+
+		if handler != nil {
+			handler(payload.ClientID, payload.ClientCount, payload.Width, payload.Height)
+		}
+
+	case MsgClientLeft:
+		// Another client left the session
+		var payload ClientLeftPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[MULTICLIENT] Failed to parse client left: %v", err)
+			return
+		}
+
+		c.multiClientMu.RLock()
+		handler := c.clientLeftHandler
+		c.multiClientMu.RUnlock()
+
+		if handler != nil {
+			handler(payload.ClientID, payload.ClientCount)
+		}
+
+	case MsgSessionResize:
+		// Session effective size changed (min of all clients)
+		var payload SessionResizePayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[MULTICLIENT] Failed to parse session resize: %v", err)
+			return
+		}
+
+		// Update stored effective dimensions
+		c.effectiveWidth = payload.Width
+		c.effectiveHeight = payload.Height
+
+		c.multiClientMu.RLock()
+		handler := c.sessionResizeHandler
+		c.multiClientMu.RUnlock()
+
+		if handler != nil {
+			handler(payload.Width, payload.Height, payload.ClientCount)
+		}
+
+	case MsgForceRefresh:
+		// Force a re-render
+		var payload ForceRefreshPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[MULTICLIENT] Failed to parse force refresh: %v", err)
+			return
+		}
+
+		c.multiClientMu.RLock()
+		handler := c.forceRefreshHandler
+		c.multiClientMu.RUnlock()
+
+		if handler != nil {
+			handler(payload.Reason)
+		}
 	}
 }
 
@@ -592,6 +749,18 @@ func (c *TUIClient) Close() error {
 // SessionName returns the attached session name.
 func (c *TUIClient) SessionName() string {
 	return c.sessionName
+}
+
+// EffectiveWidth returns the effective session width (min of all connected clients).
+// Returns 0 if not yet set (before attach).
+func (c *TUIClient) EffectiveWidth() int {
+	return c.effectiveWidth
+}
+
+// EffectiveHeight returns the effective session height (min of all connected clients).
+// Returns 0 if not yet set (before attach).
+func (c *TUIClient) EffectiveHeight() int {
+	return c.effectiveHeight
 }
 
 // IsConnected returns true if connected to daemon.

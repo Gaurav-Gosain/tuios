@@ -143,6 +143,34 @@ tuios-web --theme dracula --show-keys
 | `--host` | `localhost` | Server bind address |
 | `--read-only` | `false` | Disable client input |
 | `--max-connections` | `0` | Max concurrent sessions (0=unlimited) |
+| `--default-session` | | Default session name for all connections |
+| `--ephemeral` | `false` | Disable daemon mode (sessions don't persist) |
+
+### Daemon Mode (Default)
+
+By default, `tuios-web` connects to the TUIOS daemon for persistent sessions:
+
+```bash
+# Start web server with daemon mode (default)
+tuios-web
+
+# All clients share a specific session
+tuios-web --default-session shared
+
+# Disable daemon mode (standalone sessions)
+tuios-web --ephemeral
+```
+
+**Benefits of daemon mode:**
+- Sessions persist when browser tabs close
+- Multiple browsers/tabs can view the same session
+- State (windows, workspaces) preserved across reconnections
+- Integrates with `tuios ls`, `tuios attach`, and other session commands
+
+**Multi-client behavior:**
+- Terminal size uses minimum of all connected client dimensions
+- State changes broadcast to all clients in real-time
+- Clients notified when others join/leave
 
 ### TUIOS Flags
 

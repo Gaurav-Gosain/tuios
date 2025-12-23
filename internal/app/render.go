@@ -18,7 +18,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	defer pool.PutLayerSlice(layersPtr)
 
 	topMargin := m.GetTopMargin()
-	viewportWidth := m.Width
+	viewportWidth := m.GetRenderWidth()
 	viewportHeight := m.GetUsableHeight()
 
 	box := lipgloss.NewStyle().

@@ -13,41 +13,71 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
+// sendMouseClickToWindow sends a mouse click event to a window's terminal.
+func sendMouseClickToWindow(win *terminal.Window, event uv.MouseClickEvent) {
+	if win.Terminal == nil {
+		return
+	}
+	if win.DaemonMode {
+		seq := win.Terminal.EncodeMouseEvent(event)
+		if seq != "" {
+			_ = win.SendInput([]byte(seq))
+		}
+	} else {
+		win.Terminal.SendMouse(event)
+	}
+}
+
+// sendMouseMotionToWindow sends a mouse motion event to a window's terminal.
+func sendMouseMotionToWindow(win *terminal.Window, event uv.MouseMotionEvent) {
+	if win.Terminal == nil {
+		return
+	}
+	if win.DaemonMode {
+		seq := win.Terminal.EncodeMouseEvent(event)
+		if seq != "" {
+			_ = win.SendInput([]byte(seq))
+		}
+	} else {
+		win.Terminal.SendMouse(event)
+	}
+}
+
+// sendMouseReleaseToWindow sends a mouse release event to a window's terminal.
+func sendMouseReleaseToWindow(win *terminal.Window, event uv.MouseReleaseEvent) {
+	if win.Terminal == nil {
+		return
+	}
+	if win.DaemonMode {
+		seq := win.Terminal.EncodeMouseEvent(event)
+		if seq != "" {
+			_ = win.SendInput([]byte(seq))
+		}
+	} else {
+		win.Terminal.SendMouse(event)
+	}
+}
+
+// sendMouseWheelToWindow sends a mouse wheel event to a window's terminal.
+func sendMouseWheelToWindow(win *terminal.Window, event uv.MouseWheelEvent) {
+	if win.Terminal == nil {
+		return
+	}
+	if win.DaemonMode {
+		seq := win.Terminal.EncodeMouseEvent(event)
+		if seq != "" {
+			_ = win.SendInput([]byte(seq))
+		}
+	} else {
+		win.Terminal.SendMouse(event)
+	}
+}
+
 // handleMouseClick handles mouse click events
 func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	mouse := msg.Mouse()
 	X := mouse.X
 	Y := mouse.Y
-
-	// Forward mouse events to terminal if in terminal mode and alt screen
-	if o.Mode == app.TerminalMode {
-		// Find which window was clicked
-		clickedWindowIndex := findClickedWindow(X, Y, o)
-		if clickedWindowIndex != -1 {
-			clickedWindow := o.Windows[clickedWindowIndex]
-			if clickedWindow.IsAltScreen && clickedWindow.Terminal != nil {
-				// Convert to terminal-relative coordinates (0-based)
-				termX := X - clickedWindow.X - 1 // Account for left border
-				termY := Y - clickedWindow.Y - 1 // Account for top border
-				// Check if click is within terminal content area
-				if termX >= 0 && termY >= 0 && termX < clickedWindow.Width-2 && termY < clickedWindow.Height-2 {
-					// Focus the window first so subsequent events work
-					o.FocusWindow(clickedWindowIndex)
-
-					// Create adjusted mouse event with terminal-relative coordinates
-					adjustedMouse := uv.MouseClickEvent{
-						X:      termX,
-						Y:      termY,
-						Button: uv.MouseButton(mouse.Button),
-						Mod:    uv.KeyMod(mouse.Mod),
-					}
-					// Send to the terminal emulator
-					clickedWindow.Terminal.SendMouse(adjustedMouse)
-					return o, nil
-				}
-			}
-		}
-	}
 
 	// Check if click is in the dock area (always reserved)
 	if ((config.DockbarPosition == "bottom") && (Y >= o.Height-config.DockHeight)) || ((config.DockbarPosition == "top") && (Y <= config.DockHeight)) {
@@ -67,6 +97,36 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Fast hit testing - find which window was clicked without expensive canvas generation
 	clickedWindowIndex := findClickedWindow(X, Y, o)
+
+	// Forward mouse events to terminal if in terminal mode and window has mouse tracking
+	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode {
+		clickedWindow := o.Windows[clickedWindowIndex]
+		hasMouseMode := clickedWindow.Terminal != nil && clickedWindow.Terminal.HasMouseMode()
+
+		// Forward mouse if alt screen or has mouse mode enabled (e.g., restored daemon session)
+		shouldForward := clickedWindow.IsAltScreen || hasMouseMode
+		if shouldForward && clickedWindow.Terminal != nil {
+			// Convert to terminal-relative coordinates (0-based)
+			termX := X - clickedWindow.X - 1 // Account for left border
+			termY := Y - clickedWindow.Y - 1 // Account for top border
+			// Check if click is within terminal content area
+			if termX >= 0 && termY >= 0 && termX < clickedWindow.Width-2 && termY < clickedWindow.Height-2 {
+				// Focus the window first so subsequent events work
+				o.FocusWindow(clickedWindowIndex)
+
+				// Create adjusted mouse event with terminal-relative coordinates
+				adjustedMouse := uv.MouseClickEvent{
+					X:      termX,
+					Y:      termY,
+					Button: uv.MouseButton(mouse.Button),
+					Mod:    uv.KeyMod(mouse.Mod),
+				}
+				// Send to the terminal (uses PTY for daemon windows)
+				sendMouseClickToWindow(clickedWindow, adjustedMouse)
+				return o, nil
+			}
+		}
+	}
 	if clickedWindowIndex == -1 {
 		// Consume the event even if no window is hit to prevent leaking
 		return o, nil
@@ -276,25 +336,30 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 
-	// Forward mouse motion to terminal if in terminal mode and alt screen
+	// Forward mouse motion to terminal if in terminal mode and window has mouse tracking
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsAltScreen && focusedWindow.Terminal != nil {
-			// Convert to terminal-relative coordinates (0-based)
-			termX := mouse.X - focusedWindow.X - 1 // Account for left border
-			termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
-			// Check if motion is within terminal content area
-			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
-				// Create adjusted mouse event with terminal-relative coordinates
-				adjustedMouse := uv.MouseMotionEvent{
-					X:      termX,
-					Y:      termY,
-					Button: uv.MouseButton(mouse.Button),
-					Mod:    uv.KeyMod(mouse.Mod),
+		if focusedWindow != nil && focusedWindow.Terminal != nil {
+			hasMouseMode := focusedWindow.Terminal.HasMouseMode()
+			shouldForward := focusedWindow.IsAltScreen || hasMouseMode
+
+			if shouldForward {
+				// Convert to terminal-relative coordinates (0-based)
+				termX := mouse.X - focusedWindow.X - 1 // Account for left border
+				termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
+				// Check if motion is within terminal content area
+				if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
+					// Create adjusted mouse event with terminal-relative coordinates
+					adjustedMouse := uv.MouseMotionEvent{
+						X:      termX,
+						Y:      termY,
+						Button: uv.MouseButton(mouse.Button),
+						Mod:    uv.KeyMod(mouse.Mod),
+					}
+					// Send to the terminal (uses PTY for daemon windows)
+					sendMouseMotionToWindow(focusedWindow, adjustedMouse)
+					return o, nil
 				}
-				// Send to the terminal emulator
-				focusedWindow.Terminal.SendMouse(adjustedMouse)
-				return o, nil
 			}
 		}
 	}
@@ -539,26 +604,31 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // handleMouseRelease handles mouse release events
 func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Forward mouse release to terminal if in terminal mode and alt screen
+	// Forward mouse release to terminal if in terminal mode and window has mouse tracking
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsAltScreen && focusedWindow.Terminal != nil {
-			mouse := msg.Mouse()
-			// Convert to terminal-relative coordinates (0-based)
-			termX := mouse.X - focusedWindow.X - 1 // Account for left border
-			termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
-			// Check if release is within terminal content area
-			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
-				// Create adjusted mouse event with terminal-relative coordinates
-				adjustedMouse := uv.MouseReleaseEvent{
-					X:      termX,
-					Y:      termY,
-					Button: uv.MouseButton(mouse.Button),
-					Mod:    uv.KeyMod(mouse.Mod),
+		if focusedWindow != nil && focusedWindow.Terminal != nil {
+			hasMouseMode := focusedWindow.Terminal.HasMouseMode()
+			shouldForward := focusedWindow.IsAltScreen || hasMouseMode
+
+			if shouldForward {
+				mouse := msg.Mouse()
+				// Convert to terminal-relative coordinates (0-based)
+				termX := mouse.X - focusedWindow.X - 1 // Account for left border
+				termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
+				// Check if release is within terminal content area
+				if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
+					// Create adjusted mouse event with terminal-relative coordinates
+					adjustedMouse := uv.MouseReleaseEvent{
+						X:      termX,
+						Y:      termY,
+						Button: uv.MouseButton(mouse.Button),
+						Mod:    uv.KeyMod(mouse.Mod),
+					}
+					// Send to the terminal (uses PTY for daemon windows)
+					sendMouseReleaseToWindow(focusedWindow, adjustedMouse)
+					return o, nil
 				}
-				// Send to the terminal emulator
-				focusedWindow.Terminal.SendMouse(adjustedMouse)
-				return o, nil
 			}
 		}
 	}
@@ -766,6 +836,10 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		} else {
 			o.InteractionMode = false
 		}
+
+		// Sync state to daemon after drag/resize completes
+		// This ensures window positions persist across reconnects
+		o.SyncStateToDaemon()
 	} else {
 		// Even if we weren't dragging/resizing, clear interaction mode from click
 		o.InteractionMode = false
@@ -830,27 +904,32 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Forward mouse wheel to terminal if in terminal mode and alt screen
+	// Forward mouse wheel to terminal if in terminal mode and window has mouse tracking
 	// This allows applications like vim, less, htop to handle their own scrolling
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsAltScreen && focusedWindow.Terminal != nil {
-			mouse := msg.Mouse()
-			// Convert to terminal-relative coordinates (0-based)
-			termX := mouse.X - focusedWindow.X - 1 // Account for left border
-			termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
-			// Check if wheel is within terminal content area
-			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
-				// Create adjusted mouse event with terminal-relative coordinates
-				adjustedMouse := uv.MouseWheelEvent{
-					X:      termX,
-					Y:      termY,
-					Button: uv.MouseButton(mouse.Button),
-					Mod:    uv.KeyMod(mouse.Mod),
+		if focusedWindow != nil && focusedWindow.Terminal != nil {
+			hasMouseMode := focusedWindow.Terminal.HasMouseMode()
+			shouldForward := focusedWindow.IsAltScreen || hasMouseMode
+
+			if shouldForward {
+				mouse := msg.Mouse()
+				// Convert to terminal-relative coordinates (0-based)
+				termX := mouse.X - focusedWindow.X - 1 // Account for left border
+				termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
+				// Check if wheel is within terminal content area
+				if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
+					// Create adjusted mouse event with terminal-relative coordinates
+					adjustedMouse := uv.MouseWheelEvent{
+						X:      termX,
+						Y:      termY,
+						Button: uv.MouseButton(mouse.Button),
+						Mod:    uv.KeyMod(mouse.Mod),
+					}
+					// Send to the terminal (uses PTY for daemon windows)
+					sendMouseWheelToWindow(focusedWindow, adjustedMouse)
+					return o, nil
 				}
-				// Send to the terminal emulator
-				focusedWindow.Terminal.SendMouse(adjustedMouse)
-				return o, nil
 			}
 		}
 	}

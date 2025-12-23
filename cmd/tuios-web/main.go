@@ -5,14 +5,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Gaurav-Gosain/sip"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -45,7 +49,17 @@ var (
 	scrollbackLines   int
 	showKeys          bool
 	noAnimations      bool
+	// Daemon mode flags
+	defaultSession string
+	ephemeralMode  bool
 )
+
+// webServerConfig holds the server-wide configuration
+var webServerConfig struct {
+	defaultSession string
+	ephemeral      bool
+	version        string
+}
 
 func main() {
 	rootCmd := &cobra.Command{
@@ -63,6 +77,7 @@ Server features:
   - Configurable host, port, read-only mode, and connection limits
   - All TUIOS flags forwarded to spawned instances (theme, show-keys, etc.)
   - Structured logging with charmbracelet/log
+  - Persistent sessions via daemon mode (default) with multi-client support
 
 Client features:
   - WebGL-accelerated rendering via xterm.js for smooth 60fps output
@@ -90,7 +105,13 @@ Client features:
   tuios-web --read-only
 
   # Limit concurrent connections
-  tuios-web --max-connections 10`,
+  tuios-web --max-connections 10
+
+  # All clients share a single session
+  tuios-web --default-session shared
+
+  # Use ephemeral mode (no session persistence)
+  tuios-web --ephemeral`,
 		Version: version,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runWebServer()
@@ -103,6 +124,10 @@ Client features:
 	rootCmd.Flags().StringVar(&webHost, "host", "localhost", "Web server host")
 	rootCmd.Flags().BoolVar(&webReadOnly, "read-only", false, "Disable input from clients (view only)")
 	rootCmd.Flags().IntVar(&webMaxConnections, "max-connections", 0, "Maximum concurrent connections (0 = unlimited)")
+
+	// Daemon mode flags
+	rootCmd.Flags().StringVar(&defaultSession, "default-session", "", "Default session name for all connections (creates shared session)")
+	rootCmd.Flags().BoolVar(&ephemeralMode, "ephemeral", false, "Disable daemon mode (sessions don't persist)")
 
 	// TUIOS forwarded flags
 	rootCmd.Flags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
@@ -139,6 +164,19 @@ func runWebServer() error {
 		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
 	}
 
+	// Store server config for handler
+	webServerConfig.defaultSession = defaultSession
+	webServerConfig.ephemeral = ephemeralMode
+	webServerConfig.version = version
+
+	// If using daemon mode, ensure daemon is running
+	if !ephemeralMode {
+		if err := session.EnsureDaemonRunning(); err != nil {
+			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
+			webServerConfig.ephemeral = true
+		}
+	}
+
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -147,7 +185,20 @@ func runWebServer() error {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
+		log.Println("Shutting down...")
 		cancel()
+		// Stop in-process daemon if we started one
+		session.StopInProcessDaemon()
+
+		// Force exit after short timeout or on second signal
+		go func() {
+			select {
+			case <-c:
+				os.Exit(0)
+			case <-time.After(1 * time.Second):
+				os.Exit(0)
+			}
+		}()
 	}()
 
 	// Apply global config options
@@ -163,6 +214,13 @@ func runWebServer() error {
 
 	server := sip.NewServer(sipConfig)
 
+	// Log startup mode
+	mode := "daemon"
+	if webServerConfig.ephemeral {
+		mode = "ephemeral"
+	}
+	log.Printf("Starting web server on %s:%s (mode: %s)", webHost, webPort, mode)
+
 	// Serve TUIOS using sip
 	return server.Serve(ctx, createTUIOSHandler)
 }
@@ -171,6 +229,26 @@ func runWebServer() error {
 func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 	pty := sess.Pty()
 
+	// Determine session name
+	sessionName := webServerConfig.defaultSession
+
+	// If ephemeral mode or daemon not available, use old behavior
+	if webServerConfig.ephemeral {
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height)
+	}
+
+	// Try to connect to daemon
+	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height)
+	if err != nil {
+		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height)
+	}
+
+	return model, opts
+}
+
+// createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
+func createEphemeralTUIOSInstance(width, height int) (tea.Model, []tea.ProgramOption) {
 	// Load user configuration
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -187,6 +265,7 @@ func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 	tuiosInstance := &app.OS{
 		FocusedWindow:        -1,
 		WindowExitChan:       make(chan string, 10),
+		StateSyncChan:        make(chan *session.SessionState, 10),
 		MouseSnapping:        false,
 		MasterRatio:          0.5,
 		CurrentWorkspace:     1,
@@ -196,8 +275,8 @@ func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 		WorkspaceHasCustom:   make(map[int]bool),
 		WorkspaceMasterRatio: make(map[int]float64),
 		PendingResizes:       make(map[string][2]int),
-		Width:                pty.Width,
-		Height:               pty.Height,
+		Width:                width,
+		Height:               height,
 		KeybindRegistry:      keybindRegistry,
 		RecentKeys:           []app.KeyEvent{},
 		KeyHistoryMaxSize:    5,
@@ -208,6 +287,202 @@ func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 	return tuiosInstance, []tea.ProgramOption{
 		tea.WithFPS(config.NormalFPS),
 	}
+}
+
+// createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
+func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model, []tea.ProgramOption, error) {
+	// Connect to daemon
+	client := session.NewTUIClient()
+	v := webServerConfig.version
+	if v == "" {
+		v = "web-client"
+	}
+
+	if err := client.Connect(v, width, height); err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+
+	// If no session name specified, get or create default
+	if sessionName == "" {
+		availableSessions := client.AvailableSessionNames()
+		if len(availableSessions) == 0 {
+			// No sessions exist, create a new one
+			sessionName = "web-session"
+		} else if len(availableSessions) == 1 {
+			// Only one session, use it
+			sessionName = availableSessions[0]
+		} else {
+			// Multiple sessions - use the first one
+			// TODO: Could show session picker in web UI
+			sessionName = availableSessions[0]
+			log.Printf("Multiple sessions available, attaching to: %s", sessionName)
+		}
+	}
+
+	// Attach to session (create if doesn't exist)
+	state, err := client.AttachSession(sessionName, true, width, height)
+	if err != nil {
+		_ = client.Close()
+		return nil, nil, fmt.Errorf("failed to attach to session: %w", err)
+	}
+
+	// Start read loop for daemon messages
+	client.StartReadLoop()
+
+	// Load user configuration
+	userConfig, err := config.LoadUserConfig()
+	if err != nil {
+		log.Printf("Warning: Failed to load config for web session, using defaults: %v", err)
+		userConfig = config.DefaultConfig()
+	}
+	keybindRegistry := config.NewKeybindRegistry(userConfig)
+
+	// Set up the input handler
+	app.SetInputHandler(input.HandleInput)
+
+	// Create TUIOS instance connected to daemon
+	tuiosInstance := &app.OS{
+		FocusedWindow:        -1,
+		WindowExitChan:       make(chan string, 10),
+		StateSyncChan:        make(chan *session.SessionState, 10),
+		MouseSnapping:        false,
+		MasterRatio:          0.5,
+		CurrentWorkspace:     1,
+		NumWorkspaces:        9,
+		WorkspaceFocus:       make(map[int]int),
+		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
+		WorkspaceHasCustom:   make(map[int]bool),
+		WorkspaceMasterRatio: make(map[int]float64),
+		PendingResizes:       make(map[string][2]int),
+		Width:                width,
+		Height:               height,
+		KeybindRegistry:      keybindRegistry,
+		RecentKeys:           []app.KeyEvent{},
+		KeyHistoryMaxSize:    5,
+		IsSSHMode:            false,
+		ShowKeys:             showKeys,
+		IsDaemonSession:      true,
+		DaemonClient:         client,
+		SessionName:          sessionName,
+		// Don't set EffectiveWidth/Height here - let the daemon broadcast
+		// the effective size via SessionResizeMsg when there are multiple clients.
+	}
+
+	// Restore state from daemon if available
+	if state != nil && len(state.Windows) > 0 {
+		log.Printf("[WEB] Restoring %d windows from session state", len(state.Windows))
+		if err := tuiosInstance.RestoreFromState(state); err != nil {
+			log.Printf("Warning: Failed to restore session state: %v", err)
+		}
+
+		// Restore terminal states
+		if err := tuiosInstance.RestoreTerminalStates(); err != nil {
+			log.Printf("Warning: Failed to restore terminal states: %v", err)
+		}
+
+		// Set up PTY output handlers for existing windows
+		for _, win := range tuiosInstance.Windows {
+			setupPTYHandler(tuiosInstance, client, win)
+		}
+	}
+
+	// Register multi-client handlers
+	registerMultiClientHandlers(tuiosInstance, client)
+
+	return tuiosInstance, []tea.ProgramOption{
+		tea.WithFPS(config.NormalFPS),
+	}, nil
+}
+
+// setupPTYHandler sets up input/output handling for a window's PTY
+func setupPTYHandler(m *app.OS, client *session.TUIClient, win *terminal.Window) {
+	if win.PTYID == "" {
+		log.Printf("[WEB] setupPTYHandler: window %s has no PTYID, skipping", win.ID[:8])
+		return
+	}
+
+	ptyID := win.PTYID
+	log.Printf("[WEB] Setting up PTY handler for window %s, PTYID=%s", win.ID[:8], ptyID[:8])
+
+	// CRITICAL: Set up the daemon write function for input
+	// Without this, SendInput will fail and typing won't work
+	win.DaemonWriteFunc = func(data []byte) error {
+		return client.WritePTY(ptyID, data)
+	}
+
+	// Set up the daemon resize function
+	win.DaemonResizeFunc = func(width, height int) error {
+		return client.ResizePTY(ptyID, width, height)
+	}
+
+	// Start the response reader to handle DA queries and other terminal responses
+	win.StartDaemonResponseReader()
+
+	// Subscribe to PTY output
+	err := client.SubscribePTY(ptyID, func(data []byte) {
+		win.WriteOutputAsync(data)
+	})
+	if err != nil {
+		log.Printf("[WEB] Failed to subscribe to PTY %s: %v", ptyID[:8], err)
+	}
+
+	// Handle PTY close
+	windowID := win.ID
+	client.OnPTYClosed(ptyID, func() {
+		log.Printf("[WEB] PTY closed for window %s", windowID[:8])
+		select {
+		case m.WindowExitChan <- windowID:
+		default:
+		}
+	})
+}
+
+// registerMultiClientHandlers registers handlers for multi-client messages
+func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
+	// Handle state sync from other clients via channel (thread-safe)
+	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
+		log.Printf("[WEB] Received state sync: trigger=%s, source=%s", triggerType, sourceID[:8])
+		// Send state to channel for processing in Bubble Tea event loop
+		// This ensures thread-safe access to m.Windows
+		if m.StateSyncChan != nil {
+			select {
+			case m.StateSyncChan <- state:
+			default:
+				log.Printf("[WEB] Warning: StateSyncChan full, dropping state sync")
+			}
+		}
+	})
+
+	// Handle client join notifications
+	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
+		log.Printf("[WEB] Client joined: %s (total: %d, size: %dx%d)", clientID[:8], clientCount, width, height)
+		m.ShowNotification(fmt.Sprintf("Client joined (%d connected)", clientCount), "info", 2000)
+	})
+
+	// Handle client leave notifications
+	client.OnClientLeft(func(clientID string, clientCount int) {
+		log.Printf("[WEB] Client left: %s (remaining: %d)", clientID[:8], clientCount)
+		m.ShowNotification(fmt.Sprintf("Client left (%d connected)", clientCount), "info", 2000)
+	})
+
+	// Handle session resize (min of all clients)
+	client.OnSessionResize(func(width, height, clientCount int) {
+		log.Printf("[WEB] Session resize: %dx%d (clients: %d)", width, height, clientCount)
+		if m.EffectiveWidth != width || m.EffectiveHeight != height {
+			m.EffectiveWidth = width
+			m.EffectiveHeight = height
+			m.MarkAllDirty()
+			if m.AutoTiling {
+				m.TileAllWindows()
+			}
+		}
+	})
+
+	// Handle force refresh
+	client.OnForceRefresh(func(reason string) {
+		log.Printf("[WEB] Force refresh requested: %s", reason)
+		m.MarkAllDirty()
+	})
 }
 
 // applyGlobalConfig applies CLI flags to global configuration.

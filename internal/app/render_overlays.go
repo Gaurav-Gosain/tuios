@@ -95,7 +95,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Padding(1, 2)
 
 		centeredContent := lipgloss.Place(
-			m.Width, m.Height,
+			m.GetRenderWidth(), m.GetRenderHeight(),
 			lipgloss.Center, lipgloss.Center,
 			boxStyle.Render(content),
 		)
@@ -108,15 +108,15 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 	if m.ShowQuitConfirm {
 		quitContent, width, height := m.renderQuitConfirmDialog()
-		x := (m.Width - width) / 2
-		y := (m.Height - height) / 2
+		x := (m.GetRenderWidth() - width) / 2
+		y := (m.GetRenderHeight() - height) / 2
 		quitLayer := lipgloss.NewLayer(quitContent).
 			X(x).Y(y).Z(config.ZIndexHelp + 1).ID("quit-confirm")
 		layers = append(layers, quitLayer)
 	}
 
 	if m.ShowHelp {
-		helpContent := m.RenderHelpMenu(m.Width, m.Height)
+		helpContent := m.RenderHelpMenu(m.GetRenderWidth(), m.GetRenderHeight())
 
 		helpLayer := lipgloss.NewLayer(helpContent).
 			X(0).Y(0).Z(config.ZIndexHelp).ID("help")
@@ -125,7 +125,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	}
 
 	if m.ShowTapeManager {
-		tapeContent := m.RenderTapeManager(m.Width, m.Height)
+		tapeContent := m.RenderTapeManager(m.GetRenderWidth(), m.GetRenderHeight())
 		tapeLayer := lipgloss.NewLayer(tapeContent).
 			X(0).Y(0).Z(config.ZIndexHelp).ID("tape-manager")
 		layers = append(layers, tapeLayer)
@@ -196,7 +196,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Background(lipgloss.Color("#1a1a2a")).
 			Render(statsContent)
 
-		centeredStats := lipgloss.Place(m.Width, m.Height,
+		centeredStats := lipgloss.Place(m.GetRenderWidth(), m.GetRenderHeight(),
 			lipgloss.Center, lipgloss.Center, statsBox)
 
 		statsLayer := lipgloss.NewLayer(centeredStats).
@@ -211,7 +211,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Bold(true).
 			Render("System Logs")
 
-		maxDisplayHeight := max(m.Height-8, 8)
+		maxDisplayHeight := max(m.GetRenderHeight()-8, 8)
 		totalLogs := len(m.LogMessages)
 
 		fixedLines := 4
@@ -279,7 +279,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Background(lipgloss.Color("#1a1a2a")).
 			Render(logContent)
 
-		centeredLogs := lipgloss.Place(m.Width, m.Height,
+		centeredLogs := lipgloss.Place(m.GetRenderWidth(), m.GetRenderHeight(),
 			lipgloss.Center, lipgloss.Center, logBox)
 
 		logLayer := lipgloss.NewLayer(centeredLogs).
@@ -359,7 +359,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		scriptIndicator := scriptStyle.Render(scriptStatus)
 		scriptLayer := lipgloss.NewLayer(scriptIndicator).
-			X(m.Width - lipgloss.Width(scriptIndicator) - 2).
+			X(m.GetRenderWidth() - lipgloss.Width(scriptIndicator) - 2).
 			Y(1).
 			Z(config.ZIndexNotifications).
 			ID("script-mode")
@@ -476,22 +476,24 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		overlayHeight := lipgloss.Height(renderedOverlay)
 		var overlayX, overlayY int
 
+		renderWidth := m.GetRenderWidth()
+		renderHeight := m.GetRenderHeight()
 		switch config.WhichKeyPosition {
 		case "top-left":
 			overlayX = 2
 			overlayY = 1
 		case "top-right":
-			overlayX = m.Width - overlayWidth - 2
+			overlayX = renderWidth - overlayWidth - 2
 			overlayY = 1
 		case "bottom-left":
 			overlayX = 2
-			overlayY = m.Height - overlayHeight - 2
+			overlayY = renderHeight - overlayHeight - 2
 		case "center":
-			overlayX = (m.Width - overlayWidth) / 2
-			overlayY = (m.Height - overlayHeight) / 2
+			overlayX = (renderWidth - overlayWidth) / 2
+			overlayY = (renderHeight - overlayHeight) / 2
 		default:
-			overlayX = m.Width - overlayWidth - 2
-			overlayY = m.Height - overlayHeight - 2
+			overlayX = renderWidth - overlayWidth - 2
+			overlayY = renderHeight - overlayHeight - 2
 		}
 
 		whichKeyLayer := lipgloss.NewLayer(renderedOverlay).
@@ -550,7 +552,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				icon = config.NotificationIconInfo
 			}
 
-			maxNotifWidth := min(max(m.Width-8, 20), 60)
+			maxNotifWidth := min(max(m.GetRenderWidth()-8, 20), 60)
 
 			message := notif.Message
 			maxMessageLen := maxNotifWidth - 10
@@ -568,7 +570,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				MaxWidth(maxNotifWidth).
 				Render(notifContent)
 
-			notifX := max(m.Width-lipgloss.Width(notifBox)-2, 0)
+			notifX := max(m.GetRenderWidth()-lipgloss.Width(notifBox)-2, 0)
 			currentY := notifY + (i * notifSpacing)
 
 			notifLayer := lipgloss.NewLayer(notifBox).
@@ -628,8 +630,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				dockOffset = config.DockHeight
 			}
 
-			x := m.Width - contentWidth - rightMargin
-			y := m.Height - contentHeight - dockOffset
+			x := m.GetRenderWidth() - contentWidth - rightMargin
+			y := m.GetRenderHeight() - contentHeight - dockOffset
 
 			zIndex := config.ZIndexNotifications + 1
 			if m.ShowHelp {

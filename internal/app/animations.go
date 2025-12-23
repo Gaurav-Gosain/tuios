@@ -172,7 +172,7 @@ func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
 	}
 
 	// Dock is at the bottom of the screen
-	dockY := m.Height - config.DockHeight + 1 // +1 for the separator line
+	dockY := m.GetRenderHeight() - config.DockHeight + 1 // +1 for the separator line
 
 	// Calculate dock layout matching renderDock() logic EXACTLY
 	leftWidth := 30
@@ -207,7 +207,7 @@ func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
 	}
 
 	// Calculate center positioning
-	availableSpace := max(m.Width-leftWidth-rightWidth-dockItemsWidth, 0)
+	availableSpace := max(m.GetRenderWidth()-leftWidth-rightWidth-dockItemsWidth, 0)
 	leftSpacer := availableSpace / 2
 
 	// Calculate X position for target dock item

@@ -347,6 +347,74 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 	}
 }
 
+// HasMouseMode returns true if any mouse tracking mode is enabled.
+// This is useful for debugging mouse event forwarding issues.
+func (e *Emulator) HasMouseMode() bool {
+	for _, m := range []ansi.DECMode{
+		ansi.X10MouseMode,
+		ansi.NormalMouseMode,
+		ansi.HighlightMouseMode,
+		ansi.ButtonEventMouseMode,
+		ansi.AnyEventMouseMode,
+	} {
+		if e.isModeSet(m) {
+			return true
+		}
+	}
+	return false
+}
+
+// EncodeMouseEvent encodes a mouse event as an escape sequence string.
+// Returns empty string if no mouse mode is enabled.
+// This is used for daemon mode where mouse events need to be sent through the PTY.
+func (e *Emulator) EncodeMouseEvent(m Mouse) string {
+	var (
+		enc  ansi.Mode
+		mode ansi.Mode
+	)
+
+	for _, mm := range []ansi.DECMode{
+		ansi.X10MouseMode,
+		ansi.NormalMouseMode,
+		ansi.HighlightMouseMode,
+		ansi.ButtonEventMouseMode,
+		ansi.AnyEventMouseMode,
+	} {
+		if e.isModeSet(mm) {
+			mode = mm
+		}
+	}
+
+	if mode == nil {
+		return ""
+	}
+
+	for _, mm := range []ansi.DECMode{
+		ansi.SgrExtMouseMode,
+	} {
+		if e.isModeSet(mm) {
+			enc = mm
+		}
+	}
+
+	// Encode button
+	mouse := m.Mouse()
+	_, isMotion := m.(MouseMotion)
+	_, isRelease := m.(MouseRelease)
+	b := ansi.EncodeMouseButton(mouse.Button, isMotion,
+		mouse.Mod.Contains(ModShift),
+		mouse.Mod.Contains(ModAlt),
+		mouse.Mod.Contains(ModCtrl))
+
+	switch enc {
+	case nil: // X10 mouse encoding
+		return ansi.MouseX10(b, mouse.X, mouse.Y)
+	case ansi.SgrExtMouseMode: // SGR mouse encoding
+		return ansi.MouseSgr(b, mouse.X, mouse.Y, isRelease)
+	}
+	return ""
+}
+
 // Resize resizes the terminal.
 func (e *Emulator) Resize(width int, height int) {
 	x, y := e.scr.CursorPosition()

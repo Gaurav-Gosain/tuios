@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
@@ -53,28 +54,51 @@ func passThroughCursorStyle(data []byte) {
 
 // BuildSessionState creates a serializable SessionState from the current OS state.
 // This is called progressively during Update() to sync state to the daemon.
+// For windows with active animations, it uses the final (target) positions
+// so other clients see the end state immediately without animation jitter.
 func (m *OS) BuildSessionState() *session.SessionState {
 	state := &session.SessionState{
 		Name:             m.SessionName,
 		CurrentWorkspace: m.CurrentWorkspace,
 		MasterRatio:      m.MasterRatio,
 		AutoTiling:       m.AutoTiling,
-		Width:            m.Width,
-		Height:           m.Height,
+		Width:            m.GetRenderWidth(),
+		Height:           m.GetRenderHeight(),
+		Mode:             int(m.Mode),
 		WorkspaceFocus:   make(map[int]string),
+	}
+
+	// Build map of window -> animation for quick lookup
+	windowAnimations := make(map[*terminal.Window]*ui.Animation)
+	for _, anim := range m.Animations {
+		if anim != nil && anim.Window != nil && !anim.Complete {
+			windowAnimations[anim.Window] = anim
+		}
 	}
 
 	// Build window states
 	state.Windows = make([]session.WindowState, len(m.Windows))
 	for i, w := range m.Windows {
+		// Start with current values
+		x, y, width, height := w.X, w.Y, w.Width, w.Height
+
+		// If window has an active animation, use the final (end) position
+		// This ensures other clients see the target state immediately
+		if anim, hasAnim := windowAnimations[w]; hasAnim {
+			x = anim.EndX
+			y = anim.EndY
+			width = anim.EndWidth
+			height = anim.EndHeight
+		}
+
 		state.Windows[i] = session.WindowState{
 			ID:           w.ID,
 			Title:        w.Title,
 			CustomName:   w.CustomName,
-			X:            w.X,
-			Y:            w.Y,
-			Width:        w.Width,
-			Height:       w.Height,
+			X:            x,
+			Y:            y,
+			Width:        width,
+			Height:       height,
 			Z:            w.Z,
 			Workspace:    w.Workspace,
 			Minimized:    w.Minimized,
@@ -158,6 +182,16 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.CurrentWorkspace = state.CurrentWorkspace
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
+	m.Mode = Mode(state.Mode)
+
+	// Set effective dimensions from state - this is the min of all connected clients
+	// as calculated by the daemon. This ensures a new client joining respects
+	// the existing effective size even before receiving a SessionResizeMsg.
+	if state.Width > 0 && state.Height > 0 {
+		m.EffectiveWidth = state.Width
+		m.EffectiveHeight = state.Height
+		m.LogInfo("[RESTORE] Set effective size from state: %dx%d", state.Width, state.Height)
+	}
 
 	// Clear existing windows
 	for _, w := range m.Windows {
@@ -262,7 +296,260 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// and allows the layout to be preserved as the user left it
 	m.RestoredFromState = true
 
+	// If we have windows and a focused window, switch to terminal mode
+	// This ensures mouse events are forwarded to terminals after restore
+	if len(m.Windows) > 0 && m.FocusedWindow >= 0 {
+		m.Mode = TerminalMode
+	}
+
 	return nil
+}
+
+// ApplyStateSync applies a state update from another client.
+// This handles window creation, deletion, and property updates.
+func (m *OS) ApplyStateSync(state *session.SessionState) error {
+	if state == nil {
+		return nil
+	}
+
+	// Build maps for efficient lookup
+	incomingByID := make(map[string]*session.WindowState)
+	for i := range state.Windows {
+		ws := &state.Windows[i]
+		incomingByID[ws.ID] = ws
+	}
+
+	existingByID := make(map[string]*terminal.Window)
+	for _, w := range m.Windows {
+		existingByID[w.ID] = w
+	}
+
+	// Build new window list in the order specified by incoming state
+	newWindows := make([]*terminal.Window, 0, len(state.Windows))
+
+	for _, ws := range state.Windows {
+		if existingWindow, exists := existingByID[ws.ID]; exists {
+			// Update existing window
+			m.updateWindowFromState(existingWindow, &ws)
+			newWindows = append(newWindows, existingWindow)
+			delete(existingByID, ws.ID) // Mark as handled
+		} else {
+			// Create new window from another client
+			newWindow := m.createWindowFromSync(&ws)
+			if newWindow != nil {
+				newWindows = append(newWindows, newWindow)
+			}
+		}
+	}
+
+	// Close windows that were deleted by other client
+	for _, w := range existingByID {
+		m.closeWindowFromSync(w)
+	}
+
+	// Update window list
+	m.Windows = newWindows
+
+	// Update global state
+	m.SessionName = state.Name
+	m.CurrentWorkspace = state.CurrentWorkspace
+	m.MasterRatio = state.MasterRatio
+	m.AutoTiling = state.AutoTiling
+
+	// Update focused window index
+	m.FocusedWindow = -1
+	if state.FocusedWindowID != "" {
+		for i, w := range m.Windows {
+			if w.ID == state.FocusedWindowID {
+				m.FocusedWindow = i
+				break
+			}
+		}
+	}
+
+	// Update workspace focus map
+	m.WorkspaceFocus = make(map[int]int)
+	for workspace, windowID := range state.WorkspaceFocus {
+		for i, w := range m.Windows {
+			if w.ID == windowID {
+				m.WorkspaceFocus[workspace] = i
+				break
+			}
+		}
+	}
+
+	// Update BSP state
+	if state.WindowToBSPID != nil {
+		m.WindowToBSPID = make(map[string]int)
+		for k, v := range state.WindowToBSPID {
+			m.WindowToBSPID[k] = v
+		}
+	}
+	m.NextBSPWindowID = state.NextBSPWindowID
+	m.TilingScheme = layout.AutoScheme(state.TilingScheme)
+
+	// Update BSP trees
+	if state.WorkspaceTrees != nil && state.AutoTiling {
+		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
+		for ws, serialized := range state.WorkspaceTrees {
+			if serialized != nil {
+				layoutSerialized := &layout.SerializedBSPTree{
+					Root:         convertSessionBSPNode(serialized.Root),
+					AutoScheme:   serialized.AutoScheme,
+					DefaultRatio: serialized.DefaultRatio,
+				}
+				m.WorkspaceTrees[ws] = layoutSerialized.Deserialize()
+			}
+		}
+	}
+
+	// Sync mode from other client
+	m.Mode = Mode(state.Mode)
+
+	// If auto-tiling is enabled and the synced state has different dimensions,
+	// retile to fit our effective render size. This handles the case where
+	// a client with a smaller terminal joins and receives state from a larger client.
+	if m.AutoTiling && len(m.Windows) > 0 {
+		renderWidth := m.GetRenderWidth()
+		renderHeight := m.GetRenderHeight()
+		// Check if any window extends beyond our render bounds
+		needsRetile := false
+		for _, w := range m.Windows {
+			if w.Workspace == m.CurrentWorkspace && !w.Minimized {
+				if w.X+w.Width > renderWidth || w.Y+w.Height > renderHeight+m.GetTopMargin() {
+					needsRetile = true
+					break
+				}
+			}
+		}
+		if needsRetile {
+			m.TileAllWindows()
+		}
+	}
+
+	m.MarkAllDirty()
+	return nil
+}
+
+// updateWindowFromState updates an existing window with state from sync
+func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) {
+	// Check if size changed
+	sizeChanged := w.Width != ws.Width || w.Height != ws.Height
+
+	// Update all properties
+	w.Title = ws.Title
+	w.CustomName = ws.CustomName
+	w.X = ws.X
+	w.Y = ws.Y
+	w.Width = ws.Width
+	w.Height = ws.Height
+	w.Z = ws.Z
+	w.Workspace = ws.Workspace
+	w.Minimized = ws.Minimized
+	w.PreMinimizeX = ws.PreMinimizeX
+	w.PreMinimizeY = ws.PreMinimizeY
+	w.PreMinimizeWidth = ws.PreMinimizeW
+	w.PreMinimizeHeight = ws.PreMinimizeH
+	w.IsAltScreen = ws.IsAltScreen
+
+	if sizeChanged {
+		// Resize terminal emulator
+		if w.Terminal != nil {
+			termWidth := max(ws.Width-2, 1)
+			termHeight := max(ws.Height-2, 1)
+			w.Terminal.Resize(termWidth, termHeight)
+		}
+
+		// Resize PTY in daemon
+		if w.DaemonResizeFunc != nil {
+			termWidth := max(ws.Width-2, 1)
+			termHeight := max(ws.Height-2, 1)
+			_ = w.DaemonResizeFunc(termWidth, termHeight)
+		}
+
+		w.InvalidateCache()
+		w.MarkContentDirty()
+	}
+}
+
+// createWindowFromSync creates a new window from sync state
+func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
+	// Safety check for empty IDs
+	if ws.ID == "" || ws.PTYID == "" {
+		return nil
+	}
+
+	window := terminal.NewDaemonWindow(
+		ws.ID,
+		ws.Title,
+		ws.X, ws.Y,
+		ws.Width, ws.Height,
+		ws.Z,
+		ws.PTYID,
+	)
+	if window == nil {
+		return nil
+	}
+
+	window.CustomName = ws.CustomName
+	window.Workspace = ws.Workspace
+	window.Minimized = ws.Minimized
+	window.PreMinimizeX = ws.PreMinimizeX
+	window.PreMinimizeY = ws.PreMinimizeY
+	window.PreMinimizeWidth = ws.PreMinimizeW
+	window.PreMinimizeHeight = ws.PreMinimizeH
+	window.IsAltScreen = ws.IsAltScreen
+
+	// Set up PTY handlers if we have a daemon client
+	if m.DaemonClient != nil {
+		ptyID := ws.PTYID
+
+		window.DaemonWriteFunc = func(data []byte) error {
+			return m.DaemonClient.WritePTY(ptyID, data)
+		}
+
+		window.DaemonResizeFunc = func(width, height int) error {
+			return m.DaemonClient.ResizePTY(ptyID, width, height)
+		}
+
+		window.StartDaemonResponseReader()
+
+		// Subscribe to PTY output
+		err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
+			passThroughCursorStyle(data)
+			window.WriteOutputAsync(data)
+		})
+		if err != nil {
+			// Log but continue - window is still usable
+			m.LogError("Failed to subscribe to PTY: %v", err)
+		}
+
+		// Register exit handler
+		windowID := window.ID
+		m.DaemonClient.OnPTYClosed(ptyID, func() {
+			if m.WindowExitChan != nil {
+				m.WindowExitChan <- windowID
+			}
+		})
+
+		// Get terminal content
+		termState, err := m.DaemonClient.GetTerminalState(ptyID, true)
+		if err == nil && termState != nil {
+			m.restoreTerminalContent(window, termState)
+		}
+
+		window.EnableCallbacks()
+	}
+
+	return window
+}
+
+// closeWindowFromSync closes a window that was deleted by another client
+func (m *OS) closeWindowFromSync(w *terminal.Window) {
+	if m.DaemonClient != nil && w.PTYID != "" {
+		m.DaemonClient.UnsubscribePTY(w.PTYID)
+	}
+	w.Close()
 }
 
 // convertSessionBSPNode converts session.SerializedBSPNode to layout.SerializedNode
@@ -353,7 +640,7 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	// CRITICAL: Restore terminal modes (mouse tracking, bracketed paste, etc.)
 	// This must happen AFTER RestoreAltScreenMode so the modes map is properly updated
 	// These modes are essential for apps like vim/htop to receive mouse events
-	if state.Modes != nil {
+	if state.Modes != nil && len(state.Modes) > 0 {
 		w.Terminal.RestoreModes(state.Modes)
 		m.LogInfo("Restored %d terminal modes for window %s", len(state.Modes), w.ID[:8])
 	}
@@ -470,7 +757,7 @@ func (m *OS) AddDaemonWindow(title string) *OS {
 	m.LogInfo("[DAEMON] Creating new daemon window: %s (workspace %d)", title, m.CurrentWorkspace)
 
 	// Handle case where screen dimensions aren't available yet
-	screenWidth := m.Width
+	screenWidth := m.GetRenderWidth()
 	screenHeight := m.GetUsableHeight()
 
 	if screenWidth == 0 || screenHeight == 0 {

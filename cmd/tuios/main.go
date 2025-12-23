@@ -116,7 +116,8 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().StringVar(&windowTitlePosition, "window-title-position", "", "Window title position: bottom, top, hidden (default: from config or bottom)")
 	rootCmd.PersistentFlags().BoolVar(&hideClock, "hide-clock", false, "Hide the clock overlay")
 
-	var sshPort, sshHost, sshKeyPath string
+	var sshPort, sshHost, sshKeyPath, sshDefaultSession string
+	var sshEphemeral bool
 
 	sshCmd := &cobra.Command{
 		Use:   "ssh",
@@ -124,7 +125,16 @@ comprehensive keyboard/mouse interactions.`,
 		Long: `Run TUIOS as an SSH server
 
 Allows remote connections to TUIOS via SSH. The server will generate
-a host key automatically if not specified.`,
+a host key automatically if not specified.
+
+By default, SSH sessions connect to the TUIOS daemon for persistent sessions.
+Session selection priority:
+  1. --default-session flag (if specified)
+  2. SSH username (if not generic like "tuios", "root", "anonymous")
+  3. SSH command argument (e.g., "ssh host attach mysession")
+  4. First available session or create new
+
+Use --ephemeral for standalone sessions (legacy behavior).`,
 		Example: `  # Start SSH server on default port
   tuios ssh
 
@@ -132,15 +142,23 @@ a host key automatically if not specified.`,
   tuios ssh --port 2222
 
   # Specify custom host key
-  tuios ssh --key-path /path/to/host_key`,
+  tuios ssh --key-path /path/to/host_key
+
+  # Use a default session for all connections
+  tuios ssh --default-session mysession
+
+  # Run in ephemeral mode (standalone, no daemon)
+  tuios ssh --ephemeral`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runSSHServer(sshHost, sshPort, sshKeyPath)
+			return runSSHServer(sshHost, sshPort, sshKeyPath, sshDefaultSession, sshEphemeral)
 		},
 	}
 
 	sshCmd.Flags().StringVar(&sshPort, "port", "2222", "SSH server port")
 	sshCmd.Flags().StringVar(&sshHost, "host", "localhost", "SSH server host")
 	sshCmd.Flags().StringVar(&sshKeyPath, "key-path", "", "Path to SSH host key (auto-generated if not specified)")
+	sshCmd.Flags().StringVar(&sshDefaultSession, "default-session", "", "Default session name for all connections")
+	sshCmd.Flags().BoolVar(&sshEphemeral, "ephemeral", false, "Run in ephemeral mode (standalone, no daemon)")
 
 	configCmd := &cobra.Command{
 		Use:   "config",

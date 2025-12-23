@@ -742,6 +742,11 @@ echo "Cursor at line: $CURSOR_Y"
 
 Run TUIOS as an SSH server for remote access.
 
+By default, SSH sessions connect to the TUIOS daemon for persistent sessions with multi-client support. This means:
+- Sessions persist even when clients disconnect
+- Multiple clients can view/control the same session simultaneously
+- Session state (windows, workspaces) is preserved across reconnections
+
 **Usage:**
 ```bash
 tuios ssh [flags]
@@ -751,10 +756,18 @@ tuios ssh [flags]
 - `--host <string>` - SSH server host (default: "localhost")
 - `--port <string>` - SSH server port (default: "2222")
 - `--key-path <string>` - Path to SSH host key (auto-generated if not specified)
+- `--default-session <string>` - Default session name for all connections
+- `--ephemeral` - Run in ephemeral mode (standalone, no daemon)
+
+**Session Selection Priority:**
+1. `--default-session` flag (if specified)
+2. SSH username (if not generic like "tuios", "root", "anonymous")
+3. SSH command argument (e.g., `ssh host attach mysession`)
+4. First available session or create new
 
 **Examples:**
 ```bash
-# Start SSH server on default port
+# Start SSH server on default port (daemon mode)
 tuios ssh
 
 # Start on custom port
@@ -765,18 +778,41 @@ tuios ssh --host 0.0.0.0 --port 2222
 
 # Use custom host key
 tuios ssh --key-path /path/to/host_key
+
+# All clients share a single session
+tuios ssh --default-session shared
+
+# Run in ephemeral mode (no session persistence)
+tuios ssh --ephemeral
 ```
 
 **Connecting:**
 ```bash
+# Basic connection
 ssh -p 2222 localhost
+
+# Connect to a specific session via username
+ssh -p 2222 mysession@localhost
+
+# Connect to a specific session via command
+ssh -p 2222 localhost attach mysession
 ```
+
+**Multi-Client Behavior:**
+- When multiple clients connect to the same session, the effective terminal size is the minimum of all client dimensions
+- State changes (window create/move, workspace switch, etc.) are broadcast to all clients in real-time
+- Clients are notified when others join or leave the session
 
 ---
 
 ## `tuios-web` (Separate Binary)
 
 **Security Notice:** The web terminal functionality has been extracted to a separate binary (`tuios-web`) to provide better security isolation. This prevents the web server from being used as a potential backdoor in the main TUIOS binary.
+
+By default, web sessions connect to the TUIOS daemon for persistent sessions with multi-client support. This means:
+- Sessions persist even when browser tabs close
+- Multiple browsers/tabs can view/control the same session simultaneously
+- Session state (windows, workspaces) is preserved across reconnections
 
 **Installation:**
 ```bash
@@ -800,6 +836,8 @@ tuios-web [flags]
 - `--port <string>` - Web server port (default: "7681")
 - `--read-only` - Disable input from clients (view only mode)
 - `--max-connections <int>` - Maximum concurrent connections (default: 0 = unlimited)
+- `--default-session <string>` - Default session name for all connections (creates shared session)
+- `--ephemeral` - Disable daemon mode (sessions don't persist)
 - `--theme <name>` - Color theme forwarded to TUIOS instances
 - `--show-keys` - Enable showkeys overlay
 - `--ascii-only` - Use ASCII characters instead of Nerd Font icons
@@ -819,10 +857,12 @@ tuios-web [flags]
 - Automatic reconnection with exponential backoff
 - Self-signed TLS certificate generation for development
 - No CGO dependencies (pure Go)
+- **Persistent sessions via daemon mode** (default)
+- **Multi-client support** - multiple browsers share the same session
 
 **Examples:**
 ```bash
-# Start web server on default port
+# Start web server on default port (daemon mode)
 tuios-web
 
 # Start on custom port
@@ -839,7 +879,18 @@ tuios-web --theme dracula --show-keys
 
 # Limit concurrent connections
 tuios-web --max-connections 10
+
+# All clients share a single session
+tuios-web --default-session shared
+
+# Run in ephemeral mode (no session persistence)
+tuios-web --ephemeral
 ```
+
+**Multi-Client Behavior:**
+- When multiple clients connect to the same session, the effective terminal size is the minimum of all client dimensions
+- State changes (window create/move, workspace switch, etc.) are broadcast to all clients in real-time
+- Clients are notified when others join or leave the session
 
 **Accessing:**
 ```bash

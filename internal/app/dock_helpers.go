@@ -52,7 +52,7 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	allItems := m.getDockItems()
 
 	// Calculate how many items fit and their positions
-	layout.calculateItemPositions(m.Width, allItems)
+	layout.calculateItemPositions(m.GetRenderWidth(), allItems)
 
 	return layout
 }

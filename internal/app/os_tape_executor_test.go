@@ -3,6 +3,8 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
 
@@ -267,5 +269,203 @@ func TestMoveWindowToWorkspaceByID(t *testing.T) {
 					tt.workspace, err, tt.wantError)
 			}
 		})
+	}
+}
+
+// TestApplyStateSyncGlobalState tests that global state (workspace, tiling) is synced
+func TestApplyStateSyncGlobalState(t *testing.T) {
+	m := &OS{
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		WorkspaceFocus:   make(map[int]int),
+	}
+
+	state := &session.SessionState{
+		Name:             "test-session",
+		CurrentWorkspace: 3,
+		MasterRatio:      0.7,
+		AutoTiling:       true,
+	}
+
+	err := m.ApplyStateSync(state)
+	if err != nil {
+		t.Fatalf("ApplyStateSync failed: %v", err)
+	}
+
+	// Verify global state was applied
+	if m.CurrentWorkspace != 3 {
+		t.Errorf("CurrentWorkspace = %d, want 3", m.CurrentWorkspace)
+	}
+	if m.MasterRatio != 0.7 {
+		t.Errorf("MasterRatio = %f, want 0.7", m.MasterRatio)
+	}
+	if !m.AutoTiling {
+		t.Error("AutoTiling should be true")
+	}
+}
+
+// TestApplyStateSyncUpdatesExistingWindows tests that existing windows get updated
+func TestApplyStateSyncUpdatesExistingWindows(t *testing.T) {
+	win1ID := "win-1234-5678-90ab-cdef-000000000001"
+
+	m := &OS{
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		WorkspaceFocus:   make(map[int]int),
+		Windows: []*terminal.Window{
+			{
+				ID:     win1ID,
+				Title:  "Terminal 1",
+				X:      0,
+				Y:      0,
+				Width:  80,
+				Height: 24,
+			},
+		},
+		FocusedWindow: 0,
+	}
+
+	// Capture original window pointer
+	originalWindow := m.Windows[0]
+
+	// Sync with updated position
+	state := &session.SessionState{
+		Name:             "test-session",
+		CurrentWorkspace: 1,
+		FocusedWindowID:  win1ID,
+		Windows: []session.WindowState{
+			{ID: win1ID, X: 100, Y: 50, Width: 120, Height: 40},
+		},
+	}
+
+	err := m.ApplyStateSync(state)
+	if err != nil {
+		t.Fatalf("ApplyStateSync failed: %v", err)
+	}
+
+	// Window should be the same instance (not recreated)
+	if m.Windows[0] != originalWindow {
+		t.Error("Window should be the same instance")
+	}
+
+	// Position should be updated
+	if m.Windows[0].X != 100 || m.Windows[0].Y != 50 {
+		t.Errorf("Window position = (%d, %d), want (100, 50)", m.Windows[0].X, m.Windows[0].Y)
+	}
+	if m.Windows[0].Width != 120 || m.Windows[0].Height != 40 {
+		t.Errorf("Window size = %dx%d, want 120x40", m.Windows[0].Width, m.Windows[0].Height)
+	}
+}
+
+// TestApplyStateSyncRemovesDeletedWindows tests that windows deleted by other clients are removed
+func TestApplyStateSyncRemovesDeletedWindows(t *testing.T) {
+	win1ID := "win-1234-5678-90ab-cdef-000000000001"
+	win2ID := "win-1234-5678-90ab-cdef-000000000002"
+
+	m := &OS{
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		WorkspaceFocus:   make(map[int]int),
+		Windows: []*terminal.Window{
+			{ID: win1ID, Title: "Terminal 1"},
+			{ID: win2ID, Title: "Terminal 2"},
+		},
+		FocusedWindow: 0,
+	}
+
+	// Sync with only win2 (win1 was deleted by other client)
+	state := &session.SessionState{
+		Name:             "test-session",
+		CurrentWorkspace: 1,
+		FocusedWindowID:  win2ID,
+		Windows: []session.WindowState{
+			{ID: win2ID, X: 0, Y: 0, Width: 80, Height: 24},
+		},
+	}
+
+	err := m.ApplyStateSync(state)
+	if err != nil {
+		t.Fatalf("ApplyStateSync failed: %v", err)
+	}
+
+	// Should now have only 1 window
+	if len(m.Windows) != 1 {
+		t.Errorf("Windows count = %d, want 1", len(m.Windows))
+	}
+	if m.Windows[0].ID != win2ID {
+		t.Errorf("Remaining window ID = %s, want %s", m.Windows[0].ID, win2ID)
+	}
+}
+
+// TestApplyStateSyncNilState tests handling nil state
+func TestApplyStateSyncNilState(t *testing.T) {
+	m := &OS{}
+
+	err := m.ApplyStateSync(nil)
+	if err != nil {
+		t.Errorf("ApplyStateSync(nil) should not error, got: %v", err)
+	}
+}
+
+// TestApplyStateSyncFocusUpdate tests that focus is correctly updated
+func TestApplyStateSyncFocusUpdate(t *testing.T) {
+	win1ID := "win-1234-5678-90ab-cdef-000000000001"
+	win2ID := "win-1234-5678-90ab-cdef-000000000002"
+
+	m := &OS{
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		WorkspaceFocus:   make(map[int]int),
+		Windows: []*terminal.Window{
+			{ID: win1ID, Title: "Terminal 1"},
+			{ID: win2ID, Title: "Terminal 2"},
+		},
+		FocusedWindow: 0, // win1 focused
+	}
+
+	// Sync with win2 focused - include both windows to avoid deletion
+	state := &session.SessionState{
+		FocusedWindowID: win2ID,
+		Windows: []session.WindowState{
+			{ID: win1ID},
+			{ID: win2ID},
+		},
+	}
+
+	err := m.ApplyStateSync(state)
+	if err != nil {
+		t.Fatalf("ApplyStateSync failed: %v", err)
+	}
+
+	// Focus should now be on win2 (index 1)
+	if m.FocusedWindow != 1 {
+		t.Errorf("FocusedWindow = %d, want 1", m.FocusedWindow)
+	}
+}
+
+// TestApplyStateSyncSkipsInvalidWindows tests that windows with empty IDs are skipped
+func TestApplyStateSyncSkipsInvalidWindows(t *testing.T) {
+	m := &OS{
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		WorkspaceFocus:   make(map[int]int),
+	}
+
+	// Sync with an invalid window (empty ID)
+	state := &session.SessionState{
+		Windows: []session.WindowState{
+			{ID: "", PTYID: ""},         // Invalid - empty ID
+			{ID: "valid-id", PTYID: ""}, // Invalid - empty PTYID
+		},
+	}
+
+	err := m.ApplyStateSync(state)
+	if err != nil {
+		t.Fatalf("ApplyStateSync failed: %v", err)
+	}
+
+	// Should have 0 windows - both were invalid
+	if len(m.Windows) != 0 {
+		t.Errorf("Windows count = %d, want 0", len(m.Windows))
 	}
 }

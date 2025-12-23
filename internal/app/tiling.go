@@ -14,7 +14,7 @@ type tileLayout struct {
 
 // calculateTilingLayout is a wrapper around layout.CalculateTilingLayout for internal use
 func (m *OS) calculateTilingLayout(n int) []tileLayout {
-	layouts := layout.CalculateTilingLayout(n, m.Width, m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
+	layouts := layout.CalculateTilingLayout(n, m.GetRenderWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
 	result := make([]tileLayout, len(layouts))
 	for i, l := range layouts {
 		result[i] = tileLayout{
@@ -174,6 +174,9 @@ func (m *OS) ToggleAutoTiling() {
 		// Clear preselection when disabling tiling
 		m.PreselectionDir = layout.PreselectionNone
 	}
+
+	// Sync state to daemon so tiling mode persists across reconnects
+	m.SyncStateToDaemon()
 }
 
 // TileNewWindow arranges the new window in the tiling layout
@@ -343,7 +346,7 @@ func (m *OS) TileRemainingWindows(excludeIndex int) {
 	}
 
 	// Calculate tiling layout based on number of remaining windows
-	layouts := layout.CalculateTilingLayout(len(visibleWindows), m.Width, m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
+	layouts := layout.CalculateTilingLayout(len(visibleWindows), m.GetRenderWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
 
 	// Apply layout with animations
 	for i, idx := range visibleIndices {
@@ -674,7 +677,7 @@ func (m *OS) ResizeFocusedWindowWidth(deltaPixels int) {
 
 	// Block resizing if right edge is at screen boundary
 	const edgeTolerance = 2
-	atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (m.Width - edgeTolerance)
+	atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (m.GetRenderWidth() - edgeTolerance)
 	if atRightEdge {
 		return // Can't resize right edge when it's at the screen edge
 	}
@@ -786,7 +789,7 @@ func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 		}
 
 		// Find maximum valid X (rightmost position split can move to)
-		maxValidX := m.Width
+		maxValidX := m.GetRenderWidth()
 		for _, win := range rightWindows {
 			// Right windows need: constrainedRight <= (win.X + win.Width) - minWidth
 			maxAllowed := win.X + win.Width - minWidth
@@ -841,7 +844,7 @@ func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 		}
 
 		// Find maximum valid X
-		maxValidX := m.Width
+		maxValidX := m.GetRenderWidth()
 		for _, win := range rightWindows {
 			maxAllowed := win.X + win.Width - minWidth
 			if maxAllowed < maxValidX {
@@ -979,13 +982,14 @@ func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 	resized.Height = newBottom - newY
 
 	// Final validation: ensure dimensions are valid (should NEVER fail if constraint calculation is correct)
+	renderWidth := m.GetRenderWidth()
 	if resized.Width < minWidth || resized.Height < minHeight ||
 		resized.X < 0 || resized.Y < 0 ||
-		resized.X+resized.Width > m.Width || resized.Y+resized.Height > maxY {
+		resized.X+resized.Width > renderWidth || resized.Y+resized.Height > maxY {
 		// Constraint calculation failed - clamp as last resort to prevent panic
-		resized.Width = max(minWidth, min(resized.Width, m.Width-resized.X))
+		resized.Width = max(minWidth, min(resized.Width, renderWidth-resized.X))
 		resized.Height = max(minHeight, min(resized.Height, maxY-resized.Y))
-		resized.X = max(0, min(resized.X, m.Width-minWidth))
+		resized.X = max(0, min(resized.X, renderWidth-minWidth))
 		resized.Y = max(minY, min(resized.Y, maxY-minHeight))
 	}
 
@@ -1027,7 +1031,7 @@ func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 			}
 		}
 
-		maxValidX := m.Width
+		maxValidX := m.GetRenderWidth()
 		for _, win := range rightWindows {
 			maxAllowed := win.X + win.Width - minWidth
 			if maxAllowed < maxValidX {
@@ -1070,7 +1074,7 @@ func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 			}
 		}
 
-		maxValidX := m.Width
+		maxValidX := m.GetRenderWidth()
 		for _, win := range rightWindows {
 			maxAllowed := win.X + win.Width - minWidth
 			if maxAllowed < maxValidX {
@@ -1189,12 +1193,13 @@ func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 	resized.Width = newRight - newX
 	resized.Height = newBottom - newY
 
+	renderWidth := m.GetRenderWidth()
 	if resized.Width < minWidth || resized.Height < minHeight ||
 		resized.X < 0 || resized.Y < 0 ||
-		resized.X+resized.Width > m.Width || resized.Y+resized.Height > maxY {
-		resized.Width = max(minWidth, min(resized.Width, m.Width-resized.X))
+		resized.X+resized.Width > renderWidth || resized.Y+resized.Height > maxY {
+		resized.Width = max(minWidth, min(resized.Width, renderWidth-resized.X))
 		resized.Height = max(minHeight, min(resized.Height, maxY-resized.Y))
-		resized.X = max(0, min(resized.X, m.Width-minWidth))
+		resized.X = max(0, min(resized.X, renderWidth-minWidth))
 		resized.Y = max(minY, min(resized.Y, maxY-minHeight))
 	}
 
@@ -1295,7 +1300,7 @@ func (m *OS) GetBSPBounds() layout.Rect {
 	return layout.Rect{
 		X: 0,
 		Y: m.GetTopMargin(),
-		W: m.Width,
+		W: m.GetRenderWidth(),
 		H: m.GetUsableHeight(),
 	}
 }

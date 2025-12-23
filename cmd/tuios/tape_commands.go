@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -57,6 +58,7 @@ func runTapeInteractive(tapeFile string) error {
 	initialOS := &app.OS{
 		FocusedWindow:        -1,
 		WindowExitChan:       make(chan string, 10),
+		StateSyncChan:        make(chan *session.SessionState, 10),
 		MouseSnapping:        false,
 		MasterRatio:          0.5,
 		CurrentWorkspace:     1,

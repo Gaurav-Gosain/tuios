@@ -107,16 +107,17 @@ type OS struct {
 	LastMouseY         int
 	HasActiveTerminals bool
 	ShowHelp           bool
-	InteractionMode    bool            // True when actively dragging/resizing
-	MouseSnapping      bool            // Enable/disable mouse snapping
-	WindowExitChan     chan string     // Channel to signal window closure
-	Animations         []*ui.Animation // Active animations
-	CPUHistory         []float64       // CPU usage history for graph
-	LastCPUUpdate      time.Time       // Last time CPU was updated
-	RAMUsage           float64         // Cached RAM usage percentage
-	LastRAMUpdate      time.Time       // Last time RAM was updated
-	AutoTiling         bool            // Automatic tiling mode enabled
-	MasterRatio        float64         // Master window width ratio for tiling (0.3-0.7)
+	InteractionMode    bool                       // True when actively dragging/resizing
+	MouseSnapping      bool                       // Enable/disable mouse snapping
+	WindowExitChan     chan string                // Channel to signal window closure
+	StateSyncChan      chan *session.SessionState // Channel for thread-safe state sync from callbacks
+	Animations         []*ui.Animation            // Active animations
+	CPUHistory         []float64                  // CPU usage history for graph
+	LastCPUUpdate      time.Time                  // Last time CPU was updated
+	RAMUsage           float64                    // Cached RAM usage percentage
+	LastRAMUpdate      time.Time                  // Last time RAM was updated
+	AutoTiling         bool                       // Automatic tiling mode enabled
+	MasterRatio        float64                    // Master window width ratio for tiling (0.3-0.7)
 	// BSP tiling state
 	WorkspaceTrees        map[int]*layout.BSPTree // BSP tree per workspace
 	PreselectionDir       layout.PreselectionDir  // Pending preselection direction (0 = none)
@@ -165,6 +166,9 @@ type OS struct {
 	DaemonClient      *session.TUIClient // Client for daemon communication (nil in local mode)
 	SessionName       string             // Name of the daemon session (if attached)
 	RestoredFromState bool               // True after RestoreFromState, cleared after first resize
+	// Multi-client effective size (min of all clients in session)
+	EffectiveWidth  int // Effective width for rendering (min of all clients, 0 = use terminal size)
+	EffectiveHeight int // Effective height for rendering (min of all clients, 0 = use terminal size)
 	// Keyboard enhancement support (Kitty protocol)
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// Keybind registry for user-configurable keybindings
@@ -468,7 +472,7 @@ func (m *OS) AddWindow(title string) *OS {
 	m.LogInfo("Creating new window: %s (workspace %d)", title, m.CurrentWorkspace)
 
 	// Handle case where screen dimensions aren't available yet
-	screenWidth := m.Width
+	screenWidth := m.GetRenderWidth()
 	screenHeight := m.GetUsableHeight()
 
 	if screenWidth == 0 || screenHeight == 0 {
@@ -691,7 +695,8 @@ func (m *OS) Snap(i int, quarter SnapQuarter) *OS {
 
 func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) {
 	usableHeight := m.GetUsableHeight()
-	halfWidth := m.Width / 2
+	renderWidth := m.GetRenderWidth()
+	halfWidth := renderWidth / 2
 	halfHeight := usableHeight / 2
 	topMargin := m.GetTopMargin()
 
@@ -699,7 +704,7 @@ func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) 
 	case SnapLeft:
 		return 0, topMargin, halfWidth, usableHeight
 	case SnapRight:
-		return halfWidth, topMargin, m.Width - halfWidth, usableHeight
+		return halfWidth, topMargin, renderWidth - halfWidth, usableHeight
 	case SnapTopLeft:
 		return 0, topMargin, halfWidth, halfHeight
 	case SnapTopRight:
@@ -709,11 +714,11 @@ func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) 
 	case SnapBottomRight:
 		return halfWidth, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
 	case SnapFullScreen:
-		return 0, topMargin, m.Width, usableHeight
+		return 0, topMargin, renderWidth, usableHeight
 	case Unsnap:
-		return m.Width / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
+		return renderWidth / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
 	default:
-		return m.Width / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
+		return renderWidth / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
 	}
 }
 
@@ -726,6 +731,7 @@ func (m *OS) ClampWindowsToView() {
 	}
 
 	usableHeight := m.GetUsableHeight()
+	renderWidth := m.GetRenderWidth()
 	topMargin := m.GetTopMargin()
 	minVisibleX := 20 // Minimum visible horizontal pixels (matches mouse.go)
 	minVisibleY := 3  // Minimum visible vertical rows (matches mouse.go)
@@ -740,8 +746,8 @@ func (m *OS) ClampWindowsToView() {
 		needsResize := false
 
 		// Clamp window size to fit within terminal if larger
-		if win.Width > m.Width {
-			win.Width = m.Width
+		if win.Width > renderWidth {
+			win.Width = renderWidth
 			needsResize = true
 		}
 		if win.Height > usableHeight {
@@ -763,8 +769,8 @@ func (m *OS) ClampWindowsToView() {
 		if win.X+win.Width < minVisibleX {
 			win.X = minVisibleX - win.Width
 		}
-		if win.X > m.Width-minVisibleX {
-			win.X = m.Width - minVisibleX
+		if win.X > renderWidth-minVisibleX {
+			win.X = renderWidth - minVisibleX
 		}
 
 		// Clamp Y position: ensure at least minVisibleY rows visible, and can't go behind dock
@@ -787,7 +793,7 @@ func (m *OS) ClampWindowsToView() {
 	}
 
 	if clampedCount > 0 {
-		m.LogInfo("[CLAMP] Repositioned %d windows to fit terminal bounds (%dx%d)", clampedCount, m.Width, m.Height)
+		m.LogInfo("[CLAMP] Repositioned %d windows to fit terminal bounds (%dx%d)", clampedCount, renderWidth, m.GetRenderHeight())
 		m.SyncStateToDaemon()
 	}
 }
@@ -966,10 +972,46 @@ func (m *OS) GetTimeYPosition() int {
 // GetUsableHeight returns the usable height excluding the dock.
 func (m *OS) GetUsableHeight() int {
 	if config.DockbarPosition == "hidden" {
-		return m.Height
+		return m.GetRenderHeight()
 	}
 	// Reserve space for the dock (at top or bottom)
-	return m.Height - config.DockHeight
+	return m.GetRenderHeight() - config.DockHeight
+}
+
+// GetRenderWidth returns the width to use for rendering.
+// In multi-client mode, this is the minimum of the terminal width and
+// the effective session width (min of all connected clients).
+func (m *OS) GetRenderWidth() int {
+	// If terminal size not yet known, use effective size if available
+	if m.Width == 0 {
+		if m.EffectiveWidth > 0 {
+			return m.EffectiveWidth
+		}
+		return 0
+	}
+	// Use minimum of terminal and effective size
+	if m.EffectiveWidth > 0 && m.EffectiveWidth < m.Width {
+		return m.EffectiveWidth
+	}
+	return m.Width
+}
+
+// GetRenderHeight returns the height to use for rendering.
+// In multi-client mode, this is the minimum of the terminal height and
+// the effective session height (min of all connected clients).
+func (m *OS) GetRenderHeight() int {
+	// If terminal size not yet known, use effective size if available
+	if m.Height == 0 {
+		if m.EffectiveHeight > 0 {
+			return m.EffectiveHeight
+		}
+		return 0
+	}
+	// Use minimum of terminal and effective size
+	if m.EffectiveHeight > 0 && m.EffectiveHeight < m.Height {
+		return m.EffectiveHeight
+	}
+	return m.Height
 }
 
 // MarkAllDirty marks all windows as dirty for re-rendering.

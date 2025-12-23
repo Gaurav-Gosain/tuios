@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
@@ -144,6 +145,7 @@ func runLocal() error {
 	initialOS := &app.OS{
 		FocusedWindow:        -1,
 		WindowExitChan:       make(chan string, 10),
+		StateSyncChan:        make(chan *session.SessionState, 10),
 		MouseSnapping:        false,
 		MasterRatio:          0.5,
 		CurrentWorkspace:     1,
@@ -199,7 +201,7 @@ func runLocal() error {
 	return nil
 }
 
-func runSSHServer(sshHost, sshPort, sshKeyPath string) error {
+func runSSHServer(sshHost, sshPort, sshKeyPath, defaultSession string, ephemeral bool) error {
 	if debugMode {
 		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
 		fmt.Println("Debug mode enabled")
@@ -217,6 +219,12 @@ func runSSHServer(sshHost, sshPort, sshKeyPath string) error {
 	}
 
 	log.Printf("Starting TUIOS SSH server on %s:%s", sshHost, sshPort)
+	if defaultSession != "" {
+		log.Printf("Default session: %s", defaultSession)
+	}
+	if ephemeral {
+		log.Printf("Running in ephemeral mode (no daemon)")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -227,9 +235,19 @@ func runSSHServer(sshHost, sshPort, sshKeyPath string) error {
 		<-c
 		log.Println("Shutting down SSH server...")
 		cancel()
+		// Stop in-process daemon if we started one
+		session.StopInProcessDaemon()
 	}()
 
-	if err := server.StartSSHServer(ctx, sshHost, sshPort, sshKeyPath); err != nil {
+	cfg := &server.SSHServerConfig{
+		Host:           sshHost,
+		Port:           sshPort,
+		KeyPath:        sshKeyPath,
+		DefaultSession: defaultSession,
+		Version:        version,
+		Ephemeral:      ephemeral,
+	}
+	if err := server.StartSSHServer(ctx, cfg); err != nil {
 		return fmt.Errorf("SSH server error: %w", err)
 	}
 	return nil

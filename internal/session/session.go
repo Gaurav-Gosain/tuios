@@ -78,6 +78,8 @@ type SessionState struct {
 	AutoTiling       bool           `json:"auto_tiling"`
 	Width            int            `json:"width"`
 	Height           int            `json:"height"`
+	// Mode: 0 = WindowManagementMode, 1 = TerminalMode
+	Mode int `json:"mode"`
 	// BSP tiling state
 	WorkspaceTrees  map[int]*SerializedBSPTree `json:"workspace_trees,omitempty"`  // BSP tree per workspace
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
@@ -332,6 +334,25 @@ func (s *Session) WindowCount() int {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 	return len(s.state.Windows)
+}
+
+// Size returns the current session dimensions.
+func (s *Session) Size() (width, height int) {
+	return s.width, s.height
+}
+
+// Resize updates the session dimensions.
+// This is called when the effective size changes (min of all connected clients).
+func (s *Session) Resize(width, height int) {
+	s.width = width
+	s.height = height
+
+	// Resize all PTYs to match the new session size
+	s.ptysMu.RLock()
+	defer s.ptysMu.RUnlock()
+	for _, pty := range s.ptys {
+		pty.Resize(width, height)
+	}
 }
 
 // Info returns session information.

@@ -53,6 +53,10 @@ type connState struct {
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool
+
+	// Client terminal dimensions (for multi-client size calculation)
+	width  int
+	height int
 }
 
 // DaemonConfig holds configuration for starting the daemon.
@@ -130,9 +134,10 @@ func (d *Daemon) Run() error {
 	return d.shutdown()
 }
 
-// Stop signals the daemon to stop.
+// Stop signals the daemon to stop and performs cleanup.
 func (d *Daemon) Stop() {
 	d.cancel()
+	_ = d.shutdown()
 }
 
 func (d *Daemon) shutdown() error {
@@ -382,23 +387,52 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	}
 
 	cs.sessionID = session.ID
+	// Don't store client dimensions yet - the attach payload has placeholder values (80x24).
+	// The real terminal size will be sent via NotifyTerminalSize after Bubble Tea starts.
+	// Setting width/height to 0 excludes this client from calculateEffectiveSize until then.
+	cs.width = 0
+	cs.height = 0
 	// Mark as TUI client if they have PTY subscriptions or if they're creating a new session
 	// TUI clients are the ones that can receive and execute remote commands
 	cs.isTUIClient = true
-	log.Printf("Client %s attached to session %s (TUI client)", cs.clientID, session.Name)
 
-	// Get session state to return
+	clientCount := d.getSessionClientCount(session.ID)
+	log.Printf("Client %s attached to session %s (TUI client, %d clients total)", cs.clientID, session.Name, clientCount)
+
+	// Calculate effective size from existing clients (new client excluded since width/height = 0)
+	effectiveWidth, effectiveHeight := d.calculateEffectiveSize(session.ID)
+	if effectiveWidth == 0 || effectiveHeight == 0 {
+		// No existing clients with known size, use placeholder for now
+		// Will be updated when this client sends NotifyTerminalSize
+		effectiveWidth = payload.Width
+		effectiveHeight = payload.Height
+	}
+
+	// Update session size if needed
+	session.Resize(effectiveWidth, effectiveHeight)
+
+	// Notify other clients that a new client joined (this also broadcasts size change)
+	if clientCount > 1 {
+		d.notifyClientJoined(session.ID, cs)
+	}
+
+	// Get session state to return (with effective size)
 	state := session.GetState()
+	state.Width = effectiveWidth
+	state.Height = effectiveHeight
+
 	debugLog("[DEBUG] Session state: %d windows, %d PTYs", len(state.Windows), session.PTYCount())
 	for i, w := range state.Windows {
-		debugLog("[DEBUG]   Window %d: ID=%s, PTYID=%s", i, w.ID[:8], w.PTYID[:8])
+		if len(w.ID) >= 8 && len(w.PTYID) >= 8 {
+			debugLog("[DEBUG]   Window %d: ID=%s, PTYID=%s", i, w.ID[:8], w.PTYID[:8])
+		}
 	}
 
 	return d.sendMessage(cs, MsgAttached, &AttachedPayload{
 		SessionName: session.Name,
 		SessionID:   session.ID,
-		Width:       payload.Width,
-		Height:      payload.Height,
+		Width:       effectiveWidth,
+		Height:      effectiveHeight,
 		WindowCount: len(state.Windows),
 		State:       state,
 	})
@@ -409,16 +443,24 @@ func (d *Daemon) handleDetach(cs *connState) error {
 		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
 	}
 
+	sessionID := cs.sessionID
+	clientID := cs.clientID
+
 	// Unsubscribe from all PTYs
-	if session := d.manager.GetSessionByID(cs.sessionID); session != nil {
+	if session := d.manager.GetSessionByID(sessionID); session != nil {
 		for ptyID := range cs.ptySubscriptions {
 			if pty := session.GetPTY(ptyID); pty != nil {
-				pty.Unsubscribe(cs.clientID)
+				pty.Unsubscribe(clientID)
 			}
 		}
 	}
 	cs.ptySubscriptions = make(map[string]struct{})
 	cs.sessionID = ""
+	cs.width = 0
+	cs.height = 0
+
+	// Notify other clients that this client left
+	d.notifyClientLeft(sessionID, clientID)
 
 	return d.sendMessage(cs, MsgDetached, nil)
 }
@@ -522,7 +564,15 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 		return nil
 	}
 
-	if payload.PTYID != "" {
+	// Update client dimensions for multi-client size calculation
+	if payload.PTYID == "" {
+		// This is a client resize, not a PTY-specific resize
+		cs.width = payload.Width
+		cs.height = payload.Height
+		// Recalculate effective session size
+		d.recalculateAndBroadcastSize(cs.sessionID)
+	} else {
+		// PTY-specific resize
 		if pty := session.GetPTY(payload.PTYID); pty != nil {
 			_ = pty.Resize(payload.Width, payload.Height)
 		}
@@ -661,6 +711,13 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	}
 
 	session.UpdateState(&state)
+
+	// Broadcast state change to other clients in the session
+	clientCount := d.getSessionClientCount(cs.sessionID)
+	if clientCount > 1 {
+		d.broadcastStateSync(cs.sessionID, &state, "update", cs.clientID)
+	}
+
 	return nil
 }
 
@@ -810,6 +867,157 @@ func (d *Daemon) sendError(cs *connState, code int, message string) error {
 
 func (d *Daemon) sendPong(cs *connState) error {
 	return d.sendMessage(cs, MsgPong, nil)
+}
+
+// broadcastToSession sends a message to all TUI clients attached to a session.
+// If excludeClientID is non-empty, that client is excluded from the broadcast.
+func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, payload any, excludeClientID string) {
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+
+	for _, cs := range d.clients {
+		if cs.sessionID != sessionID || !cs.isTUIClient {
+			continue
+		}
+		if cs.clientID == excludeClientID {
+			continue
+		}
+		// Send in a goroutine to avoid blocking if client is slow
+		go func(client *connState) {
+			if err := d.sendMessage(client, msgType, payload); err != nil {
+				debugLog("[DEBUG] broadcastToSession: failed to send to client %s: %v", client.clientID, err)
+			}
+		}(cs)
+	}
+}
+
+// getSessionClients returns all TUI clients attached to a session.
+func (d *Daemon) getSessionClients(sessionID string) []*connState {
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+
+	var clients []*connState
+	for _, cs := range d.clients {
+		if cs.sessionID == sessionID && cs.isTUIClient {
+			clients = append(clients, cs)
+		}
+	}
+	return clients
+}
+
+// getSessionClientCount returns the number of TUI clients attached to a session.
+func (d *Daemon) getSessionClientCount(sessionID string) int {
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+
+	count := 0
+	for _, cs := range d.clients {
+		if cs.sessionID == sessionID && cs.isTUIClient {
+			count++
+		}
+	}
+	return count
+}
+
+// calculateEffectiveSize returns the minimum dimensions across all clients in a session.
+// This is used for multi-client rendering where all clients need to see the same content.
+func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+
+	width, height = 0, 0
+	first := true
+
+	for _, cs := range d.clients {
+		if cs.sessionID != sessionID || !cs.isTUIClient {
+			continue
+		}
+		if cs.width == 0 || cs.height == 0 {
+			continue
+		}
+		if first {
+			width, height = cs.width, cs.height
+			first = false // Fixed: was incorrectly set to true
+		} else {
+			if cs.width < width {
+				width = cs.width
+			}
+			if cs.height < height {
+				height = cs.height
+			}
+		}
+	}
+	return width, height
+}
+
+// notifyClientJoined broadcasts a client join event to all other clients in the session.
+func (d *Daemon) notifyClientJoined(sessionID string, joiningClient *connState) {
+	clientCount := d.getSessionClientCount(sessionID)
+
+	payload := &ClientJoinedPayload{
+		ClientID:    joiningClient.clientID,
+		ClientCount: clientCount,
+		Width:       joiningClient.width,
+		Height:      joiningClient.height,
+	}
+
+	d.broadcastToSession(sessionID, MsgClientJoined, payload, joiningClient.clientID)
+
+	// Recalculate effective size and broadcast if changed
+	d.recalculateAndBroadcastSize(sessionID)
+}
+
+// notifyClientLeft broadcasts a client leave event to all other clients in the session.
+func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string) {
+	clientCount := d.getSessionClientCount(sessionID)
+
+	payload := &ClientLeftPayload{
+		ClientID:    leavingClientID,
+		ClientCount: clientCount,
+	}
+
+	d.broadcastToSession(sessionID, MsgClientLeft, payload, leavingClientID)
+
+	// Recalculate effective size and broadcast if changed
+	if clientCount > 0 {
+		d.recalculateAndBroadcastSize(sessionID)
+	}
+}
+
+// recalculateAndBroadcastSize recalculates the effective session size and broadcasts if changed.
+func (d *Daemon) recalculateAndBroadcastSize(sessionID string) {
+	session := d.manager.GetSessionByID(sessionID)
+	if session == nil {
+		return
+	}
+
+	newWidth, newHeight := d.calculateEffectiveSize(sessionID)
+	if newWidth == 0 || newHeight == 0 {
+		return
+	}
+
+	oldWidth, oldHeight := session.Size()
+	if newWidth != oldWidth || newHeight != oldHeight {
+		session.Resize(newWidth, newHeight)
+
+		payload := &SessionResizePayload{
+			Width:       newWidth,
+			Height:      newHeight,
+			ClientCount: d.getSessionClientCount(sessionID),
+		}
+		d.broadcastToSession(sessionID, MsgSessionResize, payload, "")
+		LogBasic("Session %s resized to %dx%d (min of %d clients)", session.Name, newWidth, newHeight, payload.ClientCount)
+	}
+}
+
+// broadcastStateSync broadcasts a state update to all clients in a session.
+func (d *Daemon) broadcastStateSync(sessionID string, state *SessionState, triggerType string, sourceClientID string) {
+	payload := &StateSyncPayload{
+		State:       state,
+		TriggerType: triggerType,
+		SourceID:    sourceClientID,
+	}
+	d.broadcastToSession(sessionID, MsgStateSync, payload, sourceClientID)
 }
 
 // handleExecuteCommand routes a tape command to the TUI client attached to the session.

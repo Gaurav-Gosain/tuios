@@ -2,7 +2,6 @@
 package input
 
 import (
-	"log"
 	"strings"
 	"time"
 
@@ -576,18 +575,14 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		return o, nil
 	case "d":
 		// Detach from daemon session - quit client but leave session running
-		log.Printf("[DEBUG] Ctrl+B d pressed, IsDaemonSession=%v, DaemonClient=%v", o.IsDaemonSession, o.DaemonClient != nil)
 		if o.IsDaemonSession {
-			log.Printf("[DEBUG] Detaching from daemon session...")
 			// Sync state to daemon before detaching
 			o.SyncStateToDaemon()
-			log.Printf("[DEBUG] State synced, returning tea.Quit")
 			// Don't call Cleanup() - we want the session to persist
 			// Don't show notification - just quit immediately
 			return o, tea.Quit
 		}
 		// Not in daemon mode, just switch to window management mode
-		log.Printf("[DEBUG] Not in daemon mode, switching to window management mode")
 		o.Mode = app.WindowManagementMode
 		o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {

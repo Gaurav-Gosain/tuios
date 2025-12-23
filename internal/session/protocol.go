@@ -59,6 +59,14 @@ const (
 	MsgWindowList    // Response with window list
 	MsgQuerySession  // Query session info from TUI
 	MsgSessionInfo   // Response with session info
+
+	// Multi-client support messages
+	MsgStateSync       // Broadcast state update to all clients in session
+	MsgClientJoined    // Notification that another client joined the session
+	MsgClientLeft      // Notification that another client left the session
+	MsgSessionResize   // Session effective size changed (min of all clients)
+	MsgForceRefresh    // Force all clients to re-render
+	MsgRequestFullSync // Client requests full state sync from leader
 )
 
 // Message is the base protocol message structure.
@@ -351,6 +359,40 @@ type SessionInfoPayload struct {
 	Width            int    `json:"width"`                     // Terminal width
 	Height           int    `json:"height"`                    // Terminal height
 	WorkspaceWindows []int  `json:"workspace_windows"`         // Window count per workspace [ws1, ws2, ...]
+}
+
+// StateSyncPayload broadcasts state changes to all clients in a session.
+type StateSyncPayload struct {
+	State       *SessionState `json:"state"`                  // Full session state
+	TriggerType string        `json:"trigger_type,omitempty"` // What triggered the sync: "window", "workspace", "tiling", etc.
+	SourceID    string        `json:"source_id,omitempty"`    // Client ID that triggered the change
+}
+
+// ClientJoinedPayload notifies clients that another client joined.
+type ClientJoinedPayload struct {
+	ClientID    string `json:"client_id"`    // Joining client's ID
+	ClientCount int    `json:"client_count"` // Total clients now attached
+	Width       int    `json:"width"`        // New client's width
+	Height      int    `json:"height"`       // New client's height
+}
+
+// ClientLeftPayload notifies clients that another client left.
+type ClientLeftPayload struct {
+	ClientID    string `json:"client_id"`    // Leaving client's ID
+	ClientCount int    `json:"client_count"` // Total clients now attached
+}
+
+// SessionResizePayload notifies clients of effective session size change.
+// The effective size is the minimum dimensions of all attached clients.
+type SessionResizePayload struct {
+	Width       int `json:"width"`        // New effective width (min of all clients)
+	Height      int `json:"height"`       // New effective height (min of all clients)
+	ClientCount int `json:"client_count"` // Number of clients
+}
+
+// ForceRefreshPayload requests all clients to re-render.
+type ForceRefreshPayload struct {
+	Reason string `json:"reason,omitempty"` // Why refresh is needed
 }
 
 // Error codes

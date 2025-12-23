@@ -187,7 +187,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 	centerWidth := lipgloss.Width(dockItemsStr)
 	rightWidth := layout.RightWidth
 
-	availableSpace := m.Width - actualLeftWidth - rightWidth - centerWidth
+	availableSpace := m.GetRenderWidth() - actualLeftWidth - rightWidth - centerWidth
 	leftSpacer := availableSpace / 2
 	rightSpacer := availableSpace - leftSpacer
 
@@ -210,17 +210,18 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		paddedRightInfo,
 	)
 
-	if m.cachedSeparatorWidth != m.Width {
-		m.cachedSeparator = strings.Repeat(config.GetWindowSeparatorChar(), m.Width)
-		m.cachedSeparatorWidth = m.Width
+	renderWidth := m.GetRenderWidth()
+	if m.cachedSeparatorWidth != renderWidth {
+		m.cachedSeparator = strings.Repeat(config.GetWindowSeparatorChar(), renderWidth)
+		m.cachedSeparatorWidth = renderWidth
 	}
 
 	separator := lipgloss.NewStyle().
-		Width(m.Width).
+		Width(renderWidth).
 		Foreground(lipgloss.Color("#303040")).
 		Render(m.cachedSeparator)
 
-	dockbarYPos := m.Height - config.DockHeight
+	dockbarYPos := m.GetRenderHeight() - config.DockHeight
 	dockbarParts := []string{separator, dockBar}
 	if config.DockbarPosition == "top" {
 		dockbarYPos = 0
