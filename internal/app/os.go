@@ -723,6 +723,79 @@ func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) 
 	}
 }
 
+// ScaleWindowsToTerminal proportionally scales all windows when terminal size changes.
+// This is called when restoring from daemon state to ensure windows fit the new terminal size.
+// oldWidth/oldHeight are the terminal dimensions when state was saved.
+// newWidth/newHeight are the current terminal dimensions.
+func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int) {
+	if m.AutoTiling {
+		return // Tiling mode handles its own layout
+	}
+
+	if oldWidth <= 0 || oldHeight <= 0 || newWidth <= 0 || newHeight <= 0 {
+		return // Invalid dimensions
+	}
+
+	oldUsableHeight := oldHeight - m.GetTopMargin()
+	if config.DockbarPosition != "hidden" {
+		oldUsableHeight -= 1
+	}
+
+	newUsableHeight := m.GetUsableHeight()
+	newRenderWidth := m.GetRenderWidth()
+
+	widthScale := float64(newRenderWidth) / float64(oldWidth)
+	heightScale := float64(newUsableHeight) / float64(oldUsableHeight)
+
+	m.LogInfo("[SCALE] Scaling windows: width %.2fx, height %.2fx", widthScale, heightScale)
+
+	for _, win := range m.Windows {
+		if win.Minimized {
+			continue
+		}
+
+		// Scale position and size
+		win.X = int(float64(win.X) * widthScale)
+		win.Y = int(float64(win.Y) * heightScale)
+		win.Width = int(float64(win.Width) * widthScale)
+		win.Height = int(float64(win.Height) * heightScale)
+
+		// Ensure minimum size
+		if win.Width < config.DefaultWindowWidth {
+			win.Width = config.DefaultWindowWidth
+		}
+		if win.Height < config.DefaultWindowHeight {
+			win.Height = config.DefaultWindowHeight
+		}
+
+		// Ensure windows don't exceed terminal bounds
+		if win.Width > newRenderWidth {
+			win.Width = newRenderWidth
+		}
+		if win.Height > newUsableHeight {
+			win.Height = newUsableHeight
+		}
+
+		// Ensure position keeps window on screen
+		if win.X < 0 {
+			win.X = 0
+		}
+		if win.Y < 0 {
+			win.Y = 0
+		}
+		if win.X+win.Width > newRenderWidth {
+			win.X = newRenderWidth - win.Width
+		}
+		if win.Y+win.Height > newUsableHeight {
+			win.Y = newUsableHeight - win.Height
+		}
+
+		// Mark dirty and resize PTY
+		win.MarkPositionDirty()
+		win.Resize(win.Width, win.Height)
+	}
+}
+
 // ClampWindowsToView ensures all floating windows are visible within the current terminal bounds.
 // This is called when reattaching with a smaller terminal or when the terminal shrinks.
 // Windows that would be off-screen are repositioned to remain visible.

@@ -428,13 +428,28 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.RestoredFromState = false
 			sizeChanged := oldWidth != msg.Width || oldHeight != msg.Height
 			if sizeChanged {
-				if m.AutoTiling {
+				// In daemon mode, don't tile here - wait for SessionResizeMsg with the correct
+				// effective size (min of all clients). Tiling now would use stale EffectiveWidth/Height
+				// from the initial attach handshake (typically 80x24).
+				if m.IsDaemonSession && m.AutoTiling {
+					m.LogInfo("[RESIZE] Daemon mode restore: waiting for SessionResizeMsg before tiling (%dx%d -> %dx%d)",
+						oldWidth, oldHeight, msg.Width, msg.Height)
+					// Don't tile yet - SessionResizeMsg will trigger the retiling
+				} else if m.AutoTiling {
+					// Non-daemon mode: tile immediately
 					m.LogInfo("[RESIZE] Retiling restored session to fit new terminal size (%dx%d -> %dx%d)",
 						oldWidth, oldHeight, msg.Width, msg.Height)
 					m.TileAllWindows()
 				} else {
-					// In floating mode, clamp windows back into view
-					m.ClampWindowsToView()
+					// In floating mode, scale windows proportionally if dimensions changed
+					if oldWidth > 0 && oldHeight > 0 {
+						m.LogInfo("[RESIZE] Scaling restored windows from %dx%d -> %dx%d",
+							oldWidth, oldHeight, msg.Width, msg.Height)
+						m.ScaleWindowsToTerminal(oldWidth, oldHeight, msg.Width, msg.Height)
+					} else {
+						// No previous size, just clamp to current size
+						m.ClampWindowsToView()
+					}
 				}
 			} else {
 				m.LogInfo("[RESIZE] Restored session, same size (%dx%d), preserving layout", msg.Width, msg.Height)
