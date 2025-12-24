@@ -30,6 +30,9 @@ type Daemon struct {
 	pendingRequests   map[string]*connState
 	pendingRequestsMu sync.RWMutex
 
+	// Goroutine tracking for clean shutdown
+	wg sync.WaitGroup
+
 	// Configuration
 	version string
 }
@@ -158,6 +161,20 @@ func (d *Daemon) shutdown() error {
 	}
 	d.clients = make(map[string]*connState)
 	d.clientsMu.Unlock()
+
+	// Wait for goroutines with timeout
+	done := make(chan struct{})
+	go func() {
+		d.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Println("All goroutines exited cleanly")
+	case <-time.After(5 * time.Second):
+		log.Println("Warning: goroutine shutdown timed out after 5s, forcing shutdown")
+	}
 
 	d.manager.Shutdown()
 
@@ -837,7 +854,9 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 
 		debugLog("[DEBUG] notifyPTYClosed: sending to client %s", cs.clientID)
 		// Send in a goroutine to avoid blocking if client is slow
+		d.wg.Add(1)
 		go func(client *connState) {
+			defer d.wg.Done()
 			if err := d.sendMessage(client, MsgPTYClosed, &ClosePTYPayload{PTYID: ptyID}); err != nil {
 				debugLog("[DEBUG] notifyPTYClosed: failed to send to client: %v", err)
 			}
@@ -883,7 +902,9 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 			continue
 		}
 		// Send in a goroutine to avoid blocking if client is slow
+		d.wg.Add(1)
 		go func(client *connState) {
+			defer d.wg.Done()
 			if err := d.sendMessage(client, msgType, payload); err != nil {
 				debugLog("[DEBUG] broadcastToSession: failed to send to client %s: %v", client.clientID, err)
 			}

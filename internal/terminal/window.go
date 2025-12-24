@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
@@ -141,7 +142,7 @@ type Window struct {
 	OnProcessExit     func()               // Callback when PTY process exits (to close window)
 	outputChan        chan []byte          // Channel for serializing daemon PTY output writes
 	outputDone        chan struct{}        // Signal to stop output writer goroutine
-	suppressCallbacks bool                 // Suppress VT emulator callbacks during state restoration (prevents race conditions)
+	suppressCallbacks atomic.Bool          // Suppress VT emulator callbacks during state restoration (prevents race conditions)
 }
 
 // CopyModeState represents the current state within copy mode
@@ -269,7 +270,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		AltScreen: func(enabled bool) {
 			// Suppress callback during state restoration to prevent race conditions
 			// where buffered PTY output overwrites restored state
-			if !window.suppressCallbacks {
+			if !window.suppressCallbacks.Load() {
 				window.IsAltScreen = enabled
 			}
 		},
@@ -428,11 +429,11 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string)
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
 		IsAltScreen:        false,
-		PTYID:              ptyID,
-		DaemonMode:         true,
-		outputChan:         make(chan []byte, 1000), // Buffered channel for output
-		outputDone:         make(chan struct{}),
-		suppressCallbacks:  false, // Callbacks enabled by default, suppressed only during restore
+		PTYID:      ptyID,
+		DaemonMode: true,
+		outputChan: make(chan []byte, 1000), // Buffered channel for output
+		outputDone: make(chan struct{}),
+		// suppressCallbacks defaults to false (zero value)
 	}
 
 	// Start output writer goroutine to serialize writes
@@ -455,7 +456,7 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string)
 		AltScreen: func(enabled bool) {
 			// Suppress callback during state restoration to prevent race conditions
 			// where buffered PTY output overwrites restored state
-			if !window.suppressCallbacks {
+			if !window.suppressCallbacks.Load() {
 				window.IsAltScreen = enabled
 			}
 		},
@@ -1255,11 +1256,11 @@ func (w *Window) ExitCopyMode() {
 // This is used to prevent race conditions where buffered PTY output overwrites
 // restored state during daemon session reattachment.
 func (w *Window) EnableCallbacks() {
-	w.suppressCallbacks = false
+	w.suppressCallbacks.Store(false)
 }
 
 // DisableCallbacks temporarily disables VT emulator callbacks.
 // This is used during state restoration to prevent race conditions.
 func (w *Window) DisableCallbacks() {
-	w.suppressCallbacks = true
+	w.suppressCallbacks.Store(true)
 }

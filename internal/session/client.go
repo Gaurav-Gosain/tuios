@@ -27,9 +27,10 @@ type Client struct {
 	oldState *term.State
 
 	// Message handling
-	done   chan struct{}
-	sendMu sync.Mutex
-	recvMu sync.Mutex
+	done      chan struct{}
+	closeOnce sync.Once
+	sendMu    sync.Mutex
+	recvMu    sync.Mutex
 
 	// Codec negotiated with daemon (gob by default)
 	codec Codec
@@ -85,18 +86,16 @@ func (c *Client) Connect() error {
 }
 
 // Close closes the connection.
+// Safe to call multiple times concurrently.
 func (c *Client) Close() error {
-	// Use sync.Once pattern to avoid closing channel twice
-	select {
-	case <-c.done:
-		// Already closed
-	default:
+	var err error
+	c.closeOnce.Do(func() {
 		close(c.done)
-	}
-	if c.conn != nil {
-		return c.conn.Close()
-	}
-	return nil
+		if c.conn != nil {
+			err = c.conn.Close()
+		}
+	})
+	return err
 }
 
 // Attach attaches to a session.
