@@ -16,7 +16,7 @@ func (e *Emulator) handleControl(r byte) {
 // linefeed is the same as [index], except that it respects [ansi.LNM] mode.
 func (e *Emulator) linefeed() {
 	e.index()
-	if e.isModeSet(ansi.LineFeedNewLineMode) {
+	if e.isModeSet(ansi.ModeLineFeedNewLine) {
 		e.carriageReturn()
 	}
 }

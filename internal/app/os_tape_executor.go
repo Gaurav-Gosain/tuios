@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	tea "charm.land/bubbletea/v2"
 )
 
 // The following methods implement the tape.Executor interface for
@@ -823,12 +823,6 @@ func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, requestID 
 			RequestID:     requestID,
 		}
 	}, nil
-}
-
-// handleRemoteSendKeys sends keystrokes to the focused window (legacy, kept for compatibility).
-// Use startRemoteSendKeys for proper sequential processing.
-func (m *OS) handleRemoteSendKeys(keys string, literal bool) (tea.Cmd, error) {
-	return m.startRemoteSendKeys(keys, literal, false, "")
 }
 
 // executeTapeScript parses and executes a tape script remotely.

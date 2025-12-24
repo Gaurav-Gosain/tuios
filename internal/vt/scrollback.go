@@ -100,8 +100,14 @@ func (sb *Scrollback) Line(index int) []uv.Cell {
 	if index < 0 || index >= length {
 		return nil
 	}
+	if sb.maxLines <= 0 {
+		return nil
+	}
 	// Map logical index to physical ring buffer index
 	physicalIndex := (sb.head + index) % sb.maxLines
+	if physicalIndex < 0 || physicalIndex >= len(sb.lines) {
+		return nil
+	}
 	return sb.lines[physicalIndex]
 }
 

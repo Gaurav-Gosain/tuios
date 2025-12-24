@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/wish/v2"
@@ -416,23 +415,3 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 
 // Window is an alias for terminal.Window for use in this package
 type Window = terminal.Window
-
-// Helper function to truncate strings for logging
-func truncateID(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
-}
-
-// parseSSHCommand parses SSH command arguments
-func parseSSHCommand(cmd []string) (action string, args []string) {
-	if len(cmd) == 0 {
-		return "", nil
-	}
-	action = strings.ToLower(cmd[0])
-	if len(cmd) > 1 {
-		args = cmd[1:]
-	}
-	return action, args
-}

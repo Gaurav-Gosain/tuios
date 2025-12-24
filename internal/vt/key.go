@@ -25,8 +25,8 @@ type KeyPressEvent = uv.KeyPressEvent
 func (e *Emulator) SendKey(k uv.KeyEvent) {
 	var seq string
 
-	ack := e.isModeSet(ansi.CursorKeysMode)    // Application cursor keys mode
-	akk := e.isModeSet(ansi.NumericKeypadMode) // Application keypad keys mode
+	ack := e.isModeSet(ansi.ModeCursorKeys)    // Application cursor keys mode
+	akk := e.isModeSet(ansi.ModeNumericKeypad) // Application keypad keys mode
 
 	//nolint:godox
 	// TODO: Support Kitty, CSI u, and XTerm modifyOtherKeys.

@@ -640,7 +640,7 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	// CRITICAL: Restore terminal modes (mouse tracking, bracketed paste, etc.)
 	// This must happen AFTER RestoreAltScreenMode so the modes map is properly updated
 	// These modes are essential for apps like vim/htop to receive mouse events
-	if state.Modes != nil && len(state.Modes) > 0 {
+	if len(state.Modes) > 0 {
 		w.Terminal.RestoreModes(state.Modes)
 		m.LogInfo("Restored %d terminal modes for window %s", len(state.Modes), w.ID[:8])
 	}

@@ -704,7 +704,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if inputHandler != nil {
 			newModel, keyCmd := inputHandler(msg.Key, m)
 			if newOS, ok := newModel.(*OS); ok {
-				*m = *newOS
+				m = newOS
 			}
 			cmd = keyCmd
 		}

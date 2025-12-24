@@ -106,6 +106,11 @@ func NewEmulator(w, h int) *Emulator {
 	t.tabstops = uv.DefaultTabStops(w)
 	t.registerDefaultHandlers()
 
+	// Default colors (prevents nil color panics)
+	t.defaultFg = color.White
+	t.defaultBg = color.Black
+	t.defaultCur = color.White
+
 	return t
 }
 
@@ -185,7 +190,7 @@ func (e *Emulator) SetScrollbackMaxLines(maxLines int) {
 
 // WidthMethod returns the width method used by the terminal.
 func (e *Emulator) WidthMethod() uv.WidthMethod {
-	if e.isModeSet(ansi.UnicodeCoreMode) {
+	if e.isModeSet(ansi.ModeUnicodeCore) {
 		return ansi.GraphemeWidth
 	}
 	return ansi.WcWidth
@@ -264,7 +269,7 @@ func (e *Emulator) IsCursorHidden() bool {
 // This is important for mouse event forwarding - mouse events should only be forwarded
 // to applications when they are in alternate screen mode.
 func (e *Emulator) IsAltScreen() bool {
-	return e.isModeSet(ansi.AltScreenMode) || e.isModeSet(ansi.AltScreenSaveCursorMode)
+	return e.isModeSet(ansi.ModeAltScreen) || e.isModeSet(ansi.ModeAltScreenSaveCursor)
 }
 
 // RestoreAltScreenMode restores the alternate screen mode state.
@@ -298,21 +303,21 @@ func (e *Emulator) GetModes() map[int]bool {
 	// Important modes to preserve for session restoration:
 	modesToCapture := []ansi.Mode{
 		// Mouse tracking modes
-		ansi.X10MouseMode,         // ?9
-		ansi.NormalMouseMode,      // ?1000
-		ansi.HighlightMouseMode,   // ?1001
-		ansi.ButtonEventMouseMode, // ?1002
-		ansi.AnyEventMouseMode,    // ?1003
-		ansi.SgrExtMouseMode,      // ?1006 - SGR mouse encoding
+		ansi.ModeMouseX10,         // ?9
+		ansi.ModeMouseNormal,      // ?1000
+		ansi.ModeMouseHighlight,   // ?1001
+		ansi.ModeMouseButtonEvent, // ?1002
+		ansi.ModeMouseAnyEvent,    // ?1003
+		ansi.ModeMouseExtSgr,      // ?1006 - SGR mouse encoding
 
 		// Screen and cursor modes
-		ansi.AltScreenMode,           // ?1047
-		ansi.AltScreenSaveCursorMode, // ?1049
+		ansi.ModeAltScreen,           // ?1047
+		ansi.ModeAltScreenSaveCursor, // ?1049
 
 		// Other important modes
-		ansi.BracketedPasteMode, // ?2004
-		ansi.FocusEventMode,     // ?1004
-		ansi.AutoWrapMode,       // ?7
+		ansi.ModeBracketedPaste, // ?2004
+		ansi.ModeFocusEvent,     // ?1004
+		ansi.ModeAutoWrap,       // ?7
 	}
 
 	for _, mode := range modesToCapture {
@@ -351,11 +356,11 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 // This is useful for debugging mouse event forwarding issues.
 func (e *Emulator) HasMouseMode() bool {
 	for _, m := range []ansi.DECMode{
-		ansi.X10MouseMode,
-		ansi.NormalMouseMode,
-		ansi.HighlightMouseMode,
-		ansi.ButtonEventMouseMode,
-		ansi.AnyEventMouseMode,
+		ansi.ModeMouseX10,
+		ansi.ModeMouseNormal,
+		ansi.ModeMouseHighlight,
+		ansi.ModeMouseButtonEvent,
+		ansi.ModeMouseAnyEvent,
 	} {
 		if e.isModeSet(m) {
 			return true
@@ -374,11 +379,11 @@ func (e *Emulator) EncodeMouseEvent(m Mouse) string {
 	)
 
 	for _, mm := range []ansi.DECMode{
-		ansi.X10MouseMode,
-		ansi.NormalMouseMode,
-		ansi.HighlightMouseMode,
-		ansi.ButtonEventMouseMode,
-		ansi.AnyEventMouseMode,
+		ansi.ModeMouseX10,
+		ansi.ModeMouseNormal,
+		ansi.ModeMouseHighlight,
+		ansi.ModeMouseButtonEvent,
+		ansi.ModeMouseAnyEvent,
 	} {
 		if e.isModeSet(mm) {
 			mode = mm
@@ -390,7 +395,7 @@ func (e *Emulator) EncodeMouseEvent(m Mouse) string {
 	}
 
 	for _, mm := range []ansi.DECMode{
-		ansi.SgrExtMouseMode,
+		ansi.ModeMouseExtSgr,
 	} {
 		if e.isModeSet(mm) {
 			enc = mm
@@ -409,7 +414,7 @@ func (e *Emulator) EncodeMouseEvent(m Mouse) string {
 	switch enc {
 	case nil: // X10 mouse encoding
 		return ansi.MouseX10(b, mouse.X, mouse.Y)
-	case ansi.SgrExtMouseMode: // SGR mouse encoding
+	case ansi.ModeMouseExtSgr: // SGR mouse encoding
 		return ansi.MouseSgr(b, mouse.X, mouse.Y, isRelease)
 	}
 	return ""
@@ -461,7 +466,7 @@ func (e *Emulator) Resize(width int, height int) {
 
 	e.setCursor(x, y)
 
-	if e.isModeSet(ansi.InBandResizeMode) {
+	if e.isModeSet(ansi.ModeInBandResize) {
 		_, _ = io.WriteString(e.pw, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
 	}
 }
@@ -487,6 +492,10 @@ func (e *Emulator) Close() error {
 
 // Write writes data to the terminal output buffer.
 func (e *Emulator) Write(p []byte) (n int, err error) {
+	if e.closed {
+		return 0, io.ErrClosedPipe
+	}
+
 	for i := range p {
 		e.parser.Advance(p[i])
 		state := e.parser.State()
@@ -517,7 +526,7 @@ func (e *Emulator) InputPipe() io.Writer {
 // If bracketed paste mode is enabled, the text is bracketed with the
 // appropriate escape sequences.
 func (e *Emulator) Paste(text string) {
-	if e.isModeSet(ansi.BracketedPasteMode) {
+	if e.isModeSet(ansi.ModeBracketedPaste) {
 		_, _ = io.WriteString(e.pw, ansi.BracketedPasteStart)
 		defer io.WriteString(e.pw, ansi.BracketedPasteEnd) //nolint:errcheck
 	}
@@ -560,6 +569,9 @@ func (e *Emulator) SetForegroundColor(c color.Color) {
 
 // SetDefaultForegroundColor sets the terminal's default foreground color.
 func (e *Emulator) SetDefaultForegroundColor(c color.Color) {
+	if c == nil {
+		c = color.White
+	}
 	e.defaultFg = c
 }
 
@@ -586,6 +598,9 @@ func (e *Emulator) SetBackgroundColor(c color.Color) {
 
 // SetDefaultBackgroundColor sets the terminal's default background color.
 func (e *Emulator) SetDefaultBackgroundColor(c color.Color) {
+	if c == nil {
+		c = color.Black
+	}
 	e.defaultBg = c
 }
 
@@ -611,6 +626,9 @@ func (e *Emulator) SetCursorColor(c color.Color) {
 
 // SetDefaultCursorColor sets the terminal's default cursor color.
 func (e *Emulator) SetDefaultCursorColor(c color.Color) {
+	if c == nil {
+		c = color.White
+	}
 	e.defaultCur = c
 }
 

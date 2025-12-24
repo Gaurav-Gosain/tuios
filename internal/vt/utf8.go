@@ -5,8 +5,6 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/mattn/go-runewidth"
-	"github.com/rivo/uniseg"
 )
 
 // handlePrint handles printable characters.
@@ -29,40 +27,22 @@ func (e *Emulator) flushGrapheme() {
 		return
 	}
 
-	unicode := e.isModeSet(ansi.UnicodeCoreMode)
-	gr := string(e.grapheme)
-
-	var cl string
-	var w int
-	state := -1
-	for len(gr) > 0 {
-		cl, gr, w, state = uniseg.FirstGraphemeClusterInString(gr, state)
-		if !unicode {
-			//nolint:godox
-			// TODO: Investigate this further, runewidth.StringWidth doesn't
-			// report the correct width for some edge cases such as variation
-			// selectors.
-			w = 0
-			for _, r := range cl {
-				if r >= 0xFE00 && r <= 0xFE0F {
-					// Variation Selectors 1 - 16
-					continue
-				}
-				if r >= 0xE0100 && r <= 0xE01EF {
-					// Variation Selectors 17-256
-					continue
-				}
-				w += runewidth.RuneWidth(r)
-			}
-		}
-		e.handleGrapheme(cl, w)
+	// We always use ansi.GraphemeWidth here to report accurate widths
+	// and it's up to the caller to decide how to handle Unicode vs non-Unicode
+	// modes.
+	method := ansi.GraphemeWidth
+	graphemes := string(e.grapheme)
+	for len(graphemes) > 0 {
+		cluster, width := ansi.FirstGraphemeCluster(graphemes, method)
+		e.handleGrapheme(cluster, width)
+		graphemes = graphemes[len(cluster):]
 	}
 	e.grapheme = e.grapheme[:0] // Reset the grapheme buffer.
 }
 
 // handleGrapheme handles UTF-8 graphemes.
 func (e *Emulator) handleGrapheme(content string, width int) {
-	awm := e.isModeSet(ansi.AutoWrapMode)
+	awm := e.isModeSet(ansi.ModeAutoWrap)
 	cell := uv.Cell{
 		Content: content,
 		Width:   width,

@@ -891,20 +891,6 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 	}
 }
 
-// getSessionClients returns all TUI clients attached to a session.
-func (d *Daemon) getSessionClients(sessionID string) []*connState {
-	d.clientsMu.RLock()
-	defer d.clientsMu.RUnlock()
-
-	var clients []*connState
-	for _, cs := range d.clients {
-		if cs.sessionID == sessionID && cs.isTUIClient {
-			clients = append(clients, cs)
-		}
-	}
-	return clients
-}
-
 // getSessionClientCount returns the number of TUI clients attached to a session.
 func (d *Daemon) getSessionClientCount(sessionID string) int {
 	d.clientsMu.RLock()

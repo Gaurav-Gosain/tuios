@@ -404,23 +404,6 @@ func listAvailableCommands() {
 	}
 }
 
-// parseKeySequence parses a key sequence string and returns individual key presses.
-// Supports formats like: "ctrl+b,n", "Hello World", "alt+1"
-func parseKeySequence(keys string) []string {
-	// Split by comma for key sequences
-	parts := strings.Split(keys, ",")
-	return parts
-}
-
-// waitForDaemonResponse waits for a command result with timeout.
-func waitForDaemonResponse(timeout time.Duration) error {
-	// This is a placeholder for proper response waiting
-	// In a full implementation, we would read from the connection
-	// and wait for a MsgCommandResult message
-	time.Sleep(100 * time.Millisecond)
-	return nil
-}
-
 // Completion functions for shell autocompletion
 
 // getSendKeysCompletions returns completions for send-keys key names.

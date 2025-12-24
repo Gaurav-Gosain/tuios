@@ -349,13 +349,13 @@ func (e *Emulator) registerDefaultOscHandlers() {
 func (e *Emulator) registerDefaultEscHandlers() {
 	e.RegisterEscHandler('=', func() bool {
 		// Keypad Application Mode [ansi.DECKPAM]
-		e.setMode(ansi.NumericKeypadMode, ansi.ModeSet)
+		e.setMode(ansi.ModeNumericKeypad, ansi.ModeSet)
 		return true
 	})
 
 	e.RegisterEscHandler('>', func() bool {
 		// Keypad Numeric Mode [ansi.DECKPNM]
-		e.setMode(ansi.NumericKeypadMode, ansi.ModeReset)
+		e.setMode(ansi.ModeNumericKeypad, ansi.ModeReset)
 		return true
 	})
 
@@ -946,7 +946,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		// set the left and right margins. Otherwise, we save the cursor
 		// position.
 
-		if e.isModeSet(ansi.LeftRightMarginMode) {
+		if e.isModeSet(ansi.ModeLeftRightMargin) {
 			// Set Left Right Margins [ansi.DECSLRM]
 			left, _, _ := params.Param(0, 1)
 			if left < 1 {
