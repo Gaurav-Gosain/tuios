@@ -4,7 +4,7 @@
 
 TUIOS (Terminal UI Operating System) is a terminal-based window manager built in Go using the Charm stack (Bubble Tea v2, Lipgloss v2). It provides vim-like modal interface, workspace support, mouse interaction, and SSH server mode.
 
-**Note:** The web terminal functionality (`tuios web`) has been extracted into a separate `tuios-web` binary for security isolation. See `cmd/tuios-web/` and [docs/WEB_MIGRATION.md](docs/WEB_MIGRATION.md) for details.
+**Note:** The web terminal functionality is provided by the separate `tuios-web` binary for security isolation. See `cmd/tuios-web/` and [docs/WEB.md](docs/WEB.md) for details.
 
 ## Essential Commands
 
@@ -291,5 +291,5 @@ Releases are automated via GitHub Actions with GoReleaser:
 - **Contributing**: `docs/CONTRIBUTING.md` - Contribution guidelines
 - **Tape Scripting**: `docs/TAPE_SCRIPTING.md` - Automation script syntax
 - **Web Terminal**: `docs/WEB.md` - Web terminal documentation (tuios-web binary)
-- **Web Migration**: `docs/WEB_MIGRATION.md` - Migration guide from `tuios web` to `tuios-web`
+- **Multi-Client**: `docs/MULTI_CLIENT.md` - Multi-client session guide
 - **Sip Library**: `docs/SIP_LIBRARY.md` - Future library for serving Bubble Tea apps as web apps
