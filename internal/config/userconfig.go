@@ -483,7 +483,8 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	}
 
 	// WindowTitlePosition defaults to bottom
-	if cfg.Appearance.WindowTitlePosition != "" {
+	// Only apply from config if not already set via flag (run.go sets this before fillMissingAppearance is called)
+	if cfg.Appearance.WindowTitlePosition != "" && WindowTitlePosition == "bottom" {
 		WindowTitlePosition = cfg.Appearance.WindowTitlePosition
 	}
 
