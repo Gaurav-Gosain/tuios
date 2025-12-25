@@ -504,11 +504,14 @@ func (w *Window) outputWriter() {
 	}
 }
 
-// StartDaemonResponseReader starts a goroutine to read responses from the terminal
-// emulator (like DA1 responses) and send them back to the daemon PTY.
-// This must be called after DaemonWriteFunc is set.
+// StartDaemonResponseReader starts a goroutine to read and DRAIN responses from
+// the terminal emulator. We don't forward these to the PTY because:
+// 1. Responses were appearing as visible escape sequences in the output
+// 2. Applications in daemon mode receive queries from the daemon's VT emulator
+//    and don't need responses from client emulators
+// This must be called after the Terminal is set up.
 func (w *Window) StartDaemonResponseReader() {
-	if !w.DaemonMode || w.DaemonWriteFunc == nil || w.Terminal == nil {
+	if !w.DaemonMode || w.Terminal == nil {
 		return
 	}
 
@@ -517,14 +520,11 @@ func (w *Window) StartDaemonResponseReader() {
 		for {
 			// Terminal.Read() blocks, so we can't use select here.
 			// The goroutine will exit when Terminal is closed (returns error).
-			n, err := w.Terminal.Read(buf)
+			_, err := w.Terminal.Read(buf)
 			if err != nil {
 				return
 			}
-			if n > 0 {
-				// Send response back to daemon PTY
-				_ = w.DaemonWriteFunc(buf[:n])
-			}
+			// Drain responses - don't send to PTY to avoid escape sequence leaks
 		}
 	}()
 }
