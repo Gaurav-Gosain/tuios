@@ -2,6 +2,8 @@
 
 The showkeys overlay displays your keyboard input on screen in real-time, making TUIOS ideal for presentations, screencasts, and live coding demos. When enabled, every key you press appears in a clean, unobtrusive overlay at the bottom of the screen.
 
+> **Note:** Throughout this document, `Ctrl+B` refers to the default leader key. This is configurable via the `leader_key` option in your config file.
+
 ## Table of Contents
 
 - [Overview](#overview)

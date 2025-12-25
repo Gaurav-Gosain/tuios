@@ -2,6 +2,8 @@
 
 TUIOS implements automatic window tiling using Binary Space Partitioning (BSP), an algorithm that recursively divides screen space to fit windows efficiently. Unlike rigid grid-based tiling, BSP adapts to any number of windows and allows fine-grained control over splits.
 
+> **Note:** Throughout this document, `Ctrl+B` refers to the default leader key. This is configurable via the `leader_key` option in your config file.
+
 ## Table of Contents
 
 - [Overview](#overview)

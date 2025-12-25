@@ -2,6 +2,8 @@
 
 TUIOS supports multiple clients connecting to the same session simultaneously, enabling collaborative workflows and flexible access patterns.
 
+> **Note:** Throughout this document, `Ctrl+B` refers to the default leader key. This is configurable via the `leader_key` option in your config file.
+
 ## What is Multi-Client Mode?
 
 Multi-client mode allows multiple terminal instances (SSH, web, or local TUI clients) to attach to the same TUIOS session concurrently. All clients see the same windows, input, and output in real-time.
@@ -97,7 +99,7 @@ The daemon tracks client connections and notifies sessions:
 
 ### List Sessions
 ```bash
-tuios list
+tuios ls
 ```
 
 Output:
@@ -121,13 +123,10 @@ tuios attach my-session --no-create
 Ctrl+B, d  # Default prefix key
 ```
 
-Or programmatically:
+Or programmatically from another terminal:
 ```bash
-# From within session
-tuios detach
-
-# From another terminal
-tuios send-keys --session my-session "C-b d"
+# Send detach key combo to the session
+tuios send-keys --session my-session "ctrl+b" "d"
 ```
 
 ### Kill Session
@@ -145,8 +144,10 @@ tuios kill-server
 
 ```bash
 # Terminal 1 (local)
-local$ tuios daemon start
-local$ tuios attach dev
+# Note: daemon starts automatically with 'tuios new' or 'tuios attach'
+local$ tuios new dev
+# Or attach to existing session (creates if doesn't exist):
+# local$ tuios attach dev
 
 # Terminal 2 (SSH from remote)
 remote$ ssh myserver
@@ -249,8 +250,15 @@ All clients attached to a session have **full control**:
 
 Enable daemon logging to track client connections:
 ```bash
-tuios daemon start --log /var/log/tuios-daemon.log
+# Run daemon in foreground with debug logging
+tuios daemon --log-level=messages
+
+# Or set log level when creating a session
+# (daemon starts automatically in background)
+tuios new mysession --log-level=messages
 ```
+
+Available log levels: `off`, `errors`, `basic`, `messages`, `verbose`, `trace`
 
 Log format:
 ```
@@ -290,14 +298,12 @@ Log format:
 
 **Solution:**
 ```bash
-# Check daemon status
-tuios list
+# Check if daemon is running and list all sessions
+tuios ls
 
-# Check socket path
-tuios daemon status
-
-# Ensure correct socket path
-export TUIOS_SOCKET_PATH=~/.tuios/socket
+# Verify daemon is running by checking for sessions
+# (if no error, daemon is running)
+tuios list-windows --json 2>&1 | grep -q "success" && echo "Daemon running" || echo "Daemon not running"
 ```
 
 ## Comparison with tmux/screen

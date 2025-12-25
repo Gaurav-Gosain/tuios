@@ -352,7 +352,7 @@ func (s *Session) Resize(width, height int) {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
 	for _, pty := range s.ptys {
-		pty.Resize(width, height)
+		_ = pty.Resize(width, height) // Best effort resize
 	}
 }
 

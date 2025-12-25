@@ -744,8 +744,8 @@ func (m *OS) FocusDirection(direction string) error {
 	}
 
 	focusedWindow := m.Windows[m.FocusedWindow]
-	targetIndex := -1
 
+	var targetIndex int
 	switch direction {
 	case "left":
 		targetIndex = m.findWindowInDirection(focusedWindow, -1, 0)

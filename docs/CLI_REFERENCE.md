@@ -317,9 +317,17 @@ tuios daemon [flags]
 ```
 
 **Flags:**
-- `--socket <path>` - Custom socket path
+- `--log-level <level>` - Debug log level: `off`, `errors`, `basic`, `messages`, `verbose`, `trace`
 
-**Note:** This is primarily for debugging. Normal usage creates the daemon automatically when you run `tuios new`.
+**Debug log levels:**
+- `off` - No debug output (default)
+- `errors` - Only error messages
+- `basic` - Connection events and errors
+- `messages` - All protocol messages except PTY I/O
+- `verbose` - All messages including PTY I/O
+- `trace` - Full payload hex dumps
+
+**Note:** This is primarily for debugging. The daemon starts automatically in the background when you run `tuios new` or `tuios attach`. Use this command to run the daemon in the foreground with debug logging.
 
 ### Workflow Example
 
@@ -345,6 +353,8 @@ tuios kill-session work
 
 TUIOS provides commands to control a running session from external scripts and tools. These commands communicate with the TUIOS daemon to send keystrokes, execute commands, and query state. This enables powerful scripting, automation, and integration with external tools.
 
+> **Note:** When sending TUIOS commands via `send-keys`, `Ctrl+B` refers to the default leader key. This is configurable via the `leader_key` option in your config file.
+
 ### `tuios send-keys`
 
 Send keystrokes to a TUIOS session.
@@ -357,13 +367,15 @@ tuios send-keys <keys> [flags]
 **Flags:**
 - `-s, --session <name>` - Target session (default: most recently active)
 - `-l, --literal` - Send keys directly to terminal PTY (bypass TUIOS key handling)
-- `-r, --raw` - Treat each character as a separate key (no splitting on space/comma)
+- `-r, --raw` - Treat each character as a separate key (no splitting on space/comma). **Required when sending text containing spaces or commas**
 
 **Key Format:**
 - Single keys: `i`, `n`, `Enter`, `Escape`, `Space`
 - Key combos: `ctrl+b`, `alt+1`, `shift+Enter` (case-insensitive)
 - Sequences: space or comma separated, e.g. `"ctrl+b q"` or `"ctrl+b,q"`
 - Special token: `$PREFIX` or `PREFIX` expands to configured leader key
+
+**IMPORTANT:** By default, spaces and commas separate multiple key arguments. To send literal text containing spaces (e.g., to type in a terminal), use BOTH `--literal` and `--raw` flags together
 
 **Special Keys:** `Enter`, `Return`, `Space`, `Tab`, `Escape`, `Esc`, `Backspace`, `Delete`, `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`, `F1`-`F12`
 
@@ -384,8 +396,11 @@ tuios send-keys "\$PREFIX q"
 # Send Ctrl+C to TUIOS
 tuios send-keys ctrl+c
 
-# Send literal text directly to terminal PTY
-tuios send-keys --literal "echo hello"
+# Send literal text directly to terminal PTY (use --raw to prevent space splitting)
+tuios send-keys --literal --raw "echo hello"
+
+# Send text with spaces (each character is a key)
+tuios send-keys --raw "hello world"
 
 # Send to a specific session
 tuios send-keys --session mysession Escape
@@ -683,10 +698,10 @@ LOGS_ID=$(tuios run-command --json NewWindow "logs" | jq -r '.data.window_id')
 tuios run-command ToggleTiling
 
 # Send commands to each window
-tuios send-keys "nvim ." Enter
+tuios send-keys --literal --raw "nvim ." && tuios send-keys Enter
 tuios run-command FocusWindow "$TERMINAL_ID"
 tuios run-command FocusWindow "$LOGS_ID"
-tuios send-keys "tail -f /var/log/system.log" Enter
+tuios send-keys --literal --raw "tail -f /var/log/system.log" && tuios send-keys Enter
 ```
 
 ### Query and React to State
@@ -728,7 +743,7 @@ fi
 #!/bin/bash
 # Run a command and verify output
 
-tuios send-keys "echo 'test-marker-12345'" Enter
+tuios send-keys --literal --raw "echo 'test-marker-12345'" && tuios send-keys Enter
 sleep 0.5
 
 # Check if command completed (cursor moved)

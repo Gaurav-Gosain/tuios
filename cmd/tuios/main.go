@@ -487,8 +487,8 @@ Special keys: Enter, Return, Space, Tab, Escape, Esc, Backspace, Delete,
   # Send Ctrl+C to TUIOS
   tuios send-keys ctrl+c
 
-  # Send literal text directly to terminal PTY
-  tuios send-keys --literal "echo hello"
+  # Send literal text directly to terminal PTY (use --raw to prevent space splitting)
+  tuios send-keys --literal --raw "echo hello"
 
   # Send text with spaces (each char is a key, spaces included)
   tuios send-keys --raw "hello world"

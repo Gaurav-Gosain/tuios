@@ -2,6 +2,8 @@
 
 TUIOS can record your terminal sessions into `.tape` files that can be replayed, shared, or used for automated testing. Think of it as recording a macro of everything you do in TUIOS.
 
+> **Note:** Throughout this document, `Ctrl+B` refers to the default leader key. This is configurable via the `leader_key` option in your config file.
+
 ## Table of Contents
 
 - [Overview](#overview)
