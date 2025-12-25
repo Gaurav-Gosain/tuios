@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/adrg/xdg"
 	tea "charm.land/bubbletea/v2"
+	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -488,7 +488,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	}
 
 	// HideClock defaults to false
-	HideClock = cfg.Appearance.HideClock
+	// Only apply from config if not already set via flag (run.go sets this before fillMissingAppearance is called)
+	if !HideClock {
+		HideClock = cfg.Appearance.HideClock
+	}
 }
 
 // fillMissingDaemon fills in any missing daemon settings with defaults
