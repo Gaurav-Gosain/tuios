@@ -241,11 +241,10 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 	// Start output reader
 	go pty.readOutput()
 
-	// Start terminal response drainer - the daemon's emulator generates query responses
-	// but these should NOT be sent to the PTY. Client emulators handle query responses
-	// via StartDaemonResponseReader(). The daemon's emulator is only for maintaining
-	// scrollback/state across client reconnects.
-	go pty.drainTerminalResponses()
+	// Start terminal response forwarder - the daemon's emulator generates query responses
+	// (DA, CPR, etc.) which must be sent to the PTY for applications to receive.
+	// Client emulators DRAIN their responses to prevent duplicates.
+	go pty.forwardTerminalResponses()
 
 	// Monitor process exit
 	go pty.monitorExit()
@@ -766,12 +765,12 @@ func (p *PTY) SetOnExit(callback func(ptyID string)) {
 	p.onExit = callback
 }
 
-// drainTerminalResponses reads and discards responses from the daemon's terminal emulator.
+// forwardTerminalResponses reads responses from the daemon's terminal emulator and
+// forwards them to the PTY as input for applications to receive.
 // The emulator writes responses (like DA1, CPR) to its pipe. If nothing reads from the pipe,
 // Write() will block forever (io.Pipe is synchronous).
-// The daemon's emulator is only for maintaining scrollback/state - query responses are
-// handled by client emulators via StartDaemonResponseReader().
-func (p *PTY) drainTerminalResponses() {
+// Client emulators DRAIN their responses to prevent duplicates.
+func (p *PTY) forwardTerminalResponses() {
 	if p.terminal == nil {
 		return
 	}
@@ -782,10 +781,13 @@ func (p *PTY) drainTerminalResponses() {
 		case <-p.ctx.Done():
 			return
 		default:
-			// Read and discard - clients handle query responses
-			_, err := p.terminal.Read(buf)
+			n, err := p.terminal.Read(buf)
 			if err != nil {
 				return
+			}
+			if n > 0 && p.pty != nil {
+				// Forward response to PTY as input
+				_, _ = p.pty.Write(buf[:n])
 			}
 		}
 	}
