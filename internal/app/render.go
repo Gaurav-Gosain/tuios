@@ -3,11 +3,11 @@ package app
 import (
 	"image/color"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 )
 
 func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
@@ -36,10 +36,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		}
 
 		isAnimating := false
-		for _, anim := range m.Animations {
-			if anim.Window == m.Windows[i] && !anim.Complete {
-				isAnimating = true
-				break
+		// Only check animations if there are any active
+		if len(m.Animations) > 0 {
+			for _, anim := range m.Animations {
+				if anim.Window == m.Windows[i] && !anim.Complete {
+					isAnimating = true
+					break
+				}
 			}
 		}
 
