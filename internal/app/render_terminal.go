@@ -189,7 +189,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
-	safeColorEquals := func(a, b color.Color) bool {
+	safeColorEquals := func(a, b color.Color) (result bool) {
+		defer func() {
+			if recover() != nil {
+				result = false
+			}
+		}()
 		if a == nil && b == nil {
 			return true
 		}
