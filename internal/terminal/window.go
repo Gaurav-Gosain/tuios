@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/charmbracelet/colorprofile"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	xpty "github.com/charmbracelet/x/xpty"
 
@@ -131,6 +131,9 @@ type Window struct {
 	// Cursor style tracking for passthrough to parent terminal
 	CursorStyle vt.CursorStyle // Current cursor style (block, underline, bar)
 	CursorBlink bool           // Whether cursor should blink
+	// Cell dimensions in pixels (for TIOCGWINSZ pixel reporting to child processes)
+	CellPixelWidth  int
+	CellPixelHeight int
 	// Vim-style copy mode
 	CopyMode *CopyMode // Copy mode state (nil when not active)
 	// Daemon session support
@@ -143,6 +146,8 @@ type Window struct {
 	outputChan        chan []byte          // Channel for serializing daemon PTY output writes
 	outputDone        chan struct{}        // Signal to stop output writer goroutine
 	suppressCallbacks atomic.Bool          // Suppress VT emulator callbacks during state restoration (prevents race conditions)
+
+	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 }
 
 // CopyModeState represents the current state within copy mode
@@ -429,10 +434,10 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string)
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
 		IsAltScreen:        false,
-		PTYID:      ptyID,
-		DaemonMode: true,
-		outputChan: make(chan []byte, 1000), // Buffered channel for output
-		outputDone: make(chan struct{}),
+		PTYID:              ptyID,
+		DaemonMode:         true,
+		outputChan:         make(chan []byte, 1000), // Buffered channel for output
+		outputDone:         make(chan struct{}),
 		// suppressCallbacks defaults to false (zero value)
 	}
 
@@ -506,9 +511,10 @@ func (w *Window) outputWriter() {
 
 // StartDaemonResponseReader starts a goroutine to read and DRAIN responses from
 // the terminal emulator. We don't forward these to the PTY because:
-// 1. Responses were appearing as visible escape sequences in the output
-// 2. Applications in daemon mode receive queries from the daemon's VT emulator
-//    and don't need responses from client emulators
+//  1. Responses were appearing as visible escape sequences in the output
+//  2. Applications in daemon mode receive queries from the daemon's VT emulator
+//     and don't need responses from client emulators
+//
 // This must be called after the Terminal is set up.
 func (w *Window) StartDaemonResponseReader() {
 	if !w.DaemonMode || w.Terminal == nil {
@@ -925,9 +931,12 @@ func (w *Window) Resize(width, height int) {
 	w.Terminal.Resize(termWidth, termHeight)
 	if w.Pty != nil {
 		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
-			// Log PTY resize error for debugging, but continue operation
-			// This is not fatal as the terminal can still function
-			_ = err // Acknowledge error but don't break functionality
+			_ = err
+		}
+		if w.CellPixelWidth > 0 && w.CellPixelHeight > 0 {
+			xpixel := termWidth * w.CellPixelWidth
+			ypixel := termHeight * w.CellPixelHeight
+			_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
 		}
 	} else if w.DaemonMode && w.DaemonResizeFunc != nil {
 		// In daemon mode, use the resize callback to notify the daemon
@@ -970,8 +979,23 @@ func (w *Window) ResizeVisual(width, height int) {
 	// This improves responsiveness during resize operations
 }
 
-// TriggerRedraw ensures terminal applications properly respond to resize.
-// Platform-specific implementations in window_unix.go and window_windows.go
+// SetCellPixelDimensions sets the cell pixel dimensions for the window.
+// This is used to report accurate pixel dimensions to child processes via TIOCGWINSZ.
+// Call this after window creation with the host terminal's cell dimensions.
+func (w *Window) SetCellPixelDimensions(cellWidth, cellHeight int) {
+	w.CellPixelWidth = cellWidth
+	w.CellPixelHeight = cellHeight
+
+	w.Terminal.SetCellSize(cellWidth, cellHeight)
+
+	if w.Pty != nil && cellWidth > 0 && cellHeight > 0 {
+		termWidth := max(w.Width-2, 1)
+		termHeight := max(w.Height-2, 1)
+		xpixel := termWidth * cellWidth
+		ypixel := termHeight * cellHeight
+		_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
+	}
+}
 
 // Close closes the window and cleans up resources.
 func (w *Window) Close() {

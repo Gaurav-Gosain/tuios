@@ -26,3 +26,8 @@ func (w *Window) HasForegroundProcess() bool {
 	// rather than trying to detect active processes
 	return false
 }
+
+// SetPtyPixelSize is a stub for Windows - ConPTY doesn't support pixel dimensions.
+func (w *Window) SetPtyPixelSize(cols, rows, xpixel, ypixel int) error {
+	return nil
+}

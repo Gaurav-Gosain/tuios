@@ -8,14 +8,14 @@ import (
 	"syscall"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/table"
 )
 
 func runAttach(sessionName string, createIfMissing bool) error {
@@ -180,9 +180,8 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		IsDaemonSession:      true,
 		DaemonClient:         client,
 		SessionName:          client.SessionName(),
-		// Don't set EffectiveWidth/Height here - let the daemon broadcast
-		// the effective size via SessionResizeMsg when there are multiple clients.
-		// Single client uses full terminal dimensions.
+		KittyRenderer:        app.NewKittyRenderer(),
+		KittyPassthrough:     app.NewKittyPassthrough(),
 	}
 
 	windowCount := 0

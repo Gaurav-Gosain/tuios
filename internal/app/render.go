@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"os"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -156,4 +157,43 @@ func (m *OS) View() tea.View {
 	view.DisableBracketedPasteMode = false
 
 	return view
+}
+
+func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
+	if m.KittyPassthrough == nil {
+		return nil
+	}
+
+	if m.KittyPassthrough.HasPlacements() {
+		m.KittyPassthrough.RefreshAllPlacements(func(windowID string) *WindowPositionInfo {
+			for _, w := range m.Windows {
+				if w.ID == windowID {
+					visible := !w.Minimized && !w.Minimizing && w.Workspace == m.CurrentWorkspace
+					return &WindowPositionInfo{
+						WindowX:        w.X,
+						WindowY:        w.Y,
+						ContentOffsetX: 1,
+						ContentOffsetY: 1,
+						Width:          w.Width,
+						Height:         w.Height,
+						Visible:        visible,
+					}
+				}
+			}
+			return nil
+		})
+	}
+
+	data := m.KittyPassthrough.FlushPending()
+	if len(data) == 0 {
+		return nil
+	}
+	kittyPassthroughLog("GetKittyGraphicsCmd: flushing %d bytes", len(data))
+	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	if err != nil {
+		return nil
+	}
+	tty.Write(data)
+	tty.Close()
+	return nil
 }

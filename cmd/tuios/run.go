@@ -9,13 +9,13 @@ import (
 	"runtime/pprof"
 	"syscall"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	tea "charm.land/bubbletea/v2"
 )
 
 // filterMouseMotion filters out redundant mouse motion events to reduce CPU usage.
@@ -161,6 +161,8 @@ func runLocal() error {
 		RecentKeys:           []app.KeyEvent{},
 		KeyHistoryMaxSize:    5,
 		IsDaemonSession:      isDaemonSession,
+		KittyRenderer:        app.NewKittyRenderer(),
+		KittyPassthrough:     app.NewKittyPassthrough(),
 	}
 
 	p := tea.NewProgram(

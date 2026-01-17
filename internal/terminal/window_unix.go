@@ -67,3 +67,31 @@ func (w *Window) HasForegroundProcess() bool {
 	// there's an active foreground process running
 	return fgpgrp != w.ShellPgid
 }
+
+// SetPtyPixelSize sets the pixel dimensions on the PTY using TIOCSWINSZ.
+// This enables applications like kitty icat to query terminal size in pixels.
+// The cols and rows are the character dimensions, xpixel and ypixel are pixel dimensions.
+func (w *Window) SetPtyPixelSize(cols, rows, xpixel, ypixel int) error {
+	if w.Pty == nil {
+		return nil
+	}
+
+	ws := unix.Winsize{
+		Row:    uint16(rows),
+		Col:    uint16(cols),
+		Xpixel: uint16(xpixel),
+		Ypixel: uint16(ypixel),
+	}
+
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		w.Pty.Fd(),
+		uintptr(unix.TIOCSWINSZ),
+		uintptr(unsafe.Pointer(&ws)),
+	)
+
+	if errno != 0 {
+		return errno
+	}
+	return nil
+}

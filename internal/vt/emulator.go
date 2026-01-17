@@ -77,6 +77,13 @@ type Emulator struct {
 	// Cell size in pixels for size reporting (XTWINOPS)
 	cellWidth  int
 	cellHeight int
+
+	// Kitty graphics state for main and alt screens
+	kittyMain *KittyState
+	kittyAlt  *KittyState
+
+	// Kitty graphics passthrough callback
+	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
 }
 
 // NewEmulator creates a new virtual terminal emulator.
@@ -110,6 +117,10 @@ func NewEmulator(w, h int) *Emulator {
 	t.defaultFg = color.White
 	t.defaultBg = color.Black
 	t.defaultCur = color.White
+
+	t.kittyMain = NewKittyState()
+	t.kittyAlt = NewKittyState()
+	t.registerKittyGraphicsHandler()
 
 	return t
 }
@@ -694,4 +705,58 @@ func (e *Emulator) logf(format string, v ...any) {
 	if e.logger != nil {
 		e.logger.Printf(format, v...)
 	}
+}
+
+func (e *Emulator) registerKittyGraphicsHandler() {
+	e.RegisterApcHandler(func(data []byte) bool {
+		if len(data) < 1 || data[0] != 'G' {
+			return false
+		}
+
+		cmd, err := ParseKittyCommand(data[1:])
+		if err != nil || cmd == nil {
+			return false
+		}
+
+		// Build complete APC sequence: ESC _ G<params>;<payload> ESC \
+		// APC terminator is ESC \ (0x1b 0x5c), not just \
+		rawData := make([]byte, len(data)+4)
+		rawData[0] = '\x1b'
+		rawData[1] = '_'
+		copy(rawData[2:], data)
+		rawData[len(rawData)-2] = '\x1b'
+		rawData[len(rawData)-1] = '\\'
+
+		if e.kittyPassthroughFunc != nil {
+			e.kittyPassthroughFunc(cmd, rawData)
+			return true
+		}
+
+		state := e.kittyMain
+		if e.IsAltScreen() {
+			state = e.kittyAlt
+		}
+
+		handler := NewKittyGraphicsHandler(e.scr, state, e.pw)
+		return handler.HandleCommand(cmd)
+	})
+}
+
+func (e *Emulator) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte)) {
+	e.kittyPassthroughFunc = fn
+}
+
+func (e *Emulator) KittyState() *KittyState {
+	if e.IsAltScreen() {
+		return e.kittyAlt
+	}
+	return e.kittyMain
+}
+
+func (e *Emulator) KittyMainState() *KittyState {
+	return e.kittyMain
+}
+
+func (e *Emulator) KittyAltState() *KittyState {
+	return e.kittyAlt
 }

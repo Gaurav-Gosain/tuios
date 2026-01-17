@@ -215,6 +215,11 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			continue
 		}
 
+		caps := GetHostCapabilities()
+		if caps.CellWidth > 0 && caps.CellHeight > 0 {
+			window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
+		}
+
 		window.CustomName = ws.CustomName
 		window.Workspace = ws.Workspace
 		window.Minimized = ws.Minimized
@@ -228,6 +233,8 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		// where buffered PTY output overwrites the restored IsAltScreen state
 		// Callbacks will be re-enabled in restoreTerminalContent() after state is fully restored
 		window.DisableCallbacks()
+
+		m.setupKittyPassthrough(window)
 
 		m.Windows = append(m.Windows, window)
 		m.LogInfo("[RESTORE] Window %d created: DaemonMode=%v, PTYID=%s", i, window.DaemonMode, window.PTYID[:8])
@@ -491,6 +498,11 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		return nil
 	}
 
+	caps := GetHostCapabilities()
+	if caps.CellWidth > 0 && caps.CellHeight > 0 {
+		window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
+	}
+
 	window.CustomName = ws.CustomName
 	window.Workspace = ws.Workspace
 	window.Minimized = ws.Minimized
@@ -499,6 +511,8 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	window.PreMinimizeWidth = ws.PreMinimizeW
 	window.PreMinimizeHeight = ws.PreMinimizeH
 	window.IsAltScreen = ws.IsAltScreen
+
+	m.setupKittyPassthrough(window)
 
 	// Set up PTY handlers if we have a daemon client
 	if m.DaemonClient != nil {
@@ -804,16 +818,21 @@ func (m *OS) AddDaemonWindow(title string) *OS {
 	}
 	m.LogInfo("[DAEMON] PTY created with ID: %s", ptyID)
 
-	// Create local window (without local PTY)
 	window := terminal.NewDaemonWindow(newID, title, x, y, width, height, len(m.Windows), ptyID)
 	if window == nil {
 		m.LogError("Failed to create daemon window %s", title)
-		// Clean up PTY in daemon
 		_ = m.DaemonClient.ClosePTY(ptyID)
 		return m
 	}
 
+	caps := GetHostCapabilities()
+	if caps.CellWidth > 0 && caps.CellHeight > 0 {
+		window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
+	}
+
 	window.Workspace = m.CurrentWorkspace
+
+	m.setupKittyPassthrough(window)
 
 	// Set up the daemon write function for input
 	window.DaemonWriteFunc = func(data []byte) error {

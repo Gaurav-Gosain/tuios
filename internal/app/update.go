@@ -335,11 +335,14 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Skip rendering if no changes, no animations, and not in interaction mode (frame skipping)
 		if !hasChanges && !hasAnimations && !m.InteractionMode && len(m.Windows) > 0 {
-			// Continue ticking but don't trigger render
 			if len(cmds) > 1 {
 				return m, tea.Sequence(cmds...)
 			}
 			return m, nextTick
+		}
+
+		if gfxCmd := m.GetKittyGraphicsCmd(); gfxCmd != nil {
+			cmds = append(cmds, gfxCmd)
 		}
 
 		if len(cmds) > 1 {

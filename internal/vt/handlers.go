@@ -554,14 +554,18 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			rect2 := uv.Rect(0, y+1, width, height-y-1) // next line onwards
 			e.scr.FillArea(e.scr.blankCell(), rect1)
 			e.scr.FillArea(e.scr.blankCell(), rect2)
+			e.KittyState().ClearPlacements()
 		case 1: // Erase screen above (including cursor)
 			rect := uv.Rect(0, 0, width, y+1)
 			e.scr.FillArea(e.scr.blankCell(), rect)
+			e.KittyState().ClearPlacements()
 		case 2: // erase screen
 			e.scr.Clear()
+			e.KittyState().ClearPlacements()
 		case 3: // erase display including scrollback
 			e.scr.ClearScrollback()
 			e.scr.Clear()
+			e.KittyState().Clear()
 		default:
 			return false
 		}
@@ -595,7 +599,6 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		// Insert Line [ansi.IL]
 		n, _, _ := params.Param(0, 1)
 		if e.scr.InsertLine(n) {
-			// Move the cursor to the left margin.
 			e.scr.setCursorX(0, true)
 		}
 		return true
@@ -605,9 +608,6 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		// Delete Line [ansi.DL]
 		n, _, _ := params.Param(0, 1)
 		if e.scr.DeleteLine(n) {
-			// If the line was deleted successfully, move the cursor to the
-			// left.
-			// Move the cursor to the left margin.
 			e.scr.setCursorX(0, true)
 		}
 		return true

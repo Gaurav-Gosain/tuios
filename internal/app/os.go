@@ -197,6 +197,10 @@ type OS struct {
 	// Remote tape script progress (used instead of ScriptPlayer for tape exec)
 	RemoteScriptIndex int // Current command index (0-based)
 	RemoteScriptTotal int // Total commands in remote script
+	// Kitty Graphics Protocol renderer for image support
+	KittyRenderer *KittyRenderer
+	// Kitty Graphics Protocol passthrough for forwarding to host terminal
+	KittyPassthrough *KittyPassthrough
 }
 
 // Notification represents a temporary notification message.
@@ -519,8 +523,14 @@ func (m *OS) AddWindow(title string) *OS {
 		return m // Failed to create window
 	}
 
-	// Set the workspace for the new window
+	caps := GetHostCapabilities()
+	if caps.CellWidth > 0 && caps.CellHeight > 0 {
+		window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
+	}
+
 	window.Workspace = m.CurrentWorkspace
+
+	m.setupKittyPassthrough(window)
 
 	m.Windows = append(m.Windows, window)
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))
@@ -580,6 +590,10 @@ func (m *OS) DeleteWindow(i int) *OS {
 	if m.WindowToBSPID != nil {
 		delete(m.WindowToBSPID, deletedWindow.ID)
 		m.LogInfo("BSP: Removed ID mapping for window %s (int ID %d)", deletedWindow.ID[:8], windowIntID)
+	}
+
+	if m.KittyPassthrough != nil {
+		m.KittyPassthrough.OnWindowClose(deletedWindow.ID)
 	}
 
 	deletedWindow.Close()

@@ -132,6 +132,14 @@ func (m *OS) UpdateAnimations() {
 				}
 			}
 
+			if m.KittyPassthrough != nil && anim.Window != nil {
+				m.KittyPassthrough.OnWindowMove(
+					anim.Window.ID,
+					anim.EndX, anim.EndY,
+					1, 1,
+				)
+			}
+
 			// Remove completed animation
 			m.Animations = append(m.Animations[:i], m.Animations[i+1:]...)
 		}

@@ -3,13 +3,25 @@ package vt
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
 
 func (e *Emulator) handleCsi(cmd ansi.Cmd, params ansi.Params) {
 	e.flushGrapheme() // Flush any pending grapheme before handling CSI sequences.
+
+	// Debug logging for CSI 't' sequences (XTWINOPS)
+	if cmd.Final() == 't' && os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+		if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			_, _ = fmt.Fprintf(f, "[%s] VT-CSI: received CSI %q (cmd=%d, final=%c)\n",
+				time.Now().Format("15:04:05.000"), paramsString(cmd, params), int(cmd), cmd.Final())
+			_ = f.Close()
+		}
+	}
+
 	if !e.handlers.handleCsi(cmd, params) {
 		e.logf("unhandled sequence: CSI %q", paramsString(cmd, params))
 	}

@@ -366,8 +366,8 @@ func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model
 		IsDaemonSession:      true,
 		DaemonClient:         client,
 		SessionName:          sessionName,
-		// Don't set EffectiveWidth/Height here - let the daemon broadcast
-		// the effective size via SessionResizeMsg when there are multiple clients.
+		KittyRenderer:        app.NewKittyRenderer(),
+		KittyPassthrough:     app.NewKittyPassthrough(),
 	}
 
 	// Restore state from daemon if available
