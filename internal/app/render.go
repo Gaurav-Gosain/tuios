@@ -169,6 +169,10 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 			for _, w := range m.Windows {
 				if w.ID == windowID {
 					visible := !w.Minimized && !w.Minimizing && w.Workspace == m.CurrentWorkspace
+					scrollbackLen := 0
+					if w.Terminal != nil {
+						scrollbackLen = w.Terminal.ScrollbackLen()
+					}
 					return &WindowPositionInfo{
 						WindowX:        w.X,
 						WindowY:        w.Y,
@@ -177,6 +181,8 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 						Width:          w.Width,
 						Height:         w.Height,
 						Visible:        visible,
+						ScrollbackLen:  scrollbackLen,
+						ScrollOffset:   w.ScrollbackOffset,
 					}
 				}
 			}

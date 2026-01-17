@@ -269,6 +269,29 @@ func (e *Emulator) CursorPosition() uv.Position {
 	return uv.Pos(x, y)
 }
 
+// ReserveImageSpace reserves space for an image by moving cursor and outputting placeholders.
+// This ensures subsequent output appears below the image rather than on top of it.
+func (e *Emulator) ReserveImageSpace(rows, cols int) {
+	if rows <= 0 {
+		return
+	}
+	x, y := e.scr.CursorPosition()
+	height := e.scr.Height()
+
+	// Move cursor down by the number of rows, scrolling if needed
+	for i := 0; i < rows; i++ {
+		newY := y + i
+		if newY >= height {
+			// We've reached the bottom, scroll up
+			e.scr.ScrollUp(1)
+		} else {
+			e.scr.setCursor(x, newY+1, false)
+		}
+	}
+	// Position cursor at start of line below image
+	e.scr.setCursor(0, y+rows, false)
+}
+
 // IsCursorHidden returns whether the cursor is currently hidden.
 // Applications can hide the cursor using ANSI escape sequences (DECTCEM mode).
 func (e *Emulator) IsCursorHidden() bool {

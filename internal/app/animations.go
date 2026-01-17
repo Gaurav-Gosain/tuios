@@ -132,11 +132,14 @@ func (m *OS) UpdateAnimations() {
 				}
 			}
 
-			if m.KittyPassthrough != nil && anim.Window != nil {
+			if m.KittyPassthrough != nil && anim.Window != nil && anim.Window.Terminal != nil {
+				scrollbackLen := anim.Window.Terminal.ScrollbackLen()
+				viewportHeight := max(anim.Window.Height-2, 1)
 				m.KittyPassthrough.OnWindowMove(
 					anim.Window.ID,
 					anim.EndX, anim.EndY,
 					1, 1,
+					scrollbackLen, anim.Window.ScrollbackOffset, viewportHeight,
 				)
 			}
 
