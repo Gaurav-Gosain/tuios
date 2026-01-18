@@ -275,21 +275,26 @@ func (e *Emulator) ReserveImageSpace(rows, cols int) {
 	if rows <= 0 {
 		return
 	}
-	x, y := e.scr.CursorPosition()
+	_, startY := e.scr.CursorPosition()
 	height := e.scr.Height()
 
-	// Move cursor down by the number of rows, scrolling if needed
-	for i := 0; i < rows; i++ {
-		newY := y + i
-		if newY >= height {
-			// We've reached the bottom, scroll up
+	// Calculate how many scrolls are needed
+	endY := startY + rows
+	scrollCount := 0
+	if endY > height {
+		scrollCount = endY - height
+		for i := 0; i < scrollCount; i++ {
 			e.scr.ScrollUp(1)
-		} else {
-			e.scr.setCursor(x, newY+1, false)
 		}
 	}
-	// Position cursor at start of line below image
-	e.scr.setCursor(0, y+rows, false)
+
+	// Final cursor position accounts for scrolling
+	// After scrolling, the original startY has moved up by scrollCount
+	finalY := startY + rows - scrollCount
+	if finalY >= height {
+		finalY = height - 1
+	}
+	e.scr.setCursor(0, finalY, false)
 }
 
 // IsCursorHidden returns whether the cursor is currently hidden.

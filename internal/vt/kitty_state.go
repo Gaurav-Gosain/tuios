@@ -6,13 +6,14 @@ import (
 )
 
 type KittyState struct {
-	mu          sync.RWMutex
-	images      map[uint32]*KittyImage
-	imagesByNum map[uint32]uint32
-	placements  []*KittyPlacement
-	nextID      uint32
-	pending     *KittyPendingChunk
-	dirty       bool
+	mu            sync.RWMutex
+	images        map[uint32]*KittyImage
+	imagesByNum   map[uint32]uint32
+	placements    []*KittyPlacement
+	nextID        uint32
+	pending       *KittyPendingChunk
+	dirty         bool
+	clearCallback func() // Called when placements/images are cleared
 }
 
 func NewKittyState() *KittyState {
@@ -21,6 +22,14 @@ func NewKittyState() *KittyState {
 		imagesByNum: make(map[uint32]uint32),
 		nextID:      1,
 	}
+}
+
+// SetClearCallback sets a callback that will be called when placements are cleared.
+// This is used by passthrough mode to clear images on the host terminal.
+func (s *KittyState) SetClearCallback(fn func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clearCallback = fn
 }
 
 func (s *KittyState) AllocateID() uint32 {
@@ -176,20 +185,32 @@ func (s *KittyState) DeletePlacementsByZIndex(z int32) {
 
 func (s *KittyState) Clear() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	callback := s.clearCallback
 	s.images = make(map[uint32]*KittyImage)
 	s.imagesByNum = make(map[uint32]uint32)
 	s.placements = nil
 	s.pending = nil
 	s.dirty = true
+	s.mu.Unlock()
+	// Call callback outside the lock to avoid deadlocks
+	if callback != nil {
+		callback()
+	}
 }
 
 func (s *KittyState) ClearPlacements() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.placements) > 0 {
+	callback := s.clearCallback
+	hadPlacements := len(s.placements) > 0
+	if hadPlacements {
 		s.placements = nil
 		s.dirty = true
+	}
+	s.mu.Unlock()
+	// Always call callback (needed for passthrough mode where placements
+	// are stored externally, not in KittyState)
+	if callback != nil {
+		callback()
 	}
 }
 

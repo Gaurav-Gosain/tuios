@@ -139,7 +139,12 @@ func (r *KittyRenderer) GetRenderOutput(
 				r.transmittedIDs[hostID] = true
 			}
 
-			r.commandBuilder.PlaceImage(hostID, vp.Placement, vp.HostX, vp.HostY)
+			caps := GetHostCapabilities()
+			r.commandBuilder.PlaceImage(
+				hostID, vp.Placement, vp.HostX, vp.HostY,
+				vp.ClipLeft, vp.ClipTop, vp.ClipRight, vp.ClipBottom,
+				caps.CellWidth, caps.CellHeight,
+			)
 		}
 	}
 

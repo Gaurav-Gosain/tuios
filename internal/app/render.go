@@ -164,6 +164,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 		return nil
 	}
 
+	// Always refresh placements if there are any - this handles window movement
 	if m.KittyPassthrough.HasPlacements() {
 		m.KittyPassthrough.RefreshAllPlacements(func(windowID string) *WindowPositionInfo {
 			for _, w := range m.Windows {
@@ -190,6 +191,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 		})
 	}
 
+	// Always flush pending output - this includes delete commands even after placements are removed
 	data := m.KittyPassthrough.FlushPending()
 	if len(data) == 0 {
 		return nil

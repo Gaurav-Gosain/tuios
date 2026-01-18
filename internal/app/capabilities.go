@@ -155,11 +155,34 @@ func queryPixelDimensions(caps *HostCapabilities) {
 }
 
 func setDefaultCellSize(caps *HostCapabilities) {
+	// Calculate from pixel/cell ratio if available
+	if caps.PixelWidth > 0 && caps.Cols > 0 && caps.CellWidth == 0 {
+		caps.CellWidth = caps.PixelWidth / caps.Cols
+	}
+	if caps.PixelHeight > 0 && caps.Rows > 0 && caps.CellHeight == 0 {
+		caps.CellHeight = caps.PixelHeight / caps.Rows
+	}
+
+	// Terminal-specific defaults based on common font sizes
 	if caps.CellWidth == 0 {
-		caps.CellWidth = 10
+		switch caps.TerminalName {
+		case "kitty", "wezterm":
+			caps.CellWidth = 9 // Common for these terminals
+		case "ghostty":
+			caps.CellWidth = 10
+		default:
+			caps.CellWidth = 9 // Common monospace default
+		}
 	}
 	if caps.CellHeight == 0 {
-		caps.CellHeight = 20
+		switch caps.TerminalName {
+		case "kitty", "wezterm":
+			caps.CellHeight = 20 // Common for these terminals
+		case "ghostty":
+			caps.CellHeight = 22
+		default:
+			caps.CellHeight = 20 // Common monospace default
+		}
 	}
 }
 

@@ -340,12 +340,27 @@ func (h *KittyGraphicsHandler) placeImageAtCursor(img *KittyImage, cmd *KittyCom
 	kittyDebugLog("Placement created: imgID=%d, pos=(%d,%d), absLine=%d, cols=%d, rows=%d",
 		img.ID, x, y, absoluteLine, placement.Columns, placement.Rows)
 
-	// Move cursor if requested
-	if cmd.CursorMove > 0 && placement.Columns > 0 {
-		// Move cursor to the right by the number of columns
-		newX := x + placement.Columns
-		if newX < h.screen.Width() {
-			h.screen.setCursorX(newX, false)
+	// Cursor movement: C=0 (or unset) = move cursor (DEFAULT), C=1 = don't move
+	// Per Kitty graphics protocol, the default behavior is to move cursor after image placement
+	if cmd.CursorMove == 0 {
+		if placement.Rows > 0 {
+			// Multi-row image: move cursor to line below image
+			newY := y + placement.Rows
+			if newY >= h.screen.Height() {
+				newY = h.screen.Height() - 1
+			}
+			h.screen.setCursor(0, newY, false)
+		} else if placement.Columns > 0 {
+			// Single-row inline image: move cursor right
+			newX := x + placement.Columns
+			if newX >= h.screen.Width() {
+				// Wrap to next line
+				if y+1 < h.screen.Height() {
+					h.screen.setCursor(0, y+1, false)
+				}
+			} else {
+				h.screen.setCursorX(newX, false)
+			}
 		}
 	}
 }

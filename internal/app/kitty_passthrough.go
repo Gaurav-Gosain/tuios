@@ -46,8 +46,24 @@ type PassthroughPlacement struct {
 	HostX        int
 	HostY        int
 	Cols         int
-	Rows         int
-	Hidden       bool // True when placement is scrolled out of view
+	Rows         int // Original image rows (before any capping)
+	DisplayRows  int // Capped rows for initial display
+	Hidden       bool // True when placement is completely out of view
+
+	// Source clipping parameters (pixels) - preserved for re-placement
+	SourceX      int
+	SourceY      int
+	SourceWidth  int
+	SourceHeight int
+	XOffset      int
+	YOffset      int
+	ZIndex       int32
+	Virtual      bool
+
+	// Current clipping state (rows to clip from each edge)
+	ClipTop        int
+	ClipBottom     int
+	MaxShowable    int // Max rows that can be shown in current viewport
 }
 
 type WindowPositionInfo struct {
@@ -112,6 +128,8 @@ func (kp *KittyPassthrough) calculateImageCells(cmd *vt.KittyCommand) (rows, col
 	// If rows/cols not specified, calculate from image dimensions
 	if rows == 0 || cols == 0 {
 		caps := GetHostCapabilities()
+		kittyPassthroughLog("calculateImageCells: imgPixels=(%d,%d), cmdRC=(%d,%d), cellSize=(%d,%d)",
+			cmd.Width, cmd.Height, cmd.Columns, cmd.Rows, caps.CellWidth, caps.CellHeight)
 		if caps.CellWidth > 0 && caps.CellHeight > 0 {
 			if rows == 0 && cmd.Height > 0 {
 				rows = (cmd.Height + caps.CellHeight - 1) / caps.CellHeight
@@ -122,13 +140,40 @@ func (kp *KittyPassthrough) calculateImageCells(cmd *vt.KittyCommand) (rows, col
 		}
 	}
 
+	kittyPassthroughLog("calculateImageCells: result rows=%d, cols=%d", rows, cols)
+	return rows, cols
+}
+
+// calculateCappedImageCells calculates image dimensions in cells, capped to window content area.
+func (kp *KittyPassthrough) calculateCappedImageCells(cmd *vt.KittyCommand, windowWidth, windowHeight, cursorX, cursorY int) (rows, cols int) {
+	imgRows, imgCols := kp.calculateImageCells(cmd)
+
+	// Calculate content area (accounting for borders)
+	contentWidth := windowWidth - 2
+	contentHeight := windowHeight - 2
+
+	kittyPassthroughLog("calculateCappedImageCells: window=(%d,%d), contentArea=(%d,%d), img=(%d,%d)",
+		windowWidth, windowHeight, contentWidth, contentHeight, imgCols, imgRows)
+
+	// Cap to content area (not cursor position)
+	cols = imgCols
+	rows = imgRows
+	if cols > contentWidth && contentWidth > 0 {
+		cols = contentWidth
+	}
+	if rows > contentHeight && contentHeight > 0 {
+		rows = contentHeight
+	}
+
+	kittyPassthroughLog("calculateCappedImageCells: capped to rows=%d, cols=%d", rows, cols)
 	return rows, cols
 }
 
 // PlacementResult contains info about an image placement for cursor positioning
 type PlacementResult struct {
-	Rows int // Number of rows the image occupies
-	Cols int // Number of columns the image occupies
+	Rows       int // Number of rows the image occupies
+	Cols       int // Number of columns the image occupies
+	CursorMove int // C parameter: 0=move cursor (default), 1=don't move
 }
 
 func (kp *KittyPassthrough) ForwardCommand(
@@ -136,6 +181,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 	rawData []byte,
 	windowID string,
 	windowX, windowY int,
+	windowWidth, windowHeight int,
 	contentOffsetX, contentOffsetY int,
 	cursorX, cursorY int,
 	scrollbackLen int,
@@ -144,8 +190,8 @@ func (kp *KittyPassthrough) ForwardCommand(
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
-	kittyPassthroughLog("ForwardCommand: action=%c, enabled=%v, imageID=%d, windowID=%s, win=(%d,%d), cursor=(%d,%d), scrollback=%d",
-		cmd.Action, kp.enabled, cmd.ImageID, windowID[:8], windowX, windowY, cursorX, cursorY, scrollbackLen)
+	kittyPassthroughLog("ForwardCommand: action=%c, enabled=%v, imageID=%d, windowID=%s, win=(%d,%d), size=(%d,%d), cursor=(%d,%d), scrollback=%d",
+		cmd.Action, kp.enabled, cmd.ImageID, windowID[:8], windowX, windowY, windowWidth, windowHeight, cursorX, cursorY, scrollbackLen)
 
 	if !kp.enabled {
 		kittyPassthroughLog("ForwardCommand: DISABLED, returning early")
@@ -159,29 +205,31 @@ func (kp *KittyPassthrough) ForwardCommand(
 
 	case vt.KittyActionTransmit:
 		kittyPassthroughLog("ForwardCommand: handling TRANSMIT")
-		kp.forwardTransmit(cmd, rawData, windowID, false, 0, 0, 0, 0, 0, 0, 0)
+		kp.forwardTransmit(cmd, rawData, windowID, false, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 	case vt.KittyActionTransmitPlace:
 		kittyPassthroughLog("ForwardCommand: handling TRANSMIT+PLACE, more=%v", cmd.More)
 		isFileBased := cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile
-		kp.forwardTransmit(cmd, rawData, windowID, true, windowX, windowY, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
+		kp.forwardTransmit(cmd, rawData, windowID, true, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
 		if !cmd.More && !isFileBased {
-			kp.forwardPlace(cmd, windowID, windowX, windowY, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
+			kp.forwardPlace(cmd, windowID, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
 		}
-		// Return placement dimensions for cursor positioning
+		// Return ORIGINAL image dimensions for whitespace reservation
+		// The terminal needs to reserve space for the full image so it can scroll properly
 		if !cmd.More {
-			rows, cols := kp.calculateImageCells(cmd)
-			if rows > 0 || cols > 0 {
-				return &PlacementResult{Rows: rows, Cols: cols}
+			imgRows, imgCols := kp.calculateImageCells(cmd)
+			if imgRows > 0 || imgCols > 0 {
+				return &PlacementResult{Rows: imgRows, Cols: imgCols, CursorMove: cmd.CursorMove}
 			}
 		}
 
 	case vt.KittyActionPlace:
 		kittyPassthroughLog("ForwardCommand: handling PLACE")
-		kp.forwardPlace(cmd, windowID, windowX, windowY, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
-		rows, cols := kp.calculateImageCells(cmd)
-		if rows > 0 || cols > 0 {
-			return &PlacementResult{Rows: rows, Cols: cols}
+		kp.forwardPlace(cmd, windowID, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
+		// Return ORIGINAL image dimensions for whitespace reservation
+		imgRows, imgCols := kp.calculateImageCells(cmd)
+		if imgRows > 0 || imgCols > 0 {
+			return &PlacementResult{Rows: imgRows, Cols: imgCols, CursorMove: cmd.CursorMove}
 		}
 
 	case vt.KittyActionDelete:
@@ -202,15 +250,15 @@ func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, rawData []byte, p
 	}
 }
 
-func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) {
+func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) {
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile {
-		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
+		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
 		return
 	}
 	kp.pendingOutput = append(kp.pendingOutput, rawData...)
 }
 
-func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) {
+func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) {
 	if cmd.FilePath == "" {
 		return
 	}
@@ -228,6 +276,18 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 	kittyPassthroughLog("forwardFileTransmit: read %d bytes from %s, andPlace=%v", len(data), filePath, andPlace)
 
+	// Clear existing placements for this window before placing new image
+	// This prevents old images from lingering when icat is called multiple times
+	if andPlace {
+		if existing := kp.placements[windowID]; existing != nil {
+			for _, p := range existing {
+				kp.deleteOnePlacement(p)
+			}
+			kp.placements[windowID] = nil
+			kittyPassthroughLog("forwardFileTransmit: cleared %d existing placements", len(existing))
+		}
+	}
+
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile {
 		os.Remove(filePath)
 	}
@@ -238,8 +298,27 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
 
-	kittyPassthroughLog("forwardFileTransmit: hostID=%d, hostPos=(%d,%d) = win(%d,%d) + offset(%d,%d) + cursor(%d,%d), absLine=%d",
-		hostID, hostX, hostY, windowX, windowY, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen+cursorY)
+	// Calculate content area dimensions (accounting for borders)
+	contentWidth := windowWidth - 2  // -2 for left/right borders
+	contentHeight := windowHeight - 2 // -2 for top/bottom borders
+
+	// Calculate image dimensions in cells
+	// Note: calculateImageCells returns (rows, cols) in that order
+	imgRows, imgCols := kp.calculateImageCells(cmd)
+
+	// Cap to content area (not cursor position) - allow full-height images
+	// The image will be repositioned by RefreshAllPlacements after scrolling
+	displayCols := imgCols
+	displayRows := imgRows
+	if displayCols > contentWidth && contentWidth > 0 {
+		displayCols = contentWidth
+	}
+	if displayRows > contentHeight && contentHeight > 0 {
+		displayRows = contentHeight
+	}
+
+	kittyPassthroughLog("forwardFileTransmit: hostID=%d, hostPos=(%d,%d), imgSize=(%d,%d), displaySize=(%d,%d), contentArea=(%d,%d)",
+		hostID, hostX, hostY, imgCols, imgRows, displayCols, displayRows, contentWidth, contentHeight)
 
 	kp.pendingOutput = append(kp.pendingOutput, "\x1b7"...)
 
@@ -269,6 +348,50 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			if cmd.Compression == vt.KittyCompressionZlib {
 				buf.WriteString(",o=z")
 			}
+
+			// Always set c and r to control display size
+			if displayCols > 0 {
+				buf.WriteString(fmt.Sprintf(",c=%d", displayCols))
+			}
+			if displayRows > 0 {
+				buf.WriteString(fmt.Sprintf(",r=%d", displayRows))
+			}
+			// Include source rectangle if specified
+			if cmd.SourceX > 0 {
+				buf.WriteString(fmt.Sprintf(",x=%d", cmd.SourceX))
+			}
+			if cmd.SourceY > 0 {
+				buf.WriteString(fmt.Sprintf(",y=%d", cmd.SourceY))
+			}
+			if cmd.SourceWidth > 0 {
+				buf.WriteString(fmt.Sprintf(",w=%d", cmd.SourceWidth))
+			}
+			// Calculate source height for clipping (not scaling)
+			// If displayRows < imgRows, we need to clip the image
+			sourceHeight := cmd.SourceHeight
+			if sourceHeight == 0 && displayRows < imgRows {
+				caps := GetHostCapabilities()
+				cellH := caps.CellHeight
+				if cellH <= 0 {
+					cellH = 20
+				}
+				sourceHeight = displayRows * cellH
+			}
+			if sourceHeight > 0 {
+				buf.WriteString(fmt.Sprintf(",h=%d", sourceHeight))
+			}
+			if cmd.XOffset > 0 {
+				buf.WriteString(fmt.Sprintf(",X=%d", cmd.XOffset))
+			}
+			if cmd.YOffset > 0 {
+				buf.WriteString(fmt.Sprintf(",Y=%d", cmd.YOffset))
+			}
+			if cmd.ZIndex != 0 {
+				buf.WriteString(fmt.Sprintf(",z=%d", cmd.ZIndex))
+			}
+			if cmd.Virtual {
+				buf.WriteString(",U=1")
+			}
 		} else {
 			buf.WriteString(fmt.Sprintf("i=%d,q=2", hostID))
 		}
@@ -286,10 +409,11 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 	kp.pendingOutput = append(kp.pendingOutput, "\x1b8"...)
 
+	// Store placement using hostID as key (cmd.ImageID is often 0 for new images)
 	if kp.placements[windowID] == nil {
 		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
 	}
-	kp.placements[windowID][cmd.ImageID] = &PassthroughPlacement{
+	kp.placements[windowID][hostID] = &PassthroughPlacement{
 		GuestImageID: cmd.ImageID,
 		HostImageID:  hostID,
 		WindowID:     windowID,
@@ -297,6 +421,17 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		AbsoluteLine: scrollbackLen + cursorY,
 		HostX:        hostX,
 		HostY:        hostY,
+		Cols:         displayCols,
+		Rows:         imgRows,     // Original image rows (for scroll clipping)
+		DisplayRows:  displayRows, // Capped rows for initial display
+		SourceX:      cmd.SourceX,
+		SourceY:      cmd.SourceY,
+		SourceWidth:  cmd.SourceWidth,
+		SourceHeight: cmd.SourceHeight,
+		XOffset:      cmd.XOffset,
+		YOffset:      cmd.YOffset,
+		ZIndex:       cmd.ZIndex,
+		Virtual:      cmd.Virtual,
 	}
 }
 
@@ -304,6 +439,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	cmd *vt.KittyCommand,
 	windowID string,
 	windowX, windowY int,
+	windowWidth, windowHeight int,
 	contentOffsetX, contentOffsetY int,
 	cursorX, cursorY int,
 	scrollbackLen int,
@@ -311,7 +447,24 @@ func (kp *KittyPassthrough) forwardPlace(
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
 
+	// Calculate content area dimensions (accounting for borders)
+	contentWidth := windowWidth - 2
+	contentHeight := windowHeight - 2
+
+	// Calculate image dimensions and cap to content area
+	// Note: calculateImageCells returns (rows, cols) in that order
+	imgRows, imgCols := kp.calculateImageCells(cmd)
+	displayCols := imgCols
+	displayRows := imgRows
+	if displayCols > contentWidth && contentWidth > 0 {
+		displayCols = contentWidth
+	}
+	if displayRows > contentHeight && contentHeight > 0 {
+		displayRows = contentHeight
+	}
+
 	var buf bytes.Buffer
+	buf.WriteString("\x1b7") // Save cursor position
 	buf.WriteString(fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1))
 	buf.WriteString("\x1b_G")
 	buf.WriteString(fmt.Sprintf("a=p,i=%d", cmd.ImageID))
@@ -319,11 +472,12 @@ func (kp *KittyPassthrough) forwardPlace(
 	if cmd.PlacementID > 0 {
 		buf.WriteString(fmt.Sprintf(",p=%d", cmd.PlacementID))
 	}
-	if cmd.Columns > 0 {
-		buf.WriteString(fmt.Sprintf(",c=%d", cmd.Columns))
+	// Always set display dimensions to control size
+	if displayCols > 0 {
+		buf.WriteString(fmt.Sprintf(",c=%d", displayCols))
 	}
-	if cmd.Rows > 0 {
-		buf.WriteString(fmt.Sprintf(",r=%d", cmd.Rows))
+	if displayRows > 0 {
+		buf.WriteString(fmt.Sprintf(",r=%d", displayRows))
 	}
 	if cmd.XOffset > 0 {
 		buf.WriteString(fmt.Sprintf(",X=%d", cmd.XOffset))
@@ -351,6 +505,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	}
 	buf.WriteString(",q=2")
 	buf.WriteString("\x1b\\")
+	buf.WriteString("\x1b8") // Restore cursor position
 
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 
@@ -358,6 +513,7 @@ func (kp *KittyPassthrough) forwardPlace(
 		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
 	}
 
+	// Store placement with both original and capped dimensions
 	placement := &PassthroughPlacement{
 		GuestImageID: cmd.ImageID,
 		HostImageID:  cmd.ImageID,
@@ -367,8 +523,17 @@ func (kp *KittyPassthrough) forwardPlace(
 		AbsoluteLine: scrollbackLen + cursorY,
 		HostX:        hostX,
 		HostY:        hostY,
-		Cols:         cmd.Columns,
-		Rows:         cmd.Rows,
+		Cols:         displayCols,
+		Rows:         imgRows,     // Original image rows
+		DisplayRows:  displayRows, // Capped for initial display
+		SourceX:      cmd.SourceX,
+		SourceY:      cmd.SourceY,
+		SourceWidth:  cmd.SourceWidth,
+		SourceHeight: cmd.SourceHeight,
+		XOffset:      cmd.XOffset,
+		YOffset:      cmd.YOffset,
+		ZIndex:       cmd.ZIndex,
+		Virtual:      cmd.Virtual,
 	}
 	kp.placements[windowID][cmd.ImageID] = placement
 }
@@ -505,11 +670,14 @@ func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
+	kittyPassthroughLog("ClearWindow called for windowID=%s, enabled=%v", windowID[:8], kp.enabled)
+
 	if !kp.enabled {
 		return
 	}
 
 	placements := kp.placements[windowID]
+	kittyPassthroughLog("ClearWindow: found %d placements to clear", len(placements))
 	for _, p := range placements {
 		kp.deleteOnePlacement(p)
 	}
@@ -545,32 +713,75 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 		viewportHeight := info.Height - 2 // Account for window borders
 
 		for _, p := range placements {
-			// Delete current placement if visible
-			if !p.Hidden {
-				kp.deleteOnePlacement(p)
-			}
-
-			if !info.Visible {
-				p.Hidden = true
-				continue
-			}
-
-			// Calculate relative Y from AbsoluteLine
+			// Calculate new position (where top-left of image would be)
 			relativeY := p.AbsoluteLine - viewportTop
 
+			// Calculate where the FULL image would end (for visibility check)
+			fullImageBottom := relativeY + p.Rows
+
+			// Check if ANY part of the image is visible in the viewport
+			// Image is visible if: top < viewportHeight AND bottom > 0
+			anyPartVisible := info.Visible && relativeY < viewportHeight && fullImageBottom > 0
+
+			// Calculate clipping based on FULL image dimensions
+			clipTop := 0
+			clipBottom := 0
+			if anyPartVisible {
+				if relativeY < 0 {
+					clipTop = -relativeY // Clip rows above viewport
+				}
+				if fullImageBottom > viewportHeight {
+					clipBottom = fullImageBottom - viewportHeight // Clip rows below viewport
+				}
+			}
+
+			// Calculate how many rows we CAN show after clipping:
+			// - Start with original image size
+			// - Subtract what's clipped from top and bottom
+			// - But also cap to viewport height
+			maxShowableRows := p.Rows - clipTop - clipBottom
+			if maxShowableRows > viewportHeight {
+				maxShowableRows = viewportHeight
+			}
+			if maxShowableRows <= 0 {
+				maxShowableRows = 1
+			}
+
+			kittyPassthroughLog("RefreshPlacement: relY=%d, origRows=%d, fullBottom=%d, vpH=%d, clipTop=%d, clipBot=%d, maxShow=%d, visible=%v",
+				relativeY, p.Rows, fullImageBottom, viewportHeight, clipTop, clipBottom, maxShowableRows, anyPartVisible)
+
+			// Calculate actual host position (after clipping adjustment)
+			actualRelativeY := relativeY
+			if clipTop > 0 {
+				actualRelativeY = 0 // Start at top of viewport
+			}
 			newHostX := info.WindowX + info.ContentOffsetX + p.GuestX
-			newHostY := info.WindowY + info.ContentOffsetY + relativeY
+			newHostY := info.WindowY + info.ContentOffsetY + actualRelativeY
 
-			p.HostX = newHostX
-			p.HostY = newHostY
+			// Check if position or clipping changed
+			positionChanged := newHostX != p.HostX || newHostY != p.HostY
+			clippingChanged := clipTop != p.ClipTop || clipBottom != p.ClipBottom
 
-			// Check if placement is within viewport
-			if relativeY >= 0 && relativeY < viewportHeight {
+			if !anyPartVisible {
+				// Completely hidden
+				if !p.Hidden {
+					kp.deleteOnePlacement(p)
+					p.Hidden = true
+				}
+			} else if p.Hidden || positionChanged || clippingChanged || p.MaxShowable != maxShowableRows {
+				// Should be visible AND either was hidden, moved, or clipping changed
+				if !p.Hidden {
+					kp.deleteOnePlacement(p)
+				}
+				p.HostX = newHostX
+				p.HostY = newHostY
+				p.ClipTop = clipTop
+				p.ClipBottom = clipBottom
+				p.MaxShowable = maxShowableRows
 				kp.placeOne(p)
 				p.Hidden = false
-			} else {
-				p.Hidden = true
 			}
+			// else: visible, same position - do nothing
 		}
 	}
 }
@@ -598,20 +809,83 @@ func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
 }
 
 func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
+	caps := GetHostCapabilities()
+	cellHeight := caps.CellHeight
+	if cellHeight <= 0 {
+		cellHeight = 20 // Fallback
+	}
+
 	var buf bytes.Buffer
+	buf.WriteString("\x1b7") // Save cursor position
 	buf.WriteString(fmt.Sprintf("\x1b[%d;%dH", p.HostY+1, p.HostX+1))
 	buf.WriteString("\x1b_G")
 	buf.WriteString(fmt.Sprintf("a=p,i=%d", p.HostImageID))
 	if p.PlacementID > 0 {
 		buf.WriteString(fmt.Sprintf(",p=%d", p.PlacementID))
 	}
+
+	// MaxShowable is already calculated as: p.Rows - clipTop - clipBottom
+	// So it already accounts for clipping and is the number of rows to display
+	visibleRows := p.MaxShowable
+	if visibleRows <= 0 {
+		visibleRows = p.DisplayRows
+	}
+	if visibleRows <= 0 {
+		visibleRows = p.Rows
+	}
+	if visibleRows <= 0 {
+		visibleRows = 1 // Minimum 1 row to avoid issues
+	}
+
+	kittyPassthroughLog("placeOne: hostID=%d, pos=(%d,%d), origRows=%d, clipTop=%d, clipBot=%d, visibleRows=%d",
+		p.HostImageID, p.HostX, p.HostY, p.Rows, p.ClipTop, p.ClipBottom, visibleRows)
+
 	if p.Cols > 0 {
 		buf.WriteString(fmt.Sprintf(",c=%d", p.Cols))
 	}
-	if p.Rows > 0 {
-		buf.WriteString(fmt.Sprintf(",r=%d", p.Rows))
+	if visibleRows > 0 {
+		buf.WriteString(fmt.Sprintf(",r=%d", visibleRows))
+	}
+
+	// Calculate source Y offset (in pixels) - includes original SourceY plus clipping
+	sourceY := p.SourceY
+	if p.ClipTop > 0 {
+		sourceY += p.ClipTop * cellHeight
+	}
+
+	// Calculate source height (in pixels) for proper clipping (not scaling)
+	// This is critical: without setting h, Kitty will SCALE the image to fit r rows
+	// With h set, Kitty will CLIP to show only h pixels of height
+	sourceHeight := visibleRows * cellHeight
+
+	// Include source clipping parameters
+	if p.SourceX > 0 {
+		buf.WriteString(fmt.Sprintf(",x=%d", p.SourceX))
+	}
+	if sourceY > 0 {
+		buf.WriteString(fmt.Sprintf(",y=%d", sourceY))
+	}
+	if p.SourceWidth > 0 {
+		buf.WriteString(fmt.Sprintf(",w=%d", p.SourceWidth))
+	}
+	// Always set h to get clipping instead of scaling
+	if sourceHeight > 0 {
+		buf.WriteString(fmt.Sprintf(",h=%d", sourceHeight))
+	}
+	if p.XOffset > 0 {
+		buf.WriteString(fmt.Sprintf(",X=%d", p.XOffset))
+	}
+	if p.YOffset > 0 {
+		buf.WriteString(fmt.Sprintf(",Y=%d", p.YOffset))
+	}
+	if p.ZIndex != 0 {
+		buf.WriteString(fmt.Sprintf(",z=%d", p.ZIndex))
+	}
+	if p.Virtual {
+		buf.WriteString(",U=1")
 	}
 	buf.WriteString(",q=2\x1b\\")
+	buf.WriteString("\x1b8") // Restore cursor position
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 }
 
@@ -719,12 +993,20 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	}
 
 	win := window
+	kp := m.KittyPassthrough
+
+	// Set up callback for when placements are cleared (e.g., clear screen, ED sequences)
+	window.Terminal.KittyState().SetClearCallback(func() {
+		kp.ClearWindow(win.ID)
+	})
+
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		cursorPos := win.Terminal.CursorPosition()
 		scrollbackLen := win.Terminal.ScrollbackLen()
-		result := m.KittyPassthrough.ForwardCommand(
+		result := kp.ForwardCommand(
 			cmd, rawData, win.ID,
 			win.X, win.Y,
+			win.Width, win.Height,
 			1, 1,
 			cursorPos.X, cursorPos.Y,
 			scrollbackLen,
@@ -737,7 +1019,8 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 			},
 		)
 		// Reserve space in guest terminal for the image placement
-		if result != nil && result.Rows > 0 {
+		// Only move cursor when C=0 (default behavior), not when C=1 (no cursor move)
+		if result != nil && result.Rows > 0 && result.CursorMove == 0 {
 			win.Terminal.ReserveImageSpace(result.Rows, result.Cols)
 		}
 	})

@@ -554,12 +554,12 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			rect2 := uv.Rect(0, y+1, width, height-y-1) // next line onwards
 			e.scr.FillArea(e.scr.blankCell(), rect1)
 			e.scr.FillArea(e.scr.blankCell(), rect2)
-			e.KittyState().ClearPlacements()
+			// Don't clear images for ED 0 - commonly used by apps
 		case 1: // Erase screen above (including cursor)
 			rect := uv.Rect(0, 0, width, y+1)
 			e.scr.FillArea(e.scr.blankCell(), rect)
-			e.KittyState().ClearPlacements()
-		case 2: // erase screen
+			// Don't clear images for ED 1 - commonly used by apps
+		case 2: // erase screen (clear command)
 			e.scr.Clear()
 			e.KittyState().ClearPlacements()
 		case 3: // erase display including scrollback

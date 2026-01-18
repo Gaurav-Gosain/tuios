@@ -68,16 +68,70 @@ func (b *KittyCommandBuilder) TransmitImage(hostID uint32, img *vt.KittyImage) {
 	}
 }
 
-func (b *KittyCommandBuilder) PlaceImage(hostID uint32, placement *vt.KittyPlacement, hostX, hostY int) {
+func (b *KittyCommandBuilder) PlaceImage(
+	hostID uint32,
+	placement *vt.KittyPlacement,
+	hostX, hostY int,
+	clipLeft, clipTop, clipRight, clipBottom int,
+	cellWidth, cellHeight int,
+) {
 	if placement == nil {
 		return
 	}
 
-	cols := placement.Columns
-	rows := placement.Rows
+	// Get original dimensions (0 means auto-size in Kitty protocol)
+	originalCols := placement.Columns
+	originalRows := placement.Rows
 
-	rendererDebugLog("PlaceImage: hostID=%d, hostPos=(%d,%d), cols=%d, rows=%d",
-		hostID, hostX, hostY, cols, rows)
+	// Calculate effective display dimensions after clipping
+	// Only apply clipping if we have explicit dimensions
+	cols := originalCols
+	rows := originalRows
+
+	if originalCols > 0 {
+		cols = originalCols - clipLeft - clipRight
+		if cols <= 0 {
+			return // Completely clipped horizontally
+		}
+	}
+	if originalRows > 0 {
+		rows = originalRows - clipTop - clipBottom
+		if rows <= 0 {
+			return // Completely clipped vertically
+		}
+	}
+
+	// Calculate effective source rectangle (source clipping in pixels)
+	// Only apply source clipping if we have explicit dimensions
+	effectiveSourceX := placement.SourceX
+	effectiveSourceY := placement.SourceY
+	effectiveSourceWidth := placement.SourceWidth
+	effectiveSourceHeight := placement.SourceHeight
+
+	if originalCols > 0 && cellWidth > 0 {
+		effectiveSourceX = placement.SourceX + (clipLeft * cellWidth)
+		if placement.SourceWidth > 0 {
+			effectiveSourceWidth = placement.SourceWidth - ((clipLeft + clipRight) * cellWidth)
+			if effectiveSourceWidth < 0 {
+				effectiveSourceWidth = 0
+			}
+		}
+	}
+	if originalRows > 0 && cellHeight > 0 {
+		effectiveSourceY = placement.SourceY + (clipTop * cellHeight)
+		if placement.SourceHeight > 0 {
+			effectiveSourceHeight = placement.SourceHeight - ((clipTop + clipBottom) * cellHeight)
+			if effectiveSourceHeight < 0 {
+				effectiveSourceHeight = 0
+			}
+		}
+	}
+
+	rendererDebugLog("PlaceImage: hostID=%d, hostPos=(%d,%d), cols=%d, rows=%d, clip=(%d,%d,%d,%d), cellSize=(%d,%d)",
+		hostID, hostX, hostY, cols, rows, clipLeft, clipTop, clipRight, clipBottom, cellWidth, cellHeight)
+	rendererDebugLog("PlaceImage: effectiveSource: x=%d, y=%d, w=%d, h=%d (original: x=%d, y=%d, w=%d, h=%d)",
+		effectiveSourceX, effectiveSourceY, effectiveSourceWidth, effectiveSourceHeight,
+		placement.SourceX, placement.SourceY, placement.SourceWidth, placement.SourceHeight)
 
 	var params bytes.Buffer
 	params.WriteString("a=p,i=")
@@ -108,24 +162,25 @@ func (b *KittyCommandBuilder) PlaceImage(hostID uint32, placement *vt.KittyPlace
 		params.WriteString(strconv.Itoa(placement.YOffset))
 	}
 
-	if placement.SourceX > 0 {
+	// Use effective source coordinates with clipping applied
+	if effectiveSourceX > 0 {
 		params.WriteString(",x=")
-		params.WriteString(strconv.Itoa(placement.SourceX))
+		params.WriteString(strconv.Itoa(effectiveSourceX))
 	}
 
-	if placement.SourceY > 0 {
+	if effectiveSourceY > 0 {
 		params.WriteString(",y=")
-		params.WriteString(strconv.Itoa(placement.SourceY))
+		params.WriteString(strconv.Itoa(effectiveSourceY))
 	}
 
-	if placement.SourceWidth > 0 {
+	if effectiveSourceWidth > 0 {
 		params.WriteString(",w=")
-		params.WriteString(strconv.Itoa(placement.SourceWidth))
+		params.WriteString(strconv.Itoa(effectiveSourceWidth))
 	}
 
-	if placement.SourceHeight > 0 {
+	if effectiveSourceHeight > 0 {
 		params.WriteString(",h=")
-		params.WriteString(strconv.Itoa(placement.SourceHeight))
+		params.WriteString(strconv.Itoa(effectiveSourceHeight))
 	}
 
 	if placement.ZIndex != 0 {
