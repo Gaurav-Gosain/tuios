@@ -32,6 +32,7 @@ type KittyPassthrough struct {
 	hostOut *os.File
 
 	placements    map[string]map[uint32]*PassthroughPlacement
+	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
 	nextHostID    uint32
 	pendingOutput []byte
 }
@@ -60,22 +61,25 @@ type PassthroughPlacement struct {
 	ZIndex       int32
 	Virtual      bool
 
-	// Current clipping state (rows to clip from each edge)
-	ClipTop        int
-	ClipBottom     int
-	MaxShowable    int // Max rows that can be shown in current viewport
+	// Current clipping state (rows/cols to clip from each edge)
+	ClipTop         int
+	ClipBottom      int
+	ClipRight       int
+	MaxShowable     int // Max rows that can be shown in current viewport
+	MaxShowableCols int // Max cols that can be shown in current viewport
 }
 
 type WindowPositionInfo struct {
-	WindowX        int
-	WindowY        int
-	ContentOffsetX int
-	ContentOffsetY int
-	Width          int
-	Height         int
-	Visible        bool
-	ScrollbackLen  int // Total scrollback lines
-	ScrollOffset   int // Current scroll offset (0 = at bottom)
+	WindowX           int
+	WindowY           int
+	ContentOffsetX    int
+	ContentOffsetY    int
+	Width             int
+	Height            int
+	Visible           bool
+	ScrollbackLen     int  // Total scrollback lines
+	ScrollOffset      int  // Current scroll offset (0 = at bottom)
+	IsBeingManipulated bool // True when window is being dragged/resized
 }
 
 func NewKittyPassthrough() *KittyPassthrough {
@@ -85,8 +89,24 @@ func NewKittyPassthrough() *KittyPassthrough {
 		enabled:    caps.KittyGraphics,
 		hostOut:    os.Stdout,
 		placements: make(map[string]map[uint32]*PassthroughPlacement),
+		imageIDMap: make(map[string]map[uint32]uint32),
 		nextHostID: 1,
 	}
+}
+
+// getOrAllocateHostID returns the host image ID for a given (windowID, guestImageID) pair.
+// If no mapping exists, it allocates a new host ID and stores the mapping.
+func (kp *KittyPassthrough) getOrAllocateHostID(windowID string, guestImageID uint32) uint32 {
+	if kp.imageIDMap[windowID] == nil {
+		kp.imageIDMap[windowID] = make(map[uint32]uint32)
+	}
+	if hostID, ok := kp.imageIDMap[windowID][guestImageID]; ok {
+		return hostID
+	}
+	hostID := kp.allocateHostID()
+	kp.imageIDMap[windowID][guestImageID] = hostID
+	kittyPassthroughLog("getOrAllocateHostID: windowID=%s, guestID=%d -> hostID=%d", windowID[:8], guestImageID, hostID)
+	return hostID
 }
 
 func (kp *KittyPassthrough) IsEnabled() bool {
@@ -292,7 +312,14 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		os.Remove(filePath)
 	}
 
+	// Allocate a unique host ID and store the mapping
 	hostID := kp.allocateHostID()
+	if kp.imageIDMap[windowID] == nil {
+		kp.imageIDMap[windowID] = make(map[uint32]uint32)
+	}
+	kp.imageIDMap[windowID][cmd.ImageID] = hostID
+	kittyPassthroughLog("forwardFileTransmit: mapped guestID=%d -> hostID=%d for window=%s", cmd.ImageID, hostID, windowID[:8])
+
 	encoded := base64.StdEncoding.EncodeToString(data)
 
 	hostX := windowX + contentOffsetX + cursorX
@@ -447,6 +474,10 @@ func (kp *KittyPassthrough) forwardPlace(
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
 
+	// Get or allocate a unique host ID for this (window, guestImageID) pair
+	// This prevents conflicts when multiple windows use the same guest image ID
+	hostID := kp.getOrAllocateHostID(windowID, cmd.ImageID)
+
 	// Calculate content area dimensions (accounting for borders)
 	contentWidth := windowWidth - 2
 	contentHeight := windowHeight - 2
@@ -467,7 +498,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	buf.WriteString("\x1b7") // Save cursor position
 	buf.WriteString(fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1))
 	buf.WriteString("\x1b_G")
-	buf.WriteString(fmt.Sprintf("a=p,i=%d", cmd.ImageID))
+	buf.WriteString(fmt.Sprintf("a=p,i=%d", hostID))
 
 	if cmd.PlacementID > 0 {
 		buf.WriteString(fmt.Sprintf(",p=%d", cmd.PlacementID))
@@ -516,7 +547,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	// Store placement with both original and capped dimensions
 	placement := &PassthroughPlacement{
 		GuestImageID: cmd.ImageID,
-		HostImageID:  cmd.ImageID,
+		HostImageID:  hostID,
 		PlacementID:  cmd.PlacementID,
 		WindowID:     windowID,
 		GuestX:       cursorX,
@@ -630,6 +661,7 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 		kp.deleteOnePlacement(p)
 	}
 	delete(kp.placements, windowID)
+	delete(kp.imageIDMap, windowID)
 }
 
 func (kp *KittyPassthrough) OnWindowScroll(windowID string, windowX, windowY, contentOffsetX, contentOffsetY, scrollbackLen, scrollOffset, viewportHeight int) {
@@ -692,6 +724,28 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 		return
 	}
 
+	// First pass: check if ANY window is being manipulated
+	anyBeingManipulated := false
+	for windowID := range kp.placements {
+		if info := getWindowInfo(windowID); info != nil && info.IsBeingManipulated {
+			anyBeingManipulated = true
+			break
+		}
+	}
+
+	// If any window is being dragged/resized, hide ALL images to prevent ANSI leaks
+	if anyBeingManipulated {
+		for _, placements := range kp.placements {
+			for _, p := range placements {
+				if !p.Hidden {
+					kp.deleteOnePlacement(p)
+					p.Hidden = true
+				}
+			}
+		}
+		return
+	}
+
 	for windowID, placements := range kp.placements {
 		if len(placements) == 0 {
 			continue
@@ -708,9 +762,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			continue
 		}
 
-		// Calculate viewport top line (absolute line number)
+		// Calculate viewport dimensions (accounting for window borders)
 		viewportTop := info.ScrollbackLen - info.ScrollOffset
-		viewportHeight := info.Height - 2 // Account for window borders
+		viewportHeight := info.Height - 2
+		viewportWidth := info.Width - 2
 
 		for _, p := range placements {
 			// Calculate new position (where top-left of image would be)
@@ -718,12 +773,15 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 
 			// Calculate where the FULL image would end (for visibility check)
 			fullImageBottom := relativeY + p.Rows
+			fullImageRight := p.GuestX + p.Cols
 
 			// Check if ANY part of the image is visible in the viewport
-			// Image is visible if: top < viewportHeight AND bottom > 0
-			anyPartVisible := info.Visible && relativeY < viewportHeight && fullImageBottom > 0
+			// Image is visible if: top < viewportHeight AND bottom > 0 AND left < viewportWidth AND right > 0
+			anyPartVisible := info.Visible &&
+				relativeY < viewportHeight && fullImageBottom > 0 &&
+				p.GuestX < viewportWidth && fullImageRight > 0
 
-			// Calculate clipping based on FULL image dimensions
+			// Calculate vertical clipping based on FULL image dimensions
 			clipTop := 0
 			clipBottom := 0
 			if anyPartVisible {
@@ -735,10 +793,13 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 				}
 			}
 
-			// Calculate how many rows we CAN show after clipping:
-			// - Start with original image size
-			// - Subtract what's clipped from top and bottom
-			// - But also cap to viewport height
+			// For horizontal: if image is wider than viewport, hide it (simpler approach for now)
+			// TODO: implement proper horizontal clipping later
+			if fullImageRight > viewportWidth {
+				anyPartVisible = false
+			}
+
+			// Calculate how many rows we CAN show after clipping
 			maxShowableRows := p.Rows - clipTop - clipBottom
 			if maxShowableRows > viewportHeight {
 				maxShowableRows = viewportHeight
@@ -747,8 +808,8 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 				maxShowableRows = 1
 			}
 
-			kittyPassthroughLog("RefreshPlacement: relY=%d, origRows=%d, fullBottom=%d, vpH=%d, clipTop=%d, clipBot=%d, maxShow=%d, visible=%v",
-				relativeY, p.Rows, fullImageBottom, viewportHeight, clipTop, clipBottom, maxShowableRows, anyPartVisible)
+			kittyPassthroughLog("RefreshPlacement: relY=%d, origRows=%d, origCols=%d, vpH=%d, vpW=%d, clipTop=%d, clipBot=%d, maxRows=%d, visible=%v",
+				relativeY, p.Rows, p.Cols, viewportHeight, viewportWidth, clipTop, clipBottom, maxShowableRows, anyPartVisible)
 
 			// Calculate actual host position (after clipping adjustment)
 			actualRelativeY := relativeY
@@ -758,18 +819,15 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			newHostX := info.WindowX + info.ContentOffsetX + p.GuestX
 			newHostY := info.WindowY + info.ContentOffsetY + actualRelativeY
 
-			// Check if position or clipping changed
-			positionChanged := newHostX != p.HostX || newHostY != p.HostY
-			clippingChanged := clipTop != p.ClipTop || clipBottom != p.ClipBottom
-
 			if !anyPartVisible {
 				// Completely hidden
 				if !p.Hidden {
 					kp.deleteOnePlacement(p)
 					p.Hidden = true
 				}
-			} else if p.Hidden || positionChanged || clippingChanged || p.MaxShowable != maxShowableRows {
-				// Should be visible AND either was hidden, moved, or clipping changed
+			} else {
+				// Always re-place visible images to ensure correct rendering
+				// This fixes issues where one window's image operations affect another
 				if !p.Hidden {
 					kp.deleteOnePlacement(p)
 				}
@@ -781,7 +839,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 				kp.placeOne(p)
 				p.Hidden = false
 			}
-			// else: visible, same position - do nothing
 		}
 	}
 }
@@ -837,9 +894,10 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		visibleRows = 1 // Minimum 1 row to avoid issues
 	}
 
-	kittyPassthroughLog("placeOne: hostID=%d, pos=(%d,%d), origRows=%d, clipTop=%d, clipBot=%d, visibleRows=%d",
-		p.HostImageID, p.HostX, p.HostY, p.Rows, p.ClipTop, p.ClipBottom, visibleRows)
+	kittyPassthroughLog("placeOne: hostID=%d, pos=(%d,%d), origRows=%d, origCols=%d, clipTop=%d, clipBot=%d, visibleRows=%d",
+		p.HostImageID, p.HostX, p.HostY, p.Rows, p.Cols, p.ClipTop, p.ClipBottom, visibleRows)
 
+	// Use original cols (no horizontal clipping for now)
 	if p.Cols > 0 {
 		buf.WriteString(fmt.Sprintf(",c=%d", p.Cols))
 	}
@@ -853,7 +911,7 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		sourceY += p.ClipTop * cellHeight
 	}
 
-	// Calculate source height (in pixels) for proper clipping (not scaling)
+	// Calculate source height (in pixels) for proper vertical clipping
 	// This is critical: without setting h, Kitty will SCALE the image to fit r rows
 	// With h set, Kitty will CLIP to show only h pixels of height
 	sourceHeight := visibleRows * cellHeight
@@ -865,10 +923,11 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	if sourceY > 0 {
 		buf.WriteString(fmt.Sprintf(",y=%d", sourceY))
 	}
+	// Use original source width if specified (no horizontal clipping for now)
 	if p.SourceWidth > 0 {
 		buf.WriteString(fmt.Sprintf(",w=%d", p.SourceWidth))
 	}
-	// Always set h to get clipping instead of scaling
+	// Always set h for vertical clipping
 	if sourceHeight > 0 {
 		buf.WriteString(fmt.Sprintf(",h=%d", sourceHeight))
 	}

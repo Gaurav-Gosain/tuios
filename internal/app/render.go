@@ -175,15 +175,16 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 						scrollbackLen = w.Terminal.ScrollbackLen()
 					}
 					return &WindowPositionInfo{
-						WindowX:        w.X,
-						WindowY:        w.Y,
-						ContentOffsetX: 1,
-						ContentOffsetY: 1,
-						Width:          w.Width,
-						Height:         w.Height,
-						Visible:        visible,
-						ScrollbackLen:  scrollbackLen,
-						ScrollOffset:   w.ScrollbackOffset,
+						WindowX:           w.X,
+						WindowY:           w.Y,
+						ContentOffsetX:    1,
+						ContentOffsetY:    1,
+						Width:             w.Width,
+						Height:            w.Height,
+						Visible:           visible,
+						ScrollbackLen:     scrollbackLen,
+						ScrollOffset:      w.ScrollbackOffset,
+						IsBeingManipulated: w.IsBeingManipulated,
 					}
 				}
 			}
