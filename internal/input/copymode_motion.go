@@ -109,7 +109,7 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 	currentType := getCharType(currentContent)
 
 	// Phase 1: Skip current word/punctuation group
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
 		var content string
 		if cell != nil {
@@ -133,7 +133,7 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Phase 2: Skip whitespace to next word/punctuation
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
 		var content string
 		if cell != nil {
@@ -174,7 +174,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Phase 1: Skip whitespace backward
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
 		var content string
 		if cell != nil {
@@ -207,7 +207,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 	currentType := getCharType(currentContent)
 
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		if cm.CursorX == 0 {
 			// At start of line - this is the word start
 			break
@@ -262,7 +262,7 @@ func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Phase 1: Skip whitespace
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
 
 		// Found non-whitespace - move to phase 2
@@ -280,7 +280,7 @@ func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Phase 2: Move to end of word (last non-whitespace character)
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		// Peek at next character
 		nextX := cm.CursorX + 1
 		if nextX > maxWidth {
@@ -319,7 +319,7 @@ func moveWordForwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 	maxIterations := 1000
 
 	// Phase 1: Skip current WORD (any non-whitespace)
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
 		if cell == nil || cell.Content == " " || cell.Content == "\t" {
 			break
@@ -334,7 +334,7 @@ func moveWordForwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Phase 2: Skip whitespace to next WORD
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
 
 		if cell != nil && cell.Content != " " && cell.Content != "\t" {
@@ -367,7 +367,7 @@ func moveWordBackwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Phase 1: Skip whitespace backward
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
 
 		if cell != nil && cell.Content != " " && cell.Content != "\t" {
@@ -385,7 +385,7 @@ func moveWordBackwardBig(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Phase 2: Move to start of WORD
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		if cm.CursorX == 0 {
 			break
 		}
@@ -430,7 +430,7 @@ func moveWordEndBig(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Phase 1: Skip whitespace
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
 
 		if cell != nil && cell.Content != " " && cell.Content != "\t" {
@@ -446,7 +446,7 @@ func moveWordEndBig(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Phase 2: Move to end of WORD
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		nextX := cm.CursorX + 1
 		if nextX > maxWidth {
 			break
@@ -477,7 +477,7 @@ func moveWordEndBig(cm *terminal.CopyMode, window *terminal.Window) {
 // moveHalfPageUp moves cursor half page up
 func moveHalfPageUp(cm *terminal.CopyMode, window *terminal.Window) {
 	lines := max(1, window.Height/2)
-	for i := 0; i < lines; i++ {
+	for range lines {
 		moveUp(cm, window)
 	}
 }
@@ -485,7 +485,7 @@ func moveHalfPageUp(cm *terminal.CopyMode, window *terminal.Window) {
 // moveHalfPageDown moves cursor half page down
 func moveHalfPageDown(cm *terminal.CopyMode, window *terminal.Window) {
 	lines := max(1, window.Height/2)
-	for i := 0; i < lines; i++ {
+	for range lines {
 		moveDown(cm, window)
 	}
 }
@@ -493,7 +493,7 @@ func moveHalfPageDown(cm *terminal.CopyMode, window *terminal.Window) {
 // movePageUp moves cursor full page up
 func movePageUp(cm *terminal.CopyMode, window *terminal.Window) {
 	lines := max(1, window.Height-2)
-	for i := 0; i < lines; i++ {
+	for range lines {
 		moveUp(cm, window)
 	}
 }
@@ -501,7 +501,7 @@ func movePageUp(cm *terminal.CopyMode, window *terminal.Window) {
 // movePageDown moves cursor full page down
 func movePageDown(cm *terminal.CopyMode, window *terminal.Window) {
 	lines := max(1, window.Height-2)
-	for i := 0; i < lines; i++ {
+	for range lines {
 		moveDown(cm, window)
 	}
 }
@@ -528,7 +528,7 @@ func moveParagraphUp(cm *terminal.CopyMode, window *terminal.Window) {
 	maxIterations := 1000
 	foundNonBlank := false
 
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		// Check if current line is blank
 		absY := getAbsoluteY(cm, window)
 		lineText := getLineText(cm, window, absY)
@@ -554,7 +554,7 @@ func moveParagraphUp(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Skip any additional blank lines
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		absY := getAbsoluteY(cm, window)
 		lineText := getLineText(cm, window, absY)
 		if !isBlankLine(lineText) {
@@ -579,7 +579,7 @@ func moveParagraphDown(cm *terminal.CopyMode, window *terminal.Window) {
 	maxIterations := 1000
 	foundNonBlank := false
 
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		// Check if current line is blank
 		absY := getAbsoluteY(cm, window)
 		lineText := getLineText(cm, window, absY)
@@ -605,7 +605,7 @@ func moveParagraphDown(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 
 	// Skip any additional blank lines
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		absY := getAbsoluteY(cm, window)
 		lineText := getLineText(cm, window, absY)
 		if !isBlankLine(lineText) {

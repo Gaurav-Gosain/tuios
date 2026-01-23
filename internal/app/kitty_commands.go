@@ -52,10 +52,7 @@ func (b *KittyCommandBuilder) TransmitImage(hostID uint32, img *vt.KittyImage) {
 	}
 
 	for offset := 0; offset < len(encoded); offset += kittyChunkSize {
-		end := offset + kittyChunkSize
-		if end > len(encoded) {
-			end = len(encoded)
-		}
+		end := min(offset+kittyChunkSize, len(encoded))
 
 		chunk := encoded[offset:end]
 		more := end < len(encoded)
@@ -111,19 +108,13 @@ func (b *KittyCommandBuilder) PlaceImage(
 	if originalCols > 0 && cellWidth > 0 {
 		effectiveSourceX = placement.SourceX + (clipLeft * cellWidth)
 		if placement.SourceWidth > 0 {
-			effectiveSourceWidth = placement.SourceWidth - ((clipLeft + clipRight) * cellWidth)
-			if effectiveSourceWidth < 0 {
-				effectiveSourceWidth = 0
-			}
+			effectiveSourceWidth = max(0, placement.SourceWidth-((clipLeft+clipRight)*cellWidth))
 		}
 	}
 	if originalRows > 0 && cellHeight > 0 {
 		effectiveSourceY = placement.SourceY + (clipTop * cellHeight)
 		if placement.SourceHeight > 0 {
-			effectiveSourceHeight = placement.SourceHeight - ((clipTop + clipBottom) * cellHeight)
-			if effectiveSourceHeight < 0 {
-				effectiveSourceHeight = 0
-			}
+			effectiveSourceHeight = max(0, placement.SourceHeight-((clipTop+clipBottom)*cellHeight))
 		}
 	}
 

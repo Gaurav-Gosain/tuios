@@ -265,9 +265,10 @@ func (m *OS) SwapWindowsInstant(index1, index2 int) {
 	m.Windows[index1], m.Windows[index2] = m.Windows[index2], m.Windows[index1]
 
 	// Update focused window index if needed
-	if m.FocusedWindow == index1 {
+	switch m.FocusedWindow {
+	case index1:
 		m.FocusedWindow = index2
-	} else if m.FocusedWindow == index2 {
+	case index2:
 		m.FocusedWindow = index1
 	}
 
@@ -294,9 +295,10 @@ func (m *OS) SwapWindowsWithOriginal(draggedIndex, targetIndex int, origX, origY
 	m.Windows[draggedIndex], m.Windows[targetIndex] = m.Windows[targetIndex], m.Windows[draggedIndex]
 
 	// Update focused window index if needed
-	if m.FocusedWindow == draggedIndex {
+	switch m.FocusedWindow {
+	case draggedIndex:
 		m.FocusedWindow = targetIndex
-	} else if m.FocusedWindow == targetIndex {
+	case targetIndex:
 		m.FocusedWindow = draggedIndex
 	}
 

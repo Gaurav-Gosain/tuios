@@ -738,7 +738,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			atTop := mouse.Y <= topMargin+edgeSize
 			atBottom := mouse.Y >= bottomEdge-edgeSize
 
-			var snapTo app.SnapQuarter = app.NoSnap
+			snapTo := app.NoSnap
 
 			if atTop && !atLeft && !atRight {
 				// Top center - fullscreen
@@ -960,7 +960,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					}
 					// Scroll up in copy mode
 					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-						for i := 0; i < 3; i++ {
+						for range 3 {
 							MoveUp(focusedWindow.CopyMode, focusedWindow)
 						}
 						focusedWindow.InvalidateCache()
@@ -979,7 +979,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					}
 				} else if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
 					// In copy mode, scroll down
-					for i := 0; i < 3; i++ {
+					for range 3 {
 						MoveDown(focusedWindow.CopyMode, focusedWindow)
 					}
 					// Exit copy mode if at bottom

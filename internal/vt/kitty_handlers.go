@@ -17,8 +17,8 @@ func kittyDebugLog(format string, args ...any) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	fmt.Fprintf(f, "[%s] KITTY: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
+	defer func() { _ = f.Close() }()
+	_, _ = fmt.Fprintf(f, "[%s] KITTY: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
 }
 
 // KittyGraphicsHandler handles Kitty graphics protocol commands for a screen.
@@ -108,14 +108,15 @@ func (h *KittyGraphicsHandler) handleTransmit(cmd *KittyCommand, place bool) boo
 	data := cmd.Data
 
 	// Handle file transmission modes
-	if cmd.Medium == KittyMediumFile || cmd.Medium == KittyMediumTempFile {
+	switch cmd.Medium {
+	case KittyMediumFile, KittyMediumTempFile:
 		fileData, err := LoadFileData(cmd.FilePath)
 		if err != nil {
 			h.sendResponse(cmd, false, "ENOENT:file not found")
 			return true
 		}
 		data = fileData
-	} else if cmd.Medium == KittyMediumSharedMemory {
+	case KittyMediumSharedMemory:
 		shmData, err := loadSharedMemory(cmd.FilePath, cmd.Size)
 		if err != nil {
 			kittyDebugLog("Shared memory load failed: %v (path=%s, size=%d)", err, cmd.FilePath, cmd.Size)
@@ -416,7 +417,7 @@ func decompressZlib(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	return io.ReadAll(reader)
 }

@@ -19,7 +19,7 @@ func loadSharedMemory(name string, size int) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open shm: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if size <= 0 {
 		fi, err := f.Stat()

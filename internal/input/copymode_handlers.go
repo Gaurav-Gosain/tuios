@@ -104,45 +104,45 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 
 	// Navigation - basic movement
 	case "h", "left":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveLeft(cm, window)
 		}
 	case "l", "right":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveRight(cm, window)
 		}
 	case "j", "down":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveDown(cm, window)
 		}
 	case "k", "up":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveUp(cm, window)
 		}
 
 	// Navigation - word movement
 	case "w":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordForward(cm, window)
 		}
 	case "b":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordBackward(cm, window)
 		}
 	case "e":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordEnd(cm, window)
 		}
 	case "W":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordForwardBig(cm, window)
 		}
 	case "B":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordBackwardBig(cm, window)
 		}
 	case "E":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordEndBig(cm, window)
 		}
 
@@ -156,19 +156,19 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 
 	// Navigation - page movement
 	case "ctrl+u":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveHalfPageUp(cm, window)
 		}
 	case "ctrl+d":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveHalfPageDown(cm, window)
 		}
 	case "ctrl+b", "pgup":
-		for i := 0; i < count; i++ {
+		for range count {
 			movePageUp(cm, window)
 		}
 	case "ctrl+f", "pgdown":
-		for i := 0; i < count; i++ {
+		for range count {
 			movePageDown(cm, window)
 		}
 
@@ -197,11 +197,11 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			currentAbsY := getAbsoluteY(cm, window)
 			diff := targetAbsY - currentAbsY
 			if diff > 0 {
-				for i := 0; i < diff; i++ {
+				for range diff {
 					moveDown(cm, window)
 				}
 			} else if diff < 0 {
-				for i := 0; i < -diff; i++ {
+				for range -diff {
 					moveUp(cm, window)
 				}
 			}
@@ -222,11 +222,11 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 
 	// Navigation - paragraph movement
 	case "{":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveParagraphUp(cm, window)
 		}
 	case "}":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveParagraphDown(cm, window)
 		}
 
@@ -265,12 +265,12 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		return o, nil
 	case ";":
 		// Repeat last character search
-		for i := 0; i < count; i++ {
+		for range count {
 			repeatCharSearch(cm, window, false)
 		}
 	case ",":
 		// Repeat last character search in opposite direction
-		for i := 0; i < count; i++ {
+		for range count {
 			repeatCharSearch(cm, window, true)
 		}
 
@@ -289,7 +289,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		return o, nil
 	case "n":
 		// n goes forward for /, backward for ?
-		for i := 0; i < count; i++ {
+		for range count {
 			if cm.SearchBackward {
 				prevMatch(cm, window)
 			} else {
@@ -298,7 +298,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		}
 	case "N":
 		// N goes backward for /, forward for ?
-		for i := 0; i < count; i++ {
+		for range count {
 			if cm.SearchBackward {
 				nextMatch(cm, window)
 			} else {
@@ -442,54 +442,54 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 
 	// Movement in visual mode extends selection - basic
 	case "h", "left":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveLeft(cm, window)
 		}
 		updateVisualEnd(cm, window)
 	case "l", "right":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveRight(cm, window)
 		}
 		updateVisualEnd(cm, window)
 	case "j", "down":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveDown(cm, window)
 		}
 		updateVisualEnd(cm, window)
 	case "k", "up":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveUp(cm, window)
 		}
 		updateVisualEnd(cm, window)
 
 	// Word movement
 	case "w":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordForward(cm, window)
 		}
 		updateVisualEnd(cm, window)
 	case "b":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordBackward(cm, window)
 		}
 		updateVisualEnd(cm, window)
 	case "e":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordEnd(cm, window)
 		}
 		updateVisualEnd(cm, window)
 	case "W":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordForwardBig(cm, window)
 		}
 		updateVisualEnd(cm, window)
 	case "B":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordBackwardBig(cm, window)
 		}
 		updateVisualEnd(cm, window)
 	case "E":
-		for i := 0; i < count; i++ {
+		for range count {
 			moveWordEndBig(cm, window)
 		}
 		updateVisualEnd(cm, window)

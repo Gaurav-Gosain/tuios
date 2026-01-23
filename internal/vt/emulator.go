@@ -283,7 +283,7 @@ func (e *Emulator) ReserveImageSpace(rows, cols int) {
 	scrollCount := 0
 	if endY > height {
 		scrollCount = endY - height
-		for i := 0; i < scrollCount; i++ {
+		for range scrollCount {
 			e.scr.ScrollUp(1)
 		}
 	}

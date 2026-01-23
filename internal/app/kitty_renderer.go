@@ -18,8 +18,8 @@ func rendererDebugLog(format string, args ...any) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	fmt.Fprintf(f, "[%s] RENDERER: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
+	defer func() { _ = f.Close() }()
+	_, _ = fmt.Fprintf(f, "[%s] RENDERER: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
 }
 
 type KittyRenderer struct {

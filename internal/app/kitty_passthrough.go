@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,8 +21,8 @@ func kittyPassthroughLog(format string, args ...any) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	fmt.Fprintf(f, "[%s] KITTY-PASSTHROUGH: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
+	defer func() { _ = f.Close() }()
+	_, _ = fmt.Fprintf(f, "[%s] KITTY-PASSTHROUGH: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
 }
 
 type KittyPassthrough struct {
@@ -35,6 +34,40 @@ type KittyPassthrough struct {
 	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
 	nextHostID    uint32
 	pendingOutput []byte
+
+	// Pending direct transmission data (for chunked transfers)
+	pendingDirectData map[string]*pendingDirectTransmit // key: windowID
+}
+
+// pendingDirectTransmit holds accumulated data for chunked direct transmissions
+type pendingDirectTransmit struct {
+	Data        []byte
+	Format      vt.KittyGraphicsFormat
+	Compression vt.KittyGraphicsCompression
+	Width       int
+	Height      int
+	ImageID     uint32
+	Columns     int
+	Rows        int
+	SourceX     int
+	SourceY     int
+	SourceWidth int
+	SourceHeight int
+	XOffset     int
+	YOffset     int
+	ZIndex      int32
+	Virtual     bool
+	CursorMove  int
+	// Position info from the first chunk (a=T command)
+	WindowX        int
+	WindowY        int
+	WindowWidth    int
+	WindowHeight   int
+	ContentOffsetX int
+	ContentOffsetY int
+	CursorX        int
+	CursorY        int
+	ScrollbackLen  int
 }
 
 type PassthroughPlacement struct {
@@ -64,33 +97,37 @@ type PassthroughPlacement struct {
 	// Current clipping state (rows/cols to clip from each edge)
 	ClipTop         int
 	ClipBottom      int
+	ClipLeft        int
 	ClipRight       int
 	MaxShowable     int // Max rows that can be shown in current viewport
 	MaxShowableCols int // Max cols that can be shown in current viewport
 }
 
 type WindowPositionInfo struct {
-	WindowX           int
-	WindowY           int
-	ContentOffsetX    int
-	ContentOffsetY    int
-	Width             int
-	Height            int
-	Visible           bool
-	ScrollbackLen     int  // Total scrollback lines
-	ScrollOffset      int  // Current scroll offset (0 = at bottom)
+	WindowX            int
+	WindowY            int
+	ContentOffsetX     int
+	ContentOffsetY     int
+	Width              int
+	Height             int
+	Visible            bool
+	ScrollbackLen      int  // Total scrollback lines
+	ScrollOffset       int  // Current scroll offset (0 = at bottom)
 	IsBeingManipulated bool // True when window is being dragged/resized
+	WindowZ            int  // Window z-index for occlusion detection
+	IsAltScreen        bool // True when alternate screen is active (vim, less, etc.)
 }
 
 func NewKittyPassthrough() *KittyPassthrough {
 	caps := GetHostCapabilities()
 	kittyPassthroughLog("NewKittyPassthrough: KittyGraphics=%v, TerminalName=%s", caps.KittyGraphics, caps.TerminalName)
 	return &KittyPassthrough{
-		enabled:    caps.KittyGraphics,
-		hostOut:    os.Stdout,
-		placements: make(map[string]map[uint32]*PassthroughPlacement),
-		imageIDMap: make(map[string]map[uint32]uint32),
-		nextHostID: 1,
+		enabled:           caps.KittyGraphics,
+		hostOut:           os.Stdout,
+		placements:        make(map[string]map[uint32]*PassthroughPlacement),
+		imageIDMap:        make(map[string]map[uint32]uint32),
+		nextHostID:        1,
+		pendingDirectData: make(map[string]*pendingDirectTransmit),
 	}
 }
 
@@ -164,31 +201,6 @@ func (kp *KittyPassthrough) calculateImageCells(cmd *vt.KittyCommand) (rows, col
 	return rows, cols
 }
 
-// calculateCappedImageCells calculates image dimensions in cells, capped to window content area.
-func (kp *KittyPassthrough) calculateCappedImageCells(cmd *vt.KittyCommand, windowWidth, windowHeight, cursorX, cursorY int) (rows, cols int) {
-	imgRows, imgCols := kp.calculateImageCells(cmd)
-
-	// Calculate content area (accounting for borders)
-	contentWidth := windowWidth - 2
-	contentHeight := windowHeight - 2
-
-	kittyPassthroughLog("calculateCappedImageCells: window=(%d,%d), contentArea=(%d,%d), img=(%d,%d)",
-		windowWidth, windowHeight, contentWidth, contentHeight, imgCols, imgRows)
-
-	// Cap to content area (not cursor position)
-	cols = imgCols
-	rows = imgRows
-	if cols > contentWidth && contentWidth > 0 {
-		cols = contentWidth
-	}
-	if rows > contentHeight && contentHeight > 0 {
-		rows = contentHeight
-	}
-
-	kittyPassthroughLog("calculateCappedImageCells: capped to rows=%d, cols=%d", rows, cols)
-	return rows, cols
-}
-
 // PlacementResult contains info about an image placement for cursor positioning
 type PlacementResult struct {
 	Rows       int // Number of rows the image occupies
@@ -225,18 +237,25 @@ func (kp *KittyPassthrough) ForwardCommand(
 
 	case vt.KittyActionTransmit:
 		kittyPassthroughLog("ForwardCommand: handling TRANSMIT")
-		kp.forwardTransmit(cmd, rawData, windowID, false, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+		result := kp.forwardTransmit(cmd, rawData, windowID, false, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+		if result != nil {
+			return result
+		}
 
 	case vt.KittyActionTransmitPlace:
 		kittyPassthroughLog("ForwardCommand: handling TRANSMIT+PLACE, more=%v", cmd.More)
 		isFileBased := cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile
-		kp.forwardTransmit(cmd, rawData, windowID, true, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
+		result := kp.forwardTransmit(cmd, rawData, windowID, true, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
 		if !cmd.More && !isFileBased {
 			kp.forwardPlace(cmd, windowID, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
 		}
-		// Return ORIGINAL image dimensions for whitespace reservation
+		// Return PlacementResult from direct transmit if available
+		if result != nil {
+			return result
+		}
+		// Return ORIGINAL image dimensions for whitespace reservation (file-based)
 		// The terminal needs to reserve space for the full image so it can scroll properly
-		if !cmd.More {
+		if !cmd.More && isFileBased {
 			imgRows, imgCols := kp.calculateImageCells(cmd)
 			if imgRows > 0 || imgCols > 0 {
 				return &PlacementResult{Rows: imgRows, Cols: imgCols, CursorMove: cmd.CursorMove}
@@ -263,19 +282,251 @@ func (kp *KittyPassthrough) ForwardCommand(
 	return nil
 }
 
-func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, rawData []byte, ptyInput func([]byte)) {
+func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInput func([]byte)) {
 	if ptyInput != nil && cmd.Quiet < 2 {
 		response := vt.BuildKittyResponse(true, cmd.ImageID, "")
 		ptyInput(response)
 	}
 }
 
-func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) {
+func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) *PlacementResult {
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile {
 		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
-		return
+		return nil
 	}
-	kp.pendingOutput = append(kp.pendingOutput, rawData...)
+
+	// Check if we have pending data from a previous transmit+place command
+	// Chafa sends first chunk as a=T,m=1 but continuation chunks as a=t
+	// We need to continue accumulating if there's pending data
+	hasPendingData := kp.pendingDirectData[windowID] != nil
+
+	// For transmit-only (no placement) AND no pending accumulation, pass through raw data
+	if !andPlace && !hasPendingData {
+		kp.pendingOutput = append(kp.pendingOutput, rawData...)
+		return nil
+	}
+
+	// Handle direct data transmission with placement - accumulate chunks and track placements
+	// Also handle continuation of a pending transmit+place
+	return kp.forwardDirectTransmit(cmd, windowID, andPlace || hasPendingData, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
+}
+
+func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) *PlacementResult {
+	// Get or create pending data buffer for this window
+	pending := kp.pendingDirectData[windowID]
+	if pending == nil {
+		pending = &pendingDirectTransmit{
+			Format:         cmd.Format,
+			Compression:   cmd.Compression,
+			Width:         cmd.Width,
+			Height:        cmd.Height,
+			ImageID:       cmd.ImageID,
+			Columns:       cmd.Columns,
+			Rows:          cmd.Rows,
+			SourceX:       cmd.SourceX,
+			SourceY:       cmd.SourceY,
+			SourceWidth:   cmd.SourceWidth,
+			SourceHeight:  cmd.SourceHeight,
+			XOffset:       cmd.XOffset,
+			YOffset:       cmd.YOffset,
+			ZIndex:        cmd.ZIndex,
+			Virtual:       cmd.Virtual,
+			CursorMove:    cmd.CursorMove,
+			// Store position info from the first chunk (a=T command has valid positions)
+			WindowX:        windowX,
+			WindowY:        windowY,
+			WindowWidth:    windowWidth,
+			WindowHeight:   windowHeight,
+			ContentOffsetX: contentOffsetX,
+			ContentOffsetY: contentOffsetY,
+			CursorX:        cursorX,
+			CursorY:        cursorY,
+			ScrollbackLen:  scrollbackLen,
+		}
+		kp.pendingDirectData[windowID] = pending
+	}
+
+	// Accumulate data
+	pending.Data = append(pending.Data, cmd.Data...)
+
+	kittyPassthroughLog("forwardDirectTransmit: accumulated %d bytes, total=%d, more=%v, andPlace=%v, storedPos=(%d,%d)",
+		len(cmd.Data), len(pending.Data), cmd.More, andPlace, pending.WindowX, pending.WindowY)
+
+	// If more chunks coming, wait
+	if cmd.More {
+		return nil
+	}
+
+	// Final chunk - process the complete image
+	defer func() {
+		delete(kp.pendingDirectData, windowID)
+	}()
+
+	if len(pending.Data) == 0 {
+		kittyPassthroughLog("forwardDirectTransmit: no data accumulated, skipping")
+		return nil
+	}
+
+	// Clear existing placements for this window before placing new image
+	if andPlace {
+		if existing := kp.placements[windowID]; existing != nil {
+			for _, p := range existing {
+				kp.deleteOnePlacement(p)
+			}
+			kp.placements[windowID] = nil
+			kittyPassthroughLog("forwardDirectTransmit: cleared %d existing placements", len(existing))
+		}
+	}
+
+	// Allocate a unique host ID
+	hostID := kp.allocateHostID()
+	if kp.imageIDMap[windowID] == nil {
+		kp.imageIDMap[windowID] = make(map[uint32]uint32)
+	}
+	kp.imageIDMap[windowID][pending.ImageID] = hostID
+	kittyPassthroughLog("forwardDirectTransmit: mapped guestID=%d -> hostID=%d for window=%s", pending.ImageID, hostID, windowID[:8])
+
+	// Data is already base64 encoded from the guest
+	encoded := base64.StdEncoding.EncodeToString(pending.Data)
+
+	// Use stored position info from the first chunk (not the zeros from continuation chunks)
+	hostX := pending.WindowX + pending.ContentOffsetX + pending.CursorX
+	hostY := pending.WindowY + pending.ContentOffsetY + pending.CursorY
+
+	// Calculate content area dimensions
+	contentWidth := pending.WindowWidth - 2
+	contentHeight := pending.WindowHeight - 2
+
+	// Calculate image dimensions in cells
+	imgRows := pending.Rows
+	imgCols := pending.Columns
+	if imgRows == 0 || imgCols == 0 {
+		caps := GetHostCapabilities()
+		if caps.CellWidth > 0 && caps.CellHeight > 0 {
+			if imgRows == 0 && pending.Height > 0 {
+				imgRows = (pending.Height + caps.CellHeight - 1) / caps.CellHeight
+			}
+			if imgCols == 0 && pending.Width > 0 {
+				imgCols = (pending.Width + caps.CellWidth - 1) / caps.CellWidth
+			}
+		}
+	}
+
+	// Cap to content area
+	displayCols := imgCols
+	displayRows := imgRows
+	if displayCols > contentWidth && contentWidth > 0 {
+		displayCols = contentWidth
+	}
+	if displayRows > contentHeight && contentHeight > 0 {
+		displayRows = contentHeight
+	}
+
+	kittyPassthroughLog("forwardDirectTransmit: hostID=%d, hostPos=(%d,%d), imgSize=(%d,%d), displaySize=(%d,%d)",
+		hostID, hostX, hostY, imgCols, imgRows, displayCols, displayRows)
+
+	// Don't place initially - just transmit the image data
+	// RefreshAllPlacements will handle the actual placement at the correct position
+	// This avoids placing at wrong position when cursor moves during chunk accumulation
+
+	const chunkSize = 4096
+	for i := 0; i < len(encoded); i += chunkSize {
+		end := min(i+chunkSize, len(encoded))
+		chunk := encoded[i:end]
+		more := end < len(encoded)
+
+		var buf bytes.Buffer
+		buf.WriteString("\x1b_G")
+
+		if i == 0 {
+			// Always use 't' (transmit only) - placement will be done by RefreshAllPlacements
+			buf.WriteString(fmt.Sprintf("a=t,i=%d,f=%d,s=%d,v=%d,q=2",
+				hostID, pending.Format, pending.Width, pending.Height))
+			if pending.Compression == vt.KittyCompressionZlib {
+				buf.WriteString(",o=z")
+			}
+			if displayCols > 0 {
+				buf.WriteString(fmt.Sprintf(",c=%d", displayCols))
+			}
+			if displayRows > 0 {
+				buf.WriteString(fmt.Sprintf(",r=%d", displayRows))
+			}
+			if pending.SourceX > 0 {
+				buf.WriteString(fmt.Sprintf(",x=%d", pending.SourceX))
+			}
+			if pending.SourceY > 0 {
+				buf.WriteString(fmt.Sprintf(",y=%d", pending.SourceY))
+			}
+			if pending.SourceWidth > 0 {
+				buf.WriteString(fmt.Sprintf(",w=%d", pending.SourceWidth))
+			}
+			if pending.SourceHeight > 0 {
+				buf.WriteString(fmt.Sprintf(",h=%d", pending.SourceHeight))
+			}
+			if pending.XOffset > 0 {
+				buf.WriteString(fmt.Sprintf(",X=%d", pending.XOffset))
+			}
+			if pending.YOffset > 0 {
+				buf.WriteString(fmt.Sprintf(",Y=%d", pending.YOffset))
+			}
+			if pending.ZIndex != 0 {
+				buf.WriteString(fmt.Sprintf(",z=%d", pending.ZIndex))
+			}
+			if pending.Virtual {
+				buf.WriteString(",U=1")
+			}
+		} else {
+			buf.WriteString(fmt.Sprintf("i=%d,q=2", hostID))
+		}
+
+		if more {
+			buf.WriteString(",m=1")
+		}
+
+		buf.WriteByte(';')
+		buf.WriteString(chunk)
+		buf.WriteString("\x1b\\")
+
+		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+	}
+
+	// Store placement for tracking (placement will be done by RefreshAllPlacements)
+	if andPlace {
+		if kp.placements[windowID] == nil {
+			kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
+		}
+		kp.placements[windowID][hostID] = &PassthroughPlacement{
+			GuestImageID: pending.ImageID,
+			HostImageID:  hostID,
+			WindowID:     windowID,
+			GuestX:       pending.CursorX,
+			AbsoluteLine: pending.ScrollbackLen + pending.CursorY,
+			HostX:        hostX,
+			HostY:        hostY,
+			Cols:         displayCols,
+			Rows:         imgRows,
+			DisplayRows:  displayRows,
+			SourceX:      pending.SourceX,
+			SourceY:      pending.SourceY,
+			SourceWidth:  pending.SourceWidth,
+			SourceHeight: pending.SourceHeight,
+			XOffset:      pending.XOffset,
+			YOffset:      pending.YOffset,
+			ZIndex:       pending.ZIndex,
+			Virtual:      pending.Virtual,
+			Hidden:       true, // Start hidden, RefreshAllPlacements will place it
+		}
+		kittyPassthroughLog("forwardDirectTransmit: stored placement hostID=%d (hidden, waiting for refresh)", hostID)
+
+		// Return PlacementResult for whitespace reservation
+		return &PlacementResult{
+			Rows:       imgRows,
+			Cols:       imgCols,
+			CursorMove: pending.CursorMove,
+		}
+	}
+
+	return nil
 }
 
 func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) {
@@ -309,7 +560,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	}
 
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile {
-		os.Remove(filePath)
+		_ = os.Remove(filePath)
 	}
 
 	// Allocate a unique host ID and store the mapping
@@ -347,18 +598,13 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	kittyPassthroughLog("forwardFileTransmit: hostID=%d, hostPos=(%d,%d), imgSize=(%d,%d), displaySize=(%d,%d), contentArea=(%d,%d)",
 		hostID, hostX, hostY, imgCols, imgRows, displayCols, displayRows, contentWidth, contentHeight)
 
-	kp.pendingOutput = append(kp.pendingOutput, "\x1b7"...)
-
-	if andPlace {
-		kp.pendingOutput = append(kp.pendingOutput, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
-	}
+	// Don't place initially - just transmit the image data
+	// RefreshAllPlacements will handle the actual placement at the correct position
+	// This avoids ANSI leaks when icat is called multiple times
 
 	const chunkSize = 4096
 	for i := 0; i < len(encoded); i += chunkSize {
-		end := i + chunkSize
-		if end > len(encoded) {
-			end = len(encoded)
-		}
+		end := min(i+chunkSize, len(encoded))
 		chunk := encoded[i:end]
 		more := end < len(encoded)
 
@@ -366,12 +612,9 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		buf.WriteString("\x1b_G")
 
 		if i == 0 {
-			action := "t"
-			if andPlace {
-				action = "T"
-			}
-			buf.WriteString(fmt.Sprintf("a=%s,i=%d,f=%d,s=%d,v=%d,q=2",
-				action, hostID, cmd.Format, cmd.Width, cmd.Height))
+			// Always use 't' (transmit only) - placement will be done by RefreshAllPlacements
+			buf.WriteString(fmt.Sprintf("a=t,i=%d,f=%d,s=%d,v=%d,q=2",
+				hostID, cmd.Format, cmd.Width, cmd.Height))
 			if cmd.Compression == vt.KittyCompressionZlib {
 				buf.WriteString(",o=z")
 			}
@@ -434,8 +677,6 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 	}
 
-	kp.pendingOutput = append(kp.pendingOutput, "\x1b8"...)
-
 	// Store placement using hostID as key (cmd.ImageID is often 0 for new images)
 	if kp.placements[windowID] == nil {
 		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
@@ -459,7 +700,9 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		YOffset:      cmd.YOffset,
 		ZIndex:       cmd.ZIndex,
 		Virtual:      cmd.Virtual,
+		Hidden:       true, // Start hidden, RefreshAllPlacements will place it
 	}
+	kittyPassthroughLog("forwardFileTransmit: stored placement hostID=%d (hidden, waiting for refresh)", hostID)
 }
 
 func (kp *KittyPassthrough) forwardPlace(
@@ -716,7 +959,31 @@ func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	kp.placements[windowID] = nil
 }
 
-func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID string) *WindowPositionInfo) {
+// rectsOverlap checks if two rectangles overlap
+func rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2 int) bool {
+	return x1 < x2+w2 && x1+w1 > x2 && y1 < y2+h2 && y1+h1 > y2
+}
+
+// isOccludedByHigherWindow checks if an image region is fully occluded by a window with higher z-index
+func (kp *KittyPassthrough) isOccludedByHigherWindow(
+	screenX, screenY, width, height, windowZ int,
+	allWindows map[string]*WindowPositionInfo,
+	excludeWindowID string,
+) bool {
+	for id, info := range allWindows {
+		if id == excludeWindowID || info.WindowZ <= windowZ {
+			continue
+		}
+		// Check if higher-z window overlaps the image region
+		if rectsOverlap(screenX, screenY, width, height,
+			info.WindowX, info.WindowY, info.Width, info.Height) {
+			return true
+		}
+	}
+	return false
+}
+
+func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string]*WindowPositionInfo) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
@@ -724,10 +991,13 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 		return
 	}
 
+	// Get all windows upfront for occlusion detection
+	allWindows := getAllWindows()
+
 	// First pass: check if ANY window is being manipulated
 	anyBeingManipulated := false
 	for windowID := range kp.placements {
-		if info := getWindowInfo(windowID); info != nil && info.IsBeingManipulated {
+		if info := allWindows[windowID]; info != nil && info.IsBeingManipulated {
 			anyBeingManipulated = true
 			break
 		}
@@ -751,7 +1021,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			continue
 		}
 
-		info := getWindowInfo(windowID)
+		info := allWindows[windowID]
 		if info == nil {
 			for _, p := range placements {
 				if !p.Hidden {
@@ -759,6 +1029,17 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 				}
 			}
 			delete(kp.placements, windowID)
+			continue
+		}
+
+		// Hide all images when alternate screen is active (vim, less, etc.)
+		if info.IsAltScreen {
+			for _, p := range placements {
+				if !p.Hidden {
+					kp.deleteOnePlacement(p)
+					p.Hidden = true
+				}
+			}
 			continue
 		}
 
@@ -800,16 +1081,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			}
 
 			// Calculate how many rows we CAN show after clipping
-			maxShowableRows := p.Rows - clipTop - clipBottom
-			if maxShowableRows > viewportHeight {
-				maxShowableRows = viewportHeight
-			}
+			maxShowableRows := min(p.Rows-clipTop-clipBottom, viewportHeight)
 			if maxShowableRows <= 0 {
 				maxShowableRows = 1
 			}
-
-			kittyPassthroughLog("RefreshPlacement: relY=%d, origRows=%d, origCols=%d, vpH=%d, vpW=%d, clipTop=%d, clipBot=%d, maxRows=%d, visible=%v",
-				relativeY, p.Rows, p.Cols, viewportHeight, viewportWidth, clipTop, clipBottom, maxShowableRows, anyPartVisible)
 
 			// Calculate actual host position (after clipping adjustment)
 			actualRelativeY := relativeY
@@ -818,6 +1093,35 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			}
 			newHostX := info.WindowX + info.ContentOffsetX + p.GuestX
 			newHostY := info.WindowY + info.ContentOffsetY + actualRelativeY
+
+			// Calculate image dimensions in cells for occlusion check (same units as window dimensions)
+			imageCellWidth := p.Cols
+			imageCellHeight := maxShowableRows
+
+			// Check if image is occluded by a higher-z window
+			if anyPartVisible && kp.isOccludedByHigherWindow(
+				newHostX, newHostY, imageCellWidth, imageCellHeight,
+				info.WindowZ, allWindows, windowID,
+			) {
+				kittyPassthroughLog("RefreshPlacement: image occluded by higher-z window, hiding")
+				anyPartVisible = false
+			}
+
+			// Hide images when host position would be negative or outside screen bounds
+			// This prevents issues when windows are partially off-screen
+			if anyPartVisible && (newHostX < 0 || newHostY < 0) {
+				kittyPassthroughLog("RefreshPlacement: image at negative position (%d,%d), hiding", newHostX, newHostY)
+				anyPartVisible = false
+			}
+
+			// Also hide if the window itself is partially off the left or top edge
+			if anyPartVisible && (info.WindowX < 0 || info.WindowY < 0) {
+				kittyPassthroughLog("RefreshPlacement: window at negative position (%d,%d), hiding image", info.WindowX, info.WindowY)
+				anyPartVisible = false
+			}
+
+			kittyPassthroughLog("RefreshPlacement: relY=%d, origRows=%d, origCols=%d, vpH=%d, vpW=%d, clipTop=%d, clipBot=%d, maxRows=%d, visible=%v",
+				relativeY, p.Rows, p.Cols, viewportHeight, viewportWidth, clipTop, clipBottom, maxShowableRows, anyPartVisible)
 
 			if !anyPartVisible {
 				// Completely hidden
@@ -854,6 +1158,7 @@ func (kp *KittyPassthrough) HasPlacements() bool {
 	return false
 }
 
+// deleteOnePlacement removes the image and all its placements from graphics memory.
 func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")
@@ -946,102 +1251,6 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	buf.WriteString(",q=2\x1b\\")
 	buf.WriteString("\x1b8") // Restore cursor position
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-}
-
-func rebuildKittyCommand(cmd *vt.KittyCommand) []byte {
-	var buf bytes.Buffer
-	buf.WriteString("\x1b_G")
-
-	params := make([]string, 0)
-
-	if cmd.Action != 0 {
-		params = append(params, fmt.Sprintf("a=%c", cmd.Action))
-	}
-	if cmd.ImageID > 0 {
-		params = append(params, fmt.Sprintf("i=%d", cmd.ImageID))
-	}
-	if cmd.ImageNumber > 0 {
-		params = append(params, fmt.Sprintf("I=%d", cmd.ImageNumber))
-	}
-	if cmd.PlacementID > 0 {
-		params = append(params, fmt.Sprintf("p=%d", cmd.PlacementID))
-	}
-	if cmd.Format != 0 {
-		params = append(params, fmt.Sprintf("f=%d", cmd.Format))
-	}
-	if cmd.Medium != 0 {
-		params = append(params, fmt.Sprintf("t=%c", cmd.Medium))
-	}
-	if cmd.Compression == vt.KittyCompressionZlib {
-		params = append(params, "o=z")
-	}
-	if cmd.Width > 0 {
-		params = append(params, fmt.Sprintf("s=%d", cmd.Width))
-	}
-	if cmd.Height > 0 {
-		params = append(params, fmt.Sprintf("v=%d", cmd.Height))
-	}
-	if cmd.Size > 0 {
-		params = append(params, fmt.Sprintf("S=%d", cmd.Size))
-	}
-	if cmd.Offset > 0 {
-		params = append(params, fmt.Sprintf("O=%d", cmd.Offset))
-	}
-	if cmd.More {
-		params = append(params, "m=1")
-	}
-	if cmd.Delete != 0 {
-		params = append(params, fmt.Sprintf("d=%c", cmd.Delete))
-	}
-	if cmd.Columns > 0 {
-		params = append(params, fmt.Sprintf("c=%d", cmd.Columns))
-	}
-	if cmd.Rows > 0 {
-		params = append(params, fmt.Sprintf("r=%d", cmd.Rows))
-	}
-	if cmd.XOffset > 0 {
-		params = append(params, fmt.Sprintf("X=%d", cmd.XOffset))
-	}
-	if cmd.YOffset > 0 {
-		params = append(params, fmt.Sprintf("Y=%d", cmd.YOffset))
-	}
-	if cmd.SourceX > 0 {
-		params = append(params, fmt.Sprintf("x=%d", cmd.SourceX))
-	}
-	if cmd.SourceY > 0 {
-		params = append(params, fmt.Sprintf("y=%d", cmd.SourceY))
-	}
-	if cmd.SourceWidth > 0 {
-		params = append(params, fmt.Sprintf("w=%d", cmd.SourceWidth))
-	}
-	if cmd.SourceHeight > 0 {
-		params = append(params, fmt.Sprintf("h=%d", cmd.SourceHeight))
-	}
-	if cmd.ZIndex != 0 {
-		params = append(params, fmt.Sprintf("z=%d", cmd.ZIndex))
-	}
-	if cmd.CursorMove > 0 {
-		params = append(params, fmt.Sprintf("C=%d", cmd.CursorMove))
-	}
-	if cmd.Virtual {
-		params = append(params, "U=1")
-	}
-	if cmd.Quiet > 0 {
-		params = append(params, fmt.Sprintf("q=%d", cmd.Quiet))
-	}
-
-	buf.WriteString(strings.Join(params, ","))
-
-	if len(cmd.Data) > 0 {
-		buf.WriteByte(';')
-		buf.WriteString(base64.StdEncoding.EncodeToString(cmd.Data))
-	} else if cmd.FilePath != "" {
-		buf.WriteByte(';')
-		buf.WriteString(base64.StdEncoding.EncodeToString([]byte(cmd.FilePath)))
-	}
-
-	buf.WriteString("\x1b\\")
-	return buf.Bytes()
 }
 
 var _ = strconv.Itoa

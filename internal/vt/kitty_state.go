@@ -123,7 +123,7 @@ func (s *KittyState) DeletePlacement(imageID, placementID uint32) {
 	defer s.mu.Unlock()
 	filtered := s.placements[:0]
 	for _, p := range s.placements {
-		if !(p.ImageID == imageID && p.PlacementID == placementID) {
+		if p.ImageID != imageID || p.PlacementID != placementID {
 			filtered = append(filtered, p)
 		}
 	}
@@ -136,7 +136,7 @@ func (s *KittyState) DeletePlacementsAtCursor(x, y int) {
 	defer s.mu.Unlock()
 	filtered := s.placements[:0]
 	for _, p := range s.placements {
-		if !(p.ScreenX == x && p.ScreenY == y) {
+		if p.ScreenX != x || p.ScreenY != y {
 			filtered = append(filtered, p)
 		}
 	}

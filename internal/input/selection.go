@@ -13,7 +13,7 @@ import (
 
 // extractSelectedText extracts selected text from terminal based on selection coordinates
 // This handles both current screen content and scrollback buffer
-func extractSelectedText(window *terminal.Window, o *app.OS) string {
+func extractSelectedText(window *terminal.Window, _ *app.OS) string {
 	if window.Terminal == nil {
 		return ""
 	}

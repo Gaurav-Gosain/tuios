@@ -166,29 +166,31 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 
 	// Always refresh placements if there are any - this handles window movement
 	if m.KittyPassthrough.HasPlacements() {
-		m.KittyPassthrough.RefreshAllPlacements(func(windowID string) *WindowPositionInfo {
+		m.KittyPassthrough.RefreshAllPlacements(func() map[string]*WindowPositionInfo {
+			result := make(map[string]*WindowPositionInfo)
 			for _, w := range m.Windows {
-				if w.ID == windowID {
-					visible := !w.Minimized && !w.Minimizing && w.Workspace == m.CurrentWorkspace
+				if w.Workspace == m.CurrentWorkspace && !w.Minimized {
 					scrollbackLen := 0
 					if w.Terminal != nil {
 						scrollbackLen = w.Terminal.ScrollbackLen()
 					}
-					return &WindowPositionInfo{
-						WindowX:           w.X,
-						WindowY:           w.Y,
-						ContentOffsetX:    1,
-						ContentOffsetY:    1,
-						Width:             w.Width,
-						Height:            w.Height,
-						Visible:           visible,
-						ScrollbackLen:     scrollbackLen,
-						ScrollOffset:      w.ScrollbackOffset,
+					result[w.ID] = &WindowPositionInfo{
+						WindowX:            w.X,
+						WindowY:            w.Y,
+						ContentOffsetX:     1,
+						ContentOffsetY:     1,
+						Width:              w.Width,
+						Height:             w.Height,
+						Visible:            true,
+						ScrollbackLen:      scrollbackLen,
+						ScrollOffset:       w.ScrollbackOffset,
 						IsBeingManipulated: w.IsBeingManipulated,
+						WindowZ:            w.Z,
+						IsAltScreen:        w.IsAltScreen,
 					}
 				}
 			}
-			return nil
+			return result
 		})
 	}
 
@@ -202,7 +204,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 	if err != nil {
 		return nil
 	}
-	tty.Write(data)
-	tty.Close()
+	_, _ = tty.Write(data)
+	_ = tty.Close()
 	return nil
 }

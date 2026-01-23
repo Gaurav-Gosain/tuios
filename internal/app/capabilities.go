@@ -187,7 +187,7 @@ func setDefaultCellSize(caps *HostCapabilities) {
 }
 
 func queryWindowSize() (width, height int) {
-	os.Stdout.WriteString("\x1b[14t")
+	_, _ = os.Stdout.WriteString("\x1b[14t")
 
 	response := readTerminalResponse(100 * time.Millisecond)
 	if response == "" {
@@ -205,7 +205,7 @@ func queryWindowSize() (width, height int) {
 }
 
 func queryCellSize() (width, height int) {
-	os.Stdout.WriteString("\x1b[16t")
+	_, _ = os.Stdout.WriteString("\x1b[16t")
 
 	response := readTerminalResponse(100 * time.Millisecond)
 	if response == "" {
