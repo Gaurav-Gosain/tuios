@@ -68,6 +68,7 @@ type pendingDirectTransmit struct {
 	CursorX        int
 	CursorY        int
 	ScrollbackLen  int
+	IsAltScreen    bool
 }
 
 type PassthroughPlacement struct {
@@ -93,6 +94,9 @@ type PassthroughPlacement struct {
 	YOffset      int
 	ZIndex       int32
 	Virtual      bool
+
+	// Track which screen the image was placed on
+	PlacedOnAltScreen bool // True if placed while alternate screen was active
 
 	// Current clipping state (rows/cols to clip from each edge)
 	ClipTop         int
@@ -217,17 +221,36 @@ func (kp *KittyPassthrough) ForwardCommand(
 	contentOffsetX, contentOffsetY int,
 	cursorX, cursorY int,
 	scrollbackLen int,
+	isAltScreen bool,
 	ptyInput func([]byte),
 ) *PlacementResult {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
-	kittyPassthroughLog("ForwardCommand: action=%c, enabled=%v, imageID=%d, windowID=%s, win=(%d,%d), size=(%d,%d), cursor=(%d,%d), scrollback=%d",
-		cmd.Action, kp.enabled, cmd.ImageID, windowID[:8], windowX, windowY, windowWidth, windowHeight, cursorX, cursorY, scrollbackLen)
+	kittyPassthroughLog("ForwardCommand: action=%c, enabled=%v, imageID=%d, windowID=%s, win=(%d,%d), size=(%d,%d), cursor=(%d,%d), scrollback=%d, altScreen=%v",
+		cmd.Action, kp.enabled, cmd.ImageID, windowID[:8], windowX, windowY, windowWidth, windowHeight, cursorX, cursorY, scrollbackLen, isAltScreen)
 
 	if !kp.enabled {
 		kittyPassthroughLog("ForwardCommand: DISABLED, returning early")
 		return nil
+	}
+
+	// Clear virtual placements on any new image activity for this window
+	// Virtual placements are inherently transient - they should be re-sent by the app if still needed
+	if placements := kp.placements[windowID]; placements != nil {
+		var virtualIDs []uint32
+		for hostID, p := range placements {
+			if p.Virtual {
+				virtualIDs = append(virtualIDs, hostID)
+				if !p.Hidden {
+					kp.deleteOnePlacement(p)
+				}
+			}
+		}
+		for _, id := range virtualIDs {
+			delete(placements, id)
+			kittyPassthroughLog("ForwardCommand: cleared stale virtual placement hostID=%d", id)
+		}
 	}
 
 	switch cmd.Action {
@@ -237,7 +260,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 
 	case vt.KittyActionTransmit:
 		kittyPassthroughLog("ForwardCommand: handling TRANSMIT")
-		result := kp.forwardTransmit(cmd, rawData, windowID, false, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+		result := kp.forwardTransmit(cmd, rawData, windowID, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, isAltScreen)
 		if result != nil {
 			return result
 		}
@@ -245,16 +268,14 @@ func (kp *KittyPassthrough) ForwardCommand(
 	case vt.KittyActionTransmitPlace:
 		kittyPassthroughLog("ForwardCommand: handling TRANSMIT+PLACE, more=%v", cmd.More)
 		isFileBased := cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile
-		result := kp.forwardTransmit(cmd, rawData, windowID, true, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
-		if !cmd.More && !isFileBased {
-			kp.forwardPlace(cmd, windowID, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
-		}
+		result := kp.forwardTransmit(cmd, rawData, windowID, true, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
 		// Return PlacementResult from direct transmit if available
+		// Don't call forwardPlace since forwardDirectTransmit already handled placement
 		if result != nil {
 			return result
 		}
-		// Return ORIGINAL image dimensions for whitespace reservation (file-based)
-		// The terminal needs to reserve space for the full image so it can scroll properly
+		// For file-based transmissions, forwardFileTransmit handles placement
+		// Return ORIGINAL image dimensions for whitespace reservation
 		if !cmd.More && isFileBased {
 			imgRows, imgCols := kp.calculateImageCells(cmd)
 			if imgRows > 0 || imgCols > 0 {
@@ -264,7 +285,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 
 	case vt.KittyActionPlace:
 		kittyPassthroughLog("ForwardCommand: handling PLACE")
-		kp.forwardPlace(cmd, windowID, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
+		kp.forwardPlace(cmd, windowID, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
 		// Return ORIGINAL image dimensions for whitespace reservation
 		imgRows, imgCols := kp.calculateImageCells(cmd)
 		if imgRows > 0 || imgCols > 0 {
@@ -289,9 +310,9 @@ func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInpu
 	}
 }
 
-func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) *PlacementResult {
+func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile {
-		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
+		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
 		return nil
 	}
 
@@ -308,10 +329,10 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 
 	// Handle direct data transmission with placement - accumulate chunks and track placements
 	// Also handle continuation of a pending transmit+place
-	return kp.forwardDirectTransmit(cmd, windowID, andPlace || hasPendingData, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen)
+	return kp.forwardDirectTransmit(cmd, windowID, andPlace || hasPendingData, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
 }
 
-func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) *PlacementResult {
+func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
 	// Get or create pending data buffer for this window
 	pending := kp.pendingDirectData[windowID]
 	if pending == nil {
@@ -342,6 +363,7 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 			CursorX:        cursorX,
 			CursorY:        cursorY,
 			ScrollbackLen:  scrollbackLen,
+			IsAltScreen:    isAltScreen,
 		}
 		kp.pendingDirectData[windowID] = pending
 	}
@@ -365,6 +387,14 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 	if len(pending.Data) == 0 {
 		kittyPassthroughLog("forwardDirectTransmit: no data accumulated, skipping")
 		return nil
+	}
+
+	// Note: Virtual placements (U=1) use unicode placeholder characters in the terminal content.
+	// Since TUIOS renders the guest terminal content itself (not passthrough), those placeholders
+	// don't exist in the host terminal. So we convert virtual placements to regular deferred
+	// placements that RefreshAllPlacements will handle with proper cursor positioning.
+	if pending.Virtual {
+		kittyPassthroughLog("forwardDirectTransmit: virtual placement detected, converting to regular deferred placement")
 	}
 
 	// Clear existing placements for this window before placing new image
@@ -472,9 +502,9 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 			if pending.ZIndex != 0 {
 				buf.WriteString(fmt.Sprintf(",z=%d", pending.ZIndex))
 			}
-			if pending.Virtual {
-				buf.WriteString(",U=1")
-			}
+			// Note: We don't send U=1 to host even for virtual placements
+			// because TUIOS renders guest content itself, so placeholder
+			// characters don't exist in the host terminal
 		} else {
 			buf.WriteString(fmt.Sprintf("i=%d,q=2", hostID))
 		}
@@ -496,25 +526,26 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 			kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
 		}
 		kp.placements[windowID][hostID] = &PassthroughPlacement{
-			GuestImageID: pending.ImageID,
-			HostImageID:  hostID,
-			WindowID:     windowID,
-			GuestX:       pending.CursorX,
-			AbsoluteLine: pending.ScrollbackLen + pending.CursorY,
-			HostX:        hostX,
-			HostY:        hostY,
-			Cols:         displayCols,
-			Rows:         imgRows,
-			DisplayRows:  displayRows,
-			SourceX:      pending.SourceX,
-			SourceY:      pending.SourceY,
-			SourceWidth:  pending.SourceWidth,
-			SourceHeight: pending.SourceHeight,
-			XOffset:      pending.XOffset,
-			YOffset:      pending.YOffset,
-			ZIndex:       pending.ZIndex,
-			Virtual:      pending.Virtual,
-			Hidden:       true, // Start hidden, RefreshAllPlacements will place it
+			GuestImageID:      pending.ImageID,
+			HostImageID:       hostID,
+			WindowID:          windowID,
+			GuestX:            pending.CursorX,
+			AbsoluteLine:      pending.ScrollbackLen + pending.CursorY,
+			HostX:             hostX,
+			HostY:             hostY,
+			Cols:              displayCols,
+			Rows:              imgRows,
+			DisplayRows:       displayRows,
+			SourceX:           pending.SourceX,
+			SourceY:           pending.SourceY,
+			SourceWidth:       pending.SourceWidth,
+			SourceHeight:      pending.SourceHeight,
+			XOffset:           pending.XOffset,
+			YOffset:           pending.YOffset,
+			ZIndex:            pending.ZIndex,
+			Virtual:           pending.Virtual,
+			Hidden:            true, // Start hidden, RefreshAllPlacements will place it
+			PlacedOnAltScreen: pending.IsAltScreen,
 		}
 		kittyPassthroughLog("forwardDirectTransmit: stored placement hostID=%d (hidden, waiting for refresh)", hostID)
 
@@ -529,7 +560,7 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 	return nil
 }
 
-func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int) {
+func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) {
 	if cmd.FilePath == "" {
 		return
 	}
@@ -659,9 +690,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			if cmd.ZIndex != 0 {
 				buf.WriteString(fmt.Sprintf(",z=%d", cmd.ZIndex))
 			}
-			if cmd.Virtual {
-				buf.WriteString(",U=1")
-			}
+			// Note: Don't send U=1 to host - TUIOS renders guest content itself
 		} else {
 			buf.WriteString(fmt.Sprintf("i=%d,q=2", hostID))
 		}
@@ -682,25 +711,26 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
 	}
 	kp.placements[windowID][hostID] = &PassthroughPlacement{
-		GuestImageID: cmd.ImageID,
-		HostImageID:  hostID,
-		WindowID:     windowID,
-		GuestX:       cursorX,
-		AbsoluteLine: scrollbackLen + cursorY,
-		HostX:        hostX,
-		HostY:        hostY,
-		Cols:         displayCols,
-		Rows:         imgRows,     // Original image rows (for scroll clipping)
-		DisplayRows:  displayRows, // Capped rows for initial display
-		SourceX:      cmd.SourceX,
-		SourceY:      cmd.SourceY,
-		SourceWidth:  cmd.SourceWidth,
-		SourceHeight: cmd.SourceHeight,
-		XOffset:      cmd.XOffset,
-		YOffset:      cmd.YOffset,
-		ZIndex:       cmd.ZIndex,
-		Virtual:      cmd.Virtual,
-		Hidden:       true, // Start hidden, RefreshAllPlacements will place it
+		GuestImageID:      cmd.ImageID,
+		HostImageID:       hostID,
+		WindowID:          windowID,
+		GuestX:            cursorX,
+		AbsoluteLine:      scrollbackLen + cursorY,
+		HostX:             hostX,
+		HostY:             hostY,
+		Cols:              displayCols,
+		Rows:              imgRows,     // Original image rows (for scroll clipping)
+		DisplayRows:       displayRows, // Capped rows for initial display
+		SourceX:           cmd.SourceX,
+		SourceY:           cmd.SourceY,
+		SourceWidth:       cmd.SourceWidth,
+		SourceHeight:      cmd.SourceHeight,
+		XOffset:           cmd.XOffset,
+		YOffset:           cmd.YOffset,
+		ZIndex:            cmd.ZIndex,
+		Virtual:           cmd.Virtual,
+		Hidden:            true, // Start hidden, RefreshAllPlacements will place it
+		PlacedOnAltScreen: isAltScreen,
 	}
 	kittyPassthroughLog("forwardFileTransmit: stored placement hostID=%d (hidden, waiting for refresh)", hostID)
 }
@@ -713,6 +743,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	contentOffsetX, contentOffsetY int,
 	cursorX, cursorY int,
 	scrollbackLen int,
+	isAltScreen bool,
 ) {
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
@@ -774,9 +805,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	if cmd.ZIndex != 0 {
 		buf.WriteString(fmt.Sprintf(",z=%d", cmd.ZIndex))
 	}
-	if cmd.Virtual {
-		buf.WriteString(",U=1")
-	}
+	// Note: Don't send U=1 to host - TUIOS renders guest content itself
 	buf.WriteString(",q=2")
 	buf.WriteString("\x1b\\")
 	buf.WriteString("\x1b8") // Restore cursor position
@@ -813,6 +842,8 @@ func (kp *KittyPassthrough) forwardPlace(
 }
 
 func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string) {
+	kittyPassthroughLog("forwardDelete: delete=%c, imageID=%d, windowID=%s", cmd.Delete, cmd.ImageID, windowID[:8])
+
 	switch cmd.Delete {
 	case vt.KittyDeleteAll, 0:
 		// Delete all images for this window
@@ -827,33 +858,89 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 		kp.placements[windowID] = nil
 
 	case vt.KittyDeleteByID:
-		// Translate guest image ID to host image ID
-		if placements := kp.placements[windowID]; placements != nil {
-			if p, ok := placements[cmd.ImageID]; ok {
+		// Translate guest image ID to host image ID using imageIDMap
+		if windowMap := kp.imageIDMap[windowID]; windowMap != nil {
+			if hostID, ok := windowMap[cmd.ImageID]; ok {
+				// Delete from host terminal
 				var buf bytes.Buffer
 				buf.WriteString("\x1b_G")
-				buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", p.HostImageID))
+				buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", hostID))
 				buf.WriteString("\x1b\\")
 				kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-				delete(placements, cmd.ImageID)
+				// Remove from our tracking
+				if placements := kp.placements[windowID]; placements != nil {
+					delete(placements, hostID)
+				}
+				delete(windowMap, cmd.ImageID)
+				kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d)", cmd.ImageID, hostID)
 			}
 		}
 
 	case vt.KittyDeleteByIDAndPlacement:
-		// Translate guest image ID to host image ID
-		if placements := kp.placements[windowID]; placements != nil {
-			if p, ok := placements[cmd.ImageID]; ok {
+		// Translate guest image ID to host image ID using imageIDMap
+		if windowMap := kp.imageIDMap[windowID]; windowMap != nil {
+			if hostID, ok := windowMap[cmd.ImageID]; ok {
 				var buf bytes.Buffer
 				buf.WriteString("\x1b_G")
-				buf.WriteString(fmt.Sprintf("a=d,d=I,i=%d", p.HostImageID))
+				buf.WriteString(fmt.Sprintf("a=d,d=I,i=%d", hostID))
 				if cmd.PlacementID > 0 {
 					buf.WriteString(fmt.Sprintf(",p=%d", cmd.PlacementID))
 				}
 				buf.WriteString(",q=2\x1b\\")
 				kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-				delete(placements, cmd.ImageID)
+				// Remove from our tracking
+				if placements := kp.placements[windowID]; placements != nil {
+					delete(placements, hostID)
+				}
+				delete(windowMap, cmd.ImageID)
+				kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d) with placement", cmd.ImageID, hostID)
 			}
 		}
+
+	case vt.KittyDeleteOnScreen:
+		// Delete all visible placements for this window (d=p)
+		kittyPassthroughLog("forwardDelete: DeleteOnScreen - clearing all placements for window")
+		placements := kp.placements[windowID]
+		for _, p := range placements {
+			var buf bytes.Buffer
+			buf.WriteString("\x1b_G")
+			buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", p.HostImageID))
+			buf.WriteString("\x1b\\")
+			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+		}
+		kp.placements[windowID] = nil
+		// Also clear the imageIDMap for this window
+		kp.imageIDMap[windowID] = nil
+
+	case vt.KittyDeleteAtCursor, vt.KittyDeleteAtCursorCell:
+		// Delete image at cursor position (d=c or d=C)
+		// For simplicity, delete all placements in this window
+		kittyPassthroughLog("forwardDelete: DeleteAtCursor - clearing all placements for window")
+		placements := kp.placements[windowID]
+		for _, p := range placements {
+			var buf bytes.Buffer
+			buf.WriteString("\x1b_G")
+			buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", p.HostImageID))
+			buf.WriteString("\x1b\\")
+			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+		}
+		kp.placements[windowID] = nil
+		kp.imageIDMap[windowID] = nil
+
+	default:
+		// Log unhandled delete types for debugging
+		kittyPassthroughLog("forwardDelete: UNHANDLED delete type=%c (%d), clearing all as fallback", cmd.Delete, cmd.Delete)
+		// Fallback: delete all placements for this window
+		placements := kp.placements[windowID]
+		for _, p := range placements {
+			var buf bytes.Buffer
+			buf.WriteString("\x1b_G")
+			buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", p.HostImageID))
+			buf.WriteString("\x1b\\")
+			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+		}
+		kp.placements[windowID] = nil
+		kp.imageIDMap[windowID] = nil
 	}
 }
 
@@ -1022,6 +1109,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		}
 
 		info := allWindows[windowID]
+		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, info=%v, numPlacements=%d", windowID[:8], info != nil, len(placements))
 		if info == nil {
 			for _, p := range placements {
 				if !p.Hidden {
@@ -1032,23 +1120,37 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			continue
 		}
 
-		// Hide all images when alternate screen is active (vim, less, etc.)
-		if info.IsAltScreen {
-			for _, p := range placements {
-				if !p.Hidden {
-					kp.deleteOnePlacement(p)
-					p.Hidden = true
-				}
-			}
-			continue
-		}
+		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, IsAltScreen=%v, visible=%v", windowID[:8], info.IsAltScreen, info.Visible)
 
 		// Calculate viewport dimensions (accounting for window borders)
 		viewportTop := info.ScrollbackLen - info.ScrollOffset
 		viewportHeight := info.Height - 2
 		viewportWidth := info.Width - 2
 
-		for _, p := range placements {
+		// Collect IDs to delete (for altscreen cleanup)
+		var idsToDelete []uint32
+
+		for hostID, p := range placements {
+			// Handle screen mode mismatch:
+			// - Images placed on normal screen should be hidden when altscreen is active
+			// - Images placed on altscreen should be DELETED when back to normal screen
+			//   (cleanup after TUI apps like yazi exit)
+			if info.IsAltScreen != p.PlacedOnAltScreen {
+				kittyPassthroughLog("RefreshPlacement: altscreen mismatch (info=%v, placed=%v)",
+					info.IsAltScreen, p.PlacedOnAltScreen)
+				if !p.Hidden {
+					kp.deleteOnePlacement(p)
+					p.Hidden = true
+				}
+				// When exiting altscreen (now on normal screen), delete altscreen placements entirely
+				// This cleans up images from TUI apps like yazi when they exit
+				if !info.IsAltScreen && p.PlacedOnAltScreen {
+					kittyPassthroughLog("RefreshPlacement: cleaning up altscreen placement hostID=%d", hostID)
+					idsToDelete = append(idsToDelete, hostID)
+				}
+				continue
+			}
+
 			// Calculate new position (where top-left of image would be)
 			relativeY := p.AbsoluteLine - viewportTop
 
@@ -1143,6 +1245,11 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				kp.placeOne(p)
 				p.Hidden = false
 			}
+		}
+
+		// Clean up altscreen placements that are no longer needed
+		for _, id := range idsToDelete {
+			delete(placements, id)
 		}
 	}
 }
@@ -1245,9 +1352,7 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	if p.ZIndex != 0 {
 		buf.WriteString(fmt.Sprintf(",z=%d", p.ZIndex))
 	}
-	if p.Virtual {
-		buf.WriteString(",U=1")
-	}
+	// Note: Don't send U=1 to host - TUIOS renders guest content itself
 	buf.WriteString(",q=2\x1b\\")
 	buf.WriteString("\x1b8") // Restore cursor position
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
@@ -1278,6 +1383,7 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 			1, 1,
 			cursorPos.X, cursorPos.Y,
 			scrollbackLen,
+			win.IsAltScreen,
 			func(response []byte) {
 				if win.Pty != nil {
 					_, _ = win.Pty.Write(response)
