@@ -25,6 +25,8 @@ var ctrlKeyMap = map[rune]byte{
 }
 
 // Special key codes (non-modifiers)
+// Note: Arrow keys (Up, Down, Left, Right) are handled separately in getRawKeyBytesWithMode
+// to support DECCKM (application cursor keys) mode switching between CSI and SS3 sequences
 var specialKeyMap = map[rune][]byte{
 	tea.KeyEnter:     {'\r'},
 	tea.KeyTab:       {'\t'},
@@ -35,10 +37,6 @@ var specialKeyMap = map[rune][]byte{
 	tea.KeyInsert:    {0x1b, '[', '2', '~'},
 	tea.KeyPgUp:      {0x1b, '[', '5', '~'},
 	tea.KeyPgDown:    {0x1b, '[', '6', '~'},
-	tea.KeyUp:        {0x1b, '[', 'A'},
-	tea.KeyDown:      {0x1b, '[', 'B'},
-	tea.KeyRight:     {0x1b, '[', 'C'},
-	tea.KeyLeft:      {0x1b, '[', 'D'},
 	tea.KeyHome:      {0x1b, '[', 'H'},
 	tea.KeyEnd:       {0x1b, '[', 'F'},
 }
@@ -70,18 +68,29 @@ var functionKeyMap = map[rune][]byte{
 //
 // The function ensures applications like vim, emacs, etc. work correctly.
 func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
+	return getRawKeyBytesWithMode(msg, false)
+}
+
+// getRawKeyBytesWithMode converts a Bubble Tea KeyPressMsg to raw bytes for PTY forwarding.
+// The applicationCursorKeys parameter indicates whether DECCKM mode is enabled,
+// which determines whether arrow keys send SS3 (ESC O) or CSI (ESC [) sequences.
+func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []byte {
 	key := msg.Key()
 
+	// Mask off any non-modifier bits (Bubble Tea v2 may set additional flags like 128)
+	// Only consider actual modifier keys: Shift=1, Alt=2, Ctrl=4
+	modMask := tea.ModShift | tea.ModAlt | tea.ModCtrl
+	actualMod := key.Mod & modMask
+
 	// Handle modifier combinations first
-	if key.Mod != 0 {
+	if actualMod != 0 {
 		// Handle Shift+Tab (backtab) - sends CSI Z
-		// Use bitwise check since Mod may have additional flags (e.g., 129 instead of 1)
-		if key.Mod&tea.ModShift != 0 && key.Code == tea.KeyTab {
+		if actualMod&tea.ModShift != 0 && key.Code == tea.KeyTab {
 			return []byte{0x1b, '[', 'Z'}
 		}
 
 		// Handle Ctrl+letter combinations (standard control codes)
-		if key.Mod&tea.ModCtrl != 0 {
+		if actualMod&tea.ModCtrl != 0 {
 			// Special Ctrl key combinations
 			switch key.Code {
 			case tea.KeySpace:
@@ -111,7 +120,7 @@ func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
 		}
 
 		// Handle Alt+letter combinations (ESC prefix)
-		if key.Mod&tea.ModAlt != 0 {
+		if actualMod&tea.ModAlt != 0 {
 			switch key.Code {
 			case tea.KeyBackspace:
 				return []byte{0x1b, 0x7f}
@@ -127,9 +136,35 @@ func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
 		}
 
 		// Handle other modifier combinations (function keys, etc.)
-		if modSeq := handleModifierKeys(key); len(modSeq) > 0 {
+		// Pass the masked modifier to handleModifierKeys
+		if modSeq := handleModifierKeysWithMod(key, actualMod); len(modSeq) > 0 {
 			return modSeq
 		}
+	}
+
+	// Handle cursor keys with DECCKM (application cursor keys) mode support
+	// When applicationCursorKeys is true, send SS3 sequences (ESC O x) instead of CSI sequences (ESC [ x)
+	switch key.Code {
+	case tea.KeyUp:
+		if applicationCursorKeys {
+			return []byte{0x1b, 'O', 'A'}
+		}
+		return []byte{0x1b, '[', 'A'}
+	case tea.KeyDown:
+		if applicationCursorKeys {
+			return []byte{0x1b, 'O', 'B'}
+		}
+		return []byte{0x1b, '[', 'B'}
+	case tea.KeyRight:
+		if applicationCursorKeys {
+			return []byte{0x1b, 'O', 'C'}
+		}
+		return []byte{0x1b, '[', 'C'}
+	case tea.KeyLeft:
+		if applicationCursorKeys {
+			return []byte{0x1b, 'O', 'D'}
+		}
+		return []byte{0x1b, '[', 'D'}
 	}
 
 	// Handle special keys (no modifiers) using lookup table
@@ -155,16 +190,17 @@ func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
 	return []byte{}
 }
 
-// handleModifierKeys handles keys with complex modifier combinations
-func handleModifierKeys(key tea.Key) []byte {
+// handleModifierKeysWithMod handles keys with complex modifier combinations
+// The mod parameter should already be masked to only include actual modifier bits
+func handleModifierKeysWithMod(key tea.Key, mod tea.KeyMod) []byte {
 	// Handle function keys with modifiers
-	if fnSeq := getFunctionKeySequence(key.Code, getModParam(key.Mod)); fnSeq != nil {
+	if fnSeq := getFunctionKeySequence(key.Code, getModParam(mod)); fnSeq != nil {
 		return fnSeq
 	}
 
 	// Handle cursor keys with modifiers
 	if cursorSeq := getCursorSequence(key.Code); cursorSeq != nil {
-		modParam := getModParam(key.Mod)
+		modParam := getModParam(mod)
 		if modParam > 1 {
 			// Insert modifier parameter: ESC[1;{mod}{letter}
 			result := make([]byte, 0, 8)
@@ -179,6 +215,11 @@ func handleModifierKeys(key tea.Key) []byte {
 
 // getModParam calculates modifier parameter for CSI sequences
 func getModParam(mod tea.KeyMod) int {
+	// Mask off any non-modifier bits (Bubble Tea v2 may set additional flags like 128)
+	// Only consider actual modifier keys: Shift=1, Alt=2, Ctrl=4
+	modMask := tea.ModShift | tea.ModAlt | tea.ModCtrl
+	mod = mod & modMask
+
 	modParam := 1
 	if mod&tea.ModShift != 0 {
 		modParam++

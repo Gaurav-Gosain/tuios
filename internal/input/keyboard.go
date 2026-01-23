@@ -274,7 +274,12 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Normal terminal mode - pass through all keys
 	if focusedWindow != nil {
-		rawInput := getRawKeyBytes(msg)
+		// Check if the terminal has DECCKM (application cursor keys) mode enabled
+		appCursorKeys := false
+		if focusedWindow.Terminal != nil {
+			appCursorKeys = focusedWindow.Terminal.ApplicationCursorKeys()
+		}
+		rawInput := getRawKeyBytesWithMode(msg, appCursorKeys)
 		if len(rawInput) > 0 {
 			if err := focusedWindow.SendInput(rawInput); err != nil {
 				// Terminal unavailable, switch back to window mode
@@ -728,7 +733,11 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		// Unknown prefix command, pass through the key
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
-			rawInput := getRawKeyBytes(msg)
+			appCursorKeys := false
+			if focusedWindow.Terminal != nil {
+				appCursorKeys = focusedWindow.Terminal.ApplicationCursorKeys()
+			}
+			rawInput := getRawKeyBytesWithMode(msg, appCursorKeys)
 			if len(rawInput) > 0 {
 				_ = focusedWindow.SendInput(rawInput)
 			}

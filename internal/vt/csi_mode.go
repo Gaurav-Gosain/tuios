@@ -111,3 +111,9 @@ func (e *Emulator) isModeSet(mode ansi.Mode) bool {
 	m, ok := e.modes[mode]
 	return ok && m.IsSet()
 }
+
+// ApplicationCursorKeys returns true if DECCKM (application cursor keys mode) is enabled.
+// When this mode is set, cursor keys send SS3 sequences (ESC O A) instead of CSI sequences (ESC [ A).
+func (e *Emulator) ApplicationCursorKeys() bool {
+	return e.isModeSet(ansi.ModeCursorKeys)
+}
