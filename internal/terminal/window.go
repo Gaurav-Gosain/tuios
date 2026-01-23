@@ -148,6 +148,7 @@ type Window struct {
 	suppressCallbacks atomic.Bool          // Suppress VT emulator callbacks during state restoration (prevents race conditions)
 
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
+	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)
 }
 
 // CopyModeState represents the current state within copy mode

@@ -201,6 +201,8 @@ type OS struct {
 	KittyRenderer *KittyRenderer
 	// Kitty Graphics Protocol passthrough for forwarding to host terminal
 	KittyPassthrough *KittyPassthrough
+	// Sixel Graphics passthrough for forwarding to host terminal
+	SixelPassthrough *SixelPassthrough
 }
 
 // Notification represents a temporary notification message.
@@ -531,6 +533,7 @@ func (m *OS) AddWindow(title string) *OS {
 	window.Workspace = m.CurrentWorkspace
 
 	m.setupKittyPassthrough(window)
+	m.setupSixelPassthrough(window)
 
 	m.Windows = append(m.Windows, window)
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))

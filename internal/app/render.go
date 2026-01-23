@@ -208,3 +208,52 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 	_ = tty.Close()
 	return nil
 }
+
+func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
+	if m.SixelPassthrough == nil {
+		return nil
+	}
+
+	// Refresh placements for all windows
+	if m.SixelPassthrough.PlacementCount() > 0 {
+		m.SixelPassthrough.RefreshAllPlacements(func(windowID string) *WindowPositionInfo {
+			for _, w := range m.Windows {
+				if w.ID == windowID && w.Workspace == m.CurrentWorkspace && !w.Minimized {
+					scrollbackLen := 0
+					if w.Terminal != nil {
+						scrollbackLen = w.Terminal.ScrollbackLen()
+					}
+					return &WindowPositionInfo{
+						WindowX:            w.X,
+						WindowY:            w.Y,
+						ContentOffsetX:     1,
+						ContentOffsetY:     1,
+						Width:              w.Width,
+						Height:             w.Height,
+						Visible:            true,
+						ScrollbackLen:      scrollbackLen,
+						ScrollOffset:       w.ScrollbackOffset,
+						IsBeingManipulated: w.IsBeingManipulated,
+						WindowZ:            w.Z,
+						IsAltScreen:        w.IsAltScreen,
+					}
+				}
+			}
+			return nil
+		})
+	}
+
+	// Get pending sixel output and write to /dev/tty (like Kitty passthrough)
+	data := m.SixelPassthrough.FlushPending()
+	if len(data) == 0 {
+		return nil
+	}
+	sixelPassthroughLog("GetSixelGraphicsCmd: flushing %d bytes", len(data))
+	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	if err != nil {
+		return nil
+	}
+	_, _ = tty.Write(data)
+	_ = tty.Close()
+	return nil
+}

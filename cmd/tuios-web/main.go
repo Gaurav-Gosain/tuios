@@ -368,6 +368,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model
 		SessionName:          sessionName,
 		KittyRenderer:        app.NewKittyRenderer(),
 		KittyPassthrough:     app.NewKittyPassthrough(),
+		SixelPassthrough:     app.NewSixelPassthrough(),
 	}
 
 	// Restore state from daemon if available

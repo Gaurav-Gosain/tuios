@@ -182,6 +182,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		SessionName:          client.SessionName(),
 		KittyRenderer:        app.NewKittyRenderer(),
 		KittyPassthrough:     app.NewKittyPassthrough(),
+		SixelPassthrough:     app.NewSixelPassthrough(),
 	}
 
 	windowCount := 0

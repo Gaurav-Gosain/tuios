@@ -163,6 +163,7 @@ func runLocal() error {
 		IsDaemonSession:      isDaemonSession,
 		KittyRenderer:        app.NewKittyRenderer(),
 		KittyPassthrough:     app.NewKittyPassthrough(),
+		SixelPassthrough:     app.NewSixelPassthrough(),
 	}
 
 	p := tea.NewProgram(

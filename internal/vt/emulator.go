@@ -84,6 +84,13 @@ type Emulator struct {
 
 	// Kitty graphics passthrough callback
 	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
+
+	// Sixel graphics state for main and alt screens
+	sixelMain *SixelState
+	sixelAlt  *SixelState
+
+	// Sixel graphics passthrough callback
+	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
 }
 
 // NewEmulator creates a new virtual terminal emulator.
@@ -121,6 +128,10 @@ func NewEmulator(w, h int) *Emulator {
 	t.kittyMain = NewKittyState()
 	t.kittyAlt = NewKittyState()
 	t.registerKittyGraphicsHandler()
+
+	t.sixelMain = NewSixelState()
+	t.sixelAlt = NewSixelState()
+	t.registerSixelGraphicsHandler()
 
 	return t
 }
@@ -787,4 +798,117 @@ func (e *Emulator) KittyMainState() *KittyState {
 
 func (e *Emulator) KittyAltState() *KittyState {
 	return e.kittyAlt
+}
+
+func (e *Emulator) registerSixelGraphicsHandler() {
+	// Sixel DCS format: ESC P <p1>;<p2>;<p3> q <sixel-data> ST
+	// The DCS command byte is 'q' (the sixel introducer)
+	// The ansi library uses Command(0, 0, 'q') for simple DCS commands
+	e.RegisterDcsHandler(int('q'), func(params ansi.Params, data []byte) bool {
+		// Reconstruct the full DCS data (params + 'q' + data)
+		// The params have already been parsed by the ansi library
+		var fullData []byte
+
+		// Build parameter string
+		for i, p := range params {
+			if i > 0 {
+				fullData = append(fullData, ';')
+			}
+			val := p.Param(0)
+			// Convert int to string bytes
+			if val == 0 {
+				fullData = append(fullData, '0')
+			} else {
+				digits := make([]byte, 0, 10)
+				for val > 0 {
+					digits = append(digits, byte('0'+val%10))
+					val /= 10
+				}
+				// Reverse digits
+				for i := len(digits) - 1; i >= 0; i-- {
+					fullData = append(fullData, digits[i])
+				}
+			}
+		}
+
+		// Add 'q' introducer and data
+		fullData = append(fullData, 'q')
+		fullData = append(fullData, data...)
+
+		cmd := ParseSixelCommand(fullData)
+		if cmd == nil {
+			return false
+		}
+
+		// Get cursor position for placement
+		cursorX, cursorY := e.scr.CursorPosition()
+
+		// Calculate absolute line (accounting for scrollback)
+		absLine := e.scrs[0].ScrollbackLen() + cursorY
+		if e.IsAltScreen() {
+			// Alt screen doesn't have scrollback, use viewport position
+			absLine = cursorY
+		}
+
+		// If passthrough is enabled, forward to host terminal
+		if e.sixelPassthroughFunc != nil {
+			e.sixelPassthroughFunc(cmd, cursorX, cursorY, absLine)
+			// Reserve space for the image (move cursor down)
+			cellWidth, cellHeight := e.CellSize()
+			rows := cmd.RowsForHeight(cellHeight)
+			cols := cmd.ColsForWidth(cellWidth)
+			if rows > 0 {
+				e.ReserveImageSpace(rows, cols)
+			}
+			return true
+		}
+
+		// Local handling: store placement in state
+		state := e.sixelMain
+		if e.IsAltScreen() {
+			state = e.sixelAlt
+		}
+
+		cellWidth, cellHeight := e.CellSize()
+		placement := &SixelPlacement{
+			AbsoluteLine:   absLine,
+			ScreenX:        cursorX,
+			Width:          cmd.Width,
+			Height:         cmd.Height,
+			Rows:           cmd.RowsForHeight(cellHeight),
+			Cols:           cmd.ColsForWidth(cellWidth),
+			Data:           cmd.Data,
+			RawSequence:    cmd.RawSequence,
+			AspectRatio:    cmd.AspectRatio,
+			BackgroundMode: cmd.BackgroundMode,
+		}
+
+		state.AddPlacement(placement)
+
+		// Reserve space for the image
+		if placement.Rows > 0 {
+			e.ReserveImageSpace(placement.Rows, placement.Cols)
+		}
+
+		return true
+	})
+}
+
+func (e *Emulator) SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int)) {
+	e.sixelPassthroughFunc = fn
+}
+
+func (e *Emulator) SixelState() *SixelState {
+	if e.IsAltScreen() {
+		return e.sixelAlt
+	}
+	return e.sixelMain
+}
+
+func (e *Emulator) SixelMainState() *SixelState {
+	return e.sixelMain
+}
+
+func (e *Emulator) SixelAltState() *SixelState {
+	return e.sixelAlt
 }

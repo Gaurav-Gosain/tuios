@@ -279,6 +279,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 		SessionName:          sessionName,
 		KittyRenderer:        app.NewKittyRenderer(),
 		KittyPassthrough:     app.NewKittyPassthrough(),
+		SixelPassthrough:     app.NewSixelPassthrough(),
 	}
 
 	// Restore state from daemon if available

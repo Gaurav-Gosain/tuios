@@ -1,7 +1,7 @@
 package app
 
 import (
-	"bufio"
+	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -13,6 +13,7 @@ import (
 // These are used to determine which features TUIOS can use for rendering.
 type HostCapabilities struct {
 	KittyGraphics bool
+	SixelGraphics bool
 	TrueColor     bool
 	TerminalName  string
 	PixelWidth    int
@@ -52,68 +53,182 @@ func UpdateHostDimensions(cols, rows, pixelWidth, pixelHeight int) {
 
 func DetectHostCapabilities() *HostCapabilities {
 	caps := &HostCapabilities{}
-	detectFromEnvironment(caps)
+
+	// Detect terminal name from environment
+	detectTerminalName(caps)
+
+	// Detect truecolor from environment
+	detectTrueColor(caps)
+
+	// Query terminal size (cols/rows)
+	queryTerminalSize(caps)
+
+	// Query terminal for dimensions (fast, well-supported)
 	queryPixelDimensions(caps)
+
+	// Query graphics support - use fast method with fallback
+	queryGraphicsSupport(caps)
+
+	// Apply environment overrides
+	applyEnvironmentOverrides(caps)
+
+	// Debug output if requested - writes to /tmp/tuios_caps.log
+	if os.Getenv("TUIOS_DEBUG_CAPS") == "1" {
+		if f, err := os.OpenFile("/tmp/tuios_caps.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644); err == nil {
+			fmt.Fprintf(f, "Terminal: %s\nKitty: %v\nSixel: %v\nTrueColor: %v\nCell: %dx%d\nPixel: %dx%d\n",
+				caps.TerminalName, caps.KittyGraphics, caps.SixelGraphics, caps.TrueColor,
+				caps.CellWidth, caps.CellHeight, caps.PixelWidth, caps.PixelHeight)
+			f.Close()
+		}
+	}
+
 	return caps
 }
 
-func detectFromEnvironment(caps *HostCapabilities) {
+func detectTerminalName(caps *HostCapabilities) {
 	term := strings.ToLower(os.Getenv("TERM"))
 	termProgram := strings.ToLower(os.Getenv("TERM_PROGRAM"))
-	colorterm := strings.ToLower(os.Getenv("COLORTERM"))
 
 	switch {
 	case strings.Contains(termProgram, "ghostty"):
 		caps.TerminalName = "ghostty"
-		caps.KittyGraphics = true
-		caps.TrueColor = true
 	case strings.Contains(termProgram, "kitty"):
 		caps.TerminalName = "kitty"
-		caps.KittyGraphics = true
-		caps.TrueColor = true
 	case strings.Contains(termProgram, "wezterm"):
 		caps.TerminalName = "wezterm"
-		caps.KittyGraphics = true
-		caps.TrueColor = true
 	case strings.Contains(termProgram, "konsole"):
 		caps.TerminalName = "konsole"
-		caps.KittyGraphics = true
-		caps.TrueColor = true
 	case strings.Contains(termProgram, "iterm"):
 		caps.TerminalName = "iterm2"
-		caps.TrueColor = true
 	case strings.Contains(termProgram, "alacritty"):
 		caps.TerminalName = "alacritty"
-		caps.TrueColor = true
-	case strings.Contains(term, "xterm"):
-		caps.TerminalName = "xterm"
-		caps.TrueColor = strings.Contains(term, "256color") || strings.Contains(term, "direct")
+	case strings.Contains(termProgram, "foot"):
+		caps.TerminalName = "foot"
+	case strings.Contains(termProgram, "contour"):
+		caps.TerminalName = "contour"
+	case strings.Contains(termProgram, "mlterm"):
+		caps.TerminalName = "mlterm"
+	case strings.Contains(termProgram, "mintty"):
+		caps.TerminalName = "mintty"
+	default:
+		if strings.Contains(term, "kitty") {
+			caps.TerminalName = "kitty"
+		} else if strings.Contains(term, "xterm") {
+			caps.TerminalName = "xterm"
+		} else if strings.Contains(term, "mlterm") {
+			caps.TerminalName = "mlterm"
+		}
 	}
 
 	if os.Getenv("KITTY_WINDOW_ID") != "" {
 		caps.TerminalName = "kitty"
-		caps.KittyGraphics = true
-		caps.TrueColor = true
 	}
-
 	if os.Getenv("WEZTERM_PANE") != "" {
 		caps.TerminalName = "wezterm"
-		caps.KittyGraphics = true
-		caps.TrueColor = true
 	}
+}
+
+func detectTrueColor(caps *HostCapabilities) {
+	colorterm := strings.ToLower(os.Getenv("COLORTERM"))
+	term := strings.ToLower(os.Getenv("TERM"))
 
 	if colorterm == "truecolor" || colorterm == "24bit" {
 		caps.TrueColor = true
 	}
-
 	if strings.Contains(term, "256color") || strings.Contains(term, "truecolor") || strings.Contains(term, "direct") {
 		caps.TrueColor = true
 	}
+}
 
+func queryGraphicsSupport(caps *HostCapabilities) {
+	if !isTerminal(os.Stdin.Fd()) {
+		return
+	}
+
+	// Open /dev/tty for queries to avoid messing with stdin
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return
+	}
+	defer tty.Close()
+
+	oldState, err := makeRaw(tty.Fd())
+	if err != nil {
+		return
+	}
+	defer restoreTerminal(tty.Fd(), oldState)
+
+	// Send both queries at once
+	tty.WriteString("\x1b[c")                                      // DA1 for sixel
+	tty.WriteString("\x1b_Gi=1,a=q,t=d,f=24,s=1,v=1;AAAA\x1b\\") // Kitty graphics query
+
+	// Read response with timeout (300ms to account for slower terminals)
+	response := readTTYResponse(tty, 300*time.Millisecond)
+
+	// Parse DA1 response for sixel (look for "4" in params)
+	da1Re := regexp.MustCompile(`\x1b\[\?([0-9;]+)c`)
+	if matches := da1Re.FindStringSubmatch(response); len(matches) >= 2 {
+		for _, p := range strings.Split(matches[1], ";") {
+			if p == "4" {
+				caps.SixelGraphics = true
+				break
+			}
+		}
+	}
+
+	// Parse Kitty response (look for OK)
+	if strings.Contains(response, "OK") {
+		caps.KittyGraphics = true
+	}
+}
+
+// readTTYResponse reads from tty with a timeout using poll-based I/O
+func readTTYResponse(tty *os.File, timeout time.Duration) string {
+	buf := make([]byte, 512)
+	var result strings.Builder
+	terminators := 0
+	deadline := time.Now().Add(timeout)
+
+	for terminators < 2 {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+
+		// Use poll to wait for data with timeout
+		ready, err := pollReadable(tty.Fd(), remaining)
+		if err != nil || !ready {
+			break
+		}
+
+		n, err := tty.Read(buf)
+		if err != nil {
+			break
+		}
+		if n > 0 {
+			result.Write(buf[:n])
+			for i := range n {
+				if buf[i] == 'c' || buf[i] == '\\' {
+					terminators++
+				}
+			}
+		}
+	}
+
+	return result.String()
+}
+
+func applyEnvironmentOverrides(caps *HostCapabilities) {
 	if os.Getenv("TUIOS_KITTY_GRAPHICS") == "1" {
 		caps.KittyGraphics = true
 	} else if os.Getenv("TUIOS_KITTY_GRAPHICS") == "0" {
 		caps.KittyGraphics = false
+	}
+
+	if os.Getenv("TUIOS_SIXEL_GRAPHICS") == "1" {
+		caps.SixelGraphics = true
+	} else if os.Getenv("TUIOS_SIXEL_GRAPHICS") == "0" {
+		caps.SixelGraphics = false
 	}
 }
 
@@ -123,25 +238,42 @@ func queryPixelDimensions(caps *HostCapabilities) {
 		return
 	}
 
-	oldState, err := makeRaw(os.Stdin.Fd())
+	// Use /dev/tty for queries
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		setDefaultCellSize(caps)
 		return
 	}
-	defer restoreTerminal(os.Stdin.Fd(), oldState)
+	defer tty.Close()
 
-	pixelWidth, pixelHeight := queryWindowSize()
-	if pixelWidth > 0 && pixelHeight > 0 {
-		caps.PixelWidth = pixelWidth
-		caps.PixelHeight = pixelHeight
+	oldState, err := makeRaw(tty.Fd())
+	if err != nil {
+		setDefaultCellSize(caps)
+		return
+	}
+	defer restoreTerminal(tty.Fd(), oldState)
+
+	// Query window size in pixels
+	tty.WriteString("\x1b[14t")
+	response := readTTYResponse(tty, 100*time.Millisecond)
+	if re := regexp.MustCompile(`\x1b\[4;(\d+);(\d+)t`); response != "" {
+		if matches := re.FindStringSubmatch(response); len(matches) == 3 {
+			caps.PixelHeight, _ = strconv.Atoi(matches[1])
+			caps.PixelWidth, _ = strconv.Atoi(matches[2])
+		}
 	}
 
-	cellWidth, cellHeight := queryCellSize()
-	if cellWidth > 0 && cellHeight > 0 {
-		caps.CellWidth = cellWidth
-		caps.CellHeight = cellHeight
+	// Query cell size
+	tty.WriteString("\x1b[16t")
+	response = readTTYResponse(tty, 100*time.Millisecond)
+	if re := regexp.MustCompile(`\x1b\[6;(\d+);(\d+)t`); response != "" {
+		if matches := re.FindStringSubmatch(response); len(matches) == 3 {
+			caps.CellHeight, _ = strconv.Atoi(matches[1])
+			caps.CellWidth, _ = strconv.Atoi(matches[2])
+		}
 	}
 
+	// Calculate cell size from pixel dimensions if needed
 	if caps.PixelWidth > 0 && caps.CellWidth == 0 && caps.Cols > 0 {
 		caps.CellWidth = caps.PixelWidth / caps.Cols
 	}
@@ -155,7 +287,6 @@ func queryPixelDimensions(caps *HostCapabilities) {
 }
 
 func setDefaultCellSize(caps *HostCapabilities) {
-	// Calculate from pixel/cell ratio if available
 	if caps.PixelWidth > 0 && caps.Cols > 0 && caps.CellWidth == 0 {
 		caps.CellWidth = caps.PixelWidth / caps.Cols
 	}
@@ -163,97 +294,10 @@ func setDefaultCellSize(caps *HostCapabilities) {
 		caps.CellHeight = caps.PixelHeight / caps.Rows
 	}
 
-	// Terminal-specific defaults based on common font sizes
 	if caps.CellWidth == 0 {
-		switch caps.TerminalName {
-		case "kitty", "wezterm":
-			caps.CellWidth = 9 // Common for these terminals
-		case "ghostty":
-			caps.CellWidth = 10
-		default:
-			caps.CellWidth = 9 // Common monospace default
-		}
+		caps.CellWidth = 9
 	}
 	if caps.CellHeight == 0 {
-		switch caps.TerminalName {
-		case "kitty", "wezterm":
-			caps.CellHeight = 20 // Common for these terminals
-		case "ghostty":
-			caps.CellHeight = 22
-		default:
-			caps.CellHeight = 20 // Common monospace default
-		}
-	}
-}
-
-func queryWindowSize() (width, height int) {
-	_, _ = os.Stdout.WriteString("\x1b[14t")
-
-	response := readTerminalResponse(100 * time.Millisecond)
-	if response == "" {
-		return 0, 0
-	}
-
-	re := regexp.MustCompile(`\x1b\[4;(\d+);(\d+)t`)
-	matches := re.FindStringSubmatch(response)
-	if len(matches) == 3 {
-		height, _ = strconv.Atoi(matches[1])
-		width, _ = strconv.Atoi(matches[2])
-	}
-
-	return width, height
-}
-
-func queryCellSize() (width, height int) {
-	_, _ = os.Stdout.WriteString("\x1b[16t")
-
-	response := readTerminalResponse(100 * time.Millisecond)
-	if response == "" {
-		return 0, 0
-	}
-
-	re := regexp.MustCompile(`\x1b\[6;(\d+);(\d+)t`)
-	matches := re.FindStringSubmatch(response)
-	if len(matches) == 3 {
-		height, _ = strconv.Atoi(matches[1])
-		width, _ = strconv.Atoi(matches[2])
-	}
-
-	return width, height
-}
-
-func readTerminalResponse(timeout time.Duration) string {
-	done := make(chan string, 1)
-
-	go func() {
-		reader := bufio.NewReader(os.Stdin)
-		var result strings.Builder
-		deadline := time.Now().Add(timeout)
-
-		for time.Now().Before(deadline) {
-			if reader.Buffered() == 0 {
-				time.Sleep(5 * time.Millisecond)
-				continue
-			}
-
-			b, err := reader.ReadByte()
-			if err != nil {
-				break
-			}
-			result.WriteByte(b)
-
-			if b >= 'a' && b <= 'z' {
-				break
-			}
-		}
-
-		done <- result.String()
-	}()
-
-	select {
-	case result := <-done:
-		return result
-	case <-time.After(timeout):
-		return ""
+		caps.CellHeight = 20
 	}
 }

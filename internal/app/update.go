@@ -345,6 +345,10 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, gfxCmd)
 		}
 
+		if gfxCmd := m.GetSixelGraphicsCmd(); gfxCmd != nil {
+			cmds = append(cmds, gfxCmd)
+		}
+
 		if len(cmds) > 1 {
 			return m, tea.Sequence(cmds...)
 		}
