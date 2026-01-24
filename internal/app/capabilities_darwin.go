@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build darwin
 
 package app
 
@@ -9,12 +9,12 @@ import (
 )
 
 func isTerminal(fd uintptr) bool {
-	_, err := unix.IoctlGetTermios(int(fd), unix.TCGETS)
+	_, err := unix.IoctlGetTermios(int(fd), unix.TIOCGETA)
 	return err == nil
 }
 
 func makeRaw(fd uintptr) (*unix.Termios, error) {
-	termios, err := unix.IoctlGetTermios(int(fd), unix.TCGETS)
+	termios, err := unix.IoctlGetTermios(int(fd), unix.TIOCGETA)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func makeRaw(fd uintptr) (*unix.Termios, error) {
 	termios.Cc[unix.VMIN] = 1
 	termios.Cc[unix.VTIME] = 0
 
-	if err := unix.IoctlSetTermios(int(fd), unix.TCSETS, termios); err != nil {
+	if err := unix.IoctlSetTermios(int(fd), unix.TIOCSETA, termios); err != nil {
 		return nil, err
 	}
 
@@ -38,7 +38,7 @@ func makeRaw(fd uintptr) (*unix.Termios, error) {
 
 func restoreTerminal(fd uintptr, oldState *unix.Termios) {
 	if oldState != nil {
-		_ = unix.IoctlSetTermios(int(fd), unix.TCSETS, oldState)
+		_ = unix.IoctlSetTermios(int(fd), unix.TIOCSETA, oldState)
 	}
 }
 
