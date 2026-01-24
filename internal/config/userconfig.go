@@ -56,6 +56,7 @@ type KeybindingsConfig struct {
 	WorkspacePrefix  map[string][]string `toml:"workspace_prefix"`
 	DebugPrefix      map[string][]string `toml:"debug_prefix"`
 	TapePrefix       map[string][]string `toml:"tape_prefix"`
+	TerminalMode     map[string][]string `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
 }
 
 // DefaultConfig returns the default configuration
@@ -214,9 +215,25 @@ func DefaultConfig() *UserConfig {
 				"tape_prefix_stop":    {"s"},
 				"tape_prefix_cancel":  {"esc"},
 			},
+			TerminalMode: getDefaultTerminalModeKeybinds(),
 		},
 	}
 	return cfg
+}
+
+// getDefaultTerminalModeKeybinds returns platform-specific terminal mode keybindings
+// These are direct keybinds that work in terminal mode without the prefix key
+func getDefaultTerminalModeKeybinds() map[string][]string {
+	if isMacOS() {
+		return map[string][]string{
+			"terminal_next_window": {"opt+tab"},
+			"terminal_prev_window": {"opt+shift+tab"},
+		}
+	}
+	return map[string][]string{
+		"terminal_next_window": {"alt+tab"},
+		"terminal_prev_window": {"alt+shift+tab"},
+	}
 }
 
 // getDefaultWorkspaceKeybinds returns platform-specific workspace keybindings
@@ -548,6 +565,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.TapePrefix == nil {
 		cfg.Keybindings.TapePrefix = make(map[string][]string)
 	}
+	if cfg.Keybindings.TerminalMode == nil {
+		cfg.Keybindings.TerminalMode = make(map[string][]string)
+	}
 
 	// Set default leader key if not specified
 	if cfg.Keybindings.LeaderKey == "" {
@@ -568,6 +588,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
 	fillMapDefaults(cfg.Keybindings.DebugPrefix, defaultCfg.Keybindings.DebugPrefix)
 	fillMapDefaults(cfg.Keybindings.TapePrefix, defaultCfg.Keybindings.TapePrefix)
+	fillMapDefaults(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode)
 }
 
 func fillMapDefaults(target, defaults map[string][]string) {

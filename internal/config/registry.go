@@ -144,6 +144,7 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 		r.config.Keybindings.WindowPrefix,
 		r.config.Keybindings.MinimizePrefix,
 		r.config.Keybindings.WorkspacePrefix,
+		r.config.Keybindings.TerminalMode,
 	}
 
 	for _, section := range sections {
@@ -362,4 +363,8 @@ var ActionDescriptions = map[string]string{
 	"debug_prefix_cache":      "Toggle cache statistics",
 	"debug_prefix_animations": "Toggle animations",
 	"debug_prefix_cancel":     "Cancel debug prefix",
+
+	// Terminal Mode (direct keybinds, no prefix required)
+	"terminal_next_window": "Next window (terminal mode)",
+	"terminal_prev_window": "Previous window (terminal mode)",
 }

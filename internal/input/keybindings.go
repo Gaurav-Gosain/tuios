@@ -398,3 +398,20 @@ func IsMacOSOptionShiftKey(r rune) (digit int, ok bool) {
 		return 0, false
 	}
 }
+
+// IsMacOSOptionTab checks if a rune represents a macOS Option+Tab or Option+Shift+Tab key press.
+// Returns "next" for opt+tab (⇥), "prev" for opt+shift+tab (⇤), or "" if no match.
+//
+// macOS Option+Tab mappings:
+// Option+Tab → ⇥ (U+21E5, Rightwards Arrow to Bar)
+// Option+Shift+Tab → ⇤ (U+21E4, Leftwards Arrow to Bar)
+func IsMacOSOptionTab(r rune) string {
+	switch r {
+	case '⇥': // U+21E5 opt+tab
+		return "next"
+	case '⇤': // U+21E4 opt+shift+tab
+		return "prev"
+	default:
+		return ""
+	}
+}
