@@ -155,6 +155,7 @@ func (m *OS) View() tea.View {
 	view.MouseMode = tea.MouseModeAllMotion
 	view.ReportFocus = true
 	view.DisableBracketedPasteMode = false
+	view.Cursor = m.getRealCursor()
 
 	return view
 }
