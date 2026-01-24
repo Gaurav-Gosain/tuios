@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	tea "charm.land/bubbletea/v2"
 )
 
 // HandleTerminalModeKey handles keyboard input in terminal mode
@@ -258,6 +258,16 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Don't send workspace switching keys to the PTY
 	handled := handleWorkspaceSwitch(msg, o)
 	if handled {
+		return o, nil
+	}
+
+	// Handle Alt+Tab window cycling in terminal mode
+	if handleWindowCycle(msg, o) {
+		return o, nil
+	}
+
+	// Handle opt+esc to exit terminal mode (direct shortcut for ctrl+b esc)
+	if handleModeSwitch(msg, o) {
 		return o, nil
 	}
 
@@ -1254,6 +1264,63 @@ func handleWorkspaceSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
 	default:
 		return false
 	}
+}
+
+// handleModeSwitch handles opt+esc/alt+esc to exit terminal mode directly.
+// This is a shortcut equivalent to ctrl+b esc.
+func handleModeSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
+	keyStr := msg.String()
+
+	// opt+esc on macOS and alt+esc on Linux both produce alt+esc
+	if keyStr == "alt+esc" || keyStr == "alt+escape" {
+		o.Mode = app.WindowManagementMode
+		o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.InvalidateCache()
+		}
+		return true
+	}
+	return false
+}
+
+// handleWindowCycle handles Alt+Tab/Opt+Tab window cycling in terminal mode.
+// This allows cycling through windows without needing the prefix key.
+// On macOS, opt+tab produces ⇥ and opt+shift+tab produces ⇤.
+func handleWindowCycle(msg tea.KeyPressMsg, o *app.OS) bool {
+	keyStr := msg.String()
+
+	// Check for macOS Option+Tab unicode characters first
+	if len(keyStr) > 0 {
+		if dir := IsMacOSOptionTab([]rune(keyStr)[0]); dir != "" {
+			if dir == "next" {
+				o.CycleToNextVisibleWindow()
+			} else {
+				o.CycleToPreviousVisibleWindow()
+			}
+			// Refresh the new window in terminal mode
+			if newFocused := o.GetFocusedWindow(); newFocused != nil {
+				newFocused.InvalidateCache()
+			}
+			return true
+		}
+	}
+
+	// Linux alt+tab fallback
+	switch keyStr {
+	case "alt+tab":
+		o.CycleToNextVisibleWindow()
+		if newFocused := o.GetFocusedWindow(); newFocused != nil {
+			newFocused.InvalidateCache()
+		}
+		return true
+	case "alt+shift+tab":
+		o.CycleToPreviousVisibleWindow()
+		if newFocused := o.GetFocusedWindow(); newFocused != nil {
+			newFocused.InvalidateCache()
+		}
+		return true
+	}
+	return false
 }
 
 func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

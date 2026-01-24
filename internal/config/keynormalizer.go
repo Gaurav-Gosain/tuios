@@ -62,6 +62,12 @@ var macOptionShiftNumberMap = map[string]string{
 	"opt+shift+9": "·", "option+shift+9": "·",
 }
 
+// macOS Option+Tab key mappings
+var macOptionTabMap = map[string]string{
+	"opt+tab": "⇥", "option+tab": "⇥",
+	"opt+shift+tab": "⇤", "option+shift+tab": "⇤",
+}
+
 // NormalizeKey converts a key string to its canonical form for the current platform
 // For example, on macOS: "opt+1" → "¡" or "alt+1" depending on context
 func (kn *KeyNormalizer) NormalizeKey(key string) []string {
@@ -95,6 +101,13 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 			// Add the unicode character
 			result = append(result, strings.ToLower(unicode))
 			// Also map to alt+N
+			altKey := strings.Replace(keyLower, "opt+", "alt+", 1)
+			altKey = strings.Replace(altKey, "option+", "alt+", 1)
+			result = append(result, altKey)
+		} else if unicode, ok := macOptionTabMap[keyLower]; ok {
+			// Add the unicode character for opt+tab variants
+			result = append(result, unicode)
+			// Also map to alt+tab variant
 			altKey := strings.Replace(keyLower, "opt+", "alt+", 1)
 			altKey = strings.Replace(altKey, "option+", "alt+", 1)
 			result = append(result, altKey)

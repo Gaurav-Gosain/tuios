@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // HelpBinding represents a single keybinding for the help menu
@@ -40,6 +40,7 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 				"new_window", "close_window", "rename_window",
 				"minimize_window", "restore_all",
 				"next_window", "prev_window",
+				"terminal_next_window", "terminal_prev_window",
 			}),
 		},
 		{
@@ -75,6 +76,7 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 			Name: "Modes",
 			Bindings: generateCategoryBindings(registry, "Modes", []string{
 				"enter_terminal_mode", "enter_window_mode",
+				"terminal_exit_mode",
 				"toggle_help", "quit",
 			}),
 		},
