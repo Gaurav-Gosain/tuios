@@ -266,6 +266,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Handle opt+esc to exit terminal mode (direct shortcut for ctrl+b esc)
+	if handleModeSwitch(msg, o) {
+		return o, nil
+	}
+
 	// Handle paste shortcuts - intercept and request clipboard via OSC 52
 	keyStr := msg.String()
 	if keyStr == "ctrl+v" || keyStr == "ctrl+shift+v" || keyStr == "super+v" || keyStr == "super+shift+v" {
@@ -1259,6 +1264,23 @@ func handleWorkspaceSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
 	default:
 		return false
 	}
+}
+
+// handleModeSwitch handles opt+esc/alt+esc to exit terminal mode directly.
+// This is a shortcut equivalent to ctrl+b esc.
+func handleModeSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
+	keyStr := msg.String()
+
+	// opt+esc on macOS and alt+esc on Linux both produce alt+esc
+	if keyStr == "alt+esc" || keyStr == "alt+escape" {
+		o.Mode = app.WindowManagementMode
+		o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.InvalidateCache()
+		}
+		return true
+	}
+	return false
 }
 
 // handleWindowCycle handles Alt+Tab/Opt+Tab window cycling in terminal mode.

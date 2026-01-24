@@ -367,4 +367,5 @@ var ActionDescriptions = map[string]string{
 	// Terminal Mode (direct keybinds, no prefix required)
 	"terminal_next_window": "Next window (terminal mode)",
 	"terminal_prev_window": "Previous window (terminal mode)",
+	"terminal_exit_mode":   "Exit terminal mode (to window mode)",
 }

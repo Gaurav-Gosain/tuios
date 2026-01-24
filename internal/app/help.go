@@ -76,6 +76,7 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 			Name: "Modes",
 			Bindings: generateCategoryBindings(registry, "Modes", []string{
 				"enter_terminal_mode", "enter_window_mode",
+				"terminal_exit_mode",
 				"toggle_help", "quit",
 			}),
 		},

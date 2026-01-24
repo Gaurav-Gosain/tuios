@@ -228,11 +228,13 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 		return map[string][]string{
 			"terminal_next_window": {"opt+tab"},
 			"terminal_prev_window": {"opt+shift+tab"},
+			"terminal_exit_mode":   {"opt+esc"},
 		}
 	}
 	return map[string][]string{
 		"terminal_next_window": {"alt+tab"},
 		"terminal_prev_window": {"alt+shift+tab"},
+		"terminal_exit_mode":   {"alt+esc"},
 	}
 }
 
