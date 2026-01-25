@@ -5,9 +5,9 @@ import (
 	"image/color"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -62,6 +62,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		copyModeCursorX = window.CopyMode.CursorX
 		copyModeCursorY = window.CopyMode.CursorY
 	}
+
+	// Skip fake cursor rendering when real terminal cursor is active
+	useRealCursor := m.getRealCursor() != nil
 
 	var searchHighlights map[int]map[int]bool
 	var currentMatchHighlight map[int]map[int]bool
@@ -454,7 +457,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 
 			isSelected := (window.IsSelecting || window.SelectedText != "") && m.isPositionInSelection(window, x, y)
-			isCursorPos := isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
+			// Only render fake cursor when real terminal cursor is not being used
+			isCursorPos := !useRealCursor && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
 
 			isSelectionCursor := m.SelectionMode && !inTerminalMode && isFocused &&
 				x == window.SelectionCursor.X && y == window.SelectionCursor.Y
