@@ -162,11 +162,20 @@ func handleClipboardPaste(o *app.OS) {
 		return
 	}
 
-	// Use the terminal's Paste method which automatically handles bracketed paste mode
-	// If the application running in the terminal has enabled bracketed paste mode,
-	// the text will be wrapped with \x1b[200~ ... \x1b[201~ escape sequences
-	if focusedWindow.Terminal != nil {
-		focusedWindow.Terminal.Paste(o.ClipboardContent)
-		o.ShowNotification(fmt.Sprintf("Pasted %d characters", len(o.ClipboardContent)), "success", config.NotificationDuration)
+	// Build paste content with bracketed paste sequences if the app has enabled it.
+	// We use SendInput() instead of Terminal.Paste() because in daemon mode,
+	// Terminal.Paste() writes to an internal pipe that gets drained by
+	// StartDaemonResponseReader() - the data never reaches the PTY.
+	// SendInput() properly routes through DaemonWriteFunc in daemon mode.
+	pasteContent := o.ClipboardContent
+	if focusedWindow.Terminal != nil && focusedWindow.Terminal.BracketedPasteEnabled() {
+		pasteContent = "\x1b[200~" + pasteContent + "\x1b[201~"
 	}
+
+	if err := focusedWindow.SendInput([]byte(pasteContent)); err != nil {
+		o.ShowNotification("Paste failed", "error", config.NotificationDuration)
+		return
+	}
+
+	o.ShowNotification(fmt.Sprintf("Pasted %d characters", len(o.ClipboardContent)), "success", config.NotificationDuration)
 }

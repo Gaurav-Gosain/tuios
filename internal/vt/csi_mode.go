@@ -117,3 +117,9 @@ func (e *Emulator) isModeSet(mode ansi.Mode) bool {
 func (e *Emulator) ApplicationCursorKeys() bool {
 	return e.isModeSet(ansi.ModeCursorKeys)
 }
+
+// BracketedPasteEnabled returns true if bracketed paste mode (?2004) is enabled.
+// When enabled, pasted text should be wrapped with escape sequences.
+func (e *Emulator) BracketedPasteEnabled() bool {
+	return e.isModeSet(ansi.ModeBracketedPaste)
+}
