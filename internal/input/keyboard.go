@@ -1305,15 +1305,15 @@ func handleWindowCycle(msg tea.KeyPressMsg, o *app.OS) bool {
 		}
 	}
 
-	// Linux alt+tab fallback
+	// Linux/Windows alt+n/alt+p fallback (alt+tab conflicts with OS window switcher)
 	switch keyStr {
-	case "alt+tab":
+	case "alt+n":
 		o.CycleToNextVisibleWindow()
 		if newFocused := o.GetFocusedWindow(); newFocused != nil {
 			newFocused.InvalidateCache()
 		}
 		return true
-	case "alt+shift+tab":
+	case "alt+p":
 		o.CycleToPreviousVisibleWindow()
 		if newFocused := o.GetFocusedWindow(); newFocused != nil {
 			newFocused.InvalidateCache()
