@@ -262,11 +262,18 @@ func (c *TUIClient) SubscribePTY(ptyID string, handler func([]byte)) error {
 	return c.send(msg)
 }
 
-// UnsubscribePTY removes the PTY output handler.
+// UnsubscribePTY removes the PTY output handler and tells the daemon to stop streaming.
 func (c *TUIClient) UnsubscribePTY(ptyID string) {
 	c.ptyHandlersMu.Lock()
 	delete(c.ptyHandlers, ptyID)
 	c.ptyHandlersMu.Unlock()
+
+	// Send unsubscribe message to daemon to stop streaming
+	msg, err := NewMessageWithCodec(MsgUnsubscribePTY, &UnsubscribePTYPayload{PTYID: ptyID}, c.codec)
+	if err != nil {
+		return // Silent failure - handler already removed locally
+	}
+	_ = c.send(msg)
 }
 
 // OnPTYClosed registers a handler to be called when the PTY process exits.
@@ -358,7 +365,7 @@ func (c *TUIClient) SendCommandResult(requestID string, success bool, message st
 }
 
 // SendCommandResultWithData sends the result with optional structured data.
-func (c *TUIClient) SendCommandResultWithData(requestID string, success bool, message string, data map[string]interface{}) error {
+func (c *TUIClient) SendCommandResultWithData(requestID string, success bool, message string, data map[string]any) error {
 	msg, err := NewMessageWithCodec(MsgCommandResult, &CommandResultPayload{
 		RequestID: requestID,
 		Success:   success,

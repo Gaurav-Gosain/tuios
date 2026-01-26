@@ -294,9 +294,10 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 			log.Printf("Warning: Failed to restore terminal states: %v", err)
 		}
 
-		// Set up PTY output handlers for existing windows
-		for _, win := range tuiosInstance.Windows {
-			setupPTYHandler(tuiosInstance, client, win)
+		// Set up PTY output handlers for existing windows (workspace-aware)
+		// This only subscribes to PTYs for windows in the current workspace
+		if err := tuiosInstance.SetupPTYOutputHandlers(); err != nil {
+			log.Printf("Warning: Failed to setup PTY handlers: %v", err)
 		}
 	}
 
@@ -308,49 +309,6 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 	}, nil
 }
 
-// setupPTYHandler sets up input/output handling for a window's PTY
-func setupPTYHandler(m *app.OS, client *session.TUIClient, win *terminal.Window) {
-	if win.PTYID == "" {
-		log.Printf("[SSH] setupPTYHandler: window %s has no PTYID, skipping", win.ID[:8])
-		return
-	}
-
-	ptyID := win.PTYID
-	log.Printf("[SSH] Setting up PTY handler for window %s, PTYID=%s", win.ID[:8], ptyID[:8])
-
-	// CRITICAL: Set up the daemon write function for input
-	// Without this, SendInput will fail and typing won't work
-	win.DaemonWriteFunc = func(data []byte) error {
-		return client.WritePTY(ptyID, data)
-	}
-
-	// Set up the daemon resize function
-	win.DaemonResizeFunc = func(width, height int) error {
-		return client.ResizePTY(ptyID, width, height)
-	}
-
-	// Start the response reader to handle DA queries and other terminal responses
-	win.StartDaemonResponseReader()
-
-	// Subscribe to PTY output
-	err := client.SubscribePTY(ptyID, func(data []byte) {
-		win.WriteOutputAsync(data)
-	})
-	if err != nil {
-		log.Printf("[SSH] Failed to subscribe to PTY %s: %v", ptyID[:8], err)
-	}
-
-	// Handle PTY close
-	windowID := win.ID
-	client.OnPTYClosed(ptyID, func() {
-		log.Printf("[SSH] PTY closed for window %s", windowID[:8])
-		// Send a message to close the window through the window exit channel
-		select {
-		case m.WindowExitChan <- windowID:
-		default:
-		}
-	})
-}
 
 // registerMultiClientHandlers registers handlers for multi-client messages
 func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {

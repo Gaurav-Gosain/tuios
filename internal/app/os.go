@@ -167,6 +167,7 @@ type OS struct {
 	DaemonClient      *session.TUIClient // Client for daemon communication (nil in local mode)
 	SessionName       string             // Name of the daemon session (if attached)
 	RestoredFromState bool               // True after RestoreFromState, cleared after first resize
+	SubscribedPTYs    map[string]bool    // Tracks which PTY IDs are currently subscribed (for visibility optimization)
 	// Multi-client effective size (min of all clients in session)
 	EffectiveWidth  int // Effective width for rendering (min of all clients, 0 = use terminal size)
 	EffectiveHeight int // Effective height for rendering (min of all clients, 0 = use terminal size)
@@ -278,14 +279,8 @@ func (m *OS) Log(level, format string, args ...any) {
 		if totalLogs > maxDisplayHeight-fixedLines {
 			fixedLines = 6
 		}
-		logsPerPage := maxDisplayHeight - fixedLines
-		if logsPerPage < 1 {
-			logsPerPage = 1
-		}
-		maxScroll := totalLogs - logsPerPage
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
+		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
+		maxScroll := max(totalLogs-logsPerPage, 0)
 		m.LogScrollOffset = maxScroll
 	}
 }
@@ -1327,7 +1322,7 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 
 	// Extract text line by line
 	for y := startY; y <= endY; y++ {
-		line := ""
+		var lineBuilder strings.Builder
 
 		// Determine start and end columns for this line
 		lineStartX := 0
@@ -1345,13 +1340,13 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 			// Get the cell from the terminal at this position
 			cell := window.Terminal.CellAt(x, y)
 			if cell != nil && cell.Content != "" {
-				line += string(cell.Content)
+				lineBuilder.WriteString(string(cell.Content))
 			} else {
-				line += " "
+				lineBuilder.WriteByte(' ')
 			}
 		}
 
-		selectedLines = append(selectedLines, line)
+		selectedLines = append(selectedLines, lineBuilder.String())
 	}
 
 	return strings.Join(selectedLines, "\n")

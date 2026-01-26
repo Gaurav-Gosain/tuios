@@ -69,6 +69,13 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	}
 	m.SaveCurrentLayout() // Save layout before switching
 
+	// Unsubscribe from old workspace PTYs and subscribe to new workspace PTYs
+	// This optimization reduces network traffic by only streaming output for visible windows
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		m.UnsubscribeWorkspaceWindows(oldWorkspace)
+		m.SubscribeWorkspaceWindows(workspace)
+	}
+
 	// Switch to new workspace
 	m.CurrentWorkspace = workspace
 	m.RestoreWorkspaceLayout(workspace) // Restore layout after switching
@@ -160,6 +167,11 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 
 	m.LogInfo("Moving window %s: workspace %d → %d", window.Title, oldWorkspace, workspace)
 
+	// If window is moving away from the current visible workspace, unsubscribe from its PTY
+	if m.IsDaemonSession && m.DaemonClient != nil && oldWorkspace == m.CurrentWorkspace {
+		m.unsubscribeFromPTY(window)
+	}
+
 	// Move window to new workspace FIRST
 	window.Workspace = workspace
 	window.MarkPositionDirty()
@@ -196,6 +208,12 @@ func (m *OS) MoveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
 
 	if oldWorkspace == workspace {
 		return // Already in target workspace
+	}
+
+	// If window is moving away from the current visible workspace, unsubscribe from its PTY
+	// This must be done BEFORE changing window.Workspace, so we can track it correctly
+	if m.IsDaemonSession && m.DaemonClient != nil && oldWorkspace == m.CurrentWorkspace {
+		m.unsubscribeFromPTY(window)
 	}
 
 	// Move window to new workspace FIRST

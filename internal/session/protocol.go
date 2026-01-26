@@ -30,6 +30,7 @@ const (
 	MsgGetState                                // Get session state
 	MsgUpdateState                             // Update session state
 	MsgSubscribePTY                            // Subscribe to PTY output
+	MsgUnsubscribePTY                          // Unsubscribe from PTY output
 	MsgGetTerminalState                        // Get terminal state for a PTY
 	MsgExecuteCommand                          // Execute a tape command (routed to TUI)
 	MsgSendKeys                                // Send keystrokes to focused window
@@ -219,6 +220,11 @@ type SubscribePTYPayload struct {
 	PTYID string `json:"pty_id"`
 }
 
+// UnsubscribePTYPayload requests unsubscribing from PTY output.
+type UnsubscribePTYPayload struct {
+	PTYID string `json:"pty_id"`
+}
+
 // GetTerminalStatePayload requests terminal state for a PTY.
 type GetTerminalStatePayload struct {
 	PTYID              string `json:"pty_id"`
@@ -265,7 +271,7 @@ type CommandResultPayload struct {
 	RequestID string                 `json:"request_id,omitempty"` // Matches the request
 	Success   bool                   `json:"success"`              // Whether the command succeeded
 	Message   string                 `json:"message,omitempty"`    // Result message or error
-	Data      map[string]interface{} `json:"data,omitempty"`       // Structured data (window_id, etc.)
+	Data      map[string]any `json:"data,omitempty"`       // Structured data (window_id, etc.)
 }
 
 // RemoteCommandPayload is sent from daemon to TUI client for execution.

@@ -322,6 +322,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleUpdateState(cs, msg)
 	case MsgSubscribePTY:
 		return d.handleSubscribePTY(cs, msg)
+	case MsgUnsubscribePTY:
+		return d.handleUnsubscribePTY(cs, msg)
 	case MsgGetTerminalState:
 		return d.handleGetTerminalState(cs, msg)
 	case MsgExecuteCommand:
@@ -766,6 +768,38 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	cs.ptySubscriptions[payload.PTYID] = struct{}{}
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
 	go d.streamPTYOutput(cs, pty)
+
+	return nil
+}
+
+func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
+	debugLog("[DEBUG] handleUnsubscribePTY called for client %s", cs.clientID)
+
+	if cs.sessionID == "" {
+		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+	}
+
+	session := d.manager.GetSessionByID(cs.sessionID)
+	if session == nil {
+		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
+	}
+
+	var payload UnsubscribePTYPayload
+	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+		return fmt.Errorf("invalid unsubscribe PTY payload: %w", err)
+	}
+
+	debugLog("[DEBUG] Unsubscribing from PTY %s", payload.PTYID)
+
+	// Remove from subscriptions
+	delete(cs.ptySubscriptions, payload.PTYID)
+
+	// Unsubscribe from the PTY output channel
+	pty := session.GetPTY(payload.PTYID)
+	if pty != nil {
+		pty.Unsubscribe(cs.clientID)
+		debugLog("[DEBUG] Successfully unsubscribed client %s from PTY %s", cs.clientID, payload.PTYID[:8])
+	}
 
 	return nil
 }
@@ -1289,10 +1323,10 @@ func (d *Daemon) handleQueryWindows(cs *connState, msg *Message) error {
 	state := session.GetState()
 
 	// Build window list from state
-	windows := make([]map[string]interface{}, 0, len(state.Windows))
+	windows := make([]map[string]any, 0, len(state.Windows))
 	for i, w := range state.Windows {
 		isFocused := w.ID == state.FocusedWindowID
-		winInfo := map[string]interface{}{
+		winInfo := map[string]any{
 			"window_id":    w.ID,
 			"index":        i,
 			"title":        w.Title,
@@ -1331,7 +1365,7 @@ func (d *Daemon) handleQueryWindows(cs *connState, msg *Message) error {
 		}
 	}
 
-	resultData := map[string]interface{}{
+	resultData := map[string]any{
 		"windows":           windows,
 		"total":             len(state.Windows),
 		"focused_index":     focusedIndex,
@@ -1375,7 +1409,7 @@ func (d *Daemon) handleQuerySession(cs *connState, msg *Message) error {
 		tilingMode = "tiling"
 	}
 
-	resultData := map[string]interface{}{
+	resultData := map[string]any{
 		"session_name":      state.Name,
 		"session_id":        session.ID,
 		"mode":              "unknown", // Can't know mode without TUI

@@ -3,6 +3,7 @@ package app
 
 import (
 	"bytes"
+	"maps"
 	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
@@ -143,9 +144,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	// Save window to BSP ID mapping
 	if m.WindowToBSPID != nil {
 		state.WindowToBSPID = make(map[string]int)
-		for k, v := range m.WindowToBSPID {
-			state.WindowToBSPID[k] = v
-		}
+		maps.Copy(state.WindowToBSPID, m.WindowToBSPID)
 	}
 	state.NextBSPWindowID = m.NextBSPWindowID
 	state.TilingScheme = int(m.TilingScheme)
@@ -389,9 +388,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// Update BSP state
 	if state.WindowToBSPID != nil {
 		m.WindowToBSPID = make(map[string]int)
-		for k, v := range state.WindowToBSPID {
-			m.WindowToBSPID[k] = v
-		}
+		maps.Copy(m.WindowToBSPID, state.WindowToBSPID)
 	}
 	m.NextBSPWindowID = state.NextBSPWindowID
 	m.TilingScheme = layout.AutoScheme(state.TilingScheme)
@@ -530,29 +527,25 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 
 		window.StartDaemonResponseReader()
 
-		// Subscribe to PTY output
-		err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
-			passThroughCursorStyle(data)
-			window.WriteOutputAsync(data)
-		})
-		if err != nil {
-			// Log but continue - window is still usable
-			m.LogError("Failed to subscribe to PTY: %v", err)
+		// Only subscribe to PTY output if window is in current workspace
+		// Windows in other workspaces will be subscribed when switching to them
+		if ws.Workspace == m.CurrentWorkspace {
+			m.subscribeToPTY(window)
+
+			// Get terminal content for visible windows
+			termState, err := m.DaemonClient.GetTerminalState(ptyID, true)
+			if err == nil && termState != nil {
+				m.restoreTerminalContent(window, termState)
+			}
 		}
 
-		// Register exit handler
+		// Register exit handler (always needed regardless of workspace)
 		windowID := window.ID
 		m.DaemonClient.OnPTYClosed(ptyID, func() {
 			if m.WindowExitChan != nil {
 				m.WindowExitChan <- windowID
 			}
 		})
-
-		// Get terminal content
-		termState, err := m.DaemonClient.GetTerminalState(ptyID, true)
-		if err == nil && termState != nil {
-			m.restoreTerminalContent(window, termState)
-		}
 
 		window.EnableCallbacks()
 	}
@@ -563,7 +556,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 // closeWindowFromSync closes a window that was deleted by another client
 func (m *OS) closeWindowFromSync(w *terminal.Window) {
 	if m.DaemonClient != nil && w.PTYID != "" {
-		m.DaemonClient.UnsubscribePTY(w.PTYID)
+		m.unsubscribeFromPTY(w)
 	}
 	w.Close()
 }
@@ -699,16 +692,22 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 
 // SetupPTYOutputHandlers sets up PTY output handlers for all daemon-mode windows.
 // This should be called after RestoreFromState() when attaching to a session.
+// Only subscribes to PTYs for windows in the current workspace (visibility optimization).
 func (m *OS) SetupPTYOutputHandlers() error {
 	if m.DaemonClient == nil {
 		m.LogInfo("[SETUP] SetupPTYOutputHandlers: no daemon client")
 		return nil
 	}
 
+	// Initialize subscribed PTYs map
+	if m.SubscribedPTYs == nil {
+		m.SubscribedPTYs = make(map[string]bool)
+	}
+
 	m.LogInfo("[SETUP] SetupPTYOutputHandlers: setting up handlers for %d windows", len(m.Windows))
 
 	for i, w := range m.Windows {
-		m.LogInfo("[SETUP] Window %d: DaemonMode=%v, PTYID=%s", i, w.DaemonMode, w.PTYID)
+		m.LogInfo("[SETUP] Window %d: DaemonMode=%v, PTYID=%s, Workspace=%d", i, w.DaemonMode, w.PTYID, w.Workspace)
 		if w.DaemonMode && w.PTYID != "" {
 			// Capture window and ptyID for closures
 			window := w
@@ -727,19 +726,10 @@ func (m *OS) SetupPTYOutputHandlers() error {
 			// Start the response reader to handle DA queries and other terminal responses
 			window.StartDaemonResponseReader()
 
-			// Subscribe to PTY output - use async to avoid blocking readLoop
-			m.LogInfo("[SETUP] Subscribing to PTY %s for window %d", ptyID[:8], i)
-			err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
-				m.LogInfo("[OUTPUT] Received %d bytes for PTY %s", len(data), ptyID[:8])
-				// Pass through cursor style sequences directly to parent terminal
-				// since the VT emulator absorbs them
-				passThroughCursorStyle(data)
-				window.WriteOutputAsync(data)
-			})
-			if err != nil {
-				m.LogError("Failed to subscribe to PTY %s: %v", ptyID[:8], err)
-			} else {
-				m.LogInfo("[SETUP] Successfully subscribed to PTY %s", ptyID[:8])
+			// Only subscribe to PTYs for windows in the current workspace
+			// Windows in other workspaces will be subscribed when switching to them
+			if w.Workspace == m.CurrentWorkspace {
+				m.subscribeToPTY(window)
 			}
 
 			// Register handler for when PTY process exits
@@ -753,6 +743,95 @@ func (m *OS) SetupPTYOutputHandlers() error {
 	}
 
 	return nil
+}
+
+// subscribeToPTY subscribes to PTY output for a window.
+// Safe to call multiple times - will not double-subscribe.
+func (m *OS) subscribeToPTY(window *terminal.Window) {
+	if m.DaemonClient == nil || window.PTYID == "" {
+		return
+	}
+
+	ptyID := window.PTYID
+
+	// Check if already subscribed
+	if m.SubscribedPTYs[ptyID] {
+		return
+	}
+
+	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", ptyID[:8], window.ID[:8])
+	err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
+		// Pass through cursor style sequences directly to parent terminal
+		// since the VT emulator absorbs them
+		passThroughCursorStyle(data)
+		window.WriteOutputAsync(data)
+	})
+	if err != nil {
+		m.LogError("Failed to subscribe to PTY %s: %v", ptyID[:8], err)
+	} else {
+		m.SubscribedPTYs[ptyID] = true
+		m.LogInfo("[SUBSCRIBE] Successfully subscribed to PTY %s", ptyID[:8])
+	}
+}
+
+// unsubscribeFromPTY unsubscribes from PTY output for a window.
+func (m *OS) unsubscribeFromPTY(window *terminal.Window) {
+	if m.DaemonClient == nil || window.PTYID == "" {
+		return
+	}
+
+	ptyID := window.PTYID
+
+	// Check if actually subscribed
+	if !m.SubscribedPTYs[ptyID] {
+		return
+	}
+
+	m.LogInfo("[UNSUBSCRIBE] Unsubscribing from PTY %s for window %s", ptyID[:8], window.ID[:8])
+	m.DaemonClient.UnsubscribePTY(ptyID)
+	delete(m.SubscribedPTYs, ptyID)
+}
+
+// SubscribeWorkspaceWindows subscribes to PTY output for all windows in the specified workspace.
+// Also fetches terminal state for windows that need to be populated.
+func (m *OS) SubscribeWorkspaceWindows(workspace int) {
+	if m.DaemonClient == nil {
+		return
+	}
+
+	m.LogInfo("[WORKSPACE] Subscribing to windows in workspace %d", workspace)
+
+	for _, w := range m.Windows {
+		if w.DaemonMode && w.PTYID != "" && w.Workspace == workspace {
+			// Only subscribe if not already subscribed
+			if !m.SubscribedPTYs[w.PTYID] {
+				// Fetch terminal state first to populate the buffer
+				termState, err := m.DaemonClient.GetTerminalState(w.PTYID, true)
+				if err == nil && termState != nil {
+					m.restoreTerminalContent(w, termState)
+					m.LogInfo("[WORKSPACE] Restored terminal state for window %s", w.ID[:8])
+				}
+
+				// Then subscribe for live updates
+				m.subscribeToPTY(w)
+			}
+		}
+	}
+}
+
+// UnsubscribeWorkspaceWindows unsubscribes from PTY output for all windows in the specified workspace.
+func (m *OS) UnsubscribeWorkspaceWindows(workspace int) {
+	if m.DaemonClient == nil {
+		return
+	}
+
+	m.LogInfo("[WORKSPACE] Unsubscribing from windows in workspace %d", workspace)
+
+	for _, w := range m.Windows {
+		if w.DaemonMode && w.PTYID != "" && w.Workspace == workspace {
+			m.unsubscribeFromPTY(w)
+		}
+	}
 }
 
 // AddDaemonWindow creates a new window using a daemon-managed PTY.
@@ -850,15 +929,9 @@ func (m *OS) AddDaemonWindow(title string) *OS {
 	// Start the response reader to handle DA queries and other terminal responses
 	window.StartDaemonResponseReader()
 
-	// Subscribe to PTY output - use async to avoid blocking readLoop
-	err = m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
-		// Pass through cursor style sequences directly to parent terminal
-		passThroughCursorStyle(data)
-		window.WriteOutputAsync(data)
-	})
-	if err != nil {
-		m.LogError("Failed to subscribe to PTY: %v", err)
-	}
+	// Subscribe to PTY output (new windows are always in current workspace, so always subscribe)
+	// Use the helper function to track the subscription
+	m.subscribeToPTY(window)
 
 	// Register handler for when PTY process exits (e.g., Ctrl+D)
 	windowID := window.ID
