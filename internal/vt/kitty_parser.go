@@ -19,14 +19,7 @@ func ParseKittyCommand(data []byte) (*KittyCommand, error) {
 		Format: KittyFormatRGBA,
 	}
 
-	semicolonIdx := bytes.IndexByte(data, ';')
-	var controlPart, dataPart []byte
-	if semicolonIdx == -1 {
-		controlPart = data
-	} else {
-		controlPart = data[:semicolonIdx]
-		dataPart = data[semicolonIdx+1:]
-	}
+	controlPart, dataPart, _ := bytes.Cut(data, []byte{';'})
 
 	if len(controlPart) > 0 {
 		parseKittyControlParams(string(controlPart), cmd)
@@ -58,17 +51,14 @@ func ParseKittyCommand(data []byte) (*KittyCommand, error) {
 }
 
 func parseKittyControlParams(control string, cmd *KittyCommand) {
-	pairs := strings.Split(control, ",")
-	for _, pair := range pairs {
+	for pair := range strings.SplitSeq(control, ",") {
 		if pair == "" {
 			continue
 		}
-		eqIdx := strings.IndexByte(pair, '=')
-		if eqIdx == -1 {
+		key, value, ok := strings.Cut(pair, "=")
+		if !ok {
 			continue
 		}
-		key := pair[:eqIdx]
-		value := pair[eqIdx+1:]
 
 		switch key {
 		case "a":

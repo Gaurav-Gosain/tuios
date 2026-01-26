@@ -224,9 +224,7 @@ func handlePrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // makeSelectWindowHandler creates a handler for selecting a window by index
 func makeSelectWindowHandler(_ int) ActionHandler {
-	return func(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		return handleNumberKey(msg, o)
-	}
+	return handleNumberKey
 }
 
 // ============================================================================

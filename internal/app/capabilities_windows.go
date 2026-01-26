@@ -57,10 +57,7 @@ func queryTerminalSize(caps *HostCapabilities) {
 // pollReadable on Windows - uses WaitForSingleObject
 func pollReadable(fd uintptr, timeout time.Duration) (bool, error) {
 	handle := windows.Handle(fd)
-	timeoutMs := uint32(timeout.Milliseconds())
-	if timeoutMs < 1 {
-		timeoutMs = 1
-	}
+	timeoutMs := max(uint32(timeout.Milliseconds()), 1)
 
 	ret, err := windows.WaitForSingleObject(handle, timeoutMs)
 	if err != nil {

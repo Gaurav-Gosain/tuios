@@ -882,7 +882,7 @@ func (w *Window) handleIOOperations() {
 								actualY := pos.Y + 1
 								actualX := pos.X + 1
 								// Replace with corrected cursor position
-								data = []byte(fmt.Sprintf("\x1b[%d;%dR", actualY, actualX))
+								data = fmt.Appendf(nil, "\x1b[%d;%dR", actualY, actualX)
 							}
 							w.ioMu.RUnlock()
 						}

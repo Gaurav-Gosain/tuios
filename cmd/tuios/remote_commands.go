@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/signal"
 	"strings"
@@ -245,7 +246,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 	resp, err := client.SendControlMessage(msg)
 	if err != nil {
 		if jsonOutput {
-			outputJSON(map[string]interface{}{
+			outputJSON(map[string]any{
 				"success": false,
 				"error":   fmt.Sprintf("failed to send command: %v", err),
 			})
@@ -260,7 +261,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 		var result session.CommandResultPayload
 		if err := resp.ParsePayloadWithCodec(&result, client.GetCodec()); err != nil {
 			if jsonOutput {
-				outputJSON(map[string]interface{}{
+				outputJSON(map[string]any{
 					"success": false,
 					"error":   fmt.Sprintf("failed to parse response: %v", err),
 				})
@@ -269,14 +270,12 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 		if jsonOutput {
-			output := map[string]interface{}{
+			output := map[string]any{
 				"success": result.Success,
 				"message": result.Message,
 			}
 			// Merge any additional data from the result
-			for k, v := range result.Data {
-				output[k] = v
-			}
+			maps.Copy(output, result.Data)
 			outputJSON(output)
 			if !result.Success {
 				os.Exit(1)
@@ -293,7 +292,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 		var errPayload session.ErrorPayload
 		if err := resp.ParsePayloadWithCodec(&errPayload, client.GetCodec()); err != nil {
 			if jsonOutput {
-				outputJSON(map[string]interface{}{
+				outputJSON(map[string]any{
 					"success": false,
 					"error":   "command failed with unknown error",
 				})
@@ -302,7 +301,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 			return fmt.Errorf("command failed with unknown error")
 		}
 		if jsonOutput {
-			outputJSON(map[string]interface{}{
+			outputJSON(map[string]any{
 				"success": false,
 				"error":   errPayload.Message,
 			})
@@ -314,7 +313,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 	default:
 		// Command was sent, we got some response
 		if jsonOutput {
-			outputJSON(map[string]interface{}{
+			outputJSON(map[string]any{
 				"success":    true,
 				"request_id": requestID[:8],
 			})
@@ -326,7 +325,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 }
 
 // outputJSON outputs a value as JSON to stdout.
-func outputJSON(v interface{}) {
+func outputJSON(v any) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(v)
@@ -577,7 +576,7 @@ func getConfigPathCompletions(toComplete string) []string {
 }
 
 // getConfigValueCompletions returns completions for set-config values.
-func getConfigValueCompletions(path, toComplete string) []string {
+func getConfigValueCompletions(path, _ string) []string {
 	switch path {
 	case "dockbar_position", "appearance.dockbar_position":
 		return []string{"top", "bottom", "hidden"}

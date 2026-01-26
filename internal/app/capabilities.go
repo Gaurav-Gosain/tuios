@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -75,10 +76,10 @@ func DetectHostCapabilities() *HostCapabilities {
 	// Debug output if requested - writes to /tmp/tuios_caps.log
 	if os.Getenv("TUIOS_DEBUG_CAPS") == "1" {
 		if f, err := os.OpenFile("/tmp/tuios_caps.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644); err == nil {
-			fmt.Fprintf(f, "Terminal: %s\nKitty: %v\nSixel: %v\nTrueColor: %v\nCell: %dx%d\nPixel: %dx%d\n",
+			_, _ = fmt.Fprintf(f, "Terminal: %s\nKitty: %v\nSixel: %v\nTrueColor: %v\nCell: %dx%d\nPixel: %dx%d\n",
 				caps.TerminalName, caps.KittyGraphics, caps.SixelGraphics, caps.TrueColor,
 				caps.CellWidth, caps.CellHeight, caps.PixelWidth, caps.PixelHeight)
-			f.Close()
+			_ = f.Close()
 		}
 	}
 
@@ -150,7 +151,7 @@ func queryGraphicsSupport(caps *HostCapabilities) {
 	if err != nil {
 		return
 	}
-	defer tty.Close()
+	defer func() { _ = tty.Close() }()
 
 	oldState, err := makeRaw(tty.Fd())
 	if err != nil {
@@ -159,8 +160,8 @@ func queryGraphicsSupport(caps *HostCapabilities) {
 	defer restoreTerminal(tty.Fd(), oldState)
 
 	// Send both queries at once
-	tty.WriteString("\x1b[c")                                      // DA1 for sixel
-	tty.WriteString("\x1b_Gi=1,a=q,t=d,f=24,s=1,v=1;AAAA\x1b\\") // Kitty graphics query
+	_, _ = tty.WriteString("\x1b[c")                                      // DA1 for sixel
+	_, _ = tty.WriteString("\x1b_Gi=1,a=q,t=d,f=24,s=1,v=1;AAAA\x1b\\") // Kitty graphics query
 
 	// Read response with timeout (300ms to account for slower terminals)
 	response := readTTYResponse(tty, 300*time.Millisecond)
@@ -168,11 +169,8 @@ func queryGraphicsSupport(caps *HostCapabilities) {
 	// Parse DA1 response for sixel (look for "4" in params)
 	da1Re := regexp.MustCompile(`\x1b\[\?([0-9;]+)c`)
 	if matches := da1Re.FindStringSubmatch(response); len(matches) >= 2 {
-		for _, p := range strings.Split(matches[1], ";") {
-			if p == "4" {
-				caps.SixelGraphics = true
-				break
-			}
+		if slices.Contains(slices.Collect(strings.SplitSeq(matches[1], ";")), "4") {
+			caps.SixelGraphics = true
 		}
 	}
 
@@ -244,7 +242,7 @@ func queryPixelDimensions(caps *HostCapabilities) {
 		setDefaultCellSize(caps)
 		return
 	}
-	defer tty.Close()
+	defer func() { _ = tty.Close() }()
 
 	oldState, err := makeRaw(tty.Fd())
 	if err != nil {
@@ -254,7 +252,7 @@ func queryPixelDimensions(caps *HostCapabilities) {
 	defer restoreTerminal(tty.Fd(), oldState)
 
 	// Query window size in pixels
-	tty.WriteString("\x1b[14t")
+	_, _ = tty.WriteString("\x1b[14t")
 	response := readTTYResponse(tty, 100*time.Millisecond)
 	if re := regexp.MustCompile(`\x1b\[4;(\d+);(\d+)t`); response != "" {
 		if matches := re.FindStringSubmatch(response); len(matches) == 3 {

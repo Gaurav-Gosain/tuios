@@ -18,7 +18,7 @@ func TestScrollbackRingBuffer(t *testing.T) {
 	}
 
 	// Push lines until full
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		line := []uv.Cell{{Content: string(rune('A' + i)), Width: 1}}
 		sb.PushLine(line)
 	}
@@ -75,7 +75,7 @@ func TestScrollbackSoftWrapping(t *testing.T) {
 func TestScrollbackClear(t *testing.T) {
 	sb := NewScrollback(10)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		line := []uv.Cell{{Content: string(rune('A' + i)), Width: 1}}
 		sb.PushLine(line)
 	}
@@ -99,7 +99,7 @@ func TestScrollbackSetMaxLines(t *testing.T) {
 	sb := NewScrollback(10)
 
 	// Fill with 8 lines
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		line := []uv.Cell{{Content: string(rune('A' + i)), Width: 1}}
 		sb.PushLine(line)
 	}

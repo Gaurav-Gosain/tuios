@@ -218,14 +218,14 @@ func TestCalculateTilingLayout_ZeroWindows(t *testing.T) {
 
 // BenchmarkCalculateTilingLayout benchmarks the tiling calculation
 func BenchmarkCalculateTilingLayout(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = CalculateTilingLayout(10, 1920, 1080, 0, 0.5)
 	}
 }
 
 // BenchmarkCalculateTilingLayout_ManyWindows benchmarks with many windows
 func BenchmarkCalculateTilingLayout_ManyWindows(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = CalculateTilingLayout(50, 1920, 1080, 0, 0.5)
 	}
 }

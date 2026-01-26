@@ -298,7 +298,7 @@ func BenchmarkStyleCacheHit(b *testing.B) {
 	cache.Get(cell, false, false)
 
 	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		cache.Get(cell, false, false)
 	}
 }
@@ -307,8 +307,9 @@ func BenchmarkStyleCacheHit(b *testing.B) {
 func BenchmarkStyleCacheMiss(b *testing.B) {
 	cache := NewStyleCache(1024)
 
+	i := 0
 	b.ResetTimer()
-	for i := range b.N {
+	for b.Loop() {
 		cell := &uv.Cell{
 			Style: uv.Style{
 				Fg:    lipgloss.Color("15"),
@@ -316,6 +317,7 @@ func BenchmarkStyleCacheMiss(b *testing.B) {
 			},
 		}
 		cache.Get(cell, false, false)
+		i++
 	}
 }
 
@@ -330,7 +332,7 @@ func BenchmarkStyleNoCacheBaseline(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		buildCellStyle(cell, false)
 	}
 }

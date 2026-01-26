@@ -192,7 +192,7 @@ func (a *ANSIBuilder) LF() *ANSIBuilder {
 
 // CursorTo moves cursor to position (1-based).
 func (a *ANSIBuilder) CursorTo(row, col int) *ANSIBuilder {
-	a.buf.WriteString(fmt.Sprintf("%s%d;%dH", CSI, row, col))
+	fmt.Fprintf(&a.buf, "%s%d;%dH", CSI, row, col)
 	return a
 }
 
@@ -207,7 +207,7 @@ func (a *ANSIBuilder) CursorUp(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "A")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%dA", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%dA", CSI, n)
 	}
 	return a
 }
@@ -217,7 +217,7 @@ func (a *ANSIBuilder) CursorDown(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "B")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%dB", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%dB", CSI, n)
 	}
 	return a
 }
@@ -227,7 +227,7 @@ func (a *ANSIBuilder) CursorForward(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "C")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%dC", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%dC", CSI, n)
 	}
 	return a
 }
@@ -237,7 +237,7 @@ func (a *ANSIBuilder) CursorBackward(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "D")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%dD", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%dD", CSI, n)
 	}
 	return a
 }
@@ -278,7 +278,7 @@ func (a *ANSIBuilder) SGR(params ...int) *ANSIBuilder {
 		if i > 0 {
 			a.buf.WriteString(";")
 		}
-		a.buf.WriteString(fmt.Sprintf("%d", p))
+		fmt.Fprintf(&a.buf, "%d", p)
 	}
 	a.buf.WriteString("m")
 	return a
@@ -433,7 +433,7 @@ func (a *ANSIBuilder) DisableSGRMouse() *ANSIBuilder {
 
 // ScrollRegion sets the scroll region.
 func (a *ANSIBuilder) ScrollRegion(top, bottom int) *ANSIBuilder {
-	a.buf.WriteString(fmt.Sprintf("%s%d;%dr", CSI, top, bottom))
+	fmt.Fprintf(&a.buf, "%s%d;%dr", CSI, top, bottom)
 	return a
 }
 
@@ -442,7 +442,7 @@ func (a *ANSIBuilder) ScrollUp(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "S")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%dS", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%dS", CSI, n)
 	}
 	return a
 }
@@ -452,7 +452,7 @@ func (a *ANSIBuilder) ScrollDown(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "T")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%dT", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%dT", CSI, n)
 	}
 	return a
 }
@@ -462,7 +462,7 @@ func (a *ANSIBuilder) InsertLines(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "L")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%dL", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%dL", CSI, n)
 	}
 	return a
 }
@@ -472,7 +472,7 @@ func (a *ANSIBuilder) DeleteLines(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "M")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%dM", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%dM", CSI, n)
 	}
 	return a
 }
@@ -482,7 +482,7 @@ func (a *ANSIBuilder) InsertChars(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "@")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%d@", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%d@", CSI, n)
 	}
 	return a
 }
@@ -492,7 +492,7 @@ func (a *ANSIBuilder) DeleteChars(n int) *ANSIBuilder {
 	if n == 1 {
 		a.buf.WriteString(CSI + "P")
 	} else {
-		a.buf.WriteString(fmt.Sprintf("%s%dP", CSI, n))
+		fmt.Fprintf(&a.buf, "%s%dP", CSI, n)
 	}
 	return a
 }
@@ -599,12 +599,12 @@ func ProgressBar(percent int, width int) string {
 		CR(). // Return to start of line
 		Text("[")
 
-	for i := 0; i < filled; i++ {
+	for range filled {
 		b.Text("=")
 	}
 	if filled < width {
 		b.Text(">")
-		for i := 1; i < empty; i++ {
+		for range empty - 1 {
 			b.Text(" ")
 		}
 	}

@@ -3,6 +3,7 @@ package tape
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -317,33 +318,34 @@ func (r *Recorder) WriteToFile(filename string, header string) error {
 
 // String returns the tape content as a formatted string
 func (r *Recorder) String(header string) string {
-	result := ""
+	var sb strings.Builder
 
 	if header != "" {
 		// Add header with timestamp
-		result += fmt.Sprintf("# %s\n", header)
-		result += fmt.Sprintf("# Recorded: %s\n\n", r.startTime.Format(time.RFC3339))
+		fmt.Fprintf(&sb, "# %s\n", header)
+		fmt.Fprintf(&sb, "# Recorded: %s\n\n", r.startTime.Format(time.RFC3339))
 	}
 
 	// Always start with DisableAnimations for reproducibility
 	// This ensures tape playback is consistent regardless of user's animation settings
-	result += "# Disable animations for consistent playback\n"
-	result += "DisableAnimations\n\n"
+	sb.WriteString("# Disable animations for consistent playback\n")
+	sb.WriteString("DisableAnimations\n\n")
 
 	// Write commands
 	for _, cmd := range r.commands {
 		if cmd.Delay > 0 && cmd.Delay.Milliseconds() > 100 {
-			result += fmt.Sprintf("Sleep %v\n", cmd.Delay)
+			fmt.Fprintf(&sb, "Sleep %v\n", cmd.Delay)
 		}
 
-		result += cmd.Raw + "\n"
+		sb.WriteString(cmd.Raw)
+		sb.WriteByte('\n')
 	}
 
 	// Re-enable animations at the end to restore user's preference
-	result += "\n# Re-enable animations\n"
-	result += "EnableAnimations\n"
+	sb.WriteString("\n# Re-enable animations\n")
+	sb.WriteString("EnableAnimations\n")
 
-	return result
+	return sb.String()
 }
 
 // CommandCount returns the number of recorded commands

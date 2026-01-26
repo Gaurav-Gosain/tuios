@@ -328,10 +328,7 @@ func (layout *DockLayout) truncateItems(screenWidth int, allItems []DockItem) {
 
 	// Calculate center positioning
 	availableSpace := screenWidth - layout.LeftWidth - layout.RightWidth - totalWidth
-	leftSpacer := availableSpace / 2
-	if leftSpacer < 0 {
-		leftSpacer = 0
-	}
+	leftSpacer := max(availableSpace/2, 0)
 
 	layout.CenterStartX = layout.LeftWidth + leftSpacer
 

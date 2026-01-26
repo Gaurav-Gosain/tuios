@@ -42,10 +42,10 @@ func TestStringBuilderPool_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < iterations; j++ {
+			for j := range iterations {
 				sb := GetStringBuilder()
 				sb.WriteString("test")
 				if sb.String() != "test" {
@@ -159,7 +159,7 @@ func TestPoolReuse(t *testing.T) {
 // BenchmarkStringBuilderPool benchmarks the string builder pool
 func BenchmarkStringBuilderPool(b *testing.B) {
 	b.Run("WithPool", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			sb := GetStringBuilder()
 			sb.WriteString("test string")
 			_ = sb.String()
@@ -168,7 +168,7 @@ func BenchmarkStringBuilderPool(b *testing.B) {
 	})
 
 	b.Run("WithoutPool", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			sb := &strings.Builder{}
 			sb.WriteString("test string")
 			_ = sb.String()
@@ -191,7 +191,7 @@ func BenchmarkStringBuilderPool_Parallel(b *testing.B) {
 // BenchmarkByteSlicePool benchmarks the byte slice pool
 func BenchmarkByteSlicePool(b *testing.B) {
 	b.Run("WithPool", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			buf := GetByteSlice()
 			copy(*buf, []byte("test data"))
 			PutByteSlice(buf)
@@ -199,7 +199,7 @@ func BenchmarkByteSlicePool(b *testing.B) {
 	})
 
 	b.Run("WithoutPool", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			buf := make([]byte, 32*1024)
 			copy(buf, []byte("test data"))
 		}
@@ -209,14 +209,14 @@ func BenchmarkByteSlicePool(b *testing.B) {
 // BenchmarkLayerSlicePool benchmarks the layer slice pool
 func BenchmarkLayerSlicePool(b *testing.B) {
 	b.Run("WithPool", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			layers := GetLayerSlice()
 			PutLayerSlice(layers)
 		}
 	})
 
 	b.Run("WithoutPool", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = make([]*lipgloss.Layer, 0, 16)
 		}
 	})
@@ -225,14 +225,14 @@ func BenchmarkLayerSlicePool(b *testing.B) {
 // BenchmarkStylePool benchmarks the style pool
 func BenchmarkStylePool(b *testing.B) {
 	b.Run("WithPool", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			style := GetStyle()
 			PutStyle(style)
 		}
 	})
 
 	b.Run("WithoutPool", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = lipgloss.NewStyle()
 		}
 	})

@@ -396,6 +396,11 @@ func DebugPayload(msg *Message, codec Codec) string {
 		if err := codec.Decode(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("SubscribePTY{ID:%s}", truncateID(p.PTYID))
 		}
+	case MsgUnsubscribePTY:
+		var p UnsubscribePTYPayload
+		if err := codec.Decode(msg.Payload, &p); err == nil {
+			return fmt.Sprintf("UnsubscribePTY{ID:%s}", truncateID(p.PTYID))
+		}
 	case MsgInput, MsgPTYOutput:
 		// Binary data - just show size
 		return fmt.Sprintf("<%d bytes>", len(msg.Payload))

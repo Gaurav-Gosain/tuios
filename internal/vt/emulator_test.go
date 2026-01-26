@@ -535,7 +535,7 @@ func BenchmarkEmulator_PlainTextWrite(b *testing.B) {
 	data := []byte(strings.Repeat("Hello World ", 100) + "\r\n")
 
 	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		_, _ = emu.Write(data)
 	}
 }
@@ -551,7 +551,7 @@ func BenchmarkEmulator_ANSIColorWrite(b *testing.B) {
 		String())
 
 	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		_, _ = emu.Write(data)
 	}
 }
@@ -566,7 +566,7 @@ func BenchmarkEmulator_CursorMovement(b *testing.B) {
 		String())
 
 	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		_, _ = emu.Write(data)
 	}
 }
@@ -576,7 +576,7 @@ func BenchmarkEmulator_Render(b *testing.B) {
 
 	// Fill screen with styled content
 	builder := testutil.NewANSIBuilder()
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		_, _ = emu.Write([]byte(builder.
 			FgColor(31 + i%6).
 			Text(strings.Repeat("X", 80)).
@@ -586,7 +586,7 @@ func BenchmarkEmulator_Render(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		_ = emu.Render()
 	}
 }

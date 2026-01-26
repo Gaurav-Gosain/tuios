@@ -164,9 +164,9 @@ func init() {
 	gob.Register(map[int]string{})
 	gob.Register(map[string]int{})
 	gob.Register(map[int]*SerializedBSPTree{})
-	gob.Register(map[string]interface{}{})
+	gob.Register(map[string]any{})
 	// Slice types used in command result Data field
-	gob.Register([]map[string]interface{}{})
+	gob.Register([]map[string]any{})
 	gob.Register([]int{})
 	gob.Register([]string{})
 

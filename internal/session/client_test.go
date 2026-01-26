@@ -16,7 +16,7 @@ func TestClientCloseConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	const numGoroutines = 100
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

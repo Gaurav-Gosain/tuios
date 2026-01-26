@@ -235,13 +235,13 @@ func (l *Lexer) NextToken() Token {
 
 			// Check if it's a duration (has a letter after the number)
 			if unicode.IsLetter(rune(l.ch)) {
-				unit := ""
+				var unitBuilder strings.Builder
 				for unicode.IsLetter(rune(l.ch)) {
-					unit += string(l.ch)
+					unitBuilder.WriteByte(l.ch)
 					l.readChar()
 				}
 				tok.Type = TokenDuration
-				tok.Literal = num + unit
+				tok.Literal = num + unitBuilder.String()
 			} else {
 				tok.Type = TokenNumber
 				tok.Literal = num

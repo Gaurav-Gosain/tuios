@@ -218,7 +218,7 @@ func getModParam(mod tea.KeyMod) int {
 	// Mask off any non-modifier bits (Bubble Tea v2 may set additional flags like 128)
 	// Only consider actual modifier keys: Shift=1, Alt=2, Ctrl=4
 	modMask := tea.ModShift | tea.ModAlt | tea.ModCtrl
-	mod = mod & modMask
+	mod &= modMask
 
 	modParam := 1
 	if mod&tea.ModShift != 0 {

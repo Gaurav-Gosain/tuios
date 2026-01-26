@@ -12,7 +12,7 @@ func (w *Window) TriggerRedraw() {
 
 // getPgid is a stub for Windows - not supported on this platform.
 // Returns an error indicating the operation is not supported.
-func getPgid(pid int) (int, error) {
+func getPgid(_ int) (int, error) {
 	// Windows doesn't have process groups in the same way Unix does
 	// Fall back to showing the quit dialog if there are open terminals
 	return 0, nil

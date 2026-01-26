@@ -505,7 +505,7 @@ func (t *BSPTree) findAnyWindowInSubtree(node *TileNode) int {
 }
 
 // determineAutoSplit determines the split direction based on the auto scheme
-func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitType {
+func (t *BSPTree) determineAutoSplit(_ *TileNode, bounds Rect) SplitType {
 	switch t.AutoScheme {
 	case SchemeLongestSide:
 		// Split along the longest dimension

@@ -4,6 +4,6 @@ package vt
 
 import "fmt"
 
-func loadSharedMemory(name string, size int) ([]byte, error) {
+func loadSharedMemory(_ string, _ int) ([]byte, error) {
 	return nil, fmt.Errorf("shared memory not supported on Windows")
 }

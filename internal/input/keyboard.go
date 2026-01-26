@@ -146,10 +146,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 
 		// Page up/down (scroll by half page)
-		pageSize := logsPerPage / 2
-		if pageSize < 1 {
-			pageSize = 1
-		}
+		pageSize := max(logsPerPage/2, 1)
 		if key == "pgup" || key == "ctrl+u" {
 			o.LogScrollOffset -= pageSize
 			if o.LogScrollOffset < 0 {
@@ -898,17 +895,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		if totalLogs > maxDisplayHeight-fixedLines {
 			fixedLines = 6
 		}
-		logsPerPage := maxDisplayHeight - fixedLines
-		if logsPerPage < 1 {
-			logsPerPage = 1
-		}
+		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
 
 		// Calculate max scroll position based on visible capacity
 		// Can only scroll if there are more logs than fit on screen
-		maxScroll := totalLogs - logsPerPage
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
+		maxScroll := max(totalLogs-logsPerPage, 0)
 
 		// Scroll up/down
 		if key == "up" || key == "k" {
@@ -925,10 +916,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		}
 
 		// Page up/down (scroll by half page)
-		pageSize := logsPerPage / 2
-		if pageSize < 1 {
-			pageSize = 1
-		}
+		pageSize := max(logsPerPage/2, 1)
 		if key == "pgup" || key == "ctrl+u" {
 			o.LogScrollOffset -= pageSize
 			if o.LogScrollOffset < 0 {

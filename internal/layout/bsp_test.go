@@ -393,10 +393,10 @@ func TestParseAutoScheme(t *testing.T) {
 func BenchmarkBSPTree_Insert(b *testing.B) {
 	bounds := Rect{X: 0, Y: 0, W: 1920, H: 1080}
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		tree := NewBSPTree()
 		lastID := 0
-		for j := 0; j < 10; j++ {
+		for j := range 10 {
 			tree.InsertWindow(j+1, lastID, SplitNone, 0.5, bounds)
 			lastID = j + 1
 		}
@@ -410,13 +410,13 @@ func BenchmarkBSPTree_ApplyLayout(b *testing.B) {
 
 	// Build a tree with 10 windows
 	lastID := 0
-	for j := 0; j < 10; j++ {
+	for j := range 10 {
 		tree.InsertWindow(j+1, lastID, SplitNone, 0.5, bounds)
 		lastID = j + 1
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = tree.ApplyLayout(bounds)
 	}
 }

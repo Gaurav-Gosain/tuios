@@ -111,8 +111,8 @@ func (m *OS) CreateNewWindowReturningID(name string) (windowID string, displayNa
 }
 
 // getWindowInfo returns detailed information about a window.
-func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]interface{} {
-	info := map[string]interface{}{
+func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
+	info := map[string]any{
 		"id":             w.ID,
 		"title":          w.Title,
 		"display_name":   m.getWindowDisplayName(w),
@@ -162,8 +162,8 @@ func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]interf
 }
 
 // GetWindowListData returns data about all windows.
-func (m *OS) GetWindowListData() map[string]interface{} {
-	windows := make([]map[string]interface{}, 0, len(m.Windows))
+func (m *OS) GetWindowListData() map[string]any {
+	windows := make([]map[string]any, 0, len(m.Windows))
 
 	for i, w := range m.Windows {
 		isFocused := i == m.FocusedWindow
@@ -183,7 +183,7 @@ func (m *OS) GetWindowListData() map[string]interface{} {
 		focusedWindowID = m.Windows[m.FocusedWindow].ID
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"windows":           windows,
 		"total":             len(m.Windows),
 		"focused_index":     m.FocusedWindow,
@@ -194,7 +194,7 @@ func (m *OS) GetWindowListData() map[string]interface{} {
 }
 
 // GetSessionInfoData returns data about the current session.
-func (m *OS) GetSessionInfoData() map[string]interface{} {
+func (m *OS) GetSessionInfoData() map[string]any {
 	// Determine mode
 	mode := "window_management"
 	if m.Mode == TerminalMode {
@@ -234,7 +234,7 @@ func (m *OS) GetSessionInfoData() map[string]interface{} {
 		}
 	}
 
-	info := map[string]interface{}{
+	info := map[string]any{
 		"current_workspace":  m.CurrentWorkspace,
 		"total_windows":      len(m.Windows),
 		"focused_window_id":  focusedWindowID,
@@ -272,7 +272,7 @@ func (m *OS) GetSessionInfoData() map[string]interface{} {
 }
 
 // GetWindowData returns data about a specific window by ID or name.
-func (m *OS) GetWindowData(identifier string) (map[string]interface{}, error) {
+func (m *OS) GetWindowData(identifier string) (map[string]any, error) {
 	// First try by ID
 	for i, w := range m.Windows {
 		if w.ID == identifier {
@@ -300,7 +300,7 @@ func (m *OS) GetWindowData(identifier string) (map[string]interface{}, error) {
 }
 
 // GetFocusedWindowData returns data about the currently focused window.
-func (m *OS) GetFocusedWindowData() (map[string]interface{}, error) {
+func (m *OS) GetFocusedWindowData() (map[string]any, error) {
 	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
 		return nil, fmt.Errorf("no window is focused")
 	}
@@ -887,13 +887,8 @@ func (m *OS) parseKeysToMessages(keys string) []tea.KeyPressMsg {
 	// Normalize: replace commas with spaces, then split by whitespace
 	// This allows "ctrl+b,q", "ctrl+b q", or "ctrl+b, q" to all work
 	normalized := strings.ReplaceAll(keys, ",", " ")
-	parts := strings.Fields(normalized)
 
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
+	for part := range strings.FieldsSeq(normalized) {
 
 		// Handle $PREFIX or PREFIX special token
 		if strings.EqualFold(part, "$PREFIX") || strings.EqualFold(part, "PREFIX") {

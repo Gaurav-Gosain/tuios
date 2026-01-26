@@ -81,10 +81,7 @@ func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer strin
 		return ""
 	}
 
-	maxNameLen := maxWidth - 6
-	if maxNameLen < 0 {
-		maxNameLen = 0
-	}
+	maxNameLen := max(maxWidth-6, 0)
 	nameWidth := ansi.StringWidth(windowName)
 	if nameWidth > maxNameLen {
 		if maxNameLen > 3 {

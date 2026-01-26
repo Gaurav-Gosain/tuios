@@ -586,7 +586,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var err error
 		var cmd tea.Cmd
 		var notificationMsg string
-		var resultData map[string]interface{} // Rich data to return
+		var resultData map[string]any // Rich data to return
 
 		switch msg.CommandType {
 		case "tape_command":
@@ -643,7 +643,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if createErr != nil {
 						err = createErr
 					} else {
-						resultData = map[string]interface{}{
+						resultData = map[string]any{
 							"window_id": windowID,
 							"name":      displayName,
 						}
@@ -783,7 +783,6 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case RemoteTapeCommandMsg:
 		// Process a single tape command from a remote script
-		var cmd tea.Cmd
 
 		// Update progress tracking for display
 		m.RemoteScriptIndex = msg.CommandIndex
@@ -840,10 +839,6 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					TotalCommands:     msg.TotalCommands,
 				}
 			})
-			// Use Sequence to ensure commands are processed in order
-			if cmd != nil {
-				return m, tea.Sequence(cmd, nextCmdFunc)
-			}
 			return m, nextCmdFunc
 		}
 
@@ -851,9 +846,6 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		doneCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
 			return RemoteTapeScriptDoneMsg{RequestID: msg.RequestID}
 		})
-		if cmd != nil {
-			return m, tea.Sequence(cmd, doneCmd)
-		}
 		return m, doneCmd
 
 	case RemoteTapeScriptDoneMsg:

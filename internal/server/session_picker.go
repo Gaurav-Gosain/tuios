@@ -241,10 +241,10 @@ func (m *SessionPicker) View() tea.View {
 			details := fmt.Sprintf("(%d windows, %s, %s ago)", s.WindowCount, status, lastActive)
 
 			if i == m.cursor {
-				line = selectedStyle.Render(fmt.Sprintf("▸ %s", s.Name))
+				line = selectedStyle.Render("▸ " + s.Name)
 				line += " " + dimStyle.Render(details)
 			} else {
-				line = normalStyle.Render(fmt.Sprintf("  %s", s.Name))
+				line = normalStyle.Render("  " + s.Name)
 				line += " " + dimStyle.Render(details)
 			}
 			b.WriteString(line)

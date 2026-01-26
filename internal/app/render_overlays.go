@@ -337,10 +337,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				}
 
 				// Display 1-based index for human readability (command 1 of N, not 0 of N)
-				displayCmd := currentCmd + 1
-				if displayCmd > totalCmds {
-					displayCmd = totalCmds
-				}
+				displayCmd := min(currentCmd+1, totalCmds)
 
 				if m.ScriptPaused {
 					scriptStatus = fmt.Sprintf("PAUSED • %s %d%% • %d/%d", bar, progress, displayCmd, totalCmds)
@@ -413,10 +410,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				maxDescLen = len(binding.Description)
 			}
 		}
-		contentWidth := maxKeyLen + 2 + maxDescLen
-		if len(title) > contentWidth {
-			contentWidth = len(title)
-		}
+		contentWidth := max(maxKeyLen+2+maxDescLen, len(title))
 
 		bg := lipgloss.Color("#1f2937")
 

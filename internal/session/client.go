@@ -469,7 +469,7 @@ func (c *Client) readFromTerminal(errCh chan<- error) {
 			// Process input byte by byte to detect detach sequence
 			toSend := make([]byte, 0, n)
 
-			for i := 0; i < n; i++ {
+			for i := range n {
 				b := buf[i]
 
 				if c.prefixActive {

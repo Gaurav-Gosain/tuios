@@ -435,7 +435,7 @@ func TestCommandResultPayload(t *testing.T) {
 				RequestID: "req-456",
 				Success:   true,
 				Message:   "window created",
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"window_id": "win-abc123",
 					"name":      "My Terminal",
 				},
@@ -1249,8 +1249,6 @@ func TestStateSyncWithAnimationPositions(t *testing.T) {
 	// In the real implementation, BuildSessionState() would use animation end positions
 
 	currentState := &SessionState{
-		Name:             "anim-test",
-		CurrentWorkspace: 1,
 		Windows: []WindowState{
 			{
 				ID:     "win-1",

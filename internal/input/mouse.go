@@ -881,15 +881,9 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if totalLogs > maxDisplayHeight-fixedLines {
 			fixedLines = 6
 		}
-		logsPerPage := maxDisplayHeight - fixedLines
-		if logsPerPage < 1 {
-			logsPerPage = 1
-		}
+		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
 
-		maxScroll := totalLogs - logsPerPage
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
+		maxScroll := max(totalLogs-logsPerPage, 0)
 
 		switch msg.Button {
 		case tea.MouseWheelUp:
@@ -1070,13 +1064,6 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 	return -1
 }
 
-// max returns the maximum of two integers
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 // abs returns the absolute value of an integer
 func abs(x int) int {

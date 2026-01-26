@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -154,14 +155,7 @@ func TestKeyNormalizer(t *testing.T) {
 				return
 			}
 			// Check if expected is in the result
-			found := false
-			for _, k := range got {
-				if k == tc.expected {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if !slices.Contains(got, tc.expected) {
 				t.Errorf("NormalizeKey(%q) = %v, want to contain %q", tc.input, got, tc.expected)
 			}
 		})
@@ -267,7 +261,7 @@ func BenchmarkKeybindRegistry_GetAction(b *testing.B) {
 	registry := config.NewKeybindRegistry(cfg)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = registry.GetAction("n")
 	}
 }
@@ -277,7 +271,7 @@ func BenchmarkKeybindRegistry_GetKeys(b *testing.B) {
 	registry := config.NewKeybindRegistry(cfg)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = registry.GetKeys("new_window")
 	}
 }
@@ -286,8 +280,10 @@ func BenchmarkNormalizeKey(b *testing.B) {
 	normalizer := config.NewKeyNormalizer()
 	keys := []string{"ctrl+a", "Ctrl+Shift+B", "alt+1", "return"}
 
+	i := 0
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = normalizer.NormalizeKey(keys[i%len(keys)])
+		i++
 	}
 }

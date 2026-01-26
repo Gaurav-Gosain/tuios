@@ -200,13 +200,13 @@ func TestWithScrollbackLines_Bounds(t *testing.T) {
 // =============================================================================
 
 func BenchmarkNew_Default(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = tuios.New()
 	}
 }
 
 func BenchmarkNew_WithOptions(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = tuios.New(
 			tuios.WithWorkspaces(5),
 			tuios.WithShowKeys(true),

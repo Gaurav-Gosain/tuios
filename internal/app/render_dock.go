@@ -74,7 +74,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		modeColor := layout.ModeInfo.Color
 
 		var modeLabel, workspacePart string
-		if idx := strings.Index(leftText, " "); idx != -1 {
+		if strings.Contains(leftText, " ") {
 			for i := 1; i < len(leftText); i++ {
 				if leftText[i] >= '0' && leftText[i] <= '9' {
 					modeLabel = leftText[:i]

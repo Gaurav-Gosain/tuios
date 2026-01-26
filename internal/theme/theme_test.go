@@ -285,7 +285,7 @@ func BenchmarkGetANSIPalette(b *testing.B) {
 	_ = Initialize("default")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = GetANSIPalette()
 	}
 }
@@ -295,7 +295,7 @@ func BenchmarkColorToString(b *testing.B) {
 	c := lipgloss.Color("#ff0000")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = ColorToString(c)
 	}
 }

@@ -337,7 +337,7 @@ func (sp *SixelPassthrough) hidePlacement(p *SixelPassthroughPlacement) {
 // placeSixel writes a sixel image to the host terminal at the specified position.
 // cellWidth and cellHeight are provided for potential future clipping support.
 func (sp *SixelPassthrough) placeSixel(p *SixelPassthroughPlacement, _, _ int) {
-	if p.RawSequence == nil || len(p.RawSequence) == 0 {
+	if len(p.RawSequence) == 0 {
 		return
 	}
 

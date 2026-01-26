@@ -470,43 +470,43 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 
 		if i == 0 {
 			// Always use 't' (transmit only) - placement will be done by RefreshAllPlacements
-			buf.WriteString(fmt.Sprintf("a=t,i=%d,f=%d,s=%d,v=%d,q=2",
-				hostID, pending.Format, pending.Width, pending.Height))
+			fmt.Fprintf(&buf, "a=t,i=%d,f=%d,s=%d,v=%d,q=2",
+				hostID, pending.Format, pending.Width, pending.Height)
 			if pending.Compression == vt.KittyCompressionZlib {
 				buf.WriteString(",o=z")
 			}
 			if displayCols > 0 {
-				buf.WriteString(fmt.Sprintf(",c=%d", displayCols))
+				fmt.Fprintf(&buf, ",c=%d", displayCols)
 			}
 			if displayRows > 0 {
-				buf.WriteString(fmt.Sprintf(",r=%d", displayRows))
+				fmt.Fprintf(&buf, ",r=%d", displayRows)
 			}
 			if pending.SourceX > 0 {
-				buf.WriteString(fmt.Sprintf(",x=%d", pending.SourceX))
+				fmt.Fprintf(&buf, ",x=%d", pending.SourceX)
 			}
 			if pending.SourceY > 0 {
-				buf.WriteString(fmt.Sprintf(",y=%d", pending.SourceY))
+				fmt.Fprintf(&buf, ",y=%d", pending.SourceY)
 			}
 			if pending.SourceWidth > 0 {
-				buf.WriteString(fmt.Sprintf(",w=%d", pending.SourceWidth))
+				fmt.Fprintf(&buf, ",w=%d", pending.SourceWidth)
 			}
 			if pending.SourceHeight > 0 {
-				buf.WriteString(fmt.Sprintf(",h=%d", pending.SourceHeight))
+				fmt.Fprintf(&buf, ",h=%d", pending.SourceHeight)
 			}
 			if pending.XOffset > 0 {
-				buf.WriteString(fmt.Sprintf(",X=%d", pending.XOffset))
+				fmt.Fprintf(&buf, ",X=%d", pending.XOffset)
 			}
 			if pending.YOffset > 0 {
-				buf.WriteString(fmt.Sprintf(",Y=%d", pending.YOffset))
+				fmt.Fprintf(&buf, ",Y=%d", pending.YOffset)
 			}
 			if pending.ZIndex != 0 {
-				buf.WriteString(fmt.Sprintf(",z=%d", pending.ZIndex))
+				fmt.Fprintf(&buf, ",z=%d", pending.ZIndex)
 			}
 			// Note: We don't send U=1 to host even for virtual placements
 			// because TUIOS renders guest content itself, so placeholder
 			// characters don't exist in the host terminal
 		} else {
-			buf.WriteString(fmt.Sprintf("i=%d,q=2", hostID))
+			fmt.Fprintf(&buf, "i=%d,q=2", hostID)
 		}
 
 		if more {
@@ -644,28 +644,28 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 		if i == 0 {
 			// Always use 't' (transmit only) - placement will be done by RefreshAllPlacements
-			buf.WriteString(fmt.Sprintf("a=t,i=%d,f=%d,s=%d,v=%d,q=2",
-				hostID, cmd.Format, cmd.Width, cmd.Height))
+			fmt.Fprintf(&buf, "a=t,i=%d,f=%d,s=%d,v=%d,q=2",
+				hostID, cmd.Format, cmd.Width, cmd.Height)
 			if cmd.Compression == vt.KittyCompressionZlib {
 				buf.WriteString(",o=z")
 			}
 
 			// Always set c and r to control display size
 			if displayCols > 0 {
-				buf.WriteString(fmt.Sprintf(",c=%d", displayCols))
+				fmt.Fprintf(&buf, ",c=%d", displayCols)
 			}
 			if displayRows > 0 {
-				buf.WriteString(fmt.Sprintf(",r=%d", displayRows))
+				fmt.Fprintf(&buf, ",r=%d", displayRows)
 			}
 			// Include source rectangle if specified
 			if cmd.SourceX > 0 {
-				buf.WriteString(fmt.Sprintf(",x=%d", cmd.SourceX))
+				fmt.Fprintf(&buf, ",x=%d", cmd.SourceX)
 			}
 			if cmd.SourceY > 0 {
-				buf.WriteString(fmt.Sprintf(",y=%d", cmd.SourceY))
+				fmt.Fprintf(&buf, ",y=%d", cmd.SourceY)
 			}
 			if cmd.SourceWidth > 0 {
-				buf.WriteString(fmt.Sprintf(",w=%d", cmd.SourceWidth))
+				fmt.Fprintf(&buf, ",w=%d", cmd.SourceWidth)
 			}
 			// Calculate source height for clipping (not scaling)
 			// If displayRows < imgRows, we need to clip the image
@@ -679,20 +679,20 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 				sourceHeight = displayRows * cellH
 			}
 			if sourceHeight > 0 {
-				buf.WriteString(fmt.Sprintf(",h=%d", sourceHeight))
+				fmt.Fprintf(&buf, ",h=%d", sourceHeight)
 			}
 			if cmd.XOffset > 0 {
-				buf.WriteString(fmt.Sprintf(",X=%d", cmd.XOffset))
+				fmt.Fprintf(&buf, ",X=%d", cmd.XOffset)
 			}
 			if cmd.YOffset > 0 {
-				buf.WriteString(fmt.Sprintf(",Y=%d", cmd.YOffset))
+				fmt.Fprintf(&buf, ",Y=%d", cmd.YOffset)
 			}
 			if cmd.ZIndex != 0 {
-				buf.WriteString(fmt.Sprintf(",z=%d", cmd.ZIndex))
+				fmt.Fprintf(&buf, ",z=%d", cmd.ZIndex)
 			}
 			// Note: Don't send U=1 to host - TUIOS renders guest content itself
 		} else {
-			buf.WriteString(fmt.Sprintf("i=%d,q=2", hostID))
+			fmt.Fprintf(&buf, "i=%d,q=2", hostID)
 		}
 
 		if more {
@@ -743,7 +743,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	contentOffsetX, contentOffsetY int,
 	cursorX, cursorY int,
 	scrollbackLen int,
-	isAltScreen bool,
+	_ bool, // isAltScreen - currently unused
 ) {
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
@@ -770,40 +770,40 @@ func (kp *KittyPassthrough) forwardPlace(
 
 	var buf bytes.Buffer
 	buf.WriteString("\x1b7") // Save cursor position
-	buf.WriteString(fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1))
+	fmt.Fprintf(&buf, "\x1b[%d;%dH", hostY+1, hostX+1)
 	buf.WriteString("\x1b_G")
-	buf.WriteString(fmt.Sprintf("a=p,i=%d", hostID))
+	fmt.Fprintf(&buf, "a=p,i=%d", hostID)
 
 	if cmd.PlacementID > 0 {
-		buf.WriteString(fmt.Sprintf(",p=%d", cmd.PlacementID))
+		fmt.Fprintf(&buf, ",p=%d", cmd.PlacementID)
 	}
 	// Always set display dimensions to control size
 	if displayCols > 0 {
-		buf.WriteString(fmt.Sprintf(",c=%d", displayCols))
+		fmt.Fprintf(&buf, ",c=%d", displayCols)
 	}
 	if displayRows > 0 {
-		buf.WriteString(fmt.Sprintf(",r=%d", displayRows))
+		fmt.Fprintf(&buf, ",r=%d", displayRows)
 	}
 	if cmd.XOffset > 0 {
-		buf.WriteString(fmt.Sprintf(",X=%d", cmd.XOffset))
+		fmt.Fprintf(&buf, ",X=%d", cmd.XOffset)
 	}
 	if cmd.YOffset > 0 {
-		buf.WriteString(fmt.Sprintf(",Y=%d", cmd.YOffset))
+		fmt.Fprintf(&buf, ",Y=%d", cmd.YOffset)
 	}
 	if cmd.SourceX > 0 {
-		buf.WriteString(fmt.Sprintf(",x=%d", cmd.SourceX))
+		fmt.Fprintf(&buf, ",x=%d", cmd.SourceX)
 	}
 	if cmd.SourceY > 0 {
-		buf.WriteString(fmt.Sprintf(",y=%d", cmd.SourceY))
+		fmt.Fprintf(&buf, ",y=%d", cmd.SourceY)
 	}
 	if cmd.SourceWidth > 0 {
-		buf.WriteString(fmt.Sprintf(",w=%d", cmd.SourceWidth))
+		fmt.Fprintf(&buf, ",w=%d", cmd.SourceWidth)
 	}
 	if cmd.SourceHeight > 0 {
-		buf.WriteString(fmt.Sprintf(",h=%d", cmd.SourceHeight))
+		fmt.Fprintf(&buf, ",h=%d", cmd.SourceHeight)
 	}
 	if cmd.ZIndex != 0 {
-		buf.WriteString(fmt.Sprintf(",z=%d", cmd.ZIndex))
+		fmt.Fprintf(&buf, ",z=%d", cmd.ZIndex)
 	}
 	// Note: Don't send U=1 to host - TUIOS renders guest content itself
 	buf.WriteString(",q=2")
@@ -851,7 +851,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 		for _, p := range placements {
 			var buf bytes.Buffer
 			buf.WriteString("\x1b_G")
-			buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", p.HostImageID))
+			fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", p.HostImageID)
 			buf.WriteString("\x1b\\")
 			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 		}
@@ -864,7 +864,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 				// Delete from host terminal
 				var buf bytes.Buffer
 				buf.WriteString("\x1b_G")
-				buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", hostID))
+				fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", hostID)
 				buf.WriteString("\x1b\\")
 				kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 				// Remove from our tracking
@@ -882,9 +882,9 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 			if hostID, ok := windowMap[cmd.ImageID]; ok {
 				var buf bytes.Buffer
 				buf.WriteString("\x1b_G")
-				buf.WriteString(fmt.Sprintf("a=d,d=I,i=%d", hostID))
+				fmt.Fprintf(&buf, "a=d,d=I,i=%d", hostID)
 				if cmd.PlacementID > 0 {
-					buf.WriteString(fmt.Sprintf(",p=%d", cmd.PlacementID))
+					fmt.Fprintf(&buf, ",p=%d", cmd.PlacementID)
 				}
 				buf.WriteString(",q=2\x1b\\")
 				kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
@@ -904,7 +904,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 		for _, p := range placements {
 			var buf bytes.Buffer
 			buf.WriteString("\x1b_G")
-			buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", p.HostImageID))
+			fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", p.HostImageID)
 			buf.WriteString("\x1b\\")
 			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 		}
@@ -920,7 +920,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 		for _, p := range placements {
 			var buf bytes.Buffer
 			buf.WriteString("\x1b_G")
-			buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", p.HostImageID))
+			fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", p.HostImageID)
 			buf.WriteString("\x1b\\")
 			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 		}
@@ -935,7 +935,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 		for _, p := range placements {
 			var buf bytes.Buffer
 			buf.WriteString("\x1b_G")
-			buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d,q=2", p.HostImageID))
+			fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", p.HostImageID)
 			buf.WriteString("\x1b\\")
 			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 		}
@@ -1269,9 +1269,9 @@ func (kp *KittyPassthrough) HasPlacements() bool {
 func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")
-	buf.WriteString(fmt.Sprintf("a=d,d=i,i=%d", p.HostImageID))
+	fmt.Fprintf(&buf, "a=d,d=i,i=%d", p.HostImageID)
 	if p.PlacementID > 0 {
-		buf.WriteString(fmt.Sprintf(",p=%d", p.PlacementID))
+		fmt.Fprintf(&buf, ",p=%d", p.PlacementID)
 	}
 	buf.WriteString(",q=2\x1b\\")
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
@@ -1286,11 +1286,11 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 
 	var buf bytes.Buffer
 	buf.WriteString("\x1b7") // Save cursor position
-	buf.WriteString(fmt.Sprintf("\x1b[%d;%dH", p.HostY+1, p.HostX+1))
+	fmt.Fprintf(&buf, "\x1b[%d;%dH", p.HostY+1, p.HostX+1)
 	buf.WriteString("\x1b_G")
-	buf.WriteString(fmt.Sprintf("a=p,i=%d", p.HostImageID))
+	fmt.Fprintf(&buf, "a=p,i=%d", p.HostImageID)
 	if p.PlacementID > 0 {
-		buf.WriteString(fmt.Sprintf(",p=%d", p.PlacementID))
+		fmt.Fprintf(&buf, ",p=%d", p.PlacementID)
 	}
 
 	// MaxShowable is already calculated as: p.Rows - clipTop - clipBottom
@@ -1311,10 +1311,10 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 
 	// Use original cols (no horizontal clipping for now)
 	if p.Cols > 0 {
-		buf.WriteString(fmt.Sprintf(",c=%d", p.Cols))
+		fmt.Fprintf(&buf, ",c=%d", p.Cols)
 	}
 	if visibleRows > 0 {
-		buf.WriteString(fmt.Sprintf(",r=%d", visibleRows))
+		fmt.Fprintf(&buf, ",r=%d", visibleRows)
 	}
 
 	// Calculate source Y offset (in pixels) - includes original SourceY plus clipping
@@ -1330,27 +1330,27 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 
 	// Include source clipping parameters
 	if p.SourceX > 0 {
-		buf.WriteString(fmt.Sprintf(",x=%d", p.SourceX))
+		fmt.Fprintf(&buf, ",x=%d", p.SourceX)
 	}
 	if sourceY > 0 {
-		buf.WriteString(fmt.Sprintf(",y=%d", sourceY))
+		fmt.Fprintf(&buf, ",y=%d", sourceY)
 	}
 	// Use original source width if specified (no horizontal clipping for now)
 	if p.SourceWidth > 0 {
-		buf.WriteString(fmt.Sprintf(",w=%d", p.SourceWidth))
+		fmt.Fprintf(&buf, ",w=%d", p.SourceWidth)
 	}
 	// Always set h for vertical clipping
 	if sourceHeight > 0 {
-		buf.WriteString(fmt.Sprintf(",h=%d", sourceHeight))
+		fmt.Fprintf(&buf, ",h=%d", sourceHeight)
 	}
 	if p.XOffset > 0 {
-		buf.WriteString(fmt.Sprintf(",X=%d", p.XOffset))
+		fmt.Fprintf(&buf, ",X=%d", p.XOffset)
 	}
 	if p.YOffset > 0 {
-		buf.WriteString(fmt.Sprintf(",Y=%d", p.YOffset))
+		fmt.Fprintf(&buf, ",Y=%d", p.YOffset)
 	}
 	if p.ZIndex != 0 {
-		buf.WriteString(fmt.Sprintf(",z=%d", p.ZIndex))
+		fmt.Fprintf(&buf, ",z=%d", p.ZIndex)
 	}
 	// Note: Don't send U=1 to host - TUIOS renders guest content itself
 	buf.WriteString(",q=2\x1b\\")

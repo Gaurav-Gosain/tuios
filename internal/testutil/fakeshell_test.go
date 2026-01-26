@@ -525,7 +525,7 @@ func TestProgressBar(t *testing.T) {
 
 func TestSpinnerFrame(t *testing.T) {
 	frames := []string{"|", "/", "-", "\\"}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		frame := testutil.SpinnerFrame(i)
 		expected := frames[i%4]
 		if !strings.Contains(frame, expected) {
@@ -560,7 +560,7 @@ func TestFakeShell_Concurrent(t *testing.T) {
 
 	// Send output in a goroutine
 	go func() {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			shell.SendOutput("line\n")
 			time.Sleep(time.Millisecond)
 		}
@@ -568,7 +568,7 @@ func TestFakeShell_Concurrent(t *testing.T) {
 
 	// Write input in another goroutine
 	go func() {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			_, _ = shell.Write([]byte("cmd\n"))
 			time.Sleep(time.Millisecond)
 		}
@@ -576,7 +576,7 @@ func TestFakeShell_Concurrent(t *testing.T) {
 
 	// Read from shell
 	buf := make([]byte, 100)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		_, _ = shell.Read(buf)
 	}
 
@@ -588,14 +588,14 @@ func TestFakeShell_Concurrent(t *testing.T) {
 // =============================================================================
 
 func BenchmarkANSIBuilder_Simple(b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		builder := testutil.NewANSIBuilder()
 		_ = builder.Text("Hello World").String()
 	}
 }
 
 func BenchmarkANSIBuilder_Complex(b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		builder := testutil.NewANSIBuilder()
 		_ = builder.
 			ClearScreen().
@@ -613,7 +613,7 @@ func BenchmarkFakeShell_SendOutput(b *testing.B) {
 	shell := testutil.NewFakeShell()
 	defer func() { _ = shell.Close() }()
 
-	for range b.N {
+	for b.Loop() {
 		shell.SendOutput("test output\n")
 	}
 }

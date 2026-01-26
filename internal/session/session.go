@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"os"
 	"os/exec"
 	"runtime"
@@ -304,9 +305,7 @@ func (s *Session) GetState() *SessionState {
 	copy(stateCopy.Windows, s.state.Windows)
 	if s.state.WorkspaceFocus != nil {
 		stateCopy.WorkspaceFocus = make(map[int]string)
-		for k, v := range s.state.WorkspaceFocus {
-			stateCopy.WorkspaceFocus[k] = v
-		}
+		maps.Copy(stateCopy.WorkspaceFocus, s.state.WorkspaceFocus)
 	}
 	return &stateCopy
 }
