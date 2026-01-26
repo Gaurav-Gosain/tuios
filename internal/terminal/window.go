@@ -1066,49 +1066,21 @@ func (w *Window) Close() {
 	}
 	w.ioMu.Unlock()
 
-	// Wait for I/O goroutines to finish (with timeout to prevent deadlock)
-	ioWaitDone := make(chan struct{})
+	// Wait briefly for I/O goroutines (they should exit fast after PTY/Terminal close)
+	done := make(chan struct{})
 	go func() {
 		w.ioWg.Wait()
-		close(ioWaitDone)
+		close(done)
 	}()
 	select {
-	case <-ioWaitDone:
-		// I/O goroutines finished cleanly
-	case <-time.After(time.Millisecond * 500):
-		// Timeout - proceed with cleanup anyway
+	case <-done:
+	case <-time.After(10 * time.Millisecond):
 	}
 
-	// Now safe to close remaining resources
-	w.ioMu.Lock()
-	defer w.ioMu.Unlock()
-
-	// Kill the process with timeout
+	// Kill the process
 	if w.Cmd != nil && w.Cmd.Process != nil {
-		done := make(chan bool, 1)
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					// Silently recover from panics during process cleanup
-					_ = r // Explicitly ignore the recovered value
-				}
-			}()
-
-			// Best effort kill
-			_ = w.Cmd.Process.Kill() // Best effort, ignore error
-			// Wait for process to exit (uses sync.Once to prevent race)
-			w.waitForCmd()
-			done <- true
-		}()
-
-		// Wait for process cleanup with timeout
-		select {
-		case <-done:
-			// Clean shutdown
-		case <-time.After(time.Millisecond * 500):
-			// Force cleanup after shorter timeout for better responsiveness
-		}
-
+		_ = w.Cmd.Process.Kill()
+		w.waitForCmd()
 		w.Cmd = nil
 	}
 
