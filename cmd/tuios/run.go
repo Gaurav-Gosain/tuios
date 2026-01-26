@@ -15,7 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/server"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // filterMouseMotion filters out redundant mouse motion events to reduce CPU usage.
@@ -57,57 +57,23 @@ func runLocal() error {
 		fmt.Println("Debug mode enabled")
 	}
 
-	if asciiOnly {
-		config.UseASCIIOnly = true
-	}
-
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
 		userConfig = config.DefaultConfig()
 	}
 
-	if borderStyle == "" {
-		config.BorderStyle = userConfig.Appearance.BorderStyle
-	} else {
-		config.BorderStyle = borderStyle
-	}
-
-	if dockbarPosition == "" {
-		config.DockbarPosition = userConfig.Appearance.DockbarPosition
-	} else {
-		config.DockbarPosition = dockbarPosition
-	}
-
-	config.HideWindowButtons = hideWindowButtons || userConfig.Appearance.HideWindowButtons
-
-	if windowTitlePosition == "" {
-		if userConfig.Appearance.WindowTitlePosition != "" {
-			config.WindowTitlePosition = userConfig.Appearance.WindowTitlePosition
-		}
-	} else {
-		config.WindowTitlePosition = windowTitlePosition
-	}
-
-	config.HideClock = hideClock || userConfig.Appearance.HideClock
-
-	finalScrollbackLines := userConfig.Appearance.ScrollbackLines
-	if scrollbackLines > 0 {
-		if scrollbackLines < 100 {
-			finalScrollbackLines = 100
-		} else {
-			finalScrollbackLines = min(scrollbackLines, 1000000)
-		}
-	}
-	config.ScrollbackLines = finalScrollbackLines
-
-	if userConfig.Keybindings.LeaderKey != "" {
-		config.LeaderKey = userConfig.Keybindings.LeaderKey
-	}
-
-	if noAnimations {
-		config.AnimationsEnabled = false
-	}
+	config.ApplyOverrides(config.Overrides{
+		ASCIIOnly:           asciiOnly,
+		BorderStyle:         borderStyle,
+		DockbarPosition:     dockbarPosition,
+		HideWindowButtons:   hideWindowButtons,
+		WindowTitlePosition: windowTitlePosition,
+		HideClock:           hideClock,
+		ScrollbackLines:     scrollbackLines,
+		NoAnimations:        noAnimations,
+		ThemeName:           themeName,
+	}, userConfig)
 
 	if cpuProfile != "" {
 		f, err := os.Create(cpuProfile)
@@ -135,36 +101,14 @@ func runLocal() error {
 		log.Printf("Configuration: %s", configPath)
 	}
 
-	if err := theme.Initialize(themeName); err != nil {
-		log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
-		log.Printf("Falling back to default theme")
-	}
-
 	isDaemonSession := os.Getenv("TUIOS_SESSION") != ""
 
-	initialOS := &app.OS{
-		FocusedWindow:        -1,
-		WindowExitChan:       make(chan string, 10),
-		StateSyncChan:        make(chan *session.SessionState, 10),
-		ClientEventChan:      make(chan app.ClientEvent, 10),
-		MouseSnapping:        false,
-		MasterRatio:          0.5,
-		CurrentWorkspace:     1,
-		NumWorkspaces:        9,
-		WorkspaceFocus:       make(map[int]int),
-		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
-		WorkspaceHasCustom:   make(map[int]bool),
-		WorkspaceMasterRatio: make(map[int]float64),
-		PendingResizes:       make(map[string][2]int),
-		KeybindRegistry:      keybindRegistry,
-		ShowKeys:             showKeys,
-		RecentKeys:           []app.KeyEvent{},
-		KeyHistoryMaxSize:    5,
-		IsDaemonSession:      isDaemonSession,
-		KittyRenderer:        app.NewKittyRenderer(),
-		KittyPassthrough:     app.NewKittyPassthrough(),
-		SixelPassthrough:     app.NewSixelPassthrough(),
-	}
+	initialOS := app.NewOS(app.OSOptions{
+		KeybindRegistry:           keybindRegistry,
+		ShowKeys:                  showKeys,
+		IsDaemonSession:           isDaemonSession,
+		EnableGraphicsPassthrough: true,
+	})
 
 	p := tea.NewProgram(
 		initialOS,
@@ -186,17 +130,7 @@ func runLocal() error {
 		finalOS.Cleanup()
 	}
 
-	fmt.Print("\033c")
-	fmt.Print("\033[?1000l")
-	fmt.Print("\033[?1002l")
-	fmt.Print("\033[?1003l")
-	fmt.Print("\033[?1004l")
-	fmt.Print("\033[?1006l")
-	fmt.Print("\033[?25h")
-	fmt.Print("\033[?47l")
-	fmt.Print("\033[0m")
-	fmt.Print("\r\n")
-	_ = os.Stdout.Sync()
+	terminal.ResetTerminal()
 
 	if err != nil {
 		return fmt.Errorf("program error: %w", err)
@@ -211,16 +145,12 @@ func runSSHServer(sshHost, sshPort, sshKeyPath, defaultSession string, ephemeral
 		fmt.Println("Debug mode enabled")
 	}
 
-	if asciiOnly {
-		config.UseASCIIOnly = true
-	}
+	config.ApplyOverrides(config.Overrides{
+		ASCIIOnly: asciiOnly,
+		ThemeName: themeName,
+	}, nil)
 
 	app.SetInputHandler(input.HandleInput)
-
-	if err := theme.Initialize(themeName); err != nil {
-		log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
-		log.Printf("Falling back to default theme")
-	}
 
 	log.Printf("Starting TUIOS SSH server on %s:%s", sshHost, sshPort)
 	if defaultSession != "" {

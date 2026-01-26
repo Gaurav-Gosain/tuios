@@ -40,7 +40,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tea "charm.land/bubbletea/v2"
 )
@@ -291,31 +290,15 @@ func newModel(options Options) *Model {
 	// Create keybind registry
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
-	// Create the model
-	model := &Model{
-		FocusedWindow:        -1,
-		WindowExitChan:       make(chan string, 10),
-		StateSyncChan:        make(chan *session.SessionState, 10),
-		ClientEventChan:      make(chan app.ClientEvent, 10),
-		MouseSnapping:        false,
-		MasterRatio:          0.5,
-		CurrentWorkspace:     1,
-		NumWorkspaces:        options.Workspaces,
-		WorkspaceFocus:       make(map[int]int),
-		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
-		WorkspaceHasCustom:   make(map[int]bool),
-		WorkspaceMasterRatio: make(map[int]float64),
-		PendingResizes:       make(map[string][2]int),
-		KeybindRegistry:      keybindRegistry,
-		ShowKeys:             options.ShowKeys,
-		RecentKeys:           []app.KeyEvent{},
-		KeyHistoryMaxSize:    5,
-		IsSSHMode:            options.SSHMode,
-		Width:                options.Width,
-		Height:               options.Height,
-	}
-
-	return model
+	// Create the model using the factory function
+	return app.NewOS(app.OSOptions{
+		KeybindRegistry: keybindRegistry,
+		ShowKeys:        options.ShowKeys,
+		NumWorkspaces:   options.Workspaces,
+		Width:           options.Width,
+		Height:          options.Height,
+		IsSSHMode:       options.SSHMode,
+	})
 }
 
 // ProgramOptions returns recommended tea.ProgramOption values for running TUIOS.

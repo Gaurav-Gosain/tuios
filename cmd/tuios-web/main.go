@@ -18,7 +18,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
@@ -200,8 +199,16 @@ func runWebServer() error {
 		}()
 	}()
 
-	// Apply global config options
-	applyGlobalConfig()
+	// Apply global config options (CLI flags only, no user config at server level)
+	config.ApplyOverrides(config.Overrides{
+		ASCIIOnly:         asciiOnly,
+		BorderStyle:       borderStyle,
+		DockbarPosition:   dockbarPosition,
+		HideWindowButtons: hideWindowButtons,
+		ScrollbackLines:   scrollbackLines,
+		NoAnimations:      noAnimations,
+		ThemeName:         themeName,
+	}, nil)
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()
@@ -261,28 +268,12 @@ func createEphemeralTUIOSInstance(width, height int) (tea.Model, []tea.ProgramOp
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	// Create TUIOS instance
-	tuiosInstance := &app.OS{
-		FocusedWindow:        -1,
-		WindowExitChan:       make(chan string, 10),
-		StateSyncChan:        make(chan *session.SessionState, 10),
-		ClientEventChan:      make(chan app.ClientEvent, 10),
-		MouseSnapping:        false,
-		MasterRatio:          0.5,
-		CurrentWorkspace:     1,
-		NumWorkspaces:        9,
-		WorkspaceFocus:       make(map[int]int),
-		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
-		WorkspaceHasCustom:   make(map[int]bool),
-		WorkspaceMasterRatio: make(map[int]float64),
-		PendingResizes:       make(map[string][2]int),
-		Width:                width,
-		Height:               height,
-		KeybindRegistry:      keybindRegistry,
-		RecentKeys:           []app.KeyEvent{},
-		KeyHistoryMaxSize:    5,
-		IsSSHMode:            false,
-		ShowKeys:             showKeys,
-	}
+	tuiosInstance := app.NewOS(app.OSOptions{
+		KeybindRegistry: keybindRegistry,
+		ShowKeys:        showKeys,
+		Width:           width,
+		Height:          height,
+	})
 
 	return tuiosInstance, []tea.ProgramOption{
 		tea.WithFPS(config.NormalFPS),
@@ -341,34 +332,16 @@ func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model
 	app.SetInputHandler(input.HandleInput)
 
 	// Create TUIOS instance connected to daemon
-	tuiosInstance := &app.OS{
-		FocusedWindow:        -1,
-		WindowExitChan:       make(chan string, 10),
-		StateSyncChan:        make(chan *session.SessionState, 10),
-		ClientEventChan:      make(chan app.ClientEvent, 10),
-		MouseSnapping:        false,
-		MasterRatio:          0.5,
-		CurrentWorkspace:     1,
-		NumWorkspaces:        9,
-		WorkspaceFocus:       make(map[int]int),
-		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
-		WorkspaceHasCustom:   make(map[int]bool),
-		WorkspaceMasterRatio: make(map[int]float64),
-		PendingResizes:       make(map[string][2]int),
-		Width:                width,
-		Height:               height,
-		KeybindRegistry:      keybindRegistry,
-		RecentKeys:           []app.KeyEvent{},
-		KeyHistoryMaxSize:    5,
-		IsSSHMode:            false,
-		ShowKeys:             showKeys,
-		IsDaemonSession:      true,
-		DaemonClient:         client,
-		SessionName:          sessionName,
-		KittyRenderer:        app.NewKittyRenderer(),
-		KittyPassthrough:     app.NewKittyPassthrough(),
-		SixelPassthrough:     app.NewSixelPassthrough(),
-	}
+	tuiosInstance := app.NewOS(app.OSOptions{
+		KeybindRegistry:           keybindRegistry,
+		ShowKeys:                  showKeys,
+		Width:                     width,
+		Height:                    height,
+		IsDaemonSession:           true,
+		DaemonClient:              client,
+		SessionName:               sessionName,
+		EnableGraphicsPassthrough: true,
+	})
 
 	// Restore state from daemon if available
 	if state != nil && len(state.Windows) > 0 {
@@ -457,34 +430,3 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 	})
 }
 
-// applyGlobalConfig applies CLI flags to global configuration.
-func applyGlobalConfig() {
-	if asciiOnly {
-		config.UseASCIIOnly = true
-	}
-	if borderStyle != "" {
-		config.BorderStyle = borderStyle
-	}
-	if dockbarPosition != "" {
-		config.DockbarPosition = dockbarPosition
-	}
-	if hideWindowButtons {
-		config.HideWindowButtons = true
-	}
-	if scrollbackLines > 0 {
-		if scrollbackLines < 100 {
-			scrollbackLines = 100
-		} else if scrollbackLines > 1000000 {
-			scrollbackLines = 1000000
-		}
-		config.ScrollbackLines = scrollbackLines
-	}
-	if themeName != "" {
-		if err := theme.Initialize(themeName); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to load theme '%s': %v\n", themeName, err)
-		}
-	}
-	if noAnimations {
-		config.AnimationsEnabled = false
-	}
-}
