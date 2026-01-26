@@ -37,7 +37,94 @@ var (
 			return &style
 		},
 	}
+
+	// Pool for highlight grids used in terminal rendering
+	highlightGridPool = sync.Pool{
+		New: func() any {
+			return &HighlightGrid{}
+		},
+	}
 )
+
+// HighlightGrid is a sparse grid for tracking cell highlights.
+// It uses a slice of slices instead of nested maps to reduce allocations.
+type HighlightGrid struct {
+	rows   [][]bool
+	maxY   int
+	maxX   int
+	inited bool
+}
+
+// Init initializes the grid for the given dimensions.
+// This should be called before using the grid.
+func (g *HighlightGrid) Init(maxY, maxX int) {
+	g.maxY = maxY
+	g.maxX = maxX
+	g.inited = true
+
+	// Reuse existing slices if possible
+	if cap(g.rows) >= maxY {
+		g.rows = g.rows[:maxY]
+		for i := range g.rows {
+			if g.rows[i] != nil {
+				// Clear the row
+				clear(g.rows[i])
+			}
+		}
+	} else {
+		g.rows = make([][]bool, maxY)
+	}
+}
+
+// Set marks a cell as highlighted.
+func (g *HighlightGrid) Set(y, x int) {
+	if y < 0 || y >= g.maxY || x < 0 || x >= g.maxX {
+		return
+	}
+
+	if g.rows[y] == nil {
+		g.rows[y] = make([]bool, g.maxX)
+	}
+	g.rows[y][x] = true
+}
+
+// Get returns whether a cell is highlighted.
+func (g *HighlightGrid) Get(y, x int) bool {
+	if y < 0 || y >= g.maxY || x < 0 || x >= g.maxX {
+		return false
+	}
+	if g.rows[y] == nil {
+		return false
+	}
+	return g.rows[y][x]
+}
+
+// HasRow returns whether a row has any highlights.
+func (g *HighlightGrid) HasRow(y int) bool {
+	if y < 0 || y >= g.maxY {
+		return false
+	}
+	return g.rows[y] != nil
+}
+
+// Reset clears the grid for reuse.
+func (g *HighlightGrid) Reset() {
+	for i := range g.rows {
+		g.rows[i] = nil
+	}
+	g.inited = false
+}
+
+// GetHighlightGrid retrieves a highlight grid from the pool.
+func GetHighlightGrid() *HighlightGrid {
+	return highlightGridPool.Get().(*HighlightGrid)
+}
+
+// PutHighlightGrid returns a highlight grid to the pool after resetting it.
+func PutHighlightGrid(g *HighlightGrid) {
+	g.Reset()
+	highlightGridPool.Put(g)
+}
 
 // GetStringBuilder retrieves a string builder from the pool.
 func GetStringBuilder() *strings.Builder {

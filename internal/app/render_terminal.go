@@ -66,12 +66,16 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// Skip fake cursor rendering when real terminal cursor is active
 	useRealCursor := m.getRealCursor() != nil
 
-	var searchHighlights map[int]map[int]bool
-	var currentMatchHighlight map[int]map[int]bool
+	// Use pooled highlight grids to reduce allocations
+	var searchHighlights, currentMatchHighlight, visualSelection *pool.HighlightGrid
 
 	if inCopyMode && len(window.CopyMode.SearchMatches) > 0 {
-		searchHighlights = make(map[int]map[int]bool)
-		currentMatchHighlight = make(map[int]map[int]bool)
+		searchHighlights = pool.GetHighlightGrid()
+		currentMatchHighlight = pool.GetHighlightGrid()
+		searchHighlights.Init(maxY, maxX)
+		currentMatchHighlight.Init(maxY, maxX)
+		defer pool.PutHighlightGrid(searchHighlights)
+		defer pool.PutHighlightGrid(currentMatchHighlight)
 
 		for i, match := range window.CopyMode.SearchMatches {
 			var viewportY int
@@ -97,34 +101,25 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			if viewportY >= 0 && viewportY < maxY {
 				isCurrentMatch := (i == window.CopyMode.CurrentMatch)
 
-				if isCurrentMatch {
-					if currentMatchHighlight[viewportY] == nil {
-						currentMatchHighlight[viewportY] = make(map[int]bool)
-					}
-				} else {
-					if searchHighlights[viewportY] == nil {
-						searchHighlights[viewportY] = make(map[int]bool)
-					}
-				}
-
 				for x := match.StartX; x < match.EndX && x < maxX; x++ {
 					if isCurrentMatch {
-						currentMatchHighlight[viewportY][x] = true
+						currentMatchHighlight.Set(viewportY, x)
 					} else {
-						searchHighlights[viewportY][x] = true
+						searchHighlights.Set(viewportY, x)
 					}
 				}
 			}
 		}
 	}
 
-	var visualSelection map[int]map[int]bool
 	inVisualMode := inCopyMode &&
 		(window.CopyMode.State == terminal.CopyModeVisualChar ||
 			window.CopyMode.State == terminal.CopyModeVisualLine)
 
 	if inVisualMode {
-		visualSelection = make(map[int]map[int]bool)
+		visualSelection = pool.GetHighlightGrid()
+		visualSelection.Init(maxY, maxX)
+		defer pool.PutHighlightGrid(visualSelection)
 
 		start := window.CopyMode.VisualStart
 		end := window.CopyMode.VisualEnd
@@ -155,10 +150,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 
 			if viewportY >= 0 && viewportY < maxY {
-				if visualSelection[viewportY] == nil {
-					visualSelection[viewportY] = make(map[int]bool)
-				}
-
 				startX, endX := 0, maxX-1
 				if absY == start.Y {
 					startX = start.X
@@ -168,7 +159,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				}
 
 				for x := startX; x <= endX && x < maxX; x++ {
-					visualSelection[viewportY][x] = true
+					visualSelection.Set(viewportY, x)
 				}
 			}
 		}
@@ -235,7 +226,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		prevCell = nil
 
 		lineEndX := maxX - 1
-		if inVisualMode && visualSelection[y] != nil {
+		if inVisualMode && visualSelection != nil && visualSelection.HasRow(y) {
 			if inScrollbackMode {
 				if y < window.ScrollbackOffset {
 					scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
@@ -368,7 +359,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				char = string(cell.Content)
 			}
 
-			if inVisualMode && visualSelection[y] != nil && visualSelection[y][x] && x <= lineEndX {
+			if inVisualMode && visualSelection != nil && visualSelection.Get(y, x) && x <= lineEndX {
 				selStyle := lipgloss.NewStyle().
 					Background(lipgloss.Color("#5F5FAF")).
 					Foreground(lipgloss.Color("#FFFFFF")).
@@ -398,7 +389,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 
 			if inCopyMode && !inVisualMode {
-				if currentMatchHighlight[y] != nil && currentMatchHighlight[y][x] {
+				if currentMatchHighlight != nil && currentMatchHighlight.Get(y, x) {
 					matchStyle := lipgloss.NewStyle().
 						Background(lipgloss.Color("#FF00FF")).
 						Foreground(lipgloss.Color("#000000")).
@@ -427,7 +418,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					continue
 				}
 
-				if searchHighlights[y] != nil && searchHighlights[y][x] {
+				if searchHighlights != nil && searchHighlights.Get(y, x) {
 					matchStyle := lipgloss.NewStyle().
 						Background(lipgloss.Color("#FF8700")).
 						Foreground(lipgloss.Color("#000000"))

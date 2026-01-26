@@ -149,6 +149,11 @@ type Window struct {
 
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)
+
+	// cmdWaitOnce ensures cmd.Wait() is only called once to prevent race conditions
+	cmdWaitOnce sync.Once
+	// ioWg tracks I/O goroutines for clean shutdown
+	ioWg sync.WaitGroup
 }
 
 // CopyModeState represents the current state within copy mode
@@ -377,9 +382,9 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 			}
 		}()
 
-		// Wait for process to exit
-		// Use xpty.WaitProcess for cross-platform compatibility (Windows ConPTY requirement)
-		_ = xpty.WaitProcess(ctx, cmd) // Ignore error as we're just monitoring exit
+		// Wait for process to exit using sync.Once to prevent race conditions
+		// with Close() which may also wait for the process.
+		window.waitForCmd()
 
 		// Mark process as exited
 		window.ProcessExited = true
@@ -762,7 +767,9 @@ func (w *Window) handleIOOperations() {
 	w.cancelFunc = cancel
 
 	// PTY to Terminal copy (output from shell) - with proper context handling
+	w.ioWg.Add(1)
 	go func() {
+		defer w.ioWg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				// Silently recover from panics during PTY read
@@ -823,7 +830,9 @@ func (w *Window) handleIOOperations() {
 	}()
 
 	// Terminal to PTY copy (input to shell) - with proper context handling
+	w.ioWg.Add(1)
 	go func() {
+		defer w.ioWg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				// Silently recover from panics during terminal read
@@ -840,11 +849,16 @@ func (w *Window) handleIOOperations() {
 				return
 			default:
 				// Set a reasonable timeout for read operations
-				if w.Terminal == nil {
+				// Use lock to synchronize with Close() which may set w.Terminal = nil
+				w.ioMu.RLock()
+				terminal := w.Terminal
+				w.ioMu.RUnlock()
+
+				if terminal == nil {
 					return
 				}
 
-				n, err := w.Terminal.Read(buf)
+				n, err := terminal.Read(buf)
 				if err != nil {
 					if err != io.EOF && !strings.Contains(err.Error(), "file already closed") &&
 						!strings.Contains(err.Error(), "input/output error") {
@@ -998,6 +1012,18 @@ func (w *Window) SetCellPixelDimensions(cellWidth, cellHeight int) {
 	}
 }
 
+// waitForCmd waits for the command to exit, ensuring Wait() is only called once.
+// This prevents race conditions when both the process monitor goroutine and Close()
+// try to wait for the process.
+func (w *Window) waitForCmd() {
+	if w == nil || w.Cmd == nil {
+		return
+	}
+	w.cmdWaitOnce.Do(func() {
+		_ = w.Cmd.Wait() // Best effort, ignore error
+	})
+}
+
 // Close closes the window and cleans up resources.
 func (w *Window) Close() {
 	// Nil safety check
@@ -1025,16 +1051,37 @@ func (w *Window) Close() {
 		w.cancelFunc = nil
 	}
 
-	// Cleanup with proper synchronization
+	// Close PTY and Terminal to unblock I/O goroutines
+	// Must close both because:
+	// - PTY close unblocks the PTY->Terminal goroutine
+	// - Terminal close unblocks the Terminal->PTY goroutine (reads from emulator response pipe)
 	w.ioMu.Lock()
-	defer w.ioMu.Unlock()
-
-	// Close PTY first to stop I/O operations
 	if w.Pty != nil {
-		// Best effort close - ignore errors
 		_ = w.Pty.Close()
 		w.Pty = nil
 	}
+	if w.Terminal != nil {
+		_ = w.Terminal.Close()
+		w.Terminal = nil
+	}
+	w.ioMu.Unlock()
+
+	// Wait for I/O goroutines to finish (with timeout to prevent deadlock)
+	ioWaitDone := make(chan struct{})
+	go func() {
+		w.ioWg.Wait()
+		close(ioWaitDone)
+	}()
+	select {
+	case <-ioWaitDone:
+		// I/O goroutines finished cleanly
+	case <-time.After(time.Millisecond * 500):
+		// Timeout - proceed with cleanup anyway
+	}
+
+	// Now safe to close remaining resources
+	w.ioMu.Lock()
+	defer w.ioMu.Unlock()
 
 	// Kill the process with timeout
 	if w.Cmd != nil && w.Cmd.Process != nil {
@@ -1049,8 +1096,8 @@ func (w *Window) Close() {
 
 			// Best effort kill
 			_ = w.Cmd.Process.Kill() // Best effort, ignore error
-			// Wait for process to exit
-			_ = w.Cmd.Wait() // Best effort, ignore error
+			// Wait for process to exit (uses sync.Once to prevent race)
+			w.waitForCmd()
 			done <- true
 		}()
 
@@ -1063,12 +1110,6 @@ func (w *Window) Close() {
 		}
 
 		w.Cmd = nil
-	}
-
-	// Close terminal emulator to free memory
-	if w.Terminal != nil {
-		_ = w.Terminal.Close()
-		w.Terminal = nil
 	}
 
 	// Clear caches to free memory

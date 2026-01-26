@@ -290,63 +290,152 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 }
 
+// messageHandler is a function that handles a specific message type
+type messageHandler func(d *Daemon, cs *connState, msg *Message) error
+
+// messageHandlers maps message types to their handlers.
+// Handlers that don't need the message can ignore it.
+var messageHandlers = map[MessageType]messageHandler{
+	MsgHello:            (*Daemon).handleHelloMsg,
+	MsgAttach:           (*Daemon).handleAttachMsg,
+	MsgDetach:           (*Daemon).handleDetachMsg,
+	MsgNew:              (*Daemon).handleNewMsg,
+	MsgList:             (*Daemon).handleListMsg,
+	MsgKill:             (*Daemon).handleKillMsg,
+	MsgInput:            (*Daemon).handleInputMsg,
+	MsgResize:           (*Daemon).handleResizeMsg,
+	MsgPing:             (*Daemon).handlePingMsg,
+	MsgCreatePTY:        (*Daemon).handleCreatePTYMsg,
+	MsgClosePTY:         (*Daemon).handleClosePTYMsg,
+	MsgListPTYs:         (*Daemon).handleListPTYsMsg,
+	MsgGetState:         (*Daemon).handleGetStateMsg,
+	MsgUpdateState:      (*Daemon).handleUpdateStateMsg,
+	MsgSubscribePTY:     (*Daemon).handleSubscribePTYMsg,
+	MsgUnsubscribePTY:   (*Daemon).handleUnsubscribePTYMsg,
+	MsgGetTerminalState: (*Daemon).handleGetTerminalStateMsg,
+	MsgExecuteCommand:   (*Daemon).handleExecuteCommandMsg,
+	MsgSendKeys:         (*Daemon).handleSendKeysMsg,
+	MsgSetConfig:        (*Daemon).handleSetConfigMsg,
+	MsgCommandResult:    (*Daemon).handleCommandResultMsg,
+	MsgGetLogs:          (*Daemon).handleGetLogsMsg,
+	MsgQueryWindows:     (*Daemon).handleQueryWindowsMsg,
+	MsgQuerySession:     (*Daemon).handleQuerySessionMsg,
+	MsgWindowList:       (*Daemon).handleWindowListMsg,
+	MsgSessionInfo:      (*Daemon).handleSessionInfoMsg,
+}
+
 func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
-	switch msg.Type {
-	case MsgHello:
-		return d.handleHello(cs, msg)
-	case MsgAttach:
-		return d.handleAttach(cs, msg)
-	case MsgDetach:
-		return d.handleDetach(cs)
-	case MsgNew:
-		return d.handleNew(cs, msg)
-	case MsgList:
-		return d.handleList(cs)
-	case MsgKill:
-		return d.handleKill(cs, msg)
-	case MsgInput:
-		return d.handleInput(cs, msg)
-	case MsgResize:
-		return d.handleResize(cs, msg)
-	case MsgPing:
-		return d.sendPong(cs)
-	case MsgCreatePTY:
-		return d.handleCreatePTY(cs, msg)
-	case MsgClosePTY:
-		return d.handleClosePTY(cs, msg)
-	case MsgListPTYs:
-		return d.handleListPTYs(cs)
-	case MsgGetState:
-		return d.handleGetState(cs)
-	case MsgUpdateState:
-		return d.handleUpdateState(cs, msg)
-	case MsgSubscribePTY:
-		return d.handleSubscribePTY(cs, msg)
-	case MsgUnsubscribePTY:
-		return d.handleUnsubscribePTY(cs, msg)
-	case MsgGetTerminalState:
-		return d.handleGetTerminalState(cs, msg)
-	case MsgExecuteCommand:
-		return d.handleExecuteCommand(cs, msg)
-	case MsgSendKeys:
-		return d.handleSendKeys(cs, msg)
-	case MsgSetConfig:
-		return d.handleSetConfig(cs, msg)
-	case MsgCommandResult:
-		return d.handleCommandResult(cs, msg)
-	case MsgGetLogs:
-		return d.handleGetLogs(cs, msg)
-	case MsgQueryWindows:
-		return d.handleQueryWindows(cs, msg)
-	case MsgQuerySession:
-		return d.handleQuerySession(cs, msg)
-	case MsgWindowList:
-		return d.handleWindowListResponse(cs, msg)
-	case MsgSessionInfo:
-		return d.handleSessionInfoResponse(cs, msg)
-	default:
+	handler, ok := messageHandlers[msg.Type]
+	if !ok {
 		return fmt.Errorf("unknown message type: %d", msg.Type)
 	}
+	return handler(d, cs, msg)
+}
+
+// Message handler wrappers - these adapt the existing handlers to the messageHandler signature
+
+func (d *Daemon) handleHelloMsg(cs *connState, msg *Message) error {
+	return d.handleHello(cs, msg)
+}
+
+func (d *Daemon) handleAttachMsg(cs *connState, msg *Message) error {
+	return d.handleAttach(cs, msg)
+}
+
+func (d *Daemon) handleDetachMsg(cs *connState, _ *Message) error {
+	return d.handleDetach(cs)
+}
+
+func (d *Daemon) handleNewMsg(cs *connState, msg *Message) error {
+	return d.handleNew(cs, msg)
+}
+
+func (d *Daemon) handleListMsg(cs *connState, _ *Message) error {
+	return d.handleList(cs)
+}
+
+func (d *Daemon) handleKillMsg(cs *connState, msg *Message) error {
+	return d.handleKill(cs, msg)
+}
+
+func (d *Daemon) handleInputMsg(cs *connState, msg *Message) error {
+	return d.handleInput(cs, msg)
+}
+
+func (d *Daemon) handleResizeMsg(cs *connState, msg *Message) error {
+	return d.handleResize(cs, msg)
+}
+
+func (d *Daemon) handlePingMsg(cs *connState, _ *Message) error {
+	return d.sendPong(cs)
+}
+
+func (d *Daemon) handleCreatePTYMsg(cs *connState, msg *Message) error {
+	return d.handleCreatePTY(cs, msg)
+}
+
+func (d *Daemon) handleClosePTYMsg(cs *connState, msg *Message) error {
+	return d.handleClosePTY(cs, msg)
+}
+
+func (d *Daemon) handleListPTYsMsg(cs *connState, _ *Message) error {
+	return d.handleListPTYs(cs)
+}
+
+func (d *Daemon) handleGetStateMsg(cs *connState, _ *Message) error {
+	return d.handleGetState(cs)
+}
+
+func (d *Daemon) handleUpdateStateMsg(cs *connState, msg *Message) error {
+	return d.handleUpdateState(cs, msg)
+}
+
+func (d *Daemon) handleSubscribePTYMsg(cs *connState, msg *Message) error {
+	return d.handleSubscribePTY(cs, msg)
+}
+
+func (d *Daemon) handleUnsubscribePTYMsg(cs *connState, msg *Message) error {
+	return d.handleUnsubscribePTY(cs, msg)
+}
+
+func (d *Daemon) handleGetTerminalStateMsg(cs *connState, msg *Message) error {
+	return d.handleGetTerminalState(cs, msg)
+}
+
+func (d *Daemon) handleExecuteCommandMsg(cs *connState, msg *Message) error {
+	return d.handleExecuteCommand(cs, msg)
+}
+
+func (d *Daemon) handleSendKeysMsg(cs *connState, msg *Message) error {
+	return d.handleSendKeys(cs, msg)
+}
+
+func (d *Daemon) handleSetConfigMsg(cs *connState, msg *Message) error {
+	return d.handleSetConfig(cs, msg)
+}
+
+func (d *Daemon) handleCommandResultMsg(cs *connState, msg *Message) error {
+	return d.handleCommandResult(cs, msg)
+}
+
+func (d *Daemon) handleGetLogsMsg(cs *connState, msg *Message) error {
+	return d.handleGetLogs(cs, msg)
+}
+
+func (d *Daemon) handleQueryWindowsMsg(cs *connState, msg *Message) error {
+	return d.handleQueryWindows(cs, msg)
+}
+
+func (d *Daemon) handleQuerySessionMsg(cs *connState, msg *Message) error {
+	return d.handleQuerySession(cs, msg)
+}
+
+func (d *Daemon) handleWindowListMsg(cs *connState, msg *Message) error {
+	return d.handleWindowListResponse(cs, msg)
+}
+
+func (d *Daemon) handleSessionInfoMsg(cs *connState, msg *Message) error {
+	return d.handleSessionInfoResponse(cs, msg)
 }
 
 func (d *Daemon) handleHello(cs *connState, msg *Message) error {
