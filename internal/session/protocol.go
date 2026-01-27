@@ -89,6 +89,14 @@ type HelloPayload struct {
 	Width          int    `json:"width"`                     // Terminal width
 	Height         int    `json:"height"`                    // Terminal height
 	PreferredCodec string `json:"preferred_codec,omitempty"` // "gob" (default) or "json"
+	// Graphics capabilities from client's terminal
+	PixelWidth    int    `json:"pixel_width,omitempty"`    // Terminal width in pixels
+	PixelHeight   int    `json:"pixel_height,omitempty"`   // Terminal height in pixels
+	CellWidth     int    `json:"cell_width,omitempty"`     // Cell width in pixels
+	CellHeight    int    `json:"cell_height,omitempty"`    // Cell height in pixels
+	KittyGraphics bool   `json:"kitty_graphics,omitempty"` // Kitty graphics protocol support
+	SixelGraphics bool   `json:"sixel_graphics,omitempty"` // Sixel graphics support
+	TerminalName  string `json:"terminal_name,omitempty"`  // Detected terminal (kitty, wezterm, etc.)
 }
 
 // WelcomePayload is sent by server in response to Hello.

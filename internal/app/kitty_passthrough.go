@@ -230,6 +230,21 @@ func (kp *KittyPassthrough) ForwardCommand(
 	kittyPassthroughLog("ForwardCommand: action=%c, enabled=%v, imageID=%d, windowID=%s, win=(%d,%d), size=(%d,%d), cursor=(%d,%d), scrollback=%d, altScreen=%v",
 		cmd.Action, kp.enabled, cmd.ImageID, windowID[:8], windowX, windowY, windowWidth, windowHeight, cursorX, cursorY, scrollbackLen, isAltScreen)
 
+	// Detect and discard echoed responses to prevent feedback loops.
+	// Responses have format "i=N;OK" or "i=N;ERROR_MSG" or just "OK"/"ERROR_MSG"
+	// When parsed, they appear as transmit commands with Data="OK" or error message.
+	// Real transmit commands have binary/base64 image data, not status strings.
+	if cmd.Action == vt.KittyActionTransmit && len(cmd.Data) > 0 {
+		dataStr := string(cmd.Data)
+		// Check for response patterns: "OK", "ENOENT:", "EINVAL:", "EBADMSG:", etc.
+		if dataStr == "OK" ||
+			(len(dataStr) >= 2 && dataStr[0] == 'E' && (dataStr == "ENOENT" ||
+				(len(dataStr) > 2 && dataStr[1] >= 'A' && dataStr[1] <= 'Z'))) {
+			kittyPassthroughLog("ForwardCommand: DISCARDING echoed response: %q", dataStr)
+			return nil
+		}
+	}
+
 	if !kp.enabled {
 		kittyPassthroughLog("ForwardCommand: DISABLED, returning early")
 		return nil
@@ -306,7 +321,10 @@ func (kp *KittyPassthrough) ForwardCommand(
 func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInput func([]byte)) {
 	if ptyInput != nil && cmd.Quiet < 2 {
 		response := vt.BuildKittyResponse(true, cmd.ImageID, "")
+		kittyPassthroughLog("forwardQuery: sending response for imageID=%d, response=%q, ptyInput=%v", cmd.ImageID, response, ptyInput != nil)
 		ptyInput(response)
+	} else {
+		kittyPassthroughLog("forwardQuery: NOT sending response, ptyInput=%v, quiet=%d", ptyInput != nil, cmd.Quiet)
 	}
 }
 
@@ -322,8 +340,11 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	hasPendingData := kp.pendingDirectData[windowID] != nil
 
 	// For transmit-only (no placement) AND no pending accumulation, pass through raw data
+	// Wrap in APC framing since rawData is just the payload without ESC_G prefix and ESC\ suffix
 	if !andPlace && !hasPendingData {
+		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
 		kp.pendingOutput = append(kp.pendingOutput, rawData...)
+		kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
 		return nil
 	}
 
@@ -1385,10 +1406,13 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 			scrollbackLen,
 			win.IsAltScreen,
 			func(response []byte) {
+				kittyPassthroughLog("ptyInput callback: Pty=%v, DaemonWriteFunc=%v, response=%q", win.Pty != nil, win.DaemonWriteFunc != nil, response)
 				if win.Pty != nil {
 					_, _ = win.Pty.Write(response)
 				} else if win.DaemonWriteFunc != nil {
 					_ = win.DaemonWriteFunc(response)
+				} else {
+					kittyPassthroughLog("ptyInput callback: WARNING - both Pty and DaemonWriteFunc are nil, response dropped!")
 				}
 			},
 		)

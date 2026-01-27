@@ -60,6 +60,16 @@ type connState struct {
 	// Client terminal dimensions (for multi-client size calculation)
 	width  int
 	height int
+
+	// Client's terminal graphics capabilities (pixel dimensions, etc.)
+	// Used to set proper PTY pixel sizes for tools like kitty icat
+	pixelWidth    int
+	pixelHeight   int
+	cellWidth     int
+	cellHeight    int
+	kittyGraphics bool
+	sixelGraphics bool
+	terminalName  string
 }
 
 // DaemonConfig holds configuration for starting the daemon.
@@ -446,6 +456,20 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 
 	cs.hello = &payload
 
+	// Store client's graphics capabilities for PTY pixel size reporting
+	cs.pixelWidth = payload.PixelWidth
+	cs.pixelHeight = payload.PixelHeight
+	cs.cellWidth = payload.CellWidth
+	cs.cellHeight = payload.CellHeight
+	cs.kittyGraphics = payload.KittyGraphics
+	cs.sixelGraphics = payload.SixelGraphics
+	cs.terminalName = payload.TerminalName
+
+	if payload.CellWidth > 0 && payload.CellHeight > 0 {
+		LogBasic("Client %s capabilities: cell=%dx%d pixels, kitty=%v, sixel=%v, term=%s",
+			cs.clientID, payload.CellWidth, payload.CellHeight, payload.KittyGraphics, payload.SixelGraphics, payload.TerminalName)
+	}
+
 	// Negotiate codec based on client preference
 	cs.codec = NegotiateCodec(payload.PreferredCodec)
 	LogBasic("Client %s negotiated codec: %s", cs.clientID, cs.codec.Type())
@@ -524,16 +548,34 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		d.notifyClientJoined(session.ID, cs)
 	}
 
-	// Get session state to return (with effective size)
+	// Get session state to return
 	state := session.GetState()
-	state.Width = effectiveWidth
-	state.Height = effectiveHeight
+	// Only update state dimensions if we have real client sizes
+	// When reattaching after all clients disconnect, preserve the original state dimensions
+	// so that window scaling works correctly. The placeholder 80x24 values would cause
+	// windows to be scaled incorrectly when the real terminal size is known.
+	if effectiveWidth != payload.Width || effectiveHeight != payload.Height {
+		// We have real dimensions from other clients, use them
+		state.Width = effectiveWidth
+		state.Height = effectiveHeight
+	}
+	// If state dimensions are 0 (new session), use effective/placeholder values
+	if state.Width == 0 || state.Height == 0 {
+		state.Width = effectiveWidth
+		state.Height = effectiveHeight
+	}
 
 	debugLog("[DEBUG] Session state: %d windows, %d PTYs", len(state.Windows), session.PTYCount())
 	for i, w := range state.Windows {
 		if len(w.ID) >= 8 && len(w.PTYID) >= 8 {
 			debugLog("[DEBUG]   Window %d: ID=%s, PTYID=%s", i, w.ID[:8], w.PTYID[:8])
 		}
+	}
+
+	// Sync PTY pixel dimensions from client's terminal capabilities
+	// This enables graphics tools like kitty icat to query proper pixel sizes
+	if cs.cellWidth > 0 && cs.cellHeight > 0 {
+		d.syncPTYPixelDimensions(session, cs.cellWidth, cs.cellHeight)
 	}
 
 	return d.sendMessage(cs, MsgAttached, &AttachedPayload{
@@ -683,6 +725,15 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 		// PTY-specific resize
 		if pty := session.GetPTY(payload.PTYID); pty != nil {
 			_ = pty.Resize(payload.Width, payload.Height)
+			// Also update pixel dimensions if client has capability info
+			if cs.cellWidth > 0 && cs.cellHeight > 0 {
+				// Update VT emulator cell size (in case it wasn't set)
+				pty.SetCellSize(cs.cellWidth, cs.cellHeight)
+				// Update PTY pixel dimensions for TIOCGWINSZ
+				xpixel := payload.Width * cs.cellWidth
+				ypixel := payload.Height * cs.cellHeight
+				_ = pty.SetPixelSize(payload.Width, payload.Height, xpixel, ypixel)
+			}
 		}
 	}
 
@@ -723,6 +774,22 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 	if err != nil {
 		debugLog("[DEBUG] handleCreatePTY: failed to create PTY: %v", err)
 		return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to create PTY: %v", err))
+	}
+
+	// Set pixel dimensions from client's terminal capabilities
+	// This enables graphics tools like kitty icat to query proper pixel sizes
+	if cs.cellWidth > 0 && cs.cellHeight > 0 {
+		// Set cell size on VT emulator for XTWINOPS responses
+		pty.SetCellSize(cs.cellWidth, cs.cellHeight)
+
+		// Set pixel dimensions on PTY for TIOCGWINSZ queries
+		xpixel := width * cs.cellWidth
+		ypixel := height * cs.cellHeight
+		if err := pty.SetPixelSize(width, height, xpixel, ypixel); err != nil {
+			debugLog("[DEBUG] handleCreatePTY: failed to set pixel size: %v", err)
+		} else {
+			debugLog("[DEBUG] PTY pixel size set: %dx%d pixels (cell: %dx%d)", xpixel, ypixel, cs.cellWidth, cs.cellHeight)
+		}
 	}
 
 	// Set up exit callback to notify subscribed clients when PTY process exits
@@ -1148,6 +1215,36 @@ func (d *Daemon) broadcastStateSync(sessionID string, state *SessionState, trigg
 		SourceID:    sourceClientID,
 	}
 	d.broadcastToSession(sessionID, MsgStateSync, payload, sourceClientID)
+}
+
+// syncPTYPixelDimensions sets pixel dimensions on all PTYs in a session.
+// This is called when a client attaches with terminal graphics capabilities.
+func (d *Daemon) syncPTYPixelDimensions(session *Session, cellWidth, cellHeight int) {
+	if session == nil || cellWidth <= 0 || cellHeight <= 0 {
+		return
+	}
+
+	ptyIDs := session.ListPTYIDs()
+	for _, ptyID := range ptyIDs {
+		pty := session.GetPTY(ptyID)
+		if pty != nil {
+			// Calculate pixel dimensions from cell size and terminal dimensions
+			width, height := pty.Size()
+			xpixel := width * cellWidth
+			ypixel := height * cellHeight
+
+			// Set cell size on VT emulator for XTWINOPS responses
+			pty.SetCellSize(cellWidth, cellHeight)
+
+			// Set pixel dimensions on PTY for TIOCGWINSZ queries
+			if err := pty.SetPixelSize(width, height, xpixel, ypixel); err != nil {
+				LogBasic("Failed to set PTY %s pixel size: %v", ptyID[:8], err)
+			} else {
+				LogBasic("Set PTY %s pixel size: %dx%d chars, %dx%d pixels (cell: %dx%d)",
+					ptyID[:8], width, height, xpixel, ypixel, cellWidth, cellHeight)
+			}
+		}
+	}
 }
 
 // handleExecuteCommand routes a tape command to the TUI client attached to the session.

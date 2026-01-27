@@ -27,7 +27,15 @@ type HostCapabilities struct {
 
 var cachedCapabilities *HostCapabilities
 
+// clientCapabilities holds capabilities received from the daemon client.
+// These override detected capabilities when running in daemon mode.
+var clientCapabilities *HostCapabilities
+
 func GetHostCapabilities() *HostCapabilities {
+	// Prefer client-provided capabilities (for daemon mode)
+	if clientCapabilities != nil {
+		return clientCapabilities
+	}
 	if cachedCapabilities == nil {
 		cachedCapabilities = DetectHostCapabilities()
 	}
@@ -36,6 +44,18 @@ func GetHostCapabilities() *HostCapabilities {
 
 func ResetHostCapabilities() {
 	cachedCapabilities = nil
+	clientCapabilities = nil
+}
+
+// SetClientCapabilities sets capabilities received from a daemon client.
+// This is used in daemon mode where the client has access to the real terminal.
+func SetClientCapabilities(caps *HostCapabilities) {
+	clientCapabilities = caps
+}
+
+// GetClientCapabilities returns the client-provided capabilities, or nil if not set.
+func GetClientCapabilities() *HostCapabilities {
+	return clientCapabilities
 }
 
 func UpdateHostDimensions(cols, rows, pixelWidth, pixelHeight int) {

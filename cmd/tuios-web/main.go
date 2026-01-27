@@ -289,7 +289,9 @@ func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model
 		v = "web-client"
 	}
 
-	if err := client.Connect(v, width, height); err != nil {
+	// Web mode doesn't have real terminal capabilities
+	// Pass empty capabilities - graphics passthrough doesn't work in web mode anyway
+	if err := client.ConnectWithCapabilities(v, width, height, nil); err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 

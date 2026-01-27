@@ -94,8 +94,24 @@ func NewTUIClient() *TUIClient {
 	}
 }
 
+// ClientCapabilities holds terminal graphics capabilities detected from the client's terminal.
+type ClientCapabilities struct {
+	PixelWidth    int
+	PixelHeight   int
+	CellWidth     int
+	CellHeight    int
+	KittyGraphics bool
+	SixelGraphics bool
+	TerminalName  string
+}
+
 // Connect connects to the daemon and performs handshake.
 func (c *TUIClient) Connect(version string, width, height int) error {
+	return c.ConnectWithCapabilities(version, width, height, nil)
+}
+
+// ConnectWithCapabilities connects to the daemon and performs handshake with graphics capabilities.
+func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, caps *ClientCapabilities) error {
 	socketPath, err := GetSocketPath()
 	if err != nil {
 		return fmt.Errorf("failed to get socket path: %w", err)
@@ -108,13 +124,27 @@ func (c *TUIClient) Connect(version string, width, height int) error {
 	c.conn = conn
 	c.connected = true
 
-	// Send hello with gob preference
-	msg, err := NewMessageWithCodec(MsgHello, &HelloPayload{
+	// Build hello payload with capabilities
+	hello := &HelloPayload{
 		Version:        version,
 		Width:          width,
 		Height:         height,
 		PreferredCodec: "gob",
-	}, c.codec)
+	}
+
+	// Add graphics capabilities if provided
+	if caps != nil {
+		hello.PixelWidth = caps.PixelWidth
+		hello.PixelHeight = caps.PixelHeight
+		hello.CellWidth = caps.CellWidth
+		hello.CellHeight = caps.CellHeight
+		hello.KittyGraphics = caps.KittyGraphics
+		hello.SixelGraphics = caps.SixelGraphics
+		hello.TerminalName = caps.TerminalName
+	}
+
+	// Send hello with capabilities
+	msg, err := NewMessageWithCodec(MsgHello, hello, c.codec)
 	if err != nil {
 		_ = conn.Close()
 		return err

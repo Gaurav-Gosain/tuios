@@ -210,7 +210,21 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 		version = "ssh-client"
 	}
 
-	if err := client.Connect(version, width, height); err != nil {
+	// Try to detect host capabilities for SSH sessions
+	// Note: SSH doesn't forward terminal pixel queries, so this may return defaults
+	// For better graphics support, use a local session instead of SSH
+	hostCaps := app.GetHostCapabilities()
+	clientCaps := &session.ClientCapabilities{
+		PixelWidth:    hostCaps.PixelWidth,
+		PixelHeight:   hostCaps.PixelHeight,
+		CellWidth:     hostCaps.CellWidth,
+		CellHeight:    hostCaps.CellHeight,
+		KittyGraphics: hostCaps.KittyGraphics,
+		SixelGraphics: hostCaps.SixelGraphics,
+		TerminalName:  hostCaps.TerminalName,
+	}
+
+	if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 

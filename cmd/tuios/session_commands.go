@@ -101,11 +101,27 @@ func runDaemonSession(sessionName string, createNew bool) error {
 
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
+	log.Printf("[CLIENT] Detecting terminal capabilities...")
+	hostCaps := app.GetHostCapabilities()
+
+	// Build client capabilities from detected host capabilities
+	clientCaps := &session.ClientCapabilities{
+		PixelWidth:    hostCaps.PixelWidth,
+		PixelHeight:   hostCaps.PixelHeight,
+		CellWidth:     hostCaps.CellWidth,
+		CellHeight:    hostCaps.CellHeight,
+		KittyGraphics: hostCaps.KittyGraphics,
+		SixelGraphics: hostCaps.SixelGraphics,
+		TerminalName:  hostCaps.TerminalName,
+	}
+	log.Printf("[CLIENT] Capabilities: cell=%dx%d, kitty=%v, sixel=%v, term=%s",
+		clientCaps.CellWidth, clientCaps.CellHeight, clientCaps.KittyGraphics, clientCaps.SixelGraphics, clientCaps.TerminalName)
+
 	log.Printf("[CLIENT] Connecting to daemon...")
 	client := session.NewTUIClient()
 	width, height := 80, 24
 
-	if err := client.Connect(version, width, height); err != nil {
+	if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	log.Printf("[CLIENT] Connected to daemon")

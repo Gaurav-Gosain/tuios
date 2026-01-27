@@ -224,6 +224,15 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 	terminal := vt.NewEmulator(width, height)
 	terminal.SetScrollbackMaxLines(10000) // Match default scrollback
 
+	// Set a no-op Kitty passthrough func to prevent the daemon's VT emulator from
+	// generating responses to Kitty graphics commands. Responses should only come
+	// from the client's passthrough, which forwards commands to the actual terminal.
+	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
+		// Intentionally empty - discard Kitty graphics commands on the daemon side
+		// The client's passthrough will handle these and forward to the host terminal
+		debugLog("[DAEMON-VT] Kitty command received and discarded: action=%c, imageID=%d", cmd.Action, cmd.ImageID)
+	})
+
 	pty := &PTY{
 		ID:           id,
 		pty:          ptyInstance,
@@ -455,6 +464,24 @@ func (p *PTY) Write(data []byte) (int, error) {
 		return 0, fmt.Errorf("PTY not available")
 	}
 	return p.pty.Write(data)
+}
+
+// Size returns the current PTY dimensions.
+func (p *PTY) Size() (width, height int) {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+	return p.width, p.height
+}
+
+// SetCellSize sets the cell dimensions in pixels for the PTY's VT emulator.
+// This enables proper XTWINOPS responses (CSI 14t, CSI 16t) for applications
+// that query terminal pixel dimensions.
+func (p *PTY) SetCellSize(cellWidth, cellHeight int) {
+	p.terminalMu.Lock()
+	defer p.terminalMu.Unlock()
+	if p.terminal != nil && cellWidth > 0 && cellHeight > 0 {
+		p.terminal.SetCellSize(cellWidth, cellHeight)
+	}
 }
 
 // Resize changes the PTY and terminal emulator size.

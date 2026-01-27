@@ -186,10 +186,15 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// Set effective dimensions from state - this is the min of all connected clients
 	// as calculated by the daemon. This ensures a new client joining respects
 	// the existing effective size even before receiving a SessionResizeMsg.
+	// Also set Width/Height so that window scaling works correctly when the terminal
+	// size changes - without this, oldWidth/oldHeight would be 0 and windows
+	// would be clamped instead of scaled proportionally.
 	if state.Width > 0 && state.Height > 0 {
 		m.EffectiveWidth = state.Width
 		m.EffectiveHeight = state.Height
-		m.LogInfo("[RESTORE] Set effective size from state: %dx%d", state.Width, state.Height)
+		m.Width = state.Width
+		m.Height = state.Height
+		m.LogInfo("[RESTORE] Set size from state: %dx%d", state.Width, state.Height)
 	}
 
 	// Clear existing windows
