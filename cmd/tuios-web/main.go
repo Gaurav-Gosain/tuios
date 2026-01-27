@@ -360,6 +360,10 @@ func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model
 		if err := tuiosInstance.SetupPTYOutputHandlers(); err != nil {
 			log.Printf("Warning: Failed to setup PTY handlers: %v", err)
 		}
+
+		// Sync daemon PTY dimensions to match window dimensions from state
+		// This fixes the issue where PTYs have stale dimensions after detach/reattach
+		tuiosInstance.SyncDaemonPTYDimensions()
 	}
 
 	// Register multi-client handlers
@@ -429,4 +433,3 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 		m.MarkAllDirty()
 	})
 }
-

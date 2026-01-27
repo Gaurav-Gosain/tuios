@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	tea "charm.land/bubbletea/v2"
 )
 
 // HandleCopyModeKey is the main dispatcher for copy mode input

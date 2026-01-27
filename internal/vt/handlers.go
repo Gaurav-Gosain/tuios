@@ -48,25 +48,16 @@ type handlers struct {
 
 // RegisterDcsHandler registers a DCS escape sequence handler.
 func (h *handlers) RegisterDcsHandler(cmd int, handler DcsHandler) {
-	if h.dcsHandlers == nil {
-		h.dcsHandlers = make(map[int][]DcsHandler)
-	}
 	h.dcsHandlers[cmd] = append(h.dcsHandlers[cmd], handler)
 }
 
 // RegisterCsiHandler registers a CSI escape sequence handler.
 func (h *handlers) RegisterCsiHandler(cmd int, handler CsiHandler) {
-	if h.csiHandlers == nil {
-		h.csiHandlers = make(map[int][]CsiHandler)
-	}
 	h.csiHandlers[cmd] = append(h.csiHandlers[cmd], handler)
 }
 
 // RegisterOscHandler registers an OSC escape sequence handler.
 func (h *handlers) RegisterOscHandler(cmd int, handler OscHandler) {
-	if h.oscHandlers == nil {
-		h.oscHandlers = make(map[int][]OscHandler)
-	}
 	h.oscHandlers[cmd] = append(h.oscHandlers[cmd], handler)
 }
 
@@ -87,17 +78,11 @@ func (h *handlers) RegisterPmHandler(handler PmHandler) {
 
 // RegisterEscHandler registers an ESC escape sequence handler.
 func (h *handlers) RegisterEscHandler(cmd int, handler EscHandler) {
-	if h.escHandler == nil {
-		h.escHandler = make(map[int][]EscHandler)
-	}
 	h.escHandler[cmd] = append(h.escHandler[cmd], handler)
 }
 
 // registerCcHandler registers a control character handler.
 func (h *handlers) registerCcHandler(r byte, handler CcHandler) {
-	if h.ccHandlers == nil {
-		h.ccHandlers = make(map[byte][]CcHandler)
-	}
 	h.ccHandlers[r] = append(h.ccHandlers[r], handler)
 }
 

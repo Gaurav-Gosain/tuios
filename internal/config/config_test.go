@@ -287,3 +287,239 @@ func BenchmarkNormalizeKey(b *testing.B) {
 		i++
 	}
 }
+
+// =============================================================================
+// Override Tests
+// =============================================================================
+
+func TestApplyOverrides_ASCIIOnly(t *testing.T) {
+	// Save original values
+	originalASCII := config.UseASCIIOnly
+	defer func() { config.UseASCIIOnly = originalASCII }()
+
+	// Reset to default
+	config.UseASCIIOnly = false
+
+	// Apply override
+	config.ApplyOverrides(config.Overrides{ASCIIOnly: true}, nil)
+
+	if !config.UseASCIIOnly {
+		t.Error("Expected UseASCIIOnly to be true after override")
+	}
+}
+
+func TestApplyOverrides_BorderStyle(t *testing.T) {
+	// Save original value
+	originalBorder := config.BorderStyle
+	defer func() { config.BorderStyle = originalBorder }()
+
+	// Reset to default
+	config.BorderStyle = "rounded"
+
+	// Apply CLI override
+	config.ApplyOverrides(config.Overrides{BorderStyle: "double"}, nil)
+	if config.BorderStyle != "double" {
+		t.Errorf("Expected BorderStyle 'double', got %q", config.BorderStyle)
+	}
+
+	// CLI flag takes precedence over user config
+	config.BorderStyle = "rounded"
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.BorderStyle = "thick"
+	config.ApplyOverrides(config.Overrides{BorderStyle: "normal"}, userCfg)
+	if config.BorderStyle != "normal" {
+		t.Errorf("Expected CLI override 'normal' to take precedence, got %q", config.BorderStyle)
+	}
+
+	// User config used when CLI flag not set
+	config.BorderStyle = "rounded"
+	config.ApplyOverrides(config.Overrides{}, userCfg)
+	if config.BorderStyle != "thick" {
+		t.Errorf("Expected user config 'thick' to be used, got %q", config.BorderStyle)
+	}
+}
+
+func TestApplyOverrides_DockbarPosition(t *testing.T) {
+	// Save original value
+	originalPos := config.DockbarPosition
+	defer func() { config.DockbarPosition = originalPos }()
+
+	// Reset to default
+	config.DockbarPosition = "bottom"
+
+	// Apply CLI override
+	config.ApplyOverrides(config.Overrides{DockbarPosition: "top"}, nil)
+	if config.DockbarPosition != "top" {
+		t.Errorf("Expected DockbarPosition 'top', got %q", config.DockbarPosition)
+	}
+
+	// User config fallback
+	config.DockbarPosition = "bottom"
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.DockbarPosition = "left"
+	config.ApplyOverrides(config.Overrides{}, userCfg)
+	if config.DockbarPosition != "left" {
+		t.Errorf("Expected user config 'left', got %q", config.DockbarPosition)
+	}
+}
+
+func TestApplyOverrides_HideWindowButtons(t *testing.T) {
+	// Save original value
+	originalHide := config.HideWindowButtons
+	defer func() { config.HideWindowButtons = originalHide }()
+
+	// Reset to default
+	config.HideWindowButtons = false
+
+	// CLI flag only
+	config.ApplyOverrides(config.Overrides{HideWindowButtons: true}, nil)
+	if !config.HideWindowButtons {
+		t.Error("Expected HideWindowButtons to be true from CLI flag")
+	}
+
+	// User config only
+	config.HideWindowButtons = false
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.HideWindowButtons = true
+	config.ApplyOverrides(config.Overrides{}, userCfg)
+	if !config.HideWindowButtons {
+		t.Error("Expected HideWindowButtons to be true from user config")
+	}
+
+	// OR of both (CLI false, user config true)
+	config.HideWindowButtons = false
+	config.ApplyOverrides(config.Overrides{HideWindowButtons: false}, userCfg)
+	if !config.HideWindowButtons {
+		t.Error("Expected HideWindowButtons to be true (OR of CLI and user config)")
+	}
+}
+
+func TestApplyOverrides_ScrollbackLines(t *testing.T) {
+	// Save original value
+	originalLines := config.ScrollbackLines
+	defer func() { config.ScrollbackLines = originalLines }()
+
+	// Reset to default
+	config.ScrollbackLines = 10000
+
+	// CLI override takes precedence
+	config.ApplyOverrides(config.Overrides{ScrollbackLines: 5000}, nil)
+	if config.ScrollbackLines != 5000 {
+		t.Errorf("Expected ScrollbackLines 5000, got %d", config.ScrollbackLines)
+	}
+
+	// Test clamping to minimum
+	config.ScrollbackLines = 10000
+	config.ApplyOverrides(config.Overrides{ScrollbackLines: 50}, nil)
+	if config.ScrollbackLines != 100 {
+		t.Errorf("Expected ScrollbackLines to be clamped to 100, got %d", config.ScrollbackLines)
+	}
+
+	// Test clamping to maximum
+	config.ScrollbackLines = 10000
+	config.ApplyOverrides(config.Overrides{ScrollbackLines: 2000000}, nil)
+	if config.ScrollbackLines != 1000000 {
+		t.Errorf("Expected ScrollbackLines to be clamped to 1000000, got %d", config.ScrollbackLines)
+	}
+
+	// User config fallback
+	config.ScrollbackLines = 10000
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.ScrollbackLines = 20000
+	config.ApplyOverrides(config.Overrides{}, userCfg)
+	if config.ScrollbackLines != 20000 {
+		t.Errorf("Expected user config 20000, got %d", config.ScrollbackLines)
+	}
+}
+
+func TestApplyOverrides_NoAnimations(t *testing.T) {
+	// Save original value
+	originalEnabled := config.AnimationsEnabled
+	defer func() { config.AnimationsEnabled = originalEnabled }()
+
+	// Reset to default
+	config.AnimationsEnabled = true
+
+	// Apply NoAnimations flag
+	config.ApplyOverrides(config.Overrides{NoAnimations: true}, nil)
+	if config.AnimationsEnabled {
+		t.Error("Expected AnimationsEnabled to be false after NoAnimations override")
+	}
+
+	// Not setting the flag should not change the value
+	config.AnimationsEnabled = true
+	config.ApplyOverrides(config.Overrides{NoAnimations: false}, nil)
+	if !config.AnimationsEnabled {
+		t.Error("Expected AnimationsEnabled to remain true when NoAnimations is false")
+	}
+}
+
+func TestApplyOverrides_LeaderKey(t *testing.T) {
+	// Save original value
+	originalLeader := config.LeaderKey
+	defer func() { config.LeaderKey = originalLeader }()
+
+	// Reset to default
+	config.LeaderKey = "ctrl+b"
+
+	// Leader key only comes from user config
+	userCfg := config.DefaultConfig()
+	userCfg.Keybindings.LeaderKey = "ctrl+a"
+	config.ApplyOverrides(config.Overrides{}, userCfg)
+	if config.LeaderKey != "ctrl+a" {
+		t.Errorf("Expected LeaderKey 'ctrl+a', got %q", config.LeaderKey)
+	}
+
+	// No user config should keep default
+	config.LeaderKey = "ctrl+b"
+	config.ApplyOverrides(config.Overrides{}, nil)
+	if config.LeaderKey != "ctrl+b" {
+		t.Errorf("Expected LeaderKey to remain 'ctrl+b', got %q", config.LeaderKey)
+	}
+}
+
+func TestApplyOverrides_WindowTitlePosition(t *testing.T) {
+	// Save original value
+	originalPos := config.WindowTitlePosition
+	defer func() { config.WindowTitlePosition = originalPos }()
+
+	// Reset to default
+	config.WindowTitlePosition = "bottom"
+
+	// CLI override
+	config.ApplyOverrides(config.Overrides{WindowTitlePosition: "top"}, nil)
+	if config.WindowTitlePosition != "top" {
+		t.Errorf("Expected WindowTitlePosition 'top', got %q", config.WindowTitlePosition)
+	}
+
+	// Hidden option
+	config.WindowTitlePosition = "bottom"
+	config.ApplyOverrides(config.Overrides{WindowTitlePosition: "hidden"}, nil)
+	if config.WindowTitlePosition != "hidden" {
+		t.Errorf("Expected WindowTitlePosition 'hidden', got %q", config.WindowTitlePosition)
+	}
+}
+
+func TestApplyOverrides_HideClock(t *testing.T) {
+	// Save original value
+	originalHide := config.HideClock
+	defer func() { config.HideClock = originalHide }()
+
+	// Reset to default
+	config.HideClock = false
+
+	// CLI flag
+	config.ApplyOverrides(config.Overrides{HideClock: true}, nil)
+	if !config.HideClock {
+		t.Error("Expected HideClock to be true from CLI flag")
+	}
+
+	// User config OR with CLI
+	config.HideClock = false
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.HideClock = true
+	config.ApplyOverrides(config.Overrides{HideClock: false}, userCfg)
+	if !config.HideClock {
+		t.Error("Expected HideClock to be true from user config (OR)")
+	}
+}

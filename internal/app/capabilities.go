@@ -160,7 +160,7 @@ func queryGraphicsSupport(caps *HostCapabilities) {
 	defer restoreTerminal(tty.Fd(), oldState)
 
 	// Send both queries at once
-	_, _ = tty.WriteString("\x1b[c")                                      // DA1 for sixel
+	_, _ = tty.WriteString("\x1b[c")                                    // DA1 for sixel
 	_, _ = tty.WriteString("\x1b_Gi=1,a=q,t=d,f=24,s=1,v=1;AAAA\x1b\\") // Kitty graphics query
 
 	// Read response with timeout (300ms to account for slower terminals)

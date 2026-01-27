@@ -8,6 +8,14 @@ import (
 
 // Motion-related functions for copy mode (hjkl, page navigation, jumps, etc.)
 
+// cellContent returns the content string from a cell, or empty string if cell is nil.
+func cellContent(cell *uv.Cell) string {
+	if cell != nil {
+		return cell.Content
+	}
+	return ""
+}
+
 // MoveLeft moves cursor left
 func MoveLeft(cm *terminal.CopyMode, window *terminal.Window) {
 	moveLeft(cm, window)
@@ -102,20 +110,12 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 
 	// Get current character type
 	cell := getCellAtCursor(cm, window)
-	var currentContent string
-	if cell != nil {
-		currentContent = cell.Content
-	}
-	currentType := getCharType(currentContent)
+	currentType := getCharType(cellContent(cell))
 
 	// Phase 1: Skip current word/punctuation group
 	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
-		var content string
-		if cell != nil {
-			content = cell.Content
-		}
-		charType := getCharType(content)
+		charType := getCharType(cellContent(cell))
 
 		// Stop if we hit a different type (but continue through same type)
 		if charType != currentType || charType == 0 {
@@ -135,11 +135,7 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 	// Phase 2: Skip whitespace to next word/punctuation
 	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
-		var content string
-		if cell != nil {
-			content = cell.Content
-		}
-		charType := getCharType(content)
+		charType := getCharType(cellContent(cell))
 
 		// Found a non-whitespace character - we're at start of next word
 		if charType != 0 {
@@ -176,11 +172,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 	// Phase 1: Skip whitespace backward
 	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
-		var content string
-		if cell != nil {
-			content = cell.Content
-		}
-		charType := getCharType(content)
+		charType := getCharType(cellContent(cell))
 
 		// Found non-whitespace - move to phase 2
 		if charType != 0 {

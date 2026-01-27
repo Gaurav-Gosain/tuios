@@ -605,26 +605,42 @@ func (m *OS) RestoreTerminalStates() error {
 	return nil
 }
 
+// SyncDaemonPTYDimensions ensures all daemon PTYs are resized to match their window dimensions.
+// This must be called AFTER SetupPTYOutputHandlers so that DaemonResizeFunc is available.
+// This fixes the issue where PTY dimensions become out of sync after detach/reattach.
+func (m *OS) SyncDaemonPTYDimensions() {
+	for _, w := range m.Windows {
+		if w.DaemonMode && w.DaemonResizeFunc != nil {
+			termWidth := max(w.Width-2, 1)
+			termHeight := max(w.Height-2, 1)
+
+			// Resize daemon PTY to match window dimensions
+			if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
+				m.LogWarn("Failed to sync PTY dimensions for window %s: %v", w.ID[:8], err)
+			} else {
+				m.LogInfo("Synced daemon PTY dimensions for window %s (%dx%d)",
+					w.ID[:8], termWidth, termHeight)
+			}
+
+			// Ensure local VT emulator dimensions also match
+			if w.Terminal != nil {
+				w.Terminal.Resize(termWidth, termHeight)
+			}
+		}
+	}
+}
+
 // TriggerAltScreenRedraws forces alt screen apps to redraw.
 // This must be called AFTER SetupPTYOutputHandlers so that DaemonResizeFunc is available.
 // For alt screen apps (vim, htop, etc.), this invalidates caches and triggers re-render.
 func (m *OS) TriggerAltScreenRedraws() {
 	for _, w := range m.Windows {
 		if w.DaemonMode && w.IsAltScreen {
-			termWidth := max(w.Width-2, 1)
-			termHeight := max(w.Height-2, 1)
-
-			// Ensure local VT emulator dimensions match
-			if w.Terminal != nil {
-				w.Terminal.Resize(termWidth, termHeight)
-			}
-
 			// Invalidate all caches to force re-render from fresh state
 			w.InvalidateCache()
 			w.MarkContentDirty()
 
-			m.LogInfo("Invalidated caches for alt screen window %s (%dx%d)",
-				w.ID[:8], termWidth, termHeight)
+			m.LogInfo("Invalidated caches for alt screen window %s", w.ID[:8])
 		}
 	}
 

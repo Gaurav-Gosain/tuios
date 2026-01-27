@@ -133,7 +133,7 @@ func TestStyleCacheEviction(t *testing.T) {
 		cell := &uv.Cell{
 			Style: uv.Style{
 				Fg:    lipgloss.ANSIColor(uint8(i)), // Different color for each
-				Attrs: uint8(i % 16),        // Different attributes
+				Attrs: uint8(i % 16),                // Different attributes
 			},
 		}
 		// Alternate cursor state to create even more unique entries

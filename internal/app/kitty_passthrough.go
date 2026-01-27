@@ -41,23 +41,23 @@ type KittyPassthrough struct {
 
 // pendingDirectTransmit holds accumulated data for chunked direct transmissions
 type pendingDirectTransmit struct {
-	Data        []byte
-	Format      vt.KittyGraphicsFormat
-	Compression vt.KittyGraphicsCompression
-	Width       int
-	Height      int
-	ImageID     uint32
-	Columns     int
-	Rows        int
-	SourceX     int
-	SourceY     int
-	SourceWidth int
+	Data         []byte
+	Format       vt.KittyGraphicsFormat
+	Compression  vt.KittyGraphicsCompression
+	Width        int
+	Height       int
+	ImageID      uint32
+	Columns      int
+	Rows         int
+	SourceX      int
+	SourceY      int
+	SourceWidth  int
 	SourceHeight int
-	XOffset     int
-	YOffset     int
-	ZIndex      int32
-	Virtual     bool
-	CursorMove  int
+	XOffset      int
+	YOffset      int
+	ZIndex       int32
+	Virtual      bool
+	CursorMove   int
 	// Position info from the first chunk (a=T command)
 	WindowX        int
 	WindowY        int
@@ -77,12 +77,12 @@ type PassthroughPlacement struct {
 	PlacementID  uint32
 	WindowID     string
 	GuestX       int
-	AbsoluteLine int  // Absolute line position (scrollbackLen + cursorY at placement time)
+	AbsoluteLine int // Absolute line position (scrollbackLen + cursorY at placement time)
 	HostX        int
 	HostY        int
 	Cols         int
-	Rows         int // Original image rows (before any capping)
-	DisplayRows  int // Capped rows for initial display
+	Rows         int  // Original image rows (before any capping)
+	DisplayRows  int  // Capped rows for initial display
 	Hidden       bool // True when placement is completely out of view
 
 	// Source clipping parameters (pixels) - preserved for re-placement
@@ -337,22 +337,22 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 	pending := kp.pendingDirectData[windowID]
 	if pending == nil {
 		pending = &pendingDirectTransmit{
-			Format:         cmd.Format,
-			Compression:   cmd.Compression,
-			Width:         cmd.Width,
-			Height:        cmd.Height,
-			ImageID:       cmd.ImageID,
-			Columns:       cmd.Columns,
-			Rows:          cmd.Rows,
-			SourceX:       cmd.SourceX,
-			SourceY:       cmd.SourceY,
-			SourceWidth:   cmd.SourceWidth,
-			SourceHeight:  cmd.SourceHeight,
-			XOffset:       cmd.XOffset,
-			YOffset:       cmd.YOffset,
-			ZIndex:        cmd.ZIndex,
-			Virtual:       cmd.Virtual,
-			CursorMove:    cmd.CursorMove,
+			Format:       cmd.Format,
+			Compression:  cmd.Compression,
+			Width:        cmd.Width,
+			Height:       cmd.Height,
+			ImageID:      cmd.ImageID,
+			Columns:      cmd.Columns,
+			Rows:         cmd.Rows,
+			SourceX:      cmd.SourceX,
+			SourceY:      cmd.SourceY,
+			SourceWidth:  cmd.SourceWidth,
+			SourceHeight: cmd.SourceHeight,
+			XOffset:      cmd.XOffset,
+			YOffset:      cmd.YOffset,
+			ZIndex:       cmd.ZIndex,
+			Virtual:      cmd.Virtual,
+			CursorMove:   cmd.CursorMove,
 			// Store position info from the first chunk (a=T command has valid positions)
 			WindowX:        windowX,
 			WindowY:        windowY,
@@ -608,7 +608,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	hostY := windowY + contentOffsetY + cursorY
 
 	// Calculate content area dimensions (accounting for borders)
-	contentWidth := windowWidth - 2  // -2 for left/right borders
+	contentWidth := windowWidth - 2   // -2 for left/right borders
 	contentHeight := windowHeight - 2 // -2 for top/bottom borders
 
 	// Calculate image dimensions in cells

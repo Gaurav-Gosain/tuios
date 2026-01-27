@@ -1,6 +1,7 @@
 package input
 
 import (
+	"bytes"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -52,7 +53,7 @@ func TestGetCursorSequence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := getCursorSequence(tt.code)
-			if !bytesEqual(result, tt.expected) {
+			if !bytes.Equal(result, tt.expected) {
 				t.Errorf("getCursorSequence(%v) = %v, want %v", tt.code, result, tt.expected)
 			}
 		})
@@ -77,7 +78,7 @@ func TestBuildCSISequence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := buildCSISequence(tt.num, tt.modParam)
-			if !bytesEqual(result, tt.expected) {
+			if !bytes.Equal(result, tt.expected) {
 				t.Errorf("buildCSISequence(%d, %d) = %v, want %v", tt.num, tt.modParam, result, tt.expected)
 			}
 		})
@@ -105,7 +106,7 @@ func TestGetFunctionKeySequence(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := getFunctionKeySequence(tt.code, tt.modParam)
-			if !bytesEqual(result, tt.expected) {
+			if !bytes.Equal(result, tt.expected) {
 				t.Errorf("getFunctionKeySequence(%v, %d) = %v, want %v", tt.code, tt.modParam, result, tt.expected)
 			}
 		})
@@ -194,23 +195,4 @@ func TestIsMacOSOptionTab(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper function to compare byte slices
-func bytesEqual(a, b []byte) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

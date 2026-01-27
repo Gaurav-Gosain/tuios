@@ -152,6 +152,11 @@ func runDaemonSession(sessionName string, createNew bool) error {
 			log.Printf("Warning: Failed to set up PTY handlers: %v", err)
 		}
 
+		// Sync daemon PTY dimensions to match window dimensions from state
+		// This fixes the issue where PTYs have stale dimensions after detach/reattach
+		log.Printf("[CLIENT] Syncing daemon PTY dimensions")
+		initialOS.SyncDaemonPTYDimensions()
+
 		log.Printf("[CLIENT] Restore complete, %d windows in OS", len(initialOS.Windows))
 	} else {
 		log.Printf("[CLIENT] No existing state to restore")

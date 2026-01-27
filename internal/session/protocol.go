@@ -268,9 +268,9 @@ type SetConfigPayload struct {
 
 // CommandResultPayload contains the result of a remote command execution.
 type CommandResultPayload struct {
-	RequestID string                 `json:"request_id,omitempty"` // Matches the request
-	Success   bool                   `json:"success"`              // Whether the command succeeded
-	Message   string                 `json:"message,omitempty"`    // Result message or error
+	RequestID string         `json:"request_id,omitempty"` // Matches the request
+	Success   bool           `json:"success"`              // Whether the command succeeded
+	Message   string         `json:"message,omitempty"`    // Result message or error
 	Data      map[string]any `json:"data,omitempty"`       // Structured data (window_id, etc.)
 }
 

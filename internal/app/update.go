@@ -562,6 +562,10 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.AutoTiling {
 				m.TileAllWindows()
 			}
+			// CRITICAL: Force sync all daemon PTY dimensions after tiling
+			// This ensures PTYs match the new window dimensions even if no animation was created
+			// (e.g., when window was already at target position but PTY had stale dimensions)
+			m.SyncDaemonPTYDimensions()
 			m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
 		}
 		return m, nil

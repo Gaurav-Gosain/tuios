@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+// optionToAltReplacer converts opt/option to alt for consistent key naming
+var optionToAltReplacer = strings.NewReplacer("opt+", "alt+", "option+", "alt+")
+
+// altToOptReplacer converts alt to opt/option variants
+var altToOptReplacer = strings.NewReplacer("alt+", "opt+")
+var altToOptionReplacer = strings.NewReplacer("alt+", "option+")
+
 // KeyNormalizer handles platform-specific key normalization
 // Converts user-friendly key strings (like "opt+1" on macOS) to their actual representations
 type KeyNormalizer struct {
@@ -93,32 +100,24 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 		if unicode, ok := macOptionShiftNumberMap[keyLower]; ok {
 			// Add the unicode character
 			result = append(result, strings.ToLower(unicode))
-			// Also map to alt+shift+N
-			altKey := strings.Replace(keyLower, "opt+", "alt+", 1)
-			altKey = strings.Replace(altKey, "option+", "alt+", 1)
-			result = append(result, altKey)
+			// Also map to alt+shift+N (use replacer for efficiency)
+			result = append(result, optionToAltReplacer.Replace(keyLower))
 		} else if unicode, ok := macOptionNumberMap[keyLower]; ok {
 			// Add the unicode character
 			result = append(result, strings.ToLower(unicode))
 			// Also map to alt+N
-			altKey := strings.Replace(keyLower, "opt+", "alt+", 1)
-			altKey = strings.Replace(altKey, "option+", "alt+", 1)
-			result = append(result, altKey)
+			result = append(result, optionToAltReplacer.Replace(keyLower))
 		} else if unicode, ok := macOptionTabMap[keyLower]; ok {
 			// Add the unicode character for opt+tab variants
 			result = append(result, unicode)
 			// Also map to alt+tab variant
-			altKey := strings.Replace(keyLower, "opt+", "alt+", 1)
-			altKey = strings.Replace(altKey, "option+", "alt+", 1)
-			result = append(result, altKey)
+			result = append(result, optionToAltReplacer.Replace(keyLower))
 		}
 
 		// If the key starts with "alt+", also accept "opt+" and "option+" variants
 		if strings.HasPrefix(keyLower, "alt+") {
-			optKey := strings.Replace(keyLower, "alt+", "opt+", 1)
-			result = append(result, optKey)
-			optionKey := strings.Replace(keyLower, "alt+", "option+", 1)
-			result = append(result, optionKey)
+			result = append(result, altToOptReplacer.Replace(keyLower))
+			result = append(result, altToOptionReplacer.Replace(keyLower))
 		}
 	}
 

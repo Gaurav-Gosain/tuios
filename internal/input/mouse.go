@@ -6,12 +6,18 @@ import (
 	"os"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 )
+
+// isInTerminalContent checks if coordinates are within the terminal's content area.
+// The content area excludes the window borders (1 cell on each side).
+func isInTerminalContent(x, y int, win *terminal.Window) bool {
+	return x >= 0 && y >= 0 && x < win.Width-2 && y < win.Height-2
+}
 
 // sendMouseClickToWindow sends a mouse click event to a window's terminal.
 func sendMouseClickToWindow(win *terminal.Window, event uv.MouseClickEvent) {
@@ -1063,7 +1069,6 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 
 	return -1
 }
-
 
 // abs returns the absolute value of an integer
 func abs(x int) int {

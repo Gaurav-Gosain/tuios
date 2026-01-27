@@ -2,6 +2,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	vt "github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -70,7 +72,7 @@ func byteIndexToCharIndex(s string, byteIdx int) int {
 		if byteCount >= byteIdx {
 			break
 		}
-		byteCount += len(string(r))
+		byteCount += utf8.RuneLen(r)
 		charIdx++
 	}
 	return charIdx

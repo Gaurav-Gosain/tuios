@@ -3,9 +3,9 @@ package app
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	tea "charm.land/bubbletea/v2"
 )
 
 // TestParseKeyToMessage tests the key parsing function

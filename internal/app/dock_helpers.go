@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sort"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	"charm.land/lipgloss/v2"
 )
 
 // DockItem represents a single item in the dock

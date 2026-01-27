@@ -105,6 +105,11 @@ func NewSnapAnimation(w *terminal.Window, targetX, targetY, targetWidth, targetH
 	// Don't animate if already at target
 	if w.X == targetX && w.Y == targetY &&
 		w.Width == targetWidth && w.Height == targetHeight {
+		// Even if position matches, ensure PTY dimensions are synced
+		// This handles the case where daemon PTY has stale dimensions after reattach
+		if w.DaemonMode {
+			w.Resize(targetWidth, targetHeight)
+		}
 		return nil
 	}
 

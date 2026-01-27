@@ -119,6 +119,14 @@ func NewEmulator(w, h int) *Emulator {
 	t.pr, t.pw = io.Pipe()
 	t.resetModes()
 	t.tabstops = uv.DefaultTabStops(w)
+
+	// Initialize handler maps upfront to avoid nil checks during registration
+	t.ccHandlers = make(map[byte][]CcHandler)
+	t.dcsHandlers = make(map[int][]DcsHandler)
+	t.csiHandlers = make(map[int][]CsiHandler)
+	t.oscHandlers = make(map[int][]OscHandler)
+	t.escHandler = make(map[int][]EscHandler)
+
 	t.registerDefaultHandlers()
 
 	// Default colors (prevents nil color panics)
