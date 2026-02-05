@@ -172,29 +172,13 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 	// Set up the input handler
 	app.SetInputHandler(input.HandleInput)
 
-	// Create a TUIOS instance for this session
-	tuiosInstance := &app.OS{
-		FocusedWindow:        -1,
-		WindowExitChan:       make(chan string, 10),
-		StateSyncChan:        make(chan *session.SessionState, 10),
-		ClientEventChan:      make(chan app.ClientEvent, 10),
-		MouseSnapping:        false,
-		MasterRatio:          0.5,
-		CurrentWorkspace:     1,
-		NumWorkspaces:        9,
-		WorkspaceFocus:       make(map[int]int),
-		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
-		WorkspaceHasCustom:   make(map[int]bool),
-		WorkspaceMasterRatio: make(map[int]float64),
-		PendingResizes:       make(map[string][2]int),
-		Width:                width,
-		Height:               height,
-		SSHSession:           sshSession,
-		IsSSHMode:            true,
-		KeybindRegistry:      keybindRegistry,
-		RecentKeys:           []app.KeyEvent{},
-		KeyHistoryMaxSize:    5,
-	}
+	tuiosInstance := app.NewOS(app.OSOptions{
+		KeybindRegistry: keybindRegistry,
+		Width:           width,
+		Height:          height,
+		IsSSHMode:       true,
+		SSHSession:      sshSession,
+	})
 
 	return tuiosInstance, []tea.ProgramOption{
 		tea.WithFPS(config.NormalFPS),
@@ -267,34 +251,17 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 	app.SetInputHandler(input.HandleInput)
 
 	// Create TUIOS instance connected to daemon
-	tuiosInstance := &app.OS{
-		FocusedWindow:        -1,
-		WindowExitChan:       make(chan string, 10),
-		StateSyncChan:        make(chan *session.SessionState, 10),
-		ClientEventChan:      make(chan app.ClientEvent, 10),
-		MouseSnapping:        false,
-		MasterRatio:          0.5,
-		CurrentWorkspace:     1,
-		NumWorkspaces:        9,
-		WorkspaceFocus:       make(map[int]int),
-		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
-		WorkspaceHasCustom:   make(map[int]bool),
-		WorkspaceMasterRatio: make(map[int]float64),
-		PendingResizes:       make(map[string][2]int),
-		Width:                width,
-		Height:               height,
-		SSHSession:           sshSession,
-		IsSSHMode:            true,
-		KeybindRegistry:      keybindRegistry,
-		RecentKeys:           []app.KeyEvent{},
-		KeyHistoryMaxSize:    5,
-		IsDaemonSession:      true,
-		DaemonClient:         client,
-		SessionName:          sessionName,
-		KittyRenderer:        app.NewKittyRenderer(),
-		KittyPassthrough:     app.NewKittyPassthrough(),
-		SixelPassthrough:     app.NewSixelPassthrough(),
-	}
+	tuiosInstance := app.NewOS(app.OSOptions{
+		KeybindRegistry:           keybindRegistry,
+		Width:                     width,
+		Height:                    height,
+		IsSSHMode:                 true,
+		SSHSession:                sshSession,
+		IsDaemonSession:           true,
+		DaemonClient:              client,
+		SessionName:               sessionName,
+		EnableGraphicsPassthrough: true,
+	})
 
 	// Restore state from daemon if available
 	if state != nil && len(state.Windows) > 0 {

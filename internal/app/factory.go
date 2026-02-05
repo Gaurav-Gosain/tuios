@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/charmbracelet/ssh"
 )
 
 // OSOptions configures the creation of an OS instance.
@@ -31,6 +32,9 @@ type OSOptions struct {
 
 	// IsSSHMode indicates this is an SSH session.
 	IsSSHMode bool
+
+	// SSHSession is the SSH session reference (nil in local mode).
+	SSHSession ssh.Session
 
 	// EnableGraphicsPassthrough enables Kitty/Sixel graphics passthrough.
 	// This should be true for terminal sessions, false for web.
@@ -78,6 +82,7 @@ func NewOS(opts OSOptions) *OS {
 		// Mode flags
 		IsDaemonSession: opts.IsDaemonSession,
 		IsSSHMode:       opts.IsSSHMode,
+		SSHSession:      opts.SSHSession,
 
 		// Daemon connection
 		DaemonClient: opts.DaemonClient,

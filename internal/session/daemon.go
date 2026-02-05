@@ -105,7 +105,7 @@ func (d *Daemon) Start() error {
 	socketPath := d.manager.SocketPath()
 
 	if _, err := os.Stat(socketPath); err == nil {
-		if d.isDaemonRunning(socketPath) {
+		if isDaemonRunningAt(socketPath) {
 			return fmt.Errorf("daemon already running at %s", socketPath)
 		}
 		if err := os.Remove(socketPath); err != nil {
@@ -1536,7 +1536,8 @@ func (d *Daemon) cleanupLoop() {
 	}
 }
 
-func (d *Daemon) isDaemonRunning(socketPath string) bool {
+// isDaemonRunningAt checks if a daemon is listening on the given socket path.
+func isDaemonRunningAt(socketPath string) bool {
 	conn, err := net.DialTimeout("unix", socketPath, time.Second)
 	if err != nil {
 		return false
@@ -1559,13 +1560,7 @@ func IsDaemonRunning() bool {
 	if err != nil {
 		return false
 	}
-
-	conn, err := net.DialTimeout("unix", socketPath, time.Second)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
+	return isDaemonRunningAt(socketPath)
 }
 
 // GetDaemonPID is defined in platform-specific files:
