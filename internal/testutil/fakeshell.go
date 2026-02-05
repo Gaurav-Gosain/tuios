@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 )
 
 // FakeShell provides a controllable shell-like interface for testing.
@@ -21,6 +22,7 @@ type FakeShell struct {
 	outputBuf    *bytes.Buffer // Output to send to terminal
 	inputHistory []string      // History of all received input
 	closed       bool
+	closeOnce    sync.Once
 	readCh       chan []byte // Channel to signal new output is available
 }
 
@@ -52,9 +54,12 @@ func (f *FakeShell) Read(p []byte) (n int, err error) {
 	f.mu.Unlock()
 
 	// Wait for new data
-	data := <-f.readCh
-	copy(p, data)
-	return len(data), nil
+	data, ok := <-f.readCh
+	if !ok {
+		return 0, io.EOF
+	}
+	n = copy(p, data)
+	return n, nil
 }
 
 // Write implements io.Writer, receiving input from the terminal.
@@ -76,10 +81,12 @@ func (f *FakeShell) Write(p []byte) (n int, err error) {
 
 // Close closes the fake shell.
 func (f *FakeShell) Close() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.closed = true
-	close(f.readCh)
+	f.closeOnce.Do(func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.closed = true
+		close(f.readCh)
+	})
 	return nil
 }
 
@@ -139,6 +146,46 @@ func (f *FakeShell) ClearInput() {
 	defer f.mu.Unlock()
 	f.inputBuf.Reset()
 	f.inputHistory = f.inputHistory[:0]
+}
+
+// IsClosed returns whether the shell has been closed.
+func (f *FakeShell) IsClosed() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.closed
+}
+
+// SendOutputf queues formatted output to be read by the terminal.
+func (f *FakeShell) SendOutputf(format string, args ...any) {
+	f.SendOutput(fmt.Sprintf(format, args...))
+}
+
+// ReadWithTimeout reads from the shell with a timeout.
+// Returns the data read, or an error if the timeout expires or the shell is closed.
+func (f *FakeShell) ReadWithTimeout(p []byte, timeout time.Duration) (int, error) {
+	f.mu.Lock()
+	if f.closed {
+		f.mu.Unlock()
+		return 0, io.EOF
+	}
+
+	if f.outputBuf.Len() > 0 {
+		n, err := f.outputBuf.Read(p)
+		f.mu.Unlock()
+		return n, err
+	}
+	f.mu.Unlock()
+
+	select {
+	case data, ok := <-f.readCh:
+		if !ok {
+			return 0, io.EOF
+		}
+		n := copy(p, data)
+		return n, nil
+	case <-time.After(timeout):
+		return 0, fmt.Errorf("read timed out after %v", timeout)
+	}
 }
 
 // =============================================================================
@@ -630,4 +677,19 @@ func CursorPositionResponse(row, col int) string {
 // TerminalSizeResponse returns the response to an XTWINOPS size query.
 func TerminalSizeResponse(rows, cols int) string {
 	return fmt.Sprintf("%s8;%d;%dt", CSI, rows, cols)
+}
+
+// ErrorOutput returns a bash-style error message: "bash: cmd: msg".
+func ErrorOutput(cmd, msg string) string {
+	return fmt.Sprintf("bash: %s: %s\n", cmd, msg)
+}
+
+// CommandNotFound returns a bash-style "command not found" error.
+func CommandNotFound(cmd string) string {
+	return ErrorOutput(cmd, "command not found")
+}
+
+// TabCompletionResponse returns a tab completion display with the given options.
+func TabCompletionResponse(options []string) string {
+	return strings.Join(options, "  ") + "\r\n"
 }

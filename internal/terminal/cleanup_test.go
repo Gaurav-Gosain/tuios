@@ -24,7 +24,7 @@ func TestResetTerminal(t *testing.T) {
 	ResetTerminal()
 
 	// Restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	// Read captured output
@@ -78,7 +78,7 @@ func TestResetTerminalSequences(t *testing.T) {
 
 	os.Stdout = w
 	ResetTerminal()
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer

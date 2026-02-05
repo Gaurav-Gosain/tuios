@@ -290,10 +290,10 @@ func TestGetCPUGraph_ExactlyTenSamples(t *testing.T) {
 
 	graph := monitor.GetCPUGraph()
 
-	// Should not have padding spaces after "CPU:"
+	// Should not have multiple padding spaces after "CPU:" (indicating empty samples)
 	afterPrefix := strings.TrimPrefix(graph, "CPU:")
-	if strings.HasPrefix(afterPrefix, " ") && !strings.HasPrefix(afterPrefix, "  ") {
-		// Single space is fine, multiple padding spaces would indicate empty samples
+	if strings.HasPrefix(afterPrefix, "  ") {
+		t.Error("Graph has unexpected padding spaces indicating empty samples")
 	}
 
 	// Count the bar characters (they should be exactly 10 Unicode block chars)

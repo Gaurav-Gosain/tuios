@@ -224,22 +224,6 @@ func TestSessionPickerInit(t *testing.T) {
 	}
 }
 
-// mockSSHSession is a minimal mock for testing determineSessionName.
-// Note: We cannot fully test determineSessionName without the real SSH session
-// interface, so we test the logic indirectly through the config priority.
-type mockSSHSession struct {
-	user    string
-	command []string
-}
-
-func (m *mockSSHSession) User() string {
-	return m.user
-}
-
-func (m *mockSSHSession) Command() []string {
-	return m.command
-}
-
 // TestDetermineSessionNamePriority tests the session name determination logic.
 // Since determineSessionName requires a real ssh.Session, we test the logic
 // by verifying the priority order in the function.

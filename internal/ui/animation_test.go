@@ -36,7 +36,7 @@ func createTestWindow(x, y, width, height int) *terminal.Window {
 
 func TestNewMinimizeAnimation_CreatesAnimation(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	duration := 200 * time.Millisecond
 	dockX, dockY := 10, 300
@@ -89,7 +89,7 @@ func TestNewMinimizeAnimation_CreatesAnimation(t *testing.T) {
 
 func TestNewMinimizeAnimation_ZeroDuration(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	anim := NewMinimizeAnimation(w, 10, 300, 0)
 
@@ -112,7 +112,7 @@ func TestNewMinimizeAnimation_ZeroDuration(t *testing.T) {
 
 func TestNewRestoreAnimation_CreatesAnimation(t *testing.T) {
 	w := createTestWindow(10, 300, 5, 3)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	// Set pre-minimize values (where the window was before minimize)
 	w.PreMinimizeX = 100
@@ -163,7 +163,7 @@ func TestNewRestoreAnimation_CreatesAnimation(t *testing.T) {
 
 func TestNewRestoreAnimation_ZeroDuration(t *testing.T) {
 	w := createTestWindow(10, 300, 5, 3)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	w.Minimized = true
 	w.PreMinimizeX = 100
@@ -192,7 +192,7 @@ func TestNewRestoreAnimation_ZeroDuration(t *testing.T) {
 
 func TestNewSnapAnimation_CreatesAnimation(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	targetX, targetY := 0, 0
 	targetWidth, targetHeight := 160, 48
@@ -227,7 +227,7 @@ func TestNewSnapAnimation_CreatesAnimation(t *testing.T) {
 
 func TestNewSnapAnimation_ZeroDuration(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	anim := NewSnapAnimation(w, 0, 0, 160, 48, 0)
 
@@ -246,7 +246,7 @@ func TestNewSnapAnimation_ZeroDuration(t *testing.T) {
 
 func TestNewSnapAnimation_AlreadyAtTarget(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	// Animation to same position should return nil
 	anim := NewSnapAnimation(w, 100, 50, 80, 24, 200*time.Millisecond)
@@ -262,7 +262,7 @@ func TestNewSnapAnimation_AlreadyAtTarget(t *testing.T) {
 
 func TestUpdate_ProgressCalculation(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	duration := 100 * time.Millisecond
 	anim := NewSnapAnimation(w, 200, 100, 120, 36, duration)
@@ -288,7 +288,7 @@ func TestUpdate_ProgressCalculation(t *testing.T) {
 
 func TestUpdate_CompletesAtFullDuration(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	duration := 50 * time.Millisecond
 	anim := NewSnapAnimation(w, 200, 100, 120, 36, duration)
@@ -316,7 +316,7 @@ func TestUpdate_CompletesAtFullDuration(t *testing.T) {
 
 func TestUpdate_MinimizeCompletion(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	w.PreMinimizeX = 100
 	w.PreMinimizeY = 50
@@ -350,7 +350,7 @@ func TestUpdate_MinimizeCompletion(t *testing.T) {
 
 func TestUpdate_RestoreCompletion(t *testing.T) {
 	w := createTestWindow(10, 300, 5, 3)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	w.Minimized = true
 	w.PreMinimizeX = 100
@@ -379,7 +379,7 @@ func TestUpdate_RestoreCompletion(t *testing.T) {
 
 func TestUpdate_AlreadyComplete(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	anim := NewSnapAnimation(w, 200, 100, 120, 36, 100*time.Millisecond)
 	if anim == nil {
@@ -611,7 +611,7 @@ func TestAnimationType_Constants(t *testing.T) {
 
 func TestAnimation_FullCycle(t *testing.T) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	// Create a very short animation
 	duration := 10 * time.Millisecond
@@ -641,7 +641,7 @@ func TestAnimation_FullCycle(t *testing.T) {
 
 func TestAnimation_InterpolatesDuringProgress(t *testing.T) {
 	w := createTestWindow(0, 0, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	duration := 100 * time.Millisecond
 	anim := NewSnapAnimation(w, 100, 100, 80, 24, duration)
@@ -682,7 +682,7 @@ func BenchmarkInterpolate(b *testing.B) {
 
 func BenchmarkAnimationUpdate(b *testing.B) {
 	w := createTestWindow(100, 50, 80, 24)
-	defer w.Terminal.Close()
+	defer func() { _ = w.Terminal.Close() }()
 
 	anim := NewSnapAnimation(w, 200, 100, 120, 36, 1*time.Second)
 	if anim == nil {

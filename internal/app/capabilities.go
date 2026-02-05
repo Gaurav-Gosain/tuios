@@ -237,15 +237,17 @@ func readTTYResponse(tty *os.File, timeout time.Duration) string {
 }
 
 func applyEnvironmentOverrides(caps *HostCapabilities) {
-	if os.Getenv("TUIOS_KITTY_GRAPHICS") == "1" {
+	switch os.Getenv("TUIOS_KITTY_GRAPHICS") {
+	case "1":
 		caps.KittyGraphics = true
-	} else if os.Getenv("TUIOS_KITTY_GRAPHICS") == "0" {
+	case "0":
 		caps.KittyGraphics = false
 	}
 
-	if os.Getenv("TUIOS_SIXEL_GRAPHICS") == "1" {
+	switch os.Getenv("TUIOS_SIXEL_GRAPHICS") {
+	case "1":
 		caps.SixelGraphics = true
-	} else if os.Getenv("TUIOS_SIXEL_GRAPHICS") == "0" {
+	case "0":
 		caps.SixelGraphics = false
 	}
 }
@@ -282,7 +284,7 @@ func queryPixelDimensions(caps *HostCapabilities) {
 	}
 
 	// Query cell size
-	tty.WriteString("\x1b[16t")
+	_, _ = tty.WriteString("\x1b[16t")
 	response = readTTYResponse(tty, 100*time.Millisecond)
 	if re := regexp.MustCompile(`\x1b\[6;(\d+);(\d+)t`); response != "" {
 		if matches := re.FindStringSubmatch(response); len(matches) == 3 {

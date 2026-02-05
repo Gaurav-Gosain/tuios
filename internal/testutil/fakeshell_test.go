@@ -1,7 +1,9 @@
 package testutil_test
 
 import (
+	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -83,6 +85,245 @@ func TestFakeShell_Close(t *testing.T) {
 	_, err = shell.Write([]byte("test"))
 	if err == nil {
 		t.Error("Expected error when writing to closed shell")
+	}
+}
+
+func TestFakeShell_DoubleClose(t *testing.T) {
+	shell := testutil.NewFakeShell()
+
+	// First close should succeed
+	if err := shell.Close(); err != nil {
+		t.Fatalf("First close failed: %v", err)
+	}
+
+	// Second close should not panic
+	if err := shell.Close(); err != nil {
+		t.Fatalf("Second close failed: %v", err)
+	}
+}
+
+func TestFakeShell_ReadAfterClose(t *testing.T) {
+	shell := testutil.NewFakeShell()
+	_ = shell.Close()
+
+	buf := make([]byte, 100)
+	n, err := shell.Read(buf)
+	if err != io.EOF {
+		t.Errorf("Expected io.EOF, got %v", err)
+	}
+	if n != 0 {
+		t.Errorf("Expected 0 bytes, got %d", n)
+	}
+}
+
+func TestFakeShell_SendOutputAfterClose(t *testing.T) {
+	shell := testutil.NewFakeShell()
+	_ = shell.Close()
+
+	// Should not panic
+	shell.SendOutput("should be ignored")
+}
+
+func TestFakeShell_IsClosed(t *testing.T) {
+	shell := testutil.NewFakeShell()
+
+	if shell.IsClosed() {
+		t.Error("Expected shell to not be closed initially")
+	}
+
+	_ = shell.Close()
+
+	if !shell.IsClosed() {
+		t.Error("Expected shell to be closed after Close()")
+	}
+}
+
+func TestFakeShell_SendOutputf(t *testing.T) {
+	shell := testutil.NewFakeShell()
+	defer func() { _ = shell.Close() }()
+
+	shell.SendOutputf("Hello %s, you are %d years old\n", "Alice", 30)
+
+	buf := make([]byte, 200)
+	n, err := shell.Read(buf)
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+
+	got := string(buf[:n])
+	expected := "Hello Alice, you are 30 years old\n"
+	if got != expected {
+		t.Errorf("Expected %q, got %q", expected, got)
+	}
+}
+
+func TestFakeShell_ReadWithTimeout(t *testing.T) {
+	shell := testutil.NewFakeShell()
+	defer func() { _ = shell.Close() }()
+
+	buf := make([]byte, 100)
+	_, err := shell.ReadWithTimeout(buf, 50*time.Millisecond)
+	if err == nil {
+		t.Error("Expected timeout error, got nil")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("Expected timeout error, got %v", err)
+	}
+}
+
+func TestFakeShell_ReadWithTimeout_Data(t *testing.T) {
+	shell := testutil.NewFakeShell()
+	defer func() { _ = shell.Close() }()
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		shell.SendOutput("hello\n")
+	}()
+
+	buf := make([]byte, 100)
+	n, err := shell.ReadWithTimeout(buf, time.Second)
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+
+	got := string(buf[:n])
+	if got != "hello\n" {
+		t.Errorf("Expected %q, got %q", "hello\n", got)
+	}
+}
+
+func TestFakeShell_LargeOutput(t *testing.T) {
+	shell := testutil.NewFakeShell()
+	defer func() { _ = shell.Close() }()
+
+	// Send 1MB+ of data
+	data := strings.Repeat("A", 1024*1024+1)
+	shell.SendOutput(data)
+
+	// Read it all back
+	var total int
+	buf := make([]byte, 32*1024)
+	for total < len(data) {
+		n, err := shell.Read(buf)
+		if err != nil {
+			t.Fatalf("Read failed at %d bytes: %v", total, err)
+		}
+		total += n
+	}
+
+	if total != len(data) {
+		t.Errorf("Expected %d bytes, got %d", len(data), total)
+	}
+}
+
+func TestFakeShell_PartialRead(t *testing.T) {
+	shell := testutil.NewFakeShell()
+	defer func() { _ = shell.Close() }()
+
+	shell.SendOutput("Hello World")
+
+	// Read with a small buffer
+	buf := make([]byte, 5)
+	n, err := shell.Read(buf)
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if n != 5 {
+		t.Errorf("Expected 5 bytes, got %d", n)
+	}
+	if string(buf[:n]) != "Hello" {
+		t.Errorf("Expected 'Hello', got %q", string(buf[:n]))
+	}
+
+	// Read the rest
+	buf2 := make([]byte, 20)
+	n2, err := shell.Read(buf2)
+	if err != nil {
+		t.Fatalf("Second read failed: %v", err)
+	}
+	if string(buf2[:n2]) != " World" {
+		t.Errorf("Expected ' World', got %q", string(buf2[:n2]))
+	}
+}
+
+func TestFakeShell_MultipleWrites(t *testing.T) {
+	shell := testutil.NewFakeShell()
+	defer func() { _ = shell.Close() }()
+
+	_, _ = shell.Write([]byte("first "))
+	_, _ = shell.Write([]byte("second "))
+	_, _ = shell.Write([]byte("third"))
+
+	got := shell.GetInput()
+	if got != "first second third" {
+		t.Errorf("Expected 'first second third', got %q", got)
+	}
+
+	history := shell.GetInputHistory()
+	if len(history) != 3 {
+		t.Fatalf("Expected 3 history entries, got %d", len(history))
+	}
+	if history[0] != "first " || history[1] != "second " || history[2] != "third" {
+		t.Errorf("Unexpected history: %v", history)
+	}
+}
+
+func TestFakeShell_ReadCopyOverflow(t *testing.T) {
+	shell := testutil.NewFakeShell()
+	defer func() { _ = shell.Close() }()
+
+	// Send data larger than read buffer
+	shell.SendOutput("ABCDEFGHIJ") // 10 bytes
+
+	buf := make([]byte, 4) // only 4 bytes
+	n, err := shell.Read(buf)
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+
+	// Should only read up to buffer size
+	if n > len(buf) {
+		t.Errorf("Read returned %d bytes, exceeding buffer size %d", n, len(buf))
+	}
+}
+
+func TestFakeShell_ConcurrentClose(t *testing.T) {
+	shell := testutil.NewFakeShell()
+
+	var wg sync.WaitGroup
+	for range 100 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = shell.Close()
+		}()
+	}
+
+	wg.Wait()
+	// Should not panic
+}
+
+func TestErrorOutput(t *testing.T) {
+	got := testutil.ErrorOutput("ls", "No such file or directory")
+	expected := "bash: ls: No such file or directory\n"
+	if got != expected {
+		t.Errorf("Expected %q, got %q", expected, got)
+	}
+}
+
+func TestCommandNotFound(t *testing.T) {
+	got := testutil.CommandNotFound("foo")
+	expected := "bash: foo: command not found\n"
+	if got != expected {
+		t.Errorf("Expected %q, got %q", expected, got)
+	}
+}
+
+func TestTabCompletionResponse(t *testing.T) {
+	got := testutil.TabCompletionResponse([]string{"file1.txt", "file2.txt", "dir/"})
+	expected := "file1.txt  file2.txt  dir/\r\n"
+	if got != expected {
+		t.Errorf("Expected %q, got %q", expected, got)
 	}
 }
 
