@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -23,6 +22,20 @@ func kittyPassthroughLog(format string, args ...any) {
 	}
 	defer func() { _ = f.Close() }()
 	_, _ = fmt.Fprintf(f, "[%s] KITTY-PASSTHROUGH: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
+}
+
+// isKittyResponse checks if data looks like a kitty graphics protocol response
+// rather than real image data. Responses are "OK" or POSIX error names like
+// "ENOENT", "EINVAL", "EBADMSG" (start with 'E' followed by uppercase).
+func isKittyResponse(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+	if string(data) == "OK" {
+		return true
+	}
+	// POSIX error codes: start with 'E', second char is uppercase A-Z
+	return len(data) >= 2 && data[0] == 'E' && data[1] >= 'A' && data[1] <= 'Z'
 }
 
 type KittyPassthrough struct {
@@ -234,15 +247,9 @@ func (kp *KittyPassthrough) ForwardCommand(
 	// Responses have format "i=N;OK" or "i=N;ERROR_MSG" or just "OK"/"ERROR_MSG"
 	// When parsed, they appear as transmit commands with Data="OK" or error message.
 	// Real transmit commands have binary/base64 image data, not status strings.
-	if cmd.Action == vt.KittyActionTransmit && len(cmd.Data) > 0 {
-		dataStr := string(cmd.Data)
-		// Check for response patterns: "OK", "ENOENT:", "EINVAL:", "EBADMSG:", etc.
-		if dataStr == "OK" ||
-			(len(dataStr) >= 2 && dataStr[0] == 'E' && (dataStr == "ENOENT" ||
-				(len(dataStr) > 2 && dataStr[1] >= 'A' && dataStr[1] <= 'Z'))) {
-			kittyPassthroughLog("ForwardCommand: DISCARDING echoed response: %q", dataStr)
-			return nil
-		}
+	if cmd.Action == vt.KittyActionTransmit && len(cmd.Data) > 0 && isKittyResponse(cmd.Data) {
+		kittyPassthroughLog("ForwardCommand: DISCARDING echoed response: %q", cmd.Data)
+		return nil
 	}
 
 	if !kp.enabled {
@@ -420,13 +427,7 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 
 	// Clear existing placements for this window before placing new image
 	if andPlace {
-		if existing := kp.placements[windowID]; existing != nil {
-			for _, p := range existing {
-				kp.deleteOnePlacement(p)
-			}
-			kp.placements[windowID] = nil
-			kittyPassthroughLog("forwardDirectTransmit: cleared %d existing placements", len(existing))
-		}
+		kp.deleteAllWindowPlacements(windowID, false)
 	}
 
 	// Allocate a unique host ID
@@ -600,15 +601,8 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	kittyPassthroughLog("forwardFileTransmit: read %d bytes from %s, andPlace=%v", len(data), filePath, andPlace)
 
 	// Clear existing placements for this window before placing new image
-	// This prevents old images from lingering when icat is called multiple times
 	if andPlace {
-		if existing := kp.placements[windowID]; existing != nil {
-			for _, p := range existing {
-				kp.deleteOnePlacement(p)
-			}
-			kp.placements[windowID] = nil
-			kittyPassthroughLog("forwardFileTransmit: cleared %d existing placements", len(existing))
-		}
+		kp.deleteAllWindowPlacements(windowID, false)
 	}
 
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile {
@@ -862,33 +856,29 @@ func (kp *KittyPassthrough) forwardPlace(
 	kp.placements[windowID][cmd.ImageID] = placement
 }
 
+// deleteAllWindowPlacements removes all placements for a window from the host terminal
+// and clears the placement tracking. If clearImageMap is true, also clears the imageIDMap.
+func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string, clearImageMap bool) {
+	for _, p := range kp.placements[windowID] {
+		kp.deleteOnePlacement(p)
+	}
+	kp.placements[windowID] = nil
+	if clearImageMap {
+		kp.imageIDMap[windowID] = nil
+	}
+}
+
 func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string) {
 	kittyPassthroughLog("forwardDelete: delete=%c, imageID=%d, windowID=%s", cmd.Delete, cmd.ImageID, windowID[:8])
 
 	switch cmd.Delete {
 	case vt.KittyDeleteAll, 0:
-		// Delete all images for this window
-		placements := kp.placements[windowID]
-		for _, p := range placements {
-			var buf bytes.Buffer
-			buf.WriteString("\x1b_G")
-			fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", p.HostImageID)
-			buf.WriteString("\x1b\\")
-			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-		}
-		kp.placements[windowID] = nil
+		kp.deleteAllWindowPlacements(windowID, false)
 
 	case vt.KittyDeleteByID:
-		// Translate guest image ID to host image ID using imageIDMap
 		if windowMap := kp.imageIDMap[windowID]; windowMap != nil {
 			if hostID, ok := windowMap[cmd.ImageID]; ok {
-				// Delete from host terminal
-				var buf bytes.Buffer
-				buf.WriteString("\x1b_G")
-				fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", hostID)
-				buf.WriteString("\x1b\\")
-				kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-				// Remove from our tracking
+				kp.deleteOnePlacement(&PassthroughPlacement{HostImageID: hostID})
 				if placements := kp.placements[windowID]; placements != nil {
 					delete(placements, hostID)
 				}
@@ -898,7 +888,6 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 		}
 
 	case vt.KittyDeleteByIDAndPlacement:
-		// Translate guest image ID to host image ID using imageIDMap
 		if windowMap := kp.imageIDMap[windowID]; windowMap != nil {
 			if hostID, ok := windowMap[cmd.ImageID]; ok {
 				var buf bytes.Buffer
@@ -909,7 +898,6 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 				}
 				buf.WriteString(",q=2\x1b\\")
 				kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-				// Remove from our tracking
 				if placements := kp.placements[windowID]; placements != nil {
 					delete(placements, hostID)
 				}
@@ -918,50 +906,15 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 			}
 		}
 
-	case vt.KittyDeleteOnScreen:
-		// Delete all visible placements for this window (d=p)
-		kittyPassthroughLog("forwardDelete: DeleteOnScreen - clearing all placements for window")
-		placements := kp.placements[windowID]
-		for _, p := range placements {
-			var buf bytes.Buffer
-			buf.WriteString("\x1b_G")
-			fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", p.HostImageID)
-			buf.WriteString("\x1b\\")
-			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-		}
-		kp.placements[windowID] = nil
-		// Also clear the imageIDMap for this window
-		kp.imageIDMap[windowID] = nil
-
-	case vt.KittyDeleteAtCursor, vt.KittyDeleteAtCursorCell:
-		// Delete image at cursor position (d=c or d=C)
-		// For simplicity, delete all placements in this window
-		kittyPassthroughLog("forwardDelete: DeleteAtCursor - clearing all placements for window")
-		placements := kp.placements[windowID]
-		for _, p := range placements {
-			var buf bytes.Buffer
-			buf.WriteString("\x1b_G")
-			fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", p.HostImageID)
-			buf.WriteString("\x1b\\")
-			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-		}
-		kp.placements[windowID] = nil
-		kp.imageIDMap[windowID] = nil
-
 	default:
-		// Log unhandled delete types for debugging
-		kittyPassthroughLog("forwardDelete: UNHANDLED delete type=%c (%d), clearing all as fallback", cmd.Delete, cmd.Delete)
-		// Fallback: delete all placements for this window
-		placements := kp.placements[windowID]
-		for _, p := range placements {
-			var buf bytes.Buffer
-			buf.WriteString("\x1b_G")
-			fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2", p.HostImageID)
-			buf.WriteString("\x1b\\")
-			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+		// Handles DeleteOnScreen, DeleteAtCursor, DeleteAtCursorCell, and unknown types.
+		// For simplicity, all of these clear all placements and the imageID map.
+		if cmd.Delete != vt.KittyDeleteOnScreen &&
+			cmd.Delete != vt.KittyDeleteAtCursor &&
+			cmd.Delete != vt.KittyDeleteAtCursorCell {
+			kittyPassthroughLog("forwardDelete: UNHANDLED delete type=%c (%d), clearing all as fallback", cmd.Delete, cmd.Delete)
 		}
-		kp.placements[windowID] = nil
-		kp.imageIDMap[windowID] = nil
+		kp.deleteAllWindowPlacements(windowID, true)
 	}
 }
 
@@ -1016,37 +969,7 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 }
 
 func (kp *KittyPassthrough) OnWindowScroll(windowID string, windowX, windowY, contentOffsetX, contentOffsetY, scrollbackLen, scrollOffset, viewportHeight int) {
-	kp.mu.Lock()
-	defer kp.mu.Unlock()
-
-	if !kp.enabled {
-		return
-	}
-
-	placements := kp.placements[windowID]
-	if placements == nil {
-		return
-	}
-
-	viewportTop := scrollbackLen - scrollOffset
-
-	for _, p := range placements {
-		if !p.Hidden {
-			kp.deleteOnePlacement(p)
-		}
-
-		relativeY := p.AbsoluteLine - viewportTop
-		p.HostX = windowX + contentOffsetX + p.GuestX
-		p.HostY = windowY + contentOffsetY + relativeY
-
-		// Check if in viewport
-		if relativeY >= 0 && relativeY < viewportHeight {
-			kp.placeOne(p)
-			p.Hidden = false
-		} else {
-			p.Hidden = true
-		}
-	}
+	kp.OnWindowMove(windowID, windowX, windowY, contentOffsetX, contentOffsetY, scrollbackLen, scrollOffset, viewportHeight)
 }
 
 func (kp *KittyPassthrough) ClearWindow(windowID string) {
@@ -1378,8 +1301,6 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	buf.WriteString("\x1b8") // Restore cursor position
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 }
-
-var _ = strconv.Itoa
 
 func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	if m.KittyPassthrough == nil || window == nil || window.Terminal == nil {

@@ -484,6 +484,18 @@ func (p *PTY) SetCellSize(cellWidth, cellHeight int) {
 	}
 }
 
+// UpdatePixelDimensions sets the cell size on the VT emulator and updates the PTY's
+// pixel dimensions based on the current terminal size and the given cell dimensions.
+// This is a convenience method that combines SetCellSize and SetPixelSize.
+func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
+	if cellWidth <= 0 || cellHeight <= 0 {
+		return nil
+	}
+	p.SetCellSize(cellWidth, cellHeight)
+	width, height := p.Size()
+	return p.SetPixelSize(width, height, width*cellWidth, height*cellHeight)
+}
+
 // Resize changes the PTY and terminal emulator size.
 func (p *PTY) Resize(width, height int) error {
 	// Resize VT emulator

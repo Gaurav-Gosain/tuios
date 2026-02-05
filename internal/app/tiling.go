@@ -847,38 +847,39 @@ func (m *OS) constrainHorizontalSplit(requested int, topWindows, bottomWindows [
 	return max(minValidY, min(requested, maxValidY))
 }
 
-// AdjustTilingNeighbors adjusts ALL windows on affected split lines with constraint-based positioning.
-// This is the core tiling resize algorithm used by both mouse and keyboard resize operations.
-func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidth, newHeight int) {
+// applyTilingResult updates the resized window with constrained values from adjustTilingNeighborsGeneric
+// and validates that the dimensions remain within bounds, clamping as a last resort.
+func (m *OS) applyTilingResult(resized *terminal.Window, finalX, finalY, finalRight, finalBottom int) {
 	const minWidth = config.DefaultWindowWidth
 	const minHeight = config.DefaultWindowHeight
 	minY := m.GetTopMargin()
 	maxY := minY + m.GetUsableHeight()
 	renderWidth := m.GetRenderWidth()
 
-	finalX, finalY, finalRight, finalBottom := m.adjustTilingNeighborsGeneric(resized, newX, newY, newWidth, newHeight, resizeImmediate)
-
-	// Update the resized window with constrained values
 	resized.X = finalX
 	resized.Y = finalY
 	resized.Width = finalRight - finalX
 	resized.Height = finalBottom - finalY
 
-	// Final validation: ensure dimensions are valid (should NEVER fail if constraint calculation is correct)
+	// Fallback clamp if constraint calculation produced invalid values
 	if resized.Width < minWidth || resized.Height < minHeight ||
 		resized.X < 0 || resized.Y < 0 ||
 		resized.X+resized.Width > renderWidth || resized.Y+resized.Height > maxY {
-		// Constraint calculation failed - clamp as last resort to prevent panic
 		resized.Width = max(minWidth, min(resized.Width, renderWidth-resized.X))
 		resized.Height = max(minHeight, min(resized.Height, maxY-resized.Y))
 		resized.X = max(0, min(resized.X, renderWidth-minWidth))
 		resized.Y = max(minY, min(resized.Y, maxY-minHeight))
 	}
+}
+
+// AdjustTilingNeighbors adjusts ALL windows on affected split lines with constraint-based positioning.
+// This is the core tiling resize algorithm used by both mouse and keyboard resize operations.
+func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidth, newHeight int) {
+	finalX, finalY, finalRight, finalBottom := m.adjustTilingNeighborsGeneric(resized, newX, newY, newWidth, newHeight, resizeImmediate)
+	m.applyTilingResult(resized, finalX, finalY, finalRight, finalBottom)
 
 	resized.Resize(resized.Width, resized.Height)
 	resized.MarkPositionDirty()
-
-	// Mark layout as custom
 	m.MarkLayoutCustom()
 }
 
@@ -886,29 +887,8 @@ func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 // This defers PTY resize operations until the drag completes, improving responsiveness
 // during mouse resize operations while still constraining window sizes appropriately.
 func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, newWidth, newHeight int) {
-	const minWidth = config.DefaultWindowWidth
-	const minHeight = config.DefaultWindowHeight
-	minY := m.GetTopMargin()
-	maxY := minY + m.GetUsableHeight()
-	renderWidth := m.GetRenderWidth()
-
 	finalX, finalY, finalRight, finalBottom := m.adjustTilingNeighborsGeneric(resized, newX, newY, newWidth, newHeight, resizeVisual)
-
-	// Update the resized window with constrained values
-	resized.X = finalX
-	resized.Y = finalY
-	resized.Width = finalRight - finalX
-	resized.Height = finalBottom - finalY
-
-	// Final validation
-	if resized.Width < minWidth || resized.Height < minHeight ||
-		resized.X < 0 || resized.Y < 0 ||
-		resized.X+resized.Width > renderWidth || resized.Y+resized.Height > maxY {
-		resized.Width = max(minWidth, min(resized.Width, renderWidth-resized.X))
-		resized.Height = max(minHeight, min(resized.Height, maxY-resized.Y))
-		resized.X = max(0, min(resized.X, renderWidth-minWidth))
-		resized.Y = max(minY, min(resized.Y, maxY-minHeight))
-	}
+	m.applyTilingResult(resized, finalX, finalY, finalRight, finalBottom)
 
 	resized.ResizeVisual(resized.Width, resized.Height)
 	m.PendingResizes[resized.ID] = [2]int{resized.Width, resized.Height}

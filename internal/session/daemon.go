@@ -300,152 +300,63 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 }
 
-// messageHandler is a function that handles a specific message type
-type messageHandler func(d *Daemon, cs *connState, msg *Message) error
-
-// messageHandlers maps message types to their handlers.
-// Handlers that don't need the message can ignore it.
-var messageHandlers = map[MessageType]messageHandler{
-	MsgHello:            (*Daemon).handleHelloMsg,
-	MsgAttach:           (*Daemon).handleAttachMsg,
-	MsgDetach:           (*Daemon).handleDetachMsg,
-	MsgNew:              (*Daemon).handleNewMsg,
-	MsgList:             (*Daemon).handleListMsg,
-	MsgKill:             (*Daemon).handleKillMsg,
-	MsgInput:            (*Daemon).handleInputMsg,
-	MsgResize:           (*Daemon).handleResizeMsg,
-	MsgPing:             (*Daemon).handlePingMsg,
-	MsgCreatePTY:        (*Daemon).handleCreatePTYMsg,
-	MsgClosePTY:         (*Daemon).handleClosePTYMsg,
-	MsgListPTYs:         (*Daemon).handleListPTYsMsg,
-	MsgGetState:         (*Daemon).handleGetStateMsg,
-	MsgUpdateState:      (*Daemon).handleUpdateStateMsg,
-	MsgSubscribePTY:     (*Daemon).handleSubscribePTYMsg,
-	MsgUnsubscribePTY:   (*Daemon).handleUnsubscribePTYMsg,
-	MsgGetTerminalState: (*Daemon).handleGetTerminalStateMsg,
-	MsgExecuteCommand:   (*Daemon).handleExecuteCommandMsg,
-	MsgSendKeys:         (*Daemon).handleSendKeysMsg,
-	MsgSetConfig:        (*Daemon).handleSetConfigMsg,
-	MsgCommandResult:    (*Daemon).handleCommandResultMsg,
-	MsgGetLogs:          (*Daemon).handleGetLogsMsg,
-	MsgQueryWindows:     (*Daemon).handleQueryWindowsMsg,
-	MsgQuerySession:     (*Daemon).handleQuerySessionMsg,
-	MsgWindowList:       (*Daemon).handleWindowListMsg,
-	MsgSessionInfo:      (*Daemon).handleSessionInfoMsg,
-}
-
 func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
-	handler, ok := messageHandlers[msg.Type]
-	if !ok {
+	switch msg.Type {
+	case MsgHello:
+		return d.handleHello(cs, msg)
+	case MsgAttach:
+		return d.handleAttach(cs, msg)
+	case MsgDetach:
+		return d.handleDetach(cs)
+	case MsgNew:
+		return d.handleNew(cs, msg)
+	case MsgList:
+		return d.handleList(cs)
+	case MsgKill:
+		return d.handleKill(cs, msg)
+	case MsgInput:
+		return d.handleInput(cs, msg)
+	case MsgResize:
+		return d.handleResize(cs, msg)
+	case MsgPing:
+		return d.sendPong(cs)
+	case MsgCreatePTY:
+		return d.handleCreatePTY(cs, msg)
+	case MsgClosePTY:
+		return d.handleClosePTY(cs, msg)
+	case MsgListPTYs:
+		return d.handleListPTYs(cs)
+	case MsgGetState:
+		return d.handleGetState(cs)
+	case MsgUpdateState:
+		return d.handleUpdateState(cs, msg)
+	case MsgSubscribePTY:
+		return d.handleSubscribePTY(cs, msg)
+	case MsgUnsubscribePTY:
+		return d.handleUnsubscribePTY(cs, msg)
+	case MsgGetTerminalState:
+		return d.handleGetTerminalState(cs, msg)
+	case MsgExecuteCommand:
+		return d.handleExecuteCommand(cs, msg)
+	case MsgSendKeys:
+		return d.handleSendKeys(cs, msg)
+	case MsgSetConfig:
+		return d.handleSetConfig(cs, msg)
+	case MsgCommandResult:
+		return d.handleCommandResult(cs, msg)
+	case MsgGetLogs:
+		return d.handleGetLogs(cs, msg)
+	case MsgQueryWindows:
+		return d.handleQueryWindows(cs, msg)
+	case MsgQuerySession:
+		return d.handleQuerySession(cs, msg)
+	case MsgWindowList:
+		return d.handleWindowListResponse(cs, msg)
+	case MsgSessionInfo:
+		return d.handleSessionInfoResponse(cs, msg)
+	default:
 		return fmt.Errorf("unknown message type: %d", msg.Type)
 	}
-	return handler(d, cs, msg)
-}
-
-// Message handler wrappers - these adapt the existing handlers to the messageHandler signature
-
-func (d *Daemon) handleHelloMsg(cs *connState, msg *Message) error {
-	return d.handleHello(cs, msg)
-}
-
-func (d *Daemon) handleAttachMsg(cs *connState, msg *Message) error {
-	return d.handleAttach(cs, msg)
-}
-
-func (d *Daemon) handleDetachMsg(cs *connState, _ *Message) error {
-	return d.handleDetach(cs)
-}
-
-func (d *Daemon) handleNewMsg(cs *connState, msg *Message) error {
-	return d.handleNew(cs, msg)
-}
-
-func (d *Daemon) handleListMsg(cs *connState, _ *Message) error {
-	return d.handleList(cs)
-}
-
-func (d *Daemon) handleKillMsg(cs *connState, msg *Message) error {
-	return d.handleKill(cs, msg)
-}
-
-func (d *Daemon) handleInputMsg(cs *connState, msg *Message) error {
-	return d.handleInput(cs, msg)
-}
-
-func (d *Daemon) handleResizeMsg(cs *connState, msg *Message) error {
-	return d.handleResize(cs, msg)
-}
-
-func (d *Daemon) handlePingMsg(cs *connState, _ *Message) error {
-	return d.sendPong(cs)
-}
-
-func (d *Daemon) handleCreatePTYMsg(cs *connState, msg *Message) error {
-	return d.handleCreatePTY(cs, msg)
-}
-
-func (d *Daemon) handleClosePTYMsg(cs *connState, msg *Message) error {
-	return d.handleClosePTY(cs, msg)
-}
-
-func (d *Daemon) handleListPTYsMsg(cs *connState, _ *Message) error {
-	return d.handleListPTYs(cs)
-}
-
-func (d *Daemon) handleGetStateMsg(cs *connState, _ *Message) error {
-	return d.handleGetState(cs)
-}
-
-func (d *Daemon) handleUpdateStateMsg(cs *connState, msg *Message) error {
-	return d.handleUpdateState(cs, msg)
-}
-
-func (d *Daemon) handleSubscribePTYMsg(cs *connState, msg *Message) error {
-	return d.handleSubscribePTY(cs, msg)
-}
-
-func (d *Daemon) handleUnsubscribePTYMsg(cs *connState, msg *Message) error {
-	return d.handleUnsubscribePTY(cs, msg)
-}
-
-func (d *Daemon) handleGetTerminalStateMsg(cs *connState, msg *Message) error {
-	return d.handleGetTerminalState(cs, msg)
-}
-
-func (d *Daemon) handleExecuteCommandMsg(cs *connState, msg *Message) error {
-	return d.handleExecuteCommand(cs, msg)
-}
-
-func (d *Daemon) handleSendKeysMsg(cs *connState, msg *Message) error {
-	return d.handleSendKeys(cs, msg)
-}
-
-func (d *Daemon) handleSetConfigMsg(cs *connState, msg *Message) error {
-	return d.handleSetConfig(cs, msg)
-}
-
-func (d *Daemon) handleCommandResultMsg(cs *connState, msg *Message) error {
-	return d.handleCommandResult(cs, msg)
-}
-
-func (d *Daemon) handleGetLogsMsg(cs *connState, msg *Message) error {
-	return d.handleGetLogs(cs, msg)
-}
-
-func (d *Daemon) handleQueryWindowsMsg(cs *connState, msg *Message) error {
-	return d.handleQueryWindows(cs, msg)
-}
-
-func (d *Daemon) handleQuerySessionMsg(cs *connState, msg *Message) error {
-	return d.handleQuerySession(cs, msg)
-}
-
-func (d *Daemon) handleWindowListMsg(cs *connState, msg *Message) error {
-	return d.handleWindowListResponse(cs, msg)
-}
-
-func (d *Daemon) handleSessionInfoMsg(cs *connState, msg *Message) error {
-	return d.handleSessionInfoResponse(cs, msg)
 }
 
 func (d *Daemon) handleHello(cs *connState, msg *Message) error {
@@ -725,15 +636,7 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 		// PTY-specific resize
 		if pty := session.GetPTY(payload.PTYID); pty != nil {
 			_ = pty.Resize(payload.Width, payload.Height)
-			// Also update pixel dimensions if client has capability info
-			if cs.cellWidth > 0 && cs.cellHeight > 0 {
-				// Update VT emulator cell size (in case it wasn't set)
-				pty.SetCellSize(cs.cellWidth, cs.cellHeight)
-				// Update PTY pixel dimensions for TIOCGWINSZ
-				xpixel := payload.Width * cs.cellWidth
-				ypixel := payload.Height * cs.cellHeight
-				_ = pty.SetPixelSize(payload.Width, payload.Height, xpixel, ypixel)
-			}
+			_ = pty.UpdatePixelDimensions(cs.cellWidth, cs.cellHeight)
 		}
 	}
 
@@ -777,19 +680,8 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 	}
 
 	// Set pixel dimensions from client's terminal capabilities
-	// This enables graphics tools like kitty icat to query proper pixel sizes
-	if cs.cellWidth > 0 && cs.cellHeight > 0 {
-		// Set cell size on VT emulator for XTWINOPS responses
-		pty.SetCellSize(cs.cellWidth, cs.cellHeight)
-
-		// Set pixel dimensions on PTY for TIOCGWINSZ queries
-		xpixel := width * cs.cellWidth
-		ypixel := height * cs.cellHeight
-		if err := pty.SetPixelSize(width, height, xpixel, ypixel); err != nil {
-			debugLog("[DEBUG] handleCreatePTY: failed to set pixel size: %v", err)
-		} else {
-			debugLog("[DEBUG] PTY pixel size set: %dx%d pixels (cell: %dx%d)", xpixel, ypixel, cs.cellWidth, cs.cellHeight)
-		}
+	if err := pty.UpdatePixelDimensions(cs.cellWidth, cs.cellHeight); err != nil {
+		debugLog("[DEBUG] handleCreatePTY: failed to set pixel size: %v", err)
 	}
 
 	// Set up exit callback to notify subscribed clients when PTY process exits
@@ -1134,7 +1026,7 @@ func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
 		}
 		if first {
 			width, height = cs.width, cs.height
-			first = false // Fixed: was incorrectly set to true
+			first = false
 		} else {
 			if cs.width < width {
 				width = cs.width
@@ -1224,24 +1116,10 @@ func (d *Daemon) syncPTYPixelDimensions(session *Session, cellWidth, cellHeight 
 		return
 	}
 
-	ptyIDs := session.ListPTYIDs()
-	for _, ptyID := range ptyIDs {
-		pty := session.GetPTY(ptyID)
-		if pty != nil {
-			// Calculate pixel dimensions from cell size and terminal dimensions
-			width, height := pty.Size()
-			xpixel := width * cellWidth
-			ypixel := height * cellHeight
-
-			// Set cell size on VT emulator for XTWINOPS responses
-			pty.SetCellSize(cellWidth, cellHeight)
-
-			// Set pixel dimensions on PTY for TIOCGWINSZ queries
-			if err := pty.SetPixelSize(width, height, xpixel, ypixel); err != nil {
+	for _, ptyID := range session.ListPTYIDs() {
+		if pty := session.GetPTY(ptyID); pty != nil {
+			if err := pty.UpdatePixelDimensions(cellWidth, cellHeight); err != nil {
 				LogBasic("Failed to set PTY %s pixel size: %v", ptyID[:8], err)
-			} else {
-				LogBasic("Set PTY %s pixel size: %dx%d chars, %dx%d pixels (cell: %dx%d)",
-					ptyID[:8], width, height, xpixel, ypixel, cellWidth, cellHeight)
 			}
 		}
 	}
@@ -1511,22 +1389,23 @@ func (d *Daemon) handleQueryWindows(cs *connState, msg *Message) error {
 	// Build window list from state
 	windows := make([]map[string]any, 0, len(state.Windows))
 	for i, w := range state.Windows {
-		isFocused := w.ID == state.FocusedWindowID
+		displayName := w.Title
+		if w.CustomName != "" {
+			displayName = w.CustomName
+		}
+
 		winInfo := map[string]any{
 			"window_id":    w.ID,
 			"index":        i,
 			"title":        w.Title,
-			"display_name": w.CustomName,
+			"display_name": displayName,
 			"workspace":    w.Workspace,
 			"minimized":    w.Minimized,
-			"focused":      isFocused,
+			"focused":      w.ID == state.FocusedWindowID,
 			"x":            w.X,
 			"y":            w.Y,
 			"width":        w.Width,
 			"height":       w.Height,
-		}
-		if w.CustomName == "" {
-			winInfo["display_name"] = w.Title
 		}
 		if w.CustomName != "" {
 			winInfo["custom_name"] = w.CustomName
