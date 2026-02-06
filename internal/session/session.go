@@ -224,13 +224,17 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 	terminal := vt.NewEmulator(width, height)
 	terminal.SetScrollbackMaxLines(10000) // Match default scrollback
 
-	// Set a no-op Kitty passthrough func to prevent the daemon's VT emulator from
-	// generating responses to Kitty graphics commands. Responses should only come
-	// from the client's passthrough, which forwards commands to the actual terminal.
+	// Handle Kitty graphics queries on the daemon side for low-latency responses.
+	// Query responses go through the same pipe as DA1/CPR, so forwardTerminalResponses()
+	// delivers them to the PTY. All other commands (transmit, place, delete) are discarded
+	// here — the client's passthrough handles those and forwards to the host terminal.
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
-		// Intentionally empty - discard Kitty graphics commands on the daemon side
-		// The client's passthrough will handle these and forward to the host terminal
-		debugLog("[DAEMON-VT] Kitty command received and discarded: action=%c, imageID=%d", cmd.Action, cmd.ImageID)
+		if cmd.Action == vt.KittyActionQuery {
+			response := vt.BuildKittyResponse(true, cmd.ImageID, "")
+			terminal.WriteResponse(response)
+			return
+		}
+		debugLog("[DAEMON-VT] Kitty command discarded: action=%c, imageID=%d", cmd.Action, cmd.ImageID)
 	})
 
 	pty := &PTY{
@@ -405,6 +409,8 @@ func (s *Session) buildEnv() []string {
 		colorTerm = s.config.ColorTerm
 	}
 	env = append(env, "COLORTERM="+colorTerm)
+	env = append(env, "TERM_PROGRAM=TUIOS")
+	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
 	env = append(env, "TUIOS_SESSION="+s.Name)
 
 	return env

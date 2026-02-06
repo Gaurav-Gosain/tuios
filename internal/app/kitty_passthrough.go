@@ -1316,6 +1316,12 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	})
 
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
+		// In daemon mode, the daemon's VT emulator responds to queries directly
+		// with low latency. Skip here to avoid sending a duplicate response.
+		if win.DaemonMode && cmd.Action == vt.KittyActionQuery {
+			return
+		}
+
 		cursorPos := win.Terminal.CursorPosition()
 		scrollbackLen := win.Terminal.ScrollbackLen()
 		result := kp.ForwardCommand(

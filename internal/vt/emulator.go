@@ -755,6 +755,13 @@ func (e *Emulator) logf(format string, v ...any) {
 	}
 }
 
+// WriteResponse writes data to the emulator's response pipe.
+// This allows external code (e.g., daemon-side Kitty query handlers)
+// to inject responses that will be forwarded to the PTY.
+func (e *Emulator) WriteResponse(data []byte) {
+	_, _ = e.pw.Write(data)
+}
+
 func (e *Emulator) registerKittyGraphicsHandler() {
 	e.RegisterApcHandler(func(data []byte) bool {
 		if len(data) < 1 || data[0] != 'G' {
