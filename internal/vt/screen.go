@@ -1,8 +1,6 @@
 package vt
 
 import (
-	"sync"
-
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -18,8 +16,6 @@ type Screen struct {
 	scroll uv.Rectangle
 	// scrollback is the scrollback buffer for lines that have scrolled off the top.
 	scrollback *Scrollback
-	// mutex for the screen.
-	mu sync.RWMutex
 }
 
 // NewScreen creates a new screen.
@@ -266,7 +262,6 @@ func (s *Screen) ScrollUp(n int) {
 		return
 	}
 
-	s.mu.Lock()
 	scroll := s.scroll
 	width := s.buf.Width()
 
@@ -280,7 +275,6 @@ func (s *Screen) ScrollUp(n int) {
 			s.scrollback.PushLine(line)
 		}
 	}
-	s.mu.Unlock()
 
 	x, y := s.CursorPosition()
 	s.setCursor(s.cur.X, 0, true)
@@ -363,8 +357,6 @@ func (s *Screen) Scrollback() *Scrollback {
 
 // ClearScrollback clears all lines from the scrollback buffer.
 func (s *Screen) ClearScrollback() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.scrollback != nil {
 		s.scrollback.Clear()
 	}
@@ -372,8 +364,6 @@ func (s *Screen) ClearScrollback() {
 
 // ScrollbackLen returns the number of lines currently in the scrollback buffer.
 func (s *Screen) ScrollbackLen() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if s.scrollback == nil {
 		return 0
 	}
@@ -382,9 +372,7 @@ func (s *Screen) ScrollbackLen() int {
 
 // ScrollbackLine returns the line at the specified index in the scrollback buffer.
 // Index 0 is the oldest line. Returns nil if the index is out of bounds.
-func (s *Screen) ScrollbackLine(index int) []uv.Cell {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func (s *Screen) ScrollbackLine(index int) uv.Line {
 	if s.scrollback == nil {
 		return nil
 	}
@@ -393,8 +381,6 @@ func (s *Screen) ScrollbackLine(index int) []uv.Cell {
 
 // SetScrollbackMaxLines sets the maximum number of lines for the scrollback buffer.
 func (s *Screen) SetScrollbackMaxLines(maxLines int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.scrollback != nil {
 		s.scrollback.SetMaxLines(maxLines)
 	}

@@ -1188,7 +1188,7 @@ func (w *Window) ScrollbackLen() int {
 
 // ScrollbackLine returns a line from the scrollback buffer at the given index.
 // Index 0 is the oldest line. Returns nil if index is out of bounds.
-func (w *Window) ScrollbackLine(index int) []uv.Cell {
+func (w *Window) ScrollbackLine(index int) uv.Line {
 	if w.Terminal == nil {
 		return nil
 	}

@@ -19,7 +19,7 @@ func TestScrollbackRingBuffer(t *testing.T) {
 
 	// Push lines until full
 	for i := range 5 {
-		line := []uv.Cell{{Content: string(rune('A' + i)), Width: 1}}
+		line := uv.Line{{Content: string(rune('A' + i)), Width: 1}}
 		sb.PushLine(line)
 	}
 
@@ -28,7 +28,7 @@ func TestScrollbackRingBuffer(t *testing.T) {
 	}
 
 	// Verify ring buffer overwrites oldest
-	line6 := []uv.Cell{{Content: "F", Width: 1}}
+	line6 := uv.Line{{Content: "F", Width: 1}}
 	sb.PushLine(line6)
 
 	if sb.Len() != 5 {
@@ -52,11 +52,11 @@ func TestScrollbackSoftWrapping(t *testing.T) {
 	sb := NewScrollback(10)
 
 	// Push soft-wrapped line
-	line1 := []uv.Cell{{Content: "A", Width: 1}}
+	line1 := uv.Line{{Content: "A", Width: 1}}
 	sb.PushLineWithWrap(line1, true)
 
 	// Push hard break line
-	line2 := []uv.Cell{{Content: "B", Width: 1}}
+	line2 := uv.Line{{Content: "B", Width: 1}}
 	sb.PushLineWithWrap(line2, false)
 
 	if sb.Len() != 2 {
@@ -76,7 +76,7 @@ func TestScrollbackClear(t *testing.T) {
 	sb := NewScrollback(10)
 
 	for i := range 5 {
-		line := []uv.Cell{{Content: string(rune('A' + i)), Width: 1}}
+		line := uv.Line{{Content: string(rune('A' + i)), Width: 1}}
 		sb.PushLine(line)
 	}
 
@@ -87,7 +87,7 @@ func TestScrollbackClear(t *testing.T) {
 	}
 
 	// Should be able to push after clear
-	line := []uv.Cell{{Content: "X", Width: 1}}
+	line := uv.Line{{Content: "X", Width: 1}}
 	sb.PushLine(line)
 
 	if sb.Len() != 1 {
@@ -100,7 +100,7 @@ func TestScrollbackSetMaxLines(t *testing.T) {
 
 	// Fill with 8 lines
 	for i := range 8 {
-		line := []uv.Cell{{Content: string(rune('A' + i)), Width: 1}}
+		line := uv.Line{{Content: string(rune('A' + i)), Width: 1}}
 		sb.PushLine(line)
 	}
 
@@ -131,7 +131,7 @@ func TestScrollbackSetMaxLines(t *testing.T) {
 func TestScrollbackBoundsChecking(t *testing.T) {
 	sb := NewScrollback(5)
 
-	line := []uv.Cell{{Content: "A", Width: 1}}
+	line := uv.Line{{Content: "A", Width: 1}}
 	sb.PushLine(line)
 
 	// Out of bounds access should return nil
@@ -171,7 +171,7 @@ func TestScrollbackEmptyPushIgnored(t *testing.T) {
 	sb := NewScrollback(5)
 
 	// Empty line should be ignored
-	sb.PushLine([]uv.Cell{})
+	sb.PushLine(uv.Line{})
 
 	if sb.Len() != 0 {
 		t.Errorf("expected empty scrollback after pushing empty line, got %d", sb.Len())

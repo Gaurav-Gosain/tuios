@@ -4,13 +4,17 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
+// DefaultScrollbackSize is the default number of lines to keep in the
+// scrollback buffer.
+const DefaultScrollbackSize = 10000
+
 // Scrollback represents a scrollback buffer that stores lines that have
 // scrolled off the top of the visible screen.
 // Uses a ring buffer for O(1) insertions instead of O(n) slice reallocations.
 // Supports soft-wrapping to handle terminal resizes gracefully.
 type Scrollback struct {
 	// lines stores the scrollback lines in a ring buffer
-	lines [][]uv.Cell
+	lines []uv.Line
 	// maxLines is the maximum number of lines to keep in scrollback
 	maxLines int
 	// head is the index of the oldest line in the ring buffer
@@ -28,13 +32,13 @@ type Scrollback struct {
 }
 
 // NewScrollback creates a new scrollback buffer with the specified maximum
-// number of lines. If maxLines is 0, a default of 10000 lines is used.
+// number of lines. If maxLines is 0, DefaultScrollbackSize is used.
 func NewScrollback(maxLines int) *Scrollback {
 	if maxLines <= 0 {
-		maxLines = 10000 // Default scrollback size
+		maxLines = DefaultScrollbackSize
 	}
 	return &Scrollback{
-		lines:             make([][]uv.Cell, maxLines), // Pre-allocate full ring buffer
+		lines:             make([]uv.Line, maxLines), // Pre-allocate full ring buffer
 		maxLines:          maxLines,
 		head:              0,
 		tail:              0,
@@ -49,18 +53,18 @@ func NewScrollback(maxLines int) *Scrollback {
 // This is now an O(1) operation instead of O(n).
 // The isSoftWrapped parameter indicates if this line is a soft-wrap (can be
 // reflowed to a different width) or a hard break (actual newline from output).
-func (sb *Scrollback) PushLine(line []uv.Cell) {
+func (sb *Scrollback) PushLine(line uv.Line) {
 	sb.PushLineWithWrap(line, true) // Default to soft-wrapped for backwards compatibility
 }
 
 // PushLineWithWrap adds a line with wrap information for soft-wrap support.
-func (sb *Scrollback) PushLineWithWrap(line []uv.Cell, isSoftWrapped bool) {
+func (sb *Scrollback) PushLineWithWrap(line uv.Line, isSoftWrapped bool) {
 	if len(line) == 0 {
 		return
 	}
 
 	// Make a copy of the line to avoid aliasing issues
-	lineCopy := make([]uv.Cell, len(line))
+	lineCopy := make(uv.Line, len(line))
 	copy(lineCopy, line)
 
 	// Insert at tail position
@@ -95,7 +99,7 @@ func (sb *Scrollback) Len() int {
 // Line returns the line at the specified index in the scrollback buffer.
 // Index 0 is the oldest line, and Len()-1 is the newest (most recently scrolled).
 // Returns nil if the index is out of bounds.
-func (sb *Scrollback) Line(index int) []uv.Cell {
+func (sb *Scrollback) Line(index int) uv.Line {
 	length := sb.Len()
 	if index < 0 || index >= length {
 		return nil
@@ -113,14 +117,14 @@ func (sb *Scrollback) Line(index int) []uv.Cell {
 
 // Lines returns a slice of all lines in the scrollback buffer, from oldest
 // to newest. The returned slice should not be modified.
-func (sb *Scrollback) Lines() [][]uv.Cell {
+func (sb *Scrollback) Lines() []uv.Line {
 	length := sb.Len()
 	if length == 0 {
 		return nil
 	}
 
 	// Build a slice in correct order from the ring buffer
-	result := make([][]uv.Cell, length)
+	result := make([]uv.Line, length)
 	for i := range length {
 		physicalIndex := (sb.head + i) % sb.maxLines
 		result[i] = sb.lines[physicalIndex]
@@ -186,7 +190,7 @@ func (sb *Scrollback) MaxLines() int {
 // are discarded to fit the new limit.
 func (sb *Scrollback) SetMaxLines(maxLines int) {
 	if maxLines <= 0 {
-		maxLines = 10000 // Default scrollback size
+		maxLines = DefaultScrollbackSize
 	}
 
 	if maxLines == sb.maxLines {
@@ -196,7 +200,7 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	oldLen := sb.Len()
 	if oldLen == 0 {
 		// Empty buffer, just resize
-		sb.lines = make([][]uv.Cell, maxLines)
+		sb.lines = make([]uv.Line, maxLines)
 		sb.softWrapped = make([]bool, maxLines)
 		sb.maxLines = maxLines
 		sb.head = 0
@@ -206,7 +210,7 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	}
 
 	// Create new ring buffer and copy existing lines
-	newLines := make([][]uv.Cell, maxLines)
+	newLines := make([]uv.Line, maxLines)
 	newSoftWrapped := make([]bool, maxLines)
 	newLen := min(oldLen, maxLines)
 
@@ -228,8 +232,8 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 
 // extractLine extracts a complete line from the buffer at the given Y coordinate.
 // This is a helper function to copy cells from a buffer line.
-func extractLine(buf *uv.Buffer, y, width int) []uv.Cell {
-	line := make([]uv.Cell, width)
+func extractLine(buf *uv.Buffer, y, width int) uv.Line {
+	line := make(uv.Line, width)
 	for x := range width {
 		if cell := buf.CellAt(x, y); cell != nil {
 			line[x] = *cell

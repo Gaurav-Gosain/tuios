@@ -210,7 +210,7 @@ func (e *Emulator) ScrollbackLen() int {
 
 // ScrollbackLine returns a line from the scrollback buffer at the given index.
 // Index 0 is the oldest line. Returns nil if index is out of bounds.
-func (e *Emulator) ScrollbackLine(index int) []uv.Cell {
+func (e *Emulator) ScrollbackLine(index int) uv.Line {
 	return e.scrs[0].ScrollbackLine(index)
 }
 

@@ -2,6 +2,7 @@ package vt
 
 import (
 	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/ansi/parser"
 )
 
 // handleEsc handles an escape sequence.
@@ -32,4 +33,7 @@ func (e *Emulator) fullReset() {
 	e.gsingle = 0
 	e.charsets = [4]CharSet{}
 	e.atPhantom = false
+	e.grapheme = e.grapheme[:0]
+	e.lastChar = 0
+	e.lastState = parser.GroundState
 }
