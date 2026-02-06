@@ -116,7 +116,7 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 				i += skip
 			}
 		case 39: // Default foreground
-			pen.Fg = e.defaultFg
+			pen.Fg = nil
 		case 40, 41, 42, 43, 44, 45, 46, 47: // Set background - USE THEME COLORS
 			pen.Bg = e.IndexedColor(int(param - 40))
 		case 48: // Set background 256 or truecolor
@@ -125,7 +125,7 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 				i += skip
 			}
 		case 49: // Default Background
-			pen.Bg = e.defaultBg
+			pen.Bg = nil
 		case 58: // Set underline color
 			if c, skip := e.parseThemedColor(params, i); c != nil {
 				pen.UnderlineColor = c

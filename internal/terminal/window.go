@@ -267,7 +267,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	if theme.IsEnabled() {
 		terminal.SetThemeColors(
 			theme.TerminalFg(),
-			nil, // Always use transparent background so TUI apps render correctly
+			theme.TerminalBg(),
 			theme.TerminalCursor(),
 			theme.GetANSIPalette(),
 		)
@@ -454,7 +454,7 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string)
 	if theme.IsEnabled() {
 		terminal.SetThemeColors(
 			theme.TerminalFg(),
-			nil, // Always use transparent background so TUI apps render correctly
+			theme.TerminalBg(),
 			theme.TerminalCursor(),
 			theme.GetANSIPalette(),
 		)
@@ -578,7 +578,7 @@ func (w *Window) UpdateThemeColors() {
 		if theme.IsEnabled() {
 			w.Terminal.SetThemeColors(
 				theme.TerminalFg(),
-				nil, // Always use transparent background so TUI apps render correctly
+				theme.TerminalBg(),
 				theme.TerminalCursor(),
 				theme.GetANSIPalette(),
 			)

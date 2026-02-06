@@ -609,10 +609,13 @@ func (e *Emulator) SendKeys(keys ...uv.KeyEvent) {
 // the foreground color is not set which means the outer terminal color is
 // used.
 func (e *Emulator) ForegroundColor() color.Color {
-	if e.fgColor == nil {
+	if e.fgColor != nil {
+		return e.fgColor
+	}
+	if e.defaultFg != nil {
 		return e.defaultFg
 	}
-	return e.fgColor
+	return color.White // ultimate fallback
 }
 
 // SetForegroundColor sets the terminal's foreground color.
@@ -628,9 +631,6 @@ func (e *Emulator) SetForegroundColor(c color.Color) {
 
 // SetDefaultForegroundColor sets the terminal's default foreground color.
 func (e *Emulator) SetDefaultForegroundColor(c color.Color) {
-	if c == nil {
-		c = color.White
-	}
 	e.defaultFg = c
 }
 
@@ -638,10 +638,13 @@ func (e *Emulator) SetDefaultForegroundColor(c color.Color) {
 // the background color is not set which means the outer terminal color is
 // used.
 func (e *Emulator) BackgroundColor() color.Color {
-	if e.bgColor == nil {
+	if e.bgColor != nil {
+		return e.bgColor
+	}
+	if e.defaultBg != nil {
 		return e.defaultBg
 	}
-	return e.bgColor
+	return color.Black // ultimate fallback
 }
 
 // SetBackgroundColor sets the terminal's background color.
@@ -657,9 +660,6 @@ func (e *Emulator) SetBackgroundColor(c color.Color) {
 
 // SetDefaultBackgroundColor sets the terminal's default background color.
 func (e *Emulator) SetDefaultBackgroundColor(c color.Color) {
-	if c == nil {
-		c = color.Black
-	}
 	e.defaultBg = c
 }
 
