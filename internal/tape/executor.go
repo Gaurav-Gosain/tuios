@@ -91,8 +91,12 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte(cmd.Args[0]))
 		}
 
-	case CommandTypeEnter:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\n'})
+    case CommandTypeEnter:
+        // Windows requires \r\n, Unix accepts \n
+        if runtime.GOOS == "windows" {
+            return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\r', '\n'})
+        }
+        return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\n'})
 
 	case CommandTypeSpace:
 		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{' '})
