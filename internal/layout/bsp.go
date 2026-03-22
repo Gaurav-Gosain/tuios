@@ -435,22 +435,16 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
 		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
 		rightBounds = Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
-		// Shared borders: right child overlaps left child's right border by 1 cell
-		if config.SharedBorders {
-			rightBounds.X--
-			rightBounds.W++
-		}
 	} else {
 		// Horizontal split: top / bottom
 		splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
 		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
 		rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
-		// Shared borders: bottom child overlaps top child's bottom border by 1 cell
-		if config.SharedBorders {
-			rightBounds.Y--
-			rightBounds.H++
-		}
 	}
+
+	// Note: SharedBorders config flag exists but proper implementation
+	// requires a post-rendering border grid pass (future work).
+	_ = config.SharedBorders
 
 	t.applyLayoutRecursive(node.Left, leftBounds, result)
 	t.applyLayoutRecursive(node.Right, rightBounds, result)
