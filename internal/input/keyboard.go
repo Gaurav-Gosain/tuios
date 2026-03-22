@@ -251,12 +251,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-
-	// Exit scrollback mode on any keypress (scroll back to live output)
-	if focusedWindow != nil && focusedWindow.ScrollbackMode {
-		focusedWindow.ExitScrollbackMode()
-		focusedWindow.InvalidateCache()
-	}
 	// Normal terminal mode - pass through all keys
 	if focusedWindow != nil {
 		// Check if the terminal has DECCKM (application cursor keys) mode enabled
