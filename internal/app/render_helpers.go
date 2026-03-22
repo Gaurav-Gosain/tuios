@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 
@@ -230,10 +231,28 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 		topBorder = RightString(buttons, width, color)
 	}
 
-	// Build bottom border
+	// Build bottom border with optional scrollback position indicator
 	var bottomBorder string
+	scrollIndicator := ""
+	if window.ScrollbackMode && window.ScrollbackOffset > 0 {
+		scrollbackLen := 0
+		if window.Terminal != nil {
+			scrollbackLen = window.Terminal.ScrollbackLen()
+		}
+		if scrollbackLen > 0 {
+			scrollIndicator = fmt.Sprintf(" %d/%d ", window.ScrollbackOffset, scrollbackLen)
+		}
+	}
+
 	if titlePos == "bottom" && windowName != "" {
 		bottomBorder = renderTitleBadge(windowName, width, color, false)
+	} else if scrollIndicator != "" {
+		// Bottom border with scrollback position indicator on the right
+		indicatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24")).Bold(true)
+		indicator := indicatorStyle.Render(scrollIndicator)
+		indicatorWidth := lipgloss.Width(indicator)
+		lineWidth := max(width-indicatorWidth, 0)
+		bottomBorder = borderStyle.Render(config.GetWindowBorderBottomLeft()+strings.Repeat(config.GetWindowBorderBottom(), lineWidth)) + indicator + borderStyle.Render(config.GetWindowBorderBottomRight())
 	} else {
 		bottomBorder = borderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderBottom(), width) + config.GetWindowBorderBottomRight())
 	}

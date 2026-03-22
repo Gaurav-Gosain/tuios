@@ -38,6 +38,22 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
+	// Fast path for unfocused windows: use the emulator's built-in Render()
+	// which is much faster than cell-by-cell iteration with style building.
+	// Only works when there's no cursor overlay, selection, or copy mode.
+	if !isFocused && window.CopyMode == nil && !window.IsSelecting && window.SelectedText == "" && window.ScrollbackOffset == 0 {
+		rendered := screen.Render()
+		window.CachedContent = rendered
+		window.ContentDirty = false
+		return rendered
+	}
+
+	// Fast path for scrollback mode: content is static at a given scroll
+	// position, so reuse the cache if the offset hasn't changed.
+	if window.ScrollbackOffset > 0 && window.CachedContent != "" && !window.ContentDirty {
+		return window.CachedContent
+	}
+
 	cursor := screen.CursorPosition()
 	cursorX := cursor.X
 	cursorY := cursor.Y

@@ -43,6 +43,10 @@ const (
 	SchemeAlternate
 	// SchemeSpiral creates a spiral pattern (like bspwm's default)
 	SchemeSpiral
+	// SchemeSmartSplit chooses split direction based on focused window aspect ratio:
+	// width > height*2 -> vertical (side by side), height > width -> horizontal (stacked),
+	// otherwise alternates based on split depth.
+	SchemeSmartSplit
 )
 
 // String returns a string representation of the auto scheme
@@ -54,6 +58,8 @@ func (s AutoScheme) String() string {
 		return "alternate"
 	case SchemeSpiral:
 		return "spiral"
+	case SchemeSmartSplit:
+		return "smart_split"
 	default:
 		return "unknown"
 	}
@@ -66,6 +72,8 @@ func ParseAutoScheme(s string) AutoScheme {
 		return SchemeAlternate
 	case "spiral":
 		return SchemeSpiral
+	case "smart_split":
+		return SchemeSmartSplit
 	default:
 		return SchemeLongestSide
 	}
