@@ -608,21 +608,11 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		filePath = "/dev/shm/" + cmd.FilePath
 	}
 
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		kittyPassthroughLog("forwardFileTransmit: failed to read %s: %v", filePath, err)
-		return
-	}
-
-	kittyPassthroughLog("forwardFileTransmit: read %d bytes from %s, andPlace=%v", len(data), filePath, andPlace)
+	kittyPassthroughLog("forwardFileTransmit: file=%s, andPlace=%v, medium=%c", filePath, andPlace, cmd.Medium)
 
 	// Clear existing placements for this window before placing new image
 	if andPlace {
 		kp.deleteAllWindowPlacements(windowID, false)
-	}
-
-	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile {
-		_ = os.Remove(filePath)
 	}
 
 	// Allocate a unique host ID and store the mapping
@@ -633,7 +623,11 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	kp.imageIDMap[windowID][cmd.ImageID] = hostID
 	kittyPassthroughLog("forwardFileTransmit: mapped guestID=%d -> hostID=%d for window=%s", cmd.ImageID, hostID, windowID[:8])
 
-	encoded := base64.StdEncoding.EncodeToString(data)
+	// PERFORMANCE: Forward the file path directly to the host terminal.
+	// The host (Ghostty/Kitty) reads the file itself — no need to read the
+	// entire file into memory, base64 encode it, and chunk it.
+	// This is the key optimization for video playback (ytk sends ~30 temp files/sec).
+	encoded := base64.StdEncoding.EncodeToString([]byte(filePath))
 
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
@@ -664,77 +658,64 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// RefreshAllPlacements will handle the actual placement at the correct position
 	// This avoids ANSI leaks when icat is called multiple times
 
-	const chunkSize = 4096
-	for i := 0; i < len(encoded); i += chunkSize {
-		end := min(i+chunkSize, len(encoded))
-		chunk := encoded[i:end]
-		more := end < len(encoded)
-
-		var buf bytes.Buffer
-		buf.WriteString("\x1b_G")
-
-		if i == 0 {
-			// Always use 't' (transmit only) - placement will be done by RefreshAllPlacements
-			fmt.Fprintf(&buf, "a=t,i=%d,f=%d,s=%d,v=%d,q=2",
-				hostID, cmd.Format, cmd.Width, cmd.Height)
-			if cmd.Compression == vt.KittyCompressionZlib {
-				buf.WriteString(",o=z")
-			}
-
-			// Always set c and r to control display size
-			if displayCols > 0 {
-				fmt.Fprintf(&buf, ",c=%d", displayCols)
-			}
-			if displayRows > 0 {
-				fmt.Fprintf(&buf, ",r=%d", displayRows)
-			}
-			// Include source rectangle if specified
-			if cmd.SourceX > 0 {
-				fmt.Fprintf(&buf, ",x=%d", cmd.SourceX)
-			}
-			if cmd.SourceY > 0 {
-				fmt.Fprintf(&buf, ",y=%d", cmd.SourceY)
-			}
-			if cmd.SourceWidth > 0 {
-				fmt.Fprintf(&buf, ",w=%d", cmd.SourceWidth)
-			}
-			// Calculate source height for clipping (not scaling)
-			// If displayRows < imgRows, we need to clip the image
-			sourceHeight := cmd.SourceHeight
-			if sourceHeight == 0 && displayRows < imgRows {
-				caps := GetHostCapabilities()
-				cellH := caps.CellHeight
-				if cellH <= 0 {
-					cellH = 20
-				}
-				sourceHeight = displayRows * cellH
-			}
-			if sourceHeight > 0 {
-				fmt.Fprintf(&buf, ",h=%d", sourceHeight)
-			}
-			if cmd.XOffset > 0 {
-				fmt.Fprintf(&buf, ",X=%d", cmd.XOffset)
-			}
-			if cmd.YOffset > 0 {
-				fmt.Fprintf(&buf, ",Y=%d", cmd.YOffset)
-			}
-			if cmd.ZIndex != 0 {
-				fmt.Fprintf(&buf, ",z=%d", cmd.ZIndex)
-			}
-			// Note: Don't send U=1 to host - TUIOS renders guest content itself
-		} else {
-			fmt.Fprintf(&buf, "i=%d,q=2", hostID)
+	// Build a single transmit command with t=f (file-based).
+	// The host terminal reads the file directly — no chunking needed.
+	var buf bytes.Buffer
+	buf.WriteString("\x1b_G")
+	fmt.Fprintf(&buf, "a=t,t=f,i=%d,f=%d,s=%d,v=%d,q=2",
+		hostID, cmd.Format, cmd.Width, cmd.Height)
+	if cmd.Compression == vt.KittyCompressionZlib {
+		buf.WriteString(",o=z")
+	}
+	if displayCols > 0 {
+		fmt.Fprintf(&buf, ",c=%d", displayCols)
+	}
+	if displayRows > 0 {
+		fmt.Fprintf(&buf, ",r=%d", displayRows)
+	}
+	if cmd.SourceX > 0 {
+		fmt.Fprintf(&buf, ",x=%d", cmd.SourceX)
+	}
+	if cmd.SourceY > 0 {
+		fmt.Fprintf(&buf, ",y=%d", cmd.SourceY)
+	}
+	if cmd.SourceWidth > 0 {
+		fmt.Fprintf(&buf, ",w=%d", cmd.SourceWidth)
+	}
+	sourceHeight := cmd.SourceHeight
+	if sourceHeight == 0 && displayRows < imgRows {
+		caps := GetHostCapabilities()
+		cellH := caps.CellHeight
+		if cellH <= 0 {
+			cellH = 20
 		}
+		sourceHeight = displayRows * cellH
+	}
+	if sourceHeight > 0 {
+		fmt.Fprintf(&buf, ",h=%d", sourceHeight)
+	}
+	if cmd.XOffset > 0 {
+		fmt.Fprintf(&buf, ",X=%d", cmd.XOffset)
+	}
+	if cmd.YOffset > 0 {
+		fmt.Fprintf(&buf, ",Y=%d", cmd.YOffset)
+	}
+	if cmd.ZIndex != 0 {
+		fmt.Fprintf(&buf, ",z=%d", cmd.ZIndex)
+	}
+	buf.WriteByte(';')
+	buf.WriteString(encoded)
+	buf.WriteString("\x1b\\")
 
-		if more {
-			buf.WriteString(",m=1")
-		}
+	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 
-		buf.WriteByte(';')
-		buf.WriteString(chunk)
-		buf.WriteString("\x1b\\")
-
-		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+	// Clean up temp files/shm after forwarding (host has the path now)
+	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile {
+		// Defer cleanup to give the host terminal time to read the file
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			_ = os.Remove(filePath)
+		}()
 	}
 
 	// Store placement using hostID as key (cmd.ImageID is often 0 for new images)
