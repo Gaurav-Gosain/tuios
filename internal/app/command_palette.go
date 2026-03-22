@@ -358,18 +358,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Search Scrollback",
-			Shortcut: "prefix+f",
-			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ShowScrollbackSearch = true
-				m.ScrollbackSearchQuery = ""
-				m.ScrollbackSearchMatches = nil
-				m.ScrollbackSearchCurrent = 0
-				return m, nil
-			},
-		},
-		{
 			Name:     "Toggle Show Keys",
 			Shortcut: "prefix+D k",
 			Category: "Session",

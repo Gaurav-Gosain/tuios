@@ -128,53 +128,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
-	// Scrollback search highlighting (when search bar is open, not in copy mode)
-	if !inCopyMode && m.ShowScrollbackSearch && len(m.ScrollbackSearchMatches) > 0 {
-		if searchHighlights == nil {
-			searchHighlights = pool.GetHighlightGrid()
-			searchHighlights.Init(maxY, maxX)
-			defer pool.PutHighlightGrid(searchHighlights)
-		}
-		if currentMatchHighlight == nil {
-			currentMatchHighlight = pool.GetHighlightGrid()
-			currentMatchHighlight.Init(maxY, maxX)
-			defer pool.PutHighlightGrid(currentMatchHighlight)
-		}
-
-		for i, match := range m.ScrollbackSearchMatches {
-			var viewportY int
-			if match.AbsLine < scrollbackLen {
-				if window.ScrollbackOffset > 0 {
-					if match.AbsLine >= scrollbackLen-window.ScrollbackOffset {
-						viewportY = match.AbsLine - (scrollbackLen - window.ScrollbackOffset)
-					} else {
-						continue
-					}
-				} else {
-					continue
-				}
-			} else {
-				screenLine := match.AbsLine - scrollbackLen
-				if window.ScrollbackOffset > 0 {
-					viewportY = window.ScrollbackOffset + screenLine
-				} else {
-					viewportY = screenLine
-				}
-			}
-
-			if viewportY >= 0 && viewportY < maxY {
-				isCurrentMatch := (i == m.ScrollbackSearchCurrent)
-				for x := match.Col; x < match.Col+match.Len && x < maxX; x++ {
-					if isCurrentMatch {
-						currentMatchHighlight.Set(viewportY, x)
-					} else {
-						searchHighlights.Set(viewportY, x)
-					}
-				}
-			}
-		}
-	}
-
 	inVisualMode := inCopyMode &&
 		(window.CopyMode.State == terminal.CopyModeVisualChar ||
 			window.CopyMode.State == terminal.CopyModeVisualLine)
@@ -447,7 +400,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				continue
 			}
 
-			if (inCopyMode && !inVisualMode) || m.ShowScrollbackSearch {
+			if inCopyMode && !inVisualMode {
 				if currentMatchHighlight != nil && currentMatchHighlight.Get(y, x) {
 					matchStyle := lipgloss.NewStyle().
 						Background(lipgloss.Color("#FF00FF")).

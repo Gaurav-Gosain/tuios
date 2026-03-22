@@ -503,6 +503,15 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.LogInfo("[RESIZE] Restored session, same size (%dx%d), preserving layout", msg.Width, msg.Height)
 			}
+
+			// Flush PTY buffers for restored session resize
+			m.FlushPTYBuffersAfterResize()
+
+			// Clear and re-place kitty/sixel images after restore resize
+			if m.KittyPassthrough != nil {
+				m.KittyPassthrough.HideAllPlacements()
+			}
+
 			return m, nil
 		}
 
@@ -513,6 +522,11 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Terminal got smaller in floating mode - clamp windows back into view
 			m.ClampWindowsToView()
 		}
+
+		// Flush PTY buffers after resize to ensure TUI apps (btop, vim, etc.)
+		// redraw properly. The PTY resize sends SIGWINCH, but we also need to
+		// mark all content dirty and invalidate caches for the new output.
+		m.FlushPTYBuffersAfterResize()
 
 		// Clear and re-place all kitty/sixel images after resize.
 		// During resize, window positions change which invalidates image positions.

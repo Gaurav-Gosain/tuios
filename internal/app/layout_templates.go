@@ -133,7 +133,10 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		}
 	}
 
-	m.AutoTiling = tmpl.AutoTiling
+	// Temporarily disable auto-tiling during window creation to prevent
+	// each AddWindow call from triggering a retile that overrides positions.
+	savedAutoTiling := m.AutoTiling
+	m.AutoTiling = false
 
 	// Create windows at saved positions
 	for _, tw := range tmpl.Windows {
@@ -152,8 +155,14 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		}
 	}
 
+	// Restore auto-tiling setting from template
+	m.AutoTiling = tmpl.AutoTiling
+
 	if m.AutoTiling {
 		m.TileAllWindows()
+	} else if savedAutoTiling != tmpl.AutoTiling {
+		// If tiling mode changed, make sure windows are properly positioned
+		m.ClampWindowsToView()
 	}
 
 	if len(m.Windows) > 0 {

@@ -140,13 +140,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 	}
 
-	if m.ShowScrollbackSearch {
-		searchContent := m.renderScrollbackSearchBar()
-		searchLayer := lipgloss.NewLayer(searchContent).
-			X(0).Y(m.GetRenderHeight() - 1).Z(config.ZIndexScrollbackSearch).ID("scrollback-search")
-		layers = append(layers, searchLayer)
-	}
-
 	if m.ShowQuitConfirm {
 		quitContent, width, height := m.renderQuitConfirmDialog()
 		x := (m.GetRenderWidth() - width) / 2

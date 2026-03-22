@@ -114,11 +114,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Handle scrollback search (takes priority in terminal mode)
-	if o.ShowScrollbackSearch {
-		return handleScrollbackSearchInput(msg, o)
-	}
-
 	// Handle layout picker (takes priority in terminal mode)
 	if o.ShowLayoutPicker {
 		return handleLayoutPickerInput(msg, o)
@@ -611,14 +606,6 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		// Open scrollback browser
 		OpenScrollbackBrowser(o)
 		return o, nil
-	case "f":
-		// Open scrollback search
-		o.ShowScrollbackSearch = true
-		o.ScrollbackSearchQuery = ""
-		o.ScrollbackSearchMatches = nil
-		o.ScrollbackSearchCurrent = 0
-		return o, nil
-
 	// Help
 	case "?":
 		// Toggle help

@@ -235,11 +235,6 @@ type OS struct {
 	LayoutPickerQuery    string
 	LayoutPickerMode     string // "load" or "save"
 	LayoutSaveBuffer     string // Buffer for layout name when saving
-	// Scrollback search overlay (quick find in scrollback)
-	ShowScrollbackSearch    bool
-	ScrollbackSearchQuery   string
-	ScrollbackSearchMatches []ScrollbackSearchMatch
-	ScrollbackSearchCurrent int // index into matches (for next/prev navigation)
 }
 
 // Notification represents a temporary notification message.

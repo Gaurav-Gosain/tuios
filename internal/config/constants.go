@@ -703,11 +703,8 @@ const (
 	// ZIndexSessionSwitcher is the z-index for session switcher overlay
 	ZIndexSessionSwitcher = 1005
 
-	// ZIndexScrollbackSearch is the z-index for the scrollback search bar overlay
-	ZIndexScrollbackSearch = 1006
-
 	// ZIndexLayoutPicker is the z-index for layout picker overlay
-	ZIndexLayoutPicker = 1007
+	ZIndexLayoutPicker = 1006
 
 	// ZIndexNotifications is the z-index for notifications
 	ZIndexNotifications = 2000
