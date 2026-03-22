@@ -109,10 +109,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ShowCommandPalette {
 		paletteContent := m.renderCommandPalette()
 		paletteWidth := lipgloss.Width(paletteContent)
-		paletteX := (m.GetRenderWidth() - paletteWidth) / 2
-		if paletteX < 0 {
-			paletteX = 0
-		}
+		paletteX := max((m.GetRenderWidth()-paletteWidth)/2, 0)
 		paletteLayer := lipgloss.NewLayer(paletteContent).
 			X(paletteX).Y(3).Z(config.ZIndexCommandPalette).ID("command-palette")
 		layers = append(layers, paletteLayer)
@@ -121,10 +118,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ShowSessionSwitcher {
 		content := m.renderSessionSwitcher()
 		w := lipgloss.Width(content)
-		x := (m.GetRenderWidth() - w) / 2
-		if x < 0 {
-			x = 0
-		}
+		x := max((m.GetRenderWidth()-w)/2, 0)
 		layer := lipgloss.NewLayer(content).X(x).Y(3).Z(config.ZIndexSessionSwitcher).ID("session-switcher")
 		layers = append(layers, layer)
 	}
@@ -359,12 +353,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			} else {
 				barWidth := 15
 				filledWidth := (progress * barWidth) / 100
-				bar := ""
+				var bar strings.Builder
 				for i := range barWidth {
 					if i < filledWidth {
-						bar += "█"
+						bar.WriteString("█")
 					} else {
-						bar += "░"
+						bar.WriteString("░")
 					}
 				}
 
@@ -372,9 +366,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				displayCmd := min(currentCmd+1, totalCmds)
 
 				if m.ScriptPaused {
-					scriptStatus = fmt.Sprintf("PAUSED • %s %d%% • %d/%d", bar, progress, displayCmd, totalCmds)
+					scriptStatus = fmt.Sprintf("PAUSED • %s %d%% • %d/%d", bar.String(), progress, displayCmd, totalCmds)
 				} else {
-					scriptStatus = fmt.Sprintf("RUNNING • %s %d%% • %d/%d", bar, progress, displayCmd, totalCmds)
+					scriptStatus = fmt.Sprintf("RUNNING • %s %d%% • %d/%d", bar.String(), progress, displayCmd, totalCmds)
 				}
 			}
 		} else {
@@ -725,10 +719,7 @@ func (m *OS) renderCommandPalette() string {
 		lines = append(lines, padLine(emptyStyle.Render("  No matching commands"), paletteWidth))
 	} else {
 		start := m.CommandPaletteScroll
-		end := start + maxVisible
-		if end > len(filtered) {
-			end = len(filtered)
-		}
+		end := min(start+maxVisible, len(filtered))
 
 		nameStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#d1d5db")).
@@ -769,10 +760,7 @@ func (m *OS) renderCommandPalette() string {
 			// Build the padded middle section
 			nameRendered := lipgloss.Width(name)
 			catRendered := lipgloss.Width(catTag)
-			middlePadding := paletteWidth - nameRendered - shortcutLen - catRendered - 7
-			if middlePadding < 1 {
-				middlePadding = 1
-			}
+			middlePadding := max(paletteWidth-nameRendered-shortcutLen-catRendered-7, 1)
 
 			var line string
 			if isSelected {
@@ -901,10 +889,7 @@ func (m *OS) renderSessionSwitcher() string {
 		lines = append(lines, padLine(emptyStyle.Render("  No sessions found"), paletteWidth))
 	} else {
 		start := m.SessionSwitcherScroll
-		end := start + maxVisible
-		if end > len(filtered) {
-			end = len(filtered)
-		}
+		end := min(start+maxVisible, len(filtered))
 
 		nameStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#d1d5db")).

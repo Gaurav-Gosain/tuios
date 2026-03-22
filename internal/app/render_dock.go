@@ -100,7 +100,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 			Render(workspacePart)
 	}
 
-	var dockItemsStr string
+	var dockItemsStr strings.Builder
 	itemNumber := 1
 
 	for _, dockItem := range layout.VisibleItems {
@@ -137,9 +137,9 @@ func (m *OS) renderDock() *lipgloss.Layer {
 			Render(config.GetDockPillRightChar())
 
 		if itemNumber > 1 {
-			dockItemsStr += " "
+			dockItemsStr.WriteString(" ")
 		}
-		dockItemsStr += leftCircle + nameLabel + rightCircle
+		dockItemsStr.WriteString(leftCircle + nameLabel + rightCircle)
 
 		itemNumber++
 	}
@@ -147,7 +147,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 	if layout.TruncatedCount > 0 {
 		truncStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#808090"))
-		dockItemsStr += truncStyle.Render(" ...")
+		dockItemsStr.WriteString(truncStyle.Render(" ..."))
 	}
 
 	leftInfo := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -191,7 +191,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 	}
 
 	actualLeftWidth := lipgloss.Width(leftInfo)
-	centerWidth := lipgloss.Width(dockItemsStr)
+	centerWidth := lipgloss.Width(dockItemsStr.String())
 	rightWidth := layout.RightWidth
 
 	availableSpace := m.GetRenderWidth() - actualLeftWidth - rightWidth - centerWidth
@@ -212,7 +212,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 		lipgloss.Top,
 		leftInfo,
 		lipgloss.NewStyle().Width(leftSpacer).Render(""),
-		lipgloss.NewStyle().Render(dockItemsStr),
+		lipgloss.NewStyle().Render(dockItemsStr.String()),
 		lipgloss.NewStyle().Width(rightSpacer).Render(""),
 		paddedRightInfo,
 	)
