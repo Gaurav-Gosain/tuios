@@ -1206,6 +1206,22 @@ func (kp *KittyPassthrough) HasPlacements() bool {
 }
 
 // deleteOnePlacement removes the image and all its placements from graphics memory.
+// HideAllPlacements hides all visible image placements. Used during resize
+// to prevent stale positions. RefreshAllPlacements will re-place them.
+func (kp *KittyPassthrough) HideAllPlacements() {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	for _, placements := range kp.placements {
+		for _, p := range placements {
+			if !p.Hidden {
+				kp.deleteOnePlacement(p)
+				p.Hidden = true
+			}
+		}
+	}
+	kp.flushToHost()
+}
+
 func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")

@@ -514,6 +514,12 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ClampWindowsToView()
 		}
 
+		// Clear and re-place all kitty/sixel images after resize.
+		// During resize, window positions change which invalidates image positions.
+		if m.KittyPassthrough != nil {
+			m.KittyPassthrough.HideAllPlacements()
+		}
+
 		return m, nil
 
 	case tea.MouseMsg:
