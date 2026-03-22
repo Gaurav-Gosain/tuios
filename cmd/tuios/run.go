@@ -134,6 +134,7 @@ func runLocal() error {
 		ShowClock:           showClock,
 		ShowCPU:             showCPU,
 		ShowRAM:             showRAM,
+		SharedBorders:       sharedBorders,
 		ScrollbackLines:     scrollbackLines,
 		NoAnimations:        noAnimations,
 		ThemeName:           themeName,

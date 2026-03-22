@@ -36,6 +36,9 @@ type Overrides struct {
 	// ShowRAM enables the RAM usage in the dock
 	ShowRAM bool
 
+	// SharedBorders enables shared borders between tiled windows
+	SharedBorders bool
+
 	// ScrollbackLines overrides the scrollback buffer size (0 means use default)
 	ScrollbackLines int
 
@@ -134,8 +137,10 @@ func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 		AnimationsEnabled = false
 	}
 
-	// Shared Borders - user config only (default: true)
-	if userConfig != nil && userConfig.Appearance.SharedBorders != nil {
+	// Shared Borders - CLI flag OR user config (default: false)
+	if overrides.SharedBorders {
+		SharedBorders = true
+	} else if userConfig != nil && userConfig.Appearance.SharedBorders != nil {
 		SharedBorders = *userConfig.Appearance.SharedBorders
 	}
 

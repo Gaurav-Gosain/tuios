@@ -44,6 +44,7 @@ var (
 	showClock           bool
 	showCPU             bool
 	showRAM             bool
+	sharedBorders       bool
 )
 
 func main() {
@@ -125,6 +126,7 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&showClock, "show-clock", false, "Show the clock overlay")
 	rootCmd.PersistentFlags().BoolVar(&showCPU, "show-cpu", false, "Show CPU graph in the dock")
 	rootCmd.PersistentFlags().BoolVar(&showRAM, "show-ram", false, "Show RAM usage in the dock")
+	rootCmd.PersistentFlags().BoolVar(&sharedBorders, "shared-borders", false, "Share borders between adjacent tiled windows")
 
 	var sshPort, sshHost, sshKeyPath, sshDefaultSession string
 	var sshEphemeral bool

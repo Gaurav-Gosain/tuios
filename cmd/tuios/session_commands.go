@@ -95,6 +95,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		ShowClock:           showClock,
 		ShowCPU:             showCPU,
 		ShowRAM:             showRAM,
+		SharedBorders:       sharedBorders,
 		ScrollbackLines:     scrollbackLines,
 		NoAnimations:        noAnimations,
 		ThemeName:           themeName,

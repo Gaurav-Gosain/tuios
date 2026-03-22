@@ -42,7 +42,7 @@ type AppearanceConfig struct {
 	ShowCPU             bool   `toml:"show_cpu"`              // Show CPU graph in dock (default: false)
 	ShowRAM             bool   `toml:"show_ram"`              // Show RAM usage in dock (default: false)
 	Theme               string `toml:"theme"`                 // Color theme name (e.g., dracula, nord, my-custom-theme)
-	SharedBorders       *bool  `toml:"shared_borders"`        // Share borders between adjacent tiled windows (default: true)
+	SharedBorders       *bool  `toml:"shared_borders"`        // Share borders between adjacent tiled windows (default: false)
 }
 
 // KeybindingsConfig holds all keybinding configurations
