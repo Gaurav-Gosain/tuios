@@ -521,9 +521,58 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	}
 
 	content := builder.String()
+
+	// Overlay scrollbar when in copy mode with scrollback
+	if window.CopyMode != nil && window.CopyMode.Active {
+		scrollbackLen := 0
+		if window.Terminal != nil {
+			scrollbackLen = window.Terminal.ScrollbackLen()
+		}
+		if scrollbackLen > 0 {
+			content = overlayScrollbar(content, window.CopyMode.ScrollOffset, scrollbackLen, maxY)
+		}
+	}
+
 	window.CachedContent = content
 	window.ContentDirty = false
 	return content
+}
+
+// overlayScrollbar renders a scrollbar on the rightmost column of the content.
+// Uses block characters: ┃ for track, █ for thumb.
+func overlayScrollbar(content string, scrollOffset, scrollbackLen, viewportHeight int) string {
+	if viewportHeight <= 0 || scrollbackLen <= 0 || scrollOffset <= 0 {
+		return content
+	}
+
+	totalLines := scrollbackLen + viewportHeight
+	// Thumb size: proportional to viewport/total, minimum 1 row
+	thumbHeight := max((viewportHeight*viewportHeight+totalLines-1)/totalLines, 1)
+	// Thumb position: 0 = bottom (live), scrollbackLen = top
+	scrollRange := viewportHeight - thumbHeight
+	thumbPos := 0
+	if scrollbackLen > 0 {
+		thumbPos = scrollRange - (scrollOffset * scrollRange / scrollbackLen)
+		thumbPos = max(min(thumbPos, scrollRange), 0)
+	}
+
+	trackStyle := "\x1b[38;2;60;60;80m" // dim gray
+	thumbStyle := "\x1b[38;2;140;140;200m" // brighter
+	reset := "\x1b[0m"
+
+	lines := strings.Split(content, "\n")
+	for y := 0; y < len(lines) && y < viewportHeight; y++ {
+		var char string
+		if y >= thumbPos && y < thumbPos+thumbHeight {
+			char = thumbStyle + "█" + reset
+		} else {
+			char = trackStyle + "┃" + reset
+		}
+		// Append scrollbar character at the end of the line
+		lines[y] += char
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 func (m *OS) renderResizeIndicator(window *terminal.Window) string {
