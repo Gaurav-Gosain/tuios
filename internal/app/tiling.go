@@ -191,13 +191,6 @@ func (m *OS) ToggleAutoTiling() {
 		m.LogInfo("BSP: Disabling tiling mode")
 		// Clear preselection when disabling tiling
 		m.PreselectionDir = layout.PreselectionNone
-		// Clear shared border flags on all windows
-		for _, w := range m.Windows {
-			w.SharedBorderLeft = false
-			w.SharedBorderTop = false
-			w.SharedBorderRight = false
-			w.SharedBorderBottom = false
-		}
 	}
 
 	// Sync state to daemon so tiling mode persists across reconnects
@@ -1088,25 +1081,12 @@ func (m *OS) ApplyBSPLayout() {
 	}
 
 	bounds := m.GetBSPBounds()
-	layouts, borderEdges := tree.ApplyLayout(bounds, config.SharedBorders)
+	layouts := tree.ApplyLayout(bounds)
 
 	for windowIntID, rect := range layouts {
 		win := m.getWindowByIntID(windowIntID)
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized {
 			continue
-		}
-
-		// Apply shared border flags
-		if edges, ok := borderEdges[windowIntID]; ok {
-			win.SharedBorderLeft = edges.HideLeft
-			win.SharedBorderTop = edges.HideTop
-			win.SharedBorderRight = edges.HideRight
-			win.SharedBorderBottom = edges.HideBottom
-		} else {
-			win.SharedBorderLeft = false
-			win.SharedBorderTop = false
-			win.SharedBorderRight = false
-			win.SharedBorderBottom = false
 		}
 
 		// Create animation for smooth transition
