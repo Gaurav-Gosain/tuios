@@ -442,18 +442,9 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 		rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
 	}
 
-	// Shared borders: right/bottom children overlap left/top children by 1 cell.
-	// The compositor handles the visual merge. Junction characters are fixed
-	// in a post-compositing pass.
-	if config.SharedBorders {
-		if node.SplitType == SplitVertical {
-			rightBounds.X--
-			rightBounds.W++
-		} else {
-			rightBounds.Y--
-			rightBounds.H++
-		}
-	}
+	// Note: SharedBorders config flag exists but proper implementation
+	// requires a post-rendering border grid pass (future work).
+	_ = config.SharedBorders
 
 	t.applyLayoutRecursive(node.Left, leftBounds, result)
 	t.applyLayoutRecursive(node.Right, rightBounds, result)

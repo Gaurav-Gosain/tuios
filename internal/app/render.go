@@ -175,9 +175,6 @@ func (m *OS) View() tea.View {
 		view.SetContent(m.cachedViewContent)
 	} else {
 		content := lipgloss.Sprint(m.GetCanvas(true).Render())
-		if config.SharedBorders && m.AutoTiling {
-			content = fixBorderJunctions(content)
-		}
 		m.cachedViewContent = content
 		view.SetContent(content)
 	}
