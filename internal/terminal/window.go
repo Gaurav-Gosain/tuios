@@ -111,6 +111,11 @@ type Window struct {
 	PreMinimizeWidth       int                // Store size before minimizing
 	PreMinimizeHeight      int                // Store size before minimizing
 	Workspace              int                // Workspace this window belongs to
+	Zoomed                 bool               // True when window is zoomed (fullscreen)
+	PreZoomX               int                // Store position before zooming
+	PreZoomY               int                // Store position before zooming
+	PreZoomWidth           int                // Store size before zooming
+	PreZoomHeight          int                // Store size before zooming
 	SelectionStart         struct{ X, Y int } // Selection start position
 	SelectionEnd           struct{ X, Y int } // Selection end position
 	IsSelecting            bool               // True when selecting text

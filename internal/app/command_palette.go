@@ -56,6 +56,15 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Toggle Zoom",
+			Shortcut: "prefix+z",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ToggleZoom()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Minimize Window",
 			Shortcut: "prefix+m m",
 			Category: "Window",
@@ -170,6 +179,34 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				if !m.AutoTiling && len(m.Windows) > 0 && m.FocusedWindow >= 0 {
 					m.Snap(m.FocusedWindow, SnapFullScreen)
 				}
+				return m, nil
+			},
+		},
+
+		// Layout templates
+		{
+			Name:     "Save Layout",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ShowLayoutPicker = true
+				m.LayoutPickerMode = "save"
+				m.LayoutSaveBuffer = ""
+				return m, nil
+			},
+		},
+		{
+			Name:     "Load Layout",
+			Shortcut: "prefix+L",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				templates, _ := LoadLayoutTemplates()
+				m.ShowLayoutPicker = true
+				m.LayoutPickerMode = "load"
+				m.LayoutPickerItems = templates
+				m.LayoutPickerQuery = ""
+				m.LayoutPickerSelected = 0
+				m.LayoutPickerScroll = 0
 				return m, nil
 			},
 		},
@@ -317,6 +354,18 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.ShowScrollbackBrowser = !m.ShowScrollbackBrowser
+				return m, nil
+			},
+		},
+		{
+			Name:     "Search Scrollback",
+			Shortcut: "prefix+f",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ShowScrollbackSearch = true
+				m.ScrollbackSearchQuery = ""
+				m.ScrollbackSearchMatches = nil
+				m.ScrollbackSearchCurrent = 0
 				return m, nil
 			},
 		},

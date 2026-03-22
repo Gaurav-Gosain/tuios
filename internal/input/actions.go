@@ -72,6 +72,9 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("resize_height_shrink_top", handleResizeHeightShrinkTop)
 	d.Register("resize_height_grow_top", handleResizeHeightGrowTop)
 
+	// Window actions
+	d.Register("toggle_zoom", handleToggleZoom)
+
 	// BSP tiling actions
 	d.Register("smart_split", handleSmartSplit)
 	d.Register("split_horizontal", handleSplitHorizontal)
@@ -387,6 +390,17 @@ func handleResizeHeightGrowTop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 // ============================================================================
 // BSP Tiling Action Handlers
 // ============================================================================
+
+func handleToggleZoom(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.ToggleZoom()
+	fw := o.GetFocusedWindow()
+	if fw != nil && fw.Zoomed {
+		o.ShowNotification("ZOOM", "info", config.NotificationDuration)
+	} else {
+		o.ShowNotification("", "info", 0) // clear
+	}
+	return o, nil
+}
 
 func handleSmartSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {

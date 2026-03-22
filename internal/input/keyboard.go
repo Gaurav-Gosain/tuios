@@ -114,6 +114,16 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Handle scrollback search (takes priority in terminal mode)
+	if o.ShowScrollbackSearch {
+		return handleScrollbackSearchInput(msg, o)
+	}
+
+	// Handle layout picker (takes priority in terminal mode)
+	if o.ShowLayoutPicker {
+		return handleLayoutPickerInput(msg, o)
+	}
+
 	// Handle session switcher (takes priority in terminal mode)
 	if o.ShowSessionSwitcher {
 		return handleSessionSwitcherInput(msg, o)
@@ -497,6 +507,16 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		o.SessionSwitcherError = ""
 		o.SessionSwitcherItems = o.RefreshSessionList()
 		return o, nil
+	case "L":
+		// Open layout picker (load mode)
+		templates, _ := app.LoadLayoutTemplates()
+		o.ShowLayoutPicker = true
+		o.LayoutPickerMode = "load"
+		o.LayoutPickerItems = templates
+		o.LayoutPickerQuery = ""
+		o.LayoutPickerSelected = 0
+		o.LayoutPickerScroll = 0
+		return o, nil
 	case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		// Jump to window by number
 		return handleTerminalWindowSelection(msg, o)
@@ -543,9 +563,13 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		}
 		return o, nil
 	case "z":
-		// Toggle fullscreen for current window
-		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.Snap(o.FocusedWindow, app.SnapFullScreen)
+		// Toggle zoom for current window (works in both tiling and free-float modes)
+		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+			o.ToggleZoom()
+			fw := o.GetFocusedWindow()
+			if fw != nil && fw.Zoomed {
+				o.ShowNotification("ZOOM", "info", config.NotificationDuration)
+			}
 		}
 		return o, nil
 	case "-":
@@ -586,6 +610,13 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 	case "s":
 		// Open scrollback browser
 		OpenScrollbackBrowser(o)
+		return o, nil
+	case "f":
+		// Open scrollback search
+		o.ShowScrollbackSearch = true
+		o.ScrollbackSearchQuery = ""
+		o.ScrollbackSearchMatches = nil
+		o.ScrollbackSearchCurrent = 0
 		return o, nil
 
 	// Help
@@ -674,6 +705,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	// Handle scrollback browser overlay
 	if o.ShowScrollbackBrowser {
 		return HandleScrollbackBrowserKey(msg, o)
+	}
+
+	// Handle layout picker overlay
+	if o.ShowLayoutPicker {
+		return handleLayoutPickerInput(msg, o)
 	}
 
 	// Handle command palette overlay

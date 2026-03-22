@@ -50,6 +50,11 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			continue
 		}
 
+		// When any window is zoomed, only render the zoomed window
+		if fw := m.GetFocusedWindow(); fw != nil && fw.Zoomed && window != fw {
+			continue
+		}
+
 		margin := 5
 		if isAnimating {
 			margin = 20

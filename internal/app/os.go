@@ -227,6 +227,19 @@ type OS struct {
 	SessionSwitcherScroll   int
 	SessionSwitcherItems    []SessionSwitcherItem
 	SessionSwitcherError    string
+	// Layout picker overlay
+	ShowLayoutPicker     bool
+	LayoutPickerItems    []LayoutTemplate
+	LayoutPickerSelected int
+	LayoutPickerScroll   int
+	LayoutPickerQuery    string
+	LayoutPickerMode     string // "load" or "save"
+	LayoutSaveBuffer     string // Buffer for layout name when saving
+	// Scrollback search overlay (quick find in scrollback)
+	ShowScrollbackSearch    bool
+	ScrollbackSearchQuery   string
+	ScrollbackSearchMatches []ScrollbackSearchMatch
+	ScrollbackSearchCurrent int // index into matches (for next/prev navigation)
 }
 
 // Notification represents a temporary notification message.
@@ -1006,6 +1019,72 @@ func (m *OS) RestoreWindow(i int) {
 		m.FocusWindow(i)
 		// Enter window management mode to interact with the restored window
 		m.Mode = WindowManagementMode
+	}
+}
+
+// ToggleZoom toggles the focused window between zoomed (fullscreen) and normal state.
+// When zoomed, the window fills the entire viewport (minus dock). When unzoomed, it
+// returns to its previous size and position. Other windows are hidden while zoomed.
+func (m *OS) ToggleZoom() {
+	fw := m.GetFocusedWindow()
+	if fw == nil {
+		return
+	}
+
+	if fw.Zoomed {
+		// Restore from zoom
+		fw.Zoomed = false
+		fw.X = fw.PreZoomX
+		fw.Y = fw.PreZoomY
+		fw.Width = fw.PreZoomWidth
+		fw.Height = fw.PreZoomHeight
+		fw.InvalidateCache()
+		// Resize terminal to match restored dimensions
+		termW := max(fw.Width-2, 1)
+		termH := max(fw.Height-2, 1)
+		if fw.Terminal != nil {
+			fw.Terminal.Resize(termW, termH)
+		}
+		if fw.Pty != nil {
+			_ = fw.Pty.Resize(termW, termH)
+		}
+		// If tiling, retile all
+		if m.AutoTiling {
+			m.TileAllWindows()
+		}
+		m.MarkAllDirty()
+	} else {
+		// Save current position and zoom to fullscreen
+		fw.PreZoomX = fw.X
+		fw.PreZoomY = fw.Y
+		fw.PreZoomWidth = fw.Width
+		fw.PreZoomHeight = fw.Height
+		fw.Zoomed = true
+
+		// Calculate fullscreen dimensions (account for dock)
+		topMargin := 0
+		if config.DockbarPosition == "top" {
+			topMargin = config.DockHeight
+		}
+		bottomMargin := 0
+		if config.DockbarPosition == "bottom" {
+			bottomMargin = config.DockHeight
+		}
+		fw.X = 0
+		fw.Y = topMargin
+		fw.Width = m.GetRenderWidth()
+		fw.Height = m.GetRenderHeight() - topMargin - bottomMargin
+		fw.InvalidateCache()
+		// Resize terminal to match zoomed dimensions
+		termW := max(fw.Width-2, 1)
+		termH := max(fw.Height-2, 1)
+		if fw.Terminal != nil {
+			fw.Terminal.Resize(termW, termH)
+		}
+		if fw.Pty != nil {
+			_ = fw.Pty.Resize(termW, termH)
+		}
+		m.MarkAllDirty()
 	}
 }
 
