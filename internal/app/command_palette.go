@@ -415,12 +415,50 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 		return items
 	}
 	q := strings.ToLower(query)
-	var filtered []CommandPaletteItem
+
+	type scored struct {
+		item  CommandPaletteItem
+		score int
+	}
+	var results []scored
+
 	for _, item := range items {
-		if strings.Contains(strings.ToLower(item.Name), q) ||
-			strings.Contains(strings.ToLower(item.Category), q) {
-			filtered = append(filtered, item)
+		nameLower := strings.ToLower(item.Name)
+		catLower := strings.ToLower(item.Category)
+
+		score := 0
+		if strings.Contains(nameLower, q) {
+			score = 100
+			// Boost for prefix match on name
+			if strings.HasPrefix(nameLower, q) {
+				score = 200
+			}
+			// Boost for exact word match
+			for _, word := range strings.Fields(nameLower) {
+				if strings.HasPrefix(word, q) {
+					score += 50
+					break
+				}
+			}
+		} else if strings.Contains(catLower, q) {
+			score = 10 // Category-only match ranks lower
 		}
+
+		if score > 0 {
+			results = append(results, scored{item, score})
+		}
+	}
+
+	// Sort by score descending (stable to preserve original order within same score)
+	for i := 1; i < len(results); i++ {
+		for j := i; j > 0 && results[j].score > results[j-1].score; j-- {
+			results[j], results[j-1] = results[j-1], results[j]
+		}
+	}
+
+	filtered := make([]CommandPaletteItem, len(results))
+	for i, r := range results {
+		filtered[i] = r.item
 	}
 	return filtered
 }
