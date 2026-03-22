@@ -215,6 +215,11 @@ type OS struct {
 	// Scrollback browser overlay
 	ShowScrollbackBrowser bool
 	ScrollbackBrowser     any // *scrollback.Browser — typed as any to avoid import cycle
+	// Command palette overlay
+	ShowCommandPalette     bool
+	CommandPaletteQuery    string
+	CommandPaletteSelected int
+	CommandPaletteScroll   int
 }
 
 // Notification represents a temporary notification message.

@@ -74,6 +74,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"t", "Window commands..."},
 			{"D", "Debug commands..."},
 			{"T", "Tape manager..."},
+			{"P", "Command palette"},
 		}
 
 		// In daemon mode, d and Esc have different behaviors

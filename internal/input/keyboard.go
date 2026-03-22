@@ -114,6 +114,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Handle command palette (takes priority in terminal mode)
+	if o.ShowCommandPalette {
+		return handleCommandPaletteInput(msg, o)
+	}
+
 	// Handle log viewer (takes priority in terminal mode)
 	if o.ShowLogs {
 		return handleLogViewerKey(msg, o)
@@ -216,8 +221,18 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Handle paste shortcuts - intercept and request clipboard via OSC 52
 	keyStr := msg.String()
+
+	// Command palette: ctrl+p (configurable, intercepted before terminal forwarding)
+	if keyStr == "ctrl+p" {
+		o.ShowCommandPalette = true
+		o.CommandPaletteQuery = ""
+		o.CommandPaletteSelected = 0
+		o.CommandPaletteScroll = 0
+		return o, nil
+	}
+
+	// Handle paste shortcuts - intercept and request clipboard via OSC 52
 	if keyStr == "ctrl+v" || keyStr == "ctrl+shift+v" || keyStr == "super+v" || keyStr == "super+shift+v" {
 		if focusedWindow != nil {
 			// Use tea.ReadClipboard to request clipboard via OSC 52
@@ -456,6 +471,13 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			newFocused.InvalidateCache()
 		}
 		return o, nil
+	case "P":
+		// Open command palette
+		o.ShowCommandPalette = true
+		o.CommandPaletteQuery = ""
+		o.CommandPaletteSelected = 0
+		o.CommandPaletteScroll = 0
+		return o, nil
 	case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		// Jump to window by number
 		return handleTerminalWindowSelection(msg, o)
@@ -635,6 +657,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return HandleScrollbackBrowserKey(msg, o)
 	}
 
+	// Handle command palette overlay
+	if o.ShowCommandPalette {
+		return handleCommandPaletteInput(msg, o)
+	}
+
 	key := msg.String()
 
 	// Handle help menu interactions before general keybind dispatch
@@ -746,6 +773,15 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 				return dispatcher.Dispatch(action, msg, o)
 			}
 		}
+	}
+
+	// Command palette: ctrl+p
+	if key == "ctrl+p" {
+		o.ShowCommandPalette = true
+		o.CommandPaletteQuery = ""
+		o.CommandPaletteSelected = 0
+		o.CommandPaletteScroll = 0
+		return o, nil
 	}
 
 	// Emergency/safety keybindings that bypass the config system

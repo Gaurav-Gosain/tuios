@@ -697,6 +697,9 @@ const (
 	// ZIndexScrollbackBrowser is the z-index for the scrollback browser overlay
 	ZIndexScrollbackBrowser = 1003
 
+	// ZIndexCommandPalette is the z-index for command palette overlay
+	ZIndexCommandPalette = 1004
+
 	// ZIndexNotifications is the z-index for notifications
 	ZIndexNotifications = 2000
 )
