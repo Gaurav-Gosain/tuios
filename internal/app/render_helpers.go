@@ -339,11 +339,25 @@ func isColorSafe(c color.Color) bool {
 	if c == nil {
 		return false
 	}
-	defer func() {
-		_ = recover()
-	}()
-	_, _, _, _ = c.RGBA()
-	return true
+	switch c.(type) {
+	case lipgloss.ANSIColor, lipgloss.NoColor, lipgloss.RGBColor,
+		color.RGBA, color.NRGBA, color.Gray, color.Gray16,
+		color.RGBA64, color.CMYK, color.Alpha, color.Alpha16,
+		color.YCbCr:
+		return true
+	default:
+		// Unknown type — attempt RGBA() and recover on panic
+		safe := true
+		func() {
+			defer func() {
+				if recover() != nil {
+					safe = false
+				}
+			}()
+			_, _, _, _ = c.RGBA()
+		}()
+		return safe
+	}
 }
 
 func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {

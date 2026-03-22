@@ -183,19 +183,16 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
-	safeColorEquals := func(a, b color.Color) (result bool) {
-		defer func() {
-			if recover() != nil {
-				result = false
-			}
-		}()
+	safeColorEquals := func(a, b color.Color) bool {
 		if a == nil && b == nil {
 			return true
 		}
 		if a == nil || b == nil {
 			return false
 		}
-		return a == b
+		ar, ag, ab, aa := a.RGBA()
+		br, bg, bb, ba := b.RGBA()
+		return ar == br && ag == bg && ab == bb && aa == ba
 	}
 
 	styleMatches := func(cell *uv.Cell, isCursorPos, isSelected, isSelectionCursor bool) bool {
@@ -219,7 +216,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 
 		lineBuilder := pool.GetStringBuilder()
-		defer pool.PutStringBuilder(lineBuilder)
 
 		batchBuilder.Reset()
 		batchHasStyle = false
@@ -505,6 +501,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 		flushBatch(lineBuilder)
 		builder.WriteString(lineBuilder.String())
+		pool.PutStringBuilder(lineBuilder)
 	}
 
 	content := builder.String()

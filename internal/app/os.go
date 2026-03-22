@@ -102,7 +102,7 @@ type OS struct {
 	X                  int
 	Y                  int
 	Mode               Mode
-	terminalMu         sync.Mutex
+	terminalMu         sync.RWMutex
 	LastMouseX         int
 	LastMouseY         int
 	HasActiveTerminals bool
