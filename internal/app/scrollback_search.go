@@ -104,7 +104,7 @@ func (m *OS) SearchScrollback(query string) []ScrollbackSearchMatch {
 
 		for pos := 0; pos <= len(lineRunes)-qLen; pos++ {
 			if string(lineRunes[pos:pos+qLen]) == string(queryRunes) {
-				col := pos  // For screen lines, rune index is roughly the column
+				col := pos // For screen lines, rune index is roughly the column
 				matchLen := qLen
 				matches = append(matches, ScrollbackSearchMatch{
 					AbsLine: scrollbackLen + y,
@@ -158,19 +158,13 @@ func runeIndexToColumn(cells uv.Line, runeIdx int) int {
 		for range runes {
 			ri++
 			if ri >= runeIdx {
-				w := cell.Width
-				if w < 1 {
-					w = 1
-				}
+				w := max(cell.Width, 1)
 				col += w
 				break
 			}
 		}
 		if ri < runeIdx {
-			w := cell.Width
-			if w < 1 {
-				w = 1
-			}
+			w := max(cell.Width, 1)
 			col += w
 		}
 	}
