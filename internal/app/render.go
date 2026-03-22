@@ -28,6 +28,16 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		Border(getBorder()).
 		BorderTop(false)
 
+	// Determine if we should use the shared border grid path.
+	// Shared borders are only active when auto-tiling is on, no window is zoomed,
+	// and the config flag is enabled.
+	useSharedBorders := config.SharedBorders && m.AutoTiling
+	if useSharedBorders {
+		if fw := m.GetFocusedWindow(); fw != nil && fw.Zoomed {
+			useSharedBorders = false
+		}
+	}
+
 	for i := range m.Windows {
 		window := m.Windows[i]
 
@@ -103,19 +113,33 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
 
-		isRenaming := m.RenamingWindow && i == m.FocusedWindow
+		var boxContent string
 
-		boxContent := addToBorder(
-			box.Width(window.Width).
-				Height(window.Height-1).
-				BorderForeground(borderColorObj).
-				Render(content),
-			borderColorObj,
-			window,
-			isRenaming,
-			m.RenameBuffer,
-			m.AutoTiling,
-		)
+		if useSharedBorders && window.Tiled {
+			// Shared borders path: render content without individual borders.
+			// The border grid layer draws all borders.
+			boxContent = lipgloss.NewStyle().
+				Align(lipgloss.Left).
+				AlignVertical(lipgloss.Top).
+				Width(window.Width).
+				Height(window.Height).
+				Render(content)
+		} else {
+			// Normal path: render with individual window borders.
+			isRenaming := m.RenamingWindow && i == m.FocusedWindow
+
+			boxContent = addToBorder(
+				box.Width(window.Width).
+					Height(window.Height-1).
+					BorderForeground(borderColorObj).
+					Render(content),
+				borderColorObj,
+				window,
+				isRenaming,
+				m.RenameBuffer,
+				m.AutoTiling,
+			)
+		}
 
 		zIndex := window.Z
 		if isAnimating {
@@ -132,6 +156,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		layers = append(layers, window.CachedLayer)
 
 		window.ClearDirtyFlags()
+	}
+
+	// Add shared border grid layer when active.
+	if useSharedBorders {
+		if borderLayer := m.renderSharedBorderGrid(); borderLayer != nil {
+			layers = append(layers, borderLayer)
+		}
 	}
 
 	if render {
