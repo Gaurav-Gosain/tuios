@@ -883,8 +883,23 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 							focusedWindow.InvalidateCache()
 						}
 					}
+				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() {
+					// Terminal app does not have mouse tracking enabled —
+					// scroll the window's scrollback buffer directly (like openmux).
+					scrollbackLen := focusedWindow.ScrollbackLen()
+					if scrollbackLen > 0 {
+						if !focusedWindow.ScrollbackMode {
+							focusedWindow.EnterScrollbackMode()
+						}
+						focusedWindow.ScrollbackOffset += 3
+						if focusedWindow.ScrollbackOffset > scrollbackLen {
+							focusedWindow.ScrollbackOffset = scrollbackLen
+						}
+						focusedWindow.InvalidateCache()
+					}
 				} else {
-					// In terminal mode, enter copy mode on wheel up
+					// In terminal mode with mouse tracking (already handled above),
+					// or fallback: enter copy mode on wheel up
 					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
 						focusedWindow.EnterCopyMode()
 						o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration)
@@ -908,6 +923,14 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						}
 						focusedWindow.InvalidateCache()
 					}
+				} else if o.Mode == app.TerminalMode && focusedWindow.ScrollbackMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() {
+					// Terminal app does not have mouse tracking — scroll down in scrollback.
+					focusedWindow.ScrollbackOffset -= 3
+					if focusedWindow.ScrollbackOffset <= 0 {
+						focusedWindow.ScrollbackOffset = 0
+						focusedWindow.ExitScrollbackMode()
+					}
+					focusedWindow.InvalidateCache()
 				} else if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
 					// In copy mode, scroll down
 					for range 3 {

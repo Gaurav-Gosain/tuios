@@ -1162,6 +1162,15 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 
 		activeTerminals++
 
+		// Skip content checking for minimized windows or windows on a different workspace.
+		// Their PTY data is still consumed (preventing buffer overflow), but we avoid
+		// marking them dirty and triggering unnecessary rendering work.
+		if window.Minimized || window.Workspace != m.CurrentWorkspace {
+			// Drain the new-output flag so it doesn't accumulate
+			window.HasNewOutput.Swap(false)
+			continue
+		}
+
 		// Skip content checking for windows that are being moved/resized
 		// This prevents btop and other rapidly-updating programs from interfering
 		if window.IsBeingManipulated {
