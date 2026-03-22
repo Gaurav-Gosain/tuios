@@ -417,6 +417,6 @@ func BenchmarkBSPTree_ApplyLayout(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_ = tree.ApplyLayout(bounds)
+		_, _ = tree.ApplyLayout(bounds, false)
 	}
 }
