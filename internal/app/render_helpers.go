@@ -532,9 +532,8 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 							}
 						}
 
-						if pos >= skipCount {
-							result.WriteString(string(runes[seqStart:runeIdx]))
-						}
+						// Always include escape sequences — they set terminal state (colors, styles)
+						result.WriteString(string(runes[seqStart:runeIdx]))
 						continue
 					}
 
