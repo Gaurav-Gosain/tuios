@@ -483,8 +483,8 @@ func (m *OS) FocusWindow(i int) *OS {
 		m.Windows[oldFocused].MarkPositionDirty() // Use lighter invalidation
 	}
 
-	// Invalidate cache for new focused window (border color change)
-	m.Windows[i].MarkPositionDirty() // Use lighter invalidation
+	// Invalidate cache for new focused window (border color change + fresh content)
+	m.Windows[i].InvalidateCache() // Full invalidation to show latest content
 
 	return m
 }
@@ -1265,16 +1265,22 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			continue
 		}
 
+		// Mark window as dirty. Focused windows always update immediately.
+		// Background windows update every 3rd cycle to reduce CPU, but
+		// keep HasNewOutput set so they update when focused.
 		isFocused := i == focusedWindowIndex
 		if isFocused {
 			window.MarkContentDirty()
 			hasChanges = true
 		} else {
-			// For background windows, throttle updates to reduce CPU usage
 			window.UpdateCounter++
-			if window.UpdateCounter%3 == 0 { // Update every 3rd cycle (~20Hz instead of 60Hz)
+			if window.UpdateCounter%3 == 0 {
 				window.MarkContentDirty()
 				hasChanges = true
+			} else {
+				// Don't clear the flag — let it stay set so the window
+				// updates on the next cycle or when focused
+				window.HasNewOutput.Store(true)
 			}
 		}
 	}
