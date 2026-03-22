@@ -42,6 +42,7 @@ type AppearanceConfig struct {
 	ShowCPU             bool   `toml:"show_cpu"`              // Show CPU graph in dock (default: false)
 	ShowRAM             bool   `toml:"show_ram"`              // Show RAM usage in dock (default: false)
 	Theme               string `toml:"theme"`                 // Color theme name (e.g., dracula, nord, my-custom-theme)
+	SharedBorders       *bool  `toml:"shared_borders"`        // Share borders between adjacent tiled windows (default: true)
 }
 
 // KeybindingsConfig holds all keybinding configurations
@@ -455,6 +456,10 @@ func createDefaultConfig() (*UserConfig, error) {
 	sb.WriteString("#   Range: 100 to 1000000\n")
 	sb.WriteString("#   Default: 10000\n")
 	sb.WriteString("#\n")
+	sb.WriteString("# shared_borders: Share borders between adjacent tiled windows\n")
+	sb.WriteString("#   Options: true, false\n")
+	sb.WriteString("#   Default: true\n")
+	sb.WriteString("#\n")
 	sb.WriteString("# theme: Color theme name (e.g., dracula, nord, my-custom-theme)\n")
 	sb.WriteString("#   Leave empty to use standard terminal colors.\n")
 	sb.WriteString("#   CLI flag --theme overrides this. Custom themes: ~/.config/tuios/themes/*.json\n")
@@ -499,6 +504,11 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	// Only set global if explicitly configured
 	if cfg.Appearance.AnimationsEnabled != nil {
 		AnimationsEnabled = *cfg.Appearance.AnimationsEnabled
+	}
+
+	// SharedBorders defaults to true (nil means use default)
+	if cfg.Appearance.SharedBorders != nil {
+		SharedBorders = *cfg.Appearance.SharedBorders
 	}
 
 	// WhichKeyEnabled defaults to true (nil means use default)

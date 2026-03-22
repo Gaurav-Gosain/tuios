@@ -134,6 +134,11 @@ func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 		AnimationsEnabled = false
 	}
 
+	// Shared Borders - user config only (default: true)
+	if userConfig != nil && userConfig.Appearance.SharedBorders != nil {
+		SharedBorders = *userConfig.Appearance.SharedBorders
+	}
+
 	// Theme - CLI flag takes precedence, otherwise use user config
 	themeName := overrides.ThemeName
 	if themeName == "" && userConfig != nil && userConfig.Appearance.Theme != "" {

@@ -95,91 +95,18 @@ func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer strin
 	return windowName
 }
 
-// renderTitleWithButtons renders a title badge on the left with buttons on the right of a border line.
-func renderTitleWithButtons(windowName string, buttons string, width int, color color.Color, isTop bool) string {
-	style := pool.GetStyle()
-	defer pool.PutStyle(style)
-	borderStyle := style.Foreground(color)
-	nameStyle := baseButtonStyle.Background(color)
-
-	var borderLeft, borderChar, borderRight string
-	if isTop {
-		borderLeft = config.GetWindowBorderTopLeft()
-		borderChar = config.GetWindowBorderTop()
-		borderRight = config.GetWindowBorderTopRight()
-	} else {
-		borderLeft = config.GetWindowBorderBottomLeft()
-		borderChar = config.GetWindowBorderBottom()
-		borderRight = config.GetWindowBorderBottomRight()
-	}
-
-	// Build name badge
-	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
-	nameText := nameStyle.Render(" " + windowName + " ")
-	rightCircle := borderStyle.Render(config.GetWindowPillRight())
-	nameBadge := leftCircle + nameText + rightCircle
-
-	nameBadgeWidth := lipgloss.Width(nameBadge)
-	buttonsWidth := lipgloss.Width(buttons)
-
-	// Calculate padding between title and buttons
-	middlePadding := width - nameBadgeWidth - buttonsWidth
-	if middlePadding < 0 {
-		// Not enough space, just show buttons
-		return RightString(buttons, width, color)
-	}
-
-	return borderStyle.Render(borderLeft) +
-		nameBadge +
-		borderStyle.Render(strings.Repeat(borderChar, middlePadding)) +
-		buttons +
-		borderStyle.Render(borderRight)
-}
-
-// renderTitleBadge renders a centered title badge on a border line.
-func renderTitleBadge(windowName string, width int, color color.Color, isTop bool) string {
-	style := pool.GetStyle()
-	defer pool.PutStyle(style)
-	borderStyle := style.Foreground(color)
-	nameStyle := baseButtonStyle.Background(color)
-
-	var borderLeft, borderChar, borderRight string
-	if isTop {
-		borderLeft = config.GetWindowBorderTopLeft()
-		borderChar = config.GetWindowBorderTop()
-		borderRight = config.GetWindowBorderTopRight()
-	} else {
-		borderLeft = config.GetWindowBorderBottomLeft()
-		borderChar = config.GetWindowBorderBottom()
-		borderRight = config.GetWindowBorderBottomRight()
-	}
-
-	if windowName == "" {
-		return borderStyle.Render(borderLeft + strings.Repeat(borderChar, width) + borderRight)
-	}
-
-	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
-	nameText := nameStyle.Render(" " + windowName + " ")
-	rightCircle := borderStyle.Render(config.GetWindowPillRight())
-	nameBadge := leftCircle + nameText + rightCircle
-
-	badgeWidth := lipgloss.Width(nameBadge)
-	totalPadding := width - badgeWidth
-
-	if totalPadding < 0 {
-		return borderStyle.Render(borderLeft + strings.Repeat(borderChar, width) + borderRight)
-	}
-
-	leftPadding := totalPadding / 2
-	rightPadding := totalPadding - leftPadding
-
-	return borderStyle.Render(borderLeft+strings.Repeat(borderChar, leftPadding)) +
-		nameBadge +
-		borderStyle.Render(strings.Repeat(borderChar, rightPadding)+borderRight)
-}
 
 func addToBorder(content string, color color.Color, window *terminal.Window, isRenaming bool, renameBuffer string, isTiling bool) string {
-	width := max(lipgloss.Width(content)-2, 0)
+	// Calculate the inner width for top/bottom borders.
+	// Subtract border columns that are actually present (not hidden by shared borders).
+	borderCols := 2
+	if window.SharedBorderLeft {
+		borderCols--
+	}
+	if window.SharedBorderRight {
+		borderCols--
+	}
+	width := max(lipgloss.Width(content)-borderCols, 0)
 	titlePos := config.WindowTitlePosition
 
 	style := pool.GetStyle()
@@ -221,14 +148,29 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 
 	borderStyle := style.Foreground(color)
 
+	// Determine corner characters, adjusting for shared borders.
+	// When a side border is hidden, use a horizontal line instead of a corner.
+	topLeft := config.GetWindowBorderTopLeft()
+	topRight := config.GetWindowBorderTopRight()
+	bottomLeft := config.GetWindowBorderBottomLeft()
+	bottomRight := config.GetWindowBorderBottomRight()
+	if window.SharedBorderLeft {
+		topLeft = config.GetWindowBorderTop()
+		bottomLeft = config.GetWindowBorderBottom()
+	}
+	if window.SharedBorderRight {
+		topRight = config.GetWindowBorderTop()
+		bottomRight = config.GetWindowBorderBottom()
+	}
+
 	// Build top border
 	var topBorder string
 	if titlePos == "top" && windowName != "" {
 		// Title on top with buttons on the right
-		topBorder = renderTitleWithButtons(windowName, buttons, width, color, true)
+		topBorder = renderTitleWithButtonsShared(windowName, buttons, width, color, true, topLeft, topRight)
 	} else {
 		// Normal top border with buttons on right
-		topBorder = RightString(buttons, width, color)
+		topBorder = rightStringShared(buttons, width, color, topLeft, topRight)
 	}
 
 	// Build bottom border with optional scrollback position indicator
@@ -246,23 +188,124 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 	}
 
 	if titlePos == "bottom" && windowName != "" {
-		bottomBorder = renderTitleBadge(windowName, width, color, false)
+		bottomBorder = renderTitleBadgeShared(windowName, width, color, false, bottomLeft, bottomRight)
 	} else if scrollIndicator != "" {
 		// Bottom border with scrollback position indicator on the right
 		indicatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24")).Bold(true)
 		indicator := indicatorStyle.Render(scrollIndicator)
 		indicatorWidth := lipgloss.Width(indicator)
 		lineWidth := max(width-indicatorWidth, 0)
-		bottomBorder = borderStyle.Render(config.GetWindowBorderBottomLeft()+strings.Repeat(config.GetWindowBorderBottom(), lineWidth)) + indicator + borderStyle.Render(config.GetWindowBorderBottomRight())
+		bottomBorder = borderStyle.Render(bottomLeft+strings.Repeat(config.GetWindowBorderBottom(), lineWidth)) + indicator + borderStyle.Render(bottomRight)
 	} else {
-		bottomBorder = borderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderBottom(), width) + config.GetWindowBorderBottomRight())
+		bottomBorder = borderStyle.Render(bottomLeft + strings.Repeat(config.GetWindowBorderBottom(), width) + bottomRight)
 	}
 
 	lines := strings.Split(content, "\n")
-	if len(lines) > 0 {
+
+	// When shared borders are active, skip the top/bottom custom borders
+	if window.SharedBorderTop {
+		// No top border - just return content with bottom border
+		if !window.SharedBorderBottom && len(lines) > 0 {
+			lines[len(lines)-1] = bottomBorder
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	if !window.SharedBorderBottom && len(lines) > 0 {
 		lines[len(lines)-1] = bottomBorder
 	}
 	return topBorder + "\n" + strings.Join(lines, "\n")
+}
+
+// rightStringShared is like RightString but uses custom corner characters for shared borders.
+func rightStringShared(str string, width int, color color.Color, cornerLeft, cornerRight string) string {
+	spaces := width - lipgloss.Width(str)
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
+	fg := style.Foreground(color)
+
+	if spaces < 0 {
+		return ""
+	}
+
+	return fg.Render(cornerLeft+strings.Repeat(config.GetWindowBorderTop(), spaces)) +
+		str +
+		fg.Render(cornerRight)
+}
+
+// renderTitleWithButtonsShared is like renderTitleWithButtons but uses custom corner characters.
+func renderTitleWithButtonsShared(windowName string, buttons string, width int, color color.Color, isTop bool, cornerLeft, cornerRight string) string {
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
+	borderStyle := style.Foreground(color)
+	nameStyle := baseButtonStyle.Background(color)
+
+	var borderChar string
+	if isTop {
+		borderChar = config.GetWindowBorderTop()
+	} else {
+		borderChar = config.GetWindowBorderBottom()
+	}
+
+	// Build name badge
+	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
+	nameText := nameStyle.Render(" " + windowName + " ")
+	rightCircle := borderStyle.Render(config.GetWindowPillRight())
+	nameBadge := leftCircle + nameText + rightCircle
+
+	nameBadgeWidth := lipgloss.Width(nameBadge)
+	buttonsWidth := lipgloss.Width(buttons)
+
+	// Calculate padding between title and buttons
+	middlePadding := width - nameBadgeWidth - buttonsWidth
+	if middlePadding < 0 {
+		// Not enough space, just show buttons
+		return rightStringShared(buttons, width, color, cornerLeft, cornerRight)
+	}
+
+	return borderStyle.Render(cornerLeft) +
+		nameBadge +
+		borderStyle.Render(strings.Repeat(borderChar, middlePadding)) +
+		buttons +
+		borderStyle.Render(cornerRight)
+}
+
+// renderTitleBadgeShared is like renderTitleBadge but uses custom corner characters.
+func renderTitleBadgeShared(windowName string, width int, color color.Color, isTop bool, cornerLeft, cornerRight string) string {
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
+	borderStyle := style.Foreground(color)
+	nameStyle := baseButtonStyle.Background(color)
+
+	var borderChar string
+	if isTop {
+		borderChar = config.GetWindowBorderTop()
+	} else {
+		borderChar = config.GetWindowBorderBottom()
+	}
+
+	if windowName == "" {
+		return borderStyle.Render(cornerLeft + strings.Repeat(borderChar, width) + cornerRight)
+	}
+
+	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
+	nameText := nameStyle.Render(" " + windowName + " ")
+	rightCircle := borderStyle.Render(config.GetWindowPillRight())
+	nameBadge := leftCircle + nameText + rightCircle
+
+	badgeWidth := lipgloss.Width(nameBadge)
+	totalPadding := width - badgeWidth
+
+	if totalPadding < 0 {
+		return borderStyle.Render(cornerLeft + strings.Repeat(borderChar, width) + cornerRight)
+	}
+
+	leftPadding := totalPadding / 2
+	rightPadding := totalPadding - leftPadding
+
+	return borderStyle.Render(cornerLeft+strings.Repeat(borderChar, leftPadding)) +
+		nameBadge +
+		borderStyle.Render(strings.Repeat(borderChar, rightPadding)+cornerRight)
 }
 
 func styleToANSI(s lipgloss.Style) (prefix string, suffix string) {

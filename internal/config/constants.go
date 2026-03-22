@@ -323,6 +323,11 @@ func GetFastAnimationDuration() time.Duration {
 	return FastAnimationDuration
 }
 
+// SharedBorders controls whether adjacent tiled windows share a single border
+// instead of having two separate borders side by side.
+// Set via appearance.shared_borders config
+var SharedBorders = true
+
 // BorderStyle controls which border style to use for windows
 // Set via --border-style flag or appearance.border_style config
 var BorderStyle = "rounded"
