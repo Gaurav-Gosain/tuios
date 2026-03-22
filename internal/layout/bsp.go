@@ -433,24 +433,18 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 	if node.SplitType == SplitVertical {
 		// Vertical split: left | right
 		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
-		if config.SharedBorders {
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-			rightBounds = Rect{X: splitX + 1, Y: bounds.Y, W: bounds.X + bounds.W - splitX - 1, H: bounds.H}
-		} else {
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-			rightBounds = Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
-		}
+		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
+		rightBounds = Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
 	} else {
 		// Horizontal split: top / bottom
 		splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
-		if config.SharedBorders {
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-			rightBounds = Rect{X: bounds.X, Y: splitY + 1, W: bounds.W, H: bounds.Y + bounds.H - splitY - 1}
-		} else {
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-			rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
-		}
+		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
+		rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
 	}
+
+	// Note: SharedBorders config flag exists but proper implementation
+	// requires a post-rendering border grid pass (future work).
+	_ = config.SharedBorders
 
 	t.applyLayoutRecursive(node.Left, leftBounds, result)
 	t.applyLayoutRecursive(node.Right, rightBounds, result)
@@ -968,66 +962,4 @@ func deserializeNode(s *SerializedNode, parent *TileNode, windowMap map[int]*Til
 	node.Left = deserializeNode(s.Left, node, windowMap)
 	node.Right = deserializeNode(s.Right, node, windowMap)
 	return node
-}
-
-// SplitLine represents a single border line produced by a BSP split.
-// For vertical splits, Pos is the X column; for horizontal splits, Pos is the Y row.
-type SplitLine struct {
-	Type    SplitType // SplitVertical or SplitHorizontal
-	Pos     int       // X for vertical, Y for horizontal
-	FromPos int       // Start of the line (Y for vertical, X for horizontal)
-	ToPos   int       // End of the line (inclusive)
-}
-
-// CollectSplits returns all split line positions from the BSP tree.
-// When sharedBorders is true, positions account for the 1-cell gap between panes.
-func (t *BSPTree) CollectSplits(bounds Rect, sharedBorders bool) []SplitLine {
-	var splits []SplitLine
-	if t.Root != nil {
-		t.collectSplitsRecursive(t.Root, bounds, &splits, sharedBorders)
-	}
-	return splits
-}
-
-func (t *BSPTree) collectSplitsRecursive(node *TileNode, bounds Rect, splits *[]SplitLine, sharedBorders bool) {
-	if node == nil || node.IsLeaf() {
-		return
-	}
-
-	var leftBounds, rightBounds Rect
-
-	if node.SplitType == SplitVertical {
-		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
-		if sharedBorders {
-			*splits = append(*splits, SplitLine{
-				Type:    SplitVertical,
-				Pos:     splitX,
-				FromPos: bounds.Y,
-				ToPos:   bounds.Y + bounds.H - 1,
-			})
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-			rightBounds = Rect{X: splitX + 1, Y: bounds.Y, W: bounds.X + bounds.W - splitX - 1, H: bounds.H}
-		} else {
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-			rightBounds = Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
-		}
-	} else {
-		splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
-		if sharedBorders {
-			*splits = append(*splits, SplitLine{
-				Type:    SplitHorizontal,
-				Pos:     splitY,
-				FromPos: bounds.X,
-				ToPos:   bounds.X + bounds.W - 1,
-			})
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-			rightBounds = Rect{X: bounds.X, Y: splitY + 1, W: bounds.W, H: bounds.Y + bounds.H - splitY - 1}
-		} else {
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-			rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
-		}
-	}
-
-	t.collectSplitsRecursive(node.Left, leftBounds, splits, sharedBorders)
-	t.collectSplitsRecursive(node.Right, rightBounds, splits, sharedBorders)
 }
