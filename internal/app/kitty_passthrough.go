@@ -1041,16 +1041,9 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 
 		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, IsAltScreen=%v, visible=%v", windowID[:8], info.IsAltScreen, info.Visible)
 
-		// During window manipulation (drag/resize), hide only this window's images
-		if info.IsBeingManipulated {
-			for _, p := range placements {
-				if !p.Hidden {
-					kp.deleteOnePlacement(p)
-					p.Hidden = true
-				}
-			}
-			continue
-		}
+		// During window manipulation (drag/resize), let images reposition
+		// with the window. The change detection below (posChanged check)
+		// ensures we only re-place if the position actually changed.
 
 		// Calculate viewport dimensions (accounting for window borders)
 		viewportTop := info.ScrollbackLen - info.ScrollOffset
