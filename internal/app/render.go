@@ -106,10 +106,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		var boxContent string
 		if window.Tiled {
 			// Shared borders mode: no individual window borders, content fills full rect
-			boxContent = lipgloss.NewStyle().
-				Width(window.Width).
-				Height(window.Height).
-				Render(content)
+			boxContent = content
 		} else {
 			isRenaming := m.RenamingWindow && i == m.FocusedWindow
 
