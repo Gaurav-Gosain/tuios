@@ -191,6 +191,10 @@ func (m *OS) ToggleAutoTiling() {
 		m.LogInfo("BSP: Disabling tiling mode")
 		// Clear preselection when disabling tiling
 		m.PreselectionDir = layout.PreselectionNone
+		// Reset Tiled flag on all windows
+		for _, w := range m.Windows {
+			w.Tiled = false
+		}
 	}
 
 	// Sync state to daemon so tiling mode persists across reconnects
@@ -982,14 +986,23 @@ func (m *OS) GetOrCreateBSPTree() *layout.BSPTree {
 	return tree
 }
 
-// GetBSPBounds returns the bounds for BSP layout calculation
+// GetBSPBounds returns the bounds for BSP layout calculation.
+// When shared borders are active, the bounds are inset by 1 on each side
+// to leave room for the outer frame drawn by the border grid renderer.
 func (m *OS) GetBSPBounds() layout.Rect {
-	return layout.Rect{
+	r := layout.Rect{
 		X: 0,
 		Y: m.GetTopMargin(),
 		W: m.GetRenderWidth(),
 		H: m.GetUsableHeight(),
 	}
+	if config.SharedBorders && m.AutoTiling {
+		r.X += 1
+		r.Y += 1
+		r.W -= 2
+		r.H -= 2
+	}
+	return r
 }
 
 // BuildBSPTreeFromCurrentLayout creates a BSP tree from the current window geometry.
@@ -1088,6 +1101,9 @@ func (m *OS) ApplyBSPLayout() {
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized {
 			continue
 		}
+
+		// Mark window as tiled when shared borders are active
+		win.Tiled = config.SharedBorders
 
 		// Create animation for smooth transition
 		anim := ui.NewSnapAnimation(

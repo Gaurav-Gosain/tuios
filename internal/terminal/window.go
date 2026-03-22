@@ -121,6 +121,7 @@ type Window struct {
 	IsSelecting            bool               // True when selecting text
 	SelectedText           string             // Currently selected text
 	SelectionCursor        struct{ X, Y int } // Current cursor position in selection mode
+	Tiled                  bool               // True when window is positioned by BSP tiling with shared borders
 	ProcessExited          bool               // True when process has exited
 	// Enhanced text selection support
 	SelectionMode int // 0 = character, 1 = word, 2 = line
@@ -964,14 +965,38 @@ func (w *Window) handleIOOperations() {
 	})
 }
 
+// ContentWidth returns the usable content width inside the window.
+// When the window is tiled with shared borders, borders are drawn externally
+// so the full width is available for content.
+func (w *Window) ContentWidth() int {
+	if w.Tiled && config.SharedBorders {
+		return max(w.Width, 1)
+	}
+	return max(w.Width-2, 1)
+}
+
+// ContentHeight returns the usable content height inside the window.
+// When the window is tiled with shared borders, borders are drawn externally
+// so the full height is available for content.
+func (w *Window) ContentHeight() int {
+	if w.Tiled && config.SharedBorders {
+		return max(w.Height, 1)
+	}
+	return max(w.Height-2, 1)
+}
+
 // Resize resizes the window and its terminal.
 func (w *Window) Resize(width, height int) {
 	if w.Terminal == nil {
 		return
 	}
 
-	termWidth := max(width-2, 1)
-	termHeight := max(height-2, 1)
+	borderOff := 2
+	if w.Tiled && config.SharedBorders {
+		borderOff = 0
+	}
+	termWidth := max(width-borderOff, 1)
+	termHeight := max(height-borderOff, 1)
 
 	// Check if size actually changed
 	sizeChanged := w.Width != width || w.Height != height
@@ -1017,8 +1042,12 @@ func (w *Window) ResizeVisual(width, height int) {
 	// This prevents the "stuck" height and dimension mismatch issues during drag.
 	// PTY resize is still deferred until mouse release (via pending resizes).
 	if w.Terminal != nil {
-		termWidth := max(width-2, 1)
-		termHeight := max(height-2, 1)
+		borderOff := 2
+		if w.Tiled && config.SharedBorders {
+			borderOff = 0
+		}
+		termWidth := max(width-borderOff, 1)
+		termHeight := max(height-borderOff, 1)
 		w.Terminal.Resize(termWidth, termHeight)
 	}
 
