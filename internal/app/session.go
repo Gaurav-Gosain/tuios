@@ -468,15 +468,15 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	if sizeChanged {
 		// Resize terminal emulator
 		if w.Terminal != nil {
-			termWidth := max(ws.Width-2, 1)
-			termHeight := max(ws.Height-2, 1)
+			termWidth := w.ContentWidth()
+			termHeight := w.ContentHeight()
 			w.Terminal.Resize(termWidth, termHeight)
 		}
 
 		// Resize PTY in daemon
 		if w.DaemonResizeFunc != nil {
-			termWidth := max(ws.Width-2, 1)
-			termHeight := max(ws.Height-2, 1)
+			termWidth := w.ContentWidth()
+			termHeight := w.ContentHeight()
 			_ = w.DaemonResizeFunc(termWidth, termHeight)
 		}
 
@@ -620,8 +620,8 @@ func (m *OS) RestoreTerminalStates() error {
 func (m *OS) SyncDaemonPTYDimensions() {
 	for _, w := range m.Windows {
 		if w.DaemonMode && w.DaemonResizeFunc != nil {
-			termWidth := max(w.Width-2, 1)
-			termHeight := max(w.Height-2, 1)
+			termWidth := w.ContentWidth()
+			termHeight := w.ContentHeight()
 
 			// Resize daemon PTY to match window dimensions
 			if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {

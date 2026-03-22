@@ -430,21 +430,46 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 	// Internal node - split the bounds
 	var leftBounds, rightBounds Rect
 
-	if node.SplitType == SplitVertical {
-		// Vertical split: left | right
-		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
-		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-		rightBounds = Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
+	if config.SharedBorders {
+		// Shared borders mode: reserve 1 cell for separator line between panes
+		if node.SplitType == SplitVertical {
+			// Vertical split: left | separator | right
+			splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
+			// Clamp so separator stays within bounds
+			if splitX <= bounds.X {
+				splitX = bounds.X + 1
+			}
+			if splitX >= bounds.X+bounds.W-1 {
+				splitX = bounds.X + bounds.W - 2
+			}
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
+			rightBounds = Rect{X: splitX + 1, Y: bounds.Y, W: bounds.X + bounds.W - splitX - 1, H: bounds.H}
+		} else {
+			// Horizontal split: top / separator / bottom
+			splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
+			// Clamp so separator stays within bounds
+			if splitY <= bounds.Y {
+				splitY = bounds.Y + 1
+			}
+			if splitY >= bounds.Y+bounds.H-1 {
+				splitY = bounds.Y + bounds.H - 2
+			}
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
+			rightBounds = Rect{X: bounds.X, Y: splitY + 1, W: bounds.W, H: bounds.Y + bounds.H - splitY - 1}
+		}
 	} else {
-		// Horizontal split: top / bottom
-		splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
-		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-		rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
+		if node.SplitType == SplitVertical {
+			// Vertical split: left | right
+			splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
+			rightBounds = Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
+		} else {
+			// Horizontal split: top / bottom
+			splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
+			rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
+		}
 	}
-
-	// Note: SharedBorders config flag exists but proper implementation
-	// requires a post-rendering border grid pass (future work).
-	_ = config.SharedBorders
 
 	t.applyLayoutRecursive(node.Left, leftBounds, result)
 	t.applyLayoutRecursive(node.Right, rightBounds, result)
@@ -669,6 +694,69 @@ func equalizeRatiosRecursive(node *TileNode) {
 	node.SplitRatio = 0.5
 	equalizeRatiosRecursive(node.Left)
 	equalizeRatiosRecursive(node.Right)
+}
+
+// SplitLine represents a separator line between two panes in shared border mode.
+type SplitLine struct {
+	Vertical bool // true = vertical line (│), false = horizontal line (─)
+	Pos      int  // X coordinate for vertical, Y coordinate for horizontal
+	From     int  // start Y for vertical, start X for horizontal
+	To       int  // end Y for vertical, end X for horizontal
+}
+
+// CollectSplits returns all separator line positions for shared border rendering.
+// Must be called with the same bounds used for ApplyLayout.
+func (t *BSPTree) CollectSplits(bounds Rect) []SplitLine {
+	var splits []SplitLine
+	if t.Root == nil {
+		return splits
+	}
+	t.collectSplitsRecursive(t.Root, bounds, &splits)
+	return splits
+}
+
+func (t *BSPTree) collectSplitsRecursive(node *TileNode, bounds Rect, splits *[]SplitLine) {
+	if node == nil || node.IsLeaf() {
+		return
+	}
+
+	if node.SplitType == SplitVertical {
+		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
+		if splitX <= bounds.X {
+			splitX = bounds.X + 1
+		}
+		if splitX >= bounds.X+bounds.W-1 {
+			splitX = bounds.X + bounds.W - 2
+		}
+		*splits = append(*splits, SplitLine{
+			Vertical: true,
+			Pos:      splitX,
+			From:     bounds.Y,
+			To:       bounds.Y + bounds.H - 1,
+		})
+		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
+		rightBounds := Rect{X: splitX + 1, Y: bounds.Y, W: bounds.X + bounds.W - splitX - 1, H: bounds.H}
+		t.collectSplitsRecursive(node.Left, leftBounds, splits)
+		t.collectSplitsRecursive(node.Right, rightBounds, splits)
+	} else {
+		splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
+		if splitY <= bounds.Y {
+			splitY = bounds.Y + 1
+		}
+		if splitY >= bounds.Y+bounds.H-1 {
+			splitY = bounds.Y + bounds.H - 2
+		}
+		*splits = append(*splits, SplitLine{
+			Vertical: false,
+			Pos:      splitY,
+			From:     bounds.X,
+			To:       bounds.X + bounds.W - 1,
+		})
+		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
+		rightBounds := Rect{X: bounds.X, Y: splitY + 1, W: bounds.W, H: bounds.Y + bounds.H - splitY - 1}
+		t.collectSplitsRecursive(node.Left, leftBounds, splits)
+		t.collectSplitsRecursive(node.Right, rightBounds, splits)
+	}
 }
 
 // GetAllWindowIDs returns all window IDs in the tree (in-order traversal)

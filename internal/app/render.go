@@ -103,19 +103,28 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
 
-		isRenaming := m.RenamingWindow && i == m.FocusedWindow
+		var boxContent string
+		if window.Tiled {
+			// Shared borders mode: no individual window borders, content fills full rect
+			boxContent = lipgloss.NewStyle().
+				Width(window.Width).
+				Height(window.Height).
+				Render(content)
+		} else {
+			isRenaming := m.RenamingWindow && i == m.FocusedWindow
 
-		boxContent := addToBorder(
-			box.Width(window.Width).
-				Height(window.Height-1).
-				BorderForeground(borderColorObj).
-				Render(content),
-			borderColorObj,
-			window,
-			isRenaming,
-			m.RenameBuffer,
-			m.AutoTiling,
-		)
+			boxContent = addToBorder(
+				box.Width(window.Width).
+					Height(window.Height-1).
+					BorderForeground(borderColorObj).
+					Render(content),
+				borderColorObj,
+				window,
+				isRenaming,
+				m.RenameBuffer,
+				m.AutoTiling,
+			)
+		}
 
 		zIndex := window.Z
 		if isAnimating {
@@ -132,6 +141,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		layers = append(layers, window.CachedLayer)
 
 		window.ClearDirtyFlags()
+	}
+
+	// Add shared border separator overlay when active
+	if config.SharedBorders && m.AutoTiling {
+		if sepLayer := m.renderSeparatorOverlay(); sepLayer != nil {
+			layers = append(layers, sepLayer)
+		}
 	}
 
 	if render {

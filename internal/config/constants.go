@@ -682,6 +682,9 @@ const (
 	// ZIndexBase is the base z-index for regular windows
 	ZIndexBase = 0
 
+	// ZIndexSeparators is the z-index for shared border separator lines (above windows, below overlays)
+	ZIndexSeparators = 998
+
 	// ZIndexAnimating is the z-index for windows currently animating
 	ZIndexAnimating = 999
 

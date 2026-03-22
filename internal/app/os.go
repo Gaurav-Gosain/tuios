@@ -1035,8 +1035,8 @@ func (m *OS) ToggleZoom() {
 		fw.Height = fw.PreZoomHeight
 		fw.InvalidateCache()
 		// Resize terminal to match restored dimensions
-		termW := max(fw.Width-2, 1)
-		termH := max(fw.Height-2, 1)
+		termW := fw.ContentWidth()
+		termH := fw.ContentHeight()
 		if fw.Terminal != nil {
 			fw.Terminal.Resize(termW, termH)
 		}
@@ -1071,8 +1071,8 @@ func (m *OS) ToggleZoom() {
 		fw.Height = m.GetRenderHeight() - topMargin - bottomMargin
 		fw.InvalidateCache()
 		// Resize terminal to match zoomed dimensions
-		termW := max(fw.Width-2, 1)
-		termH := max(fw.Height-2, 1)
+		termW := fw.ContentWidth()
+		termH := fw.ContentHeight()
 		if fw.Terminal != nil {
 			fw.Terminal.Resize(termW, termH)
 		}
@@ -1331,8 +1331,8 @@ func (m *OS) MoveSelectionCursor(window *terminal.Window, dx, dy int, extending 
 	}
 
 	// Get terminal dimensions (account for borders)
-	maxX := window.Width - 2
-	maxY := window.Height - 2
+	maxX := window.ContentWidth()
+	maxY := window.ContentHeight()
 
 	// Initialize selection cursor if not set (only for non-extending moves)
 	if !extending && !window.IsSelecting {
@@ -1443,7 +1443,7 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 
 		// Determine start and end columns for this line
 		lineStartX := 0
-		lineEndX := window.Width - 2 // Account for borders
+		lineEndX := window.ContentWidth() // Account for borders
 
 		if y == startY {
 			lineStartX = startX
@@ -1453,7 +1453,7 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 		}
 
 		// Extract characters from the terminal for this line
-		for x := lineStartX; x <= lineEndX && x < window.Width-2; x++ {
+		for x := lineStartX; x <= lineEndX && x < window.ContentWidth(); x++ {
 			// Get the cell from the terminal at this position
 			cell := window.Terminal.CellAt(x, y)
 			if cell != nil && cell.Content != "" {

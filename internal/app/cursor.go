@@ -31,17 +31,21 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	}
 
 	pos := window.Terminal.CursorPosition()
-	contentWidth := window.Width - 2 // subtract borders
-	contentHeight := window.Height - 2
+	contentWidth := window.ContentWidth()
+	contentHeight := window.ContentHeight()
 
 	// Bounds check - cursor must be within visible content area
 	if pos.X < 0 || pos.X >= contentWidth || pos.Y < 0 || pos.Y >= contentHeight {
 		return nil
 	}
 
-	// Transform to screen coordinates (+1 for border)
-	screenX := window.X + 1 + pos.X
-	screenY := window.Y + 1 + pos.Y
+	// Transform to screen coordinates (+1 for border, +0 for tiled)
+	borderOffset := 1
+	if window.Tiled {
+		borderOffset = 0
+	}
+	screenX := window.X + borderOffset + pos.X
+	screenY := window.Y + borderOffset + pos.Y
 
 	cursor := tea.NewCursor(screenX, screenY)
 	cursor.Shape = mapCursorStyle(window.CursorStyle)

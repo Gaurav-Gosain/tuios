@@ -484,7 +484,7 @@ func moveHalfPageDown(cm *terminal.CopyMode, window *terminal.Window) {
 
 // movePageUp moves cursor full page up
 func movePageUp(cm *terminal.CopyMode, window *terminal.Window) {
-	lines := max(1, window.Height-2)
+	lines := max(1, window.ContentHeight())
 	for range lines {
 		moveUp(cm, window)
 	}
@@ -492,7 +492,7 @@ func movePageUp(cm *terminal.CopyMode, window *terminal.Window) {
 
 // movePageDown moves cursor full page down
 func movePageDown(cm *terminal.CopyMode, window *terminal.Window) {
-	lines := max(1, window.Height-2)
+	lines := max(1, window.ContentHeight())
 	for range lines {
 		moveDown(cm, window)
 	}

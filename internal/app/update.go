@@ -432,8 +432,8 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.LogInfo("[REDRAW] Triggering alt screen redraws")
 		for _, w := range m.Windows {
 			if w.DaemonMode && w.IsAltScreen && w.DaemonResizeFunc != nil {
-				termWidth := max(w.Width-2, 1)
-				termHeight := max(w.Height-2, 1)
+				termWidth := w.ContentWidth()
+				termHeight := w.ContentHeight()
 
 				// Do a fake resize to slightly smaller, then back to real size
 				// This ensures SIGWINCH is sent even if size "hasn't changed"

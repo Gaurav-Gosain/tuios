@@ -191,6 +191,10 @@ func (m *OS) ToggleAutoTiling() {
 		m.LogInfo("BSP: Disabling tiling mode")
 		// Clear preselection when disabling tiling
 		m.PreselectionDir = layout.PreselectionNone
+		// Reset Tiled flag on all windows
+		for _, w := range m.Windows {
+			w.Tiled = false
+		}
 	}
 
 	// Sync state to daemon so tiling mode persists across reconnects
@@ -1089,6 +1093,9 @@ func (m *OS) ApplyBSPLayout() {
 			continue
 		}
 
+		// Set tiled flag when shared borders are active
+		win.Tiled = config.SharedBorders
+
 		// Create animation for smooth transition
 		anim := ui.NewSnapAnimation(
 			win,
@@ -1183,6 +1190,11 @@ func (m *OS) SyncBSPTreeFromGeometry() {
 
 	bounds := m.GetBSPBounds()
 	tree.SyncRatiosFromGeometry(geometry, bounds)
+
+	// In shared borders mode, re-apply layout after sync to enforce separator gaps
+	if config.SharedBorders {
+		m.ApplyBSPLayout()
+	}
 }
 
 // SplitFocusedHorizontal splits the focused window horizontally (top/bottom) and creates a new terminal

@@ -14,9 +14,9 @@ import (
 )
 
 // isInTerminalContent checks if coordinates are within the terminal's content area.
-// The content area excludes the window borders (1 cell on each side).
+// The content area excludes the window borders (1 cell on each side, 0 for tiled).
 func isInTerminalContent(x, y int, win *terminal.Window) bool {
-	return x >= 0 && y >= 0 && x < win.Width-2 && y < win.Height-2
+	return x >= 0 && y >= 0 && x < win.ContentWidth() && y < win.ContentHeight()
 }
 
 // sendMouseToWindow forwards a mouse event to a window's terminal.
@@ -67,10 +67,9 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Forward mouse only when app explicitly requested mouse tracking (DECSET 1000-1003)
 		if clickedWindow.Terminal != nil && clickedWindow.Terminal.HasMouseMode() {
 			// Convert to terminal-relative coordinates (0-based)
-			termX := X - clickedWindow.X - 1 // Account for left border
-			termY := Y - clickedWindow.Y - 1 // Account for top border
+			termX, termY, inContent := clickedWindow.ScreenToTerminal(X, Y)
 			// Check if click is within terminal content area
-			if termX >= 0 && termY >= 0 && termX < clickedWindow.Width-2 && termY < clickedWindow.Height-2 {
+			if inContent {
 				// Focus the window first so subsequent events work
 				o.FocusWindow(clickedWindowIndex)
 
@@ -150,9 +149,8 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// In copy mode, handle mouse clicks for cursor movement and selection
 		if mouse.Button == tea.MouseLeft {
 			// Check if clicking in terminal content area (not on title bar or buttons)
-			terminalX := X - clickedWindow.X - 1
-			terminalY := Y - clickedWindow.Y // Fixed: Y coordinate relative to window
-			if terminalX >= 0 && terminalY >= 0 && terminalX < clickedWindow.Width-2 && terminalY < clickedWindow.Height-2 {
+			_, _, inContent := clickedWindow.ScreenToTerminal(X, Y)
+			if inContent {
 				// Start drag for visual selection
 				HandleCopyModeMouseDrag(clickedWindow.CopyMode, clickedWindow, X, Y)
 				o.Dragging = true
@@ -217,12 +215,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Check if we're in selection mode
 		if o.SelectionMode {
 			// Calculate terminal coordinates relative to window content
-			terminalX := X - clickedWindow.X - 1 // Account for border
-			terminalY := Y - clickedWindow.Y - 1 // Account for border
+			terminalX, terminalY, inContent := clickedWindow.ScreenToTerminal(X, Y)
 
 			// Start text selection
-			if terminalX >= 0 && terminalY >= 0 &&
-				terminalX < clickedWindow.Width-2 && terminalY < clickedWindow.Height-2 {
+			if inContent {
 				// Track consecutive clicks for double/triple-click selection
 				now := time.Now()
 				timeSinceLastClick := now.Sub(clickedWindow.LastClickTime)
@@ -307,10 +303,9 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 			if shouldForward {
 				// Convert to terminal-relative coordinates (0-based)
-				termX := mouse.X - focusedWindow.X - 1 // Account for left border
-				termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
+				termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 				// Check if motion is within terminal content area
-				if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
+				if inContent {
 					// Create adjusted mouse event with terminal-relative coordinates
 					adjustedMouse := uv.MouseMotionEvent{
 						X:      termX,
@@ -341,12 +336,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.IsSelecting {
 			// Calculate terminal coordinates
-			terminalX := mouse.X - focusedWindow.X - 1
-			terminalY := mouse.Y - focusedWindow.Y - 1
+			terminalX, terminalY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 
 			// Update selection end position
-			if terminalX >= 0 && terminalY >= 0 &&
-				terminalX < focusedWindow.Width-2 && terminalY < focusedWindow.Height-2 {
+			if inContent {
 				focusedWindow.SelectionEnd.X = terminalX
 				focusedWindow.SelectionEnd.Y = terminalY
 				return o, nil
@@ -572,10 +565,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if focusedWindow != nil && focusedWindow.Terminal != nil && focusedWindow.Terminal.HasMouseMode() {
 			mouse := msg.Mouse()
 			// Convert to terminal-relative coordinates (0-based)
-			termX := mouse.X - focusedWindow.X - 1 // Account for left border
-			termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
+			termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 			// Check if release is within terminal content area
-			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
+			if inContent {
 				adjustedMouse := uv.MouseReleaseEvent{
 					X:      termX,
 					Y:      termY,
@@ -849,10 +841,9 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if focusedWindow != nil && focusedWindow.Terminal != nil && focusedWindow.Terminal.HasMouseMode() {
 			mouse := msg.Mouse()
 			// Convert to terminal-relative coordinates (0-based)
-			termX := mouse.X - focusedWindow.X - 1 // Account for left border
-			termY := mouse.Y - focusedWindow.Y - 1 // Account for top border
+			termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 			// Check if wheel is within terminal content area
-			if termX >= 0 && termY >= 0 && termX < focusedWindow.Width-2 && termY < focusedWindow.Height-2 {
+			if inContent {
 				adjustedMouse := uv.MouseWheelEvent{
 					X:      termX,
 					Y:      termY,
@@ -1022,7 +1013,7 @@ func selectWord(window *terminal.Window, x, y int, o *app.OS) {
 	}
 
 	screen := window.Terminal
-	maxX := window.Width - 2
+	maxX := window.ContentWidth()
 
 	// Find the start of the word (move left until we hit a non-word character)
 	startX := x
@@ -1058,7 +1049,7 @@ func selectWord(window *terminal.Window, x, y int, o *app.OS) {
 
 // selectLine selects the entire line at the given Y position
 func selectLine(window *terminal.Window, y int) {
-	maxX := window.Width - 2
+	maxX := window.ContentWidth()
 
 	// Select the entire line
 	window.IsSelecting = true

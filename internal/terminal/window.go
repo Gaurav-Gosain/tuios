@@ -160,6 +160,8 @@ type Window struct {
 	// to trigger rendering. Non-blocking send coalesces rapid updates.
 	PTYDataChan chan struct{}
 
+	Tiled bool // True when window is in shared-border tiling mode (no individual borders)
+
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)
 
@@ -965,13 +967,52 @@ func (w *Window) handleIOOperations() {
 }
 
 // Resize resizes the window and its terminal.
+// ContentWidth returns the usable content width (excluding borders if not tiled).
+func (w *Window) ContentWidth() int {
+	if w.Tiled {
+		return max(w.Width, 1)
+	}
+	return max(w.Width-2, 1)
+}
+
+// ContentHeight returns the usable content height (excluding borders if not tiled).
+func (w *Window) ContentHeight() int {
+	if w.Tiled {
+		return max(w.Height, 1)
+	}
+	return max(w.Height-2, 1)
+}
+
+// BorderOffset returns the number of cells used by each border edge.
+// Returns 0 for tiled windows (no individual borders), 1 otherwise.
+func (w *Window) BorderOffset() int {
+	if w.Tiled {
+		return 0
+	}
+	return 1
+}
+
+// ScreenToTerminal converts screen coordinates (X, Y) to terminal-relative coordinates.
+// Returns the terminal X, Y and whether the coordinates are within the content area.
+func (w *Window) ScreenToTerminal(screenX, screenY int) (termX, termY int, ok bool) {
+	off := w.BorderOffset()
+	termX = screenX - w.X - off
+	termY = screenY - w.Y - off
+	ok = termX >= 0 && termY >= 0 && termX < w.ContentWidth() && termY < w.ContentHeight()
+	return
+}
+
 func (w *Window) Resize(width, height int) {
 	if w.Terminal == nil {
 		return
 	}
 
-	termWidth := max(width-2, 1)
-	termHeight := max(height-2, 1)
+	borderDeduct := 2
+	if w.Tiled {
+		borderDeduct = 0
+	}
+	termWidth := max(width-borderDeduct, 1)
+	termHeight := max(height-borderDeduct, 1)
 
 	// Check if size actually changed
 	sizeChanged := w.Width != width || w.Height != height
@@ -1017,8 +1058,12 @@ func (w *Window) ResizeVisual(width, height int) {
 	// This prevents the "stuck" height and dimension mismatch issues during drag.
 	// PTY resize is still deferred until mouse release (via pending resizes).
 	if w.Terminal != nil {
-		termWidth := max(width-2, 1)
-		termHeight := max(height-2, 1)
+		borderDeduct := 2
+		if w.Tiled {
+			borderDeduct = 0
+		}
+		termWidth := max(width-borderDeduct, 1)
+		termHeight := max(height-borderDeduct, 1)
 		w.Terminal.Resize(termWidth, termHeight)
 	}
 
@@ -1037,8 +1082,8 @@ func (w *Window) SetCellPixelDimensions(cellWidth, cellHeight int) {
 	w.Terminal.SetCellSize(cellWidth, cellHeight)
 
 	if w.Pty != nil && cellWidth > 0 && cellHeight > 0 {
-		termWidth := max(w.Width-2, 1)
-		termHeight := max(w.Height-2, 1)
+		termWidth := w.ContentWidth()
+		termHeight := w.ContentHeight()
 		xpixel := termWidth * cellWidth
 		ypixel := termHeight * cellHeight
 		_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
