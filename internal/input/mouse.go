@@ -883,7 +883,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 							focusedWindow.InvalidateCache()
 						}
 					}
-				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() {
+				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen {
 					// Terminal app does not have mouse tracking enabled —
 					// scroll the window's scrollback buffer directly (like openmux).
 					scrollbackLen := focusedWindow.ScrollbackLen()
@@ -923,7 +923,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						}
 						focusedWindow.InvalidateCache()
 					}
-				} else if o.Mode == app.TerminalMode && focusedWindow.ScrollbackMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() {
+				} else if o.Mode == app.TerminalMode && focusedWindow.ScrollbackMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen {
 					// Terminal app does not have mouse tracking — scroll down in scrollback.
 					focusedWindow.ScrollbackOffset -= 3
 					if focusedWindow.ScrollbackOffset <= 0 {

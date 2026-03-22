@@ -108,8 +108,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 	if m.ShowCommandPalette {
 		paletteContent := m.renderCommandPalette()
+		paletteWidth := lipgloss.Width(paletteContent)
+		paletteX := (m.GetRenderWidth() - paletteWidth) / 2
+		if paletteX < 0 {
+			paletteX = 0
+		}
 		paletteLayer := lipgloss.NewLayer(paletteContent).
-			X(0).Y(0).Z(config.ZIndexCommandPalette).ID("command-palette")
+			X(paletteX).Y(3).Z(config.ZIndexCommandPalette).ID("command-palette")
 		layers = append(layers, paletteLayer)
 	}
 
@@ -794,15 +799,12 @@ func (m *OS) renderCommandPalette() string {
 
 	content := strings.Join(lines, "\n")
 
-	box := lipgloss.NewStyle().
+	return lipgloss.NewStyle().
 		Border(getBorder()).
 		BorderForeground(lipgloss.Color("14")).
 		Padding(1, 2).
 		Background(bg).
 		Render(content)
-
-	return lipgloss.Place(m.GetRenderWidth(), m.GetRenderHeight(),
-		lipgloss.Center, lipgloss.Center, box)
 }
 
 func (m *OS) renderQuitConfirmDialog() (string, int, int) {
