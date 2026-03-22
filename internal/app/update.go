@@ -377,8 +377,13 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds[0] = nextTick
 
-		// Only render on tick if something periodic needs visual updates
-		needsRender := hasAnimations || m.InteractionMode || m.PrefixActive || needsDockTick
+		// Sync background windows that have accumulated output.
+		// This catches windows whose HasNewOutput flag was preserved by
+		// the throttling logic, ensuring they eventually render.
+		hasBackgroundChanges := m.MarkTerminalsWithNewContent()
+
+		// Render on tick if something periodic needs visual updates OR background windows changed
+		needsRender := hasAnimations || m.InteractionMode || m.PrefixActive || needsDockTick || hasBackgroundChanges
 		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {
