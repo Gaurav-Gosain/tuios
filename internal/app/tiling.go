@@ -1183,11 +1183,6 @@ func (m *OS) SyncBSPTreeFromGeometry() {
 
 	bounds := m.GetBSPBounds()
 	tree.SyncRatiosFromGeometry(geometry, bounds)
-
-	// Re-apply layout to restore shared border overlap after mouse resize
-	if config.SharedBorders {
-		m.ApplyBSPLayout()
-	}
 }
 
 // SplitFocusedHorizontal splits the focused window horizontally (top/bottom) and creates a new terminal
