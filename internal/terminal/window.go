@@ -151,6 +151,10 @@ type Window struct {
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
 	HasNewOutput atomic.Bool
 
+	// PTYDataChan is a shared channel (buffered 1) that PTY readers signal
+	// to trigger rendering. Non-blocking send coalesces rapid updates.
+	PTYDataChan chan struct{}
+
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)
 
@@ -231,7 +235,7 @@ type CopyMode struct {
 // NewWindow creates a new terminal window with the specified properties.
 // It spawns a shell process, sets up PTY communication, and initializes the virtual terminal.
 // Returns nil if window creation fails.
-func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string) *Window {
+func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}) *Window {
 	if title == "" {
 		title = "Terminal " + id[:8]
 	}
@@ -257,6 +261,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		Z:                  z,
 		ID:                 id,
 		Terminal:           terminal,
+		PTYDataChan:        ptyDataChan,
 		LastUpdate:         time.Now(),
 		Dirty:              true,
 		ContentDirty:       true,
@@ -415,7 +420,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 // NewDaemonWindow creates a new terminal window that uses a daemon-managed PTY.
 // Unlike NewWindow, this doesn't spawn a local PTY - I/O is proxied through the daemon.
 // The caller is responsible for subscribing to PTY output and handling I/O.
-func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string) *Window {
+func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string, ptyDataChan chan struct{}) *Window {
 	if title == "" {
 		title = "Terminal " + id[:8]
 	}
@@ -436,6 +441,7 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string)
 		Z:                  z,
 		ID:                 id,
 		Terminal:           terminal,
+		PTYDataChan:        ptyDataChan,
 		LastUpdate:         time.Now(),
 		Dirty:              true,
 		ContentDirty:       true,
@@ -511,6 +517,12 @@ func (w *Window) outputWriter() {
 			}
 			if w.Terminal != nil {
 				w.HasNewOutput.Store(true)
+				if w.PTYDataChan != nil {
+					select {
+					case w.PTYDataChan <- struct{}{}:
+					default:
+					}
+				}
 				w.ioMu.Lock()
 				_, _ = w.Terminal.Write(data)
 				w.ioMu.Unlock()
@@ -551,6 +563,12 @@ func (w *Window) StartDaemonResponseReader() {
 func (w *Window) WriteOutput(data []byte) {
 	if w.Terminal != nil {
 		w.HasNewOutput.Store(true)
+		if w.PTYDataChan != nil {
+			select {
+			case w.PTYDataChan <- struct{}{}:
+			default:
+			}
+		}
 		w.ioMu.Lock()
 		_, _ = w.Terminal.Write(data)
 		w.ioMu.Unlock()
@@ -807,6 +825,14 @@ func (w *Window) handleIOOperations() {
 				}
 				if n > 0 {
 					w.HasNewOutput.Store(true)
+
+					// Signal bubbletea that PTY data arrived (non-blocking, coalesces rapid updates)
+					if w.PTYDataChan != nil {
+						select {
+						case w.PTYDataChan <- struct{}{}:
+						default:
+						}
+					}
 
 					// Debug: Log all data from PTY (applications sending queries)
 					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {

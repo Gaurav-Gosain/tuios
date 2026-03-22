@@ -18,7 +18,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	isRecording := m.TapeRecorder != nil && m.TapeRecorder.IsRecording()
 
 	// Show clock/status unless hidden (but always show if recording or prefix active)
-	if !config.HideClock || isRecording || m.PrefixActive {
+	if (config.ShowClock && !config.HideClock) || isRecording || m.PrefixActive {
 		currentTime := time.Now().Format("15:04:05")
 		var statusText string
 

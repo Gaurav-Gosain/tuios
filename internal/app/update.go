@@ -10,9 +10,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
-// TickerMsg represents a periodic tick event for updating the UI.
-// This is exported so it can be used by the input package.
+// TickerMsg represents a periodic tick event for maintenance tasks
+// (animations, dock stats, script playback). NOT for PTY-driven rendering.
 type TickerMsg time.Time
+
+// PTYDataMsg signals that one or more PTY readers have new output.
+// This triggers re-rendering. Sent from the PTYDataChan listener.
+type PTYDataMsg struct{}
 
 // WindowExitMsg signals that a terminal window process has exited.
 // This is exported so it can be used by the input package.
@@ -136,6 +140,7 @@ func (m *OS) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		TickCmd(),
 		ListenForWindowExits(m.WindowExitChan),
+		ListenForPTYData(m.PTYDataChan),
 	}
 
 	// Listen for state sync from other clients (daemon/SSH/web mode)
@@ -218,8 +223,8 @@ func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 	}
 }
 
-// TickCmd creates a command that generates tick messages at 60 FPS.
-// This drives the main update loop for animations and terminal content updates.
+// TickCmd creates a maintenance tick for animations, dock stats, and script playback.
+// This runs at a low rate and does NOT drive PTY rendering.
 func TickCmd() tea.Cmd {
 	return tea.Tick(time.Second/config.NormalFPS, func(t time.Time) tea.Msg {
 		return TickerMsg(t)
@@ -240,6 +245,15 @@ func IdleTickCmd() tea.Cmd {
 	return tea.Tick(time.Second/config.IdleFPS, func(t time.Time) tea.Msg {
 		return TickerMsg(t)
 	})
+}
+
+// ListenForPTYData returns a Cmd that blocks until a PTY reader signals
+// new data, then sends a PTYDataMsg to trigger re-rendering.
+func ListenForPTYData(ch <-chan struct{}) tea.Cmd {
+	return func() tea.Msg {
+		<-ch
+		return PTYDataMsg{}
+	}
 }
 
 // EnableCallbacksMsg is sent after a delay to re-enable VT emulator callbacks
@@ -274,8 +288,26 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case PTYDataMsg:
+		// PTY output arrived — mark dirty terminals and re-render immediately.
+		// This is the primary render trigger, replacing tick-driven rendering.
+		m.MarkTerminalsWithNewContent()
+		m.renderSkipped = false
+
+		cmds := []tea.Cmd{ListenForPTYData(m.PTYDataChan)}
+
+		if gfxCmd := m.GetKittyGraphicsCmd(); gfxCmd != nil {
+			cmds = append(cmds, gfxCmd)
+		}
+		if gfxCmd := m.GetSixelGraphicsCmd(); gfxCmd != nil {
+			cmds = append(cmds, gfxCmd)
+		}
+
+		return m, tea.Batch(cmds...)
+
 	case TickerMsg:
-		// Proactively check for exited processes and clean them up
+		// Maintenance tick: animations, dock stats, script playback, process cleanup.
+		// Does NOT trigger rendering unless animations/interactions are active.
 		// This ensures windows close even if the exit channel message was missed
 		for i := len(m.Windows) - 1; i >= 0; i-- {
 			if m.Windows[i].ProcessExited {
@@ -286,9 +318,11 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update animations
 		m.UpdateAnimations()
 
-		// Update system info (only needed when dockbar is visible)
-		if config.DockbarPosition != "hidden" {
+		// Update system info (only when explicitly enabled)
+		if config.ShowCPU {
 			m.UpdateCPUHistory()
+		}
+		if config.ShowRAM {
 			m.UpdateRAMUsage()
 		}
 
@@ -336,48 +370,35 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Adaptive polling - slower during interactions for better mouse responsiveness
-		hasChanges := m.MarkTerminalsWithNewContent()
-
-		// Check if we have active animations
+		// Tick handles animations, interactions, whichkey, dock stats, and scripts.
+		// PTY content changes are handled by PTYDataMsg (event-driven).
 		hasAnimations := m.HasActiveAnimations()
+		needsDockTick := config.NeedsDockTick()
 
-		// Determine tick rate based on activity level
+		// Determine next tick rate
 		nextTick := TickCmd()
 		if m.InteractionMode {
-			nextTick = SlowTickCmd() // 30 FPS during interactions
-			m.idleFrames = 0
-		} else if hasChanges || hasAnimations {
-			m.idleFrames = 0
+			nextTick = SlowTickCmd() // 30 FPS during drag/resize
+		} else if hasAnimations || m.PrefixActive || m.ScriptMode || needsDockTick {
+			nextTick = TickCmd() // Normal FPS when things need periodic updates
 		} else {
-			m.idleFrames++
-			if m.idleFrames >= config.IdleThresholdFrames {
-				nextTick = IdleTickCmd() // 10 FPS when idle
-			}
+			nextTick = IdleTickCmd() // Slow idle tick (process cleanup, etc.)
 		}
+		cmds[0] = nextTick
 
-		// Skip rendering if no changes, no animations, and not in interaction mode (frame skipping).
-		// Don't skip when PrefixActive — the whichkey overlay needs re-render
-		// after a time-based delay (500ms) to appear.
-		if !hasChanges && !hasAnimations && !m.InteractionMode && !m.PrefixActive && len(m.Windows) > 0 {
+		// Only render on tick if something periodic needs visual updates
+		needsRender := hasAnimations || m.InteractionMode || m.PrefixActive || needsDockTick
+		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {
-				return m, tea.Sequence(cmds...)
+				return m, tea.Batch(cmds...)
 			}
 			return m, nextTick
 		}
 		m.renderSkipped = false
 
-		if gfxCmd := m.GetKittyGraphicsCmd(); gfxCmd != nil {
-			cmds = append(cmds, gfxCmd)
-		}
-
-		if gfxCmd := m.GetSixelGraphicsCmd(); gfxCmd != nil {
-			cmds = append(cmds, gfxCmd)
-		}
-
 		if len(cmds) > 1 {
-			return m, tea.Sequence(cmds...)
+			return m, tea.Batch(cmds...)
 		}
 		return m, nextTick
 

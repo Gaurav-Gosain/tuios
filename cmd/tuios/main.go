@@ -40,6 +40,9 @@ var (
 	noAnimations        bool
 	windowTitlePosition string
 	hideClock           bool
+	showClock           bool
+	showCPU             bool
+	showRAM             bool
 )
 
 func main() {
@@ -117,7 +120,10 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
 	rootCmd.PersistentFlags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
 	rootCmd.PersistentFlags().StringVar(&windowTitlePosition, "window-title-position", "", "Window title position: bottom, top, hidden (default: from config or bottom)")
-	rootCmd.PersistentFlags().BoolVar(&hideClock, "hide-clock", false, "Hide the clock overlay")
+	rootCmd.PersistentFlags().BoolVar(&hideClock, "hide-clock", false, "Hide the clock overlay (deprecated, clock is hidden by default)")
+	rootCmd.PersistentFlags().BoolVar(&showClock, "show-clock", false, "Show the clock overlay")
+	rootCmd.PersistentFlags().BoolVar(&showCPU, "show-cpu", false, "Show CPU graph in the dock")
+	rootCmd.PersistentFlags().BoolVar(&showRAM, "show-ram", false, "Show RAM usage in the dock")
 
 	var sshPort, sshHost, sshKeyPath, sshDefaultSession string
 	var sshEphemeral bool

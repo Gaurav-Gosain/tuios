@@ -342,7 +342,25 @@ var WindowTitlePosition = "bottom"
 
 // HideClock controls whether the clock overlay is hidden
 // Set via --hide-clock flag or appearance.hide_clock config
+// Deprecated: Use ShowClock instead. HideClock takes precedence when true.
 var HideClock = false
+
+// ShowClock controls whether the clock overlay is shown (default: hidden).
+// Set via --show-clock flag or appearance.show_clock config
+var ShowClock = false
+
+// ShowCPU controls whether the CPU graph is shown in the dock (default: hidden).
+// Set via --show-cpu flag or appearance.show_cpu config
+var ShowCPU = false
+
+// ShowRAM controls whether RAM usage is shown in the dock (default: hidden).
+// Set via --show-ram flag or appearance.show_ram config
+var ShowRAM = false
+
+// NeedsDockTick returns true if any dock element requires periodic updates.
+func NeedsDockTick() bool {
+	return ShowClock || ShowCPU || ShowRAM
+}
 
 // ScrollbackLines controls the number of lines to keep in scrollback buffer
 // Set via --scrollback-lines flag or appearance.scrollback_lines config

@@ -24,8 +24,17 @@ type Overrides struct {
 	// WindowTitlePosition overrides the window title position
 	WindowTitlePosition string
 
-	// HideClock overrides hiding the clock
+	// HideClock overrides hiding the clock (deprecated, use ShowClock)
 	HideClock bool
+
+	// ShowClock enables the clock overlay
+	ShowClock bool
+
+	// ShowCPU enables the CPU graph in the dock
+	ShowCPU bool
+
+	// ShowRAM enables the RAM usage in the dock
+	ShowRAM bool
 
 	// ScrollbackLines overrides the scrollback buffer size (0 means use default)
 	ScrollbackLines int
@@ -73,11 +82,32 @@ func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 		WindowTitlePosition = userConfig.Appearance.WindowTitlePosition
 	}
 
-	// Hide Clock - OR of CLI flag and user config
+	// Hide Clock - OR of CLI flag and user config (deprecated)
 	if userConfig != nil {
 		HideClock = overrides.HideClock || userConfig.Appearance.HideClock
 	} else {
 		HideClock = overrides.HideClock
+	}
+
+	// Show Clock - OR of CLI flag and user config
+	if userConfig != nil {
+		ShowClock = overrides.ShowClock || userConfig.Appearance.ShowClock
+	} else {
+		ShowClock = overrides.ShowClock
+	}
+
+	// Show CPU - OR of CLI flag and user config
+	if userConfig != nil {
+		ShowCPU = overrides.ShowCPU || userConfig.Appearance.ShowCPU
+	} else {
+		ShowCPU = overrides.ShowCPU
+	}
+
+	// Show RAM - OR of CLI flag and user config
+	if userConfig != nil {
+		ShowRAM = overrides.ShowRAM || userConfig.Appearance.ShowRAM
+	} else {
+		ShowRAM = overrides.ShowRAM
 	}
 
 	// Scrollback Lines - CLI flag takes precedence, otherwise use user config

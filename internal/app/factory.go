@@ -54,6 +54,7 @@ func NewOS(opts OSOptions) *OS {
 		// Core state
 		FocusedWindow:    -1,
 		WindowExitChan:   make(chan string, 10),
+		PTYDataChan:      make(chan struct{}, 1),
 		StateSyncChan:    make(chan *session.SessionState, 10),
 		ClientEventChan:  make(chan ClientEvent, 10),
 		MasterRatio:      0.5,

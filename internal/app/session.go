@@ -214,6 +214,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			ws.Width, ws.Height,
 			ws.Z,
 			ws.PTYID,
+			m.PTYDataChan,
 		)
 		if window == nil {
 			m.LogError("Failed to create daemon window for %s", ws.ID[:8])
@@ -498,6 +499,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		ws.Width, ws.Height,
 		ws.Z,
 		ws.PTYID,
+		m.PTYDataChan,
 	)
 	if window == nil {
 		return nil
@@ -922,7 +924,7 @@ func (m *OS) AddDaemonWindow(title string) *OS {
 	}
 	m.LogInfo("[DAEMON] PTY created with ID: %s", ptyID)
 
-	window := terminal.NewDaemonWindow(newID, title, x, y, width, height, len(m.Windows), ptyID)
+	window := terminal.NewDaemonWindow(newID, title, x, y, width, height, len(m.Windows), ptyID, m.PTYDataChan)
 	if window == nil {
 		m.LogError("Failed to create daemon window %s", title)
 		_ = m.DaemonClient.ClosePTY(ptyID)

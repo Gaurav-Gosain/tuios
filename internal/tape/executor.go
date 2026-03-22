@@ -2,6 +2,7 @@ package tape
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"unicode"
 )

@@ -178,9 +178,16 @@ func (m *OS) renderDock() *lipgloss.Layer {
 			Padding(0, 1)
 		rightInfo = helpStyle.Render(helpText)
 	} else {
-		cpuGraph := m.GetCPUGraph()
-		ramUsage := m.GetRAMUsage()
-		rightInfo = sysInfoStyle.Render(cpuGraph + " " + ramUsage)
+		var sysInfoParts []string
+		if config.ShowCPU {
+			sysInfoParts = append(sysInfoParts, m.GetCPUGraph())
+		}
+		if config.ShowRAM {
+			sysInfoParts = append(sysInfoParts, m.GetRAMUsage())
+		}
+		if len(sysInfoParts) > 0 {
+			rightInfo = sysInfoStyle.Render(strings.Join(sysInfoParts, " "))
+		}
 	}
 
 	actualLeftWidth := lipgloss.Width(leftInfo)

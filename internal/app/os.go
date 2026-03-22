@@ -111,6 +111,7 @@ type OS struct {
 	InteractionMode    bool                       // True when actively dragging/resizing
 	MouseSnapping      bool                       // Enable/disable mouse snapping
 	WindowExitChan     chan string                // Channel to signal window closure
+	PTYDataChan        chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
 	StateSyncChan      chan *session.SessionState // Channel for thread-safe state sync from callbacks
 	ClientEventChan    chan ClientEvent           // Channel for thread-safe client join/leave notifications
 	Animations         []*ui.Animation            // Active animations
@@ -524,7 +525,7 @@ func (m *OS) AddWindow(title string) *OS {
 		y = screenHeight / 4
 	}
 
-	window := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan)
+	window := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan)
 	if window == nil {
 		m.LogError("Failed to create window %s (PTY creation failed)", title)
 		return m // Failed to create window
