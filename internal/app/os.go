@@ -220,6 +220,13 @@ type OS struct {
 	CommandPaletteQuery    string
 	CommandPaletteSelected int
 	CommandPaletteScroll   int
+	// Session switcher overlay
+	ShowSessionSwitcher     bool
+	SessionSwitcherQuery    string
+	SessionSwitcherSelected int
+	SessionSwitcherScroll   int
+	SessionSwitcherItems    []SessionSwitcherItem
+	SessionSwitcherError    string
 }
 
 // Notification represents a temporary notification message.

@@ -265,6 +265,20 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 
 		// Session
 		{
+			Name:     "Switch Session",
+			Shortcut: "prefix+S",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ShowSessionSwitcher = true
+				m.SessionSwitcherQuery = ""
+				m.SessionSwitcherSelected = 0
+				m.SessionSwitcherScroll = 0
+				m.SessionSwitcherError = ""
+				m.SessionSwitcherItems = m.RefreshSessionList()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Show Help",
 			Shortcut: "prefix+?",
 			Category: "Session",

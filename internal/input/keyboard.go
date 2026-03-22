@@ -114,6 +114,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Handle session switcher (takes priority in terminal mode)
+	if o.ShowSessionSwitcher {
+		return handleSessionSwitcherInput(msg, o)
+	}
+
 	// Handle command palette (takes priority in terminal mode)
 	if o.ShowCommandPalette {
 		return handleCommandPaletteInput(msg, o)
@@ -483,6 +488,15 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		o.CommandPaletteSelected = 0
 		o.CommandPaletteScroll = 0
 		return o, nil
+	case "S":
+		// Open session switcher
+		o.ShowSessionSwitcher = true
+		o.SessionSwitcherQuery = ""
+		o.SessionSwitcherSelected = 0
+		o.SessionSwitcherScroll = 0
+		o.SessionSwitcherError = ""
+		o.SessionSwitcherItems = o.RefreshSessionList()
+		return o, nil
 	case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		// Jump to window by number
 		return handleTerminalWindowSelection(msg, o)
@@ -665,6 +679,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	// Handle command palette overlay
 	if o.ShowCommandPalette {
 		return handleCommandPaletteInput(msg, o)
+	}
+
+	// Handle session switcher overlay
+	if o.ShowSessionSwitcher {
+		return handleSessionSwitcherInput(msg, o)
 	}
 
 	key := msg.String()

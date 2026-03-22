@@ -700,6 +700,9 @@ const (
 	// ZIndexCommandPalette is the z-index for command palette overlay
 	ZIndexCommandPalette = 1004
 
+	// ZIndexSessionSwitcher is the z-index for session switcher overlay
+	ZIndexSessionSwitcher = 1005
+
 	// ZIndexNotifications is the z-index for notifications
 	ZIndexNotifications = 2000
 )
