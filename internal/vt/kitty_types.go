@@ -119,6 +119,7 @@ type KittyCommand struct {
 	CursorMove   int
 	Virtual      bool
 	Data         []byte
+	RawPayload   string // Original base64 payload (preserved for passthrough without re-encoding)
 	FilePath     string
 }
 

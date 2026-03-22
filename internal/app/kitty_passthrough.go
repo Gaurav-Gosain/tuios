@@ -55,6 +55,7 @@ type KittyPassthrough struct {
 // pendingDirectTransmit holds accumulated data for chunked direct transmissions
 type pendingDirectTransmit struct {
 	Data         []byte
+	RawPayload   string // Accumulated raw base64 payload (avoids decode→re-encode)
 	Format       vt.KittyGraphicsFormat
 	Compression  vt.KittyGraphicsCompression
 	Width        int
@@ -138,13 +139,26 @@ type WindowPositionInfo struct {
 func NewKittyPassthrough() *KittyPassthrough {
 	caps := GetHostCapabilities()
 	kittyPassthroughLog("NewKittyPassthrough: KittyGraphics=%v, TerminalName=%s", caps.KittyGraphics, caps.TerminalName)
+	// Open /dev/tty once for the lifetime of the passthrough (avoids per-frame open/close)
+	hostOut := os.Stdout
+	if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
+		hostOut = tty
+	}
+
 	return &KittyPassthrough{
 		enabled:           caps.KittyGraphics,
-		hostOut:           os.Stdout,
+		hostOut:           hostOut,
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
 		nextHostID:        1,
 		pendingDirectData: make(map[string]*pendingDirectTransmit),
+	}
+}
+
+// WriteToHost writes graphics data directly to the host terminal.
+func (kp *KittyPassthrough) WriteToHost(data []byte) {
+	if kp.hostOut != nil && len(data) > 0 {
+		_, _ = kp.hostOut.Write(data)
 	}
 }
 
@@ -396,7 +410,9 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 		kp.pendingDirectData[windowID] = pending
 	}
 
-	// Accumulate data
+	// Accumulate raw base64 payload (avoids decode→re-encode cycle)
+	pending.RawPayload += cmd.RawPayload
+	// Also accumulate decoded data for dimension calculations
 	pending.Data = append(pending.Data, cmd.Data...)
 
 	kittyPassthroughLog("forwardDirectTransmit: accumulated %d bytes, total=%d, more=%v, andPlace=%v, storedPos=(%d,%d)",
@@ -438,8 +454,8 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 	kp.imageIDMap[windowID][pending.ImageID] = hostID
 	kittyPassthroughLog("forwardDirectTransmit: mapped guestID=%d -> hostID=%d for window=%s", pending.ImageID, hostID, windowID[:8])
 
-	// Data is already base64 encoded from the guest
-	encoded := base64.StdEncoding.EncodeToString(pending.Data)
+	// Use the accumulated raw base64 payload directly (no decode→re-encode cycle)
+	encoded := pending.RawPayload
 
 	// Use stored position info from the first chunk (not the zeros from continuation chunks)
 	hostX := pending.WindowX + pending.ContentOffsetX + pending.CursorX
@@ -1165,17 +1181,20 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					p.Hidden = true
 				}
 			} else {
-				// Always re-place visible images to ensure correct rendering
-				// This fixes issues where one window's image operations affect another
-				if !p.Hidden {
-					kp.deleteOnePlacement(p)
+				// Only re-place if position/clipping actually changed
+				posChanged := p.Hidden || p.HostX != newHostX || p.HostY != newHostY ||
+					p.ClipTop != clipTop || p.ClipBottom != clipBottom || p.MaxShowable != maxShowableRows
+				if posChanged {
+					if !p.Hidden {
+						kp.deleteOnePlacement(p)
+					}
+					p.HostX = newHostX
+					p.HostY = newHostY
+					p.ClipTop = clipTop
+					p.ClipBottom = clipBottom
+					p.MaxShowable = maxShowableRows
+					kp.placeOne(p)
 				}
-				p.HostX = newHostX
-				p.HostY = newHostY
-				p.ClipTop = clipTop
-				p.ClipBottom = clipBottom
-				p.MaxShowable = maxShowableRows
-				kp.placeOne(p)
 				p.Hidden = false
 			}
 		}

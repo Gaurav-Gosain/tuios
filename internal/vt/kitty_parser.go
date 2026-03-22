@@ -26,6 +26,9 @@ func ParseKittyCommand(data []byte) (*KittyCommand, error) {
 	}
 
 	if len(dataPart) > 0 {
+		// Always preserve raw payload for passthrough (avoids decode→re-encode cycle)
+		cmd.RawPayload = string(dataPart)
+
 		switch cmd.Medium {
 		case KittyMediumFile, KittyMediumTempFile:
 			decoded, err := base64.StdEncoding.DecodeString(string(dataPart))

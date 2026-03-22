@@ -226,12 +226,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 		return nil
 	}
 	kittyPassthroughLog("GetKittyGraphicsCmd: flushing %d bytes", len(data))
-	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
-	if err != nil {
-		return nil
-	}
-	_, _ = tty.Write(data)
-	_ = tty.Close()
+	m.KittyPassthrough.WriteToHost(data)
 	return nil
 }
 
