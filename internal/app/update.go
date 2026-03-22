@@ -397,6 +397,14 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.renderSkipped = false
 
+		// Refresh graphics during interaction (images follow windows during drag)
+		if gfxCmd := m.GetKittyGraphicsCmd(); gfxCmd != nil {
+			cmds = append(cmds, gfxCmd)
+		}
+		if gfxCmd := m.GetSixelGraphicsCmd(); gfxCmd != nil {
+			cmds = append(cmds, gfxCmd)
+		}
+
 		if len(cmds) > 1 {
 			return m, tea.Batch(cmds...)
 		}
