@@ -146,12 +146,21 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 	canvas.Compose(lipgloss.NewCompositor(layers...))
 
-	// Refresh graphics (kitty/sixel) after composing — this ensures images
-	// reposition correctly during scrollback, drag, resize, etc.
-	// Called here so ANY render triggers graphics refresh, not just specific Update handlers.
+	// Refresh graphics (kitty/sixel) after composing.
+	// Hide all images when any overlay is active (images render on top of text,
+	// making overlays invisible). Re-place them when overlays close.
 	if render {
-		m.GetKittyGraphicsCmd()
-		m.GetSixelGraphicsCmd()
+		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
+			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
+			m.ShowLogs || m.ShowCacheStats
+		if hasOverlay {
+			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
+				m.KittyPassthrough.HideAllPlacements()
+			}
+		} else {
+			m.GetKittyGraphicsCmd()
+			m.GetSixelGraphicsCmd()
+		}
 	}
 
 	return canvas

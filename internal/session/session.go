@@ -429,7 +429,7 @@ func (p *PTY) Subscribe(clientID string) <-chan []byte {
 		return existing
 	}
 
-	ch := make(chan []byte, 256)
+	ch := make(chan []byte, 4096) // Large buffer to prevent frame drops during video playback
 	p.subscribers[clientID] = ch
 	debugLog("[DEBUG] PTY %s: added subscriber %s (total: %d)", p.ID[:8], clientID, len(p.subscribers))
 
