@@ -194,6 +194,15 @@ func (kp *KittyPassthrough) FlushPending() []byte {
 	return out
 }
 
+// flushToHost writes any pending output immediately to the host terminal.
+// Must be called while kp.mu is already held.
+func (kp *KittyPassthrough) flushToHost() {
+	if len(kp.pendingOutput) > 0 && kp.hostOut != nil {
+		_, _ = kp.hostOut.Write(kp.pendingOutput)
+		kp.pendingOutput = kp.pendingOutput[:0]
+	}
+}
+
 func (kp *KittyPassthrough) allocateHostID() uint32 {
 	id := kp.nextHostID
 	kp.nextHostID++
@@ -352,6 +361,9 @@ func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInpu
 func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile {
 		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
+		// Flush file-based transmits immediately to host (don't wait for render cycle).
+		// This is critical for video playback (ytk) where frames must be displayed ASAP.
+		kp.flushToHost()
 		return nil
 	}
 
@@ -366,6 +378,8 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
 		kp.pendingOutput = append(kp.pendingOutput, rawData...)
 		kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
+		// Flush transmit-only commands immediately (don't wait for render cycle)
+		kp.flushToHost()
 		return nil
 	}
 
