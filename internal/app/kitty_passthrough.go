@@ -1025,28 +1025,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 	// Get all windows upfront for occlusion detection
 	allWindows := getAllWindows()
 
-	// First pass: check if ANY window is being manipulated
-	anyBeingManipulated := false
-	for windowID := range kp.placements {
-		if info := allWindows[windowID]; info != nil && info.IsBeingManipulated {
-			anyBeingManipulated = true
-			break
-		}
-	}
-
-	// If any window is being dragged/resized, hide ALL images to prevent ANSI leaks
-	if anyBeingManipulated {
-		for _, placements := range kp.placements {
-			for _, p := range placements {
-				if !p.Hidden {
-					kp.deleteOnePlacement(p)
-					p.Hidden = true
-				}
-			}
-		}
-		return
-	}
-
 	for windowID, placements := range kp.placements {
 		if len(placements) == 0 {
 			continue
@@ -1065,6 +1043,17 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		}
 
 		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, IsAltScreen=%v, visible=%v", windowID[:8], info.IsAltScreen, info.Visible)
+
+		// During window manipulation (drag/resize), hide only this window's images
+		if info.IsBeingManipulated {
+			for _, p := range placements {
+				if !p.Hidden {
+					kp.deleteOnePlacement(p)
+					p.Hidden = true
+				}
+			}
+			continue
+		}
 
 		// Calculate viewport dimensions (accounting for window borders)
 		viewportTop := info.ScrollbackLen - info.ScrollOffset

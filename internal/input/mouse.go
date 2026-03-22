@@ -757,7 +757,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		for i := range o.Windows {
 			o.Windows[i].IsBeingManipulated = false
-			o.Windows[i].ContentDirty = true // Invalidate cache when exiting resize mode
+			o.Windows[i].ContentDirty = true  // Invalidate cache when exiting resize mode
+			o.Windows[i].CachedLayer = nil    // Force full layer rebuild for graphics refresh
 		}
 
 		// Comprehensive state cleanup to prevent stale values from affecting subsequent operations

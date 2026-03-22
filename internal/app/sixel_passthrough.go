@@ -219,7 +219,7 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			windowID[:min(8, len(windowID))], info.WindowX, info.WindowY, info.Width, info.Height,
 			info.ScrollbackLen, info.ScrollOffset)
 
-		// During window manipulation (drag/resize), hide all images
+		// During window manipulation (drag/resize), hide only this window's images
 		if info.IsBeingManipulated {
 			for _, p := range placements {
 				if !p.Hidden {

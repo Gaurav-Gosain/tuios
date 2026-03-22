@@ -91,7 +91,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.CachedLayer.GetY() != window.Y ||
 			window.CachedLayer.GetZ() != window.Z
 
-		if !needsRedraw || (!isFocused && !isFullyVisible && !window.ContentDirty && !window.IsBeingManipulated && window.CachedLayer != nil) {
+		if !needsRedraw || (!isFocused && !isFullyVisible && !window.ContentDirty && !window.PositionDirty && !window.IsBeingManipulated && window.CachedLayer != nil) {
 			layers = append(layers, window.CachedLayer)
 			continue
 		}
