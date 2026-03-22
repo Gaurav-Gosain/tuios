@@ -318,10 +318,12 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	// Visual mode
 	case "v":
 		enterVisualChar(cm, window)
+		window.InvalidateCache()
 		o.ShowNotification("VISUAL", "info", 0)
 		return o, nil
 	case "V":
 		enterVisualLine(cm, window)
+		window.InvalidateCache()
 		o.ShowNotification("VISUAL LINE", "info", 0)
 		return o, nil
 	}
