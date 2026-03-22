@@ -127,6 +127,18 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Smart Split",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.AutoTiling {
+					m.SmartSplitFocused()
+					m.ShowNotification("Smart Split", "info", config.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
 			Name:     "Rotate Split",
 			Shortcut: "prefix+R",
 			Category: "Layout",

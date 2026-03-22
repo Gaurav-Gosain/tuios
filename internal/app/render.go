@@ -140,6 +140,15 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	}
 
 	canvas.Compose(lipgloss.NewCompositor(layers...))
+
+	// Refresh graphics (kitty/sixel) after composing — this ensures images
+	// reposition correctly during scrollback, drag, resize, etc.
+	// Called here so ANY render triggers graphics refresh, not just specific Update handlers.
+	if render {
+		m.GetKittyGraphicsCmd()
+		m.GetSixelGraphicsCmd()
+	}
+
 	return canvas
 }
 

@@ -73,6 +73,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("resize_height_grow_top", handleResizeHeightGrowTop)
 
 	// BSP tiling actions
+	d.Register("smart_split", handleSmartSplit)
 	d.Register("split_horizontal", handleSplitHorizontal)
 	d.Register("split_vertical", handleSplitVertical)
 	d.Register("rotate_split", handleRotateSplit)
@@ -386,6 +387,14 @@ func handleResizeHeightGrowTop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 // ============================================================================
 // BSP Tiling Action Handlers
 // ============================================================================
+
+func handleSmartSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.SmartSplitFocused()
+		o.ShowNotification("Smart Split", "info", config.NotificationDuration)
+	}
+	return o, nil
+}
 
 func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {

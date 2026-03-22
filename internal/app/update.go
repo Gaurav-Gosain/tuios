@@ -291,19 +291,10 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PTYDataMsg:
 		// PTY output arrived — mark dirty terminals and re-render immediately.
 		// This is the primary render trigger, replacing tick-driven rendering.
+		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
 		m.MarkTerminalsWithNewContent()
 		m.renderSkipped = false
-
-		cmds := []tea.Cmd{ListenForPTYData(m.PTYDataChan)}
-
-		if gfxCmd := m.GetKittyGraphicsCmd(); gfxCmd != nil {
-			cmds = append(cmds, gfxCmd)
-		}
-		if gfxCmd := m.GetSixelGraphicsCmd(); gfxCmd != nil {
-			cmds = append(cmds, gfxCmd)
-		}
-
-		return m, tea.Batch(cmds...)
+		return m, ListenForPTYData(m.PTYDataChan)
 
 	case TickerMsg:
 		// Maintenance tick: animations, dock stats, script playback, process cleanup.
@@ -396,14 +387,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nextTick
 		}
 		m.renderSkipped = false
-
-		// Refresh graphics during interaction (images follow windows during drag)
-		if gfxCmd := m.GetKittyGraphicsCmd(); gfxCmd != nil {
-			cmds = append(cmds, gfxCmd)
-		}
-		if gfxCmd := m.GetSixelGraphicsCmd(); gfxCmd != nil {
-			cmds = append(cmds, gfxCmd)
-		}
+		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
 
 		if len(cmds) > 1 {
 			return m, tea.Batch(cmds...)

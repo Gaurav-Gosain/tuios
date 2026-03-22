@@ -967,11 +967,11 @@ func (m *OS) GetOrCreateBSPTree() *layout.BSPTree {
 	tree, exists := m.WorkspaceTrees[m.CurrentWorkspace]
 	if !exists || tree == nil {
 		tree = layout.NewBSPTree()
-		// Use SchemeSpiral (alternating V,H,V,H) as default if TilingScheme not set
+		// Use SchemeSmartSplit as default if TilingScheme not set
 		if m.TilingScheme == layout.SchemeLongestSide {
 			// SchemeLongestSide is the zero value, which means it wasn't explicitly set
-			// Default to SchemeSpiral for proper alternating behavior
-			tree.AutoScheme = layout.SchemeSpiral
+			// Default to SchemeSmartSplit for aspect-ratio-aware splitting
+			tree.AutoScheme = layout.SchemeSmartSplit
 		} else {
 			tree.AutoScheme = m.TilingScheme
 		}
@@ -1227,6 +1227,31 @@ func (m *OS) SplitFocusedVertical() {
 	m.PreselectionDir = layout.PreselectionRight
 
 	// Create a new window - it will be added with the preselection
+	m.AddWindow("")
+
+	// Clear the split target
+	m.SplitTargetWindowID = ""
+}
+
+// SmartSplitFocused splits the focused window using the smart split algorithm:
+// it chooses horizontal or vertical based on the focused window's aspect ratio.
+func (m *OS) SmartSplitFocused() {
+	if !m.AutoTiling {
+		return
+	}
+
+	focusedWin := m.GetFocusedWindow()
+	if focusedWin == nil {
+		return
+	}
+
+	// Store the target window ID so AddWindowToBSPTree splits at the focused window
+	m.SplitTargetWindowID = focusedWin.ID
+
+	// No preselection — let determineAutoSplit (SchemeSmartSplit) pick the direction
+	m.PreselectionDir = layout.PreselectionNone
+
+	// Create a new window — AddWindowToBSPTree will use SplitNone which triggers auto split
 	m.AddWindow("")
 
 	// Clear the split target

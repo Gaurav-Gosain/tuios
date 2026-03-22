@@ -192,7 +192,7 @@ func NewBSPTree() *BSPTree {
 	return &BSPTree{
 		Root:         nil,
 		WindowToNode: make(map[int]*TileNode),
-		AutoScheme:   SchemeSpiral,
+		AutoScheme:   SchemeSmartSplit,
 		DefaultRatio: 0.5,
 	}
 }
@@ -512,8 +512,43 @@ func (t *BSPTree) findAnyWindowInSubtree(node *TileNode) int {
 	return t.findAnyWindowInSubtree(node.Right)
 }
 
+// nodeRect computes the actual rectangle a node occupies by walking up from
+// the node to the root and applying split ratios along the way.
+func (t *BSPTree) nodeRect(node *TileNode, bounds Rect) Rect {
+	if node == nil {
+		return bounds
+	}
+	// Collect ancestors from root to node's parent
+	var ancestors []*TileNode
+	for cur := node; cur.Parent != nil; cur = cur.Parent {
+		ancestors = append(ancestors, cur)
+	}
+	// Walk from root down, narrowing bounds at each split
+	rect := bounds
+	for i := len(ancestors) - 1; i >= 0; i-- {
+		child := ancestors[i]
+		parent := child.Parent
+		if parent.SplitType == SplitVertical {
+			splitX := rect.X + int(float64(rect.W)*parent.SplitRatio)
+			if child.IsLeftChild() {
+				rect = Rect{X: rect.X, Y: rect.Y, W: splitX - rect.X, H: rect.H}
+			} else {
+				rect = Rect{X: splitX, Y: rect.Y, W: rect.X + rect.W - splitX, H: rect.H}
+			}
+		} else {
+			splitY := rect.Y + int(float64(rect.H)*parent.SplitRatio)
+			if child.IsLeftChild() {
+				rect = Rect{X: rect.X, Y: rect.Y, W: rect.W, H: splitY - rect.Y}
+			} else {
+				rect = Rect{X: rect.X, Y: splitY, W: rect.W, H: rect.Y + rect.H - splitY}
+			}
+		}
+	}
+	return rect
+}
+
 // determineAutoSplit determines the split direction based on the auto scheme
-func (t *BSPTree) determineAutoSplit(_ *TileNode, bounds Rect) SplitType {
+func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitType {
 	switch t.AutoScheme {
 	case SchemeLongestSide:
 		// Split along the longest dimension
@@ -529,6 +564,25 @@ func (t *BSPTree) determineAutoSplit(_ *TileNode, bounds Rect) SplitType {
 		// Even count (0, 2, 4...) = Vertical (left|right)
 		// Odd count (1, 3, 5...) = Horizontal (top/bottom)
 		if splitCount%2 == 0 {
+			return SplitVertical
+		}
+		return SplitHorizontal
+
+	case SchemeSmartSplit:
+		// Compute the focused window's actual rect from the BSP tree
+		r := t.nodeRect(targetNode, bounds)
+		w, h := r.W, r.H
+		if w > h*2 {
+			// Very wide window: split vertically (side by side)
+			return SplitVertical
+		}
+		if h > w {
+			// Tall window: split horizontally (stacked)
+			return SplitHorizontal
+		}
+		// Otherwise alternate based on split depth
+		depth := targetNode.Depth()
+		if depth%2 == 0 {
 			return SplitVertical
 		}
 		return SplitHorizontal

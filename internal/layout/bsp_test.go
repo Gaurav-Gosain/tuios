@@ -17,8 +17,8 @@ func TestNewBSPTree(t *testing.T) {
 	if tree.WindowCount() != 0 {
 		t.Errorf("New tree should have 0 windows, got %d", tree.WindowCount())
 	}
-	if tree.AutoScheme != SchemeSpiral {
-		t.Errorf("Expected default scheme SchemeSpiral, got %v", tree.AutoScheme)
+	if tree.AutoScheme != SchemeSmartSplit {
+		t.Errorf("Expected default scheme SchemeSmartSplit, got %v", tree.AutoScheme)
 	}
 	if tree.DefaultRatio != 0.5 {
 		t.Errorf("Expected default ratio 0.5, got %f", tree.DefaultRatio)
