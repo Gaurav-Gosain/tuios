@@ -192,7 +192,7 @@ func NewBSPTree() *BSPTree {
 	return &BSPTree{
 		Root:         nil,
 		WindowToNode: make(map[int]*TileNode),
-		AutoScheme:   SchemeSmartSplit,
+		AutoScheme:   SchemeSpiral,
 		DefaultRatio: 0.5,
 	}
 }

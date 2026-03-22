@@ -967,11 +967,11 @@ func (m *OS) GetOrCreateBSPTree() *layout.BSPTree {
 	tree, exists := m.WorkspaceTrees[m.CurrentWorkspace]
 	if !exists || tree == nil {
 		tree = layout.NewBSPTree()
-		// Use SchemeSmartSplit as default if TilingScheme not set
+		// Use SchemeSpiral as default if TilingScheme not set
 		if m.TilingScheme == layout.SchemeLongestSide {
 			// SchemeLongestSide is the zero value, which means it wasn't explicitly set
-			// Default to SchemeSmartSplit for aspect-ratio-aware splitting
-			tree.AutoScheme = layout.SchemeSmartSplit
+			// Default to SchemeSpiral for balanced alternating splits
+			tree.AutoScheme = layout.SchemeSpiral
 		} else {
 			tree.AutoScheme = m.TilingScheme
 		}
