@@ -1,17 +1,17 @@
 module github.com/Gaurav-Gosain/tuios
 
-go 1.25.0
+go 1.25.8
 
 require (
-	charm.land/bubbletea/v2 v2.0.0
-	charm.land/lipgloss/v2 v2.0.0
-	charm.land/wish/v2 v2.0.0-20251118130305-6cd7463a7b97
+	charm.land/bubbletea/v2 v2.0.2
+	charm.land/lipgloss/v2 v2.0.2
+	charm.land/wish/v2 v2.0.0
 	github.com/Gaurav-Gosain/sip v0.1.11
 	github.com/adrg/xdg v0.5.3
-	github.com/charmbracelet/colorprofile v0.4.2
+	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/fang v0.4.4
 	github.com/charmbracelet/ssh v0.0.0-20250826160808-ebfa259c7309
-	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8
+	github.com/charmbracelet/ultraviolet v0.0.0-20260316091819-b93f6a3b8502
 	github.com/charmbracelet/x/xpty v0.1.3
 	github.com/google/uuid v1.6.0
 	github.com/lrstanley/bubbletint/v2 v2.0.0-alpha.9
@@ -19,8 +19,8 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/shirou/gopsutil/v4 v4.25.10
 	github.com/spf13/cobra v1.10.1
-	golang.org/x/sys v0.41.0
-	golang.org/x/term v0.36.0
+	golang.org/x/sys v0.42.0
+	golang.org/x/term v0.40.0
 )
 
 require (
@@ -29,14 +29,14 @@ require (
 )
 
 require (
-	charm.land/log/v2 v2.0.0-20251110204020-529bb77f35da // indirect
+	charm.land/log/v2 v2.0.0 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/keygen v0.5.4 // indirect
 	github.com/charmbracelet/lipgloss v1.1.0 // indirect
 	github.com/charmbracelet/log v0.4.2 // indirect
 	github.com/charmbracelet/x/ansi v0.11.6
-	github.com/charmbracelet/x/cellbuf v0.0.14 // indirect
+	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/conpty v0.1.1 // indirect
 	github.com/charmbracelet/x/errors v0.0.0-20251110184232-6ab307057ac7 // indirect
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20250603201427-c31516f43444 // indirect
@@ -69,9 +69,9 @@ require (
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
-	golang.org/x/net v0.45.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 )
