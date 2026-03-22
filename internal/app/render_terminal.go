@@ -61,14 +61,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	builder := pool.GetStringBuilder()
 	defer pool.PutStringBuilder(builder)
 
-	contentW := window.ContentWidth()
-	contentH := window.ContentHeight()
-
-	estimatedSize := contentW * contentH
+	estimatedSize := (window.Width - 2) * (window.Height - 2)
 	builder.Grow(estimatedSize)
 
-	maxY := min(contentH, screen.Height())
-	maxX := min(contentW, screen.Width())
+	maxY := min(window.Height-2, screen.Height())
+	maxX := min(window.Width-2, screen.Width())
 
 	useOptimizedRendering := !isFocused && !inTerminalMode
 
@@ -579,8 +576,8 @@ func overlayScrollbar(content string, scrollOffset, scrollbackLen, viewportHeigh
 }
 
 func (m *OS) renderResizeIndicator(window *terminal.Window) string {
-	termWidth := window.ContentWidth()
-	termHeight := window.ContentHeight()
+	termWidth := max(window.Width-2, 1)
+	termHeight := max(window.Height-2, 1)
 
 	resizeMsg := fmt.Sprintf("Resizing... %dx%d", termWidth, termHeight)
 
