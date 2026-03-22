@@ -376,7 +376,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		needsDockTick := config.NeedsDockTick()
 
 		// Determine next tick rate
-		nextTick := TickCmd()
+		var nextTick tea.Cmd
 		if m.InteractionMode {
 			nextTick = SlowTickCmd() // 30 FPS during drag/resize
 		} else if hasAnimations || m.PrefixActive || m.ScriptMode || needsDockTick {
