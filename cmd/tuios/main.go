@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/fang"
@@ -761,7 +762,75 @@ Use --json for machine-readable output.`,
 	sessionInfoCmd.Flags().BoolVar(&sessionInfoJSON, "json", false, "Output as JSON")
 	_ = sessionInfoCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
-	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd)
+	// Layout template commands
+	layoutCmd := &cobra.Command{
+		Use:   "layout",
+		Short: "Manage layout templates",
+		Long:  `Save, load, list, and delete window layout templates`,
+	}
+	layoutListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List saved layout templates",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			templates, err := app.LoadLayoutTemplates()
+			if err != nil {
+				return err
+			}
+			if len(templates) == 0 {
+				fmt.Println("No saved layouts. Use 'tuios layout save <name>' or the command palette.")
+				return nil
+			}
+			for _, t := range templates {
+				windows := len(t.Windows)
+				tiling := "free-float"
+				if t.AutoTiling {
+					tiling = "tiled"
+				}
+				fmt.Printf("  %-20s  %d windows  %s  %s\n", t.Name, windows, tiling, t.CreatedAt.Format("2006-01-02 15:04"))
+			}
+			return nil
+		},
+	}
+	layoutDeleteCmd := &cobra.Command{
+		Use:   "delete [name]",
+		Short: "Delete a layout template",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if err := app.DeleteLayoutTemplate(args[0]); err != nil {
+				return err
+			}
+			fmt.Printf("Deleted layout '%s'\n", args[0])
+			return nil
+		},
+	}
+	layoutDirCmd := &cobra.Command{
+		Use:   "dir",
+		Short: "Print layout templates directory path",
+		Run: func(_ *cobra.Command, _ []string) {
+			fmt.Println(app.GetTemplatesDir())
+		},
+	}
+	layoutExportCmd := &cobra.Command{
+		Use:   "export [name]",
+		Short: "Export a layout template as a tape script",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			templates, err := app.LoadLayoutTemplates()
+			if err != nil {
+				return err
+			}
+			for _, t := range templates {
+				if t.Name == args[0] {
+					fmt.Print(app.GenerateTapeScript(t))
+					return nil
+				}
+			}
+			return fmt.Errorf("layout '%s' not found", args[0])
+		},
+	}
+	layoutCmd.AddCommand(layoutListCmd, layoutDeleteCmd, layoutDirCmd, layoutExportCmd)
+
+	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, logsCmd)

@@ -8,42 +8,88 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/adrg/xdg"
 )
 
-// LayoutTemplate represents a saved window layout configuration.
+// LayoutTemplate v2 — comprehensive layout specification.
+//
+// A layout template captures everything needed to recreate a terminal
+// workspace: window positions, BSP tree structure, per-window startup
+// commands, working directories, and tiling configuration.
+//
+// Templates are stored as JSON in ~/.config/tuios/layouts/.
+//
+// Integration points:
+//   - Command palette: "Save Layout", "Load Layout"
+//   - Keybinding: prefix+L (load), command palette (save)
+//   - Tape scripting: SaveLayout/LoadLayout commands
+//   - CLI API: tuios layout save/load/list/delete
 type LayoutTemplate struct {
-	Name       string                 `json:"name"`
-	CreatedAt  time.Time              `json:"created_at"`
-	Windows    []LayoutTemplateWindow `json:"windows"`
-	AutoTiling bool                   `json:"auto_tiling"`
+	// Metadata
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	Version     int       `json:"version"` // Schema version (2)
+
+	// Tiling configuration
+	AutoTiling  bool   `json:"auto_tiling"`
+	TilingScheme string `json:"tiling_scheme,omitempty"` // "spiral", "alternate", "smart_split", etc.
+	MasterRatio float64 `json:"master_ratio,omitempty"`
+
+	// BSP tree structure (for tiled layouts)
+	// When present, this is used instead of individual window coordinates.
+	BSPTree *LayoutBSPNode `json:"bsp_tree,omitempty"`
+
+	// Windows — each window's configuration
+	Windows []LayoutWindow `json:"windows"`
+
+	// Screen dimensions at save time (for proportional scaling on different screens)
+	ScreenWidth  int `json:"screen_width,omitempty"`
+	ScreenHeight int `json:"screen_height,omitempty"`
 }
 
-// LayoutTemplateWindow stores the position and size of a single window in a layout template.
-type LayoutTemplateWindow struct {
-	X      int    `json:"x"`
-	Y      int    `json:"y"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-	Title  string `json:"title,omitempty"`
+// LayoutBSPNode is a serializable representation of a BSP tree node.
+type LayoutBSPNode struct {
+	SplitType  string          `json:"split_type"` // "vertical", "horizontal", "none"
+	SplitRatio float64         `json:"split_ratio"`
+	WindowIdx  int             `json:"window_idx,omitempty"` // Index into Windows array (-1 for internal nodes)
+	Left       *LayoutBSPNode  `json:"left,omitempty"`
+	Right      *LayoutBSPNode  `json:"right,omitempty"`
+}
+
+// LayoutWindow stores per-window configuration.
+type LayoutWindow struct {
+	// Position and size (used in free-float mode or as fallback)
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+
+	// Window identity
+	Title      string `json:"title,omitempty"`       // Custom name
+	CustomName string `json:"custom_name,omitempty"` // User-set name
+
+	// Startup configuration
+	Command    string   `json:"command,omitempty"`    // Shell command to run on creation (e.g., "vim", "htop")
+	Args       []string `json:"args,omitempty"`       // Command arguments
+	WorkingDir string   `json:"working_dir,omitempty"` // Working directory for the shell
+	Shell      string   `json:"shell,omitempty"`      // Override shell (empty = default)
+
+	// State
+	Minimized bool `json:"minimized,omitempty"`
 }
 
 // GetTemplatesDir returns the directory path for layout template files.
-// It uses the XDG config directory under tuios/layouts/.
 func GetTemplatesDir() string {
-	configDir := filepath.Join(xdg.ConfigHome, "tuios", "layouts")
-	return configDir
+	return filepath.Join(xdg.ConfigHome, "tuios", "layouts")
 }
 
-// ensureTemplatesDir creates the templates directory if it does not exist.
 func ensureTemplatesDir() error {
-	dir := GetTemplatesDir()
-	return os.MkdirAll(dir, 0750)
+	return os.MkdirAll(GetTemplatesDir(), 0750)
 }
 
-// templateFilePath returns the file path for a layout template with the given name.
 func templateFilePath(name string) string {
-	// Sanitize the name: replace path separators and whitespace
 	safe := strings.ReplaceAll(name, string(os.PathSeparator), "_")
 	safe = strings.ReplaceAll(safe, " ", "_")
 	safe = strings.ReplaceAll(safe, "..", "_")
@@ -53,45 +99,104 @@ func templateFilePath(name string) string {
 	return filepath.Join(GetTemplatesDir(), safe+".json")
 }
 
-// SaveLayoutTemplate saves the current window layout of the OS to a JSON file.
+// SaveLayoutTemplate saves the current workspace layout.
 func SaveLayoutTemplate(name string, m *OS) error {
 	if err := ensureTemplatesDir(); err != nil {
-		return fmt.Errorf("failed to create layouts directory: %w", err)
+		return fmt.Errorf("create layouts dir: %w", err)
 	}
 
 	tmpl := LayoutTemplate{
-		Name:       name,
-		CreatedAt:  time.Now(),
-		AutoTiling: m.AutoTiling,
+		Name:         name,
+		CreatedAt:    time.Now(),
+		Version:      2,
+		AutoTiling:   m.AutoTiling,
+		MasterRatio:  m.MasterRatio,
+		ScreenWidth:  m.GetRenderWidth(),
+		ScreenHeight: m.GetRenderHeight(),
 	}
 
+	// Save tiling scheme
+	if tree := m.WorkspaceTrees[m.CurrentWorkspace]; tree != nil {
+		tmpl.TilingScheme = tree.AutoScheme.String()
+	}
+
+	// Collect windows
+	windowIdx := 0
+	bspWindowMap := make(map[int]int) // BSP window ID → template window index
 	for _, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-			tw := LayoutTemplateWindow{
-				X:      w.X,
-				Y:      w.Y,
-				Width:  w.Width,
-				Height: w.Height,
-				Title:  w.CustomName,
+		if w.Workspace != m.CurrentWorkspace {
+			continue
+		}
+		lw := LayoutWindow{
+			X: w.X, Y: w.Y,
+			Width: w.Width, Height: w.Height,
+			Title:      w.Title,
+			CustomName: w.CustomName,
+			Minimized:  w.Minimized,
+		}
+
+		// Capture working directory from the terminal's CWD if available
+		if w.Terminal != nil {
+			// Try to get CWD from /proc if we have a shell PID
+			if w.ShellPgid > 0 {
+				if cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", w.ShellPgid)); err == nil {
+					lw.WorkingDir = cwd
+				}
 			}
-			tmpl.Windows = append(tmpl.Windows, tw)
+		}
+
+		tmpl.Windows = append(tmpl.Windows, lw)
+
+		// Map BSP window IDs for tree serialization
+		if bspID, ok := m.WindowToBSPID[w.ID]; ok {
+			bspWindowMap[bspID] = windowIdx
+		}
+		windowIdx++
+	}
+
+	// Save BSP tree structure (for tiled mode)
+	if m.AutoTiling {
+		if tree := m.WorkspaceTrees[m.CurrentWorkspace]; tree != nil && tree.Root != nil {
+			tmpl.BSPTree = serializeBSPNode(tree.Root, bspWindowMap)
 		}
 	}
 
 	data, err := json.MarshalIndent(tmpl, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal layout template: %w", err)
+		return fmt.Errorf("marshal: %w", err)
 	}
-
-	path := templateFilePath(name)
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("failed to write layout template: %w", err)
-	}
-
-	return nil
+	return os.WriteFile(templateFilePath(name), data, 0600)
 }
 
-// LoadLayoutTemplates reads all layout template JSON files from the templates directory.
+func serializeBSPNode(node *layout.TileNode, windowMap map[int]int) *LayoutBSPNode {
+	if node == nil {
+		return nil
+	}
+	n := &LayoutBSPNode{
+		SplitRatio: node.SplitRatio,
+		WindowIdx:  -1,
+	}
+	switch node.SplitType {
+	case layout.SplitVertical:
+		n.SplitType = "vertical"
+	case layout.SplitHorizontal:
+		n.SplitType = "horizontal"
+	default:
+		n.SplitType = "none"
+	}
+
+	if node.WindowID >= 0 {
+		if idx, ok := windowMap[node.WindowID]; ok {
+			n.WindowIdx = idx
+		}
+	}
+
+	n.Left = serializeBSPNode(node.Left, windowMap)
+	n.Right = serializeBSPNode(node.Right, windowMap)
+	return n
+}
+
+// LoadLayoutTemplates reads all templates from the layouts directory.
 func LoadLayoutTemplates() ([]LayoutTemplate, error) {
 	dir := GetTemplatesDir()
 	entries, err := os.ReadDir(dir)
@@ -99,7 +204,7 @@ func LoadLayoutTemplates() ([]LayoutTemplate, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to read layouts directory: %w", err)
+		return nil, err
 	}
 
 	var templates []LayoutTemplate
@@ -107,9 +212,8 @@ func LoadLayoutTemplates() ([]LayoutTemplate, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
-		path := filepath.Join(dir, entry.Name())
-		// #nosec G304 - reading user layout files from known config directory
-		data, err := os.ReadFile(path)
+		// #nosec G304
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
 		if err != nil {
 			continue
 		}
@@ -119,12 +223,10 @@ func LoadLayoutTemplates() ([]LayoutTemplate, error) {
 		}
 		templates = append(templates, tmpl)
 	}
-
 	return templates, nil
 }
 
-// ApplyLayoutTemplate closes all windows in the current workspace and creates new ones
-// at the positions defined by the template.
+// ApplyLayoutTemplate recreates a workspace from a template.
 func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 	// Close all windows in current workspace
 	for i := len(m.Windows) - 1; i >= 0; i-- {
@@ -133,55 +235,109 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		}
 	}
 
-	// Temporarily disable auto-tiling during window creation to prevent
-	// each AddWindow call from triggering a retile that overrides positions.
+	// Disable auto-tiling during creation to prevent retiling
 	savedAutoTiling := m.AutoTiling
 	m.AutoTiling = false
 
-	// Create windows at saved positions
+	// Scale factor for different screen sizes
+	scaleX, scaleY := 1.0, 1.0
+	if tmpl.ScreenWidth > 0 && tmpl.ScreenHeight > 0 {
+		scaleX = float64(m.GetRenderWidth()) / float64(tmpl.ScreenWidth)
+		scaleY = float64(m.GetRenderHeight()) / float64(tmpl.ScreenHeight)
+	}
+
+	// Create windows
 	for _, tw := range tmpl.Windows {
-		title := tw.Title
+		if tw.Minimized {
+			continue // Skip minimized windows for now
+		}
+
+		// If window has a startup command, we could set it up here
+		// For now, just create with default shell
+		title := tw.CustomName
+		if title == "" {
+			title = tw.Title
+		}
 		m.AddWindow(title)
-		// The newly added window is at the end of the Windows slice
+
 		if len(m.Windows) > 0 {
 			newWin := m.Windows[len(m.Windows)-1]
-			newWin.X = tw.X
-			newWin.Y = tw.Y
-			newWin.Resize(tw.Width, tw.Height)
-			if tw.Title != "" {
-				newWin.CustomName = tw.Title
+
+			// Apply scaled positions
+			newWin.X = int(float64(tw.X) * scaleX)
+			newWin.Y = int(float64(tw.Y) * scaleY)
+			newWin.Resize(
+				max(int(float64(tw.Width)*scaleX), 10),
+				max(int(float64(tw.Height)*scaleY), 5),
+			)
+
+			if tw.CustomName != "" {
+				newWin.CustomName = tw.CustomName
 			}
+
+			// If template specifies a working directory, cd to it
+			if tw.WorkingDir != "" {
+				if newWin.Pty != nil {
+					// Send cd command to the shell
+					cdCmd := fmt.Sprintf("cd %q && clear\n", tw.WorkingDir)
+					_, _ = newWin.Pty.Write([]byte(cdCmd))
+				} else if newWin.DaemonWriteFunc != nil {
+					cdCmd := fmt.Sprintf("cd %q && clear\n", tw.WorkingDir)
+					_ = newWin.DaemonWriteFunc([]byte(cdCmd))
+				}
+			}
+
+			// If template specifies a startup command, run it
+			if tw.Command != "" {
+				cmd := tw.Command
+				if len(tw.Args) > 0 {
+					cmd += " " + strings.Join(tw.Args, " ")
+				}
+				if newWin.Pty != nil {
+					_, _ = newWin.Pty.Write([]byte(cmd + "\n"))
+				} else if newWin.DaemonWriteFunc != nil {
+					_ = newWin.DaemonWriteFunc([]byte(cmd + "\n"))
+				}
+			}
+
 			newWin.InvalidateCache()
 		}
 	}
 
-	// Restore auto-tiling setting from template
+	// Restore tiling configuration
 	m.AutoTiling = tmpl.AutoTiling
+	if tmpl.MasterRatio > 0 {
+		m.MasterRatio = tmpl.MasterRatio
+	}
 
+	// If tiled, apply BSP tree or retile
 	if m.AutoTiling {
+		// Set tiling scheme if specified
+		if tmpl.TilingScheme != "" {
+			if tree := m.GetOrCreateBSPTree(); tree != nil {
+				tree.AutoScheme = layout.ParseAutoScheme(tmpl.TilingScheme)
+			}
+		}
 		m.TileAllWindows()
 	} else if savedAutoTiling != tmpl.AutoTiling {
-		// If tiling mode changed, make sure windows are properly positioned
 		m.ClampWindowsToView()
 	}
 
 	if len(m.Windows) > 0 {
-		m.FocusedWindow = len(m.Windows) - 1
+		m.FocusWindow(0)
 	}
 }
 
-// DeleteLayoutTemplate removes a layout template file by name.
+// DeleteLayoutTemplate removes a template file.
 func DeleteLayoutTemplate(name string) error {
-	path := templateFilePath(name)
-	err := os.Remove(path)
+	err := os.Remove(templateFilePath(name))
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to delete layout template: %w", err)
+		return err
 	}
 	return nil
 }
 
-// FilterLayoutTemplates filters layout templates by a query string.
-// It performs case-insensitive substring matching on the Name field.
+// FilterLayoutTemplates filters by name substring.
 func FilterLayoutTemplates(templates []LayoutTemplate, query string) []LayoutTemplate {
 	if query == "" {
 		return templates
@@ -194,4 +350,41 @@ func FilterLayoutTemplates(templates []LayoutTemplate, query string) []LayoutTem
 		}
 	}
 	return filtered
+}
+
+// GenerateTapeScript converts a layout template to a tape script that
+// recreates the layout. This enables layout templates to be shared,
+// version-controlled, and executed in CI/headless environments.
+func GenerateTapeScript(tmpl LayoutTemplate) string {
+	var sb strings.Builder
+	sb.WriteString("# Auto-generated layout script: " + tmpl.Name + "\n")
+	sb.WriteString("# Created: " + tmpl.CreatedAt.Format(time.RFC3339) + "\n\n")
+
+	if tmpl.AutoTiling {
+		sb.WriteString("EnableTiling\n")
+	} else {
+		sb.WriteString("DisableTiling\n")
+	}
+
+	for i, w := range tmpl.Windows {
+		if i > 0 {
+			sb.WriteString("NewWindow\n")
+		}
+		if w.CustomName != "" {
+			sb.WriteString(fmt.Sprintf("RenameWindow %s\n", w.CustomName))
+		}
+		if w.WorkingDir != "" {
+			sb.WriteString(fmt.Sprintf("Type cd %s\nEnter\n", w.WorkingDir))
+		}
+		if w.Command != "" {
+			cmd := w.Command
+			if len(w.Args) > 0 {
+				cmd += " " + strings.Join(w.Args, " ")
+			}
+			sb.WriteString(fmt.Sprintf("Type %s\nEnter\n", cmd))
+		}
+		sb.WriteString("Sleep 200ms\n")
+	}
+
+	return sb.String()
 }

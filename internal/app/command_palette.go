@@ -434,7 +434,7 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 				score = 200
 			}
 			// Boost for exact word match
-			for _, word := range strings.Fields(nameLower) {
+			for word := range strings.FieldsSeq(nameLower) {
 				if strings.HasPrefix(word, q) {
 					score += 50
 					break
