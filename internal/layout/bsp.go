@@ -95,12 +95,6 @@ type Rect struct {
 	X, Y, W, H int
 }
 
-// BorderEdges indicates which borders of a window should be hidden
-// because they are shared with an adjacent tiled window.
-type BorderEdges struct {
-	HideLeft, HideTop, HideRight, HideBottom bool
-}
-
 // TileNode represents a node in the binary space partition tree.
 // Internal nodes have Left and Right children and define a split.
 // Leaf nodes have a WindowID and represent an actual window.
@@ -403,21 +397,17 @@ func (t *BSPTree) RemoveWindow(windowID int) {
 }
 
 // ApplyLayout calculates positions for all windows in the tree.
-// Returns a map of windowID -> Rect with the calculated layout,
-// and a map of windowID -> BorderEdges indicating which borders are shared.
-// When sharedBorders is true, adjacent windows overlap by 1 cell so they
-// share a single border line instead of drawing two side by side.
-func (t *BSPTree) ApplyLayout(bounds Rect, sharedBorders bool) (map[int]Rect, map[int]BorderEdges) {
+// Returns a map of windowID -> Rect with the calculated layout.
+func (t *BSPTree) ApplyLayout(bounds Rect) map[int]Rect {
 	result := make(map[int]Rect)
-	edges := make(map[int]BorderEdges)
 	if t.Root == nil {
-		return result, edges
+		return result
 	}
-	t.applyLayoutRecursive(t.Root, bounds, result, edges, BorderEdges{}, sharedBorders)
-	return result, edges
+	t.applyLayoutRecursive(t.Root, bounds, result)
+	return result
 }
 
-func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[int]Rect, edges map[int]BorderEdges, inherited BorderEdges, sharedBorders bool) {
+func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[int]Rect) {
 	if node == nil {
 		return
 	}
@@ -434,46 +424,26 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 			h = config.DefaultWindowHeight
 		}
 		result[node.WindowID] = Rect{X: bounds.X, Y: bounds.Y, W: w, H: h}
-		edges[node.WindowID] = inherited
 		return
 	}
 
 	// Internal node - split the bounds
 	var leftBounds, rightBounds Rect
-	var leftEdges, rightEdges BorderEdges
-
-	// Inherit parent edges
-	leftEdges = inherited
-	rightEdges = inherited
 
 	if node.SplitType == SplitVertical {
 		// Vertical split: left | right
 		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
 		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
 		rightBounds = Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
-
-		if sharedBorders {
-			// Right child overlaps left child by 1 column, hiding its left border
-			rightBounds.X -= 1
-			rightBounds.W += 1
-			rightEdges.HideLeft = true
-		}
 	} else {
 		// Horizontal split: top / bottom
 		splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
 		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
 		rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
-
-		if sharedBorders {
-			// Bottom child overlaps top child by 1 row, hiding its top border
-			rightBounds.Y -= 1
-			rightBounds.H += 1
-			rightEdges.HideTop = true
-		}
 	}
 
-	t.applyLayoutRecursive(node.Left, leftBounds, result, edges, leftEdges, sharedBorders)
-	t.applyLayoutRecursive(node.Right, rightBounds, result, edges, rightEdges, sharedBorders)
+	t.applyLayoutRecursive(node.Left, leftBounds, result)
+	t.applyLayoutRecursive(node.Right, rightBounds, result)
 }
 
 // SyncRatiosFromGeometry updates the tree's split ratios based on actual window positions.

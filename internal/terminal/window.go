@@ -152,13 +152,6 @@ type Window struct {
 	outputDone        chan struct{}        // Signal to stop output writer goroutine
 	suppressCallbacks atomic.Bool          // Suppress VT emulator callbacks during state restoration (prevents race conditions)
 
-	// Shared border flags for tiling mode: when true, the corresponding border
-	// is shared with an adjacent window and should not be drawn.
-	SharedBorderLeft   bool
-	SharedBorderTop    bool
-	SharedBorderRight  bool
-	SharedBorderBottom bool
-
 	// HasNewOutput is set when new data is written to the terminal.
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
 	HasNewOutput atomic.Bool
@@ -980,21 +973,6 @@ func (w *Window) Resize(width, height int) {
 	termWidth := max(width-2, 1)
 	termHeight := max(height-2, 1)
 
-	// Account for hidden shared borders: when a border is hidden,
-	// the content area is 1 cell larger in that dimension.
-	if w.SharedBorderLeft {
-		termWidth++
-	}
-	if w.SharedBorderRight {
-		termWidth++
-	}
-	if w.SharedBorderTop {
-		termHeight++
-	}
-	if w.SharedBorderBottom {
-		termHeight++
-	}
-
 	// Check if size actually changed
 	sizeChanged := w.Width != width || w.Height != height
 
@@ -1041,18 +1019,6 @@ func (w *Window) ResizeVisual(width, height int) {
 	if w.Terminal != nil {
 		termWidth := max(width-2, 1)
 		termHeight := max(height-2, 1)
-		if w.SharedBorderLeft {
-			termWidth++
-		}
-		if w.SharedBorderRight {
-			termWidth++
-		}
-		if w.SharedBorderTop {
-			termHeight++
-		}
-		if w.SharedBorderBottom {
-			termHeight++
-		}
 		w.Terminal.Resize(termWidth, termHeight)
 	}
 

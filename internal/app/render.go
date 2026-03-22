@@ -105,32 +105,9 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		isRenaming := m.RenamingWindow && i == m.FocusedWindow
 
-		// Apply shared border overrides for tiled windows
-		windowBox := box
-		if window.SharedBorderLeft {
-			windowBox = windowBox.BorderLeft(false)
-		}
-		if window.SharedBorderRight {
-			windowBox = windowBox.BorderRight(false)
-		}
-		// Note: top border is already false (custom-drawn by addToBorder).
-		// Bottom border is also replaced by addToBorder, but we still need
-		// the lipgloss bottom border disabled when shared so the placeholder
-		// line is not generated.
-		if window.SharedBorderBottom {
-			windowBox = windowBox.BorderBottom(false)
-		}
-
-		// Height is reduced by 1 to account for the custom top border
-		// added by addToBorder, unless the top border is shared/hidden.
-		boxHeight := window.Height - 1
-		if window.SharedBorderTop {
-			boxHeight = window.Height
-		}
-
 		boxContent := addToBorder(
-			windowBox.Width(window.Width).
-				Height(boxHeight).
+			box.Width(window.Width).
+				Height(window.Height-1).
 				BorderForeground(borderColorObj).
 				Render(content),
 			borderColorObj,
