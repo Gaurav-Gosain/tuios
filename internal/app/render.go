@@ -104,7 +104,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
 
 		var boxContent string
-		if window.Tiled && !window.IsBeingManipulated && !window.Zoomed {
+		if window.Tiled && !window.Zoomed {
 			// Shared borders mode: no individual window borders, content fills full rect
 			boxContent = content
 		} else {
@@ -124,8 +124,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		}
 
 		zIndex := window.Z
-		if isAnimating {
-			zIndex = config.ZIndexAnimating
+		if isAnimating || window.IsBeingManipulated {
+			zIndex = config.ZIndexAnimating // Above separators (Z=998)
 		}
 
 		clippedContent, finalX, finalY := clipWindowContent(
