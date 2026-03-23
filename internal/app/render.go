@@ -142,8 +142,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 	// Add shared border separator overlay when active
 	if config.SharedBorders && m.AutoTiling {
-		if sepLayer := m.renderSeparatorOverlay(); sepLayer != nil {
-			layers = append(layers, sepLayer)
+		if sepLayers := m.renderSeparatorOverlay(); len(sepLayers) > 0 {
+			layers = append(layers, sepLayers...)
 		}
 	}
 
