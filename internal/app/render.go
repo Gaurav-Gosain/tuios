@@ -140,8 +140,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		window.ClearDirtyFlags()
 	}
 
-	// Add shared border separator overlay when active
-	if config.SharedBorders && m.AutoTiling {
+	// Add shared border separator overlay when active (hide during drag/resize)
+	if config.SharedBorders && m.AutoTiling && !m.InteractionMode {
 		if sepLayers := m.renderSeparatorOverlay(); len(sepLayers) > 0 {
 			layers = append(layers, sepLayers...)
 		}

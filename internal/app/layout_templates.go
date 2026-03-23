@@ -326,6 +326,10 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 	if len(m.Windows) > 0 {
 		m.FocusWindow(0)
 	}
+
+	// Force all windows dirty so they render on the next frame.
+	// Without this, windows created before PTY output arrives show blank.
+	m.MarkAllDirty()
 }
 
 // DeleteLayoutTemplate removes a template file.
