@@ -338,7 +338,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Handle text selection motion with auto-scroll
-	if o.SelectionMode {
+	{
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.IsSelecting {
 			terminalX, terminalY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
