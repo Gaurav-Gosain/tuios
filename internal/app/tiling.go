@@ -203,7 +203,9 @@ func (m *OS) ToggleAutoTiling() {
 			w.CachedLayer = nil
 			w.ContentDirty = true
 			w.Dirty = true
+			w.HasNewOutput.Store(true) // Trigger re-render via tick sync
 		}
+		m.MarkAllDirty()
 	}
 
 	// Sync state to daemon so tiling mode persists across reconnects
