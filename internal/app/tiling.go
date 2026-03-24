@@ -196,8 +196,13 @@ func (m *OS) ToggleAutoTiling() {
 			if w.Tiled {
 				w.Tiled = false
 				w.Resize(w.Width, w.Height) // Re-applies border deduction
-				w.InvalidateCache()
 			}
+			// Force full re-render: clear all caches so content redraws
+			// at the new (bordered) dimensions
+			w.CachedContent = ""
+			w.CachedLayer = nil
+			w.ContentDirty = true
+			w.Dirty = true
 		}
 	}
 
