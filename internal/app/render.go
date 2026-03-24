@@ -104,7 +104,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
 
 		var boxContent string
-		isTiledBorderless := window.Tiled && !window.Zoomed && !window.IsBeingManipulated
+		isTiledBorderless := window.Tiled && !window.Zoomed
 		if isTiledBorderless {
 			// Shared borders mode: no individual window borders, content fills full rect
 			boxContent = content

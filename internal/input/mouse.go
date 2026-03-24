@@ -181,11 +181,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Already in interaction mode, now set resize-specific flags
 		o.Resizing = true
 		o.Windows[clickedWindowIndex].IsBeingManipulated = true
-		// Temporarily untile for border rendering during manipulation
-		if o.Windows[clickedWindowIndex].Tiled {
-			o.Windows[clickedWindowIndex].Tiled = false
-			o.Windows[clickedWindowIndex].Resize(o.Windows[clickedWindowIndex].Width, o.Windows[clickedWindowIndex].Height)
-		}
 		o.ResizeStartX = mouse.X
 		o.ResizeStartY = mouse.Y
 		// Save state for resize calculations (avoid mutex copying)
