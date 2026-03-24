@@ -293,9 +293,8 @@ func makeSnapCornerHandler(corner app.SnapQuarter) ActionHandler {
 }
 
 func handleToggleTiling(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.AutoTiling = !o.AutoTiling
+	o.ToggleAutoTiling()
 	if o.AutoTiling {
-		o.TileAllWindows()
 		o.ShowNotification("Tiling Mode Enabled [T]", "success", config.NotificationDuration)
 	} else {
 		o.ShowNotification("Tiling Mode Disabled", "info", config.NotificationDuration)

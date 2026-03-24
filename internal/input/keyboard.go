@@ -378,10 +378,7 @@ func handleTerminalTilingPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 	case "t":
 		// Toggle tiling mode
-		o.AutoTiling = !o.AutoTiling
-		if o.AutoTiling {
-			o.TileAllWindows()
-		}
+		o.ToggleAutoTiling()
 		return o, nil
 	case "esc":
 		// Cancel tiling prefix mode
@@ -546,10 +543,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 	// Layout commands
 	case "space":
 		// Toggle tiling mode (like tmux)
-		o.AutoTiling = !o.AutoTiling
-		if o.AutoTiling {
-			o.TileAllWindows()
-		}
+		o.ToggleAutoTiling()
 		return o, nil
 	case "z":
 		// Toggle zoom for current window (works in both tiling and free-float modes)
@@ -952,9 +946,8 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 		return o, nil
 	case "t":
 		// Toggle tiling mode
-		o.AutoTiling = !o.AutoTiling
+		o.ToggleAutoTiling()
 		if o.AutoTiling {
-			o.TileAllWindows()
 			o.ShowNotification("Tiling Mode Enabled [T]", "success", config.NotificationDuration)
 		} else {
 			o.ShowNotification("Tiling Mode Disabled", "info", config.NotificationDuration)
