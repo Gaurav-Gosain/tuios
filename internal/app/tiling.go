@@ -191,9 +191,13 @@ func (m *OS) ToggleAutoTiling() {
 		m.LogInfo("BSP: Disabling tiling mode")
 		// Clear preselection when disabling tiling
 		m.PreselectionDir = layout.PreselectionNone
-		// Reset Tiled flag on all windows
+		// Reset Tiled flag and resize PTY to account for borders reappearing
 		for _, w := range m.Windows {
-			w.Tiled = false
+			if w.Tiled {
+				w.Tiled = false
+				w.Resize(w.Width, w.Height) // Re-applies border deduction
+				w.InvalidateCache()
+			}
 		}
 	}
 
@@ -1094,7 +1098,11 @@ func (m *OS) ApplyBSPLayout() {
 		}
 
 		// Set tiled flag when shared borders are active
+		wasTiled := win.Tiled
 		win.Tiled = config.SharedBorders
+		if win.Tiled != wasTiled {
+			win.InvalidateCache()
+		}
 
 		// Create animation for smooth transition
 		anim := ui.NewSnapAnimation(
