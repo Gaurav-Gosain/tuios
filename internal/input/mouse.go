@@ -310,11 +310,17 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 
+	// DEBUG: check if motion events arrive at all
+	if o.ScrollbarDragging {
+		o.ShowNotification(fmt.Sprintf("MOTION Y=%d SBdrag=%v", mouse.Y, o.ScrollbarDragging), "info", 0)
+	}
+
 	// Handle scrollbar drag FIRST — before anything else consumes the motion event
-	if o.ScrollbarDragging && o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
-		win := o.Windows[o.ScrollbarDragWindowIndex]
-		scrollToPosition(win, mouse.Y)
-		o.ShowNotification(fmt.Sprintf("SB drag Y=%d", mouse.Y), "info", 0)
+	if o.ScrollbarDragging {
+		if o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
+			win := o.Windows[o.ScrollbarDragWindowIndex]
+			scrollToPosition(win, mouse.Y)
+		}
 		return o, nil
 	}
 
