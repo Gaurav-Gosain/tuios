@@ -966,7 +966,13 @@ func (w *Window) handleIOOperations() {
 	})
 }
 
-// Resize resizes the window and its terminal.
+// RLockIO acquires a read lock on the window's I/O mutex.
+// Use for reading terminal state from outside the PTY reader goroutine.
+func (w *Window) RLockIO()   { w.ioMu.RLock() }
+
+// RUnlockIO releases the read lock on the window's I/O mutex.
+func (w *Window) RUnlockIO() { w.ioMu.RUnlock() }
+
 // ContentWidth returns the usable content width (excluding borders if not tiled).
 func (w *Window) ContentWidth() int {
 	if w.Tiled {

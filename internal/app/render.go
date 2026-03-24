@@ -138,6 +138,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
 		layers = append(layers, window.CachedLayer)
 
+		// Scrollbar overlay on the right border when scrollback exists
+		if window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+			if sbLayer := m.renderScrollbarOverlay(window, zIndex+1); sbLayer != nil {
+				layers = append(layers, sbLayer)
+			}
+		}
+
 		window.ClearDirtyFlags()
 	}
 
@@ -206,7 +213,13 @@ func (m *OS) View() tea.View {
 	// a flood of motion events that get forwarded as phantom keypresses (#78).
 	if m.Mode == TerminalMode {
 		fw := m.GetFocusedWindow()
-		if fw != nil && fw.Terminal != nil && fw.Terminal.HasAllMotionMode() {
+		useAllMotion := false
+		if fw != nil && fw.Terminal != nil {
+			fw.RLockIO()
+			useAllMotion = fw.Terminal.HasAllMotionMode()
+			fw.RUnlockIO()
+		}
+		if useAllMotion {
 			view.MouseMode = tea.MouseModeAllMotion
 		} else {
 			view.MouseMode = tea.MouseModeCellMotion

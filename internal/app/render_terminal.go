@@ -525,57 +525,63 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	content := builder.String()
 
-	// Overlay scrollbar when in copy mode with scrollback
-	if window.CopyMode != nil && window.CopyMode.Active {
-		scrollbackLen := 0
-		if window.Terminal != nil {
-			scrollbackLen = window.Terminal.ScrollbackLen()
-		}
-		if scrollbackLen > 0 {
-			content = overlayScrollbar(content, window.CopyMode.ScrollOffset, scrollbackLen, maxY)
-		}
-	}
-
 	window.CachedContent = content
 	window.ContentDirty = false
 	return content
 }
 
-// overlayScrollbar renders a scrollbar on the rightmost column of the content.
-// Uses block characters: ┃ for track, █ for thumb.
-func overlayScrollbar(content string, scrollOffset, scrollbackLen, viewportHeight int) string {
-	if viewportHeight <= 0 || scrollbackLen <= 0 || scrollOffset <= 0 {
-		return content
+// renderScrollbarOverlay creates a lipgloss Layer showing a scrollbar on the
+// window's right border. The thumb position reflects how far back in the
+// scrollback the user has scrolled.
+func (m *OS) renderScrollbarOverlay(window *terminal.Window, zIndex int) *lipgloss.Layer {
+	scrollbackLen := window.Terminal.ScrollbackLen()
+	if scrollbackLen <= 0 {
+		return nil
 	}
 
-	totalLines := scrollbackLen + viewportHeight
-	// Thumb size: proportional to viewport/total, minimum 1 row
-	thumbHeight := max((viewportHeight*viewportHeight+totalLines-1)/totalLines, 1)
-	// Thumb position: 0 = bottom (live), scrollbackLen = top
-	scrollRange := viewportHeight - thumbHeight
-	thumbPos := 0
-	if scrollbackLen > 0 {
+	contentH := window.ContentHeight()
+	borderOff := window.BorderOffset()
+
+	// Scroll offset from copy mode (0 = at bottom/live)
+	scrollOffset := 0
+	if window.CopyMode != nil && window.CopyMode.Active {
+		scrollOffset = window.CopyMode.ScrollOffset
+	}
+
+	totalLines := scrollbackLen + contentH
+	thumbHeight := max((contentH*contentH+totalLines-1)/totalLines, 1)
+	scrollRange := contentH - thumbHeight
+
+	// Position: when scrollOffset=0 (live), thumb at bottom; scrollOffset=max, thumb at top
+	thumbPos := scrollRange // default: at bottom
+	if scrollOffset > 0 && scrollbackLen > 0 {
 		thumbPos = scrollRange - (scrollOffset * scrollRange / scrollbackLen)
 		thumbPos = max(min(thumbPos, scrollRange), 0)
 	}
 
-	trackStyle := "\x1b[38;2;60;60;80m" // dim gray
-	thumbStyle := "\x1b[38;2;140;140;200m" // brighter
+	trackColor := "\x1b[38;2;60;60;80m"
+	thumbColor := "\x1b[38;2;140;140;200m"
 	reset := "\x1b[0m"
 
-	lines := strings.Split(content, "\n")
-	for y := 0; y < len(lines) && y < viewportHeight; y++ {
-		var char string
-		if y >= thumbPos && y < thumbPos+thumbHeight {
-			char = thumbStyle + "█" + reset
-		} else {
-			char = trackStyle + "┃" + reset
+	var sb strings.Builder
+	for y := range contentH {
+		if y > 0 {
+			sb.WriteByte('\n')
 		}
-		// Append scrollbar character at the end of the line
-		lines[y] += char
+		if y >= thumbPos && y < thumbPos+thumbHeight {
+			sb.WriteString(thumbColor + "▐" + reset)
+		} else {
+			sb.WriteString(trackColor + "▕" + reset)
+		}
 	}
 
-	return strings.Join(lines, "\n")
+	// Position on the right border of the window
+	x := window.X + window.Width - 1 // right border column
+	y := window.Y + borderOff        // skip top border
+
+	return lipgloss.NewLayer(sb.String()).
+		X(x).Y(y).Z(zIndex).
+		ID(window.ID + "-scrollbar")
 }
 
 func (m *OS) renderResizeIndicator(window *terminal.Window) string {
