@@ -192,18 +192,16 @@ func (m *OS) ToggleAutoTiling() {
 		// Clear preselection when disabling tiling
 		m.PreselectionDir = layout.PreselectionNone
 		// Reset Tiled flag and resize PTY to account for borders reappearing
-		for _, w := range m.Windows {
-			if w.Tiled {
-				w.Tiled = false
-				w.Resize(w.Width, w.Height) // Re-applies border deduction
-			}
-			// Force full re-render: clear all caches so content redraws
-			// at the new (bordered) dimensions
-			w.CachedContent = ""
-			w.CachedLayer = nil
-			w.ContentDirty = true
-			w.Dirty = true
-			w.HasNewOutput.Store(true) // Trigger re-render via tick sync
+		for i := range m.Windows {
+			m.Windows[i].Tiled = false
+			m.Windows[i].CachedContent = ""
+			m.Windows[i].CachedLayer = nil
+			m.Windows[i].ContentDirty = true
+			m.Windows[i].Dirty = true
+			m.Windows[i].PositionDirty = true
+			m.Windows[i].HasNewOutput.Store(true)
+			// Resize PTY: now uses border deduction (Tiled=false → width-2)
+			m.Windows[i].Resize(m.Windows[i].Width, m.Windows[i].Height)
 		}
 		m.MarkAllDirty()
 	}
