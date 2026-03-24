@@ -454,10 +454,6 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseMotionMsg,
 		tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.ClipboardMsg,
 		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
-		// DEBUG: log mouse motion during scrollbar drag
-		if _, isMotion := msg.(tea.MouseMotionMsg); isMotion && m.ScrollbarDragging {
-			m.ShowNotification("UPDATE: motion during SB drag", "info", 0)
-		}
 		// Reset idle counter on any user input to restore full tick rate
 		m.idleFrames = 0
 		// Delegate to the registered input handler

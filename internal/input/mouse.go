@@ -70,6 +70,9 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			scrollToPosition(win, Y)
 			o.ScrollbarDragging = true
 			o.ScrollbarDragWindowIndex = clickedWindowIndex
+			o.InteractionMode = true
+			o.Dragging = true
+			o.DraggedWindowIndex = clickedWindowIndex
 			return o, nil
 		}
 	}
@@ -310,19 +313,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 
-	// DEBUG: check if motion events arrive at all
-	if o.ScrollbarDragging {
-		o.ShowNotification(fmt.Sprintf("MOTION Y=%d SBdrag=%v", mouse.Y, o.ScrollbarDragging), "info", 0)
-	}
-
-	// Handle scrollbar drag FIRST — before anything else consumes the motion event
-	if o.ScrollbarDragging {
-		if o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
-			win := o.Windows[o.ScrollbarDragWindowIndex]
-			scrollToPosition(win, mouse.Y)
-		}
-		return o, nil
-	}
 
 	// Forward mouse motion to terminal if in terminal mode and window supports motion events.
 	// Only modes 1002 (button-event) and 1003 (any-event) support motion forwarding.
@@ -351,6 +341,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 			}
 		}
+	}
+
+	// Handle scrollbar drag
+	if o.ScrollbarDragging && o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
+		win := o.Windows[o.ScrollbarDragWindowIndex]
+		scrollToPosition(win, mouse.Y)
+		return o, nil
 	}
 
 	// Handle copy mode mouse motion
@@ -647,6 +644,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ScrollbarDragging {
 		o.ScrollbarDragging = false
 		o.ScrollbarDragWindowIndex = -1
+		o.Dragging = false
+		o.InteractionMode = false
+		o.DraggedWindowIndex = -1
 		return o, nil
 	}
 
