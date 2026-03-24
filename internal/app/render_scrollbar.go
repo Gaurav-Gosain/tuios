@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"image/color"
 	"strings"
 
@@ -9,10 +8,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// renderScrollbarLayer creates a single-column lipgloss Layer that overlays
-// the right border of a window with a scrollbar. The thumb is a bright ┃,
-// the track is a dim │. Positioned exactly on the right border column.
-func renderScrollbarLayer(window *terminal.Window, borderColor color.Color, zIndex int) *lipgloss.Layer {
+// renderScrollbarLayer creates a 1-column layer overlaying the right border
+// with a scrollbar indicator. Hidden during window manipulation.
+func renderScrollbarLayer(window *terminal.Window, _ color.Color, zIndex int) *lipgloss.Layer {
+	if window.IsBeingManipulated {
+		return nil
+	}
+
 	scrollbackLen := window.Terminal.ScrollbackLen()
 	if scrollbackLen <= 0 {
 		return nil
@@ -26,7 +28,7 @@ func renderScrollbarLayer(window *terminal.Window, borderColor color.Color, zInd
 	totalLines := scrollbackLen + contentH
 	thumbHeight := max((contentH*contentH+totalLines-1)/totalLines, 1)
 	if thumbHeight >= contentH {
-		return nil // No scrollbar needed
+		return nil
 	}
 
 	scrollOffset := 0
@@ -35,17 +37,15 @@ func renderScrollbarLayer(window *terminal.Window, borderColor color.Color, zInd
 	}
 
 	scrollRange := contentH - thumbHeight
-	thumbPos := scrollRange // default at bottom
+	thumbPos := scrollRange
 	if scrollOffset > 0 && scrollbackLen > 0 {
 		thumbPos = scrollRange - (scrollOffset * scrollRange / scrollbackLen)
 		thumbPos = max(min(thumbPos, scrollRange), 0)
 	}
 
-	// Colors: bright for thumb, dim for track, derived from border color
-	r, g, b, _ := borderColor.RGBA()
-	cr, cg, cb := r>>8, g>>8, b>>8
-	thumbFg := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", min(cr*2, 255), min(cg*2, 255), min(cb*2, 255))
-	trackFg := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", cr, cg, cb)
+	// Dark gray colors
+	thumbFg := "\x1b[38;2;120;120;140m"
+	trackFg := "\x1b[38;2;50;50;65m"
 	reset := "\x1b[0m"
 
 	var sb strings.Builder
@@ -60,7 +60,6 @@ func renderScrollbarLayer(window *terminal.Window, borderColor color.Color, zInd
 		}
 	}
 
-	// Position on the right border column, skipping top border row
 	borderOff := window.BorderOffset()
 	x := window.X + window.Width - 1
 	y := window.Y + borderOff

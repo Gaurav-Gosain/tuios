@@ -61,6 +61,18 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Fast hit testing - find which window was clicked without expensive canvas generation
 	clickedWindowIndex := findClickedWindow(X, Y, o)
 
+	// Scrollbar click: left click on right border of a window with scrollback
+	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft {
+		win := o.Windows[clickedWindowIndex]
+		rightBorderX := win.X + win.Width - 1
+		if X == rightBorderX && win.Terminal != nil && win.Terminal.ScrollbackLen() > 0 {
+			o.FocusWindow(clickedWindowIndex)
+			scrollToPosition(win, Y)
+			o.ScrollbarDragging = true
+			o.ScrollbarDragWindowIndex = clickedWindowIndex
+			return o, nil
+		}
+	}
 
 	// Forward mouse events to terminal if in terminal mode and window has mouse tracking
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode {
@@ -325,6 +337,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 			}
 		}
+	}
+
+	// Handle scrollbar drag
+	if o.ScrollbarDragging && o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
+		win := o.Windows[o.ScrollbarDragWindowIndex]
+		scrollToPosition(win, mouse.Y)
+		return o, nil
 	}
 
 	// Handle copy mode mouse motion
@@ -615,6 +634,13 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				return o, nil
 			}
 		}
+	}
+
+	// Clear scrollbar drag
+	if o.ScrollbarDragging {
+		o.ScrollbarDragging = false
+		o.ScrollbarDragWindowIndex = -1
+		return o, nil
 	}
 
 	// Handle copy mode mouse release
@@ -1109,4 +1135,36 @@ func isWordChar(r rune) bool {
 		(r >= 'A' && r <= 'Z') ||
 		(r >= '0' && r <= '9') ||
 		r == '_' || r == '-' || r == '.'
+}
+
+// scrollToPosition scrolls a window's copy mode to the position indicated
+// by the mouse Y coordinate on the scrollbar (right border).
+func scrollToPosition(win *terminal.Window, mouseY int) {
+	if win.Terminal == nil {
+		return
+	}
+	scrollbackLen := win.Terminal.ScrollbackLen()
+	if scrollbackLen <= 0 {
+		return
+	}
+
+	// Enter copy mode if not already
+	if win.CopyMode == nil || !win.CopyMode.Active {
+		win.EnterCopyMode()
+	}
+	if win.CopyMode == nil {
+		return
+	}
+
+	borderOff := win.BorderOffset()
+	contentH := win.ContentHeight()
+	relY := mouseY - win.Y - borderOff
+	relY = max(min(relY, contentH-1), 0)
+
+	// relY=0 → top (max scroll), relY=contentH-1 → bottom (0 scroll)
+	scrollOffset := scrollbackLen - (relY * scrollbackLen / max(contentH-1, 1))
+	scrollOffset = max(min(scrollOffset, scrollbackLen), 0)
+
+	win.CopyMode.ScrollOffset = scrollOffset
+	win.InvalidateCache()
 }
