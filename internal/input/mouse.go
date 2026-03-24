@@ -61,35 +61,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Fast hit testing - find which window was clicked without expensive canvas generation
 	clickedWindowIndex := findClickedWindow(X, Y, o)
 
-	// Scrollbar click: right border column of a window with scrollback
-	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft {
-		win := o.Windows[clickedWindowIndex]
-		rightBorderX := win.X + win.Width - 1
-		if X == rightBorderX && win.Terminal != nil && win.Terminal.ScrollbackLen() > 0 {
-			// Calculate scroll position from Y coordinate
-			borderOff := win.BorderOffset()
-			contentH := win.ContentHeight()
-			relY := Y - win.Y - borderOff
-			if relY >= 0 && relY < contentH {
-				scrollbackLen := win.Terminal.ScrollbackLen()
-				// relY=0 → top (max scroll), relY=contentH-1 → bottom (0 scroll)
-				scrollOffset := scrollbackLen - (relY * scrollbackLen / max(contentH-1, 1))
-				scrollOffset = max(min(scrollOffset, scrollbackLen), 0)
-
-				o.FocusWindow(clickedWindowIndex)
-				if win.CopyMode == nil || !win.CopyMode.Active {
-					win.EnterCopyMode()
-				}
-				if win.CopyMode != nil {
-					win.CopyMode.ScrollOffset = scrollOffset
-				}
-				win.InvalidateCache()
-				// Track scrollbar drag state
-				o.ScrollbarDragWindowIndex = clickedWindowIndex
-				return o, nil
-			}
-		}
-	}
 
 	// Forward mouse events to terminal if in terminal mode and window has mouse tracking
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode {
@@ -326,23 +297,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.Y = mouse.Y
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
-
-	// Handle scrollbar drag
-	if o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
-		win := o.Windows[o.ScrollbarDragWindowIndex]
-		if win.Terminal != nil && win.CopyMode != nil {
-			borderOff := win.BorderOffset()
-			contentH := win.ContentHeight()
-			relY := mouse.Y - win.Y - borderOff
-			relY = max(min(relY, contentH-1), 0)
-			scrollbackLen := win.Terminal.ScrollbackLen()
-			scrollOffset := scrollbackLen - (relY * scrollbackLen / max(contentH-1, 1))
-			scrollOffset = max(min(scrollOffset, scrollbackLen), 0)
-			win.CopyMode.ScrollOffset = scrollOffset
-			win.InvalidateCache()
-		}
-		return o, nil
-	}
 
 	// Forward mouse motion to terminal if in terminal mode and window supports motion events.
 	// Only modes 1002 (button-event) and 1003 (any-event) support motion forwarding.
@@ -615,9 +569,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // handleMouseRelease handles mouse release events
 func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Clear scrollbar drag
-	o.ScrollbarDragWindowIndex = -1
-
 	// Forward mouse release to terminal if in terminal mode and window has mouse tracking
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()

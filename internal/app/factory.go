@@ -52,8 +52,7 @@ func NewOS(opts OSOptions) *OS {
 
 	os := &OS{
 		// Core state
-		FocusedWindow:            -1,
-		ScrollbarDragWindowIndex: -1,
+		FocusedWindow: -1,
 		WindowExitChan:   make(chan string, 10),
 		PTYDataChan:      make(chan struct{}, 1),
 		StateSyncChan:    make(chan *session.SessionState, 10),

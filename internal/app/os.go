@@ -94,8 +94,7 @@ type OS struct {
 	TiledY             int // Original tiled position Y
 	TiledWidth         int // Original tiled width
 	TiledHeight        int // Original tiled height
-	DraggedWindowIndex      int // Index of window being dragged
-	ScrollbarDragWindowIndex int // Index of window whose scrollbar is being dragged (-1 = none)
+	DraggedWindowIndex int // Index of window being dragged
 	Windows            []*terminal.Window
 	FocusedWindow      int
 	Width              int

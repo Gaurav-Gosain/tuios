@@ -8,7 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -529,84 +528,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	window.CachedContent = content
 	window.ContentDirty = false
 	return content
-}
-
-// renderScrollbarOverlay creates a lipgloss Layer showing a scrollbar on the
-// window's right border. Uses the border color for visual consistency.
-// The thumb indicates the viewport position within the scrollback.
-func (m *OS) renderScrollbarOverlay(window *terminal.Window, isFocused bool, zIndex int) *lipgloss.Layer {
-	scrollbackLen := window.Terminal.ScrollbackLen()
-	if scrollbackLen <= 0 {
-		return nil
-	}
-
-	contentH := window.ContentHeight()
-	if contentH <= 0 {
-		return nil
-	}
-	borderOff := window.BorderOffset()
-
-	// Scroll offset from copy mode (0 = at bottom/live)
-	scrollOffset := 0
-	if window.CopyMode != nil && window.CopyMode.Active {
-		scrollOffset = window.CopyMode.ScrollOffset
-	}
-
-	totalLines := scrollbackLen + contentH
-	thumbHeight := max((contentH*contentH+totalLines-1)/totalLines, 1)
-	if thumbHeight >= contentH {
-		return nil // Scrollbar would fill entire height — no point showing it
-	}
-	scrollRange := contentH - thumbHeight
-
-	// Position: scrollOffset=0 → thumb at bottom, scrollOffset=max → thumb at top
-	thumbPos := scrollRange
-	if scrollOffset > 0 && scrollbackLen > 0 {
-		thumbPos = scrollRange - (scrollOffset * scrollRange / scrollbackLen)
-		thumbPos = max(min(thumbPos, scrollRange), 0)
-	}
-
-	// Use the actual border color from the theme
-	var borderColor color.Color
-	if isFocused {
-		if m.Mode == TerminalMode {
-			borderColor = theme.BorderFocusedTerminal()
-		} else {
-			borderColor = theme.BorderFocusedWindow()
-		}
-	} else {
-		borderColor = theme.BorderUnfocused()
-	}
-
-	// Convert to ANSI color string
-	r, g, b, _ := borderColor.RGBA()
-	cr, cg, cb := r>>8, g>>8, b>>8
-
-	// Thumb: bright version of border color (full block on the border)
-	thumbFg := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", min(cr+80, 255), min(cg+80, 255), min(cb+80, 255))
-	// Track: dim version (subtle indicator)
-	trackFg := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", cr/2, cg/2, cb/2)
-	reset := "\x1b[0m"
-
-	var sb strings.Builder
-	for y := range contentH {
-		if y > 0 {
-			sb.WriteByte('\n')
-		}
-		if y >= thumbPos && y < thumbPos+thumbHeight {
-			sb.WriteString(thumbFg + "┃" + reset)
-		} else {
-			sb.WriteString(trackFg + "│" + reset)
-		}
-	}
-
-	// Position on the right border column
-	x := window.X + window.Width - 1
-	y := window.Y + borderOff
-
-	return lipgloss.NewLayer(sb.String()).
-		X(x).Y(y).Z(zIndex).
-		ID(window.ID + "-scrollbar")
 }
 
 func (m *OS) renderResizeIndicator(window *terminal.Window) string {
