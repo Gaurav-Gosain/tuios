@@ -122,6 +122,11 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 				m.RenameBuffer,
 				m.AutoTiling,
 			)
+
+			// Render scrollbar into the right border characters
+			if window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+				boxContent = applyScrollbarToBorder(boxContent, window, borderColorObj)
+			}
 		}
 
 		zIndex := window.Z

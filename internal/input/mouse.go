@@ -337,19 +337,46 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Handle text selection motion
+	// Handle text selection motion with auto-scroll
 	if o.SelectionMode {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.IsSelecting {
-			// Calculate terminal coordinates
 			terminalX, terminalY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 
-			// Update selection end position
 			if inContent {
 				focusedWindow.SelectionEnd.X = terminalX
 				focusedWindow.SelectionEnd.Y = terminalY
-				return o, nil
+			} else {
+				// Auto-scroll when dragging above or below the content area
+				borderOff := focusedWindow.BorderOffset()
+				contentTop := focusedWindow.Y + borderOff
+				contentBottom := focusedWindow.Y + borderOff + focusedWindow.ContentHeight()
+
+				if mouse.Y < contentTop {
+					// Dragging above — enter copy mode and scroll up
+					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
+						focusedWindow.EnterCopyMode()
+					}
+					if focusedWindow.CopyMode != nil {
+						for range 3 {
+							MoveUp(focusedWindow.CopyMode, focusedWindow)
+						}
+					}
+					focusedWindow.SelectionEnd.Y = 0
+					focusedWindow.SelectionEnd.X = max(terminalX, 0)
+				} else if mouse.Y >= contentBottom {
+					// Dragging below — scroll down (or exit copy mode if at bottom)
+					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+						for range 3 {
+							MoveDown(focusedWindow.CopyMode, focusedWindow)
+						}
+					}
+					focusedWindow.SelectionEnd.Y = focusedWindow.ContentHeight() - 1
+					focusedWindow.SelectionEnd.X = max(terminalX, 0)
+				}
 			}
+			focusedWindow.InvalidateCache()
+			return o, nil
 		}
 	}
 
