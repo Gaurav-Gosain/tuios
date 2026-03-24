@@ -87,6 +87,12 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		if window.CachedLayer != nil && !window.Dirty && !window.ContentDirty && !window.PositionDirty {
 			layers = append(layers, window.CachedLayer)
+			// Scrollbar layer (always fresh, not cached)
+			if !window.Tiled && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+				if sbLayer := renderScrollbarLayer(window, borderColorObj, window.Z+1); sbLayer != nil {
+					layers = append(layers, sbLayer)
+				}
+			}
 			continue
 		}
 
@@ -130,11 +136,6 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			zIndex = config.ZIndexAnimating // Above separators (Z=998)
 		}
 
-		// Apply scrollbar to right border before clipping/caching
-		if !isTiledBorderless && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
-			boxContent = applyScrollbarToBorder(boxContent, window, borderColorObj)
-		}
-
 		clippedContent, finalX, finalY := clipWindowContent(
 			boxContent,
 			window.X, window.Y,
@@ -144,6 +145,12 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
 		layers = append(layers, window.CachedLayer)
 
+		// Scrollbar layer (always fresh, not cached)
+		if !isTiledBorderless && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+			if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
+				layers = append(layers, sbLayer)
+			}
+		}
 
 		window.ClearDirtyFlags()
 	}
