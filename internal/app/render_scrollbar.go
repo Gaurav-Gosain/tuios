@@ -43,26 +43,22 @@ func renderScrollbarLayer(window *terminal.Window, _ color.Color, zIndex int) *l
 		thumbPos = max(min(thumbPos, scrollRange), 0)
 	}
 
-	// Dark gray colors
+	// Only render the thumb portion — let the original border show through
+	// for track rows so the theme border color is preserved.
 	thumbFg := "\x1b[38;2;120;120;140m"
-	trackFg := "\x1b[38;2;50;50;65m"
 	reset := "\x1b[0m"
 
 	var sb strings.Builder
-	for y := range contentH {
-		if y > 0 {
+	for i := range thumbHeight {
+		if i > 0 {
 			sb.WriteByte('\n')
 		}
-		if y >= thumbPos && y < thumbPos+thumbHeight {
-			sb.WriteString(thumbFg + "┃" + reset)
-		} else {
-			sb.WriteString(trackFg + "│" + reset)
-		}
+		sb.WriteString(thumbFg + "┃" + reset)
 	}
 
 	borderOff := window.BorderOffset()
 	x := window.X + window.Width - 1
-	y := window.Y + borderOff
+	y := window.Y + borderOff + thumbPos
 
 	return lipgloss.NewLayer(sb.String()).
 		X(x).Y(y).Z(zIndex).

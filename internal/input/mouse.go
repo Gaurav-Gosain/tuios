@@ -310,6 +310,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 
+	// Handle scrollbar drag FIRST — before anything else consumes the motion event
+	if o.ScrollbarDragging && o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
+		win := o.Windows[o.ScrollbarDragWindowIndex]
+		scrollToPosition(win, mouse.Y)
+		return o, nil
+	}
+
 	// Forward mouse motion to terminal if in terminal mode and window supports motion events.
 	// Only modes 1002 (button-event) and 1003 (any-event) support motion forwarding.
 	// Mode 1000/1001 (normal tracking) only supports click/release — forwarding motion
@@ -337,13 +344,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 			}
 		}
-	}
-
-	// Handle scrollbar drag
-	if o.ScrollbarDragging && o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
-		win := o.Windows[o.ScrollbarDragWindowIndex]
-		scrollToPosition(win, mouse.Y)
-		return o, nil
 	}
 
 	// Handle copy mode mouse motion
@@ -990,6 +990,39 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// Handle scrollback in window management mode too
+	if o.Mode == app.WindowManagementMode {
+		focusedWindow := o.GetFocusedWindow()
+		if focusedWindow != nil && focusedWindow.Terminal != nil && !focusedWindow.IsAltScreen {
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				scrollbackLen := focusedWindow.ScrollbackLen()
+				if scrollbackLen > 0 {
+					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
+						focusedWindow.EnterCopyMode()
+						o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration)
+					}
+					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+						for range 3 {
+							MoveUp(focusedWindow.CopyMode, focusedWindow)
+						}
+						focusedWindow.InvalidateCache()
+					}
+				}
+			case tea.MouseWheelDown:
+				if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+					for range 3 {
+						MoveDown(focusedWindow.CopyMode, focusedWindow)
+					}
+					if focusedWindow.CopyMode.ScrollOffset == 0 && focusedWindow.CopyMode.CursorY >= focusedWindow.ContentHeight()-1 {
+						focusedWindow.ExitCopyMode()
+					}
+					focusedWindow.InvalidateCache()
+				}
+			}
+		}
+	}
+
 	return o, nil
 }
 
@@ -1166,5 +1199,6 @@ func scrollToPosition(win *terminal.Window, mouseY int) {
 	scrollOffset = max(min(scrollOffset, scrollbackLen), 0)
 
 	win.CopyMode.ScrollOffset = scrollOffset
+	win.ScrollbackOffset = scrollOffset // Sync for rendering
 	win.InvalidateCache()
 }
