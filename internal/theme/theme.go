@@ -169,7 +169,7 @@ func DockColorTerminal() color.Color {
 func DockColorCopy() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#ffff00")
+		return lipgloss.Color("#e0af68") // Soft amber
 	}
 	return t.Yellow
 }
