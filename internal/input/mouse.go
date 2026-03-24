@@ -314,6 +314,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ScrollbarDragging && o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
 		win := o.Windows[o.ScrollbarDragWindowIndex]
 		scrollToPosition(win, mouse.Y)
+		o.ShowNotification(fmt.Sprintf("SB drag Y=%d", mouse.Y), "info", 0)
 		return o, nil
 	}
 

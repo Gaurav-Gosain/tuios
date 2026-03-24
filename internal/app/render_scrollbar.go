@@ -7,12 +7,11 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // renderScrollbarLayer creates a 1-column layer overlaying the right border
 // with a scrollbar indicator. Hidden during window manipulation.
-func renderScrollbarLayer(window *terminal.Window, _ color.Color, zIndex int) *lipgloss.Layer {
+func renderScrollbarLayer(window *terminal.Window, borderColor color.Color, zIndex int) *lipgloss.Layer {
 	if window.IsBeingManipulated {
 		return nil
 	}
@@ -45,12 +44,11 @@ func renderScrollbarLayer(window *terminal.Window, _ color.Color, zIndex int) *l
 		thumbPos = max(min(thumbPos, scrollRange), 0)
 	}
 
-	// Use a bright version of the focused border color for the thumb
-	thumbColor := theme.BorderFocusedTerminal()
-	r, g, b, _ := thumbColor.RGBA()
+	// Use a darker version of the border color for the thumb
+	r, g, b, _ := borderColor.RGBA()
 	cr, cg, cb := r>>8, g>>8, b>>8
-	// Brighten for visibility against the border
-	thumbFg := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", min(cr+60, 255), min(cg+60, 255), min(cb+60, 255))
+	// Darken by 40% for contrast against the border
+	thumbFg := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", cr*60/100, cg*60/100, cb*60/100)
 	reset := "\x1b[0m"
 
 	var sb strings.Builder
