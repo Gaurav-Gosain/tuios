@@ -546,6 +546,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// In tiling mode, update visual state but defer PTY resize until drag completes
 			// Store pending resizes for all affected windows
 			o.AdjustTilingNeighborsVisual(focusedWindow, newX, newY, newWidth, newHeight)
+			// Sync BSP ratios continuously so separator overlay follows the resize
+			if config.SharedBorders {
+				o.SyncBSPTreeFromGeometry()
+			}
 		} else {
 			// In floating mode, apply visual resize only (defer PTY resize until drag completes)
 			focusedWindow.X = newX
