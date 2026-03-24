@@ -681,8 +681,23 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 	// Convert window-relative coordinates to terminal coordinates
 	terminalX, terminalY, inContent := window.ScreenToTerminal(mouseX, mouseY)
 
-	// Check bounds
+	// Auto-scroll when dragging outside content area
 	if !inContent {
+		borderOff := window.BorderOffset()
+		contentTop := window.Y + borderOff
+		contentBottom := window.Y + borderOff + window.ContentHeight()
+
+		if mouseY < contentTop {
+			for range 3 {
+				MoveUp(cm, window)
+			}
+		} else if mouseY >= contentBottom {
+			for range 3 {
+				MoveDown(cm, window)
+			}
+		}
+		updateVisualEnd(cm, window)
+		window.InvalidateCache()
 		return
 	}
 
