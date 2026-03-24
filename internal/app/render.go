@@ -140,7 +140,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		// Scrollbar overlay on the right border when scrollback exists
 		if window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
-			if sbLayer := m.renderScrollbarOverlay(window, zIndex+1); sbLayer != nil {
+			if sbLayer := m.renderScrollbarOverlay(window, isFocused, zIndex+1); sbLayer != nil {
 				layers = append(layers, sbLayer)
 			}
 		}
