@@ -1,11 +1,13 @@
 package app
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // renderScrollbarLayer creates a 1-column layer overlaying the right border
@@ -43,9 +45,12 @@ func renderScrollbarLayer(window *terminal.Window, _ color.Color, zIndex int) *l
 		thumbPos = max(min(thumbPos, scrollRange), 0)
 	}
 
-	// Only render the thumb portion — let the original border show through
-	// for track rows so the theme border color is preserved.
-	thumbFg := "\x1b[38;2;120;120;140m"
+	// Use a bright version of the focused border color for the thumb
+	thumbColor := theme.BorderFocusedTerminal()
+	r, g, b, _ := thumbColor.RGBA()
+	cr, cg, cb := r>>8, g>>8, b>>8
+	// Brighten for visibility against the border
+	thumbFg := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", min(cr+60, 255), min(cg+60, 255), min(cb+60, 255))
 	reset := "\x1b[0m"
 
 	var sb strings.Builder

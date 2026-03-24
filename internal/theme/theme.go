@@ -160,7 +160,7 @@ func DockColorWindow() color.Color {
 func DockColorTerminal() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#00ff00")
+		return lipgloss.Color("#7aa2f7") // Soft blue
 	}
 	return t.BrightGreen
 }
