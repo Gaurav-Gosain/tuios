@@ -1194,10 +1194,12 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			if anyPartVisible && (info.WindowX < 0 || info.WindowY < 0) {
 				anyPartVisible = false
 			}
-			// Hide if image extends past the host terminal screen edge.
-			// The terminal wraps/duplicates images that go past screen bounds.
+			// Hide if image would extend past or touch the host terminal screen edge.
+			// Placing an image near the bottom causes the terminal to scroll to
+			// make room, creating a feedback loop of duplicate frames scrolling up.
+			// Use a 1-row margin to prevent this.
 			if anyPartVisible && info.ScreenWidth > 0 && info.ScreenHeight > 0 {
-				if newHostX+imageCellWidth > info.ScreenWidth || newHostY+imageCellHeight > info.ScreenHeight {
+				if newHostX+imageCellWidth > info.ScreenWidth || newHostY+imageCellHeight >= info.ScreenHeight-1 {
 					anyPartVisible = false
 				}
 			}
