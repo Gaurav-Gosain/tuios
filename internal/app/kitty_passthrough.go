@@ -132,6 +132,8 @@ type WindowPositionInfo struct {
 	ScrollbackLen      int  // Total scrollback lines
 	ScrollOffset       int  // Current scroll offset (0 = at bottom)
 	IsBeingManipulated bool // True when window is being dragged/resized
+	ScreenWidth        int  // Host terminal width
+	ScreenHeight       int  // Host terminal height
 	WindowZ            int  // Window z-index for occlusion detection
 	IsAltScreen        bool // True when alternate screen is active (vim, less, etc.)
 }
@@ -1192,12 +1194,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			if anyPartVisible && (info.WindowX < 0 || info.WindowY < 0) {
 				anyPartVisible = false
 			}
-			// Hide if image extends past window's right or bottom edge.
-			// The terminal wraps/duplicates images that extend past screen bounds.
-			if anyPartVisible {
-				windowRight := info.WindowX + info.Width
-				windowBottom := info.WindowY + info.Height
-				if newHostX+imageCellWidth > windowRight || newHostY+imageCellHeight > windowBottom {
+			// Hide if image extends past the host terminal screen edge.
+			// The terminal wraps/duplicates images that go past screen bounds.
+			if anyPartVisible && info.ScreenWidth > 0 && info.ScreenHeight > 0 {
+				if newHostX+imageCellWidth > info.ScreenWidth || newHostY+imageCellHeight > info.ScreenHeight {
 					anyPartVisible = false
 				}
 			}

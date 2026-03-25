@@ -270,6 +270,8 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 						IsBeingManipulated: w.IsBeingManipulated,
 						WindowZ:            w.Z,
 						IsAltScreen:        w.IsAltScreen,
+						ScreenWidth:        m.GetRenderWidth(),
+						ScreenHeight:       m.GetRenderHeight(),
 					}
 				}
 			}
