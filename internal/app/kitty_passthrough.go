@@ -155,10 +155,13 @@ func NewKittyPassthrough() *KittyPassthrough {
 	}
 }
 
-// WriteToHost writes graphics data directly to the host terminal.
+// WriteToHost writes graphics data directly to the host terminal,
+// wrapped in synchronized update sequences to prevent tearing.
 func (kp *KittyPassthrough) WriteToHost(data []byte) {
 	if kp.hostOut != nil && len(data) > 0 {
+		_, _ = kp.hostOut.Write(syncBegin)
 		_, _ = kp.hostOut.Write(data)
+		_, _ = kp.hostOut.Write(syncEnd)
 	}
 }
 
@@ -194,11 +197,20 @@ func (kp *KittyPassthrough) FlushPending() []byte {
 	return out
 }
 
-// flushToHost writes any pending output immediately to the host terminal.
+// Synchronized update sequences to prevent screen tearing.
+var (
+	syncBegin = []byte("\x1bP=1s\x1b\\") // Begin Synchronized Update
+	syncEnd   = []byte("\x1bP=2s\x1b\\") // End Synchronized Update
+)
+
+// flushToHost writes any pending output immediately to the host terminal,
+// wrapped in synchronized update sequences to prevent tearing/flickering.
 // Must be called while kp.mu is already held.
 func (kp *KittyPassthrough) flushToHost() {
 	if len(kp.pendingOutput) > 0 && kp.hostOut != nil {
+		_, _ = kp.hostOut.Write(syncBegin)
 		_, _ = kp.hostOut.Write(kp.pendingOutput)
+		_, _ = kp.hostOut.Write(syncEnd)
 		kp.pendingOutput = kp.pendingOutput[:0]
 	}
 }
@@ -672,12 +684,22 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// RefreshAllPlacements will handle the actual placement at the correct position
 	// This avoids ANSI leaks when icat is called multiple times
 
-	// Build a single transmit command with t=f (file-based).
-	// The host terminal reads the file directly — no chunking needed.
+	// Build a single transmit command with the correct medium type.
+	// The host terminal reads the file/shm directly — no chunking needed.
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")
-	fmt.Fprintf(&buf, "a=t,t=f,i=%d,f=%d,s=%d,v=%d,q=2",
-		hostID, cmd.Format, cmd.Width, cmd.Height)
+
+	// Use the original medium type: f=file, s=shared memory, t=temp file
+	medium := "f"
+	switch cmd.Medium {
+	case vt.KittyMediumSharedMemory:
+		medium = "s"
+	case vt.KittyMediumTempFile:
+		medium = "t"
+	}
+
+	fmt.Fprintf(&buf, "a=t,t=%s,i=%d,f=%d,s=%d,v=%d,q=2",
+		medium, hostID, cmd.Format, cmd.Width, cmd.Height)
 	if cmd.Compression == vt.KittyCompressionZlib {
 		buf.WriteString(",o=z")
 	}
@@ -723,14 +745,9 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 
-	// Clean up temp files/shm after forwarding (host has the path now)
-	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile {
-		// Defer cleanup to give the host terminal time to read the file
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			_ = os.Remove(filePath)
-		}()
-	}
+	// Don't clean up files here — for shared memory (t=s), the guest app
+	// manages the lifecycle. For temp files (t=t), the host terminal deletes
+	// them after reading. For regular files (t=f), they persist.
 
 	// Store placement using hostID as key (cmd.ImageID is often 0 for new images)
 	if kp.placements[windowID] == nil {
