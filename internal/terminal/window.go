@@ -369,7 +369,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		_ = err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 
 	// Update window with PTY and command info
 	window.Pty = ptyInstance
@@ -411,13 +411,13 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		// Give a small delay to ensure final output is captured
 		time.Sleep(config.ProcessWaitDelay)
 
-		// Notify exit channel
+		// Notify exit channel (ctx is already cancelled above, so don't
+		// include ctx.Done — it would randomly win the select and drop
+		// the exit notification, causing the window to stay open)
 		select {
 		case exitChan <- id:
-		case <-ctx.Done():
-			// Context cancelled, exit silently
 		default:
-			// Channel full or closed, exit silently
+			// Channel full, exit silently
 		}
 	}()
 
@@ -803,6 +803,17 @@ func (w *Window) handleIOOperations() {
 			if r := recover(); r != nil {
 				// Silently recover from panics during PTY read
 				_ = r // Explicitly ignore the recovered value
+			}
+		}()
+
+		// Signal bubbletea when PTY reader exits so the tick handler
+		// can detect ProcessExited and close the window promptly.
+		defer func() {
+			if w.PTYDataChan != nil {
+				select {
+				case w.PTYDataChan <- struct{}{}:
+				default:
+				}
 			}
 		}()
 

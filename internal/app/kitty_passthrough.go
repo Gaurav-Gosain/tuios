@@ -197,10 +197,12 @@ func (kp *KittyPassthrough) FlushPending() []byte {
 	return out
 }
 
-// Synchronized update sequences to prevent screen tearing.
+// Synchronized output mode 2026 (supported by Kitty, Ghostty, WezTerm, etc.)
+// This prevents screen tearing by telling the terminal to buffer output
+// until the end sequence is received.
 var (
-	syncBegin = []byte("\x1bP=1s\x1b\\") // Begin Synchronized Update
-	syncEnd   = []byte("\x1bP=2s\x1b\\") // End Synchronized Update
+	syncBegin = []byte("\x1b[?2026h") // Begin Synchronized Update
+	syncEnd   = []byte("\x1b[?2026l") // End Synchronized Update
 )
 
 // flushToHost writes any pending output immediately to the host terminal,
@@ -467,17 +469,19 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 		kittyPassthroughLog("forwardDirectTransmit: virtual placement detected, converting to regular deferred placement")
 	}
 
-	// Clear existing placements for this window before placing new image
-	if andPlace {
-		kp.deleteAllWindowPlacements(windowID, false)
-	}
-
-	// Allocate a unique host ID
-	hostID := kp.allocateHostID()
+	// Reuse existing host ID to avoid delete+re-place flicker
 	if kp.imageIDMap[windowID] == nil {
 		kp.imageIDMap[windowID] = make(map[uint32]uint32)
 	}
-	kp.imageIDMap[windowID][pending.ImageID] = hostID
+
+	hostID, reusingID := kp.imageIDMap[windowID][pending.ImageID]
+	if !reusingID {
+		hostID = kp.allocateHostID()
+		kp.imageIDMap[windowID][pending.ImageID] = hostID
+		if andPlace {
+			kp.deleteAllWindowPlacements(windowID, false)
+		}
+	}
 	kittyPassthroughLog("forwardDirectTransmit: mapped guestID=%d -> hostID=%d for window=%s", pending.ImageID, hostID, windowID[:8])
 
 	// Use the accumulated raw base64 payload directly (no decode→re-encode cycle)
@@ -636,17 +640,25 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 	kittyPassthroughLog("forwardFileTransmit: file=%s, andPlace=%v, medium=%c", filePath, andPlace, cmd.Medium)
 
-	// Clear existing placements for this window before placing new image
-	if andPlace {
-		kp.deleteAllWindowPlacements(windowID, false)
-	}
-
-	// Allocate a unique host ID and store the mapping
-	hostID := kp.allocateHostID()
+	// Reuse existing host ID if this window already has a placement for this
+	// guest image ID. This eliminates delete+re-place flicker for video playback:
+	// transmitting with the same ID replaces the image data in-place, and the
+	// existing placement automatically shows the new frame.
 	if kp.imageIDMap[windowID] == nil {
 		kp.imageIDMap[windowID] = make(map[uint32]uint32)
 	}
-	kp.imageIDMap[windowID][cmd.ImageID] = hostID
+
+	hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
+	if !reusingID {
+		// First frame for this image — allocate a new ID
+		hostID = kp.allocateHostID()
+		kp.imageIDMap[windowID][cmd.ImageID] = hostID
+		// Clear other placements for this window (switching from one image to another)
+		if andPlace {
+			kp.deleteAllWindowPlacements(windowID, false)
+		}
+	}
+	// When reusing ID: no delete needed — the transmit replaces image data in-place
 	kittyPassthroughLog("forwardFileTransmit: mapped guestID=%d -> hostID=%d for window=%s", cmd.ImageID, hostID, windowID[:8])
 
 	// PERFORMANCE: Forward the file path directly to the host terminal.
