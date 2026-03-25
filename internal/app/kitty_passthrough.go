@@ -1185,17 +1185,21 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				anyPartVisible = false
 			}
 
-			// Hide images when host position would be negative or outside screen bounds
-			// This prevents issues when windows are partially off-screen
+			// Hide images when host position is out of bounds.
 			if anyPartVisible && (newHostX < 0 || newHostY < 0) {
-				kittyPassthroughLog("RefreshPlacement: image at negative position (%d,%d), hiding", newHostX, newHostY)
 				anyPartVisible = false
 			}
-
-			// Also hide if the window itself is partially off the left or top edge
 			if anyPartVisible && (info.WindowX < 0 || info.WindowY < 0) {
-				kittyPassthroughLog("RefreshPlacement: window at negative position (%d,%d), hiding image", info.WindowX, info.WindowY)
 				anyPartVisible = false
+			}
+			// Hide if image extends past window's right or bottom edge.
+			// The terminal wraps/duplicates images that extend past screen bounds.
+			if anyPartVisible {
+				windowRight := info.WindowX + info.Width
+				windowBottom := info.WindowY + info.Height
+				if newHostX+imageCellWidth > windowRight || newHostY+imageCellHeight > windowBottom {
+					anyPartVisible = false
+				}
 			}
 
 			kittyPassthroughLog("RefreshPlacement: relY=%d, origRows=%d, origCols=%d, vpH=%d, vpW=%d, clipTop=%d, clipBot=%d, maxRows=%d, visible=%v",
