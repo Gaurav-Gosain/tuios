@@ -375,9 +375,9 @@ func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInpu
 func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile {
 		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
-		// Flush file-based transmits immediately to host (don't wait for render cycle).
-		// This is critical for video playback (ytk) where frames must be displayed ASAP.
-		kp.flushToHost()
+		// Don't flush immediately — accumulate in pendingOutput.
+		// Flushed during render cycle (GetKittyGraphicsCmd) so graphics
+		// and text arrive in the same frame, preventing tearing.
 		return nil
 	}
 
@@ -392,8 +392,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
 		kp.pendingOutput = append(kp.pendingOutput, rawData...)
 		kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
-		// Flush transmit-only commands immediately (don't wait for render cycle)
-		kp.flushToHost()
+		// Don't flush immediately — batched with render cycle to prevent tearing.
 		return nil
 	}
 

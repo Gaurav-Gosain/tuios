@@ -174,23 +174,6 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 	canvas.Compose(lipgloss.NewCompositor(layers...))
 
-	// Refresh graphics (kitty/sixel) after composing.
-	// Hide all images when any overlay is active (images render on top of text,
-	// making overlays invisible). Re-place them when overlays close.
-	if render {
-		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
-			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
-			m.ShowLogs || m.ShowCacheStats
-		if hasOverlay {
-			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
-				m.KittyPassthrough.HideAllPlacements()
-			}
-		} else {
-			m.GetKittyGraphicsCmd()
-			m.GetSixelGraphicsCmd()
-		}
-	}
-
 	return canvas
 }
 
@@ -238,6 +221,23 @@ func (m *OS) View() tea.View {
 	view.ReportFocus = true
 	view.DisableBracketedPasteMode = false
 	view.Cursor = m.getRealCursor()
+
+	// Flush graphics AFTER setting view content. bubbletea will render the
+	// text first, then we write graphics. This keeps them in the same frame
+	// and prevents tearing between text and graphics updates.
+	if !m.renderSkipped {
+		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
+			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
+			m.ShowLogs || m.ShowCacheStats
+		if hasOverlay {
+			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
+				m.KittyPassthrough.HideAllPlacements()
+			}
+		} else {
+			m.GetKittyGraphicsCmd()
+			m.GetSixelGraphicsCmd()
+		}
+	}
 
 	return view
 }
