@@ -652,12 +652,23 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		// First frame for this image — allocate a new ID
 		hostID = kp.allocateHostID()
 		kp.imageIDMap[windowID][cmd.ImageID] = hostID
-		// Clear other placements for this window (switching from one image to another)
 		if andPlace {
 			kp.deleteAllWindowPlacements(windowID, false)
 		}
+	} else if andPlace {
+		// Reusing ID — check if dimensions changed (e.g., window resize).
+		// If so, delete old placement so it gets recreated at the new size.
+		if placements := kp.placements[windowID]; placements != nil {
+			for _, p := range placements {
+				imgRows, imgCols := kp.calculateImageCells(cmd)
+			if p.HostImageID == hostID && (p.Rows != imgRows || p.Cols != imgCols) {
+					kp.deleteOnePlacement(p)
+					delete(placements, hostID)
+					break
+				}
+			}
+		}
 	}
-	// When reusing ID: no delete needed — the transmit replaces image data in-place
 	kittyPassthroughLog("forwardFileTransmit: mapped guestID=%d -> hostID=%d for window=%s", cmd.ImageID, hostID, windowID[:8])
 
 	// PERFORMANCE: Forward the file path directly to the host terminal.
