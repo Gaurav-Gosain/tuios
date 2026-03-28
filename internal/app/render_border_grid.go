@@ -12,6 +12,11 @@ import (
 // renderSeparatorOverlay renders thin separator lines between tiled panes.
 // Each separator line is its own lipgloss Layer to avoid occluding content.
 func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
+	// Don't render shared borders when a window is zoomed
+	if fw := m.GetFocusedWindow(); fw != nil && fw.Zoomed {
+		return nil
+	}
+
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil || tree.IsEmpty() {
 		return nil

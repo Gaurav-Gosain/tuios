@@ -236,6 +236,7 @@ var ActionDescriptions = map[string]string{
 	"rename_window":   "Rename window",
 	"minimize_window": "Minimize window",
 	"restore_all":     "Restore all minimized",
+	"toggle_zoom":     "Toggle zoom (fullscreen)",
 	"next_window":     "Next window",
 	"prev_window":     "Previous window",
 	"select_window_1": "Select window 1",

@@ -87,6 +87,7 @@ func DefaultConfig() *UserConfig {
 				"rename_window":   {"r"},
 				"minimize_window": {"m"},
 				"restore_all":     {"M"},
+				"toggle_zoom":     {"z"},
 				"next_window":     {"tab"},
 				"prev_window":     {"shift+tab"},
 				"select_window_1": {"1"},

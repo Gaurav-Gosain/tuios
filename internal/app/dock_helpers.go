@@ -117,6 +117,11 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 		}
 	}
 
+	// Add zoom indicator
+	if focusedWindow != nil && focusedWindow.Zoomed {
+		modeLabel += " Z"
+	}
+
 	// Build pill-style mode indicator with configurable semicircles
 	// This will be styled in render.go with the mode color
 	modeText = config.GetDockPillLeftChar() + modeLabel + config.GetDockPillRightChar()
