@@ -464,9 +464,9 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 			return
 		}
 
-		// Calculate host position
-		hostX := win.X + win.BorderOffset() + cursorX
-		hostY := win.Y + win.BorderOffset() + cursorY
+		// Calculate host position (always +1 for border)
+		hostX := win.X + 1 + cursorX
+		hostY := win.Y + 1 + cursorY
 
 		// Write directly to /dev/tty as a single write to avoid fragmentation
 		tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
