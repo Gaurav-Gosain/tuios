@@ -83,10 +83,8 @@ type SixelPassthroughPlacement struct {
 func NewSixelPassthrough() *SixelPassthrough {
 	caps := GetHostCapabilities()
 	sixelPassthroughLog("NewSixelPassthrough: SixelGraphics=%v, TerminalName=%s", caps.SixelGraphics, caps.TerminalName)
-	// TODO: Sixel passthrough is disabled - needs proper sixel raster clipping
-	// to work correctly in a windowed environment.
 	return &SixelPassthrough{
-		enabled:    false,
+		enabled:    caps.SixelGraphics,
 		hostOut:    os.Stdout,
 		placements: make(map[string][]*SixelPassthroughPlacement),
 	}
