@@ -58,6 +58,12 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"s", "Stop recording"},
 			{"Esc", "Cancel"},
 		}
+	case "layout":
+		return []Keybinding{
+			{"l", "Load layout"},
+			{"s", "Save layout"},
+			{"Esc", "Cancel"},
+		}
 	default: // general prefix
 		bindings := []Keybinding{
 			{"c", "Create window"},
@@ -79,7 +85,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"T", "Tape manager..."},
 			{"P", "Command palette"},
 			{"S", "Session switcher"},
-			{"L", "Load layout"},
+			{"L", "Layout commands..."},
 		}
 
 		// In daemon mode, d and Esc have different behaviors

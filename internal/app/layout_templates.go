@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/adrg/xdg"
 )
 
@@ -228,14 +229,23 @@ func LoadLayoutTemplates() ([]LayoutTemplate, error) {
 
 // ApplyLayoutTemplate recreates a workspace from a template.
 func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
-	// Close all windows in current workspace
-	for i := len(m.Windows) - 1; i >= 0; i-- {
-		if m.Windows[i].Workspace == m.CurrentWorkspace {
-			m.DeleteWindow(i)
+	// Collect existing windows in current workspace (reuse them instead of killing)
+	var existingWindows []*terminal.Window
+	for _, w := range m.Windows {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized {
+			existingWindows = append(existingWindows, w)
 		}
 	}
 
-	// Disable auto-tiling during creation to prevent retiling
+	// Count non-minimized template slots
+	var templateSlots []LayoutWindow
+	for _, tw := range tmpl.Windows {
+		if !tw.Minimized {
+			templateSlots = append(templateSlots, tw)
+		}
+	}
+
+	// Disable auto-tiling during layout to prevent retiling
 	savedAutoTiling := m.AutoTiling
 	m.AutoTiling = false
 
@@ -246,62 +256,70 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		scaleY = float64(m.GetRenderHeight()) / float64(tmpl.ScreenHeight)
 	}
 
-	// Create windows
-	for _, tw := range tmpl.Windows {
-		if tw.Minimized {
-			continue // Skip minimized windows for now
+	// Assign existing windows to template slots
+	for i, tw := range templateSlots {
+		var win *terminal.Window
+		if i < len(existingWindows) {
+			// Reuse existing window
+			win = existingWindows[i]
+		} else {
+			// Need more windows than we have — create new ones
+			title := tw.CustomName
+			if title == "" {
+				title = tw.Title
+			}
+			m.AddWindow(title)
+			if len(m.Windows) > 0 {
+				win = m.Windows[len(m.Windows)-1]
+			}
+		}
+		if win == nil {
+			continue
 		}
 
-		// If window has a startup command, we could set it up here
-		// For now, just create with default shell
-		title := tw.CustomName
-		if title == "" {
-			title = tw.Title
+		// Apply scaled positions
+		win.X = int(float64(tw.X) * scaleX)
+		win.Y = int(float64(tw.Y) * scaleY)
+		win.Resize(
+			max(int(float64(tw.Width)*scaleX), 10),
+			max(int(float64(tw.Height)*scaleY), 5),
+		)
+		win.Minimized = false
+
+		if tw.CustomName != "" {
+			win.CustomName = tw.CustomName
 		}
-		m.AddWindow(title)
 
-		if len(m.Windows) > 0 {
-			newWin := m.Windows[len(m.Windows)-1]
-
-			// Apply scaled positions
-			newWin.X = int(float64(tw.X) * scaleX)
-			newWin.Y = int(float64(tw.Y) * scaleY)
-			newWin.Resize(
-				max(int(float64(tw.Width)*scaleX), 10),
-				max(int(float64(tw.Height)*scaleY), 5),
-			)
-
-			if tw.CustomName != "" {
-				newWin.CustomName = tw.CustomName
+		// If template specifies a working directory, cd to it
+		if tw.WorkingDir != "" {
+			if win.Pty != nil {
+				cdCmd := fmt.Sprintf("cd %q && clear\n", tw.WorkingDir)
+				_, _ = win.Pty.Write([]byte(cdCmd))
+			} else if win.DaemonWriteFunc != nil {
+				cdCmd := fmt.Sprintf("cd %q && clear\n", tw.WorkingDir)
+				_ = win.DaemonWriteFunc([]byte(cdCmd))
 			}
-
-			// If template specifies a working directory, cd to it
-			if tw.WorkingDir != "" {
-				if newWin.Pty != nil {
-					// Send cd command to the shell
-					cdCmd := fmt.Sprintf("cd %q && clear\n", tw.WorkingDir)
-					_, _ = newWin.Pty.Write([]byte(cdCmd))
-				} else if newWin.DaemonWriteFunc != nil {
-					cdCmd := fmt.Sprintf("cd %q && clear\n", tw.WorkingDir)
-					_ = newWin.DaemonWriteFunc([]byte(cdCmd))
-				}
-			}
-
-			// If template specifies a startup command, run it
-			if tw.Command != "" {
-				cmd := tw.Command
-				if len(tw.Args) > 0 {
-					cmd += " " + strings.Join(tw.Args, " ")
-				}
-				if newWin.Pty != nil {
-					_, _ = newWin.Pty.Write([]byte(cmd + "\n"))
-				} else if newWin.DaemonWriteFunc != nil {
-					_ = newWin.DaemonWriteFunc([]byte(cmd + "\n"))
-				}
-			}
-
-			newWin.InvalidateCache()
 		}
+
+		// If template specifies a startup command, run it (only for newly created windows)
+		if i >= len(existingWindows) && tw.Command != "" {
+			cmd := tw.Command
+			if len(tw.Args) > 0 {
+				cmd += " " + strings.Join(tw.Args, " ")
+			}
+			if win.Pty != nil {
+				_, _ = win.Pty.Write([]byte(cmd + "\n"))
+			} else if win.DaemonWriteFunc != nil {
+				_ = win.DaemonWriteFunc([]byte(cmd + "\n"))
+			}
+		}
+
+		win.InvalidateCache()
+	}
+
+	// If we have MORE existing windows than template slots, minimize the extras
+	for i := len(templateSlots); i < len(existingWindows); i++ {
+		existingWindows[i].Minimized = true
 	}
 
 	// Restore tiling configuration
@@ -312,7 +330,6 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 
 	// If tiled, apply BSP tree or retile
 	if m.AutoTiling {
-		// Set tiling scheme if specified
 		if tmpl.TilingScheme != "" {
 			if tree := m.GetOrCreateBSPTree(); tree != nil {
 				tree.AutoScheme = layout.ParseAutoScheme(tmpl.TilingScheme)
@@ -327,8 +344,6 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		m.FocusWindow(0)
 	}
 
-	// Force all windows dirty so they render on the next frame.
-	// Without this, windows created before PTY output arrives show blank.
 	m.MarkAllDirty()
 }
 

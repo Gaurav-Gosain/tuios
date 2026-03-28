@@ -429,6 +429,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		} else if m.TapePrefixActive {
 			title = "Tape"
 			bindings = config.GetPrefixKeybindings("tape")
+		} else if m.LayoutPrefixActive {
+			title = "Layout"
+			bindings = config.GetPrefixKeybindings("layout")
 		} else {
 			title = "Prefix"
 			bindings = config.GetPrefixKeybindings("", m.IsDaemonSession)

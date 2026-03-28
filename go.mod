@@ -24,6 +24,7 @@ require (
 )
 
 require (
+	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 )

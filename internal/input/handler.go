@@ -226,6 +226,11 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleDebugPrefixCommand(msg, o)
 	}
 
+	// Handle layout prefix commands (Ctrl+B, L, ...)
+	if o.LayoutPrefixActive {
+		return handleTerminalLayoutPrefix(msg, o)
+	}
+
 	// Handle tape prefix commands (Ctrl+B, T, ...)
 	if o.TapePrefixActive {
 		return HandleTapePrefixCommand(msg, o)
@@ -374,10 +379,22 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	case "z":
-		// Toggle fullscreen for current window
-		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.Snap(o.FocusedWindow, app.SnapFullScreen)
+		// Toggle zoom for current window
+		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+			o.ToggleZoom()
+			fw := o.GetFocusedWindow()
+			if fw != nil && fw.Zoomed {
+				o.ShowNotification("ZOOM", "info", config.NotificationDuration)
+			} else {
+				o.ShowNotification("", "info", 0)
+			}
 		}
+		return o, nil
+	case "L":
+		// Enter layout prefix mode
+		o.LayoutPrefixActive = true
+		o.PrefixActive = true
+		o.LastPrefixTime = time.Now()
 		return o, nil
 	case "-":
 		// Split focused window horizontally (top/bottom)
