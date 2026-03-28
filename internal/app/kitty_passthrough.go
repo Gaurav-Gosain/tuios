@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -394,33 +395,136 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	}
 
 	// Check if we have pending data from a previous transmit+place command
-	// Chafa sends first chunk as a=T,m=1 but continuation chunks as a=t
-	// We need to continue accumulating if there's pending data
 	hasPendingData := kp.pendingDirectData[windowID] != nil
 
-	// For transmit-only (no placement) AND no pending accumulation, pass through raw data
-	if !andPlace && !hasPendingData {
-		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
-		kp.pendingOutput = append(kp.pendingOutput, rawData...)
-		kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
-		// Don't flush immediately — batched with render cycle to prevent tearing.
+	// For transmit+place: stream raw chunks directly to host terminal with
+	// cursor positioning on the first chunk. This handles video playback
+	// (mpv sends a=T,m=1 chunks) without needing to accumulate all data.
+	if andPlace || hasPendingData {
+		isFirstChunk := cmd.Width > 0 && cmd.Height > 0
+
+		if isFirstChunk {
+			// Get/allocate host ID
+			if kp.imageIDMap[windowID] == nil {
+				kp.imageIDMap[windowID] = make(map[uint32]uint32)
+			}
+			hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
+			if !reusingID {
+				hostID = kp.allocateHostID()
+				kp.imageIDMap[windowID][cmd.ImageID] = hostID
+				kp.deleteAllWindowPlacements(windowID, false)
+			}
+
+			hostX := windowX + contentOffsetX + cursorX
+			hostY := windowY + contentOffsetY + cursorY
+
+			// Rewrite the command with host ID and a=T, stream to host
+			var buf []byte
+			buf = append(buf, syncBegin...)
+			buf = append(buf, "\x1b7"...)
+			buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
+			buf = append(buf, "\x1b_G"...)
+			// Replace guest image ID with host ID in raw data, and ensure a=T
+			buf = append(buf, fmt.Sprintf("a=T,i=%d,", hostID)...)
+			// Forward remaining params from rawData (skip any a= and i= that may be present)
+			paramEnd := bytes.IndexByte(rawData, ';')
+			if paramEnd >= 0 {
+				params := string(rawData[:paramEnd])
+				// Remove a= and i= from params, keep everything else
+				var filteredParams []string
+				for _, p := range strings.Split(params, ",") {
+					if !strings.HasPrefix(p, "a=") && !strings.HasPrefix(p, "i=") {
+						filteredParams = append(filteredParams, p)
+					}
+				}
+				if len(filteredParams) > 0 {
+					buf = append(buf, strings.Join(filteredParams, ",")...)
+				}
+				buf = append(buf, rawData[paramEnd:]...) // ;data
+			}
+			buf = append(buf, "\x1b\\"...)
+			if kp.hostOut != nil {
+				_, _ = kp.hostOut.Write(buf)
+			}
+
+			// Track placement for RefreshAllPlacements
+			imgRows, imgCols := kp.calculateImageCells(cmd)
+			contentWidth := windowWidth - 2
+			contentHeight := windowHeight - 2
+			displayCols := min(imgCols, contentWidth)
+			displayRows := min(imgRows, contentHeight)
+			if kp.placements[windowID] == nil {
+				kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
+			}
+			kp.placements[windowID][hostID] = &PassthroughPlacement{
+				GuestImageID:      cmd.ImageID,
+				HostImageID:       hostID,
+				WindowID:          windowID,
+				GuestX:            cursorX,
+				AbsoluteLine:      scrollbackLen + cursorY,
+				HostX:             hostX,
+				HostY:             hostY,
+				Cols:              displayCols,
+				Rows:              imgRows,
+				DisplayRows:       displayRows,
+				Hidden:            false, // Already placed
+				PlacedOnAltScreen: isAltScreen,
+			}
+			// Mark that we're streaming a chunked transfer
+			kp.pendingDirectData[windowID] = &pendingDirectTransmit{ImageID: cmd.ImageID}
+		} else {
+			// Continuation chunk - stream directly with host ID
+			hostID := kp.imageIDMap[windowID][cmd.ImageID]
+			var buf []byte
+			buf = append(buf, "\x1b_G"...)
+			buf = append(buf, fmt.Sprintf("i=%d,", hostID)...)
+			paramEnd := bytes.IndexByte(rawData, ';')
+			if paramEnd >= 0 {
+				var filteredParams []string
+				for _, p := range strings.Split(string(rawData[:paramEnd]), ",") {
+					if !strings.HasPrefix(p, "a=") && !strings.HasPrefix(p, "i=") {
+						filteredParams = append(filteredParams, p)
+					}
+				}
+				if len(filteredParams) > 0 {
+					buf = append(buf, strings.Join(filteredParams, ",")...)
+				}
+				buf = append(buf, rawData[paramEnd:]...)
+			}
+			buf = append(buf, "\x1b\\"...)
+			if kp.hostOut != nil {
+				_, _ = kp.hostOut.Write(buf)
+			}
+		}
+
+		// If this is the last chunk, clean up pending state and restore cursor
+		if !cmd.More {
+			delete(kp.pendingDirectData, windowID)
+			if kp.hostOut != nil {
+				_, _ = kp.hostOut.Write([]byte("\x1b8")) // restore cursor
+				_, _ = kp.hostOut.Write(syncEnd)
+			}
+		}
+
 		return nil
 	}
 
-	// Handle direct data transmission with placement - accumulate chunks and track placements
-	// Also handle continuation of a pending transmit+place
-	return kp.forwardDirectTransmit(cmd, windowID, andPlace || hasPendingData, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
+	// For transmit-only (no placement), pass through raw data via pendingOutput
+	kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
+	kp.pendingOutput = append(kp.pendingOutput, rawData...)
+	kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
+	return nil
 }
 
 func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
 	// Get or create pending data buffer for this window
 	pending := kp.pendingDirectData[windowID]
 
-	// If a new a=T starts (has Width/Height) while previous is still pending,
-	// the previous frame was implicitly complete. Start fresh.
-	// Also: some apps (mpv) set m=1 on every a=T but each is actually a complete
-	// frame. Detect this by checking if the new command has image dimensions.
+	// If a new frame starts (has Width/Height) while previous is still pending,
+	// the previous frame was implicitly complete. Discard it (the new frame
+	// supersedes it) and start fresh.
 	if pending != nil && cmd.Width > 0 && cmd.Height > 0 {
+		kittyPassthroughLog("forwardDirectTransmit: new frame supersedes pending (%d bytes), starting fresh", len(pending.Data))
 		delete(kp.pendingDirectData, windowID)
 		pending = nil
 	}
@@ -466,10 +570,10 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 	kittyPassthroughLog("forwardDirectTransmit: accumulated %d bytes, total=%d, more=%v, andPlace=%v, storedPos=(%d,%d)",
 		len(cmd.Data), len(pending.Data), cmd.More, andPlace, pending.WindowX, pending.WindowY)
 
-	// If more chunks coming, wait — UNLESS this is a self-contained frame
-	// (has image dimensions and data). mpv sets m=1 on every a=T but each
-	// command is actually a complete frame.
-	if cmd.More && (pending.Width == 0 || len(pending.Data) == 0) {
+	// If more chunks coming, wait for finalization.
+	// Note: a new a=T with dimensions arriving while accumulating will be
+	// detected at the top of this function and reset the pending state.
+	if cmd.More {
 		return nil
 	}
 
