@@ -52,6 +52,10 @@ type KittyPassthrough struct {
 
 	// Pending direct transmission data (for chunked transfers)
 	pendingDirectData map[string]*pendingDirectTransmit // key: windowID
+
+	// Screen dimensions (updated by RefreshAllPlacements)
+	screenWidth  int
+	screenHeight int
 }
 
 // pendingDirectTransmit holds accumulated data for chunked direct transmissions
@@ -476,7 +480,17 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			kp.videoFrameBuf = append(kp.videoFrameBuf, innerData[paramEnd:]...)
 		}
 		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b\\"...)
-		kp.pendingDirectData[windowID] = &pendingDirectTransmit{ImageID: cmd.ImageID}
+		kp.pendingDirectData[windowID] = &pendingDirectTransmit{
+			ImageID:        cmd.ImageID,
+			WindowX:        windowX,
+			WindowY:        windowY,
+			WindowWidth:    windowWidth,
+			WindowHeight:   windowHeight,
+			ContentOffsetX: contentOffsetX,
+			ContentOffsetY: contentOffsetY,
+			CursorX:        cursorX,
+			CursorY:        cursorY,
+		}
 	} else {
 		// Continuation chunk: accumulate in videoFrameBuf
 		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b_G"...)
@@ -520,13 +534,18 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			}
 		}
 
-		// Bounds check: window must be onscreen, image must fit in content area
+		// Bounds check: window must be onscreen, image must fit in content area AND screen
 		visible := winX >= 0 && winY >= 0 && hostX >= 0 && hostY >= 0
 		if visible && imgCols > 0 {
 			visible = hostX+imgCols <= winX+1+contentW
 		}
 		if visible && imgRows > 0 {
 			visible = hostY+imgRows <= winY+1+contentH
+		}
+		if visible && kp.screenWidth > 0 && kp.screenHeight > 0 {
+			if hostX+imgCols > kp.screenWidth || hostY+imgRows >= kp.screenHeight-1 {
+				visible = false
+			}
 		}
 
 		if visible {
@@ -979,13 +998,18 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// File/shm-based video is time-critical: mpv overwrites the shm/file
 	// with the next frame almost instantly.
 	if action == "T" && kp.hostOut != nil {
-		// Bounds check: window must be fully onscreen, image must fit in content area
+		// Bounds check: window must be fully onscreen, image must fit in content area AND screen
 		visible := windowX >= 0 && windowY >= 0 && hostX >= 0 && hostY >= 0
 		if visible && displayCols > 0 {
 			visible = hostX+displayCols <= windowX+1+contentWidth
 		}
 		if visible && displayRows > 0 {
 			visible = hostY+displayRows <= windowY+1+contentHeight
+		}
+		if visible && kp.screenWidth > 0 && kp.screenHeight > 0 {
+			if hostX+displayCols > kp.screenWidth || hostY+displayRows >= kp.screenHeight-1 {
+				visible = false
+			}
 		}
 
 		if visible {
@@ -1314,6 +1338,15 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 
 	// Get all windows upfront for occlusion detection
 	allWindows := getAllWindows()
+
+	// Update screen dimensions from any window info
+	for _, info := range allWindows {
+		if info.ScreenWidth > 0 && info.ScreenHeight > 0 {
+			kp.screenWidth = info.ScreenWidth
+			kp.screenHeight = info.ScreenHeight
+			break
+		}
+	}
 
 	for windowID, placements := range kp.placements {
 		if len(placements) == 0 {
