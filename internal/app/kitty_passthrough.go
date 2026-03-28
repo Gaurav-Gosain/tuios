@@ -949,10 +949,10 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		medium = "t"
 	}
 
-	action := "t" // transmit only (default)
-	if andPlace {
-		action = "T" // transmit+place (always when placement is requested)
-	}
+	// Always transmit-only here. Placement is handled either by:
+	// - Video immediate path (isVideoFrame) which uses a=T with positioning
+	// - RefreshAllPlacements which sends a=p for non-video images
+	action := "t"
 
 	fmt.Fprintf(&buf, "a=%s,t=%s,i=%d,f=%d,s=%d,v=%d,q=2",
 		action, medium, hostID, cmd.Format, cmd.Width, cmd.Height)
@@ -1004,11 +1004,14 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// with the next frame almost instantly.
 	// For non-video (first image, icat), always transmit via pendingOutput
 	// and let RefreshAllPlacements handle placement with proper clipping.
-	// Video: reusing ID + shm + chunked (more=true on first chunk).
-	// icat: may reuse ID but sends single unchunked command (more=false).
-	isVideoFrame := reusingID && action == "T" && cmd.More
+	// Video: reusing ID + chunked (more=true on first chunk).
+	// icat/ytk: may reuse ID but sends single unchunked command (more=false).
+	isVideoFrame := reusingID && andPlace && cmd.More
 
 	if isVideoFrame && kp.hostOut != nil {
+		// Override to a=T for video immediate flush (buf was built with a=t)
+		bufBytes := bytes.Replace(buf.Bytes(), []byte("a=t,"), []byte("a=T,"), 1)
+
 		// Bounds check for video
 		visible := windowX >= 0 && windowY >= 0 && hostX >= 0 && hostY >= 0
 		if visible && displayCols > 0 {
@@ -1027,7 +1030,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			var posCmd []byte
 			posCmd = append(posCmd, syncBegin...)
 			posCmd = append(posCmd, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
-			posCmd = append(posCmd, buf.Bytes()...)
+			posCmd = append(posCmd, bufBytes...)
 			posCmd = append(posCmd, syncEnd...)
 			_, _ = kp.hostOut.Write(posCmd)
 		} else if hostID > 0 {
