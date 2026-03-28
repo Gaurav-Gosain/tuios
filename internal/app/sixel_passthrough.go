@@ -474,9 +474,34 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 		hostX := win.X + borderOff + cursorX
 		hostY := win.Y + borderOff + cursorY
 
-		// Debug: log position calculation
-		sixelPassthroughLog("SIXEL DIRECT: winX=%d winY=%d borderOff=%d cursorX=%d cursorY=%d -> hostX=%d hostY=%d",
-			win.X, win.Y, borderOff, cursorX, cursorY, hostX, hostY)
+		// Calculate image size in cells
+		caps := GetHostCapabilities()
+		cellH := caps.CellHeight
+		if cellH <= 0 {
+			cellH = 20
+		}
+		cellW := caps.CellWidth
+		if cellW <= 0 {
+			cellW = 9
+		}
+		imgRows := (cmd.Height + cellH - 1) / cellH
+		imgCols := (cmd.Width + cellW - 1) / cellW
+
+		// Skip if image would extend past window content area
+		contentBottom := win.Y + win.Height - borderOff
+		contentRight := win.X + win.Width - borderOff
+		if hostY+imgRows > contentBottom || hostX+imgCols > contentRight {
+			return
+		}
+
+		// Skip if image would extend past screen bottom (causes scroll)
+		screenH := caps.Rows
+		if screenH <= 0 {
+			screenH = 50
+		}
+		if hostY+imgRows >= screenH-1 {
+			return
+		}
 
 		// Write directly to /dev/tty as a single write to avoid fragmentation
 		tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
