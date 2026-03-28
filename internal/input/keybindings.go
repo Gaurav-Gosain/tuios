@@ -9,6 +9,7 @@ package input
 
 import (
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // Ctrl key combinations mapping
@@ -413,5 +414,19 @@ func IsMacOSOptionTab(r rune) string {
 		return "prev"
 	default:
 		return ""
+	}
+}
+
+// vtKeyFromBubbletea converts a bubbletea KeyPressMsg to a VT emulator
+// KeyPressEvent for use with the kitty keyboard protocol's SendKey path.
+func vtKeyFromBubbletea(msg tea.KeyPressMsg) vt.KeyPressEvent {
+	key := msg.Key()
+	return vt.KeyPressEvent{
+		Code:        key.Code,
+		Text:        key.Text,
+		Mod:         vt.KeyMod(key.Mod),
+		ShiftedCode: key.ShiftedCode,
+		BaseCode:    key.BaseCode,
+		IsRepeat:    key.IsRepeat,
 	}
 }

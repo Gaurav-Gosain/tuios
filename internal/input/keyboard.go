@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // HandleTerminalModeKey handles keyboard input in terminal mode
@@ -209,6 +210,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleTerminalTapePrefix(msg, o)
 	}
 
+	// Handle layout prefix commands (Ctrl+B, L, ...)
+	if o.LayoutPrefixActive {
+		return handleTerminalLayoutPrefix(msg, o)
+	}
+
 	// Handle prefix commands in terminal mode
 	if o.PrefixActive {
 		return handleTerminalPrefixCommand(msg, o)
@@ -253,12 +259,24 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// Normal terminal mode - pass through all keys
 	if focusedWindow != nil {
-		// Check if the terminal has DECCKM (application cursor keys) mode enabled
 		appCursorKeys := false
 		if focusedWindow.Terminal != nil {
 			appCursorKeys = focusedWindow.Terminal.ApplicationCursorKeys()
 		}
-		rawInput := getRawKeyBytesWithMode(msg, appCursorKeys)
+
+		// When kitty keyboard protocol is active, encode as CSI u
+		var rawInput []byte
+		if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
+			encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focusedWindow.Terminal.KittyKeyboardFlags())
+			if len(encoded) > 0 {
+				rawInput = []byte(encoded)
+			}
+		}
+		// Fall back to legacy encoding
+		if len(rawInput) == 0 {
+			rawInput = getRawKeyBytesWithMode(msg, appCursorKeys)
+		}
+
 		if len(rawInput) > 0 {
 			if err := focusedWindow.SendInput(rawInput); err != nil {
 				// Terminal unavailable, switch back to window mode
@@ -401,6 +419,77 @@ func handleTerminalTapePrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 	return HandleTapePrefixCommand(msg, o)
 }
 
+// handleWindowMgmtPrefixCommand handles prefix commands in window management mode.
+// Supports a subset of the terminal mode prefix commands.
+func handleWindowMgmtPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.PrefixActive = false
+	switch msg.String() {
+	case "z":
+		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+			o.ToggleZoom()
+			fw := o.GetFocusedWindow()
+			if fw != nil && fw.Zoomed {
+				o.ShowNotification("ZOOM", "info", config.NotificationDuration)
+			} else {
+				o.ShowNotification("", "info", 0)
+			}
+		}
+		return o, nil
+	case "L":
+		o.LayoutPrefixActive = true
+		o.PrefixActive = true
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "c":
+		return handleNewWindow(msg, o)
+	case "x":
+		return handleCloseWindow(msg, o)
+	case "esc":
+		return o, nil
+	default:
+		// Try dispatch through registry's prefix section
+		if o.KeybindRegistry != nil {
+			action := o.KeybindRegistry.GetPrefixAction(msg.String())
+			if action != "" {
+				dispatcher := GetDispatcher()
+				if dispatcher.HasAction(action) {
+					return dispatcher.Dispatch(action, msg, o)
+				}
+			}
+		}
+		return o, nil
+	}
+}
+
+func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.LayoutPrefixActive = false
+	o.PrefixActive = false
+	switch msg.String() {
+	case "l":
+		// Load layout
+		templates, _ := app.LoadLayoutTemplates()
+		o.ShowLayoutPicker = true
+		o.LayoutPickerMode = "load"
+		o.LayoutPickerItems = templates
+		o.LayoutPickerQuery = ""
+		o.LayoutPickerSelected = 0
+		o.LayoutPickerScroll = 0
+		return o, nil
+	case "s":
+		// Save layout
+		o.ShowLayoutPicker = true
+		o.LayoutPickerMode = "save"
+		o.LayoutPickerQuery = ""
+		o.LayoutPickerSelected = 0
+		o.LayoutPickerScroll = 0
+		return o, nil
+	case "esc":
+		return o, nil
+	default:
+		return o, nil
+	}
+}
+
 // handleTerminalPrefixCommand handles prefix commands in terminal mode
 func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.PrefixActive = false
@@ -494,14 +583,10 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		o.SessionSwitcherItems = o.RefreshSessionList()
 		return o, nil
 	case "L":
-		// Open layout picker (load mode)
-		templates, _ := app.LoadLayoutTemplates()
-		o.ShowLayoutPicker = true
-		o.LayoutPickerMode = "load"
-		o.LayoutPickerItems = templates
-		o.LayoutPickerQuery = ""
-		o.LayoutPickerSelected = 0
-		o.LayoutPickerScroll = 0
+		// Enter layout prefix mode (Ctrl+B, L, then l=load / s=save)
+		o.LayoutPrefixActive = true
+		o.PrefixActive = true // Keep prefix active for whichkey overlay
+		o.LastPrefixTime = time.Now()
 		return o, nil
 	case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		// Jump to window by number
@@ -620,11 +705,20 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		// Unknown prefix command, pass through the key
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
-			appCursorKeys := false
-			if focusedWindow.Terminal != nil {
-				appCursorKeys = focusedWindow.Terminal.ApplicationCursorKeys()
+			var rawInput []byte
+			if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
+				encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focusedWindow.Terminal.KittyKeyboardFlags())
+				if len(encoded) > 0 {
+					rawInput = []byte(encoded)
+				}
 			}
-			rawInput := getRawKeyBytesWithMode(msg, appCursorKeys)
+			if len(rawInput) == 0 {
+				appCursorKeys := false
+				if focusedWindow.Terminal != nil {
+					appCursorKeys = focusedWindow.Terminal.ApplicationCursorKeys()
+				}
+				rawInput = getRawKeyBytesWithMode(msg, appCursorKeys)
+			}
 			if len(rawInput) > 0 {
 				_ = focusedWindow.SendInput(rawInput)
 			}
