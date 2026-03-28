@@ -828,8 +828,14 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// PERFORMANCE: Forward the file path directly to the host terminal.
 	// The host (Ghostty/Kitty) reads the file itself — no need to read the
 	// entire file into memory, base64 encode it, and chunk it.
-	// This is the key optimization for video playback (ytk sends ~30 temp files/sec).
-	encoded := base64.StdEncoding.EncodeToString([]byte(filePath))
+	// For t=s (shm), send the original shm name (NOT /dev/shm/ prefixed path).
+	// The host terminal prepends /dev/shm/ itself.
+	// For t=f/t=t, send the full file path.
+	encodePath := cmd.FilePath // Original name from the guest
+	if cmd.Medium != vt.KittyMediumSharedMemory {
+		encodePath = filePath // Use potentially modified path for non-shm
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(encodePath))
 
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
