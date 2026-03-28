@@ -497,21 +497,45 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		hostX := windowX + contentOffsetX + cursorX
 		hostY := windowY + contentOffsetY + cursorY
 
-		// Position cursor and write frame. No save/restore (DECSC/DECRC)
-		// which can interfere with bubbletea's cursor state. The a=T command
-		// has C=1 (don't move cursor after placement) from mpv's original params.
-		var frame []byte
-		frame = append(frame, syncBegin...)
-		frame = append(frame, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
-		frame = append(frame, kp.videoFrameBuf...)
-		frame = append(frame, syncEnd...)
-		_, _ = kp.hostOut.Write(frame)
-		kp.videoFrameBuf = kp.videoFrameBuf[:0]
-
-		// Mark placement as visible
+		// Bounds check: don't render if image would be outside window content area
+		contentWidth := windowWidth - 2
+		contentHeight := windowHeight - 2
+		imgCols, imgRows := 0, 0
 		if placements := kp.placements[windowID]; placements != nil {
 			if p := placements[hostID]; p != nil {
-				p.Hidden = false
+				imgCols = p.Cols
+				imgRows = p.DisplayRows
+			}
+		}
+
+		visible := hostX >= 0 && hostY >= 0 &&
+			hostX < windowX+contentOffsetX+contentWidth &&
+			hostY < windowY+contentOffsetY+contentHeight
+		// Check image doesn't extend past window right/bottom edge
+		if visible && imgCols > 0 && hostX+imgCols > windowX+contentOffsetX+contentWidth {
+			visible = false
+		}
+		if visible && imgRows > 0 && hostY+imgRows > windowY+contentOffsetY+contentHeight {
+			visible = false
+		}
+		if visible && (windowX < 0 || windowY < 0) {
+			visible = false
+		}
+
+		if visible {
+			var frame []byte
+			frame = append(frame, syncBegin...)
+			frame = append(frame, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
+			frame = append(frame, kp.videoFrameBuf...)
+			frame = append(frame, syncEnd...)
+			_, _ = kp.hostOut.Write(frame)
+		}
+		kp.videoFrameBuf = kp.videoFrameBuf[:0]
+
+		// Mark placement
+		if placements := kp.placements[windowID]; placements != nil {
+			if p := placements[hostID]; p != nil {
+				p.Hidden = !visible
 				p.Streaming = false
 				p.HostX = hostX
 				p.HostY = hostY
