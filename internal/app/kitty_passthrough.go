@@ -994,11 +994,15 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	buf.WriteString(encoded)
 	buf.WriteString("\x1b\\")
 
-	// For a=T (video frame updates), write IMMEDIATELY to host terminal.
+	// For video (reusing ID + shm), write IMMEDIATELY to host terminal.
 	// File/shm-based video is time-critical: mpv overwrites the shm/file
 	// with the next frame almost instantly.
-	if action == "T" && kp.hostOut != nil {
-		// Bounds check: window must be fully onscreen, image must fit in content area AND screen
+	// For non-video (first image, icat), always transmit via pendingOutput
+	// and let RefreshAllPlacements handle placement with proper clipping.
+	isVideoFrame := reusingID && action == "T"
+
+	if isVideoFrame && kp.hostOut != nil {
+		// Bounds check for video
 		visible := windowX >= 0 && windowY >= 0 && hostX >= 0 && hostY >= 0
 		if visible && displayCols > 0 {
 			visible = hostX+displayCols <= windowX+1+contentWidth
@@ -1020,7 +1024,6 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			posCmd = append(posCmd, syncEnd...)
 			_, _ = kp.hostOut.Write(posCmd)
 		} else if hostID > 0 {
-			// Delete image when out of bounds
 			var del []byte
 			del = append(del, syncBegin...)
 			del = append(del, fmt.Sprintf("\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)...)
