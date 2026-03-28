@@ -990,50 +990,62 @@ func (m *OS) renderQuitConfirmDialog() (string, int, int) {
 	borderColor := theme.HelpBorder()
 	selectedColor := theme.HelpTabActive()
 	unselectedColor := theme.HelpGray()
-	dimColor := lipgloss.Color("#555555")
 
 	title := lipgloss.NewStyle().
 		Foreground(selectedColor).
 		Bold(true).
 		Render("Quit TUIOS?")
 
-	selectedBtn := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#ffffff")).
-		Background(selectedColor).
-		Bold(true).
-		Padding(0, 3)
-
-	unselectedBtn := lipgloss.NewStyle().
-		Foreground(unselectedColor).
-		Padding(0, 3)
+	yesButtonContent := "yes"
+	noButtonContent := "no"
 
 	var yesButton, noButton string
+
 	if m.QuitConfirmSelection == 0 {
-		yesButton = selectedBtn.Render("Yes")
-		noButton = unselectedBtn.Render("No")
+		yesButton = lipgloss.NewStyle().
+			Foreground(selectedColor).
+			Bold(true).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(selectedColor).
+			Padding(0, 1).
+			Render(yesButtonContent)
+
+		noButton = lipgloss.NewStyle().
+			Foreground(unselectedColor).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(unselectedColor).
+			Padding(0, 1).
+			Render(noButtonContent)
 	} else {
-		yesButton = unselectedBtn.Render("Yes")
-		noButton = selectedBtn.Render("No")
+		yesButton = lipgloss.NewStyle().
+			Foreground(unselectedColor).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(unselectedColor).
+			Padding(0, 1).
+			Render(yesButtonContent)
+
+		noButton = lipgloss.NewStyle().
+			Foreground(selectedColor).
+			Bold(true).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(selectedColor).
+			Padding(0, 1).
+			Render(noButtonContent)
 	}
 
-	buttonRow := lipgloss.JoinHorizontal(lipgloss.Center, yesButton, " ", noButton)
-
-	hint := lipgloss.NewStyle().
-		Foreground(dimColor).
-		Render("enter/esc")
+	buttonRow := lipgloss.JoinHorizontal(lipgloss.Center, yesButton, "   ", noButton)
 
 	dialogContent := lipgloss.JoinVertical(
 		lipgloss.Center,
 		title,
 		"",
 		buttonRow,
-		hint,
 	)
 
 	dialogBox := lipgloss.NewStyle().
 		Border(getBorder()).
 		BorderForeground(borderColor).
-		Padding(1, 2).
+		Padding(1, 3).
 		Render(dialogContent)
 
 	width := lipgloss.Width(dialogBox)
