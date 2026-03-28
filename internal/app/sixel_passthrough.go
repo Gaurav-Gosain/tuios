@@ -459,22 +459,25 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 	}
 
 	win := window
+	var lastSixelLen int
+	var lastSixelTime time.Time
 	window.Terminal.SetSixelPassthroughFunc(func(cmd *vt.SixelCommand, cursorX, cursorY, _ int) {
 		if !m.SixelPassthrough.IsEnabled() || len(cmd.RawSequence) == 0 {
 			return
 		}
 
-		// Calculate host position
-		// +1 for border, +1 because sixel rendering is 0-indexed from the
-		// cursor cell but our cursor positioning is relative to window edge
-		borderOff := 1
-		if win.Tiled {
-			borderOff = 0
+		// Deduplicate: skip if same-sized sixel arrives within 1 second
+		// (shell prompt redraws can re-trigger the DCS handler)
+		now := time.Now()
+		if len(cmd.RawSequence) == lastSixelLen && now.Sub(lastSixelTime) < time.Second {
+			return
 		}
-		// Sixel renders from the cursor cell. Some terminals render starting
-		// at the cursor column, others one cell before. The +1 accounts for
-		// the border AND aligns with observed rendering in Rio/other terminals.
-		hostX := win.X + borderOff + cursorX + 1
+		lastSixelLen = len(cmd.RawSequence)
+		lastSixelTime = now
+
+		// Calculate host position
+		borderOff := win.BorderOffset()
+		hostX := win.X + borderOff + cursorX
 		hostY := win.Y + borderOff + cursorY
 
 		// Write directly to /dev/tty as a single write to avoid fragmentation
