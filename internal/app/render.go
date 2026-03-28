@@ -226,10 +226,14 @@ func (m *OS) View() tea.View {
 	// text first, then we write graphics. This keeps them in the same frame
 	// and prevents tearing between text and graphics updates.
 	if !m.renderSkipped {
+		// Hide images during overlays or copy mode scrollback (images render on
+		// top of text and don't scroll with terminal content in copy mode)
 		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
 			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
 			m.ShowLogs || m.ShowCacheStats
-		if hasOverlay {
+		fw := m.GetFocusedWindow()
+		inCopyModeScroll := fw != nil && fw.CopyMode != nil && fw.CopyMode.Active && fw.CopyMode.ScrollOffset > 0
+		if hasOverlay || inCopyModeScroll {
 			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 				m.KittyPassthrough.HideAllPlacements()
 			}
