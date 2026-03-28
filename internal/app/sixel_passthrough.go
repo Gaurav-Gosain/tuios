@@ -464,22 +464,27 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 			return
 		}
 
-		// Calculate host position directly
+		// Calculate host position
 		hostX := win.X + win.BorderOffset() + cursorX
 		hostY := win.Y + win.BorderOffset() + cursorY
 
-		// Write sixel directly to host at the translated position
-		var buf []byte
-		buf = append(buf, "\x1b7"...)                                               // Save cursor
-		buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)          // Move cursor (1-indexed)
-		buf = append(buf, "\x1bP"...)                                                // DCS start
-		buf = append(buf, cmd.RawSequence...)                                        // Sixel data
-		buf = append(buf, "\x1b\\"...)                                               // DCS end
-		buf = append(buf, "\x1b8"...)                                               // Restore cursor
+		// Write directly to /dev/tty as a single write to avoid fragmentation
+		tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+		if err != nil {
+			return
+		}
+		defer tty.Close()
 
-		m.SixelPassthrough.mu.Lock()
-		m.SixelPassthrough.pendingOutput = append(m.SixelPassthrough.pendingOutput, buf...)
-		m.SixelPassthrough.mu.Unlock()
+		// Build complete sequence in one buffer
+		var buf []byte
+		buf = append(buf, "\x1b7"...)                                      // Save cursor
+		buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...) // Move cursor
+		buf = append(buf, "\x1bP"...)                                       // DCS start
+		buf = append(buf, cmd.RawSequence...)                               // Sixel params + data
+		buf = append(buf, "\x1b\\"...)                                      // DCS end (ST)
+		buf = append(buf, "\x1b8"...)                                      // Restore cursor
+
+		_, _ = tty.Write(buf)
 	})
 
 	sixelPassthroughLog("setupSixelPassthrough: configured for window %s", window.ID[:min(8, len(window.ID))])
