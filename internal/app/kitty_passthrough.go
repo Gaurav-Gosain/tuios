@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -220,42 +219,6 @@ func (kp *KittyPassthrough) flushToHost() {
 	}
 }
 
-// getHostID returns the host image ID for a guest image ID in a window.
-func (kp *KittyPassthrough) getHostID(windowID string, guestID uint32) (uint32, bool) {
-	if m := kp.imageIDMap[windowID]; m != nil {
-		id, ok := m[guestID]
-		return id, ok
-	}
-	return 0, false
-}
-
-// rebuildControlWithHostID replaces the i=GUEST_ID parameter in raw APC data
-// with i=HOST_ID. The rawData is the control;payload part (without ESC_G prefix).
-func rebuildControlWithHostID(rawData []byte, hostID uint32) string {
-	s := string(rawData)
-	// Find and replace i=NUMBER with i=HOST_ID
-	result := strings.Builder{}
-	i := 0
-	for i < len(s) {
-		// Look for i= followed by digits
-		if i+2 < len(s) && s[i] == 'i' && s[i+1] == '=' {
-			result.WriteByte('i')
-			result.WriteByte('=')
-			i += 2
-			// Skip old digits
-			for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-				i++
-			}
-			// Write new host ID
-			fmt.Fprintf(&result, "%d", hostID)
-		} else {
-			result.WriteByte(s[i])
-			i++
-		}
-	}
-	return result.String()
-}
-
 func (kp *KittyPassthrough) allocateHostID() uint32 {
 	id := kp.nextHostID
 	kp.nextHostID++
@@ -396,25 +359,14 @@ func (kp *KittyPassthrough) ForwardCommand(
 
 	case vt.KittyActionFrame, vt.KittyActionAnimation, vt.KittyActionCompose:
 		// Animation commands: pass through raw to host terminal.
-		// These reference existing images by ID and don't need position adjustment.
-		// Remap the guest image ID to host ID before forwarding.
-		kittyPassthroughLog("ForwardCommand: handling ANIMATION action=%c imageID=%d", cmd.Action, cmd.ImageID)
-		if hostID, ok := kp.getHostID(windowID, cmd.ImageID); ok {
-			// Rebuild the command with the host image ID
-			var buf bytes.Buffer
-			buf.WriteString("\x1b_G")
-			buf.WriteString(rebuildControlWithHostID(rawData, hostID))
-			buf.WriteString("\x1b\\")
-			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-		} else {
-			// No ID mapping yet - pass through as-is (first frame might use a=T)
-			kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
-			kp.pendingOutput = append(kp.pendingOutput, rawData...)
-			kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
-		}
+		// Don't remap IDs - the guest app manages its own image IDs for
+		// animation, and the initial a=T frame was also passed raw.
+		kittyPassthroughLog("ForwardCommand: passing through animation action=%c", cmd.Action)
+		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
+		kp.pendingOutput = append(kp.pendingOutput, rawData...)
+		kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
 
 	default:
-		kittyPassthroughLog("ForwardCommand: UNKNOWN action %c, passing through raw", cmd.Action)
 		// Unknown actions: pass through raw for forward compatibility
 		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
 		kp.pendingOutput = append(kp.pendingOutput, rawData...)
@@ -448,9 +400,10 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	// We need to continue accumulating if there's pending data
 	hasPendingData := kp.pendingDirectData[windowID] != nil
 
-	// For transmit-only (no placement) AND no pending accumulation, pass through raw data
-	// Wrap in APC framing since rawData is just the payload without ESC_G prefix and ESC\ suffix
-	if !andPlace && !hasPendingData {
+	// For transmit-only, transmit+place in alt screen (animation apps like kitty-doom),
+	// or no pending accumulation: pass through raw data.
+	// Alt screen apps manage their own cursor positioning so we don't need deferred placement.
+	if (!andPlace && !hasPendingData) || (isAltScreen && !hasPendingData) {
 		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
 		kp.pendingOutput = append(kp.pendingOutput, rawData...)
 		kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
