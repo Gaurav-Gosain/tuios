@@ -320,6 +320,8 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 						IsBeingManipulated: w.IsBeingManipulated,
 						WindowZ:            w.Z,
 						IsAltScreen:        w.IsAltScreen,
+						ScreenWidth:        m.GetRenderWidth(),
+						ScreenHeight:       m.GetRenderHeight(),
 					}
 				}
 			}
@@ -327,12 +329,11 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 		})
 	}
 
-	// Get pending sixel output and write to /dev/tty (like Kitty passthrough)
+	// Get pending sixel output and write to /dev/tty
 	data := m.SixelPassthrough.FlushPending()
 	if len(data) == 0 {
 		return nil
 	}
-	sixelPassthroughLog("GetSixelGraphicsCmd: flushing %d bytes", len(data))
 	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
 	if err != nil {
 		return nil

@@ -83,13 +83,8 @@ type SixelPassthroughPlacement struct {
 func NewSixelPassthrough() *SixelPassthrough {
 	caps := GetHostCapabilities()
 	sixelPassthroughLog("NewSixelPassthrough: SixelGraphics=%v, TerminalName=%s", caps.SixelGraphics, caps.TerminalName)
-	// Sixel passthrough is disabled - the placement/clipping logic doesn't
-	// correctly handle window offsets and borders, causing images to render
-	// at the wrong position and not clear on scroll. Kitty graphics protocol
-	// is the recommended alternative (use chafa -f kitty instead of -f sixel).
-	_ = caps
 	return &SixelPassthrough{
-		enabled:    false,
+		enabled:    caps.SixelGraphics,
 		hostOut:    os.Stdout,
 		placements: make(map[string][]*SixelPassthroughPlacement),
 	}
