@@ -44,6 +44,8 @@ type Emulator struct {
 	// Thread-safe cached mouse mode flags (updated on mode set/reset)
 	cachedHasMouse    atomic.Bool
 	cachedAllMotion   atomic.Bool
+	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
+	cachedKittyFlags  atomic.Int32
 
 	// The last written character.
 	lastChar rune // either ansi.Rune or ansi.Grapheme

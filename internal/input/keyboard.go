@@ -174,7 +174,15 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.PrefixActive {
 			o.PrefixActive = false
 			if focusedWindow != nil {
-				// Send literal leader key (default Ctrl+B = 0x02)
+				// Use CSI u encoding if kitty keyboard is active
+				if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
+					encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focusedWindow.Terminal.KittyKeyboardFlags())
+					if len(encoded) > 0 {
+						_ = focusedWindow.SendInput([]byte(encoded))
+						return o, nil
+					}
+				}
+				// Legacy: send raw Ctrl+B byte
 				_ = focusedWindow.SendInput([]byte{0x02})
 			}
 			return o, nil

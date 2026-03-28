@@ -105,6 +105,7 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 			flags = params[0].Param(0)
 		}
 		e.kittyKbd.Push(flags)
+		e.updateKittyKeyboardCache()
 		e.logf("kitty keyboard: push flags=%d, stack depth=%d", flags, len(e.kittyKbd.stack))
 		return true
 	})
@@ -116,6 +117,7 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 			count = params[0].Param(1)
 		}
 		e.kittyKbd.Pop(count)
+		e.updateKittyKeyboardCache()
 		e.logf("kitty keyboard: pop count=%d, stack depth=%d, flags=%d", count, len(e.kittyKbd.stack), e.kittyKbd.CurrentFlags())
 		return true
 	})
@@ -141,17 +143,26 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 			mode = params[1].Param(1)
 		}
 		e.kittyKbd.Set(flags, mode)
+		e.updateKittyKeyboardCache()
 		e.logf("kitty keyboard: set flags=%d mode=%d, result=%d", flags, mode, e.kittyKbd.CurrentFlags())
 		return true
 	})
 }
 
 // KittyKeyboardFlags returns the current kitty keyboard protocol flags.
+// Thread-safe: reads from an atomic cache updated on push/pop/set/reset.
 func (e *Emulator) KittyKeyboardFlags() int {
-	if e.kittyKbd == nil {
-		return 0
+	return int(e.cachedKittyFlags.Load())
+}
+
+// updateKittyKeyboardCache updates the thread-safe cached flags.
+// Must be called from the VT processing goroutine after any stack change.
+func (e *Emulator) updateKittyKeyboardCache() {
+	flags := 0
+	if e.kittyKbd != nil {
+		flags = e.kittyKbd.CurrentFlags()
 	}
-	return e.kittyKbd.CurrentFlags()
+	e.cachedKittyFlags.Store(int32(flags))
 }
 
 // EncodeKeyCSIu encodes a key event in the CSI u format used by the kitty keyboard protocol.

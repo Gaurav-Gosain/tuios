@@ -40,5 +40,6 @@ func (e *Emulator) fullReset() {
 	// Reset kitty keyboard protocol state
 	if e.kittyKbd != nil {
 		e.kittyKbd.Reset()
+		e.updateKittyKeyboardCache()
 	}
 }
