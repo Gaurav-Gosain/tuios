@@ -98,6 +98,7 @@ type PassthroughPlacement struct {
 	Rows         int  // Original image rows (before any capping)
 	DisplayRows  int  // Capped rows for initial display
 	Hidden       bool // True when placement is completely out of view
+	DataDirty    bool // True when image data was re-transmitted (needs re-place for video)
 
 	// Source clipping parameters (pixels) - preserved for re-placement
 	SourceX      int
@@ -535,6 +536,12 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 	// RefreshAllPlacements will handle the actual placement at the correct position
 	// This avoids placing at wrong position when cursor moves during chunk accumulation
 
+	// Use 'T' for video frame updates, 't' for first frame
+	directAction := "t"
+	if reusingID && andPlace {
+		directAction = "T"
+	}
+
 	const chunkSize = 4096
 	for i := 0; i < len(encoded); i += chunkSize {
 		end := min(i+chunkSize, len(encoded))
@@ -545,9 +552,8 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 		buf.WriteString("\x1b_G")
 
 		if i == 0 {
-			// Always use 't' (transmit only) - placement will be done by RefreshAllPlacements
-			fmt.Fprintf(&buf, "a=t,i=%d,f=%d,s=%d,v=%d,q=2",
-				hostID, pending.Format, pending.Width, pending.Height)
+			fmt.Fprintf(&buf, "a=%s,i=%d,f=%d,s=%d,v=%d,q=2",
+				directAction, hostID, pending.Format, pending.Width, pending.Height)
 			if pending.Compression == vt.KittyCompressionZlib {
 				buf.WriteString(",o=z")
 			}
@@ -593,7 +599,26 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 		buf.WriteString(chunk)
 		buf.WriteString("\x1b\\")
 
-		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+		// For a=T on first chunk, add cursor positioning
+		if i == 0 && directAction == "T" {
+			var posCmd []byte
+			posCmd = append(posCmd, "\x1b7"...)
+			posCmd = append(posCmd, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
+			posCmd = append(posCmd, buf.Bytes()...)
+			// Don't restore cursor yet if there are more chunks
+			if !more {
+				posCmd = append(posCmd, "\x1b8"...)
+			}
+			kp.pendingOutput = append(kp.pendingOutput, posCmd...)
+		} else if !more && directAction == "T" {
+			// Last chunk - restore cursor
+			var posCmd []byte
+			posCmd = append(posCmd, buf.Bytes()...)
+			posCmd = append(posCmd, "\x1b8"...)
+			kp.pendingOutput = append(kp.pendingOutput, posCmd...)
+		} else {
+			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+		}
 	}
 
 	// Store placement for tracking (placement will be done by RefreshAllPlacements)
@@ -711,12 +736,13 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	kittyPassthroughLog("forwardFileTransmit: hostID=%d, hostPos=(%d,%d), imgSize=(%d,%d), displaySize=(%d,%d), contentArea=(%d,%d)",
 		hostID, hostX, hostY, imgCols, imgRows, displayCols, displayRows, contentWidth, contentHeight)
 
-	// Don't place initially - just transmit the image data
-	// RefreshAllPlacements will handle the actual placement at the correct position
-	// This avoids ANSI leaks when icat is called multiple times
-
 	// Build a single transmit command with the correct medium type.
 	// The host terminal reads the file/shm directly — no chunking needed.
+	//
+	// For video playback (reusing ID + andPlace), use a=T (transmit+place)
+	// to avoid race conditions where RefreshAllPlacements runs before the
+	// new transmit arrives. For first frames (new ID), use a=t and let
+	// RefreshAllPlacements handle placement.
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")
 
@@ -729,8 +755,13 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		medium = "t"
 	}
 
-	fmt.Fprintf(&buf, "a=t,t=%s,i=%d,f=%d,s=%d,v=%d,q=2",
-		medium, hostID, cmd.Format, cmd.Width, cmd.Height)
+	action := "t" // transmit only (default)
+	if reusingID && andPlace {
+		action = "T" // transmit+place for video frame updates
+	}
+
+	fmt.Fprintf(&buf, "a=%s,t=%s,i=%d,f=%d,s=%d,v=%d,q=2",
+		action, medium, hostID, cmd.Format, cmd.Width, cmd.Height)
 	if cmd.Compression == vt.KittyCompressionZlib {
 		buf.WriteString(",o=z")
 	}
@@ -774,7 +805,17 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	buf.WriteString(encoded)
 	buf.WriteString("\x1b\\")
 
-	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+	// For a=T, position cursor at the correct host location before the command
+	if action == "T" {
+		var posCmd []byte
+		posCmd = append(posCmd, "\x1b7"...) // save cursor
+		posCmd = append(posCmd, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...) // CUP
+		posCmd = append(posCmd, buf.Bytes()...)
+		posCmd = append(posCmd, "\x1b8"...) // restore cursor
+		kp.pendingOutput = append(kp.pendingOutput, posCmd...)
+	} else {
+		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+	}
 
 	// Don't clean up files here — for shared memory (t=s), the guest app
 	// manages the lifecycle. For temp files (t=t), the host terminal deletes
