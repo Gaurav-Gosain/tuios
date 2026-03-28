@@ -294,7 +294,15 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			}
 
 			// Check if we're within host terminal bounds
-			if hostY < 0 || hostY >= hostHeight {
+			if hostY < 0 || hostY >= hostHeight || hostX < 0 || hostX >= hostWidth {
+				if !p.Hidden {
+					sp.hidePlacement(p)
+				}
+				continue
+			}
+
+			// Hide if image extends past screen bottom (causes scroll feedback)
+			if hostY+visibleRows >= hostHeight-1 {
 				if !p.Hidden {
 					sp.hidePlacement(p)
 				}

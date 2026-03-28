@@ -310,8 +310,8 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 					return &WindowPositionInfo{
 						WindowX:            w.X,
 						WindowY:            w.Y,
-						ContentOffsetX:     1,
-						ContentOffsetY:     1,
+						ContentOffsetX:     w.BorderOffset(),
+						ContentOffsetY:     w.BorderOffset(),
 						Width:              w.Width,
 						Height:             w.Height,
 						Visible:            true,
