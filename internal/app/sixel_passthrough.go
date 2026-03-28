@@ -83,8 +83,14 @@ type SixelPassthroughPlacement struct {
 func NewSixelPassthrough() *SixelPassthrough {
 	caps := GetHostCapabilities()
 	sixelPassthroughLog("NewSixelPassthrough: SixelGraphics=%v, TerminalName=%s", caps.SixelGraphics, caps.TerminalName)
+	// Sixel passthrough is not yet production-ready:
+	// - Can't clip images at window boundaries (needs pixel-level crop like zellij's sixel-image crate)
+	// - Position offset issues with different terminal emulators
+	// - Duplicate render on shell prompt redraw
+	// Use kitty graphics protocol instead (chafa -f kitty).
+	_ = caps
 	return &SixelPassthrough{
-		enabled:    caps.SixelGraphics,
+		enabled:    false,
 		hostOut:    os.Stdout,
 		placements: make(map[string][]*SixelPassthroughPlacement),
 	}
