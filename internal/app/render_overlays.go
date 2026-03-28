@@ -990,61 +990,50 @@ func (m *OS) renderQuitConfirmDialog() (string, int, int) {
 	borderColor := theme.HelpBorder()
 	selectedColor := theme.HelpTabActive()
 	unselectedColor := theme.HelpGray()
-	dimColor := lipgloss.Color("#666666")
+	dimColor := lipgloss.Color("#555555")
 
 	title := lipgloss.NewStyle().
 		Foreground(selectedColor).
 		Bold(true).
 		Render("Quit TUIOS?")
 
-	subtitle := lipgloss.NewStyle().
-		Foreground(dimColor).
-		Render("All terminal sessions will be closed.")
-
-	yesLabel := " Yes "
-	noLabel := " No "
-
 	selectedBtn := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#ffffff")).
 		Background(selectedColor).
 		Bold(true).
-		Padding(0, 1)
+		Padding(0, 3)
 
 	unselectedBtn := lipgloss.NewStyle().
 		Foreground(unselectedColor).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(unselectedColor).
-		Padding(0, 1)
+		Padding(0, 3)
 
 	var yesButton, noButton string
 	if m.QuitConfirmSelection == 0 {
-		yesButton = selectedBtn.Render(yesLabel)
-		noButton = unselectedBtn.Render(noLabel)
+		yesButton = selectedBtn.Render("Yes")
+		noButton = unselectedBtn.Render("No")
 	} else {
-		yesButton = unselectedBtn.Render(yesLabel)
-		noButton = selectedBtn.Render(noLabel)
+		yesButton = unselectedBtn.Render("Yes")
+		noButton = selectedBtn.Render("No")
 	}
 
-	buttonRow := lipgloss.JoinHorizontal(lipgloss.Center, yesButton, "  ", noButton)
+	buttonRow := lipgloss.JoinHorizontal(lipgloss.Center, yesButton, " ", noButton)
 
 	hint := lipgloss.NewStyle().
 		Foreground(dimColor).
-		Render("h/l to select, enter to confirm, esc to cancel")
+		Render("enter/esc")
 
 	dialogContent := lipgloss.JoinVertical(
 		lipgloss.Center,
 		title,
-		subtitle,
 		"",
 		buttonRow,
-		"",
 		hint,
 	)
 
 	dialogBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(getBorder()).
 		BorderForeground(borderColor).
-		Padding(1, 3).
+		Padding(1, 2).
 		Render(dialogContent)
 
 	width := lipgloss.Width(dialogBox)
