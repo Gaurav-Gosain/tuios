@@ -506,12 +506,17 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 
 	// When transfer completes (m=0), write ENTIRE frame to host in one call
 	if !cmd.More && kp.hostOut != nil {
-		hostID := kp.imageIDMap[windowID][cmd.ImageID]
-
-		// Get stored position from first chunk (m=0 arrives via KittyActionTransmit
-		// with all position params as 0, so we use the saved values)
+		// Get stored state from first chunk — the m=0 final chunk arrives via
+		// KittyActionTransmit with imageID=0 and all position params as 0.
 		pending := kp.pendingDirectData[windowID]
 		delete(kp.pendingDirectData, windowID)
+
+		// Use the stored imageID from first chunk, not cmd.ImageID (which is 0)
+		guestImageID := cmd.ImageID
+		if pending != nil && pending.ImageID != 0 {
+			guestImageID = pending.ImageID
+		}
+		hostID := kp.imageIDMap[windowID][guestImageID]
 
 		var hostX, hostY int
 		winX, winY, winW, winH := windowX, windowY, windowWidth, windowHeight
