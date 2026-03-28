@@ -39,6 +39,7 @@ var (
 	scrollbackLines     int
 	showKeys            bool
 	noAnimations        bool
+	confirmQuit         bool
 	windowTitlePosition string
 	hideClock           bool
 	showClock           bool
@@ -121,6 +122,7 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
 	rootCmd.PersistentFlags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
 	rootCmd.PersistentFlags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
+	rootCmd.PersistentFlags().BoolVar(&confirmQuit, "confirm-quit", false, "Always show quit confirmation dialog")
 	rootCmd.PersistentFlags().StringVar(&windowTitlePosition, "window-title-position", "", "Window title position: bottom, top, hidden (default: from config or bottom)")
 	rootCmd.PersistentFlags().BoolVar(&hideClock, "hide-clock", false, "Hide the clock overlay (deprecated, clock is hidden by default)")
 	rootCmd.PersistentFlags().BoolVar(&showClock, "show-clock", false, "Show the clock overlay")

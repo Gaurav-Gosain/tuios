@@ -86,6 +86,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 // to show quit confirmation for. Returns true if any window has a foreground process
 // (besides the shell itself), or if we're unable to detect (falls back to true).
 func shouldShowQuitDialog(o *app.OS) bool {
+	if config.AlwaysConfirmQuit {
+		return true
+	}
 	// Check each window for active foreground processes
 	for _, win := range o.Windows {
 		if win != nil && win.HasForegroundProcess() {

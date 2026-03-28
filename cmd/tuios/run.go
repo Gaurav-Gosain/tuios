@@ -134,6 +134,7 @@ func runLocal() error {
 		SharedBorders:       sharedBorders,
 		ScrollbackLines:     scrollbackLines,
 		NoAnimations:        noAnimations,
+		ConfirmQuit:         confirmQuit,
 		ThemeName:           themeName,
 	}, userConfig)
 

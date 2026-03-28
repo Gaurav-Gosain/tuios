@@ -296,6 +296,11 @@ var AnimationsEnabled = true
 // (e.g., during remote command processing). This takes precedence over AnimationsEnabled.
 var AnimationsSuppressed = false
 
+// AlwaysConfirmQuit controls whether the quit confirmation dialog is shown
+// every time, regardless of whether there are active foreground processes.
+// Set via confirm_quit config option.
+var AlwaysConfirmQuit = false
+
 // WhichKeyEnabled controls whether the which-key popup is shown after pressing leader key
 // Set via appearance.whichkey_enabled config
 var WhichKeyEnabled = true

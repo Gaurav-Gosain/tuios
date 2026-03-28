@@ -34,6 +34,7 @@ type AppearanceConfig struct {
 	DockbarPosition     string `toml:"dockbar_position"`      // Dockbar position: bottom, top, hidden
 	PreferredShell      string `toml:"preferred_shell"`       // Preferred shell: if empty, auto-detect based on platform.
 	AnimationsEnabled   *bool  `toml:"animations_enabled"`    // Enable UI animations (default: true). Set to false for instant transitions.
+	ConfirmQuit         *bool  `toml:"confirm_quit"`          // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
 	WhichKeyEnabled     *bool  `toml:"whichkey_enabled"`      // Show which-key popup after pressing leader key (default: true)
 	WhichKeyPosition    string `toml:"whichkey_position"`     // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
 	WindowTitlePosition string `toml:"window_title_position"` // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
@@ -505,6 +506,11 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	// Only set global if explicitly configured
 	if cfg.Appearance.AnimationsEnabled != nil {
 		AnimationsEnabled = *cfg.Appearance.AnimationsEnabled
+	}
+
+	// ConfirmQuit defaults to false (nil means use default)
+	if cfg.Appearance.ConfirmQuit != nil {
+		AlwaysConfirmQuit = *cfg.Appearance.ConfirmQuit
 	}
 
 	// SharedBorders defaults to true (nil means use default)

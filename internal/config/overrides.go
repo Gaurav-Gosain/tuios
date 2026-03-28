@@ -45,6 +45,9 @@ type Overrides struct {
 	// NoAnimations disables UI animations
 	NoAnimations bool
 
+	// ConfirmQuit always shows quit confirmation dialog
+	ConfirmQuit bool
+
 	// ThemeName is the theme to load
 	ThemeName string
 }
@@ -135,6 +138,10 @@ func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 	// Animations - disabled by flag
 	if overrides.NoAnimations {
 		AnimationsEnabled = false
+	}
+
+	if overrides.ConfirmQuit {
+		AlwaysConfirmQuit = true
 	}
 
 	// Shared Borders - CLI flag OR user config (default: false)
