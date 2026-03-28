@@ -83,13 +83,8 @@ type SixelPassthroughPlacement struct {
 func NewSixelPassthrough() *SixelPassthrough {
 	caps := GetHostCapabilities()
 	sixelPassthroughLog("NewSixelPassthrough: SixelGraphics=%v, TerminalName=%s", caps.SixelGraphics, caps.TerminalName)
-	// Sixel passthrough disabled - positioning works but images can't be
-	// clipped at window boundaries (sixel is a raster format that requires
-	// re-encoding to clip). Images bleed past window borders.
-	// Use kitty graphics protocol instead (chafa -f kitty).
-	_ = caps
 	return &SixelPassthrough{
-		enabled:    false,
+		enabled:    caps.SixelGraphics,
 		hostOut:    os.Stdout,
 		placements: make(map[string][]*SixelPassthroughPlacement),
 	}
@@ -463,15 +458,28 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 		cellHeight = 20
 	}
 
-	window.Terminal.SetSixelPassthroughFunc(func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int) {
-		isAltScreen := window.Terminal.IsAltScreen()
-		m.SixelPassthrough.ForwardCommand(
-			window.ID,
-			cmd,
-			cursorX, cursorY, absLine,
-			isAltScreen,
-			cellWidth, cellHeight,
-		)
+	win := window
+	window.Terminal.SetSixelPassthroughFunc(func(cmd *vt.SixelCommand, cursorX, cursorY, _ int) {
+		if !m.SixelPassthrough.IsEnabled() || len(cmd.RawSequence) == 0 {
+			return
+		}
+
+		// Calculate host position directly
+		hostX := win.X + win.BorderOffset() + cursorX
+		hostY := win.Y + win.BorderOffset() + cursorY
+
+		// Write sixel directly to host at the translated position
+		var buf []byte
+		buf = append(buf, "\x1b7"...)                                               // Save cursor
+		buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)          // Move cursor (1-indexed)
+		buf = append(buf, "\x1bP"...)                                                // DCS start
+		buf = append(buf, cmd.RawSequence...)                                        // Sixel data
+		buf = append(buf, "\x1b\\"...)                                               // DCS end
+		buf = append(buf, "\x1b8"...)                                               // Restore cursor
+
+		m.SixelPassthrough.mu.Lock()
+		m.SixelPassthrough.pendingOutput = append(m.SixelPassthrough.pendingOutput, buf...)
+		m.SixelPassthrough.mu.Unlock()
 	})
 
 	sixelPassthroughLog("setupSixelPassthrough: configured for window %s", window.ID[:min(8, len(window.ID))])
