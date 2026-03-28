@@ -181,6 +181,12 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 		if key.Mod == 0 && code >= 0x20 && code < 0x7f {
 			return ""
 		}
+		// For Shift+printable that produces different text (e.g., Shift+a → 'A'),
+		// the kitty spec says to send the text directly, not CSI u.
+		// Only use CSI u when there are other modifiers (Ctrl, Alt) besides Shift.
+		if key.Text != "" && key.Mod == 1 { // Shift only (ModShift = 1)
+			return ""
+		}
 	}
 
 	// Map special keys to their CSI u key codes
