@@ -28,20 +28,25 @@ func (e *Emulator) SendKey(k uv.KeyEvent) {
 	ack := e.isModeSet(ansi.ModeCursorKeys)    // Application cursor keys mode
 	akk := e.isModeSet(ansi.ModeNumericKeypad) // Application keypad keys mode
 
-	//nolint:godox
-	// TODO: Support Kitty, CSI u, and XTerm modifyOtherKeys.
 	switch key := k.(type) {
 	case KeyPressEvent:
+		// Try kitty keyboard protocol encoding first
+		if e.kittyKbd != nil && e.kittyKbd.CurrentFlags() != 0 {
+			if encoded := EncodeKeyCSIu(key, e.kittyKbd.CurrentFlags()); encoded != "" {
+				_, _ = io.WriteString(e.pw, encoded)
+				return
+			}
+		}
+
 		if key.Mod&ModAlt != 0 {
 			// Handle alt-modified keys
 			seq = "\x1b" + seq
 			key.Mod &^= ModAlt // Remove the Alt modifier for easier matching
 		}
 
-		//nolint:godox
-		// FIXME: We remove any Base and Shifted codes to properly handle
-		// comparison. This is a workaround for the fact that we don't support
-		// extended keys yet.
+		// We remove any Base and Shifted codes to properly handle
+		// comparison. This is a workaround for when the kitty keyboard
+		// protocol is not active.
 		key.BaseCode = 0
 		key.ShiftedCode = 0
 

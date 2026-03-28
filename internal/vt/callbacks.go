@@ -60,4 +60,8 @@ type Callbacks struct {
 	// DisableMode callback. When set, this function is called when a mode is
 	// disabled.
 	DisableMode func(mode ansi.Mode)
+
+	// ScreenClear callback. When set, this function is called when the screen
+	// is cleared (ED 2 or ED 3).
+	ScreenClear func()
 }

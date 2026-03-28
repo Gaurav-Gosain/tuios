@@ -104,6 +104,9 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 			e.cb.DisableMode(mode)
 		}
 	}
+
+	// Update thread-safe mouse mode cache
+	e.updateMouseModeCache()
 }
 
 // isModeSet returns true if the mode is set.

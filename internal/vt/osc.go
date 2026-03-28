@@ -178,6 +178,120 @@ func (e *Emulator) handleSemanticZone(data []byte) {
 	}
 }
 
+func (e *Emulator) handleTextSizing(data []byte) {
+	parts := bytes.SplitN(data, []byte{';'}, 3)
+	if len(parts) < 3 {
+		return
+	}
+	text := parts[2]
+	if len(text) == 0 {
+		return
+	}
+
+	// Parse scale
+	scale := 1
+	for _, kv := range bytes.Split(parts[1], []byte{':'}) {
+		if bytes.HasPrefix(kv, []byte("s=")) && len(kv) > 2 {
+			if s := kv[2] - '0'; s >= 1 && s <= 7 {
+				scale = int(s)
+			}
+		}
+	}
+
+	textRunes := len([]rune(string(text)))
+	curX, curY := e.scr.CursorPosition()
+
+	// Forward to host terminal
+	if e.textSizingFunc != nil {
+		var rawOSC []byte
+		rawOSC = append(rawOSC, "\x1b]"...)
+		rawOSC = append(rawOSC, data...)
+		rawOSC = append(rawOSC, '\a')
+		e.textSizingFunc(rawOSC, curX, curY, scale, textRunes)
+	}
+
+	// Clear rows occupied by the scaled text so bubbletea renders spaces,
+	// allowing our post-render OSC 66 passthrough to persist.
+	// Also clear columns beyond the scaled text on the row above (curY-1)
+	// to remove wrapped command text like "ext\a\n\n"".
+	w := e.Width()
+	h := e.Height()
+	scaledCols := textRunes * scale
+	for row := range scale {
+		y := curY + row
+		if y >= h {
+			break
+		}
+		for x := 0; x < w; x++ {
+			e.scr.SetCell(x, y, nil)
+		}
+	}
+	// Clear only columns beyond scaledCols on the row above (command text wrap area)
+	if curY > 0 && scaledCols < w {
+		for x := scaledCols; x < w; x++ {
+			e.scr.SetCell(x, curY-1, nil)
+		}
+	}
+}
+
+func (e *Emulator) handlePaletteColor(data []byte) {
+	// OSC 4 format: "4;<index>;<spec>" where spec can be "?" for query or an X11 color
+	parts := bytes.Split(data, []byte{';'})
+	if len(parts) < 3 {
+		return
+	}
+
+	// Parse color index
+	idx := 0
+	for _, b := range parts[1] {
+		if b >= '0' && b <= '9' {
+			idx = idx*10 + int(b-'0')
+		}
+	}
+	if idx < 0 || idx > 255 {
+		return
+	}
+
+	arg := string(parts[2])
+	if arg == "?" {
+		// Query: respond with current color
+		c := e.IndexedColor(idx)
+		if c != nil {
+			var xrgb ansi.XRGBColor
+			xrgb.Color = c
+			response := "\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + "\x1b\\"
+			_, _ = io.WriteString(e.pw, response)
+		}
+	} else if c := ansi.XParseColor(arg); c != nil {
+		// Set: update the palette entry
+		e.SetIndexedColor(idx, c)
+	}
+}
+
+func (e *Emulator) handleClipboard(data []byte) {
+	// OSC 52 format: "52;<selection>;<base64-data>"
+	// selection: c = clipboard, p = primary, s = secondary, etc.
+	// base64-data: "?" to query, base64-encoded string to set
+	parts := bytes.Split(data, []byte{';'})
+	if len(parts) < 3 {
+		return
+	}
+
+	// For now, acknowledge clipboard operations but don't implement them
+	// (clipboard access requires integration with the host's clipboard system
+	// which is handled at the app layer, not the VT emulator layer)
+	selection := string(parts[1])
+	payload := string(parts[2])
+
+	if payload == "?" {
+		// Query clipboard - respond with empty (we don't store clipboard content)
+		response := "\x1b]52;" + selection + ";\x1b\\"
+		_, _ = io.WriteString(e.pw, response)
+	}
+	// Set clipboard - the app layer should intercept this via callbacks
+	// For now we just acknowledge it silently
+}
+
 func (e *Emulator) handleHyperlink(cmd int, data []byte) {
 	parts := bytes.Split(data, []byte{';'})
 	if len(parts) != 3 || cmd != 8 {

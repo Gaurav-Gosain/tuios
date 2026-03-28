@@ -41,6 +41,10 @@ type Emulator struct {
 	// Terminal modes.
 	modes ansi.Modes
 
+	// Thread-safe cached mouse mode flags (updated on mode set/reset)
+	cachedHasMouse    atomic.Bool
+	cachedAllMotion   atomic.Bool
+
 	// The last written character.
 	lastChar rune // either ansi.Rune or ansi.Grapheme
 	// A slice of runes to compose a grapheme.
@@ -94,6 +98,12 @@ type Emulator struct {
 	// Sixel graphics passthrough callback
 	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
 
+	// Text sizing (OSC 66) passthrough callback
+	textSizingFunc func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
+
+	// Kitty keyboard protocol state
+	kittyKbd *kittyKeyboardState
+
 	// semanticMarkers tracks OSC 133 shell integration markers
 	semanticMarkers *SemanticMarkerList
 }
@@ -146,6 +156,9 @@ func NewEmulator(w, h int) *Emulator {
 	t.sixelAlt = NewSixelState()
 	t.registerSixelGraphicsHandler()
 
+	t.kittyKbd = newKittyKeyboardState()
+	t.registerKittyKeyboardHandlers()
+
 	t.semanticMarkers = NewSemanticMarkerList(10000)
 
 	// Wire scrollback trim to semantic markers adjustment
@@ -168,6 +181,16 @@ func (e *Emulator) SetCallbacks(cb Callbacks) {
 	e.cb = cb
 	e.scrs[0].cb = &e.cb
 	e.scrs[1].cb = &e.cb
+}
+
+// GetCallbacks returns the terminal's current callbacks.
+func (e *Emulator) GetCallbacks() Callbacks {
+	return e.cb
+}
+
+// SetScreenClearFunc sets the ScreenClear callback without replacing other callbacks.
+func (e *Emulator) SetScreenClearFunc(f func()) {
+	e.cb.ScreenClear = f
 }
 
 // Touched returns the touched lines in the current screen buffer.
@@ -492,7 +515,22 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 }
 
 // HasMouseMode returns true if any mouse tracking mode is enabled.
+// HasMouseMode returns true if any mouse tracking mode is enabled.
+// Thread-safe: reads from an atomic cache updated on mode set/reset.
 func (e *Emulator) HasMouseMode() bool {
+	return e.cachedHasMouse.Load()
+}
+
+// HasAllMotionMode returns true only if the child app requested mode 1003.
+// Thread-safe: reads from an atomic cache updated on mode set/reset.
+func (e *Emulator) HasAllMotionMode() bool {
+	return e.cachedAllMotion.Load()
+}
+
+// updateMouseModeCache recalculates the cached mouse mode flags.
+// Must be called from the VT processing goroutine after mode changes.
+func (e *Emulator) updateMouseModeCache() {
+	hasMouse := false
 	for _, m := range []ansi.DECMode{
 		ansi.ModeMouseX10,
 		ansi.ModeMouseNormal,
@@ -501,17 +539,12 @@ func (e *Emulator) HasMouseMode() bool {
 		ansi.ModeMouseAnyEvent,
 	} {
 		if e.isModeSet(m) {
-			return true
+			hasMouse = true
+			break
 		}
 	}
-	return false
-}
-
-// HasAllMotionMode returns true only if the child app requested mode 1003
-// (any-event tracking), which reports ALL mouse motion including no-button motion.
-// Used to decide whether the host terminal should use AllMotion vs CellMotion.
-func (e *Emulator) HasAllMotionMode() bool {
-	return e.isModeSet(ansi.ModeMouseAnyEvent)
+	e.cachedHasMouse.Store(hasMouse)
+	e.cachedAllMotion.Store(e.isModeSet(ansi.ModeMouseAnyEvent))
 }
 
 // HasCellMotionMode returns true if the child app requested mode 1002
@@ -1011,6 +1044,11 @@ func (e *Emulator) registerSixelGraphicsHandler() {
 func (e *Emulator) SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int)) {
 	e.sixelPassthroughFunc = fn
 }
+
+func (e *Emulator) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int)) {
+	e.textSizingFunc = fn
+}
+
 
 func (e *Emulator) SixelState() *SixelState {
 	if e.IsAltScreen() {

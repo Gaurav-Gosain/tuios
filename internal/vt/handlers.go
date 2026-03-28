@@ -329,6 +329,26 @@ func (e *Emulator) registerDefaultOscHandlers() {
 		})
 	}
 
+	// OSC 4 - Set/Query indexed color palette
+	e.RegisterOscHandler(4, func(data []byte) bool {
+		e.handlePaletteColor(data)
+		return true
+	})
+
+	// OSC 52 - Clipboard operations (query/set)
+	e.RegisterOscHandler(52, func(data []byte) bool {
+		e.handleClipboard(data)
+		return true
+	})
+
+	// OSC 66 - Kitty text sizing protocol
+	// We can't render scaled text in a cell-grid multiplexer, but we extract
+	// the text content and display it at normal size so it doesn't vanish.
+	e.RegisterOscHandler(66, func(data []byte) bool {
+		e.handleTextSizing(data)
+		return true
+	})
+
 	// OSC 133 - Semantic prompt / shell integration (FinalTerm)
 	e.RegisterOscHandler(133, func(data []byte) bool {
 		e.handleSemanticZone(data)
@@ -546,6 +566,10 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			e.scr.FillArea(e.scr.blankCell(), rect1)
 			e.scr.FillArea(e.scr.blankCell(), rect2)
 			// Don't clear images for ED 0 - commonly used by apps
+			// But clear text sizing placements if clearing from top (ctrl+l pattern: CUP(1,1) + ED 0)
+			if x == 0 && y == 0 && e.cb.ScreenClear != nil {
+				e.cb.ScreenClear()
+			}
 		case 1: // Erase screen above (including cursor)
 			rect := uv.Rect(0, 0, width, y+1)
 			e.scr.FillArea(e.scr.blankCell(), rect)
@@ -553,12 +577,18 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		case 2: // erase screen (clear command)
 			e.scr.Clear()
 			e.KittyState().ClearPlacements()
+			if e.cb.ScreenClear != nil {
+				e.cb.ScreenClear()
+			}
 		case 3: // erase display including scrollback
 			e.scr.ClearScrollback()
 			e.scr.Clear()
 			e.KittyState().Clear()
 			if e.semanticMarkers != nil {
 				e.semanticMarkers.Clear()
+			}
+			if e.cb.ScreenClear != nil {
+				e.cb.ScreenClear()
 			}
 		default:
 			return false
@@ -683,10 +713,10 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			return false
 		}
 
-		// Do we fully support VT220?
 		_, _ = io.WriteString(e.pw, ansi.PrimaryDeviceAttributes(
 			62, // VT220
 			1,  // 132 columns
+			4,  // Sixel graphics
 			6,  // Selective Erase
 			9,  // National Replacement Character sets
 			15, // Technical characters
