@@ -492,14 +492,26 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 
 	// When transfer completes (m=0), write ENTIRE frame to host in one call
 	if !cmd.More && kp.hostOut != nil {
-		delete(kp.pendingDirectData, windowID)
 		hostID := kp.imageIDMap[windowID][cmd.ImageID]
-		hostX := windowX + contentOffsetX + cursorX
-		hostY := windowY + contentOffsetY + cursorY
 
-		// Bounds check: don't render if image would be outside window content area
-		contentWidth := windowWidth - 2
-		contentHeight := windowHeight - 2
+		// Get stored position from first chunk (m=0 arrives via KittyActionTransmit
+		// with all position params as 0, so we use the saved values)
+		pending := kp.pendingDirectData[windowID]
+		delete(kp.pendingDirectData, windowID)
+
+		var hostX, hostY int
+		winX, winY, winW, winH := windowX, windowY, windowWidth, windowHeight
+		if pending != nil {
+			hostX = pending.WindowX + pending.ContentOffsetX + pending.CursorX
+			hostY = pending.WindowY + pending.ContentOffsetY + pending.CursorY
+			winX = pending.WindowX
+			winY = pending.WindowY
+			winW = pending.WindowWidth
+			winH = pending.WindowHeight
+		}
+
+		contentW := winW - 2
+		contentH := winH - 2
 		imgCols, imgRows := 0, 0
 		if placements := kp.placements[windowID]; placements != nil {
 			if p := placements[hostID]; p != nil {
@@ -508,18 +520,13 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			}
 		}
 
-		visible := hostX >= 0 && hostY >= 0 &&
-			hostX < windowX+contentOffsetX+contentWidth &&
-			hostY < windowY+contentOffsetY+contentHeight
-		// Check image doesn't extend past window right/bottom edge
-		if visible && imgCols > 0 && hostX+imgCols > windowX+contentOffsetX+contentWidth {
-			visible = false
+		// Bounds check: window must be onscreen, image must fit in content area
+		visible := winX >= 0 && winY >= 0 && hostX >= 0 && hostY >= 0
+		if visible && imgCols > 0 {
+			visible = hostX+imgCols <= winX+1+contentW
 		}
-		if visible && imgRows > 0 && hostY+imgRows > windowY+contentOffsetY+contentHeight {
-			visible = false
-		}
-		if visible && (windowX < 0 || windowY < 0) {
-			visible = false
+		if visible && imgRows > 0 {
+			visible = hostY+imgRows <= winY+1+contentH
 		}
 
 		if visible {
@@ -529,6 +536,13 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			frame = append(frame, kp.videoFrameBuf...)
 			frame = append(frame, syncEnd...)
 			_, _ = kp.hostOut.Write(frame)
+		} else if hostID > 0 {
+			// Delete the image from host when not visible to prevent ghost rendering
+			var del []byte
+			del = append(del, syncBegin...)
+			del = append(del, fmt.Sprintf("\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)...)
+			del = append(del, syncEnd...)
+			_, _ = kp.hostOut.Write(del)
 		}
 		kp.videoFrameBuf = kp.videoFrameBuf[:0]
 
@@ -963,17 +977,32 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 	// For a=T (video frame updates), write IMMEDIATELY to host terminal.
 	// File/shm-based video is time-critical: mpv overwrites the shm/file
-	// with the next frame almost instantly. If we queue in pendingOutput
-	// and wait for the render cycle to flush, the file content is stale.
+	// with the next frame almost instantly.
 	if action == "T" && kp.hostOut != nil {
-		var posCmd []byte
-		posCmd = append(posCmd, syncBegin...)
-		posCmd = append(posCmd, "\x1b7"...) // save cursor
-		posCmd = append(posCmd, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...) // CUP
-		posCmd = append(posCmd, buf.Bytes()...)
-		posCmd = append(posCmd, "\x1b8"...) // restore cursor
-		posCmd = append(posCmd, syncEnd...)
-		_, _ = kp.hostOut.Write(posCmd)
+		// Bounds check: window must be fully onscreen, image must fit in content area
+		visible := windowX >= 0 && windowY >= 0 && hostX >= 0 && hostY >= 0
+		if visible && displayCols > 0 {
+			visible = hostX+displayCols <= windowX+1+contentWidth
+		}
+		if visible && displayRows > 0 {
+			visible = hostY+displayRows <= windowY+1+contentHeight
+		}
+
+		if visible {
+			var posCmd []byte
+			posCmd = append(posCmd, syncBegin...)
+			posCmd = append(posCmd, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
+			posCmd = append(posCmd, buf.Bytes()...)
+			posCmd = append(posCmd, syncEnd...)
+			_, _ = kp.hostOut.Write(posCmd)
+		} else if hostID > 0 {
+			// Delete image when out of bounds
+			var del []byte
+			del = append(del, syncBegin...)
+			del = append(del, fmt.Sprintf("\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)...)
+			del = append(del, syncEnd...)
+			_, _ = kp.hostOut.Write(del)
+		}
 	} else {
 		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 	}
