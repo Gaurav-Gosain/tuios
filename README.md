@@ -112,7 +112,8 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **Synchronized Output** - Mode 2026 prevents screen tearing
 - **Shared Memory Support** - `t=s` passthrough for mpv `--vo-kitty-use-shm`
 - **Terminal Queries** - OSC 4 palette, OSC 10-12 colors, CSI 14/16/18t sizing, DA1/DA2
-- **Not Yet Supported** - Kitty text sizing protocol (OSC 66), kitty animation protocol
+- **Experimental** - Kitty text sizing protocol (OSC 66) - basic passthrough works but has known issues with scrollback and window repositioning
+- **Not Yet Supported** - Kitty animation protocol
 
 ### Session Management
 - **Daemon Mode** - Persistent sessions with detach/reattach (like tmux)
@@ -153,7 +154,7 @@ tuios --show-keys        # Launch with key overlay for learning
 | <kbd>Prefix</kbd>+<kbd>Space</kbd> | Toggle BSP tiling |
 | <kbd>Prefix</kbd>+<kbd>[</kbd> | Enter copy mode (vim scrollback) |
 | <kbd>Prefix</kbd>+<kbd>S</kbd> | Session switcher |
-| <kbd>Prefix</kbd>+<kbd>L</kbd> | Load layout template |
+| <kbd>Prefix</kbd>+<kbd>L</kbd> then <kbd>l</kbd>/<kbd>s</kbd> | Load/Save layout template |
 | <kbd>Prefix</kbd>+<kbd>?</kbd> | Help overlay |
 | <kbd>Prefix</kbd>+<kbd>q</kbd> | Quit |
 
@@ -171,8 +172,8 @@ tuios kill-session mysession # Kill session
 ### Layout Templates
 
 ```bash
-# In-app: Ctrl+P → "Save Layout" / "Load Layout"
-# Or via prefix+L to load
+# In-app: Ctrl+B, L, l to load / Ctrl+B, L, s to save
+# Or via command palette: Ctrl+P → "Save Layout" / "Load Layout"
 
 # CLI:
 tuios layout list            # List saved layouts

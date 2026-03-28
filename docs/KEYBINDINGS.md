@@ -273,6 +273,18 @@ Record and manage tape sessions:
 
 See [Tape Recording Guide](TAPE_RECORDING.md) for details on recording workflows.
 
+### Layout Prefix (`Ctrl+B` `L`)
+
+Save and load window layout templates:
+
+| Key Sequence | Action |
+|--------------|--------|
+| `Ctrl+B` `L` `l` | Load layout template |
+| `Ctrl+B` `L` `s` | Save layout template |
+| `Ctrl+B` `L` `Esc` | Cancel |
+
+Layout loading is non-destructive: existing windows are repositioned to match the template rather than being killed. Extra windows are minimized.
+
 ### Debug Prefix (`Ctrl+B` `D`)
 
 Access debug and development tools:
