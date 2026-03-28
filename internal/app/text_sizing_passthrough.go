@@ -60,22 +60,24 @@ func (m *OS) setupTextSizingPassthrough(window *terminal.Window) {
 		m.ClearTextSizingPlacements(win.ID)
 	})
 
-	var lastLen int
-	var lastY int
+	var lastLen, lastX, lastY, lastScroll int
 	var lastTime time.Time
 	window.Terminal.SetTextSizingFunc(func(rawOSC []byte, cursorX, cursorY, scale, textLen int) {
 		now := time.Now()
-		if len(rawOSC) == lastLen && cursorY == lastY && now.Sub(lastTime) < 100*time.Millisecond {
-			return
-		}
-		lastLen = len(rawOSC)
-		lastY = cursorY
-		lastTime = now
-
 		scrollbackLen := 0
 		if win.Terminal != nil {
 			scrollbackLen = win.Terminal.ScrollbackLen()
 		}
+		if len(rawOSC) == lastLen && cursorX == lastX && cursorY == lastY &&
+			scrollbackLen == lastScroll && now.Sub(lastTime) < 100*time.Millisecond {
+			return
+		}
+		lastLen = len(rawOSC)
+		lastX = cursorX
+		lastY = cursorY
+		lastScroll = scrollbackLen
+		lastTime = now
+
 		absLine := scrollbackLen + cursorY
 
 		oscCopy := make([]byte, len(rawOSC))
