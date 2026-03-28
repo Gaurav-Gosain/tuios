@@ -42,6 +42,39 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	X := mouse.X
 	Y := mouse.Y
 
+	// Handle quit confirmation dialog clicks
+	if o.ShowQuitConfirm {
+		// Dialog is centered on screen
+		dialogW, dialogH := 26, 7 // approximate dialog dimensions
+		dialogX := (o.GetRenderWidth() - dialogW) / 2
+		dialogY := (o.GetRenderHeight() - dialogH) / 2
+
+		// Check if click is inside the dialog
+		if X >= dialogX && X < dialogX+dialogW && Y >= dialogY && Y < dialogY+dialogH {
+			// Button row is near the bottom of the dialog
+			buttonY := dialogY + dialogH - 3
+			if Y >= buttonY && Y < buttonY+2 {
+				midX := dialogX + dialogW/2
+				if X < midX {
+					// Clicked "Yes" (left side)
+					if o.IsDaemonSession && o.DaemonClient != nil {
+						_ = o.DaemonClient.KillSession()
+					}
+					o.Cleanup()
+					return o, tea.Quit
+				} else {
+					// Clicked "No" (right side)
+					o.ShowQuitConfirm = false
+					return o, nil
+				}
+			}
+		} else {
+			// Clicked outside dialog - dismiss it
+			o.ShowQuitConfirm = false
+		}
+		return o, nil
+	}
+
 	// Check if click is in the dock area (always reserved)
 	if ((config.DockbarPosition == "bottom") && (Y >= o.Height-config.DockHeight)) || ((config.DockbarPosition == "top") && (Y <= config.DockHeight)) {
 		// Handle dock click only if there are minimized windows

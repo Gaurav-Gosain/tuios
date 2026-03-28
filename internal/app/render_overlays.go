@@ -990,60 +990,59 @@ func (m *OS) renderQuitConfirmDialog() (string, int, int) {
 	borderColor := theme.HelpBorder()
 	selectedColor := theme.HelpTabActive()
 	unselectedColor := theme.HelpGray()
+	dimColor := lipgloss.Color("#666666")
 
 	title := lipgloss.NewStyle().
 		Foreground(selectedColor).
 		Bold(true).
 		Render("Quit TUIOS?")
 
-	yesButtonContent := "yes"
-	noButtonContent := "no"
+	subtitle := lipgloss.NewStyle().
+		Foreground(dimColor).
+		Render("All terminal sessions will be closed.")
+
+	yesLabel := " Yes "
+	noLabel := " No "
+
+	selectedBtn := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#ffffff")).
+		Background(selectedColor).
+		Bold(true).
+		Padding(0, 1)
+
+	unselectedBtn := lipgloss.NewStyle().
+		Foreground(unselectedColor).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(unselectedColor).
+		Padding(0, 1)
 
 	var yesButton, noButton string
-
 	if m.QuitConfirmSelection == 0 {
-		yesButton = lipgloss.NewStyle().
-			Foreground(selectedColor).
-			Bold(true).
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(selectedColor).
-			Padding(0, 1).
-			Render(yesButtonContent)
-
-		noButton = lipgloss.NewStyle().
-			Foreground(unselectedColor).
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(unselectedColor).
-			Padding(0, 1).
-			Render(noButtonContent)
+		yesButton = selectedBtn.Render(yesLabel)
+		noButton = unselectedBtn.Render(noLabel)
 	} else {
-		yesButton = lipgloss.NewStyle().
-			Foreground(unselectedColor).
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(unselectedColor).
-			Padding(0, 1).
-			Render(yesButtonContent)
-
-		noButton = lipgloss.NewStyle().
-			Foreground(selectedColor).
-			Bold(true).
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(selectedColor).
-			Padding(0, 1).
-			Render(noButtonContent)
+		yesButton = unselectedBtn.Render(yesLabel)
+		noButton = selectedBtn.Render(noLabel)
 	}
 
-	buttonRow := lipgloss.JoinHorizontal(lipgloss.Center, yesButton, "   ", noButton)
+	buttonRow := lipgloss.JoinHorizontal(lipgloss.Center, yesButton, "  ", noButton)
+
+	hint := lipgloss.NewStyle().
+		Foreground(dimColor).
+		Render("h/l to select, enter to confirm, esc to cancel")
 
 	dialogContent := lipgloss.JoinVertical(
 		lipgloss.Center,
 		title,
+		subtitle,
 		"",
 		buttonRow,
+		"",
+		hint,
 	)
 
 	dialogBox := lipgloss.NewStyle().
-		Border(getBorder()).
+		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
 		Padding(1, 3).
 		Render(dialogContent)
