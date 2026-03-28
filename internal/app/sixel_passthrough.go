@@ -83,14 +83,8 @@ type SixelPassthroughPlacement struct {
 func NewSixelPassthrough() *SixelPassthrough {
 	caps := GetHostCapabilities()
 	sixelPassthroughLog("NewSixelPassthrough: SixelGraphics=%v, TerminalName=%s", caps.SixelGraphics, caps.TerminalName)
-	// Sixel passthrough is not yet production-ready:
-	// - Can't clip images at window boundaries (needs pixel-level crop like zellij's sixel-image crate)
-	// - Position offset issues with different terminal emulators
-	// - Duplicate render on shell prompt redraw
-	// Use kitty graphics protocol instead (chafa -f kitty).
-	_ = caps
 	return &SixelPassthrough{
-		enabled:    false,
+		enabled:    caps.SixelGraphics,
 		hostOut:    os.Stdout,
 		placements: make(map[string][]*SixelPassthroughPlacement),
 	}
@@ -123,6 +117,19 @@ func (sp *SixelPassthrough) ForwardCommand(
 	// Calculate rows and columns
 	rows := cmd.RowsForHeight(cellHeight)
 	cols := cmd.ColsForWidth(cellWidth)
+
+	// Check for existing placement at the same position with same dimensions
+	// (shell redraws can re-emit the same sixel)
+	for _, existing := range sp.placements[windowID] {
+		if existing.AbsoluteLine == absLine && existing.GuestX == cursorX &&
+			existing.Width == cmd.Width && existing.Height == cmd.Height {
+			// Update in place
+			existing.RawSequence = cmd.RawSequence
+			existing.IsPlaced = false // Force re-render
+			sixelPassthroughLog("ForwardCommand: updated existing placement at absLine=%d", absLine)
+			return
+		}
+	}
 
 	placement := &SixelPassthroughPlacement{
 		WindowID:          windowID,
@@ -198,7 +205,6 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 	}
 
 	hostHeight := caps.Rows
-	hostWidth := caps.Cols
 
 	for windowID, placements := range sp.placements {
 		info := getWindowInfo(windowID)
@@ -233,11 +239,14 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			continue
 		}
 
-		// Calculate viewport boundaries
-		// When scrollbackLen < height, content starts at top of window (viewportTop = 0)
+		// Calculate viewport boundaries using content height (exclude borders)
+		contentHeight := info.Height - 2*info.ContentOffsetY
+		if contentHeight <= 0 {
+			contentHeight = info.Height
+		}
 		viewportTop := 0
-		if info.ScrollbackLen > info.Height {
-			viewportTop = info.ScrollbackLen - info.ScrollOffset - info.Height
+		if info.ScrollbackLen > contentHeight {
+			viewportTop = info.ScrollbackLen - info.ScrollOffset - contentHeight
 		}
 		viewportBottom := info.ScrollbackLen - info.ScrollOffset
 
@@ -256,26 +265,14 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			// Check if any part is visible
 			anyPartVisible := placementBottom > viewportTop && p.AbsoluteLine < viewportBottom
 
+			// When not scrolled back, also consider images that extend beyond
+			// current scrollback (the scrollback may not have caught up with
+			// ReserveImageSpace yet)
+			if !anyPartVisible && info.ScrollOffset == 0 && p.AbsoluteLine >= viewportTop {
+				anyPartVisible = true
+			}
+
 			if !anyPartVisible {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-				continue
-			}
-
-			// Calculate clipping
-			clipTop := 0
-			clipBottom := 0
-
-			if p.AbsoluteLine < viewportTop {
-				clipTop = viewportTop - p.AbsoluteLine
-			}
-			if placementBottom > viewportBottom {
-				clipBottom = placementBottom - viewportBottom
-			}
-
-			visibleRows := p.Rows - clipTop - clipBottom
-			if visibleRows <= 0 {
 				if !p.Hidden {
 					sp.hidePlacement(p)
 				}
@@ -288,19 +285,12 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			hostX := info.WindowX + info.ContentOffsetX + p.GuestX
 			hostY := info.WindowY + info.ContentOffsetY + relativeY
 
-			sixelPassthroughLog("Placement: absLine=%d viewportTop=%d relativeY=%d guestX=%d -> hostPos=(%d,%d)",
-				p.AbsoluteLine, viewportTop, relativeY, p.GuestX, hostX, hostY)
+			// Window content area bounds (in host coordinates)
+			windowContentBottom := info.WindowY + info.Height - info.ContentOffsetY
 
-			// Check horizontal bounds
-			if hostX < 0 || hostX >= hostWidth {
-				if !p.Hidden {
-					sp.hidePlacement(p)
-				}
-				continue
-			}
-
-			// Check if we're within host terminal bounds
-			if hostY < 0 || hostY >= hostHeight || hostX < 0 || hostX >= hostWidth {
+			// Hide if image extends past window content bottom
+			// (sixel can't be pixel-cropped without palette re-quantization)
+			if hostY+p.Rows > windowContentBottom {
 				if !p.Hidden {
 					sp.hidePlacement(p)
 				}
@@ -308,7 +298,15 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			}
 
 			// Hide if image extends past screen bottom (causes scroll feedback)
-			if hostY+visibleRows >= hostHeight-1 {
+			if hostY+p.Rows >= hostHeight-1 {
+				if !p.Hidden {
+					sp.hidePlacement(p)
+				}
+				continue
+			}
+
+			// Hide if top is clipped (scrolled partially out of view)
+			if p.AbsoluteLine < viewportTop {
 				if !p.Hidden {
 					sp.hidePlacement(p)
 				}
@@ -316,16 +314,17 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 			}
 
 			// Check if position changed - only re-render if needed
-			positionChanged := !p.IsPlaced || p.PlacedAtX != hostX || p.PlacedAtY != hostY
+			positionChanged := !p.IsPlaced ||
+				p.PlacedAtX != hostX || p.PlacedAtY != hostY
 
 			// Update placement state
 			p.HostX = hostX
 			p.HostY = hostY
-			p.ClipTop = clipTop
-			p.ClipBottom = clipBottom
 
-			// Only place the sixel image if position changed or not yet placed
+			// Only place the sixel image if position changed
 			if positionChanged {
+				sixelPassthroughLog("placeSixel: rendering at (%d,%d) imgSize=%dx%d rows=%d",
+					hostX, hostY, p.Width, p.Height, p.Rows)
 				sp.placeSixel(p, cellWidth, cellHeight)
 				p.PlacedAtX = hostX
 				p.PlacedAtY = hostY
@@ -336,18 +335,29 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 	}
 }
 
-// hidePlacement hides a sixel placement.
-// Since sixels don't have delete commands like Kitty, we rely on
-// the terminal to naturally overwrite the area or redraw.
+// hidePlacement hides a sixel placement by overwriting the image area with
+// spaces. Unlike Kitty graphics, sixel has no delete command, so we must
+// actively clear the area.
 func (sp *SixelPassthrough) hidePlacement(p *SixelPassthroughPlacement) {
+	if p.IsPlaced && p.Rows > 0 {
+		// Clear the image area by writing spaces over it
+		var buf []byte
+		buf = append(buf, "\x1b7"...) // Save cursor
+		for row := range p.Rows {
+			buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", p.PlacedAtY+row+1, p.PlacedAtX+1)...)
+			buf = append(buf, fmt.Sprintf("\x1b[%dX", p.Cols)...) // Erase N characters
+		}
+		buf = append(buf, "\x1b8"...) // Restore cursor
+		sp.pendingOutput = append(sp.pendingOutput, buf...)
+	}
 	p.Hidden = true
-	p.IsPlaced = false // Force re-render when it becomes visible again
-	// Sixel doesn't have a delete command - the area will be
-	// naturally cleared when the terminal redraws
+	p.IsPlaced = false
 }
 
 // placeSixel writes a sixel image to the host terminal at the specified position.
-// cellWidth and cellHeight are provided for potential future clipping support.
+// The raw sixel data is passed through without re-encoding to preserve the
+// original palette and image quality. Clipping is handled by hiding images
+// that don't fit within window boundaries.
 func (sp *SixelPassthrough) placeSixel(p *SixelPassthroughPlacement, _, _ int) {
 	if len(p.RawSequence) == 0 {
 		return
@@ -362,7 +372,7 @@ func (sp *SixelPassthrough) placeSixel(p *SixelPassthroughPlacement, _, _ int) {
 	// Move to target position (1-indexed)
 	buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", p.HostY+1, p.HostX+1)...)
 
-	// Write the DCS sixel sequence
+	// Write the DCS sixel sequence with raw data passthrough
 	// Format: ESC P <params> q <data> ESC \
 	buf = append(buf, "\x1bP"...)
 	buf = append(buf, p.RawSequence...)
@@ -372,7 +382,6 @@ func (sp *SixelPassthrough) placeSixel(p *SixelPassthroughPlacement, _, _ int) {
 	buf = append(buf, "\x1b8"...)
 
 	sp.pendingOutput = append(sp.pendingOutput, buf...)
-
 }
 
 // FlushOutput writes any pending output to the host terminal.
@@ -383,6 +392,20 @@ func (sp *SixelPassthrough) FlushOutput() {
 	if len(sp.pendingOutput) > 0 {
 		_, _ = sp.hostOut.Write(sp.pendingOutput)
 		sp.pendingOutput = sp.pendingOutput[:0]
+	}
+}
+
+// HideAllPlacements hides all sixel placements and queues clear commands.
+func (sp *SixelPassthrough) HideAllPlacements() {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+
+	for _, placements := range sp.placements {
+		for _, p := range placements {
+			if !p.Hidden {
+				sp.hidePlacement(p)
+			}
+		}
 	}
 }
 
@@ -453,21 +476,10 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 		return
 	}
 
-	caps := GetHostCapabilities()
-	cellWidth := caps.CellWidth
-	cellHeight := caps.CellHeight
-
-	if cellWidth == 0 {
-		cellWidth = 9
-	}
-	if cellHeight == 0 {
-		cellHeight = 20
-	}
-
 	win := window
 	var lastSixelLen int
 	var lastSixelTime time.Time
-	window.Terminal.SetSixelPassthroughFunc(func(cmd *vt.SixelCommand, cursorX, cursorY, _ int) {
+	window.Terminal.SetSixelPassthroughFunc(func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int) {
 		if !m.SixelPassthrough.IsEnabled() || len(cmd.RawSequence) == 0 {
 			return
 		}
@@ -481,28 +493,28 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 		lastSixelLen = len(cmd.RawSequence)
 		lastSixelTime = now
 
-		// Calculate host position
-		borderOff := win.BorderOffset()
-		hostX := win.X + borderOff + cursorX
-		hostY := win.Y + borderOff + cursorY
-
-		// Write directly to /dev/tty as a single write to avoid fragmentation
-		tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
-		if err != nil {
-			return
+		// Get fresh cell dimensions (may change on resize)
+		caps := GetHostCapabilities()
+		cw := caps.CellWidth
+		ch := caps.CellHeight
+		if cw == 0 {
+			cw = 9
 		}
-		defer tty.Close()
+		if ch == 0 {
+			ch = 20
+		}
 
-		// Build complete sequence in one buffer
-		var buf []byte
-		buf = append(buf, "\x1b7"...)                                      // Save cursor
-		buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...) // Move cursor
-		buf = append(buf, "\x1bP"...)                                       // DCS start
-		buf = append(buf, cmd.RawSequence...)                               // Sixel params + data
-		buf = append(buf, "\x1b\\"...)                                      // DCS end (ST)
-		buf = append(buf, "\x1b8"...)                                      // Restore cursor
+		sixelPassthroughLog("CALLBACK: rawLen=%d cursorX=%d cursorY=%d absLine=%d winX=%d winY=%d winW=%d winH=%d cell=%dx%d",
+			len(cmd.RawSequence), cursorX, cursorY, absLine, win.X, win.Y, win.Width, win.Height, cw, ch)
 
-		_, _ = tty.Write(buf)
+		// Route through the placement system for proper position tracking and clipping
+		m.SixelPassthrough.ForwardCommand(
+			win.ID,
+			cmd,
+			cursorX, cursorY, absLine,
+			win.IsAltScreen,
+			cw, ch,
+		)
 	})
 
 	sixelPassthroughLog("setupSixelPassthrough: configured for window %s", window.ID[:min(8, len(window.ID))])
