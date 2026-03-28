@@ -18,6 +18,7 @@ This document provides a complete reference for TUIOS command-line interface.
   - [tuios-web (separate binary)](#tuios-web-separate-binary)
   - [tuios config](#tuios-config)
   - [tuios keybinds](#tuios-keybinds)
+  - [tuios layout](#tuios-layout)
   - [tuios completion](#tuios-completion)
   - [tuios help](#tuios-help)
 - [Global Flags](#global-flags)
@@ -112,6 +113,10 @@ tuios
 - `--window-title-position <pos>` - Window title position (bottom, top, hidden)
 - `--hide-clock` - Hide the clock overlay
 - `--no-animations` - Disable UI animations for instant transitions
+- `--show-clock` - Show clock in the status area
+- `--show-cpu` - Show CPU usage in the status area
+- `--show-ram` - Show RAM usage in the status area
+- `--shared-borders` - Enable shared borders between tiled windows
 - `--debug` - Enable debug logging
 - `--cpuprofile <file>` - Write CPU profile to file
 - `-h, --help` - Show help for tuios
@@ -1016,6 +1021,65 @@ tuios keybinds list-custom
 
 ---
 
+### `tuios layout`
+
+Manage saved layout templates.
+
+**Subcommands:**
+- `tuios layout list` - List all saved layout templates
+- `tuios layout delete <name>` - Delete a saved layout template
+- `tuios layout dir` - Print the layout templates directory path
+- `tuios layout export <name>` - Export a layout template as JSON
+
+#### `tuios layout list`
+
+List all saved layout templates.
+
+**Example:**
+```bash
+tuios layout list
+```
+
+#### `tuios layout delete`
+
+Delete a saved layout template by name.
+
+**Usage:**
+```bash
+tuios layout delete <name>
+```
+
+**Example:**
+```bash
+tuios layout delete dev-layout
+```
+
+#### `tuios layout dir`
+
+Print the path to the layout templates directory.
+
+**Example:**
+```bash
+tuios layout dir
+# Output: /home/user/.config/tuios/layouts
+```
+
+#### `tuios layout export`
+
+Export a saved layout template as JSON for sharing or backup.
+
+**Usage:**
+```bash
+tuios layout export <name>
+```
+
+**Example:**
+```bash
+tuios layout export dev-layout
+```
+
+---
+
 ### `tuios completion`
 
 Generate shell completion scripts for command-line autocompletion.
@@ -1097,6 +1161,10 @@ These flags are available on the root command:
 - `--preview-theme <name>` - Preview a theme's colors and exit
 - `--ascii-only` - Use ASCII characters instead of Nerd Font icons
 - `--show-keys` - Enable showkeys overlay (screencaster-style key display)
+- `--show-clock` - Show clock in the status area
+- `--show-cpu` - Show CPU usage in the status area
+- `--show-ram` - Show RAM usage in the status area
+- `--shared-borders` - Enable shared borders between tiled windows
 - `--debug` - Enable debug logging
 - `--cpuprofile <file>` - Write CPU profile to file
 - `-h, --help` - Show help

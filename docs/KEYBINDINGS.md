@@ -215,7 +215,7 @@ Press `Ctrl+B`, release, then press the command key (tmux-style).
 | `Ctrl+B` `p` or `Shift+Tab` | Previous window |
 | `Ctrl+B` `0-9` | Jump to window |
 | `Ctrl+B` `Space` | Toggle tiling mode |
-| `Ctrl+B` `z` | Fullscreen current window |
+| `Ctrl+B` `z` | Toggle Zoom (fullscreen focused window) |
 | `Ctrl+B` `w` | Enter workspace prefix menu |
 | `Ctrl+B` `m` | Enter minimize prefix menu |
 | `Ctrl+B` `t` | Enter window prefix menu |
@@ -224,6 +224,10 @@ Press `Ctrl+B`, release, then press the command key (tmux-style).
 | `Ctrl+B` `d` or `Esc` | Detach (exit terminal mode) |
 | `Ctrl+B` `q` | Quit TUIOS |
 | `Ctrl+B` `?` | Toggle help |
+| `Ctrl+B` `S` | Session Switcher |
+| `Ctrl+B` `L` | Load Layout |
+| `Ctrl+B` `P` | Command Palette (alternative) |
+| `Ctrl+P` | Command Palette |
 | `Ctrl+B` `Ctrl+B` | Send literal Ctrl+B to terminal |
 
 ### Workspace Prefix (`Ctrl+B` `w`)
@@ -301,6 +305,9 @@ Access debug and development tools:
 - **Click Dock Item**: Restore minimized window
 - **Copy Mode Click**: Move cursor to position
 - **Copy Mode Drag**: Select text (enters visual mode)
+- **Mouse Wheel**: Enter copy mode and scroll (when no mouse tracking, not alt screen)
+- **Right Border Click**: Scrollbar jump
+- **Right Border Drag**: Scrollbar scroll
 
 ## Customization
 

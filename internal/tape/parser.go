@@ -139,6 +139,20 @@ func (p *Parser) parseCommand() (Command, bool) {
 		return p.parseMoveAndFollowWorkspaceCommand()
 	case TokenSplit:
 		return p.parseBasicCommand(CommandTypeSplit)
+	case TokenRotateSplit:
+		return p.parseBasicCommand(CommandTypeRotateSplit)
+	case TokenEqualizeSplits:
+		return p.parseBasicCommand(CommandTypeEqualizeSplits)
+	case TokenToggleZoom:
+		return p.parseBasicCommand(CommandTypeToggleZoom)
+	case TokenSmartSplit:
+		return p.parseBasicCommand(CommandTypeSmartSplit)
+	case TokenCommandPalette:
+		return p.parseBasicCommand(CommandTypeCommandPalette)
+	case TokenSaveLayout:
+		return p.parseSaveLayoutCommand()
+	case TokenLoadLayout:
+		return p.parseLoadLayoutCommand()
 	case TokenFocus:
 		return p.parseFocusCommand()
 	case TokenWait:
@@ -634,6 +648,60 @@ func (p *Parser) parseSourceCommand() (Command, bool) {
 		p.nextToken()
 	} else {
 		p.addError("Source command expects a filename")
+		p.skipToNextLine()
+		return cmd, false
+	}
+
+	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
+		p.skipToNextLine()
+	}
+
+	return cmd, true
+}
+
+// parseSaveLayoutCommand parses SaveLayout <name> commands
+func (p *Parser) parseSaveLayoutCommand() (Command, bool) {
+	cmd := Command{
+		Type:   CommandTypeSaveLayout,
+		Line:   p.curTok.Line,
+		Column: p.curTok.Column,
+	}
+
+	p.nextToken() // consume SaveLayout
+
+	if p.curTok.Type == TokenString || p.curTok.Type == TokenIdentifier {
+		cmd.Args = []string{p.curTok.Literal}
+		cmd.Raw = fmt.Sprintf("SaveLayout %s", p.curTok.Literal)
+		p.nextToken()
+	} else {
+		p.addError("SaveLayout command expects a layout name")
+		p.skipToNextLine()
+		return cmd, false
+	}
+
+	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
+		p.skipToNextLine()
+	}
+
+	return cmd, true
+}
+
+// parseLoadLayoutCommand parses LoadLayout <name> commands
+func (p *Parser) parseLoadLayoutCommand() (Command, bool) {
+	cmd := Command{
+		Type:   CommandTypeLoadLayout,
+		Line:   p.curTok.Line,
+		Column: p.curTok.Column,
+	}
+
+	p.nextToken() // consume LoadLayout
+
+	if p.curTok.Type == TokenString || p.curTok.Type == TokenIdentifier {
+		cmd.Args = []string{p.curTok.Literal}
+		cmd.Raw = fmt.Sprintf("LoadLayout %s", p.curTok.Literal)
+		p.nextToken()
+	} else {
+		p.addError("LoadLayout command expects a layout name")
 		p.skipToNextLine()
 		return cmd, false
 	}

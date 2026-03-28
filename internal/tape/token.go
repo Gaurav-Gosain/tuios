@@ -126,6 +126,21 @@ const (
 	TokenDisableAnimations TokenType = "DisableAnimations"
 	// TokenToggleAnimations represents the ToggleAnimations command token.
 	TokenToggleAnimations TokenType = "ToggleAnimations"
+	// TokenRotateSplit represents the RotateSplit command token.
+	TokenRotateSplit TokenType = "RotateSplit"
+	// TokenEqualizeSplits represents the EqualizeSplits command token.
+	TokenEqualizeSplits TokenType = "EqualizeSplits"
+	// TokenToggleZoom represents the ToggleZoom command token.
+	TokenToggleZoom TokenType = "ToggleZoom"
+	// TokenSmartSplit represents the SmartSplit command token.
+	TokenSmartSplit TokenType = "SmartSplit"
+	// TokenCommandPalette represents the CommandPalette command token.
+	TokenCommandPalette TokenType = "CommandPalette"
+	// TokenSaveLayout represents the SaveLayout command token.
+	TokenSaveLayout TokenType = "SaveLayout"
+	// TokenLoadLayout represents the LoadLayout command token.
+	TokenLoadLayout TokenType = "LoadLayout"
+
 	// TokenTrue represents the true keyword token.
 	TokenTrue TokenType = "true"
 	// TokenFalse represents the false keyword token.
@@ -153,7 +168,9 @@ func (tt TokenType) IsCommand() bool {
 		TokenToggleTiling, TokenEnableTiling, TokenDisableTiling,
 		TokenSnapLeft, TokenSnapRight, TokenSnapFullscreen,
 		TokenSwitchWS, TokenMoveToWS, TokenMoveAndFollowWS,
-		TokenSplit, TokenFocus,
+		TokenSplit, TokenFocus, TokenRotateSplit, TokenEqualizeSplits,
+		TokenToggleZoom, TokenSmartSplit, TokenCommandPalette,
+		TokenSaveLayout, TokenLoadLayout,
 		TokenWait, TokenWaitUntilRegex,
 		TokenSet, TokenOutput, TokenSource,
 		TokenEnableAnimations, TokenDisableAnimations, TokenToggleAnimations:
@@ -233,8 +250,15 @@ var KeywordTokenMap = map[string]TokenType{
 	"MoveAndFollowWorkspace": TokenMoveAndFollowWS,
 
 	// Other actions
-	"Split": TokenSplit,
-	"Focus": TokenFocus,
+	"Split":          TokenSplit,
+	"Focus":          TokenFocus,
+	"RotateSplit":    TokenRotateSplit,
+	"EqualizeSplits": TokenEqualizeSplits,
+	"ToggleZoom":     TokenToggleZoom,
+	"SmartSplit":     TokenSmartSplit,
+	"CommandPalette": TokenCommandPalette,
+	"SaveLayout":     TokenSaveLayout,
+	"LoadLayout":     TokenLoadLayout,
 
 	// Synchronization
 	"Wait":           TokenWait,

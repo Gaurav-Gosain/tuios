@@ -61,6 +61,13 @@ type Executor interface {
 	DisableAnimations() error
 	ToggleAnimations() error
 
+	// New feature commands
+	ToggleZoomExec() error
+	SmartSplitFocusedExec() error
+	ShowCommandPaletteExec() error
+	SaveLayoutExec(name string) error
+	LoadLayoutExec(name string) error
+
 	// Config commands for runtime configuration
 	SetConfig(path, value string) error
 	SetTheme(themeName string) error
@@ -110,6 +117,27 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 
 	case CommandTypeEscape:
 		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b})
+
+	case CommandTypeDelete:
+		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', '3', '~'})
+
+	case CommandTypeUp:
+		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'A'})
+
+	case CommandTypeDown:
+		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'B'})
+
+	case CommandTypeRight:
+		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'C'})
+
+	case CommandTypeLeft:
+		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'D'})
+
+	case CommandTypeHome:
+		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'H'})
+
+	case CommandTypeEnd:
+		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'F'})
 
 	// Mode switching
 	case CommandTypeTerminalMode:
@@ -266,6 +294,28 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 
 	case CommandTypeToggleAnimations:
 		return ce.executor.ToggleAnimations()
+
+	// New feature commands
+	case CommandTypeToggleZoom:
+		return ce.executor.ToggleZoomExec()
+
+	case CommandTypeSmartSplit:
+		return ce.executor.SmartSplitFocusedExec()
+
+	case CommandTypeCommandPalette:
+		return ce.executor.ShowCommandPaletteExec()
+
+	case CommandTypeSaveLayout:
+		if len(cmd.Args) > 0 {
+			return ce.executor.SaveLayoutExec(cmd.Args[0])
+		}
+		return nil
+
+	case CommandTypeLoadLayout:
+		if len(cmd.Args) > 0 {
+			return ce.executor.LoadLayoutExec(cmd.Args[0])
+		}
+		return nil
 
 	// Config commands
 	case CommandTypeSetConfig:

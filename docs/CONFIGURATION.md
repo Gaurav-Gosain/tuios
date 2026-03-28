@@ -298,6 +298,54 @@ Controls whether UI animations are enabled.
 
 **CLI override:** `--no-animations`
 
+### show_clock
+
+Controls whether the clock is shown in the status area.
+
+**Valid values:**
+- `false` - Hide clock (default)
+- `true` - Show clock
+
+**Default:** `false`
+
+**CLI override:** `--show-clock`
+
+### show_cpu
+
+Controls whether CPU usage is shown in the status area.
+
+**Valid values:**
+- `false` - Hide CPU usage (default)
+- `true` - Show CPU usage
+
+**Default:** `false`
+
+**CLI override:** `--show-cpu`
+
+### show_ram
+
+Controls whether RAM usage is shown in the status area.
+
+**Valid values:**
+- `false` - Hide RAM usage (default)
+- `true` - Show RAM usage
+
+**Default:** `false`
+
+**CLI override:** `--show-ram`
+
+### shared_borders
+
+Controls whether windows share borders when tiling (reducing visual clutter).
+
+**Valid values:**
+- `false` - Each window draws its own borders (default)
+- `true` - Adjacent windows share a single border line
+
+**Default:** `false`
+
+**CLI override:** `--shared-borders`
+
 ## Keybindings Prefix Configuration
 
 ### leader_key

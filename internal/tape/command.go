@@ -132,6 +132,17 @@ const (
 	CommandTypeShowNotification CommandType = "ShowNotification"
 	// CommandTypeFocusDirection focuses a window in a direction.
 	CommandTypeFocusDirection CommandType = "FocusDirection"
+
+	// CommandTypeToggleZoom represents the ToggleZoom command.
+	CommandTypeToggleZoom CommandType = "ToggleZoom"
+	// CommandTypeSmartSplit represents the SmartSplit command.
+	CommandTypeSmartSplit CommandType = "SmartSplit"
+	// CommandTypeCommandPalette represents the CommandPalette command.
+	CommandTypeCommandPalette CommandType = "CommandPalette"
+	// CommandTypeSaveLayout represents the SaveLayout command.
+	CommandTypeSaveLayout CommandType = "SaveLayout"
+	// CommandTypeLoadLayout represents the LoadLayout command.
+	CommandTypeLoadLayout CommandType = "LoadLayout"
 )
 
 // Command represents a parsed tape command
@@ -182,7 +193,10 @@ func (ct CommandType) IsCommand() bool {
 		CommandTypeComment,
 		// Config commands
 		CommandTypeSetConfig, CommandTypeSetTheme, CommandTypeSetDockbarPosition,
-		CommandTypeSetBorderStyle, CommandTypeShowNotification, CommandTypeFocusDirection:
+		CommandTypeSetBorderStyle, CommandTypeShowNotification, CommandTypeFocusDirection,
+		// New feature commands
+		CommandTypeToggleZoom, CommandTypeSmartSplit, CommandTypeCommandPalette,
+		CommandTypeSaveLayout, CommandTypeLoadLayout:
 		return true
 	}
 	return false

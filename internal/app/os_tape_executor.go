@@ -768,6 +768,44 @@ func (m *OS) FocusDirection(direction string) error {
 	return nil
 }
 
+// ToggleZoom toggles zoom on the focused window (tape executor interface).
+func (m *OS) ToggleZoomExec() error {
+	m.ToggleZoom()
+	return nil
+}
+
+// SmartSplitFocusedExec performs a smart split on the focused window (tape executor interface).
+func (m *OS) SmartSplitFocusedExec() error {
+	m.SmartSplitFocused()
+	return nil
+}
+
+// ShowCommandPaletteExec opens the command palette (tape executor interface).
+func (m *OS) ShowCommandPaletteExec() error {
+	m.ShowCommandPalette = true
+	return nil
+}
+
+// SaveLayoutExec saves the current layout with the given name (tape executor interface).
+func (m *OS) SaveLayoutExec(name string) error {
+	return SaveLayoutTemplate(name, m)
+}
+
+// LoadLayoutExec loads a saved layout by name (tape executor interface).
+func (m *OS) LoadLayoutExec(name string) error {
+	templates, err := LoadLayoutTemplates()
+	if err != nil {
+		return fmt.Errorf("failed to load layout templates: %w", err)
+	}
+	for _, t := range templates {
+		if t.Name == name {
+			ApplyLayoutTemplate(t, m)
+			return nil
+		}
+	}
+	return fmt.Errorf("layout template not found: %s", name)
+}
+
 // handleRemoteSendKeys processes key sequences for TUIOS.
 // When literal=true, keys are sent directly to the focused terminal PTY.
 // When raw=true, each character is treated as a separate key (no splitting on space/comma).

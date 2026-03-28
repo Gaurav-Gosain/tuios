@@ -10,46 +10,36 @@
 
 ![TUIOS](./assets/demo.gif)
 
-TUIOS is a terminal-based window manager that provides a modern, efficient interface for managing multiple terminal sessions. Built with Go using the Charm stack (Bubble Tea v2 and Lipgloss v2), TUIOS offers a vim-like modal interface with comprehensive keyboard shortcuts, workspace support, and mouse interaction.
+TUIOS is a modern terminal multiplexer and window manager built with Go. It provides a vim-like modal interface with multiple terminal panes, workspaces, BSP tiling, kitty graphics protocol support, and a command palette - all running inside your existing terminal.
+
+Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driven rendering for near-zero idle CPU usage, flicker-free kitty image passthrough, and comprehensive keyboard/mouse interaction.
 
 ## Documentation
 
-### User Guides
-- **[Keybindings Reference](docs/KEYBINDINGS.md)** - Complete keyboard shortcut reference
-- **[BSP Tiling Guide](docs/BSP_TILING.md)** - Advanced tiling with preselection and split control
-- **[Configuration Guide](docs/CONFIGURATION.md)** - Customize keybindings and settings
-- **[CLI Reference](docs/CLI_REFERENCE.md)** - Command-line options and flags
-- **[Tape Scripting](docs/TAPE_SCRIPTING.md)** - Automate workflows with DSL
-- **[Tape Recording](docs/TAPE_RECORDING.md)** - Record and replay sessions
-- **[Showkeys Overlay](docs/SHOWKEYS.md)** - Display keys for presentations
+Full documentation is available at **[tuios-docs](https://tuios-docs.vercel.app)** (hosted) or in the [`docs/`](./docs/) folder.
 
-### Advanced Topics
-- **[Web Terminal](docs/WEB.md)** - Browser-based terminal access
-- **[Architecture Guide](docs/ARCHITECTURE.md)** - Technical architecture and design
-- **[Library Usage](docs/LIBRARY.md)** - Use TUIOS as a Go library
-- **[Contributing](docs/CONTRIBUTING.md)** - Contribution guidelines
+### Quick Links
+- **[Getting Started](docs/KEYBINDINGS.md)** - Keybindings and quick reference
+- **[BSP Tiling](docs/BSP_TILING.md)** - Tiling with preselection and split control
+- **[Configuration](docs/CONFIGURATION.md)** - Customize keybindings, themes, and behavior
+- **[CLI Reference](docs/CLI_REFERENCE.md)** - All command-line options
+- **[Tape Scripting](docs/TAPE_SCRIPTING.md)** - Automate workflows
+- **[Sessions](docs/SESSIONS.md)** - Daemon mode and session persistence
+- **[Architecture](docs/ARCHITECTURE.md)** - Technical design
 
 <details>
-
 <summary>Table of Contents</summary>
 
 <!--toc:start-->
-
-- [TUIOS - Terminal UI Operating System](#tuios-terminal-ui-operating-system)
-  - [Documentation](#documentation)
-  - [Installation](#installation)
-  - [Features](#features)
-  - [Quick Start](#quick-start)
-  - [Tape Scripting](#tape-scripting)
-  - [Architecture](#architecture)
-  - [Performance](#performance)
-  - [Troubleshooting](#troubleshooting)
-  - [Roadmap](#roadmap)
-  - [Development](#development)
-  - [Star History](#star-history)
-  - [License](#license)
-  - [Acknowledgments](#acknowledgments)
-  <!--toc:end-->
+- [Installation](#installation)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [What's New in v0.7.0](#whats-new-in-v070)
+- [Architecture](#architecture)
+- [Performance](#performance)
+- [Development](#development)
+- [License](#license)
+<!--toc:end-->
 
 </details>
 
@@ -59,306 +49,208 @@ TUIOS is a terminal-based window manager that provides a modern, efficient inter
 
 **Homebrew (macOS/Linux):**
 ```bash
-# TUIOS terminal window manager
 brew install tuios
-
-# tuios-web (separate binary for web terminal server)
-brew install tuios-web
 ```
 
 **Arch Linux (AUR):**
 ```bash
-# TUIOS terminal window manager
 yay -S tuios-bin
-
-# tuios-web (separate binary for web terminal server)
-yay -S tuios-web-bin
 ```
 
 **Nix:**
 ```bash
-# Run directly
 nix run github:Gaurav-Gosain/tuios#tuios
-
-# Or add to your configuration
-nix-shell -p tuios
 ```
 
-### Quick Install Script
+### Other Methods
 
-**Linux/macOS:**
 ```bash
+# Quick install script (Linux/macOS)
 curl -fsSL https://raw.githubusercontent.com/Gaurav-Gosain/tuios/main/install.sh | bash
+
+# Go install
+go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest
+
+# Docker
+docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 ```
 
-**Alternative Methods:**
-- **[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)** - Download pre-built binaries for both `tuios` and `tuios-web`
-- **Go Install:** 
-  - `go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest` (main binary)
-  - `go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@latest` (web server)
-- **Docker:** `docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest`
-- **Build from Source:** See [Development](#development) section below
+**[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)** - Pre-built binaries for all platforms.
 
-**Requirements:**
-- A terminal with true color support (most modern terminals)
-- Go 1.24+ (if building from source)
+**Requirements:** A terminal with true color and kitty graphics support (Ghostty, Kitty, WezTerm recommended).
 
 ## Features
 
 ![TUIOS](./assets/tuios.gif)
 
-- **Multiple Terminal Windows**: Create and manage multiple terminal sessions
-- **9 Workspaces**: Organize windows across independent workspaces
-- **Modal Interface**: Vim-inspired Window Management and Terminal modes
-- **BSP Tiling**: Binary Space Partitioning with automatic spiral layout (alternating V/H splits)
-  - **Manual Split Control**: Create horizontal/vertical splits, rotate split direction
-  - **Preselection**: Control where next window spawns (left, right, up, down)
-  - **Equalize Splits**: Reset all splits to balanced 50/50 ratios
-  - **Edge-Based Resizing**: Precise control with left/right/top/bottom edge resizing
-- **Vim-Style Copy Mode**: Navigate scrollback (10,000 lines), search, and select text with vim keybindings
-- **Tape Scripting**: Automate workflows with DSL for recording and playback
-  - **Tape Recording**: Record live sessions with <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>T</kbd> <kbd>r</kbd>
-  - **Headless Execution**: Run scripts in CI/CD with `tuios tape run`
-  - **Interactive Playback**: Watch automation with `tuios tape play`
-- **Showkeys Overlay**: Display pressed keys on screen for presentations and screencasts
-- **Customizable Keybindings**: TOML configuration file with full keybinding customization (Kitty protocol support)
-- **Mouse Support**: Click, drag, and resize with full mouse interaction
-- **Daemon Mode**: Persistent sessions with detach/reattach (like tmux)
-  - **Session Management**: Create, list, attach, kill sessions
-  - **State Persistence**: Window positions, workspaces, and terminal content preserved
-- **SSH Server Mode**: Remote terminal multiplexing with per-connection isolation
-- **Web Terminal Mode**: Access TUIOS from any browser with WebGL rendering
-- **Smart Performance**: Style caching, viewport culling, adaptive refresh (60Hz/30Hz)
+### Core
+- **Multiple Terminal Panes** - Create, resize, drag, and organize terminal sessions
+- **9 Workspaces** - Independent workspace isolation with instant switching
+- **Modal Interface** - Vim-inspired Window Management and Terminal modes
+- **Command Palette** - Fuzzy-searchable action launcher (<kbd>Ctrl</kbd>+<kbd>P</kbd>)
+- **Pane Zoom** - Fullscreen any pane and restore with <kbd>Prefix</kbd>+<kbd>z</kbd>
+
+### Tiling
+- **BSP Tiling** - Binary Space Partitioning with spiral layout
+- **Smart Auto-Split** - Aspect-ratio-aware splitting (opt-in)
+- **Shared Borders** - tmux-style separator lines between panes (`--shared-borders`)
+- **Preselection** - Control where the next pane spawns
+- **Equalize Splits** - Reset all splits to balanced ratios
+
+### Scrollback & Copy Mode
+- **Vim-Style Copy Mode** - Navigate 10,000-line scrollback with hjkl, search with `/`, yank with `y`
+- **Mouse Wheel Scrollback** - Scroll wheel enters copy mode directly (no alt-screen)
+- **Interactive Scrollbar** - Click or drag the right border to jump to scroll position
+- **Selection Auto-Scroll** - Drag selection above/below pane to scroll
+- **Scrollback Browser** - OSC 133-aware command/output block navigation
+- **Scroll Position Indicator** - Shows offset/total on the bottom border
+
+### Graphics
+- **Kitty Graphics Protocol** - Full image rendering with flicker-free video playback
+- **Sixel Graphics** - Sixel image passthrough
+- **Synchronized Output** - Mode 2026 prevents screen tearing
+- **Shared Memory Support** - `t=s` passthrough for mpv `--vo-kitty-use-shm`
+
+### Session Management
+- **Daemon Mode** - Persistent sessions with detach/reattach (like tmux)
+- **Session Switcher** - In-app session list (<kbd>Prefix</kbd>+<kbd>S</kbd>)
+- **Layout Templates** - Save/load window arrangements with working directories and startup commands
+- **Layout CLI** - `tuios layout list`, `tuios layout delete`, `tuios layout export`
+
+### Automation
+- **Tape Scripting** - DSL for recording and replaying terminal workflows
+- **Tape Recording** - Record live sessions (<kbd>Prefix</kbd>+<kbd>T</kbd> <kbd>r</kbd>)
+- **Headless Execution** - Run scripts in CI/CD with `tuios tape run`
+- **Layout Export** - Convert layouts to tape scripts for sharing
+
+### More
+- **Showkeys Overlay** - Display pressed keys for presentations
+- **Customizable Keybindings** - TOML configuration with Kitty protocol support
+- **Mouse Support** - Click, drag, resize, scrollbar interaction
+- **SSH Server Mode** - Remote terminal multiplexing
+- **Web Terminal Mode** - Browser-based access (separate `tuios-web` binary)
+- **Themes** - Bundled themes with custom theme support
 
 ## Quick Start
 
-**Launch TUIOS:**
 ```bash
-tuios
+tuios                    # Launch TUIOS
+tuios --show-keys        # Launch with key overlay for learning
 ```
 
-**Essential Keys:**
+### Essential Keys
 
-*Window Management Mode (default):*
-- <kbd>n</kbd> - Create new window
-- <kbd>i</kbd> or <kbd>Enter</kbd> - Enter Terminal Mode
+| Key | Action |
+|-----|--------|
+| <kbd>Ctrl</kbd>+<kbd>P</kbd> | **Command palette** - search and run any action |
+| <kbd>n</kbd> | New pane (Window Management mode) |
+| <kbd>i</kbd> / <kbd>Enter</kbd> | Enter Terminal mode |
+| <kbd>Esc</kbd> / <kbd>Prefix</kbd>+<kbd>d</kbd> | Back to Window Management mode |
+| <kbd>Prefix</kbd>+<kbd>z</kbd> | Toggle pane zoom (fullscreen) |
+| <kbd>Prefix</kbd>+<kbd>Space</kbd> | Toggle BSP tiling |
+| <kbd>Prefix</kbd>+<kbd>[</kbd> | Enter copy mode (vim scrollback) |
+| <kbd>Prefix</kbd>+<kbd>S</kbd> | Session switcher |
+| <kbd>Prefix</kbd>+<kbd>L</kbd> | Load layout template |
+| <kbd>Prefix</kbd>+<kbd>?</kbd> | Help overlay |
+| <kbd>Prefix</kbd>+<kbd>q</kbd> | Quit |
 
-*Works from any mode:*
-- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>c</kbd> - Create new window
-- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>?</kbd> - Toggle help overlay
-- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>[</kbd> - Enter copy mode (vim-style scrollback)
-- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>d</kbd> or <kbd>Esc</kbd> - Return to Window Management Mode
-- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>q</kbd> - Quit
+The **prefix key** is <kbd>Ctrl</kbd>+<kbd>B</kbd> by default (configurable).
 
-*Alternative (<kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> submenu):*
-- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>n</kbd> - Create new window
-- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>x</kbd> - Close window
-- <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>t</kbd> <kbd>r</kbd> - Rename window
+### Daemon Mode
 
-**Daemon Mode (Session Persistence):**
 ```bash
-tuios new mysession                  # Create a new persistent session
-tuios attach mysession               # Attach to existing session
-tuios ls                             # List all sessions
-tuios kill-session mysession         # Kill a session
-tuios kill-server                    # Stop the daemon
+tuios new mysession          # Create persistent session
+tuios attach mysession       # Reattach
+tuios ls                     # List sessions
+tuios kill-session mysession # Kill session
 ```
 
-**SSH Server Mode:**
+### Layout Templates
+
 ```bash
-tuios ssh                            # Start on localhost:2222
-tuios ssh --host 0.0.0.0 --port 8022 # Custom host/port
-ssh -p 2222 localhost                # Connect
+# In-app: Ctrl+P → "Save Layout" / "Load Layout"
+# Or via prefix+L to load
+
+# CLI:
+tuios layout list            # List saved layouts
+tuios layout delete mysetup  # Delete a layout
+tuios layout export mysetup  # Export as tape script
 ```
 
-**Web Terminal Mode** (requires separate `tuios-web` binary):
+### Configuration
+
 ```bash
-tuios-web                            # Start on http://localhost:7681
-tuios-web --port 8080                # Custom port
-tuios-web --theme dracula            # With theme
-open http://localhost:7681           # Open in browser
+tuios config edit            # Edit config in $EDITOR
+tuios keybinds list          # View all keybindings
 ```
 
-Features: WebGL rendering, WebTransport/WebSocket, bundled Nerd Fonts, settings panel.
+See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show_clock`, `show_cpu`, `show_ram`, `shared_borders`, custom themes, and keybinding customization.
 
-**Install tuios-web:**
-```bash
-# Homebrew
-brew install tuios-web
+## What's New in v0.7.0
 
-# AUR
-yay -S tuios-web-bin
+### Architecture Overhaul
+- **Event-driven rendering** - PTY output signals trigger renders instead of fixed-rate ticking. Near-zero CPU at idle.
+- **Graphics batched with render cycle** - Kitty commands flush after text content, preventing tearing.
 
-# Go install
-go install github.com/Gaurav-Gosain/tuios/cmd/tuios-web@latest
-```
+### Performance
+- **Kitty graphics flicker elimination** - Reuses image IDs so frames replace in-place without delete+re-place.
+- **Raw passthrough** - File-based kitty transmissions forward the path directly (no read+encode+chunk).
+- **Fast render path** - Unfocused panes use the emulator's built-in `Render()` bypassing cell-by-cell iteration.
+- **Hot path cleanup** - Removed `defer/recover` from style comparison (~20k calls/frame), fixed string builder leak.
+- **Visibility gating** - Minimized/off-workspace panes skip rendering entirely.
+- **Synchronized output** - Mode 2026 wrapping for all graphics output.
 
-**Tape Scripting (Automation):**
-```bash
-# Record a session (Ctrl+B T r while in TUIOS)
-# Stop recording (Ctrl+B T s)
+### New Features
+- **Command palette** (<kbd>Ctrl</kbd>+<kbd>P</kbd>) - Fuzzy search across 30+ actions with ranked results.
+- **Pane zoom** (<kbd>Prefix</kbd>+<kbd>z</kbd>) - Fullscreen toggle for the focused pane.
+- **Session switcher** (<kbd>Prefix</kbd>+<kbd>S</kbd>) - Browse and switch daemon sessions in-app.
+- **Layout templates** - Save/load window arrangements with CWD, startup commands, BSP tree, proportional scaling.
+- **Shared borders** (`--shared-borders`) - tmux-style thin separator lines between tiled panes.
+- **Smart auto-split** - Aspect-ratio-aware BSP splitting (opt-in via command palette).
+- **Interactive scrollbar** - Click/drag the right border to scroll, theme-aware colors.
+- **Mouse wheel scrollback** - Scroll wheel enters copy mode directly with full vim/selection support.
+- **Selection auto-scroll** - Drag selection above/below pane to scroll during visual mode.
+- **Dock stats opt-in** - Clock, CPU, RAM hidden by default (`--show-clock`, `--show-cpu`, `--show-ram`).
 
-# List recordings
-tuios tape list
+### Bug Fixes
+- Images follow windows during drag and reposition on resize.
+- `ctrl+d` window close no longer requires double-press (race condition fix).
+- Visual line mode (`Shift+V`) highlights immediately.
+- Off-screen windows don't corrupt ANSI rendering.
+- Background windows stay fresh (no stale content on focus switch).
+- Tiling toggle immediately shows/hides borders.
 
-# Show recording contents
-tuios tape show my-recording
-
-# Run tape script with visible TUI (watch automation)
-tuios tape play my-recording.tape
-
-# Validate tape file syntax
-tuios tape validate my-recording.tape
-```
-
-See [Tape Recording Guide](docs/TAPE_RECORDING.md) for details.
-
-**Configuration:**
-```bash
-tuios config edit                    # Edit keybindings in $EDITOR
-tuios config path                    # Print config file location
-tuios config reset                   # Reset to defaults
-tuios keybinds list                  # View all current keybindings
-tuios keybinds list-custom           # View only your customizations
-```
-
-**Shell Completions:**
-```bash
-# Bash
-tuios completion bash > /etc/bash_completion.d/tuios
-
-# Zsh
-tuios completion zsh > "${fpath[1]}/_tuios"
-
-# Fish
-tuios completion fish > ~/.config/fish/completions/tuios.fish
-
-# PowerShell
-tuios completion powershell > tuios.ps1
-```
-
-For complete keybindings, configuration options, and CLI flags, see the [Documentation](#documentation) section above.
-
-## Tape Scripting
-
-TUIOS supports automation through `.tape` files - a simple, declarative format for automating interactions. Perfect for:
-- Recording and replaying terminal workflows
-- Automated testing
-- Demo recording
-- CI/CD automation
-- Terminal workflow documentation
-- Setup of development environments
-
-**Basic Tape File Syntax:**
-```tape
-# Create windows and windows
-NewWindow
-Sleep 500ms
-
-# Type text with delays
-Type "echo 'Hello, TUIOS!'"
-Enter
-
-# Key presses and combinations
-Ctrl+B
-Type "n"
-
-# Navigation and window management
-SwitchWorkspace 2
-Sleep 1s
-
-# Sleep between commands
-Sleep 500ms
-```
-
-**Supported Commands:**
-- `Type "text"` - Type text
-- `Type@100ms "text"` - Type with custom speed
-- `Enter`, `Space`, `Tab`, `Escape` - Special keys
-- `Backspace`, `Delete` - Editing keys
-- `Up`, `Down`, `Left`, `Right` - Navigation
-- `Ctrl+X`, `Alt+X`, `Shift+X` - Key combinations
-- `Sleep 500ms` or `Sleep 2s` - Delays
-- `NewWindow`, `CloseWindow`, `ToggleTiling` - Window management
-- `SwitchWorkspace N` - Switch to workspace
-- `MoveToWorkspace N` - Move window to workspace
-- `Focus`, `Split` - Window manipulation
-
-**Running Tape Scripts:**
-```bash
-# Headless mode (background) - useful for automation
-tuios tape run script.tape
-
-# Interactive mode (visible TUI) - watch it happen
-tuios tape play script.tape
-
-# Validate syntax
-tuios tape validate script.tape
-```
-
-**Example Tapes:**
-- `examples/simple.tape` - Basic tape file
-- `examples/demo.tape` - Comprehensive demo
-- `examples/advanced.tape` - Complex scenarios
+### Dependencies
+- Bubble Tea v2.0.2, Lipgloss v2.0.2, Wish v2.0.0, Log v2.0.0 (all stable releases).
 
 ## Architecture
 
-TUIOS is built on the Bubble Tea v2 framework following the Model-View-Update pattern. For detailed architecture diagrams and technical documentation, see [Architecture Guide](docs/ARCHITECTURE.md).
+TUIOS follows the Model-View-Update pattern on Bubble Tea v2. For details, see [Architecture Guide](docs/ARCHITECTURE.md).
 
-**Key Technologies:**
-- **[Bubble Tea v2](https://github.com/charmbracelet/bubbletea)** - Event-driven TUI framework
-- **[Lipgloss v2](https://github.com/charmbracelet/lipgloss)** - Terminal styling
-- **[go-pty](https://github.com/aymanbagabas/go-pty)** - Cross-platform PTY interface
-- **[Wish v2](https://github.com/charmbracelet/wish)** - SSH server
-- **Vendored VT** - ANSI/VT100 terminal emulator
+**Key design decisions:**
+- **Event-driven rendering** - PTY reader goroutines signal bubbletea via a buffered channel. No fixed-rate ticking for terminal content.
+- **Kitty graphics passthrough** - Image IDs are reused across frames for flicker-free video. Output is batched with the render cycle and wrapped in mode 2026 sync.
+- **BSP tiling** - Binary space partitioning tree with configurable schemes (spiral, smart split). Shared borders mode overlaps window rects and draws separator lines as a separate layer.
+- **Copy mode** - Full vim navigation over scrollback with mouse wheel entry, scrollbar interaction, and selection auto-scroll.
 
 **Core Components:**
-- **Window Manager** ([`internal/app/os.go`](./internal/app/os.go)) - Central state and workspace orchestration
-- **Terminal Emulation** ([`internal/vt/`](./internal/vt/)) - ANSI parser with 10,000 line scrollback
-- **Rendering Engine** ([`internal/app/render.go`](./internal/app/render.go)) - Layer composition with viewport culling
-- **Input System** ([`internal/input/`](./internal/input/)) - Modal routing and 100+ configurable keybindings
-- **Configuration** ([`internal/config/`](./internal/config/)) - TOML-based keybinding customization
+- **Window Manager** ([`internal/app/os.go`](./internal/app/os.go)) - Central state, workspaces, overlays
+- **Terminal Emulation** ([`internal/vt/`](./internal/vt/)) - ANSI parser with scrollback, kitty/sixel graphics, OSC 133
+- **Rendering** ([`internal/app/render.go`](./internal/app/render.go)) - Layer composition, viewport culling, graphics batching
+- **Input** ([`internal/input/`](./internal/input/)) - Modal routing, 100+ configurable keybindings, mouse handling
+- **Kitty Passthrough** ([`internal/app/kitty_passthrough.go`](./internal/app/kitty_passthrough.go)) - Flicker-free image forwarding with ID reuse and sync output
 
 ## Performance
 
-**Optimization Strategies:**
-- Smart caching with sequence-based change detection
-- Viewport culling for off-screen windows
-- Adaptive refresh rates (60Hz focused, 30Hz background)
-- Memory pooling for strings, buffers, and styles
-- LRU style cache (40-60% allocation reduction)
-- Frame skipping when no changes detected
-
-## Troubleshooting
-
-**Common Issues:**
-- **Colors not displaying**: Set `COLORTERM=truecolor` environment variable
-- **SSH connection issues**: Use `--host 0.0.0.0` for remote access, check firewall settings
-- **Performance with many windows**: Enable tiling mode (<kbd>t</kbd> key)
-
-**Debug Mode:** Press <kbd>Ctrl</kbd> + <kbd>L</kbd> to view system logs.
-
-## Roadmap
-
-**Completed:**
-- ✓ Multiple windows with 9 workspaces
-- ✓ Automatic tiling and snapping
-- ✓ Vim-style copy mode with search
-- ✓ SSH server mode
-- ✓ Performance optimizations
-- ✓ TOML configuration system with custom keybindings
-- ✓ Session persistence (daemon mode)
-
-**Planned:**
-- [ ] Theme and color customization
-- [ ] Split panes and tabs
-- [ ] Plugin system
+- **Event-driven rendering** - Zero CPU at idle. Renders only when PTY data arrives or interaction occurs.
+- **Kitty graphics** - Flicker-free via image ID reuse. Tearing-free via mode 2026 sync + render cycle batching.
+- **Fast unfocused render** - Unfocused panes use emulator's built-in `Render()` instead of cell-by-cell.
+- **Style caching** - LRU cache with sequence-based change detection (40-60% allocation reduction).
+- **Viewport culling** - Off-screen and minimized panes skip rendering.
+- **Memory pooling** - Pooled strings, buffers, and styles.
 
 ## Development
 
-Contributions are welcome! Feel free to open issues or pull requests.
-
-**Build from Source:**
 ```bash
 git clone https://github.com/gaurav-gosain/tuios.git
 cd tuios
@@ -366,9 +258,10 @@ go build -o tuios ./cmd/tuios
 ./tuios
 ```
 
-**Run Tests:**
 ```bash
-go test ./...
+go test ./...              # Run tests
+go vet ./...               # Lint
+staticcheck ./...          # Static analysis
 ```
 
 **Support:** [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B81N8V1R)
@@ -377,26 +270,25 @@ go test ./...
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Gaurav-Gosain/tuios&type=Date&theme=dark)](https://star-history.com/#Gaurav-Gosain/tuios&Date)
 
-<p style="display:flex;flex-wrap:wrap;"> 
-<img alt="GitHub Language Count" src="https://img.shields.io/github/languages/count/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
-<img alt="GitHub Top Language" src="https://img.shields.io/github/languages/top/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
-<img alt="Repo Size" src="https://img.shields.io/github/repo-size/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
-<img alt="GitHub Issues" src="https://img.shields.io/github/issues/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
-<img alt="GitHub Closed Issues" src="https://img.shields.io/github/issues-closed/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
-<img alt="GitHub Pull Requests" src="https://img.shields.io/github/issues-pr/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
-<img alt="GitHub Closed Pull Requests" src="https://img.shields.io/github/issues-pr-closed/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
-<img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
-<img alt="GitHub Last Commit" src="https://img.shields.io/github/last-commit/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
-<img alt="GitHub Commit Activity (Week)" src="https://img.shields.io/github/commit-activity/w/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" /> 
+<p style="display:flex;flex-wrap:wrap;">
+<img alt="GitHub Language Count" src="https://img.shields.io/github/languages/count/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
+<img alt="GitHub Top Language" src="https://img.shields.io/github/languages/top/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
+<img alt="Repo Size" src="https://img.shields.io/github/repo-size/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
+<img alt="GitHub Issues" src="https://img.shields.io/github/issues/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
+<img alt="GitHub Closed Issues" src="https://img.shields.io/github/issues-closed/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
+<img alt="GitHub Pull Requests" src="https://img.shields.io/github/issues-pr/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
+<img alt="GitHub Closed Pull Requests" src="https://img.shields.io/github/issues-pr-closed/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
+<img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
+<img alt="GitHub Last Commit" src="https://img.shields.io/github/last-commit/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
+<img alt="GitHub Commit Activity (Week)" src="https://img.shields.io/github/commit-activity/w/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />
 </p>
 
 ## License
 
-This project is licensed under the MIT License -
-see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
-- The Charm team for Bubble Tea and Lipgloss libraries
-- The Go terminal ecosystem for PTY and VT implementations
-- The vim and tmux communities for interface design inspiration
+- The [Charm](https://charm.sh) team for Bubble Tea, Lipgloss, and the Go terminal ecosystem
+- The vim, tmux, and i3 communities for interface design inspiration
+- [Ghostty](https://ghostty.org), [Kitty](https://sw.kovidgoyal.net/kitty/), and [WezTerm](https://wezfurlong.org/wezterm/) for excellent terminal emulators with graphics support
