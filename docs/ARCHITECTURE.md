@@ -102,8 +102,8 @@ graph TB
 
 **Terminal Emulation:**
 
-- **VT Emulator**: ANSI/VT100 escape sequence parser
-- **PTY Interface**: Pseudo-terminal communication with shell
+- **VT Emulator**: ANSI/VT100 escape sequence parser with kitty keyboard protocol (CSI u, fish 4.x compatible), mode 2026/2027, OSC 4/52
+- **PTY Interface**: Pseudo-terminal communication with shell. Thread-safe HasMouseMode/HasAllMotionMode/KittyKeyboardFlags via atomics.
 - **Scrollback Buffer**: 10,000 line history
 
 **Rendering Pipeline:**
@@ -568,8 +568,8 @@ This ensures:
 | **Terminal Windows**  | `internal/terminal/window.go`   | Terminal session container | PTY lifecycle, VT emulator integration, content caching         |
 | **Input Handler**     | `internal/input/keyboard.go`    | Event dispatcher           | Modal routing, prefix commands, keyboard/mouse processing       |
 | **Action Registry**   | `internal/input/actions.go`     | Command execution          | 40+ action handlers for window management and navigation        |
-| **VT Emulator**       | `internal/vt/emulator.go`       | ANSI parser                | Screen buffer management, scrollback, escape sequence handling, kitty keyboard protocol  |
-| **Kitty Passthrough** | `internal/app/kitty_passthrough.go` | Graphics forwarding    | Flicker-free image passthrough with ID reuse and mode 2026 sync |
+| **VT Emulator**       | `internal/vt/emulator.go`       | ANSI parser                | Screen buffer management, scrollback, escape sequence handling, kitty keyboard protocol (CSI u, fish 4.x compatible), OSC 4/52, mode 2026/2027  |
+| **Kitty Passthrough** | `internal/app/kitty_passthrough.go` | Graphics forwarding    | Flicker-free image passthrough with ID reuse and mode 2026 sync. Video playback via mpv --vo=kitty (shm and base64) and ytk. |
 | **Sixel Passthrough** | `internal/app/sixel_passthrough.go` | Sixel forwarding       | Raw sixel passthrough with window boundary awareness            |
 | **Rendering Engine**  | `internal/app/render.go`        | View generation            | Layer composition, viewport culling, ANSI generation            |
 | **Layout System**     | `internal/layout/tiling.go`     | Window positioning         | Grid calculations, tiling algorithms, snap positions            |
@@ -624,7 +624,7 @@ This ensures:
 
 - Per-window PTY polling goroutines
 - Context-based cancellation for cleanup
-- Mutex-protected shared state
+- Mutex-protected shared state, atomic HasMouseMode/HasAllMotionMode/KittyKeyboardFlags for thread safety
 - Background window throttling (20Hz vs 60Hz)
 
 ## Related Documentation

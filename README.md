@@ -88,7 +88,7 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **9 Workspaces** - Independent workspace isolation with instant switching
 - **Modal Interface** - Vim-inspired Window Management and Terminal modes
 - **Command Palette** - Fuzzy-searchable action launcher (<kbd>Ctrl</kbd>+<kbd>P</kbd>)
-- **Pane Zoom** - Fullscreen any pane and restore with <kbd>Prefix</kbd>+<kbd>z</kbd>
+- **Pane Zoom** - Fullscreen any pane with <kbd>z</kbd> (WM mode) or <kbd>Prefix</kbd>+<kbd>z</kbd>. Shared borders hidden when zoomed, dockbar shows **Z** indicator.
 
 ### Tiling
 - **BSP Tiling** - Binary Space Partitioning with spiral layout
@@ -106,14 +106,14 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **Scroll Position Indicator** - Shows offset/total on the bottom border
 
 ### Graphics & Protocols
-- **Kitty Graphics Protocol** - Full image rendering with flicker-free video playback
+- **Kitty Graphics Protocol** - Full image rendering with flicker-free video playback. `mpv --vo=kitty` works (both shm and base64), and [ytk](https://github.com/Gaurav-Gosain/ytk) works.
 - **Sixel Graphics** - Sixel image passthrough (experimental, no pixel-level clipping yet)
-- **Kitty Keyboard Protocol** - Progressive enhancement (CSI u) with push/pop/query support
+- **Kitty Keyboard Protocol** - Progressive enhancement (CSI u) with push/pop/query support. Fish 4.x compatible; Shift+printable bypasses the protocol and sends text directly.
 - **Synchronized Output** - Mode 2026 prevents screen tearing
 - **Shared Memory Support** - `t=s` passthrough for mpv `--vo-kitty-use-shm`
 - **Terminal Queries** - OSC 4 palette, OSC 10-12 colors, CSI 14/16/18t sizing, DA1/DA2
 - **Experimental** - Kitty text sizing protocol (OSC 66) - basic passthrough works but has known issues with scrollback and window repositioning
-- **Not Yet Supported** - Kitty animation protocol
+- **Not Yet Supported** - Kitty animation protocol (a=f, a=a, a=c)
 
 ### Session Management
 - **Daemon Mode** - Persistent sessions with detach/reattach (like tmux)
@@ -150,7 +150,7 @@ tuios --show-keys        # Launch with key overlay for learning
 | <kbd>n</kbd> | New pane (Window Management mode) |
 | <kbd>i</kbd> / <kbd>Enter</kbd> | Enter Terminal mode |
 | <kbd>Esc</kbd> / <kbd>Prefix</kbd>+<kbd>d</kbd> | Back to Window Management mode |
-| <kbd>Prefix</kbd>+<kbd>z</kbd> | Toggle pane zoom (fullscreen) |
+| <kbd>z</kbd> (WM) or <kbd>Prefix</kbd>+<kbd>z</kbd> | Toggle pane zoom (fullscreen) |
 | <kbd>Prefix</kbd>+<kbd>Space</kbd> | Toggle BSP tiling |
 | <kbd>Prefix</kbd>+<kbd>[</kbd> | Enter copy mode (vim scrollback) |
 | <kbd>Prefix</kbd>+<kbd>S</kbd> | Session switcher |
@@ -206,7 +206,7 @@ See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show
 
 ### New Features
 - **Command palette** (<kbd>Ctrl</kbd>+<kbd>P</kbd>) - Fuzzy search across 30+ actions with ranked results.
-- **Pane zoom** (<kbd>Prefix</kbd>+<kbd>z</kbd>) - Fullscreen toggle for the focused pane.
+- **Pane zoom** (<kbd>z</kbd> in WM mode or <kbd>Prefix</kbd>+<kbd>z</kbd>) - Fullscreen toggle for the focused pane. Shared borders hidden when zoomed, dockbar shows Z indicator.
 - **Session switcher** (<kbd>Prefix</kbd>+<kbd>S</kbd>) - Browse and switch daemon sessions in-app.
 - **Layout templates** - Save/load window arrangements with CWD, startup commands, BSP tree, proportional scaling.
 - **Shared borders** (`--shared-borders`) - tmux-style thin separator lines between tiled panes.
@@ -243,7 +243,7 @@ TUIOS follows the Model-View-Update pattern on Bubble Tea v2. For details, see [
 - **Event-driven rendering** - PTY reader goroutines signal bubbletea via a buffered channel. No fixed-rate ticking for terminal content.
 - **Kitty graphics passthrough** - Image IDs are reused across frames for flicker-free video. Output is batched with the render cycle and wrapped in mode 2026 sync.
 - **BSP tiling** - Binary space partitioning tree with configurable schemes (spiral, smart split). Shared borders mode overlaps window rects and draws separator lines as a separate layer.
-- **Copy mode** - Full vim navigation over scrollback with mouse wheel entry, scrollbar interaction, and selection auto-scroll.
+- **Copy mode** - Full vim navigation over scrollback with mouse wheel entry, scrollbar interaction, and selection auto-scroll (timer-based continuous drag scrolling).
 
 **Core Components:**
 - **Window Manager** ([`internal/app/os.go`](./internal/app/os.go)) - Central state, workspaces, overlays

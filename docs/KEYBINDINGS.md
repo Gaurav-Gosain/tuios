@@ -30,6 +30,7 @@ TUIOS has two main modes:
 
 | Key | Action |
 |-----|--------|
+| `z` | Toggle zoom (fullscreen focused window) |
 | `n` | Create new window |
 | `w` or `x` | Close focused window |
 | `r` | Rename focused window |
@@ -318,6 +319,7 @@ Access debug and development tools:
 - **Copy Mode Click**: Move cursor to position
 - **Copy Mode Drag**: Select text (enters visual mode)
 - **Mouse Wheel**: Enter copy mode and scroll (when no mouse tracking, not alt screen)
+- **Copy Mode Drag Auto-Scroll**: Dragging a selection above/below the pane continuously scrolls via a timer
 - **Right Border Click**: Scrollbar jump
 - **Right Border Drag**: Scrollbar scroll
 
