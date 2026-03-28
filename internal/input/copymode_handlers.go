@@ -671,11 +671,12 @@ func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, sta
 	window.InvalidateCache()
 }
 
-// HandleCopyModeMouseMotion handles mouse motion during drag in copy mode
-func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, mouseX, mouseY int) {
+// HandleCopyModeMouseMotion handles mouse motion during drag in copy mode.
+// Returns the auto-scroll direction: -1 (up), 0 (none), 1 (down).
+func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, mouseX, mouseY int) int {
 	// Only handle if in visual mode
 	if cm.State != terminal.CopyModeVisualChar && cm.State != terminal.CopyModeVisualLine {
-		return
+		return 0
 	}
 
 	// Convert window-relative coordinates to terminal coordinates
@@ -687,18 +688,21 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 		contentTop := window.Y + borderOff
 		contentBottom := window.Y + borderOff + window.ContentHeight()
 
+		scrollDir := 0
 		if mouseY < contentTop {
+			scrollDir = -1
 			for range 3 {
 				MoveUp(cm, window)
 			}
 		} else if mouseY >= contentBottom {
+			scrollDir = 1
 			for range 3 {
 				MoveDown(cm, window)
 			}
 		}
 		updateVisualEnd(cm, window)
 		window.InvalidateCache()
-		return
+		return scrollDir
 	}
 
 	// Update cursor position
@@ -706,7 +710,6 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 	cm.CursorY = terminalY
 
 	// Adjust cursor to avoid landing on continuation cells of wide characters
-	// Move left until we find a cell with Width > 0
 	for cm.CursorX > 0 {
 		cell := getCellAtCursor(cm, window)
 		if cell == nil || cell.Width > 0 {
@@ -715,8 +718,7 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 		cm.CursorX--
 	}
 
-	// Update visual selection end
 	updateVisualEnd(cm, window)
-
 	window.InvalidateCache()
+	return 0
 }

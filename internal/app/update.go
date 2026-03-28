@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // TickerMsg represents a periodic tick event for maintenance tasks
@@ -17,6 +18,9 @@ type TickerMsg time.Time
 // PTYDataMsg signals that one or more PTY readers have new output.
 // This triggers re-rendering. Sent from the PTYDataChan listener.
 type PTYDataMsg struct{}
+
+// AutoScrollTickMsg triggers continuous scrolling while dragging outside content area.
+type AutoScrollTickMsg struct{}
 
 // WindowExitMsg signals that a terminal window process has exited.
 // This is exported so it can be used by the input package.
@@ -249,6 +253,12 @@ func IdleTickCmd() tea.Cmd {
 
 // ListenForPTYData returns a Cmd that blocks until a PTY reader signals
 // new data, then sends a PTYDataMsg to trigger re-rendering.
+func autoScrollTick() tea.Cmd {
+	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+		return AutoScrollTickMsg{}
+	})
+}
+
 func ListenForPTYData(ch <-chan struct{}) tea.Cmd {
 	return func() tea.Msg {
 		<-ch
@@ -295,6 +305,61 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.MarkTerminalsWithNewContent()
 		m.renderSkipped = false
 		return m, ListenForPTYData(m.PTYDataChan)
+
+	case AutoScrollTickMsg:
+		if !m.AutoScrollActive || m.AutoScrollDir == 0 {
+			return m, nil
+		}
+		// Find the target window for auto-scrolling
+		var w *terminal.Window
+		if m.DraggedWindowIndex >= 0 && m.DraggedWindowIndex < len(m.Windows) {
+			w = m.Windows[m.DraggedWindowIndex]
+		}
+		if w == nil {
+			w = m.GetFocusedWindow()
+		}
+		if w != nil && w.CopyMode != nil && w.CopyMode.Active {
+			cm := w.CopyMode
+			for range 2 {
+				if m.AutoScrollDir < 0 {
+					// Scroll up: use same logic as moveUp (keep cursor mid-screen)
+					midPoint := w.Height / 2
+					if cm.CursorY > midPoint {
+						cm.CursorY--
+					} else if w.Terminal != nil && cm.ScrollOffset < w.Terminal.ScrollbackLen() {
+						cm.ScrollOffset++
+						w.ScrollbackOffset = cm.ScrollOffset
+					} else if cm.CursorY > 0 {
+						cm.CursorY--
+					}
+				} else {
+					// Scroll down: use same logic as moveDown
+					midPoint := w.Height / 2
+					if cm.CursorY < midPoint {
+						cm.CursorY++
+					} else if cm.ScrollOffset > 0 {
+						cm.ScrollOffset--
+						w.ScrollbackOffset = cm.ScrollOffset
+					} else if cm.CursorY < w.Height-3 {
+						cm.CursorY++
+					}
+				}
+			}
+			// Update visual selection end
+			if cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualLine {
+				scrollbackLen := 0
+				if w.Terminal != nil {
+					scrollbackLen = w.Terminal.ScrollbackLen()
+				}
+				absY := scrollbackLen - cm.ScrollOffset + cm.CursorY
+				cm.VisualEnd = terminal.Position{X: cm.CursorX, Y: absY}
+			}
+			w.Dirty = true
+			w.ContentDirty = true
+			w.InvalidateCache()
+		}
+		m.renderSkipped = false
+		return m, autoScrollTick()
 
 	case TickerMsg:
 		// Maintenance tick: animations, dock stats, script playback, process cleanup.

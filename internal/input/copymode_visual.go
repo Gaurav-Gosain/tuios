@@ -30,6 +30,11 @@ func enterVisualLine(cm *terminal.CopyMode, window *terminal.Window) {
 	cm.VisualEnd = terminal.Position{X: endX, Y: absY}
 }
 
+// UpdateVisualEnd updates the visual selection end position (exported for auto-scroll).
+func UpdateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
+	updateVisualEnd(cm, window)
+}
+
 // updateVisualEnd updates the visual selection end position
 func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 	absY := getAbsoluteY(cm, window)

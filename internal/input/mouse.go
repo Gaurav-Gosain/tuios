@@ -354,8 +354,17 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
 		if draggedWindow.CopyMode != nil && draggedWindow.CopyMode.Active {
-			// Update selection in copy mode
-			HandleCopyModeMouseMotion(draggedWindow.CopyMode, draggedWindow, mouse.X, mouse.Y)
+			scrollDir := HandleCopyModeMouseMotion(draggedWindow.CopyMode, draggedWindow, mouse.X, mouse.Y)
+			o.AutoScrollDir = scrollDir
+			if scrollDir != 0 && !o.AutoScrollActive {
+				o.AutoScrollActive = true
+				return o, tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+					return app.AutoScrollTickMsg{}
+				})
+			}
+			if scrollDir == 0 {
+				o.AutoScrollActive = false
+			}
 			return o, nil
 		}
 	}
@@ -654,10 +663,12 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
 		if draggedWindow.CopyMode != nil && draggedWindow.CopyMode.Active {
-			// Selection is complete, just clean up drag state
+			// Selection is complete, clean up drag state and stop auto-scroll
 			o.Dragging = false
 			o.DraggedWindowIndex = -1
 			o.InteractionMode = false
+			o.AutoScrollActive = false
+			o.AutoScrollDir = 0
 			return o, nil
 		}
 	}
