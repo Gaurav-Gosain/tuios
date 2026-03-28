@@ -402,6 +402,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	// (mpv sends a=T,m=1 chunks) without needing to accumulate all data.
 	if andPlace || hasPendingData {
 		isFirstChunk := cmd.Width > 0 && cmd.Height > 0
+		kittyPassthroughLog("forwardTransmit: streaming path, first=%v, andPlace=%v, pending=%v, more=%v", isFirstChunk, andPlace, hasPendingData, cmd.More)
 
 		if isFirstChunk {
 			// Get/allocate host ID
@@ -424,16 +425,14 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			buf = append(buf, "\x1b7"...)
 			buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
 			buf = append(buf, "\x1b_G"...)
-			// Replace guest image ID with host ID in raw data, and ensure a=T
-			buf = append(buf, fmt.Sprintf("a=T,i=%d,", hostID)...)
-			// Forward remaining params from rawData (skip any a= and i= that may be present)
+			// Build first chunk: a=T with host ID, q=2, and all original params
+			buf = append(buf, fmt.Sprintf("a=T,i=%d,q=2,", hostID)...)
 			paramEnd := bytes.IndexByte(rawData, ';')
 			if paramEnd >= 0 {
-				params := string(rawData[:paramEnd])
-				// Remove a= and i= from params, keep everything else
+				// Filter out a=, i=, q= from original params (we set our own)
 				var filteredParams []string
-				for _, p := range strings.Split(params, ",") {
-					if !strings.HasPrefix(p, "a=") && !strings.HasPrefix(p, "i=") {
+				for _, p := range strings.Split(string(rawData[:paramEnd]), ",") {
+					if !strings.HasPrefix(p, "a=") && !strings.HasPrefix(p, "i=") && !strings.HasPrefix(p, "q=") {
 						filteredParams = append(filteredParams, p)
 					}
 				}
@@ -473,23 +472,19 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			// Mark that we're streaming a chunked transfer
 			kp.pendingDirectData[windowID] = &pendingDirectTransmit{ImageID: cmd.ImageID}
 		} else {
-			// Continuation chunk - stream directly with host ID
+			// Continuation chunk - stream directly with host ID + q=2
 			hostID := kp.imageIDMap[windowID][cmd.ImageID]
 			var buf []byte
 			buf = append(buf, "\x1b_G"...)
-			buf = append(buf, fmt.Sprintf("i=%d,", hostID)...)
+			buf = append(buf, fmt.Sprintf("i=%d,q=2", hostID)...)
+			// Add m=1 if more chunks coming
+			if cmd.More {
+				buf = append(buf, ",m=1"...)
+			}
+			// Append the data portion
 			paramEnd := bytes.IndexByte(rawData, ';')
 			if paramEnd >= 0 {
-				var filteredParams []string
-				for _, p := range strings.Split(string(rawData[:paramEnd]), ",") {
-					if !strings.HasPrefix(p, "a=") && !strings.HasPrefix(p, "i=") {
-						filteredParams = append(filteredParams, p)
-					}
-				}
-				if len(filteredParams) > 0 {
-					buf = append(buf, strings.Join(filteredParams, ",")...)
-				}
-				buf = append(buf, rawData[paramEnd:]...)
+				buf = append(buf, rawData[paramEnd:]...) // ;base64data
 			}
 			buf = append(buf, "\x1b\\"...)
 			if kp.hostOut != nil {
