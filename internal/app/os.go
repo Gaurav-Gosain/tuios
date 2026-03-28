@@ -95,6 +95,8 @@ type OS struct {
 	TiledWidth         int // Original tiled width
 	TiledHeight        int // Original tiled height
 	DraggedWindowIndex       int // Index of window being dragged
+	AutoScrollDir            int // -1 = up, 0 = none, 1 = down (for drag auto-scroll)
+	AutoScrollActive         bool
 	ScrollbarDragging        bool
 	ScrollbarDragWindowIndex int // -1 when not dragging
 	Windows            []*terminal.Window
@@ -198,7 +200,8 @@ type OS struct {
 	TapeManager       *TapeManagerState // Tape manager state
 	TapeRecorder      *tape.Recorder    // Tape recorder for recording sessions
 	TapeRecordingName string            // Name of current recording
-	TapePrefixActive  bool              // True when Ctrl+B, T was pressed (tape sub-prefix)
+	TapePrefixActive   bool             // True when Ctrl+B, T was pressed (tape sub-prefix)
+	LayoutPrefixActive bool             // True when Ctrl+B, L was pressed (layout sub-prefix)
 	// Remote command processing
 	ProcessingRemoteKeys bool // True when processing remote send-keys (disables animations)
 	// Remote tape script progress (used instead of ScriptPlayer for tape exec)
@@ -210,6 +213,9 @@ type OS struct {
 	KittyPassthrough *KittyPassthrough
 	// Sixel Graphics passthrough for forwarding to host terminal
 	SixelPassthrough *SixelPassthrough
+	TextSizingState  *TextSizingState
+	PostRenderWriter *PostRenderWriter
+	// Text sizing (OSC 66) passthrough state
 	// TerminalModeEnteredAt tracks when we last switched to TerminalMode.
 	// Used to suppress misparsed mouse-sequence fragments (phantom keypresses)
 	// during the AllMotion→CellMotion transition window.
@@ -562,6 +568,7 @@ func (m *OS) AddWindow(title string) *OS {
 
 	m.setupKittyPassthrough(window)
 	m.setupSixelPassthrough(window)
+	m.setupTextSizingPassthrough(window)
 
 	m.Windows = append(m.Windows, window)
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))

@@ -110,7 +110,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
 
 		var boxContent string
-		isTiledBorderless := window.Tiled && !window.Zoomed
+		isTiledBorderless := window.Tiled && (!window.Zoomed || config.SharedBorders)
 		if isTiledBorderless {
 			// Shared borders mode: no individual window borders, content fills full rect
 			boxContent = content
@@ -205,9 +205,7 @@ func (m *OS) View() tea.View {
 		fw := m.GetFocusedWindow()
 		useAllMotion := false
 		if fw != nil && fw.Terminal != nil {
-			fw.RLockIO()
 			useAllMotion = fw.Terminal.HasAllMotionMode()
-			fw.RUnlockIO()
 		}
 		if useAllMotion {
 			view.MouseMode = tea.MouseModeAllMotion
@@ -237,9 +235,19 @@ func (m *OS) View() tea.View {
 			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 				m.KittyPassthrough.HideAllPlacements()
 			}
+			if m.SixelPassthrough != nil && m.SixelPassthrough.PlacementCount() > 0 {
+				m.SixelPassthrough.HideAllPlacements()
+				// Flush the clear commands
+				data := m.SixelPassthrough.FlushPending()
+				if len(data) > 0 {
+					_, _ = os.Stdout.Write(data)
+				}
+			}
 		} else {
 			m.GetKittyGraphicsCmd()
 			m.GetSixelGraphicsCmd()
+			m.RefreshTextSizing()
+			m.FlushTextSizing()
 		}
 	}
 
@@ -329,16 +337,15 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 		})
 	}
 
-	// Get pending sixel output and write to /dev/tty
+	// Get pending sixel output and write to stdout (same stream as bubbletea)
+	// wrapped in synchronized update sequences to prevent tearing
 	data := m.SixelPassthrough.FlushPending()
 	if len(data) == 0 {
 		return nil
 	}
-	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
-	if err != nil {
-		return nil
-	}
-	_, _ = tty.Write(data)
-	_ = tty.Close()
+	// Write to stdout with sync wrapping (same approach as kitty graphics)
+	_, _ = os.Stdout.Write([]byte("\x1b[?2026h")) // sync begin
+	_, _ = os.Stdout.Write(data)
+	_, _ = os.Stdout.Write([]byte("\x1b[?2026l")) // sync end
 	return nil
 }

@@ -242,6 +242,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 
 		m.setupKittyPassthrough(window)
 		m.setupSixelPassthrough(window)
+	m.setupTextSizingPassthrough(window)
 
 		m.Windows = append(m.Windows, window)
 		m.LogInfo("[RESTORE] Window %d created: DaemonMode=%v, PTYID=%s", i, window.DaemonMode, window.PTYID[:8])
@@ -521,6 +522,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 
 	m.setupKittyPassthrough(window)
 	m.setupSixelPassthrough(window)
+	m.setupTextSizingPassthrough(window)
 
 	// Set up PTY handlers if we have a daemon client
 	if m.DaemonClient != nil {
@@ -940,6 +942,7 @@ func (m *OS) AddDaemonWindow(title string) *OS {
 
 	m.setupKittyPassthrough(window)
 	m.setupSixelPassthrough(window)
+	m.setupTextSizingPassthrough(window)
 
 	// Set up the daemon write function for input
 	window.DaemonWriteFunc = func(data []byte) error {

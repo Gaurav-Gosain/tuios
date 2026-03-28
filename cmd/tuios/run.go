@@ -27,15 +27,10 @@ func debugLogEvent(osModel *app.OS, msg tea.Msg) {
 		return
 	}
 
-	// Determine focused window mouse mode context
-	mouseMode := "none"
-	if fw := osModel.GetFocusedWindow(); fw != nil && fw.Terminal != nil {
-		if fw.Terminal.HasMouseMode() {
-			mouseMode = "has_mouse"
-		} else {
-			mouseMode = "no_mouse"
-		}
-	}
+	// Note: we intentionally don't check HasMouseMode() here because
+	// accessing the VT emulator's modes map from this goroutine causes
+	// unrecoverable concurrent map read/write panics.
+	mouseMode := "unknown"
 
 	modeStr := "WinMgmt"
 	if osModel.Mode == app.TerminalMode {
@@ -104,8 +99,10 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 
 	if os.Mode == app.TerminalMode {
 		focusedWindow := os.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.Terminal != nil && focusedWindow.Terminal.HasMouseMode() {
-			return msg
+		if focusedWindow != nil && focusedWindow.Terminal != nil {
+			if focusedWindow.Terminal.HasMouseMode() {
+				return msg
+			}
 		}
 	}
 
@@ -168,18 +165,22 @@ func runLocal() error {
 
 	isDaemonSession := os.Getenv("TUIOS_SESSION") != ""
 
+	prw := app.NewPostRenderWriter(os.Stdout)
+
 	initialOS := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
 		ShowKeys:                  showKeys,
 		IsDaemonSession:           isDaemonSession,
 		EnableGraphicsPassthrough: true,
 	})
+	initialOS.PostRenderWriter = prw
 
 	p := tea.NewProgram(
 		initialOS,
 		tea.WithFPS(config.NormalFPS),
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(filterMouseMotion),
+		tea.WithOutput(prw),
 	)
 
 	sigChan := make(chan os.Signal, 1)

@@ -141,6 +141,8 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	log.Printf("[CLIENT] Starting read loop")
 	client.StartReadLoop()
 
+	prw := app.NewPostRenderWriter(os.Stdout)
+
 	initialOS := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
 		ShowKeys:                  showKeys,
@@ -149,6 +151,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		SessionName:               client.SessionName(),
 		EnableGraphicsPassthrough: true,
 	})
+	initialOS.PostRenderWriter = prw
 
 	windowCount := 0
 	if state != nil {
@@ -187,6 +190,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		tea.WithFPS(config.NormalFPS),
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(filterMouseMotion),
+		tea.WithOutput(prw),
 	)
 
 	// Set up remote command handler for CLI-initiated commands
