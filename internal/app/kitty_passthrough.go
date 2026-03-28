@@ -93,7 +93,8 @@ type PassthroughPlacement struct {
 	PlacementID  uint32
 	WindowID     string
 	GuestX       int
-	AbsoluteLine int // Absolute line position (scrollbackLen + cursorY at placement time)
+	AbsoluteLine int  // Absolute line position (scrollbackLen + cursorY at placement time)
+	Streaming    bool // True while chunks are still being received (don't re-place)
 	HostX        int
 	HostY        int
 	Cols         int
@@ -323,7 +324,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 		kp.forwardQuery(cmd, rawData, ptyInput)
 
 	case vt.KittyActionTransmit:
-		kittyPassthroughLog("ForwardCommand: handling TRANSMIT")
+		kittyPassthroughLog("ForwardCommand: handling TRANSMIT, more=%v", cmd.More)
 		result := kp.forwardTransmit(cmd, rawData, windowID, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, isAltScreen)
 		if result != nil {
 			return result
@@ -394,120 +395,130 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		return nil
 	}
 
-	// Check if we have pending data from a previous transmit+place command
+	// rawData includes the full APC framing: \x1b_G<params>;<data>\x1b\\
+	// Strip the framing to get just the inner content for rewriting.
+	innerData := rawData
+	if len(innerData) >= 3 && innerData[0] == '\x1b' && innerData[1] == '_' {
+		innerData = innerData[2:] // skip \x1b_
+		if innerData[0] == 'G' {
+			innerData = innerData[1:] // skip G
+		}
+	}
+	if len(innerData) >= 2 && innerData[len(innerData)-2] == '\x1b' && innerData[len(innerData)-1] == '\\' {
+		innerData = innerData[:len(innerData)-2] // strip \x1b\\
+	}
+
 	hasPendingData := kp.pendingDirectData[windowID] != nil
-
-	// For transmit+place: stream raw chunks directly to host terminal with
-	// cursor positioning on the first chunk. This handles video playback
-	// (mpv sends a=T,m=1 chunks) without needing to accumulate all data.
-	if andPlace || hasPendingData {
-		isFirstChunk := cmd.Width > 0 && cmd.Height > 0
-		kittyPassthroughLog("forwardTransmit: streaming path, first=%v, andPlace=%v, pending=%v, more=%v", isFirstChunk, andPlace, hasPendingData, cmd.More)
-
-		if isFirstChunk {
-			// Get/allocate host ID
-			if kp.imageIDMap[windowID] == nil {
-				kp.imageIDMap[windowID] = make(map[uint32]uint32)
-			}
-			hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
-			if !reusingID {
-				hostID = kp.allocateHostID()
-				kp.imageIDMap[windowID][cmd.ImageID] = hostID
-				kp.deleteAllWindowPlacements(windowID, false)
-			}
-
-			hostX := windowX + contentOffsetX + cursorX
-			hostY := windowY + contentOffsetY + cursorY
-
-			// Rewrite the command with host ID and a=T, stream to host
-			var buf []byte
-			buf = append(buf, syncBegin...)
-			buf = append(buf, "\x1b7"...)
-			buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
-			buf = append(buf, "\x1b_G"...)
-			// Build first chunk: a=T with host ID, q=2, and all original params
-			buf = append(buf, fmt.Sprintf("a=T,i=%d,q=2,", hostID)...)
-			paramEnd := bytes.IndexByte(rawData, ';')
-			if paramEnd >= 0 {
-				// Filter out a=, i=, q= from original params (we set our own)
-				var filteredParams []string
-				for _, p := range strings.Split(string(rawData[:paramEnd]), ",") {
-					if !strings.HasPrefix(p, "a=") && !strings.HasPrefix(p, "i=") && !strings.HasPrefix(p, "q=") {
-						filteredParams = append(filteredParams, p)
-					}
-				}
-				if len(filteredParams) > 0 {
-					buf = append(buf, strings.Join(filteredParams, ",")...)
-				}
-				buf = append(buf, rawData[paramEnd:]...) // ;data
-			}
-			buf = append(buf, "\x1b\\"...)
-			if kp.hostOut != nil {
-				_, _ = kp.hostOut.Write(buf)
-			}
-
-			// Track placement for RefreshAllPlacements
-			imgRows, imgCols := kp.calculateImageCells(cmd)
-			contentWidth := windowWidth - 2
-			contentHeight := windowHeight - 2
-			displayCols := min(imgCols, contentWidth)
-			displayRows := min(imgRows, contentHeight)
-			if kp.placements[windowID] == nil {
-				kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
-			}
-			kp.placements[windowID][hostID] = &PassthroughPlacement{
-				GuestImageID:      cmd.ImageID,
-				HostImageID:       hostID,
-				WindowID:          windowID,
-				GuestX:            cursorX,
-				AbsoluteLine:      scrollbackLen + cursorY,
-				HostX:             hostX,
-				HostY:             hostY,
-				Cols:              displayCols,
-				Rows:              imgRows,
-				DisplayRows:       displayRows,
-				Hidden:            false, // Already placed
-				PlacedOnAltScreen: isAltScreen,
-			}
-			// Mark that we're streaming a chunked transfer
-			kp.pendingDirectData[windowID] = &pendingDirectTransmit{ImageID: cmd.ImageID}
-		} else {
-			// Continuation chunk - stream directly with host ID + q=2
-			hostID := kp.imageIDMap[windowID][cmd.ImageID]
-			var buf []byte
-			buf = append(buf, "\x1b_G"...)
-			buf = append(buf, fmt.Sprintf("i=%d,q=2", hostID)...)
-			// Add m=1 if more chunks coming
-			if cmd.More {
-				buf = append(buf, ",m=1"...)
-			}
-			// Append the data portion
-			paramEnd := bytes.IndexByte(rawData, ';')
-			if paramEnd >= 0 {
-				buf = append(buf, rawData[paramEnd:]...) // ;base64data
-			}
-			buf = append(buf, "\x1b\\"...)
-			if kp.hostOut != nil {
-				_, _ = kp.hostOut.Write(buf)
-			}
-		}
-
-		// If this is the last chunk, clean up pending state and restore cursor
-		if !cmd.More {
-			delete(kp.pendingDirectData, windowID)
-			if kp.hostOut != nil {
-				_, _ = kp.hostOut.Write([]byte("\x1b8")) // restore cursor
-				_, _ = kp.hostOut.Write(syncEnd)
-			}
-		}
-
+	if !andPlace && !hasPendingData {
+		// Pass through raw (already has framing)
+		kp.pendingOutput = append(kp.pendingOutput, rawData...)
 		return nil
 	}
 
-	// For transmit-only (no placement), pass through raw data via pendingOutput
-	kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
-	kp.pendingOutput = append(kp.pendingOutput, rawData...)
-	kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
+	isFirstChunk := cmd.Width > 0 && cmd.Height > 0
+
+	if isFirstChunk {
+		delete(kp.pendingDirectData, windowID)
+
+		// Get/allocate host ID
+		if kp.imageIDMap[windowID] == nil {
+			kp.imageIDMap[windowID] = make(map[uint32]uint32)
+		}
+		hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
+		if !reusingID {
+			hostID = kp.allocateHostID()
+			kp.imageIDMap[windowID][cmd.ImageID] = hostID
+			kp.deleteAllWindowPlacements(windowID, false)
+		}
+
+		hostX := windowX + contentOffsetX + cursorX
+		hostY := windowY + contentOffsetY + cursorY
+
+		// Track placement for RefreshAllPlacements
+		imgRows, imgCols := kp.calculateImageCells(cmd)
+		contentWidth := windowWidth - 2
+		contentHeight := windowHeight - 2
+		if kp.placements[windowID] == nil {
+			kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
+		}
+		kp.placements[windowID][hostID] = &PassthroughPlacement{
+			GuestImageID:      cmd.ImageID,
+			HostImageID:       hostID,
+			WindowID:          windowID,
+			GuestX:            cursorX,
+			AbsoluteLine:      scrollbackLen + cursorY,
+			HostX:             hostX,
+			HostY:             hostY,
+			Cols:              min(imgCols, contentWidth),
+			Rows:              imgRows,
+			DisplayRows:       min(imgRows, contentHeight),
+			Hidden:            true, // Will be placed by a=p after transfer completes
+				Streaming:         true, // Don't let RefreshAllPlacements touch this
+			PlacedOnAltScreen: isAltScreen,
+		}
+
+		// Accumulate ALL chunks in videoFrameBuf, write to host in ONE call
+		// when m=0 arrives. This prevents interleaving with bubbletea's output.
+		kp.videoFrameBuf = kp.videoFrameBuf[:0]
+		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b_G"...)
+		kp.videoFrameBuf = append(kp.videoFrameBuf, fmt.Sprintf("a=T,i=%d,q=2,", hostID)...)
+		paramEnd := bytes.IndexByte(innerData, ';')
+		if paramEnd >= 0 {
+			var filteredParams []string
+			for _, p := range strings.Split(string(innerData[:paramEnd]), ",") {
+				if !strings.HasPrefix(p, "a=") && !strings.HasPrefix(p, "i=") && !strings.HasPrefix(p, "q=") {
+					filteredParams = append(filteredParams, p)
+				}
+			}
+			if len(filteredParams) > 0 {
+				kp.videoFrameBuf = append(kp.videoFrameBuf, strings.Join(filteredParams, ",")...)
+			}
+			kp.videoFrameBuf = append(kp.videoFrameBuf, innerData[paramEnd:]...)
+		}
+		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b\\"...)
+		kp.pendingDirectData[windowID] = &pendingDirectTransmit{ImageID: cmd.ImageID}
+	} else {
+		// Continuation chunk: accumulate in videoFrameBuf
+		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b_G"...)
+		if cmd.More {
+			kp.videoFrameBuf = append(kp.videoFrameBuf, "m=1"...)
+		}
+		paramEnd := bytes.IndexByte(innerData, ';')
+		if paramEnd >= 0 {
+			kp.videoFrameBuf = append(kp.videoFrameBuf, innerData[paramEnd:]...)
+		}
+		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b\\"...)
+	}
+
+	// When transfer completes (m=0), write ENTIRE frame to host in one call
+	if !cmd.More && kp.hostOut != nil {
+		delete(kp.pendingDirectData, windowID)
+		hostID := kp.imageIDMap[windowID][cmd.ImageID]
+		hostX := windowX + contentOffsetX + cursorX
+		hostY := windowY + contentOffsetY + cursorY
+
+		// Position cursor and write frame. No save/restore (DECSC/DECRC)
+		// which can interfere with bubbletea's cursor state. The a=T command
+		// has C=1 (don't move cursor after placement) from mpv's original params.
+		var frame []byte
+		frame = append(frame, syncBegin...)
+		frame = append(frame, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
+		frame = append(frame, kp.videoFrameBuf...)
+		frame = append(frame, syncEnd...)
+		_, _ = kp.hostOut.Write(frame)
+		kp.videoFrameBuf = kp.videoFrameBuf[:0]
+
+		// Mark placement as visible
+		if placements := kp.placements[windowID]; placements != nil {
+			if p := placements[hostID]; p != nil {
+				p.Hidden = false
+				p.Streaming = false
+				p.HostX = hostX
+				p.HostY = hostY
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -1283,6 +1294,11 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		var idsToDelete []uint32
 
 		for hostID, p := range placements {
+			// Skip placements that are still receiving chunked data
+			if p.Streaming {
+				continue
+			}
+
 			// Handle screen mode mismatch:
 			// - Images placed on normal screen should be hidden when altscreen is active
 			// - Images placed on altscreen should be DELETED when back to normal screen

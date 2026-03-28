@@ -296,7 +296,11 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 	if len(data) == 0 {
 		return nil
 	}
-	kittyPassthroughLog("GetKittyGraphicsCmd: flushing %d bytes", len(data))
+	preview := string(data)
+	if len(preview) > 200 {
+		preview = preview[:200]
+	}
+	kittyPassthroughLog("GetKittyGraphicsCmd: flushing %d bytes, preview=%q", len(data), preview)
 	m.KittyPassthrough.WriteToHost(data)
 	return nil
 }

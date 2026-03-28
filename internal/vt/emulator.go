@@ -905,6 +905,9 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 		if err != nil || cmd == nil {
 			return false
 		}
+		if !cmd.More {
+			e.logf("KITTY APC: m=0 chunk received, action=%c", cmd.Action)
+		}
 
 		// Build complete APC sequence: ESC _ G<params>;<payload> ESC \
 		// APC terminator is ESC \ (0x1b 0x5c), not just \
