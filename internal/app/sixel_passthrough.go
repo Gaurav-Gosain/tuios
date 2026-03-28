@@ -464,9 +464,19 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 			return
 		}
 
-		// Calculate host position (always +1 for border)
-		hostX := win.X + 1 + cursorX
-		hostY := win.Y + 1 + cursorY
+		// Calculate host position
+		// +1 for border, +1 because sixel rendering is 0-indexed from the
+		// cursor cell but our cursor positioning is relative to window edge
+		borderOff := 1
+		if win.Tiled {
+			borderOff = 0
+		}
+		hostX := win.X + borderOff + cursorX
+		hostY := win.Y + borderOff + cursorY
+
+		// Debug: log position calculation
+		sixelPassthroughLog("SIXEL DIRECT: winX=%d winY=%d borderOff=%d cursorX=%d cursorY=%d -> hostX=%d hostY=%d",
+			win.X, win.Y, borderOff, cursorX, cursorY, hostX, hostY)
 
 		// Write directly to /dev/tty as a single write to avoid fragmentation
 		tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
