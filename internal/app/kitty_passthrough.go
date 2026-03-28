@@ -358,19 +358,15 @@ func (kp *KittyPassthrough) ForwardCommand(
 		kp.forwardDelete(cmd, windowID)
 
 	case vt.KittyActionFrame, vt.KittyActionAnimation, vt.KittyActionCompose:
-		// Animation commands: pass through raw to host terminal.
-		// Don't remap IDs - the guest app manages its own image IDs for
-		// animation, and the initial a=T frame was also passed raw.
-		kittyPassthroughLog("ForwardCommand: passing through animation action=%c", cmd.Action)
-		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
-		kp.pendingOutput = append(kp.pendingOutput, rawData...)
-		kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
+		// Animation protocol (a=f, a=a, a=c) is not yet supported in passthrough.
+		// These commands require consistent image ID management between the guest
+		// app and host terminal which conflicts with tuios's ID remapping.
+		// Apps like kitty-doom that use animation should be run directly in the
+		// terminal instead of inside tuios.
+		kittyPassthroughLog("ForwardCommand: DROPPING unsupported animation action=%c", cmd.Action)
 
 	default:
-		// Unknown actions: pass through raw for forward compatibility
-		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
-		kp.pendingOutput = append(kp.pendingOutput, rawData...)
-		kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
+		kittyPassthroughLog("ForwardCommand: UNKNOWN action %c", cmd.Action)
 	}
 
 	return nil
@@ -400,10 +396,8 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	// We need to continue accumulating if there's pending data
 	hasPendingData := kp.pendingDirectData[windowID] != nil
 
-	// For transmit-only, transmit+place in alt screen (animation apps like kitty-doom),
-	// or no pending accumulation: pass through raw data.
-	// Alt screen apps manage their own cursor positioning so we don't need deferred placement.
-	if (!andPlace && !hasPendingData) || (isAltScreen && !hasPendingData) {
+	// For transmit-only (no placement) AND no pending accumulation, pass through raw data
+	if !andPlace && !hasPendingData {
 		kp.pendingOutput = append(kp.pendingOutput, "\x1b_G"...)
 		kp.pendingOutput = append(kp.pendingOutput, rawData...)
 		kp.pendingOutput = append(kp.pendingOutput, "\x1b\\"...)
