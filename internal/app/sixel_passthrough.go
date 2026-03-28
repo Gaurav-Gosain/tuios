@@ -460,6 +460,9 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 
 	win := window
 	window.Terminal.SetSixelPassthroughFunc(func(cmd *vt.SixelCommand, cursorX, cursorY, _ int) {
+		sixelPassthroughLog("CALLBACK: enabled=%v rawLen=%d cursorX=%d cursorY=%d winX=%d winY=%d winW=%d winH=%d",
+			m.SixelPassthrough.IsEnabled(), len(cmd.RawSequence), cursorX, cursorY, win.X, win.Y, win.Width, win.Height)
+
 		if !m.SixelPassthrough.IsEnabled() || len(cmd.RawSequence) == 0 {
 			return
 		}
