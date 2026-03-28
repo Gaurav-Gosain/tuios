@@ -487,14 +487,7 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 		imgRows := (cmd.Height + cellH - 1) / cellH
 		imgCols := (cmd.Width + cellW - 1) / cellW
 
-		// Skip if image would extend past window content area
-		contentBottom := win.Y + win.Height - borderOff
-		contentRight := win.X + win.Width - borderOff
-		if hostY+imgRows > contentBottom || hostX+imgCols > contentRight {
-			return
-		}
-
-		// Skip if image would extend past screen bottom (causes scroll)
+		// Skip if image would extend past screen bottom (causes scroll feedback)
 		screenH := caps.Rows
 		if screenH <= 0 {
 			screenH = 50
@@ -502,6 +495,7 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 		if hostY+imgRows >= screenH-1 {
 			return
 		}
+		_ = imgCols // image may extend past window right edge (visual only, no harm)
 
 		// Write directly to /dev/tty as a single write to avoid fragmentation
 		tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
