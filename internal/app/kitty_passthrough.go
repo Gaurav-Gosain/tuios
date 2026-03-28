@@ -415,6 +415,16 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
 	// Get or create pending data buffer for this window
 	pending := kp.pendingDirectData[windowID]
+
+	// If a new a=T starts (has Width/Height) while previous is still pending,
+	// the previous frame was implicitly complete. Start fresh.
+	// Also: some apps (mpv) set m=1 on every a=T but each is actually a complete
+	// frame. Detect this by checking if the new command has image dimensions.
+	if pending != nil && cmd.Width > 0 && cmd.Height > 0 {
+		delete(kp.pendingDirectData, windowID)
+		pending = nil
+	}
+
 	if pending == nil {
 		pending = &pendingDirectTransmit{
 			Format:       cmd.Format,
@@ -456,8 +466,10 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 	kittyPassthroughLog("forwardDirectTransmit: accumulated %d bytes, total=%d, more=%v, andPlace=%v, storedPos=(%d,%d)",
 		len(cmd.Data), len(pending.Data), cmd.More, andPlace, pending.WindowX, pending.WindowY)
 
-	// If more chunks coming, wait
-	if cmd.More {
+	// If more chunks coming, wait — UNLESS this is a self-contained frame
+	// (has image dimensions and data). mpv sets m=1 on every a=T but each
+	// command is actually a complete frame.
+	if cmd.More && (pending.Width == 0 || len(pending.Data) == 0) {
 		return nil
 	}
 
@@ -537,9 +549,9 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 	// RefreshAllPlacements will handle the actual placement at the correct position
 	// This avoids placing at wrong position when cursor moves during chunk accumulation
 
-	// Use 'T' for video frame updates, 't' for first frame
+	// Use 'T' when placement is requested (including video frame updates)
 	directAction := "t"
-	if reusingID && andPlace {
+	if andPlace {
 		directAction = "T"
 	}
 
@@ -760,8 +772,8 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	}
 
 	action := "t" // transmit only (default)
-	if reusingID && andPlace {
-		action = "T" // transmit+place for video frame updates
+	if andPlace {
+		action = "T" // transmit+place (always when placement is requested)
 	}
 
 	fmt.Fprintf(&buf, "a=%s,t=%s,i=%d,f=%d,s=%d,v=%d,q=2",
