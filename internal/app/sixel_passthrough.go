@@ -460,9 +460,6 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 
 	win := window
 	window.Terminal.SetSixelPassthroughFunc(func(cmd *vt.SixelCommand, cursorX, cursorY, _ int) {
-		sixelPassthroughLog("CALLBACK: enabled=%v rawLen=%d cursorX=%d cursorY=%d winX=%d winY=%d winW=%d winH=%d",
-			m.SixelPassthrough.IsEnabled(), len(cmd.RawSequence), cursorX, cursorY, win.X, win.Y, win.Width, win.Height)
-
 		if !m.SixelPassthrough.IsEnabled() || len(cmd.RawSequence) == 0 {
 			return
 		}
@@ -474,7 +471,10 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 		if win.Tiled {
 			borderOff = 0
 		}
-		hostX := win.X + borderOff + cursorX
+		// Sixel renders from the cursor cell. Some terminals render starting
+		// at the cursor column, others one cell before. The +1 accounts for
+		// the border AND aligns with observed rendering in Rio/other terminals.
+		hostX := win.X + borderOff + cursorX + 1
 		hostY := win.Y + borderOff + cursorY
 
 		// Calculate image size in cells
