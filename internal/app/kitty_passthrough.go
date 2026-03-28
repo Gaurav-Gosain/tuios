@@ -47,6 +47,7 @@ type KittyPassthrough struct {
 	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
 	nextHostID    uint32
 	pendingOutput []byte
+	videoFrameBuf []byte // Reusable buffer for immediate video frame writes
 
 	// Pending direct transmission data (for chunked transfers)
 	pendingDirectData map[string]*pendingDirectTransmit // key: windowID
@@ -599,23 +600,26 @@ func (kp *KittyPassthrough) forwardDirectTransmit(cmd *vt.KittyCommand, windowID
 		buf.WriteString(chunk)
 		buf.WriteString("\x1b\\")
 
-		// For a=T on first chunk, add cursor positioning
-		if i == 0 && directAction == "T" {
-			var posCmd []byte
-			posCmd = append(posCmd, "\x1b7"...)
-			posCmd = append(posCmd, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
-			posCmd = append(posCmd, buf.Bytes()...)
-			// Don't restore cursor yet if there are more chunks
-			if !more {
-				posCmd = append(posCmd, "\x1b8"...)
+		// For video frame updates (a=T), accumulate ALL chunks then flush
+		// immediately to host. For first frames (a=t), queue in pendingOutput.
+		if directAction == "T" {
+			if i == 0 {
+				// First chunk: save cursor + position
+				kp.videoFrameBuf = kp.videoFrameBuf[:0]
+				kp.videoFrameBuf = append(kp.videoFrameBuf, syncBegin...)
+				kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b7"...)
+				kp.videoFrameBuf = append(kp.videoFrameBuf, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
 			}
-			kp.pendingOutput = append(kp.pendingOutput, posCmd...)
-		} else if !more && directAction == "T" {
-			// Last chunk - restore cursor
-			var posCmd []byte
-			posCmd = append(posCmd, buf.Bytes()...)
-			posCmd = append(posCmd, "\x1b8"...)
-			kp.pendingOutput = append(kp.pendingOutput, posCmd...)
+			kp.videoFrameBuf = append(kp.videoFrameBuf, buf.Bytes()...)
+			if !more {
+				// Last chunk: restore cursor + flush immediately
+				kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b8"...)
+				kp.videoFrameBuf = append(kp.videoFrameBuf, syncEnd...)
+				if kp.hostOut != nil {
+					_, _ = kp.hostOut.Write(kp.videoFrameBuf)
+				}
+				kp.videoFrameBuf = kp.videoFrameBuf[:0]
+			}
 		} else {
 			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 		}
@@ -805,14 +809,19 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	buf.WriteString(encoded)
 	buf.WriteString("\x1b\\")
 
-	// For a=T, position cursor at the correct host location before the command
-	if action == "T" {
+	// For a=T (video frame updates), write IMMEDIATELY to host terminal.
+	// File/shm-based video is time-critical: mpv overwrites the shm/file
+	// with the next frame almost instantly. If we queue in pendingOutput
+	// and wait for the render cycle to flush, the file content is stale.
+	if action == "T" && kp.hostOut != nil {
 		var posCmd []byte
+		posCmd = append(posCmd, syncBegin...)
 		posCmd = append(posCmd, "\x1b7"...) // save cursor
 		posCmd = append(posCmd, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...) // CUP
 		posCmd = append(posCmd, buf.Bytes()...)
 		posCmd = append(posCmd, "\x1b8"...) // restore cursor
-		kp.pendingOutput = append(kp.pendingOutput, posCmd...)
+		posCmd = append(posCmd, syncEnd...)
+		_, _ = kp.hostOut.Write(posCmd)
 	} else {
 		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 	}
