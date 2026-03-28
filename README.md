@@ -77,7 +77,7 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 
 **[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)** - Pre-built binaries for all platforms.
 
-**Requirements:** A terminal with true color and kitty graphics support (Ghostty, Kitty, WezTerm recommended).
+**Requirements:** A terminal with true color support. Kitty graphics and sixel support recommended (Ghostty, Kitty, WezTerm).
 
 ## Features
 
@@ -105,11 +105,14 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **Scrollback Browser** - OSC 133-aware command/output block navigation
 - **Scroll Position Indicator** - Shows offset/total on the bottom border
 
-### Graphics
+### Graphics & Protocols
 - **Kitty Graphics Protocol** - Full image rendering with flicker-free video playback
-- **Sixel Graphics** - Sixel image passthrough
+- **Sixel Graphics** - Sixel image passthrough (experimental, no pixel-level clipping yet)
+- **Kitty Keyboard Protocol** - Progressive enhancement (CSI u) with push/pop/query support
 - **Synchronized Output** - Mode 2026 prevents screen tearing
 - **Shared Memory Support** - `t=s` passthrough for mpv `--vo-kitty-use-shm`
+- **Terminal Queries** - OSC 4 palette, OSC 10-12 colors, CSI 14/16/18t sizing, DA1/DA2
+- **Not Yet Supported** - Kitty text sizing protocol (OSC 66), kitty animation protocol
 
 ### Session Management
 - **Daemon Mode** - Persistent sessions with detach/reattach (like tmux)
@@ -212,6 +215,13 @@ See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show
 - **Selection auto-scroll** - Drag selection above/below pane to scroll during visual mode.
 - **Dock stats opt-in** - Clock, CPU, RAM hidden by default (`--show-clock`, `--show-cpu`, `--show-ram`).
 
+### Terminal Protocol Support
+- **Kitty keyboard protocol** - Full CSI u support: push (`CSI > u`), pop (`CSI < u`), query (`CSI ? u`), set (`CSI = u`). Keys encoded in CSI u format when the protocol is active.
+- **Mode 2026 (synchronized output)** and **mode 2027 (unicode core)** tracked in the VT emulator.
+- **OSC 4** palette color query/set, **OSC 52** clipboard operations.
+- **DA1** now advertises sixel capability (attribute 4).
+- **Sixel passthrough** re-enabled with raw data passthrough and active area clearing on hide (experimental).
+
 ### Bug Fixes
 - Images follow windows during drag and reposition on resize.
 - `ctrl+d` window close no longer requires double-press (race condition fix).
@@ -219,6 +229,7 @@ See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show
 - Off-screen windows don't corrupt ANSI rendering.
 - Background windows stay fresh (no stale content on focus switch).
 - Tiling toggle immediately shows/hides borders.
+- Sixel images hidden during overlays and copy mode scrollback.
 
 ### Dependencies
 - Bubble Tea v2.0.2, Lipgloss v2.0.2, Wish v2.0.0, Log v2.0.0 (all stable releases).
@@ -235,7 +246,7 @@ TUIOS follows the Model-View-Update pattern on Bubble Tea v2. For details, see [
 
 **Core Components:**
 - **Window Manager** ([`internal/app/os.go`](./internal/app/os.go)) - Central state, workspaces, overlays
-- **Terminal Emulation** ([`internal/vt/`](./internal/vt/)) - ANSI parser with scrollback, kitty/sixel graphics, OSC 133
+- **Terminal Emulation** ([`internal/vt/`](./internal/vt/)) - ANSI parser with scrollback, kitty/sixel graphics, kitty keyboard protocol, OSC 133
 - **Rendering** ([`internal/app/render.go`](./internal/app/render.go)) - Layer composition, viewport culling, graphics batching
 - **Input** ([`internal/input/`](./internal/input/)) - Modal routing, 100+ configurable keybindings, mouse handling
 - **Kitty Passthrough** ([`internal/app/kitty_passthrough.go`](./internal/app/kitty_passthrough.go)) - Flicker-free image forwarding with ID reuse and sync output
