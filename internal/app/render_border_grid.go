@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -62,6 +63,16 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		}
 	}
 
+	// Get border characters from the configured style
+	border := config.GetBorderForStyle()
+	chVert := firstRune(border.Left, '│')
+	chHoriz := firstRune(border.Top, '─')
+	chCross := firstRune(border.Middle, '┼')
+	chTRight := firstRune(border.MiddleLeft, '├')  // ├ T pointing right
+	chTLeft := firstRune(border.MiddleRight, '┤')  // ┤ T pointing left
+	chTDown := firstRune(border.MiddleTop, '┬')    // ┬ T pointing down
+	chTUp := firstRune(border.MiddleBottom, '┴')   // ┴ T pointing up
+
 	// Resolve each cell to a character
 	type charPos struct {
 		x, y int
@@ -72,31 +83,31 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	for k, c := range grid {
 		x, y := k[0], k[1]
 		if c.vert && c.horiz {
-			chars = append(chars, charPos{x, y, '┼'})
+			chars = append(chars, charPos{x, y, chCross})
 		} else if c.vert {
 			// Check horizontal neighbors for T-junctions
 			_, hasL := grid[[2]int{x - 1, y}]
 			_, hasR := grid[[2]int{x + 1, y}]
 			if hasL && hasR {
-				chars = append(chars, charPos{x, y, '┼'})
+				chars = append(chars, charPos{x, y, chCross})
 			} else if hasR {
-				chars = append(chars, charPos{x, y, '├'})
+				chars = append(chars, charPos{x, y, chTRight})
 			} else if hasL {
-				chars = append(chars, charPos{x, y, '┤'})
+				chars = append(chars, charPos{x, y, chTLeft})
 			} else {
-				chars = append(chars, charPos{x, y, '│'})
+				chars = append(chars, charPos{x, y, chVert})
 			}
 		} else if c.horiz {
 			_, hasU := grid[[2]int{x, y - 1}]
 			_, hasD := grid[[2]int{x, y + 1}]
 			if hasU && hasD {
-				chars = append(chars, charPos{x, y, '┼'})
+				chars = append(chars, charPos{x, y, chCross})
 			} else if hasD {
-				chars = append(chars, charPos{x, y, '┬'})
+				chars = append(chars, charPos{x, y, chTDown})
 			} else if hasU {
-				chars = append(chars, charPos{x, y, '┴'})
+				chars = append(chars, charPos{x, y, chTUp})
 			} else {
-				chars = append(chars, charPos{x, y, '─'})
+				chars = append(chars, charPos{x, y, chHoriz})
 			}
 		}
 	}
@@ -159,4 +170,12 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	}
 
 	return layers
+}
+
+// firstRune returns the first rune from s, or fallback if s is empty.
+func firstRune(s string, fallback rune) rune {
+	for _, r := range s {
+		return r
+	}
+	return fallback
 }

@@ -1102,11 +1102,14 @@ func (m *OS) ApplyBSPLayout() {
 			continue
 		}
 
-		// Set tiled flag when shared borders are active
 		wasTiled := win.Tiled
-		win.Tiled = config.SharedBorders
-		if win.Tiled != wasTiled {
-			win.InvalidateCache()
+
+		// Cancel any existing snap animation for this window to prevent
+		// animation pileup during continuous resize.
+		for j := len(m.Animations) - 1; j >= 0; j-- {
+			if m.Animations[j].Window == win && m.Animations[j].Type == ui.AnimationSnap {
+				m.Animations = append(m.Animations[:j], m.Animations[j+1:]...)
+			}
 		}
 
 		// Create animation for smooth transition
@@ -1117,7 +1120,24 @@ func (m *OS) ApplyBSPLayout() {
 		)
 
 		if anim != nil {
+			if config.SharedBorders && !wasTiled {
+				// New window entering tiled mode: keep Tiled=false during animation
+				// so it renders with individual borders. TileOnComplete transitions
+				// it to shared borders when animation finishes.
+				anim.TileOnComplete = true
+			} else {
+				win.Tiled = config.SharedBorders
+				if win.Tiled != wasTiled {
+					win.InvalidateCache()
+				}
+			}
 			m.Animations = append(m.Animations, anim)
+		} else {
+			// Already at target - set tiled immediately
+			win.Tiled = config.SharedBorders
+			if win.Tiled != wasTiled {
+				win.InvalidateCache()
+			}
 		}
 	}
 }
@@ -1159,6 +1179,11 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 	}
 
 	m.LogInfo("BSP: Tree now has %d windows", tree.WindowCount())
+
+	// Position the new window at screen center so it animates from
+	// center to its tiled position with visible borders.
+	window.X = bounds.X + bounds.W/2 - window.Width/2
+	window.Y = bounds.Y + bounds.H/2 - window.Height/2
 
 	// Apply the new layout
 	m.ApplyBSPLayout()

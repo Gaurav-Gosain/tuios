@@ -132,6 +132,12 @@ func (m *OS) UpdateAnimations() {
 				}
 			}
 
+			// Transition window to tiled mode after animation completes
+			if anim.TileOnComplete && anim.Window != nil {
+				anim.Window.Tiled = true
+				anim.Window.InvalidateCache()
+			}
+
 			if m.KittyPassthrough != nil && anim.Window != nil && anim.Window.Terminal != nil {
 				scrollbackLen := anim.Window.Terminal.ScrollbackLen()
 				viewportHeight := anim.Window.ContentHeight()

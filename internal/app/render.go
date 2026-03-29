@@ -133,7 +133,11 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		zIndex := window.Z
 		if isAnimating || window.IsBeingManipulated {
-			zIndex = config.ZIndexAnimating // Above separators (Z=998)
+			// Only elevate non-tiled windows above separators.
+			// Tiled windows stay below Z=998 so separator lines remain visible.
+			if !window.Tiled {
+				zIndex = config.ZIndexAnimating // Above separators (Z=998)
+			}
 		}
 
 		clippedContent, finalX, finalY := clipWindowContent(
