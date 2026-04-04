@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -469,6 +470,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		windowID := msg.WindowID
 		for i, w := range m.Windows {
 			if w.ID == windowID {
+				m.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
 				m.DeleteWindow(i)
 				break
 			}

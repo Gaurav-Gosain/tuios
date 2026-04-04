@@ -11,6 +11,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -215,7 +216,8 @@ type OS struct {
 	SixelPassthrough *SixelPassthrough
 	TextSizingState  *TextSizingState
 	PostRenderWriter *PostRenderWriter
-	// Text sizing (OSC 66) passthrough state
+	// Hooks manager for shell-command hooks
+	HookManager *hooks.Manager
 	// TerminalModeEnteredAt tracks when we last switched to TerminalMode.
 	// Used to suppress misparsed mouse-sequence fragments (phantom keypresses)
 	// during the AllMotion→CellMotion transition window.
@@ -327,6 +329,18 @@ func (m *OS) Log(level, format string, args ...any) {
 // LogInfo logs an informational message.
 func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
+}
+
+// FireHook fires a hook event with the current context.
+func (m *OS) FireHook(event hooks.Event, windowID, windowName string) {
+	if m.HookManager == nil {
+		return
+	}
+	m.HookManager.Fire(event, hooks.Context{
+		WindowID:   windowID,
+		WindowName: windowName,
+		Workspace:  m.CurrentWorkspace,
+	})
 }
 
 // LogWarn logs a warning message.
@@ -494,6 +508,8 @@ func (m *OS) FocusWindow(i int) *OS {
 	// Invalidate cache for new focused window (border color change + fresh content)
 	m.Windows[i].InvalidateCache() // Full invalidation to show latest content
 
+	m.FireHook(hooks.AfterFocusChange, m.Windows[i].ID, m.Windows[i].Title)
+
 	return m
 }
 
@@ -572,6 +588,7 @@ func (m *OS) AddWindow(title string) *OS {
 
 	m.Windows = append(m.Windows, window)
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))
+	m.FireHook(hooks.AfterNewWindow, newID, title)
 
 	// Focus the new window, which will bring it to the front
 	m.FocusWindow(len(m.Windows) - 1)

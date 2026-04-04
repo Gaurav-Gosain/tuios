@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/ssh"
 )
@@ -96,6 +97,9 @@ func NewOS(opts OSOptions) *OS {
 		os.KittyPassthrough = NewKittyPassthrough()
 		os.SixelPassthrough = NewSixelPassthrough()
 	}
+
+	// Initialize hooks manager
+	os.HookManager = hooks.NewManager()
 
 	// Initialize PTY subscription tracking for daemon sessions
 	if opts.IsDaemonSession {
