@@ -236,7 +236,7 @@ func (m *OS) View() tea.View {
 		// top of text and don't scroll with terminal content in copy mode)
 		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
 			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
-			m.ShowLogs || m.ShowCacheStats
+			m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView
 		fw := m.GetFocusedWindow()
 		inCopyModeScroll := fw != nil && fw.CopyMode != nil && fw.CopyMode.Active && fw.CopyMode.ScrollOffset > 0
 		if hasOverlay || inCopyModeScroll {

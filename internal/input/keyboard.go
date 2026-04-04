@@ -125,6 +125,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleSessionSwitcherInput(msg, o)
 	}
 
+	// Handle aggregate view
+	if o.ShowAggregateView {
+		return handleAggregateViewInput(msg, o)
+	}
+
 	// Handle command palette (takes priority in terminal mode)
 	if o.ShowCommandPalette {
 		return handleCommandPaletteInput(msg, o)
@@ -755,6 +760,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	// Handle session switcher overlay
 	if o.ShowSessionSwitcher {
 		return handleSessionSwitcherInput(msg, o)
+	}
+
+	// Handle aggregate view overlay
+	if o.ShowAggregateView {
+		return handleAggregateViewInput(msg, o)
 	}
 
 	key := msg.String()

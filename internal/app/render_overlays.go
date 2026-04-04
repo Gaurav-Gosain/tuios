@@ -131,6 +131,14 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, layer)
 	}
 
+	if m.ShowAggregateView {
+		content := m.renderAggregateView()
+		w := lipgloss.Width(content)
+		x := max((m.GetRenderWidth()-w)/2, 0)
+		layer := lipgloss.NewLayer(content).X(x).Y(3).Z(config.ZIndexLayoutPicker).ID("aggregate-view")
+		layers = append(layers, layer)
+	}
+
 	if m.ShowScrollbackBrowser {
 		browserContent := m.renderScrollbackBrowser()
 		if browserContent != "" {
@@ -1214,4 +1222,68 @@ func (m *OS) renderLayoutPicker() string {
 		Padding(1, 2).
 		Background(bg).
 		Render(content)
+}
+
+func (m *OS) renderAggregateView() string {
+	items := m.GetAggregateViewItems()
+	filtered := FilterAggregateViewItems(items, m.AggregateViewQuery)
+
+	var sb strings.Builder
+	sb.WriteString(" Aggregate View (All Windows)\n")
+	sb.WriteString(" ────────────────────────────────────────\n")
+	sb.WriteString(fmt.Sprintf(" > %s\n", m.AggregateViewQuery))
+	sb.WriteString(" ────────────────────────────────────────\n")
+
+	if len(filtered) == 0 {
+		sb.WriteString(" No windows found\n")
+	}
+
+	maxVisible := 12
+	startIdx := m.AggregateViewScroll
+	endIdx := min(startIdx+maxVisible, len(filtered))
+
+	for i := startIdx; i < endIdx; i++ {
+		item := filtered[i]
+		prefix := "  "
+		if i == m.AggregateViewSelected {
+			prefix = "> "
+		}
+
+		ws := fmt.Sprintf("[%d]", item.Workspace+1)
+		focus := ""
+		if item.IsFocused {
+			focus = " *"
+		}
+		minimized := ""
+		if item.IsMinimized {
+			minimized = " (min)"
+		}
+
+		line := fmt.Sprintf("%s%s %s%s%s", prefix, ws, item.Title, focus, minimized)
+		if len(line) > 50 {
+			line = line[:47] + "..."
+		}
+		sb.WriteString(line + "\n")
+
+		if item.Preview != "" && i == m.AggregateViewSelected {
+			preview := item.Preview
+			if len(preview) > 48 {
+				preview = preview[:45] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("    %s\n", preview))
+		}
+	}
+
+	if len(filtered) > maxVisible {
+		sb.WriteString(fmt.Sprintf(" (%d/%d shown)\n", maxVisible, len(filtered)))
+	}
+
+	bg := lipgloss.Color("0")
+	return lipgloss.NewStyle().
+		Width(52).
+		Border(getBorder()).
+		BorderForeground(lipgloss.Color("12")).
+		Padding(0, 1).
+		Background(bg).
+		Render(sb.String())
 }
