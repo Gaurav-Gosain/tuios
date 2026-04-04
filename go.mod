@@ -13,6 +13,7 @@ require (
 	github.com/charmbracelet/ssh v0.0.0-20250826160808-ebfa259c7309
 	github.com/charmbracelet/ultraviolet v0.0.0-20260316091819-b93f6a3b8502
 	github.com/charmbracelet/x/xpty v0.1.3
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/lrstanley/bubbletint/v2 v2.0.0-alpha.9
 	github.com/lrstanley/go-nf v0.0.0-20260224052632-5067bad45c5b
