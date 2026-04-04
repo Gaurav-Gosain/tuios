@@ -26,6 +26,7 @@ func (e *Emulator) resetModes() {
 		ansi.ModeBracketedPaste:      ansi.ModeReset, // ?2004
 		ansi.ModeSynchronizedOutput:  ansi.ModeReset, // ?2026
 		ansi.ModeUnicodeCore:         ansi.ModeReset, // ?2027
+		ansi.ModeLightDark:           ansi.ModeReset, // ?2031
 	}
 
 	// Set mode effects.
