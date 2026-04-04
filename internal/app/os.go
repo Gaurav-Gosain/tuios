@@ -249,6 +249,7 @@ type OS struct {
 	ShowLayoutPicker     bool
 	LayoutCycleIndex     int              // Current index in saved layouts for cycling
 	MultifocusSet        map[int]bool     // Windows that receive keystrokes simultaneously
+	UseBSPLayout         bool             // true = BSP tiling, false = master-stack
 	LayoutPickerItems    []LayoutTemplate
 	LayoutPickerSelected int
 	LayoutPickerScroll   int
@@ -339,6 +340,19 @@ func (m *OS) Log(level, format string, args ...any) {
 // LogInfo logs an informational message.
 func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
+}
+
+// ToggleLayoutMode switches between BSP tiling and master-stack layout.
+func (m *OS) ToggleLayoutMode() {
+	m.UseBSPLayout = !m.UseBSPLayout
+	if m.UseBSPLayout {
+		m.ShowNotification("Layout: BSP tiling", "info", 0)
+	} else {
+		m.ShowNotification("Layout: master-stack", "info", 0)
+	}
+	if m.AutoTiling {
+		m.TileAllWindows()
+	}
 }
 
 // EditScrollbackInEditor captures the focused pane's scrollback to a temp file

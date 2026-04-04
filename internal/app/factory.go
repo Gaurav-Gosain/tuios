@@ -101,6 +101,9 @@ func NewOS(opts OSOptions) *OS {
 	// Initialize hooks manager
 	os.HookManager = hooks.NewManager()
 
+	// Default to BSP layout mode
+	os.UseBSPLayout = true
+
 	// Initialize clipboard channel for OSC 52 propagation
 	os.PendingClipboardSet = make(chan string, 1)
 

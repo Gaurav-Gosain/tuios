@@ -312,6 +312,15 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 
+		// Layout mode
+		{
+			Name:     "Toggle Layout Mode (BSP/Master-Stack)",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ToggleLayoutMode()
+				return m, nil
+			},
+		},
 		// Scrollback
 		{
 			Name:     "Edit Scrollback in $EDITOR",
