@@ -240,6 +240,11 @@ type OS struct {
 	SessionSwitcherScroll   int
 	SessionSwitcherItems    []SessionSwitcherItem
 	SessionSwitcherError    string
+	// Aggregate view overlay (all windows across workspaces)
+	ShowAggregateView     bool
+	AggregateViewQuery    string
+	AggregateViewSelected int
+	AggregateViewScroll   int
 	// Layout picker overlay
 	ShowLayoutPicker     bool
 	LayoutCycleIndex     int              // Current index in saved layouts for cycling

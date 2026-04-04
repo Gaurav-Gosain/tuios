@@ -312,6 +312,19 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 
+		// Navigation
+		{
+			Name:     "Aggregate View (All Windows)",
+			Shortcut: "Alt+G",
+			Category: "Navigation",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ShowAggregateView = true
+				m.AggregateViewQuery = ""
+				m.AggregateViewSelected = 0
+				m.AggregateViewScroll = 0
+				return m, nil
+			},
+		},
 		// Session & Config
 		{
 			Name:     "Reload Config",
