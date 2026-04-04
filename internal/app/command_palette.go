@@ -312,7 +312,26 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 
-		// Session
+		// Session & Config
+		{
+			Name:     "Reload Config",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				configPath, err := config.GetConfigPath()
+				if err != nil {
+					m.ShowNotification("Config path error: "+err.Error(), "error", 0)
+					return m, nil
+				}
+				newCfg, err := config.ReloadConfig(configPath)
+				if err != nil {
+					m.ShowNotification("Config error: "+err.Error(), "error", 0)
+					return m, nil
+				}
+				_ = newCfg // TODO: apply new config (keybinds, appearance)
+				m.ShowNotification("Config reloaded", "success", 0)
+				return m, nil
+			},
+		},
 		{
 			Name:     "Switch Session",
 			Shortcut: "prefix+S",
