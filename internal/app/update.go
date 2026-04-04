@@ -811,6 +811,15 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
 				return m, cmd
 			}
+		case "capture_pane":
+			notificationMsg = "Remote: capture-pane"
+			content, captureErr := m.capturePane(msg.WindowTarget, msg.Keys)
+			if captureErr != nil {
+				err = captureErr
+			} else if m.DaemonClient != nil {
+				_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "captured", map[string]any{"content": content})
+				return m, nil
+			}
 		case "set_config":
 			// Show what config is being changed
 			notificationMsg = fmt.Sprintf("Remote: set %s=%s", msg.ConfigPath, msg.ConfigValue)

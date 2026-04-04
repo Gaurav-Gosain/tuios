@@ -52,6 +52,59 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 	return nil
 }
 
+// runCapturePane captures the content of a pane and prints to stdout.
+func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool) error {
+	if !session.IsDaemonRunning() {
+		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
+	}
+
+	client := session.NewClient(&session.ClientConfig{
+		Version: version,
+	})
+
+	if err := client.Connect(); err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	requestID := uuid.New().String()
+
+	msg, err := session.NewMessage(session.MsgCapturePane, &session.CapturePanePayload{
+		SessionName:  sessionName,
+		WindowTarget: windowTarget,
+		Scrollback:   scrollback,
+		ANSI:         ansi,
+		RequestID:    requestID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create message: %w", err)
+	}
+
+	resp, err := client.SendControlMessage(msg)
+	if err != nil {
+		return fmt.Errorf("failed to send command: %w", err)
+	}
+
+	switch resp.Type {
+	case session.MsgCommandResult:
+		var result session.CommandResultPayload
+		if err := resp.ParsePayloadWithCodec(&result, client.GetCodec()); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		if !result.Success {
+			return fmt.Errorf("capture failed: %s", result.Message)
+		}
+		if content, ok := result.Data["content"].(string); ok {
+			fmt.Print(content)
+		}
+		return nil
+	case session.MsgError:
+		return fmt.Errorf("server error: %s", string(resp.Payload))
+	default:
+		return fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+}
+
 // runCommand executes a tape command in a running TUIOS session.
 func runCommand(sessionName, command string, args []string, jsonOutput bool) error {
 	if !session.IsDaemonRunning() {

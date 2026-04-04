@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -342,6 +343,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleSendKeys(cs, msg)
 	case MsgSetConfig:
 		return d.handleSetConfig(cs, msg)
+	case MsgCapturePane:
+		return d.handleCapturePane(cs, msg)
 	case MsgCommandResult:
 		return d.handleCommandResult(cs, msg)
 	case MsgGetLogs:
@@ -1225,6 +1228,53 @@ func (d *Daemon) handleSendKeys(cs *connState, msg *Message) error {
 	}
 
 	// Don't send response here - wait for TUI to send result via handleCommandResult
+	return nil
+}
+
+// handleCapturePane routes a capture-pane request to the TUI client.
+func (d *Daemon) handleCapturePane(cs *connState, msg *Message) error {
+	var payload CapturePanePayload
+	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+		return fmt.Errorf("invalid capture pane payload: %w", err)
+	}
+
+	session := d.findTargetSession(payload.SessionName)
+	if session == nil {
+		return d.sendCommandResult(cs, payload.RequestID, false, "session not found")
+	}
+
+	tuiClient := d.findTUIClient(session.ID)
+	if tuiClient == nil {
+		return d.sendCommandResult(cs, payload.RequestID, false, "no TUI client attached to session")
+	}
+
+	remoteCmd := &RemoteCommandPayload{
+		RequestID:    payload.RequestID,
+		CommandType:  "capture_pane",
+		WindowTarget: payload.WindowTarget,
+	}
+	// Pack options into Keys field as a simple flag string
+	var flags []string
+	if payload.Scrollback {
+		flags = append(flags, "scrollback")
+	}
+	if payload.ANSI {
+		flags = append(flags, "ansi")
+	}
+	if len(flags) > 0 {
+		remoteCmd.Keys = strings.Join(flags, ",")
+	}
+
+	if err := d.sendMessage(tuiClient, MsgRemoteCommand, remoteCmd); err != nil {
+		return d.sendCommandResult(cs, payload.RequestID, false, fmt.Sprintf("failed to send to TUI: %v", err))
+	}
+
+	if cs.clientID != tuiClient.clientID {
+		d.pendingRequestsMu.Lock()
+		d.pendingRequests[payload.RequestID] = cs
+		d.pendingRequestsMu.Unlock()
+	}
+
 	return nil
 }
 

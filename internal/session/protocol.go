@@ -35,6 +35,7 @@ const (
 	MsgExecuteCommand                          // Execute a tape command (routed to TUI)
 	MsgSendKeys                                // Send keystrokes to focused window
 	MsgSetConfig                               // Set a config option at runtime
+	MsgCapturePane                             // Capture pane content (screen + scrollback)
 
 	// Server -> Client messages
 	MsgWelcome       // Response to Hello with server info
@@ -264,6 +265,15 @@ type SendKeysPayload struct {
 	Literal      bool   `json:"literal,omitempty"`       // If true, send keys literally to PTY (no parsing)
 	Raw          bool   `json:"raw,omitempty"`           // If true, treat each character as a separate key (no splitting on space/comma)
 	WindowTarget string `json:"window_target,omitempty"` // Target window by name or ID (empty = focused window)
+	RequestID    string `json:"request_id,omitempty"`    // Optional ID for matching responses
+}
+
+// CapturePanePayload requests capturing the content of a pane.
+type CapturePanePayload struct {
+	SessionName  string `json:"session_name,omitempty"`  // Target session (empty = most recently active)
+	WindowTarget string `json:"window_target,omitempty"` // Target window by name or ID (empty = focused)
+	Scrollback   bool   `json:"scrollback,omitempty"`    // Include scrollback history (not just visible screen)
+	ANSI         bool   `json:"ansi,omitempty"`          // Include ANSI escape codes in output
 	RequestID    string `json:"request_id,omitempty"`    // Optional ID for matching responses
 }
 

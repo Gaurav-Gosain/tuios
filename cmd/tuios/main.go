@@ -541,6 +541,40 @@ Window targeting (--window):
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
+	// capture-pane command
+	var capturePaneSession string
+	var capturePaneWindow string
+	var capturePaneScrollback bool
+	var capturePaneANSI bool
+	capturePaneCmd := &cobra.Command{
+		Use:   "capture-pane",
+		Short: "Capture the content of a pane",
+		Long: `Capture the visible content (or scrollback history) of a terminal pane.
+
+Output is written to stdout. By default captures the focused window's visible screen.
+Use --scrollback to include the full scrollback history.
+Use --ansi to preserve ANSI escape codes (colors, styles).`,
+		Example: `  # Capture focused window
+  tuios capture-pane
+
+  # Capture specific window with scrollback
+  tuios capture-pane -w mywindow --scrollback
+
+  # Capture with ANSI colors preserved
+  tuios capture-pane --ansi
+
+  # Pipe to a file
+  tuios capture-pane -w editor --scrollback > pane.txt`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI)
+		},
+	}
+	capturePaneCmd.Flags().StringVarP(&capturePaneSession, "session", "s", "", "Target session")
+	capturePaneCmd.Flags().StringVarP(&capturePaneWindow, "window", "w", "", "Target window by name or ID")
+	capturePaneCmd.Flags().BoolVarP(&capturePaneScrollback, "scrollback", "S", false, "Include full scrollback history")
+	capturePaneCmd.Flags().BoolVar(&capturePaneANSI, "ansi", false, "Preserve ANSI escape codes")
+	_ = capturePaneCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var runCommandSession string
 	var runCommandList bool
 	var runCommandJSON bool
@@ -851,7 +885,7 @@ Use --json for machine-readable output.`,
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
-	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, logsCmd)
+	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, logsCmd, capturePaneCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd)
 
 	if err := fang.Execute(

@@ -1184,3 +1184,61 @@ func (m *OS) findWindowInDirection(from *terminal.Window, dx, dy int) int {
 
 	return targetIndex
 }
+
+// capturePane captures the content of a pane.
+// flags is a comma-separated string of options: "scrollback", "ansi".
+func (m *OS) capturePane(windowTarget, flags string) (string, error) {
+	// Resolve target window
+	var win *terminal.Window
+	if windowTarget == "" {
+		win = m.GetFocusedWindow()
+	} else {
+		windowID, err := m.resolveWindowTarget(windowTarget)
+		if err != nil {
+			return "", err
+		}
+		for _, w := range m.Windows {
+			if w.ID == windowID {
+				win = w
+				break
+			}
+		}
+	}
+
+	if win == nil {
+		return "", fmt.Errorf("no window found")
+	}
+	if win.Terminal == nil {
+		return "", fmt.Errorf("window has no terminal")
+	}
+
+	includeScrollback := strings.Contains(flags, "scrollback")
+	includeANSI := strings.Contains(flags, "ansi")
+
+	win.RLockIO()
+	defer win.RUnlockIO()
+
+	var content string
+	if includeANSI {
+		content = win.Terminal.Render()
+	} else {
+		content = win.Terminal.String()
+	}
+
+	if includeScrollback {
+		// Prepend scrollback content
+		scrollbackLen := win.Terminal.ScrollbackLen()
+		if scrollbackLen > 0 {
+			var sb strings.Builder
+			for i := range scrollbackLen {
+				line := win.Terminal.ScrollbackLine(i)
+				sb.WriteString(line.String())
+				sb.WriteByte('\n')
+			}
+			sb.WriteString(content)
+			content = sb.String()
+		}
+	}
+
+	return content, nil
+}
