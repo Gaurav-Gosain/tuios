@@ -218,6 +218,9 @@ type OS struct {
 	PostRenderWriter *PostRenderWriter
 	// Hooks manager for shell-command hooks
 	HookManager *hooks.Manager
+	// PendingClipboardSet receives clipboard content from guest apps via OSC 52.
+	// The bubbletea Update loop reads this and calls tea.SetClipboard().
+	PendingClipboardSet chan string
 	// TerminalModeEnteredAt tracks when we last switched to TerminalMode.
 	// Used to suppress misparsed mouse-sequence fragments (phantom keypresses)
 	// during the AllMotion→CellMotion transition window.
@@ -331,6 +334,22 @@ func (m *OS) Log(level, format string, args ...any) {
 // LogInfo logs an informational message.
 func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
+}
+
+// setupClipboardPassthrough wires a window's OSC 52 clipboard to bubbletea.
+func (m *OS) setupClipboardPassthrough(window *terminal.Window) {
+	if window == nil {
+		return
+	}
+	window.ClipboardSetFunc = func(text string) {
+		if m.PendingClipboardSet != nil {
+			select {
+			case m.PendingClipboardSet <- text:
+			default:
+				// Channel full, drop (non-blocking)
+			}
+		}
+	}
 }
 
 // ToggleMultifocus toggles a window in/out of the multifocus set.
@@ -675,6 +694,7 @@ func (m *OS) AddWindow(title string) *OS {
 	m.setupKittyPassthrough(window)
 	m.setupSixelPassthrough(window)
 	m.setupTextSizingPassthrough(window)
+	m.setupClipboardPassthrough(window)
 
 	m.Windows = append(m.Windows, window)
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))

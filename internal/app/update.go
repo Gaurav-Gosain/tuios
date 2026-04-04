@@ -29,6 +29,25 @@ type WindowExitMsg struct {
 	WindowID string
 }
 
+// ClipboardSetMsg carries clipboard content from a guest app (OSC 52) to bubbletea.
+type ClipboardSetMsg struct {
+	Text string
+}
+
+// ListenForClipboardSet creates a command that listens for OSC 52 clipboard set events.
+func ListenForClipboardSet(ch chan string) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		text, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return ClipboardSetMsg{Text: text}
+	}
+}
+
 // ScriptCommandMsg represents a command from a tape script to be executed.
 // This allows tape commands to be processed through the normal message handling flow.
 type ScriptCommandMsg struct {
@@ -147,6 +166,7 @@ func (m *OS) Init() tea.Cmd {
 		TickCmd(),
 		ListenForWindowExits(m.WindowExitChan),
 		ListenForPTYData(m.PTYDataChan),
+		ListenForClipboardSet(m.PendingClipboardSet),
 	}
 
 	// Listen for state sync from other clients (daemon/SSH/web mode)
@@ -465,6 +485,13 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		return m, nextTick
+
+	case ClipboardSetMsg:
+		// Propagate clipboard from guest app to host terminal
+		return m, tea.Batch(
+			tea.SetClipboard(msg.Text),
+			ListenForClipboardSet(m.PendingClipboardSet),
+		)
 
 	case WindowExitMsg:
 		windowID := msg.WindowID
