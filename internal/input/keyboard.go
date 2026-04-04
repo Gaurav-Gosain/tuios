@@ -427,48 +427,6 @@ func handleTerminalTapePrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 	return HandleTapePrefixCommand(msg, o)
 }
 
-// handleWindowMgmtPrefixCommand handles prefix commands in window management mode.
-// Supports a subset of the terminal mode prefix commands.
-func handleWindowMgmtPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.PrefixActive = false
-	switch msg.String() {
-	case "z":
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.ToggleZoom()
-			fw := o.GetFocusedWindow()
-			if fw != nil && fw.Zoomed {
-				o.ShowNotification("ZOOM", "info", config.NotificationDuration)
-			} else {
-				o.ShowNotification("", "info", 0)
-			}
-		}
-		return o, nil
-	case "L":
-		o.LayoutPrefixActive = true
-		o.PrefixActive = true
-		o.LastPrefixTime = time.Now()
-		return o, nil
-	case "c":
-		return handleNewWindow(msg, o)
-	case "x":
-		return handleCloseWindow(msg, o)
-	case "esc":
-		return o, nil
-	default:
-		// Try dispatch through registry's prefix section
-		if o.KeybindRegistry != nil {
-			action := o.KeybindRegistry.GetPrefixAction(msg.String())
-			if action != "" {
-				dispatcher := GetDispatcher()
-				if dispatcher.HasAction(action) {
-					return dispatcher.Dispatch(action, msg, o)
-				}
-			}
-		}
-		return o, nil
-	}
-}
-
 func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LayoutPrefixActive = false
 	o.PrefixActive = false
