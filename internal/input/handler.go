@@ -273,12 +273,19 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "backspace":
 		if len(o.RenameBuffer) > 0 {
 			o.RenameBuffer = o.RenameBuffer[:len(o.RenameBuffer)-1]
+			if fw := o.GetFocusedWindow(); fw != nil {
+				fw.InvalidateCache()
+			}
 		}
 		return o, nil
 	default:
 		// Add character to buffer if it's a printable character
 		if len(msg.String()) == 1 && msg.String()[0] >= 32 && msg.String()[0] < 127 {
 			o.RenameBuffer += msg.String()
+			// Invalidate cache so the rename input is visible immediately
+			if fw := o.GetFocusedWindow(); fw != nil {
+				fw.InvalidateCache()
+			}
 		}
 		return o, nil
 	}

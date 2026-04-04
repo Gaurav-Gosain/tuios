@@ -70,7 +70,16 @@ func handleCommandPaletteInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 
 	default:
 		// Accept printable characters
-		if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
+		if keyStr == "space" {
+			o.CommandPaletteQuery += " "
+			o.CommandPaletteSelected = 0
+			o.CommandPaletteScroll = 0
+		} else if msg.Text != "" {
+			// Use msg.Text for actual typed text (handles all printable chars)
+			o.CommandPaletteQuery += msg.Text
+			o.CommandPaletteSelected = 0
+			o.CommandPaletteScroll = 0
+		} else if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
 			o.CommandPaletteQuery += keyStr
 			o.CommandPaletteSelected = 0
 			o.CommandPaletteScroll = 0

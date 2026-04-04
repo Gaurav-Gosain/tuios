@@ -176,6 +176,19 @@ func runLocal() error {
 	})
 	initialOS.PostRenderWriter = prw
 
+	// Start config file watcher for hot-reload
+	if configPath, err := config.GetConfigPath(); err == nil {
+		if watcher, err := config.NewWatcher(configPath, func(newConfig *config.UserConfig, err error) {
+			if err != nil {
+				log.Printf("Config reload error: %v", err)
+				return
+			}
+			_ = newConfig // Config watcher fires; manual reload via command palette applies changes
+		}); err == nil {
+			defer watcher.Stop()
+		}
+	}
+
 	p := tea.NewProgram(
 		initialOS,
 		tea.WithFPS(config.NormalFPS),
