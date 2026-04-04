@@ -741,7 +741,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// For non-video (first image, icat), always transmit via pendingOutput
 	// and let RefreshAllPlacements handle placement with proper clipping.
 	// Video: reusing ID + chunked (more=true on first chunk).
-	// icat/ytk: may reuse ID but sends single unchunked command (more=false).
+	// icat/youterm: may reuse ID but sends single unchunked command (more=false).
 	isVideoFrame := reusingID && andPlace && cmd.More
 
 	if isVideoFrame && kp.hostOut != nil {

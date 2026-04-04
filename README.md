@@ -106,7 +106,7 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **Scroll Position Indicator** - Shows offset/total on the bottom border
 
 ### Graphics & Protocols
-- **Kitty Graphics Protocol** - Full image rendering with flicker-free video playback. `mpv --vo=kitty` works (both shm and base64), and [ytk](https://github.com/Gaurav-Gosain/ytk) works.
+- **Kitty Graphics Protocol** - Full image rendering with flicker-free video playback. `mpv --vo=kitty` works (both shm and base64), and [youterm](https://github.com/Gaurav-Gosain/youterm) works.
 - **Sixel Graphics** - Sixel image passthrough (experimental, no pixel-level clipping yet)
 - **Kitty Keyboard Protocol** - Progressive enhancement (CSI u) with push/pop/query support. Fish 4.x compatible; Shift+printable bypasses the protocol and sends text directly.
 - **Synchronized Output** - Mode 2026 prevents screen tearing
