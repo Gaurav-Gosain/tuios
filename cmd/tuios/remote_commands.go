@@ -16,7 +16,7 @@ import (
 )
 
 // runSendKeys sends keystrokes to a running TUIOS session.
-func runSendKeys(sessionName, keys string, literal bool, raw bool) error {
+func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string) error {
 	if !session.IsDaemonRunning() {
 		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
 	}
@@ -34,11 +34,12 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool) error {
 
 	// Send the keys command
 	msg, err := session.NewMessage(session.MsgSendKeys, &session.SendKeysPayload{
-		SessionName: sessionName,
-		Keys:        keys,
-		Literal:     literal,
-		Raw:         raw,
-		RequestID:   requestID,
+		SessionName:  sessionName,
+		Keys:         keys,
+		Literal:      literal,
+		Raw:          raw,
+		WindowTarget: windowTarget,
+		RequestID:    requestID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create message: %w", err)

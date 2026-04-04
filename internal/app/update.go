@@ -37,16 +37,17 @@ type ScriptCommandMsg struct {
 // RemoteCommandMsg represents a remote command from the CLI.
 // This allows remote commands to be processed through the normal message handling flow.
 type RemoteCommandMsg struct {
-	CommandType string   // "tape_command", "send_keys", "set_config", "tape_script"
-	TapeCommand string   // For tape commands (single command)
-	TapeArgs    []string // Arguments for tape command
-	TapeScript  string   // For tape_script (full script content)
-	Keys        string   // For send_keys
-	Literal     bool     // For send_keys (send to PTY)
-	Raw         bool     // For send_keys (no splitting on space/comma)
-	ConfigPath  string   // For set_config
-	ConfigValue string   // For set_config
-	RequestID   string   // For response tracking
+	CommandType  string   // "tape_command", "send_keys", "set_config", "tape_script"
+	TapeCommand  string   // For tape commands (single command)
+	TapeArgs     []string // Arguments for tape command
+	TapeScript   string   // For tape_script (full script content)
+	Keys         string   // For send_keys
+	Literal      bool     // For send_keys (send to PTY)
+	Raw          bool     // For send_keys (no splitting on space/comma)
+	WindowTarget string   // For send_keys (target window by name or ID)
+	ConfigPath   string   // For set_config
+	ConfigValue  string   // For set_config
+	RequestID    string   // For response tracking
 }
 
 // RemoteKeyMsg represents a single key to be processed from a remote send-keys command.
@@ -803,7 +804,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			notificationMsg = fmt.Sprintf("Remote: send-keys %s", msg.Keys)
 
 			// Parse keys and start sequential processing
-			cmd, err = m.startRemoteSendKeys(msg.Keys, msg.Literal, msg.Raw, msg.RequestID)
+			cmd, err = m.startRemoteSendKeys(msg.Keys, msg.Literal, msg.Raw, msg.WindowTarget, msg.RequestID)
 			if err == nil {
 				// Keys will be processed sequentially via RemoteKeyMsg
 				// Show notification now, result will be sent after all keys processed

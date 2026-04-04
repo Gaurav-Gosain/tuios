@@ -1205,11 +1205,12 @@ func (d *Daemon) handleSendKeys(cs *connState, msg *Message) error {
 
 	// Forward the command to the TUI client
 	remoteCmd := &RemoteCommandPayload{
-		RequestID:   payload.RequestID,
-		CommandType: "send_keys",
-		Keys:        payload.Keys,
-		Literal:     payload.Literal,
-		Raw:         payload.Raw,
+		RequestID:    payload.RequestID,
+		CommandType:  "send_keys",
+		Keys:         payload.Keys,
+		Literal:      payload.Literal,
+		Raw:          payload.Raw,
+		WindowTarget: payload.WindowTarget,
 	}
 
 	if err := d.sendMessage(tuiClient, MsgRemoteCommand, remoteCmd); err != nil {

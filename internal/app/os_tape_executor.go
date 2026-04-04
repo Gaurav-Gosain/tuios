@@ -62,6 +62,55 @@ func (m *OS) GetFocusedWindowID() string {
 	return ""
 }
 
+// resolveWindowTarget resolves a window target string to a window ID.
+// If target is empty, returns the focused window ID.
+// Matching order: exact ID, ID prefix (first 8+ chars), window name (CustomName then Title).
+func (m *OS) resolveWindowTarget(target string) (string, error) {
+	if target == "" {
+		windowID := m.GetFocusedWindowID()
+		if windowID == "" {
+			return "", fmt.Errorf("no focused window")
+		}
+		return windowID, nil
+	}
+
+	// Try exact ID match
+	for _, w := range m.Windows {
+		if w.ID == target {
+			return w.ID, nil
+		}
+	}
+
+	// Try ID prefix match (at least 8 characters for safety)
+	if len(target) >= 8 {
+		var prefixMatch *terminal.Window
+		prefixCount := 0
+		for _, w := range m.Windows {
+			if strings.HasPrefix(w.ID, target) {
+				prefixMatch = w
+				prefixCount++
+			}
+		}
+		if prefixCount == 1 {
+			return prefixMatch.ID, nil
+		}
+		if prefixCount > 1 {
+			return "", fmt.Errorf("ambiguous window ID prefix %q matches %d windows", target, prefixCount)
+		}
+	}
+
+	// Try window name match (CustomName first, then Title)
+	matches := m.findWindowsByName(target)
+	if len(matches) == 1 {
+		return matches[0].ID, nil
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("ambiguous window name %q matches %d windows", target, len(matches))
+	}
+
+	return "", fmt.Errorf("no window found matching %q", target)
+}
+
 // SendToWindow sends bytes to a window's PTY.
 // This works in both local and daemon mode.
 func (m *OS) SendToWindow(windowID string, data []byte) error {
@@ -823,12 +872,12 @@ func (m *OS) LoadLayoutExec(name string) error {
 //
 // Special key names: Enter, Return, Space, Tab, Escape, Esc, Backspace, Delete,
 // Up, Down, Left, Right, Home, End, PageUp, PageDown, F1-F12
-func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, requestID string) (tea.Cmd, error) {
+func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarget string, requestID string) (tea.Cmd, error) {
 	if literal {
-		// Send directly to the focused terminal PTY
-		windowID := m.GetFocusedWindowID()
-		if windowID == "" {
-			return nil, fmt.Errorf("no focused window")
+		// Send directly to the target terminal PTY (or focused if no target)
+		windowID, err := m.resolveWindowTarget(windowTarget)
+		if err != nil {
+			return nil, err
 		}
 		return nil, m.SendToWindow(windowID, []byte(keys))
 	}

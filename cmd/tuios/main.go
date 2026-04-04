@@ -464,6 +464,7 @@ This will terminate all sessions and disconnect all clients.`,
 	var sendKeysSession string
 	var sendKeysLiteral bool
 	var sendKeysRaw bool
+	var sendKeysWindow string
 	sendKeysCmd := &cobra.Command{
 		Use:   "send-keys <keys>",
 		Short: "Send keystrokes to a running TUIOS session",
@@ -472,9 +473,10 @@ This will terminate all sessions and disconnect all clients.`,
 By default, keys are sent to TUIOS itself (for window management, mode switching, etc).
 Use --literal to send keys directly to the focused terminal PTY.
 Use --raw to send each character as a separate key (no splitting on spaces).
+Use --window to target a specific window by name or ID (default: focused window).
 
 Key format (default mode):
-  - Single keys: "i", "n", "Enter", "Escape", "Space"  
+  - Single keys: "i", "n", "Enter", "Escape", "Space"
   - Key combos: "ctrl+b", "alt+1", "shift+Enter" (case-insensitive)
   - Sequences: space or comma separated, e.g. "ctrl+b q" or "ctrl+b,q"
 
@@ -484,7 +486,12 @@ Special tokens:
 Modifiers: ctrl, alt, shift, super, meta
 
 Special keys: Enter, Return, Space, Tab, Escape, Esc, Backspace, Delete,
-              Up, Down, Left, Right, Home, End, PageUp, PageDown, F1-F12`,
+              Up, Down, Left, Right, Home, End, PageUp, PageDown, F1-F12
+
+Window targeting (--window):
+  - Window name: matches CustomName first, then Title
+  - Exact window ID: full UUID match
+  - ID prefix: first 8+ characters of the UUID`,
 		Example: `  # Enter terminal mode (press 'i')
   tuios send-keys i
 
@@ -508,15 +515,22 @@ Special keys: Enter, Return, Space, Tab, Escape, Esc, Backspace, Delete,
   tuios send-keys --raw "hello world"
 
   # Send to a specific session
-  tuios send-keys --session mysession Escape`,
+  tuios send-keys --session mysession Escape
+
+  # Send keys to a specific window by name
+  tuios send-keys --window "Server" --literal --raw "echo hello"
+
+  # Send keys to a window by ID prefix
+  tuios send-keys --window a1b2c3d4 --literal "ls"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runSendKeys(sendKeysSession, args[0], sendKeysLiteral, sendKeysRaw)
+			return runSendKeys(sendKeysSession, args[0], sendKeysLiteral, sendKeysRaw, sendKeysWindow)
 		},
 	}
 	sendKeysCmd.Flags().StringVarP(&sendKeysSession, "session", "s", "", "Target session (default: most recently active)")
 	sendKeysCmd.Flags().BoolVarP(&sendKeysLiteral, "literal", "l", false, "Send keys directly to terminal PTY (bypass TUIOS)")
 	sendKeysCmd.Flags().BoolVarP(&sendKeysRaw, "raw", "r", false, "Treat each character as a separate key (no splitting on space/comma)")
+	sendKeysCmd.Flags().StringVarP(&sendKeysWindow, "window", "w", "", "Target window by name or ID (default: focused window)")
 	_ = sendKeysCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	// Add completion for send-keys

@@ -259,11 +259,12 @@ type ExecuteCommandPayload struct {
 
 // SendKeysPayload requests sending keystrokes to a session.
 type SendKeysPayload struct {
-	SessionName string `json:"session_name,omitempty"` // Target session (empty = most recently active)
-	Keys        string `json:"keys"`                   // Key sequence (e.g., "ctrl+b,n" or "Hello World")
-	Literal     bool   `json:"literal,omitempty"`      // If true, send keys literally to PTY (no parsing)
-	Raw         bool   `json:"raw,omitempty"`          // If true, treat each character as a separate key (no splitting on space/comma)
-	RequestID   string `json:"request_id,omitempty"`   // Optional ID for matching responses
+	SessionName  string `json:"session_name,omitempty"`  // Target session (empty = most recently active)
+	Keys         string `json:"keys"`                    // Key sequence (e.g., "ctrl+b,n" or "Hello World")
+	Literal      bool   `json:"literal,omitempty"`       // If true, send keys literally to PTY (no parsing)
+	Raw          bool   `json:"raw,omitempty"`           // If true, treat each character as a separate key (no splitting on space/comma)
+	WindowTarget string `json:"window_target,omitempty"` // Target window by name or ID (empty = focused window)
+	RequestID    string `json:"request_id,omitempty"`    // Optional ID for matching responses
 }
 
 // SetConfigPayload requests changing a configuration option at runtime.
@@ -285,16 +286,17 @@ type CommandResultPayload struct {
 // RemoteCommandPayload is sent from daemon to TUI client for execution.
 // This is the routed version of ExecuteCommand/SendKeys/SetConfig.
 type RemoteCommandPayload struct {
-	RequestID   string   `json:"request_id,omitempty"`
-	CommandType string   `json:"command_type"`           // "tape_command", "send_keys", "set_config"
-	TapeCommand string   `json:"tape_command,omitempty"` // For tape commands
-	TapeArgs    []string `json:"tape_args,omitempty"`    // Arguments for tape command
-	TapeScript  string   `json:"tape_script,omitempty"`  // Raw tape script
-	Keys        string   `json:"keys,omitempty"`         // For send_keys
-	Literal     bool     `json:"literal,omitempty"`      // For send_keys (send to PTY)
-	Raw         bool     `json:"raw,omitempty"`          // For send_keys (no splitting)
-	ConfigPath  string   `json:"config_path,omitempty"`  // For set_config
-	ConfigValue string   `json:"config_value,omitempty"` // For set_config
+	RequestID    string   `json:"request_id,omitempty"`
+	CommandType  string   `json:"command_type"`                // "tape_command", "send_keys", "set_config"
+	TapeCommand  string   `json:"tape_command,omitempty"`      // For tape commands
+	TapeArgs     []string `json:"tape_args,omitempty"`         // Arguments for tape command
+	TapeScript   string   `json:"tape_script,omitempty"`       // Raw tape script
+	Keys         string   `json:"keys,omitempty"`              // For send_keys
+	Literal      bool     `json:"literal,omitempty"`           // For send_keys (send to PTY)
+	Raw          bool     `json:"raw,omitempty"`               // For send_keys (no splitting)
+	WindowTarget string   `json:"window_target,omitempty"`     // For send_keys (target window by name or ID)
+	ConfigPath   string   `json:"config_path,omitempty"`       // For set_config
+	ConfigValue  string   `json:"config_value,omitempty"`      // For set_config
 }
 
 // GetLogsPayload requests log entries from the daemon.

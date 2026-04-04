@@ -201,16 +201,17 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		// Use Send which is safe to call from any goroutine
 		go func() {
 			p.Send(app.RemoteCommandMsg{
-				CommandType: payload.CommandType,
-				TapeCommand: payload.TapeCommand,
-				TapeArgs:    payload.TapeArgs,
-				TapeScript:  payload.TapeScript,
-				Keys:        payload.Keys,
-				Literal:     payload.Literal,
-				Raw:         payload.Raw,
-				ConfigPath:  payload.ConfigPath,
-				ConfigValue: payload.ConfigValue,
-				RequestID:   payload.RequestID,
+				CommandType:  payload.CommandType,
+				TapeCommand:  payload.TapeCommand,
+				TapeArgs:     payload.TapeArgs,
+				TapeScript:   payload.TapeScript,
+				Keys:         payload.Keys,
+				Literal:      payload.Literal,
+				Raw:          payload.Raw,
+				WindowTarget: payload.WindowTarget,
+				ConfigPath:   payload.ConfigPath,
+				ConfigValue:  payload.ConfigValue,
+				RequestID:    payload.RequestID,
 			})
 		}()
 		return nil // Don't report error here - it will be handled by the Update loop
