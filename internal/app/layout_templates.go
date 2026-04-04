@@ -246,7 +246,6 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 	}
 
 	// Disable auto-tiling during layout to prevent retiling
-	savedAutoTiling := m.AutoTiling
 	m.AutoTiling = false
 
 	// Scale factor for different screen sizes
@@ -338,7 +337,8 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		}
 		// Rebuild BSP tree from current window positions instead of retiling
 		m.RebuildBSPTreeFromPositions()
-	} else if savedAutoTiling != tmpl.AutoTiling {
+	} else {
+		// Always clamp windows after loading - handles resolution differences
 		m.ClampWindowsToView()
 	}
 

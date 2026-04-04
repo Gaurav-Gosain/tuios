@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
@@ -163,6 +164,8 @@ func handleNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+		w := o.Windows[o.FocusedWindow]
+		o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
 		o.DeleteWindow(o.FocusedWindow)
 	}
 	return o, nil

@@ -201,6 +201,10 @@ func (m *OS) ToggleAutoTiling() {
 		}
 
 		m.ApplyBSPLayout()
+		// Invalidate all caches so buttons re-render (fullscreen button hidden in tiling)
+		for _, win := range visibleWindows {
+			win.InvalidateCache()
+		}
 		m.LogInfo("BSP: Tiling enabled with %d windows", len(visibleWindows))
 	} else {
 		m.LogInfo("BSP: Disabling tiling mode")

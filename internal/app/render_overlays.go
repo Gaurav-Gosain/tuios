@@ -1228,61 +1228,87 @@ func (m *OS) renderAggregateView() string {
 	items := m.GetAggregateViewItems()
 	filtered := FilterAggregateViewItems(items, m.AggregateViewQuery)
 
+	
+	
+	
+	
+
 	var sb strings.Builder
-	sb.WriteString(" Aggregate View (All Windows)\n")
-	sb.WriteString(" ────────────────────────────────────────\n")
-	sb.WriteString(fmt.Sprintf(" > %s\n", m.AggregateViewQuery))
-	sb.WriteString(" ────────────────────────────────────────\n")
+
+	// Header with search
+	query := m.AggregateViewQuery
+	if query == "" {
+		query = " "
+	}
+	sb.WriteString(fmt.Sprintf("\x1b[1m Choose Window \x1b[0m (%d total)\n", len(items)))
+	sb.WriteString(fmt.Sprintf(" Filter: %s\x1b[7m \x1b[0m\n", query))
+	sb.WriteString(" \x1b[2m───────────────────────────────────────────\x1b[0m\n")
 
 	if len(filtered) == 0 {
-		sb.WriteString(" No windows found\n")
+		sb.WriteString("\n \x1b[2m(no matching windows)\x1b[0m\n")
 	}
 
-	maxVisible := 12
+	maxVisible := 15
 	startIdx := m.AggregateViewScroll
 	endIdx := min(startIdx+maxVisible, len(filtered))
 
+	// Group by workspace
+	lastWS := -1
 	for i := startIdx; i < endIdx; i++ {
 		item := filtered[i]
-		prefix := "  "
-		if i == m.AggregateViewSelected {
-			prefix = "> "
-		}
 
-		ws := fmt.Sprintf("[%d]", item.Workspace+1)
-		focus := ""
-		if item.IsFocused {
-			focus = " *"
-		}
-		minimized := ""
-		if item.IsMinimized {
-			minimized = " (min)"
-		}
-
-		line := fmt.Sprintf("%s%s %s%s%s", prefix, ws, item.Title, focus, minimized)
-		if len(line) > 50 {
-			line = line[:47] + "..."
-		}
-		sb.WriteString(line + "\n")
-
-		if item.Preview != "" && i == m.AggregateViewSelected {
-			preview := item.Preview
-			if len(preview) > 48 {
-				preview = preview[:45] + "..."
+		// Workspace header
+		if item.Workspace != lastWS {
+			if lastWS != -1 {
+				sb.WriteString("\n")
 			}
-			sb.WriteString(fmt.Sprintf("    %s\n", preview))
+			sb.WriteString(fmt.Sprintf(" \x1b[1;33mWorkspace %d\x1b[0m\n", item.Workspace+1))
+			lastWS = item.Workspace
+		}
+
+		// Window entry
+		selected := i == m.AggregateViewSelected
+		title := item.Title
+		if len(title) > 35 {
+			title = title[:32] + "..."
+		}
+
+		idx := item.WindowIndex + 1
+		focusMark := " "
+		if item.IsFocused {
+			focusMark = "\x1b[32m*\x1b[0m"
+		}
+		minMark := ""
+		if item.IsMinimized {
+			minMark = " \x1b[2m[minimized]\x1b[0m"
+		}
+
+		if selected {
+			sb.WriteString(fmt.Sprintf(" \x1b[7m %d: %s %s%s \x1b[0m\n", idx, title, focusMark, minMark))
+			// Show preview for selected
+			if item.Preview != "" {
+				preview := item.Preview
+				if len(preview) > 42 {
+					preview = preview[:39] + "..."
+				}
+				sb.WriteString(fmt.Sprintf("   \x1b[2m%s\x1b[0m\n", preview))
+			}
+		} else {
+			sb.WriteString(fmt.Sprintf("  %d: %s %s%s\n", idx, title, focusMark, minMark))
 		}
 	}
 
 	if len(filtered) > maxVisible {
-		sb.WriteString(fmt.Sprintf(" (%d/%d shown)\n", maxVisible, len(filtered)))
+		sb.WriteString(fmt.Sprintf("\n \x1b[2m(%d more)\x1b[0m\n", len(filtered)-maxVisible))
 	}
+
+	sb.WriteString("\n \x1b[2m↑↓ navigate  Enter jump  Esc close  type to filter\x1b[0m")
 
 	bg := lipgloss.Color("0")
 	return lipgloss.NewStyle().
-		Width(52).
+		Width(48).
 		Border(getBorder()).
-		BorderForeground(lipgloss.Color("12")).
+		BorderForeground(lipgloss.Color("4")).
 		Padding(0, 1).
 		Background(bg).
 		Render(sb.String())
