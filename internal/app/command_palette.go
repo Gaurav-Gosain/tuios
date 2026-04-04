@@ -312,6 +312,39 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 
+		// Layout
+		{
+			Name:     "Next Layout",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.NextLayout()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Previous Layout",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.PrevLayout()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Toggle Multifocus",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ToggleMultifocus(m.FocusedWindow)
+				return m, nil
+			},
+		},
+		{
+			Name:     "Clear Multifocus",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ClearMultifocus()
+				return m, nil
+			},
+		},
 		// Layout mode
 		{
 			Name:     "Toggle Layout Mode (BSP/Master-Stack)",
@@ -326,8 +359,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Name:     "Edit Scrollback in $EDITOR",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.EditScrollbackInEditor()
-				return m, nil
+				return m, m.EditScrollbackInEditor()
 			},
 		},
 		// Floating

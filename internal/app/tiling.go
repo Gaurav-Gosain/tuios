@@ -59,7 +59,22 @@ func (m *OS) TileAllWindows() {
 		return
 	}
 
-	m.LogInfo("BSP: TileAllWindows called with %d visible windows", len(visibleWindows))
+	m.LogInfo("TileAllWindows called with %d visible windows, BSP=%v", len(visibleWindows), m.UseBSPLayout)
+
+	// Use master-stack layout if BSP is disabled
+	if !m.UseBSPLayout {
+		layouts := layout.CalculateTilingLayout(len(visibleWindows), m.GetRenderWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
+		for i, l := range layouts {
+			if i < len(visibleWindows) {
+				visibleWindows[i].X = l.X
+				visibleWindows[i].Y = l.Y
+				visibleWindows[i].Resize(l.Width, l.Height)
+				visibleWindows[i].Tiled = config.SharedBorders
+				visibleWindows[i].InvalidateCache()
+			}
+		}
+		return
+	}
 
 	// Try to use BSP tree if available
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]

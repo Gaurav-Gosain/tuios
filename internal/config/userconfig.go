@@ -17,6 +17,7 @@ type UserConfig struct {
 	Appearance  AppearanceConfig  `toml:"appearance"`
 	Keybindings KeybindingsConfig `toml:"keybindings"`
 	Daemon      DaemonConfig      `toml:"daemon"`
+	Hooks       HooksConfig       `toml:"hooks"`
 }
 
 // DaemonConfig holds daemon-related settings
@@ -51,6 +52,9 @@ type AppearanceConfig struct {
 	WindowTitleFormat   string `toml:"window_title_format"`   // Format string for window titles: {title}, {index}, {cwd}
 	SeparatorStyle      string `toml:"separator_style"`       // Separator pill style: rounded (default), powerline, flat, none
 }
+
+// HooksConfig holds shell command hooks for events.
+type HooksConfig map[string]any
 
 // KeybindingsConfig holds all keybinding configurations
 type KeybindingsConfig struct {

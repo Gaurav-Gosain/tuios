@@ -132,7 +132,8 @@ type Session struct {
 	ptysMu sync.RWMutex
 
 	// Session state (serializable)
-	state   *SessionState
+	state             *SessionState
+	stopResurrection  func() // Stops periodic resurrection saving
 	stateMu sync.RWMutex
 
 	// Terminal size
@@ -182,6 +183,11 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 		LastActive: now,
 		config:     cfg,
 	}
+
+	// Start periodic resurrection saving
+	session.stopResurrection = StartPeriodicSave(func() *SessionState {
+		return session.GetState()
+	})
 
 	return session, nil
 }
@@ -333,6 +339,13 @@ func (s *Session) UpdateState(state *SessionState) {
 
 // Stop closes all PTYs and cleans up.
 func (s *Session) Stop() {
+	// Stop resurrection saving
+	if s.stopResurrection != nil {
+		s.stopResurrection()
+	}
+	// Final save before stopping
+	_ = SaveSessionForResurrection(s.GetState())
+
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 

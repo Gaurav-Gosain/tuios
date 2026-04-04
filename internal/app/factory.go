@@ -98,8 +98,12 @@ func NewOS(opts OSOptions) *OS {
 		os.SixelPassthrough = NewSixelPassthrough()
 	}
 
-	// Initialize hooks manager
+	// Initialize hooks manager and load user-defined hooks from config
 	os.HookManager = hooks.NewManager()
+	cfg, cfgErr := config.LoadUserConfig()
+	if cfgErr == nil && cfg.Hooks != nil {
+		os.HookManager.LoadFromConfig(cfg.Hooks)
+	}
 
 	// Default to BSP layout mode
 	os.UseBSPLayout = true

@@ -1232,7 +1232,11 @@ func (m *OS) capturePane(windowTarget, flags string) (string, error) {
 			var sb strings.Builder
 			for i := range scrollbackLen {
 				line := win.Terminal.ScrollbackLine(i)
-				sb.WriteString(line.String())
+				if includeANSI {
+					sb.WriteString(line.Render())
+				} else {
+					sb.WriteString(line.String())
+				}
 				sb.WriteByte('\n')
 			}
 			sb.WriteString(content)
