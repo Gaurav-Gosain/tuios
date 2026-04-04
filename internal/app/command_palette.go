@@ -312,6 +312,15 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 
+		// Scrollback
+		{
+			Name:     "Edit Scrollback in $EDITOR",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.EditScrollbackInEditor()
+				return m, nil
+			},
+		},
 		// Floating
 		{
 			Name:     "Toggle Floating",

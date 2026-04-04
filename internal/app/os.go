@@ -341,6 +341,35 @@ func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
 }
 
+// EditScrollbackInEditor captures the focused pane's scrollback to a temp file
+// and opens it in $EDITOR.
+func (m *OS) EditScrollbackInEditor() {
+	content, err := m.capturePane("", "scrollback")
+	if err != nil {
+		m.ShowNotification("Capture failed: "+err.Error(), "error", 0)
+		return
+	}
+
+	// Write to temp file
+	tmpFile, err := os.CreateTemp("", "tuios-scrollback-*.txt")
+	if err != nil {
+		m.ShowNotification("Failed to create temp file: "+err.Error(), "error", 0)
+		return
+	}
+	if _, err := tmpFile.WriteString(content); err != nil {
+		_ = tmpFile.Close()
+		m.ShowNotification("Failed to write temp file: "+err.Error(), "error", 0)
+		return
+	}
+	_ = tmpFile.Close()
+
+	if err := OpenInEditor(tmpFile.Name()); err != nil {
+		m.ShowNotification("Failed to open editor: "+err.Error(), "error", 0)
+		return
+	}
+	m.ShowNotification("Scrollback opened in $EDITOR", "info", 0)
+}
+
 // ToggleFloating toggles the focused window between floating and tiled mode.
 func (m *OS) ToggleFloating() {
 	fw := m.GetFocusedWindow()
