@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -387,6 +388,7 @@ func handleTerminalTilingPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			if focusedWindow != nil {
 				o.Mode = app.WindowManagementMode
 				o.RenamingWindow = true
+				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
 				o.RenameBuffer = focusedWindow.CustomName
 			}
 		}
@@ -591,6 +593,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			if focusedWindow != nil {
 				o.Mode = app.WindowManagementMode
 				o.RenamingWindow = true
+				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
 				o.RenameBuffer = focusedWindow.CustomName
 			}
 		}
@@ -983,6 +986,8 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 	case "x":
 		// Close window
 		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+			w := o.Windows[o.FocusedWindow]
+			o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
 			o.DeleteWindow(o.FocusedWindow)
 		}
 		return o, nil
@@ -998,6 +1003,7 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
 				o.RenamingWindow = true
+				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
 				o.RenameBuffer = focusedWindow.CustomName
 			}
 		}

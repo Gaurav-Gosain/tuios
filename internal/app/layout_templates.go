@@ -328,14 +328,16 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 		m.MasterRatio = tmpl.MasterRatio
 	}
 
-	// If tiled, apply BSP tree or retile
+	// If tiled, rebuild BSP tree from the loaded window positions
+	// instead of retiling (which would override the loaded layout)
 	if m.AutoTiling {
 		if tmpl.TilingScheme != "" {
 			if tree := m.GetOrCreateBSPTree(); tree != nil {
 				tree.AutoScheme = layout.ParseAutoScheme(tmpl.TilingScheme)
 			}
 		}
-		m.TileAllWindows()
+		// Rebuild BSP tree from current window positions instead of retiling
+		m.RebuildBSPTreeFromPositions()
 	} else if savedAutoTiling != tmpl.AutoTiling {
 		m.ClampWindowsToView()
 	}

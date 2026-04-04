@@ -1,0 +1,104 @@
+Welcome to fish, the friendly interactive shell
+Type help for instructions on how to use fish
+❯ ls
+ AGENTS.md
+ assets
+ CITATION.cff
+ cmd
+ dist
+ Dockerfile
+ docs
+ examples
+ flake.lock
+ flake.nix
+ FUNDING.yml
+ go.mod
+ go.sum
+ install-web.sh
+ install.sh
+ internal
+ LICENSE
+ nix
+ pkg
+󰂺 README.md
+󰒃 SECURITY.md
+󰡯 tuios
+󰡯 tuios-web
+ tuios.nix
+❯ ll
+Permissions  Size User   Date Modified Name
+drwx------      - gaurav  4 Apr 17:49   .claude
+drwxr-xr-x      - gaurav  4 Dec  2025   .crush
+drwxr-xr-x      - gaurav  9 Nov  2025   .direnv
+drwxr-xr-x      - gaurav  4 Apr 21:19   .git
+drwxr-xr-x      - gaurav  5 Nov  2025   .github
+drwxr-xr-x      - gaurav 26 Oct  2025   assets
+drwxr-xr-x      - gaurav 23 Jan 18:17   cmd
+drwxr-xr-x      - gaurav 29 Mar 01:14   dist
+drwxr-xr-x      - gaurav  4 Apr 18:32   docs
+drwxr-xr-x      - gaurav 28 Dec  2025   examples
+drwxr-xr-x      - gaurav  4 Apr 17:19   internal
+drwxr-xr-x      - gaurav 26 Oct  2025   nix
+drwxr-xr-x      - gaurav 16 Dec  2025   pkg
+.rw-r--r--    138 gaurav  5 Nov  2025   .dockerignore
+.rw-r--r--     10 gaurav 26 Oct  2025   .envrc
+.rw-r--r--    100 gaurav 26 Oct  2025  󰊢 .gitattributes
+.rw-r--r--    134 gaurav  2 Dec  2025  󰊢 .gitignore
+.rw-r--r--   8.4k gaurav  4 Dec  2025   .goreleaser.yml
+.rw-r--r--     61 gaurav  6 Sep  2025   .markdownlint.json
+.rw-r--r--  10.0k gaurav 28 Dec  2025   AGENTS.md
+.rw-r--r--    641 gaurav 26 Oct  2025   CITATION.cff
+.rw-r--r--    313 gaurav 29 Mar 01:14   Dockerfile
+.rw-r--r--   5.0k gaurav 26 Oct  2025   flake.lock
+.rw-r--r--   2.0k gaurav 26 Oct  2025   flake.nix
+.rw-r--r--     20 gaurav 26 Oct  2025   FUNDING.yml
+.rw-r--r--   3.4k gaurav  4 Apr 17:38   go.mod
+.rw-r--r--    15k gaurav  4 Apr 17:35   go.sum
+.rwxr-xr-x   5.8k gaurav  3 Dec  2025   install-web.sh
+.rwxr-xr-x   5.7k gaurav 26 Oct  2025   install.sh
+.rw-r--r--   1.1k gaurav 18 Jul  2025   LICENSE
+.rw-r--r--    16k gaurav  4 Apr 18:32  󰂺 README.md
+.rw-r--r--   1.7k gaurav  3 Nov  2025  󰒃 SECURITY.md
+.rwxr-xr-x    17M gaurav  4 Apr 21:19  󰡯 tuios
+.rwxr-xr-x    32M gaurav  4 Apr 21:19  󰡯 tuios-web
+.rw-r--r--    407 gaurav 29 Mar 01:28   tuios.nix
+❯ ll
+Permissions  Size User   Date Modified Name
+drwx------      - gaurav  4 Apr 17:49   .claude
+drwxr-xr-x      - gaurav  4 Dec  2025   .crush
+drwxr-xr-x      - gaurav  9 Nov  2025   .direnv
+drwxr-xr-x      - gaurav  4 Apr 21:19   .git
+drwxr-xr-x      - gaurav  5 Nov  2025   .github
+drwxr-xr-x      - gaurav 26 Oct  2025   assets
+drwxr-xr-x      - gaurav 23 Jan 18:17   cmd
+drwxr-xr-x      - gaurav 29 Mar 01:14   dist
+drwxr-xr-x      - gaurav  4 Apr 18:32   docs
+drwxr-xr-x      - gaurav 28 Dec  2025   examples
+drwxr-xr-x      - gaurav  4 Apr 17:19   internal
+drwxr-xr-x      - gaurav 26 Oct  2025   nix
+drwxr-xr-x      - gaurav 16 Dec  2025   pkg
+.rw-r--r--    138 gaurav  5 Nov  2025   .dockerignore
+.rw-r--r--     10 gaurav 26 Oct  2025   .envrc
+.rw-r--r--    100 gaurav 26 Oct  2025  󰊢 .gitattributes
+.rw-r--r--    134 gaurav  2 Dec  2025  󰊢 .gitignore
+.rw-r--r--   8.4k gaurav  4 Dec  2025   .goreleaser.yml
+.rw-r--r--     61 gaurav  6 Sep  2025   .markdownlint.json
+.rw-r--r--  10.0k gaurav 28 Dec  2025   AGENTS.md
+.rw-r--r--    641 gaurav 26 Oct  2025   CITATION.cff
+.rw-r--r--    313 gaurav 29 Mar 01:14   Dockerfile
+.rw-r--r--   5.0k gaurav 26 Oct  2025   flake.lock
+.rw-r--r--   2.0k gaurav 26 Oct  2025   flake.nix
+.rw-r--r--     20 gaurav 26 Oct  2025   FUNDING.yml
+.rw-r--r--   3.4k gaurav  4 Apr 17:38   go.mod
+.rw-r--r--    15k gaurav  4 Apr 17:35   go.sum
+.rwxr-xr-x   5.8k gaurav  3 Dec  2025   install-web.sh
+.rwxr-xr-x   5.7k gaurav 26 Oct  2025   install.sh
+.rw-r--r--   1.1k gaurav 18 Jul  2025   LICENSE
+.rw-r--r--    16k gaurav  4 Apr 18:32  󰂺 README.md
+.rw-r--r--   1.7k gaurav  3 Nov  2025  󰒃 SECURITY.md
+.rwxr-xr-x    17M gaurav  4 Apr 21:19  󰡯 tuios
+.rwxr-xr-x    32M gaurav  4 Apr 21:19  󰡯 tuios-web
+.rw-r--r--    407 gaurav 29 Mar 01:28   tuios.nix
+
+…  tuios─ main───────────────────────────────────────────────────────────────────────────────────────────────────────────────󰑮 Go v1.26.1-X:nodwarf5─󰦖 21:24─ gaurav
+╰─

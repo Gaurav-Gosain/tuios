@@ -344,6 +344,43 @@ func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
 }
 
+// RebuildBSPTreeFromPositions rebuilds the BSP tree from current window positions.
+// Used after layout loading to sync the tree with the loaded positions without retiling.
+func (m *OS) RebuildBSPTreeFromPositions() {
+	// Clear existing tree and rebuild from scratch with current window order
+	delete(m.WorkspaceTrees, m.CurrentWorkspace)
+	tree := m.GetOrCreateBSPTree()
+	if tree == nil {
+		return
+	}
+
+	var visibleWindows []*terminal.Window
+	for _, w := range m.Windows {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
+			visibleWindows = append(visibleWindows, w)
+		}
+	}
+
+	// Re-add all windows to BSP tree
+	for _, w := range visibleWindows {
+		intID := m.getWindowIntID(w.ID)
+		existingIDs := tree.GetAllWindowIDs()
+		if len(existingIDs) == 0 {
+			tree.InsertWindow(intID, 0, layout.SplitNone, 0.5, m.GetBSPBounds())
+		} else {
+			tree.InsertWindow(intID, existingIDs[len(existingIDs)-1], layout.SplitNone, 0.5, m.GetBSPBounds())
+		}
+	}
+
+	// Sync ratios from actual positions
+	windowRects := make(map[int]layout.Rect)
+	for _, w := range visibleWindows {
+		intID := m.getWindowIntID(w.ID)
+		windowRects[intID] = layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}
+	}
+	tree.SyncRatiosFromGeometry(windowRects, m.GetBSPBounds())
+}
+
 // ToggleLayoutMode switches between BSP tiling and master-stack layout.
 func (m *OS) ToggleLayoutMode() {
 	m.UseBSPLayout = !m.UseBSPLayout
@@ -360,7 +397,7 @@ func (m *OS) ToggleLayoutMode() {
 // EditScrollbackInEditor captures the focused pane's scrollback to a temp file
 // and returns a tea.Cmd that suspends bubbletea and opens $EDITOR.
 func (m *OS) EditScrollbackInEditor() tea.Cmd {
-	content, err := m.capturePane("", "scrollback")
+	content, err := m.capturePane("", "scrollback") // plain text, no ANSI
 	if err != nil {
 		m.ShowNotification("Capture failed: "+err.Error(), "error", 0)
 		return nil

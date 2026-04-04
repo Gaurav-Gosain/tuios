@@ -186,6 +186,7 @@ func handleRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
 			o.RenamingWindow = true
+				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
 			o.RenameBuffer = focusedWindow.CustomName
 		}
 	}
