@@ -15,7 +15,16 @@ import (
 func (e *Emulator) handleOsc(cmd int, data []byte) {
 	e.flushGrapheme() // Flush any pending grapheme before handling OSC sequences.
 	if !e.handlers.handleOsc(cmd, data) {
-		e.logf("unhandled sequence: OSC %q", data)
+		if e.passthroughOSC && e.cb.Passthrough != nil {
+			// Build raw OSC sequence: ESC ] <data> ST
+			raw := make([]byte, 0, len(data)+4)
+			raw = append(raw, '\x1b', ']') // OSC introducer
+			raw = append(raw, data...)
+			raw = append(raw, '\x1b', '\\') // ST terminator
+			e.cb.Passthrough(raw)
+		} else {
+			e.logf("unhandled sequence: OSC %q", data)
+		}
 	}
 }
 

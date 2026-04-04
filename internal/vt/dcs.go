@@ -6,15 +6,40 @@ import "github.com/charmbracelet/x/ansi"
 func (e *Emulator) handleDcs(cmd ansi.Cmd, params ansi.Params, data []byte) {
 	e.flushGrapheme() // Flush any pending grapheme before handling DCS sequences.
 	if !e.handlers.handleDcs(cmd, params, data) {
-		e.logf("unhandled sequence: DCS %q %q", paramsString(cmd, params), data)
+		if e.passthroughDCS && e.cb.Passthrough != nil {
+			// Build raw DCS sequence: ESC P <params> <data> ST
+			raw := buildDCSSequence(cmd, params, data)
+			e.cb.Passthrough(raw)
+		} else {
+			e.logf("unhandled sequence: DCS %q %q", paramsString(cmd, params), data)
+		}
 	}
+}
+
+// buildDCSSequence reconstructs a raw DCS escape sequence from parsed components.
+func buildDCSSequence(cmd ansi.Cmd, params ansi.Params, data []byte) []byte {
+	var raw []byte
+	raw = append(raw, '\x1b', 'P') // DCS introducer
+	raw = append(raw, []byte(paramsString(cmd, params))...)
+	raw = append(raw, data...)
+	raw = append(raw, '\x1b', '\\') // ST terminator
+	return raw
 }
 
 // handleApc handles an APC escape sequence.
 func (e *Emulator) handleApc(data []byte) {
 	e.flushGrapheme() // Flush any pending grapheme before handling APC sequences.
 	if !e.handlers.handleApc(data) {
-		e.logf("unhandled sequence: APC %q", data)
+		if e.passthroughAPC && e.cb.Passthrough != nil {
+			// Build raw APC sequence: ESC _ <data> ST
+			raw := make([]byte, 0, len(data)+4)
+			raw = append(raw, '\x1b', '_') // APC introducer
+			raw = append(raw, data...)
+			raw = append(raw, '\x1b', '\\') // ST terminator
+			e.cb.Passthrough(raw)
+		} else {
+			e.logf("unhandled sequence: APC %q", data)
+		}
 	}
 }
 
