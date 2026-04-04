@@ -239,6 +239,8 @@ type OS struct {
 	SessionSwitcherError    string
 	// Layout picker overlay
 	ShowLayoutPicker     bool
+	LayoutCycleIndex     int              // Current index in saved layouts for cycling
+	cachedLayoutNames    []string         // Cached layout names for cycling
 	LayoutPickerItems    []LayoutTemplate
 	LayoutPickerSelected int
 	LayoutPickerScroll   int
@@ -329,6 +331,37 @@ func (m *OS) Log(level, format string, args ...any) {
 // LogInfo logs an informational message.
 func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
+}
+
+// NextLayout cycles to the next saved layout template.
+func (m *OS) NextLayout() {
+	templates, err := LoadLayoutTemplates()
+	if err != nil || len(templates) == 0 {
+		m.ShowNotification("No saved layouts", "warn", 0)
+		return
+	}
+
+	m.LayoutCycleIndex = (m.LayoutCycleIndex + 1) % len(templates)
+	tmpl := templates[m.LayoutCycleIndex]
+	ApplyLayoutTemplate(tmpl, m)
+	m.ShowNotification(fmt.Sprintf("Layout: %s (%d/%d)", tmpl.Name, m.LayoutCycleIndex+1, len(templates)), "info", 0)
+}
+
+// PrevLayout cycles to the previous saved layout template.
+func (m *OS) PrevLayout() {
+	templates, err := LoadLayoutTemplates()
+	if err != nil || len(templates) == 0 {
+		m.ShowNotification("No saved layouts", "warn", 0)
+		return
+	}
+
+	m.LayoutCycleIndex--
+	if m.LayoutCycleIndex < 0 {
+		m.LayoutCycleIndex = len(templates) - 1
+	}
+	tmpl := templates[m.LayoutCycleIndex]
+	ApplyLayoutTemplate(tmpl, m)
+	m.ShowNotification(fmt.Sprintf("Layout: %s (%d/%d)", tmpl.Name, m.LayoutCycleIndex+1, len(templates)), "info", 0)
 }
 
 // FireHook fires a hook event with the current context.
