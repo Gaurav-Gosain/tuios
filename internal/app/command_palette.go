@@ -312,6 +312,15 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 
+		// Floating
+		{
+			Name:     "Toggle Floating",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ToggleFloating()
+				return m, nil
+			},
+		},
 		// Navigation
 		{
 			Name:     "Aggregate View (All Windows)",

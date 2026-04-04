@@ -133,6 +133,9 @@ type Window struct {
 	ScrollbackOffset int  // Number of lines scrolled back (0 = at bottom, viewing live output)
 	// Alternate screen buffer tracking for TUI detection
 	IsAltScreen bool // True when application is using alternate screen buffer (nvim, vim, etc.)
+	// Floating pane support
+	IsFloating bool // True when window is floating (not in BSP tiling)
+	IsPinned   bool // True when floating pane persists across workspace switches
 	// Cursor style tracking for passthrough to parent terminal
 	CursorStyle vt.CursorStyle // Current cursor style (block, underline, bar)
 	CursorBlink bool           // Whether cursor should blink

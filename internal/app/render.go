@@ -132,6 +132,10 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		}
 
 		zIndex := window.Z
+		if window.IsFloating {
+			// Floating windows render above tiled windows and separators
+			zIndex = config.ZIndexSeparators + 1
+		}
 		if isAnimating || window.IsBeingManipulated {
 			// Only elevate non-tiled windows above separators.
 			// Tiled windows stay below Z=998 so separator lines remain visible.

@@ -341,6 +341,32 @@ func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
 }
 
+// ToggleFloating toggles the focused window between floating and tiled mode.
+func (m *OS) ToggleFloating() {
+	fw := m.GetFocusedWindow()
+	if fw == nil {
+		return
+	}
+
+	fw.IsFloating = !fw.IsFloating
+
+	if fw.IsFloating {
+		// Remove from BSP tree when floating
+		if m.AutoTiling {
+			m.RemoveWindowFromBSPTree(fw)
+		}
+		fw.Tiled = false
+		fw.InvalidateCache()
+		m.ShowNotification("Window: floating", "info", 0)
+	} else {
+		// Re-add to BSP tree when unfloating
+		if m.AutoTiling {
+			m.AddWindowToBSPTree(fw)
+		}
+		m.ShowNotification("Window: tiled", "info", 0)
+	}
+}
+
 // setupClipboardPassthrough wires a window's OSC 52 clipboard to bubbletea.
 func (m *OS) setupClipboardPassthrough(window *terminal.Window) {
 	if window == nil {
