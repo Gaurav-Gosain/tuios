@@ -17,6 +17,7 @@ const (
 	SplitNone       SplitType = iota // Leaf node (contains a window)
 	SplitVertical                    // Left/Right children (vertical divider)
 	SplitHorizontal                  // Top/Bottom children (horizontal divider)
+	SplitStacked                     // Stacked children (only active child visible, others show as title bars)
 )
 
 // String returns a string representation of the split type
@@ -28,6 +29,8 @@ func (s SplitType) String() string {
 		return "vertical"
 	case SplitHorizontal:
 		return "horizontal"
+	case SplitStacked:
+		return "stacked"
 	default:
 		return "unknown"
 	}
@@ -99,13 +102,14 @@ type Rect struct {
 // Internal nodes have Left and Right children and define a split.
 // Leaf nodes have a WindowID and represent an actual window.
 type TileNode struct {
-	ID         uint64    // Unique identifier for the node
-	Parent     *TileNode // Parent node (nil for root)
-	Left       *TileNode // Left/Top child (nil for leaf nodes)
-	Right      *TileNode // Right/Bottom child (nil for leaf nodes)
-	WindowID   int       // Window ID (-1 for internal nodes)
-	SplitType  SplitType // How this node splits its space
-	SplitRatio float64   // Position of split (0.0-1.0), 0.5 = middle
+	ID                uint64    // Unique identifier for the node
+	Parent            *TileNode // Parent node (nil for root)
+	Left              *TileNode // Left/Top child (nil for leaf nodes)
+	Right             *TileNode // Right/Bottom child (nil for leaf nodes)
+	WindowID          int       // Window ID (-1 for internal nodes)
+	SplitType         SplitType // How this node splits its space
+	SplitRatio        float64   // Position of split (0.0-1.0), 0.5 = middle
+	StackedActiveLeft bool      // For SplitStacked: true = left child is active (gets content area)
 }
 
 // newNodeID generates a unique node ID
@@ -469,6 +473,25 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
 			rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
 		}
+	}
+
+	if node.SplitType == SplitStacked {
+		// Stacked: active child gets full bounds minus 1 row for inactive child's title bar
+		titleBarHeight := 1
+		if node.StackedActiveLeft {
+			// Left is active: gets content area, right gets title bar at bottom
+			activeBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: bounds.H - titleBarHeight}
+			inactiveBounds := Rect{X: bounds.X, Y: bounds.Y + bounds.H - titleBarHeight, W: bounds.W, H: titleBarHeight}
+			t.applyLayoutRecursive(node.Left, activeBounds, result)
+			t.applyLayoutRecursive(node.Right, inactiveBounds, result)
+		} else {
+			// Right is active: left gets title bar at top, right gets content area
+			inactiveBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: titleBarHeight}
+			activeBounds := Rect{X: bounds.X, Y: bounds.Y + titleBarHeight, W: bounds.W, H: bounds.H - titleBarHeight}
+			t.applyLayoutRecursive(node.Left, inactiveBounds, result)
+			t.applyLayoutRecursive(node.Right, activeBounds, result)
+		}
+		return
 	}
 
 	t.applyLayoutRecursive(node.Left, leftBounds, result)
