@@ -64,4 +64,11 @@ type Callbacks struct {
 	// ScreenClear callback. When set, this function is called when the screen
 	// is cleared (ED 2 or ED 3).
 	ScreenClear func()
+
+	// ClipboardSet callback. Called when a guest app sets clipboard via OSC 52.
+	ClipboardSet func(selection, content string)
+
+	// ClipboardQuery callback. Called when a guest app queries clipboard via OSC 52.
+	// Returns the current clipboard content for the given selection.
+	ClipboardQuery func(selection string) string
 }

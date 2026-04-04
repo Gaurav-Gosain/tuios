@@ -148,6 +148,8 @@ type Window struct {
 	DaemonResizeFunc  func(w, h int) error // Callback for resizing daemon PTY
 	DaemonCloseFunc   func()               // Callback when window is closed (to notify daemon)
 	OnProcessExit     func()               // Callback when PTY process exits (to close window)
+	ClipboardContent  string               // Last clipboard content set via OSC 52
+	ClipboardSetFunc  func(string)         // Callback to propagate clipboard to host
 	outputChan        chan []byte          // Channel for serializing daemon PTY output writes
 	outputDone        chan struct{}        // Signal to stop output writer goroutine
 	suppressCallbacks atomic.Bool          // Suppress VT emulator callbacks during state restoration (prevents race conditions)
@@ -312,6 +314,15 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 			if title != "" {
 				window.Title = title
 			}
+		},
+		ClipboardSet: func(_ string, content string) {
+			window.ClipboardContent = content
+			if window.ClipboardSetFunc != nil {
+				window.ClipboardSetFunc(content)
+			}
+		},
+		ClipboardQuery: func(_ string) string {
+			return window.ClipboardContent
 		},
 	})
 
@@ -499,6 +510,15 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 			if title != "" {
 				window.Title = title
 			}
+		},
+		ClipboardSet: func(_ string, content string) {
+			window.ClipboardContent = content
+			if window.ClipboardSetFunc != nil {
+				window.ClipboardSetFunc(content)
+			}
+		},
+		ClipboardQuery: func(_ string) string {
+			return window.ClipboardContent
 		},
 	})
 

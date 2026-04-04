@@ -4,6 +4,7 @@ package vt
 
 import (
 	"bytes"
+	"encoding/base64"
 	"image/color"
 	"io"
 
@@ -277,19 +278,31 @@ func (e *Emulator) handleClipboard(data []byte) {
 		return
 	}
 
-	// For now, acknowledge clipboard operations but don't implement them
-	// (clipboard access requires integration with the host's clipboard system
-	// which is handled at the app layer, not the VT emulator layer)
 	selection := string(parts[1])
 	payload := string(parts[2])
 
 	if payload == "?" {
-		// Query clipboard - respond with empty (we don't store clipboard content)
-		response := "\x1b]52;" + selection + ";\x1b\\"
-		_, _ = io.WriteString(e.pw, response)
+		// Query clipboard
+		if e.cb.ClipboardQuery != nil {
+			content := e.cb.ClipboardQuery(selection)
+			encoded := base64.StdEncoding.EncodeToString([]byte(content))
+			response := "\x1b]52;" + selection + ";" + encoded + "\x1b\\"
+			_, _ = io.WriteString(e.pw, response)
+		} else {
+			// No callback - respond empty
+			response := "\x1b]52;" + selection + ";\x1b\\"
+			_, _ = io.WriteString(e.pw, response)
+		}
+	} else {
+		// Set clipboard
+		decoded, err := base64.StdEncoding.DecodeString(payload)
+		if err != nil {
+			return
+		}
+		if e.cb.ClipboardSet != nil {
+			e.cb.ClipboardSet(selection, string(decoded))
+		}
 	}
-	// Set clipboard - the app layer should intercept this via callbacks
-	// For now we just acknowledge it silently
 }
 
 func (e *Emulator) handleHyperlink(cmd int, data []byte) {
