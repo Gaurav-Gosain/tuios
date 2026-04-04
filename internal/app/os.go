@@ -240,7 +240,7 @@ type OS struct {
 	// Layout picker overlay
 	ShowLayoutPicker     bool
 	LayoutCycleIndex     int              // Current index in saved layouts for cycling
-	cachedLayoutNames    []string         // Cached layout names for cycling
+	MultifocusSet        map[int]bool     // Windows that receive keystrokes simultaneously
 	LayoutPickerItems    []LayoutTemplate
 	LayoutPickerSelected int
 	LayoutPickerScroll   int
@@ -331,6 +331,63 @@ func (m *OS) Log(level, format string, args ...any) {
 // LogInfo logs an informational message.
 func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
+}
+
+// ToggleMultifocus toggles a window in/out of the multifocus set.
+// When multiple windows are in the set, keystrokes are sent to all of them.
+func (m *OS) ToggleMultifocus(windowIndex int) {
+	if windowIndex < 0 || windowIndex >= len(m.Windows) {
+		return
+	}
+	if m.MultifocusSet == nil {
+		m.MultifocusSet = make(map[int]bool)
+	}
+	if m.MultifocusSet[windowIndex] {
+		delete(m.MultifocusSet, windowIndex)
+		if len(m.MultifocusSet) == 0 {
+			m.MultifocusSet = nil
+		}
+		m.ShowNotification("Multifocus: removed window", "info", 0)
+	} else {
+		m.MultifocusSet[windowIndex] = true
+		m.ShowNotification(fmt.Sprintf("Multifocus: %d windows", len(m.MultifocusSet)), "info", 0)
+	}
+	// Invalidate caches to show visual indicator
+	for idx := range m.MultifocusSet {
+		if idx < len(m.Windows) {
+			m.Windows[idx].InvalidateCache()
+		}
+	}
+}
+
+// ClearMultifocus removes all windows from the multifocus set.
+func (m *OS) ClearMultifocus() {
+	if m.MultifocusSet != nil {
+		for idx := range m.MultifocusSet {
+			if idx < len(m.Windows) {
+				m.Windows[idx].InvalidateCache()
+			}
+		}
+	}
+	m.MultifocusSet = nil
+	m.ShowNotification("Multifocus: cleared", "info", 0)
+}
+
+// IsMultifocused returns true if the given window index is in the multifocus set.
+func (m *OS) IsMultifocused(windowIndex int) bool {
+	return m.MultifocusSet != nil && m.MultifocusSet[windowIndex]
+}
+
+// GetMultifocusWindows returns all window indices in the multifocus set.
+func (m *OS) GetMultifocusWindows() []int {
+	if m.MultifocusSet == nil {
+		return nil
+	}
+	var indices []int
+	for idx := range m.MultifocusSet {
+		indices = append(indices, idx)
+	}
+	return indices
 }
 
 // NextLayout cycles to the next saved layout template.
