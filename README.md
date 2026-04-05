@@ -16,7 +16,7 @@ Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driv
 
 ## Documentation
 
-Full documentation is available at **[tuios-docs](https://tuios-docs.vercel.app)** (hosted) or in the [`docs/`](./docs/) folder.
+Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (hosted) or in the [`docs/`](./docs/) folder.
 
 ### Quick Links
 - **[Getting Started](docs/KEYBINDINGS.md)** - Keybindings and quick reference
