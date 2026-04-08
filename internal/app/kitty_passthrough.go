@@ -277,6 +277,10 @@ func (kp *KittyPassthrough) IsEnabled() bool {
 	return kp.enabled
 }
 
+func (kp *KittyPassthrough) IsInlineGraphics() bool {
+	return kp.inlineGraphics
+}
+
 func (kp *KittyPassthrough) FlushPending() []byte {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
@@ -577,8 +581,21 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		kp.pendingDirectData[windowID] = pending
 	}
 
-	// Accumulate DECODED data bytes from this chunk (cmd.Data is already base64-decoded by the parser)
-	pending.Data = append(pending.Data, cmd.Data...)
+	// Accumulate DECODED data bytes from this chunk.
+	// Cap at expected size to handle double-delivery (reliable kittyChan +
+	// lossy broadcast both feed the same VT, producing duplicate chunks).
+	expectedSize := pending.Width * pending.Height * 4 // RGBA
+	if pending.Format == vt.KittyFormatRGB {
+		expectedSize = pending.Width * pending.Height * 3
+	}
+	if expectedSize > 0 && len(pending.Data)+len(cmd.Data) > expectedSize {
+		remaining := expectedSize - len(pending.Data)
+		if remaining > 0 {
+			pending.Data = append(pending.Data, cmd.Data[:remaining]...)
+		}
+	} else {
+		pending.Data = append(pending.Data, cmd.Data...)
+	}
 
 	kittyPassthroughLog("forwardTransmit: accumulated %d bytes, total=%d, more=%v",
 		len(cmd.Data), len(pending.Data), cmd.More)
@@ -1352,15 +1369,9 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 		return
 	}
 
-	// In web mode, don't send d=i delete commands - the browser overlay
-	// manages its own DOM canvases. Sending deletes through the PTY wipes
-	// image data from the overlay storage before the browser even processes
-	// the place command (the 1.7MB transmit is still in flight).
-	if !kp.inlineGraphics {
-		placements := kp.placements[windowID]
-		for _, p := range placements {
-			kp.deleteOnePlacement(p)
-		}
+	placements := kp.placements[windowID]
+	for _, p := range placements {
+		kp.deleteOnePlacement(p)
 	}
 	delete(kp.placements, windowID)
 	delete(kp.imageIDMap, windowID)
@@ -1371,11 +1382,18 @@ func (kp *KittyPassthrough) OnWindowScroll(windowID string, windowX, windowY, co
 }
 
 func (kp *KittyPassthrough) ClearWindow(windowID string) {
-	// The VT's clear callback fires on ANY clear operation (ED, EL, scroll).
-	// Deleting all placements here is too aggressive - partial clears like
-	// the shell redrawing a prompt line would wipe images above. Instead,
-	// let RefreshAllPlacements handle visibility via its viewport checks.
-	// Explicit kitty delete commands (a=d) still work via forwardDelete.
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+
+	if !kp.enabled {
+		return
+	}
+
+	placements := kp.placements[windowID]
+	for _, p := range placements {
+		kp.deleteOnePlacement(p)
+	}
+	kp.placements[windowID] = nil
 }
 
 // rectsOverlap checks if two rectangles overlap
@@ -1514,29 +1532,27 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 
-			// If image extends past viewport right edge, clamp the display
-			// columns instead of hiding the entire image.
-			if fullImageRight > viewportWidth && p.GuestX < viewportWidth {
-				// Image starts inside viewport but extends past right edge.
-				// Show the portion that fits.
-			}
-
-			// Calculate how many rows we CAN show after clipping
+			// Clamp to viewport: rows vertically, cols horizontally
 			maxShowableRows := min(p.Rows-clipTop-clipBottom, viewportHeight)
 			if maxShowableRows <= 0 {
 				maxShowableRows = 1
 			}
+			maxShowableCols := p.Cols
+			if fullImageRight > viewportWidth {
+				maxShowableCols = viewportWidth - p.GuestX
+				if maxShowableCols <= 0 {
+					anyPartVisible = false
+				}
+			}
 
-			// Calculate actual host position (after clipping adjustment)
 			actualRelativeY := relativeY
 			if clipTop > 0 {
-				actualRelativeY = 0 // Start at top of viewport
+				actualRelativeY = 0
 			}
 			newHostX := info.WindowX + info.ContentOffsetX + p.GuestX
 			newHostY := info.WindowY + info.ContentOffsetY + actualRelativeY
 
-			// Calculate image dimensions in cells for occlusion check (same units as window dimensions)
-			imageCellWidth := p.Cols
+			imageCellWidth := maxShowableCols
 			imageCellHeight := maxShowableRows
 
 			// Check if image is occluded by a higher-z window
@@ -1584,13 +1600,15 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				// and our sip overlay both treat a=p with the same (i, p)
 				// as an in-place update of the existing placement.
 				posChanged := p.Hidden || p.HostX != newHostX || p.HostY != newHostY ||
-					p.ClipTop != clipTop || p.ClipBottom != clipBottom || p.MaxShowable != maxShowableRows
+					p.ClipTop != clipTop || p.ClipBottom != clipBottom ||
+					p.MaxShowable != maxShowableRows || p.MaxShowableCols != maxShowableCols
 				if posChanged {
 					p.HostX = newHostX
 					p.HostY = newHostY
 					p.ClipTop = clipTop
 					p.ClipBottom = clipBottom
 					p.MaxShowable = maxShowableRows
+					p.MaxShowableCols = maxShowableCols
 					kp.placeOne(p)
 				}
 				p.Hidden = false
@@ -1688,9 +1706,13 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		p.HostImageID, p.HostX, p.HostY, p.Rows, p.Cols, p.ClipTop, p.ClipBottom, visibleRows,
 		p.SourceX, p.SourceY, p.SourceWidth, p.SourceHeight, cellHeight)
 
-	// Use original cols (no horizontal clipping for now)
-	if p.Cols > 0 {
-		fmt.Fprintf(&buf, ",c=%d", p.Cols)
+	// Use clamped cols if the image extends past the viewport
+	visibleCols := p.Cols
+	if p.MaxShowableCols > 0 && p.MaxShowableCols < visibleCols {
+		visibleCols = p.MaxShowableCols
+	}
+	if visibleCols > 0 {
+		fmt.Fprintf(&buf, ",c=%d", visibleCols)
 	}
 	if visibleRows > 0 {
 		fmt.Fprintf(&buf, ",r=%d", visibleRows)
@@ -1708,7 +1730,7 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	// at daemon cellH=20 → 380/19=20). Using the client's cellHeight would
 	// produce source regions that overflow the image and xterm-addon-image
 	// rejects them.
-	isClipping := p.ClipTop > 0 || p.ClipBottom > 0
+	isClipping := p.ClipTop > 0 || p.ClipBottom > 0 || visibleCols < p.Cols
 	pixelsPerRow := cellHeight
 	switch {
 	case p.Rows > 0 && p.ImagePixelHeight > 0:
@@ -1730,6 +1752,10 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		srcW := p.SourceWidth
 		if srcW == 0 && pixelsPerCol > 0 {
 			srcW = p.Cols * pixelsPerCol
+		}
+		// Horizontal crop: if columns were clamped, crop source width
+		if visibleCols < p.Cols && pixelsPerCol > 0 {
+			srcW = visibleCols * pixelsPerCol
 		}
 		srcH := visibleRows * pixelsPerRow
 		// Clamp against the image's native pixel height so we never request
@@ -1786,10 +1812,6 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	})
 
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
-		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-			log.Printf("[CLIENT-VT] kitty callback fired: action=%c imageID=%d more=%v daemonMode=%v",
-				cmd.Action, cmd.ImageID, cmd.More, win.DaemonMode)
-		}
 		// In daemon mode, the daemon's VT emulator responds to queries directly
 		// with low latency. Skip here to avoid sending a duplicate response.
 		if win.DaemonMode && cmd.Action == vt.KittyActionQuery {

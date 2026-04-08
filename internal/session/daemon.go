@@ -897,7 +897,6 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 	batch := make([]byte, 0, maxBatch)
 
 	for {
-		// Wait for at least one chunk
 		select {
 		case <-cs.done:
 			pty.Unsubscribe(cs.clientID)
@@ -909,29 +908,40 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 				return
 			}
 			batch = append(batch[:0], data...)
-		}
-
-		// Drain additional pending chunks up to batch cap
-		for len(batch) < maxBatch {
-			select {
-			case more, ok := <-outputCh:
-				if !ok {
+			for len(batch) < maxBatch {
+				select {
+				case more, ok := <-outputCh:
+					if !ok {
+						goto send
+					}
+					batch = append(batch, more...)
+				default:
 					goto send
 				}
-				batch = append(batch, more...)
-			default:
-				goto send
 			}
-		}
+		send:
+			cs.sendMu.Lock()
+			_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			err := WritePTYOutput(cs.conn, pty.ID, batch)
+			cs.sendMu.Unlock()
+			if err != nil {
+				pty.Unsubscribe(cs.clientID)
+				return
+			}
 
-	send:
-		cs.sendMu.Lock()
-		_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		err := WritePTYOutput(cs.conn, pty.ID, batch)
-		cs.sendMu.Unlock()
-		if err != nil {
-			pty.Unsubscribe(cs.clientID)
-			return
+		case kittyData := <-pty.kittyChan:
+			// Kitty graphics via reliable path. Each message is one
+			// complete APC from the daemon's VT callback. Bypasses
+			// the lossy broadcast channel to prevent mid-stream drops
+			// that corrupt image data.
+			cs.sendMu.Lock()
+			_ = cs.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			err := WritePTYOutput(cs.conn, pty.ID, kittyData)
+			cs.sendMu.Unlock()
+			if err != nil {
+				pty.Unsubscribe(cs.clientID)
+				return
+			}
 		}
 	}
 }

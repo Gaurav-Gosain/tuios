@@ -808,8 +808,6 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 
 	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", ptyID[:8], window.ID[:8])
 	err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
-		// Legacy raw-byte path. Still used as fallback and for cursor
-		// style passthrough (the VT absorbs these sequences).
 		passThroughCursorStyle(data)
 		window.WriteOutputAsync(data)
 	})
@@ -820,10 +818,6 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 		m.LogInfo("[SUBSCRIBE] Successfully subscribed to PTY %s", ptyID[:8])
 	}
 
-	// Screen diff handler disabled for now. The diff protocol infrastructure
-	// (screen_diff.go) is retained for the planned prise-style processed-state
-	// protocol, but dual-streaming (raw + diff) causes flickering from the
-	// two paths racing on the same VT buffer.
 }
 
 // unsubscribeFromPTY unsubscribes from PTY output for a window.
