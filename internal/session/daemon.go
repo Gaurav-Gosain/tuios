@@ -949,6 +949,11 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 // terminal to a subscriber. Uses ghostty's render state API with built-in
 // dirty tracking for zero-drop, zero-corruption delivery.
 func (d *Daemon) streamGhosttyDiffs(cs *connState, pty *PTY) {
+	defer func() {
+		if r := recover(); r != nil {
+			debugLog("[DEBUG] streamGhosttyDiffs panic recovered: %v", r)
+		}
+	}()
 	signal := pty.ghosttyTerm.DirtySignal()
 
 	for {

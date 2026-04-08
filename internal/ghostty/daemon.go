@@ -79,7 +79,14 @@ func (dt *DaemonTerminal) WriteNonBlocking(data []byte) {
 // writerLoop drains the write channel and feeds data to ghostty.
 func (dt *DaemonTerminal) writerLoop() {
 	for data := range dt.writeCh {
-		dt.Write(data)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// CGo panic - ghostty VT issue. Don't crash the daemon.
+				}
+			}()
+			dt.Write(data)
+		}()
 	}
 }
 

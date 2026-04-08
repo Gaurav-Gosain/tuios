@@ -250,11 +250,11 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 	terminal := vt.NewEmulator(width, height)
 	terminal.SetScrollbackMaxLines(10000)
 
-	// Create ghostty terminal for high-performance daemon-side VT with
-	// built-in dirty tracking. This is the primary VT for screen diffs.
+	// Create ghostty terminal for high-performance daemon-side VT.
 	ghosttyTerm, ghosttyErr := ghostty.NewDaemonTerminal(width, height)
 	if ghosttyErr != nil {
-		debugLog("[DEBUG] ghostty terminal creation failed: %v (falling back to ultraviolet only)", ghosttyErr)
+		debugLog("[DEBUG] ghostty terminal creation failed: %v (using ultraviolet only)", ghosttyErr)
+		ghosttyTerm = nil
 	}
 
 	pty := &PTY{
