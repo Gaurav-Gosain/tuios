@@ -6,7 +6,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.2
 	charm.land/lipgloss/v2 v2.0.2
 	charm.land/wish/v2 v2.0.0
-	github.com/Gaurav-Gosain/sip v0.2.4
+	github.com/Gaurav-Gosain/sip v0.2.5
 	github.com/adrg/xdg v0.5.3
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/fang v0.4.4
