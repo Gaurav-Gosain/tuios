@@ -31,6 +31,7 @@ type DaemonConfig struct {
 type AppearanceConfig struct {
 	BorderStyle         string `toml:"border_style"`          // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
 	HideWindowButtons   bool   `toml:"hide_window_buttons"`   // Hide window control buttons (minimize, maximize, close)
+	HideScrollbar       bool   `toml:"hide_scrollbar"`        // Hide the window scrollbar thumb on the border
 	ScrollbackLines     int    `toml:"scrollback_lines"`      // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 	DockbarPosition     string `toml:"dockbar_position"`      // Dockbar position: bottom, top, hidden
 	PreferredShell      string `toml:"preferred_shell"`       // Preferred shell: if empty, auto-detect based on platform.
@@ -51,6 +52,9 @@ type AppearanceConfig struct {
 	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
 	WindowTitleFormat   string `toml:"window_title_format"`   // Format string for window titles: {title}, {index}, {cwd}
 	SeparatorStyle      string `toml:"separator_style"`       // Separator pill style: rounded (default), powerline, flat, none
+	ZoomMaxWidth        int    `toml:"zoom_max_width"`          // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
+	NiriReverseScroll   bool   `toml:"niri_reverse_scroll"`     // Reverse mouse scroll direction in niri scrolling mode (default: false)
+	MaxFPS              int    `toml:"max_fps"`                 // Maximum render FPS (default: 60, max: 120)
 }
 
 // HooksConfig holds shell command hooks for events.
@@ -548,6 +552,11 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	// Only apply from config if not already set via flag (run.go sets this before fillMissingAppearance is called)
 	if !HideClock {
 		HideClock = cfg.Appearance.HideClock
+	}
+
+	// ZoomMaxWidth (0 = fullscreen)
+	if cfg.Appearance.ZoomMaxWidth > 0 {
+		ZoomMaxWidth = cfg.Appearance.ZoomMaxWidth
 	}
 }
 

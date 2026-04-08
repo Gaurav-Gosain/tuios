@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -90,12 +91,14 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		BorderStyle:         borderStyle,
 		DockbarPosition:     dockbarPosition,
 		HideWindowButtons:   hideWindowButtons,
+		HideScrollbar:       hideScrollbar,
 		WindowTitlePosition: windowTitlePosition,
 		HideClock:           hideClock,
 		ShowClock:           showClock,
 		ShowCPU:             showCPU,
 		ShowRAM:             showRAM,
 		SharedBorders:       sharedBorders,
+		ZoomMaxWidth:     zoomMaxWidth,
 		ScrollbackLines:     scrollbackLines,
 		NoAnimations:        noAnimations,
 		ThemeName:           themeName,
@@ -175,8 +178,13 @@ func runDaemonSession(sessionName string, createNew bool) error {
 			log.Printf("Warning: Failed to set up PTY handlers: %v", err)
 		}
 
-		// Sync daemon PTY dimensions to match window dimensions from state
-		// This fixes the issue where PTYs have stale dimensions after detach/reattach
+		// Re-tile to set correct dimensions for current screen size
+		if initialOS.AutoTiling {
+			log.Printf("[CLIENT] Re-tiling windows for current screen")
+			initialOS.TileAllWindows()
+		}
+
+		// Sync daemon PTY dimensions to match tiled layout
 		log.Printf("[CLIENT] Syncing daemon PTY dimensions")
 		initialOS.SyncDaemonPTYDimensions()
 
@@ -282,9 +290,13 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	return nil
 }
 
-func runListSessions() error {
+func runListSessions(jsonOutput bool) error {
 	if !session.IsDaemonRunning() {
-		fmt.Println("TUIOS daemon is not running. No sessions available.")
+		if jsonOutput {
+			fmt.Println("[]")
+		} else {
+			fmt.Println("TUIOS daemon is not running. No sessions available.")
+		}
 		return nil
 	}
 
@@ -300,6 +312,15 @@ func runListSessions() error {
 	sessions, err := client.ListSessions()
 	if err != nil {
 		return err
+	}
+
+	if jsonOutput {
+		data, err := json.MarshalIndent(sessions, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+		return nil
 	}
 
 	if len(sessions) == 0 {

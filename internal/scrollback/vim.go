@@ -65,7 +65,7 @@ type VimState struct {
 }
 
 // NewVimState creates a VimState for the given text lines, with cursor at startY.
-// styledLines may be nil — if provided, they are used for colored rendering.
+// styledLines may be nil  - if provided, they are used for colored rendering.
 func NewVimState(lines, styledLines []string, startY int) *VimState {
 	v := &VimState{
 		Lines:       lines,

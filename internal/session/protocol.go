@@ -69,6 +69,7 @@ const (
 	MsgSessionResize   // Session effective size changed (min of all clients)
 	MsgForceRefresh    // Force all clients to re-render
 	MsgRequestFullSync // Client requests full state sync from leader
+	MsgScreenDiff      // Screen diff (changed cells) from daemon VT to client
 )
 
 // Message is the base protocol message structure.

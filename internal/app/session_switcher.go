@@ -11,23 +11,39 @@ type SessionSwitcherItem struct {
 }
 
 // RefreshSessionList populates the session switcher items from the daemon client.
+// Queries the daemon for an up-to-date list (so newly created sessions appear).
 // If not in daemon mode, returns nil.
 func (m *OS) RefreshSessionList() []SessionSwitcherItem {
 	if m.DaemonClient == nil {
 		return nil
 	}
 
-	names := m.DaemonClient.AvailableSessionNames()
+	// Query daemon for fresh session list (not cached)
+	sessions, err := m.DaemonClient.RefreshSessionList()
 	currentSession := m.DaemonClient.SessionName()
 
-	items := make([]SessionSwitcherItem, 0, len(names))
-	for _, name := range names {
-		items = append(items, SessionSwitcherItem{
-			Name:      name,
-			IsCurrent: name == currentSession,
-		})
+	if err != nil {
+		// Fall back to cached names on error
+		m.LogWarn("Failed to refresh session list from daemon: %v", err)
+		names := m.DaemonClient.AvailableSessionNames()
+		items := make([]SessionSwitcherItem, 0, len(names))
+		for _, name := range names {
+			items = append(items, SessionSwitcherItem{
+				Name:      name,
+				IsCurrent: name == currentSession,
+			})
+		}
+		return items
 	}
 
+	items := make([]SessionSwitcherItem, 0, len(sessions))
+	for _, s := range sessions {
+		items = append(items, SessionSwitcherItem{
+			Name:      s.Name,
+			Windows:   s.WindowCount,
+			IsCurrent: s.Name == currentSession,
+		})
+	}
 	return items
 }
 

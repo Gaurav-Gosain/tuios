@@ -345,12 +345,67 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				return m, nil
 			},
 		},
-		// Layout mode
+		// Layout mode  - individual commands
 		{
-			Name:     "Toggle Layout Mode (BSP/Master-Stack)",
+			Name:     "Layout: BSP Tiling",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ToggleLayoutMode()
+				m.EnableBSPLayout()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Layout: Master-Stack",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.EnableMasterStackLayout()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Layout: Scrolling (niri-style)",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.EnableScrollingLayout()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Layout: Disable Tiling",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.DisableAllTiling()
+				return m, nil
+			},
+		},
+		// Scrolling-specific actions
+		{
+			Name:     "Scroll: Cycle Column Width",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.UseScrollingLayout {
+					m.ScrollingCycleWidth()
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Scroll: Stack Window Below (consume)",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.UseScrollingLayout {
+					m.ScrollingConsumeWindow()
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Scroll: Split to New Column (expel)",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.UseScrollingLayout {
+					m.ScrollingExpelWindow()
+				}
 				return m, nil
 			},
 		},

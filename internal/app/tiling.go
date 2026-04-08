@@ -59,7 +59,16 @@ func (m *OS) TileAllWindows() {
 		return
 	}
 
-	m.LogInfo("TileAllWindows called with %d visible windows, BSP=%v", len(visibleWindows), m.UseBSPLayout)
+	m.LogInfo("TileAllWindows called with %d visible windows, BSP=%v, Scrolling=%v", len(visibleWindows), m.UseBSPLayout, m.UseScrollingLayout)
+
+	// Scrolling layout mode (niri-like)
+	if m.UseScrollingLayout {
+		sl := m.GetOrCreateScrollingLayout()
+		m.LogInfo("[SCROLL-TILE] TileAllWindows scrolling path, %d visible windows", len(visibleWindows))
+		sl.EnsureFocusedVisible(m.GetRenderWidth())
+		m.scrollingSetPositions()
+		return
+	}
 
 	// Use master-stack layout if BSP is disabled
 	if !m.UseBSPLayout {
@@ -167,6 +176,22 @@ func (m *OS) ToggleAutoTiling() {
 	m.AutoTiling = !m.AutoTiling
 
 	if m.AutoTiling {
+		// If scrolling mode was active, re-enable it
+		if m.UseScrollingLayout {
+			m.LogInfo("Scrolling: Re-enabling scrolling tiling mode")
+			// Clear old scrolling layout to rebuild from current windows
+			delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
+			sl := m.GetOrCreateScrollingLayout()
+			sl.EnsureFocusedVisible(m.GetRenderWidth())
+			m.scrollingSetPositions()
+			for _, w := range m.Windows {
+				if w.Workspace == m.CurrentWorkspace {
+					w.InvalidateCache()
+				}
+			}
+			return
+		}
+
 		m.LogInfo("BSP: Enabling tiling mode")
 
 		// Initialize the workspace trees map if needed
@@ -175,33 +200,28 @@ func (m *OS) ToggleAutoTiling() {
 		}
 
 		// When enabling, create a fresh BSP tree and add all visible windows
-		// This ensures proper spiral layout instead of guessing from geometry
-		m.WorkspaceTrees[m.CurrentWorkspace] = nil // Clear any existing tree
+		m.WorkspaceTrees[m.CurrentWorkspace] = nil
 		tree := m.GetOrCreateBSPTree()
 
-		// Add all visible windows to the tree in order
 		var visibleWindows []*terminal.Window
 		for _, w := range m.Windows {
-			if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+			if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing && !w.IsFloating {
 				visibleWindows = append(visibleWindows, w)
 			}
 		}
 
 		bounds := m.GetBSPBounds()
-		var lastInsertedID = 0 // Track the last inserted window for proper chaining
+		var lastInsertedID = 0
 
 		for i, win := range visibleWindows {
 			windowIntID := m.getWindowIntID(win.ID)
-			// Pass the last inserted ID as target so windows chain properly
-			// This ensures spiral pattern: first window is root, subsequent windows split the previous one
 			tree.InsertWindow(windowIntID, lastInsertedID, layout.SplitNone, 0.5, bounds)
-			lastInsertedID = windowIntID // Update for next iteration
+			lastInsertedID = windowIntID
 			m.LogInfo("BSP: Added window %d (int ID %d) with target %d, split count now: %d",
 				i+1, windowIntID, lastInsertedID, tree.WindowCount())
 		}
 
 		m.ApplyBSPLayout()
-		// Invalidate all caches so buttons re-render (fullscreen button hidden in tiling)
 		for _, win := range visibleWindows {
 			win.InvalidateCache()
 		}
@@ -433,6 +453,11 @@ func (m *OS) SwapWindow(dir Direction) {
 	}
 
 	focusedWindow := m.Windows[m.FocusedWindow]
+
+	// Don't swap floating windows
+	if focusedWindow.IsFloating {
+		return
+	}
 	targetIndex := m.findAdjacentWindow(focusedWindow, dir)
 
 	if targetIndex >= 0 {
@@ -454,7 +479,7 @@ func (m *OS) findAdjacentWindow(focused *terminal.Window, dir Direction) int {
 	}
 
 	for i, window := range m.Windows {
-		if i == m.FocusedWindow || window.Workspace != m.CurrentWorkspace || window.Minimized || window.Minimizing {
+		if i == m.FocusedWindow || window.Workspace != m.CurrentWorkspace || window.Minimized || window.Minimizing || window.IsFloating {
 			continue
 		}
 
@@ -642,10 +667,16 @@ func (m *OS) ResizeFocusedWindowWidth(deltaPixels int) {
 		return
 	}
 
+	// In scrolling mode, change the column's fixed width
+	if m.UseScrollingLayout {
+		m.scrollingResizeColumn(deltaPixels)
+		return
+	}
+
 	// Block resizing if right edge is at screen boundary
 	atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (m.GetRenderWidth() - edgeTolerance)
 	if atRightEdge {
-		return // Can't resize right edge when it's at the screen edge
+		return
 	}
 
 	// Calculate new dimensions (right edge moves)
@@ -670,16 +701,22 @@ func (m *OS) ResizeFocusedWindowWidthLeft(deltaPixels int) {
 		return
 	}
 
+	// In scrolling mode, change the column's fixed width
+	if m.UseScrollingLayout {
+		m.scrollingResizeColumn(-deltaPixels)
+		return
+	}
+
 	// Block resizing if left edge is at screen boundary
 	atLeftEdge := focusedWindow.X <= edgeTolerance
 	if atLeftEdge {
-		return // Can't resize left edge when it's at the screen edge
+		return
 	}
 
 	// Calculate new dimensions (left edge moves)
 	newX := focusedWindow.X + deltaPixels
 	newY := focusedWindow.Y
-	newWidth := focusedWindow.Width - deltaPixels // Width decreases when X increases
+	newWidth := focusedWindow.Width - deltaPixels
 	newHeight := focusedWindow.Height
 
 	// Call the shared tiling adjustment logic
@@ -1117,7 +1154,7 @@ func (m *OS) ApplyBSPLayout() {
 
 	for windowIntID, rect := range layouts {
 		win := m.getWindowByIntID(windowIntID)
-		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized {
+		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
 
@@ -1317,10 +1354,10 @@ func (m *OS) SmartSplitFocused() {
 	// Store the target window ID so AddWindowToBSPTree splits at the focused window
 	m.SplitTargetWindowID = focusedWin.ID
 
-	// No preselection — let determineAutoSplit (SchemeSmartSplit) pick the direction
+	// No preselection  - let determineAutoSplit (SchemeSmartSplit) pick the direction
 	m.PreselectionDir = layout.PreselectionNone
 
-	// Create a new window — AddWindowToBSPTree will use SplitNone which triggers auto split
+	// Create a new window  - AddWindowToBSPTree will use SplitNone which triggers auto split
 	m.AddWindow("")
 
 	// Clear the split target

@@ -199,6 +199,18 @@ func runWebServer() error {
 		}()
 	}()
 
+	// Advertise kitty graphics support to child processes. tuios-web runs
+	// atop sip+xterm.js with xterm-addon-image (kittySupport=true), so the
+	// host terminal understands kitty graphics. Apps like `kitten icat` and
+	// `yazi` refuse to emit graphics unless TERM looks kitty-aware, so we
+	// override TERM/TERM_PROGRAM here. This is per-process and affects all
+	// web sessions spawned by this tuios-web instance. getTerminalEnv() in
+	// internal/terminal caches on first call via sync.Once, so we must set
+	// this BEFORE any window is created.
+	_ = os.Setenv("TERM", "xterm-kitty")
+	_ = os.Setenv("COLORTERM", "truecolor")
+	_ = os.Setenv("TERM_PROGRAM", "tuios-web")
+
 	// Apply global config options (CLI flags only, no user config at server level)
 	config.ApplyOverrides(config.Overrides{
 		ASCIIOnly:         asciiOnly,
@@ -232,29 +244,38 @@ func runWebServer() error {
 }
 
 // createTUIOSHandler creates a TUIOS instance for each web session.
+//
+// Graphics: starting with sip v0.1.12, the bundled xterm.js loads
+// @xterm/addon-image 0.10.0-beta.196 with kittySupport and sixelSupport
+// enabled (from xtermjs/xterm.js#5619). We force-enable the kitty/sixel
+// passthroughs and route their output through the sip session's PTY slave
+// so APC sequences emitted by child processes (chafa -f kitty, kitten
+// icat, etc.) flow through the same pipe as bubbletea's text output and
+// get rendered by the browser's image addon.
 func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 	pty := sess.Pty()
+	graphicsOut := sess.PtySlave()
 
 	// Determine session name
 	sessionName := webServerConfig.defaultSession
 
 	// If ephemeral mode or daemon not available, use old behavior
 	if webServerConfig.ephemeral {
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height)
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut)
 	}
 
 	// Try to connect to daemon
-	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height)
+	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, graphicsOut)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height)
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut)
 	}
 
 	return model, opts
 }
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(width, height int) (tea.Model, []tea.ProgramOption) {
+func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.Model, []tea.ProgramOption) {
 	// Load user configuration
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -267,12 +288,18 @@ func createEphemeralTUIOSInstance(width, height int) (tea.Model, []tea.ProgramOp
 	// Create keybind registry
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
-	// Create TUIOS instance
+	// Create TUIOS instance with kitty/sixel graphics routed through the
+	// sip PTY slave. sip v0.1.12+ bundles xterm.js's image addon with
+	// kittySupport enabled, so APC sequences we forward here are rendered
+	// by the browser terminal.
 	tuiosInstance := app.NewOS(app.OSOptions{
-		KeybindRegistry: keybindRegistry,
-		ShowKeys:        showKeys,
-		Width:           width,
-		Height:          height,
+		KeybindRegistry:           keybindRegistry,
+		ShowKeys:                  showKeys,
+		Width:                     width,
+		Height:                    height,
+		EnableGraphicsPassthrough: true,
+		ForceGraphicsEnabled:      true,
+		GraphicsOutput:            graphicsOut,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -281,7 +308,7 @@ func createEphemeralTUIOSInstance(width, height int) (tea.Model, []tea.ProgramOp
 }
 
 // createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
-func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model, []tea.ProgramOption, error) {
+func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOut *os.File) (tea.Model, []tea.ProgramOption, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	v := webServerConfig.version
@@ -289,27 +316,33 @@ func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model
 		v = "web-client"
 	}
 
-	// Web mode doesn't have real terminal capabilities
-	// Pass empty capabilities - graphics passthrough doesn't work in web mode anyway
-	if err := client.ConnectWithCapabilities(v, width, height, nil); err != nil {
+	// Advertise kitty graphics capability to the daemon. sip v0.1.12+
+	// bundles xterm.js's image addon with kittySupport enabled, so the
+	// browser terminal can render kitty APC sequences forwarded by child
+	// processes. Cell dimensions are placeholders; the daemon uses them
+	// for pixel-perfect sizing hints (kitty icat queries terminal cell
+	// size before transmitting) and tuios-web doesn't have access to the
+	// browser's real font metrics.
+	webCaps := &session.ClientCapabilities{
+		KittyGraphics: true,
+		SixelGraphics: true,
+		TerminalName:  "tuios-web",
+		CellWidth:     10,
+		CellHeight:    20,
+	}
+	if err := client.ConnectWithCapabilities(v, width, height, webCaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 
-	// If no session name specified, get or create default
+	// Determine which session to attach to. The previous behavior  - picking
+	// an arbitrary existing session  - was confusing and non-deterministic.
+	// New behavior:
+	//   - If --default-session is set, use that (create if missing).
+	//   - Otherwise attach to a dedicated session named "web" (create if
+	//     missing). Users can then `Ctrl+B S` to switch to any other session
+	//     from inside TUIOS using the built-in session switcher.
 	if sessionName == "" {
-		availableSessions := client.AvailableSessionNames()
-		if len(availableSessions) == 0 {
-			// No sessions exist, create a new one
-			sessionName = "web-session"
-		} else if len(availableSessions) == 1 {
-			// Only one session, use it
-			sessionName = availableSessions[0]
-		} else {
-			// Multiple sessions - use the first one
-			// TODO: Could show session picker in web UI
-			sessionName = availableSessions[0]
-			log.Printf("Multiple sessions available, attaching to: %s", sessionName)
-		}
+		sessionName = "web"
 	}
 
 	// Attach to session (create if doesn't exist)
@@ -333,7 +366,9 @@ func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model
 	// Set up the input handler
 	app.SetInputHandler(input.HandleInput)
 
-	// Create TUIOS instance connected to daemon
+	// Create TUIOS instance connected to daemon. Graphics passthrough is
+	// force-enabled and routed through the sip PTY slave so kitty/sixel
+	// sequences reach the browser's xterm.js image addon (sip v0.1.12+).
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
 		ShowKeys:                  showKeys,
@@ -343,6 +378,8 @@ func createDaemonTUIOSInstance(sessionName string, width, height int) (tea.Model
 		DaemonClient:              client,
 		SessionName:               sessionName,
 		EnableGraphicsPassthrough: true,
+		ForceGraphicsEnabled:      true,
+		GraphicsOutput:            graphicsOut,
 	})
 
 	// Restore state from daemon if available

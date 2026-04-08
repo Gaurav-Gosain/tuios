@@ -94,6 +94,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Fast hit testing - find which window was clicked without expensive canvas generation
 	clickedWindowIndex := findClickedWindow(X, Y, o)
 
+	// Ctrl+Click: toggle multifocus on the clicked window
+	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft && msg.Mod&tea.ModCtrl != 0 {
+		o.ToggleMultifocus(clickedWindowIndex)
+		return o, nil
+	}
+
 	// Scrollbar click: left click on right border of a window with scrollback
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft {
 		win := o.Windows[clickedWindowIndex]
@@ -218,6 +224,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.Mode = app.WindowManagementMode
 	}
 
+	// Zoomed windows are immune to drag/resize  - skip interaction state setup.
+	// The click still focuses the window (already done above) but no drag/resize starts.
+	if clickedWindow.Zoomed {
+		return o, nil
+	}
+
 	// Set interaction mode to prevent expensive rendering during drag/resize
 	o.InteractionMode = true
 
@@ -229,6 +241,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case tea.MouseRight:
 		// Already in interaction mode, now set resize-specific flags
 		o.Resizing = true
+		o.DraggedWindowIndex = clickedWindowIndex
 		o.Windows[clickedWindowIndex].IsBeingManipulated = true
 		o.ResizeStartX = mouse.X
 		o.ResizeStartY = mouse.Y
@@ -322,9 +335,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		o.DraggedWindowIndex = clickedWindowIndex
 
-		// In tiling mode, complete ALL pending animations to avoid state conflicts
-		// This ensures all windows are in their final positions before starting a new drag
-		if o.AutoTiling {
+		// In tiling mode (non-scrolling), complete pending animations to avoid
+		// state conflicts when starting a drag. Scrolling mode doesn't drag
+		// windows, so let its slide animations play.
+		if o.AutoTiling && !o.UseScrollingLayout {
 			o.CompleteAllAnimations()
 
 			// Store current position (after completing all animations) for tiling mode swaps
@@ -349,7 +363,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Forward mouse motion to terminal if in terminal mode and window supports motion events.
 	// Only modes 1002 (button-event) and 1003 (any-event) support motion forwarding.
-	// Mode 1000/1001 (normal tracking) only supports click/release — forwarding motion
+	// Mode 1000/1001 (normal tracking) only supports click/release  - forwarding motion
 	// events to these apps causes phantom keypresses (issue #78).
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
@@ -418,7 +432,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				contentBottom := focusedWindow.Y + borderOff + focusedWindow.ContentHeight()
 
 				if mouse.Y < contentTop {
-					// Dragging above — enter copy mode and scroll up
+					// Dragging above  - enter copy mode and scroll up
 					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
 						focusedWindow.EnterCopyMode()
 					}
@@ -430,7 +444,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					focusedWindow.SelectionEnd.Y = 0
 					focusedWindow.SelectionEnd.X = max(terminalX, 0)
 				} else if mouse.Y >= contentBottom {
-					// Dragging below — scroll down (or exit copy mode if at bottom)
+					// Dragging below  - scroll down (or exit copy mode if at bottom)
 					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
 						for range 3 {
 							MoveDown(focusedWindow.CopyMode, focusedWindow)
@@ -459,6 +473,11 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Dragging && o.InteractionMode {
+		// In scrolling mode, don't move windows during drag  - layout controls positions.
+		// Swap detection happens on release.
+		if o.UseScrollingLayout {
+			return o, nil
+		}
 		// Calculate new position - allow windows to go partially off-screen for edge snapping
 		newX := mouse.X - o.DragOffsetX
 		newY := mouse.Y - o.DragOffsetY
@@ -504,6 +523,11 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		newY := focusedWindow.Y
 		newWidth := focusedWindow.Width
 		newHeight := focusedWindow.Height
+
+		// In scrolling mode, only allow width resize (columns fill full height)
+		if o.UseScrollingLayout {
+			yOffset = 0
+		}
 
 		switch o.ResizeCorner {
 		case app.TopLeft:
@@ -590,8 +614,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		newWidth = min(newWidth, o.Width-newX)
 		newHeight = min(newHeight, maxY-newY)
 
-		// In tiling mode, block resizing edges at screen boundaries
-		if o.AutoTiling {
+		// In tiling mode (except scrolling), block resizing edges at screen boundaries
+		if o.AutoTiling && !o.UseScrollingLayout {
 			const edgeTolerance = 2 // Small tolerance for detecting screen edges
 
 			// Check which edges are at screen boundaries
@@ -643,6 +667,51 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			if config.SharedBorders {
 				o.SyncBSPTreeFromGeometry()
 			}
+		} else if o.UseScrollingLayout {
+			// Scrolling mode: compute width from horizontal drag delta.
+			switch o.ResizeCorner {
+			case app.TopLeft, app.BottomLeft:
+				newWidth = o.PreResizeState.Width - xOffset
+			case app.TopRight, app.BottomRight:
+				newWidth = o.PreResizeState.Width + xOffset
+			}
+			maxWidth := o.Width * 9 / 10
+			newWidth = max(min(newWidth, maxWidth), config.DefaultWindowWidth)
+
+			// Update column width and reposition all windows visually.
+			sl := o.GetOrCreateScrollingLayout()
+			intID := o.GetWindowIntID(focusedWindow.ID)
+			oldWidth := 0
+			for ci := range sl.Columns {
+				for _, wid := range sl.Columns[ci].WindowIDs {
+					if wid == intID {
+						oldWidth = sl.ResolveColumnWidth(ci, o.GetRenderWidth())
+						sl.Columns[ci].FixedWidth = newWidth
+						sl.Columns[ci].Proportion = 0
+					}
+				}
+			}
+			// For left-edge resize, shift viewport so the right edge stays fixed
+			if (o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft) && oldWidth > 0 {
+				sl.ViewportX += newWidth - oldWidth
+			}
+			sl.ClampViewport(o.GetRenderWidth())
+			layouts := sl.ComputePositions(o.GetRenderWidth(), o.GetUsableHeight(), o.GetTopMargin())
+			for winID, rect := range layouts {
+				win := o.GetWindowByIntID(winID)
+				if win == nil {
+					continue
+				}
+				win.X = rect.X
+				win.Y = rect.Y
+				win.Width = rect.W
+				// Don't call ResizeVisual or Resize  - just set visual width.
+				// Terminal emulator keeps old dimensions until release.
+				win.MarkPositionDirty()
+				win.InvalidateCache()
+			}
+			// Defer PTY resize to mouse release
+			o.PendingResizes[focusedWindow.ID] = [2]int{newWidth, focusedWindow.Height}
 		} else {
 			// In floating mode, apply visual resize only (defer PTY resize until drag completes)
 			focusedWindow.X = newX
@@ -721,8 +790,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Handle window drop in tiling mode
-	if o.Dragging && o.AutoTiling && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
+	// Handle window drop in tiling mode (drag-to-swap only, NOT resize)
+	if o.Dragging && o.AutoTiling && !o.Resizing && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		mouse := msg.Mouse()
 
 		// Calculate drag distance to determine if this was actually a drag or just a click
@@ -731,12 +800,49 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
 
-		if dragDistance >= dragThreshold {
+		// Floating windows: no snap-back
+		if draggedWindow.IsFloating {
+			o.DraggedWindowIndex = -1
+		} else if o.UseScrollingLayout {
+			// Scrolling mode: windows don't move during drag.
+			// For actual drags, check if cursor ended on a different window for swap.
+			if dragDistance >= dragThreshold {
+				sl := o.GetOrCreateScrollingLayout()
+				draggedIntID := o.GetWindowIntID(draggedWindow.ID)
+				for i := range o.Windows {
+					if i == o.DraggedWindowIndex || o.Windows[i].Minimized || o.Windows[i].IsFloating || o.Windows[i].Workspace != o.CurrentWorkspace {
+						continue
+					}
+					w := o.Windows[i]
+					if mouse.X >= w.X && mouse.X < w.X+w.Width && mouse.Y >= w.Y && mouse.Y < w.Y+w.Height {
+						targetIntID := o.GetWindowIntID(w.ID)
+						dragCol, targetCol := -1, -1
+						for ci, col := range sl.Columns {
+							for _, wid := range col.WindowIDs {
+								if wid == draggedIntID {
+									dragCol = ci
+								}
+								if wid == targetIntID {
+									targetCol = ci
+								}
+							}
+						}
+						if dragCol >= 0 && targetCol >= 0 && dragCol != targetCol {
+							sl.Columns[dragCol], sl.Columns[targetCol] = sl.Columns[targetCol], sl.Columns[dragCol]
+							sl.FocusedCol = targetCol
+							o.ScrollingSetPositions()
+						}
+						break
+					}
+				}
+			}
+			o.DraggedWindowIndex = -1
+		} else if dragDistance >= dragThreshold {
 			// This was an actual drag, check for swap
 			// Find which window is under the cursor (excluding the dragged window)
 			targetWindowIndex := -1
 			for i := range o.Windows {
-				if i == o.DraggedWindowIndex || o.Windows[i].Minimized || o.Windows[i].Minimizing {
+				if i == o.DraggedWindowIndex || o.Windows[i].Minimized || o.Windows[i].Minimizing || o.Windows[i].IsFloating {
 					continue
 				}
 				// Only consider windows in current workspace
@@ -834,10 +940,10 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Clean up interaction state on mouse release
 	if o.Dragging || o.Resizing {
 		wasResizing := o.Resizing
+		// Save the dragged/resized window index before anything clears it
+		resizedWindowIndex := o.DraggedWindowIndex
 		o.Dragging = false
 		o.Resizing = false
-		// NOTE: Keep InteractionMode=true for now to prevent content polling until
-		// we've had a chance to process all buffered PTY data after resize
 
 		// Apply all pending PTY resizes that were deferred during drag/resize
 		if wasResizing && len(o.PendingResizes) > 0 {
@@ -846,29 +952,46 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					o.Windows[i].Resize(dimensions[0], dimensions[1])
 				}
 			}
-			// Clear pending resizes after applying them
 			o.PendingResizes = make(map[string][2]int)
-
-			// Flush PTY buffers and force content re-render after resize
-			// This ensures shell prompt redraws in response to SIGWINCH are processed
 			o.FlushPTYBuffersAfterResize()
 		}
 
-		// Mark layout as custom if resizing in tiling mode
-		if wasResizing && o.AutoTiling {
+		// In scrolling mode, capture resized width into the column BEFORE retiling
+		if wasResizing && o.AutoTiling && o.UseScrollingLayout {
+			if resizedWindowIndex >= 0 && resizedWindowIndex < len(o.Windows) {
+				win := o.Windows[resizedWindowIndex]
+				sl := o.GetOrCreateScrollingLayout()
+				intID := o.GetWindowIntID(win.ID)
+				for ci := range sl.Columns {
+					for _, wid := range sl.Columns[ci].WindowIDs {
+						if wid == intID {
+							sl.Columns[ci].FixedWidth = win.Width
+							sl.Columns[ci].Proportion = 0
+						}
+					}
+				}
+			}
+		}
+
+		// Mark layout as custom if resizing in tiling mode (BSP only)
+		if wasResizing && o.AutoTiling && !o.UseScrollingLayout {
 			o.MarkLayoutCustom()
-			// Sync BSP tree ratios to match the new window positions after resize
 			o.SyncBSPTreeFromGeometry()
 		}
 
 		for i := range o.Windows {
 			o.Windows[i].IsBeingManipulated = false
-			o.Windows[i].ContentDirty = true  // Invalidate cache when exiting resize mode
-			o.Windows[i].CachedLayer = nil    // Force full layer rebuild for graphics refresh
+			o.Windows[i].ContentDirty = true
+			o.Windows[i].CachedLayer = nil
 		}
 
-		// Re-tile after drag to restore shared borders layout
-		if o.AutoTiling && config.SharedBorders {
+		// Re-tile / re-layout after drag or resize.
+		// For scrolling mode: only on actual resize (avoid viewport reset on click).
+		// For BSP shared borders: always re-tile to restore the Tiled flag that
+		// was temporarily cleared during drag setup (line 327).
+		if wasResizing && o.AutoTiling && o.UseScrollingLayout {
+			o.ScrollingSetPositions()
+		} else if o.AutoTiling && config.SharedBorders && !o.UseScrollingLayout {
 			o.TileAllWindows()
 		}
 
@@ -953,6 +1076,33 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Alt+scroll or Shift+scroll in scrolling tiling mode: scroll the viewport left/right
+	if o.AutoTiling && o.UseScrollingLayout {
+		mouse := msg.Mouse()
+		if mouse.Mod&(tea.ModAlt|tea.ModShift) != 0 {
+			dir := 1
+			if config.NiriReverseScroll {
+				dir = -1
+			}
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				o.ScrollingScrollViewport(-1 * dir)
+			case tea.MouseWheelDown:
+				o.ScrollingScrollViewport(1 * dir)
+			}
+			return o, nil
+		}
+		// Also intercept horizontal scroll events (MouseWheelLeft/Right) if available
+		switch msg.Button {
+		case tea.MouseWheelLeft:
+			o.ScrollingScrollViewport(-1)
+			return o, nil
+		case tea.MouseWheelRight:
+			o.ScrollingScrollViewport(1)
+			return o, nil
+		}
+	}
+
 	// Forward mouse wheel to terminal if in terminal mode and window has mouse tracking
 	// This allows applications like vim, less, htop to handle their own scrolling
 	if o.Mode == app.TerminalMode {
@@ -994,7 +1144,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						}
 					}
 				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen {
-					// No mouse tracking and not alt screen — enter copy mode and scroll.
+					// No mouse tracking and not alt screen  - enter copy mode and scroll.
 					// Copy mode supports selection, search, and vim navigation.
 					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
 						focusedWindow.EnterCopyMode()
@@ -1007,7 +1157,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						focusedWindow.InvalidateCache()
 					}
 				} else if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-					// Already in copy mode — scroll up
+					// Already in copy mode  - scroll up
 					for range 3 {
 						MoveUp(focusedWindow.CopyMode, focusedWindow)
 					}

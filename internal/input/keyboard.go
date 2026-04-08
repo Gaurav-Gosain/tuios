@@ -20,7 +20,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// 50ms ESC timeout force-processes partial CSI sequences, and the remaining bytes
 	// (digits, 'M', ';', etc.) are decoded as individual KeyPressEvents.
 	// Suppress unmodified single-character keys for 150ms after entering TerminalMode.
-	if msg.Mod == 0 && msg.Text != "" && !o.TerminalModeEnteredAt.IsZero() &&
+	if msg.Mod == 0 && msg.Text != "" && !o.PrefixActive && !o.TerminalModeEnteredAt.IsZero() &&
 		time.Since(o.TerminalModeEnteredAt) < 150*time.Millisecond {
 		return o, nil
 	}
@@ -162,6 +162,34 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Shift+Up/Shift+Down: enter copy mode (if not active) and scroll scrollback.
+	// Handled BEFORE the copy mode check so subsequent presses also scroll
+	// instead of being consumed by the copy mode key handler.
+	if focusedWindow != nil {
+		shiftScroll := msg.String()
+		if shiftScroll == "shift+up" || shiftScroll == "shift+down" {
+			if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
+				focusedWindow.EnterCopyMode()
+			}
+			if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+				cm := focusedWindow.CopyMode
+				if shiftScroll == "shift+up" {
+					if cm.ScrollOffset < focusedWindow.ScrollbackLen() {
+						cm.ScrollOffset++
+						focusedWindow.ScrollbackOffset = cm.ScrollOffset
+					}
+				} else {
+					if cm.ScrollOffset > 0 {
+						cm.ScrollOffset--
+						focusedWindow.ScrollbackOffset = cm.ScrollOffset
+					}
+				}
+				focusedWindow.InvalidateCache()
+			}
+			return o, nil
+		}
+	}
+
 	// Handle copy mode (vim-style scrollback/selection)
 	if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
 		return HandleCopyModeKey(msg, o, focusedWindow)
@@ -246,6 +274,18 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Handle Alt+Left/Right for scrolling tiling column navigation
+	if o.AutoTiling && o.UseScrollingLayout {
+		switch msg.String() {
+		case "alt+left":
+			o.ScrollingFocusLeft()
+			return o, nil
+		case "alt+right":
+			o.ScrollingFocusRight()
+			return o, nil
+		}
+	}
+
 	// Handle opt+esc to exit terminal mode (direct shortcut for ctrl+b esc)
 	if handleModeSwitch(msg, o) {
 		return o, nil
@@ -296,6 +336,14 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				// Terminal unavailable, switch back to window mode
 				o.Mode = app.WindowManagementMode
 				focusedWindow.InvalidateCache()
+			}
+			// Forward keystrokes to all multifocused windows
+			if len(o.MultifocusSet) > 0 {
+				for idx := range o.MultifocusSet {
+					if idx != o.FocusedWindow && idx >= 0 && idx < len(o.Windows) {
+						_ = o.Windows[idx].SendInput(rawInput)
+					}
+				}
 			}
 		}
 	} else {
@@ -887,6 +935,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		}
 	}
 
+	// Alt+N/Alt+P window cycling works in both terminal and WM mode
+	if handleWindowCycle(msg, o) {
+		return o, nil
+	}
+
 	// Command palette: ctrl+p
 	if key == "ctrl+p" {
 		o.ShowCommandPalette = true
@@ -1202,12 +1255,19 @@ func handleWindowCycle(msg tea.KeyPressMsg, o *app.OS) bool {
 	// Check for macOS Option+Tab unicode characters first
 	if len(keyStr) > 0 {
 		if dir := IsMacOSOptionTab([]rune(keyStr)[0]); dir != "" {
-			if dir == "next" {
-				o.CycleToNextVisibleWindow()
+			if o.AutoTiling && o.UseScrollingLayout {
+				if dir == "next" {
+					o.ScrollingFocusRight()
+				} else {
+					o.ScrollingFocusLeft()
+				}
 			} else {
-				o.CycleToPreviousVisibleWindow()
+				if dir == "next" {
+					o.CycleToNextVisibleWindow()
+				} else {
+					o.CycleToPreviousVisibleWindow()
+				}
 			}
-			// Refresh the new window in terminal mode
 			if newFocused := o.GetFocusedWindow(); newFocused != nil {
 				newFocused.InvalidateCache()
 			}
@@ -1218,13 +1278,21 @@ func handleWindowCycle(msg tea.KeyPressMsg, o *app.OS) bool {
 	// Linux/Windows alt+n/alt+p fallback (alt+tab conflicts with OS window switcher)
 	switch keyStr {
 	case "alt+n":
-		o.CycleToNextVisibleWindow()
+		if o.AutoTiling && o.UseScrollingLayout {
+			o.ScrollingFocusRight()
+		} else {
+			o.CycleToNextVisibleWindow()
+		}
 		if newFocused := o.GetFocusedWindow(); newFocused != nil {
 			newFocused.InvalidateCache()
 		}
 		return true
 	case "alt+p":
-		o.CycleToPreviousVisibleWindow()
+		if o.AutoTiling && o.UseScrollingLayout {
+			o.ScrollingFocusLeft()
+		} else {
+			o.CycleToPreviousVisibleWindow()
+		}
 		if newFocused := o.GetFocusedWindow(); newFocused != nil {
 			newFocused.InvalidateCache()
 		}
@@ -1317,7 +1385,7 @@ func handleDownKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handleLeftKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Help menu category navigation
 	if o.ShowHelp && !o.HelpSearchMode {
 		if o.HelpCategory > 0 {
@@ -1334,10 +1402,11 @@ func handleLeftKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
+
 	return o, nil
 }
 
-func handleRightKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+func handleRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Help menu category navigation
 	if o.ShowHelp && !o.HelpSearchMode {
 		categories := app.GetHelpCategories(o.KeybindRegistry)
@@ -1355,6 +1424,7 @@ func handleRightKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
+
 	return o, nil
 }
 

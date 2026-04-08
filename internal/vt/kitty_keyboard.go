@@ -98,7 +98,7 @@ func (k *kittyKeyboardState) HasReportAllKeys() bool {
 
 // registerKittyKeyboardHandlers registers CSI handlers for kitty keyboard protocol.
 func (e *Emulator) registerKittyKeyboardHandlers() {
-	// CSI > flags u — Push keyboard mode
+	// CSI > flags u  - Push keyboard mode
 	e.RegisterCsiHandler(ansi.Command('>', 0, 'u'), func(params ansi.Params) bool {
 		flags := 0
 		if len(params) > 0 {
@@ -110,7 +110,7 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		return true
 	})
 
-	// CSI < count u — Pop keyboard mode
+	// CSI < count u  - Pop keyboard mode
 	e.RegisterCsiHandler(ansi.Command('<', 0, 'u'), func(params ansi.Params) bool {
 		count := 1
 		if len(params) > 0 {
@@ -122,7 +122,7 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		return true
 	})
 
-	// CSI ? u — Query keyboard mode
+	// CSI ? u  - Query keyboard mode
 	e.RegisterCsiHandler(ansi.Command('?', 0, 'u'), func(_ ansi.Params) bool {
 		flags := e.kittyKbd.CurrentFlags()
 		// Respond with CSI ? flags u
@@ -132,7 +132,7 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		return true
 	})
 
-	// CSI = flags ; mode u — Set keyboard mode
+	// CSI = flags ; mode u  - Set keyboard mode
 	e.RegisterCsiHandler(ansi.Command('=', 0, 'u'), func(params ansi.Params) bool {
 		flags := 0
 		mode := 1

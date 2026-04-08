@@ -77,7 +77,8 @@ func TestScrollingLayout_ApplyLayout(t *testing.T) {
 	s.AddColumn(3)
 
 	// Screen is 100 wide, 40 tall
-	result := s.ApplyLayout(100, 40, 2)
+	s.EnsureFocusedVisible(100)
+	result := s.ComputePositions(100, 40, 2)
 
 	// With 50% width, columns 1 and 2 should be visible (0-49, 50-99)
 	// Column 3 at 100+ should be off-screen
@@ -126,7 +127,7 @@ func TestScrollingLayout_CycleWidth(t *testing.T) {
 func TestScrollingLayout_EnsureFocusedVisible(t *testing.T) {
 	s := NewScrollingLayout()
 	s.DefaultWidth = 0.5
-	s.CenterMode = "never"
+	// Minimal scroll mode (default behavior)
 	s.AddColumn(1)
 	s.AddColumn(2)
 	s.AddColumn(3)

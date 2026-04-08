@@ -233,7 +233,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		statsBox := lipgloss.NewStyle().
 			Border(getBorder()).
-			BorderForeground(lipgloss.Color("13")).
+			BorderForeground(theme.HelpBorder()).
 			Padding(1, 2).
 			Background(lipgloss.Color("#1a1a2a")).
 			Render(statsContent)
@@ -309,13 +309,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		logLines = append(logLines, "")
 		logLines = append(logLines, lipgloss.NewStyle().
 			Foreground(lipgloss.Color("8")).
-			Render("Press 'q'/'esc' to exit, j/k or ↑/↓ to scroll"))
+			Render("q:close  j/k:scroll  E:copy errors  A:copy all"))
 
 		logContent := strings.Join(logLines, "\n")
 
 		logBox := lipgloss.NewStyle().
 			Border(getBorder()).
-			BorderForeground(lipgloss.Color("12")).
+			BorderForeground(theme.HelpBorder()).
 			Padding(1, 2).
 			Width(80).
 			Background(lipgloss.Color("#1a1a2a")).
@@ -820,7 +820,7 @@ func (m *OS) renderCommandPalette() string {
 
 	return lipgloss.NewStyle().
 		Border(getBorder()).
-		BorderForeground(lipgloss.Color("14")).
+		BorderForeground(theme.HelpBorder()).
 		Padding(1, 2).
 		Background(bg).
 		Render(content)
@@ -866,7 +866,33 @@ func (m *OS) renderSessionSwitcher() string {
 		content := strings.Join(lines, "\n")
 		return lipgloss.NewStyle().
 			Border(getBorder()).
-			BorderForeground(lipgloss.Color("14")).
+			BorderForeground(theme.HelpBorder()).
+			Padding(1, 2).
+			Background(bg).
+			Render(content)
+	}
+
+	// Delete confirmation overlay  - takes over the switcher content
+	if m.SessionSwitcherConfirmDelete != "" {
+		warnStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#f87171")).
+			Bold(true).
+			Background(bg)
+		textStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#d1d5db")).
+			Background(bg)
+		confirmHintStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6b7280")).
+			Background(bg)
+		lines = append(lines, padLine(warnStyle.Render("  Delete session?"), paletteWidth))
+		lines = append(lines, padLine(textStyle.Render("  '"+m.SessionSwitcherConfirmDelete+"'"), paletteWidth))
+		lines = append(lines, padLine(textStyle.Render(""), paletteWidth))
+		lines = append(lines, padLine(confirmHintStyle.Render("  [y] yes  [n] no  [esc] cancel"), paletteWidth))
+
+		content := strings.Join(lines, "\n")
+		return lipgloss.NewStyle().
+			Border(getBorder()).
+			BorderForeground(theme.HelpBorder()).
 			Padding(1, 2).
 			Background(bg).
 			Render(content)
@@ -906,7 +932,11 @@ func (m *OS) renderSessionSwitcher() string {
 		emptyStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#6b7280")).
 			Background(bg)
-		lines = append(lines, padLine(emptyStyle.Render("  No sessions found"), paletteWidth))
+		if m.SessionSwitcherQuery != "" {
+			lines = append(lines, padLine(emptyStyle.Render("  No match  - Enter to create '"+m.SessionSwitcherQuery+"'"), paletteWidth))
+		} else {
+			lines = append(lines, padLine(emptyStyle.Render("  No sessions found"), paletteWidth))
+		}
 	} else {
 		start := m.SessionSwitcherScroll
 		end := min(start+maxVisible, len(filtered))
@@ -982,13 +1012,13 @@ func (m *OS) renderSessionSwitcher() string {
 	hintStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6b7280")).
 		Background(bg)
-	lines = append(lines, padLine(hintStyle.Render("enter: switch | n: new | d: delete | esc: close"), paletteWidth))
+	lines = append(lines, padLine(hintStyle.Render("enter: switch/create | ctrl+d: delete | esc: close"), paletteWidth))
 
 	content := strings.Join(lines, "\n")
 
 	return lipgloss.NewStyle().
 		Border(getBorder()).
-		BorderForeground(lipgloss.Color("14")).
+		BorderForeground(theme.HelpBorder()).
 		Padding(1, 2).
 		Background(bg).
 		Render(content)
@@ -1218,7 +1248,7 @@ func (m *OS) renderLayoutPicker() string {
 
 	return lipgloss.NewStyle().
 		Border(getBorder()).
-		BorderForeground(lipgloss.Color("14")).
+		BorderForeground(theme.HelpBorder()).
 		Padding(1, 2).
 		Background(bg).
 		Render(content)
@@ -1227,89 +1257,205 @@ func (m *OS) renderLayoutPicker() string {
 func (m *OS) renderAggregateView() string {
 	items := m.GetAggregateViewItems()
 	filtered := FilterAggregateViewItems(items, m.AggregateViewQuery)
+	groups := GetAggregateWorkspaceGroups(filtered, m.CurrentWorkspace)
 
-	
-	
-	
-	
-
-	var sb strings.Builder
-
-	// Header with search
-	query := m.AggregateViewQuery
-	if query == "" {
-		query = " "
+	// Dimensions
+	totalWidth := m.GetRenderWidth() * 4 / 5
+	if totalWidth < 80 {
+		totalWidth = min(m.GetRenderWidth()-4, 80)
 	}
-	sb.WriteString(fmt.Sprintf("\x1b[1m Choose Window \x1b[0m (%d total)\n", len(items)))
-	sb.WriteString(fmt.Sprintf(" Filter: %s\x1b[7m \x1b[0m\n", query))
-	sb.WriteString(" \x1b[2m───────────────────────────────────────────\x1b[0m\n")
-
-	if len(filtered) == 0 {
-		sb.WriteString("\n \x1b[2m(no matching windows)\x1b[0m\n")
+	treeWidth := totalWidth*2/5 - 2
+	previewWidth := totalWidth - treeWidth - 5
+	totalHeight := m.GetRenderHeight() * 3 / 4
+	if totalHeight < 15 {
+		totalHeight = min(m.GetRenderHeight()-4, 15)
 	}
 
-	maxVisible := 15
-	startIdx := m.AggregateViewScroll
-	endIdx := min(startIdx+maxVisible, len(filtered))
+	selectedFlatIdx := m.AggregateViewSelected
 
-	// Group by workspace
-	lastWS := -1
-	for i := startIdx; i < endIdx; i++ {
-		item := filtered[i]
+	// Adjust scroll to keep selected visible
+	maxTreeLines := max(totalHeight-3, 5)
+	if selectedFlatIdx < m.AggregateViewScroll {
+		m.AggregateViewScroll = selectedFlatIdx
+	}
+	if selectedFlatIdx >= m.AggregateViewScroll+maxTreeLines {
+		m.AggregateViewScroll = selectedFlatIdx - maxTreeLines + 1
+	}
+
+	// === Build tree content as plain text lines ===
+	type treeRow struct {
+		text     string
+		selected bool
+	}
+	var treeRows []treeRow
+	var selectedItem *AggregateViewItem
+	flatIdx := 0
+
+	for gi := range groups {
+		g := &groups[gi]
 
 		// Workspace header
-		if item.Workspace != lastWS {
-			if lastWS != -1 {
-				sb.WriteString("\n")
+		attached := ""
+		if g.IsCurrent {
+			attached = " (attached)"
+		}
+		wsHeader := fmt.Sprintf("Workspace %d: %d windows%s", g.Workspace+1, g.WindowCount, attached)
+		treeRows = append(treeRows, treeRow{text: wsHeader})
+
+		// Window entries
+		for ii := range g.Items {
+			item := &g.Items[ii]
+			selected := flatIdx == selectedFlatIdx
+			if selected {
+				selectedItem = item
 			}
-			sb.WriteString(fmt.Sprintf(" \x1b[1;33mWorkspace %d\x1b[0m\n", item.Workspace+1))
-			lastWS = item.Workspace
-		}
 
-		// Window entry
-		selected := i == m.AggregateViewSelected
-		title := item.Title
-		if len(title) > 35 {
-			title = title[:32] + "..."
-		}
+			title := item.Title
+			maxTitle := max(treeWidth-18, 10)
+			if len(title) > maxTitle {
+				title = title[:maxTitle-3] + "..."
+			}
 
-		idx := item.WindowIndex + 1
-		focusMark := " "
-		if item.IsFocused {
-			focusMark = "\x1b[32m*\x1b[0m"
-		}
-		minMark := ""
-		if item.IsMinimized {
-			minMark = " \x1b[2m[minimized]\x1b[0m"
-		}
+			mark := " "
+			if item.IsFocused {
+				mark = "*"
+			}
 
-		if selected {
-			sb.WriteString(fmt.Sprintf(" \x1b[7m %d: %s %s%s \x1b[0m\n", idx, title, focusMark, minMark))
-			// Show preview for selected
-			if item.Preview != "" {
-				preview := item.Preview
-				if len(preview) > 42 {
-					preview = preview[:39] + "..."
+			flags := ""
+			if item.IsMinimized {
+				flags = " [min]"
+			}
+			if item.IsFloating {
+				flags += " [float]"
+			}
+
+			dims := fmt.Sprintf("[%dx%d]", item.Width, item.Height)
+			line := fmt.Sprintf("  %d: %s%s %s%s", item.WindowIndex, title, mark, dims, flags)
+
+			treeRows = append(treeRows, treeRow{text: line, selected: selected})
+			flatIdx++
+		}
+	}
+
+	// Fallback if nothing found via loop
+	if selectedItem == nil && selectedFlatIdx >= 0 && selectedFlatIdx < len(filtered) {
+		selectedItem = &filtered[selectedFlatIdx]
+	}
+
+	// Render tree lines with lipgloss styles
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3"))
+	selectedStyle := lipgloss.NewStyle().Reverse(true)
+	normalStyle := lipgloss.NewStyle()
+	dimStyle := lipgloss.NewStyle().Faint(true)
+
+	var treeContent strings.Builder
+
+	// Header / filter
+	query := m.AggregateViewQuery
+	if query != "" {
+		treeContent.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("Filter: ") + query + "\n")
+	} else {
+		treeContent.WriteString(lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("Choose Window (%d total)", len(items))) + "\n")
+	}
+
+	if len(filtered) == 0 {
+		treeContent.WriteString(dimStyle.Render("(no matching windows)") + "\n")
+	}
+
+	// Visible rows with scrolling
+	startRow := 0
+	// Find which tree row corresponds to the scroll offset
+	windowRowIdx := 0
+	for ri, r := range treeRows {
+		if !r.selected && windowRowIdx < m.AggregateViewScroll && !strings.HasPrefix(r.text, "Workspace") {
+			windowRowIdx++
+			continue
+		}
+		if strings.HasPrefix(r.text, "Workspace") {
+			continue
+		}
+		if windowRowIdx >= m.AggregateViewScroll {
+			// Find the workspace header before this row
+			for si := ri; si >= 0; si-- {
+				if strings.HasPrefix(treeRows[si].text, "Workspace") {
+					startRow = si
+					break
 				}
-				sb.WriteString(fmt.Sprintf("   \x1b[2m%s\x1b[0m\n", preview))
 			}
-		} else {
-			sb.WriteString(fmt.Sprintf("  %d: %s %s%s\n", idx, title, focusMark, minMark))
+			break
 		}
+		windowRowIdx++
 	}
 
-	if len(filtered) > maxVisible {
-		sb.WriteString(fmt.Sprintf("\n \x1b[2m(%d more)\x1b[0m\n", len(filtered)-maxVisible))
+	linesRendered := 0
+	for ri := startRow; ri < len(treeRows) && linesRendered < maxTreeLines; ri++ {
+		r := treeRows[ri]
+		if strings.HasPrefix(r.text, "Workspace") {
+			treeContent.WriteString(headerStyle.Render(r.text) + "\n")
+		} else if r.selected {
+			treeContent.WriteString(selectedStyle.Render(r.text) + "\n")
+		} else {
+			treeContent.WriteString(normalStyle.Render(r.text) + "\n")
+		}
+		linesRendered++
 	}
 
-	sb.WriteString("\n \x1b[2m↑↓ navigate  Enter jump  Esc close  type to filter\x1b[0m")
+	treeContent.WriteString(dimStyle.Render("up/down:nav  Enter:jump  Esc:close"))
 
-	bg := lipgloss.Color("0")
+	// === Build preview content ===
+	var previewContent strings.Builder
+
+	if selectedItem != nil && selectedItem.Window != nil && selectedItem.Window.Terminal != nil {
+		w := selectedItem.Window
+		w.RLockIO()
+		raw := w.Terminal.String()
+		w.RUnlockIO()
+
+		previewContent.WriteString(lipgloss.NewStyle().Bold(true).Render(selectedItem.Title) +
+			dimStyle.Render(fmt.Sprintf(" [%dx%d]", w.Width, w.Height)) + "\n")
+		previewContent.WriteString(dimStyle.Render(strings.Repeat("─", previewWidth)) + "\n")
+
+		lines := strings.Split(raw, "\n")
+		previewLines := max(totalHeight-4, 3)
+		start := 0
+		if len(lines) > previewLines {
+			start = len(lines) - previewLines
+		}
+		for i := start; i < len(lines) && i < start+previewLines; i++ {
+			line := lines[i]
+			// Truncate by visible length (accounting for ANSI in terminal output)
+			if len(line) > previewWidth*3 { // rough byte limit
+				line = line[:previewWidth*3]
+			}
+			previewContent.WriteString(line + "\n")
+		}
+	} else if selectedItem != nil {
+		previewContent.WriteString(lipgloss.NewStyle().Bold(true).Render(selectedItem.Title) + "\n")
+		previewContent.WriteString(dimStyle.Render("(no content)") + "\n")
+	}
+
+	// === Layout with lipgloss ===
+	treePane := lipgloss.NewStyle().
+		Width(treeWidth).
+		Height(totalHeight).
+		Render(treeContent.String())
+
+	previewPane := lipgloss.NewStyle().
+		Width(previewWidth).
+		Height(totalHeight).
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("8")).
+		PaddingLeft(1).
+		Render(previewContent.String())
+
+	combined := lipgloss.JoinHorizontal(lipgloss.Top, treePane, previewPane)
+
 	return lipgloss.NewStyle().
-		Width(48).
+		Width(totalWidth).
 		Border(getBorder()).
-		BorderForeground(lipgloss.Color("4")).
+		BorderForeground(theme.HelpBorder()).
 		Padding(0, 1).
-		Background(bg).
-		Render(sb.String())
+		Background(lipgloss.Color("0")).
+		Render(combined)
 }

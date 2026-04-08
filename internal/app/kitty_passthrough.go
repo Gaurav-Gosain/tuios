@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -42,13 +42,28 @@ func isKittyResponse(data []byte) bool {
 type KittyPassthrough struct {
 	mu      sync.Mutex
 	enabled bool
-	hostOut *os.File
+	// inlineGraphics indicates the host terminal is xterm.js with a custom
+	// kitty overlay (xterm-kitty-overlay.js) that renders placements as
+	// absolutely-positioned DOM canvases. In this mode, file-based
+	// transmissions (t=f, t=s) are read server-side and re-encoded as
+	// direct (t=d) chunks because the browser cannot read local files.
+	inlineGraphics bool
+	hostOut        *os.File
+	hostMu         sync.Mutex // serializes writes to hostOut across render + async paths
 
 	placements    map[string]map[uint32]*PassthroughPlacement
 	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
 	nextHostID    uint32
 	pendingOutput []byte
 	videoFrameBuf []byte // Reusable buffer for immediate video frame writes
+
+	// Async video frame writer. Video apps (mpv, youterm) send 30+ fps of
+	// large image data. Processing synchronously inside the VT callback
+	// blocks the bubbletea render loop and makes the entire UI unresponsive.
+	// Instead we enqueue frames to this channel; a background goroutine
+	// drains it and writes to hostOut. Channel capacity 1 means we always
+	// keep at most one pending frame; newer frames replace older ones.
+	asyncFrameCh chan []byte
 
 	// Pending direct transmission data (for chunked transfers)
 	pendingDirectData map[string]*pendingDirectTransmit // key: windowID
@@ -78,6 +93,16 @@ type pendingDirectTransmit struct {
 	ZIndex       int32
 	Virtual      bool
 	CursorMove   int
+	// HeaderParams stores filtered params from the first (params-only) chunk,
+	// to be merged into the first data-carrying chunk. Needed because chafa
+	// sends params and data in separate APC sequences.
+	HeaderParams string
+	HeaderSent   bool
+	// AndPlace tracks whether the original chunk that created this pending
+	// was a TransmitPlace (action T). Chafa sends first chunk as T (andPlace=true)
+	// then subsequent chunks as t (andPlace=false). We track this so the final
+	// chunk's PlacementResult is returned correctly for whitespace reservation.
+	AndPlace bool
 	// Position info from the first chunk (a=T command)
 	WindowX        int
 	WindowY        int
@@ -117,6 +142,12 @@ type PassthroughPlacement struct {
 	ZIndex       int32
 	Virtual      bool
 
+	// Image's NATIVE pixel dimensions as transmitted (from s/v params).
+	// Used to derive an accurate pixels-per-cell for source-region cropping
+	//  - critical when client and daemon have different cell sizes (web mode).
+	ImagePixelWidth  int
+	ImagePixelHeight int
+
 	// Track which screen the image was placed on
 	PlacedOnAltScreen bool // True if placed while alternate screen was active
 
@@ -146,33 +177,82 @@ type WindowPositionInfo struct {
 	IsAltScreen        bool // True when alternate screen is active (vim, less, etc.)
 }
 
+// KittyPassthroughOptions configures a KittyPassthrough instance.
+type KittyPassthroughOptions struct {
+	// ForceEnable skips capability detection and enables kitty graphics
+	// unconditionally. Used in web mode where stdin isn't a real TTY so
+	// GetHostCapabilities() can't detect kitty support, but the browser
+	// terminal (xterm.js with kitty addon) supports it.
+	ForceEnable bool
+	// Output is the writer for kitty graphics APC sequences. If nil, the
+	// passthrough opens /dev/tty (or falls back to os.Stdout). Web mode
+	// should pass the sip session's PtySlave so graphics bytes flow through
+	// the same PTY as bubbletea's text output to the browser.
+	Output *os.File
+}
+
+// NewKittyPassthrough creates a passthrough using auto-detected capabilities
+// and /dev/tty for output. Use NewKittyPassthroughWithOptions for finer
+// control (web mode, custom writers).
 func NewKittyPassthrough() *KittyPassthrough {
+	return NewKittyPassthroughWithOptions(KittyPassthroughOptions{})
+}
+
+// NewKittyPassthroughWithOptions creates a passthrough with custom options.
+func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthrough {
 	caps := GetHostCapabilities()
-	kittyPassthroughLog("NewKittyPassthrough: KittyGraphics=%v, TerminalName=%s", caps.KittyGraphics, caps.TerminalName)
+	enabled := caps.KittyGraphics || opts.ForceEnable
+	kittyPassthroughLog("NewKittyPassthrough: KittyGraphics=%v Force=%v TerminalName=%s", caps.KittyGraphics, opts.ForceEnable, caps.TerminalName)
 	// Open /dev/tty once for the lifetime of the passthrough (avoids per-frame open/close)
-	hostOut := os.Stdout
-	if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
-		hostOut = tty
+	hostOut := opts.Output
+	if hostOut == nil {
+		hostOut = os.Stdout
+		if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
+			hostOut = tty
+		}
 	}
 
-	return &KittyPassthrough{
-		enabled:           caps.KittyGraphics,
+	kp := &KittyPassthrough{
+		enabled:           enabled,
+		inlineGraphics:    opts.ForceEnable,
 		hostOut:           hostOut,
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
 		nextHostID:        1,
 		pendingDirectData: make(map[string]*pendingDirectTransmit),
+		asyncFrameCh:      make(chan []byte, 1),
 	}
+	go kp.asyncFrameWriter()
+	return kp
 }
 
 // WriteToHost writes graphics data directly to the host terminal,
 // wrapped in synchronized update sequences to prevent tearing.
-func (kp *KittyPassthrough) WriteToHost(data []byte) {
-	if kp.hostOut != nil && len(data) > 0 {
+// asyncFrameWriter drains asyncFrameCh and writes video frames to hostOut
+// in a background goroutine so the VT callback and render loop stay
+// responsive during high-fps video playback.
+func (kp *KittyPassthrough) asyncFrameWriter() {
+	for data := range kp.asyncFrameCh {
+		if kp.hostOut == nil || len(data) == 0 {
+			continue
+		}
+		kp.hostMu.Lock()
 		_, _ = kp.hostOut.Write(syncBegin)
 		_, _ = kp.hostOut.Write(data)
 		_, _ = kp.hostOut.Write(syncEnd)
+		kp.hostMu.Unlock()
 	}
+}
+
+func (kp *KittyPassthrough) WriteToHost(data []byte) {
+	if kp.hostOut == nil || len(data) == 0 {
+		return
+	}
+	kp.hostMu.Lock()
+	_, _ = kp.hostOut.Write(syncBegin)
+	_, _ = kp.hostOut.Write(data)
+	_, _ = kp.hostOut.Write(syncEnd)
+	kp.hostMu.Unlock()
 }
 
 // getOrAllocateHostID returns the host image ID for a given (windowID, guestImageID) pair.
@@ -287,6 +367,10 @@ func (kp *KittyPassthrough) ForwardCommand(
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
+	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+		log.Printf("[KP] ForwardCommand action=%c enabled=%v inline=%v imageID=%d more=%v dataLen=%d",
+			cmd.Action, kp.enabled, kp.inlineGraphics, cmd.ImageID, cmd.More, len(cmd.Data))
+	}
 	kittyPassthroughLog("ForwardCommand: action=%c, enabled=%v, imageID=%d, windowID=%s, win=(%d,%d), size=(%d,%d), cursor=(%d,%d), scrollback=%d, altScreen=%v",
 		cmd.Action, kp.enabled, cmd.ImageID, windowID[:8], windowX, windowY, windowWidth, windowHeight, cursorX, cursorY, scrollbackLen, isAltScreen)
 
@@ -333,20 +417,51 @@ func (kp *KittyPassthrough) ForwardCommand(
 		if result != nil {
 			return result
 		}
+		// On the final chunk of a chunked transmission that was part of a
+		// previous TransmitPlace (chafa: T ... t ... t m=0), return the image
+		// dimensions from the tracked placement so the guest terminal reserves
+		// whitespace. Without this, the image appears but the cursor doesn't
+		// advance below it, causing text to overdraw.
+		if !cmd.More {
+			if placements := kp.placements[windowID]; placements != nil {
+				for _, p := range placements {
+					if p.Streaming {
+						return &PlacementResult{
+							Rows:       p.Rows,
+							Cols:       p.Cols,
+							CursorMove: cmd.CursorMove,
+						}
+					}
+				}
+			}
+		}
 
 	case vt.KittyActionTransmitPlace:
 		kittyPassthroughLog("ForwardCommand: handling TRANSMIT+PLACE, more=%v", cmd.More)
 		isFileBased := cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile
 		result := kp.forwardTransmit(cmd, rawData, windowID, true, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
 		// Return PlacementResult from direct transmit if available
-		// Placement already handled during transmission
 		if result != nil {
 			return result
 		}
-		// For file-based transmissions, forwardFileTransmit handles placement
-		// Return ORIGINAL image dimensions for whitespace reservation
-		if !cmd.More && isFileBased {
+		// On the final chunk (m=0), return image dimensions so the guest
+		// terminal reserves whitespace for the image. This applies to BOTH
+		// file-based AND direct transmissions (chafa uses direct with chunks).
+		if !cmd.More {
 			imgRows, imgCols := kp.calculateImageCells(cmd)
+			// For direct mode where the final chunk doesn't have s/v params,
+			// look up the stored placement from the first chunk.
+			if imgRows == 0 && imgCols == 0 && !isFileBased {
+				if placements := kp.placements[windowID]; placements != nil {
+					for _, p := range placements {
+						if p.Streaming || p.Hidden {
+							imgRows = p.Rows
+							imgCols = p.Cols
+							break
+						}
+					}
+				}
+			}
 			if imgRows > 0 || imgCols > 0 {
 				return &PlacementResult{Rows: imgRows, Cols: imgCols, CursorMove: cmd.CursorMove}
 			}
@@ -393,7 +508,7 @@ func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInpu
 func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile {
 		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
-		// Don't flush immediately — accumulate in pendingOutput.
+		// Don't flush immediately  - accumulate in pendingOutput.
 		// Flushed during render cycle (GetKittyGraphicsCmd) so graphics
 		// and text arrive in the same frame, preventing tearing.
 		return nil
@@ -412,6 +527,8 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		innerData = innerData[:len(innerData)-2] // strip \x1b\\
 	}
 
+	_ = innerData // innerData unused in this v0.6.0-style implementation
+
 	hasPendingData := kp.pendingDirectData[windowID] != nil
 	if !andPlace && !hasPendingData {
 		// Pass through raw (already has framing)
@@ -419,69 +536,32 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		return nil
 	}
 
-	isFirstChunk := cmd.Width > 0 && cmd.Height > 0
+	// v0.6.0-style direct transmit: accumulate raw decoded bytes across chunks,
+	// then on the final chunk re-encode and emit as properly-formatted kitty
+	// APC chunks of our own. This avoids the mess of trying to splice chafa's
+	// non-standard chunk format (params-only first chunk + data-only continuations).
 
-	if isFirstChunk {
-		delete(kp.pendingDirectData, windowID)
-
-		// Get/allocate host ID
-		if kp.imageIDMap[windowID] == nil {
-			kp.imageIDMap[windowID] = make(map[uint32]uint32)
-		}
-		hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
-		if !reusingID {
-			hostID = kp.allocateHostID()
-			kp.imageIDMap[windowID][cmd.ImageID] = hostID
-			kp.deleteAllWindowPlacements(windowID, false)
-		}
-
-		hostX := windowX + contentOffsetX + cursorX
-		hostY := windowY + contentOffsetY + cursorY
-
-		// Track placement for RefreshAllPlacements
-		imgRows, imgCols := kp.calculateImageCells(cmd)
-		contentWidth := windowWidth - 2
-		contentHeight := windowHeight - 2
-		if kp.placements[windowID] == nil {
-			kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
-		}
-		kp.placements[windowID][hostID] = &PassthroughPlacement{
-			GuestImageID:      cmd.ImageID,
-			HostImageID:       hostID,
-			WindowID:          windowID,
-			GuestX:            cursorX,
-			AbsoluteLine:      scrollbackLen + cursorY,
-			HostX:             hostX,
-			HostY:             hostY,
-			Cols:              min(imgCols, contentWidth),
-			Rows:              imgRows,
-			DisplayRows:       min(imgRows, contentHeight),
-			Hidden:            true, // Will be placed by a=p after transfer completes
-				Streaming:         true, // Don't let RefreshAllPlacements touch this
-			PlacedOnAltScreen: isAltScreen,
-		}
-
-		// Accumulate ALL chunks in videoFrameBuf, write to host in ONE call
-		// when m=0 arrives. This prevents interleaving with bubbletea's output.
-		kp.videoFrameBuf = kp.videoFrameBuf[:0]
-		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b_G"...)
-		kp.videoFrameBuf = append(kp.videoFrameBuf, fmt.Sprintf("a=T,i=%d,q=2,", hostID)...)
-		paramEnd := bytes.IndexByte(innerData, ';')
-		if paramEnd >= 0 {
-			var filteredParams []string
-			for _, p := range strings.Split(string(innerData[:paramEnd]), ",") {
-				if !strings.HasPrefix(p, "a=") && !strings.HasPrefix(p, "i=") && !strings.HasPrefix(p, "q=") {
-					filteredParams = append(filteredParams, p)
-				}
-			}
-			if len(filteredParams) > 0 {
-				kp.videoFrameBuf = append(kp.videoFrameBuf, strings.Join(filteredParams, ",")...)
-			}
-			kp.videoFrameBuf = append(kp.videoFrameBuf, innerData[paramEnd:]...)
-		}
-		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b\\"...)
-		kp.pendingDirectData[windowID] = &pendingDirectTransmit{
+	// Get or create pending transmission state
+	pending := kp.pendingDirectData[windowID]
+	if pending == nil {
+		pending = &pendingDirectTransmit{
+			Format:         cmd.Format,
+			Compression:    cmd.Compression,
+			Width:          cmd.Width,
+			Height:         cmd.Height,
 			ImageID:        cmd.ImageID,
+			Columns:        cmd.Columns,
+			Rows:           cmd.Rows,
+			SourceX:        cmd.SourceX,
+			SourceY:        cmd.SourceY,
+			SourceWidth:    cmd.SourceWidth,
+			SourceHeight:   cmd.SourceHeight,
+			XOffset:        cmd.XOffset,
+			YOffset:        cmd.YOffset,
+			ZIndex:         cmd.ZIndex,
+			Virtual:        cmd.Virtual,
+			CursorMove:     cmd.CursorMove,
+			AndPlace:       andPlace,
 			WindowX:        windowX,
 			WindowY:        windowY,
 			WindowWidth:    windowWidth,
@@ -490,100 +570,168 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			ContentOffsetY: contentOffsetY,
 			CursorX:        cursorX,
 			CursorY:        cursorY,
+			ScrollbackLen:  scrollbackLen,
+			IsAltScreen:    isAltScreen,
 		}
+		kp.pendingDirectData[windowID] = pending
+	}
+
+	// Accumulate DECODED data bytes from this chunk (cmd.Data is already base64-decoded by the parser)
+	pending.Data = append(pending.Data, cmd.Data...)
+
+	kittyPassthroughLog("forwardTransmit: accumulated %d bytes, total=%d, more=%v",
+		len(cmd.Data), len(pending.Data), cmd.More)
+
+	// If more chunks coming, wait for them
+	if cmd.More {
+		return nil
+	}
+
+	// Final chunk  - process complete image
+	defer delete(kp.pendingDirectData, windowID)
+
+	if len(pending.Data) == 0 {
+		kittyPassthroughLog("forwardTransmit: no data accumulated, skipping")
+		return nil
+	}
+
+	// Get/allocate host ID.
+	// - Guest image ID == 0 is kitty's "auto-assign" sentinel; each transmit
+	//   with ID 0 is a DISTINCT image (chafa uses 0 for every invocation).
+	//   Always allocate a fresh host ID so multiple chafa images coexist in
+	//   scrollback without overwriting each other.
+	// - For non-zero guest IDs, reuse the same host ID on re-transmit so the
+	//   image data is replaced in place.
+	if kp.imageIDMap[windowID] == nil {
+		kp.imageIDMap[windowID] = make(map[uint32]uint32)
+	}
+	var hostID uint32
+	if pending.ImageID == 0 {
+		hostID = kp.allocateHostID()
 	} else {
-		// Continuation chunk: accumulate in videoFrameBuf
-		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b_G"...)
-		if cmd.More {
-			kp.videoFrameBuf = append(kp.videoFrameBuf, "m=1"...)
+		var reusingID bool
+		hostID, reusingID = kp.imageIDMap[windowID][pending.ImageID]
+		if !reusingID {
+			hostID = kp.allocateHostID()
+			kp.imageIDMap[windowID][pending.ImageID] = hostID
 		}
-		paramEnd := bytes.IndexByte(innerData, ';')
-		if paramEnd >= 0 {
-			kp.videoFrameBuf = append(kp.videoFrameBuf, innerData[paramEnd:]...)
-		}
-		kp.videoFrameBuf = append(kp.videoFrameBuf, "\x1b\\"...)
 	}
 
-	// When transfer completes (m=0), write ENTIRE frame to host in one call
-	if !cmd.More && kp.hostOut != nil {
-		// Get stored state from first chunk — the m=0 final chunk arrives via
-		// KittyActionTransmit with imageID=0 and all position params as 0.
-		pending := kp.pendingDirectData[windowID]
-		delete(kp.pendingDirectData, windowID)
+	// Re-encode to base64 and emit as properly-formatted kitty chunks
+	encoded := base64.StdEncoding.EncodeToString(pending.Data)
 
-		// Use the stored imageID from first chunk, not cmd.ImageID (which is 0)
-		guestImageID := cmd.ImageID
-		if pending != nil && pending.ImageID != 0 {
-			guestImageID = pending.ImageID
-		}
-		hostID := kp.imageIDMap[windowID][guestImageID]
+	hostX := pending.WindowX + pending.ContentOffsetX + pending.CursorX
+	hostY := pending.WindowY + pending.ContentOffsetY + pending.CursorY
 
-		var hostX, hostY int
-		winX, winY, winW, winH := windowX, windowY, windowWidth, windowHeight
-		if pending != nil {
-			hostX = pending.WindowX + pending.ContentOffsetX + pending.CursorX
-			hostY = pending.WindowY + pending.ContentOffsetY + pending.CursorY
-			winX = pending.WindowX
-			winY = pending.WindowY
-			winW = pending.WindowWidth
-			winH = pending.WindowHeight
-		}
+	contentWidth := pending.WindowWidth - 2
+	contentHeight := pending.WindowHeight - 2
 
-		contentW := winW - 2
-		contentH := winH - 2
-		imgCols, imgRows := 0, 0
-		if placements := kp.placements[windowID]; placements != nil {
-			if p := placements[hostID]; p != nil {
-				imgCols = p.Cols
-				imgRows = p.DisplayRows
+	// Calculate image cell dimensions
+	imgRows := pending.Rows
+	imgCols := pending.Columns
+	if imgRows == 0 || imgCols == 0 {
+		caps := GetHostCapabilities()
+		if caps.CellWidth > 0 && caps.CellHeight > 0 {
+			if imgRows == 0 && pending.Height > 0 {
+				imgRows = (pending.Height + caps.CellHeight - 1) / caps.CellHeight
 			}
-		}
-
-		// Bounds check: window must be onscreen, image must fit in content area AND screen
-		visible := winX >= 0 && winY >= 0 && hostX >= 0 && hostY >= 0
-		if visible && imgCols > 0 {
-			visible = hostX+imgCols <= winX+1+contentW
-		}
-		if visible && imgRows > 0 {
-			visible = hostY+imgRows <= winY+1+contentH
-		}
-		if visible && kp.screenWidth > 0 && kp.screenHeight > 0 {
-			if hostX+imgCols > kp.screenWidth || hostY+imgRows >= kp.screenHeight-1 {
-				visible = false
-			}
-		}
-
-		if visible {
-			var frame []byte
-			frame = append(frame, syncBegin...)
-			frame = append(frame, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
-			frame = append(frame, kp.videoFrameBuf...)
-			frame = append(frame, syncEnd...)
-			_, _ = kp.hostOut.Write(frame)
-		} else if hostID > 0 {
-			// Delete the image from host when not visible to prevent ghost rendering
-			var del []byte
-			del = append(del, syncBegin...)
-			del = append(del, fmt.Sprintf("\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)...)
-			del = append(del, syncEnd...)
-			_, _ = kp.hostOut.Write(del)
-		}
-		kp.videoFrameBuf = kp.videoFrameBuf[:0]
-
-		// Mark placement
-		if placements := kp.placements[windowID]; placements != nil {
-			if p := placements[hostID]; p != nil {
-				p.Hidden = !visible
-				p.Streaming = false
-				p.HostX = hostX
-				p.HostY = hostY
+			if imgCols == 0 && pending.Width > 0 {
+				imgCols = (pending.Width + caps.CellWidth - 1) / caps.CellWidth
 			}
 		}
 	}
 
+	displayCols := imgCols
+	displayRows := imgRows
+	if displayCols > contentWidth && contentWidth > 0 {
+		displayCols = contentWidth
+	}
+	if displayRows > contentHeight && contentHeight > 0 {
+		displayRows = contentHeight
+	}
+
+	// Emit transmit-only command in proper 4096-byte kitty chunks.
+	// Placement is handled by RefreshAllPlacements.
+	const chunkSize = 4096
+	for i := 0; i < len(encoded); i += chunkSize {
+		end := min(i+chunkSize, len(encoded))
+		chunk := encoded[i:end]
+		more := end < len(encoded)
+
+		var buf bytes.Buffer
+		buf.WriteString("\x1b_G")
+		if i == 0 {
+			// First chunk: full header
+			fmt.Fprintf(&buf, "a=t,i=%d,f=%d,s=%d,v=%d,q=2",
+				hostID, pending.Format, pending.Width, pending.Height)
+			if pending.Compression == vt.KittyCompressionZlib {
+				buf.WriteString(",o=z")
+			}
+		} else {
+			// Continuation chunks: just image ID (no placement params for a=t)
+			fmt.Fprintf(&buf, "i=%d,q=2", hostID)
+		}
+		if more {
+			buf.WriteString(",m=1")
+		}
+		buf.WriteByte(';')
+		buf.WriteString(chunk)
+		buf.WriteString("\x1b\\")
+		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+	}
+
+	kittyPassthroughLog("forwardTransmit: emitted %d bytes as %d-byte chunks, hostID=%d, imgSize=(%d,%d) srcXYWH=(%d,%d,%d,%d) imgPixels=(%d,%d)",
+		len(encoded), chunkSize, hostID, imgCols, imgRows,
+		pending.SourceX, pending.SourceY, pending.SourceWidth, pending.SourceHeight,
+		pending.Width, pending.Height)
+
+	// Track placement for RefreshAllPlacements
+	if kp.placements[windowID] == nil {
+		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
+	}
+	kp.placements[windowID][hostID] = &PassthroughPlacement{
+		GuestImageID:      pending.ImageID,
+		HostImageID:       hostID,
+		WindowID:          windowID,
+		GuestX:            pending.CursorX,
+		AbsoluteLine:      pending.ScrollbackLen + pending.CursorY,
+		HostX:             hostX,
+		HostY:             hostY,
+		Cols:              displayCols,
+		Rows:              imgRows,
+		DisplayRows:       displayRows,
+		SourceX:           pending.SourceX,
+		SourceY:           pending.SourceY,
+		SourceWidth:       pending.SourceWidth,
+		SourceHeight:      pending.SourceHeight,
+		XOffset:           pending.XOffset,
+		YOffset:           pending.YOffset,
+		ZIndex:            pending.ZIndex,
+		Virtual:           pending.Virtual,
+		Hidden:            true, // RefreshAllPlacements places it
+		PlacedOnAltScreen: pending.IsAltScreen,
+		// The image's native pixel dimensions from the s/v params. These are
+		// what the image ACTUALLY has on disk/in kitty  - independent of the
+		// client's notion of cell size. placeOne uses these to derive accurate
+		// pixels-per-row for source-region cropping, which is critical in
+		// web/daemon mode where the client and daemon may have different
+		// terminal cell sizes.
+		ImagePixelWidth:  pending.Width,
+		ImagePixelHeight: pending.Height,
+	}
+
+	// Return PlacementResult if the original transmission was a TransmitPlace.
+	// This triggers whitespace reservation in the guest terminal so the cursor
+	// advances past where the image will be placed.
+	if pending.AndPlace {
+		return &PlacementResult{
+			Rows:       imgRows,
+			Cols:       imgCols,
+			CursorMove: pending.CursorMove,
+		}
+	}
 	return nil
 }
-
 
 func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) {
 	if cmd.FilePath == "" {
@@ -597,6 +745,20 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 	kittyPassthroughLog("forwardFileTransmit: file=%s, andPlace=%v, medium=%c", filePath, andPlace, cmd.Medium)
 
+	// In inline-graphics mode (tuios-web) the host terminal cannot read
+	// files on the server. Read the file ourselves and divert into the
+	// direct-transmission path so the bytes reach the browser over the
+	// sip PTY. This is critical for apps like youterm / mpv that use
+	// shared-memory frames (t=s, /dev/shm/...) and for any t=f / t=t
+	// transmission.
+	if kp.inlineGraphics {
+		kp.forwardFileTransmitInline(cmd, filePath, windowID, andPlace,
+			windowX, windowY, windowWidth, windowHeight,
+			contentOffsetX, contentOffsetY,
+			cursorX, cursorY, scrollbackLen, isAltScreen)
+		return
+	}
+
 	// Reuse existing host ID if this window already has a placement for this
 	// guest image ID. This eliminates delete+re-place flicker for video playback:
 	// transmitting with the same ID replaces the image data in-place, and the
@@ -607,19 +769,19 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 	hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
 	if !reusingID {
-		// First frame for this image — allocate a new ID
+		// First frame for this image  - allocate a new ID
 		hostID = kp.allocateHostID()
 		kp.imageIDMap[windowID][cmd.ImageID] = hostID
 		if andPlace {
 			kp.deleteAllWindowPlacements(windowID, false)
 		}
 	} else if andPlace {
-		// Reusing ID — check if dimensions changed (e.g., window resize).
+		// Reusing ID  - check if dimensions changed (e.g., window resize).
 		// If so, delete old placement so it gets recreated at the new size.
 		if placements := kp.placements[windowID]; placements != nil {
 			for _, p := range placements {
 				imgRows, imgCols := kp.calculateImageCells(cmd)
-			if p.HostImageID == hostID && (p.Rows != imgRows || p.Cols != imgCols) {
+				if p.HostImageID == hostID && (p.Rows != imgRows || p.Cols != imgCols) {
 					kp.deleteOnePlacement(p)
 					delete(placements, hostID)
 					break
@@ -630,7 +792,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	kittyPassthroughLog("forwardFileTransmit: mapped guestID=%d -> hostID=%d for window=%s", cmd.ImageID, hostID, windowID[:8])
 
 	// PERFORMANCE: Forward the file path directly to the host terminal.
-	// The host (Ghostty/Kitty) reads the file itself — no need to read the
+	// The host (Ghostty/Kitty) reads the file itself  - no need to read the
 	// entire file into memory, base64 encode it, and chunk it.
 	// For t=s (shm), send the original shm name (NOT /dev/shm/ prefixed path).
 	// The host terminal prepends /dev/shm/ itself.
@@ -667,7 +829,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		hostID, hostX, hostY, imgCols, imgRows, displayCols, displayRows, contentWidth, contentHeight)
 
 	// Build a single transmit command with the correct medium type.
-	// The host terminal reads the file/shm directly — no chunking needed.
+	// The host terminal reads the file/shm directly  - no chunking needed.
 	//
 	// For video playback (reusing ID + andPlace), use a=T (transmit+place)
 	// to avoid race conditions where RefreshAllPlacements runs before the
@@ -780,7 +942,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 	}
 
-	// Don't clean up files here — for shared memory (t=s), the guest app
+	// Don't clean up files here  - for shared memory (t=s), the guest app
 	// manages the lifecycle. For temp files (t=t), the host terminal deletes
 	// them after reading. For regular files (t=f), they persist.
 
@@ -811,6 +973,161 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		PlacedOnAltScreen: isAltScreen,
 	}
 	kittyPassthroughLog("forwardFileTransmit: stored placement hostID=%d (hidden, waiting for refresh)", hostID)
+}
+
+// forwardFileTransmitInline handles file / shm / temp-file kitty transmits
+// when the host terminal cannot read server-local files (tuios-web's browser
+// target). We read the file ourselves, base64 encode it, and emit a normal
+// direct (t=d) transmission so the bytes reach the browser through the sip
+// PTY. A placement entry is created in the standard hidden-until-refresh
+// state so RefreshAllPlacements will emit the matching a=p on the next
+// render cycle, identical to the native-mode flow.
+func (kp *KittyPassthrough) forwardFileTransmitInline(
+	cmd *vt.KittyCommand,
+	filePath string,
+	windowID string,
+	andPlace bool,
+	windowX, windowY, windowWidth, windowHeight int,
+	contentOffsetX, contentOffsetY int,
+	cursorX, cursorY int,
+	scrollbackLen int,
+	isAltScreen bool,
+) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		kittyPassthroughLog("forwardFileTransmitInline: read %s failed: %v", filePath, err)
+		return
+	}
+	kittyPassthroughLog("forwardFileTransmitInline: read %d bytes from %s", len(data), filePath)
+
+	// Get or allocate a host id. Video frames reuse the same guest id per
+	// stream, so the second frame onward finds an existing placement and
+	// just replaces the bitmap bytes (our overlay re-renders live
+	// placements when their image id gets re-transmitted).
+	if kp.imageIDMap[windowID] == nil {
+		kp.imageIDMap[windowID] = make(map[uint32]uint32)
+	}
+	hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
+	if !reusingID {
+		hostID = kp.allocateHostID()
+		kp.imageIDMap[windowID][cmd.ImageID] = hostID
+	}
+
+	// Cell dimensions. Match forwardFileTransmit semantics.
+	imgRows, imgCols := kp.calculateImageCells(cmd)
+	contentWidth := windowWidth - 2
+	contentHeight := windowHeight - 2
+	displayCols := imgCols
+	displayRows := imgRows
+	if displayCols > contentWidth && contentWidth > 0 {
+		displayCols = contentWidth
+	}
+	if displayRows > contentHeight && contentHeight > 0 {
+		displayRows = contentHeight
+	}
+
+	hostX := windowX + contentOffsetX + cursorX
+	hostY := windowY + contentOffsetY + cursorY
+
+	// Build the image as 4096-byte kitty chunks (t=d). Pass through
+	// format / compression / size so the overlay knows how to decode.
+	frameData := kp.buildInlineChunks(hostID, cmd.Format, cmd.Compression, cmd.Width, cmd.Height, data)
+
+	kittyPassthroughLog("forwardFileTransmitInline: built %d bytes, hostID=%d, imgSize=(%d,%d), reusingID=%v",
+		len(frameData), hostID, imgCols, imgRows, reusingID)
+
+	if reusingID {
+		// Video frame: send asynchronously so the VT callback and render
+		// loop stay responsive. Drop frames if the writer is backed up
+		// (channel full) to prevent unbounded lag.
+		select {
+		case kp.asyncFrameCh <- frameData:
+		default:
+			// Previous frame still in flight, drop this one.
+			kittyPassthroughLog("forwardFileTransmitInline: dropped frame (async channel full)")
+		}
+	} else {
+		// First frame / static image: go through pendingOutput so
+		// RefreshAllPlacements can attach the a=p in the same flush.
+		kp.pendingOutput = append(kp.pendingOutput, frameData...)
+	}
+
+	// Track placement. Reuse an existing entry on retransmit so the
+	// previously emitted a=p does not get resent (we want the browser
+	// to keep the same canvas and just pick up the new bitmap).
+	if kp.placements[windowID] == nil {
+		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
+	}
+	existing, hasExisting := kp.placements[windowID][hostID]
+	if hasExisting {
+		// Retransmit path: update dims in case they changed, but keep
+		// Hidden state as-is so we do not re-emit a=p.
+		existing.Cols = displayCols
+		existing.Rows = imgRows
+		existing.DisplayRows = displayRows
+		existing.HostX = hostX
+		existing.HostY = hostY
+		existing.AbsoluteLine = scrollbackLen + cursorY
+		existing.ImagePixelWidth = cmd.Width
+		existing.ImagePixelHeight = cmd.Height
+	} else {
+		kp.placements[windowID][hostID] = &PassthroughPlacement{
+			GuestImageID:      cmd.ImageID,
+			HostImageID:       hostID,
+			WindowID:          windowID,
+			GuestX:            cursorX,
+			AbsoluteLine:      scrollbackLen + cursorY,
+			HostX:             hostX,
+			HostY:             hostY,
+			Cols:              displayCols,
+			Rows:              imgRows,
+			DisplayRows:       displayRows,
+			SourceX:           cmd.SourceX,
+			SourceY:           cmd.SourceY,
+			SourceWidth:       cmd.SourceWidth,
+			SourceHeight:      cmd.SourceHeight,
+			XOffset:           cmd.XOffset,
+			YOffset:           cmd.YOffset,
+			ZIndex:            cmd.ZIndex,
+			Virtual:           cmd.Virtual,
+			Hidden:            true, // RefreshAllPlacements emits a=p
+			PlacedOnAltScreen: isAltScreen,
+			ImagePixelWidth:   cmd.Width,
+			ImagePixelHeight:  cmd.Height,
+		}
+	}
+	_ = andPlace // placement is always driven by RefreshAllPlacements in inline mode
+}
+
+// buildInlineChunks encodes raw image bytes as a kitty direct-transmission
+// (t=d) sequence split into 4096-byte base64 chunks. Returns the complete
+// byte sequence ready to write to the host.
+func (kp *KittyPassthrough) buildInlineChunks(hostID uint32, format vt.KittyGraphicsFormat, compression vt.KittyGraphicsCompression, width, height int, raw []byte) []byte {
+	encoded := base64.StdEncoding.EncodeToString(raw)
+	const chunkSize = 4096
+	var out bytes.Buffer
+	for i := 0; i < len(encoded); i += chunkSize {
+		end := min(i+chunkSize, len(encoded))
+		chunk := encoded[i:end]
+		more := end < len(encoded)
+
+		out.WriteString("\x1b_G")
+		if i == 0 {
+			fmt.Fprintf(&out, "a=t,i=%d,f=%d,s=%d,v=%d,q=2", hostID, format, width, height)
+			if compression == vt.KittyCompressionZlib {
+				out.WriteString(",o=z")
+			}
+		} else {
+			fmt.Fprintf(&out, "i=%d,q=2", hostID)
+		}
+		if more {
+			out.WriteString(",m=1")
+		}
+		out.WriteByte(';')
+		out.WriteString(chunk)
+		out.WriteString("\x1b\\")
+	}
+	return out.Bytes()
 }
 
 func (kp *KittyPassthrough) forwardPlace(
@@ -1085,6 +1402,13 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		return
 	}
 
+	// Note: prior versions short-circuited this loop in web mode because
+	// xterm-addon-image could not update placements in place. sip now
+	// ships a custom kitty overlay (xterm-kitty-overlay.js) that renders
+	// placements as absolutely-positioned DOM canvases with proper
+	// update/delete semantics, so the standard refresh path works in
+	// both native and web modes.
+
 	// Get all windows upfront for occlusion detection
 	allWindows := getAllWindows()
 
@@ -1120,10 +1444,13 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// with the window. The change detection below (posChanged check)
 		// ensures we only re-place if the position actually changed.
 
-		// Calculate viewport dimensions (accounting for window borders)
+		// Calculate viewport dimensions (accounting for window borders).
+		// For tiled/borderless windows BorderOffset=0, so content area is full
+		// Width×Height. For floating windows with a border, it's 1, so content
+		// is (Width-2)×(Height-2).
 		viewportTop := info.ScrollbackLen - info.ScrollOffset
-		viewportHeight := info.Height - 2
-		viewportWidth := info.Width - 2
+		viewportHeight := info.Height - 2*info.ContentOffsetY
+		viewportWidth := info.Width - 2*info.ContentOffsetX
 
 		// Collect IDs to delete (for altscreen cleanup)
 		var idsToDelete []uint32
@@ -1229,23 +1556,26 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 
-			kittyPassthroughLog("RefreshPlacement: relY=%d, origRows=%d, origCols=%d, vpH=%d, vpW=%d, clipTop=%d, clipBot=%d, maxRows=%d, visible=%v",
-				relativeY, p.Rows, p.Cols, viewportHeight, viewportWidth, clipTop, clipBottom, maxShowableRows, anyPartVisible)
+			kittyPassthroughLog("RefreshPlacement: winXY=(%d,%d) size=(%d,%d) off=(%d,%d) relY=%d, origRows=%d, origCols=%d, vpH=%d, vpW=%d, clipTop=%d, clipBot=%d, maxRows=%d, newHost=(%d,%d), visible=%v",
+				info.WindowX, info.WindowY, info.Width, info.Height, info.ContentOffsetX, info.ContentOffsetY,
+				relativeY, p.Rows, p.Cols, viewportHeight, viewportWidth, clipTop, clipBottom, maxShowableRows, newHostX, newHostY, anyPartVisible)
 
 			if !anyPartVisible {
-				// Completely hidden
+				// Send a delete only if the image was currently visible.
+				// deleteOnePlacement sends d=p (placement id, image id) so
+				// the image bytes stay in storage and a subsequent scroll
+				// back into view can re-place without retransmitting.
 				if !p.Hidden {
 					kp.deleteOnePlacement(p)
 					p.Hidden = true
 				}
 			} else {
-				// Only re-place if position/clipping actually changed
+				// Re-place only if position/clipping changed. Real kitty
+				// and our sip overlay both treat a=p with the same (i, p)
+				// as an in-place update of the existing placement.
 				posChanged := p.Hidden || p.HostX != newHostX || p.HostY != newHostY ||
 					p.ClipTop != clipTop || p.ClipBottom != clipBottom || p.MaxShowable != maxShowableRows
 				if posChanged {
-					if !p.Hidden {
-						kp.deleteOnePlacement(p)
-					}
 					p.HostX = newHostX
 					p.HostY = newHostY
 					p.ClipTop = clipTop
@@ -1293,13 +1623,13 @@ func (kp *KittyPassthrough) HideAllPlacements() {
 }
 
 func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
+	// Delete ALL placements of this image  - don't filter by placement id.
+	// Filtering by p= would leave stale placements with a different p= on
+	// screen (e.g. if a previous chafa run had placed with p=0 default).
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")
-	fmt.Fprintf(&buf, "a=d,d=i,i=%d", p.HostImageID)
-	if p.PlacementID > 0 {
-		fmt.Fprintf(&buf, ",p=%d", p.PlacementID)
-	}
-	buf.WriteString(",q=2\x1b\\")
+	fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2\x1b\\", p.HostImageID)
+	kittyPassthroughLog("deleteOnePlacement: hostID=%d, cmd=%q", p.HostImageID, buf.String())
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 }
 
@@ -1310,14 +1640,18 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		cellHeight = 20 // Fallback
 	}
 
+	// Use a stable, non-zero placement ID so we can delete the previous
+	// placement unambiguously before creating a new one. Kitty's a=p with
+	// the same (i, p) replaces  - without p, kitty can stack placements.
+	if p.PlacementID == 0 {
+		p.PlacementID = 1
+	}
+
 	var buf bytes.Buffer
 	buf.WriteString("\x1b7") // Save cursor position
 	fmt.Fprintf(&buf, "\x1b[%d;%dH", p.HostY+1, p.HostX+1)
 	buf.WriteString("\x1b_G")
-	fmt.Fprintf(&buf, "a=p,i=%d", p.HostImageID)
-	if p.PlacementID > 0 {
-		fmt.Fprintf(&buf, ",p=%d", p.PlacementID)
-	}
+	fmt.Fprintf(&buf, "a=p,i=%d,p=%d", p.HostImageID, p.PlacementID)
 
 	// MaxShowable is already calculated as: p.Rows - clipTop - clipBottom
 	// So it already accounts for clipping and is the number of rows to display
@@ -1332,8 +1666,9 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		visibleRows = 1 // Minimum 1 row to avoid issues
 	}
 
-	kittyPassthroughLog("placeOne: hostID=%d, pos=(%d,%d), origRows=%d, origCols=%d, clipTop=%d, clipBot=%d, visibleRows=%d",
-		p.HostImageID, p.HostX, p.HostY, p.Rows, p.Cols, p.ClipTop, p.ClipBottom, visibleRows)
+	kittyPassthroughLog("placeOne: hostID=%d, pos=(%d,%d), origRows=%d, origCols=%d, clipTop=%d, clipBot=%d, visibleRows=%d, srcXYWH=(%d,%d,%d,%d), cellH=%d",
+		p.HostImageID, p.HostX, p.HostY, p.Rows, p.Cols, p.ClipTop, p.ClipBottom, visibleRows,
+		p.SourceX, p.SourceY, p.SourceWidth, p.SourceHeight, cellHeight)
 
 	// Use original cols (no horizontal clipping for now)
 	if p.Cols > 0 {
@@ -1343,31 +1678,65 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		fmt.Fprintf(&buf, ",r=%d", visibleRows)
 	}
 
-	// Calculate source Y offset (in pixels) - includes original SourceY plus clipping
-	sourceY := p.SourceY
-	if p.ClipTop > 0 {
-		sourceY += p.ClipTop * cellHeight
+	// Source clipping parameters. Emit the full x,y,w,h rectangle when
+	// clipping is needed so kitty crops the source to exactly the visible
+	// slice. When combined with c,r, kitty maps that source pixel rect 1:1
+	// onto the cell area, avoiding vertical squash.
+	//
+	// Derive pixels-per-row from the image's ACTUAL native pixel dimensions
+	// (from the s/v transmit params) divided by its native cell rows. This is
+	// critical in web/daemon mode where the client's host cell height may
+	// differ from the daemon's (e.g. client cellH=22 but image was generated
+	// at daemon cellH=20 → 380/19=20). Using the client's cellHeight would
+	// produce source regions that overflow the image and xterm-addon-image
+	// rejects them.
+	isClipping := p.ClipTop > 0 || p.ClipBottom > 0
+	pixelsPerRow := cellHeight
+	switch {
+	case p.Rows > 0 && p.ImagePixelHeight > 0:
+		pixelsPerRow = p.ImagePixelHeight / p.Rows
+	case p.Rows > 0 && p.SourceHeight > 0:
+		pixelsPerRow = p.SourceHeight / p.Rows
 	}
-
-	// Calculate source height (in pixels) for proper vertical clipping
-	// This is critical: without setting h, Kitty will SCALE the image to fit r rows
-	// With h set, Kitty will CLIP to show only h pixels of height
-	sourceHeight := visibleRows * cellHeight
-
-	// Include source clipping parameters
-	if p.SourceX > 0 {
-		fmt.Fprintf(&buf, ",x=%d", p.SourceX)
+	pixelsPerCol := caps.CellWidth
+	switch {
+	case p.Cols > 0 && p.ImagePixelWidth > 0:
+		pixelsPerCol = p.ImagePixelWidth / p.Cols
+	case p.Cols > 0 && p.SourceWidth > 0:
+		pixelsPerCol = p.SourceWidth / p.Cols
 	}
-	if sourceY > 0 {
-		fmt.Fprintf(&buf, ",y=%d", sourceY)
-	}
-	// Use original source width if specified (no horizontal clipping for now)
-	if p.SourceWidth > 0 {
-		fmt.Fprintf(&buf, ",w=%d", p.SourceWidth)
-	}
-	// Always set h for vertical clipping
-	if sourceHeight > 0 {
-		fmt.Fprintf(&buf, ",h=%d", sourceHeight)
+	switch {
+	case isClipping:
+		srcX := p.SourceX
+		srcY := p.SourceY + p.ClipTop*pixelsPerRow
+		srcW := p.SourceWidth
+		if srcW == 0 && pixelsPerCol > 0 {
+			srcW = p.Cols * pixelsPerCol
+		}
+		srcH := visibleRows * pixelsPerRow
+		// Clamp against the image's native pixel height so we never request
+		// a source region that overflows the image  - xterm-addon-image rejects
+		// such requests (real kitty silently clamps).
+		if p.ImagePixelHeight > 0 && srcY+srcH > p.ImagePixelHeight {
+			srcH = max(p.ImagePixelHeight-srcY, 0)
+		}
+		if p.ImagePixelWidth > 0 && srcX+srcW > p.ImagePixelWidth {
+			srcW = max(p.ImagePixelWidth-srcX, 0)
+		}
+		fmt.Fprintf(&buf, ",x=%d,y=%d,w=%d,h=%d", srcX, srcY, srcW, srcH)
+	case p.SourceWidth > 0 || p.SourceHeight > 0:
+		if p.SourceX > 0 {
+			fmt.Fprintf(&buf, ",x=%d", p.SourceX)
+		}
+		if p.SourceY > 0 {
+			fmt.Fprintf(&buf, ",y=%d", p.SourceY)
+		}
+		if p.SourceWidth > 0 {
+			fmt.Fprintf(&buf, ",w=%d", p.SourceWidth)
+		}
+		if p.SourceHeight > 0 {
+			fmt.Fprintf(&buf, ",h=%d", p.SourceHeight)
+		}
 	}
 	if p.XOffset > 0 {
 		fmt.Fprintf(&buf, ",X=%d", p.XOffset)
@@ -1381,6 +1750,7 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	// Note: Don't send U=1 to host - TUIOS renders guest content itself
 	buf.WriteString(",q=2\x1b\\")
 	buf.WriteString("\x1b8") // Restore cursor position
+	kittyPassthroughLog("placeOne: emitted kitty cmd: %q", buf.String())
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 }
 
@@ -1398,6 +1768,10 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	})
 
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
+		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+			log.Printf("[CLIENT-VT] kitty callback fired: action=%c imageID=%d more=%v daemonMode=%v",
+				cmd.Action, cmd.ImageID, cmd.More, win.DaemonMode)
+		}
 		// In daemon mode, the daemon's VT emulator responds to queries directly
 		// with low latency. Skip here to avoid sending a duplicate response.
 		if win.DaemonMode && cmd.Action == vt.KittyActionQuery {
@@ -1406,11 +1780,12 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 
 		cursorPos := win.Terminal.CursorPosition()
 		scrollbackLen := win.Terminal.ScrollbackLen()
+		borderOff := win.BorderOffset()
 		result := kp.ForwardCommand(
 			cmd, rawData, win.ID,
 			win.X, win.Y,
 			win.Width, win.Height,
-			1, 1,
+			borderOff, borderOff,
 			cursorPos.X, cursorPos.Y,
 			scrollbackLen,
 			win.IsAltScreen,

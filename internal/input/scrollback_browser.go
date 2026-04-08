@@ -79,7 +79,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	case "ctrl+u":
 		browser.PageUp(10)
 	case "g":
-		// Go to top (gg pattern — single g goes to top in this context)
+		// Go to top (gg pattern  - single g goes to top in this context)
 		browser.SelectedIdx = 0
 		browser.PreviewScroll = 0
 	case "G":

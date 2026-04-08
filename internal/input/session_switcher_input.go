@@ -10,6 +10,32 @@ import (
 func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	keyStr := msg.String()
 
+	// Handle delete confirmation state first
+	if o.SessionSwitcherConfirmDelete != "" {
+		switch keyStr {
+		case "y", "Y", "enter":
+			name := o.SessionSwitcherConfirmDelete
+			o.SessionSwitcherConfirmDelete = ""
+			if o.DaemonClient != nil {
+				if err := o.DaemonClient.KillSessionByName(name); err != nil {
+					o.ShowNotification("Delete failed: "+err.Error(), "error", config.NotificationDuration*2)
+				} else {
+					o.ShowNotification("Deleted session: "+name, "success", config.NotificationDuration)
+					o.SessionSwitcherItems = o.RefreshSessionList()
+					if o.SessionSwitcherSelected >= len(o.SessionSwitcherItems) && o.SessionSwitcherSelected > 0 {
+						o.SessionSwitcherSelected--
+					}
+				}
+			}
+			return o, nil
+		case "n", "N", "esc":
+			o.SessionSwitcherConfirmDelete = ""
+			return o, nil
+		}
+		// Ignore all other keys while confirming
+		return o, nil
+	}
+
 	filtered := app.FilterSessionItems(o.SessionSwitcherItems, o.SessionSwitcherQuery)
 
 	switch keyStr {
@@ -27,14 +53,21 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			if selected.IsCurrent {
 				o.ShowNotification("Already on this session", "info", config.NotificationDuration)
 			} else {
-				o.ShowNotification("Session switching is not yet supported in-app. Detach and reattach with: tuios attach "+selected.Name, "info", config.NotificationDuration*2)
+				if err := o.SwitchToSession(selected.Name); err != nil {
+					o.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+				}
 			}
-			o.ShowSessionSwitcher = false
-			o.SessionSwitcherQuery = ""
-			o.SessionSwitcherSelected = 0
-			o.SessionSwitcherScroll = 0
-			o.SessionSwitcherError = ""
+		} else if o.SessionSwitcherQuery != "" {
+			// No matching session  - create new one with the typed name
+			if err := o.SwitchToSession(o.SessionSwitcherQuery); err != nil {
+				o.ShowNotification("Create failed: "+err.Error(), "error", config.NotificationDuration*2)
+			}
 		}
+		o.ShowSessionSwitcher = false
+		o.SessionSwitcherQuery = ""
+		o.SessionSwitcherSelected = 0
+		o.SessionSwitcherScroll = 0
+		o.SessionSwitcherError = ""
 		return o, nil
 
 	case "up", "ctrl+p":
@@ -70,32 +103,20 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.SessionSwitcherScroll = 0
 		return o, nil
 
-	default:
-		// Handle special action keys only when query is empty (to avoid conflicts with typing)
-		if o.SessionSwitcherQuery == "" {
-			switch keyStr {
-			case "n":
-				o.ShowNotification("Use `tuios new <name>` to create a session", "info", config.NotificationDuration*2)
-				o.ShowSessionSwitcher = false
-				o.SessionSwitcherQuery = ""
-				o.SessionSwitcherSelected = 0
-				o.SessionSwitcherScroll = 0
-				o.SessionSwitcherError = ""
-				return o, nil
-			case "d":
-				if len(filtered) > 0 && o.SessionSwitcherSelected < len(filtered) {
-					selected := filtered[o.SessionSwitcherSelected]
-					if selected.IsCurrent {
-						o.ShowNotification("Cannot delete the current session", "warning", config.NotificationDuration)
-					} else {
-						o.ShowNotification("Use `tuios kill "+selected.Name+"` to delete this session", "info", config.NotificationDuration*2)
-					}
-				}
-				return o, nil
+	case "ctrl+d":
+		// Request delete confirmation for the selected session
+		if len(filtered) > 0 && o.SessionSwitcherSelected < len(filtered) {
+			selected := filtered[o.SessionSwitcherSelected]
+			if selected.IsCurrent {
+				o.ShowNotification("Cannot delete the current session", "warning", config.NotificationDuration)
+			} else {
+				o.SessionSwitcherConfirmDelete = selected.Name
 			}
 		}
+		return o, nil
 
-		// Accept printable characters for search
+	default:
+		// Accept printable characters for fuzzy search (including 'n', 'd', etc.)
 		if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
 			o.SessionSwitcherQuery += keyStr
 			o.SessionSwitcherSelected = 0

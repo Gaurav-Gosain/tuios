@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -38,8 +40,19 @@ type OSOptions struct {
 	SSHSession ssh.Session
 
 	// EnableGraphicsPassthrough enables Kitty/Sixel graphics passthrough.
-	// This should be true for terminal sessions, false for web.
 	EnableGraphicsPassthrough bool
+
+	// ForceGraphicsEnabled skips capability detection for the graphics
+	// passthroughs. Use this in web mode where stdin isn't a real TTY so
+	// GetHostCapabilities can't detect terminal support, but the browser
+	// terminal (xterm.js kitty addon) actually supports the protocol.
+	ForceGraphicsEnabled bool
+
+	// GraphicsOutput is the writer that kitty/sixel APC sequences are written
+	// to. If nil, the passthroughs fall back to /dev/tty / os.Stdout (the
+	// native TTY path). Web mode must supply the sip session's PTY slave so
+	// graphics bytes flow through the same pipe as bubbletea's text output.
+	GraphicsOutput *os.File
 }
 
 // NewOS creates a new OS instance with the given options.
@@ -94,8 +107,14 @@ func NewOS(opts OSOptions) *OS {
 	// Initialize graphics passthrough if enabled
 	if opts.EnableGraphicsPassthrough {
 		os.KittyRenderer = NewKittyRenderer()
-		os.KittyPassthrough = NewKittyPassthrough()
-		os.SixelPassthrough = NewSixelPassthrough()
+		os.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+			ForceEnable: opts.ForceGraphicsEnabled,
+			Output:      opts.GraphicsOutput,
+		})
+		os.SixelPassthrough = NewSixelPassthroughWithOptions(SixelPassthroughOptions{
+			ForceEnable: opts.ForceGraphicsEnabled,
+			Output:      opts.GraphicsOutput,
+		})
 	}
 
 	// Initialize hooks manager and load user-defined hooks from config

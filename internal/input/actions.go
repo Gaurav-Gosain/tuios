@@ -76,6 +76,15 @@ func (d *ActionDispatcher) registerHandlers() {
 	// Window actions
 	d.Register("toggle_zoom", handleToggleZoom)
 
+	// Scrolling tiling actions (niri-like)
+	d.Register("scroll_focus_left", handleScrollFocusLeft)
+	d.Register("scroll_focus_right", handleScrollFocusRight)
+	d.Register("scroll_move_left", handleScrollMoveLeft)
+	d.Register("scroll_move_right", handleScrollMoveRight)
+	d.Register("scroll_cycle_width", handleScrollCycleWidth)
+	d.Register("scroll_consume", handleScrollConsume)
+	d.Register("scroll_expel", handleScrollExpel)
+
 	// BSP tiling actions
 	d.Register("smart_split", handleSmartSplit)
 	d.Register("split_horizontal", handleSplitHorizontal)
@@ -308,14 +317,22 @@ func handleToggleTiling(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleSwapLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.FocusedWindow >= 0 {
-		o.SwapWindowLeft()
+		if o.UseScrollingLayout {
+			o.ScrollingMoveColumnLeft()
+		} else {
+			o.SwapWindowLeft()
+		}
 	}
 	return o, nil
 }
 
 func handleSwapRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.FocusedWindow >= 0 {
-		o.SwapWindowRight()
+		if o.UseScrollingLayout {
+			o.ScrollingMoveColumnRight()
+		} else {
+			o.SwapWindowRight()
+		}
 	}
 	return o, nil
 }
@@ -575,6 +592,7 @@ func handleToggleCacheStats(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+
 func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
@@ -609,6 +627,59 @@ func handleToggleTapeManager(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleStopRecording(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
 		o.TapeManagerStopRecording()
+	}
+	return o, nil
+}
+
+// ============================================================================
+// Scrolling Tiling Action Handlers (niri-like)
+// ============================================================================
+
+func handleScrollFocusLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling && o.UseScrollingLayout {
+		o.ScrollingFocusLeft()
+	}
+	return o, nil
+}
+
+func handleScrollFocusRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling && o.UseScrollingLayout {
+		o.ScrollingFocusRight()
+	}
+	return o, nil
+}
+
+func handleScrollMoveLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling && o.UseScrollingLayout {
+		o.ScrollingMoveColumnLeft()
+	}
+	return o, nil
+}
+
+func handleScrollMoveRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling && o.UseScrollingLayout {
+		o.ScrollingMoveColumnRight()
+	}
+	return o, nil
+}
+
+func handleScrollCycleWidth(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling && o.UseScrollingLayout {
+		o.ScrollingCycleWidth()
+	}
+	return o, nil
+}
+
+func handleScrollConsume(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling && o.UseScrollingLayout {
+		o.ScrollingConsumeWindow()
+	}
+	return o, nil
+}
+
+func handleScrollExpel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling && o.UseScrollingLayout {
+		o.ScrollingExpelWindow()
 	}
 	return o, nil
 }

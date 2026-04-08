@@ -74,6 +74,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.Y+window.Height <= viewportHeight+topMargin
 
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
+		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[i]
 		var borderColorObj color.Color
 		if isFocused {
 			if m.Mode == TerminalMode {
@@ -81,6 +82,9 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			} else {
 				borderColorObj = theme.BorderFocusedWindow()
 			}
+		} else if isMultifocused {
+			// Multifocused windows get a distinct border color (yellow/orange)
+			borderColorObj = lipgloss.Color("3")
 		} else {
 			borderColorObj = theme.BorderUnfocused()
 		}
@@ -133,8 +137,10 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		zIndex := window.Z
 		if window.IsFloating {
-			// Floating windows render above tiled windows and separators
-			zIndex = config.ZIndexSeparators + 1
+			// Floating windows render above tiled windows and separators.
+			// Use window.Z offset above ZIndexSeparators to preserve relative
+			// ordering between multiple floating windows (focused on top).
+			zIndex = config.ZIndexSeparators + 1 + window.Z
 		}
 		if isAnimating || window.IsBeingManipulated {
 			// Only elevate non-tiled windows above separators.
@@ -163,8 +169,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		window.ClearDirtyFlags()
 	}
 
-	// Add shared border separator overlay when active
-	if config.SharedBorders && m.AutoTiling {
+	// Add shared border separator overlay when active (not in scrolling mode)
+	if config.SharedBorders && m.AutoTiling && !m.UseScrollingLayout {
 		if sepLayers := m.renderSeparatorOverlay(); len(sepLayers) > 0 {
 			layers = append(layers, sepLayers...)
 		}
@@ -232,14 +238,14 @@ func (m *OS) View() tea.View {
 	// text first, then we write graphics. This keeps them in the same frame
 	// and prevents tearing between text and graphics updates.
 	if !m.renderSkipped {
-		// Hide images during overlays or copy mode scrollback (images render on
-		// top of text and don't scroll with terminal content in copy mode)
+		// Hide images ONLY during full-screen overlays (help, palette, etc.).
+		// Copy-mode scroll is NOT a reason to hide  - RefreshAllPlacements uses
+		// the window's scrollback offset to reposition images so they scroll
+		// naturally with the terminal content.
 		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
 			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
 			m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView
-		fw := m.GetFocusedWindow()
-		inCopyModeScroll := fw != nil && fw.CopyMode != nil && fw.CopyMode.Active && fw.CopyMode.ScrollOffset > 0
-		if hasOverlay || inCopyModeScroll {
+		if hasOverlay {
 			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 				m.KittyPassthrough.HideAllPlacements()
 			}
@@ -280,8 +286,8 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 					result[w.ID] = &WindowPositionInfo{
 						WindowX:            w.X,
 						WindowY:            w.Y,
-						ContentOffsetX:     1,
-						ContentOffsetY:     1,
+						ContentOffsetX:     w.BorderOffset(),
+						ContentOffsetY:     w.BorderOffset(),
 						Width:              w.Width,
 						Height:             w.Height,
 						Visible:            true,

@@ -2,11 +2,12 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
-	"slices"
 )
 
 // CreateMinimizeAnimation creates a minimize animation for the window at index i
@@ -81,6 +82,16 @@ func (m *OS) CompleteWindowAnimations(windowIndex int) {
 
 			// Mark as complete and remove
 			anim.Complete = true
+			m.Animations = slices.Delete(m.Animations, i, i+1)
+		}
+	}
+}
+
+// CancelAnimationsForWindow removes all pending animations for a window
+// without completing them (the caller will set the new position).
+func (m *OS) CancelAnimationsForWindow(w *terminal.Window) {
+	for i := len(m.Animations) - 1; i >= 0; i-- {
+		if m.Animations[i].Window == w {
 			m.Animations = slices.Delete(m.Animations, i, i+1)
 		}
 	}

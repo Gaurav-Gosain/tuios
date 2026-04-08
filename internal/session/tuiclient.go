@@ -48,9 +48,14 @@ type TUIClient struct {
 	// Codec negotiated with daemon (gob by default)
 	codec Codec
 
-	// PTY output handlers
+	// PTY output handlers (legacy raw-byte path)
 	ptyHandlers   map[string]func([]byte)
 	ptyHandlersMu sync.RWMutex
+
+	// Screen diff handlers (event-based path). Keyed by PTY ID.
+	// Called when the daemon sends a screen diff (MsgScreenDiff).
+	screenDiffHandlers   map[string]func(*ScreenDiff)
+	screenDiffHandlersMu sync.RWMutex
 
 	// PTY closed handlers - called when a PTY process exits
 	ptyClosedHandlers   map[string]func()
@@ -81,16 +86,18 @@ type TUIClient struct {
 	connected       bool
 	readLoopRunning bool
 	done            chan struct{}
+	switchMu        sync.Mutex // prevents concurrent SwitchSession calls
 }
 
 // NewTUIClient creates a new TUI client for daemon communication.
 func NewTUIClient() *TUIClient {
 	return &TUIClient{
-		codec:             DefaultCodec(), // gob by default
-		ptyHandlers:       make(map[string]func([]byte)),
-		ptyClosedHandlers: make(map[string]func()),
-		pendingResponses:  make(map[MessageType]chan *Message),
-		done:              make(chan struct{}),
+		codec:              DefaultCodec(), // gob by default
+		ptyHandlers:        make(map[string]func([]byte)),
+		screenDiffHandlers: make(map[string]func(*ScreenDiff)),
+		ptyClosedHandlers:  make(map[string]func()),
+		pendingResponses:   make(map[MessageType]chan *Message),
+		done:               make(chan struct{}),
 	}
 }
 
@@ -236,6 +243,91 @@ func (c *TUIClient) Detach() error {
 	return c.send(msg)
 }
 
+// SwitchSession detaches from the current session and attaches to another.
+// Safe to call while the read loop is running. Serialized via mutex.
+func (c *TUIClient) SwitchSession(targetName string, width, height int) (*SessionState, error) {
+	c.switchMu.Lock()
+	defer c.switchMu.Unlock()
+
+	debugLog("[SWITCH] Starting session switch to %q", targetName)
+
+	// 1. Detach (fire-and-forget, daemon sends MsgDetached back)
+	detachMsg, err := NewMessageWithCodec(MsgDetach, nil, c.codec)
+	if err != nil {
+		return nil, fmt.Errorf("detach encode: %w", err)
+	}
+
+	// Register for detach response before sending
+	detachResp := make(chan *Message, 1)
+	c.pendingResponsesMu.Lock()
+	c.pendingResponses[MsgDetached] = detachResp
+	c.pendingResponsesMu.Unlock()
+
+	if err := c.send(detachMsg); err != nil {
+		return nil, fmt.Errorf("detach send: %w", err)
+	}
+
+	debugLog("[SWITCH] Detach sent, waiting for confirmation...")
+
+	// Wait for detach confirmation
+	select {
+	case <-detachResp:
+		debugLog("[SWITCH] Detach confirmed")
+	case <-time.After(5 * time.Second):
+		return nil, fmt.Errorf("detach timeout")
+	case <-c.done:
+		return nil, fmt.Errorf("client closed")
+	}
+
+	// Clean up pending response registration
+	c.pendingResponsesMu.Lock()
+	delete(c.pendingResponses, MsgDetached)
+	c.pendingResponsesMu.Unlock()
+
+	// 2. Attach to new session using sendAndWaitResponse
+	debugLog("[SWITCH] Attaching to session %q (%dx%d)", targetName, width, height)
+	attachMsg, err := NewMessageWithCodec(MsgAttach, &AttachPayload{
+		SessionName: targetName,
+		CreateNew:   true, // Create if doesn't exist (for "new session" feature)
+		Width:       width,
+		Height:      height,
+	}, c.codec)
+	if err != nil {
+		return nil, fmt.Errorf("attach encode: %w", err)
+	}
+
+	resp, err := c.sendAndWaitResponse(attachMsg, MsgAttached, MsgError)
+	if err != nil {
+		return nil, fmt.Errorf("attach: %w", err)
+	}
+
+	switch resp.Type {
+	case MsgAttached:
+		var payload AttachedPayload
+		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			return nil, err
+		}
+		c.sessionID = payload.SessionID
+		c.sessionName = payload.SessionName
+		c.effectiveWidth = payload.Width
+		c.effectiveHeight = payload.Height
+		windowCount := 0
+		if payload.State != nil {
+			windowCount = len(payload.State.Windows)
+		}
+		debugLog("[SWITCH] Attached to %q (%d windows)", c.sessionName, windowCount)
+		return payload.State, nil
+
+	case MsgError:
+		var errPayload ErrorPayload
+		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		return nil, fmt.Errorf("attach failed: %s", errPayload.Message)
+
+	default:
+		return nil, fmt.Errorf("unexpected response: %d", resp.Type)
+	}
+}
+
 // CreatePTY creates a new PTY in the session.
 func (c *TUIClient) CreatePTY(title string, width, height int) (string, error) {
 	msg, err := NewMessageWithCodec(MsgCreatePTY, &CreatePTYPayload{
@@ -279,7 +371,10 @@ func (c *TUIClient) ClosePTY(ptyID string) error {
 	return c.send(msg)
 }
 
-// SubscribePTY subscribes to PTY output and registers a handler.
+// SubscribePTY subscribes to PTY output and registers handlers.
+// The raw handler receives legacy byte streams (MsgPTYOutput).
+// Use SetScreenDiffHandler to additionally (or instead) handle the
+// event-based screen diff protocol (MsgScreenDiff).
 func (c *TUIClient) SubscribePTY(ptyID string, handler func([]byte)) error {
 	c.ptyHandlersMu.Lock()
 	c.ptyHandlers[ptyID] = handler
@@ -290,6 +385,15 @@ func (c *TUIClient) SubscribePTY(ptyID string, handler func([]byte)) error {
 		return err
 	}
 	return c.send(msg)
+}
+
+// SetScreenDiffHandler registers a handler for screen diffs from a PTY.
+// The daemon sends diffs when the PTY's VT state changes (event-based,
+// no timers, natural coalescing). The handler receives only changed cells.
+func (c *TUIClient) SetScreenDiffHandler(ptyID string, handler func(*ScreenDiff)) {
+	c.screenDiffHandlersMu.Lock()
+	c.screenDiffHandlers[ptyID] = handler
+	c.screenDiffHandlersMu.Unlock()
 }
 
 // UnsubscribePTY removes the PTY output handler and tells the daemon to stop streaming.
@@ -461,8 +565,16 @@ func (c *TUIClient) KillSession() error {
 	if c.sessionName == "" {
 		return nil
 	}
+	return c.KillSessionByName(c.sessionName)
+}
+
+// KillSessionByName terminates a session by name (can be any session, not just current).
+func (c *TUIClient) KillSessionByName(name string) error {
+	if name == "" {
+		return fmt.Errorf("session name cannot be empty")
+	}
 	msg, err := NewMessageWithCodec(MsgKill, &KillPayload{
-		SessionName: c.sessionName,
+		SessionName: name,
 	}, c.codec)
 	if err != nil {
 		return err
@@ -471,7 +583,6 @@ func (c *TUIClient) KillSession() error {
 		return err
 	}
 	// Wait briefly to ensure the daemon processes the kill message
-	// before we close the connection
 	time.Sleep(100 * time.Millisecond)
 	return nil
 }
@@ -518,6 +629,12 @@ func (c *TUIClient) StartReadLoop() {
 }
 
 func (c *TUIClient) readLoop() {
+	defer func() {
+		if r := recover(); r != nil {
+			debugLog("[CLIENT] PANIC in readLoop: %v", r)
+			// Don't crash the whole app  - log and try to continue
+		}
+	}()
 	for {
 		select {
 		case <-c.done:
@@ -586,6 +703,20 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			handler(data)
 		}
 
+	case MsgScreenDiff:
+		ptyID, diff, err := DecodeScreenDiff(msg.Payload)
+		if err != nil || ptyID == "" || diff == nil {
+			return
+		}
+
+		c.screenDiffHandlersMu.RLock()
+		handler := c.screenDiffHandlers[ptyID]
+		c.screenDiffHandlersMu.RUnlock()
+
+		if handler != nil {
+			handler(diff)
+		}
+
 	case MsgPTYClosed:
 		var payload ClosePTYPayload
 		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
@@ -611,12 +742,18 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		}
 
 	case MsgDetached:
-		// Session detached
-		close(c.done)
+		// Session detached  - handled via pendingResponses in SwitchSession.
+		// Do NOT close c.done here; it must stay open for subsequent switches.
+		debugLog("[CLIENT] Received MsgDetached (no-op in handleMessage)")
 
 	case MsgSessionEnded:
-		// Session ended
-		close(c.done)
+		// Session was killed/ended permanently  - shut down the read loop
+		select {
+		case <-c.done:
+			// Already closed
+		default:
+			close(c.done)
+		}
 
 	case MsgRemoteCommand:
 		// Remote command from CLI routed through daemon
@@ -810,6 +947,38 @@ func (c *TUIClient) AvailableSessionNames() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return append([]string{}, c.availableSessionNames...) // Return a copy
+}
+
+// RefreshSessionList queries the daemon for an up-to-date session list and
+// updates the cached availableSessionNames. Blocks until response arrives.
+// Safe to call while the read loop is running.
+func (c *TUIClient) RefreshSessionList() ([]SessionInfo, error) {
+	listMsg, err := NewMessageWithCodec(MsgList, nil, c.codec)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.sendAndWaitResponse(listMsg, MsgSessionList, MsgError)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Type == MsgError {
+		var errPayload ErrorPayload
+		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		return nil, fmt.Errorf("list sessions: %s", errPayload.Message)
+	}
+	var payload SessionListPayload
+	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		return nil, err
+	}
+	// Update cache
+	names := make([]string, 0, len(payload.Sessions))
+	for _, s := range payload.Sessions {
+		names = append(names, s.Name)
+	}
+	c.mu.Lock()
+	c.availableSessionNames = names
+	c.mu.Unlock()
+	return payload.Sessions, nil
 }
 
 func (c *TUIClient) send(msg *Message) error {

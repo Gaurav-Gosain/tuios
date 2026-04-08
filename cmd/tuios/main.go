@@ -36,6 +36,7 @@ var (
 	borderStyle         string
 	dockbarPosition     string
 	hideWindowButtons   bool
+	hideScrollbar       bool
 	scrollbackLines     int
 	showKeys            bool
 	noAnimations        bool
@@ -46,6 +47,7 @@ var (
 	showCPU             bool
 	showRAM             bool
 	sharedBorders       bool
+	zoomMaxWidth        int
 )
 
 func main() {
@@ -119,6 +121,7 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().StringVar(&borderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)")
 	rootCmd.PersistentFlags().StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden (default: from config or bottom)")
 	rootCmd.PersistentFlags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
+	rootCmd.PersistentFlags().BoolVar(&hideScrollbar, "hide-scrollbar", false, "Hide the window scrollbar thumb on the border")
 	rootCmd.PersistentFlags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
 	rootCmd.PersistentFlags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
 	rootCmd.PersistentFlags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
@@ -129,6 +132,8 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&showCPU, "show-cpu", false, "Show CPU graph in the dock")
 	rootCmd.PersistentFlags().BoolVar(&showRAM, "show-ram", false, "Show RAM usage in the dock")
 	rootCmd.PersistentFlags().BoolVar(&sharedBorders, "shared-borders", false, "Share borders between adjacent tiled windows")
+
+	rootCmd.PersistentFlags().IntVar(&zoomMaxWidth, "zoom-max-width", 0, "Max width in cells for zoom mode (0 = fullscreen, e.g. 120)")
 
 	var sshPort, sshHost, sshKeyPath, sshDefaultSession string
 	var sshEphemeral bool
@@ -380,18 +385,22 @@ with 'tuios attach'.`,
 		},
 	}
 
+	var lsJSON bool
 	lsCmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List TUIOS sessions",
 		Long: `List all active TUIOS sessions.
 
-Shows session names, window counts, and whether clients are attached.`,
-		Example: `  tuios ls`,
+Shows session names, window counts, and whether clients are attached.
+Use --json for machine-readable output.`,
+		Example: `  tuios ls
+  tuios ls --json`,
 		Aliases: []string{"list-sessions"},
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runListSessions()
+			return runListSessions(lsJSON)
 		},
 	}
+	lsCmd.Flags().BoolVar(&lsJSON, "json", false, "Output as JSON")
 
 	killSessionCmd := &cobra.Command{
 		Use:   "kill-session <session-name>",

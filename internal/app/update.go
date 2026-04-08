@@ -252,7 +252,7 @@ func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 // TickCmd creates a maintenance tick for animations, dock stats, and script playback.
 // This runs at a low rate and does NOT drive PTY rendering.
 func TickCmd() tea.Cmd {
-	return tea.Tick(time.Second/config.NormalFPS, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Second/time.Duration(config.NormalFPS), func(t time.Time) tea.Msg {
 		return TickerMsg(t)
 	})
 }
@@ -260,7 +260,7 @@ func TickCmd() tea.Cmd {
 // SlowTickCmd creates a command that generates tick messages at 30 FPS.
 // Used during user interactions to improve responsiveness.
 func SlowTickCmd() tea.Cmd {
-	return tea.Tick(time.Second/config.InteractionFPS, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Second/time.Duration(config.InteractionFPS), func(t time.Time) tea.Msg {
 		return TickerMsg(t)
 	})
 }
@@ -268,7 +268,7 @@ func SlowTickCmd() tea.Cmd {
 // IdleTickCmd creates a command that generates tick messages at 10 FPS.
 // Used when the terminal has been idle for a sustained period to reduce CPU.
 func IdleTickCmd() tea.Cmd {
-	return tea.Tick(time.Second/config.IdleFPS, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Second/time.Duration(config.IdleFPS), func(t time.Time) tea.Msg {
 		return TickerMsg(t)
 	})
 }
@@ -321,7 +321,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case PTYDataMsg:
-		// PTY output arrived — mark dirty terminals and re-render immediately.
+		// PTY output arrived  - mark dirty terminals and re-render immediately.
 		// This is the primary render trigger, replacing tick-driven rendering.
 		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
 		m.MarkTerminalsWithNewContent()
@@ -395,6 +395,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Update animations
 		m.UpdateAnimations()
+
 
 		// Update system info (only when explicitly enabled)
 		if config.ShowCPU {
@@ -577,13 +578,25 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.RestoredFromState = false
 			sizeChanged := oldWidth != msg.Width || oldHeight != msg.Height
 			if sizeChanged {
-				// In daemon mode, don't tile here - wait for SessionResizeMsg with the correct
-				// effective size (min of all clients). Tiling now would use stale EffectiveWidth/Height
-				// from the initial attach handshake (typically 80x24).
+				// In daemon mode, the previous implementation waited for
+				// SessionResizeMsg before tiling. That broke when the effective
+				// size didn't change (e.g. a web client reattaches to a session
+				// whose cached min-of-all-clients matches or is larger than
+				// the browser viewport)  - no SessionResizeMsg ever arrives and
+				// the restored layout stays at the stale saved dimensions.
+				// Tile using the browser's actual size now; if the daemon
+				// later reports a different effective size via SessionResizeMsg,
+				// the handler there will re-tile anyway.
 				if m.IsDaemonSession && m.AutoTiling {
-					m.LogInfo("[RESIZE] Daemon mode restore: waiting for SessionResizeMsg before tiling (%dx%d -> %dx%d)",
-						oldWidth, oldHeight, msg.Width, msg.Height)
-					// Don't tile yet - SessionResizeMsg will trigger the retiling
+					m.LogInfo("[RESIZE] Daemon mode restore: tiling to %dx%d (was %dx%d)",
+						msg.Width, msg.Height, oldWidth, oldHeight)
+					// Force the render size to the browser viewport. Any stale
+					// EffectiveWidth/Height from the attach handshake will be
+					// corrected by the next SessionResizeMsg if the daemon
+					// actually computes something different.
+					m.EffectiveWidth = msg.Width
+					m.EffectiveHeight = msg.Height
+					m.TileAllWindows()
 				} else if m.AutoTiling {
 					// Non-daemon mode: tile immediately
 					m.LogInfo("[RESIZE] Retiling restored session to fit new terminal size (%dx%d -> %dx%d)",
@@ -628,11 +641,10 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// mark all content dirty and invalidate caches for the new output.
 		m.FlushPTYBuffersAfterResize()
 
-		// Clear and re-place all kitty/sixel images after resize.
-		// During resize, window positions change which invalidates image positions.
-		if m.KittyPassthrough != nil {
-			m.KittyPassthrough.HideAllPlacements()
-		}
+		// NOTE: Don't HideAllPlacements on kitty here  - the delete+re-place cycle
+		// can lose image data on some terminals. RefreshAllPlacements runs every
+		// render and will reposition in place via `a=p` (the image data persists
+		// across `d=i` deletes per the kitty protocol).
 
 		return m, nil
 

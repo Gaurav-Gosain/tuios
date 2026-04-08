@@ -79,13 +79,34 @@ type SixelPassthroughPlacement struct {
 	BackgroundMode int
 }
 
-// NewSixelPassthrough creates a new SixelPassthrough.
+// SixelPassthroughOptions configures a SixelPassthrough instance.
+type SixelPassthroughOptions struct {
+	// ForceEnable skips capability detection (for web mode).
+	ForceEnable bool
+	// Output is the writer for sixel output. If nil, uses os.Stdout.
+	Output *os.File
+}
+
+// NewSixelPassthrough creates a new SixelPassthrough using auto-detected
+// capabilities and os.Stdout for output.
 func NewSixelPassthrough() *SixelPassthrough {
+	return NewSixelPassthroughWithOptions(SixelPassthroughOptions{})
+}
+
+// NewSixelPassthroughWithOptions creates a new SixelPassthrough with custom
+// options. Use this in web mode to pass the sip session's PtySlave() so
+// sixel bytes flow through the same PTY as the browser's text output.
+func NewSixelPassthroughWithOptions(opts SixelPassthroughOptions) *SixelPassthrough {
 	caps := GetHostCapabilities()
-	sixelPassthroughLog("NewSixelPassthrough: SixelGraphics=%v, TerminalName=%s", caps.SixelGraphics, caps.TerminalName)
+	enabled := caps.SixelGraphics || opts.ForceEnable
+	sixelPassthroughLog("NewSixelPassthrough: SixelGraphics=%v Force=%v TerminalName=%s", caps.SixelGraphics, opts.ForceEnable, caps.TerminalName)
+	hostOut := opts.Output
+	if hostOut == nil {
+		hostOut = os.Stdout
+	}
 	return &SixelPassthrough{
-		enabled:    caps.SixelGraphics,
-		hostOut:    os.Stdout,
+		enabled:    enabled,
+		hostOut:    hostOut,
 		placements: make(map[string][]*SixelPassthroughPlacement),
 	}
 }

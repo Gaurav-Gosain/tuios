@@ -433,23 +433,27 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	}
 
 	cs.sessionID = session.ID
-	// Don't store client dimensions yet - the attach payload has placeholder values (80x24).
-	// The real terminal size will be sent via NotifyTerminalSize after Bubble Tea starts.
-	// Setting width/height to 0 excludes this client from calculateEffectiveSize until then.
-	cs.width = 0
-	cs.height = 0
+	// Record the new client's dimensions from the attach payload. Previously
+	// these were zeroed out on the theory that 80x24 might be a bubbletea
+	// placeholder; but leaving them at 0 excludes the client from
+	// calculateEffectiveSize until NotifyTerminalSize arrives, which causes
+	// web clients to be stuck at stale session dimensions from a previously-
+	// attached native client. Trust the attach payload  - web/native attach
+	// callers already pass the real client viewport.
+	cs.width = payload.Width
+	cs.height = payload.Height
 	// Mark as TUI client if they have PTY subscriptions or if they're creating a new session
 	// TUI clients are the ones that can receive and execute remote commands
 	cs.isTUIClient = true
 
 	clientCount := d.getSessionClientCount(session.ID)
-	log.Printf("Client %s attached to session %s (TUI client, %d clients total)", cs.clientID, session.Name, clientCount)
+	log.Printf("Client %s attached to session %s (TUI client, %d clients total, size=%dx%d)",
+		cs.clientID, session.Name, clientCount, payload.Width, payload.Height)
 
-	// Calculate effective size from existing clients (new client excluded since width/height = 0)
+	// Calculate effective size including the new client's dimensions.
 	effectiveWidth, effectiveHeight := d.calculateEffectiveSize(session.ID)
 	if effectiveWidth == 0 || effectiveHeight == 0 {
-		// No existing clients with known size, use placeholder for now
-		// Will be updated when this client sends NotifyTerminalSize
+		// No known sizes yet  - fall back to this client's payload.
 		effectiveWidth = payload.Width
 		effectiveHeight = payload.Height
 	}
@@ -815,7 +819,6 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 		return d.sendError(cs, ErrCodePTYNotFound, fmt.Sprintf("PTY %s not found", payload.PTYID))
 	}
 
-	// Subscribe and start streaming
 	cs.ptySubscriptions[payload.PTYID] = struct{}{}
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
 	go d.streamPTYOutput(cs, pty)
@@ -882,40 +885,108 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 	})
 }
 
+
+// streamPTYOutput streams raw PTY bytes to a subscriber with batching.
+// Multiple channel reads are coalesced into a single connection write to
+// reduce syscall overhead (30K+ reads/sec at 500fps doom fire → one large
+// write per batch instead of one per read).
 func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
-	debugLog("[DEBUG] streamPTYOutput started for PTY %s, client %s", pty.ID[:8], cs.clientID)
 	outputCh := pty.Subscribe(cs.clientID)
-	debugLog("[DEBUG] Subscribed to PTY output channel")
+
+	const maxBatch = 256 * 1024
+	batch := make([]byte, 0, maxBatch)
+
+	for {
+		// Wait for at least one chunk
+		select {
+		case <-cs.done:
+			pty.Unsubscribe(cs.clientID)
+			return
+		case <-d.ctx.Done():
+			return
+		case data, ok := <-outputCh:
+			if !ok {
+				return
+			}
+			batch = append(batch[:0], data...)
+		}
+
+		// Drain additional pending chunks up to batch cap
+		for len(batch) < maxBatch {
+			select {
+			case more, ok := <-outputCh:
+				if !ok {
+					goto send
+				}
+				batch = append(batch, more...)
+			default:
+				goto send
+			}
+		}
+
+	send:
+		cs.sendMu.Lock()
+		_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		err := WritePTYOutput(cs.conn, pty.ID, batch)
+		cs.sendMu.Unlock()
+		if err != nil {
+			pty.Unsubscribe(cs.clientID)
+			return
+		}
+	}
+}
+
+// streamScreenDiffs streams event-based screen diffs to a subscriber.
+// This replaces the raw-byte streamPTYOutput path. The subscriber receives
+// only changed cells (via DirtyAccumulator), so:
+//   - No data loss: missing an intermediate diff just means the next one
+//     carries more cells. No VT state corruption.
+//   - Natural coalescing: multiple VT updates between sends merge in the
+//     accumulator. Fast TUIs produce fewer, larger diffs instead of many
+//     tiny ones.
+//   - Event-driven: the signal channel wakes us only when there's work.
+func (d *Daemon) streamScreenDiffs(cs *connState, pty *PTY) {
+	debugLog("[DEBUG] streamScreenDiffs started for PTY %s, client %s", pty.ID[:8], cs.clientID)
+
+	sub := pty.SubscribeScreenDiffs(cs.clientID)
+	defer pty.UnsubscribeScreenDiffs(cs.clientID)
 
 	for {
 		select {
 		case <-cs.done:
-			debugLog("[DEBUG] streamPTYOutput: client done, unsubscribing")
-			pty.Unsubscribe(cs.clientID)
+			debugLog("[DEBUG] streamScreenDiffs: client done")
 			return
 		case <-d.ctx.Done():
-			debugLog("[DEBUG] streamPTYOutput: daemon context done")
+			debugLog("[DEBUG] streamScreenDiffs: daemon context done")
 			return
-		case data, ok := <-outputCh:
-			if !ok {
-				debugLog("[DEBUG] streamPTYOutput: output channel closed")
-				return
+		case <-sub.Done:
+			debugLog("[DEBUG] streamScreenDiffs: subscription ended")
+			return
+		case <-sub.Signal:
+			// Compute diff via snapshot comparison. This reads the VT
+			// screen, compares with the previous snapshot, and returns
+			// only changed cells. Correctly handles scrolls, clears,
+			// and all other screen operations that Touched misses.
+			pty.terminalMu.RLock()
+			var diff *ScreenDiff
+			if pty.terminal != nil {
+				diff = sub.Differ.ComputeDiff(pty.terminal)
+			}
+			pty.terminalMu.RUnlock()
+
+			if diff == nil {
+				continue
 			}
 
-			debugLog("[DEBUG] streamPTYOutput: got %d bytes from PTY %s", len(data), pty.ID[:8])
-
-			// Use optimized binary format for PTY output (bypasses codec for performance)
 			cs.sendMu.Lock()
 			_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			err := WritePTYOutput(cs.conn, pty.ID, data)
+			err := WriteScreenDiff(cs.conn, pty.ID, diff)
 			cs.sendMu.Unlock()
 
 			if err != nil {
-				debugLog("[DEBUG] streamPTYOutput: failed to send: %v", err)
-				pty.Unsubscribe(cs.clientID)
+				debugLog("[DEBUG] streamScreenDiffs: send failed: %v", err)
 				return
 			}
-			debugLog("[DEBUG] streamPTYOutput: sent %d bytes to client", len(data))
 		}
 	}
 }

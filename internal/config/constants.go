@@ -70,8 +70,9 @@ const (
 // FPS and Refresh Rates
 // =============================================================================
 
-const (
-	// NormalFPS is the normal refresh rate during regular operation
+var (
+	// NormalFPS is the normal refresh rate during regular operation.
+	// Set via appearance.max_fps config (default 60, max 120).
 	NormalFPS = 60
 
 	// InteractionFPS is the refresh rate during user interactions (drag/resize)
@@ -342,9 +343,16 @@ var BorderStyle = "rounded"
 // Set via --dockbar-position flag or appearance.dockbar_position config
 var DockbarPosition = "bottom"
 
+
 // HideWindowButtons controls whether to hide window control buttons
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config
 var HideWindowButtons = false
+
+// HideScrollbar controls whether the window scrollbar is hidden.
+// Automatically treated as true when BorderStyle == "hidden" since there is
+// no border to draw the thumb on in that mode.
+// Set via --hide-scrollbar flag or appearance.hide_scrollbar config
+var HideScrollbar = false
 
 // WindowTitlePosition controls where window titles are displayed
 // Options: bottom, top, hidden
@@ -377,9 +385,19 @@ func NeedsDockTick() bool {
 // Set via --scrollback-lines flag or appearance.scrollback_lines config
 var ScrollbackLines = 10000
 
+// NiriReverseScroll reverses mouse scroll direction in niri scrolling mode.
+// When true, scroll-up moves viewport right and scroll-down moves left.
+// Set via appearance.niri_reverse_scroll config
+var NiriReverseScroll = false
+
 // LeaderKey is the prefix key for commands (default: ctrl+b)
 // Set via appearance.leader_key config
 var LeaderKey = "ctrl+b"
+
+// ZoomMaxWidth is the maximum width in cells for zoom/zen mode.
+// 0 means fullscreen (no max width cap). When set (e.g., 120), the zoomed
+// window is centered horizontally and capped at this width.
+var ZoomMaxWidth = 0
 
 // GetDockPillLeftChar returns the appropriate pill left character based on UseASCIIOnly
 func GetDockPillLeftChar() string {
@@ -518,6 +536,15 @@ func GetBorderForStyle() lipgloss.Border {
 	default:
 		return lipgloss.RoundedBorder()
 	}
+}
+
+// GetScrollbarThumbChar returns the scrollbar thumb character. Uses a full
+// block by default for prominence, falling back to '#' for ASCII-only mode.
+func GetScrollbarThumbChar() string {
+	if UseASCIIOnly || BorderStyle == "ascii" {
+		return "#"
+	}
+	return "█"
 }
 
 // Window decoration getter functions

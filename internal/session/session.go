@@ -3,7 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
-	"io"
+
 	"log"
 	"maps"
 	"os"
@@ -108,13 +108,23 @@ type PTY struct {
 	outputBuffer []byte
 	outputPos    int
 
-	// Subscribers for output streaming
+	// Subscribers for raw output streaming (legacy path, used by non-diff clients)
 	subscribers   map[string]chan []byte
 	subscribersMu sync.RWMutex
+
+	// Screen-diff subscribers. Each subscriber has a signal channel (cap 1)
+	// and a ScreenDiffer that computes diffs via snapshot comparison. The
+	// PTY read loop signals; the subscriber goroutine computes + sends.
+	diffSubscribers   map[string]*DiffSignal
+	diffSubscribersMu sync.RWMutex
 
 	exited   bool
 	exitedMu sync.RWMutex
 	exitCode int
+
+	// Single-goroutine VT writer channel. Replaces goroutine-per-write
+	// which caused unbounded goroutine explosion at high FPS.
+	vtWriteChan chan []byte
 
 	// Callback when PTY process exits - used by daemon to notify clients
 	onExit func(ptyID string)
@@ -230,19 +240,6 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 	terminal := vt.NewEmulator(width, height)
 	terminal.SetScrollbackMaxLines(10000) // Match default scrollback
 
-	// Handle Kitty graphics queries on the daemon side for low-latency responses.
-	// Query responses go through the same pipe as DA1/CPR, so forwardTerminalResponses()
-	// delivers them to the PTY. All other commands (transmit, place, delete) are discarded
-	// here — the client's passthrough handles those and forwards to the host terminal.
-	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
-		if cmd.Action == vt.KittyActionQuery {
-			response := vt.BuildKittyResponse(true, cmd.ImageID, "")
-			terminal.WriteResponse(response)
-			return
-		}
-		debugLog("[DAEMON-VT] Kitty command discarded: action=%c, imageID=%d", cmd.Action, cmd.ImageID)
-	})
-
 	pty := &PTY{
 		ID:           id,
 		pty:          ptyInstance,
@@ -253,10 +250,28 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 		width:        width,
 		height:       height,
 		outputBuffer: make([]byte, 64*1024), // 64KB ring buffer
-		subscribers:  make(map[string]chan []byte),
+		subscribers: make(map[string]chan []byte),
+		vtWriteChan: make(chan []byte, 256), // Daemon VT writer (state tracking only)
 	}
 
+	// Handle kitty graphics queries on the daemon side for low-latency
+	// responses. Non-query commands (transmit, place, delete) flow through
+	// the raw PTY output broadcast to subscribers  - the client's VT
+	// processes them via its own kitty passthrough callback.
+	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
+		if cmd.Action == vt.KittyActionQuery {
+			response := vt.BuildKittyResponse(true, cmd.ImageID, "")
+			terminal.WriteResponse(response)
+			return
+		}
+		// Non-query commands: no-op here. The raw bytes are already
+		// broadcast to subscribers as part of the PTY output stream.
+	})
+
 	s.ptys[id] = pty
+
+	// Start VT writer goroutine (single, persistent)
+	go pty.vtWriter()
 
 	// Start output reader
 	go pty.readOutput()
@@ -442,7 +457,7 @@ func (p *PTY) Subscribe(clientID string) <-chan []byte {
 		return existing
 	}
 
-	ch := make(chan []byte, 4096) // Large buffer to prevent frame drops during video playback
+	ch := make(chan []byte, 16384) // Large buffer matching client-side outputChan capacity
 	p.subscribers[clientID] = ch
 	debugLog("[DEBUG] PTY %s: added subscriber %s (total: %d)", p.ID[:8], clientID, len(p.subscribers))
 
@@ -474,6 +489,63 @@ func (p *PTY) Unsubscribe(clientID string) {
 	if ch, ok := p.subscribers[clientID]; ok {
 		close(ch)
 		delete(p.subscribers, clientID)
+	}
+}
+
+// SubscribeScreenDiffs registers a client for event-based screen diffs.
+// Returns a DiffSignal whose Signal channel wakes the subscriber goroutine.
+// The subscriber uses DiffSignal.Differ.ComputeDiff(emulator) to compute
+// diffs via snapshot comparison. The first ComputeDiff call returns a full
+// screen snapshot since there's no previous state to compare against.
+func (p *PTY) SubscribeScreenDiffs(clientID string) *DiffSignal {
+	p.diffSubscribersMu.Lock()
+	defer p.diffSubscribersMu.Unlock()
+
+	if p.diffSubscribers == nil {
+		p.diffSubscribers = make(map[string]*DiffSignal)
+	}
+
+	if existing, ok := p.diffSubscribers[clientID]; ok {
+		return existing
+	}
+
+	sub := NewDiffSignal()
+	p.diffSubscribers[clientID] = sub
+
+	// Signal immediately so the subscriber sends an initial full snapshot
+	select {
+	case sub.Signal <- struct{}{}:
+	default:
+	}
+
+	debugLog("[DEBUG] PTY %s: added diff subscriber %s", p.ID[:8], clientID)
+	return sub
+}
+
+// UnsubscribeScreenDiffs removes a screen-diff subscriber.
+func (p *PTY) UnsubscribeScreenDiffs(clientID string) {
+	p.diffSubscribersMu.Lock()
+	defer p.diffSubscribersMu.Unlock()
+
+	if sub, ok := p.diffSubscribers[clientID]; ok {
+		close(sub.Done)
+		delete(p.diffSubscribers, clientID)
+		debugLog("[DEBUG] PTY %s: removed diff subscriber %s", p.ID[:8], clientID)
+	}
+}
+
+// signalDiffSubscribers wakes all screen-diff subscribers. Non-blocking:
+// if a subscriber's signal channel already has a pending signal, the new
+// one is a no-op (natural coalescing).
+func (p *PTY) signalDiffSubscribers() {
+	p.diffSubscribersMu.RLock()
+	defer p.diffSubscribersMu.RUnlock()
+
+	for _, sub := range p.diffSubscribers {
+		select {
+		case sub.Signal <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -720,61 +792,72 @@ func (p *PTY) IsExited() bool {
 }
 
 func (p *PTY) readOutput() {
-	debugLog("[DEBUG] PTY %s: readOutput started", p.ID[:8])
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16*1024) // 16KB: matches typical PTY pipe buffer
 	for {
 		select {
 		case <-p.ctx.Done():
-			debugLog("[DEBUG] PTY %s: context done, stopping readOutput", p.ID[:8])
 			return
 		default:
 		}
 
 		n, err := p.pty.Read(buf)
 		if err != nil {
-			if err != io.EOF {
-				debugLog("[DEBUG] PTY %s: read error: %v", p.ID[:8], err)
-			} else {
-				debugLog("[DEBUG] PTY %s: EOF", p.ID[:8])
-			}
 			return
 		}
 
 		if n > 0 {
-			debugLog("[DEBUG] PTY %s: read %d bytes, about to process", p.ID[:8], n)
 			data := make([]byte, n)
 			copy(data, buf[:n])
 
-			// Write to VT emulator for persistent terminal state
-			// This maintains scrollback and screen content across reconnects
-			// NOTE: Do this in a separate goroutine to avoid blocking output
-			go func(termData []byte) {
-				p.terminalMu.Lock()
-				if p.terminal != nil {
-					_, _ = p.terminal.Write(termData)
-				}
-				p.terminalMu.Unlock()
-			}(data)
+			// VT emulator: feed via a dedicated single goroutine to
+			// avoid unbounded goroutine growth at high FPS. The VT is
+			// only used for state queries (GetTerminalState) and kitty
+			// query responses, so it's OK if it falls slightly behind.
+			select {
+			case p.vtWriteChan <- data:
+			default:
+				// VT writer can't keep up  - acceptable for state tracking.
+				// The client's own VT is the rendering source of truth.
+			}
 
-			// Store in ring buffer
+			// Store in ring buffer for reconnection
 			p.outputMu.Lock()
 			p.appendToBuffer(data)
 			p.outputMu.Unlock()
 
 			// Broadcast to subscribers
-			debugLog("[DEBUG] PTY %s: calling broadcast with %d bytes", p.ID[:8], len(data))
 			p.broadcast(data)
 		}
 	}
 }
 
+// vtWriter is a single persistent goroutine that feeds the daemon's VT
+// emulator. Using a dedicated goroutine (instead of spawning one per PTY
+// read) prevents unbounded goroutine growth at high FPS.
+func (p *PTY) vtWriter() {
+	for data := range p.vtWriteChan {
+		p.terminalMu.Lock()
+		if p.terminal != nil {
+			_, _ = p.terminal.Write(data)
+		}
+		p.terminalMu.Unlock()
+	}
+}
+
 func (p *PTY) appendToBuffer(data []byte) {
-	space := len(p.outputBuffer) - p.outputPos
+	bufLen := len(p.outputBuffer)
+	// If data is bigger than the buffer, keep only the tail
+	if len(data) >= bufLen {
+		copy(p.outputBuffer, data[len(data)-bufLen:])
+		p.outputPos = bufLen
+		return
+	}
+	space := bufLen - p.outputPos
 	if len(data) > space {
 		// Shift buffer, keep last half
-		half := len(p.outputBuffer) / 2
+		half := bufLen / 2
 		copy(p.outputBuffer, p.outputBuffer[half:p.outputPos])
-		p.outputPos = p.outputPos - half
+		p.outputPos -= half
 	}
 	copy(p.outputBuffer[p.outputPos:], data)
 	p.outputPos += len(data)

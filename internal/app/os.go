@@ -229,7 +229,7 @@ type OS struct {
 	TerminalModeEnteredAt time.Time
 	// Scrollback browser overlay
 	ShowScrollbackBrowser bool
-	ScrollbackBrowser     any // *scrollback.Browser — typed as any to avoid import cycle
+	ScrollbackBrowser     any // *scrollback.Browser  - typed as any to avoid import cycle
 	// Command palette overlay
 	ShowCommandPalette     bool
 	CommandPaletteQuery    string
@@ -237,11 +237,12 @@ type OS struct {
 	CommandPaletteScroll   int
 	// Session switcher overlay
 	ShowSessionSwitcher     bool
-	SessionSwitcherQuery    string
-	SessionSwitcherSelected int
-	SessionSwitcherScroll   int
-	SessionSwitcherItems    []SessionSwitcherItem
-	SessionSwitcherError    string
+	SessionSwitcherQuery         string
+	SessionSwitcherSelected      int
+	SessionSwitcherScroll        int
+	SessionSwitcherItems         []SessionSwitcherItem
+	SessionSwitcherError         string
+	SessionSwitcherConfirmDelete string // non-empty = confirming deletion of this session name
 	// Aggregate view overlay (all windows across workspaces)
 	ShowAggregateView     bool
 	AggregateViewQuery    string
@@ -252,6 +253,10 @@ type OS struct {
 	LayoutCycleIndex     int              // Current index in saved layouts for cycling
 	MultifocusSet        map[int]bool     // Windows that receive keystrokes simultaneously
 	UseBSPLayout         bool             // true = BSP tiling, false = master-stack
+	// Scrolling tiling (niri-like) layout
+	UseScrollingLayout        bool                            // true = scrolling columns mode
+	WorkspaceScrollingLayouts map[int]*layout.ScrollingLayout // per-workspace scrolling layouts
+	scrollingFocusSyncing     bool                            // guard to prevent recursive sync
 	LayoutPickerItems    []LayoutTemplate
 	LayoutPickerSelected int
 	LayoutPickerScroll   int
@@ -381,16 +386,377 @@ func (m *OS) RebuildBSPTreeFromPositions() {
 	tree.SyncRatiosFromGeometry(windowRects, m.GetBSPBounds())
 }
 
-// ToggleLayoutMode switches between BSP tiling and master-stack layout.
+// ToggleLayoutMode cycles through layout modes: BSP -> master-stack -> scrolling -> BSP.
 func (m *OS) ToggleLayoutMode() {
-	m.UseBSPLayout = !m.UseBSPLayout
-	if m.UseBSPLayout {
-		m.ShowNotification("Layout: BSP tiling", "info", 0)
+	m.resetTiledFlags()
+	if m.UseScrollingLayout {
+		// scrolling -> BSP
+		m.UseScrollingLayout = false
+		m.UseBSPLayout = true
+		if m.WorkspaceTrees == nil {
+			m.WorkspaceTrees = make(map[int]*layout.BSPTree)
+		}
+		m.WorkspaceTrees[m.CurrentWorkspace] = nil
+		m.ShowNotification("Layout: BSP tiling", "info", config.NotificationDuration)
+	} else if m.UseBSPLayout {
+		// BSP -> master-stack
+		m.UseBSPLayout = false
+		m.ShowNotification("Layout: master-stack", "info", config.NotificationDuration)
 	} else {
-		m.ShowNotification("Layout: master-stack", "info", 0)
+		// master-stack -> scrolling
+		m.UseScrollingLayout = true
+		delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
+		m.ShowNotification("Layout: scrolling (niri)", "info", config.NotificationDuration)
+	}
+	if !m.AutoTiling && (m.UseScrollingLayout || m.UseBSPLayout) {
+		m.AutoTiling = true
 	}
 	if m.AutoTiling {
 		m.TileAllWindows()
+	}
+}
+
+// resetTiledFlags clears the Tiled flag on all current workspace windows
+// and invalidates caches. Call when switching layout modes to prevent
+// stale shared-border state from bleeding between modes.
+func (m *OS) resetTiledFlags() {
+	for i := range m.Windows {
+		if m.Windows[i].Workspace == m.CurrentWorkspace {
+			m.Windows[i].Tiled = false
+			m.Windows[i].InvalidateCache()
+		}
+	}
+}
+
+// EnableScrollingLayout directly enables scrolling layout mode.
+func (m *OS) EnableScrollingLayout() {
+	m.resetTiledFlags()
+	m.UseScrollingLayout = true
+	m.UseBSPLayout = false
+	if !m.AutoTiling {
+		m.AutoTiling = true
+	}
+	// Clear old scrolling layout to rebuild from current windows
+	delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
+	m.TileAllWindows()
+	m.ShowNotification("Layout: scrolling (niri)", "info", config.NotificationDuration)
+}
+
+// EnableBSPLayout directly enables BSP layout mode.
+func (m *OS) EnableBSPLayout() {
+	m.resetTiledFlags()
+	m.UseScrollingLayout = false
+	m.UseBSPLayout = true
+	if !m.AutoTiling {
+		m.AutoTiling = true
+	}
+	// Clear old BSP tree to rebuild
+	if m.WorkspaceTrees == nil {
+		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
+	}
+	m.WorkspaceTrees[m.CurrentWorkspace] = nil
+	m.TileAllWindows()
+	m.ShowNotification("Layout: BSP tiling", "info", config.NotificationDuration)
+}
+
+// EnableMasterStackLayout directly enables master-stack layout mode.
+func (m *OS) EnableMasterStackLayout() {
+	m.resetTiledFlags()
+	m.UseScrollingLayout = false
+	m.UseBSPLayout = false
+	if !m.AutoTiling {
+		m.AutoTiling = true
+	}
+	m.TileAllWindows()
+	m.ShowNotification("Layout: master-stack", "info", config.NotificationDuration)
+}
+
+// DisableAllTiling disables all tiling modes and resets window state.
+func (m *OS) DisableAllTiling() {
+	m.AutoTiling = false
+	m.UseScrollingLayout = false
+	m.resetTiledFlags()
+	m.ShowNotification("Tiling disabled", "info", config.NotificationDuration)
+}
+
+// GetOrCreateScrollingLayout returns the scrolling layout for the current workspace.
+func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
+	if m.WorkspaceScrollingLayouts == nil {
+		m.WorkspaceScrollingLayouts = make(map[int]*layout.ScrollingLayout)
+	}
+	sl, ok := m.WorkspaceScrollingLayouts[m.CurrentWorkspace]
+	if !ok || sl == nil {
+		sl = layout.NewScrollingLayout()
+		m.WorkspaceScrollingLayouts[m.CurrentWorkspace] = sl
+
+		// Populate with existing visible windows
+		for _, w := range m.Windows {
+			if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
+				intID := m.getWindowIntID(w.ID)
+				sl.AddColumn(intID)
+			}
+		}
+
+		// Sync FocusedCol with the OS focused window so the viewport
+		// shows the correct column instead of always the last one.
+		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+			fw := m.Windows[m.FocusedWindow]
+			if fw.Workspace == m.CurrentWorkspace && !fw.IsFloating {
+				intID := m.getWindowIntID(fw.ID)
+				sl.FocusColumnContaining(intID)
+			}
+		}
+	}
+	return sl
+}
+
+// scrollingSetPositions applies the scrolling layout positions and dimensions.
+// When animate is true, windows slide to their new positions.
+func (m *OS) scrollingSetPositions() {
+	m.scrollingSetPositionsAnimated(true)
+}
+
+// scrollingSetPositionsInstant applies positions without animation (mouse wheel).
+func (m *OS) scrollingSetPositionsInstant() {
+	m.scrollingSetPositionsAnimated(false)
+}
+
+func (m *OS) scrollingSetPositionsAnimated(animate bool) {
+	sl := m.GetOrCreateScrollingLayout()
+	screenW := m.GetRenderWidth()
+
+	sl.ClampViewport(screenW)
+
+	layouts := sl.ComputePositions(screenW, m.GetUsableHeight(), m.GetTopMargin())
+
+	// Scrolling layout transitions always animate (even with --no-animations)
+	// because the viewport shift is disorienting without the slide.
+	dur := 150 * time.Millisecond
+	if config.GetAnimationDuration() > 0 {
+		dur = config.GetAnimationDuration()
+	}
+
+	for windowIntID, rect := range layouts {
+		win := m.getWindowByIntID(windowIntID)
+		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
+			continue
+		}
+		if win.Width != rect.W || win.Height != rect.H {
+			win.Resize(rect.W, rect.H)
+		}
+
+		// If this window already has an in-flight animation heading to
+		// the same target, don't touch it. TileAllWindows and other
+		// callers re-run scrollingSetPositions frequently; without this
+		// guard each call would cancel + recreate the animation from the
+		// current intermediate position, making it stutter.
+		if m.windowHasAnimationTo(win, rect.X, rect.Y, rect.W, rect.H) {
+			continue
+		}
+
+		alreadyPlaced := win.X != 0 || win.Y != 0 || win.Width != 0
+		if animate && alreadyPlaced && (win.X != rect.X || win.Y != rect.Y) {
+			if !m.windowHasAnimationTo(win, rect.X, rect.Y, rect.W, rect.H) {
+				m.CancelAnimationsForWindow(win)
+				anim := ui.NewSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur)
+				if anim != nil {
+					m.Animations = append(m.Animations, anim)
+					continue
+				}
+			} else {
+				continue
+			}
+		}
+
+		win.X = rect.X
+		win.Y = rect.Y
+		win.Width = rect.W
+		win.Height = rect.H
+		win.Tiled = false
+		win.MarkPositionDirty()
+		win.InvalidateCache()
+	}
+}
+
+// windowHasAnimationTo checks if a window has an active animation
+// heading to the exact target position. Used to avoid canceling
+// in-flight animations when scrollingSetPositions is called repeatedly.
+func (m *OS) windowHasAnimationTo(win *terminal.Window, x, y, w, h int) bool {
+	for _, anim := range m.Animations {
+		if anim.Window == win && !anim.Complete &&
+			anim.EndX == x && anim.EndY == y &&
+			anim.EndWidth == w && anim.EndHeight == h {
+			return true
+		}
+	}
+	return false
+}
+
+// ScrollingFocusLeft navigates to the column to the left.
+func (m *OS) ScrollingFocusLeft() {
+	sl := m.GetOrCreateScrollingLayout()
+	sl.FocusLeft()
+	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	m.scrollingSyncFocusToOS()
+	m.scrollingSetPositions()
+}
+
+// ScrollingFocusRight navigates to the column to the right.
+func (m *OS) ScrollingFocusRight() {
+	sl := m.GetOrCreateScrollingLayout()
+	sl.FocusRight()
+	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	m.scrollingSyncFocusToOS()
+	m.scrollingSetPositions()
+}
+
+// ScrollingMoveColumnLeft moves the focused column left.
+func (m *OS) ScrollingMoveColumnLeft() {
+	sl := m.GetOrCreateScrollingLayout()
+	sl.MoveColumnLeft()
+	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	m.scrollingSetPositions()
+}
+
+// ScrollingMoveColumnRight moves the focused column right.
+func (m *OS) ScrollingMoveColumnRight() {
+	sl := m.GetOrCreateScrollingLayout()
+	sl.MoveColumnRight()
+	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	m.scrollingSetPositions()
+}
+
+// ScrollingCycleWidth cycles the focused column through preset widths.
+func (m *OS) ScrollingCycleWidth() {
+	sl := m.GetOrCreateScrollingLayout()
+	sl.CycleWidth()
+	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	m.scrollingSetPositions()
+}
+
+// ScrollingConsumeWindow absorbs the next column's window into the focused column.
+func (m *OS) ScrollingConsumeWindow() {
+	sl := m.GetOrCreateScrollingLayout()
+	sl.ConsumeWindow()
+	m.scrollingSetPositions()
+}
+
+// ScrollingExpelWindow ejects the last stacked window into its own column.
+func (m *OS) ScrollingExpelWindow() {
+	sl := m.GetOrCreateScrollingLayout()
+	sl.ExpelWindow()
+	m.scrollingSetPositions()
+}
+
+// ScrollingScrollViewport scrolls the viewport manually (mouse wheel).
+// Uses instant positioning so scrolling feels direct and responsive.
+func (m *OS) ScrollingScrollViewport(delta int) {
+	sl := m.GetOrCreateScrollingLayout()
+	screenW := m.GetRenderWidth()
+	// Cancel any in-flight slide animations so the wheel feels direct
+	m.CompleteAllAnimations()
+	sl.ViewportX += delta * (screenW / 5)
+	sl.ClampViewport(screenW)
+	m.scrollingSetPositionsInstant()
+}
+
+// ScrollingOnFocusChange is called when the OS focus changes (click, etc.)
+// to sync the scrolling layout and scroll the focused column into view.
+// Only updates viewport/positions, never changes dimensions.
+func (m *OS) ScrollingOnFocusChange() {
+	sl := m.GetOrCreateScrollingLayout()
+	fw := m.GetFocusedWindow()
+	if fw == nil {
+		return
+	}
+	intID := m.getWindowIntID(fw.ID)
+	if !sl.FocusColumnContaining(intID) {
+		sl.AddColumn(intID)
+		sl.FocusColumnContaining(intID)
+	}
+
+	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	m.scrollingSetPositions()
+}
+
+// ScrollingOnWindowAdded adds a new window to the scrolling layout.
+// Only adds the column  - FocusWindow handles viewport and positioning.
+func (m *OS) ScrollingOnWindowAdded(w *terminal.Window) {
+	sl := m.GetOrCreateScrollingLayout()
+	intID := m.getWindowIntID(w.ID)
+	// GetOrCreateScrollingLayout populates from m.Windows on first call.
+	// If the window was already appended to m.Windows before this call,
+	// the layout already has it. Don't add a duplicate.
+	if sl.HasWindow(intID) {
+		m.LogInfo("[SCROLL-ADD] ScrollingOnWindowAdded: window=%s intID=%d already in layout, skipping", w.ID[:8], intID)
+		return
+	}
+	m.LogInfo("[SCROLL-ADD] ScrollingOnWindowAdded: window=%s intID=%d", w.ID[:8], intID)
+	sl.AddColumn(intID)
+}
+
+// ScrollingOnWindowRemoved removes a window and focuses the neighbor.
+func (m *OS) ScrollingOnWindowRemoved(windowIntID int) {
+	sl := m.GetOrCreateScrollingLayout()
+	sl.RemoveWindow(windowIntID)
+	if sl.WindowCount() > 0 {
+		sl.EnsureFocusedVisible(m.GetRenderWidth())
+		m.scrollingSyncFocusToOS()
+		m.scrollingSetPositions()
+	}
+}
+
+// scrollingSyncFocusToOS sets the OS focused window to match the scrolling layout's focus.
+// GetWindowIntID returns the integer BSP ID for a window by its string ID.
+func (m *OS) GetWindowIntID(windowID string) int {
+	return m.getWindowIntID(windowID)
+}
+
+// ScrollingSetPositions applies scrolling layout positions (public wrapper).
+func (m *OS) ScrollingSetPositions() {
+	m.scrollingSetPositions()
+}
+
+// GetWindowByIntID returns the window with the given integer BSP ID.
+func (m *OS) GetWindowByIntID(intID int) *terminal.Window {
+	return m.getWindowByIntID(intID)
+}
+
+// scrollingResizeColumn changes the focused column's width by delta pixels.
+func (m *OS) scrollingResizeColumn(delta int) {
+	sl := m.GetOrCreateScrollingLayout()
+	if sl.FocusedCol < 0 || sl.FocusedCol >= len(sl.Columns) {
+		return
+	}
+	col := &sl.Columns[sl.FocusedCol]
+	// Get current width and apply delta, capped at 90% of screen
+	screenW := m.GetRenderWidth()
+	maxWidth := screenW * 9 / 10
+	currentWidth := sl.ResolveColumnWidth(sl.FocusedCol, screenW)
+	newWidth := max(min(currentWidth+delta, maxWidth), 20)
+	col.FixedWidth = newWidth
+	col.Proportion = 0 // FixedWidth takes priority
+	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	m.scrollingSetPositions()
+}
+
+func (m *OS) scrollingSyncFocusToOS() {
+	sl := m.GetOrCreateScrollingLayout()
+	focusedWinID := sl.GetFocusedWindowID()
+	if focusedWinID < 0 {
+		return
+	}
+	win := m.getWindowByIntID(focusedWinID)
+	if win == nil {
+		return
+	}
+	m.scrollingFocusSyncing = true
+	defer func() { m.scrollingFocusSyncing = false }()
+	for i, w := range m.Windows {
+		if w == win {
+			m.FocusWindow(i)
+			return
+		}
 	}
 }
 
@@ -449,13 +815,25 @@ func (m *OS) ToggleFloating() {
 		}
 		fw.Tiled = false
 		fw.InvalidateCache()
-		m.ShowNotification("Window: floating", "info", 0)
+		m.RecalcZOrder()
+		m.ShowNotification("Window: floating", "info", config.NotificationDuration)
 	} else {
-		// Re-add to BSP tree when unfloating
+		// Re-add to tiling layout when unfloating
 		if m.AutoTiling {
-			m.AddWindowToBSPTree(fw)
+			if m.UseScrollingLayout {
+				intID := m.getWindowIntID(fw.ID)
+				sl := m.GetOrCreateScrollingLayout()
+				if !sl.HasWindow(intID) {
+					sl.AddColumn(intID)
+				}
+				m.TileAllWindows()
+			} else {
+				m.AddWindowToBSPTree(fw)
+			}
 		}
-		m.ShowNotification("Window: tiled", "info", 0)
+		fw.InvalidateCache()
+		m.RecalcZOrder()
+		m.ShowNotification("Window: tiled", "info", config.NotificationDuration)
 	}
 }
 
@@ -489,12 +867,13 @@ func (m *OS) ToggleMultifocus(windowIndex int) {
 		if len(m.MultifocusSet) == 0 {
 			m.MultifocusSet = nil
 		}
-		m.ShowNotification("Multifocus: removed window", "info", 0)
+		m.ShowNotification("Multifocus: removed window", "info", config.NotificationDuration)
 	} else {
 		m.MultifocusSet[windowIndex] = true
-		m.ShowNotification(fmt.Sprintf("Multifocus: %d windows", len(m.MultifocusSet)), "info", 0)
+		m.ShowNotification(fmt.Sprintf("Multifocus: %d windows", len(m.MultifocusSet)), "info", config.NotificationDuration)
 	}
-	// Invalidate caches to show visual indicator
+	// Invalidate caches to show visual indicator on all affected windows
+	m.Windows[windowIndex].InvalidateCache()
 	for idx := range m.MultifocusSet {
 		if idx < len(m.Windows) {
 			m.Windows[idx].InvalidateCache()
@@ -718,18 +1097,8 @@ func (m *OS) FocusWindow(i int) *OS {
 		m.WorkspaceFocus[m.CurrentWorkspace] = i
 	}
 
-	// Simple Z-index assignment: focused window gets highest Z
-	highestZ := len(m.Windows) - 1
-	m.Windows[i].Z = highestZ
-
-	// Assign Z-indices to other windows in order
-	z := 0
-	for j := range m.Windows {
-		if j != i {
-			m.Windows[j].Z = z
-			z++
-		}
-	}
+	// Recalculate Z-ordering (floating always above non-floating)
+	m.RecalcZOrder()
 
 	// Always invalidate caches for immediate visual feedback on focus change
 	// The Z-index change needs to be visible immediately when user clicks
@@ -742,7 +1111,45 @@ func (m *OS) FocusWindow(i int) *OS {
 
 	m.FireHook(hooks.AfterFocusChange, m.Windows[i].ID, m.Windows[i].Title)
 
+	// Sync scrolling layout focus and scroll into view when focus changes
+	// via click or external means (not from scrollingSyncFocusToOS).
+	if m.AutoTiling && m.UseScrollingLayout && !m.scrollingFocusSyncing {
+		m.LogInfo("[SCROLL-FOCUS] FocusWindow(%d) -> triggering ScrollingOnFocusChange (old=%d)", i, oldFocused)
+		m.ScrollingOnFocusChange()
+	}
+
 	return m
+}
+
+// RecalcZOrder recalculates Z-index values for all windows, ensuring floating
+// windows are always above non-floating windows. Call after toggling IsFloating.
+func (m *OS) RecalcZOrder() {
+	focused := m.FocusedWindow
+	z := 0
+	// Non-floating, non-focused first
+	for j := range m.Windows {
+		if j != focused && !m.Windows[j].IsFloating {
+			m.Windows[j].Z = z
+			z++
+		}
+	}
+	// Focused non-floating
+	if focused >= 0 && focused < len(m.Windows) && !m.Windows[focused].IsFloating {
+		m.Windows[focused].Z = z
+		z++
+	}
+	// Non-focused floating
+	for j := range m.Windows {
+		if j != focused && m.Windows[j].IsFloating {
+			m.Windows[j].Z = z
+			z++
+		}
+	}
+	// Focused floating (very top)
+	if focused >= 0 && focused < len(m.Windows) && m.Windows[focused].IsFloating {
+		m.Windows[focused].Z = z
+	}
+	m.MarkAllDirty()
 }
 
 // AddWindow adds a new window to the current workspace.
@@ -823,18 +1230,26 @@ func (m *OS) AddWindow(title string) *OS {
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))
 	m.FireHook(hooks.AfterNewWindow, newID, title)
 
+	// In scrolling mode, add to layout BEFORE focusing so that
+	// ScrollingOnFocusChange can find the window's column.
+	if m.AutoTiling && m.UseScrollingLayout {
+		m.ScrollingOnWindowAdded(window)
+	}
+
 	// Focus the new window, which will bring it to the front
 	m.FocusWindow(len(m.Windows) - 1)
 
 	// Auto-tile if in tiling mode
 	if m.AutoTiling {
-		m.LogInfo("Auto-tiling triggered for new window")
-		// Use BSP tree if available
-		tree := m.GetOrCreateBSPTree()
-		if tree != nil {
-			m.AddWindowToBSPTree(window)
-		} else {
+		if m.UseScrollingLayout {
 			m.TileAllWindows()
+		} else {
+			tree := m.GetOrCreateBSPTree()
+			if tree != nil {
+				m.AddWindowToBSPTree(window)
+			} else {
+				m.TileAllWindows()
+			}
 		}
 	}
 
@@ -882,6 +1297,24 @@ func (m *OS) DeleteWindow(i int) *OS {
 
 	if m.KittyPassthrough != nil {
 		m.KittyPassthrough.OnWindowClose(deletedWindow.ID)
+	}
+
+	// Update MultifocusSet: remove the deleted index and shift higher indices down
+	if len(m.MultifocusSet) > 0 {
+		delete(m.MultifocusSet, i)
+		updated := make(map[int]bool, len(m.MultifocusSet))
+		for idx := range m.MultifocusSet {
+			if idx > i {
+				updated[idx-1] = true
+			} else {
+				updated[idx] = true
+			}
+		}
+		if len(updated) == 0 {
+			m.MultifocusSet = nil
+		} else {
+			m.MultifocusSet = updated
+		}
 	}
 
 	deletedWindow.Close()
@@ -932,32 +1365,38 @@ func (m *OS) DeleteWindow(i int) *OS {
 
 	// Retile if in tiling mode
 	if m.AutoTiling {
-		// Use BSP tree if available
-		tree := m.WorkspaceTrees[m.CurrentWorkspace]
-		if tree != nil && windowIntID > 0 {
-			tree.RemoveWindow(windowIntID)
-			m.LogInfo("BSP: Removed window from tree, tree now has %d windows", tree.WindowCount())
-
-			// If tree is now empty, clear it completely so next window starts fresh
-			if tree.IsEmpty() {
-				m.LogInfo("BSP: Tree is now empty, clearing workspace tree")
-				m.WorkspaceTrees[m.CurrentWorkspace] = nil
-			} else if len(m.Windows) > 0 {
-				m.ApplyBSPLayout()
+		if m.UseScrollingLayout {
+			// Scrolling mode: only touch the scrolling layout
+			if windowIntID > 0 {
+				m.ScrollingOnWindowRemoved(windowIntID)
 			}
-		}
+		} else {
+			// BSP/master-stack mode
+			tree := m.WorkspaceTrees[m.CurrentWorkspace]
+			if tree != nil && windowIntID > 0 {
+				tree.RemoveWindow(windowIntID)
+				m.LogInfo("BSP: Removed window from tree, tree now has %d windows", tree.WindowCount())
 
-		// If there are still visible windows in this workspace, retile them
-		if len(m.Windows) > 0 {
-			hasVisibleInWorkspace := false
-			for _, w := range m.Windows {
-				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-					hasVisibleInWorkspace = true
-					break
+				if tree.IsEmpty() {
+					m.LogInfo("BSP: Tree is now empty, clearing workspace tree")
+					m.WorkspaceTrees[m.CurrentWorkspace] = nil
+				} else if len(m.Windows) > 0 {
+					m.ApplyBSPLayout()
 				}
 			}
-			if hasVisibleInWorkspace && (tree == nil || tree.IsEmpty()) {
-				m.TileAllWindows()
+
+			// If there are still visible windows in this workspace, retile them
+			if len(m.Windows) > 0 {
+				hasVisibleInWorkspace := false
+				for _, w := range m.Windows {
+					if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+						hasVisibleInWorkspace = true
+						break
+					}
+				}
+				if hasVisibleInWorkspace && (tree == nil || tree.IsEmpty()) {
+					m.TileAllWindows()
+				}
 			}
 		}
 	}
@@ -1222,7 +1661,16 @@ func (m *OS) MinimizeWindow(i int) {
 
 		// Retile remaining windows if in tiling mode
 		if m.AutoTiling {
-			m.TileRemainingWindows(i)
+			if m.UseScrollingLayout {
+				// Remove from scrolling layout and retile
+				intID := m.getWindowIntID(window.ID)
+				sl := m.GetOrCreateScrollingLayout()
+				sl.RemoveWindow(intID)
+				sl.EnsureFocusedVisible(m.GetRenderWidth())
+				m.scrollingSetPositions()
+			} else {
+				m.TileRemainingWindows(i)
+			}
 		}
 	}
 }
@@ -1235,21 +1683,20 @@ func (m *OS) RestoreWindow(i int) {
 		// In tiling mode, skip animation and let TileAllWindows() handle positioning
 		// This prevents incorrect tiling calculations when restoring multiple windows
 		if m.AutoTiling {
-			// Simply mark as not minimized and let TileAllWindows() position it
 			window.Minimized = false
 
-			// Set to a temporary position (will be overridden by TileAllWindows)
-			window.X = 10
-			window.Y = 5
-			window.Width = config.DefaultWindowWidth
-			window.Height = config.DefaultWindowHeight
+			if m.UseScrollingLayout {
+				// Re-add to scrolling layout
+				intID := m.getWindowIntID(window.ID)
+				sl := m.GetOrCreateScrollingLayout()
+				if !sl.HasWindow(intID) {
+					sl.AddColumn(intID)
+				}
+			}
 
 			// Bring the window to front and focus it
 			m.FocusWindow(i)
-			m.Mode = WindowManagementMode
-
-			// Note: No animation in tiling mode. TileAllWindows() should be called
-			// by the caller after all restores are complete.
+			m.TileAllWindows()
 			return
 		}
 
@@ -1315,7 +1762,7 @@ func (m *OS) ToggleZoom() {
 		fw.PreZoomHeight = fw.Height
 		fw.Zoomed = true
 
-		// Calculate fullscreen dimensions (account for dock)
+		// Calculate zoom dimensions, respecting the dockbar's reserved space.
 		topMargin := 0
 		if config.DockbarPosition == "top" {
 			topMargin = config.DockHeight
@@ -1324,9 +1771,15 @@ func (m *OS) ToggleZoom() {
 		if config.DockbarPosition == "bottom" {
 			bottomMargin = config.DockHeight
 		}
-		fw.X = 0
+		screenWidth := m.GetRenderWidth()
+		zoomWidth := screenWidth
+		// If ZoomMaxWidth is set, cap width and center horizontally
+		if config.ZoomMaxWidth > 0 && config.ZoomMaxWidth < screenWidth {
+			zoomWidth = config.ZoomMaxWidth
+		}
+		fw.X = (screenWidth - zoomWidth) / 2
 		fw.Y = topMargin
-		fw.Width = m.GetRenderWidth()
+		fw.Width = zoomWidth
 		fw.Height = m.GetRenderHeight() - topMargin - bottomMargin
 		fw.InvalidateCache()
 		// Resize terminal to match zoomed dimensions
@@ -1384,7 +1837,8 @@ func (m *OS) HasMinimizedWindows() bool {
 	return false
 }
 
-// GetTopMargin returns the margin at the top (possibly reserved space for the dockbar)
+// GetTopMargin returns the margin at the top (reserved space for the dockbar
+// when positioned at "top").
 func (m *OS) GetTopMargin() int {
 	if config.DockbarPosition == "top" {
 		return config.DockHeight
@@ -1411,12 +1865,14 @@ func (m *OS) GetTimeYPosition() int {
 	return 0
 }
 
-// GetUsableHeight returns the usable height excluding the dock.
+// GetUsableHeight returns the usable height excluding the dock. Auto-hide
+// mode keeps the reservation so tiled windows have a stable layout  - the dock
+// only hides when a specific window (zoom/float) explicitly expands into its
+// rows.
 func (m *OS) GetUsableHeight() int {
 	if config.DockbarPosition == "hidden" {
 		return m.GetRenderHeight()
 	}
-	// Reserve space for the dock (at top or bottom)
 	return m.GetRenderHeight() - config.DockHeight
 }
 
@@ -1537,7 +1993,7 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 				window.MarkContentDirty()
 				hasChanges = true
 			} else {
-				// Don't clear the flag — let it stay set so the window
+				// Don't clear the flag  - let it stay set so the window
 				// updates on the next cycle or when focused
 				window.HasNewOutput.Store(true)
 			}
@@ -1726,6 +2182,83 @@ func (m *OS) extractSelectedText(window *terminal.Window) string {
 	}
 
 	return strings.Join(selectedLines, "\n")
+}
+
+// SwitchToSession detaches from the current daemon session and attaches to another.
+// The connection to the daemon stays open  - only the session binding changes.
+func (m *OS) SwitchToSession(targetSession string) error {
+	if m.DaemonClient == nil {
+		return fmt.Errorf("not in daemon mode")
+	}
+	if targetSession == "" {
+		return fmt.Errorf("session name cannot be empty")
+	}
+
+	m.LogInfo("[SWITCH] Starting: %s → %s", m.SessionName, targetSession)
+
+	// 1. Unsubscribe from all current PTYs and close windows
+	for _, w := range m.Windows {
+		if w.DaemonMode && w.PTYID != "" {
+			m.DaemonClient.UnsubscribePTY(w.PTYID)
+		}
+		w.Close()
+	}
+
+	// 2. Clear all current state but preserve screen dimensions
+	savedWidth, savedHeight := m.Width, m.Height
+	m.Windows = nil
+	m.FocusedWindow = -1
+	m.WorkspaceTrees = make(map[int]*layout.BSPTree)
+	m.WorkspaceScrollingLayouts = make(map[int]*layout.ScrollingLayout)
+	m.WindowToBSPID = make(map[string]int)
+	m.NextBSPWindowID = 1
+	m.Animations = nil
+	m.MultifocusSet = nil
+	m.CurrentWorkspace = 0
+	m.SubscribedPTYs = make(map[string]bool)
+
+	// 3. Detach + attach in one operation (safe with read loop running)
+	state, err := m.DaemonClient.SwitchSession(targetSession, savedWidth, savedHeight)
+	if err != nil {
+		return fmt.Errorf("switch failed: %w", err)
+	}
+	m.SessionName = m.DaemonClient.SessionName()
+
+	// 4. Restore windows from new session state
+	if state != nil && len(state.Windows) > 0 {
+		if err := m.RestoreFromState(state); err != nil {
+			m.LogError("Failed to restore state: %v", err)
+		}
+		// Restore current workspace from state
+		if state.CurrentWorkspace > 0 {
+			m.CurrentWorkspace = state.CurrentWorkspace
+		}
+		// Restore real screen dimensions (RestoreFromState may overwrite with saved values)
+		m.Width = savedWidth
+		m.Height = savedHeight
+		m.EffectiveWidth = savedWidth
+		m.EffectiveHeight = savedHeight
+
+		if err := m.RestoreTerminalStates(); err != nil {
+			m.LogError("Failed to restore terminal states: %v", err)
+		}
+		if err := m.SetupPTYOutputHandlers(); err != nil {
+			m.LogError("Failed to setup PTY handlers: %v", err)
+		}
+		// Re-tile to set correct window dimensions for current screen
+		if m.AutoTiling {
+			m.TileAllWindows()
+		}
+		// Sync PTY dimensions to match the tiled layout
+		m.SyncDaemonPTYDimensions()
+		// Trigger redraws for alt-screen apps
+		m.TriggerAltScreenRedraws()
+	}
+
+	m.MarkAllDirty()
+	m.LogInfo("Session switch complete: now on %s with %d windows", m.SessionName, len(m.Windows))
+	m.ShowNotification("Session: "+m.SessionName, "success", config.NotificationDuration)
+	return nil
 }
 
 // Cleanup performs cleanup operations when the application exits.

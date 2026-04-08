@@ -200,7 +200,7 @@ func (e *Emulator) handleTextSizing(data []byte) {
 
 	// Parse scale
 	scale := 1
-	for _, kv := range bytes.Split(parts[1], []byte{':'}) {
+	for kv := range bytes.SplitSeq(parts[1], []byte{':'}) {
 		if bytes.HasPrefix(kv, []byte("s=")) && len(kv) > 2 {
 			if s := kv[2] - '0'; s >= 1 && s <= 7 {
 				scale = int(s)
@@ -232,7 +232,7 @@ func (e *Emulator) handleTextSizing(data []byte) {
 		if y >= h {
 			break
 		}
-		for x := 0; x < w; x++ {
+		for x := range w {
 			e.scr.SetCell(x, y, nil)
 		}
 	}

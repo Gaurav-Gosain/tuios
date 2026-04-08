@@ -346,7 +346,7 @@ func buildRightPane(
 	// Header
 	out[0] = fitLine(styled(accent, true, ansi.Truncate(headerText, width, "…")), width)
 
-	// Preview — prefer styled text for display
+	// Preview  - prefer styled text for display
 	preview := styledPreview
 	if preview == "" {
 		preview = plainPreview
@@ -518,7 +518,7 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 	cursorPastEnd := lineIdx == vim.CursorY && vim.CursorX >= len(runes)
 
 	if !hasHL && !cursorPastEnd {
-		// No highlights — prefer styled text for ANSI colors
+		// No highlights  - prefer styled text for ANSI colors
 		if vim.StyledLines != nil && lineIdx < len(vim.StyledLines) {
 			truncated := ansi.Truncate(vim.StyledLines[lineIdx], width, "")
 			return padANSI(truncated, width)
@@ -640,7 +640,7 @@ func parseANSIRuneStates(styled string, numRunes int) []string {
 		}
 
 		if styled[i] == '\x1b' {
-			// Non-CSI escape (OSC, etc) — skip to end
+			// Non-CSI escape (OSC, etc)  - skip to end
 			i++
 			for i < len(styled) && styled[i] != '\x1b' && styled[i] >= 0x20 {
 				i++

@@ -7,8 +7,21 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// kittyPlaceholderChar is the base character used by kitty's unicode
+// placeholder image protocol (U=1). Apps like yazi emit this character
+// with combining diacritical marks to encode image-id/row/column.
+// tuios handles kitty graphics via a separate overlay layer, so these
+// placeholder characters should be invisible in the text buffer.
+const kittyPlaceholderChar = 0x10EEEE
+
 // handlePrint handles printable characters.
 func (e *Emulator) handlePrint(r rune) {
+	// Suppress kitty unicode placeholder characters. They would show as
+	// garbled text because tuios renders images via its own passthrough
+	// layer, not by interpreting placeholder cells.
+	if r == kittyPlaceholderChar {
+		return
+	}
 	if r >= ansi.SP && r < ansi.DEL {
 		if len(e.grapheme) > 0 {
 			// If we have a grapheme buffer, flush it before handling the ASCII character.

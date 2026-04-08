@@ -13,7 +13,7 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// LayoutTemplate v2 — comprehensive layout specification.
+// LayoutTemplate v2  - comprehensive layout specification.
 //
 // A layout template captures everything needed to recreate a terminal
 // workspace: window positions, BSP tree structure, per-window startup
@@ -42,7 +42,7 @@ type LayoutTemplate struct {
 	// When present, this is used instead of individual window coordinates.
 	BSPTree *LayoutBSPNode `json:"bsp_tree,omitempty"`
 
-	// Windows — each window's configuration
+	// Windows  - each window's configuration
 	Windows []LayoutWindow `json:"windows"`
 
 	// Screen dimensions at save time (for proportional scaling on different screens)
@@ -262,7 +262,7 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 			// Reuse existing window
 			win = existingWindows[i]
 		} else {
-			// Need more windows than we have — create new ones
+			// Need more windows than we have  - create new ones
 			title := tw.CustomName
 			if title == "" {
 				title = tw.Title
@@ -330,13 +330,16 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 	// If tiled, rebuild BSP tree from the loaded window positions
 	// instead of retiling (which would override the loaded layout)
 	if m.AutoTiling {
-		if tmpl.TilingScheme != "" {
-			if tree := m.GetOrCreateBSPTree(); tree != nil {
-				tree.AutoScheme = layout.ParseAutoScheme(tmpl.TilingScheme)
+		if m.UseScrollingLayout {
+			m.TileAllWindows()
+		} else {
+			if tmpl.TilingScheme != "" {
+				if tree := m.GetOrCreateBSPTree(); tree != nil {
+					tree.AutoScheme = layout.ParseAutoScheme(tmpl.TilingScheme)
+				}
 			}
+			m.RebuildBSPTreeFromPositions()
 		}
-		// Rebuild BSP tree from current window positions instead of retiling
-		m.RebuildBSPTreeFromPositions()
 	} else {
 		// Always clamp windows after loading - handles resolution differences
 		m.ClampWindowsToView()

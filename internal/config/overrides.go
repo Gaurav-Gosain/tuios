@@ -21,6 +21,9 @@ type Overrides struct {
 	// HideWindowButtons overrides hiding window control buttons
 	HideWindowButtons bool
 
+	// HideScrollbar overrides hiding the scrollbar thumb
+	HideScrollbar bool
+
 	// WindowTitlePosition overrides the window title position
 	WindowTitlePosition string
 
@@ -50,6 +53,9 @@ type Overrides struct {
 
 	// ThemeName is the theme to load
 	ThemeName string
+
+	// ZoomMaxWidth caps the zoom mode width (0 = fullscreen)
+	ZoomMaxWidth int
 }
 
 // ApplyOverrides applies CLI flag overrides to global config, falling back to user config defaults.
@@ -79,6 +85,13 @@ func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 		HideWindowButtons = overrides.HideWindowButtons || userConfig.Appearance.HideWindowButtons
 	} else {
 		HideWindowButtons = overrides.HideWindowButtons
+	}
+
+	// Hide Scrollbar - OR of CLI flag and user config
+	if userConfig != nil {
+		HideScrollbar = overrides.HideScrollbar || userConfig.Appearance.HideScrollbar
+	} else {
+		HideScrollbar = overrides.HideScrollbar
 	}
 
 	// Window Title Position - CLI flag takes precedence, otherwise use user config
@@ -160,5 +173,20 @@ func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 		if err := theme.Initialize(themeName); err != nil {
 			log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
 		}
+	}
+
+	// Zen mode max width - CLI flag takes precedence
+	if overrides.ZoomMaxWidth > 0 {
+		ZoomMaxWidth = overrides.ZoomMaxWidth
+	} else if userConfig != nil && userConfig.Appearance.ZoomMaxWidth > 0 {
+		ZoomMaxWidth = userConfig.Appearance.ZoomMaxWidth
+	}
+
+	if userConfig != nil && userConfig.Appearance.NiriReverseScroll {
+		NiriReverseScroll = true
+	}
+
+	if userConfig != nil && userConfig.Appearance.MaxFPS > 0 {
+		NormalFPS = max(min(userConfig.Appearance.MaxFPS, 120), 10)
 	}
 }

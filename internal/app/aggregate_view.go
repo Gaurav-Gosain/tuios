@@ -16,7 +16,18 @@ type AggregateViewItem struct {
 	CWD         string
 	IsFocused   bool
 	IsMinimized bool
+	IsFloating  bool
+	Width       int
+	Height      int
 	Preview     string // First few lines of terminal content
+}
+
+// AggregateWorkspaceGroup groups windows by workspace for tree display.
+type AggregateWorkspaceGroup struct {
+	Workspace    int
+	IsCurrent    bool
+	WindowCount  int
+	Items        []AggregateViewItem
 }
 
 // GetAggregateViewItems collects all windows across all workspaces.
@@ -65,11 +76,40 @@ func (m *OS) GetAggregateViewItems() []AggregateViewItem {
 			CWD:         cwd,
 			IsFocused:   i == m.FocusedWindow && w.Workspace == m.CurrentWorkspace,
 			IsMinimized: w.Minimized,
+			IsFloating:  w.IsFloating,
+			Width:       w.Width,
+			Height:      w.Height,
 			Preview:     preview,
 		})
 	}
 
 	return items
+}
+
+// GetAggregateWorkspaceGroups organizes items into workspace groups for tree view.
+func GetAggregateWorkspaceGroups(items []AggregateViewItem, currentWorkspace int) []AggregateWorkspaceGroup {
+	groupMap := make(map[int]*AggregateWorkspaceGroup)
+	var order []int
+
+	for _, item := range items {
+		g, ok := groupMap[item.Workspace]
+		if !ok {
+			g = &AggregateWorkspaceGroup{
+				Workspace:   item.Workspace,
+				IsCurrent:   item.Workspace == currentWorkspace,
+			}
+			groupMap[item.Workspace] = g
+			order = append(order, item.Workspace)
+		}
+		g.WindowCount++
+		g.Items = append(g.Items, item)
+	}
+
+	var groups []AggregateWorkspaceGroup
+	for _, ws := range order {
+		groups = append(groups, *groupMap[ws])
+	}
+	return groups
 }
 
 // FilterAggregateViewItems filters items by query using fuzzy matching.
@@ -136,4 +176,3 @@ func (m *OS) JumpToAggregateViewItem(item AggregateViewItem) {
 
 	m.ShowAggregateView = false
 }
-

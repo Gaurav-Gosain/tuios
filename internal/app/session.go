@@ -259,6 +259,21 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			}
 		}
 	}
+	// If no focused window matched, focus the first visible window in current workspace
+	if m.FocusedWindow < 0 && len(m.Windows) > 0 {
+		for i, w := range m.Windows {
+			if w.Workspace == m.CurrentWorkspace && !w.Minimized {
+				m.FocusedWindow = i
+				break
+			}
+		}
+	}
+
+	// Start in terminal mode so input goes to the focused terminal immediately
+	// (previously stayed in WM mode, causing typing to not work until click)
+	if m.FocusedWindow >= 0 {
+		m.Mode = TerminalMode
+	}
 
 	// Restore workspace focus (window ID -> window index)
 	m.WorkspaceFocus = make(map[int]int)
@@ -305,8 +320,13 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		}
 	}
 
+	// Restore current workspace
+	if state.CurrentWorkspace > 0 {
+		m.CurrentWorkspace = state.CurrentWorkspace
+	}
+
 	m.MarkAllDirty()
-	m.LogInfo("[RESTORE] Restored session state: %d windows, FocusedWindow=%d, AutoTiling=%v", len(m.Windows), m.FocusedWindow, m.AutoTiling)
+	m.LogInfo("[RESTORE] Restored session state: %d windows, FocusedWindow=%d, AutoTiling=%v, Workspace=%d", len(m.Windows), m.FocusedWindow, m.AutoTiling, m.CurrentWorkspace)
 
 	// Mark that we restored from state - this prevents the first resize from retiling
 	// and allows the layout to be preserved as the user left it
@@ -728,10 +748,8 @@ func (m *OS) SetupPTYOutputHandlers() error {
 		return nil
 	}
 
-	// Initialize subscribed PTYs map
-	if m.SubscribedPTYs == nil {
-		m.SubscribedPTYs = make(map[string]bool)
-	}
+	// Always reset subscribed PTYs to prevent stale entries from previous sessions
+	m.SubscribedPTYs = make(map[string]bool)
 
 	m.LogInfo("[SETUP] SetupPTYOutputHandlers: setting up handlers for %d windows", len(m.Windows))
 
@@ -790,8 +808,8 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 
 	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", ptyID[:8], window.ID[:8])
 	err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
-		// Pass through cursor style sequences directly to parent terminal
-		// since the VT emulator absorbs them
+		// Legacy raw-byte path. Still used as fallback and for cursor
+		// style passthrough (the VT absorbs these sequences).
 		passThroughCursorStyle(data)
 		window.WriteOutputAsync(data)
 	})
@@ -801,6 +819,11 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 		m.SubscribedPTYs[ptyID] = true
 		m.LogInfo("[SUBSCRIBE] Successfully subscribed to PTY %s", ptyID[:8])
 	}
+
+	// Screen diff handler disabled for now. The diff protocol infrastructure
+	// (screen_diff.go) is retained for the planned prise-style processed-state
+	// protocol, but dual-streaming (raw + diff) causes flickering from the
+	// two paths racing on the same VT buffer.
 }
 
 // unsubscribeFromPTY unsubscribes from PTY output for a window.
@@ -976,17 +999,29 @@ func (m *OS) AddDaemonWindow(title string) *OS {
 	m.Windows = append(m.Windows, window)
 	m.LogInfo("Daemon window created: %s (PTY: %s)", title, ptyID[:8])
 
+	// Register with scrolling layout BEFORE focusing (FocusWindow triggers
+	// ScrollingOnFocusChange which needs the window in the layout).
+	if m.AutoTiling && m.UseScrollingLayout {
+		m.ScrollingOnWindowAdded(window)
+	}
+
 	// Focus the new window
 	m.FocusWindow(len(m.Windows) - 1)
 
 	// Auto-tile if in tiling mode
 	if m.AutoTiling {
-		m.LogInfo("Auto-tiling triggered for new window")
-		tree := m.GetOrCreateBSPTree()
-		if tree != nil {
-			m.AddWindowToBSPTree(window)
-		} else {
+		if m.UseScrollingLayout {
+			// Scrolling mode: just retile (FocusWindow already synced
+			// the scrolling layout focus via ScrollingOnFocusChange).
 			m.TileAllWindows()
+		} else {
+			// BSP mode
+			tree := m.GetOrCreateBSPTree()
+			if tree != nil {
+				m.AddWindowToBSPTree(window)
+			} else {
+				m.TileAllWindows()
+			}
 		}
 	}
 

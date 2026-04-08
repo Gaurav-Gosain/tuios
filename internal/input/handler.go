@@ -477,6 +477,29 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 
+	// Session switcher
+	case "S":
+		o.ShowSessionSwitcher = true
+		o.SessionSwitcherQuery = ""
+		o.SessionSwitcherSelected = 0
+		o.SessionSwitcherScroll = 0
+		o.SessionSwitcherError = ""
+		o.SessionSwitcherItems = o.RefreshSessionList()
+		return o, nil
+
+	// Command palette
+	case "P":
+		o.ShowCommandPalette = true
+		o.CommandPaletteQuery = ""
+		o.CommandPaletteSelected = 0
+		o.CommandPaletteScroll = 0
+		return o, nil
+
+	// Scrollback browser
+	case "s":
+		OpenScrollbackBrowser(o)
+		return o, nil
+
 	// Exit prefix mode
 	case "esc", "ctrl+c":
 		// Just cancel prefix mode

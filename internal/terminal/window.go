@@ -30,39 +30,40 @@ import (
 // and writes them directly to stdout to pass through to the parent terminal.
 // The VT emulator absorbs these sequences, so we need to re-emit them.
 // DECSCUSR format: CSI Ps SP q (ESC [ Ps SPACE q) where Ps is optional (0-6)
+// LockIO/UnlockIO: exclusive lock for PTY writes (mutates cell buffer).
+func (w *Window) LockIO()   { w.ioMu.Lock() }
+func (w *Window) UnlockIO() { w.ioMu.Unlock() }
+
+// RLockIO/RUnlockIO: shared lock for rendering (reads cell buffer).
+func (w *Window) RLockIO()   { w.ioMu.RLock() }
+func (w *Window) RUnlockIO() { w.ioMu.RUnlock() }
+
 func passThroughCursorStyle(data []byte) {
-	// Look for DECSCUSR pattern: \x1b[N q where N is 0-6 (or no digit)
+	// Fast path: DECSCUSR sequences contain " q" (space-q). If neither
+	// byte is present, skip the scan entirely. This avoids O(n) work on
+	// the vast majority of PTY output chunks at 300+ fps.
+	if !bytes.Contains(data, []byte(" q")) {
+		return
+	}
 	idx := 0
 	for idx < len(data) {
-		// Find ESC [
 		escIdx := bytes.Index(data[idx:], []byte("\x1b["))
 		if escIdx == -1 {
 			break
 		}
 		escIdx += idx
-
-		// Check if this could be DECSCUSR
-		// Need at least ESC [ SP q (4 bytes from escIdx)
 		if escIdx+4 > len(data) {
-			idx = escIdx + 1
-			continue
+			break
 		}
-
-		// Check for pattern: optional digit(s) followed by space and 'q'
 		numEnd := escIdx + 2
 		for numEnd < len(data) && data[numEnd] >= '0' && data[numEnd] <= '9' {
 			numEnd++
 		}
-
-		// Check if followed by " q" (space then q)
 		if numEnd+1 < len(data) && data[numEnd] == ' ' && data[numEnd+1] == 'q' {
-			// Found DECSCUSR sequence - write it to stdout
-			seq := data[escIdx : numEnd+2]
-			_, _ = os.Stdout.Write(seq)
+			_, _ = os.Stdout.Write(data[escIdx : numEnd+2])
 			idx = numEnd + 2
 			continue
 		}
-
 		idx = escIdx + 1
 	}
 }
@@ -426,7 +427,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		time.Sleep(config.ProcessWaitDelay)
 
 		// Notify exit channel (ctx is already cancelled above, so don't
-		// include ctx.Done — it would randomly win the select and drop
+		// include ctx.Done  - it would randomly win the select and drop
 		// the exit notification, causing the window to stay open)
 		select {
 		case exitChan <- id:
@@ -473,13 +474,15 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 		IsAltScreen:        false,
 		PTYID:              ptyID,
 		DaemonMode:         true,
-		outputChan:         make(chan []byte, 1000), // Buffered channel for output
+		outputChan:         make(chan []byte, 16384), // Large buffer: kitty images can be 250+ chunks
 		outputDone:         make(chan struct{}),
 		// suppressCallbacks defaults to false (zero value)
 	}
 
 	// Start output writer goroutine to serialize writes
 	go window.outputWriter()
+	// Start render coalescer to prevent partial-frame flickering
+	go window.renderCoalescer()
 
 	// Apply theme colors to the terminal (only if theming is enabled)
 	if theme.IsEnabled() {
@@ -529,12 +532,22 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 }
 
 // outputWriter is a goroutine that serializes writes to the terminal emulator.
-// This ensures output is written in order for daemon mode windows.
+// It batches pending chunks into capped VT writes and coalesces render
+// signals to prevent partial-frame flickering.
+//
+// The anti-flicker mechanism: instead of signaling a re-render on every
+// VT write (which shows incomplete frames mid-sync-update), we defer the
+// signal. A separate renderCoalescer goroutine fires at a capped rate
+// (~120fps) and only signals when there's actually new output. This is
+// the same technique prise uses (8ms render timer) to eliminate flicker
+// from fast-updating TUIs.
 func (w *Window) outputWriter() {
-	// Nil channel check - if channels aren't initialized, exit
 	if w.outputDone == nil || w.outputChan == nil {
 		return
 	}
+
+	const maxBatch = 256 * 1024
+	batch := make([]byte, 0, maxBatch)
 
 	for {
 		select {
@@ -542,21 +555,58 @@ func (w *Window) outputWriter() {
 			return
 		case data, ok := <-w.outputChan:
 			if !ok {
-				// Channel closed
 				return
 			}
-			if w.Terminal != nil {
-				w.HasNewOutput.Store(true)
+			batch = append(batch[:0], data...)
+		}
+
+		for len(batch) < maxBatch {
+			select {
+			case more, ok := <-w.outputChan:
+				if !ok {
+					goto write
+				}
+				batch = append(batch, more...)
+			default:
+				goto write
+			}
+		}
+
+	write:
+		if w.Terminal != nil {
+			w.ioMu.Lock()
+			_, _ = w.Terminal.Write(batch)
+			w.ioMu.Unlock()
+
+			w.HasNewOutput.Store(true)
+			w.MarkContentDirty()
+			// Don't signal PTYDataChan here. The renderCoalescer
+			// goroutine checks HasNewOutput at a capped rate and
+			// signals then. This prevents partial-frame renders.
+		}
+	}
+}
+
+// renderCoalescer runs for daemon mode windows and fires render signals
+// at a capped rate. Multiple VT writes between ticks coalesce into a
+// single render that shows the latest complete frame.
+func (w *Window) renderCoalescer() {
+	const interval = 8 * time.Millisecond // ~120fps cap
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-w.outputDone:
+			return
+		case <-ticker.C:
+			if w.HasNewOutput.CompareAndSwap(true, false) {
 				if w.PTYDataChan != nil {
 					select {
 					case w.PTYDataChan <- struct{}{}:
 					default:
 					}
 				}
-				w.ioMu.Lock()
-				_, _ = w.Terminal.Write(data)
-				w.ioMu.Unlock()
-				w.MarkContentDirty()
 			}
 		}
 	}
@@ -624,6 +674,77 @@ func (w *Window) WriteOutputAsync(data []byte) {
 	default:
 		// Channel full - drop data (shouldn't happen with large buffer)
 	}
+}
+
+// DiffCell is a minimal cell representation for the screen diff protocol.
+// Avoids importing the session package (which would create a cycle).
+type DiffCell struct {
+	Row, Col int
+	Content  string
+	Width    int
+	Fg, Bg   uint32
+	Attrs    uint16
+	UlColor  uint32
+	UlStyle  uint8
+}
+
+// ApplyScreenDiff writes changed cells from a daemon screen diff directly
+// into the terminal emulator's screen buffer. This bypasses the VT parser
+// entirely: no raw bytes, no escape sequences, just cell data. Used by
+// the event-based screen diff protocol to update daemon windows without
+// risk of byte-stream corruption.
+func (w *Window) ApplyScreenDiff(cells []DiffCell, cursorX, cursorY int, cursorHidden, isAltScreen bool) {
+	if w.Terminal == nil {
+		return
+	}
+
+	w.ioMu.Lock()
+	for _, c := range cells {
+		cell := &uv.Cell{
+			Content: c.Content,
+			Width:   c.Width,
+			Style: uv.Style{
+				Fg:             unpackColor(c.Fg),
+				Bg:             unpackColor(c.Bg),
+				Attrs:          unpackDiffAttrs(c.Attrs),
+				Underline:      uv.Underline(c.UlStyle),
+				UnderlineColor: unpackColor(c.UlColor),
+			},
+		}
+		w.Terminal.SetCell(c.Col, c.Row, cell)
+	}
+	w.ioMu.Unlock()
+
+	w.IsAltScreen = isAltScreen
+
+	w.HasNewOutput.Store(true)
+	w.MarkContentDirty()
+	if w.PTYDataChan != nil {
+		select {
+		case w.PTYDataChan <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// unpackColor converts a packed RGBA uint32 to a color.Color.
+// 0 means "default terminal color" (nil).
+func unpackColor(rgba uint32) color.Color {
+	if rgba == 0 {
+		return nil
+	}
+	return color.RGBA{
+		R: uint8(rgba >> 24),
+		G: uint8(rgba >> 16),
+		B: uint8(rgba >> 8),
+		A: uint8(rgba),
+	}
+}
+
+// unpackDiffAttrs converts DiffCell attrs bitmask to ultraviolet's uint8 Attrs.
+func unpackDiffAttrs(attrs uint16) uint8 {
+	// DiffCell bitmask matches ultraviolet's AttrBold..AttrStrikethrough order
+	return uint8(attrs & 0xFF)
 }
 
 // UpdateThemeColors updates the terminal colors when the theme changes
@@ -891,10 +1012,9 @@ func (w *Window) handleIOOperations() {
 					// The VT emulator absorbs DECSCUSR, so we re-emit them
 					passThroughCursorStyle(buf[:n])
 
-					// Write to terminal with mutex protection
 					w.ioMu.RLock()
 					if w.Terminal != nil {
-						_, _ = w.Terminal.Write(buf[:n]) // Ignore write errors in read loop
+						_, _ = w.Terminal.Write(buf[:n])
 					}
 					w.ioMu.RUnlock()
 				}
@@ -999,13 +1119,6 @@ func (w *Window) handleIOOperations() {
 		}
 	})
 }
-
-// RLockIO acquires a read lock on the window's I/O mutex.
-// Use for reading terminal state from outside the PTY reader goroutine.
-func (w *Window) RLockIO()   { w.ioMu.RLock() }
-
-// RUnlockIO releases the read lock on the window's I/O mutex.
-func (w *Window) RUnlockIO() { w.ioMu.RUnlock() }
 
 // ContentWidth returns the usable content width (excluding borders if not tiled).
 func (w *Window) ContentWidth() int {
