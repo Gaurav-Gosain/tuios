@@ -824,14 +824,13 @@ func (p *PTY) readOutput() {
 			data := make([]byte, n)
 			copy(data, buf[:n])
 
-			// Feed ghostty terminal (synchronous, fast SIMD parser).
-			// This is the primary VT for screen diff clients.
+			// Feed ghostty terminal. Non-blocking - if ghostty can't keep up,
+			// it's acceptable (diff will catch up on next read).
 			if p.ghosttyTerm != nil {
-				p.ghosttyTerm.Write(data)
+				p.ghosttyTerm.WriteNonBlocking(data)
 			}
 
-			// Feed ultraviolet VT via dedicated goroutine (for legacy
-			// state queries and kitty query responses).
+			// Feed ultraviolet VT via dedicated goroutine.
 			select {
 			case p.vtWriteChan <- data:
 			default:

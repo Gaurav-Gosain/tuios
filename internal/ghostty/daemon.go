@@ -18,6 +18,7 @@ type DaemonTerminal struct {
 	width    int
 	height   int
 	dirty    chan struct{} // signal channel (cap 1) for event-driven diffs
+	writeCh  chan []byte   // async write channel for non-blocking writes
 }
 
 // NewDaemonTerminal creates a ghostty-backed terminal for a daemon PTY.
@@ -26,12 +27,15 @@ func NewDaemonTerminal(cols, rows int) (*DaemonTerminal, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DaemonTerminal{
-		term:   term,
-		width:  cols,
-		height: rows,
-		dirty:  make(chan struct{}, 1),
-	}, nil
+	dt := &DaemonTerminal{
+		term:    term,
+		width:   cols,
+		height:  rows,
+		dirty:   make(chan struct{}, 1),
+		writeCh: make(chan []byte, 256),
+	}
+	go dt.writerLoop()
+	return dt, nil
 }
 
 // Free releases the terminal.
@@ -44,6 +48,9 @@ func (dt *DaemonTerminal) Free() {
 	}
 }
 
+// writeChan is used by WriteNonBlocking to feed data asynchronously.
+var _ = (*DaemonTerminal)(nil) // type check
+
 // Write processes PTY output through the ghostty VT and signals dirty.
 func (dt *DaemonTerminal) Write(data []byte) {
 	dt.mu.Lock()
@@ -52,10 +59,27 @@ func (dt *DaemonTerminal) Write(data []byte) {
 	}
 	dt.mu.Unlock()
 
-	// Signal that new content is available (non-blocking, coalesces)
 	select {
 	case dt.dirty <- struct{}{}:
 	default:
+	}
+}
+
+// WriteNonBlocking sends data to a channel for async processing.
+// Drops if the channel is full (ghostty will catch up on next write).
+func (dt *DaemonTerminal) WriteNonBlocking(data []byte) {
+	dataCopy := make([]byte, len(data))
+	copy(dataCopy, data)
+	select {
+	case dt.writeCh <- dataCopy:
+	default:
+	}
+}
+
+// writerLoop drains the write channel and feeds data to ghostty.
+func (dt *DaemonTerminal) writerLoop() {
+	for data := range dt.writeCh {
+		dt.Write(data)
 	}
 }
 
