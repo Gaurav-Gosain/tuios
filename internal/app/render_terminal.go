@@ -38,10 +38,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
-	// Fast path: use the emulator's built-in Render() which generates a
-	// consistent ANSI string in one pass (no race with VT writes).
-	// Works for all windows without active copy mode, selection, or scrollback.
-	if window.CopyMode == nil && !window.IsSelecting && window.SelectedText == "" && window.ScrollbackOffset == 0 {
+	// Fast path for unfocused windows: use the emulator's built-in Render().
+	if !isFocused && window.CopyMode == nil && !window.IsSelecting && window.SelectedText == "" && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
 		window.CachedContent = rendered
 		window.ContentDirty = false

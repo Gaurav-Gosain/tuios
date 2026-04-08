@@ -823,14 +823,16 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 
 	cs.ptySubscriptions[payload.PTYID] = struct{}{}
 
-	// Use ghostty screen diffs when available (zero drops, zero corruption).
-	// Falls back to raw byte streaming otherwise.
+	// Always stream raw bytes (needed for cursor, modes, kitty graphics).
+	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
+	go d.streamPTYOutput(cs, pty)
+
+	// Additionally stream ghostty diffs when available. These provide
+	// authoritative cell content with zero drops, fixing any corruption
+	// from the lossy raw byte broadcast.
 	if pty.ghosttyTerm != nil {
 		debugLog("[DEBUG] Starting ghostty diff stream for PTY %s", payload.PTYID)
 		go d.streamGhosttyDiffs(cs, pty)
-	} else {
-		debugLog("[DEBUG] Starting raw PTY output stream for %s", payload.PTYID)
-		go d.streamPTYOutput(cs, pty)
 	}
 
 	return nil
