@@ -38,11 +38,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
-	// Fast path: use the emulator's built-in Render() which generates a
-	// complete ANSI string atomically (no race with VT writes). This is
-	// ~10x faster than cell-by-cell iteration with style building.
-	// Works for all windows without active copy mode, selection, or scrollback.
-	if window.CopyMode == nil && !window.IsSelecting && window.SelectedText == "" && window.ScrollbackOffset == 0 {
+	// Fast path for unfocused windows: use the emulator's built-in Render()
+	// which is faster than cell-by-cell iteration. The focused window uses
+	// the slow path for cursor overlay and selection highlighting.
+	if !isFocused && window.CopyMode == nil && !window.IsSelecting && window.SelectedText == "" && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
 		window.CachedContent = rendered
 		window.ContentDirty = false

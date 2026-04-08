@@ -737,7 +737,7 @@ func (m *OS) scrollingResizeColumn(delta int) {
 	col.FixedWidth = newWidth
 	col.Proportion = 0 // FixedWidth takes priority
 	sl.ScrollToFocusedColumn(m.GetRenderWidth())
-	m.scrollingSetPositions()
+	m.scrollingSetPositionsInstant() // resize must be instant, not animated
 }
 
 func (m *OS) scrollingSyncFocusToOS() {

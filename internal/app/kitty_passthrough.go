@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -768,12 +769,15 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	}
 
 	hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
-	if !reusingID {
-		// First frame for this image  - allocate a new ID
+	if !reusingID || cmd.ImageID == 0 {
+		// New image, or imageID=0 (default - no explicit ID). Apps like
+		// youterm use imageID=0 for ALL thumbnails. Each transmit is a
+		// separate image that should get its own host ID and placement.
+		// Only reuse IDs when the app explicitly sets a non-zero imageID
+		// (e.g., video playback with a fixed stream ID).
 		hostID = kp.allocateHostID()
-		kp.imageIDMap[windowID][cmd.ImageID] = hostID
-		if andPlace {
-			kp.deleteAllWindowPlacements(windowID, false)
+		if cmd.ImageID != 0 {
+			kp.imageIDMap[windowID][cmd.ImageID] = hostID
 		}
 	} else if andPlace {
 		// Reusing ID  - check if dimensions changed (e.g., window resize).
@@ -1008,9 +1012,11 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		kp.imageIDMap[windowID] = make(map[uint32]uint32)
 	}
 	hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
-	if !reusingID {
+	if !reusingID || cmd.ImageID == 0 {
 		hostID = kp.allocateHostID()
-		kp.imageIDMap[windowID][cmd.ImageID] = hostID
+		if cmd.ImageID != 0 {
+			kp.imageIDMap[windowID][cmd.ImageID] = hostID
+		}
 	}
 
 	// Cell dimensions. Match forwardFileTransmit semantics.
@@ -1305,6 +1311,12 @@ func (kp *KittyPassthrough) OnWindowMove(windowID string, newX, newY, contentOff
 	if !kp.enabled {
 		return
 	}
+	// In web mode, RefreshAllPlacements handles repositioning via the
+	// overlay. OnWindowMove's delete-then-reposition pattern sends d=i
+	// which wipes image data from the overlay's storage.
+	if kp.inlineGraphics {
+		return
+	}
 
 	placements := kp.placements[windowID]
 	if placements == nil {
@@ -1340,9 +1352,15 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 		return
 	}
 
-	placements := kp.placements[windowID]
-	for _, p := range placements {
-		kp.deleteOnePlacement(p)
+	// In web mode, don't send d=i delete commands - the browser overlay
+	// manages its own DOM canvases. Sending deletes through the PTY wipes
+	// image data from the overlay storage before the browser even processes
+	// the place command (the 1.7MB transmit is still in flight).
+	if !kp.inlineGraphics {
+		placements := kp.placements[windowID]
+		for _, p := range placements {
+			kp.deleteOnePlacement(p)
+		}
 	}
 	delete(kp.placements, windowID)
 	delete(kp.imageIDMap, windowID)
@@ -1353,21 +1371,11 @@ func (kp *KittyPassthrough) OnWindowScroll(windowID string, windowX, windowY, co
 }
 
 func (kp *KittyPassthrough) ClearWindow(windowID string) {
-	kp.mu.Lock()
-	defer kp.mu.Unlock()
-
-	kittyPassthroughLog("ClearWindow called for windowID=%s, enabled=%v", windowID[:8], kp.enabled)
-
-	if !kp.enabled {
-		return
-	}
-
-	placements := kp.placements[windowID]
-	kittyPassthroughLog("ClearWindow: found %d placements to clear", len(placements))
-	for _, p := range placements {
-		kp.deleteOnePlacement(p)
-	}
-	kp.placements[windowID] = nil
+	// The VT's clear callback fires on ANY clear operation (ED, EL, scroll).
+	// Deleting all placements here is too aggressive - partial clears like
+	// the shell redrawing a prompt line would wipe images above. Instead,
+	// let RefreshAllPlacements handle visibility via its viewport checks.
+	// Explicit kitty delete commands (a=d) still work via forwardDelete.
 }
 
 // rectsOverlap checks if two rectangles overlap
@@ -1506,10 +1514,11 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 
-			// For horizontal: if image is wider than viewport, hide it (simpler approach for now)
-			// TODO: implement proper horizontal clipping later
-			if fullImageRight > viewportWidth {
-				anyPartVisible = false
+			// If image extends past viewport right edge, clamp the display
+			// columns instead of hiding the entire image.
+			if fullImageRight > viewportWidth && p.GuestX < viewportWidth {
+				// Image starts inside viewport but extends past right edge.
+				// Show the portion that fits.
 			}
 
 			// Calculate how many rows we CAN show after clipping
@@ -1546,11 +1555,12 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			if anyPartVisible && (info.WindowX < 0 || info.WindowY < 0) {
 				anyPartVisible = false
 			}
-			// Hide if image would extend past or touch the host terminal screen edge.
-			// Placing an image near the bottom causes the terminal to scroll to
-			// make room, creating a feedback loop of duplicate frames scrolling up.
-			// Use a 1-row margin to prevent this.
-			if anyPartVisible && info.ScreenWidth > 0 && info.ScreenHeight > 0 {
+			// In native mode, hide if image extends past the host terminal edge
+			// to prevent the terminal from scrolling to make room (feedback loop).
+			// In inline-graphics mode (web), the browser overlay clips via CSS
+			// overflow:hidden, so this check is unnecessary and causes images to
+			// disappear at certain terminal sizes.
+			if !kp.inlineGraphics && anyPartVisible && info.ScreenWidth > 0 && info.ScreenHeight > 0 {
 				if newHostX+imageCellWidth > info.ScreenWidth || newHostY+imageCellHeight >= info.ScreenHeight-1 {
 					anyPartVisible = false
 				}
@@ -1609,6 +1619,12 @@ func (kp *KittyPassthrough) HasPlacements() bool {
 // HideAllPlacements hides all visible image placements. Used during resize
 // to prevent stale positions. RefreshAllPlacements will re-place them.
 func (kp *KittyPassthrough) HideAllPlacements() {
+	// In inline-graphics mode (web), the browser overlay manages
+	// placement visibility via CSS. Don't send delete commands that
+	// would wipe image data from the overlay's storage.
+	if kp.inlineGraphics {
+		return
+	}
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 	for _, placements := range kp.placements {
@@ -1623,13 +1639,15 @@ func (kp *KittyPassthrough) HideAllPlacements() {
 }
 
 func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
-	// Delete ALL placements of this image  - don't filter by placement id.
-	// Filtering by p= would leave stale placements with a different p= on
-	// screen (e.g. if a previous chafa run had placed with p=0 default).
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")
 	fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2\x1b\\", p.HostImageID)
-	kittyPassthroughLog("deleteOnePlacement: hostID=%d, cmd=%q", p.HostImageID, buf.String())
+	// Trace caller for debugging
+	var caller string
+	if pc, _, line, ok := runtime.Caller(1); ok {
+		caller = fmt.Sprintf("%s:%d", runtime.FuncForPC(pc).Name(), line)
+	}
+	kittyPassthroughLog("deleteOnePlacement: hostID=%d caller=%s", p.HostImageID, caller)
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 }
 
