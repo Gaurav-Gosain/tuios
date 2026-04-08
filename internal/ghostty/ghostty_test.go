@@ -47,6 +47,46 @@ func TestResize(t *testing.T) {
 	}
 }
 
+func TestReadDirtyRows(t *testing.T) {
+	term, err := NewTerminal(80, 24)
+	if err != nil {
+		t.Fatalf("NewTerminal failed: %v", err)
+	}
+	defer term.Free()
+
+	// Write colored text
+	term.Write([]byte("\x1b[31mRed\x1b[32mGreen\x1b[0m Normal\r\n"))
+	term.Write([]byte("Line 2\r\n"))
+
+	diff := term.ReadDirtyRows()
+	if diff == nil {
+		t.Fatal("expected non-nil diff")
+	}
+
+	t.Logf("diff: fullRedraw=%v rows=%d cols=%d cursor=(%d,%d)",
+		diff.FullRedraw, len(diff.Rows), diff.Cols, diff.Cursor.X, diff.Cursor.Y)
+
+	for _, row := range diff.Rows {
+		var content string
+		for _, cell := range row.Cells {
+			if cell.Content != "" {
+				content += cell.Content
+			}
+		}
+		t.Logf("  row[%d]: %d cells, content=%q", row.Y, len(row.Cells), content)
+	}
+
+	if len(diff.Rows) == 0 {
+		t.Error("expected at least one dirty row")
+	}
+
+	// Second read should be clean (no changes)
+	diff2 := term.ReadDirtyRows()
+	if diff2 != nil {
+		t.Logf("second read: %d dirty rows (expected 0)", len(diff2.Rows))
+	}
+}
+
 func BenchmarkVTWrite(b *testing.B) {
 	term, err := NewTerminal(200, 50)
 	if err != nil {
