@@ -259,53 +259,13 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 		kittyChan:   make(chan []byte, 512), // Reliable kitty graphics delivery
 	}
 
-	// Handle kitty graphics on the daemon side. Queries get low-latency
-	// responses. Transmit data is accumulated across chunks and sent as
-	// one complete message via the reliable kittyChan. This prevents
-	// both mid-stream drops (lossy broadcast) and chunk interleaving
-	// (individual chunks lack image ID on continuation APCs).
-	var pendingKittyChunks [][]byte
+	// Handle kitty graphics queries on the daemon side for low-latency
+	// responses. All other commands flow through the raw PTY broadcast.
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		if cmd.Action == vt.KittyActionQuery {
 			response := vt.BuildKittyResponse(true, cmd.ImageID, "")
 			terminal.WriteResponse(response)
 			return
-		}
-
-		// For transmit: accumulate chunks, send complete image
-		if cmd.Action == vt.KittyActionTransmit || cmd.Action == vt.KittyActionTransmitPlace {
-			chunk := make([]byte, len(rawData))
-			copy(chunk, rawData)
-			pendingKittyChunks = append(pendingKittyChunks, chunk)
-
-			if !cmd.More {
-				// All chunks received. Concatenate into one buffer so
-				// the client's VT parser processes them in a single
-				// Write call (maintaining chunked state correctly).
-				total := 0
-				for _, c := range pendingKittyChunks {
-					total += len(c)
-				}
-				combined := make([]byte, 0, total)
-				for _, c := range pendingKittyChunks {
-					combined = append(combined, c...)
-				}
-				pendingKittyChunks = pendingKittyChunks[:0]
-
-				select {
-				case pty.kittyChan <- combined:
-				default:
-				}
-			}
-			return
-		}
-
-		// Place, delete, etc: forward individually
-		dataCopy := make([]byte, len(rawData))
-		copy(dataCopy, rawData)
-		select {
-		case pty.kittyChan <- dataCopy:
-		default:
 		}
 	})
 

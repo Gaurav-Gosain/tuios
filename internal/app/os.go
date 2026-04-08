@@ -1297,6 +1297,9 @@ func (m *OS) DeleteWindow(i int) *OS {
 
 	if m.KittyPassthrough != nil {
 		m.KittyPassthrough.OnWindowClose(deletedWindow.ID)
+		if data := m.KittyPassthrough.FlushPending(); len(data) > 0 {
+			m.KittyPassthrough.WriteToHost(data)
+		}
 	}
 
 	// Update MultifocusSet: remove the deleted index and shift higher indices down

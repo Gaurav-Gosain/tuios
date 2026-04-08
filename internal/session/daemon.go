@@ -929,19 +929,6 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 				return
 			}
 
-		case kittyData := <-pty.kittyChan:
-			// Kitty graphics via reliable path. Each message is one
-			// complete APC from the daemon's VT callback. Bypasses
-			// the lossy broadcast channel to prevent mid-stream drops
-			// that corrupt image data.
-			cs.sendMu.Lock()
-			_ = cs.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			err := WritePTYOutput(cs.conn, pty.ID, kittyData)
-			cs.sendMu.Unlock()
-			if err != nil {
-				pty.Unsubscribe(cs.clientID)
-				return
-			}
 		}
 	}
 }

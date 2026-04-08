@@ -581,21 +581,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		kp.pendingDirectData[windowID] = pending
 	}
 
-	// Accumulate DECODED data bytes from this chunk.
-	// Cap at expected size to handle double-delivery (reliable kittyChan +
-	// lossy broadcast both feed the same VT, producing duplicate chunks).
-	expectedSize := pending.Width * pending.Height * 4 // RGBA
-	if pending.Format == vt.KittyFormatRGB {
-		expectedSize = pending.Width * pending.Height * 3
-	}
-	if expectedSize > 0 && len(pending.Data)+len(cmd.Data) > expectedSize {
-		remaining := expectedSize - len(pending.Data)
-		if remaining > 0 {
-			pending.Data = append(pending.Data, cmd.Data[:remaining]...)
-		}
-	} else {
-		pending.Data = append(pending.Data, cmd.Data...)
-	}
+	pending.Data = append(pending.Data, cmd.Data...)
 
 	kittyPassthroughLog("forwardTransmit: accumulated %d bytes, total=%d, more=%v",
 		len(cmd.Data), len(pending.Data), cmd.More)
@@ -786,16 +772,9 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	}
 
 	hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
-	if !reusingID || cmd.ImageID == 0 {
-		// New image, or imageID=0 (default - no explicit ID). Apps like
-		// youterm use imageID=0 for ALL thumbnails. Each transmit is a
-		// separate image that should get its own host ID and placement.
-		// Only reuse IDs when the app explicitly sets a non-zero imageID
-		// (e.g., video playback with a fixed stream ID).
+	if !reusingID {
 		hostID = kp.allocateHostID()
-		if cmd.ImageID != 0 {
-			kp.imageIDMap[windowID][cmd.ImageID] = hostID
-		}
+		kp.imageIDMap[windowID][cmd.ImageID] = hostID
 	} else if andPlace {
 		// Reusing ID  - check if dimensions changed (e.g., window resize).
 		// If so, delete old placement so it gets recreated at the new size.
