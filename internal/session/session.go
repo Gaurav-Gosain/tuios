@@ -251,11 +251,22 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 	terminal.SetScrollbackMaxLines(10000)
 
 	// Create ghostty terminal for high-performance daemon-side VT.
-	ghosttyTerm, ghosttyErr := ghostty.NewDaemonTerminal(width, height)
-	if ghosttyErr != nil {
-		debugLog("[DEBUG] ghostty terminal creation failed: %v (using ultraviolet only)", ghosttyErr)
-		ghosttyTerm = nil
-	}
+	var ghosttyTerm *ghostty.DaemonTerminal
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[GHOSTTY] panic during creation: %v", r)
+			}
+		}()
+		var err error
+		ghosttyTerm, err = ghostty.NewDaemonTerminal(width, height)
+		if err != nil {
+			log.Printf("[GHOSTTY] creation failed: %v", err)
+			ghosttyTerm = nil
+		} else {
+			log.Printf("[GHOSTTY] terminal created OK for PTY %s (%dx%d)", id[:8], width, height)
+		}
+	}()
 
 	pty := &PTY{
 		ID:           id,
@@ -612,6 +623,11 @@ func (p *PTY) Resize(width, height int) error {
 	p.width = width
 	p.height = height
 	p.terminalMu.Unlock()
+
+	// Resize ghostty terminal
+	if p.ghosttyTerm != nil {
+		_ = p.ghosttyTerm.Resize(width, height, 0, 0)
+	}
 
 	// Resize PTY
 	if p.pty != nil {
