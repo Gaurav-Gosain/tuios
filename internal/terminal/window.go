@@ -4,6 +4,7 @@ package terminal
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"image/color"
 	"io"
@@ -745,6 +746,79 @@ func unpackColor(rgba uint32) color.Color {
 func unpackDiffAttrs(attrs uint16) uint8 {
 	// DiffCell bitmask matches ultraviolet's AttrBold..AttrStrikethrough order
 	return uint8(attrs & 0xFF)
+}
+
+// ApplyGhosttyDiff applies a binary-encoded ghostty screen diff to the
+// terminal's cell buffer. Each dirty row's cells are written via SetCell.
+func (w *Window) ApplyGhosttyDiff(payload []byte) {
+	if w.Terminal == nil || len(payload) < 11 {
+		return
+	}
+
+	off := 0
+	off += 2 + 2 + 2 + 2 + 1 + 1 // skip header (cols, rows, cursorXY, visible, fullRedraw)
+	numDirtyRows := int(binary.BigEndian.Uint16(payload[off:]))
+	off += 2
+
+	w.ioMu.Lock()
+	for i := 0; i < numDirtyRows && off+4 <= len(payload); i++ {
+		y := int(binary.BigEndian.Uint16(payload[off:]))
+		off += 2
+		numCells := int(binary.BigEndian.Uint16(payload[off:]))
+		off += 2
+
+		for x := 0; x < numCells && off+2 <= len(payload); x++ {
+			contentLen := int(binary.BigEndian.Uint16(payload[off:]))
+			off += 2
+			if off+contentLen+9 > len(payload) {
+				break
+			}
+			content := string(payload[off : off+contentLen])
+			off += contentLen
+
+			fgSet := payload[off] != 0
+			off++
+			fgR, fgG, fgB := payload[off], payload[off+1], payload[off+2]
+			off += 3
+			bgSet := payload[off] != 0
+			off++
+			bgR, bgG, bgB := payload[off], payload[off+1], payload[off+2]
+			off += 3
+			flags := payload[off]
+			off++
+
+			cell := &uv.Cell{Content: content, Width: 1}
+			if fgSet {
+				cell.Style.Fg = color.RGBA{R: fgR, G: fgG, B: fgB, A: 255}
+			}
+			if bgSet {
+				cell.Style.Bg = color.RGBA{R: bgR, G: bgG, B: bgB, A: 255}
+			}
+			if flags&1 != 0 {
+				cell.Style.Attrs |= uv.AttrBold
+			}
+			if flags&2 != 0 {
+				cell.Style.Attrs |= uv.AttrItalic
+			}
+			if flags&8 != 0 {
+				cell.Style.Attrs |= uv.AttrStrikethrough
+			}
+			if flags&16 != 0 {
+				cell.Width = 2
+			}
+			w.Terminal.SetCell(x, y, cell)
+		}
+	}
+	w.ioMu.Unlock()
+
+	w.HasNewOutput.Store(true)
+	w.MarkContentDirty()
+	if w.PTYDataChan != nil {
+		select {
+		case w.PTYDataChan <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // UpdateThemeColors updates the terminal colors when the theme changes

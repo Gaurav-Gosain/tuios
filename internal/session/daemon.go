@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/ghostty"
 )
 
 // Daemon manages the persistent TUIOS server process.
@@ -820,8 +822,16 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	}
 
 	cs.ptySubscriptions[payload.PTYID] = struct{}{}
-	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
-	go d.streamPTYOutput(cs, pty)
+
+	// Use ghostty screen diffs when available (zero drops, zero corruption).
+	// Falls back to raw byte streaming otherwise.
+	if pty.ghosttyTerm != nil {
+		debugLog("[DEBUG] Starting ghostty diff stream for PTY %s", payload.PTYID)
+		go d.streamGhosttyDiffs(cs, pty)
+	} else {
+		debugLog("[DEBUG] Starting raw PTY output stream for %s", payload.PTYID)
+		go d.streamPTYOutput(cs, pty)
+	}
 
 	return nil
 }
@@ -929,6 +939,42 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 				return
 			}
 
+		}
+	}
+}
+
+// streamGhosttyDiffs streams event-driven screen diffs from the ghostty
+// terminal to a subscriber. Uses ghostty's render state API with built-in
+// dirty tracking for zero-drop, zero-corruption delivery.
+func (d *Daemon) streamGhosttyDiffs(cs *connState, pty *PTY) {
+	signal := pty.ghosttyTerm.DirtySignal()
+
+	for {
+		select {
+		case <-cs.done:
+			return
+		case <-d.ctx.Done():
+			return
+		case <-signal:
+			diff := pty.ghosttyTerm.ReadDiff()
+			if diff == nil {
+				continue
+			}
+
+			payload := ghostty.EncodeDiff(diff)
+			if len(payload) == 0 {
+				continue
+			}
+
+			// Wrap in standard message framing
+			cs.sendMu.Lock()
+			_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			err := WriteGhosttyDiff(cs.conn, pty.ID, payload)
+			cs.sendMu.Unlock()
+
+			if err != nil {
+				return
+			}
 		}
 	}
 }

@@ -818,6 +818,13 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 		m.LogInfo("[SUBSCRIBE] Successfully subscribed to PTY %s", ptyID[:8])
 	}
 
+	// Register ghostty diff handler. When the daemon has libghostty-vt,
+	// it sends screen diffs with only changed rows instead of raw bytes.
+	// Apply them directly to the window's VT screen buffer.
+	m.DaemonClient.SetGhosttyDiffHandler(ptyID, func(payload []byte) {
+		// Decode and apply ghostty diff to the window
+		window.ApplyGhosttyDiff(payload)
+	})
 }
 
 // unsubscribeFromPTY unsubscribes from PTY output for a window.

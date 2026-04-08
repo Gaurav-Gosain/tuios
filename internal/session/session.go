@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/ghostty"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	xpty "github.com/charmbracelet/x/xpty"
@@ -100,8 +101,14 @@ type PTY struct {
 	// This persists across client disconnect/reconnect
 	terminal   *vt.Emulator
 	terminalMu sync.RWMutex
-	width      int
-	height     int
+
+	// Ghostty terminal (libghostty-vt) for high-performance VT parsing
+	// with built-in dirty tracking. Used when available; falls back to
+	// ultraviolet (terminal field above) otherwise.
+	ghosttyTerm *ghostty.DaemonTerminal
+
+	width  int
+	height int
 
 	// Output buffer for reconnection (ring buffer) - legacy, kept for raw output
 	outputMu     sync.RWMutex
@@ -240,9 +247,15 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 	}
 
 	// Create VT emulator for persistent terminal state
-	// This maintains scrollback, screen content, cursor position across reconnects
 	terminal := vt.NewEmulator(width, height)
-	terminal.SetScrollbackMaxLines(10000) // Match default scrollback
+	terminal.SetScrollbackMaxLines(10000)
+
+	// Create ghostty terminal for high-performance daemon-side VT with
+	// built-in dirty tracking. This is the primary VT for screen diffs.
+	ghosttyTerm, ghosttyErr := ghostty.NewDaemonTerminal(width, height)
+	if ghosttyErr != nil {
+		debugLog("[DEBUG] ghostty terminal creation failed: %v (falling back to ultraviolet only)", ghosttyErr)
+	}
 
 	pty := &PTY{
 		ID:           id,
@@ -251,12 +264,13 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 		ctx:          ctx,
 		cancel:       cancel,
 		terminal:     terminal,
+		ghosttyTerm:  ghosttyTerm,
 		width:        width,
 		height:       height,
-		outputBuffer: make([]byte, 64*1024), // 64KB ring buffer
-		subscribers: make(map[string]chan []byte),
-		vtWriteChan: make(chan []byte, 256),
-		kittyChan:   make(chan []byte, 512), // Reliable kitty graphics delivery
+		outputBuffer: make([]byte, 64*1024),
+		subscribers:  make(map[string]chan []byte),
+		vtWriteChan:  make(chan []byte, 256),
+		kittyChan:    make(chan []byte, 512),
 	}
 
 	// Handle kitty graphics queries on the daemon side for low-latency
@@ -810,15 +824,17 @@ func (p *PTY) readOutput() {
 			data := make([]byte, n)
 			copy(data, buf[:n])
 
-			// VT emulator: feed via a dedicated single goroutine to
-			// avoid unbounded goroutine growth at high FPS. The VT is
-			// only used for state queries (GetTerminalState) and kitty
-			// query responses, so it's OK if it falls slightly behind.
+			// Feed ghostty terminal (synchronous, fast SIMD parser).
+			// This is the primary VT for screen diff clients.
+			if p.ghosttyTerm != nil {
+				p.ghosttyTerm.Write(data)
+			}
+
+			// Feed ultraviolet VT via dedicated goroutine (for legacy
+			// state queries and kitty query responses).
 			select {
 			case p.vtWriteChan <- data:
 			default:
-				// VT writer can't keep up  - acceptable for state tracking.
-				// The client's own VT is the rendering source of truth.
 			}
 
 			// Store in ring buffer for reconnection
@@ -826,7 +842,7 @@ func (p *PTY) readOutput() {
 			p.appendToBuffer(data)
 			p.outputMu.Unlock()
 
-			// Broadcast to subscribers
+			// Broadcast raw bytes to legacy subscribers
 			p.broadcast(data)
 		}
 	}
