@@ -148,7 +148,8 @@ type Window struct {
 	CopyMode *CopyMode // Copy mode state (nil when not active)
 	// Daemon session support
 	PTYID             string               // ID of daemon-managed PTY (empty for local PTYs)
-	DaemonMode        bool                 // True when PTY is managed by daemon
+	DaemonMode             bool // True when PTY is managed by daemon
+	GhosttyDrivenRendering bool // True when ghostty diffs are the sole cell source (no raw VT writes)
 	DaemonWriteFunc   func([]byte) error   // Callback for sending input to daemon PTY
 	DaemonResizeFunc  func(w, h int) error // Callback for resizing daemon PTY
 	DaemonCloseFunc   func()               // Callback when window is closed (to notify daemon)
@@ -756,11 +757,27 @@ func (w *Window) ApplyGhosttyDiff(payload []byte) {
 	}
 
 	off := 0
-	off += 2 + 2 + 2 + 2 + 1 + 1 // skip header (cols, rows, cursorXY, visible, fullRedraw)
+	// Parse header: [2B cols][2B rows][2B cursorX][2B cursorY][1B cursorVisible][1B fullRedraw][2B numRows]
+	// cols := int(binary.BigEndian.Uint16(payload[off:]));
+	off += 2
+	// rows := int(binary.BigEndian.Uint16(payload[off:]));
+	off += 2
+	cursorX := int(binary.BigEndian.Uint16(payload[off:]))
+	off += 2
+	cursorY := int(binary.BigEndian.Uint16(payload[off:]))
+	off += 2
+	// cursorVisible := payload[off] != 0
+	off++
+	// fullRedraw := payload[off] != 0
+	off++
 	numDirtyRows := int(binary.BigEndian.Uint16(payload[off:]))
 	off += 2
 
+	// Position cursor via escape sequence so the VT tracks it
+	cursorSeq := fmt.Sprintf("\x1b[%d;%dH", cursorY+1, cursorX+1)
+
 	w.ioMu.Lock()
+	_, _ = w.Terminal.Write([]byte(cursorSeq))
 	for i := 0; i < numDirtyRows && off+4 <= len(payload); i++ {
 		y := int(binary.BigEndian.Uint16(payload[off:]))
 		off += 2

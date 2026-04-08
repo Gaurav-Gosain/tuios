@@ -808,6 +808,14 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 
 	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", ptyID[:8], window.ID[:8])
 	err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
+		// When ghostty diffs are the primary renderer, skip feeding raw
+		// bytes to the VT entirely. This eliminates the write/read race
+		// that causes flickering. Cursor style passthrough still works
+		// because it writes directly to stdout, not through the VT.
+		if window.GhosttyDrivenRendering {
+			passThroughCursorStyle(data)
+			return
+		}
 		passThroughCursorStyle(data)
 		window.WriteOutputAsync(data)
 	})
@@ -818,11 +826,11 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 		m.LogInfo("[SUBSCRIBE] Successfully subscribed to PTY %s", ptyID[:8])
 	}
 
-	// Register ghostty diff handler. When the daemon has libghostty-vt,
-	// it sends screen diffs with only changed rows instead of raw bytes.
-	// Apply them directly to the window's VT screen buffer.
+	// Register ghostty diff handler. When active, this becomes the SOLE
+	// source of cell content - no raw bytes touch the VT, eliminating
+	// the write/read race that causes flickering.
 	m.DaemonClient.SetGhosttyDiffHandler(ptyID, func(payload []byte) {
-		// Decode and apply ghostty diff to the window
+		window.GhosttyDrivenRendering = true
 		window.ApplyGhosttyDiff(payload)
 	})
 }
