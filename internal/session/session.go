@@ -413,17 +413,9 @@ func (s *Session) Size() (width, height int) {
 func (s *Session) Resize(width, height int) {
 	s.width = width
 	s.height = height
-
-	// Resize PTYs to content area (session dimensions minus borders).
-	// The client creates windows with 1-cell borders on each side,
-	// so the PTY content area is 2 cells narrower/shorter.
-	contentW := max(width-2, 1)
-	contentH := max(height-2, 1)
-	s.ptysMu.RLock()
-	defer s.ptysMu.RUnlock()
-	for _, pty := range s.ptys {
-		_ = pty.Resize(contentW, contentH)
-	}
+	// Don't resize individual PTYs here. Each PTY's dimensions are managed
+	// by the client via per-window DaemonResizeFunc calls that account for
+	// the actual window content area (which varies in tiled layouts).
 }
 
 // Info returns session information.
