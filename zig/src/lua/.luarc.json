@@ -1,0 +1,106 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+
+  "runtime": {
+    "version": "Lua 5.4",
+    "special": {}
+  },
+
+  "workspace": {
+    "library": [
+      "types"
+    ],
+    "checkThirdParty": false,
+    "useGitIgnore": true
+  },
+
+  "type": {
+    "weakNilCheck": false,
+    "weakUnionCheck": false,
+    "checkTableShape": true,
+    "inferParamType": false,
+    "castNumberToInteger": false
+  },
+
+  "diagnostics": {
+    "enable": true,
+
+    "globals": [],
+
+    "groupSeverity": {
+      "type-check": "Error",
+      "unused": "Error",
+      "redefined": "Error",
+      "strict": "Error",
+      "strong": "Error",
+      "global": "Error",
+      "unbalanced": "Error",
+      "luadoc": "Error",
+      "ambiguity": "Error"
+    },
+
+    "severity": {
+      "undefined-global": "Error!",
+      "undefined-field": "Error!",
+      "missing-fields": "Error!",
+      "assign-type-mismatch": "Error!",
+      "param-type-mismatch": "Error!",
+      "return-type-mismatch": "Error!",
+      "need-check-nil": "Error!",
+      "redefined-local": "Error!",
+      "unused-local": "Error!",
+      "unused-function": "Error!",
+      "unused-vararg": "Error!",
+      "discard-returns": "Error!",
+      "cast-local-type": "Error!",
+      "inject-field": "Error!",
+      "missing-parameter": "Error!",
+      "redundant-parameter": "Error!",
+      "lowercase-global": "Error!",
+      "duplicate-index": "Error!",
+      "duplicate-set-field": "Error!",
+      "missing-return": "Error!",
+      "missing-return-value": "Error!",
+      "redundant-return-value": "Error!",
+      "redundant-value": "Error!",
+      "deprecated": "Error!",
+      "incomplete-signature-doc": "Error!",
+      "missing-global-doc": "Error!",
+      "missing-local-export-doc": "Error!"
+    },
+
+    "neededFileStatus": {
+      "undefined-global": "Any!",
+      "undefined-field": "Any!",
+      "missing-fields": "Any!",
+      "assign-type-mismatch": "Any!",
+      "param-type-mismatch": "Any!",
+      "return-type-mismatch": "Any!",
+      "need-check-nil": "Any!",
+      "redefined-local": "Any!",
+      "unused-local": "Any!",
+      "unused-function": "Any!",
+      "unused-vararg": "Any!",
+      "discard-returns": "Any!",
+      "cast-local-type": "Any!",
+      "inject-field": "Any!",
+      "missing-parameter": "Any!",
+      "redundant-parameter": "Any!",
+      "lowercase-global": "Any!",
+      "duplicate-index": "Any!",
+      "duplicate-set-field": "Any!",
+      "missing-return": "Any!",
+      "missing-return-value": "Any!",
+      "redundant-return-value": "Any!",
+      "redundant-value": "Any!",
+      "deprecated": "Any!",
+      "incomplete-signature-doc": "Any!",
+      "missing-global-doc": "Any!",
+      "missing-local-export-doc": "Any!"
+    },
+
+    "unusedLocalExclude": [
+      "^_$"
+    ]
+  }
+}

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Prise Manual</title>
+    <style>
+        :root {
+            --bg: #f5f5f5;
+            --fg: #1a1a1a;
+            --accent: #0066cc;
+            --purple: #9854c7;
+            --code-bg: #e8e8e8;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1a1b26;
+                --fg: #c0caf5;
+                --accent: #7aa2f7;
+                --purple: #bb9af7;
+                --code-bg: #1e1e2e;
+            }
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+            background: var(--bg);
+            color: var(--fg);
+            line-height: 1.6;
+            margin: 0;
+            padding: 2rem;
+        }
+        main {
+            max-width: 50rem;
+            margin: 0 auto;
+        }
+        h1, h2, h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+        h1 { font-size: 1em; text-transform: uppercase; font-weight: bold; color: var(--purple); }
+        h2 { font-size: 1em; margin-left: 2rem; font-weight: bold; color: var(--accent); }
+        h1 a, h2 a, h3 a { color: inherit; text-decoration: none; position: relative; }
+        h1 a:hover::before, h2 a:hover::before, h3 a:hover::before {
+            content: "¶";
+            opacity: 0.5;
+            position: absolute;
+            right: 100%;
+            padding-right: 0.3em;
+        }
+        p { margin-left: 4rem; }
+        ul { margin-left: 4rem; padding-left: 1.5rem; }
+        code {
+            background: var(--code-bg);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+        }
+        pre {
+            background: var(--code-bg);
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-left: 4rem;
+        }
+        a { color: var(--accent); }
+        pre code { padding: 0; }
+        dl { margin-left: 4rem; }
+        dt { font-weight: normal; margin-top: 1rem; }
+        dd { margin-left: 4rem; }
+    </style>
+</head>
+<body>
+<main>

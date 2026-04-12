@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Prise</title>
+    <style>
+        :root {
+            --bg: #f5f5f5;
+            --fg: #1a1a1a;
+            --accent: #0066cc;
+            --purple: #9854c7;
+            --code-bg: #e8e8e8;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1a1b26;
+                --fg: #c0caf5;
+                --accent: #7aa2f7;
+                --purple: #bb9af7;
+                --code-bg: #1e1e2e;
+            }
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+            background: var(--bg);
+            color: var(--fg);
+            line-height: 1.6;
+            margin: 0;
+            padding: 2rem;
+        }
+        main {
+            max-width: 50rem;
+            margin: 0 auto;
+        }
+        h1 { font-size: 1em; text-transform: uppercase; font-weight: bold; color: var(--purple); }
+        p { margin-left: 4rem; }
+        dl { margin-left: 4rem; }
+        dt { margin-top: 1rem; }
+        dd { margin-left: 4rem; }
+        a { color: var(--accent); }
+        code {
+            background: var(--code-bg);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+<main>
+<h1>Prise</h1>
+<p>A terminal multiplexer for modern terminals.</p>
+
+<dl>
+    <dt><a href="prise.1.html">prise(1)</a></dt>
+    <dd>Command-line usage and options</dd>
+
+    <dt><a href="prise.5.html">prise(5)</a></dt>
+    <dd>Configuration file format</dd>
+
+    <dt><a href="prise.7.html">prise(7)</a></dt>
+    <dd>Architecture and concepts</dd>
+</dl>
+</main>
+</body>
+</html>
