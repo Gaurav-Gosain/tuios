@@ -333,9 +333,13 @@ pub const Layout = struct {
                 self.requestRedraw();
             },
             .pty_exited => |info| {
-                // Remove from BSP tree
-                const tree = self.currentTree();
-                tree.removeWindow(info.id);
+                // Remove from BSP tree (search all workspaces)
+                for (&self.workspaces) |*ws_tree| {
+                    if (ws_tree.hasWindow(info.id)) {
+                        ws_tree.removeWindow(info.id);
+                        break;
+                    }
+                }
                 self.removeWindowWorkspace(info.id);
 
                 _ = self.ptys.orderedRemove(info.id);
@@ -849,9 +853,19 @@ pub const Layout = struct {
 
         const tree = self.currentTreeConst();
 
-        // Empty workspace
+        // Empty workspace — show hint
         if (tree.isEmpty()) {
-            return self.emptyWidget();
+            const alloc = self.allocator;
+            var spans: std.ArrayList(widget.Text.Span) = .empty;
+            try spans.append(alloc, .{
+                .text = try alloc.dupe(u8, "  Empty workspace. Press Ctrl+B c to create a window."),
+                .style = .{ .fg = .{ .rgb = .{ 0x66, 0x66, 0x66 } } },
+            });
+            return widget.Widget{
+                .kind = .{ .text = .{
+                    .spans = try spans.toOwnedSlice(alloc),
+                } },
+            };
         }
 
         // Single window — no borders needed, maximize space
@@ -963,14 +977,15 @@ pub const Layout = struct {
             .focus = focused,
         };
 
+        const border_color = if (focused) focused_border_color else unfocused_border_color;
+
         return widget.Widget{
             .kind = .{ .box = .{
                 .child = child,
                 .border = .rounded,
-                .style = .{
-                    .fg = if (focused) focused_border_color else unfocused_border_color,
-                },
+                .style = .{ .fg = border_color },
             } },
+            .id = wid,
         };
     }
 
@@ -1014,8 +1029,6 @@ pub const Layout = struct {
                     .style = .{ .fg = .{ .rgb = .{ 0xbb, 0xbb, 0xbb } }, .bg = .{ .rgb = .{ 0x1e, 0x1e, 0x2e } } },
                 });
             }
-            const is_header = line.len > 0 and line[0] != ' ';
-            _ = is_header;
             try spans.append(alloc, .{
                 .text = try alloc.dupe(u8, line),
                 .style = .{

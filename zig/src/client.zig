@@ -19,6 +19,16 @@ const log = std.log.scoped(.client);
 
 const MAX_PASTE_SIZE = 10 * 1024 * 1024; // 10 MiB
 
+/// Returns true if the env var should be filtered out when forwarding to the PTY.
+/// Terminal-specific vars (TERM, COLORTERM, KITTY_*, TERMINFO*) conflict with ghostty-vt.
+fn isFilteredEnvVar(key: []const u8) bool {
+    return std.mem.eql(u8, key, "TERM") or
+        std.mem.eql(u8, key, "COLORTERM") or
+        std.mem.startsWith(u8, key, "KITTY_") or
+        std.mem.eql(u8, key, "TERMINFO") or
+        std.mem.eql(u8, key, "TERMINFO_DIRS");
+}
+
 pub const MsgId = enum(u16) {
     spawn_pty = 1,
     attach_pty = 2,
@@ -708,7 +718,7 @@ pub const App = struct {
 
         log.info("Vaxis initialized", .{});
 
-        // Initialize Lua UI
+        // Initialize layout UI
         switch (Layout.init(allocator)) {
             .ok => |ui| app.ui = ui,
             .err => |init_err| {
@@ -717,7 +727,7 @@ pub const App = struct {
                 return .{ .err = .{ .err = init_err.err, .lua_msg = init_err.lua_msg } };
             },
         }
-        log.info("Lua UI initialized", .{});
+        log.info("Layout UI initialized", .{});
 
         // Create pipe for TTY thread -> Main thread communication
         const fds = posix.pipe2(.{ .CLOEXEC = true, .NONBLOCK = true }) catch |err| {
@@ -1762,13 +1772,7 @@ pub const App = struct {
         var env_it = env_map.iterator();
         while (env_it.next()) |entry| {
             const key = entry.key_ptr.*;
-            // Filter out terminal-specific vars that conflict with ghostty-vt
-            if (std.mem.eql(u8, key, "TERM") or
-                std.mem.eql(u8, key, "COLORTERM") or
-                std.mem.startsWith(u8, key, "KITTY_") or
-                std.mem.eql(u8, key, "TERMINFO") or
-                std.mem.eql(u8, key, "TERMINFO_DIRS"))
-                continue;
+            if (isFilteredEnvVar(key)) continue;
             const env_str = try std.fmt.allocPrint(arena_alloc, "{s}={s}", .{ key, entry.value_ptr.* });
             try env_array.append(self.allocator, .{ .string = env_str });
         }
@@ -1897,12 +1901,7 @@ pub const App = struct {
         var env_it = env_map.iterator();
         while (env_it.next()) |entry| {
             const key = entry.key_ptr.*;
-            if (std.mem.eql(u8, key, "TERM") or
-                std.mem.eql(u8, key, "COLORTERM") or
-                std.mem.startsWith(u8, key, "KITTY_") or
-                std.mem.eql(u8, key, "TERMINFO") or
-                std.mem.eql(u8, key, "TERMINFO_DIRS"))
-                continue;
+            if (isFilteredEnvVar(key)) continue;
             const env_str = try std.fmt.allocPrint(self.allocator, "{s}={s}", .{ key, entry.value_ptr.* });
             try env_array.append(self.allocator, .{ .string = env_str });
         }
@@ -2257,12 +2256,7 @@ pub const App = struct {
                                 var env_it = env_map.iterator();
                                 while (env_it.next()) |entry| {
                                     const key = entry.key_ptr.*;
-                                    if (std.mem.eql(u8, key, "TERM") or
-                                        std.mem.eql(u8, key, "COLORTERM") or
-                                        std.mem.startsWith(u8, key, "KITTY_") or
-                                        std.mem.eql(u8, key, "TERMINFO") or
-                                        std.mem.eql(u8, key, "TERMINFO_DIRS"))
-                                        continue;
+                                    if (isFilteredEnvVar(key)) continue;
                                     const env_str = try std.fmt.allocPrint(app.allocator, "{s}={s}", .{ key, entry.value_ptr.* });
                                     try env_array.append(app.allocator, .{ .string = env_str });
                                 }
