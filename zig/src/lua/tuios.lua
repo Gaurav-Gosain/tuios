@@ -70,7 +70,7 @@ local M = {}
 ---Load the tiling UI module
 ---@return PriseUI
 function M.tiling()
-    local ok, result = pcall(require, "tuios_tiling_ui")
+    local ok, result = pcall(require, "prise_tiling_ui")
     if not ok then
         error("Failed to load tiling UI: " .. tostring(result))
     end

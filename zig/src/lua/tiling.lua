@@ -1,4 +1,4 @@
-local tuios = require("tuios")
+local prise = require("prise")
 local utils = require("utils")
 
 ---@class Pane
@@ -233,7 +233,7 @@ local POWERLINE_SYMBOLS = {
 ---@field is_zoomed boolean True if this tab has a zoomed pane
 
 ---Custom render function for tab bar
----Must return an array of segments compatible with tuios.Text()
+---Must return an array of segments compatible with prise.Text()
 ---@alias TabRenderFunction fun(tabs: TabInfo[], screen_width: number, theme: PriseTheme): table[]
 
 ---Optional function to format tab titles for display
@@ -469,7 +469,7 @@ local function init_keybinds()
     if state.keybind_matcher then
         return
     end
-    state.keybind_matcher = tuios.keybind.compile(config.keybinds, config.leader)
+    state.keybind_matcher = prise.keybind.compile(config.keybinds, config.leader)
 end
 
 ---Configure the default UI
@@ -516,39 +516,39 @@ local function handle_text_input_key(input, key_data)
 
     if k == "Backspace" then
         input:delete_backward()
-        tuios.request_frame()
+        prise.request_frame()
         return true
     elseif k == "Delete" then
         input:delete_forward()
-        tuios.request_frame()
+        prise.request_frame()
         return true
     elseif k == "w" and ctrl then
         input:delete_word_backward()
-        tuios.request_frame()
+        prise.request_frame()
         return true
     elseif k == "k" and ctrl then
         input:kill_line()
-        tuios.request_frame()
+        prise.request_frame()
         return true
     elseif k == "ArrowLeft" then
         input:move_left()
-        tuios.request_frame()
+        prise.request_frame()
         return true
     elseif k == "ArrowRight" then
         input:move_right()
-        tuios.request_frame()
+        prise.request_frame()
         return true
     elseif k == "Home" or (k == "a" and ctrl) then
         input:move_to_start()
-        tuios.request_frame()
+        prise.request_frame()
         return true
     elseif k == "End" or (k == "e" and ctrl) then
         input:move_to_end()
-        tuios.request_frame()
+        prise.request_frame()
         return true
     elseif #k == 1 and not ctrl and not key_data.alt and not key_data.super then
         input:insert(k)
-        tuios.request_frame()
+        prise.request_frame()
         return true
     end
 
@@ -592,7 +592,7 @@ local function detach_session()
         state.timer:cancel()
         state.timer = nil
     end
-    tuios.detach(tuios.get_session_name())
+    prise.detach(prise.get_session_name())
 end
 
 ---Get the currently active tab
@@ -727,7 +727,7 @@ local function update_cached_git_branch()
             local pane = path[#path]
             local cwd = pane.pty:cwd()
             if cwd then
-                state.cached_git_branch = tuios.get_git_branch(cwd)
+                state.cached_git_branch = prise.get_git_branch(cwd)
                 return
             end
         end
@@ -943,7 +943,7 @@ local function set_active_tab_index(new_index)
     state.focused_id = new_focus_id
     update_pty_focus(old_focused, new_focus_id)
     update_cached_git_branch()
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 ---Close the current tab
@@ -972,7 +972,7 @@ local function close_tab(idx)
             state.clock_timer:cancel()
             state.clock_timer = nil
         end
-        tuios.exit()
+        prise.exit()
         return
     end
 
@@ -1022,8 +1022,8 @@ local function close_tab(idx)
         state.cached_git_branch = nil
     end
 
-    tuios.request_frame()
-    tuios.save()
+    prise.request_frame()
+    prise.save()
 end
 
 ---Close the current tab
@@ -1052,8 +1052,8 @@ local function swap_tabs(idx1, idx2)
         state.active_tab = idx1
     end
 
-    tuios.request_frame()
-    tuios.save()
+    prise.request_frame()
+    prise.save()
 end
 
 ---Remove a pane by id from the appropriate tab
@@ -1088,7 +1088,7 @@ local function remove_pane_by_id(id)
                 state.clock_timer:cancel()
                 state.clock_timer = nil
             end
-            tuios.exit()
+            prise.exit()
             return true
         else
             local old_focused = state.focused_id
@@ -1121,7 +1121,7 @@ local function remove_pane_by_id(id)
                 update_pty_focus(old_focused, new_focus_id)
                 update_cached_git_branch()
             end
-            tuios.request_frame()
+            prise.request_frame()
             return false
         end
     else
@@ -1139,7 +1139,7 @@ local function remove_pane_by_id(id)
             update_pty_focus(old_id, state.focused_id)
             update_cached_git_branch()
         end
-        tuios.request_frame()
+        prise.request_frame()
         return false
     end
 end
@@ -1505,7 +1505,7 @@ local function build_tabs_from_layout(layout, pty_queue)
     for tab_index, tab_def in ipairs(layout.tabs) do
         local root, new_idx, err = build_node_from_layout(tab_def.root, pty_queue, queue_idx)
         if not root then
-            tuios.log.error(string.format("Layout: failed to build tab %d: %s", tab_index, err or "unknown"))
+            prise.log.error(string.format("Layout: failed to build tab %d: %s", tab_index, err or "unknown"))
             cleanup_new_ptys(pty_queue, queue_idx)
             return nil, nil, nil, nil, queue_idx
         end
@@ -1546,7 +1546,7 @@ local function finalize_layout(pending)
     -- Validate pane count before any destructive operations
     local needed = count_layout_total_panes(layout)
     if needed ~= #pty_queue then
-        tuios.log.error(string.format("Layout: pane count mismatch (layout=%d, ptys=%d)", needed, #pty_queue))
+        prise.log.error(string.format("Layout: pane count mismatch (layout=%d, ptys=%d)", needed, #pty_queue))
         cleanup_new_ptys(pty_queue, 1)
         state.pending_layout = nil
         return
@@ -1562,7 +1562,7 @@ local function finalize_layout(pending)
 
     -- Verify we used all PTYs
     if queue_idx ~= #pty_queue + 1 then
-        tuios.log.error(string.format("Layout: PTY mismatch after build (used %d of %d)", queue_idx - 1, #pty_queue))
+        prise.log.error(string.format("Layout: PTY mismatch after build (used %d of %d)", queue_idx - 1, #pty_queue))
         cleanup_new_ptys(pty_queue, queue_idx)
         state.pending_layout = nil
         return
@@ -1599,8 +1599,8 @@ local function finalize_layout(pending)
     end
 
     state.pending_layout = nil
-    tuios.request_frame()
-    tuios.save()
+    prise.request_frame()
+    prise.save()
 end
 
 ---Expand ~ to home directory in a path and validate it exists
@@ -1618,7 +1618,7 @@ local function expand_path(path)
         if home then
             expanded = home .. path:sub(2)
         else
-            tuios.log.warn("Layout: HOME not set, cannot expand ~")
+            prise.log.warn("Layout: HOME not set, cannot expand ~")
             return nil
         end
     end
@@ -1637,7 +1637,7 @@ local function expand_path(path)
         return expanded
     end
 
-    tuios.log.warn("Layout: cwd does not exist: " .. expanded)
+    prise.log.warn("Layout: cwd does not exist: " .. expanded)
     return nil
 end
 
@@ -1646,7 +1646,7 @@ end
 local function spawn_for_layout_node(node)
     assert(node and type(node) == "table", "spawn_for_layout_node: node must be a table")
     if node.type == "pane" then
-        tuios.spawn({ cwd = expand_path(node.cwd), cmd = node.cmd })
+        prise.spawn({ cwd = expand_path(node.cwd), cmd = node.cmd })
     elseif node.type == "split" then
         for _, child in ipairs(node.children or {}) do
             spawn_for_layout_node(child)
@@ -1661,13 +1661,13 @@ local function apply_layout(layout_name)
     assert(type(layout_name) == "string", "apply_layout: layout_name must be a string")
 
     if state.pending_layout then
-        tuios.log.warn("Layout already pending")
+        prise.log.warn("Layout already pending")
         return false
     end
 
     local layout = config.layouts[layout_name]
     if not layout then
-        tuios.log.warn("Layout not found: " .. layout_name)
+        prise.log.warn("Layout not found: " .. layout_name)
         return false
     end
 
@@ -1677,7 +1677,7 @@ local function apply_layout(layout_name)
 
     local total_panes = count_layout_total_panes(layout)
     if total_panes == 0 then
-        tuios.log.warn("Layout has no panes: " .. layout_name)
+        prise.log.warn("Layout has no panes: " .. layout_name)
         return false
     end
 
@@ -1691,7 +1691,7 @@ local function apply_layout(layout_name)
 
         -- Spawn floating pane if defined
         if tab_def.floating and tab_def.floating.pane then
-            tuios.spawn({
+            prise.spawn({
                 cwd = expand_path(tab_def.floating.pane.cwd),
                 cmd = tab_def.floating.pane.cmd,
             })
@@ -1716,20 +1716,20 @@ end
 local function open_layout_picker()
     local names = get_layout_names()
     if #names == 0 then
-        tuios.log.warn("No layouts defined")
+        prise.log.warn("No layouts defined")
         return
     end
     state.layout_picker.visible = true
     state.layout_picker.selected = 1
     state.layout_picker.scroll_offset = 0
     state.layout_picker.regions = {}
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 ---Close the layout picker
 local function close_layout_picker()
     state.layout_picker.visible = false
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 ---Execute the selected layout
@@ -1852,8 +1852,8 @@ local function resize_pane(dimension, delta_ratio)
         end
     end
 
-    tuios.request_frame()
-    tuios.save()
+    prise.request_frame()
+    prise.save()
 end
 
 ---@param direction "left"|"right"|"up"|"down"
@@ -1920,7 +1920,7 @@ local function move_focus(direction)
             state.focused_id = target_leaf.id
             update_pty_focus(old_id, state.focused_id)
             update_cached_git_branch()
-            tuios.request_frame()
+            prise.request_frame()
         end
     end
 end
@@ -1938,19 +1938,19 @@ end
 
 local function open_rename_tab()
     if not state.rename_tab.input then
-        state.rename_tab.input = tuios.create_text_input()
+        state.rename_tab.input = prise.create_text_input()
     end
     local tab = get_active_tab()
     local current_title = (tab and tab.title) or ""
     state.rename_tab.input:clear()
     state.rename_tab.input:insert(current_title)
     state.rename_tab.visible = true
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 local function close_rename_tab()
     state.rename_tab.visible = false
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 local function execute_rename_tab()
@@ -1966,13 +1966,13 @@ local function execute_rename_tab()
         else
             tab.title = new_title
         end
-        tuios.save() -- Auto-save on tab renamed
+        prise.save() -- Auto-save on tab renamed
     end
     close_rename_tab()
 end
 
 -- Platform-dependent key prefix for shortcuts
-local key_prefix = tuios.platform == "macos" and "󰘳 +k" or "Super+k"
+local key_prefix = prise.platform == "macos" and "󰘳 +k" or "Super+k"
 
 ---Forward declaration for open_rename
 ---@type fun()
@@ -1991,7 +1991,7 @@ local commands = {
         action = function()
             local pty = get_focused_pty()
             state.pending_split = { direction = "row" }
-            tuios.spawn({ cwd = pty and pty:cwd() })
+            prise.spawn({ cwd = pty and pty:cwd() })
         end,
     },
     {
@@ -2000,7 +2000,7 @@ local commands = {
         action = function()
             local pty = get_focused_pty()
             state.pending_split = { direction = "col" }
-            tuios.spawn({ cwd = pty and pty:cwd() })
+            prise.spawn({ cwd = pty and pty:cwd() })
         end,
     },
     {
@@ -2009,7 +2009,7 @@ local commands = {
         action = function()
             local pty = get_focused_pty()
             state.pending_split = { direction = get_auto_split_direction() }
-            tuios.spawn({ cwd = pty and pty:cwd() })
+            prise.spawn({ cwd = pty and pty:cwd() })
         end,
     },
     {
@@ -2051,7 +2051,7 @@ local commands = {
                 pane.pty:close()
                 local was_last = remove_pane_by_id(pane.id)
                 if not was_last then
-                    tuios.save()
+                    prise.save()
                 end
             end
         end,
@@ -2065,7 +2065,7 @@ local commands = {
             elseif state.focused_id then
                 state.zoomed_pane_id = state.focused_id
             end
-            tuios.request_frame()
+            prise.request_frame()
         end,
     },
     {
@@ -2074,7 +2074,7 @@ local commands = {
         action = function()
             local pty = get_focused_pty()
             state.pending_new_tab = true
-            tuios.spawn({ cwd = pty and pty:cwd() })
+            prise.spawn({ cwd = pty and pty:cwd() })
         end,
     },
     {
@@ -2142,10 +2142,10 @@ local commands = {
             -- Open a text input for the user to specify the tab index
             state.swap_with_index = {
                 visible = true,
-                input = tuios.create_text_input(),
+                input = prise.create_text_input(),
                 target_index = nil,
             }
-            tuios.request_frame()
+            prise.request_frame()
         end,
         visible = function()
             return #state.tabs > 1
@@ -2347,17 +2347,17 @@ action_handlers = {
     split_horizontal = function()
         local pty = get_focused_pty()
         state.pending_split = { direction = "row" }
-        tuios.spawn({ cwd = pty and pty:cwd() })
+        prise.spawn({ cwd = pty and pty:cwd() })
     end,
     split_vertical = function()
         local pty = get_focused_pty()
         state.pending_split = { direction = "col" }
-        tuios.spawn({ cwd = pty and pty:cwd() })
+        prise.spawn({ cwd = pty and pty:cwd() })
     end,
     split_auto = function()
         local pty = get_focused_pty()
         state.pending_split = { direction = get_auto_split_direction() }
-        tuios.spawn({ cwd = pty and pty:cwd() })
+        prise.spawn({ cwd = pty and pty:cwd() })
     end,
     focus_left = function()
         move_focus("left")
@@ -2379,7 +2379,7 @@ action_handlers = {
             pane.pty:close()
             local was_last = remove_pane_by_id(pane.id)
             if not was_last then
-                tuios.save()
+                prise.save()
             end
         end
     end,
@@ -2389,12 +2389,12 @@ action_handlers = {
         elseif state.focused_id then
             state.zoomed_pane_id = state.focused_id
         end
-        tuios.request_frame()
+        prise.request_frame()
     end,
     new_tab = function()
         local pty = get_focused_pty()
         state.pending_new_tab = true
-        tuios.spawn({ cwd = pty and pty:cwd() })
+        prise.spawn({ cwd = pty and pty:cwd() })
     end,
     close_tab = function()
         close_current_tab()
@@ -2488,24 +2488,24 @@ action_handlers = {
             -- No floating pane created yet, spawn one
             state.floating.pending = true
             local pty = get_focused_pty()
-            tuios.spawn({ cwd = pty and pty:cwd() })
+            prise.spawn({ cwd = pty and pty:cwd() })
         else
             -- Toggle visibility
             tab.floating.visible = not tab.floating.visible
-            tuios.request_frame()
+            prise.request_frame()
         end
     end,
     floating_increase_size = function()
         state.floating.width = math.min(state.floating.width + FLOATING_WIDTH_STEP, FLOATING_MAX_WIDTH)
         state.floating.height = math.min(state.floating.height + FLOATING_HEIGHT_STEP, FLOATING_MAX_HEIGHT)
         state.floating.resize_mode = true
-        tuios.request_frame()
+        prise.request_frame()
     end,
     floating_decrease_size = function()
         state.floating.width = math.max(state.floating.width - FLOATING_WIDTH_STEP, FLOATING_MIN_WIDTH)
         state.floating.height = math.max(state.floating.height - FLOATING_HEIGHT_STEP, FLOATING_MIN_HEIGHT)
         state.floating.resize_mode = true
-        tuios.request_frame()
+        prise.request_frame()
     end,
     layout_picker = function()
         open_layout_picker()
@@ -2534,13 +2534,13 @@ end
 
 local function open_palette()
     if not state.palette.input then
-        state.palette.input = tuios.create_text_input()
+        state.palette.input = prise.create_text_input()
     end
     state.palette.visible = true
     state.palette.selected = 1
     state.palette.scroll_offset = 0
     state.palette.input:clear()
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 -- Add command_palette handler now that open_palette is defined
@@ -2550,7 +2550,7 @@ end
 
 local function close_palette()
     state.palette.visible = false
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 local function execute_selected()
@@ -2563,44 +2563,44 @@ end
 
 open_rename = function()
     if not state.rename.input then
-        state.rename.input = tuios.create_text_input()
+        state.rename.input = prise.create_text_input()
     end
-    local current_name = tuios.get_session_name() or ""
+    local current_name = prise.get_session_name() or ""
     state.rename.input:clear()
     state.rename.input:insert(current_name)
     state.rename.visible = true
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 local function close_rename()
     state.rename.visible = false
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 local function execute_rename()
     local new_name = state.rename.input:text()
     if new_name and new_name ~= "" then
-        local current_name = tuios.get_session_name() or ""
-        tuios.rename_session(current_name, new_name)
+        local current_name = prise.get_session_name() or ""
+        prise.rename_session(current_name, new_name)
     end
     close_rename()
 end
 
 open_session_picker = function()
     if not state.session_picker.input then
-        state.session_picker.input = tuios.create_text_input()
+        state.session_picker.input = prise.create_text_input()
     end
     state.session_picker.input:clear()
-    state.session_picker.sessions = tuios.list_sessions() or {}
+    state.session_picker.sessions = prise.list_sessions() or {}
     state.session_picker.selected = 1
     state.session_picker.scroll_offset = 0
     state.session_picker.visible = true
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 local function close_session_picker()
     state.session_picker.visible = false
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 ---Filter sessions by fuzzy matching the input text
@@ -2631,7 +2631,7 @@ local function execute_session_switch()
     if idx >= 1 and idx <= #filtered then
         local target = filtered[idx]
         close_session_picker()
-        tuios.switch_session(target)
+        prise.switch_session(target)
     end
 end
 
@@ -2648,7 +2648,7 @@ local function open_session_rename()
         state.session_picker.rename_target = target
         state.session_picker.input:clear()
         state.session_picker.input:insert(target)
-        tuios.request_frame()
+        prise.request_frame()
     end
 end
 
@@ -2659,8 +2659,8 @@ local function close_session_rename()
     state.session_picker.selected = 1
     state.session_picker.scroll_offset = 0
     -- Refresh the session list
-    state.session_picker.sessions = tuios.list_sessions() or {}
-    tuios.request_frame()
+    state.session_picker.sessions = prise.list_sessions() or {}
+    prise.request_frame()
 end
 
 local function execute_session_rename()
@@ -2668,10 +2668,10 @@ local function execute_session_rename()
     local target = state.session_picker.rename_target
     if new_name and new_name ~= "" and target and new_name ~= target then
         local ok, err = pcall(function()
-            tuios.rename_session(target, new_name)
+            prise.rename_session(target, new_name)
         end)
         if not ok then
-            tuios.log.warn("Failed to rename session: " .. tostring(err))
+            prise.log.warn("Failed to rename session: " .. tostring(err))
         end
     end
     close_session_rename()
@@ -2682,7 +2682,7 @@ end
 ---@param event Event
 function M.update(event)
     if event.type == "pty_attach" then
-        tuios.log.info("Lua: pty_attach received")
+        prise.log.info("Lua: pty_attach received")
         ---@type Pty
         local pty = event.data.pty
         ---@type Pane
@@ -2717,7 +2717,7 @@ function M.update(event)
             if tab then
                 tab.floating = { pane = new_pane, visible = true }
             end
-            tuios.request_frame()
+            prise.request_frame()
             return
         end
 
@@ -2779,8 +2779,8 @@ function M.update(event)
             state.pending_split = nil
         end
         update_pty_focus(old_focused_id, state.focused_id)
-        tuios.request_frame()
-        tuios.save() -- Auto-save on pane added
+        prise.request_frame()
+        prise.save() -- Auto-save on pane added
     elseif event.type == "key_press" then
         -- Handle command palette
         if state.palette.visible then
@@ -2788,7 +2788,7 @@ function M.update(event)
             local k = event.data.key
             local filtered = filter_commands(state.palette.input:text())
 
-            tuios.log.debug(
+            prise.log.debug(
                 "palette key: "
                     .. tostring(k)
                     .. " len="
@@ -2808,13 +2808,13 @@ function M.update(event)
             elseif k == "ArrowUp" or (k == "p" and event.data.ctrl) then
                 if state.palette.selected > 1 then
                     state.palette.selected = state.palette.selected - 1
-                    tuios.request_frame()
+                    prise.request_frame()
                 end
                 return
             elseif k == "ArrowDown" or (k == "n" and event.data.ctrl) then
                 if state.palette.selected < #filtered then
                     state.palette.selected = state.palette.selected + 1
-                    tuios.request_frame()
+                    prise.request_frame()
                 end
                 return
             end
@@ -2863,7 +2863,7 @@ function M.update(event)
                         state.session_picker.scroll_offset = state.session_picker.selected - 1
                     end
                 end
-                tuios.request_frame()
+                prise.request_frame()
                 return
             elseif k == "ArrowDown" or (k == "n" and event.data.ctrl) then
                 if state.session_picker.selected < #filtered then
@@ -2874,14 +2874,14 @@ function M.update(event)
                         state.session_picker.scroll_offset = state.session_picker.selected - visible_height
                     end
                 end
-                tuios.request_frame()
+                prise.request_frame()
                 return
             elseif k == "Backspace" then
                 state.session_picker.input:delete_backward()
                 local new_filtered = filter_sessions(state.session_picker.input:text())
                 state.session_picker.selected = math.min(state.session_picker.selected, math.max(1, #new_filtered))
                 state.session_picker.scroll_offset = 0
-                tuios.request_frame()
+                prise.request_frame()
                 return
             elseif k == "D" and event.data.shift then
                 -- Delete the selected session (Shift+D)
@@ -2889,20 +2889,20 @@ function M.update(event)
                     local idx = state.session_picker.selected
                     if idx >= 1 and idx <= #filtered then
                         local target = filtered[idx]
-                        local current_session = tuios.get_session_name()
+                        local current_session = prise.get_session_name()
                         if target == current_session then
                             -- Can't delete the current session
-                            tuios.log.warn("Cannot delete the current session")
+                            prise.log.warn("Cannot delete the current session")
                             return
                         end
-                        tuios.delete_session(target)
+                        prise.delete_session(target)
                         -- Refresh the session list
-                        state.session_picker.sessions = tuios.list_sessions() or {}
+                        state.session_picker.sessions = prise.list_sessions() or {}
                         state.session_picker.selected = math.min(
                             state.session_picker.selected,
                             math.max(1, #filter_sessions(state.session_picker.input:text()))
                         )
-                        tuios.request_frame()
+                        prise.request_frame()
                     end
                 end
                 return
@@ -2915,7 +2915,7 @@ function M.update(event)
                 local new_filtered = filter_sessions(state.session_picker.input:text())
                 state.session_picker.selected = math.min(state.session_picker.selected, math.max(1, #new_filtered))
                 state.session_picker.scroll_offset = 0
-                tuios.request_frame()
+                prise.request_frame()
                 return
             end
             return
@@ -2939,7 +2939,7 @@ function M.update(event)
                         state.layout_picker.scroll_offset = state.layout_picker.selected - 1
                     end
                 end
-                tuios.request_frame()
+                prise.request_frame()
                 return
             elseif k == "ArrowDown" or (k == "n" and event.data.ctrl) then
                 if state.layout_picker.selected < #names then
@@ -2950,7 +2950,7 @@ function M.update(event)
                         state.layout_picker.scroll_offset = state.layout_picker.selected - visible_height
                     end
                 end
-                tuios.request_frame()
+                prise.request_frame()
                 return
             end
             return
@@ -2993,7 +2993,7 @@ function M.update(event)
             if k == "Escape" then
                 state.swap_with_index.visible = false
                 state.swap_with_index = nil
-                tuios.request_frame()
+                prise.request_frame()
                 return
             elseif k == "Enter" then
                 local text = state.swap_with_index.input:text()
@@ -3006,11 +3006,11 @@ function M.update(event)
                 end
                 state.swap_with_index.visible = false
                 state.swap_with_index = nil
-                tuios.request_frame()
+                prise.request_frame()
                 return
             end
             handle_text_input_key(state.swap_with_index.input, event.data)
-            tuios.request_frame()
+            prise.request_frame()
             return
         end
 
@@ -3026,7 +3026,7 @@ function M.update(event)
             else
                 -- Exit resize mode on any other key
                 state.floating.resize_mode = false
-                tuios.request_frame()
+                prise.request_frame()
                 -- Don't return - let the key be processed normally
             end
         end
@@ -3058,23 +3058,23 @@ function M.update(event)
                     handler()
                 end
             end
-            tuios.request_frame()
+            prise.request_frame()
             return
         elseif result.pending then
             -- Key sequence in progress
             state.pending_command = true
-            tuios.request_frame()
+            prise.request_frame()
 
             -- Cancel existing timeout and start new one
             if state.timer then
                 state.timer:cancel()
             end
-            state.timer = tuios.set_timeout(1000, function()
+            state.timer = prise.set_timeout(1000, function()
                 if state.pending_command then
                     state.pending_command = false
                     state.timer = nil
                     state.keybind_matcher:reset()
-                    tuios.request_frame()
+                    prise.request_frame()
                 end
             end)
             return
@@ -3087,7 +3087,7 @@ function M.update(event)
                 state.timer = nil
             end
             state.pending_command = false
-            tuios.request_frame()
+            prise.request_frame()
             -- Send the unmapped key to the focused PTY
             local root = get_active_root()
             if root and state.focused_id then
@@ -3103,7 +3103,7 @@ function M.update(event)
         -- Copy selection: Cmd+c (macOS) or Ctrl+Shift+c (Linux)
         if event.data.key == "c" then
             local is_copy = false
-            if tuios.platform == "macos" then
+            if prise.platform == "macos" then
                 is_copy = (event.data.super == true) and not event.data.ctrl and not event.data.alt
             else
                 is_copy = (event.data.ctrl == true) and (event.data.shift == true) and not event.data.super
@@ -3148,19 +3148,19 @@ function M.update(event)
         if state.palette.visible then
             state.palette.input:insert(text_sanitized)
             state.palette.selected = 1
-            tuios.request_frame()
+            prise.request_frame()
         elseif state.rename_tab.visible then
             state.rename_tab.input:insert(text_sanitized)
-            tuios.request_frame()
+            prise.request_frame()
         elseif state.rename.visible then
             state.rename.input:insert(text_sanitized)
-            tuios.request_frame()
+            prise.request_frame()
         elseif state.session_picker.visible then
             state.session_picker.input:insert(text_sanitized)
-            tuios.request_frame()
+            prise.request_frame()
         elseif state.swap_with_index and state.swap_with_index.visible then
             state.swap_with_index.input:insert(text_sanitized)
-            tuios.request_frame()
+            prise.request_frame()
         else
             local pty = get_visible_floating_pty() or get_focused_pty()
             if pty then
@@ -3169,26 +3169,26 @@ function M.update(event)
         end
     elseif event.type == "pty_exited" then
         local id = event.data.id
-        tuios.log.info("Lua: pty_exited " .. id)
+        prise.log.info("Lua: pty_exited " .. id)
 
         -- Check if this is a floating pane (check active tab first, then others)
         local active_tab = get_active_tab()
         if active_tab and active_tab.floating and active_tab.floating.pane.id == id then
             active_tab.floating = nil
-            tuios.request_frame()
+            prise.request_frame()
             return
         end
         for _, tab in ipairs(state.tabs) do
             if tab ~= active_tab and tab.floating and tab.floating.pane.id == id then
                 tab.floating = nil
-                tuios.request_frame()
+                prise.request_frame()
                 return
             end
         end
 
         local was_last = remove_pane_by_id(id)
         if not was_last then
-            tuios.save()
+            prise.save()
         end
     elseif event.type == "mouse" then
         local d = event.data
@@ -3219,7 +3219,7 @@ function M.update(event)
             if new_hover ~= state.hovered_tab or new_close_hover ~= state.hovered_close_tab then
                 state.hovered_tab = new_hover
                 state.hovered_close_tab = new_close_hover
-                tuios.request_frame()
+                prise.request_frame()
             end
         end
 
@@ -3242,7 +3242,7 @@ function M.update(event)
                             else
                                 -- First click, just highlight it
                                 state.palette.selected = region.index
-                                tuios.request_frame()
+                                prise.request_frame()
                             end
                             return
                         end
@@ -3273,7 +3273,7 @@ function M.update(event)
                 local old_id = state.focused_id
                 state.focused_id = d.target
                 update_pty_focus(old_id, state.focused_id)
-                tuios.request_frame()
+                prise.request_frame()
             end
 
             -- Hide floating pane when clicking on main pane
@@ -3286,7 +3286,7 @@ function M.update(event)
                 and d.target ~= tab.floating.pane.id
             then
                 tab.floating.visible = false
-                tuios.request_frame()
+                prise.request_frame()
             end
         end
         -- Forward mouse events to floating pane if visible and targeted
@@ -3328,7 +3328,7 @@ function M.update(event)
     elseif event.type == "winsize" then
         state.screen_cols = event.data.cols or state.screen_cols
         state.screen_rows = event.data.rows or state.screen_rows
-        tuios.request_frame()
+        prise.request_frame()
     elseif event.type == "focus_in" then
         state.app_focused = true
         local pty = get_visible_floating_pty() or get_focused_pty()
@@ -3390,14 +3390,14 @@ function M.update(event)
 
         local root = get_active_root()
         if update_split_ratio(root) then
-            tuios.request_frame()
-            tuios.save() -- Auto-save on layout change
+            prise.request_frame()
+            prise.save() -- Auto-save on layout change
         end
     elseif event.type == "cwd_changed" then
         -- CWD changed for a PTY - update cached git branch
         update_cached_git_branch()
-        tuios.request_frame()
-        tuios.save() -- Auto-save on cwd change
+        prise.request_frame()
+        prise.save() -- Auto-save on cwd change
     end
 end
 
@@ -3408,10 +3408,10 @@ end
 local function render_node(node, force_unfocused)
     if is_pane(node) then
         local is_focused = (node.id == state.focused_id) and not (force_unfocused == true)
-        tuios.log.debug(
+        prise.log.debug(
             "render_node: force_unfocused=" .. tostring(force_unfocused) .. " is_focused=" .. tostring(is_focused)
         )
-        local terminal = tuios.Terminal({
+        local terminal = prise.Terminal({
             pty = node.pty,
             ratio = node.ratio,
             focus = is_focused,
@@ -3421,7 +3421,7 @@ local function render_node(node, force_unfocused)
         if should_show_borders() and config.borders.mode == "box" then
             local border_color = is_focused and config.borders.focused_color or config.borders.unfocused_color
 
-            return tuios.Box({
+            return prise.Box({
                 border = config.borders.style,
                 style = { fg = border_color },
                 child = terminal,
@@ -3448,7 +3448,7 @@ local function render_node(node, force_unfocused)
                     local sep_axis = node.direction == "row" and "vertical" or "horizontal"
                     table.insert(
                         children_widgets,
-                        tuios.Separator({
+                        prise.Separator({
                             axis = sep_axis,
                             style = { fg = sep_color },
                             border = config.borders.style,
@@ -3473,9 +3473,9 @@ local function render_node(node, force_unfocused)
         }
 
         if node.direction == "row" then
-            return tuios.Row(props)
+            return prise.Row(props)
         else
-            return tuios.Column(props)
+            return prise.Column(props)
         end
     else
         error("render_node: unknown node type: " .. tostring(node.type))
@@ -3491,7 +3491,7 @@ local function format_palette_item(name, shortcut, width)
     if not shortcut then
         return name
     end
-    local padding = width - tuios.gwidth(name) - tuios.gwidth(shortcut)
+    local padding = width - prise.gwidth(name) - prise.gwidth(shortcut)
     if padding < 2 then
         padding = 2
     end
@@ -3507,13 +3507,13 @@ local function build_palette()
     end
 
     local text = state.palette.input:text()
-    tuios.log.debug("build_palette: text='" .. text .. "'")
+    prise.log.debug("build_palette: text='" .. text .. "'")
     local filtered = filter_commands(text)
     local has_commands = #filtered > 0
     if not has_commands then
         table.insert(filtered, { name = "No matches" })
     end
-    tuios.log.debug("build_palette: filtered count=" .. #filtered)
+    prise.log.debug("build_palette: filtered count=" .. #filtered)
 
     local items = {}
     for _, cmd in ipairs(filtered) do
@@ -3548,30 +3548,30 @@ local function build_palette()
         end
     end
 
-    return tuios.Positioned({
+    return prise.Positioned({
         anchor = "top_center",
         y = state.palette.palette_y,
-        child = tuios.Box({
+        child = prise.Box({
             border = "none",
             max_width = PALETTE_WIDTH,
             style = palette_style,
-            child = tuios.Padding({
+            child = prise.Padding({
                 top = 1,
                 bottom = 1,
                 left = 2,
                 right = 2,
-                child = tuios.Column({
+                child = prise.Column({
                     cross_axis_align = "stretch",
                     children = {
-                        tuios.TextInput({
+                        prise.TextInput({
                             input = state.palette.input,
                             style = input_style,
                         }),
-                        tuios.Text({
+                        prise.Text({
                             text = string.rep("─", PALETTE_WIDTH),
                             style = { fg = THEME.bg3, bg = THEME.bg1 },
                         }),
-                        tuios.List({
+                        prise.List({
                             items = items,
                             selected = state.palette.selected,
                             scroll_offset = state.palette.scroll_offset,
@@ -3595,23 +3595,23 @@ local function build_rename()
     local palette_style = { bg = THEME.bg1, fg = THEME.fg_bright }
     local input_style = { bg = THEME.bg1, fg = THEME.fg_bright }
 
-    return tuios.Positioned({
+    return prise.Positioned({
         anchor = "top_center",
         y = 5,
-        child = tuios.Box({
+        child = prise.Box({
             border = "none",
             max_width = PALETTE_WIDTH,
             style = palette_style,
-            child = tuios.Padding({
+            child = prise.Padding({
                 top = 1,
                 bottom = 1,
                 left = 2,
                 right = 2,
-                child = tuios.Column({
+                child = prise.Column({
                     cross_axis_align = "stretch",
                     children = {
-                        tuios.Text({ text = "Rename Session", style = { fg = THEME.fg_dim, bg = THEME.bg1 } }),
-                        tuios.TextInput({
+                        prise.Text({ text = "Rename Session", style = { fg = THEME.fg_dim, bg = THEME.bg1 } }),
+                        prise.TextInput({
                             input = state.rename.input,
                             style = input_style,
                         }),
@@ -3632,23 +3632,23 @@ local function build_rename_tab()
     local palette_style = { bg = THEME.bg1, fg = THEME.fg_bright }
     local input_style = { bg = THEME.bg1, fg = THEME.fg_bright }
 
-    return tuios.Positioned({
+    return prise.Positioned({
         anchor = "top_center",
         y = 5,
-        child = tuios.Box({
+        child = prise.Box({
             border = "none",
             max_width = PALETTE_WIDTH,
             style = palette_style,
-            child = tuios.Padding({
+            child = prise.Padding({
                 top = 1,
                 bottom = 1,
                 left = 2,
                 right = 2,
-                child = tuios.Column({
+                child = prise.Column({
                     cross_axis_align = "stretch",
                     children = {
-                        tuios.Text({ text = "Rename Tab", style = { fg = THEME.fg_dim, bg = THEME.bg1 } }),
-                        tuios.TextInput({
+                        prise.Text({ text = "Rename Tab", style = { fg = THEME.fg_dim, bg = THEME.bg1 } }),
+                        prise.TextInput({
                             input = state.rename_tab.input,
                             style = input_style,
                         }),
@@ -3672,7 +3672,7 @@ local function build_session_picker()
     local has_sessions = #filtered > 0
 
     local items = {}
-    local current_session = tuios.get_session_name()
+    local current_session = prise.get_session_name()
     for _, session in ipairs(filtered) do
         local display = session
         if session == current_session then
@@ -3705,48 +3705,48 @@ local function build_session_picker()
         end
     end
 
-    return tuios.Positioned({
+    return prise.Positioned({
         anchor = "top_center",
         y = 5,
         focus = true,
-        child = tuios.Box({
+        child = prise.Box({
             border = "none",
             max_width = PALETTE_WIDTH,
             style = palette_style,
             focus = true,
-            child = tuios.Padding({
+            child = prise.Padding({
                 top = 1,
                 bottom = 1,
                 left = 2,
                 right = 2,
-                child = tuios.Column({
+                child = prise.Column({
                     cross_axis_align = "stretch",
                     children = {
-                        tuios.Text({ text = "Switch Session", style = { fg = THEME.fg_dim, bg = THEME.bg1 } }),
-                        tuios.Padding({
+                        prise.Text({ text = "Switch Session", style = { fg = THEME.fg_dim, bg = THEME.bg1 } }),
+                        prise.Padding({
                             left = 38,
-                            child = tuios.Text({
+                            child = prise.Text({
                                 text = "Shift + R - rename",
                                 style = { fg = THEME.fg_dim, bg = THEME.bg1 },
                             }),
                         }),
-                        tuios.Padding({
+                        prise.Padding({
                             left = 38,
-                            child = tuios.Text({
+                            child = prise.Text({
                                 text = "Shift + D - delete",
                                 style = { fg = THEME.fg_dim, bg = THEME.bg1 },
                             }),
                         }),
-                        tuios.TextInput({
+                        prise.TextInput({
                             input = state.session_picker.input,
                             style = input_style,
                             focus = true,
                         }),
-                        tuios.Text({
+                        prise.Text({
                             text = string.rep("─", PALETTE_WIDTH),
                             style = { fg = THEME.bg3, bg = THEME.bg1 },
                         }),
-                        tuios.List({
+                        prise.List({
                             items = items,
                             selected = state.session_picker.selected,
                             scroll_offset = state.session_picker.scroll_offset,
@@ -3799,29 +3799,29 @@ local function build_layout_picker()
         })
     end
 
-    return tuios.Positioned({
+    return prise.Positioned({
         anchor = "top_center",
         y = 5,
         focus = true,
-        child = tuios.Box({
+        child = prise.Box({
             border = "none",
             max_width = PALETTE_WIDTH,
             style = palette_style,
             focus = true,
-            child = tuios.Padding({
+            child = prise.Padding({
                 top = 1,
                 bottom = 1,
                 left = 2,
                 right = 2,
-                child = tuios.Column({
+                child = prise.Column({
                     cross_axis_align = "stretch",
                     children = {
-                        tuios.Text({ text = "Layouts", style = { fg = THEME.fg_dim, bg = THEME.bg1 } }),
-                        tuios.Text({
+                        prise.Text({ text = "Layouts", style = { fg = THEME.fg_dim, bg = THEME.bg1 } }),
+                        prise.Text({
                             text = string.rep("─", PALETTE_WIDTH),
                             style = { fg = THEME.bg3, bg = THEME.bg1 },
                         }),
-                        tuios.List({
+                        prise.List({
                             items = items,
                             selected = state.layout_picker.selected,
                             scroll_offset = state.layout_picker.scroll_offset,
@@ -3903,7 +3903,7 @@ local function build_tab_bar_default()
             close_text = "\u{F467}" -- md-close_circle_outline
         end
         -- Pad close_text to exactly close_widget_width cells
-        local close_text_width = tuios.gwidth(close_text)
+        local close_text_width = prise.gwidth(close_text)
         if close_text_width < close_widget_width then
             close_text = close_text .. string.rep(" ", close_widget_width - close_text_width)
         end
@@ -3917,12 +3917,12 @@ local function build_tab_bar_default()
 
         -- Always reserve space for endcaps, close widget, and index
         local inner_width = tab_width - endcap_width - close_widget_width - index_width
-        local title_width = tuios.gwidth(title)
+        local title_width = prise.gwidth(title)
 
         -- Truncate title if needed
         if title_width > inner_width then
             title = string.sub(title, 1, inner_width - 1) .. "…"
-            title_width = tuios.gwidth(title)
+            title_width = prise.gwidth(title)
         end
 
         -- Center the title
@@ -4028,7 +4028,7 @@ local function build_tab_bar_custom()
     -- Calculate actual segment positions
     local segment_positions = {}
     for _, seg in ipairs(original_segments) do
-        local width = tuios.gwidth(seg.text)
+        local width = prise.gwidth(seg.text)
         table.insert(segment_positions, {
             start_x = x_pos,
             end_x = x_pos + width,
@@ -4104,10 +4104,10 @@ local function build_tab_bar()
     -- Use custom renderer if provided
     if config.tab_bar.render then
         local segments = build_tab_bar_custom()
-        return tuios.Text(segments)
+        return prise.Text(segments)
     else
         local segments = build_tab_bar_default()
-        return tuios.Text(segments)
+        return prise.Text(segments)
     end
 end
 
@@ -4115,14 +4115,14 @@ end
 ---@return table
 local function build_status_bar()
     local mode_color = state.pending_command and THEME.mode_command or THEME.mode_normal
-    local session_name = (tuios.get_session_name() or "tuios"):upper()
+    local session_name = (prise.get_session_name() or "prise"):upper()
     local mode_text = state.pending_command and " CMD " or (" " .. session_name .. " ")
 
     -- Use cached git branch (updated on cwd_changed and focus change)
     local git_branch = state.cached_git_branch
 
     -- Get current time
-    local time_str = tuios.get_time()
+    local time_str = prise.get_time()
 
     -- Build segments and track width
     local segments = {}
@@ -4130,7 +4130,7 @@ local function build_status_bar()
 
     -- Mode indicator
     table.insert(segments, { text = mode_text, style = { bg = mode_color, fg = THEME.fg_dark, bold = true } })
-    left_width = left_width + tuios.gwidth(mode_text)
+    left_width = left_width + prise.gwidth(mode_text)
 
     -- Track the last background color for proper powerline transitions
     local last_bg = mode_color
@@ -4140,7 +4140,7 @@ local function build_status_bar()
         local branch_text = " \u{F062C} " .. git_branch .. " "
         table.insert(segments, { text = POWERLINE_SYMBOLS.right_solid, style = { fg = last_bg, bg = THEME.bg2 } })
         table.insert(segments, { text = branch_text, style = { bg = THEME.bg2, fg = THEME.fg_bright } })
-        left_width = left_width + 1 + tuios.gwidth(branch_text)
+        left_width = left_width + 1 + prise.gwidth(branch_text)
         last_bg = THEME.bg2
     end
 
@@ -4157,7 +4157,7 @@ local function build_status_bar()
         local resize_text = " RESIZE " .. state.floating.width .. "x" .. state.floating.height .. " "
         table.insert(segments, { text = POWERLINE_SYMBOLS.right_solid, style = { fg = last_bg, bg = THEME.accent } })
         table.insert(segments, { text = resize_text, style = { bg = THEME.accent, fg = THEME.fg_dark, bold = true } })
-        left_width = left_width + 1 + tuios.gwidth(resize_text)
+        left_width = left_width + 1 + prise.gwidth(resize_text)
         last_bg = THEME.accent
     end
 
@@ -4167,7 +4167,7 @@ local function build_status_bar()
 
     -- Right side content
     local right_text = " " .. time_str .. " "
-    local right_width = 1 + tuios.gwidth(right_text) -- powerline symbol + time
+    local right_width = 1 + prise.gwidth(right_text) -- powerline symbol + time
 
     -- Calculate padding to fill the middle
     local padding = state.screen_cols - left_width - right_width
@@ -4182,7 +4182,7 @@ local function build_status_bar()
     table.insert(segments, { text = POWERLINE_SYMBOLS.left_solid, style = { fg = THEME.bg3, bg = THEME.bg1 } })
     table.insert(segments, { text = right_text, style = { bg = THEME.bg3, fg = THEME.fg_dim } })
 
-    return tuios.Text(segments)
+    return prise.Text(segments)
 end
 
 ---Schedule a clock timer to refresh the display every minute
@@ -4190,10 +4190,10 @@ local function schedule_clock_timer()
     if state.clock_timer or state.detaching then
         return
     end
-    state.clock_timer = tuios.set_timeout(60000, function()
+    state.clock_timer = prise.set_timeout(60000, function()
         state.clock_timer = nil
         if not state.detaching then
-            tuios.request_frame()
+            prise.request_frame()
             schedule_clock_timer()
         end
     end)
@@ -4209,26 +4209,26 @@ local function build_swap_with_index()
     local palette_style = { bg = THEME.bg1, fg = THEME.fg_bright }
     local input_style = { bg = THEME.bg1, fg = THEME.fg_bright }
 
-    return tuios.Positioned({
+    return prise.Positioned({
         anchor = "top_center",
         y = 5,
-        child = tuios.Box({
+        child = prise.Box({
             border = "none",
             max_width = PALETTE_WIDTH,
             style = palette_style,
-            child = tuios.Padding({
+            child = prise.Padding({
                 top = 1,
                 bottom = 1,
                 left = 2,
                 right = 2,
-                child = tuios.Column({
+                child = prise.Column({
                     cross_axis_align = "stretch",
                     children = {
-                        tuios.Text({
+                        prise.Text({
                             text = "Swap Tab with Index (1-" .. #state.tabs .. ")",
                             style = { fg = THEME.fg_dim, bg = THEME.bg1 },
                         }),
-                        tuios.TextInput({
+                        prise.TextInput({
                             input = state.swap_with_index.input,
                             style = input_style,
                         }),
@@ -4252,14 +4252,14 @@ local function build_floating()
     end
 
     -- Create positioned terminal widget with size constraints
-    return tuios.Positioned({
+    return prise.Positioned({
         anchor = "center",
-        child = tuios.Box({
+        child = prise.Box({
             border = config.borders.style,
             style = { fg = config.borders.focused_color },
             max_width = state.floating.width,
             max_height = state.floating.height,
-            child = tuios.Terminal({
+            child = prise.Terminal({
                 pty = tab.floating.pane.pty,
                 focus = true,
             }),
@@ -4270,9 +4270,9 @@ end
 function M.view()
     local root = get_active_root()
     if not root then
-        return tuios.Column({
+        return prise.Column({
             cross_axis_align = "stretch",
-            children = { tuios.Text("Waiting for terminal...") },
+            children = { prise.Text("Waiting for terminal...") },
         })
     end
 
@@ -4289,7 +4289,7 @@ function M.view()
     local layout_picker = build_layout_picker()
     local floating = build_floating()
     local tab_bar = build_tab_bar()
-    tuios.log.debug("view: palette.visible=" .. tostring(state.palette.visible))
+    prise.log.debug("view: palette.visible=" .. tostring(state.palette.visible))
 
     -- When zoomed, render only the zoomed pane
     local tab = get_active_tab()
@@ -4306,7 +4306,7 @@ function M.view()
         local path = find_node_path(root, state.zoomed_pane_id)
         if path then
             local pane = path[#path]
-            local terminal = tuios.Terminal({
+            local terminal = prise.Terminal({
                 pty = pane.pty,
                 focus = not overlay_visible,
             })
@@ -4314,7 +4314,7 @@ function M.view()
             -- Apply borders to zoomed pane if enabled and show_single_pane is true
             -- (zoomed pane is a temporary single-pane view)
             if config.borders.enabled and config.borders.show_single_pane then
-                content = tuios.Box({
+                content = prise.Box({
                     border = config.borders.style,
                     style = { fg = config.borders.focused_color }, -- Zoomed pane is always focused
                     child = terminal,
@@ -4341,7 +4341,7 @@ function M.view()
         table.insert(main_children, status_bar)
     end
 
-    local main_ui = tuios.Column({
+    local main_ui = prise.Column({
         cross_axis_align = "stretch",
         children = main_children,
     })
@@ -4355,14 +4355,14 @@ function M.view()
     local modal = palette or rename or rename_tab or swap_with_index or session_picker or layout_picker
     if modal then
         table.insert(overlay_children, modal)
-        return tuios.Stack({
+        return prise.Stack({
             children = overlay_children,
         })
     end
 
     -- If we only have floating pane (no modal), use Stack if floating exists
     if floating then
-        return tuios.Stack({
+        return prise.Stack({
             children = overlay_children,
         })
     end
@@ -4469,7 +4469,7 @@ function M.set_state(saved, pty_lookup)
         end
     end
 
-    tuios.request_frame()
+    prise.request_frame()
 end
 
 -- Export internal functions for testing
@@ -4488,9 +4488,6 @@ M._test = {
     set_state = function(test_state)
         state.tabs = test_state.tabs or {}
         state.active_tab = test_state.active_tab or 1
-    set_state = function(test_state)
-        state.tabs = test_state.tabs or {}
-        state.active_tab = test_state.active_tab or 1
         state.next_tab_id = test_state.next_tab_id or (#state.tabs + 1) -- state.tabs already updated above
         state.focused_id = test_state.focused_id
         state.zoomed_pane_id = test_state.zoomed_pane_id
@@ -4501,14 +4498,6 @@ M._test = {
         state.tab_close_regions = {}
         state.pending_split = nil
         state.next_split_id = test_state.next_split_id or 1
-    end,
-        state.focused_id = test_state.focused_id
-        state.zoomed_pane_id = test_state.zoomed_pane_id
-        state.floating = { width = 0.8, height = 0.8, visible = false, pending = false, resize_mode = false }
-        state.hovered_tab = nil
-        state.hovered_close_tab = nil
-        state.tab_regions = {}
-        state.tab_close_regions = {}
     end,
     -- Returns a direct reference to internal state, not a copy
     get_state = function()

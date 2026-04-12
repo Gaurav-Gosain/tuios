@@ -21,7 +21,7 @@ const logger = std.log.scoped(.lua);
 const tuios_module = @embedFile("lua/tuios.lua");
 const tiling_ui_module = @embedFile("lua/tiling.lua");
 const utils_module = @embedFile("lua/utils.lua");
-const fallback_init = "return require('tuios').tiling()";
+const fallback_init = "return require('prise').tiling()";
 
 const TimerContext = struct {
     ui: *UI,
@@ -154,12 +154,11 @@ pub const UI = struct {
         };
         _ = lua.getField(-1, "preload");
         lua.pushFunction(ziglua.wrap(loadPriseModule));
-        lua.setField(-2, "tuios");
+        lua.setField(-2, "prise");
 
         // Always use embedded tiling UI module for runtime
-        // (installed to disk only for LSP completion support)
         lua.pushFunction(ziglua.wrap(loadTilingUiModule));
-        lua.setField(-2, "tuios_tiling_ui");
+        lua.setField(-2, "prise_tiling_ui");
 
         // Embed utils module so it's available without filesystem install
         lua.pushFunction(ziglua.wrap(loadUtilsModule));
@@ -181,9 +180,10 @@ pub const UI = struct {
         };
 
         if (use_default) {
+            log.info("No init.lua found, using default: {s}", .{fallback_init});
             lua.doString(fallback_init) catch {
                 const msg = lua.toString(-1) catch "unknown error";
-                log.err("Failed to load default UI: {s}", .{msg});
+                log.err("Default UI failed: {s}", .{msg});
                 return .{ .err = .{ .err = error.DefaultUIFailed, .lua_msg = msg } };
             };
         } else {
@@ -195,7 +195,9 @@ pub const UI = struct {
         }
 
         // init.lua should return a table with update and view functions
-        if (lua.typeOf(-1) != .table) {
+        const top_type = lua.typeOf(-1);
+        if (top_type != .table) {
+            log.err("init.lua returned {s} instead of table (stack top type: {})", .{ lua.typeName(top_type), top_type });
             return .{ .err = .{ .err = error.InitLuaMustReturnTable, .lua_msg = null } };
         }
 
@@ -341,6 +343,8 @@ pub const UI = struct {
 
     fn loadUtilsModule(lua: *ziglua.Lua) i32 {
         lua.doString(utils_module) catch {
+            const err_msg = lua.toString(-1) catch "unknown";
+            log.err("Failed to load utils module: {s}", .{err_msg});
             lua.pushNil();
             return 1;
         };
@@ -348,15 +352,28 @@ pub const UI = struct {
     }
 
     fn loadTilingUiModule(lua: *ziglua.Lua) i32 {
+        const top_before = lua.getTop();
         lua.doString(tiling_ui_module) catch {
+            const err_msg = lua.toString(-1) catch "unknown";
+            log.err("Failed to load tiling_ui module: {s}", .{err_msg});
             lua.pushNil();
             return 1;
         };
+        const top_after = lua.getTop();
+        const result_type = lua.typeOf(-1);
+        log.info("tiling_ui loaded: stack before={} after={} top_type={}", .{ top_before, top_after, result_type });
+        if (top_after == top_before) {
+            // doString didn't push anything — module returned nothing
+            // Lua require will interpret this as true
+            log.err("tiling_ui module returned nothing! Pushing true placeholder.", .{});
+        }
         return 1;
     }
 
     fn loadPriseModule(lua: *ziglua.Lua) i32 {
         lua.doString(tuios_module) catch {
+            const err_msg = lua.toString(-1) catch "unknown";
+            log.err("Failed to load prise/tuios module: {s}", .{err_msg});
             lua.pushNil();
             return 1;
         };
