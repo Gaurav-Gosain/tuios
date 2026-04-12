@@ -744,7 +744,10 @@ pub const App = struct {
 
         // Wake up TTY thread by sending a Device Status Report request.
         // This causes the terminal to send a response, unblocking the read.
-        self.vx.deviceStatusReport(self.tty.writer()) catch {};
+        // Guard: the TTY fd may already be closed if we're exiting due to error.
+        if (self.tty.fd >= 0) {
+            self.vx.deviceStatusReport(self.tty.writer()) catch {};
+        }
 
         // Cancel pending recv task
         if (self.recv_task) |*task| {
