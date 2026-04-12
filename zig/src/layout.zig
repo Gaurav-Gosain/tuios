@@ -426,14 +426,15 @@ pub const Layout = struct {
             },
             .cwd_changed => {},
             .split_resize => |resize| {
-                // Adjust BSP split ratio when user drags a separator
-                // The resize event comes from client.zig's split handle drag
-                if (resize.parent_id) |_| {
-                    // Find which split this corresponds to and adjust ratio
-                    // For now, adjust the ratio on the focused window's parent
-                    if (self.focused_id) |fid| {
-                        self.currentTree().adjustRatio(fid, resize.ratio);
-                        self.requestRedraw();
+                if (resize.parent_id) |pid| {
+                    // Map widget ID back to BSP node index
+                    if (pid >= 0x10000) {
+                        const node_idx: u16 = @intCast(pid - 0x10000);
+                        const tree = self.currentTree();
+                        if (node_idx < bsp.max_nodes and tree.nodes[node_idx].active) {
+                            tree.nodes[node_idx].ratio = std.math.clamp(resize.ratio, 0.1, 0.9);
+                            self.requestRedraw();
+                        }
                     }
                 }
             },
@@ -946,6 +947,9 @@ pub const Layout = struct {
         children[2] = try self.buildBSPWidget(node.right, right_bounds);
         children[2].ratio = 1.0 - node.ratio;
 
+        // Use node_idx + offset as widget ID for split_resize mapping
+        const split_widget_id: u32 = @as(u32, node_idx) + 0x10000;
+
         if (is_vertical) {
             return widget.Widget{
                 .kind = .{ .row = .{
@@ -953,6 +957,7 @@ pub const Layout = struct {
                     .cross_axis_align = .stretch,
                     .resizable = true,
                 } },
+                .id = split_widget_id,
             };
         } else {
             return widget.Widget{
@@ -961,6 +966,7 @@ pub const Layout = struct {
                     .cross_axis_align = .stretch,
                     .resizable = true,
                 } },
+                .id = split_widget_id,
             };
         }
     }
