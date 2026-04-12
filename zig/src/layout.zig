@@ -1032,15 +1032,60 @@ pub const Layout = struct {
     }
 
     pub fn getStateJson(self: *Layout, cwd_lookup_fn: ?CwdLookupFn, cwd_lookup_ctx: *anyopaque) ![]u8 {
-        _ = cwd_lookup_fn;
-        _ = cwd_lookup_ctx;
-        return try self.allocator.dupe(u8, "{}");
+        const alloc = self.allocator;
+        var buf = std.ArrayList(u8).empty;
+        const writer = buf.writer(alloc);
+
+        try writer.writeAll("{\"workspaces\":[");
+        for (0..max_workspaces) |ws| {
+            if (ws > 0) try writer.writeAll(",");
+            try writer.writeAll("{\"windows\":[");
+            var ids: [64]u32 = undefined;
+            const count = self.workspaces[ws].getAllWindowIDs(&ids);
+            for (0..count) |i| {
+                if (i > 0) try writer.writeAll(",");
+                try writer.writeAll("{\"id\":");
+                try writer.print("{d}", .{ids[i]});
+                // Include CWD if available
+                if (cwd_lookup_fn) |lookup| {
+                    if (lookup(cwd_lookup_ctx, @intCast(ids[i]))) |cwd| {
+                        try writer.writeAll(",\"cwd\":\"");
+                        // Simple JSON string escape
+                        for (cwd) |c| {
+                            if (c == '"') {
+                                try writer.writeAll("\\\"");
+                            } else if (c == '\\') {
+                                try writer.writeAll("\\\\");
+                            } else {
+                                try writer.writeByte(c);
+                            }
+                        }
+                        try writer.writeAll("\"");
+                    }
+                }
+                try writer.writeAll("}");
+            }
+            try writer.writeAll("]}");
+        }
+        try writer.writeAll("],\"active_workspace\":");
+        try writer.print("{d}", .{self.active_workspace});
+        try writer.writeAll("}");
+
+        return try buf.toOwnedSlice(alloc);
     }
 
     pub fn setStateFromJson(self: *Layout, json: []const u8, pty_lookup_fn: PtyLookupFn, pty_lookup_ctx: *anyopaque) !void {
+        // Parse JSON to restore window layout
+        // For now, just use the simple approach: parse windows and attach them
         _ = self;
-        _ = json;
         _ = pty_lookup_fn;
         _ = pty_lookup_ctx;
+
+        if (json.len <= 2) return; // "{}" — nothing to restore
+        // Full restoration would parse the JSON, spawn PTYs for each saved window
+        // with their cwds, and rebuild the BSP trees. This requires server-side
+        // coordination. For now, the client handles session restore by spawning
+        // PTYs from the saved session file.
+        log.info("setStateFromJson: received {d} bytes (restore via session file)", .{json.len});
     }
 };

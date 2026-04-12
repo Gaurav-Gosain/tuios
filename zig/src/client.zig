@@ -1761,7 +1761,15 @@ pub const App = struct {
         defer env_array.deinit(self.allocator);
         var env_it = env_map.iterator();
         while (env_it.next()) |entry| {
-            const env_str = try std.fmt.allocPrint(arena_alloc, "{s}={s}", .{ entry.key_ptr.*, entry.value_ptr.* });
+            const key = entry.key_ptr.*;
+            // Filter out terminal-specific vars that conflict with ghostty-vt
+            if (std.mem.eql(u8, key, "TERM") or
+                std.mem.eql(u8, key, "COLORTERM") or
+                std.mem.startsWith(u8, key, "KITTY_") or
+                std.mem.eql(u8, key, "TERMINFO") or
+                std.mem.eql(u8, key, "TERMINFO_DIRS"))
+                continue;
+            const env_str = try std.fmt.allocPrint(arena_alloc, "{s}={s}", .{ key, entry.value_ptr.* });
             try env_array.append(self.allocator, .{ .string = env_str });
         }
 
@@ -1888,7 +1896,14 @@ pub const App = struct {
         defer env_array.deinit(self.allocator);
         var env_it = env_map.iterator();
         while (env_it.next()) |entry| {
-            const env_str = try std.fmt.allocPrint(self.allocator, "{s}={s}", .{ entry.key_ptr.*, entry.value_ptr.* });
+            const key = entry.key_ptr.*;
+            if (std.mem.eql(u8, key, "TERM") or
+                std.mem.eql(u8, key, "COLORTERM") or
+                std.mem.startsWith(u8, key, "KITTY_") or
+                std.mem.eql(u8, key, "TERMINFO") or
+                std.mem.eql(u8, key, "TERMINFO_DIRS"))
+                continue;
+            const env_str = try std.fmt.allocPrint(self.allocator, "{s}={s}", .{ key, entry.value_ptr.* });
             try env_array.append(self.allocator, .{ .string = env_str });
         }
 
@@ -2241,7 +2256,14 @@ pub const App = struct {
                                 defer env_array.deinit(app.allocator);
                                 var env_it = env_map.iterator();
                                 while (env_it.next()) |entry| {
-                                    const env_str = try std.fmt.allocPrint(app.allocator, "{s}={s}", .{ entry.key_ptr.*, entry.value_ptr.* });
+                                    const key = entry.key_ptr.*;
+                                    if (std.mem.eql(u8, key, "TERM") or
+                                        std.mem.eql(u8, key, "COLORTERM") or
+                                        std.mem.startsWith(u8, key, "KITTY_") or
+                                        std.mem.eql(u8, key, "TERMINFO") or
+                                        std.mem.eql(u8, key, "TERMINFO_DIRS"))
+                                        continue;
+                                    const env_str = try std.fmt.allocPrint(app.allocator, "{s}={s}", .{ key, entry.value_ptr.* });
                                     try env_array.append(app.allocator, .{ .string = env_str });
                                 }
 
