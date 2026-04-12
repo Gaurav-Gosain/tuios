@@ -2410,7 +2410,9 @@ pub const App = struct {
         log.info("spawnPty: sending request msgid={}", .{msgid});
         try self.state.pending_requests.put(msgid, .{ .spawn = .{ .cwd = opts.cwd, .cmd = opts.cmd } });
 
-        // Build env array from current process environment
+        // Build env array from current process environment.
+        // Filter out terminal-specific vars that conflict with the multiplexer's
+        // TERM=xterm-256color (e.g. TERM=xterm-kitty causes garbled output).
         var env_map = try std.process.getEnvMap(self.allocator);
         defer env_map.deinit();
 
@@ -2418,7 +2420,14 @@ pub const App = struct {
         defer env_array.deinit(self.allocator);
         var env_it = env_map.iterator();
         while (env_it.next()) |entry| {
-            const env_str = try std.fmt.allocPrint(self.allocator, "{s}={s}", .{ entry.key_ptr.*, entry.value_ptr.* });
+            const key = entry.key_ptr.*;
+            // Skip terminal-specific vars that the server will set correctly
+            if (std.mem.eql(u8, key, "TERM") or
+                std.mem.eql(u8, key, "COLORTERM") or
+                std.mem.eql(u8, key, "TERMINFO") or
+                std.mem.startsWith(u8, key, "KITTY_"))
+                continue;
+            const env_str = try std.fmt.allocPrint(self.allocator, "{s}={s}", .{ key, entry.value_ptr.* });
             try env_array.append(self.allocator, .{ .string = env_str });
         }
 
