@@ -182,6 +182,7 @@ pub const Layout = struct {
     zoomed: bool = false,
     zoomed_id: ?u32 = null,
     pending_split_dir: bsp.SplitDirection = .none, // for explicit split commands
+    show_help: bool = false,
 
     pub const InitResult = union(enum) {
         ok: Layout,
@@ -443,6 +444,17 @@ pub const Layout = struct {
             return self.forwardKeyToFocused(key, true);
         }
 
+        // Dismiss help overlay
+        if (self.show_help) {
+            if (key.codepoint == vaxis.Key.escape or key.codepoint == '?' or key.codepoint == 'q') {
+                self.show_help = false;
+                self.requestRedraw();
+                return;
+            }
+            // Ignore all other keys while help is shown
+            return;
+        }
+
         // Check prefix timeout
         if (self.prefix_active) {
             const now = std.time.nanoTimestamp();
@@ -567,6 +579,12 @@ pub const Layout = struct {
         // Quit
         if (cp == 'q') {
             if (self.exit_callback) |cb| cb(self.exit_ctx);
+            return;
+        }
+
+        // Help
+        if (cp == '?') {
+            self.show_help = !self.show_help;
             return;
         }
 
@@ -793,17 +811,30 @@ pub const Layout = struct {
         const status = try self.buildStatusBar();
 
         // Column: content (flex) + status bar (fixed 1 row)
-        const children = try alloc.alloc(widget.Widget, 2);
-        children[0] = content;
-        children[0].ratio = 1.0; // takes remaining space
-        children[1] = status;
+        const col_children = try alloc.alloc(widget.Widget, 2);
+        col_children[0] = content;
+        col_children[0].ratio = 1.0;
+        col_children[1] = status;
 
-        return widget.Widget{
+        const base = widget.Widget{
             .kind = .{ .column = .{
-                .children = children,
+                .children = col_children,
                 .cross_axis_align = .stretch,
             } },
         };
+
+        // Overlay help if shown
+        if (self.show_help) {
+            const help = try self.buildHelpOverlay();
+            const stack_children = try alloc.alloc(widget.Widget, 2);
+            stack_children[0] = base;
+            stack_children[1] = help;
+            return widget.Widget{
+                .kind = .{ .stack = .{ .children = stack_children } },
+            };
+        }
+
+        return base;
     }
 
     fn buildTilingWidget(self: *Layout) !widget.Widget {
@@ -939,6 +970,90 @@ pub const Layout = struct {
                 .style = .{
                     .fg = if (focused) focused_border_color else unfocused_border_color,
                 },
+            } },
+        };
+    }
+
+    fn buildHelpOverlay(self: *Layout) !widget.Widget {
+        const alloc = self.allocator;
+
+        const help_lines = [_][]const u8{
+            "  tuios keybinds (press ? or Esc to close)",
+            "",
+            "  Ctrl+B  |     Split vertical",
+            "  Ctrl+B  -     Split horizontal",
+            "  Ctrl+B  h/j/k/l  Focus left/down/up/right",
+            "  Ctrl+B  c     New window",
+            "  Ctrl+B  x     Close window",
+            "  Ctrl+B  z     Toggle zoom",
+            "  Ctrl+B  n/Tab Next window",
+            "  Ctrl+B  p     Previous window",
+            "  Ctrl+B  r     Rotate split",
+            "  Ctrl+B  =     Equalize splits",
+            "  Ctrl+B  1-9   Switch workspace",
+            "  Ctrl+B  Shift+1-9  Move to workspace",
+            "  Ctrl+B  {/}   Swap with neighbor",
+            "  Ctrl+B  w     Window management mode",
+            "  Ctrl+B  d     Detach session",
+            "  Ctrl+B  q     Quit",
+            "  Alt+1-9       Switch workspace (no prefix)",
+            "",
+            "  Window Management Mode:",
+            "  h/j/k/l  Focus left/down/up/right",
+            "  |/-      Split vertical/horizontal",
+            "  x        Close window",
+            "  z        Toggle zoom",
+            "  Esc/i    Return to terminal mode",
+        };
+
+        var spans = std.ArrayList(widget.Text.Span).empty;
+        for (help_lines) |line| {
+            if (spans.items.len > 0) {
+                try spans.append(alloc, .{
+                    .text = try alloc.dupe(u8, "\n"),
+                    .style = .{ .fg = .{ .rgb = .{ 0xbb, 0xbb, 0xbb } }, .bg = .{ .rgb = .{ 0x1e, 0x1e, 0x2e } } },
+                });
+            }
+            const is_header = line.len > 0 and line[0] != ' ';
+            _ = is_header;
+            try spans.append(alloc, .{
+                .text = try alloc.dupe(u8, line),
+                .style = .{
+                    .fg = if (line.len > 2 and std.mem.startsWith(u8, line, "  tuios"))
+                        focused_border_color
+                    else if (line.len > 2 and std.mem.startsWith(u8, line, "  Window"))
+                        focused_border_color
+                    else
+                        .{ .rgb = .{ 0xcc, 0xcc, 0xcc } },
+                    .bg = .{ .rgb = .{ 0x1e, 0x1e, 0x2e } },
+                    .bold = std.mem.startsWith(u8, line, "  tuios") or std.mem.startsWith(u8, line, "  Window"),
+                },
+            });
+        }
+
+        const text_widget = try alloc.create(widget.Widget);
+        text_widget.* = .{
+            .kind = .{ .text = .{
+                .spans = try spans.toOwnedSlice(alloc),
+                .wrap = .word,
+            } },
+        };
+
+        const padded = try alloc.create(widget.Widget);
+        padded.* = .{
+            .kind = .{ .padding = .{
+                .child = text_widget,
+                .top = 1,
+                .bottom = 1,
+                .left = 2,
+                .right = 2,
+            } },
+        };
+
+        return widget.Widget{
+            .kind = .{ .positioned = .{
+                .child = padded,
+                .anchor = .center,
             } },
         };
     }
