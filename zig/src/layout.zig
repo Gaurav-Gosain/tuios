@@ -358,10 +358,10 @@ pub const Layout = struct {
         }
 
         // No PTY yet — empty screen
+        const spans = try self.allocator.alloc(widget.Text.Span, 1);
+        spans[0] = .{ .text = "tuios: waiting for terminal...", .style = .{} };
         return widget.Widget{
-            .kind = .{ .text = .{
-                .spans = @constCast(&[_]widget.Text.Span{.{ .text = "tuios: waiting for terminal...", .style = .{} }}),
-            } },
+            .kind = .{ .text = .{ .spans = spans } },
         };
     }
 
