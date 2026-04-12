@@ -143,8 +143,9 @@ pub const Layout = struct {
     // State
     ptys: std.AutoArrayHashMap(u32, Pty),
     focused_id: ?u32 = null,
-    screen_cols: u16 = 80,
-    screen_rows: u16 = 24,
+    screen_cols: u16 = 0,
+    screen_rows: u16 = 0,
+    needs_initial_spawn: bool = false,
 
     pub const InitResult = union(enum) {
         ok: Layout,
@@ -259,6 +260,19 @@ pub const Layout = struct {
                     .winsize => |ws| {
                         self.screen_cols = ws.cols;
                         self.screen_rows = ws.rows;
+                        // Spawn initial terminal once we have real dimensions
+                        if (self.needs_initial_spawn and ws.cols > 0 and ws.rows > 0) {
+                            self.needs_initial_spawn = false;
+                            if (self.spawn_callback) |cb| {
+                                cb(self.spawn_ctx, .{
+                                    .rows = ws.rows,
+                                    .cols = ws.cols,
+                                    .attach = true,
+                                }) catch |err| {
+                                    log.err("Failed to spawn initial terminal: {}", .{err});
+                                };
+                            }
+                        }
                         self.requestRedraw();
                     },
                     .key_press => |key| {
@@ -298,16 +312,8 @@ pub const Layout = struct {
                 }
             },
             .init => {
-                // Spawn initial terminal
-                if (self.spawn_callback) |cb| {
-                    cb(self.spawn_ctx, .{
-                        .rows = self.screen_rows,
-                        .cols = self.screen_cols,
-                        .attach = true,
-                    }) catch |err| {
-                        log.err("Failed to spawn initial terminal: {}", .{err});
-                    };
-                }
+                // Defer spawn until we get a winsize event with real dimensions
+                self.needs_initial_spawn = true;
             },
             .cwd_changed => {},
             .split_resize => {},
