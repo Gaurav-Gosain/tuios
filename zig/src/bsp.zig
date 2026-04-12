@@ -35,7 +35,7 @@ pub const Direction = enum {
     down,
 };
 
-const null_idx: u16 = std.math.maxInt(u16);
+pub const null_idx: u16 = std.math.maxInt(u16);
 
 pub const Node = struct {
     window_id: i32, // -1 for internal nodes
@@ -117,7 +117,7 @@ pub const BSPTree = struct {
         }
     }
 
-    fn mapGet(self: *const BSPTree, window_id: u32) ?u16 {
+    pub fn mapGet(self: *const BSPTree, window_id: u32) ?u16 {
         for (0..self.window_map_count) |i| {
             if (self.window_map_ids[i] == window_id) {
                 return self.window_map_nodes[i];

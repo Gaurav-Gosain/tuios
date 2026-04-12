@@ -587,6 +587,20 @@ pub const Layout = struct {
             return;
         }
 
+        // Resize focused pane (Ctrl+B, H/J/K/L with shift)
+        if (shift) {
+            if (cp == 'H') { self.resizeFocused(.left); return; }
+            if (cp == 'J') { self.resizeFocused(.down); return; }
+            if (cp == 'K') { self.resizeFocused(.up); return; }
+            if (cp == 'L') { self.resizeFocused(.right); return; }
+        }
+
+        // Arrow key resize (with or without shift in prefix)
+        if (cp == vaxis.Key.left) { self.resizeFocused(.left); return; }
+        if (cp == vaxis.Key.right) { self.resizeFocused(.right); return; }
+        if (cp == vaxis.Key.up) { self.resizeFocused(.up); return; }
+        if (cp == vaxis.Key.down) { self.resizeFocused(.down); return; }
+
         // Help
         if (cp == '?') {
             self.show_help = !self.show_help;
@@ -718,6 +732,40 @@ pub const Layout = struct {
 
         self.focused_id = ids[next];
         self.updateFocusState();
+        self.requestRedraw();
+    }
+
+    fn resizeFocused(self: *Layout, dir: bsp.Direction) void {
+        const fid = self.focused_id orelse return;
+        const tree = self.currentTree();
+        const node_idx = tree.mapGet(fid) orelse return;
+        const parent_idx = tree.nodes[node_idx].parent;
+        if (parent_idx == bsp.null_idx) return;
+
+        const delta: f32 = 0.05; // 5% per step
+        const is_left_child = tree.nodes[parent_idx].left == node_idx;
+        const parent_split = tree.nodes[parent_idx].split;
+
+        // Determine if this resize direction affects the parent's split
+        const affects = switch (dir) {
+            .left, .right => parent_split == .vertical,
+            .up, .down => parent_split == .horizontal,
+        };
+
+        if (!affects) return;
+
+        // Growing: left child grows → ratio increases; right child grows → ratio decreases
+        const grow = switch (dir) {
+            .right, .down => is_left_child,
+            .left, .up => !is_left_child,
+        };
+
+        const new_ratio = if (grow)
+            tree.nodes[parent_idx].ratio + delta
+        else
+            tree.nodes[parent_idx].ratio - delta;
+
+        tree.nodes[parent_idx].ratio = std.math.clamp(new_ratio, 0.1, 0.9);
         self.requestRedraw();
     }
 
@@ -893,9 +941,8 @@ pub const Layout = struct {
 
     fn buildBSPWidget(self: *Layout, node_idx: u16, bounds: bsp.Rect) !widget.Widget {
         const alloc = self.allocator;
-        const null_idx: u16 = std.math.maxInt(u16);
 
-        if (node_idx == null_idx) {
+        if (node_idx == bsp.null_idx) {
             return self.emptyWidget();
         }
 
@@ -1013,6 +1060,8 @@ pub const Layout = struct {
             "  Ctrl+B  =     Equalize splits",
             "  Ctrl+B  1-9   Switch workspace",
             "  Ctrl+B  Shift+1-9  Move to workspace",
+            "  Ctrl+B  H/J/K/L  Resize pane",
+            "  Ctrl+B  arrows   Resize pane",
             "  Ctrl+B  {/}   Swap with neighbor",
             "  Ctrl+B  w     Window management mode",
             "  Ctrl+B  d     Detach session",
