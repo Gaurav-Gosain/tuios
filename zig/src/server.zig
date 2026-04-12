@@ -2191,7 +2191,10 @@ const Server = struct {
             return msgpack.Value{ .string = try self.allocator.dupe(u8, "PTY limit reached") };
         }
 
-        const parsed = parseSpawnPtyParams(params);
+        var parsed = parseSpawnPtyParams(params);
+        // Ensure minimum dimensions (zero crashes ghostty terminal init)
+        if (parsed.size.ws_row == 0) parsed.size.ws_row = 24;
+        if (parsed.size.ws_col == 0) parsed.size.ws_col = 80;
         const cwd = parsed.cwd orelse posix.getenv("HOME");
         log.info("spawn_pty: rows={} cols={} attach={} cwd={?s} has_client_env={}", .{ parsed.size.ws_row, parsed.size.ws_col, parsed.attach, cwd, parsed.env != null });
 

@@ -263,6 +263,7 @@ pub const Layout = struct {
                         // Spawn initial terminal once we have real dimensions
                         if (self.needs_initial_spawn and ws.cols > 0 and ws.rows > 0) {
                             self.needs_initial_spawn = false;
+                            log.info("Spawning initial terminal: {}x{}", .{ ws.cols, ws.rows });
                             if (self.spawn_callback) |cb| {
                                 cb(self.spawn_ctx, .{
                                     .rows = ws.rows,
