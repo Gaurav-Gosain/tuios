@@ -75,7 +75,7 @@ pub fn build(b: *std.Build) void {
 
 fn getVersion(b: *std.Build) []const u8 {
     var code: u8 = undefined;
-    const git_describe = b.runAllowFailure(&.{ "git", "describe", "--match", "v*.*.*", "--tags" }, &code, .Ignore) catch {
+    const git_describe = b.runAllowFail(&.{ "git", "describe", "--match", "v*.*.*", "--tags" }, &code, .Ignore) catch {
         return "0.1.0-dev";
     };
     return std.mem.trim(u8, git_describe, " \n\r");

@@ -26,82 +26,49 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len > 1 and std.mem.eql(u8, args[1], "--version")) {
-        const stdout = std.io.getStdOut().writer();
-        try stdout.print("tuios {s}\n", .{build_options.version});
+        std.log.info("tuios {s}", .{build_options.version});
         return;
     }
 
-    var app = try App.init(allocator);
-    defer app.deinit();
+    var tty_buf: [4096]u8 = undefined;
+    var tty = try vaxis.Tty.init(&tty_buf);
+    defer tty.deinit();
 
-    try app.run();
-}
+    var vx = try vaxis.Vaxis.init(allocator, .{});
+    defer vx.deinit(allocator, tty.writer());
 
-/// The tuios TUI client. Renders terminal windows using libvaxis,
-/// handles input, communicates with the server daemon.
-const App = struct {
-    allocator: std.mem.Allocator,
-    vx: vaxis.Vaxis,
-    tty: vaxis.Tty,
-    loop: vaxis.Loop(Event),
+    var loop: vaxis.Loop(Event) = .{ .vaxis = &vx, .tty = &tty };
+    try loop.start();
+    defer loop.stop();
 
-    pub fn init(allocator: std.mem.Allocator) !App {
-        var tty = try vaxis.Tty.init();
-        var vx = try vaxis.Vaxis.init(allocator, .{});
+    try vx.enterAltScreen(tty.writer());
+    try vx.setMouseMode(tty.writer(), true);
+    try vx.queryTerminal(tty.writer(), 1 * std.time.ns_per_s);
 
-        var self = App{
-            .allocator = allocator,
-            .vx = vx,
-            .tty = tty,
-            .loop = .{ .vaxis = &vx, .tty = &tty },
-        };
-        // Fix: point loop fields at self's owned copies
-        self.loop.vaxis = &self.vx;
-        self.loop.tty = &self.tty;
-        return self;
-    }
-
-    pub fn deinit(self: *App) void {
-        self.loop.stop();
-        self.vx.deinit(self.allocator, self.tty.anyWriter());
-        self.tty.deinit();
-    }
-
-    pub fn run(self: *App) !void {
-        try self.loop.start();
-        try self.vx.enterAltScreen(self.tty.anyWriter());
-        try self.vx.setMouseMode(self.tty.anyWriter(), true);
-        try self.vx.queryTerminal(self.tty.anyWriter(), 1 * std.time.ns_per_s);
-
-        while (true) {
-            const event = self.loop.nextEvent();
-            switch (event) {
-                .key_press => |key| {
-                    // Ctrl+Q to quit
-                    if (key.matches('q', .{ .ctrl = true })) return;
-                },
-                .winsize => |ws| {
-                    try self.vx.resize(self.allocator, self.tty.anyWriter(), ws);
-                },
-                else => {},
-            }
-            try self.render();
+    while (true) {
+        const event = loop.nextEvent();
+        switch (event) {
+            .key_press => |key| {
+                if (key.matches('q', .{ .ctrl = true })) return;
+            },
+            .winsize => |ws| {
+                try vx.resize(allocator, tty.writer(), ws);
+            },
+            else => {},
         }
-    }
 
-    fn render(self: *App) !void {
-        const win = self.vx.window();
+        // Render
+        const win = vx.window();
         win.clear();
 
-        // Placeholder: draw a centered message
         const msg = "tuios-zig (press Ctrl+Q to quit)";
-        const col = if (win.width > msg.len) (win.width - @as(u16, @intCast(msg.len))) / 2 else 0;
+        const col: u16 = if (win.width > msg.len) (win.width - @as(u16, @intCast(msg.len))) / 2 else 0;
         const row = win.height / 2;
         _ = win.printSegment(.{ .text = msg, .style = .{
             .fg = .{ .rgb = .{ 0x88, 0xc0, 0xd0 } },
             .bold = true,
         } }, .{ .col_offset = col, .row_offset = row });
 
-        try self.vx.render(self.tty.anyWriter());
+        try vx.render(tty.writer());
     }
-};
+}

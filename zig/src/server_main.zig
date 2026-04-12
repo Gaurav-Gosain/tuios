@@ -9,14 +9,12 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    const stdout = std.io.getStdOut().writer();
-
     if (args.len > 1 and std.mem.eql(u8, args[1], "--version")) {
-        try stdout.print("tuios-server {s}\n", .{build_options.version});
+        std.log.info("tuios-server {s}", .{build_options.version});
         return;
     }
 
-    try stdout.print("tuios-server {s} starting...\n", .{build_options.version});
+    std.log.info("tuios-server {s} starting...", .{build_options.version});
 
     var server = try Server.init(allocator);
     defer server.deinit();
