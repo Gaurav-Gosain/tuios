@@ -8,6 +8,7 @@ const vaxis = @import("vaxis");
 const widget = @import("widget.zig");
 const Surface = @import("Surface.zig");
 const io = @import("io.zig");
+const vaxis_helper = @import("vaxis_helper.zig");
 
 const log = std.log.scoped(.layout);
 
@@ -337,11 +338,24 @@ pub const Layout = struct {
     }
 
     fn handleKeyPress(self: *Layout, key: vaxis.Key, release: bool) !void {
-        // Phase 1: forward all keys to focused PTY
+        // Forward all keys to focused PTY
         if (self.focused_id) |id| {
             if (self.ptys.get(id)) |pty| {
-                const key_data = vaxisKeyToKeyData(key, release);
-                pty.send_key_fn(pty.app, pty.id, key_data) catch {};
+                // Use vaxis_helper for proper W3C key name conversion
+                // (heap-allocated strings that survive the function call)
+                const strings = vaxis_helper.vaxisKeyToStrings(self.allocator, key) catch return;
+                defer self.allocator.free(strings.key);
+                defer self.allocator.free(strings.code);
+
+                pty.send_key_fn(pty.app, pty.id, .{
+                    .key = strings.key,
+                    .code = strings.code,
+                    .ctrl = key.mods.ctrl,
+                    .alt = key.mods.alt,
+                    .shift = key.mods.shift,
+                    .super = key.mods.super,
+                    .release = release,
+                }) catch {};
             }
         }
     }
@@ -420,36 +434,4 @@ pub const Layout = struct {
         _ = pty_lookup_ctx;
     }
 
-    // ---- Helpers ----
-
-    fn vaxisKeyToKeyData(key: vaxis.Key, release: bool) KeyData {
-        // Convert vaxis key to W3C-style key data for the server protocol
-        var key_buf: [32]u8 = undefined;
-        var code_buf: [32]u8 = undefined;
-        const key_str = vaxisKeyToString(key.codepoint, &key_buf);
-        const code_str = vaxisCodeToString(key.codepoint, &code_buf);
-        return .{
-            .key = key_str,
-            .code = code_str,
-            .ctrl = key.mods.ctrl,
-            .alt = key.mods.alt,
-            .shift = key.mods.shift,
-            .super = key.mods.super,
-            .release = release,
-        };
-    }
-
-    fn vaxisKeyToString(codepoint: u21, buf: *[32]u8) []const u8 {
-        if (codepoint < 128) {
-            buf[0] = @intCast(codepoint);
-            return buf[0..1];
-        }
-        const len = std.unicode.utf8Encode(codepoint, buf) catch return " ";
-        return buf[0..len];
-    }
-
-    fn vaxisCodeToString(codepoint: u21, buf: *[32]u8) []const u8 {
-        // For now, return same as key (proper W3C code mapping added later)
-        return vaxisKeyToString(codepoint, buf);
-    }
 };
