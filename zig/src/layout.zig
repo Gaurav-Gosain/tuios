@@ -313,8 +313,23 @@ pub const Layout = struct {
                 }
             },
             .init => {
-                // Defer spawn until we get a winsize event with real dimensions
-                self.needs_initial_spawn = true;
+                // Spawn initial terminal. screen_cols/rows were set by
+                // the winsize event that fires during setup() before .init.
+                if (self.screen_cols > 0 and self.screen_rows > 0) {
+                    log.info("Spawning initial terminal: {}x{}", .{ self.screen_cols, self.screen_rows });
+                    if (self.spawn_callback) |cb| {
+                        cb(self.spawn_ctx, .{
+                            .rows = self.screen_rows,
+                            .cols = self.screen_cols,
+                            .attach = true,
+                        }) catch |err| {
+                            log.err("Failed to spawn initial terminal: {}", .{err});
+                        };
+                    }
+                } else {
+                    // Winsize hasn't arrived yet — defer to next winsize
+                    self.needs_initial_spawn = true;
+                }
             },
             .cwd_changed => {},
             .split_resize => {},
