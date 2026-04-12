@@ -808,10 +808,9 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 
 	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", ptyID[:8], window.ID[:8])
 	err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
-		// When ghostty diffs are the primary renderer, skip feeding raw
-		// bytes to the VT entirely. This eliminates the write/read race
-		// that causes flickering. Cursor style passthrough still works
-		// because it writes directly to stdout, not through the VT.
+		// When screen diffs are the primary renderer (ghostty path),
+		// skip feeding raw bytes to the VT. This eliminates the
+		// write/read race that causes flickering.
 		if window.GhosttyDrivenRendering {
 			passThroughCursorStyle(data)
 			return
@@ -826,13 +825,31 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 		m.LogInfo("[SUBSCRIBE] Successfully subscribed to PTY %s", ptyID[:8])
 	}
 
-	// Register ghostty diff handler. When active, this becomes the SOLE
-	// source of cell content - no raw bytes touch the VT, eliminating
-	// the write/read race that causes flickering.
-	m.DaemonClient.SetGhosttyDiffHandler(ptyID, func(payload []byte) {
+	// Register screen diff handler. When the daemon has ghostty enabled,
+	// diffs arrive via MsgScreenDiff and become the SOLE source of cell
+	// content — no raw bytes touch the client VT, eliminating flickering.
+	m.DaemonClient.SetScreenDiffHandler(ptyID, func(diff *session.ScreenDiff) {
 		window.GhosttyDrivenRendering = true
-		window.ApplyGhosttyDiff(payload)
+		window.ApplyScreenDiff(
+			convertDiffCells(diff.Cells),
+			diff.CursorX, diff.CursorY,
+			diff.CursorHidden, diff.IsAltScreen,
+		)
 	})
+}
+
+// convertDiffCells converts session.DiffCell to terminal.DiffCell.
+func convertDiffCells(cells []session.DiffCell) []terminal.DiffCell {
+	out := make([]terminal.DiffCell, len(cells))
+	for i, c := range cells {
+		out[i] = terminal.DiffCell{
+			Row: c.Row, Col: c.Col,
+			Content: c.Content, Width: c.Width,
+			Fg: c.Fg, Bg: c.Bg,
+			Attrs: c.Attrs, UlColor: c.UlColor, UlStyle: c.UlStyle,
+		}
+	}
+	return out
 }
 
 // unsubscribeFromPTY unsubscribes from PTY output for a window.

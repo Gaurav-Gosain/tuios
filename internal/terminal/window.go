@@ -4,7 +4,6 @@ package terminal
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"image/color"
 	"io"
@@ -149,7 +148,10 @@ type Window struct {
 	// Daemon session support
 	PTYID             string               // ID of daemon-managed PTY (empty for local PTYs)
 	DaemonMode             bool // True when PTY is managed by daemon
-	GhosttyDrivenRendering bool // True when ghostty diffs are the sole cell source (no raw VT writes)
+	GhosttyDrivenRendering bool   // True when ghostty diffs are the sole cell source (no raw VT writes)
+	DiffCursorX            int    // Cursor X from daemon diff (used when GhosttyDrivenRendering)
+	DiffCursorY            int    // Cursor Y from daemon diff
+	DiffCursorHidden       bool   // Cursor hidden from daemon diff
 	DaemonWriteFunc   func([]byte) error   // Callback for sending input to daemon PTY
 	DaemonResizeFunc  func(w, h int) error // Callback for resizing daemon PTY
 	DaemonCloseFunc   func()               // Callback when window is closed (to notify daemon)
@@ -700,6 +702,10 @@ func (w *Window) ApplyScreenDiff(cells []DiffCell, cursorX, cursorY int, cursorH
 		return
 	}
 
+	// Write cells directly to the emulator's screen buffer.
+	// NO escape sequences — those corrupt the emulator's internal state
+	// (scroll regions, wrap flags, mode tracking) causing broken clear,
+	// wrong cursor positioning, and TUI rendering artifacts.
 	w.ioMu.Lock()
 	for _, c := range cells {
 		cell := &uv.Cell{
@@ -717,6 +723,12 @@ func (w *Window) ApplyScreenDiff(cells []DiffCell, cursorX, cursorY int, cursorH
 	}
 	w.ioMu.Unlock()
 
+	// Store cursor and screen state on the Window struct.
+	// The renderer checks GhosttyDrivenRendering and reads these
+	// instead of querying the emulator (which has stale state).
+	w.DiffCursorX = cursorX
+	w.DiffCursorY = cursorY
+	w.DiffCursorHidden = cursorHidden
 	w.IsAltScreen = isAltScreen
 
 	w.HasNewOutput.Store(true)
@@ -747,95 +759,6 @@ func unpackColor(rgba uint32) color.Color {
 func unpackDiffAttrs(attrs uint16) uint8 {
 	// DiffCell bitmask matches ultraviolet's AttrBold..AttrStrikethrough order
 	return uint8(attrs & 0xFF)
-}
-
-// ApplyGhosttyDiff applies a binary-encoded ghostty screen diff to the
-// terminal's cell buffer. Each dirty row's cells are written via SetCell.
-func (w *Window) ApplyGhosttyDiff(payload []byte) {
-	if w.Terminal == nil || len(payload) < 11 {
-		return
-	}
-
-	off := 0
-	// Parse header: [2B cols][2B rows][2B cursorX][2B cursorY][1B cursorVisible][1B fullRedraw][2B numRows]
-	// cols := int(binary.BigEndian.Uint16(payload[off:]));
-	off += 2
-	// rows := int(binary.BigEndian.Uint16(payload[off:]));
-	off += 2
-	cursorX := int(binary.BigEndian.Uint16(payload[off:]))
-	off += 2
-	cursorY := int(binary.BigEndian.Uint16(payload[off:]))
-	off += 2
-	// cursorVisible := payload[off] != 0
-	off++
-	// fullRedraw := payload[off] != 0
-	off++
-	numDirtyRows := int(binary.BigEndian.Uint16(payload[off:]))
-	off += 2
-
-	// Position cursor via escape sequence so the VT tracks it
-	cursorSeq := fmt.Sprintf("\x1b[%d;%dH", cursorY+1, cursorX+1)
-
-	w.ioMu.Lock()
-	_, _ = w.Terminal.Write([]byte(cursorSeq))
-	for i := 0; i < numDirtyRows && off+4 <= len(payload); i++ {
-		y := int(binary.BigEndian.Uint16(payload[off:]))
-		off += 2
-		numCells := int(binary.BigEndian.Uint16(payload[off:]))
-		off += 2
-
-		for x := 0; x < numCells && off+2 <= len(payload); x++ {
-			contentLen := int(binary.BigEndian.Uint16(payload[off:]))
-			off += 2
-			if off+contentLen+9 > len(payload) {
-				break
-			}
-			content := string(payload[off : off+contentLen])
-			off += contentLen
-
-			fgSet := payload[off] != 0
-			off++
-			fgR, fgG, fgB := payload[off], payload[off+1], payload[off+2]
-			off += 3
-			bgSet := payload[off] != 0
-			off++
-			bgR, bgG, bgB := payload[off], payload[off+1], payload[off+2]
-			off += 3
-			flags := payload[off]
-			off++
-
-			cell := &uv.Cell{Content: content, Width: 1}
-			if fgSet {
-				cell.Style.Fg = color.RGBA{R: fgR, G: fgG, B: fgB, A: 255}
-			}
-			if bgSet {
-				cell.Style.Bg = color.RGBA{R: bgR, G: bgG, B: bgB, A: 255}
-			}
-			if flags&1 != 0 {
-				cell.Style.Attrs |= uv.AttrBold
-			}
-			if flags&2 != 0 {
-				cell.Style.Attrs |= uv.AttrItalic
-			}
-			if flags&8 != 0 {
-				cell.Style.Attrs |= uv.AttrStrikethrough
-			}
-			if flags&16 != 0 {
-				cell.Width = 2
-			}
-			w.Terminal.SetCell(x, y, cell)
-		}
-	}
-	w.ioMu.Unlock()
-
-	w.HasNewOutput.Store(true)
-	w.MarkContentDirty()
-	if w.PTYDataChan != nil {
-		select {
-		case w.PTYDataChan <- struct{}{}:
-		default:
-		}
-	}
 }
 
 // UpdateThemeColors updates the terminal colors when the theme changes

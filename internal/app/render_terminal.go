@@ -39,7 +39,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	}
 
 	// Fast path for unfocused windows: use the emulator's built-in Render().
-	if !isFocused && window.CopyMode == nil && !window.IsSelecting && window.SelectedText == "" && window.ScrollbackOffset == 0 {
+	// Skip when ghostty-driven — the emulator's internal buffer is stale;
+	// cells were written via SetCell, which Render() doesn't use.
+	if !window.GhosttyDrivenRendering && !isFocused && window.CopyMode == nil && !window.IsSelecting && window.SelectedText == "" && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
 		window.CachedContent = rendered
 		window.ContentDirty = false
@@ -52,9 +54,17 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
-	cursor := screen.CursorPosition()
-	cursorX := cursor.X
-	cursorY := cursor.Y
+	// Get cursor position. When ghostty-driven, read from the diff state
+	// stored on the Window (the emulator's cursor is stale/wrong).
+	var cursorX, cursorY int
+	if window.GhosttyDrivenRendering {
+		cursorX = window.DiffCursorX
+		cursorY = window.DiffCursorY
+	} else {
+		cursor := screen.CursorPosition()
+		cursorX = cursor.X
+		cursorY = cursor.Y
+	}
 
 	builder := pool.GetStringBuilder()
 	defer pool.PutStringBuilder(builder)
@@ -462,7 +472,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 			isSelected := (window.IsSelecting || window.SelectedText != "") && m.isPositionInSelection(window, x, y)
 			// Only render fake cursor when real terminal cursor is not being used
-			isCursorPos := !useRealCursor && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
+			cursorVisible := !screen.IsCursorHidden()
+			if window.GhosttyDrivenRendering {
+				cursorVisible = !window.DiffCursorHidden
+			}
+			isCursorPos := !useRealCursor && isFocused && inTerminalMode && !inCopyMode && cursorVisible && x == cursorX && y == cursorY
 
 			isSelectionCursor := m.SelectionMode && !inTerminalMode && isFocused &&
 				x == window.SelectionCursor.X && y == window.SelectionCursor.Y

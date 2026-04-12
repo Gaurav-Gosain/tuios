@@ -33,6 +33,18 @@ func debugLog(format string, args ...any) {
 	}
 }
 
+// ghosttyLog always writes to /tmp/tuios-debug.log (daemon stderr is lost,
+// and the daemon process may not have TUIOS_DEBUG_INTERNAL set).
+func ghosttyLog(format string, args ...any) {
+	f, err := os.OpenFile("/tmp/tuios-ghostty.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	msg := fmt.Sprintf("[GHOSTTY] "+format+"\n", args...)
+	_, _ = f.WriteString(msg)
+}
+
 // WindowState represents the serializable state of a window.
 type WindowState struct {
 	ID           string `json:"id"`
@@ -136,6 +148,8 @@ type PTY struct {
 	// VT callback is sent here instead of relying on the lossy broadcast.
 	// streamPTYOutput reads from both broadcast and kittyChan.
 	kittyChan chan []byte
+
+	ghosttyLogOnce int // prevents log spam
 
 	// Callback when PTY process exits - used by daemon to notify clients
 	onExit func(ptyID string)
@@ -250,21 +264,21 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 	terminal := vt.NewEmulator(width, height)
 	terminal.SetScrollbackMaxLines(10000)
 
-	// Create ghostty terminal for high-performance daemon-side VT.
+	// Create ghostty terminal (go-libghostty) for high-performance daemon-side VT.
 	var ghosttyTerm *ghostty.DaemonTerminal
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[GHOSTTY] panic during creation: %v", r)
+				ghosttyLog("panic during ghostty creation: %v", r)
 			}
 		}()
 		var err error
 		ghosttyTerm, err = ghostty.NewDaemonTerminal(width, height)
 		if err != nil {
-			log.Printf("[GHOSTTY] creation failed: %v", err)
+			ghosttyLog("ghostty creation failed: %v", err)
 			ghosttyTerm = nil
 		} else {
-			log.Printf("[GHOSTTY] terminal created OK for PTY %s (%dx%d)", id[:8], width, height)
+			ghosttyLog("ghostty terminal created OK for PTY %s (%dx%d)", id[:8], width, height)
 		}
 	}()
 
@@ -622,7 +636,7 @@ func (p *PTY) Resize(width, height int) error {
 
 	// Resize ghostty terminal
 	if p.ghosttyTerm != nil {
-		_ = p.ghosttyTerm.Resize(width, height, 0, 0)
+		_ = p.ghosttyTerm.Resize(width, height)
 	}
 
 	// Resize PTY
@@ -836,10 +850,12 @@ func (p *PTY) readOutput() {
 			data := make([]byte, n)
 			copy(data, buf[:n])
 
-			// Feed ghostty terminal. Non-blocking - if ghostty can't keep up,
-			// it's acceptable (diff will catch up on next read).
+			// Feed ghostty terminal.
 			if p.ghosttyTerm != nil {
 				p.ghosttyTerm.WriteNonBlocking(data)
+			} else if p.ghosttyLogOnce == 0 {
+				p.ghosttyLogOnce = 1
+				ghosttyLog("PTY %s: ghosttyTerm is nil, using raw bytes only", p.ID[:8])
 			}
 
 			// Feed ultraviolet VT via dedicated goroutine.

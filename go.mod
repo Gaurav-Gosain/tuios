@@ -1,6 +1,6 @@
 module github.com/Gaurav-Gosain/tuios
 
-go 1.25.8
+go 1.26.0
 
 require (
 	charm.land/bubbletea/v2 v2.0.2
@@ -27,6 +27,7 @@ require (
 require (
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
+	github.com/mitchellh/go-libghostty v0.0.0-20260411202315-e65c1153258f // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 )
 

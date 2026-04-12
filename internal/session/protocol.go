@@ -70,7 +70,6 @@ const (
 	MsgForceRefresh    // Force all clients to re-render
 	MsgRequestFullSync // Client requests full state sync from leader
 	MsgScreenDiff      // Screen diff (changed cells) from daemon VT to client
-	MsgGhosttyDiff     // Ghostty render state diff (binary dirty rows)
 )
 
 // Message is the base protocol message structure.
@@ -579,24 +578,6 @@ func (m *Message) ParsePayload(v any) error {
 // Binary message helpers for high-frequency PTY I/O
 // These bypass the codec system for maximum performance.
 // Format: [4 bytes length][1 byte type][1 byte codec=0][36 bytes PTY ID][raw data]
-
-// WriteGhosttyDiff writes a ghostty screen diff in binary format.
-func WriteGhosttyDiff(w io.Writer, ptyID string, payload []byte) error {
-	totalLen := uint32(2 + 36 + len(payload))
-	if err := binary.Write(w, binary.BigEndian, totalLen); err != nil {
-		return err
-	}
-	if _, err := w.Write([]byte{byte(MsgGhosttyDiff), byte(CodecGob)}); err != nil {
-		return err
-	}
-	idBytes := make([]byte, 36)
-	copy(idBytes, ptyID)
-	if _, err := w.Write(idBytes); err != nil {
-		return err
-	}
-	_, err := w.Write(payload)
-	return err
-}
 
 // WritePTYOutput writes PTY output in optimized binary format.
 func WritePTYOutput(w io.Writer, ptyID string, data []byte) error {

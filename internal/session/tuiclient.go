@@ -56,10 +56,6 @@ type TUIClient struct {
 	screenDiffHandlers   map[string]func(*ScreenDiff)
 	screenDiffHandlersMu sync.RWMutex
 
-	// Ghostty diff handlers. Called when daemon sends MsgGhosttyDiff.
-	ghosttyDiffHandlers   map[string]func([]byte)
-	ghosttyDiffHandlersMu sync.RWMutex
-
 	// PTY closed handlers - called when a PTY process exits
 	ptyClosedHandlers   map[string]func()
 	ptyClosedHandlersMu sync.RWMutex
@@ -98,7 +94,6 @@ func NewTUIClient() *TUIClient {
 		codec:               DefaultCodec(),
 		ptyHandlers:         make(map[string]func([]byte)),
 		screenDiffHandlers:  make(map[string]func(*ScreenDiff)),
-		ghosttyDiffHandlers: make(map[string]func([]byte)),
 		ptyClosedHandlers:   make(map[string]func()),
 		pendingResponses:   make(map[MessageType]chan *Message),
 		done:               make(chan struct{}),
@@ -389,13 +384,6 @@ func (c *TUIClient) SubscribePTY(ptyID string, handler func([]byte)) error {
 		return err
 	}
 	return c.send(msg)
-}
-
-// SetGhosttyDiffHandler registers a handler for ghostty screen diffs from a PTY.
-func (c *TUIClient) SetGhosttyDiffHandler(ptyID string, handler func([]byte)) {
-	c.ghosttyDiffHandlersMu.Lock()
-	c.ghosttyDiffHandlers[ptyID] = handler
-	c.ghosttyDiffHandlersMu.Unlock()
 }
 
 // SetScreenDiffHandler registers a handler for screen diffs from a PTY.
@@ -726,18 +714,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 
 		if handler != nil {
 			handler(diff)
-		}
-
-	case MsgGhosttyDiff:
-		ptyID, data, err := ParseBinaryPTYMessage(msg.Payload)
-		if err != nil || ptyID == "" {
-			return
-		}
-		c.ghosttyDiffHandlersMu.RLock()
-		handler := c.ghosttyDiffHandlers[ptyID]
-		c.ghosttyDiffHandlersMu.RUnlock()
-		if handler != nil {
-			handler(data)
 		}
 
 	case MsgPTYClosed:

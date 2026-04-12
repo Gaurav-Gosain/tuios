@@ -24,13 +24,25 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	}
 
 	// Hide during copy mode, scrollback, or when VT hides cursor
+	cursorHidden := window.Terminal.IsCursorHidden()
+	if window.GhosttyDrivenRendering {
+		cursorHidden = window.DiffCursorHidden
+	}
 	if (window.CopyMode != nil && window.CopyMode.Active) ||
 		window.ScrollbackOffset > 0 ||
-		window.Terminal.IsCursorHidden() {
+		cursorHidden {
 		return nil
 	}
 
-	pos := window.Terminal.CursorPosition()
+	var pos struct{ X, Y int }
+	if window.GhosttyDrivenRendering {
+		pos.X = window.DiffCursorX
+		pos.Y = window.DiffCursorY
+	} else {
+		cp := window.Terminal.CursorPosition()
+		pos.X = cp.X
+		pos.Y = cp.Y
+	}
 	contentWidth := window.ContentWidth()
 	contentHeight := window.ContentHeight()
 

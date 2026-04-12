@@ -2055,9 +2055,14 @@ func (m *OS) MoveSelectionCursor(window *terminal.Window, dx, dy int, extending 
 	// Initialize selection cursor if not set (only for non-extending moves)
 	if !extending && !window.IsSelecting {
 		// Position at terminal cursor when starting cursor movement
-		cursor := screen.CursorPosition()
-		window.SelectionCursor.X = cursor.X
-		window.SelectionCursor.Y = cursor.Y
+		if window.GhosttyDrivenRendering {
+			window.SelectionCursor.X = window.DiffCursorX
+			window.SelectionCursor.Y = window.DiffCursorY
+		} else {
+			cursor := screen.CursorPosition()
+			window.SelectionCursor.X = cursor.X
+			window.SelectionCursor.Y = cursor.Y
+		}
 	}
 
 	// Move cursor

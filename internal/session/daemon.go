@@ -653,7 +653,7 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 }
 
 func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
-	debugLog("[DEBUG] handleCreatePTY called for client %s", cs.clientID)
+	ghosttyLog("handleCreatePTY called for client %s", cs.clientID)
 
 	if cs.sessionID == "" {
 		debugLog("[DEBUG] handleCreatePTY: client not attached")
@@ -681,7 +681,7 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 		height = 24
 	}
 
-	debugLog("[DEBUG] Creating PTY %dx%d for session %s", width, height, session.Name)
+	ghosttyLog("Creating PTY %dx%d for session %s", width, height, session.Name)
 	pty, err := session.CreatePTY(width, height)
 	if err != nil {
 		debugLog("[DEBUG] handleCreatePTY: failed to create PTY: %v", err)
@@ -831,8 +831,10 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	// authoritative cell content with zero drops, fixing any corruption
 	// from the lossy raw byte broadcast.
 	if pty.ghosttyTerm != nil {
-		debugLog("[DEBUG] Starting ghostty diff stream for PTY %s", payload.PTYID)
+		ghosttyLog("[GHOSTTY] Starting ghostty diff stream for PTY %s", payload.PTYID[:8])
 		go d.streamGhosttyDiffs(cs, pty)
+	} else {
+		ghosttyLog("[GHOSTTY] No ghostty terminal for PTY %s — skipping diff stream", payload.PTYID[:8])
 	}
 
 	return nil
@@ -946,43 +948,104 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 }
 
 // streamGhosttyDiffs streams event-driven screen diffs from the ghostty
-// terminal to a subscriber. Uses ghostty's render state API with built-in
-// dirty tracking for zero-drop, zero-corruption delivery.
+// terminal to a subscriber. Uses go-libghostty's render state API with
+// dirty tracking for zero-drop, zero-corruption delivery. Sends diffs
+// via the MsgScreenDiff protocol (same wire format as ultraviolet diffs).
 func (d *Daemon) streamGhosttyDiffs(cs *connState, pty *PTY) {
 	defer func() {
 		if r := recover(); r != nil {
-			debugLog("[DEBUG] streamGhosttyDiffs panic recovered: %v", r)
+			ghosttyLog("[GHOSTTY] streamGhosttyDiffs panic: %v", r)
 		}
 	}()
 	signal := pty.ghosttyTerm.DirtySignal()
+	coalesce := pty.ghosttyTerm.CoalesceDuration()
+	diffCount := 0
+
+	// Coalesce timer: after a dirty signal, wait briefly for more writes
+	// to arrive before reading. This batches rapid updates (btop, htop)
+	// into fewer, larger diffs instead of many tiny ones.
+	timer := time.NewTimer(0)
+	if !timer.Stop() {
+		<-timer.C
+	}
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-cs.done:
+			ghosttyLog("[GHOSTTY] diff stream ended (client done) for PTY %s after %d diffs", pty.ID[:8], diffCount)
 			return
 		case <-d.ctx.Done():
+			ghosttyLog("[GHOSTTY] diff stream ended (ctx done) for PTY %s after %d diffs", pty.ID[:8], diffCount)
 			return
 		case <-signal:
-			diff := pty.ghosttyTerm.ReadDiff()
-			if diff == nil {
+			// Coalesce: wait briefly for more writes before reading.
+			timer.Reset(coalesce)
+			select {
+			case <-timer.C:
+			case <-cs.done:
+				return
+			case <-d.ctx.Done():
+				return
+			}
+			// Drain any additional signals that arrived during coalesce.
+			for {
+				select {
+				case <-signal:
+				default:
+					goto read
+				}
+			}
+		read:
+			gDiff := pty.ghosttyTerm.ReadDiff()
+			if gDiff == nil {
 				continue
 			}
 
-			payload := ghostty.EncodeDiff(diff)
-			if len(payload) == 0 {
-				continue
+			diff := ghosttyDiffToScreenDiff(gDiff)
+
+			diffCount++
+			if diffCount <= 3 || diffCount%100 == 0 {
+				ghosttyLog("[GHOSTTY] sending diff #%d for PTY %s (%d cells)", diffCount, pty.ID[:8], len(diff.Cells))
 			}
 
-			// Wrap in standard message framing
 			cs.sendMu.Lock()
 			_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			err := WriteGhosttyDiff(cs.conn, pty.ID, payload)
+			err := WriteScreenDiff(cs.conn, pty.ID, diff)
 			cs.sendMu.Unlock()
 
 			if err != nil {
+				ghosttyLog("[GHOSTTY] diff stream write error for PTY %s: %v", pty.ID[:8], err)
 				return
 			}
 		}
+	}
+}
+
+// ghosttyDiffToScreenDiff converts a ghostty.ScreenDiff to session.ScreenDiff.
+func ghosttyDiffToScreenDiff(g *ghostty.ScreenDiff) *ScreenDiff {
+	cells := make([]DiffCell, len(g.Cells))
+	for i, gc := range g.Cells {
+		cells[i] = DiffCell{
+			Row:     gc.Row,
+			Col:     gc.Col,
+			Content: gc.Content,
+			Width:   gc.Width,
+			Fg:      gc.Fg,
+			Bg:      gc.Bg,
+			Attrs:   gc.Attrs,
+			UlColor: gc.UlColor,
+			UlStyle: gc.UlStyle,
+		}
+	}
+	return &ScreenDiff{
+		Cells:        cells,
+		CursorX:      g.CursorX,
+		CursorY:      g.CursorY,
+		CursorHidden: g.CursorHidden,
+		IsAltScreen:  g.IsAltScreen,
+		Width:        g.Width,
+		Height:       g.Height,
 	}
 }
 
