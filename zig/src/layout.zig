@@ -314,22 +314,23 @@ pub const Layout = struct {
                 }
             },
             .init => {
-                // Spawn initial terminal. screen_cols/rows were set by
-                // the winsize event that fires during setup() before .init.
-                if (self.screen_cols > 0 and self.screen_rows > 0) {
-                    log.info("Spawning initial terminal: {}x{}", .{ self.screen_cols, self.screen_rows });
-                    if (self.spawn_callback) |cb| {
-                        cb(self.spawn_ctx, .{
-                            .rows = self.screen_rows,
-                            .cols = self.screen_cols,
-                            .attach = true,
-                        }) catch |err| {
-                            log.err("Failed to spawn initial terminal: {}", .{err});
-                        };
+                // Only spawn if we don't already have a PTY (prevents
+                // double-spawn from session restore + init event).
+                if (self.ptys.count() == 0 and self.focused_id == null) {
+                    if (self.screen_cols > 0 and self.screen_rows > 0) {
+                        log.info("Spawning initial terminal: {}x{}", .{ self.screen_cols, self.screen_rows });
+                        if (self.spawn_callback) |cb| {
+                            cb(self.spawn_ctx, .{
+                                .rows = self.screen_rows,
+                                .cols = self.screen_cols,
+                                .attach = true,
+                            }) catch |err| {
+                                log.err("Failed to spawn initial terminal: {}", .{err});
+                            };
+                        }
+                    } else {
+                        self.needs_initial_spawn = true;
                     }
-                } else {
-                    // Winsize hasn't arrived yet — defer to next winsize
-                    self.needs_initial_spawn = true;
                 }
             },
             .cwd_changed => {},
@@ -341,8 +342,9 @@ pub const Layout = struct {
         // Forward all keys to focused PTY
         if (self.focused_id) |id| {
             if (self.ptys.get(id)) |pty| {
-                // Use vaxis_helper for proper W3C key name conversion
-                // (heap-allocated strings that survive the function call)
+                // Use vaxis_helper for proper W3C key name conversion.
+                // Heap alloc is needed because send_key_fn encodes to
+                // msgpack which reads the slices. Freed immediately after.
                 const strings = vaxis_helper.vaxisKeyToStrings(self.allocator, key) catch return;
                 defer self.allocator.free(strings.key);
                 defer self.allocator.free(strings.code);
