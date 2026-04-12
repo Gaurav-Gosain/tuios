@@ -420,7 +420,18 @@ pub const Layout = struct {
                 }
             },
             .cwd_changed => {},
-            .split_resize => {},
+            .split_resize => |resize| {
+                // Adjust BSP split ratio when user drags a separator
+                // The resize event comes from client.zig's split handle drag
+                if (resize.parent_id) |_| {
+                    // Find which split this corresponds to and adjust ratio
+                    // For now, adjust the ratio on the focused window's parent
+                    if (self.focused_id) |fid| {
+                        self.currentTree().adjustRatio(fid, resize.ratio);
+                        self.requestRedraw();
+                    }
+                }
+            },
         }
     }
 
@@ -440,8 +451,8 @@ pub const Layout = struct {
             }
         }
 
-        // Ctrl+B activates prefix in terminal mode
-        if (!self.prefix_active and self.mode == .terminal) {
+        // Ctrl+B activates prefix in any mode
+        if (!self.prefix_active) {
             if (key.codepoint == 'b' and key.mods.ctrl and !key.mods.alt and !key.mods.shift and !key.mods.super) {
                 self.prefix_active = true;
                 self.prefix_time = std.time.nanoTimestamp();
@@ -710,6 +721,11 @@ pub const Layout = struct {
         // Mouse is handled via the .mouse event (hit-tested by client.zig)
     }
 
+    fn emptyWidget(self: *Layout) !widget.Widget {
+        const spans = try self.allocator.alloc(widget.Text.Span, 0);
+        return widget.Widget{ .kind = .{ .text = .{ .spans = spans } } };
+    }
+
     fn requestRedraw(self: *Layout) void {
         if (self.redraw_callback) |cb| cb(self.redraw_ctx);
     }
@@ -753,7 +769,7 @@ pub const Layout = struct {
 
         // Empty workspace
         if (tree.isEmpty()) {
-            return widget.Widget{ .kind = .{ .text = .{ .spans = &.{} } } };
+            return self.emptyWidget();
         }
 
         // Single window — no borders needed, maximize space
@@ -771,7 +787,7 @@ pub const Layout = struct {
                     };
                 }
             }
-            return widget.Widget{ .kind = .{ .text = .{ .spans = &.{} } } };
+            return self.emptyWidget();
         }
 
         // Multiple windows — build from BSP tree
@@ -783,7 +799,7 @@ pub const Layout = struct {
         const null_idx: u16 = std.math.maxInt(u16);
 
         if (node_idx == null_idx) {
-            return widget.Widget{ .kind = .{ .text = .{ .spans = &.{} } } };
+            return self.emptyWidget();
         }
 
         const tree = self.currentTreeConst();
@@ -795,7 +811,7 @@ pub const Layout = struct {
             if (self.ptys.get(wid)) |pty| {
                 return try self.buildBorderedSurface(wid, pty.surface, self.focused_id == wid);
             }
-            return widget.Widget{ .kind = .{ .text = .{ .spans = &.{} } } };
+            return self.emptyWidget();
         }
 
         // Internal node — split into two children with a separator

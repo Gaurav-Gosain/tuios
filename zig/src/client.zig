@@ -809,8 +809,11 @@ pub const App = struct {
         }
         if (self.hit_regions.len > 0) self.allocator.free(self.hit_regions);
         if (self.split_handles.len > 0) self.allocator.free(self.split_handles);
-        self.vx.deinit(self.allocator, self.tty.writer());
-        self.tty.deinit();
+        // Guard: TTY fd may be invalid by the time deinit runs (e.g. timeout kill)
+        if (self.tty.fd >= 0) {
+            self.vx.deinit(self.allocator, self.tty.writer());
+            self.tty.deinit();
+        }
 
         posix.close(self.pipe_read_fd);
         posix.close(self.pipe_write_fd);
