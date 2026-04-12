@@ -357,12 +357,8 @@ pub const Layout = struct {
             }
         }
 
-        // No PTY yet — empty screen
-        const spans = try self.allocator.alloc(widget.Text.Span, 1);
-        spans[0] = .{ .text = "tuios: waiting for terminal...", .style = .{} };
-        return widget.Widget{
-            .kind = .{ .text = .{ .spans = spans } },
-        };
+        // No PTY yet — return empty widget (no children to render)
+        return widget.Widget{ .kind = .{ .text = .{ .spans = &.{} } } };
     }
 
     // ---- Types needed by client.zig ----
