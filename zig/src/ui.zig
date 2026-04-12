@@ -20,6 +20,7 @@ const logger = std.log.scoped(.lua);
 
 const tuios_module = @embedFile("lua/tuios.lua");
 const tiling_ui_module = @embedFile("lua/tiling.lua");
+const utils_module = @embedFile("lua/utils.lua");
 const fallback_init = "return require('tuios').tiling()";
 
 const TimerContext = struct {
@@ -159,6 +160,10 @@ pub const UI = struct {
         // (installed to disk only for LSP completion support)
         lua.pushFunction(ziglua.wrap(loadTilingUiModule));
         lua.setField(-2, "tuios_tiling_ui");
+
+        // Embed utils module so it's available without filesystem install
+        lua.pushFunction(ziglua.wrap(loadUtilsModule));
+        lua.setField(-2, "utils");
         lua.pop(2);
 
         // Try to load ~/.config/tuios/init.lua
@@ -332,6 +337,14 @@ pub const UI = struct {
         }
 
         return self.allocator.dupe(u8, AMORY_NAMES[0]);
+    }
+
+    fn loadUtilsModule(lua: *ziglua.Lua) i32 {
+        lua.doString(utils_module) catch {
+            lua.pushNil();
+            return 1;
+        };
+        return 1;
     }
 
     fn loadTilingUiModule(lua: *ziglua.Lua) i32 {
