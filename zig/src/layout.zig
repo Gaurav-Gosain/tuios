@@ -514,16 +514,31 @@ pub const Layout = struct {
         if (cp == 'n' or cp == '\t') { self.cycleFocus(true); return; }
         if (cp == 'p') { self.cycleFocus(false); return; }
 
-        // Workspace (Ctrl+B, w then number — simplified: Ctrl+B, 1-9)
+        // Workspace switching (Ctrl+B, 1-9)
         if (cp >= '1' and cp <= '9') {
             const ws: u8 = @intCast(cp - '1');
-            self.switchWorkspace(ws);
+            if (shift) {
+                // Shift+1-9: move focused window to workspace
+                self.moveWindowToWorkspace(ws);
+            } else {
+                self.switchWorkspace(ws);
+            }
             return;
         }
 
         // Mode switching
         if (cp == 'w') {
             self.mode = .window_management;
+            return;
+        }
+
+        // Swap with neighbor
+        if (cp == '{') { self.swapWithNeighbor(.left); return; }
+        if (cp == '}') { self.swapWithNeighbor(.right); return; }
+
+        // Toggle tiling (Ctrl+B, space)
+        if (cp == ' ') {
+            self.toggleZoom(); // zoom acts as a simple tiling toggle for now
             return;
         }
 
@@ -679,6 +694,42 @@ pub const Layout = struct {
         else if (ci == 0) count - 1 else ci - 1;
 
         self.focused_id = ids[next];
+        self.updateFocusState();
+        self.requestRedraw();
+    }
+
+    fn swapWithNeighbor(self: *Layout, dir: bsp.Direction) void {
+        const fid = self.focused_id orelse return;
+        const tree = self.currentTree();
+        if (tree.findNeighbor(fid, dir, self.tileBounds())) |neighbor_id| {
+            tree.swapWindows(fid, neighbor_id);
+            self.requestRedraw();
+        }
+    }
+
+    fn moveWindowToWorkspace(self: *Layout, target_ws: u8) void {
+        if (target_ws >= max_workspaces) return;
+        if (target_ws == self.active_workspace) return;
+        const fid = self.focused_id orelse return;
+
+        // Remove from current workspace BSP
+        self.currentTree().removeWindow(fid);
+
+        // Insert into target workspace BSP
+        // Find something to split against, or just insert as first
+        var target_focused: u32 = fid;
+        var target_ids: [64]u32 = undefined;
+        const target_count = self.workspaces[target_ws].getAllWindowIDs(&target_ids);
+        if (target_count > 0) {
+            target_focused = target_ids[0];
+        }
+        self.workspaces[target_ws].insertWindow(fid, target_focused, .none, self.tileBounds());
+
+        // Update workspace mapping
+        self.setWindowWorkspace(fid, target_ws);
+
+        // Focus next window in current workspace
+        self.focused_id = self.findNextFocusable();
         self.updateFocusState();
         self.requestRedraw();
     }

@@ -610,6 +610,91 @@ test "BSPTree: find neighbor" {
     try std.testing.expectEqual(@as(?u32, null), tree.findNeighbor(1, .up, bounds));
 }
 
+test "BSPTree: three-window spiral layout" {
+    var tree = BSPTree.init();
+    const bounds = Rect{ .x = 0, .y = 0, .w = 120, .h = 40 };
+
+    tree.insertWindow(1, 0, .none, bounds);
+    tree.insertWindow(2, 1, .none, bounds); // auto: vertical (0 internal nodes -> even -> V)
+    tree.insertWindow(3, 2, .none, bounds); // auto: horizontal (1 internal node -> odd -> H)
+
+    try std.testing.expectEqual(@as(u16, 3), tree.windowCount());
+
+    var ids: [64]u32 = undefined;
+    var rects: [64]Rect = undefined;
+    const count = tree.applyLayout(bounds, &ids, &rects);
+    try std.testing.expectEqual(@as(u16, 3), count);
+
+    // All three rects should be non-zero
+    for (0..count) |i| {
+        try std.testing.expect(rects[i].w > 0);
+        try std.testing.expect(rects[i].h > 0);
+    }
+}
+
+test "BSPTree: swap windows" {
+    var tree = BSPTree.init();
+    const bounds = Rect{ .x = 0, .y = 0, .w = 80, .h = 24 };
+
+    tree.insertWindow(1, 0, .none, bounds);
+    tree.insertWindow(2, 1, .vertical, bounds);
+
+    // Get positions before swap
+    var ids_before: [64]u32 = undefined;
+    var rects_before: [64]Rect = undefined;
+    _ = tree.applyLayout(bounds, &ids_before, &rects_before);
+
+    tree.swapWindows(1, 2);
+
+    // Both windows should still exist
+    try std.testing.expect(tree.hasWindow(1));
+    try std.testing.expect(tree.hasWindow(2));
+}
+
+test "BSPTree: rotate split" {
+    var tree = BSPTree.init();
+    const bounds = Rect{ .x = 0, .y = 0, .w = 80, .h = 24 };
+
+    tree.insertWindow(1, 0, .none, bounds);
+    tree.insertWindow(2, 1, .vertical, bounds);
+
+    // After rotate, neighbor directions should change
+    tree.rotateSplit(1);
+
+    // Now it should be horizontal: 1 above, 2 below
+    const below = tree.findNeighbor(1, .down, bounds);
+    try std.testing.expectEqual(@as(?u32, 2), below);
+}
+
+test "BSPTree: remove middle window" {
+    var tree = BSPTree.init();
+    const bounds = Rect{ .x = 0, .y = 0, .w = 120, .h = 40 };
+
+    tree.insertWindow(1, 0, .none, bounds);
+    tree.insertWindow(2, 1, .vertical, bounds);
+    tree.insertWindow(3, 2, .none, bounds);
+
+    // Remove window 2 — its sibling (3) should take its place
+    tree.removeWindow(2);
+    try std.testing.expectEqual(@as(u16, 2), tree.windowCount());
+    try std.testing.expect(tree.hasWindow(1));
+    try std.testing.expect(tree.hasWindow(3));
+    try std.testing.expect(!tree.hasWindow(2));
+}
+
+test "BSPTree: collect splits" {
+    var tree = BSPTree.init();
+    const bounds = Rect{ .x = 0, .y = 0, .w = 80, .h = 24 };
+
+    tree.insertWindow(1, 0, .none, bounds);
+    tree.insertWindow(2, 1, .vertical, bounds);
+
+    var splits: [32]SplitLine = undefined;
+    const split_count = tree.collectSplits(bounds, &splits);
+    try std.testing.expectEqual(@as(u16, 1), split_count);
+    try std.testing.expect(splits[0].vertical);
+}
+
 test "BSPTree: equalize ratios" {
     var tree = BSPTree.init();
     const bounds = Rect{ .x = 0, .y = 0, .w = 80, .h = 24 };
