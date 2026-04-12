@@ -1686,6 +1686,12 @@ const Client = struct {
             y_pixel = parseU16(notif.params.array[4]) orelse 0;
         }
 
+        // Guard: zero dimensions crash ghostty terminal resize
+        if (rows == 0 or cols == 0) {
+            log.warn("resize_pty: ignoring zero dimensions {}x{}", .{ cols, rows });
+            return;
+        }
+
         if (self.server.ptys.get(pty_id)) |pty_instance| {
             pty_instance.terminal_mutex.lock();
 
