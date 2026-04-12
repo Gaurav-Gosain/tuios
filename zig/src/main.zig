@@ -419,27 +419,7 @@ fn runClient(allocator: std.mem.Allocator, socket_path: []const u8, args: ParseR
     var app = switch (client.App.init(allocator)) {
         .ok => |a| a,
         .err => |init_err| {
-            var buf: [512]u8 = undefined;
-            var stderr = std.fs.File.stderr().writer(&buf);
-            defer stderr.interface.flush() catch {};
-            switch (init_err.err) {
-                error.InitLuaMustReturnTable => stderr.interface.print("error: init.lua must return a UI table\n  example: return require('tuios').tiling()\n  see: man 5 tuios\n", .{}) catch {},
-                error.InitLuaFailed => {
-                    if (init_err.lua_msg) |lua_msg| {
-                        stderr.interface.print("error: {s}\n  see: man 5 tuios\n", .{lua_msg}) catch {};
-                    } else {
-                        stderr.interface.print("error: failed to load init.lua\n  see: man 5 tuios\n", .{}) catch {};
-                    }
-                },
-                error.DefaultUIFailed => {
-                    if (init_err.lua_msg) |lua_msg| {
-                        stderr.interface.print("error: failed to load default UI: {s}\n", .{lua_msg}) catch {};
-                    } else {
-                        stderr.interface.print("error: failed to load default UI\n", .{}) catch {};
-                    }
-                },
-                else => {},
-            }
+            log.err("Failed to initialize: {}", .{init_err.err});
             return init_err.err;
         },
     };
@@ -817,10 +797,8 @@ test {
     _ = @import("key_encode.zig");
     _ = @import("mouse_encode.zig");
     _ = @import("vaxis_helper.zig");
-    _ = @import("lua_test.zig");
     _ = @import("key_string.zig");
     _ = @import("action.zig");
-    _ = @import("keybind.zig");
     _ = @import("keybind_compiler.zig");
     _ = @import("keybind_matcher.zig");
 

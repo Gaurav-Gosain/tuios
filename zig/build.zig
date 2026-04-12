@@ -30,15 +30,6 @@ pub fn build(b: *std.Build) void {
     });
     exe_mod.addImport("vaxis", vaxis.module("vaxis"));
 
-    const zlua = b.dependency("zlua", .{
-        .target = target,
-        .optimize = optimize,
-        .lang = .lua54,
-    });
-    exe_mod.addImport("zlua", zlua.module("zlua"));
-
-    const zeit = b.dependency("zeit", .{});
-    exe_mod.addImport("zeit", zeit.module("zeit"));
 
     const exe = b.addExecutable(.{
         .name = "tuios",
@@ -47,10 +38,6 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
-    // Lua files
-    b.installFile("src/lua/prise.lua", "share/tuios/lua/prise.lua");
-    b.installFile("src/lua/tiling.lua", "share/tuios/lua/prise_tiling_ui.lua");
-    b.installFile("src/lua/utils.lua", "share/tuios/lua/utils.lua");
 
     // Run
     const run_cmd = b.addRunArtifact(exe);

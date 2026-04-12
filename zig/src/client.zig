@@ -3,13 +3,14 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 const io = @import("io.zig");
-const lua_event = @import("lua_event.zig");
+const layout_mod = @import("layout.zig");
+const Layout = layout_mod.Layout;
 const msgpack = @import("msgpack.zig");
 const redraw = @import("redraw.zig");
 const rpc = @import("rpc.zig");
 const Surface = @import("Surface.zig");
-const ui_mod = @import("ui.zig");
-const UI = ui_mod.UI;
+
+
 const vaxis_helper = @import("vaxis_helper.zig");
 const widget = @import("widget.zig");
 const posix = std.posix;
@@ -616,7 +617,7 @@ pub const App = struct {
     tty_buffer: [4096]u8 = undefined,
     surfaces: std.AutoHashMap(u32, *Surface),
     state: ClientState,
-    ui: UI = undefined,
+    ui: Layout = undefined,
     first_resize_done: bool = false,
     socket_path: []const u8 = undefined,
     /// Session name to attach to (existing session passed via `tuios session attach <name>`)
@@ -708,7 +709,7 @@ pub const App = struct {
         log.info("Vaxis initialized", .{});
 
         // Initialize Lua UI
-        switch (UI.init(allocator)) {
+        switch (Layout.init(allocator)) {
             .ok => |ui| app.ui = ui,
             .err => |init_err| {
                 // Note: we skip vx.deinit here since TTY isn't initialized yet
@@ -882,7 +883,7 @@ pub const App = struct {
 
         // Register spawn callback
         self.ui.setSpawnCallback(self, struct {
-            fn spawnCb(ctx: *anyopaque, opts: UI.SpawnOptions) !void {
+            fn spawnCb(ctx: *anyopaque, opts: layout_mod.SpawnOptions) !void {
                 const app_ptr: *App = @ptrCast(@alignCast(ctx));
                 try app_ptr.spawnPty(opts);
             }
@@ -1231,7 +1232,7 @@ pub const App = struct {
                     try self.scheduleRender();
                 }
 
-                const mouse_event = lua_event.MouseEvent{
+                const mouse_event = layout_mod.MouseEvent{
                     .x = x,
                     .y = y,
                     .button = mouse.button,
@@ -2020,7 +2021,7 @@ pub const App = struct {
                                                 .surface = surface,
                                                 .app = app,
                                                 .send_key_fn = struct {
-                                                    fn appSendDirect(ctx: *anyopaque, id: u32, key: lua_event.KeyData) anyerror!void {
+                                                    fn appSendDirect(ctx: *anyopaque, id: u32, key: layout_mod.KeyData) anyerror!void {
                                                         const self: *App = @ptrCast(@alignCast(ctx));
 
                                                         var key_map_kv = try self.allocator.alloc(msgpack.Value.KeyValue, 6);
@@ -2056,7 +2057,7 @@ pub const App = struct {
                                                     }
                                                 }.appSendDirect,
                                                 .send_mouse_fn = struct {
-                                                    fn appSendMouse(ctx: *anyopaque, id: u32, mouse: lua_event.MouseData) anyerror!void {
+                                                    fn appSendMouse(ctx: *anyopaque, id: u32, mouse: layout_mod.MouseData) anyerror!void {
                                                         const self: *App = @ptrCast(@alignCast(ctx));
 
                                                         var mouse_map_kv = try self.allocator.alloc(msgpack.Value.KeyValue, 7);
@@ -2174,7 +2175,7 @@ pub const App = struct {
                                                     }
                                                 }.appCopySelection,
                                                 .cell_size_fn = struct {
-                                                    fn appGetCellSize(ctx: *anyopaque) lua_event.CellSize {
+                                                    fn appGetCellSize(ctx: *anyopaque) layout_mod.CellSize {
                                                         const self: *App = @ptrCast(@alignCast(ctx));
                                                         return .{
                                                             .width = self.cell_width_px,
@@ -2402,7 +2403,7 @@ pub const App = struct {
         }
     }
 
-    pub fn spawnPty(self: *App, opts: UI.SpawnOptions) !void {
+    pub fn spawnPty(self: *App, opts: layout_mod.SpawnOptions) !void {
         const msgid = self.state.next_msgid;
         self.state.next_msgid += 1;
 
@@ -2876,7 +2877,7 @@ pub const App = struct {
         }
     }
 
-    fn ptyLookup(ctx: *anyopaque, id: u32) ?UI.PtyLookupResult {
+    fn ptyLookup(ctx: *anyopaque, id: u32) ?Layout.PtyLookupResult {
         const self: *App = @ptrCast(@alignCast(ctx));
 
         // Check if this ID was remapped (old PTY ID -> new PTY ID due to validity mismatch)
@@ -2888,7 +2889,7 @@ pub const App = struct {
             .surface = surface,
             .app = self,
             .send_key_fn = struct {
-                fn sendKey(app_ctx: *anyopaque, pty_id: u32, key: lua_event.KeyData) anyerror!void {
+                fn sendKey(app_ctx: *anyopaque, pty_id: u32, key: layout_mod.KeyData) anyerror!void {
                     const app: *App = @ptrCast(@alignCast(app_ctx));
 
                     var key_map_kv = try app.allocator.alloc(msgpack.Value.KeyValue, 6);
@@ -2923,7 +2924,7 @@ pub const App = struct {
                 }
             }.sendKey,
             .send_mouse_fn = struct {
-                fn sendMouse(app_ctx: *anyopaque, pty_id: u32, mouse: lua_event.MouseData) anyerror!void {
+                fn sendMouse(app_ctx: *anyopaque, pty_id: u32, mouse: layout_mod.MouseData) anyerror!void {
                     const app: *App = @ptrCast(@alignCast(app_ctx));
 
                     var mouse_map_kv = try app.allocator.alloc(msgpack.Value.KeyValue, 7);
@@ -3044,7 +3045,7 @@ pub const App = struct {
                 }
             }.copySelection,
             .cell_size_fn = struct {
-                fn getCellSize(app_ctx: *anyopaque) lua_event.CellSize {
+                fn getCellSize(app_ctx: *anyopaque) layout_mod.CellSize {
                     const app: *App = @ptrCast(@alignCast(app_ctx));
                     return .{
                         .width = app.cell_width_px,
