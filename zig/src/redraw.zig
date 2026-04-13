@@ -18,6 +18,14 @@ pub const UIEvent = union(enum) {
     title: Title,
     selection: Selection,
     flush: void,
+    kitty_graphics: KittyGraphics,
+
+    /// ["kitty_graphics", pty, raw_apc_data]
+    /// Raw APC payload for kitty graphics passthrough
+    pub const KittyGraphics = struct {
+        pty: u32,
+        data: []const u8,
+    };
 
     /// ["resize", pty, rows, cols]
     pub const Resize = struct {
@@ -473,6 +481,21 @@ pub const RedrawBuilder = struct {
         const event_arr = try arena.alloc(msgpack.Value, 2);
         event_arr[0] = event_name;
         event_arr[1] = args_array;
+
+        try self.events.append(self.allocator, .{ .array = event_arr });
+    }
+
+    pub fn kittyGraphics(self: *RedrawBuilder, pty: u32, data: []const u8) !void {
+        const arena = self.arena.allocator();
+        const event_name: msgpack.Value = .{ .string = try arena.dupe(u8, "kitty_graphics") };
+
+        const args = try arena.alloc(msgpack.Value, 2);
+        args[0] = .{ .unsigned = pty };
+        args[1] = .{ .binary = try arena.dupe(u8, data) };
+
+        const event_arr = try arena.alloc(msgpack.Value, 2);
+        event_arr[0] = event_name;
+        event_arr[1] = .{ .array = args };
 
         try self.events.append(self.allocator, .{ .array = event_arr });
     }

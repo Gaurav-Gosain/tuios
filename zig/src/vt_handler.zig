@@ -44,6 +44,15 @@ pub const Handler = struct {
     da1_fn: ?*const fn (ctx: ?*anyopaque) anyerror!void = null,
     da1_ctx: ?*anyopaque = null,
 
+    /// Optional callback for APC sequences (kitty graphics protocol)
+    apc_fn: ?*const fn (ctx: ?*anyopaque, data: []const u8) anyerror!void = null,
+    apc_ctx: ?*anyopaque = null,
+
+    /// APC accumulation buffer (kitty graphics payloads)
+    apc_buf: [65536]u8 = undefined,
+    apc_len: usize = 0,
+    apc_active: bool = false,
+
     pub fn init(terminal: *Terminal) Handler {
         return .{
             .terminal = terminal,
@@ -102,6 +111,16 @@ pub const Handler = struct {
     ) void {
         self.da1_ctx = ctx;
         self.da1_fn = da1_fn;
+    }
+
+    /// Set callback for APC sequences (kitty graphics passthrough)
+    pub fn setApcCallback(
+        self: *Handler,
+        ctx: ?*anyopaque,
+        apc_fn: *const fn (ctx: ?*anyopaque, data: []const u8) anyerror!void,
+    ) void {
+        self.apc_ctx = ctx;
+        self.apc_fn = apc_fn;
     }
 
     /// Write data back to the PTY (if callback is set)
@@ -237,10 +256,27 @@ pub const Handler = struct {
             .dcs_unhook,
             => {},
 
-            .apc_start,
-            .apc_end,
-            .apc_put,
-            => {},
+            .apc_start => {
+                self.apc_active = true;
+                self.apc_len = 0;
+            },
+            .apc_put => |byte_val| {
+                if (self.apc_active and self.apc_len < self.apc_buf.len) {
+                    self.apc_buf[self.apc_len] = @intFromEnum(byte_val);
+                    self.apc_len += 1;
+                }
+            },
+            .apc_end => {
+                if (self.apc_active and self.apc_len > 0) {
+                    if (self.apc_fn) |func| {
+                        func(self.apc_ctx, self.apc_buf[0..self.apc_len]) catch |err| {
+                            log.err("APC callback error: {}", .{err});
+                        };
+                    }
+                }
+                self.apc_active = false;
+                self.apc_len = 0;
+            },
 
             .window_title => {
                 if (self.title_fn) |func| {

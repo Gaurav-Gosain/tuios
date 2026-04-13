@@ -152,6 +152,11 @@ const Pty = struct {
     left_click_count: u8 = 0,
     left_click_time: i64 = 0, // milliseconds timestamp
 
+    // APC data queue for kitty graphics passthrough
+    apc_queue: [16][]u8 = [_][]u8{&.{}} ** 16,
+    apc_queue_len: u8 = 0,
+    apc_mutex: std.Thread.Mutex = .{},
+
     // Pointer to server for callbacks (opaque to avoid circular type dependency)
     server_ptr: *anyopaque = undefined,
 
@@ -341,6 +346,34 @@ const Pty = struct {
         _ = posix.write(self.pipe_fds[1], "c") catch {};
     }
 
+    /// Queue APC data for kitty graphics passthrough to clients.
+    fn queueApcData(self: *Pty, data: []const u8) !void {
+        self.apc_mutex.lock();
+        defer self.apc_mutex.unlock();
+
+        if (self.apc_queue_len >= 16) return; // queue full, drop
+
+        const copy = try self.allocator.dupe(u8, data);
+        self.apc_queue[self.apc_queue_len] = copy;
+        self.apc_queue_len += 1;
+
+        // Signal dirty to trigger redraw which will include APC data
+        _ = posix.write(self.pipe_fds[1], "g") catch {};
+    }
+
+    /// Drain queued APC data into a redraw builder.
+    fn drainApcQueue(self: *Pty, builder: *redraw.RedrawBuilder) void {
+        self.apc_mutex.lock();
+        defer self.apc_mutex.unlock();
+
+        for (0..self.apc_queue_len) |i| {
+            builder.kittyGraphics(@intCast(self.id), self.apc_queue[i]) catch {};
+            self.allocator.free(self.apc_queue[i]);
+            self.apc_queue[i] = &.{};
+        }
+        self.apc_queue_len = 0;
+    }
+
     /// Queue a DA1 response to be sent after all other responses are flushed.
     fn queueDa1(self: *Pty) void {
         self.color_queries_mutex.lock();
@@ -495,6 +528,19 @@ const Pty = struct {
                 pty_inst.queueDa1();
             }
         }.onDa1);
+
+        // Set up APC callback for kitty graphics passthrough
+        handler.setApcCallback(self, struct {
+            fn onApc(ctx: ?*anyopaque, data: []const u8) !void {
+                const pty_inst: *Pty = @ptrCast(@alignCast(ctx));
+                // Check if this looks like a kitty graphics command (starts with 'G')
+                if (data.len > 0 and data[0] == 'G') {
+                    pty_inst.queueApcData(data) catch |err| {
+                        log.err("Failed to queue APC data: {}", .{err});
+                    };
+                }
+            }
+        }.onApc);
 
         var stream = vt_handler.Stream.initAlloc(self.allocator, handler);
         defer stream.deinit();
@@ -1075,6 +1121,9 @@ fn buildRedrawMessageFromPty(
     try emitCursor(&builder, pty_instance.id, rs);
     try builder.mouseShape(@intCast(pty_instance.id), mouse_shape);
     try emitSelection(&builder, pty_instance.id, rs);
+
+    // Drain any queued APC data (kitty graphics passthrough)
+    pty_instance.drainApcQueue(&builder);
 
     try builder.flush();
     return builder.build();

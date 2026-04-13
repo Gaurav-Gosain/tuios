@@ -1567,6 +1567,16 @@ pub const App = struct {
             if (pty_id) |_| break;
         }
 
+        // Handle kitty_graphics events separately (passthrough to host terminal)
+        for (params.array) |event| {
+            if (event != .array or event.array.len < 2) continue;
+            const name = event.array[0];
+            if (name != .string) continue;
+            if (std.mem.eql(u8, name.string, "kitty_graphics")) {
+                self.handleKittyGraphics(event.array[1]);
+            }
+        }
+
         if (pty_id) |pid| {
             if (self.surfaces.get(pid)) |surface| {
                 try surface.applyRedraw(params);
@@ -1583,6 +1593,49 @@ pub const App = struct {
         } else {
             log.debug("handleRedraw: could not determine pty_id from events", .{});
         }
+    }
+
+    fn handleKittyGraphics(self: *App, args: msgpack.Value) void {
+        if (args != .array or args.array.len < 2) return;
+
+        // args = [pty_id, raw_apc_data]
+        const pty_id: u32 = switch (args.array[0]) {
+            .unsigned => |u| @intCast(u),
+            .integer => |i| @intCast(i),
+            else => return,
+        };
+        const data = switch (args.array[1]) {
+            .binary => |b| b,
+            .string => |s| s,
+            else => return,
+        };
+
+        if (data.len == 0) return;
+
+        // Find the window position for this PTY from hit regions
+        var offset_x: u16 = 0;
+        var offset_y: u16 = 0;
+        for (self.hit_regions) |region| {
+            if (region.pty_id == pty_id) {
+                offset_x = region.x;
+                offset_y = region.y;
+                break;
+            }
+        }
+
+        // Write APC passthrough directly to host terminal
+        // Format: ESC _ <data> ESC \ (APC sequence)
+        // But first, we need to position the cursor for image placement
+        // The kitty graphics protocol handles positioning via its own parameters,
+        // so we just write the raw APC as-is, wrapped in APC delimiters.
+        const writer = self.tty.writer();
+        writer.writeAll("\x1b_") catch return;
+        writer.writeAll(data) catch return;
+        writer.writeAll("\x1b\\") catch return;
+
+        // TODO: coordinate translation using offset_x, offset_y for multi-window
+        // For now, passthrough works for single/focused window
+        log.debug("kitty_graphics: pty={} data_len={} offset=({},{})", .{ pty_id, data.len, offset_x, offset_y });
     }
 
     fn renderWidget(self: *App, w: widget.Widget, win: vaxis.Window) !void {
