@@ -152,6 +152,7 @@ type Window struct {
 	DiffCursorX            int    // Cursor X from daemon diff (used when GhosttyDrivenRendering)
 	DiffCursorY            int    // Cursor Y from daemon diff
 	DiffCursorHidden       bool   // Cursor hidden from daemon diff
+	DiffHasMouseMode       bool   // PTY has mouse tracking enabled (from daemon diff)
 	DaemonWriteFunc   func([]byte) error   // Callback for sending input to daemon PTY
 	DaemonResizeFunc  func(w, h int) error // Callback for resizing daemon PTY
 	DaemonCloseFunc   func()               // Callback when window is closed (to notify daemon)
@@ -700,6 +701,21 @@ type DiffCell struct {
 func (w *Window) ApplyScreenDiff(cells []DiffCell, cursorX, cursorY int, cursorHidden, isAltScreen bool) {
 	if w.Terminal == nil {
 		return
+	}
+
+	// When alt screen transitions off, clear the entire screen.
+	// The diff only has changed cells — stale alt screen content
+	// would otherwise persist as artifacts (e.g., DOOM-fire residue).
+	if w.IsAltScreen && !isAltScreen {
+		w.ioMu.Lock()
+		emptyCell := &uv.Cell{Content: " ", Width: 1}
+		for row := 0; row < w.Terminal.Height(); row++ {
+			for col := 0; col < w.Terminal.Width(); col++ {
+				w.Terminal.SetCell(col, row, emptyCell)
+			}
+		}
+		w.ioMu.Unlock()
+		w.MarkContentDirty()
 	}
 
 	// Write cells directly to the emulator's screen buffer.

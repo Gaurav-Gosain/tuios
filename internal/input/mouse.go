@@ -1107,7 +1107,12 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// This allows applications like vim, less, htop to handle their own scrolling
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.Terminal != nil && focusedWindow.Terminal.HasMouseMode() {
+		hasMouseMode := focusedWindow != nil && focusedWindow.Terminal != nil && focusedWindow.Terminal.HasMouseMode()
+		// In ghostty-driven mode, the client VT doesn't track modes — use daemon's info
+		if focusedWindow != nil && focusedWindow.GhosttyDrivenRendering {
+			hasMouseMode = focusedWindow.DiffHasMouseMode
+		}
+		if hasMouseMode {
 			mouse := msg.Mouse()
 			// Convert to terminal-relative coordinates (0-based)
 			termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)

@@ -669,22 +669,40 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 	case "-":
 		// Split focused window horizontally (top/bottom)
 		if o.AutoTiling {
-			o.SplitFocusedHorizontal()
-			o.ShowNotification("Split Horizontal", "info", config.NotificationDuration)
+			if o.UseScrollingLayout {
+				// In scrolling mode: stack window into current column
+				o.ScrollingConsumeWindow()
+				o.ShowNotification("Stacked into Column", "info", config.NotificationDuration)
+			} else {
+				o.SplitFocusedHorizontal()
+				o.ShowNotification("Split Horizontal", "info", config.NotificationDuration)
+			}
 		}
 		return o, nil
 	case "|", "\\":
 		// Split focused window vertically (left/right)
 		if o.AutoTiling {
-			o.SplitFocusedVertical()
-			o.ShowNotification("Split Vertical", "info", config.NotificationDuration)
+			if o.UseScrollingLayout {
+				// In scrolling mode: new window creates a new column (default behavior)
+				o.AddWindow("")
+				o.ShowNotification("New Column", "info", config.NotificationDuration)
+			} else {
+				o.SplitFocusedVertical()
+				o.ShowNotification("Split Vertical", "info", config.NotificationDuration)
+			}
 		}
 		return o, nil
 	case "R":
 		// Rotate split direction at focused window
 		if o.AutoTiling {
-			o.RotateFocusedSplit()
-			o.ShowNotification("Split Rotated", "info", config.NotificationDuration)
+			if o.UseScrollingLayout {
+				// In scrolling mode: expel stacked window into its own column
+				o.ScrollingExpelWindow()
+				o.ShowNotification("Expelled from Column", "info", config.NotificationDuration)
+			} else {
+				o.RotateFocusedSplit()
+				o.ShowNotification("Split Rotated", "info", config.NotificationDuration)
+			}
 		}
 		return o, nil
 	case "=":

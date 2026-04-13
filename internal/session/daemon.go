@@ -262,37 +262,35 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		_ = conn.Close()
 	}()
 
-	lastHeartbeat := time.Now()
-	for {
+	// Close connection when daemon shuts down or client disconnects —
+	// this interrupts the blocking read below with zero polling latency.
+	go func() {
 		select {
 		case <-d.ctx.Done():
-			return
 		case <-cs.done:
-			return
-		default:
 		}
+		_ = conn.Close()
+	}()
 
-		_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-
+	for {
 		msg, codecType, err := ReadMessageWithCodec(conn)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
 			}
+			// Connection closed by shutdown goroutine or network error
 			var netErr net.Error
 			if errors.As(err, &netErr) && netErr.Timeout() {
-				// Keep-alive check
-				if time.Since(lastHeartbeat) > 2*time.Second {
-					lastHeartbeat = time.Now()
-				}
 				continue
 			}
-			LogError("Read error from %s: %v", clientID, err)
+			// Don't log if context is done (clean shutdown)
+			if d.ctx.Err() == nil {
+				LogError("Read error from %s: %v", clientID, err)
+			}
 			return
 		}
 
-		// Update codec if message came with a different one (shouldn't happen after handshake)
-		_ = codecType // Codec is negotiated at Hello, messages should use that codec
+		_ = codecType
 
 		cs.lastActive = time.Now()
 
@@ -1003,6 +1001,12 @@ func (d *Daemon) streamGhosttyDiffs(cs *connState, pty *PTY) {
 			}
 
 			diff := ghosttyDiffToScreenDiff(gDiff)
+
+			// Include mouse mode from ultraviolet emulator so clients
+			// know whether to forward scroll/click events to the PTY.
+			pty.terminalMu.RLock()
+			diff.HasMouseMode = pty.terminal.HasMouseMode()
+			pty.terminalMu.RUnlock()
 
 			diffCount++
 			if diffCount <= 3 || diffCount%100 == 0 {

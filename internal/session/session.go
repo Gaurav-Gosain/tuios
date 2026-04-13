@@ -99,6 +99,8 @@ type SessionState struct {
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`
 	TilingScheme    int                        `json:"tiling_scheme,omitempty"` // Default auto-insertion scheme
+	// Layout mode: "bsp" (default), "scrolling" (niri), "master-stack"
+	LayoutMode string `json:"layout_mode,omitempty"`
 }
 
 // PTY represents a daemon-managed pseudo-terminal.

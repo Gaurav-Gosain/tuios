@@ -22,6 +22,7 @@ type ScreenDiff struct {
 	CursorHidden  bool
 	CursorStyle   vt.CursorStyle
 	IsAltScreen   bool
+	HasMouseMode  bool // True if PTY application has mouse tracking enabled
 	Title         string
 	Width, Height int
 }

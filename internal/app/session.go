@@ -13,6 +13,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
+// containsAPC checks if data contains an APC sequence (ESC _ ... ST).
+// Used to detect kitty graphics data that must be forwarded to the VT even
+// when ghostty-driven rendering skips regular cell content.
+func containsAPC(data []byte) bool {
+	return bytes.Contains(data, []byte("\x1b_"))
+}
+
 // passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
 // and writes them directly to stdout to pass through to the parent terminal.
 // The VT emulator absorbs these sequences, so we need to re-emit them.
@@ -149,6 +156,15 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	}
 	state.NextBSPWindowID = m.NextBSPWindowID
 	state.TilingScheme = int(m.TilingScheme)
+
+	// Save layout mode
+	if m.UseScrollingLayout {
+		state.LayoutMode = "scrolling"
+	} else if m.UseBSPLayout {
+		state.LayoutMode = "bsp"
+	} else {
+		state.LayoutMode = "master-stack"
+	}
 
 	return state
 }
@@ -440,6 +456,21 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 
 	// Sync mode from other client
 	m.Mode = Mode(state.Mode)
+
+	// Restore layout mode
+	switch state.LayoutMode {
+	case "scrolling":
+		if !m.UseScrollingLayout {
+			m.UseScrollingLayout = true
+			m.UseBSPLayout = false
+		}
+	case "bsp":
+		m.UseScrollingLayout = false
+		m.UseBSPLayout = true
+	case "master-stack":
+		m.UseScrollingLayout = false
+		m.UseBSPLayout = false
+	}
 
 	// If auto-tiling is enabled and the synced state has different dimensions,
 	// retile to fit our effective render size. This handles the case where
@@ -808,14 +839,19 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 
 	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", ptyID[:8], window.ID[:8])
 	err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
+		passThroughCursorStyle(data)
+
 		// When screen diffs are the primary renderer (ghostty path),
-		// skip feeding raw bytes to the VT. This eliminates the
-		// write/read race that causes flickering.
+		// skip feeding raw bytes to the VT for cell content — but
+		// still pass APC sequences through for kitty graphics passthrough.
 		if window.GhosttyDrivenRendering {
-			passThroughCursorStyle(data)
+			// Scan for APC (ESC _ ... ST) sequences and feed only those
+			// to the VT so the kitty passthrough handler fires.
+			if containsAPC(data) {
+				window.WriteOutputAsync(data)
+			}
 			return
 		}
-		passThroughCursorStyle(data)
 		window.WriteOutputAsync(data)
 	})
 	if err != nil {
@@ -830,6 +866,7 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 	// content — no raw bytes touch the client VT, eliminating flickering.
 	m.DaemonClient.SetScreenDiffHandler(ptyID, func(diff *session.ScreenDiff) {
 		window.GhosttyDrivenRendering = true
+		window.DiffHasMouseMode = diff.HasMouseMode
 		window.ApplyScreenDiff(
 			convertDiffCells(diff.Cells),
 			diff.CursorX, diff.CursorY,
