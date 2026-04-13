@@ -10,12 +10,15 @@ const Surface = @import("Surface.zig");
 const io = @import("io.zig");
 const vaxis_helper = @import("vaxis_helper.zig");
 const bsp = @import("bsp.zig");
+const key_string = @import("key_string.zig");
+const keybind_compiler = @import("keybind_compiler.zig");
+const keybind_matcher = @import("keybind_matcher.zig");
+const Action = @import("action.zig").Action;
 
 const log = std.log.scoped(.layout);
 
 // ---- Constants ----
 
-const prefix_timeout_ns: i128 = 2 * std.time.ns_per_s;
 const max_workspaces = 9;
 const status_bar_height = 1;
 const focused_border_color = vaxis.Color{ .rgb = .{ 0x48, 0x65, 0xf2 } }; // #4865f2
@@ -177,27 +180,130 @@ pub const Layout = struct {
 
     // Mode and prefix
     mode: Mode = .terminal,
-    prefix_active: bool = false,
-    prefix_time: i128 = 0,
     zoomed: bool = false,
     zoomed_id: ?u32 = null,
-    pending_split_dir: bsp.SplitDirection = .none, // for explicit split commands
+    pending_split_dir: bsp.SplitDirection = .none,
     show_help: bool = false,
+
+    // Keybind system
+    trie: keybind_compiler.Trie = undefined,
+    matcher: keybind_matcher.Matcher = undefined,
+    trie_initialized: bool = false,
 
     pub const InitResult = union(enum) {
         ok: Layout,
         err: struct { err: anyerror, lua_msg: ?[:0]const u8 },
     };
 
+    // Default keybinds: leader is <C-b>
+    const default_bindings = [_]keybind_compiler.Keybind{
+        // Splits
+        .{ .key_string = "<leader><S-Backslash>", .action = .split_vertical }, // Ctrl+B, |
+        .{ .key_string = "<leader>-", .action = .split_horizontal },
+        // Focus
+        .{ .key_string = "<leader>h", .action = .focus_left },
+        .{ .key_string = "<leader>j", .action = .focus_down },
+        .{ .key_string = "<leader>k", .action = .focus_up },
+        .{ .key_string = "<leader>l", .action = .focus_right },
+        // Window ops
+        .{ .key_string = "<leader>c", .action = .new_window },
+        .{ .key_string = "<leader>x", .action = .close_pane },
+        .{ .key_string = "<leader>z", .action = .toggle_zoom },
+        .{ .key_string = "<leader>n", .action = .cycle_next },
+        .{ .key_string = "<leader><Tab>", .action = .cycle_next },
+        .{ .key_string = "<leader>p", .action = .cycle_prev },
+        // Resize (Shift+hjkl in prefix)
+        .{ .key_string = "<leader><S-h>", .action = .resize_left },
+        .{ .key_string = "<leader><S-j>", .action = .resize_down },
+        .{ .key_string = "<leader><S-k>", .action = .resize_up },
+        .{ .key_string = "<leader><S-l>", .action = .resize_right },
+        .{ .key_string = "<leader><Left>", .action = .resize_left },
+        .{ .key_string = "<leader><Right>", .action = .resize_right },
+        .{ .key_string = "<leader><Up>", .action = .resize_up },
+        .{ .key_string = "<leader><Down>", .action = .resize_down },
+        // Workspace switch
+        .{ .key_string = "<leader>1", .action = .workspace_1 },
+        .{ .key_string = "<leader>2", .action = .workspace_2 },
+        .{ .key_string = "<leader>3", .action = .workspace_3 },
+        .{ .key_string = "<leader>4", .action = .workspace_4 },
+        .{ .key_string = "<leader>5", .action = .workspace_5 },
+        .{ .key_string = "<leader>6", .action = .workspace_6 },
+        .{ .key_string = "<leader>7", .action = .workspace_7 },
+        .{ .key_string = "<leader>8", .action = .workspace_8 },
+        .{ .key_string = "<leader>9", .action = .workspace_9 },
+        // Workspace switch (Alt, no prefix)
+        .{ .key_string = "<A-1>", .action = .workspace_1 },
+        .{ .key_string = "<A-2>", .action = .workspace_2 },
+        .{ .key_string = "<A-3>", .action = .workspace_3 },
+        .{ .key_string = "<A-4>", .action = .workspace_4 },
+        .{ .key_string = "<A-5>", .action = .workspace_5 },
+        .{ .key_string = "<A-6>", .action = .workspace_6 },
+        .{ .key_string = "<A-7>", .action = .workspace_7 },
+        .{ .key_string = "<A-8>", .action = .workspace_8 },
+        .{ .key_string = "<A-9>", .action = .workspace_9 },
+        // Move to workspace (Shift+number in prefix)
+        .{ .key_string = "<leader><S-1>", .action = .move_to_workspace_1 },
+        .{ .key_string = "<leader><S-2>", .action = .move_to_workspace_2 },
+        .{ .key_string = "<leader><S-3>", .action = .move_to_workspace_3 },
+        .{ .key_string = "<leader><S-4>", .action = .move_to_workspace_4 },
+        .{ .key_string = "<leader><S-5>", .action = .move_to_workspace_5 },
+        .{ .key_string = "<leader><S-6>", .action = .move_to_workspace_6 },
+        .{ .key_string = "<leader><S-7>", .action = .move_to_workspace_7 },
+        .{ .key_string = "<leader><S-8>", .action = .move_to_workspace_8 },
+        .{ .key_string = "<leader><S-9>", .action = .move_to_workspace_9 },
+        // Mode
+        .{ .key_string = "<leader>w", .action = .enter_wm_mode },
+        // Split manipulation
+        .{ .key_string = "<leader>r", .action = .rotate_split },
+        .{ .key_string = "<leader>=", .action = .equalize_splits },
+        .{ .key_string = "<leader>{", .action = .swap_left },
+        .{ .key_string = "<leader>}", .action = .swap_right },
+        // Floating
+        .{ .key_string = "<leader>f", .action = .floating_toggle },
+        // Session/misc
+        .{ .key_string = "<leader>d", .action = .detach_session },
+        .{ .key_string = "<leader>q", .action = .quit },
+        .{ .key_string = "<leader>?", .action = .help_toggle },
+        .{ .key_string = "<leader><Space>", .action = .toggle_zoom },
+        .{ .key_string = "<leader>[", .action = .enter_copy_mode },
+    };
+
     pub fn init(allocator: std.mem.Allocator) InitResult {
+        // Compile default keybinds
+        var compiler = keybind_compiler.Compiler.init(allocator);
+        defer compiler.deinit();
+
+        compiler.setLeader("<C-b>") catch |err| {
+            return .{ .err = .{ .err = err, .lua_msg = null } };
+        };
+
+        const trie = compiler.compile(&default_bindings) catch |err| {
+            log.err("Failed to compile keybinds: {}", .{err});
+            return .{ .err = .{ .err = err, .lua_msg = null } };
+        };
+
         return .{ .ok = .{
             .allocator = allocator,
             .ptys = std.AutoArrayHashMap(u32, Pty).init(allocator),
+            .trie = trie,
+            .matcher = undefined, // must call initMatcher() after Layout is in final location
+            .trie_initialized = true,
         } };
+    }
+
+    /// Must be called after Layout is in its final memory location (after init returns).
+    /// Sets up the matcher to point at the trie.
+    pub fn initMatcher(self: *Layout) void {
+        if (self.trie_initialized) {
+            self.matcher = keybind_matcher.Matcher.init(&self.trie);
+        }
     }
 
     pub fn deinit(self: *Layout) void {
         self.ptys.deinit();
+        if (self.trie_initialized) {
+            self.trie.deinit();
+        }
     }
 
     // ---- BSP helpers ----
@@ -441,10 +547,72 @@ pub const Layout = struct {
         }
     }
 
+    // ---- Vaxis Key → key_string.Key conversion ----
+
+    fn vaxisToKeyString(vkey: vaxis.Key) key_string.Key {
+        return .{
+            .key = vaxisCodepointToName(vkey.codepoint),
+            .ctrl = vkey.mods.ctrl,
+            .alt = vkey.mods.alt,
+            .shift = vkey.mods.shift,
+            .super = vkey.mods.super,
+        };
+    }
+
+    fn vaxisCodepointToName(cp: u21) []const u8 {
+        return switch (cp) {
+            vaxis.Key.escape => "Escape",
+            vaxis.Key.enter => "Enter",
+            vaxis.Key.tab => "Tab",
+            vaxis.Key.backspace => "Backspace",
+            vaxis.Key.space => "Space",
+            vaxis.Key.delete => "Delete",
+            vaxis.Key.insert => "Insert",
+            vaxis.Key.left => "Left",
+            vaxis.Key.right => "Right",
+            vaxis.Key.up => "Up",
+            vaxis.Key.down => "Down",
+            vaxis.Key.home => "Home",
+            vaxis.Key.end => "End",
+            vaxis.Key.page_up => "PageUp",
+            vaxis.Key.page_down => "PageDown",
+            vaxis.Key.f1 => "F1",
+            vaxis.Key.f2 => "F2",
+            vaxis.Key.f3 => "F3",
+            vaxis.Key.f4 => "F4",
+            vaxis.Key.f5 => "F5",
+            vaxis.Key.f6 => "F6",
+            vaxis.Key.f7 => "F7",
+            vaxis.Key.f8 => "F8",
+            vaxis.Key.f9 => "F9",
+            vaxis.Key.f10 => "F10",
+            vaxis.Key.f11 => "F11",
+            vaxis.Key.f12 => "F12",
+            '\\' => "Backslash",
+            else => blk: {
+                // For printable ASCII, use the character itself (stored as static strings)
+                if (cp >= 0x21 and cp <= 0x7E) {
+                    const table = comptime init_ascii_table();
+                    break :blk table[cp - 0x21];
+                }
+                break :blk "?";
+            },
+        };
+    }
+
+    fn init_ascii_table() [94][]const u8 {
+        var table: [94][]const u8 = undefined;
+        for (0..94) |i| {
+            const c: u8 = @intCast(i + 0x21);
+            table[i] = &[_]u8{c};
+        }
+        return table;
+    }
+
     // ---- Key handling ----
 
     fn handleKeyPress(self: *Layout, key: vaxis.Key, release: bool) !void {
-        // Never intercept releases for prefix
+        // Never intercept releases
         if (release) {
             return self.forwardKeyToFocused(key, true);
         }
@@ -456,188 +624,114 @@ pub const Layout = struct {
                 self.requestRedraw();
                 return;
             }
-            // Ignore all other keys while help is shown
             return;
         }
 
-        // Check prefix timeout
-        if (self.prefix_active) {
-            const now = std.time.nanoTimestamp();
-            if (now - self.prefix_time > prefix_timeout_ns) {
-                self.prefix_active = false;
-            }
-        }
-
-        // Ctrl+B activates prefix in any mode
-        if (!self.prefix_active) {
-            if (key.codepoint == 'b' and key.mods.ctrl and !key.mods.alt and !key.mods.shift and !key.mods.super) {
-                self.prefix_active = true;
-                self.prefix_time = std.time.nanoTimestamp();
-                self.requestRedraw(); // show prefix indicator
-                return;
-            }
-        }
-
-        // Handle prefix commands
-        if (self.prefix_active) {
-            self.prefix_active = false;
-            self.handlePrefixKey(key);
-            self.requestRedraw();
-            return;
-        }
-
-        // Alt+1-9 switches workspace directly (no prefix needed)
-        if (key.mods.alt and !key.mods.ctrl and !key.mods.super) {
-            if (key.codepoint >= '1' and key.codepoint <= '9') {
-                const ws: u8 = @intCast(key.codepoint - '1');
-                self.switchWorkspace(ws);
-                return;
-            }
-        }
-
-        // In window management mode, hjkl moves focus without prefix
+        // In WM mode, handle direct keys (no prefix needed)
         if (self.mode == .window_management) {
             if (self.handleWMKey(key)) return;
         }
 
-        // Forward to focused PTY
-        return self.forwardKeyToFocused(key, false);
-    }
+        // Feed key through trie matcher
+        const ks = vaxisToKeyString(key);
+        const result = self.matcher.handleKey(ks);
 
-    fn handlePrefixKey(self: *Layout, key: vaxis.Key) void {
-        const cp = key.codepoint;
-        const shift = key.mods.shift;
-
-        // Split commands
-        if (cp == '|' or (cp == '\\' and shift)) {
-            self.splitFocused(.vertical);
-            return;
+        switch (result) {
+            .action => |act| {
+                self.dispatchAction(act.action);
+                self.requestRedraw();
+            },
+            .pending => {
+                // Matcher is waiting for more keys (e.g., after Ctrl+B)
+                self.requestRedraw();
+            },
+            .none => {
+                // No binding matched — forward to focused PTY
+                return self.forwardKeyToFocused(key, false);
+            },
         }
-        if (cp == '-') {
-            self.splitFocused(.horizontal);
-            return;
-        }
-
-        // Focus movement
-        if (cp == 'h') { self.moveFocus(.left); return; }
-        if (cp == 'j') { self.moveFocus(.down); return; }
-        if (cp == 'k') { self.moveFocus(.up); return; }
-        if (cp == 'l') { self.moveFocus(.right); return; }
-
-        // Window operations
-        if (cp == 'c') { self.spawnWindow(); return; }
-        if (cp == 'x') { self.closeFocused(); return; }
-        if (cp == 'z') { self.toggleZoom(); return; }
-        if (cp == 'n' or cp == '\t') { self.cycleFocus(true); return; }
-        if (cp == 'p') { self.cycleFocus(false); return; }
-
-        // Workspace switching (Ctrl+B, 1-9)
-        if (cp >= '1' and cp <= '9') {
-            const ws: u8 = @intCast(cp - '1');
-            if (shift) {
-                // Shift+1-9: move focused window to workspace
-                self.moveWindowToWorkspace(ws);
-            } else {
-                self.switchWorkspace(ws);
-            }
-            return;
-        }
-
-        // Mode switching
-        if (cp == 'w') {
-            self.mode = .window_management;
-            return;
-        }
-
-        // Swap with neighbor
-        if (cp == '{') { self.swapWithNeighbor(.left); return; }
-        if (cp == '}') { self.swapWithNeighbor(.right); return; }
-
-        // Toggle tiling (Ctrl+B, space)
-        if (cp == ' ') {
-            self.toggleZoom(); // zoom acts as a simple tiling toggle for now
-            return;
-        }
-
-        // Rotate split
-        if (cp == 'r') {
-            if (self.focused_id) |fid| {
-                self.currentTree().rotateSplit(fid);
-            }
-            return;
-        }
-
-        // Equalize
-        if (cp == '=') {
-            self.currentTree().equalizeRatios();
-            return;
-        }
-
-        // Detach
-        if (cp == 'd') {
-            if (self.detach_callback) |cb| {
-                cb(self.detach_ctx, "default") catch {};
-            }
-            return;
-        }
-
-        // Quit
-        if (cp == 'q') {
-            if (self.exit_callback) |cb| cb(self.exit_ctx);
-            return;
-        }
-
-        // Resize focused pane (Ctrl+B, H/J/K/L with shift)
-        if (shift) {
-            if (cp == 'H') { self.resizeFocused(.left); return; }
-            if (cp == 'J') { self.resizeFocused(.down); return; }
-            if (cp == 'K') { self.resizeFocused(.up); return; }
-            if (cp == 'L') { self.resizeFocused(.right); return; }
-        }
-
-        // Arrow key resize (with or without shift in prefix)
-        if (cp == vaxis.Key.left) { self.resizeFocused(.left); return; }
-        if (cp == vaxis.Key.right) { self.resizeFocused(.right); return; }
-        if (cp == vaxis.Key.up) { self.resizeFocused(.up); return; }
-        if (cp == vaxis.Key.down) { self.resizeFocused(.down); return; }
-
-        // Help
-        if (cp == '?') {
-            self.show_help = !self.show_help;
-            return;
-        }
-
-        // Escape cancels prefix (already deactivated above)
-        if (cp == vaxis.Key.escape) return;
     }
 
     fn handleWMKey(self: *Layout, key: vaxis.Key) bool {
         const cp = key.codepoint;
+        if (key.mods.ctrl or key.mods.alt or key.mods.super) return false;
 
-        // hjkl for focus
-        if (cp == 'h') { self.moveFocus(.left); self.requestRedraw(); return true; }
-        if (cp == 'j') { self.moveFocus(.down); self.requestRedraw(); return true; }
-        if (cp == 'k') { self.moveFocus(.up); self.requestRedraw(); return true; }
-        if (cp == 'l') { self.moveFocus(.right); self.requestRedraw(); return true; }
+        const acted = true;
+        if (cp == 'h') { self.moveFocus(.left); }
+        else if (cp == 'j') { self.moveFocus(.down); }
+        else if (cp == 'k') { self.moveFocus(.up); }
+        else if (cp == 'l') { self.moveFocus(.right); }
+        else if (cp == '|') { self.splitFocused(.vertical); }
+        else if (cp == '-') { self.splitFocused(.horizontal); }
+        else if (cp == 'x') { self.closeFocused(); }
+        else if (cp == 'z') { self.toggleZoom(); }
+        else if (cp == vaxis.Key.escape or cp == 'i') { self.mode = .terminal; }
+        else return false;
 
-        // | and - for splits
-        if (cp == '|') { self.splitFocused(.vertical); self.requestRedraw(); return true; }
-        if (cp == '-') { self.splitFocused(.horizontal); self.requestRedraw(); return true; }
+        if (acted) self.requestRedraw();
+        return true;
+    }
 
-        // x to close
-        if (cp == 'x') { self.closeFocused(); self.requestRedraw(); return true; }
+    // ---- Action dispatch ----
 
-        // z to zoom
-        if (cp == 'z') { self.toggleZoom(); self.requestRedraw(); return true; }
-
-        // Escape or i returns to terminal mode
-        if (cp == vaxis.Key.escape or cp == 'i') {
-            self.mode = .terminal;
-            self.requestRedraw();
-            return true;
+    fn dispatchAction(self: *Layout, action: Action) void {
+        switch (action) {
+            .split_vertical => self.splitFocused(.vertical),
+            .split_horizontal => self.splitFocused(.horizontal),
+            .split_auto => self.splitFocused(.none),
+            .focus_left => self.moveFocus(.left),
+            .focus_right => self.moveFocus(.right),
+            .focus_up => self.moveFocus(.up),
+            .focus_down => self.moveFocus(.down),
+            .cycle_next => self.cycleFocus(true),
+            .cycle_prev => self.cycleFocus(false),
+            .new_window => self.spawnWindow(),
+            .close_pane => self.closeFocused(),
+            .toggle_zoom => self.toggleZoom(),
+            .resize_left => self.resizeFocused(.left),
+            .resize_right => self.resizeFocused(.right),
+            .resize_up => self.resizeFocused(.up),
+            .resize_down => self.resizeFocused(.down),
+            .rotate_split => {
+                if (self.focused_id) |fid| self.currentTree().rotateSplit(fid);
+            },
+            .equalize_splits => self.currentTree().equalizeRatios(),
+            .swap_left => self.swapWithNeighbor(.left),
+            .swap_right => self.swapWithNeighbor(.right),
+            .workspace_1 => self.switchWorkspace(0),
+            .workspace_2 => self.switchWorkspace(1),
+            .workspace_3 => self.switchWorkspace(2),
+            .workspace_4 => self.switchWorkspace(3),
+            .workspace_5 => self.switchWorkspace(4),
+            .workspace_6 => self.switchWorkspace(5),
+            .workspace_7 => self.switchWorkspace(6),
+            .workspace_8 => self.switchWorkspace(7),
+            .workspace_9 => self.switchWorkspace(8),
+            .move_to_workspace_1 => self.moveWindowToWorkspace(0),
+            .move_to_workspace_2 => self.moveWindowToWorkspace(1),
+            .move_to_workspace_3 => self.moveWindowToWorkspace(2),
+            .move_to_workspace_4 => self.moveWindowToWorkspace(3),
+            .move_to_workspace_5 => self.moveWindowToWorkspace(4),
+            .move_to_workspace_6 => self.moveWindowToWorkspace(5),
+            .move_to_workspace_7 => self.moveWindowToWorkspace(6),
+            .move_to_workspace_8 => self.moveWindowToWorkspace(7),
+            .move_to_workspace_9 => self.moveWindowToWorkspace(8),
+            .enter_wm_mode => { self.mode = .window_management; },
+            .enter_terminal_mode => { self.mode = .terminal; },
+            .enter_copy_mode => {}, // TODO: Phase D
+            .floating_toggle => {}, // TODO: Phase C
+            .command_palette => {}, // TODO: Phase D
+            .session_switcher => {}, // TODO: Phase D
+            .help_toggle => { self.show_help = !self.show_help; },
+            .detach_session => {
+                if (self.detach_callback) |cb| cb(self.detach_ctx, "default") catch {};
+            },
+            .rename_session => {}, // TODO
+            .switch_session => {}, // TODO
+            .quit => {
+                if (self.exit_callback) |cb| cb(self.exit_ctx);
+            },
         }
-
-        return false;
     }
 
     fn forwardKeyToFocused(self: *Layout, key: vaxis.Key, release: bool) !void {
@@ -1134,15 +1228,15 @@ pub const Layout = struct {
 
         // Mode indicator
         const mode_text = switch (self.mode) {
-            .terminal => if (self.prefix_active) " PREFIX " else " T ",
+            .terminal => if (self.matcher.isPending()) " PREFIX " else " T ",
             .window_management => " WM ",
         };
         const mode_fg = switch (self.mode) {
-            .terminal => if (self.prefix_active) vaxis.Color{ .rgb = .{ 0, 0, 0 } } else vaxis.Color{ .rgb = .{ 0xbb, 0xbb, 0xbb } },
+            .terminal => if (self.matcher.isPending()) vaxis.Color{ .rgb = .{ 0, 0, 0 } } else vaxis.Color{ .rgb = .{ 0xbb, 0xbb, 0xbb } },
             .window_management => vaxis.Color{ .rgb = .{ 0, 0, 0 } },
         };
         const mode_bg = switch (self.mode) {
-            .terminal => if (self.prefix_active) prefix_indicator_color else status_bg_color,
+            .terminal => if (self.matcher.isPending()) prefix_indicator_color else status_bg_color,
             .window_management => focused_border_color,
         };
 
