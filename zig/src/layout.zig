@@ -20,6 +20,32 @@ const log = std.log.scoped(.layout);
 // ---- Constants ----
 
 const max_workspaces = 9;
+const max_floating = 16;
+const min_window_width = 10;
+const min_window_height = 3;
+
+pub const FloatingWindow = struct {
+    id: u32,
+    x: u16,
+    y: u16,
+    w: u16,
+    h: u16,
+};
+
+pub const DragState = struct {
+    window_id: u32,
+    mode: DragMode,
+    start_x: u16,
+    start_y: u16,
+    orig_x: u16,
+    orig_y: u16,
+    orig_w: u16,
+    orig_h: u16,
+    corner: ResizeCorner = .bottom_right,
+
+    pub const DragMode = enum { move, resize };
+    pub const ResizeCorner = enum { top_left, top_right, bottom_left, bottom_right };
+};
 const status_bar_height = 1;
 const focused_border_color = vaxis.Color{ .rgb = .{ 0x48, 0x65, 0xf2 } }; // #4865f2
 const unfocused_border_color = vaxis.Color{ .rgb = .{ 0x55, 0x55, 0x55 } }; // #555555
@@ -184,6 +210,13 @@ pub const Layout = struct {
     zoomed_id: ?u32 = null,
     pending_split_dir: bsp.SplitDirection = .none,
     show_help: bool = false,
+
+    // Floating windows
+    floating: [max_floating]FloatingWindow = undefined,
+    floating_count: u8 = 0,
+
+    // Mouse drag state
+    drag: ?DragState = null,
 
     // Keybind system
     trie: keybind_compiler.Trie = undefined,
@@ -447,6 +480,9 @@ pub const Layout = struct {
                     }
                 }
                 self.removeWindowWorkspace(info.id);
+
+                // Remove from floating list if floating
+                self.removeFloating(info.id);
 
                 _ = self.ptys.orderedRemove(info.id);
 
@@ -719,7 +755,7 @@ pub const Layout = struct {
             .enter_wm_mode => { self.mode = .window_management; },
             .enter_terminal_mode => { self.mode = .terminal; },
             .enter_copy_mode => {}, // TODO: Phase D
-            .floating_toggle => {}, // TODO: Phase C
+            .floating_toggle => self.toggleFloating(),
             .command_palette => {}, // TODO: Phase D
             .session_switcher => {}, // TODO: Phase D
             .help_toggle => { self.show_help = !self.show_help; },
@@ -791,6 +827,83 @@ pub const Layout = struct {
             self.zoomed_id = self.focused_id;
         }
         self.requestRedraw();
+    }
+
+    fn toggleFloating(self: *Layout) void {
+        const fid = self.focused_id orelse return;
+
+        // Check if already floating
+        for (0..self.floating_count) |i| {
+            if (self.floating[i].id == fid) {
+                // Un-float: remove from floating list, add back to BSP
+                const fw = self.floating[i];
+                _ = fw;
+                // Shift remaining floating windows
+                var j = i;
+                while (j + 1 < self.floating_count) : (j += 1) {
+                    self.floating[j] = self.floating[j + 1];
+                }
+                self.floating_count -= 1;
+
+                // Re-insert into BSP tree
+                const tree = self.currentTree();
+                var ids: [64]u32 = undefined;
+                const count = tree.getAllWindowIDs(&ids);
+                const focused = if (count > 0) ids[0] else fid;
+                tree.insertWindow(fid, focused, .none, self.tileBounds());
+                self.requestRedraw();
+                return;
+            }
+        }
+
+        // Float: remove from BSP, add to floating list
+        if (self.floating_count >= max_floating) return;
+
+        self.currentTree().removeWindow(fid);
+
+        // Center on screen at 60% size
+        const bounds = self.tileBounds();
+        const fw_w = @max(bounds.w * 6 / 10, min_window_width);
+        const fw_h = @max(bounds.h * 6 / 10, min_window_height);
+        const fw_x = (bounds.w -| fw_w) / 2;
+        const fw_y = (bounds.h -| fw_h) / 2;
+
+        self.floating[self.floating_count] = .{
+            .id = fid,
+            .x = fw_x,
+            .y = fw_y,
+            .w = fw_w,
+            .h = fw_h,
+        };
+        self.floating_count += 1;
+        self.requestRedraw();
+    }
+
+    fn removeFloating(self: *Layout, wid: u32) void {
+        for (0..self.floating_count) |i| {
+            if (self.floating[i].id == wid) {
+                var j = i;
+                while (j + 1 < self.floating_count) : (j += 1) {
+                    self.floating[j] = self.floating[j + 1];
+                }
+                self.floating_count -= 1;
+                return;
+            }
+        }
+    }
+
+    fn isFloating(self: *const Layout, wid: u32) bool {
+        for (0..self.floating_count) |i| {
+            if (self.floating[i].id == wid) return true;
+        }
+        return false;
+    }
+
+    fn getFloating(self: *Layout, wid: u32) ?*FloatingWindow {
+        for (0..self.floating_count) |i| {
+            if (self.floating[i].id == wid) return &self.floating[i];
+        }
+        return null;
     }
 
     fn moveFocus(self: *Layout, dir: bsp.Direction) void {
@@ -932,9 +1045,143 @@ pub const Layout = struct {
     }
 
     fn handleMouse(self: *Layout, mouse: vaxis.Mouse) !void {
+        const mx: u16 = @intCast(@max(0, mouse.col));
+        const my: u16 = @intCast(@max(0, mouse.row));
+
+        switch (mouse.type) {
+            .press => {
+                // Check if click is on a floating window
+                if (self.findFloatingAt(mx, my)) |fw| {
+                    // Focus the floating window
+                    self.focused_id = fw.id;
+                    self.updateFocusState();
+
+                    if (mouse.button == .right) {
+                        // Right-click: start resize
+                        const corner = self.detectCorner(&fw, mx, my);
+                        self.drag = .{
+                            .window_id = fw.id,
+                            .mode = .resize,
+                            .start_x = mx,
+                            .start_y = my,
+                            .orig_x = fw.x,
+                            .orig_y = fw.y,
+                            .orig_w = fw.w,
+                            .orig_h = fw.h,
+                            .corner = corner,
+                        };
+                    } else {
+                        // Left-click: start move
+                        self.drag = .{
+                            .window_id = fw.id,
+                            .mode = .move,
+                            .start_x = mx,
+                            .start_y = my,
+                            .orig_x = fw.x,
+                            .orig_y = fw.y,
+                            .orig_w = fw.w,
+                            .orig_h = fw.h,
+                        };
+                    }
+                    self.requestRedraw();
+                }
+            },
+            .drag => {
+                if (self.drag) |d| {
+                    const fw = self.getFloating(d.window_id) orelse return;
+                    const bounds = self.tileBounds();
+
+                    switch (d.mode) {
+                        .move => {
+                            const dx: i32 = @as(i32, mx) - @as(i32, d.start_x);
+                            const dy: i32 = @as(i32, my) - @as(i32, d.start_y);
+                            const new_x = @as(i32, d.orig_x) + dx;
+                            const new_y = @as(i32, d.orig_y) + dy;
+                            fw.x = @intCast(std.math.clamp(new_x, 0, @as(i32, bounds.w) - @as(i32, min_window_width)));
+                            fw.y = @intCast(std.math.clamp(new_y, 0, @as(i32, bounds.h) - @as(i32, min_window_height)));
+                        },
+                        .resize => {
+                            const dx: i32 = @as(i32, mx) - @as(i32, d.start_x);
+                            const dy: i32 = @as(i32, my) - @as(i32, d.start_y);
+                            self.applyResize(fw, d, dx, dy, bounds);
+                        },
+                    }
+                    self.requestRedraw();
+                }
+            },
+            .release => {
+                self.drag = null;
+            },
+            else => {},
+        }
+    }
+
+    fn findFloatingAt(self: *const Layout, mx: u16, my: u16) ?FloatingWindow {
+        // Search in reverse order (topmost first)
+        var i: i32 = @as(i32, self.floating_count) - 1;
+        while (i >= 0) : (i -= 1) {
+            const fw = self.floating[@intCast(i)];
+            if (mx >= fw.x and mx < fw.x + fw.w and my >= fw.y and my < fw.y + fw.h) {
+                return fw;
+            }
+        }
+        return null;
+    }
+
+    fn detectCorner(self: *const Layout, fw: *const FloatingWindow, mx: u16, my: u16) DragState.ResizeCorner {
         _ = self;
-        _ = mouse;
-        // Mouse is handled via the .mouse event (hit-tested by client.zig)
+        const mid_x = fw.x + fw.w / 2;
+        const mid_y = fw.y + fw.h / 2;
+        if (mx < mid_x) {
+            return if (my < mid_y) .top_left else .bottom_left;
+        } else {
+            return if (my < mid_y) .top_right else .bottom_right;
+        }
+    }
+
+    fn applyResize(self: *const Layout, fw: *FloatingWindow, d: DragState, dx: i32, dy: i32, bounds: bsp.Rect) void {
+        _ = self;
+        switch (d.corner) {
+            .bottom_right => {
+                fw.w = @intCast(@max(min_window_width, @as(i32, d.orig_w) + dx));
+                fw.h = @intCast(@max(min_window_height, @as(i32, d.orig_h) + dy));
+            },
+            .bottom_left => {
+                const new_x = @as(i32, d.orig_x) + dx;
+                const new_w = @as(i32, d.orig_w) - dx;
+                if (new_w >= min_window_width and new_x >= 0) {
+                    fw.x = @intCast(new_x);
+                    fw.w = @intCast(new_w);
+                }
+                fw.h = @intCast(@max(min_window_height, @as(i32, d.orig_h) + dy));
+            },
+            .top_right => {
+                fw.w = @intCast(@max(min_window_width, @as(i32, d.orig_w) + dx));
+                const new_y = @as(i32, d.orig_y) + dy;
+                const new_h = @as(i32, d.orig_h) - dy;
+                if (new_h >= min_window_height and new_y >= 0) {
+                    fw.y = @intCast(new_y);
+                    fw.h = @intCast(new_h);
+                }
+            },
+            .top_left => {
+                const new_x = @as(i32, d.orig_x) + dx;
+                const new_w = @as(i32, d.orig_w) - dx;
+                if (new_w >= min_window_width and new_x >= 0) {
+                    fw.x = @intCast(new_x);
+                    fw.w = @intCast(new_w);
+                }
+                const new_y = @as(i32, d.orig_y) + dy;
+                const new_h = @as(i32, d.orig_h) - dy;
+                if (new_h >= min_window_height and new_y >= 0) {
+                    fw.y = @intCast(new_y);
+                    fw.h = @intCast(new_h);
+                }
+            },
+        }
+        // Clamp to viewport
+        if (fw.x + fw.w > bounds.w) fw.w = bounds.w -| fw.x;
+        if (fw.y + fw.h > bounds.h) fw.h = bounds.h -| fw.y;
     }
 
     fn emptyWidget(self: *Layout) !widget.Widget {
@@ -970,18 +1217,45 @@ pub const Layout = struct {
             } },
         };
 
-        // Overlay help if shown
-        if (self.show_help) {
-            const help = try self.buildHelpOverlay();
-            const stack_children = try alloc.alloc(widget.Widget, 2);
-            stack_children[0] = base;
-            stack_children[1] = help;
-            return widget.Widget{
-                .kind = .{ .stack = .{ .children = stack_children } },
-            };
+        // Determine number of overlay layers
+        var overlay_count: usize = 0;
+        if (self.floating_count > 0) overlay_count += self.floating_count;
+        if (self.show_help) overlay_count += 1;
+
+        if (overlay_count == 0) return base;
+
+        // Build stack: base + floating windows + optional help
+        const stack_children = try alloc.alloc(widget.Widget, 1 + overlay_count);
+        stack_children[0] = base;
+
+        var si: usize = 1;
+
+        // Add floating windows (render order: unfocused first, focused last)
+        for (0..self.floating_count) |i| {
+            const fw = self.floating[i];
+            if (self.focused_id != fw.id) {
+                stack_children[si] = try self.buildFloatingWidget(fw);
+                si += 1;
+            }
+        }
+        // Focused floating window on top
+        for (0..self.floating_count) |i| {
+            const fw = self.floating[i];
+            if (self.focused_id == fw.id) {
+                stack_children[si] = try self.buildFloatingWidget(fw);
+                si += 1;
+            }
         }
 
-        return base;
+        if (self.show_help) {
+            stack_children[si] = try self.buildHelpOverlay();
+            si += 1;
+        }
+
+        // Trim if we allocated too much (shouldn't happen but safe)
+        return widget.Widget{
+            .kind = .{ .stack = .{ .children = stack_children[0..si] } },
+        };
     }
 
     fn buildTilingWidget(self: *Layout) !widget.Widget {
@@ -1110,6 +1384,29 @@ pub const Layout = struct {
                 .id = split_widget_id,
             };
         }
+    }
+
+    fn buildFloatingWidget(self: *Layout, fw: FloatingWindow) !widget.Widget {
+        const alloc = self.allocator;
+        const focused = self.focused_id == fw.id;
+
+        if (self.ptys.get(fw.id)) |pty| {
+            const bordered = try self.buildBorderedSurface(fw.id, pty.surface, focused);
+            const child = try alloc.create(widget.Widget);
+            child.* = bordered;
+            child.width = fw.w;
+            child.height = fw.h;
+
+            return widget.Widget{
+                .kind = .{ .positioned = .{
+                    .child = child,
+                    .x = fw.x,
+                    .y = fw.y,
+                    .anchor = .top_left,
+                } },
+            };
+        }
+        return self.emptyWidget();
     }
 
     fn buildBorderedSurface(self: *Layout, wid: u32, surface: *Surface, focused: bool) !widget.Widget {
