@@ -14,6 +14,7 @@ const key_string = @import("key_string.zig");
 const keybind_compiler = @import("keybind_compiler.zig");
 const keybind_matcher = @import("keybind_matcher.zig");
 const Action = @import("action.zig").Action;
+const theme_mod = @import("theme.zig");
 
 const log = std.log.scoped(.layout);
 
@@ -47,10 +48,6 @@ pub const DragState = struct {
     pub const ResizeCorner = enum { top_left, top_right, bottom_left, bottom_right };
 };
 const status_bar_height = 1;
-const focused_border_color = vaxis.Color{ .rgb = .{ 0x48, 0x65, 0xf2 } }; // #4865f2
-const unfocused_border_color = vaxis.Color{ .rgb = .{ 0x55, 0x55, 0x55 } }; // #555555
-const prefix_indicator_color = vaxis.Color{ .rgb = .{ 0xff, 0xa5, 0x00 } }; // orange
-const status_bg_color = vaxis.Color{ .rgb = .{ 0x1e, 0x1e, 0x2e } }; // dark bg
 
 // ---- Event types (replaces lua_event.zig) ----
 
@@ -222,6 +219,9 @@ pub const Layout = struct {
     trie: keybind_compiler.Trie = undefined,
     matcher: keybind_matcher.Matcher = undefined,
     trie_initialized: bool = false,
+
+    // Theme
+    theme: theme_mod.Theme = theme_mod.default_theme,
 
     pub const InitResult = union(enum) {
         ok: Layout,
@@ -1354,7 +1354,7 @@ pub const Layout = struct {
         children[1] = widget.Widget{
             .kind = .{ .separator = .{
                 .axis = if (is_vertical) .vertical else .horizontal,
-                .style = .{ .fg = unfocused_border_color },
+                .style = .{ .fg = self.theme.borderUnfocused() },
                 .border = .rounded,
             } },
         };
@@ -1421,7 +1421,7 @@ pub const Layout = struct {
             .focus = focused,
         };
 
-        const border_color = if (focused) focused_border_color else unfocused_border_color;
+        const border_color = if (focused) self.theme.borderFocused() else self.theme.borderUnfocused();
 
         return widget.Widget{
             .kind = .{ .box = .{
@@ -1479,9 +1479,9 @@ pub const Layout = struct {
                 .text = try alloc.dupe(u8, line),
                 .style = .{
                     .fg = if (line.len > 2 and std.mem.startsWith(u8, line, "  tuios"))
-                        focused_border_color
+                        self.theme.borderFocused()
                     else if (line.len > 2 and std.mem.startsWith(u8, line, "  Window"))
-                        focused_border_color
+                        self.theme.borderFocused()
                     else
                         .{ .rgb = .{ 0xcc, 0xcc, 0xcc } },
                     .bg = .{ .rgb = .{ 0x1e, 0x1e, 0x2e } },
@@ -1533,8 +1533,8 @@ pub const Layout = struct {
             .window_management => vaxis.Color{ .rgb = .{ 0, 0, 0 } },
         };
         const mode_bg = switch (self.mode) {
-            .terminal => if (self.matcher.isPending()) prefix_indicator_color else status_bg_color,
-            .window_management => focused_border_color,
+            .terminal => if (self.matcher.isPending()) self.theme.prefixIndicator() else self.theme.statusBg(),
+            .window_management => self.theme.borderFocused(),
         };
 
         try spans.append(alloc, .{
@@ -1547,7 +1547,7 @@ pub const Layout = struct {
         const ws_text = std.fmt.bufPrint(&ws_buf, " [{d}] ", .{self.active_workspace + 1}) catch " [?] ";
         try spans.append(alloc, .{
             .text = try alloc.dupe(u8, ws_text),
-            .style = .{ .fg = focused_border_color, .bg = status_bg_color },
+            .style = .{ .fg = self.theme.borderFocused(), .bg = self.theme.statusBg() },
         });
 
         // Window count
@@ -1556,7 +1556,7 @@ pub const Layout = struct {
         const wc_text = std.fmt.bufPrint(&wc_buf, " {d} window{s} ", .{ wcount, if (wcount != 1) "s" else "" }) catch " ? ";
         try spans.append(alloc, .{
             .text = try alloc.dupe(u8, wc_text),
-            .style = .{ .fg = .{ .rgb = .{ 0x88, 0x88, 0x88 } }, .bg = status_bg_color },
+            .style = .{ .fg = .{ .rgb = .{ 0x88, 0x88, 0x88 } }, .bg = self.theme.statusBg() },
         });
 
         // Zoom indicator
