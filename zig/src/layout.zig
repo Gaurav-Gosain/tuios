@@ -47,7 +47,7 @@ pub const DragState = struct {
     pub const DragMode = enum { move, resize };
     pub const ResizeCorner = enum { top_left, top_right, bottom_left, bottom_right };
 };
-const status_bar_height = 1;
+const status_bar_height = 2;
 
 // ---- Event types (replaces lua_event.zig) ----
 
@@ -1520,21 +1520,34 @@ pub const Layout = struct {
     fn buildStatusBar(self: *Layout) !widget.Widget {
         const alloc = self.allocator;
 
-        // Build status text spans
+        // Build dock: separator line + content bar (2 rows like Go tuios)
+        const dock_children = try alloc.alloc(widget.Widget, 2);
+
+        // Row 1: Separator line
+        dock_children[0] = widget.Widget{
+            .kind = .{ .separator = .{
+                .axis = .horizontal,
+                .style = .{ .fg = self.theme.borderUnfocused() },
+                .border = .single,
+            } },
+        };
+
+        // Row 2: Status content with window tabs
         var spans: std.ArrayList(widget.Text.Span) = .empty;
 
-        // Mode indicator
+        // Mode indicator pill
+        const is_pending = self.matcher.isPending();
         const mode_text = switch (self.mode) {
-            .terminal => if (self.matcher.isPending()) " PREFIX " else " T ",
+            .terminal => if (is_pending) " PREFIX " else " T ",
             .window_management => " WM ",
         };
-        const mode_fg = switch (self.mode) {
-            .terminal => if (self.matcher.isPending()) vaxis.Color{ .rgb = .{ 0, 0, 0 } } else vaxis.Color{ .rgb = .{ 0xbb, 0xbb, 0xbb } },
-            .window_management => vaxis.Color{ .rgb = .{ 0, 0, 0 } },
+        const mode_fg: vaxis.Color = switch (self.mode) {
+            .terminal => if (is_pending) .{ .rgb = .{ 0, 0, 0 } } else self.theme.statusFg(),
+            .window_management => .{ .rgb = .{ 0, 0, 0 } },
         };
         const mode_bg = switch (self.mode) {
-            .terminal => if (self.matcher.isPending()) self.theme.prefixIndicator() else self.theme.statusBg(),
-            .window_management => self.theme.borderFocused(),
+            .terminal => if (is_pending) self.theme.prefixIndicator() else self.theme.statusBg(),
+            .window_management => self.theme.wmModeIndicator(),
         };
 
         try spans.append(alloc, .{
@@ -1542,34 +1555,84 @@ pub const Layout = struct {
             .style = .{ .fg = mode_fg, .bg = mode_bg, .bold = true },
         });
 
-        // Workspace indicator
-        var ws_buf: [16]u8 = undefined;
-        const ws_text = std.fmt.bufPrint(&ws_buf, " [{d}] ", .{self.active_workspace + 1}) catch " [?] ";
+        // Workspace number
+        var ws_buf: [8]u8 = undefined;
+        const ws_text = std.fmt.bufPrint(&ws_buf, " {d} ", .{self.active_workspace + 1}) catch "?";
         try spans.append(alloc, .{
             .text = try alloc.dupe(u8, ws_text),
-            .style = .{ .fg = self.theme.borderFocused(), .bg = self.theme.statusBg() },
+            .style = .{ .fg = self.theme.accentColor(), .bg = self.theme.statusBg(), .bold = true },
         });
 
-        // Window count
-        const wcount = self.currentTreeConst().windowCount();
-        var wc_buf: [32]u8 = undefined;
-        const wc_text = std.fmt.bufPrint(&wc_buf, " {d} window{s} ", .{ wcount, if (wcount != 1) "s" else "" }) catch " ? ";
+        // Separator
         try spans.append(alloc, .{
-            .text = try alloc.dupe(u8, wc_text),
-            .style = .{ .fg = .{ .rgb = .{ 0x88, 0x88, 0x88 } }, .bg = self.theme.statusBg() },
+            .text = try alloc.dupe(u8, "\xe2\x94\x82"), // │
+            .style = .{ .fg = self.theme.dimColor(), .bg = self.theme.statusBg() },
         });
 
-        // Zoom indicator
-        if (self.zoomed) {
+        // Window tabs — show each window as a tab pill
+        const tree = self.currentTreeConst();
+        var win_ids: [64]u32 = undefined;
+        const win_count = tree.getAllWindowIDs(&win_ids);
+
+        // Also include floating windows
+        for (0..self.floating_count) |fi| {
+            if (win_count + fi < 64) {
+                win_ids[win_count + fi] = self.floating[fi].id;
+            }
+        }
+        const total_windows = win_count + self.floating_count;
+
+        for (0..total_windows) |i| {
+            const wid = win_ids[i];
+            const focused = self.focused_id == wid;
+            const is_float = self.isFloating(wid);
+
+            // Get window title from surface
+            var title_buf: [16]u8 = undefined;
+            var title: []const u8 = "shell";
+            if (self.ptys.get(wid)) |pty| {
+                const surface_title = pty.surface.getTitle();
+                if (surface_title.len > 0) {
+                    const max_len = @min(surface_title.len, 12);
+                    @memcpy(title_buf[0..max_len], surface_title[0..max_len]);
+                    title = title_buf[0..max_len];
+                }
+            }
+
+            // Float indicator
+            const prefix: []const u8 = if (is_float) " \xe2\x96\xa3 " else " "; // ▣ for floating
+            const suffix: []const u8 = " ";
+
+            var tab_buf: [32]u8 = undefined;
+            const tab_text = std.fmt.bufPrint(&tab_buf, "{s}{s}{s}", .{ prefix, title, suffix }) catch " ? ";
+
+            const tab_fg: vaxis.Color = if (focused) .{ .rgb = .{ 0, 0, 0 } } else self.theme.dimColor();
+            const tab_bg: vaxis.Color = if (focused) self.theme.borderFocused() else self.theme.statusBg();
+
             try spans.append(alloc, .{
-                .text = try alloc.dupe(u8, " ZOOM "),
-                .style = .{ .fg = .{ .rgb = .{ 0, 0, 0 } }, .bg = .{ .rgb = .{ 0xff, 0x55, 0x55 } }, .bold = true },
+                .text = try alloc.dupe(u8, tab_text),
+                .style = .{ .fg = tab_fg, .bg = tab_bg, .bold = focused },
             });
         }
 
-        return widget.Widget{
+        // Zoom indicator on the right
+        if (self.zoomed) {
+            try spans.append(alloc, .{
+                .text = try alloc.dupe(u8, " ZOOM "),
+                .style = .{ .fg = .{ .rgb = .{ 0, 0, 0 } }, .bg = self.theme.errorColor(), .bold = true },
+            });
+        }
+
+        dock_children[1] = widget.Widget{
             .kind = .{ .text = .{
                 .spans = try spans.toOwnedSlice(alloc),
+            } },
+        };
+
+        return widget.Widget{
+            .kind = .{ .column = .{
+                .children = dock_children,
+                .cross_axis_align = .stretch,
             } },
         };
     }
