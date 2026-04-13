@@ -267,7 +267,7 @@ func NewDiffSignal() *DiffSignal {
 // Wire format (after the standard message header):
 //   [2B width][2B height]
 //   [2B cursorX][2B cursorY]
-//   [1B flags: bit0=cursorHidden, bit1=altScreen, bits2-4=cursorStyle]
+//   [1B flags: bit0=cursorHidden, bit1=altScreen, bits2-4=cursorStyle, bit5=hasMouseMode]
 //   [2B titleLen][nB titleUTF8]
 //   [4B numCells]
 //   per cell:
@@ -307,6 +307,9 @@ func EncodeScreenDiff(ptyID string, diff *ScreenDiff) []byte {
 		flags |= 2
 	}
 	flags |= uint8(diff.CursorStyle&0x7) << 2
+	if diff.HasMouseMode {
+		flags |= 0x20 // bit 5
+	}
 	buf[off] = flags
 	off++
 
@@ -369,6 +372,7 @@ func DecodeScreenDiff(data []byte) (ptyID string, diff *ScreenDiff, err error) {
 	diff.CursorHidden = flags&1 != 0
 	diff.IsAltScreen = flags&2 != 0
 	diff.CursorStyle = vt.CursorStyle((flags >> 2) & 0x7)
+	diff.HasMouseMode = flags&0x20 != 0
 
 	titleLen := int(binary.BigEndian.Uint16(data[off:]))
 	off += 2

@@ -13,11 +13,43 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
-// containsAPC checks if data contains an APC sequence (ESC _ ... ST).
-// Used to detect kitty graphics data that must be forwarded to the VT even
-// when ghostty-driven rendering skips regular cell content.
-func containsAPC(data []byte) bool {
-	return bytes.Contains(data, []byte("\x1b_"))
+// extractAPCSequences extracts only APC sequences (ESC _ ... ST) from data.
+// Returns nil if no APC sequences found. APC terminator is ST (ESC \).
+// This is needed because in ghostty-driven mode, we skip regular output
+// but must still forward kitty graphics APC sequences to the VT emulator.
+func extractAPCSequences(data []byte) []byte {
+	apcStart := []byte("\x1b_")
+	st := []byte("\x1b\\")
+
+	var result []byte
+	idx := 0
+	for idx < len(data) {
+		start := bytes.Index(data[idx:], apcStart)
+		if start == -1 {
+			break
+		}
+		start += idx
+
+		// Find the ST terminator
+		end := bytes.Index(data[start+2:], st)
+		if end == -1 {
+			// No terminator found — include rest of data as partial APC
+			// (the terminator may arrive in the next chunk)
+			if result == nil {
+				result = make([]byte, 0, len(data)-start)
+			}
+			result = append(result, data[start:]...)
+			break
+		}
+		end += start + 2 + len(st) // include the ST
+
+		if result == nil {
+			result = make([]byte, 0, end-start)
+		}
+		result = append(result, data[start:end]...)
+		idx = end
+	}
+	return result
 }
 
 // passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
@@ -842,13 +874,11 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 		passThroughCursorStyle(data)
 
 		// When screen diffs are the primary renderer (ghostty path),
-		// skip feeding raw bytes to the VT for cell content — but
-		// still pass APC sequences through for kitty graphics passthrough.
+		// skip feeding regular bytes to the VT — but extract and forward
+		// ONLY APC sequences for kitty graphics passthrough.
 		if window.GhosttyDrivenRendering {
-			// Scan for APC (ESC _ ... ST) sequences and feed only those
-			// to the VT so the kitty passthrough handler fires.
-			if containsAPC(data) {
-				window.WriteOutputAsync(data)
+			if apcData := extractAPCSequences(data); apcData != nil {
+				window.WriteOutputAsync(apcData)
 			}
 			return
 		}
