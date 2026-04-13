@@ -273,6 +273,14 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
+		// Set precise resize cursor based on corner
+		switch o.ResizeCorner {
+		case app.TopLeft, app.BottomRight:
+			app.SetPointerShape(app.PointerNWSEResize)
+		case app.TopRight, app.BottomLeft:
+			app.SetPointerShape(app.PointerNESWResize)
+		}
+
 	case tea.MouseLeft:
 		// Check if we're in selection mode
 		if o.SelectionMode {
@@ -323,6 +331,8 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
+		// Set grabbing pointer during drag
+		app.SetPointerShape(app.PointerGrabbing)
 		// Already in interaction mode, now set drag-specific flags
 		o.Dragging = true
 		o.DragStartX = mouse.X
@@ -360,6 +370,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 
+	// Update pointer shape based on what we're hovering over (OSC 22)
+	o.UpdatePointerForPosition(mouse.X, mouse.Y)
 
 	// Forward mouse motion to terminal if in terminal mode and window supports motion events.
 	// Only modes 1002 (button-event) and 1003 (any-event) support motion forwarding.
@@ -730,6 +742,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // handleMouseRelease handles mouse release events
 func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Reset pointer shape on release
+	app.ResetPointerShape()
 	// Forward mouse release to terminal if in terminal mode and window has mouse tracking
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
