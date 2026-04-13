@@ -232,7 +232,7 @@ pub const Layout = struct {
     // Default keybinds: leader is <C-b>
     const default_bindings = [_]keybind_compiler.Keybind{
         // Splits
-        .{ .key_string = "<leader><S-Backslash>", .action = .split_vertical }, // Ctrl+B, |
+        .{ .key_string = "<leader>|", .action = .split_vertical },
         .{ .key_string = "<leader>-", .action = .split_horizontal },
         // Focus
         .{ .key_string = "<leader>h", .action = .focus_left },
@@ -247,10 +247,10 @@ pub const Layout = struct {
         .{ .key_string = "<leader><Tab>", .action = .cycle_next },
         .{ .key_string = "<leader>p", .action = .cycle_prev },
         // Resize (Shift+hjkl in prefix)
-        .{ .key_string = "<leader><S-h>", .action = .resize_left },
-        .{ .key_string = "<leader><S-j>", .action = .resize_down },
-        .{ .key_string = "<leader><S-k>", .action = .resize_up },
-        .{ .key_string = "<leader><S-l>", .action = .resize_right },
+        .{ .key_string = "<leader>H", .action = .resize_left },
+        .{ .key_string = "<leader>J", .action = .resize_down },
+        .{ .key_string = "<leader>K", .action = .resize_up },
+        .{ .key_string = "<leader>L", .action = .resize_right },
         .{ .key_string = "<leader><Left>", .action = .resize_left },
         .{ .key_string = "<leader><Right>", .action = .resize_right },
         .{ .key_string = "<leader><Up>", .action = .resize_up },
@@ -276,15 +276,16 @@ pub const Layout = struct {
         .{ .key_string = "<A-8>", .action = .workspace_8 },
         .{ .key_string = "<A-9>", .action = .workspace_9 },
         // Move to workspace (Shift+number in prefix)
-        .{ .key_string = "<leader><S-1>", .action = .move_to_workspace_1 },
-        .{ .key_string = "<leader><S-2>", .action = .move_to_workspace_2 },
-        .{ .key_string = "<leader><S-3>", .action = .move_to_workspace_3 },
-        .{ .key_string = "<leader><S-4>", .action = .move_to_workspace_4 },
-        .{ .key_string = "<leader><S-5>", .action = .move_to_workspace_5 },
-        .{ .key_string = "<leader><S-6>", .action = .move_to_workspace_6 },
-        .{ .key_string = "<leader><S-7>", .action = .move_to_workspace_7 },
-        .{ .key_string = "<leader><S-8>", .action = .move_to_workspace_8 },
-        .{ .key_string = "<leader><S-9>", .action = .move_to_workspace_9 },
+        // Move-to-workspace: Shift+1-9 produces !@#$%^&*( on US layout
+        .{ .key_string = "<leader>!", .action = .move_to_workspace_1 },
+        .{ .key_string = "<leader>@", .action = .move_to_workspace_2 },
+        .{ .key_string = "<leader>#", .action = .move_to_workspace_3 },
+        .{ .key_string = "<leader>$", .action = .move_to_workspace_4 },
+        .{ .key_string = "<leader>%", .action = .move_to_workspace_5 },
+        .{ .key_string = "<leader>^", .action = .move_to_workspace_6 },
+        .{ .key_string = "<leader>&", .action = .move_to_workspace_7 },
+        .{ .key_string = "<leader>*", .action = .move_to_workspace_8 },
+        .{ .key_string = "<leader>(", .action = .move_to_workspace_9 },
         // Mode
         .{ .key_string = "<leader>w", .action = .enter_wm_mode },
         // Split manipulation
@@ -594,6 +595,7 @@ pub const Layout = struct {
     fn vaxisToKeyString(vkey: vaxis.Key) key_string.Key {
         var cp = vkey.codepoint;
         var ctrl = vkey.mods.ctrl;
+        var shift = vkey.mods.shift;
 
         // Normalize legacy control characters (0x01-0x1A) to their letter + ctrl
         // e.g., Ctrl+B might arrive as codepoint 0x02 in legacy mode
@@ -602,11 +604,32 @@ pub const Layout = struct {
             cp = cp + 'a' - 1; // 0x02 -> 'b', 0x01 -> 'a', etc.
         }
 
+        // With kitty keyboard protocol, shifted characters report the BASE key
+        // with shift modifier. E.g., | arrives as codepoint='\', shift=true,
+        // shifted_codepoint='|'. For keybind matching, we want the actual
+        // character typed (|), not the base key + shift.
+        if (shift and !ctrl and !vkey.mods.super) {
+            // Use shifted_codepoint if available
+            if (vkey.shifted_codepoint) |scp| {
+                if (scp >= 0x21 and scp <= 0x7E) {
+                    cp = scp;
+                    shift = false; // shift is "consumed" by producing the character
+                }
+            } else {
+                // No shifted_codepoint — if the base codepoint is a letter,
+                // shift means uppercase. Use uppercase letter directly.
+                if (cp >= 'a' and cp <= 'z') {
+                    cp = cp - 'a' + 'A';
+                    shift = false;
+                }
+            }
+        }
+
         return .{
             .key = vaxisCodepointToName(cp),
             .ctrl = ctrl,
             .alt = vkey.mods.alt,
-            .shift = vkey.mods.shift,
+            .shift = shift,
             .super = vkey.mods.super,
         };
     }
