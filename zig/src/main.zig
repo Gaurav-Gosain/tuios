@@ -107,13 +107,20 @@ pub fn main() !void {
         var log_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
 
         if (err == error.ServerNotRunning) {
-            try std.fs.File.stderr().writeAll(
-                \\Server not running. Start with:
-                \\    tuios serve
-                \\
-                \\For automatic startup, see 'man tuios.7'
-                \\
-            );
+            // Auto-start server in background
+            if (startServerBackground(socket_path)) {
+                // Retry connection
+                runClient(allocator, socket_path, result) catch |retry_err| {
+                    if (retry_err == error.ServerNotRunning) {
+                        try std.fs.File.stderr().writeAll("Failed to auto-start server.\n");
+                    } else {
+                        return retry_err;
+                    }
+                };
+                return;
+            } else {
+                try std.fs.File.stderr().writeAll("Failed to start server in background.\n");
+            }
         } else if (getLogDir(&log_dir_buf)) |log_dir| {
             var msg_buf: [1024]u8 = undefined;
             const msg = try std.fmt.bufPrint(&msg_buf,
@@ -178,6 +185,14 @@ fn parseArgs(allocator: std.mem.Allocator, socket_path: []const u8) !?ParseResul
         } else if (std.mem.eql(u8, arg, "pty")) {
             _ = try handlePtyCommand(allocator, &args, socket_path);
             return null;
+        } else if (std.mem.eql(u8, arg, "kill-server")) {
+            killServer(socket_path);
+            return null;
+        } else if (std.mem.eql(u8, arg, "daemon")) {
+            // Alias for serve (Go tuios compat)
+            initLogFile("server.log");
+            try server.startServer(allocator, socket_path);
+            return null;
         } else {
             log.err("Unknown command: {s}", .{arg});
             try printHelp();
@@ -186,6 +201,88 @@ fn parseArgs(allocator: std.mem.Allocator, socket_path: []const u8) !?ParseResul
     }
 
     return result;
+}
+
+/// Start the server as a detached background process.
+/// Returns true if server started successfully (socket appeared within timeout).
+fn startServerBackground(socket_path: []const u8) bool {
+    // Get our own executable path
+    var self_exe_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const self_exe = std.fs.selfExePath(&self_exe_buf) catch return false;
+
+    // Fork and exec ourselves with "serve" argument
+    const pid = std.posix.fork() catch return false;
+    if (pid == 0) {
+        // Child process: become session leader (detach from terminal)
+        _ = std.c.setsid();
+
+        // Close stdin/stdout/stderr
+        std.posix.close(0);
+        std.posix.close(1);
+        std.posix.close(2);
+
+        // Redirect to /dev/null
+        _ = std.posix.open("/dev/null", .{ .ACCMODE = .RDWR }, 0) catch {};
+        _ = std.posix.open("/dev/null", .{ .ACCMODE = .RDWR }, 0) catch {};
+        _ = std.posix.open("/dev/null", .{ .ACCMODE = .RDWR }, 0) catch {};
+
+        // Exec ourselves with "serve"
+        const argv = [_:null]?[*:0]const u8{
+            @ptrCast(self_exe.ptr),
+            "serve",
+            null,
+        };
+        _ = std.posix.execveZ(@ptrCast(self_exe.ptr), &argv, std.c.environ) catch {};
+        std.posix.exit(1);
+    }
+
+    // Parent: wait for socket to appear
+    var attempts: u32 = 0;
+    while (attempts < 40) : (attempts += 1) {
+        std.Thread.sleep(100 * std.time.ns_per_ms);
+        std.fs.accessAbsolute(socket_path, .{}) catch continue;
+        return true; // Socket appeared, server is ready
+    }
+
+    return false; // Timeout
+}
+
+/// Kill the running server by sending a ping to verify it's alive,
+/// then removing the socket and signaling it.
+fn killServer(socket_path: []const u8) void {
+    // Check if socket exists
+    std.fs.accessAbsolute(socket_path, .{}) catch {
+        std.fs.File.stderr().writeAll("Server is not running.\n") catch {};
+        return;
+    };
+
+    // Try to connect and send a graceful shutdown
+    const fd = std.posix.socket(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0) catch {
+        // Can't create socket — just remove the file
+        std.posix.unlink(socket_path) catch {};
+        std.fs.File.stderr().writeAll("Removed stale socket.\n") catch {};
+        return;
+    };
+    defer std.posix.close(fd);
+
+    var addr: std.posix.sockaddr.un = .{ .path = undefined };
+    @memcpy(addr.path[0..socket_path.len], socket_path);
+    addr.path[socket_path.len] = 0;
+
+    std.posix.connect(fd, @ptrCast(&addr), @sizeOf(std.posix.sockaddr.un)) catch {
+        // Can't connect — remove stale socket
+        std.posix.unlink(socket_path) catch {};
+        std.fs.File.stderr().writeAll("Removed stale socket (server not responding).\n") catch {};
+        return;
+    };
+
+    // Remove socket file — server will detect this and exit
+    std.posix.unlink(socket_path) catch {};
+
+    var buf: [256]u8 = undefined;
+    var stderr = std.fs.File.stderr().writer(&buf);
+    defer stderr.interface.flush() catch {};
+    stderr.interface.print("Server stopped (socket {s} removed).\n", .{socket_path}) catch {};
 }
 
 fn printVersion() !void {
@@ -244,10 +341,11 @@ fn printHelp() !void {
         \\Usage: tuios [options] [command]
         \\
         \\Commands:
-        \\  (none)     Start client, connect to server (spawns server if needed)
-        \\  serve      Start the server in the foreground
-        \\  session    Manage sessions (attach, list, rename, delete)
-        \\  pty        Manage PTYs (list, kill)
+        \\  (none)        Start client (auto-starts server if needed)
+        \\  serve         Start the server in the foreground
+        \\  kill-server   Stop the running server
+        \\  session       Manage sessions (attach, list, rename, delete)
+        \\  pty           Manage PTYs (list, kill)
         \\
         \\Options:
         \\  -s, --session <name>  Create a new session with the specified name
