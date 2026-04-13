@@ -1728,6 +1728,33 @@ pub const App = struct {
 
         try self.renderWidget(w, win);
 
+        // Cursor passthrough: show focused window's cursor at correct host position
+        if (self.ui.mode == .terminal) {
+            if (self.ui.focused_id) |fid| {
+                if (self.surfaces.get(fid)) |surface| {
+                    if (surface.front.cursor_vis) {
+                        for (self.hit_regions) |region| {
+                            if (region.pty_id == fid) {
+                                const host_col = region.x + surface.front.cursor_col;
+                                const host_row = region.y + surface.front.cursor_row;
+                                if (host_col < screen.width and host_row < screen.height) {
+                                    win.showCursor(host_col, host_row);
+                                    // Map redraw cursor shape to vaxis cursor shape
+                                    const shape: vaxis.Cell.CursorShape = switch (surface.cursor_shape) {
+                                        .block => .block,
+                                        .beam => .beam,
+                                        .underline => .underline,
+                                    };
+                                    win.setCursorShape(shape);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         log.debug("render: calling vx.render()", .{});
         if (self.state.pty_id) |pid_i64| {
             const pid = @as(u32, @intCast(pid_i64));
