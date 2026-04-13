@@ -15,6 +15,7 @@ const keybind_compiler = @import("keybind_compiler.zig");
 const keybind_matcher = @import("keybind_matcher.zig");
 const Action = @import("action.zig").Action;
 const theme_mod = @import("theme.zig");
+const config_mod = @import("config.zig");
 
 const log = std.log.scoped(.layout);
 
@@ -302,11 +303,15 @@ pub const Layout = struct {
     };
 
     pub fn init(allocator: std.mem.Allocator) InitResult {
-        // Compile default keybinds
+        // Load config
+        const config = config_mod.Config.load(allocator);
+        const theme = config.resolveTheme();
+
+        // Compile keybinds with configured leader key
         var compiler = keybind_compiler.Compiler.init(allocator);
         defer compiler.deinit();
 
-        compiler.setLeader("<C-b>") catch |err| {
+        compiler.setLeader(config.leader_key) catch |err| {
             return .{ .err = .{ .err = err, .lua_msg = null } };
         };
 
@@ -321,6 +326,7 @@ pub const Layout = struct {
             .trie = trie,
             .matcher = undefined, // must call initMatcher() after Layout is in final location
             .trie_initialized = true,
+            .theme = theme,
         } };
     }
 
