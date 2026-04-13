@@ -523,6 +523,10 @@ fn runClient(allocator: std.mem.Allocator, socket_path: []const u8, args: ParseR
     };
     defer app.deinit();
 
+    // Initialize keybind matcher pointer AFTER app is in its final stack location.
+    // The matcher holds a pointer to the trie which must not move.
+    app.ui.initMatcher();
+
     // Initialize TTY after App is in its final memory location
     // (tty writer holds pointer to tty_buffer)
     try app.initTty();

@@ -592,14 +592,34 @@ pub const Layout = struct {
     // ---- Vaxis Key → key_string.Key conversion ----
 
     fn vaxisToKeyString(vkey: vaxis.Key) key_string.Key {
+        var cp = vkey.codepoint;
+        var ctrl = vkey.mods.ctrl;
+
+        // Normalize legacy control characters (0x01-0x1A) to their letter + ctrl
+        // e.g., Ctrl+B might arrive as codepoint 0x02 in legacy mode
+        if (cp >= 1 and cp <= 26 and !ctrl) {
+            ctrl = true;
+            cp = cp + 'a' - 1; // 0x02 -> 'b', 0x01 -> 'a', etc.
+        }
+
         return .{
-            .key = vaxisCodepointToName(vkey.codepoint),
-            .ctrl = vkey.mods.ctrl,
+            .key = vaxisCodepointToName(cp),
+            .ctrl = ctrl,
             .alt = vkey.mods.alt,
             .shift = vkey.mods.shift,
             .super = vkey.mods.super,
         };
     }
+
+    // Comptime-generated table of single-char strings for printable ASCII
+    const ascii_table = blk: {
+        var table: [94][]const u8 = undefined;
+        for (0..94) |i| {
+            const c: u8 = @intCast(i + 0x21);
+            table[i] = &[_]u8{c};
+        }
+        break :blk table;
+    };
 
     fn vaxisCodepointToName(cp: u21) []const u8 {
         return switch (cp) {
@@ -631,24 +651,14 @@ pub const Layout = struct {
             vaxis.Key.f11 => "F11",
             vaxis.Key.f12 => "F12",
             '\\' => "Backslash",
-            else => blk: {
-                // For printable ASCII, use the character itself (stored as static strings)
+            else => {
+                // Printable ASCII → single-char static string
                 if (cp >= 0x21 and cp <= 0x7E) {
-                    const table = comptime init_ascii_table();
-                    break :blk table[cp - 0x21];
+                    return ascii_table[cp - 0x21];
                 }
-                break :blk "?";
+                return "?";
             },
         };
-    }
-
-    fn init_ascii_table() [94][]const u8 {
-        var table: [94][]const u8 = undefined;
-        for (0..94) |i| {
-            const c: u8 = @intCast(i + 0x21);
-            table[i] = &[_]u8{c};
-        }
-        return table;
     }
 
     // ---- Key handling ----

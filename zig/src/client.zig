@@ -727,8 +727,6 @@ pub const App = struct {
                 return .{ .err = .{ .err = init_err.err, .lua_msg = init_err.lua_msg } };
             },
         }
-        // Matcher needs pointer to trie in final memory location
-        app.ui.initMatcher();
         log.info("Layout UI initialized", .{});
 
         // Create pipe for TTY thread -> Main thread communication
@@ -868,7 +866,9 @@ pub const App = struct {
                     app.send_task = null;
                 }
                 // Wake up TTY thread so it can exit
-                app.vx.deviceStatusReport(app.tty.writer()) catch {};
+                if (app.tty.fd >= 0) {
+                    app.vx.deviceStatusReport(app.tty.writer()) catch {};
+                }
             }
         }.exitCb);
 
