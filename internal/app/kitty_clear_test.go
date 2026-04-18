@@ -32,9 +32,15 @@ func TestKittyClearOnED2(t *testing.T) {
 	winID := "test-window-id-abcdef12"
 
 	emu := vt.NewEmulator(80, 24)
-	emu.KittyState().SetClearCallback(func() {
-		kp.ClearWindow(winID)
-	})
+	clearCB := func() { kp.ClearWindow(winID) }
+	emu.KittyMainState().SetClearCallback(clearCB)
+	emu.KittyAltState().SetClearCallback(clearCB)
+
+	// youterm enters alt screen immediately. The VT has separate KittyState
+	// objects for main / alt screens — if the callback is only registered on
+	// the currently-active state at setup time, the alt-screen ClearPlacements
+	// fires with nil callback and no deletes reach the host.
+	_, _ = emu.Write([]byte("\x1b[?1049h"))
 	emu.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		cursorPos := emu.CursorPosition()
 		kp.ForwardCommand(

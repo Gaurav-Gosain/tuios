@@ -1791,10 +1791,16 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	win := window
 	kp := m.KittyPassthrough
 
-	// Set up callback for when placements are cleared (e.g., clear screen, ED sequences)
-	window.Terminal.KittyState().SetClearCallback(func() {
+	// Set up callback for when placements are cleared (e.g., clear screen, ED sequences).
+	// The VT keeps separate KittyState objects for the main and alt screens; the
+	// active one depends on IsAltScreen() at call time. Register on BOTH so the
+	// clear callback fires regardless of which screen the app is on (youterm,
+	// yazi, etc. run on alt screen and rely on ED 2 clearing their thumbnails).
+	clearCallback := func() {
 		kp.ClearWindow(win.ID)
-	})
+	}
+	window.Terminal.KittyMainState().SetClearCallback(clearCallback)
+	window.Terminal.KittyAltState().SetClearCallback(clearCallback)
 
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		// In daemon mode, the daemon's VT emulator responds to queries directly
