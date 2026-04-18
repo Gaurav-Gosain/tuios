@@ -767,14 +767,20 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// guest image ID. This eliminates delete+re-place flicker for video playback:
 	// transmitting with the same ID replaces the image data in-place, and the
 	// existing placement automatically shows the new frame.
+	//
+	// Guest image ID == 0 is kitty's "auto-assign" sentinel; each transmit with
+	// ID 0 is a DISTINCT image (youterm's thumbnails, chafa, etc. all use 0).
+	// Always allocate a fresh host ID so they coexist instead of overwriting.
 	if kp.imageIDMap[windowID] == nil {
 		kp.imageIDMap[windowID] = make(map[uint32]uint32)
 	}
 
 	hostID, reusingID := kp.imageIDMap[windowID][cmd.ImageID]
-	if !reusingID {
+	if !reusingID || cmd.ImageID == 0 {
 		hostID = kp.allocateHostID()
-		kp.imageIDMap[windowID][cmd.ImageID] = hostID
+		if cmd.ImageID != 0 {
+			kp.imageIDMap[windowID][cmd.ImageID] = hostID
+		}
 	} else if andPlace {
 		// Reusing ID  - check if dimensions changed (e.g., window resize).
 		// If so, delete old placement so it gets recreated at the new size.
