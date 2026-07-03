@@ -315,10 +315,12 @@ func (p *Parser) parseKeyComboCommand() (Command, bool) {
 		}
 	}
 
-	// Get the final key
+	// Get the final key. Guard the raw-byte index: an empty final token
+	// (TokenEOF has an empty literal) must not panic on Literal[0].
 	if p.curTok.Type == TokenIdentifier || p.curTok.Type.IsNavigationKey() ||
 		p.curTok.Type == TokenEnter || p.curTok.Type == TokenSpace ||
-		isDigit(p.curTok.Literal[0]) {
+		p.curTok.Type == TokenNumber ||
+		(len(p.curTok.Literal) > 0 && isDigit(p.curTok.Literal[0])) {
 		comboParts = append(comboParts, p.curTok.Literal)
 		p.nextToken()
 	} else {

@@ -155,7 +155,8 @@ func (r *Recorder) flushTypingBuffer() {
 		Delay:  0, // Delay is captured between commands
 		Line:   len(r.commands) + 1,
 		Column: 1,
-		Raw:    fmt.Sprintf(`Type "%s"`, r.typingBuffer),
+		// %q escapes quotes, backslashes, and newlines so the tape round-trips.
+		Raw: fmt.Sprintf("Type %q", r.typingBuffer),
 	}
 
 	r.commands = append(r.commands, cmd)
@@ -403,7 +404,8 @@ func (r *Recorder) keyToCommand(key string) *Command {
 		} else if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			// Single printable character - record as Type command
 			cmdType = CommandTypeType
-			raw = fmt.Sprintf(`Type "%s"`, key)
+			// %q escapes quotes, backslashes, and newlines so the tape round-trips.
+			raw = fmt.Sprintf("Type %q", key)
 			return &Command{
 				Type:   cmdType,
 				Args:   []string{key},

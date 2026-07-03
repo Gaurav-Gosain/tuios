@@ -378,6 +378,40 @@ Backspace@200ms 3`
 	}
 }
 
+func TestParserKeyComboNoPanic(t *testing.T) {
+	// A modifier with no trailing key must error rather than panic on the
+	// raw-byte index of an empty final token.
+	inputs := []string{"Ctrl", "Ctrl+", "Alt+", "Ctrl+Alt+"}
+
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			commands, errors := ParseFile(in)
+			if len(errors) == 0 {
+				t.Errorf("expected a parse error for %q, got none", in)
+			}
+			if len(commands) != 0 {
+				t.Errorf("expected no commands for %q, got %d", in, len(commands))
+			}
+		})
+	}
+}
+
+func TestParserCompoundDuration(t *testing.T) {
+	commands, errors := ParseFile("Sleep 1m30s")
+	if len(errors) > 0 {
+		t.Fatalf("unexpected parse errors: %v", errors)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("expected 1 command, got %d", len(commands))
+	}
+	if commands[0].Args[0] != "1m30s" {
+		t.Errorf("expected arg 1m30s, got %q", commands[0].Args[0])
+	}
+	if commands[0].Delay != 90*time.Second {
+		t.Errorf("expected delay 90s, got %v", commands[0].Delay)
+	}
+}
+
 func TestParserMultipleRepeat(t *testing.T) {
 	input := `Backspace 5
 Down 3
