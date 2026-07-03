@@ -396,7 +396,6 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update animations
 		m.UpdateAnimations()
 
-
 		// Update system info (only when explicitly enabled)
 		if config.ShowCPU {
 			m.UpdateCPUHistory()
@@ -747,6 +746,15 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ForceRefreshMsg:
 		// Force re-render
 		m.MarkAllDirty()
+		return m, nil
+
+	case ConfigReloadedMsg:
+		// Apply appearance config parsed by the watcher goroutine here, on the
+		// Bubble Tea goroutine, so the render loop never reads the globals mid-write.
+		if msg.Config != nil {
+			config.ApplyAppearanceConfig(msg.Config)
+			m.MarkAllDirty()
+		}
 		return m, nil
 
 	case ScriptCommandMsg:

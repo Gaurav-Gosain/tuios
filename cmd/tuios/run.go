@@ -133,7 +133,7 @@ func runLocal() error {
 		ShowCPU:             showCPU,
 		ShowRAM:             showRAM,
 		SharedBorders:       sharedBorders,
-		ZoomMaxWidth:     zoomMaxWidth,
+		ZoomMaxWidth:        zoomMaxWidth,
 		ScrollbackLines:     scrollbackLines,
 		NoAnimations:        noAnimations,
 		ConfirmQuit:         confirmQuit,
@@ -178,19 +178,6 @@ func runLocal() error {
 	})
 	initialOS.PostRenderWriter = prw
 
-	// Start config file watcher for hot-reload
-	if configPath, err := config.GetConfigPath(); err == nil {
-		if watcher, err := config.NewWatcher(configPath, func(newConfig *config.UserConfig, err error) {
-			if err != nil {
-				log.Printf("Config reload error: %v", err)
-				return
-			}
-			_ = newConfig // Config watcher fires; manual reload via command palette applies changes
-		}); err == nil {
-			defer watcher.Stop()
-		}
-	}
-
 	p := tea.NewProgram(
 		initialOS,
 		tea.WithFPS(config.NormalFPS),
@@ -198,6 +185,22 @@ func runLocal() error {
 		tea.WithFilter(filterMouseMotion),
 		tea.WithOutput(prw),
 	)
+
+	// Start config file watcher for hot-reload. The watcher goroutine only
+	// parses the config; it must not apply the appearance globals directly
+	// because the render loop reads them concurrently. Delivery goes through
+	// p.Send so the apply happens on the Bubble Tea goroutine.
+	if configPath, err := config.GetConfigPath(); err == nil {
+		if watcher, err := config.NewWatcher(configPath, func(newConfig *config.UserConfig, err error) {
+			if err != nil {
+				log.Printf("Config reload error: %v", err)
+				return
+			}
+			p.Send(app.ConfigReloadedMsg{Config: newConfig})
+		}); err == nil {
+			defer watcher.Stop()
+		}
+	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)

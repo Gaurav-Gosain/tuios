@@ -12,6 +12,29 @@ import (
 
 var enabled bool
 
+// Border color overrides from user config. When non-nil they take precedence
+// over the theme-derived border colors. A single focused override applies to
+// both window-mode and terminal-mode focused borders.
+var (
+	borderFocusedOverride   color.Color
+	borderUnfocusedOverride color.Color
+)
+
+// SetBorderOverrides sets custom border colors from hex strings (e.g. "#89b4fa").
+// An empty string clears the corresponding override and restores the theme color.
+func SetBorderOverrides(focusedHex, unfocusedHex string) {
+	if focusedHex != "" {
+		borderFocusedOverride = lipgloss.Color(focusedHex)
+	} else {
+		borderFocusedOverride = nil
+	}
+	if unfocusedHex != "" {
+		borderUnfocusedOverride = lipgloss.Color(unfocusedHex)
+	} else {
+		borderUnfocusedOverride = nil
+	}
+}
+
 // Initialize sets up the theme registry with the specified theme name.
 // Call this once at application startup.
 // If themeName is empty, theming will be disabled and standard terminal colors will be used.
@@ -32,11 +55,11 @@ func Initialize(themeName string) error {
 		}
 	}
 
-	// Try to set the theme by ID
-	ok := tint.SetTintID(themeName)
-	if !ok {
-		// Theme not found, set to default
-		tint.SetTintID("default")
+	// Try to set the theme by ID. An unknown name leaves the registry on its
+	// current tint; warn so a typo is visible instead of silently applying the
+	// wrong palette. Behavior is otherwise unchanged (theming stays enabled).
+	if ok := tint.SetTintID(themeName); !ok {
+		log.Printf("Warning: theme %q not found; using default theme colors", themeName)
 	}
 
 	return nil
@@ -118,6 +141,9 @@ func TerminalCursor() color.Color {
 
 // BorderUnfocused returns the color for unfocused window borders.
 func BorderUnfocused() color.Color {
+	if borderUnfocusedOverride != nil {
+		return borderUnfocusedOverride
+	}
 	t := Current()
 	if t == nil {
 		return lipgloss.Color("#FAAAAA")
@@ -129,6 +155,9 @@ func BorderUnfocused() color.Color {
 
 // BorderFocusedWindow returns the color for focused window borders in window management mode.
 func BorderFocusedWindow() color.Color {
+	if borderFocusedOverride != nil {
+		return borderFocusedOverride
+	}
 	t := Current()
 	if t == nil {
 		return lipgloss.Color("#AFFFFF")
@@ -139,6 +168,9 @@ func BorderFocusedWindow() color.Color {
 
 // BorderFocusedTerminal returns the color for focused window borders in terminal mode.
 func BorderFocusedTerminal() color.Color {
+	if borderFocusedOverride != nil {
+		return borderFocusedOverride
+	}
 	t := Current()
 	if t == nil {
 		return lipgloss.Color("#AAFFAA")

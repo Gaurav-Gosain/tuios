@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -47,14 +48,14 @@ type AppearanceConfig struct {
 	Theme               string `toml:"theme"`                 // Color theme name (e.g., dracula, nord, my-custom-theme)
 	SharedBorders       *bool  `toml:"shared_borders"`        // Share borders between adjacent tiled windows (default: false)
 	// Customization
-	Gap                 int    `toml:"gap"`                   // Gap in cells between tiled panes (default: 0)
-	BorderFocusedColor  string `toml:"border_focused_color"`  // Hex color for focused pane border (e.g., "#89b4fa")
+	Gap                  int    `toml:"gap"`                    // Gap in cells between tiled panes (default: 0)
+	BorderFocusedColor   string `toml:"border_focused_color"`   // Hex color for focused pane border (e.g., "#89b4fa")
 	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
-	WindowTitleFormat   string `toml:"window_title_format"`   // Format string for window titles: {title}, {index}, {cwd}
-	SeparatorStyle      string `toml:"separator_style"`       // Separator pill style: rounded (default), powerline, flat, none
-	ZoomMaxWidth        int    `toml:"zoom_max_width"`          // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
-	NiriReverseScroll   bool   `toml:"niri_reverse_scroll"`     // Reverse mouse scroll direction in niri scrolling mode (default: false)
-	MaxFPS              int    `toml:"max_fps"`                 // Maximum render FPS (default: 60, max: 120)
+	WindowTitleFormat    string `toml:"window_title_format"`    // Format string for window titles: {title}, {index}, {cwd}
+	SeparatorStyle       string `toml:"separator_style"`        // Separator pill style: rounded (default), powerline, flat, none
+	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
+	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
+	MaxFPS               int    `toml:"max_fps"`                // Maximum render FPS (default: 60, max: 120)
 }
 
 // HooksConfig holds shell command hooks for events.
@@ -179,7 +180,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_split_vertical":   {"|", "\\"},
 				"prefix_rotate_split":     {"R"},
 				"prefix_equalize_splits":  {"="},
-			"prefix_scrollback":       {"s"},
+				"prefix_scrollback":       {"s"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -419,6 +420,9 @@ func LoadUserConfig() (*UserConfig, error) {
 		}
 	}
 
+	// Apply appearance globals at startup (single-threaded, before the program runs).
+	ApplyAppearanceConfig(&cfg)
+
 	return &cfg, nil
 }
 
@@ -494,7 +498,11 @@ func createDefaultConfig() (*UserConfig, error) {
 	return cfg, nil
 }
 
-// fillMissingAppearance fills in any missing appearance settings with defaults
+// fillMissingAppearance fills in any missing appearance settings with defaults.
+// It only mutates cfg and has no package-global side effects, so it is safe to
+// call off the Bubble Tea goroutine (e.g. from the config file watcher).
+// Applying the parsed values to package globals is done separately by
+// ApplyAppearanceConfig, which must run on the Bubble Tea goroutine.
 func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.BorderStyle == "" {
 		cfg.Appearance.BorderStyle = defaultCfg.Appearance.BorderStyle
@@ -515,7 +523,14 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	} else if cfg.Appearance.ScrollbackLines > 1000000 {
 		cfg.Appearance.ScrollbackLines = 1000000
 	}
+}
 
+// ApplyAppearanceConfig applies parsed appearance settings to the package
+// globals read by the render loop. It must be called on the Bubble Tea
+// goroutine (from Update or at startup before the program runs), never from the
+// file-watcher goroutine, because the globals are read concurrently on the
+// render path.
+func ApplyAppearanceConfig(cfg *UserConfig) {
 	// AnimationsEnabled defaults to true (nil means use default)
 	// Only set global if explicitly configured
 	if cfg.Appearance.AnimationsEnabled != nil {
@@ -543,13 +558,13 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	}
 
 	// WindowTitlePosition defaults to bottom
-	// Only apply from config if not already set via flag (run.go sets this before fillMissingAppearance is called)
+	// Only apply from config if not already set via flag (run.go applies flags separately)
 	if cfg.Appearance.WindowTitlePosition != "" && WindowTitlePosition == "bottom" {
 		WindowTitlePosition = cfg.Appearance.WindowTitlePosition
 	}
 
 	// HideClock defaults to false
-	// Only apply from config if not already set via flag (run.go sets this before fillMissingAppearance is called)
+	// Only apply from config if not already set via flag (run.go applies flags separately)
 	if !HideClock {
 		HideClock = cfg.Appearance.HideClock
 	}
@@ -558,6 +573,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.ZoomMaxWidth > 0 {
 		ZoomMaxWidth = cfg.Appearance.ZoomMaxWidth
 	}
+
+	// Custom border colors override the theme-derived colors. Empty strings
+	// clear any override and restore theme colors.
+	theme.SetBorderOverrides(cfg.Appearance.BorderFocusedColor, cfg.Appearance.BorderUnfocusedColor)
 }
 
 // fillMissingDaemon fills in any missing daemon settings with defaults

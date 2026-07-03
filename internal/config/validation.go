@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -83,10 +84,18 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateSection("layout", cfg.Keybindings.Layout)
 	validateSection("mode_control", cfg.Keybindings.ModeControl)
 	validateSection("system", cfg.Keybindings.System)
+	validateSection("navigation", cfg.Keybindings.Navigation)
+	validateSection("restore_minimized", cfg.Keybindings.RestoreMinimized)
 	validateSection("prefix_mode", cfg.Keybindings.PrefixMode)
 	validateSection("window_prefix", cfg.Keybindings.WindowPrefix)
 	validateSection("minimize_prefix", cfg.Keybindings.MinimizePrefix)
 	validateSection("workspace_prefix", cfg.Keybindings.WorkspacePrefix)
+	validateSection("debug_prefix", cfg.Keybindings.DebugPrefix)
+	validateSection("tape_prefix", cfg.Keybindings.TapePrefix)
+	validateSection("terminal_mode", cfg.Keybindings.TerminalMode)
+
+	// Validate enum appearance options (warn on unknown values; they fall back to defaults)
+	validateAppearanceEnums(cfg, result)
 
 	// Check for keybinding conflicts (same key bound to multiple actions)
 	conflicts := findConflicts(cfg, normalizer)
@@ -152,6 +161,36 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	return result
 }
 
+// validateAppearanceEnums warns when an enum appearance option holds a value
+// outside its allowed set. Such values silently fall back to defaults, so a
+// typo would otherwise go unnoticed. Empty values are left to the defaults.
+func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
+	checkEnum := func(key, value string, allowed []string) {
+		if value == "" {
+			return
+		}
+		if slices.Contains(allowed, value) {
+			return
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance",
+			Key:     key,
+			Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to default", value, strings.Join(allowed, ", ")),
+		})
+	}
+
+	checkEnum("border_style", cfg.Appearance.BorderStyle,
+		[]string{"rounded", "normal", "thick", "double", "hidden", "block", "ascii", "outer-half-block", "inner-half-block"})
+	checkEnum("dockbar_position", cfg.Appearance.DockbarPosition,
+		[]string{"bottom", "top", "hidden"})
+	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition,
+		[]string{"bottom-right", "bottom-left", "top-right", "top-left", "center"})
+	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition,
+		[]string{"bottom", "top", "hidden"})
+	checkEnum("separator_style", cfg.Appearance.SeparatorStyle,
+		[]string{"rounded", "powerline", "flat", "none"})
+}
+
 // findConflicts finds keys that are bound to multiple actions within the same context
 func findConflicts(cfg *UserConfig, normalizer *KeyNormalizer) map[string][]string {
 	// Define action groups by context - actions in different contexts can share keys
@@ -191,6 +230,7 @@ func findConflicts(cfg *UserConfig, normalizer *KeyNormalizer) map[string][]stri
 		cfg.Keybindings.Layout,
 		cfg.Keybindings.ModeControl,
 		cfg.Keybindings.System,
+		cfg.Keybindings.Navigation,
 	}
 
 	// Map keys to actions within each context
