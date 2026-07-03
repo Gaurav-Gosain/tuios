@@ -42,10 +42,10 @@ type Emulator struct {
 	modes ansi.Modes
 
 	// Thread-safe cached mouse mode flags (updated on mode set/reset)
-	cachedHasMouse    atomic.Bool
-	cachedAllMotion   atomic.Bool
+	cachedHasMouse  atomic.Bool
+	cachedAllMotion atomic.Bool
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
-	cachedKittyFlags  atomic.Int32
+	cachedKittyFlags atomic.Int32
 
 	// The last written character.
 	lastChar rune // either ansi.Rune or ansi.Grapheme
@@ -413,7 +413,9 @@ func (e *Emulator) ReserveImageSpace(rows, cols int) {
 	endY := startY + rows
 	scrollCount := 0
 	if endY > height {
-		scrollCount = endY - height
+		// clamp: rows beyond the viewport cannot be shown, and a hostile r=
+		// could otherwise drive ~1e9 ScrollUp calls while holding the IO lock.
+		scrollCount = min(endY-height, height)
 		for range scrollCount {
 			e.scr.ScrollUp(1)
 		}
@@ -685,6 +687,11 @@ func (e *Emulator) Close() error {
 	}
 
 	e.closed.Store(true)
+	// Close the response pipe writer so a reader blocked in pr.Read (the
+	// terminal-response forwarder) unblocks with EOF instead of leaking.
+	if e.pw != nil {
+		_ = e.pw.Close()
+	}
 	return nil
 }
 
@@ -1074,7 +1081,6 @@ func (e *Emulator) SetPassthroughConfig(dcs, apc, osc bool) {
 	e.passthroughAPC = apc
 	e.passthroughOSC = osc
 }
-
 
 func (e *Emulator) SixelState() *SixelState {
 	if e.IsAltScreen() {

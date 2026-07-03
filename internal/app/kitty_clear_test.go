@@ -103,3 +103,75 @@ func TestKittyClearOnED2(t *testing.T) {
 		}
 	}
 }
+
+// TestKittyNoStaleAccumulation simulates repeated scroll redraws and verifies
+// the placement map size stays bounded at the per-frame count (3 here) — no
+// accumulation of stale placements that would eventually leak to the host.
+func TestKittyNoStaleAccumulation(t *testing.T) {
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devnull.Close()
+	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+		ForceEnable: true,
+		Output:      devnull,
+	})
+	kp.enabled = true
+
+	winID := "test-window-id-abcdef12"
+
+	emu := vt.NewEmulator(80, 40)
+	clearCB := func() { kp.ClearWindow(winID) }
+	emu.KittyMainState().SetClearCallback(clearCB)
+	emu.KittyAltState().SetClearCallback(clearCB)
+	emu.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
+		cursorPos := emu.CursorPosition()
+		kp.ForwardCommand(
+			cmd, rawData, winID,
+			0, 0, 80, 40,
+			0, 0,
+			cursorPos.X, cursorPos.Y,
+			0,
+			emu.IsAltScreen(),
+			nil,
+		)
+	})
+
+	_, _ = emu.Write([]byte("\x1b[?1049h"))
+
+	tmpFile, err := os.CreateTemp("", "youterm-thumb-accum-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = tmpFile.Write(bytes.Repeat([]byte{0x00}, 100))
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+	encodedPath := base64.StdEncoding.EncodeToString([]byte(tmpFile.Name()))
+
+	frame := func() []byte {
+		var b bytes.Buffer
+		b.WriteString("\x1b[2J\x1b[H")
+		for _, row := range []int{5, 11, 17} {
+			fmt.Fprintf(&b, "\x1b[%d;3H", row)
+			b.WriteString("\x1b_Ga=T,t=f,f=24,s=400,v=300,c=20,r=5,C=1,q=2;")
+			b.WriteString(encodedPath)
+			b.WriteString("\x1b\\")
+		}
+		return b.Bytes()
+	}
+
+	// Simulate 10 scroll redraws back-to-back. Drain pendingOutput between
+	// frames (like the render cycle does) so each frame starts clean.
+	for i := 0; i < 10; i++ {
+		_, _ = emu.Write(frame())
+		_ = kp.FlushPending()
+	}
+
+	kp.mu.Lock()
+	count := len(kp.placements[winID])
+	kp.mu.Unlock()
+	if count != 3 {
+		t.Errorf("after 10 scroll redraws expected 3 placements tracked (one per visible thumbnail), got %d — placements are leaking", count)
+	}
+}

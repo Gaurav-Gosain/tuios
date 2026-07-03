@@ -267,7 +267,7 @@ func (kp *KittyPassthrough) getOrAllocateHostID(windowID string, guestImageID ui
 	}
 	hostID := kp.allocateHostID()
 	kp.imageIDMap[windowID][guestImageID] = hostID
-	kittyPassthroughLog("getOrAllocateHostID: windowID=%s, guestID=%d -> hostID=%d", windowID[:8], guestImageID, hostID)
+	kittyPassthroughLog("getOrAllocateHostID: windowID=%s, guestID=%d -> hostID=%d", windowID[:min(8, len(windowID))], guestImageID, hostID)
 	return hostID
 }
 
@@ -299,6 +299,10 @@ var (
 	syncBegin = []byte("\x1b[?2026h") // Begin Synchronized Update
 	syncEnd   = []byte("\x1b[?2026l") // End Synchronized Update
 )
+
+// maxPassthroughTransmitBytes caps the accumulated chunk data for a single
+// direct passthrough transmission, mirroring the internal handler's limit.
+const maxPassthroughTransmitBytes = 64 * 1024 * 1024
 
 // flushToHost writes any pending output immediately to the host terminal,
 // wrapped in synchronized update sequences to prevent tearing/flickering.
@@ -377,7 +381,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 			cmd.Action, kp.enabled, kp.inlineGraphics, cmd.ImageID, cmd.More, len(cmd.Data))
 	}
 	kittyPassthroughLog("ForwardCommand: action=%c, enabled=%v, imageID=%d, windowID=%s, win=(%d,%d), size=(%d,%d), cursor=(%d,%d), scrollback=%d, altScreen=%v",
-		cmd.Action, kp.enabled, cmd.ImageID, windowID[:8], windowX, windowY, windowWidth, windowHeight, cursorX, cursorY, scrollbackLen, isAltScreen)
+		cmd.Action, kp.enabled, cmd.ImageID, windowID[:min(8, len(windowID))], windowX, windowY, windowWidth, windowHeight, cursorX, cursorY, scrollbackLen, isAltScreen)
 
 	// Detect and discard echoed responses to prevent feedback loops.
 	// Responses have format "i=N;OK" or "i=N;ERROR_MSG" or just "OK"/"ERROR_MSG"
@@ -581,6 +585,15 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		kp.pendingDirectData[windowID] = pending
 	}
 
+	// Abort a runaway transmission before it exhausts memory. A guest can
+	// stream endless m=1 chunks without ever sending m=0; kitty's own limit
+	// is on this order (tens of MB).
+	if len(pending.Data)+len(cmd.Data) > maxPassthroughTransmitBytes {
+		kittyPassthroughLog("forwardTransmit: aborting oversized transmission (%d + %d bytes)",
+			len(pending.Data), len(cmd.Data))
+		delete(kp.pendingDirectData, windowID)
+		return nil
+	}
 	pending.Data = append(pending.Data, cmd.Data...)
 
 	kittyPassthroughLog("forwardTransmit: accumulated %d bytes, total=%d, more=%v",
@@ -795,7 +808,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			}
 		}
 	}
-	kittyPassthroughLog("forwardFileTransmit: mapped guestID=%d -> hostID=%d for window=%s", cmd.ImageID, hostID, windowID[:8])
+	kittyPassthroughLog("forwardFileTransmit: mapped guestID=%d -> hostID=%d for window=%s", cmd.ImageID, hostID, windowID[:min(8, len(windowID))])
 
 	// PERFORMANCE: Forward the file path directly to the host terminal.
 	// The host (Ghostty/Kitty) reads the file itself  - no need to read the
@@ -1257,7 +1270,7 @@ func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string, clearImag
 }
 
 func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string) {
-	kittyPassthroughLog("forwardDelete: delete=%c, imageID=%d, windowID=%s", cmd.Delete, cmd.ImageID, windowID[:8])
+	kittyPassthroughLog("forwardDelete: delete=%c, imageID=%d, windowID=%s", cmd.Delete, cmd.ImageID, windowID[:min(8, len(windowID))])
 
 	switch cmd.Delete {
 	case vt.KittyDeleteAll, 0:
@@ -1370,6 +1383,9 @@ func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
+	kittyPassthroughLog("ClearWindow: winID=%s enabled=%v, %d placements to delete",
+		windowID[:min(8, len(windowID))], kp.enabled, len(kp.placements[windowID]))
+
 	if !kp.enabled {
 		return
 	}
@@ -1438,7 +1454,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		}
 
 		info := allWindows[windowID]
-		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, info=%v, numPlacements=%d", windowID[:8], info != nil, len(placements))
+		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, info=%v, numPlacements=%d", windowID[:min(8, len(windowID))], info != nil, len(placements))
 		if info == nil {
 			for _, p := range placements {
 				if !p.Hidden {
@@ -1449,7 +1465,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			continue
 		}
 
-		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, IsAltScreen=%v, visible=%v", windowID[:8], info.IsAltScreen, info.Visible)
+		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, IsAltScreen=%v, visible=%v", windowID[:min(8, len(windowID))], info.IsAltScreen, info.Visible)
 
 		// During window manipulation (drag/resize), let images reposition
 		// with the window. The change detection below (posChanged check)
@@ -1797,10 +1813,13 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	// clear callback fires regardless of which screen the app is on (youterm,
 	// yazi, etc. run on alt screen and rely on ED 2 clearing their thumbnails).
 	clearCallback := func() {
+		kittyPassthroughLog("CALLBACK FIRED: winID=%s", win.ID[:min(8, len(win.ID))])
 		kp.ClearWindow(win.ID)
 	}
 	window.Terminal.KittyMainState().SetClearCallback(clearCallback)
 	window.Terminal.KittyAltState().SetClearCallback(clearCallback)
+	kittyPassthroughLog("setupKittyPassthrough: registered clear callback on BOTH main/alt for winID=%s",
+		win.ID[:min(8, len(win.ID))])
 
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		// In daemon mode, the daemon's VT emulator responds to queries directly

@@ -262,10 +262,24 @@ func (s *KittyState) ClearPending() {
 	s.pending = nil
 }
 
+// maxKittyTransmitBytes caps the total accumulated chunk data for a single
+// kitty transmission. A guest streaming endless m=1 chunks and never sending
+// m=0 would otherwise grow the buffer until OOM; kitty's own limit is on this
+// order (tens of MB).
+const maxKittyTransmitBytes = 64 * 1024 * 1024
+
+// AppendToPending appends a chunk to the in-progress transmission. It returns
+// false when there is no pending transmission, or when the cumulative size
+// would exceed maxKittyTransmitBytes, in which case the runaway transmission
+// is aborted (pending is discarded) so later chunks start fresh.
 func (s *KittyState) AppendToPending(data []byte) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.pending == nil {
+		return false
+	}
+	if len(s.pending.DataBuffer)+len(data) > maxKittyTransmitBytes {
+		s.pending = nil
 		return false
 	}
 	s.pending.DataBuffer = append(s.pending.DataBuffer, data...)

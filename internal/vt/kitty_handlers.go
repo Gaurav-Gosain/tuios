@@ -82,13 +82,17 @@ func (h *KittyGraphicsHandler) handleTransmit(cmd *KittyCommand, place bool) boo
 	// Check if this is a continuation of a chunked transmission
 	pending := h.state.GetPending()
 	if pending != nil {
-		// Append final chunk and finalize
-		h.state.AppendToPending(cmd.Data)
+		// Append final chunk and finalize. A false return means the
+		// transmission overran the cumulative size cap and was aborted.
+		if !h.state.AppendToPending(cmd.Data) {
+			h.sendResponse(cmd, false, "EINVAL:transmission exceeds size limit")
+			return true
+		}
 		img := h.state.FinalizePending()
 		if img != nil {
 			// Decompress if needed
 			if pending.Compression == KittyCompressionZlib {
-				decompressed, err := decompressZlib(img.Data)
+				decompressed, err := decompressZlib(img.Data, decompressLimit(img.Width, img.Height))
 				if err != nil {
 					h.sendResponse(cmd, false, "EDECOMPRESS:zlib decompression failed")
 					return true
@@ -129,7 +133,7 @@ func (h *KittyGraphicsHandler) handleTransmit(cmd *KittyCommand, place bool) boo
 
 	// Decompress if needed
 	if cmd.Compression == KittyCompressionZlib {
-		decompressed, err := decompressZlib(data)
+		decompressed, err := decompressZlib(data, decompressLimit(cmd.Width, cmd.Height))
 		if err != nil {
 			h.sendResponse(cmd, false, "EDECOMPRESS:zlib decompression failed")
 			return true
@@ -191,8 +195,12 @@ func (h *KittyGraphicsHandler) handleChunkedTransmit(cmd *KittyCommand) bool {
 		h.state.SetPending(pending)
 	}
 
-	// Append data
-	h.state.AppendToPending(cmd.Data)
+	// Append data. A false return means the cumulative size cap was exceeded
+	// and the transmission was aborted, so reject it instead of accumulating.
+	if !h.state.AppendToPending(cmd.Data) {
+		h.sendResponse(cmd, false, "EINVAL:transmission exceeds size limit")
+		return true
+	}
 
 	// Don't send response for intermediate chunks (quiet mode implied)
 	return true
@@ -411,13 +419,47 @@ func (h *KittyGraphicsHandler) sendResponse(cmd *KittyCommand, ok bool, errMsg s
 	}
 }
 
-// decompressZlib decompresses zlib-compressed data.
-func decompressZlib(data []byte) ([]byte, error) {
+// maxDecompressedBytes is the absolute ceiling for a single zlib-inflated
+// image, used when the declared dimensions are missing or implausible.
+const maxDecompressedBytes = 256 * 1024 * 1024
+
+// decompressLimit derives an inflation cap from the declared image
+// dimensions (RGBA is 4 bytes per pixel) plus a margin, falling back to the
+// fixed ceiling when the dimensions are absent or would overflow.
+func decompressLimit(width, height int) int64 {
+	if width <= 0 || height <= 0 {
+		return maxDecompressedBytes
+	}
+	// Guard against overflow before multiplying hostile dimensions.
+	if width > maxDecompressedBytes/4 || height > maxDecompressedBytes/4 {
+		return maxDecompressedBytes
+	}
+	n := int64(width) * int64(height) * 4
+	n += n / 4 // margin for headers and format slack
+	if n <= 0 || n > maxDecompressedBytes {
+		return maxDecompressedBytes
+	}
+	return n
+}
+
+// decompressZlib decompresses zlib-compressed data, refusing to inflate past
+// maxBytes. A small o=z payload can otherwise expand to gigabytes
+// (decompression bomb); truncation is reported as an error.
+func decompressZlib(data []byte, maxBytes int64) ([]byte, error) {
 	reader, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = reader.Close() }()
 
-	return io.ReadAll(reader)
+	// Read one extra byte past the limit so we can distinguish a stream that
+	// exactly fills the cap from one that overruns it.
+	out, err := io.ReadAll(io.LimitReader(reader, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(out)) > maxBytes {
+		return nil, fmt.Errorf("decompressed data exceeds limit %d", maxBytes)
+	}
+	return out, nil
 }
