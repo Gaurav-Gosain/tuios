@@ -83,51 +83,51 @@ type WindowLayout struct {
 // OS represents the main application state and window manager.
 // It manages all windows, workspaces, and user interactions.
 type OS struct {
-	Dragging           bool
-	Resizing           bool
-	ResizeCorner       ResizeCorner
-	PreResizeState     terminal.Window
-	ResizeStartX       int
-	ResizeStartY       int
-	DragOffsetX        int
-	DragOffsetY        int
-	DragStartX         int // Track where drag started
-	DragStartY         int // Track where drag started
-	TiledX             int // Original tiled position X
-	TiledY             int // Original tiled position Y
-	TiledWidth         int // Original tiled width
-	TiledHeight        int // Original tiled height
+	Dragging                 bool
+	Resizing                 bool
+	ResizeCorner             ResizeCorner
+	PreResizeState           terminal.Window
+	ResizeStartX             int
+	ResizeStartY             int
+	DragOffsetX              int
+	DragOffsetY              int
+	DragStartX               int // Track where drag started
+	DragStartY               int // Track where drag started
+	TiledX                   int // Original tiled position X
+	TiledY                   int // Original tiled position Y
+	TiledWidth               int // Original tiled width
+	TiledHeight              int // Original tiled height
 	DraggedWindowIndex       int // Index of window being dragged
 	AutoScrollDir            int // -1 = up, 0 = none, 1 = down (for drag auto-scroll)
 	AutoScrollActive         bool
 	ScrollbarDragging        bool
 	ScrollbarDragWindowIndex int // -1 when not dragging
-	Windows            []*terminal.Window
-	FocusedWindow      int
-	Width              int
-	Height             int
-	X                  int
-	Y                  int
-	Mode               Mode
-	terminalMu         sync.RWMutex
-	LastMouseX         int
-	LastMouseY         int
-	HasActiveTerminals bool
-	idleFrames         int // Consecutive frames with no content changes (for adaptive tick)
-	ShowHelp           bool
-	InteractionMode    bool                       // True when actively dragging/resizing
-	MouseSnapping      bool                       // Enable/disable mouse snapping
-	WindowExitChan     chan string                // Channel to signal window closure
-	PTYDataChan        chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
-	StateSyncChan      chan *session.SessionState // Channel for thread-safe state sync from callbacks
-	ClientEventChan    chan ClientEvent           // Channel for thread-safe client join/leave notifications
-	Animations         []*ui.Animation            // Active animations
-	CPUHistory         []float64                  // CPU usage history for graph
-	LastCPUUpdate      time.Time                  // Last time CPU was updated
-	RAMUsage           float64                    // Cached RAM usage percentage
-	LastRAMUpdate      time.Time                  // Last time RAM was updated
-	AutoTiling         bool                       // Automatic tiling mode enabled
-	MasterRatio        float64                    // Master window width ratio for tiling (0.3-0.7)
+	Windows                  []*terminal.Window
+	FocusedWindow            int
+	Width                    int
+	Height                   int
+	X                        int
+	Y                        int
+	Mode                     Mode
+	terminalMu               sync.RWMutex
+	LastMouseX               int
+	LastMouseY               int
+	HasActiveTerminals       bool
+	idleFrames               int // Consecutive frames with no content changes (for adaptive tick)
+	ShowHelp                 bool
+	InteractionMode          bool                       // True when actively dragging/resizing
+	MouseSnapping            bool                       // Enable/disable mouse snapping
+	WindowExitChan           chan string                // Channel to signal window closure
+	PTYDataChan              chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
+	StateSyncChan            chan *session.SessionState // Channel for thread-safe state sync from callbacks
+	ClientEventChan          chan ClientEvent           // Channel for thread-safe client join/leave notifications
+	Animations               []*ui.Animation            // Active animations
+	CPUHistory               []float64                  // CPU usage history for graph
+	LastCPUUpdate            time.Time                  // Last time CPU was updated
+	RAMUsage                 float64                    // Cached RAM usage percentage
+	LastRAMUpdate            time.Time                  // Last time RAM was updated
+	AutoTiling               bool                       // Automatic tiling mode enabled
+	MasterRatio              float64                    // Master window width ratio for tiling (0.3-0.7)
 	// BSP tiling state
 	WorkspaceTrees        map[int]*layout.BSPTree // BSP tree per workspace
 	PreselectionDir       layout.PreselectionDir  // Pending preselection direction (0 = none)
@@ -199,12 +199,12 @@ type OS struct {
 	ScriptSleepUntil   time.Time // When to resume after a sleep command
 	ScriptFinishedTime time.Time // When the script finished (for auto-hide)
 	// Tape manager UI
-	ShowTapeManager   bool              // True when showing tape manager overlay
-	TapeManager       *TapeManagerState // Tape manager state
-	TapeRecorder      *tape.Recorder    // Tape recorder for recording sessions
-	TapeRecordingName string            // Name of current recording
-	TapePrefixActive   bool             // True when Ctrl+B, T was pressed (tape sub-prefix)
-	LayoutPrefixActive bool             // True when Ctrl+B, L was pressed (layout sub-prefix)
+	ShowTapeManager    bool              // True when showing tape manager overlay
+	TapeManager        *TapeManagerState // Tape manager state
+	TapeRecorder       *tape.Recorder    // Tape recorder for recording sessions
+	TapeRecordingName  string            // Name of current recording
+	TapePrefixActive   bool              // True when Ctrl+B, T was pressed (tape sub-prefix)
+	LayoutPrefixActive bool              // True when Ctrl+B, L was pressed (layout sub-prefix)
 	// Remote command processing
 	ProcessingRemoteKeys bool // True when processing remote send-keys (disables animations)
 	// Remote tape script progress (used instead of ScriptPlayer for tape exec)
@@ -236,7 +236,7 @@ type OS struct {
 	CommandPaletteSelected int
 	CommandPaletteScroll   int
 	// Session switcher overlay
-	ShowSessionSwitcher     bool
+	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string
 	SessionSwitcherSelected      int
 	SessionSwitcherScroll        int
@@ -249,20 +249,20 @@ type OS struct {
 	AggregateViewSelected int
 	AggregateViewScroll   int
 	// Layout picker overlay
-	ShowLayoutPicker     bool
-	LayoutCycleIndex     int              // Current index in saved layouts for cycling
-	MultifocusSet        map[int]bool     // Windows that receive keystrokes simultaneously
-	UseBSPLayout         bool             // true = BSP tiling, false = master-stack
+	ShowLayoutPicker bool
+	LayoutCycleIndex int          // Current index in saved layouts for cycling
+	MultifocusSet    map[int]bool // Windows that receive keystrokes simultaneously
+	UseBSPLayout     bool         // true = BSP tiling, false = master-stack
 	// Scrolling tiling (niri-like) layout
 	UseScrollingLayout        bool                            // true = scrolling columns mode
 	WorkspaceScrollingLayouts map[int]*layout.ScrollingLayout // per-workspace scrolling layouts
 	scrollingFocusSyncing     bool                            // guard to prevent recursive sync
-	LayoutPickerItems    []LayoutTemplate
-	LayoutPickerSelected int
-	LayoutPickerScroll   int
-	LayoutPickerQuery    string
-	LayoutPickerMode     string // "load" or "save"
-	LayoutSaveBuffer     string // Buffer for layout name when saving
+	LayoutPickerItems         []LayoutTemplate
+	LayoutPickerSelected      int
+	LayoutPickerScroll        int
+	LayoutPickerQuery         string
+	LayoutPickerMode          string // "load" or "save"
+	LayoutSaveBuffer          string // Buffer for layout name when saving
 }
 
 // Notification represents a temporary notification message.
@@ -1747,7 +1747,9 @@ func (m *OS) ToggleZoom() {
 		termW := fw.ContentWidth()
 		termH := fw.ContentHeight()
 		if fw.Terminal != nil {
+			fw.LockIO()
 			fw.Terminal.Resize(termW, termH)
+			fw.UnlockIO()
 		}
 		if fw.Pty != nil {
 			_ = fw.Pty.Resize(termW, termH)
@@ -1789,7 +1791,9 @@ func (m *OS) ToggleZoom() {
 		termW := fw.ContentWidth()
 		termH := fw.ContentHeight()
 		if fw.Terminal != nil {
+			fw.LockIO()
 			fw.Terminal.Resize(termW, termH)
+			fw.UnlockIO()
 		}
 		if fw.Pty != nil {
 			_ = fw.Pty.Resize(termW, termH)

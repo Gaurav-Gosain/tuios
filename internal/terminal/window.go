@@ -1170,7 +1170,12 @@ func (w *Window) Resize(width, height int) {
 	// Check if size actually changed
 	sizeChanged := w.Width != width || w.Height != height
 
+	// ioMu serializes the emulator buffer reallocation against the render
+	// reader (RLockIO) and the PTY writers; Terminal has no lock of its own.
+	// TriggerRedraw below takes ioMu.RLock, so the lock is scoped to the resize.
+	w.ioMu.Lock()
 	w.Terminal.Resize(termWidth, termHeight)
+	w.ioMu.Unlock()
 	if w.Pty != nil {
 		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
 			_ = err
@@ -1217,7 +1222,11 @@ func (w *Window) ResizeVisual(width, height int) {
 		}
 		termWidth := max(width-borderDeduct, 1)
 		termHeight := max(height-borderDeduct, 1)
+		// ioMu serializes the buffer reallocation with the render reader and
+		// PTY writers; Terminal has no lock of its own.
+		w.ioMu.Lock()
 		w.Terminal.Resize(termWidth, termHeight)
+		w.ioMu.Unlock()
 	}
 
 	w.MarkPositionDirty()
