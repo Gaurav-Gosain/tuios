@@ -48,14 +48,9 @@ type TUIClient struct {
 	// Codec negotiated with daemon (gob by default)
 	codec Codec
 
-	// PTY output handlers (legacy raw-byte path)
+	// PTY output handlers (raw-byte path)
 	ptyHandlers   map[string]func([]byte)
 	ptyHandlersMu sync.RWMutex
-
-	// Screen diff handlers (event-based path). Keyed by PTY ID.
-	// Called when the daemon sends a screen diff (MsgScreenDiff).
-	screenDiffHandlers   map[string]func(*ScreenDiff)
-	screenDiffHandlersMu sync.RWMutex
 
 	// PTY closed handlers - called when a PTY process exits
 	ptyClosedHandlers   map[string]func()
@@ -92,12 +87,11 @@ type TUIClient struct {
 // NewTUIClient creates a new TUI client for daemon communication.
 func NewTUIClient() *TUIClient {
 	return &TUIClient{
-		codec:              DefaultCodec(), // gob by default
-		ptyHandlers:        make(map[string]func([]byte)),
-		screenDiffHandlers: make(map[string]func(*ScreenDiff)),
-		ptyClosedHandlers:  make(map[string]func()),
-		pendingResponses:   make(map[MessageType]chan *Message),
-		done:               make(chan struct{}),
+		codec:             DefaultCodec(), // gob by default
+		ptyHandlers:       make(map[string]func([]byte)),
+		ptyClosedHandlers: make(map[string]func()),
+		pendingResponses:  make(map[MessageType]chan *Message),
+		done:              make(chan struct{}),
 	}
 }
 
@@ -328,12 +322,14 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 	}
 }
 
-// CreatePTY creates a new PTY in the session.
-func (c *TUIClient) CreatePTY(title string, width, height int) (string, error) {
+// CreatePTY creates a new PTY in the session. windowID, if non-empty, is the
+// client-side window UUID exported to the shell as TUIOS_WINDOW_ID.
+func (c *TUIClient) CreatePTY(title, windowID string, width, height int) (string, error) {
 	msg, err := NewMessageWithCodec(MsgCreatePTY, &CreatePTYPayload{
-		Title:  title,
-		Width:  width,
-		Height: height,
+		Title:    title,
+		Width:    width,
+		Height:   height,
+		WindowID: windowID,
 	}, c.codec)
 	if err != nil {
 		return "", err
@@ -371,10 +367,8 @@ func (c *TUIClient) ClosePTY(ptyID string) error {
 	return c.send(msg)
 }
 
-// SubscribePTY subscribes to PTY output and registers handlers.
-// The raw handler receives legacy byte streams (MsgPTYOutput).
-// Use SetScreenDiffHandler to additionally (or instead) handle the
-// event-based screen diff protocol (MsgScreenDiff).
+// SubscribePTY subscribes to PTY output and registers a handler.
+// The handler receives raw byte streams (MsgPTYOutput).
 func (c *TUIClient) SubscribePTY(ptyID string, handler func([]byte)) error {
 	c.ptyHandlersMu.Lock()
 	c.ptyHandlers[ptyID] = handler
@@ -385,15 +379,6 @@ func (c *TUIClient) SubscribePTY(ptyID string, handler func([]byte)) error {
 		return err
 	}
 	return c.send(msg)
-}
-
-// SetScreenDiffHandler registers a handler for screen diffs from a PTY.
-// The daemon sends diffs when the PTY's VT state changes (event-based,
-// no timers, natural coalescing). The handler receives only changed cells.
-func (c *TUIClient) SetScreenDiffHandler(ptyID string, handler func(*ScreenDiff)) {
-	c.screenDiffHandlersMu.Lock()
-	c.screenDiffHandlers[ptyID] = handler
-	c.screenDiffHandlersMu.Unlock()
 }
 
 // UnsubscribePTY removes the PTY output handler and tells the daemon to stop streaming.
@@ -643,8 +628,10 @@ func (c *TUIClient) readLoop() {
 		}
 
 		c.readMu.Lock()
-		_ = c.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-		msg, _, err := ReadMessageWithCodec(c.conn)
+		// Short deadline detects the message boundary for done-channel checks;
+		// the body then gets a longer deadline so a large payload cannot be cut
+		// mid-frame and desync framing.
+		msg, _, err := ReadMessageConn(c.conn, 100*time.Millisecond, 30*time.Second)
 		c.readMu.Unlock()
 
 		if err != nil {
@@ -701,20 +688,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 
 		if handler != nil {
 			handler(data)
-		}
-
-	case MsgScreenDiff:
-		ptyID, diff, err := DecodeScreenDiff(msg.Payload)
-		if err != nil || ptyID == "" || diff == nil {
-			return
-		}
-
-		c.screenDiffHandlersMu.RLock()
-		handler := c.screenDiffHandlers[ptyID]
-		c.screenDiffHandlersMu.RUnlock()
-
-		if handler != nil {
-			handler(diff)
 		}
 
 	case MsgPTYClosed:

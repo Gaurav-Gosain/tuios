@@ -242,8 +242,8 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 
 		m.setupKittyPassthrough(window)
 		m.setupSixelPassthrough(window)
-	m.setupTextSizingPassthrough(window)
-	m.setupClipboardPassthrough(window)
+		m.setupTextSizingPassthrough(window)
+		m.setupClipboardPassthrough(window)
 
 		m.Windows = append(m.Windows, window)
 		m.LogInfo("[RESTORE] Window %d created: DaemonMode=%v, PTYID=%s", i, window.DaemonMode, window.PTYID[:8])
@@ -936,9 +936,10 @@ func (m *OS) AddDaemonWindow(title string) *OS {
 	termWidth := max(width-2, 1)
 	termHeight := max(height-2, 1)
 
-	// Create PTY in daemon
+	// Create PTY in daemon. newID is the window UUID, exported to the shell as
+	// TUIOS_WINDOW_ID.
 	m.LogInfo("[DAEMON] Calling CreatePTY(%s, %d, %d)", title, termWidth, termHeight)
-	ptyID, err := m.DaemonClient.CreatePTY(title, termWidth, termHeight)
+	ptyID, err := m.DaemonClient.CreatePTY(title, newID, termWidth, termHeight)
 	if err != nil {
 		m.LogError("[DAEMON] Failed to create PTY in daemon: %v", err)
 		return m

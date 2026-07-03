@@ -7,6 +7,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
+	"time"
 )
 
 // MessageType identifies the type of protocol message.
@@ -69,7 +71,6 @@ const (
 	MsgSessionResize   // Session effective size changed (min of all clients)
 	MsgForceRefresh    // Force all clients to re-render
 	MsgRequestFullSync // Client requests full state sync from leader
-	MsgScreenDiff      // Screen diff (changed cells) from daemon VT to client
 )
 
 // Message is the base protocol message structure.
@@ -188,6 +189,9 @@ type CreatePTYPayload struct {
 	Title  string `json:"title,omitempty"`
 	Width  int    `json:"width,omitempty"`
 	Height int    `json:"height,omitempty"`
+	// WindowID is the client-side window UUID. It is exported to the spawned
+	// shell as TUIOS_WINDOW_ID. Empty from older clients (unset, as before).
+	WindowID string `json:"window_id,omitempty"`
 }
 
 // PTYCreatedPayload confirms PTY creation.
@@ -298,16 +302,16 @@ type CommandResultPayload struct {
 // This is the routed version of ExecuteCommand/SendKeys/SetConfig.
 type RemoteCommandPayload struct {
 	RequestID    string   `json:"request_id,omitempty"`
-	CommandType  string   `json:"command_type"`                // "tape_command", "send_keys", "set_config"
-	TapeCommand  string   `json:"tape_command,omitempty"`      // For tape commands
-	TapeArgs     []string `json:"tape_args,omitempty"`         // Arguments for tape command
-	TapeScript   string   `json:"tape_script,omitempty"`       // Raw tape script
-	Keys         string   `json:"keys,omitempty"`              // For send_keys
-	Literal      bool     `json:"literal,omitempty"`           // For send_keys (send to PTY)
-	Raw          bool     `json:"raw,omitempty"`               // For send_keys (no splitting)
-	WindowTarget string   `json:"window_target,omitempty"`     // For send_keys (target window by name or ID)
-	ConfigPath   string   `json:"config_path,omitempty"`       // For set_config
-	ConfigValue  string   `json:"config_value,omitempty"`      // For set_config
+	CommandType  string   `json:"command_type"`            // "tape_command", "send_keys", "set_config"
+	TapeCommand  string   `json:"tape_command,omitempty"`  // For tape commands
+	TapeArgs     []string `json:"tape_args,omitempty"`     // Arguments for tape command
+	TapeScript   string   `json:"tape_script,omitempty"`   // Raw tape script
+	Keys         string   `json:"keys,omitempty"`          // For send_keys
+	Literal      bool     `json:"literal,omitempty"`       // For send_keys (send to PTY)
+	Raw          bool     `json:"raw,omitempty"`           // For send_keys (no splitting)
+	WindowTarget string   `json:"window_target,omitempty"` // For send_keys (target window by name or ID)
+	ConfigPath   string   `json:"config_path,omitempty"`   // For set_config
+	ConfigValue  string   `json:"config_value,omitempty"`  // For set_config
 }
 
 // GetLogsPayload requests log entries from the daemon.
@@ -470,7 +474,6 @@ func WriteMessageWithCodec(w io.Writer, msg *Message, codec Codec) error {
 // ReadMessageWithCodec reads a message and returns it along with the codec type used.
 // Wire format: [4 bytes BE length][1 byte type][1 byte codec][payload]
 func ReadMessageWithCodec(r io.Reader) (*Message, CodecType, error) {
-	// Read length
 	var totalLen uint32
 	if err := binary.Read(r, binary.BigEndian, &totalLen); err != nil {
 		if err == io.EOF {
@@ -478,7 +481,38 @@ func ReadMessageWithCodec(r io.Reader) (*Message, CodecType, error) {
 		}
 		return nil, CodecGob, fmt.Errorf("failed to read message length: %w", err)
 	}
+	return readMessageBody(r, totalLen)
+}
 
+// ReadMessageConn reads a framed message from conn, applying boundaryTimeout
+// only to the 4-byte length prefix and bodyTimeout to the header and payload.
+// Splitting the deadline keeps idle-connection keepalive timeouts short while
+// preventing a large payload that arrives across several reads from being cut
+// mid-frame, which would otherwise desync the stream. A bodyTimeout of 0
+// clears the read deadline for the body.
+func ReadMessageConn(conn net.Conn, boundaryTimeout, bodyTimeout time.Duration) (*Message, CodecType, error) {
+	_ = conn.SetReadDeadline(time.Now().Add(boundaryTimeout))
+
+	var totalLen uint32
+	if err := binary.Read(conn, binary.BigEndian, &totalLen); err != nil {
+		if err == io.EOF {
+			return nil, CodecGob, err
+		}
+		return nil, CodecGob, fmt.Errorf("failed to read message length: %w", err)
+	}
+
+	if bodyTimeout > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(bodyTimeout))
+	} else {
+		_ = conn.SetReadDeadline(time.Time{})
+	}
+
+	return readMessageBody(conn, totalLen)
+}
+
+// readMessageBody reads the header and payload after the length prefix has
+// already been consumed from r.
+func readMessageBody(r io.Reader, totalLen uint32) (*Message, CodecType, error) {
 	// Sanity check length (max 16MB)
 	if totalLen > 16*1024*1024 {
 		return nil, CodecGob, fmt.Errorf("message too large: %d bytes (raw: 0x%08x)", totalLen, totalLen)

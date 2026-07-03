@@ -108,27 +108,17 @@ type PTY struct {
 	outputBuffer []byte
 	outputPos    int
 
-	// Subscribers for raw output streaming (legacy path, used by non-diff clients)
+	// Subscribers for raw output streaming.
 	subscribers   map[string]chan []byte
 	subscribersMu sync.RWMutex
-
-	// Screen-diff subscribers. Each subscriber has a signal channel (cap 1)
-	// and a ScreenDiffer that computes diffs via snapshot comparison. The
-	// PTY read loop signals; the subscriber goroutine computes + sends.
-	diffSubscribers   map[string]*DiffSignal
-	diffSubscribersMu sync.RWMutex
 
 	exited   bool
 	exitedMu sync.RWMutex
 	exitCode int
 
-	// Single-goroutine VT writer channel.
+	// Single-goroutine VT writer channel. Closed by readOutput on exit so
+	// vtWriter's range terminates.
 	vtWriteChan chan []byte
-
-	// Reliable kitty graphics channel. Kitty APC data from the daemon's
-	// VT callback is sent here instead of relying on the lossy broadcast.
-	// streamPTYOutput reads from both broadcast and kittyChan.
-	kittyChan chan []byte
 
 	// Callback when PTY process exits - used by daemon to notify clients
 	onExit func(ptyID string)
@@ -146,13 +136,14 @@ type Session struct {
 	ptysMu sync.RWMutex
 
 	// Session state (serializable)
-	state             *SessionState
-	stopResurrection  func() // Stops periodic resurrection saving
-	stateMu sync.RWMutex
+	state            *SessionState
+	stopResurrection func() // Stops periodic resurrection saving
+	stateMu          sync.RWMutex
 
 	// Terminal size
 	width  int
 	height int
+	sizeMu sync.RWMutex
 
 	// Lifecycle
 	Created    time.Time
@@ -206,8 +197,9 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 	return session, nil
 }
 
-// CreatePTY creates a new PTY in this session.
-func (s *Session) CreatePTY(width, height int) (*PTY, error) {
+// CreatePTY creates a new PTY in this session. windowID, if non-empty, is the
+// client-side window UUID exported to the shell as TUIOS_WINDOW_ID.
+func (s *Session) CreatePTY(windowID string, width, height int) (*PTY, error) {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
@@ -225,7 +217,7 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 
 	// Create command
 	cmd := exec.Command(shell)
-	cmd.Env = s.buildEnv()
+	cmd.Env = s.buildEnv(windowID)
 
 	// Set up the command to use the PTY as controlling terminal
 	// This is required for interactive shells to work properly
@@ -254,9 +246,8 @@ func (s *Session) CreatePTY(width, height int) (*PTY, error) {
 		width:        width,
 		height:       height,
 		outputBuffer: make([]byte, 64*1024), // 64KB ring buffer
-		subscribers: make(map[string]chan []byte),
-		vtWriteChan: make(chan []byte, 256),
-		kittyChan:   make(chan []byte, 512), // Reliable kitty graphics delivery
+		subscribers:  make(map[string]chan []byte),
+		vtWriteChan:  make(chan []byte, 256),
 	}
 
 	// Handle kitty graphics queries on the daemon side for low-latency
@@ -380,14 +371,18 @@ func (s *Session) WindowCount() int {
 
 // Size returns the current session dimensions.
 func (s *Session) Size() (width, height int) {
+	s.sizeMu.RLock()
+	defer s.sizeMu.RUnlock()
 	return s.width, s.height
 }
 
 // Resize updates the session dimensions.
 // This is called when the effective size changes (min of all connected clients).
 func (s *Session) Resize(width, height int) {
+	s.sizeMu.Lock()
 	s.width = width
 	s.height = height
+	s.sizeMu.Unlock()
 
 	// Resize all PTYs to match the new session size
 	s.ptysMu.RLock()
@@ -399,6 +394,10 @@ func (s *Session) Resize(width, height int) {
 
 // Info returns session information.
 func (s *Session) Info() SessionInfo {
+	s.sizeMu.RLock()
+	width, height := s.width, s.height
+	s.sizeMu.RUnlock()
+
 	return SessionInfo{
 		Name:        s.Name,
 		ID:          s.ID,
@@ -406,8 +405,8 @@ func (s *Session) Info() SessionInfo {
 		LastActive:  s.LastActive.Unix(),
 		WindowCount: s.WindowCount(),
 		Attached:    false, // Will be set by manager
-		Width:       s.width,
-		Height:      s.height,
+		Width:       width,
+		Height:      height,
 	}
 }
 
@@ -424,7 +423,7 @@ func (s *Session) getShell() string {
 	return "/bin/sh"
 }
 
-func (s *Session) buildEnv() []string {
+func (s *Session) buildEnv(windowID string) []string {
 	env := os.Environ()
 
 	term := "xterm-256color"
@@ -441,6 +440,9 @@ func (s *Session) buildEnv() []string {
 	env = append(env, "TERM_PROGRAM=TUIOS")
 	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
 	env = append(env, "TUIOS_SESSION="+s.Name)
+	if windowID != "" {
+		env = append(env, "TUIOS_WINDOW_ID="+windowID)
+	}
 
 	return env
 }
@@ -490,63 +492,6 @@ func (p *PTY) Unsubscribe(clientID string) {
 	if ch, ok := p.subscribers[clientID]; ok {
 		close(ch)
 		delete(p.subscribers, clientID)
-	}
-}
-
-// SubscribeScreenDiffs registers a client for event-based screen diffs.
-// Returns a DiffSignal whose Signal channel wakes the subscriber goroutine.
-// The subscriber uses DiffSignal.Differ.ComputeDiff(emulator) to compute
-// diffs via snapshot comparison. The first ComputeDiff call returns a full
-// screen snapshot since there's no previous state to compare against.
-func (p *PTY) SubscribeScreenDiffs(clientID string) *DiffSignal {
-	p.diffSubscribersMu.Lock()
-	defer p.diffSubscribersMu.Unlock()
-
-	if p.diffSubscribers == nil {
-		p.diffSubscribers = make(map[string]*DiffSignal)
-	}
-
-	if existing, ok := p.diffSubscribers[clientID]; ok {
-		return existing
-	}
-
-	sub := NewDiffSignal()
-	p.diffSubscribers[clientID] = sub
-
-	// Signal immediately so the subscriber sends an initial full snapshot
-	select {
-	case sub.Signal <- struct{}{}:
-	default:
-	}
-
-	debugLog("[DEBUG] PTY %s: added diff subscriber %s", p.ID[:8], clientID)
-	return sub
-}
-
-// UnsubscribeScreenDiffs removes a screen-diff subscriber.
-func (p *PTY) UnsubscribeScreenDiffs(clientID string) {
-	p.diffSubscribersMu.Lock()
-	defer p.diffSubscribersMu.Unlock()
-
-	if sub, ok := p.diffSubscribers[clientID]; ok {
-		close(sub.Done)
-		delete(p.diffSubscribers, clientID)
-		debugLog("[DEBUG] PTY %s: removed diff subscriber %s", p.ID[:8], clientID)
-	}
-}
-
-// signalDiffSubscribers wakes all screen-diff subscribers. Non-blocking:
-// if a subscriber's signal channel already has a pending signal, the new
-// one is a no-op (natural coalescing).
-func (p *PTY) signalDiffSubscribers() {
-	p.diffSubscribersMu.RLock()
-	defer p.diffSubscribersMu.RUnlock()
-
-	for _, sub := range p.diffSubscribers {
-		select {
-		case sub.Signal <- struct{}{}:
-		default:
-		}
 	}
 }
 
@@ -778,7 +723,15 @@ func (p *PTY) Close() error {
 		_ = p.cmd.Process.Kill()
 	}
 
-	// Close PTY
+	// Mark the VT emulator closed so forwardTerminalResponses returns EOF on
+	// its next read. (A read already blocked in the response pipe is only
+	// unblocked once Emulator.Close CloseWrites the pipe.)
+	if p.terminal != nil {
+		_ = p.terminal.Close()
+	}
+
+	// Close PTY. This unblocks readOutput's pending Read, which then closes
+	// vtWriteChan so vtWriter exits.
 	if p.pty != nil {
 		return p.pty.Close()
 	}
@@ -793,6 +746,10 @@ func (p *PTY) IsExited() bool {
 }
 
 func (p *PTY) readOutput() {
+	// readOutput is the sole sender on vtWriteChan; closing it here lets
+	// vtWriter's range terminate when the read loop exits.
+	defer close(p.vtWriteChan)
+
 	buf := make([]byte, 16*1024) // 16KB: matches typical PTY pipe buffer
 	for {
 		select {
@@ -816,6 +773,8 @@ func (p *PTY) readOutput() {
 			// query responses, so it's OK if it falls slightly behind.
 			select {
 			case p.vtWriteChan <- data:
+			case <-p.ctx.Done():
+				return
 			default:
 				// VT writer can't keep up  - acceptable for state tracking.
 				// The client's own VT is the rendering source of truth.
@@ -853,15 +812,17 @@ func (p *PTY) appendToBuffer(data []byte) {
 		p.outputPos = bufLen
 		return
 	}
-	space := bufLen - p.outputPos
-	if len(data) > space {
-		// Shift buffer, keep last half
-		half := bufLen / 2
+	// Shift in half-buffer steps until there is room. A single half-shift is
+	// not always enough when len(data) exceeds bufLen/2, so loop until the
+	// remaining space fits or the buffer is empty.
+	for bufLen-p.outputPos < len(data) && p.outputPos > 0 {
+		half := min(bufLen/2, p.outputPos)
 		copy(p.outputBuffer, p.outputBuffer[half:p.outputPos])
 		p.outputPos -= half
 	}
-	copy(p.outputBuffer[p.outputPos:], data)
-	p.outputPos += len(data)
+	// Advance by bytes actually copied so outputPos can never exceed bufLen.
+	n := copy(p.outputBuffer[p.outputPos:], data)
+	p.outputPos += n
 }
 
 func (p *PTY) broadcast(data []byte) {

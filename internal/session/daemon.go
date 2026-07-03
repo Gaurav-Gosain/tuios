@@ -28,30 +28,47 @@ type Daemon struct {
 
 	// Pending requests: maps requestID to the client that made the request
 	// Used to route command results back to the original requester
-	pendingRequests   map[string]*connState
+	pendingRequests   map[string]*pendingRequest
 	pendingRequestsMu sync.RWMutex
 
 	// Goroutine tracking for clean shutdown
 	wg sync.WaitGroup
 
+	// shutdownOnce makes shutdown idempotent (Run and Stop can both call it).
+	shutdownOnce sync.Once
+
 	// Configuration
 	version string
+}
+
+// pendingRequest tracks a routed command awaiting its result, with the time it
+// was created so cleanupLoop can expire stale entries.
+type pendingRequest struct {
+	requester *connState
+	created   time.Time
 }
 
 // connState tracks state for a connected client.
 type connState struct {
 	conn       net.Conn
 	clientID   string
-	sessionID  string // Session they're attached to
 	hello      *HelloPayload
 	done       chan struct{}
+	doneOnce   sync.Once // gates close(done) so shutdown is safe to call twice
 	sendMu     sync.Mutex
 	lastActive time.Time
 
 	// Codec negotiated for this connection (gob by default)
 	codec Codec
 
-	// PTY subscriptions for this client
+	// mu guards the mutable per-connection fields below (sessionID, width,
+	// height, isTUIClient, ptySubscriptions). These are written on this
+	// connection's own goroutine and read from other goroutines (PTY exit
+	// callbacks, size recalculation, command routing). Lock ordering: readers
+	// that also hold d.clientsMu always take d.clientsMu first, then cs.mu; no
+	// path takes cs.mu then d.clientsMu.
+	mu               sync.Mutex
+	sessionID        string // Session they're attached to
 	ptySubscriptions map[string]struct{}
 
 	// isTUIClient indicates this is a full TUI client (vs a control client)
@@ -90,7 +107,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		ctx:             ctx,
 		cancel:          cancel,
 		clients:         make(map[string]*connState),
-		pendingRequests: make(map[string]*connState),
+		pendingRequests: make(map[string]*pendingRequest),
 		version:         cfg.Version,
 	}
 
@@ -154,50 +171,54 @@ func (d *Daemon) Stop() {
 	_ = d.shutdown()
 }
 
+// closeDone closes cs.done exactly once, even if shutdown races the connection
+// goroutine.
+func (cs *connState) closeDone() {
+	cs.doneOnce.Do(func() { close(cs.done) })
+}
+
 func (d *Daemon) shutdown() error {
-	log.Println("Shutting down daemon...")
+	d.shutdownOnce.Do(func() {
+		log.Println("Shutting down daemon...")
 
-	if d.listener != nil {
-		_ = d.listener.Close()
-	}
-
-	d.clientsMu.Lock()
-	for _, cs := range d.clients {
-		select {
-		case <-cs.done:
-		default:
-			close(cs.done)
+		if d.listener != nil {
+			_ = d.listener.Close()
 		}
-		_ = cs.conn.Close()
-	}
-	d.clients = make(map[string]*connState)
-	d.clientsMu.Unlock()
 
-	// Wait for goroutines with timeout
-	done := make(chan struct{})
-	go func() {
-		d.wg.Wait()
-		close(done)
-	}()
+		d.clientsMu.Lock()
+		for _, cs := range d.clients {
+			cs.closeDone()
+			_ = cs.conn.Close()
+		}
+		d.clients = make(map[string]*connState)
+		d.clientsMu.Unlock()
 
-	select {
-	case <-done:
-		log.Println("All goroutines exited cleanly")
-	case <-time.After(5 * time.Second):
-		log.Println("Warning: goroutine shutdown timed out after 5s, forcing shutdown")
-	}
+		// Wait for goroutines with timeout
+		done := make(chan struct{})
+		go func() {
+			d.wg.Wait()
+			close(done)
+		}()
 
-	d.manager.Shutdown()
+		select {
+		case <-done:
+			log.Println("All goroutines exited cleanly")
+		case <-time.After(5 * time.Second):
+			log.Println("Warning: goroutine shutdown timed out after 5s, forcing shutdown")
+		}
 
-	socketPath := d.manager.SocketPath()
-	_ = os.Remove(socketPath)
+		d.manager.Shutdown()
 
-	pidPath, err := GetPidFilePath()
-	if err == nil {
-		_ = os.Remove(pidPath)
-	}
+		socketPath := d.manager.SocketPath()
+		_ = os.Remove(socketPath)
 
-	log.Println("Daemon shutdown complete")
+		pidPath, err := GetPidFilePath()
+		if err == nil {
+			_ = os.Remove(pidPath)
+		}
+
+		log.Println("Daemon shutdown complete")
+	})
 	return nil
 }
 
@@ -246,16 +267,35 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		delete(d.clients, clientID)
 		d.clientsMu.Unlock()
 
+		// Snapshot subscriptions and session under cs.mu before unsubscribing.
+		cs.mu.Lock()
+		sessionID := cs.sessionID
+		subs := make([]string, 0, len(cs.ptySubscriptions))
+		for ptyID := range cs.ptySubscriptions {
+			subs = append(subs, ptyID)
+		}
+		cs.mu.Unlock()
+
 		// Unsubscribe from all PTYs
-		if cs.sessionID != "" {
-			if session := d.manager.GetSessionByID(cs.sessionID); session != nil {
-				for ptyID := range cs.ptySubscriptions {
+		if sessionID != "" {
+			if session := d.manager.GetSessionByID(sessionID); session != nil {
+				for _, ptyID := range subs {
 					if pty := session.GetPTY(ptyID); pty != nil {
 						pty.Unsubscribe(clientID)
 					}
 				}
 			}
 		}
+
+		// Purge any pending requests this client was waiting on so its
+		// connState is not pinned forever.
+		d.pendingRequestsMu.Lock()
+		for id, pr := range d.pendingRequests {
+			if pr.requester == cs {
+				delete(d.pendingRequests, id)
+			}
+		}
+		d.pendingRequestsMu.Unlock()
 
 		_ = conn.Close()
 	}()
@@ -270,9 +310,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		default:
 		}
 
-		_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-
-		msg, codecType, err := ReadMessageWithCodec(conn)
+		// Short deadline only detects the message boundary (for done/ctx
+		// checks); the body gets a longer deadline so a large payload cannot be
+		// cut mid-frame and desync framing.
+		msg, codecType, err := ReadMessageConn(conn, 100*time.Millisecond, 30*time.Second)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
@@ -432,7 +473,6 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		return fmt.Errorf("failed to get/create session: %w", err)
 	}
 
-	cs.sessionID = session.ID
 	// Record the new client's dimensions from the attach payload. Previously
 	// these were zeroed out on the theory that 80x24 might be a bubbletea
 	// placeholder; but leaving them at 0 excludes the client from
@@ -440,11 +480,15 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// web clients to be stuck at stale session dimensions from a previously-
 	// attached native client. Trust the attach payload  - web/native attach
 	// callers already pass the real client viewport.
+	// TUI clients are the ones that can receive and execute remote commands.
+	// Set under cs.mu, then release before calling helpers that take
+	// clientsMu then cs.mu (avoids a re-entrant cs.mu lock).
+	cs.mu.Lock()
+	cs.sessionID = session.ID
 	cs.width = payload.Width
 	cs.height = payload.Height
-	// Mark as TUI client if they have PTY subscriptions or if they're creating a new session
-	// TUI clients are the ones that can receive and execute remote commands
 	cs.isTUIClient = true
+	cs.mu.Unlock()
 
 	clientCount := d.getSessionClientCount(session.ID)
 	log.Printf("Client %s attached to session %s (TUI client, %d clients total, size=%dx%d)",
@@ -507,25 +551,34 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 }
 
 func (d *Daemon) handleDetach(cs *connState) error {
-	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
-	}
-
-	sessionID := cs.sessionID
 	clientID := cs.clientID
 
-	// Unsubscribe from all PTYs
-	if session := d.manager.GetSessionByID(sessionID); session != nil {
-		for ptyID := range cs.ptySubscriptions {
-			if pty := session.GetPTY(ptyID); pty != nil {
-				pty.Unsubscribe(clientID)
-			}
-		}
+	// Snapshot the subscriptions and session, then clear the fields, all under
+	// cs.mu. Unsubscribe and notify after releasing the lock.
+	cs.mu.Lock()
+	sessionID := cs.sessionID
+	if sessionID == "" {
+		cs.mu.Unlock()
+		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
+	}
+	subs := make([]string, 0, len(cs.ptySubscriptions))
+	for ptyID := range cs.ptySubscriptions {
+		subs = append(subs, ptyID)
 	}
 	cs.ptySubscriptions = make(map[string]struct{})
 	cs.sessionID = ""
 	cs.width = 0
 	cs.height = 0
+	cs.mu.Unlock()
+
+	// Unsubscribe from all PTYs
+	if session := d.manager.GetSessionByID(sessionID); session != nil {
+		for _, ptyID := range subs {
+			if pty := session.GetPTY(ptyID); pty != nil {
+				pty.Unsubscribe(clientID)
+			}
+		}
+	}
 
 	// Notify other clients that this client left
 	d.notifyClientLeft(sessionID, clientID)
@@ -680,7 +733,7 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 	}
 
 	debugLog("[DEBUG] Creating PTY %dx%d for session %s", width, height, session.Name)
-	pty, err := session.CreatePTY(width, height)
+	pty, err := session.CreatePTY(payload.WindowID, width, height)
 	if err != nil {
 		debugLog("[DEBUG] handleCreatePTY: failed to create PTY: %v", err)
 		return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to create PTY: %v", err))
@@ -720,7 +773,9 @@ func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 	}
 
 	// Unsubscribe first
+	cs.mu.Lock()
 	delete(cs.ptySubscriptions, payload.PTYID)
+	cs.mu.Unlock()
 
 	if err := session.ClosePTY(payload.PTYID); err != nil {
 		return d.sendError(cs, ErrCodePTYNotFound, err.Error())
@@ -819,7 +874,17 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 		return d.sendError(cs, ErrCodePTYNotFound, fmt.Sprintf("PTY %s not found", payload.PTYID))
 	}
 
+	cs.mu.Lock()
+	if _, already := cs.ptySubscriptions[payload.PTYID]; already {
+		cs.mu.Unlock()
+		// Already streaming; a second streamPTYOutput would compete for the
+		// same output channel and interleave halves of the output.
+		debugLog("[DEBUG] PTY %s already subscribed for client %s", payload.PTYID, cs.clientID)
+		return nil
+	}
 	cs.ptySubscriptions[payload.PTYID] = struct{}{}
+	cs.mu.Unlock()
+
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
 	go d.streamPTYOutput(cs, pty)
 
@@ -846,7 +911,9 @@ func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
 	debugLog("[DEBUG] Unsubscribing from PTY %s", payload.PTYID)
 
 	// Remove from subscriptions
+	cs.mu.Lock()
 	delete(cs.ptySubscriptions, payload.PTYID)
+	cs.mu.Unlock()
 
 	// Unsubscribe from the PTY output channel
 	pty := session.GetPTY(payload.PTYID)
@@ -884,7 +951,6 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 		State: state,
 	})
 }
-
 
 // streamPTYOutput streams raw PTY bytes to a subscriber with batching.
 // Multiple channel reads are coalesced into a single connection write to
@@ -933,61 +999,6 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 	}
 }
 
-// streamScreenDiffs streams event-based screen diffs to a subscriber.
-// This replaces the raw-byte streamPTYOutput path. The subscriber receives
-// only changed cells (via DirtyAccumulator), so:
-//   - No data loss: missing an intermediate diff just means the next one
-//     carries more cells. No VT state corruption.
-//   - Natural coalescing: multiple VT updates between sends merge in the
-//     accumulator. Fast TUIs produce fewer, larger diffs instead of many
-//     tiny ones.
-//   - Event-driven: the signal channel wakes us only when there's work.
-func (d *Daemon) streamScreenDiffs(cs *connState, pty *PTY) {
-	debugLog("[DEBUG] streamScreenDiffs started for PTY %s, client %s", pty.ID[:8], cs.clientID)
-
-	sub := pty.SubscribeScreenDiffs(cs.clientID)
-	defer pty.UnsubscribeScreenDiffs(cs.clientID)
-
-	for {
-		select {
-		case <-cs.done:
-			debugLog("[DEBUG] streamScreenDiffs: client done")
-			return
-		case <-d.ctx.Done():
-			debugLog("[DEBUG] streamScreenDiffs: daemon context done")
-			return
-		case <-sub.Done:
-			debugLog("[DEBUG] streamScreenDiffs: subscription ended")
-			return
-		case <-sub.Signal:
-			// Compute diff via snapshot comparison. This reads the VT
-			// screen, compares with the previous snapshot, and returns
-			// only changed cells. Correctly handles scrolls, clears,
-			// and all other screen operations that Touched misses.
-			pty.terminalMu.RLock()
-			var diff *ScreenDiff
-			if pty.terminal != nil {
-				diff = sub.Differ.ComputeDiff(pty.terminal)
-			}
-			pty.terminalMu.RUnlock()
-
-			if diff == nil {
-				continue
-			}
-
-			cs.sendMu.Lock()
-			_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			err := WriteScreenDiff(cs.conn, pty.ID, diff)
-			cs.sendMu.Unlock()
-
-			if err != nil {
-				debugLog("[DEBUG] streamScreenDiffs: send failed: %v", err)
-				return
-			}
-		}
-	}
-}
-
 // notifyPTYClosed sends MsgPTYClosed to all clients subscribed to the given PTY.
 // This is called when the PTY process exits (e.g., user types exit or Ctrl+D).
 func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
@@ -997,11 +1008,16 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 	defer d.clientsMu.RUnlock()
 
 	for _, cs := range d.clients {
-		// Only notify clients attached to this session and subscribed to this PTY
-		if cs.sessionID != sessionID {
-			continue
+		// Only notify clients attached to this session and subscribed to this
+		// PTY. Read the guarded fields under cs.mu (clientsMu is already held,
+		// preserving the clientsMu-then-cs.mu order).
+		cs.mu.Lock()
+		match := cs.sessionID == sessionID
+		if match {
+			_, match = cs.ptySubscriptions[ptyID]
 		}
-		if _, subscribed := cs.ptySubscriptions[ptyID]; !subscribed {
+		cs.mu.Unlock()
+		if !match {
 			continue
 		}
 
@@ -1048,7 +1064,10 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 	defer d.clientsMu.RUnlock()
 
 	for _, cs := range d.clients {
-		if cs.sessionID != sessionID || !cs.isTUIClient {
+		cs.mu.Lock()
+		match := cs.sessionID == sessionID && cs.isTUIClient
+		cs.mu.Unlock()
+		if !match {
 			continue
 		}
 		if cs.clientID == excludeClientID {
@@ -1072,7 +1091,10 @@ func (d *Daemon) getSessionClientCount(sessionID string) int {
 
 	count := 0
 	for _, cs := range d.clients {
-		if cs.sessionID == sessionID && cs.isTUIClient {
+		cs.mu.Lock()
+		match := cs.sessionID == sessionID && cs.isTUIClient
+		cs.mu.Unlock()
+		if match {
 			count++
 		}
 	}
@@ -1089,21 +1111,25 @@ func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
 	first := true
 
 	for _, cs := range d.clients {
-		if cs.sessionID != sessionID || !cs.isTUIClient {
+		cs.mu.Lock()
+		match := cs.sessionID == sessionID && cs.isTUIClient
+		cw, ch := cs.width, cs.height
+		cs.mu.Unlock()
+		if !match {
 			continue
 		}
-		if cs.width == 0 || cs.height == 0 {
+		if cw == 0 || ch == 0 {
 			continue
 		}
 		if first {
-			width, height = cs.width, cs.height
+			width, height = cw, ch
 			first = false
 		} else {
-			if cs.width < width {
-				width = cs.width
+			if cw < width {
+				width = cw
 			}
-			if cs.height < height {
-				height = cs.height
+			if ch < height {
+				height = ch
 			}
 		}
 	}
@@ -1247,7 +1273,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	// Track this request so we can route the result back to the original client
 	if cs.clientID != tuiClient.clientID {
 		d.pendingRequestsMu.Lock()
-		d.pendingRequests[payload.RequestID] = cs
+		d.pendingRequests[payload.RequestID] = &pendingRequest{requester: cs, created: time.Now()}
 		d.pendingRequestsMu.Unlock()
 	}
 
@@ -1291,7 +1317,7 @@ func (d *Daemon) handleSendKeys(cs *connState, msg *Message) error {
 	// Track this request so we can route the result back to the original client
 	if cs.clientID != tuiClient.clientID {
 		d.pendingRequestsMu.Lock()
-		d.pendingRequests[payload.RequestID] = cs
+		d.pendingRequests[payload.RequestID] = &pendingRequest{requester: cs, created: time.Now()}
 		d.pendingRequestsMu.Unlock()
 	}
 
@@ -1339,7 +1365,7 @@ func (d *Daemon) handleCapturePane(cs *connState, msg *Message) error {
 
 	if cs.clientID != tuiClient.clientID {
 		d.pendingRequestsMu.Lock()
-		d.pendingRequests[payload.RequestID] = cs
+		d.pendingRequests[payload.RequestID] = &pendingRequest{requester: cs, created: time.Now()}
 		d.pendingRequestsMu.Unlock()
 	}
 
@@ -1380,7 +1406,7 @@ func (d *Daemon) handleSetConfig(cs *connState, msg *Message) error {
 	// Track this request so we can route the result back to the original client
 	if cs.clientID != tuiClient.clientID {
 		d.pendingRequestsMu.Lock()
-		d.pendingRequests[payload.RequestID] = cs
+		d.pendingRequests[payload.RequestID] = &pendingRequest{requester: cs, created: time.Now()}
 		d.pendingRequestsMu.Unlock()
 	}
 
@@ -1407,14 +1433,15 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 
 	// Check if there's a pending request from another client waiting for this result
 	d.pendingRequestsMu.Lock()
-	requester, found := d.pendingRequests[payload.RequestID]
+	pending, found := d.pendingRequests[payload.RequestID]
 	if found {
 		delete(d.pendingRequests, payload.RequestID)
 	}
 	d.pendingRequestsMu.Unlock()
 
 	// Forward the result to the original requester
-	if found && requester != nil {
+	if found && pending != nil && pending.requester != nil {
+		requester := pending.requester
 		LogBasic("Forwarding result to original requester %s", requester.clientID)
 		return d.sendMessage(requester, MsgCommandResult, &payload)
 	}
@@ -1453,7 +1480,10 @@ func (d *Daemon) findTUIClient(sessionID string) *connState {
 	defer d.clientsMu.RUnlock()
 
 	for _, cs := range d.clients {
-		if cs.sessionID == sessionID && cs.isTUIClient {
+		cs.mu.Lock()
+		match := cs.sessionID == sessionID && cs.isTUIClient
+		cs.mu.Unlock()
+		if match {
 			return cs
 		}
 	}
@@ -1645,12 +1675,23 @@ func (d *Daemon) cleanupLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
+	const pendingRequestTTL = 2 * time.Minute
+
 	for {
 		select {
 		case <-d.ctx.Done():
 			return
 		case <-ticker.C:
-			// Could implement session cleanup here
+			// Expire stale pending requests whose TUI result never arrived so
+			// they do not pin the requester's connState forever.
+			now := time.Now()
+			d.pendingRequestsMu.Lock()
+			for id, pr := range d.pendingRequests {
+				if now.Sub(pr.created) > pendingRequestTTL {
+					delete(d.pendingRequests, id)
+				}
+			}
+			d.pendingRequestsMu.Unlock()
 		}
 	}
 }

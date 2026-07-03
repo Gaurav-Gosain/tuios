@@ -1,9 +1,7 @@
 package session
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -15,16 +13,15 @@ import (
 	"golang.org/x/term"
 )
 
-// Client connects to the TUIOS daemon and handles terminal I/O.
+// Client connects to the TUIOS daemon for one-shot request/response control
+// messages (used by the tuios CLI). It does not stream an interactive session.
 type Client struct {
-	conn     net.Conn
-	version  string
-	attached bool
+	conn    net.Conn
+	version string
 
-	// Terminal state
-	width    int
-	height   int
-	oldState *term.State
+	// Terminal size, reported to the daemon in the hello handshake.
+	width  int
+	height int
 
 	// Message handling
 	done      chan struct{}
@@ -34,14 +31,6 @@ type Client struct {
 
 	// Codec negotiated with daemon (gob by default)
 	codec Codec
-
-	// Session info (after attach)
-	sessionName string
-	sessionID   string
-
-	// Prefix key state for detach detection (Ctrl+B, d)
-	prefixActive bool
-	prefixKey    byte // Default: Ctrl+B (0x02)
 }
 
 // ClientConfig holds configuration for creating a client.
@@ -53,10 +42,9 @@ type ClientConfig struct {
 // NewClient creates a new daemon client.
 func NewClient(cfg *ClientConfig) *Client {
 	return &Client{
-		version:   cfg.Version,
-		done:      make(chan struct{}),
-		prefixKey: 0x02,           // Ctrl+B
-		codec:     DefaultCodec(), // gob by default
+		version: cfg.Version,
+		done:    make(chan struct{}),
+		codec:   DefaultCodec(), // gob by default
 	}
 }
 
@@ -96,119 +84,6 @@ func (c *Client) Close() error {
 		}
 	})
 	return err
-}
-
-// Attach attaches to a session.
-func (c *Client) Attach(sessionName string, createIfMissing bool) error {
-	msg, err := NewMessageWithCodec(MsgAttach, &AttachPayload{
-		SessionName: sessionName,
-		CreateNew:   createIfMissing,
-		Width:       c.width,
-		Height:      c.height,
-	}, c.codec)
-	if err != nil {
-		return err
-	}
-
-	if err := c.send(msg); err != nil {
-		return err
-	}
-
-	// Wait for response
-	resp, err := c.recv()
-	if err != nil {
-		return err
-	}
-
-	switch resp.Type {
-	case MsgAttached:
-		var payload AttachedPayload
-		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
-			return err
-		}
-		c.attached = true
-		c.sessionName = payload.SessionName
-		c.sessionID = payload.SessionID
-		return nil
-
-	case MsgError:
-		var errPayload ErrorPayload
-		if err := resp.ParsePayloadWithCodec(&errPayload, c.codec); err != nil {
-			return fmt.Errorf("attach failed")
-		}
-		return fmt.Errorf("attach failed: %s", errPayload.Message)
-
-	default:
-		return fmt.Errorf("unexpected response type: %d", resp.Type)
-	}
-}
-
-// NewSession creates a new session.
-func (c *Client) NewSession(name string) error {
-	msg, err := NewMessageWithCodec(MsgNew, &NewPayload{
-		SessionName: name,
-		Width:       c.width,
-		Height:      c.height,
-	}, c.codec)
-	if err != nil {
-		return err
-	}
-
-	if err := c.send(msg); err != nil {
-		return err
-	}
-
-	// Wait for response (session list or error)
-	resp, err := c.recv()
-	if err != nil {
-		return err
-	}
-
-	switch resp.Type {
-	case MsgSessionList:
-		return nil // Success
-
-	case MsgError:
-		var errPayload ErrorPayload
-		if err := resp.ParsePayloadWithCodec(&errPayload, c.codec); err != nil {
-			return fmt.Errorf("create failed")
-		}
-		return fmt.Errorf("create failed: %s", errPayload.Message)
-
-	default:
-		return fmt.Errorf("unexpected response type: %d", resp.Type)
-	}
-}
-
-// Detach detaches from the current session.
-func (c *Client) Detach() error {
-	if !c.attached {
-		return fmt.Errorf("not attached to any session")
-	}
-
-	msg, err := NewMessageWithCodec(MsgDetach, nil, c.codec)
-	if err != nil {
-		return err
-	}
-
-	if err := c.send(msg); err != nil {
-		return err
-	}
-
-	// Wait for confirmation
-	resp, err := c.recv()
-	if err != nil {
-		return err
-	}
-
-	if resp.Type == MsgDetached {
-		c.attached = false
-		c.sessionName = ""
-		c.sessionID = ""
-		return nil
-	}
-
-	return fmt.Errorf("unexpected response type: %d", resp.Type)
 }
 
 // ListSessions returns a list of all sessions.
@@ -272,273 +147,6 @@ func (c *Client) KillSession(name string) error {
 		return fmt.Errorf("unexpected response type: %d", resp.Type)
 	}
 }
-
-// SendInput sends input bytes to the attached session.
-func (c *Client) SendInput(data []byte) error {
-	if !c.attached {
-		return fmt.Errorf("not attached to any session")
-	}
-
-	msg := NewRawMessage(MsgInput, data)
-	return c.send(msg)
-}
-
-// SendResize notifies the session of a terminal resize.
-func (c *Client) SendResize(width, height int) error {
-	c.width = width
-	c.height = height
-
-	msg, err := NewMessageWithCodec(MsgResize, &ResizePayload{
-		Width:  width,
-		Height: height,
-	}, c.codec)
-	if err != nil {
-		return err
-	}
-
-	return c.send(msg)
-}
-
-// ReadOutput reads output from the session.
-// Returns the output bytes, or nil on non-output messages.
-func (c *Client) ReadOutput() ([]byte, error) {
-	msg, err := c.recv()
-	if err != nil {
-		return nil, err
-	}
-
-	switch msg.Type {
-	case MsgOutput:
-		return msg.Payload, nil
-	case MsgSessionEnded:
-		return nil, io.EOF
-	case MsgDetached:
-		c.attached = false
-		return nil, io.EOF
-	case MsgError:
-		var errPayload ErrorPayload
-		_ = msg.ParsePayloadWithCodec(&errPayload, c.codec)
-		return nil, fmt.Errorf("server error: %s", errPayload.Message)
-	default:
-		// Other message types, return nil to continue
-		return nil, nil
-	}
-}
-
-// Run runs the interactive terminal session with PTY streaming from the daemon.
-// The terminal is put in raw mode and all I/O is streamed to/from the daemon's PTYs.
-func (c *Client) Run() error {
-	if !c.attached {
-		return fmt.Errorf("not attached to any session")
-	}
-
-	// Check if stdin is a terminal
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return fmt.Errorf("stdin is not a terminal - run this command from an interactive terminal")
-	}
-
-	// Put terminal in raw mode
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		return fmt.Errorf("failed to set raw mode: %w", err)
-	}
-	c.oldState = oldState
-	defer c.restoreTerminal()
-
-	// Set up channels for coordination
-	errCh := make(chan error, 2)
-
-	// Start goroutine to read from daemon and write to terminal
-	go c.readFromDaemon(errCh)
-
-	// Start goroutine to read from terminal and send to daemon
-	go c.readFromTerminal(errCh)
-
-	// Start resize watcher
-	go c.watchResizeSignals()
-
-	// Wait for error or done signal
-	select {
-	case err := <-errCh:
-		return err
-	case <-c.done:
-		return nil
-	}
-}
-
-// readFromDaemon reads messages from the daemon and writes output to the terminal.
-func (c *Client) readFromDaemon(errCh chan<- error) {
-	for {
-		select {
-		case <-c.done:
-			return
-		default:
-		}
-
-		// Set a reasonable read deadline to allow checking done channel
-		_ = c.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-
-		msg, _, err := ReadMessageWithCodec(c.conn)
-		if err != nil {
-			// Check for timeout (need to unwrap since ReadMessage wraps errors)
-			var netErr net.Error
-			if errors.As(err, &netErr) && netErr.Timeout() {
-				continue // Normal timeout, keep reading
-			}
-			if errors.Is(err, io.EOF) {
-				errCh <- fmt.Errorf("daemon disconnected")
-				return
-			}
-			errCh <- fmt.Errorf("read error: %w", err)
-			return
-		}
-
-		switch msg.Type {
-		case MsgOutput:
-			// Raw terminal output from the TUIOS TUI
-			_, _ = os.Stdout.Write(msg.Payload)
-
-		case MsgPTYOutput:
-			// PTY output - try binary format first, then codec format
-			ptyID, data, err := ParseBinaryPTYMessage(msg.Payload)
-			if err != nil || ptyID == "" {
-				// Fall back to codec format
-				var payload PTYOutputPayload
-				if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
-					_, _ = os.Stdout.Write(msg.Payload)
-					continue
-				}
-				data = payload.Data
-			}
-			_, _ = os.Stdout.Write(data)
-
-		case MsgSessionEnded:
-			errCh <- io.EOF
-			return
-
-		case MsgDetached:
-			c.attached = false
-			// Print detach message (restore terminal first for clean output)
-			c.restoreTerminal()
-			fmt.Println("\r\n[detached from session]")
-			errCh <- nil
-			return
-
-		case MsgError:
-			var errPayload ErrorPayload
-			_ = msg.ParsePayloadWithCodec(&errPayload, c.codec)
-			errCh <- fmt.Errorf("server error: %s", errPayload.Message)
-			return
-
-		case MsgPTYClosed:
-			// A PTY was closed, might want to notify user
-			// For now, continue running if there are other PTYs
-
-		case MsgPong:
-			// Keepalive response, ignore
-
-		default:
-			// Unknown message type, ignore
-		}
-	}
-}
-
-// readFromTerminal reads from stdin and sends to the daemon.
-// Also handles the detach sequence (Ctrl+B, d).
-func (c *Client) readFromTerminal(errCh chan<- error) {
-	buf := make([]byte, 4096)
-
-	for {
-		select {
-		case <-c.done:
-			return
-		default:
-		}
-
-		n, err := os.Stdin.Read(buf)
-		if err != nil {
-			if err == io.EOF {
-				errCh <- nil
-				return
-			}
-			errCh <- fmt.Errorf("stdin read error: %w", err)
-			return
-		}
-
-		if n > 0 {
-			// Process input byte by byte to detect detach sequence
-			toSend := make([]byte, 0, n)
-
-			for i := range n {
-				b := buf[i]
-
-				if c.prefixActive {
-					c.prefixActive = false
-					if b == 'd' || b == 'D' {
-						// Detach sequence detected (Ctrl+B, d)
-						_ = c.Detach() // Ignore error, we're exiting anyway
-						errCh <- nil
-						return
-					}
-					// Not a detach, send the prefix key and this byte
-					toSend = append(toSend, c.prefixKey, b)
-					continue
-				}
-
-				if b == c.prefixKey {
-					// Prefix key pressed, wait for next key
-					c.prefixActive = true
-					continue
-				}
-
-				toSend = append(toSend, b)
-			}
-
-			// Send remaining input to daemon
-			if len(toSend) > 0 {
-				msg := NewRawMessage(MsgInput, toSend)
-				if err := c.send(msg); err != nil {
-					errCh <- fmt.Errorf("send error: %w", err)
-					return
-				}
-			}
-		}
-	}
-}
-
-// watchResizeSignals monitors for terminal resize and sends updates to daemon.
-func (c *Client) watchResizeSignals() {
-	// Poll for size changes (cross-platform approach)
-	// On Unix, we could use SIGWINCH, but polling works everywhere
-	ticker := time.NewTicker(250 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.done:
-			return
-		case <-ticker.C:
-			w, h := c.getTerminalSize()
-			if w != c.width || h != c.height {
-				c.width = w
-				c.height = h
-				_ = c.SendResize(w, h)
-			}
-		}
-	}
-}
-
-// restoreTerminal restores the terminal to its original state.
-func (c *Client) restoreTerminal() {
-	if c.oldState != nil {
-		_ = term.Restore(int(os.Stdin.Fd()), c.oldState)
-		c.oldState = nil
-	}
-}
-
-// ErrRunLocalTUI is returned by Run() to indicate the caller should run TUIOS locally.
-// This is deprecated - Run() now streams directly from daemon PTYs.
-var ErrRunLocalTUI = fmt.Errorf("run local TUI")
 
 func (c *Client) sendHello() error {
 	// Detect terminal capabilities
@@ -609,16 +217,6 @@ func (c *Client) getTerminalSize() (width, height int) {
 		return 80, 24 // Default
 	}
 	return width, height
-}
-
-// IsAttached returns true if client is attached to a session.
-func (c *Client) IsAttached() bool {
-	return c.attached
-}
-
-// SessionName returns the name of the attached session.
-func (c *Client) SessionName() string {
-	return c.sessionName
 }
 
 // SendControlMessage sends a control message to the daemon and waits for a response.
