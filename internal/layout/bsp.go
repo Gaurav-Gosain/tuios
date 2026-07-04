@@ -408,6 +408,14 @@ func (t *BSPTree) ApplyLayout(bounds Rect) map[int]Rect {
 		return result
 	}
 	t.applyLayoutRecursive(t.Root, bounds, result)
+	// Keep leaves that were grown to the minimum size within the root bounds, so
+	// a terminal too small to fit every pane pushes tiles back on-screen instead
+	// of off the edge.
+	for id, r := range result {
+		r.X = max(bounds.X, min(r.X, bounds.X+bounds.W-r.W))
+		r.Y = max(bounds.Y, min(r.Y, bounds.Y+bounds.H-r.H))
+		result[id] = r
+	}
 	return result
 }
 

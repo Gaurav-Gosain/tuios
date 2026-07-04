@@ -159,7 +159,9 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		}
 	}
 
-	// Ensure minimum window size
+	// Ensure minimum window size, then keep the widened tile on-screen. Without
+	// the position clamp a tile that was grown to the minimum on a small terminal
+	// would overflow screenWidth/usableHeight and overlap its neighbours.
 	for i := range layouts {
 		if layouts[i].Width < config.DefaultWindowWidth {
 			layouts[i].Width = config.DefaultWindowWidth
@@ -167,6 +169,8 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		if layouts[i].Height < config.DefaultWindowHeight {
 			layouts[i].Height = config.DefaultWindowHeight
 		}
+		layouts[i].X = max(0, min(layouts[i].X, screenWidth-layouts[i].Width))
+		layouts[i].Y = max(topMargin, min(layouts[i].Y, topMargin+usableHeight-layouts[i].Height))
 	}
 
 	return layouts
