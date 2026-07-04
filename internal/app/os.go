@@ -168,8 +168,9 @@ type OS struct {
 	cachedSeparator      string // Cached dock separator string
 	cachedSeparatorWidth int    // Width of cached separator
 	workspaceActiveStyle *lipgloss.Style
-	cachedViewContent    string // Cached full View() output to skip rendering on idle ticks
-	renderSkipped        bool   // True when frame-skip fired; View() returns cached content
+	cachedViewContent    string           // Cached full View() output to skip rendering on idle ticks
+	renderSkipped        bool             // True when frame-skip fired; View() returns cached content
+	renderCanvas         *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH

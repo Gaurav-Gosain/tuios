@@ -12,7 +12,18 @@ import (
 )
 
 func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
-	canvas := lipgloss.NewCanvas(m.GetRenderWidth(), m.GetRenderHeight())
+	// Reuse the canvas across frames. Allocating a fresh one each frame was the
+	// single largest source of allocations (a full-screen cell buffer per frame).
+	// Resize is a no-op when the dimensions are unchanged; Clear resets the cells
+	// in place. Safe because GetCanvas is only called from View on one goroutine.
+	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
+	if m.renderCanvas == nil {
+		m.renderCanvas = lipgloss.NewCanvas(rw, rh)
+	} else {
+		m.renderCanvas.Resize(rw, rh)
+		m.renderCanvas.Clear()
+	}
+	canvas := m.renderCanvas
 
 	layersPtr := pool.GetLayerSlice()
 	layers := (*layersPtr)[:0]
