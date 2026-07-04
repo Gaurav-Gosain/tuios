@@ -94,14 +94,13 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	return server.Shutdown(ctx)
 }
 
-// StartSSHServerLegacy is the legacy function signature for backward compatibility
-func StartSSHServerLegacy(ctx context.Context, host, port, keyPath string) error {
-	return StartSSHServer(ctx, &SSHServerConfig{
-		Host:      host,
-		Port:      port,
-		KeyPath:   keyPath,
-		Ephemeral: true, // Legacy mode is ephemeral
-	})
+// shortID returns the first 8 characters of an id for logging, or the whole id
+// when it is shorter, so a non-UUID id cannot panic the log call.
+func shortID(id string) string {
+	if len(id) < 8 {
+		return id
+	}
+	return id[:8]
 }
 
 // teaHandler creates a TUIOS instance for each SSH session
@@ -131,6 +130,15 @@ func teaHandler(sshSession ssh.Session) (tea.Model, []tea.ProgramOption) {
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
 		return createEphemeralTUIOSInstance(sshSession, pty.Window.Width, pty.Window.Height)
+	}
+
+	// Close the daemon client when the SSH session ends, otherwise the client
+	// read loop, its socket, and the daemon-side connState leak per connection.
+	if o, ok := model.(*app.OS); ok {
+		go func() {
+			<-sshSession.Context().Done()
+			o.Cleanup()
+		}()
 	}
 
 	return model, opts
@@ -298,7 +306,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 	// Handle state sync from other clients via channel (thread-safe)
 	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
-		log.Printf("[SSH] Received state sync: trigger=%s, source=%s", triggerType, sourceID[:8])
+		log.Printf("[SSH] Received state sync: trigger=%s, source=%s", triggerType, shortID(sourceID))
 		// Send state to channel for processing in Bubble Tea event loop
 		// This ensures thread-safe access to m.Windows
 		if m.StateSyncChan != nil {
@@ -312,7 +320,7 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 
 	// Handle client join notifications via channel (thread-safe)
 	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
-		log.Printf("[SSH] Client joined: %s (total: %d, size: %dx%d)", clientID[:8], clientCount, width, height)
+		log.Printf("[SSH] Client joined: %s (total: %d, size: %dx%d)", shortID(clientID), clientCount, width, height)
 		if m.ClientEventChan != nil {
 			select {
 			case m.ClientEventChan <- app.ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height}:
@@ -324,7 +332,7 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 
 	// Handle client leave notifications via channel (thread-safe)
 	client.OnClientLeft(func(clientID string, clientCount int) {
-		log.Printf("[SSH] Client left: %s (remaining: %d)", clientID[:8], clientCount)
+		log.Printf("[SSH] Client left: %s (remaining: %d)", shortID(clientID), clientCount)
 		if m.ClientEventChan != nil {
 			select {
 			case m.ClientEventChan <- app.ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount}:

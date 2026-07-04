@@ -2268,6 +2268,13 @@ func (m *OS) SwitchToSession(targetSession string) error {
 }
 
 // Cleanup performs cleanup operations when the application exits.
+// Cleanup releases per-session resources. It closes the daemon client, which
+// stops the client read loop and drops the daemon-side connection, so an SSH or
+// web session ending does not leak a goroutine, a socket, and a daemon connState.
+// TUIClient.Close is idempotent, so calling Cleanup more than once is safe.
+// State should be synced to the daemon before Cleanup, on the UI goroutine.
 func (m *OS) Cleanup() {
-	// Reserved for future cleanup operations
+	if m.DaemonClient != nil {
+		_ = m.DaemonClient.Close()
+	}
 }

@@ -271,7 +271,25 @@ func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut)
 	}
 
+	// Close the daemon client when the web session ends, otherwise the client
+	// read loop, its socket, and the daemon-side connState leak per connection.
+	if o, ok := model.(*app.OS); ok {
+		go func() {
+			<-sess.Context().Done()
+			o.Cleanup()
+		}()
+	}
+
 	return model, opts
+}
+
+// shortID returns the first 8 characters of an id for logging, or the whole id
+// when it is shorter, so a non-UUID id cannot panic the log call.
+func shortID(id string) string {
+	if len(id) < 8 {
+		return id
+	}
+	return id[:8]
 }
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
@@ -417,7 +435,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 	// Handle state sync from other clients via channel (thread-safe)
 	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
-		log.Printf("[WEB] Received state sync: trigger=%s, source=%s", triggerType, sourceID[:8])
+		log.Printf("[WEB] Received state sync: trigger=%s, source=%s", triggerType, shortID(sourceID))
 		// Send state to channel for processing in Bubble Tea event loop
 		// This ensures thread-safe access to m.Windows
 		if m.StateSyncChan != nil {
@@ -431,7 +449,7 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 
 	// Handle client join notifications via channel (thread-safe)
 	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
-		log.Printf("[WEB] Client joined: %s (total: %d, size: %dx%d)", clientID[:8], clientCount, width, height)
+		log.Printf("[WEB] Client joined: %s (total: %d, size: %dx%d)", shortID(clientID), clientCount, width, height)
 		if m.ClientEventChan != nil {
 			select {
 			case m.ClientEventChan <- app.ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height}:
@@ -443,7 +461,7 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 
 	// Handle client leave notifications via channel (thread-safe)
 	client.OnClientLeft(func(clientID string, clientCount int) {
-		log.Printf("[WEB] Client left: %s (remaining: %d)", clientID[:8], clientCount)
+		log.Printf("[WEB] Client left: %s (remaining: %d)", shortID(clientID), clientCount)
 		if m.ClientEventChan != nil {
 			select {
 			case m.ClientEventChan <- app.ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount}:
