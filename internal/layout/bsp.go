@@ -512,21 +512,30 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		return
 	}
 
-	// Find a window in the left subtree to determine the split position
-	leftWindowID := t.findAnyWindowInSubtree(node.Left)
-	if leftWindowID == -1 {
-		return
-	}
-
-	leftRect, ok := windows[leftWindowID]
-	if !ok {
-		return
-	}
-
-	// Calculate the actual split ratio from window geometry
+	// Calculate the actual split ratio from window geometry.
 	if node.SplitType == SplitVertical {
-		// The right edge of left windows defines the split position
-		splitX := leftRect.X + leftRect.W
+		// The split boundary is the near edge of the right subtree's leftmost
+		// leaf, which sits flush against the divider. Reading node.Right gives
+		// the true boundary even when node.Left is itself split on this axis
+		// (its leftmost leaf would report an inner divider, not the boundary).
+		// Fall back to the left subtree's far edge only when the right subtree
+		// has no known geometry.
+		splitX, ok := -1, false
+		if id := t.findAnyWindowInSubtree(node.Right); id != -1 {
+			if r, found := windows[id]; found {
+				splitX, ok = r.X, true
+			}
+		}
+		if !ok {
+			if id := t.findAnyWindowInSubtree(node.Left); id != -1 {
+				if r, found := windows[id]; found {
+					splitX, ok = r.X+r.W, true
+				}
+			}
+		}
+		if !ok {
+			return
+		}
 		if bounds.W > 0 {
 			node.SplitRatio = float64(splitX-bounds.X) / float64(bounds.W)
 		}
@@ -536,8 +545,25 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		t.syncRatiosRecursive(node.Left, leftBounds, windows)
 		t.syncRatiosRecursive(node.Right, rightBounds, windows)
 	} else {
-		// The bottom edge of top windows defines the split position
-		splitY := leftRect.Y + leftRect.H
+		// The split boundary is the near (top) edge of the bottom subtree's
+		// topmost leaf. Fall back to the top subtree's bottom edge only when the
+		// bottom subtree has no known geometry.
+		splitY, ok := -1, false
+		if id := t.findAnyWindowInSubtree(node.Right); id != -1 {
+			if r, found := windows[id]; found {
+				splitY, ok = r.Y, true
+			}
+		}
+		if !ok {
+			if id := t.findAnyWindowInSubtree(node.Left); id != -1 {
+				if r, found := windows[id]; found {
+					splitY, ok = r.Y+r.H, true
+				}
+			}
+		}
+		if !ok {
+			return
+		}
 		if bounds.H > 0 {
 			node.SplitRatio = float64(splitY-bounds.Y) / float64(bounds.H)
 		}
