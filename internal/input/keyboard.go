@@ -302,8 +302,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Handle paste shortcuts - intercept and request clipboard via OSC 52
-	if keyStr == "ctrl+v" || keyStr == "ctrl+shift+v" || keyStr == "super+v" || keyStr == "super+shift+v" {
+	// Handle paste shortcuts - intercept and request clipboard via OSC 52.
+	// Plain ctrl+v is deliberately excluded so it falls through to the passthrough
+	// block and reaches the child PTY as 0x16 (needed for vim visual-block, etc.),
+	// matching the tmux/zellij convention. Ctrl+Shift+V and host bracketed paste remain.
+	if keyStr == "ctrl+shift+v" || keyStr == "super+v" || keyStr == "super+shift+v" {
 		if focusedWindow != nil {
 			// Use tea.ReadClipboard to request clipboard via OSC 52
 			// This will generate a tea.ClipboardMsg which we handle in handler.go
@@ -438,7 +441,9 @@ func handleTerminalTilingPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			if focusedWindow != nil {
 				o.Mode = app.WindowManagementMode
 				o.RenamingWindow = true
-				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
+				if fw := o.GetFocusedWindow(); fw != nil {
+					fw.InvalidateCache()
+				}
 				o.RenameBuffer = focusedWindow.CustomName
 			}
 		}
@@ -645,7 +650,9 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			if focusedWindow != nil {
 				o.Mode = app.WindowManagementMode
 				o.RenamingWindow = true
-				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
+				if fw := o.GetFocusedWindow(); fw != nil {
+					fw.InvalidateCache()
+				}
 				o.RenameBuffer = focusedWindow.CustomName
 			}
 		}
@@ -1060,7 +1067,9 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
 				o.RenamingWindow = true
-				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
+				if fw := o.GetFocusedWindow(); fw != nil {
+					fw.InvalidateCache()
+				}
 				o.RenameBuffer = focusedWindow.CustomName
 			}
 		}

@@ -20,7 +20,7 @@ func (m *OS) EnterTerminalMode() tea.Cmd {
 
 	// Raw reader disabled - Bubbletea handles all input correctly including:
 	// - Bracketed paste for Cmd+V (via PasteMsg)
-	// - OSC 52 clipboard reading for Ctrl+V (via ClipboardMsg)
+	// - OSC 52 clipboard reading for Ctrl+Shift+V (via ClipboardMsg)
 	// - All key events properly parsed
 	// Raw reader conflicts with Bubbletea in modern terminals using CSI u encoding
 	return nil

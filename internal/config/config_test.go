@@ -187,6 +187,57 @@ func TestKeyNormalizer_ValidateKey(t *testing.T) {
 	}
 }
 
+// TestKeyNormalizer_AccentedKeys covers AZERTY accented letters (issue #51).
+// These are multi-byte but single-rune, so a byte-length validator rejected them
+// and aborted config load. They must validate and round-trip through normalize
+// and registry lookup.
+func TestKeyNormalizer_AccentedKeys(t *testing.T) {
+	normalizer := config.NewKeyNormalizer()
+
+	validKeys := []string{
+		"é", "è", "à", "ç",
+		"alt+é", "alt+è", "alt+à", "alt+ç",
+		"alt+shift+é",
+	}
+	for _, k := range validKeys {
+		t.Run("validate/"+k, func(t *testing.T) {
+			valid, msg := normalizer.ValidateKey(k)
+			if !valid {
+				t.Errorf("ValidateKey(%q) = false (%q), want true", k, msg)
+			}
+		})
+	}
+
+	roundTrip := []struct {
+		input string
+		want  string
+	}{
+		{"é", "é"},
+		{"alt+é", "alt+é"},
+		{"alt+shift+é", "alt+shift+é"},
+	}
+	for _, tc := range roundTrip {
+		t.Run("normalize/"+tc.input, func(t *testing.T) {
+			got := normalizer.NormalizeKey(tc.input)
+			if !slices.Contains(got, tc.want) {
+				t.Errorf("NormalizeKey(%q) = %v, want to contain %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestKeybindRegistry_AccentedLookup verifies an accented binding survives the
+// full expand/normalize path and reverse-looks-up to its action.
+func TestKeybindRegistry_AccentedLookup(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Keybindings.Workspaces["switch_workspace_2"] = []string{"alt+é"}
+	registry := config.NewKeybindRegistry(cfg)
+
+	if action := registry.GetAction("alt+é"); action != "switch_workspace_2" {
+		t.Errorf("GetAction(%q) = %q, want %q", "alt+é", action, "switch_workspace_2")
+	}
+}
+
 // =============================================================================
 // Animation Configuration Tests
 // =============================================================================

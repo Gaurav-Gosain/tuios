@@ -113,8 +113,9 @@ func (r *KeybindRegistry) lookupKey(key string, keyMap map[string]string) string
 	key = strings.TrimSpace(key)
 
 	// For single letters, preserve case exactly as received
-	// For compound keys (ctrl+x, shift+tab), normalize to lowercase
-	if len(key) == 1 && ((key[0] >= 'a' && key[0] <= 'z') || (key[0] >= 'A' && key[0] <= 'Z')) {
+	// For compound keys (ctrl+x, shift+tab), normalize to lowercase.
+	// Rune-aware so multi-byte AZERTY letters (é/è/à/ç) match too.
+	if isSingleRuneLetter(key) {
 		// Single letter - check both exact case and lowercase
 		// This handles both "M" (shift+m) and "m" inputs
 		if action, ok := keyMap[key]; ok {
