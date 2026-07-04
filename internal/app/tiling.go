@@ -1061,38 +1061,6 @@ func (m *OS) GetBSPBounds() layout.Rect {
 	}
 }
 
-// BuildBSPTreeFromCurrentLayout creates a BSP tree from the current window geometry.
-// This is used when enabling tiling mode to preserve the existing layout structure.
-func (m *OS) BuildBSPTreeFromCurrentLayout() {
-	var windows []layout.Rect
-	var windowIDs []int
-
-	for _, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-			windows = append(windows, layout.Rect{
-				X: w.X,
-				Y: w.Y,
-				W: w.Width,
-				H: w.Height,
-			})
-			// Use window index as ID for BSP tree (we'll use a lookup map)
-			windowIDs = append(windowIDs, m.getWindowIntID(w.ID))
-		}
-	}
-
-	if len(windows) == 0 {
-		return
-	}
-
-	bounds := m.GetBSPBounds()
-	tree := layout.BuildTreeFromWindows(windows, windowIDs, bounds, m.TilingScheme)
-
-	if m.WorkspaceTrees == nil {
-		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
-	}
-	m.WorkspaceTrees[m.CurrentWorkspace] = tree
-}
-
 // getWindowIntID returns a stable integer ID for a window string ID.
 // Uses a direct map lookup for reliable ID assignment.
 func (m *OS) getWindowIntID(stringID string) int {
