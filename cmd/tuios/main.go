@@ -248,8 +248,6 @@ Shows a comparison of default and custom keybindings.`,
 
 	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd)
 
-	var tapeVisible bool
-
 	tapeCmd := &cobra.Command{
 		Use:   "tape",
 		Short: "Manage and run .tape automation scripts",
@@ -325,8 +323,6 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 			return showTapeFile(args[0])
 		},
 	}
-
-	tapePlayCmd.Flags().BoolVarP(&tapeVisible, "visible", "v", true, "Show TUI during playback")
 
 	tapeCmd.AddCommand(tapePlayCmd, tapeValidateCmd, tapeListCmd, tapeDirCmd, tapeDeleteCmd, tapeShowCmd)
 
@@ -731,7 +727,10 @@ Logs are stored in a ring buffer (1000 entries by default).`,
 
   # Follow logs (continuously show new entries)
   tuios logs -f`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if all, _ := cmd.Flags().GetBool("all"); all {
+				logsCount = 0
+			}
 			return runGetLogs(logsCount, logsClear, logsFollow)
 		},
 	}

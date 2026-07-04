@@ -665,50 +665,56 @@ func runGetLogs(count int, clear bool, follow bool) error {
 	}
 
 	// Single retrieval
-	return displayLogs(client, count, clear)
+	_, err := displayLogs(client, count, clear)
+	return err
 }
 
 // displayLogs fetches and displays logs once.
-func displayLogs(client *session.Client, count int, clear bool) error {
+// displayLogs prints up to count entries and returns the newest timestamp shown
+// (0 when none), which follow mode uses to seed its poll cursor.
+func displayLogs(client *session.Client, count int, clear bool) (int64, error) {
 	msg, err := session.NewMessage(session.MsgGetLogs, &session.GetLogsPayload{
 		Count: count,
 		Clear: clear,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return 0, fmt.Errorf("failed to create message: %w", err)
 	}
 
 	resp, err := client.SendControlMessage(msg)
 	if err != nil {
-		return fmt.Errorf("failed to get logs: %w", err)
+		return 0, fmt.Errorf("failed to get logs: %w", err)
 	}
 
 	if resp.Type == session.MsgError {
 		var errPayload session.ErrorPayload
 		if err := resp.ParsePayloadWithCodec(&errPayload, client.GetCodec()); err != nil {
-			return fmt.Errorf("failed to get logs")
+			return 0, fmt.Errorf("failed to get logs")
 		}
-		return fmt.Errorf("failed to get logs: %s", errPayload.Message)
+		return 0, fmt.Errorf("failed to get logs: %s", errPayload.Message)
 	}
 
 	if resp.Type != session.MsgLogsData {
-		return fmt.Errorf("unexpected response type: %d", resp.Type)
+		return 0, fmt.Errorf("unexpected response type: %d", resp.Type)
 	}
 
 	var logsData session.LogsDataPayload
 	if err := resp.ParsePayloadWithCodec(&logsData, client.GetCodec()); err != nil {
-		return fmt.Errorf("failed to parse logs: %w", err)
+		return 0, fmt.Errorf("failed to parse logs: %w", err)
 	}
 
 	if len(logsData.Entries) == 0 {
 		fmt.Println("No log entries")
-		return nil
+		return 0, nil
 	}
 
-	// Display logs
+	var newest int64
 	for _, entry := range logsData.Entries {
 		ts := time.UnixMilli(entry.Timestamp)
 		fmt.Printf("[%s] [%s] %s\n", ts.Format("15:04:05.000"), entry.Level, entry.Message)
+		if entry.Timestamp > newest {
+			newest = entry.Timestamp
+		}
 	}
 
 	fmt.Printf("\n--- %d log entries ---\n", len(logsData.Entries))
@@ -717,20 +723,19 @@ func displayLogs(client *session.Client, count int, clear bool) error {
 		fmt.Println("(logs cleared)")
 	}
 
-	return nil
+	return newest, nil
 }
 
 // followLogs continuously polls for new logs.
 func followLogs(client *session.Client, initialCount int) error {
-	// First, display existing logs
-	if err := displayLogs(client, initialCount, false); err != nil {
+	// First, display existing logs and seed the poll cursor from the newest one
+	// shown, so the first tick does not reprint what we just displayed.
+	lastTimestamp, err := displayLogs(client, initialCount, false)
+	if err != nil {
 		return err
 	}
 
 	fmt.Println("\n--- Following logs (Ctrl+C to stop) ---")
-
-	// Keep track of the last timestamp we've seen
-	var lastTimestamp int64
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
