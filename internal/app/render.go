@@ -100,11 +100,25 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			borderColorObj = theme.BorderUnfocused()
 		}
 
+		// Effective z-index, computed once so the cached and freshly-rendered
+		// paths place the window and its scrollbar at the same depth. Computing
+		// it only in the fresh path left the cached path's scrollbar at a
+		// different depth, so it flickered as the window toggled dirty/clean.
+		zIndex := window.Z
+		if window.IsFloating {
+			zIndex = config.ZIndexSeparators + 1 + window.Z
+		}
+		if (isAnimating || window.IsBeingManipulated) && !window.Tiled {
+			zIndex = config.ZIndexAnimating
+		}
+
 		if window.CachedLayer != nil && !window.Dirty && !window.ContentDirty && !window.PositionDirty {
 			layers = append(layers, window.CachedLayer)
-			// Scrollbar layer (always fresh, not cached)
-			if !window.Tiled && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
-				if sbLayer := renderScrollbarLayer(window, borderColorObj, window.Z+1); sbLayer != nil {
+			// Scrollbar layer (always fresh, not cached). Alt-screen apps (btop,
+			// vim) have no scrollback, so drawing a scrollback thumb over them
+			// only flickers as their content redraws.
+			if !window.Tiled && !window.IsAltScreen && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
 			}
@@ -146,21 +160,6 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		}
 
-		zIndex := window.Z
-		if window.IsFloating {
-			// Floating windows render above tiled windows and separators.
-			// Use window.Z offset above ZIndexSeparators to preserve relative
-			// ordering between multiple floating windows (focused on top).
-			zIndex = config.ZIndexSeparators + 1 + window.Z
-		}
-		if isAnimating || window.IsBeingManipulated {
-			// Only elevate non-tiled windows above separators.
-			// Tiled windows stay below Z=998 so separator lines remain visible.
-			if !window.Tiled {
-				zIndex = config.ZIndexAnimating // Above separators (Z=998)
-			}
-		}
-
 		clippedContent, finalX, finalY := clipWindowContent(
 			boxContent,
 			window.X, window.Y,
@@ -170,8 +169,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
 		layers = append(layers, window.CachedLayer)
 
-		// Scrollbar layer (always fresh, not cached)
-		if !isTiledBorderless && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+		// Scrollbar layer (always fresh, not cached). See the alt-screen note above.
+		if !isTiledBorderless && !window.IsAltScreen && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
 			if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 				layers = append(layers, sbLayer)
 			}
