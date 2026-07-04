@@ -161,12 +161,13 @@ func runLocal() error {
 		defer pprof.StopCPUProfile()
 	}
 
-	// Live profiling endpoint. Enabling block/mutex sampling makes the
-	// contention profiles usable for checking the render and daemon locks.
-	// Output is not printed so it cannot corrupt the TUI on stdout.
+	// Live profiling endpoint. Block/mutex profiling is sampled, not exhaustive:
+	// rate 1 samples every event and adds heavy overhead under load, which is not
+	// worth it for representative contention data. Output is not printed so it
+	// cannot corrupt the TUI on stdout.
 	if pprofAddr != "" {
-		runtime.SetBlockProfileRate(1)
-		runtime.SetMutexProfileFraction(1)
+		runtime.SetBlockProfileRate(10000) // one sample per ~10us blocked
+		runtime.SetMutexProfileFraction(100)
 		go func() {
 			srv := &http.Server{Addr: pprofAddr, ReadHeaderTimeout: 5 * time.Second}
 			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
