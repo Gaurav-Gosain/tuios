@@ -53,7 +53,6 @@ func runTapeInteractive(tapeFile string) error {
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	player := tape.NewPlayer(commands)
-	converter := tape.NewScriptMessageConverter()
 
 	initialOS := &app.OS{
 		FocusedWindow:        -1,
@@ -76,7 +75,6 @@ func runTapeInteractive(tapeFile string) error {
 		ScriptMode:           true,
 		ScriptPlayer:         player,
 		ScriptPaused:         false,
-		ScriptConverter:      converter,
 		ScriptExecutor:       tape.NewCommandExecutor(nil),
 	}
 

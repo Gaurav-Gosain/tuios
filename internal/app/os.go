@@ -194,7 +194,6 @@ type OS struct {
 	ScriptPlayer       any       // *tape.Player - script playback engine
 	ScriptMode         bool      // True when running a tape script
 	ScriptPaused       bool      // True when script playback is paused
-	ScriptConverter    any       // *tape.ScriptMessageConverter - converts tape commands to tea.Msg
 	ScriptExecutor     any       // *tape.CommandExecutor - executes tape commands
 	ScriptSleepUntil   time.Time // When to resume after a sleep command
 	ScriptFinishedTime time.Time // When the script finished (for auto-hide)
