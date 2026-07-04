@@ -29,6 +29,7 @@ var (
 var (
 	debugMode           bool
 	cpuProfile          string
+	pprofAddr           string
 	asciiOnly           bool
 	themeName           string
 	listThemes          bool
@@ -114,6 +115,7 @@ comprehensive keyboard/mouse interactions.`,
 
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
 	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "Write CPU profile to file")
+	rootCmd.PersistentFlags().StringVar(&pprofAddr, "pprof", "", "Serve net/http/pprof on this address for live profiling (e.g. localhost:6060)")
 	rootCmd.PersistentFlags().BoolVar(&asciiOnly, "ascii-only", false, "Use ASCII characters instead of Nerd Font icons")
 	rootCmd.PersistentFlags().StringVar(&themeName, "theme", "", "Color theme to use (e.g., dracula, nord, tokyonight). Leave empty to use standard terminal colors without theming")
 	rootCmd.PersistentFlags().BoolVar(&listThemes, "list-themes", false, "List all available themes and exit")

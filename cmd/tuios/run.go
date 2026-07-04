@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof" // registers /debug/pprof handlers on http.DefaultServeMux
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/pprof"
 	"syscall"
 	"time"
@@ -155,6 +159,20 @@ func runLocal() error {
 			return fmt.Errorf("could not start CPU profile: %w", err)
 		}
 		defer pprof.StopCPUProfile()
+	}
+
+	// Live profiling endpoint. Enabling block/mutex sampling makes the
+	// contention profiles usable for checking the render and daemon locks.
+	// Output is not printed so it cannot corrupt the TUI on stdout.
+	if pprofAddr != "" {
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(1)
+		go func() {
+			srv := &http.Server{Addr: pprofAddr, ReadHeaderTimeout: 5 * time.Second}
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("pprof server error: %v", err)
+			}
+		}()
 	}
 
 	app.SetInputHandler(input.HandleInput)
