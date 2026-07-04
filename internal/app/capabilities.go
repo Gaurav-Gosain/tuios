@@ -42,36 +42,6 @@ func GetHostCapabilities() *HostCapabilities {
 	return cachedCapabilities
 }
 
-func ResetHostCapabilities() {
-	cachedCapabilities = nil
-	clientCapabilities = nil
-}
-
-// SetClientCapabilities sets capabilities received from a daemon client.
-// This is used in daemon mode where the client has access to the real terminal.
-func SetClientCapabilities(caps *HostCapabilities) {
-	clientCapabilities = caps
-}
-
-// GetClientCapabilities returns the client-provided capabilities, or nil if not set.
-func GetClientCapabilities() *HostCapabilities {
-	return clientCapabilities
-}
-
-func UpdateHostDimensions(cols, rows, pixelWidth, pixelHeight int) {
-	caps := GetHostCapabilities()
-	caps.Cols = cols
-	caps.Rows = rows
-	caps.PixelWidth = pixelWidth
-	caps.PixelHeight = pixelHeight
-	if cols > 0 && pixelWidth > 0 {
-		caps.CellWidth = pixelWidth / cols
-	}
-	if rows > 0 && pixelHeight > 0 {
-		caps.CellHeight = pixelHeight / rows
-	}
-}
-
 func DetectHostCapabilities() *HostCapabilities {
 	caps := &HostCapabilities{}
 

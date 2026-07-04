@@ -56,7 +56,6 @@ type KittyPassthrough struct {
 	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
 	nextHostID    uint32
 	pendingOutput []byte
-	videoFrameBuf []byte // Reusable buffer for immediate video frame writes
 
 	// Async video frame writer. Video apps (mpv, youterm) send 30+ fps of
 	// large image data. Processing synchronously inside the VT callback
@@ -190,13 +189,6 @@ type KittyPassthroughOptions struct {
 	// should pass the sip session's PtySlave so graphics bytes flow through
 	// the same PTY as bubbletea's text output to the browser.
 	Output *os.File
-}
-
-// NewKittyPassthrough creates a passthrough using auto-detected capabilities
-// and /dev/tty for output. Use NewKittyPassthroughWithOptions for finer
-// control (web mode, custom writers).
-func NewKittyPassthrough() *KittyPassthrough {
-	return NewKittyPassthroughWithOptions(KittyPassthroughOptions{})
 }
 
 // NewKittyPassthroughWithOptions creates a passthrough with custom options.

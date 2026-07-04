@@ -87,12 +87,6 @@ type SixelPassthroughOptions struct {
 	Output *os.File
 }
 
-// NewSixelPassthrough creates a new SixelPassthrough using auto-detected
-// capabilities and os.Stdout for output.
-func NewSixelPassthrough() *SixelPassthrough {
-	return NewSixelPassthroughWithOptions(SixelPassthroughOptions{})
-}
-
 // NewSixelPassthroughWithOptions creates a new SixelPassthrough with custom
 // options. Use this in web mode to pass the sip session's PtySlave() so
 // sixel bytes flow through the same PTY as the browser's text output.
