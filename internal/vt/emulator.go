@@ -44,6 +44,8 @@ type Emulator struct {
 	// Thread-safe cached mouse mode flags (updated on mode set/reset)
 	cachedHasMouse  atomic.Bool
 	cachedAllMotion atomic.Bool
+	// Thread-safe cached synchronized-output flag (DEC 2026, updated on set/reset)
+	cachedSyncOutput atomic.Bool
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
 	cachedKittyFlags atomic.Int32
 
@@ -535,6 +537,14 @@ func (e *Emulator) HasMouseMode() bool {
 // Thread-safe: reads from an atomic cache updated on mode set/reset.
 func (e *Emulator) HasAllMotionMode() bool {
 	return e.cachedAllMotion.Load()
+}
+
+// IsSyncActive reports whether the guest has an open synchronized update
+// (DEC private mode 2026): it has begun drawing a frame and does not want it
+// presented until it resets the mode. Thread-safe: reads from an atomic cache
+// updated on mode set/reset.
+func (e *Emulator) IsSyncActive() bool {
+	return e.cachedSyncOutput.Load()
 }
 
 // updateMouseModeCache recalculates the cached mouse mode flags.

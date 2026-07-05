@@ -125,6 +125,26 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			continue
 		}
 
+		// Synchronized output (DEC 2026): the guest has begun a frame and does
+		// not want it shown until it closes the update. Hold the last complete
+		// frame instead of rendering the half-updated buffer, which is what made
+		// apps like btop flicker. ContentDirty stays set, so the frame that
+		// arrives when the guest closes sync renders the finished screen. Only
+		// hold when nothing but content changed (position/z match the cache).
+		if window.Terminal != nil && window.Terminal.IsSyncActive() &&
+			window.CachedLayer != nil &&
+			window.CachedLayer.GetX() == window.X &&
+			window.CachedLayer.GetY() == window.Y &&
+			window.CachedLayer.GetZ() == zIndex {
+			layers = append(layers, window.CachedLayer)
+			if !window.Tiled && !window.IsAltScreen && window.Terminal.ScrollbackLen() > 0 {
+				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
+					layers = append(layers, sbLayer)
+				}
+			}
+			continue
+		}
+
 		needsRedraw := window.CachedLayer == nil ||
 			window.Dirty || window.ContentDirty || window.PositionDirty ||
 			window.CachedLayer.GetX() != window.X ||
