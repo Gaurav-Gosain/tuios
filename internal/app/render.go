@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -32,12 +33,6 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	topMargin := m.GetTopMargin()
 	viewportWidth := m.GetRenderWidth()
 	viewportHeight := m.GetUsableHeight()
-
-	box := lipgloss.NewStyle().
-		Align(lipgloss.Left).
-		AlignVertical(lipgloss.Top).
-		Border(getBorder()).
-		BorderTop(false)
 
 	for i := range m.Windows {
 		window := m.Windows[i]
@@ -156,29 +151,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			continue
 		}
 
-		content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
-
-		var boxContent string
 		isTiledBorderless := window.Tiled && (!window.Zoomed || config.SharedBorders)
-		if isTiledBorderless {
-			// Shared borders mode: no individual window borders, content fills full rect
-			boxContent = content
-		} else {
-			isRenaming := m.RenamingWindow && i == m.FocusedWindow
-
-			boxContent = addToBorder(
-				box.Width(window.Width).
-					Height(window.Height-1).
-					BorderForeground(borderColorObj).
-					Render(content),
-				borderColorObj,
-				window,
-				isRenaming,
-				m.RenameBuffer,
-				m.AutoTiling,
-			)
-
-		}
+		boxContent := m.renderWindowBox(window, i, isFocused, borderColorObj)
 
 		clippedContent, finalX, finalY := clipWindowContent(
 			boxContent,
@@ -221,6 +195,122 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	return canvas
 }
 
+// renderWindowBox renders a window's content, wrapped in its border unless the
+// window is borderless. Shared by the compositor path and the fullscreen fast
+// path so both produce identical output.
+func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool, borderColorObj color.Color) string {
+	content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
+	if window.Tiled && (!window.Zoomed || config.SharedBorders) {
+		return content
+	}
+	box := lipgloss.NewStyle().
+		Align(lipgloss.Left).
+		AlignVertical(lipgloss.Top).
+		Border(getBorder()).
+		BorderTop(false)
+	isRenaming := m.RenamingWindow && index == m.FocusedWindow
+	return addToBorder(
+		box.Width(window.Width).
+			Height(window.Height-1).
+			BorderForeground(borderColorObj).
+			Render(content),
+		borderColorObj,
+		window,
+		isRenaming,
+		m.RenameBuffer,
+		m.AutoTiling,
+	)
+}
+
+// fastPathDisabled turns the fullscreen fast path off (TUIOS_NO_FASTPATH=1) so it
+// can be compared against the compositor path.
+var fastPathDisabled = os.Getenv("TUIOS_NO_FASTPATH") == "1"
+
+// composeFrame renders the full frame, using the fullscreen fast path when it is
+// eligible and falling back to the compositor otherwise.
+func (m *OS) composeFrame() string {
+	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled {
+		return m.buildFullscreenFrame(window)
+	}
+	return lipgloss.Sprint(m.GetCanvas(true).Render())
+}
+
+// fullscreenFastWindow returns the single window that fills the content area with
+// nothing overlapping it, or ok=false when the compositor is required: multiple
+// visible windows, any overlay, separators, graphics, or active manipulation or
+// animation. Pure: it does not mutate render state.
+func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
+	if len(m.Animations) > 0 || m.RenamingWindow {
+		return nil, false
+	}
+	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowLayoutPicker ||
+		m.ShowQuitConfirm || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
+		m.ShowAggregateView || m.ShowTapeManager || m.PrefixActive {
+		return nil, false
+	}
+	if (config.ShowClock && !config.HideClock) || (m.TapeRecorder != nil && m.TapeRecorder.IsRecording()) {
+		return nil, false
+	}
+	if config.SharedBorders && m.AutoTiling && !m.UseScrollingLayout {
+		return nil, false
+	}
+	if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
+		return nil, false
+	}
+	if m.SixelPassthrough != nil && m.SixelPassthrough.PlacementCount() > 0 {
+		return nil, false
+	}
+
+	visible := m.GetVisibleWindows()
+	if len(visible) != 1 {
+		return nil, false
+	}
+	window := visible[0]
+	if window.IsBeingManipulated || window.Minimizing {
+		return nil, false
+	}
+	rw, topMargin, usableH := m.GetRenderWidth(), m.GetTopMargin(), m.GetUsableHeight()
+	if window.X != 0 || window.Y != topMargin || window.Width != rw || window.Height != usableH {
+		return nil, false
+	}
+	return window, true
+}
+
+// buildFullscreenFrame renders the window box and stacks it with the dock,
+// skipping the compositor. Mutates render state (renders the window, clears its
+// dirty flags), so it must only be called after eligibility is confirmed.
+func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
+	isFocused := m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == window
+	var borderColorObj color.Color
+	switch {
+	case isFocused && m.Mode == TerminalMode:
+		borderColorObj = theme.BorderFocusedTerminal()
+	case isFocused:
+		borderColorObj = theme.BorderFocusedWindow()
+	default:
+		borderColorObj = theme.BorderUnfocused()
+	}
+
+	windowIndex := -1
+	for i := range m.Windows {
+		if m.Windows[i] == window {
+			windowIndex = i
+			break
+		}
+	}
+	boxContent := m.renderWindowBox(window, windowIndex, isFocused, borderColorObj)
+	window.ClearDirtyFlags()
+
+	if config.DockbarPosition == "hidden" {
+		return boxContent
+	}
+	dockStr, _ := m.renderDockString()
+	if config.DockbarPosition == "top" {
+		return dockStr + "\n" + boxContent
+	}
+	return boxContent + "\n" + dockStr
+}
+
 func (m *OS) View() tea.View {
 	var view tea.View
 
@@ -229,7 +319,7 @@ func (m *OS) View() tea.View {
 	if m.renderSkipped && m.cachedViewContent != "" {
 		view.SetContent(m.cachedViewContent)
 	} else {
-		content := lipgloss.Sprint(m.GetCanvas(true).Render())
+		content := m.composeFrame()
 		m.cachedViewContent = content
 		view.SetContent(content)
 	}

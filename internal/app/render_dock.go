@@ -10,6 +10,13 @@ import (
 )
 
 func (m *OS) renderDock() *lipgloss.Layer {
+	fullDock, dockbarYPos := m.renderDockString()
+	return lipgloss.NewLayer(fullDock).X(0).Y(dockbarYPos).Z(config.ZIndexDock).ID("dock")
+}
+
+// renderDockString returns the dock content and its top row, used both by the
+// layer path and the fullscreen fast path.
+func (m *OS) renderDockString() (string, int) {
 	layout := m.CalculateDockLayout()
 
 	sysInfoStyle := lipgloss.NewStyle().
@@ -236,5 +243,5 @@ func (m *OS) renderDock() *lipgloss.Layer {
 	}
 
 	fullDock := lipgloss.JoinVertical(lipgloss.Left, dockbarParts...)
-	return lipgloss.NewLayer(fullDock).X(0).Y(dockbarYPos).Z(config.ZIndexDock).ID("dock")
+	return fullDock, dockbarYPos
 }
