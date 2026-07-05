@@ -1410,9 +1410,13 @@ func (w *Window) MarkPositionDirty() {
 func (w *Window) MarkContentDirty() {
 	w.Dirty = true
 	w.ContentDirty = true
-	// Content changes invalidate both cached content and layer
+	// Invalidate the content cache so the next render re-reads the emulator.
+	// ContentDirty already forces that re-render, so CachedLayer is deliberately
+	// kept: retaining the last complete layer lets the renderer hold it while the
+	// guest is mid-frame in a synchronized update (DEC 2026), instead of showing
+	// a half-drawn buffer. It is replaced on the next render and invalidated by
+	// MarkPositionDirty, retiling, and close.
 	w.CachedContent = ""
-	w.CachedLayer = nil
 }
 
 // ClearDirtyFlags clears all dirty flags.

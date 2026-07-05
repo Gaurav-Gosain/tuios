@@ -2,6 +2,7 @@ package vt
 
 import (
 	"io"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -49,6 +50,10 @@ func (e *Emulator) setAltScreenMode(on bool) {
 	} else {
 		e.scr = &e.scrs[0]
 	}
+	// A screen switch ends any frame in progress; clear a stuck sync flag so a
+	// window is never left holding a stale frame (e.g. when an app exits without
+	// closing its synchronized update).
+	e.cachedSyncOutput.Store(false)
 	if e.cb.AltScreen != nil {
 		e.cb.AltScreen(on)
 	}
@@ -109,6 +114,9 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 	e.updateMouseModeCache()
 	if mode == ansi.ModeSynchronizedOutput {
 		e.cachedSyncOutput.Store(setting.IsSet())
+		if setting.IsSet() {
+			e.syncSetAtNanos.Store(time.Now().UnixNano())
+		}
 	}
 }
 

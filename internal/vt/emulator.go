@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/screen"
@@ -46,6 +47,8 @@ type Emulator struct {
 	cachedAllMotion atomic.Bool
 	// Thread-safe cached synchronized-output flag (DEC 2026, updated on set/reset)
 	cachedSyncOutput atomic.Bool
+	// Unix-nanos timestamp of the last sync begin, for the present-anyway timeout
+	syncSetAtNanos atomic.Int64
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
 	cachedKittyFlags atomic.Int32
 
@@ -539,12 +542,20 @@ func (e *Emulator) HasAllMotionMode() bool {
 	return e.cachedAllMotion.Load()
 }
 
+// syncMaxHold bounds how long a synchronized update is honored. An app that
+// opens sync and never closes it (a crash, or a screen switch mid-frame) must
+// not freeze the window; real terminals present anyway after a short timeout.
+const syncMaxHold = 150 * time.Millisecond
+
 // IsSyncActive reports whether the guest has an open synchronized update
 // (DEC private mode 2026): it has begun drawing a frame and does not want it
-// presented until it resets the mode. Thread-safe: reads from an atomic cache
-// updated on mode set/reset.
+// presented until it resets the mode. Thread-safe: reads from atomics updated on
+// mode set/reset. Returns false once the update has been open past syncMaxHold.
 func (e *Emulator) IsSyncActive() bool {
-	return e.cachedSyncOutput.Load()
+	if !e.cachedSyncOutput.Load() {
+		return false
+	}
+	return time.Now().UnixNano()-e.syncSetAtNanos.Load() < int64(syncMaxHold)
 }
 
 // updateMouseModeCache recalculates the cached mouse mode flags.
