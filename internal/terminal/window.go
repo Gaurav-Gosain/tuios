@@ -146,17 +146,19 @@ type Window struct {
 	// Vim-style copy mode
 	CopyMode *CopyMode // Copy mode state (nil when not active)
 	// Daemon session support
-	PTYID             string               // ID of daemon-managed PTY (empty for local PTYs)
-	DaemonMode        bool                 // True when PTY is managed by daemon
-	DaemonWriteFunc   func([]byte) error   // Callback for sending input to daemon PTY
-	DaemonResizeFunc  func(w, h int) error // Callback for resizing daemon PTY
-	DaemonCloseFunc   func()               // Callback when window is closed (to notify daemon)
-	OnProcessExit     func()               // Callback when PTY process exits (to close window)
-	ClipboardContent  string               // Last clipboard content set via OSC 52
-	ClipboardSetFunc  func(string)         // Callback to propagate clipboard to host
-	outputChan        chan []byte          // Channel for serializing daemon PTY output writes
-	outputDone        chan struct{}        // Signal to stop output writer goroutine
-	suppressCallbacks atomic.Bool          // Suppress VT emulator callbacks during state restoration (prevents race conditions)
+	PTYID             string                   // ID of daemon-managed PTY (empty for local PTYs)
+	DaemonMode        bool                     // True when PTY is managed by daemon
+	DaemonWriteFunc   func([]byte) error       // Callback for sending input to daemon PTY
+	DaemonResizeFunc  func(w, h int) error     // Callback for resizing daemon PTY
+	DaemonCloseFunc   func()                   // Callback when window is closed (to notify daemon)
+	OnProcessExit     func()                   // Callback when PTY process exits (to close window)
+	ClipboardContent  string                   // Last clipboard content set via OSC 52
+	ClipboardSetFunc  func(string)             // Callback to propagate clipboard to host
+	NotifyFunc        func(title, body string) // Callback for guest desktop notifications (OSC 9/777/99)
+	BellFunc          func()                   // Callback for guest bell (BEL)
+	outputChan        chan []byte              // Channel for serializing daemon PTY output writes
+	outputDone        chan struct{}            // Signal to stop output writer goroutine
+	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
 
 	// HasNewOutput is set when new data is written to the terminal.
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
@@ -327,6 +329,16 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		},
 		ClipboardQuery: func(_ string) string {
 			return window.ClipboardContent
+		},
+		Notify: func(title, body string) {
+			if window.NotifyFunc != nil {
+				window.NotifyFunc(title, body)
+			}
+		},
+		Bell: func() {
+			if window.BellFunc != nil {
+				window.BellFunc()
+			}
 		},
 	})
 
@@ -525,6 +537,16 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 		},
 		ClipboardQuery: func(_ string) string {
 			return window.ClipboardContent
+		},
+		Notify: func(title, body string) {
+			if window.NotifyFunc != nil {
+				window.NotifyFunc(title, body)
+			}
+		},
+		Bell: func() {
+			if window.BellFunc != nil {
+				window.BellFunc()
+			}
 		},
 	})
 

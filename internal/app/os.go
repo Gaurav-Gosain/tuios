@@ -222,6 +222,12 @@ type OS struct {
 	// PendingClipboardSet receives clipboard content from guest apps via OSC 52.
 	// The bubbletea Update loop reads this and calls tea.SetClipboard().
 	PendingClipboardSet chan string
+	// PendingNotification receives guest desktop notifications and bells (OSC 9/777/99, BEL).
+	// The notification callbacks fire on a window's PTY writer goroutine, so they cannot
+	// touch OS notification state directly (the render goroutine reads m.Notifications).
+	// The bubbletea Update loop drains this and calls ShowNotification, mirroring the
+	// PendingClipboardSet path.
+	PendingNotification chan NotificationMsg
 	// TerminalModeEnteredAt tracks when we last switched to TerminalMode.
 	// Used to suppress misparsed mouse-sequence fragments (phantom keypresses)
 	// during the AllMotion→CellMotion transition window.
@@ -1224,6 +1230,7 @@ func (m *OS) AddWindow(title string) *OS {
 	m.setupSixelPassthrough(window)
 	m.setupTextSizingPassthrough(window)
 	m.setupClipboardPassthrough(window)
+	m.setupNotificationPassthrough(window)
 
 	m.Windows = append(m.Windows, window)
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))

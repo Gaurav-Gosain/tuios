@@ -167,6 +167,7 @@ func (m *OS) Init() tea.Cmd {
 		ListenForWindowExits(m.WindowExitChan),
 		ListenForPTYData(m.PTYDataChan),
 		ListenForClipboardSet(m.PendingClipboardSet),
+		ListenForNotification(m.ensureNotificationChan()),
 	}
 
 	// Listen for state sync from other clients (daemon/SSH/web mode)
@@ -492,6 +493,12 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			tea.SetClipboard(msg.Text),
 			ListenForClipboardSet(m.PendingClipboardSet),
 		)
+
+	case NotificationMsg:
+		// Guest desktop notification or bell delivered off the PTY goroutine;
+		// apply it here on the Bubble Tea goroutine where notification state is owned.
+		m.ShowNotification(msg.Message, msg.Type, msg.Duration)
+		return m, ListenForNotification(m.PendingNotification)
 
 	case WindowExitMsg:
 		windowID := msg.WindowID
