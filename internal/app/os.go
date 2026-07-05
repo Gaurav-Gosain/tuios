@@ -134,6 +134,7 @@ type OS struct {
 	TilingScheme          layout.AutoScheme       // Default auto-insertion scheme
 	SplitTargetWindowID   string                  // Window ID to split (set before AddWindow for splits)
 	WindowToBSPID         map[string]int          // Maps window UUID to stable BSP integer ID
+	BSPIDToWindowID       map[int]string          // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for getWindowByIntID)
 	NextBSPWindowID       int                     // Next BSP window ID to assign (starts at 1)
 	RenamingWindow        bool                    // True when renaming a window
 	RenameBuffer          string                  // Buffer for new window name
@@ -210,8 +211,6 @@ type OS struct {
 	// Remote tape script progress (used instead of ScriptPlayer for tape exec)
 	RemoteScriptIndex int // Current command index (0-based)
 	RemoteScriptTotal int // Total commands in remote script
-	// Kitty Graphics Protocol renderer for image support
-	KittyRenderer *KittyRenderer
 	// Kitty Graphics Protocol passthrough for forwarding to host terminal
 	KittyPassthrough *KittyPassthrough
 	// Sixel Graphics passthrough for forwarding to host terminal
@@ -1292,6 +1291,9 @@ func (m *OS) DeleteWindow(i int) *OS {
 	// Clean up the BSP ID mapping
 	if m.WindowToBSPID != nil {
 		delete(m.WindowToBSPID, deletedWindow.ID)
+		if m.BSPIDToWindowID != nil {
+			delete(m.BSPIDToWindowID, windowIntID)
+		}
 		m.LogInfo("BSP: Removed ID mapping for window %s (int ID %d)", deletedWindow.ID[:8], windowIntID)
 	}
 
@@ -2218,6 +2220,7 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 	m.WorkspaceScrollingLayouts = make(map[int]*layout.ScrollingLayout)
 	m.WindowToBSPID = make(map[string]int)
+	m.BSPIDToWindowID = make(map[int]string)
 	m.NextBSPWindowID = 1
 	m.Animations = nil
 	m.MultifocusSet = nil

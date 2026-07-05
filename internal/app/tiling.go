@@ -1085,6 +1085,10 @@ func (m *OS) getWindowIntID(stringID string) int {
 	newID := m.NextBSPWindowID
 	m.NextBSPWindowID++
 	m.WindowToBSPID[stringID] = newID
+	if m.BSPIDToWindowID == nil {
+		m.BSPIDToWindowID = make(map[int]string)
+	}
+	m.BSPIDToWindowID[newID] = stringID
 
 	return newID
 }
@@ -1095,10 +1099,22 @@ func (m *OS) getWindowByIntID(intID int) *terminal.Window {
 		return nil
 	}
 
-	// Search through the map to find the string ID, then find the window
+	// Fast path: reverse-map lookup. Verify against the forward map so a stale
+	// or missing reverse entry (e.g. after a session restore that rebuilt only
+	// WindowToBSPID) can never return the wrong window.
+	if stringID, ok := m.BSPIDToWindowID[intID]; ok {
+		if id, exists := m.WindowToBSPID[stringID]; exists && id == intID {
+			for _, w := range m.Windows {
+				if w.ID == stringID {
+					return w
+				}
+			}
+		}
+	}
+
+	// Fallback: resolve via the forward map on a reverse-map miss or mismatch.
 	for stringID, id := range m.WindowToBSPID {
 		if id == intID {
-			// Found the string ID, now find the window
 			for _, w := range m.Windows {
 				if w.ID == stringID {
 					return w

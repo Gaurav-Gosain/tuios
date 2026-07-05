@@ -269,10 +269,6 @@ func (kp *KittyPassthrough) IsEnabled() bool {
 	return kp.enabled
 }
 
-func (kp *KittyPassthrough) IsInlineGraphics() bool {
-	return kp.inlineGraphics
-}
-
 func (kp *KittyPassthrough) FlushPending() []byte {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
@@ -1365,10 +1361,6 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 	}
 	delete(kp.placements, windowID)
 	delete(kp.imageIDMap, windowID)
-}
-
-func (kp *KittyPassthrough) OnWindowScroll(windowID string, windowX, windowY, contentOffsetX, contentOffsetY, scrollbackLen, scrollOffset, viewportHeight int) {
-	kp.OnWindowMove(windowID, windowX, windowY, contentOffsetX, contentOffsetY, scrollbackLen, scrollOffset, viewportHeight)
 }
 
 func (kp *KittyPassthrough) ClearWindow(windowID string) {

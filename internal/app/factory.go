@@ -66,7 +66,7 @@ func NewOS(opts OSOptions) *OS {
 
 	os := &OS{
 		// Core state
-		FocusedWindow: -1,
+		FocusedWindow:    -1,
 		WindowExitChan:   make(chan string, 10),
 		PTYDataChan:      make(chan struct{}, 1),
 		StateSyncChan:    make(chan *session.SessionState, 10),
@@ -106,7 +106,6 @@ func NewOS(opts OSOptions) *OS {
 
 	// Initialize graphics passthrough if enabled
 	if opts.EnableGraphicsPassthrough {
-		os.KittyRenderer = NewKittyRenderer()
 		os.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{
 			ForceEnable: opts.ForceGraphicsEnabled,
 			Output:      opts.GraphicsOutput,
