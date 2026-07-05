@@ -113,12 +113,6 @@ type Emulator struct {
 
 	// semanticMarkers tracks OSC 133 shell integration markers
 	semanticMarkers *SemanticMarkerList
-
-	// Passthrough configuration: when enabled, unhandled sequences of each
-	// type are forwarded to the host terminal via the Passthrough callback.
-	passthroughDCS bool
-	passthroughAPC bool
-	passthroughOSC bool
 }
 
 // NewEmulator creates a new virtual terminal emulator.
@@ -1088,32 +1082,9 @@ func (e *Emulator) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, sc
 	e.textSizingFunc = fn
 }
 
-// SetPassthroughFunc sets the callback for forwarding unhandled escape sequences
-// to the host terminal. This is analogous to tmux's allow-passthrough option.
-func (e *Emulator) SetPassthroughFunc(fn func(data []byte)) {
-	e.cb.Passthrough = fn
-}
-
-// SetPassthroughConfig enables or disables passthrough for specific sequence types.
-// When enabled and a Passthrough callback is set, unhandled sequences of the
-// specified types are forwarded to the host terminal instead of being silently consumed.
-func (e *Emulator) SetPassthroughConfig(dcs, apc, osc bool) {
-	e.passthroughDCS = dcs
-	e.passthroughAPC = apc
-	e.passthroughOSC = osc
-}
-
 func (e *Emulator) SixelState() *SixelState {
 	if e.IsAltScreen() {
 		return e.sixelAlt
 	}
 	return e.sixelMain
-}
-
-func (e *Emulator) SixelMainState() *SixelState {
-	return e.sixelMain
-}
-
-func (e *Emulator) SixelAltState() *SixelState {
-	return e.sixelAlt
 }

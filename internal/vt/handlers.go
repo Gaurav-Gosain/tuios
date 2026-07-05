@@ -354,6 +354,21 @@ func (e *Emulator) registerDefaultOscHandlers() {
 		e.handleSemanticZone(data)
 		return true
 	})
+
+	// OSC 9 - iTerm2 desktop notification
+	e.RegisterOscHandler(9, func(data []byte) bool {
+		return e.handleNotify9(data)
+	})
+
+	// OSC 777 - urxvt desktop notification
+	e.RegisterOscHandler(777, func(data []byte) bool {
+		return e.handleNotify777(data)
+	})
+
+	// OSC 99 - kitty desktop notification
+	e.RegisterOscHandler(99, func(data []byte) bool {
+		return e.handleNotify99(data)
+	})
 }
 
 // registerDefaultEscHandlers registers the default ESC escape sequence handlers.

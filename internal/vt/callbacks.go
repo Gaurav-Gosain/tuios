@@ -72,8 +72,7 @@ type Callbacks struct {
 	// Returns the current clipboard content for the given selection.
 	ClipboardQuery func(selection string) string
 
-	// Passthrough callback. Called when an unhandled escape sequence should be
-	// forwarded to the host terminal. The raw byte slice contains the complete
-	// escape sequence including introducer and terminator.
-	Passthrough func(data []byte)
+	// Notify callback. Called when a guest app requests a desktop notification
+	// via OSC 9, OSC 777, or OSC 99.
+	Notify func(title, body string)
 }

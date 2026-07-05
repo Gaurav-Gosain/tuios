@@ -12,7 +12,6 @@ type KittyState struct {
 	placements    []*KittyPlacement
 	nextID        uint32
 	pending       *KittyPendingChunk
-	dirty         bool
 	clearCallback func() // Called when placements/images are cleared
 }
 
@@ -50,7 +49,6 @@ func (s *KittyState) AddImage(img *KittyImage) {
 	if img.Number > 0 {
 		s.imagesByNum[img.Number] = img.ID
 	}
-	s.dirty = true
 }
 
 func (s *KittyState) GetImage(id uint32) *KittyImage {
@@ -78,7 +76,6 @@ func (s *KittyState) DeleteImage(id uint32) {
 		delete(s.images, id)
 	}
 	s.removePlacementsForImage(id)
-	s.dirty = true
 }
 
 func (s *KittyState) DeleteImageByNumber(num uint32) {
@@ -89,7 +86,6 @@ func (s *KittyState) DeleteImageByNumber(num uint32) {
 		s.removePlacementsForImage(id)
 	}
 	delete(s.imagesByNum, num)
-	s.dirty = true
 }
 
 func (s *KittyState) removePlacementsForImage(imageID uint32) {
@@ -109,13 +105,11 @@ func (s *KittyState) AddPlacement(p *KittyPlacement) {
 		for i, existing := range s.placements {
 			if existing.ImageID == p.ImageID && existing.PlacementID == p.PlacementID {
 				s.placements[i] = p
-				s.dirty = true
 				return
 			}
 		}
 	}
 	s.placements = append(s.placements, p)
-	s.dirty = true
 }
 
 func (s *KittyState) DeletePlacement(imageID, placementID uint32) {
@@ -128,7 +122,6 @@ func (s *KittyState) DeletePlacement(imageID, placementID uint32) {
 		}
 	}
 	s.placements = filtered
-	s.dirty = true
 }
 
 func (s *KittyState) DeletePlacementsAtCursor(x, y int) {
@@ -141,7 +134,6 @@ func (s *KittyState) DeletePlacementsAtCursor(x, y int) {
 		}
 	}
 	s.placements = filtered
-	s.dirty = true
 }
 
 func (s *KittyState) DeletePlacementsInColumn(x int) {
@@ -154,7 +146,6 @@ func (s *KittyState) DeletePlacementsInColumn(x int) {
 		}
 	}
 	s.placements = filtered
-	s.dirty = true
 }
 
 func (s *KittyState) DeletePlacementsInRow(y int) {
@@ -167,7 +158,6 @@ func (s *KittyState) DeletePlacementsInRow(y int) {
 		}
 	}
 	s.placements = filtered
-	s.dirty = true
 }
 
 func (s *KittyState) DeletePlacementsByZIndex(z int32) {
@@ -180,7 +170,6 @@ func (s *KittyState) DeletePlacementsByZIndex(z int32) {
 		}
 	}
 	s.placements = filtered
-	s.dirty = true
 }
 
 func (s *KittyState) Clear() {
@@ -190,7 +179,6 @@ func (s *KittyState) Clear() {
 	s.imagesByNum = make(map[uint32]uint32)
 	s.placements = nil
 	s.pending = nil
-	s.dirty = true
 	s.mu.Unlock()
 	// Call callback outside the lock to avoid deadlocks
 	if callback != nil {
@@ -204,7 +192,6 @@ func (s *KittyState) ClearPlacements() {
 	hadPlacements := len(s.placements) > 0
 	if hadPlacements {
 		s.placements = nil
-		s.dirty = true
 	}
 	s.mu.Unlock()
 	// Always call callback (needed for passthrough mode where placements
@@ -230,18 +217,6 @@ func (s *KittyState) GetPlacements() []*KittyPlacement {
 	result := make([]*KittyPlacement, len(s.placements))
 	copy(result, s.placements)
 	return result
-}
-
-func (s *KittyState) IsDirty() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.dirty
-}
-
-func (s *KittyState) ClearDirty() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.dirty = false
 }
 
 func (s *KittyState) SetPending(chunk *KittyPendingChunk) {
