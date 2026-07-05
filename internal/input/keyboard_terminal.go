@@ -1,0 +1,859 @@
+package input
+
+import (
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
+)
+
+// HandleTerminalModeKey handles keyboard input in terminal mode
+func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// Guard: suppress misparsed mouse-sequence fragments during AllMotion→CellMotion transition.
+	// When switching from WindowManagementMode (AllMotion) to TerminalMode (CellMotion),
+	// buffered mouse motion sequences can be split across read boundaries. ultraviolet's
+	// 50ms ESC timeout force-processes partial CSI sequences, and the remaining bytes
+	// (digits, 'M', ';', etc.) are decoded as individual KeyPressEvents.
+	// Suppress unmodified single-character keys for 150ms after entering TerminalMode.
+	if msg.Mod == 0 && msg.Text != "" && !o.PrefixActive && !o.TerminalModeEnteredAt.IsZero() &&
+		time.Since(o.TerminalModeEnteredAt) < 150*time.Millisecond {
+		return o, nil
+	}
+
+	focusedWindow := o.GetFocusedWindow()
+
+	// Handle help menu first (takes priority over everything in terminal mode)
+	if o.ShowHelp {
+		key := msg.String()
+
+		// Handle escape - exit search first if active, then close help
+		if key == "esc" {
+			if o.HelpSearchMode {
+				// Exit search mode first
+				o.HelpSearchMode = false
+				o.HelpSearchQuery = ""
+				o.HelpScrollOffset = 0
+				return o, nil
+			}
+			// Close help menu
+			o.ShowHelp = false
+			o.HelpScrollOffset = 0
+			o.HelpCategory = -1
+			return o, nil
+		}
+
+		// Handle ? to close help
+		if key == "?" {
+			o.ShowHelp = false
+			o.HelpScrollOffset = 0
+			o.HelpCategory = -1 // Reset to trigger auto-selection next time
+			o.HelpSearchQuery = ""
+			o.HelpSearchMode = false
+			return o, nil
+		}
+
+		// Handle up/down arrows for scrolling
+		// Scroll by 2 rows at a time (1 entry + 1 gap row)
+		if key == "up" {
+			if o.HelpScrollOffset > 0 {
+				o.HelpScrollOffset -= 2
+				if o.HelpScrollOffset < 0 {
+					o.HelpScrollOffset = 0
+				}
+			}
+			return o, nil
+		}
+		if key == "down" {
+			o.HelpScrollOffset += 2
+			return o, nil
+		}
+
+		// Handle left/right arrows for category navigation
+		if key == "left" {
+			o.HelpScrollOffset = 0 // Reset scroll when changing categories
+			return handleLeftKey(msg, o)
+		}
+		if key == "right" {
+			o.HelpScrollOffset = 0 // Reset scroll when changing categories
+			return handleRightKey(msg, o)
+		}
+
+		// Toggle search mode with "/"
+		if key == "/" {
+			o.HelpSearchMode = !o.HelpSearchMode
+			o.HelpScrollOffset = 0 // Reset scroll when toggling search
+			if !o.HelpSearchMode {
+				o.HelpSearchQuery = "" // Clear query when exiting search
+			}
+			return o, nil
+		}
+
+		// Handle typing in search mode
+		if o.HelpSearchMode {
+			// Handle backspace
+			if key == "backspace" {
+				if len(o.HelpSearchQuery) > 0 {
+					o.HelpSearchQuery = o.HelpSearchQuery[:len(o.HelpSearchQuery)-1]
+					o.HelpScrollOffset = 0 // Reset scroll when query changes
+				}
+				return o, nil
+			}
+
+			// Handle regular character input (single printable characters)
+			if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
+				o.HelpSearchQuery += key
+				o.HelpScrollOffset = 0 // Reset scroll when query changes
+				return o, nil
+			}
+		}
+
+		// Help is showing but key wasn't handled - ignore it
+		return o, nil
+	}
+
+	// Handle layout picker (takes priority in terminal mode)
+	if o.ShowLayoutPicker {
+		return handleLayoutPickerInput(msg, o)
+	}
+
+	// Handle session switcher (takes priority in terminal mode)
+	if o.ShowSessionSwitcher {
+		return handleSessionSwitcherInput(msg, o)
+	}
+
+	// Handle aggregate view
+	if o.ShowAggregateView {
+		return handleAggregateViewInput(msg, o)
+	}
+
+	// Handle command palette (takes priority in terminal mode)
+	if o.ShowCommandPalette {
+		return handleCommandPaletteInput(msg, o)
+	}
+
+	// Handle log viewer (takes priority in terminal mode)
+	if o.ShowLogs {
+		return handleLogViewerKey(msg, o)
+	}
+
+	// Handle cache stats viewer (takes priority in terminal mode)
+	if o.ShowCacheStats {
+		key := msg.String()
+
+		// Close cache stats with q, esc, or c
+		if key == "q" || key == "esc" || key == "c" {
+			o.ShowCacheStats = false
+			return o, nil
+		}
+
+		// Reset cache stats with r
+		if key == "r" {
+			app.GetGlobalStyleCache().ResetStats()
+			o.ShowNotification("Cache statistics reset", "info", 2*time.Second)
+			return o, nil
+		}
+
+		// Ignore other keys when cache stats is active
+		return o, nil
+	}
+
+	// Shift+Up/Shift+Down: enter copy mode (if not active) and scroll scrollback.
+	// Handled BEFORE the copy mode check so subsequent presses also scroll
+	// instead of being consumed by the copy mode key handler.
+	if focusedWindow != nil {
+		shiftScroll := msg.String()
+		if shiftScroll == "shift+up" || shiftScroll == "shift+down" {
+			if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
+				focusedWindow.EnterCopyMode()
+			}
+			if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+				cm := focusedWindow.CopyMode
+				if shiftScroll == "shift+up" {
+					if cm.ScrollOffset < focusedWindow.ScrollbackLen() {
+						cm.ScrollOffset++
+						focusedWindow.ScrollbackOffset = cm.ScrollOffset
+					}
+				} else {
+					if cm.ScrollOffset > 0 {
+						cm.ScrollOffset--
+						focusedWindow.ScrollbackOffset = cm.ScrollOffset
+					}
+				}
+				focusedWindow.InvalidateCache()
+			}
+			return o, nil
+		}
+	}
+
+	// Handle copy mode (vim-style scrollback/selection)
+	if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+		return HandleCopyModeKey(msg, o, focusedWindow)
+	}
+
+	// Handle scrollback browser overlay
+	if o.ShowScrollbackBrowser {
+		return HandleScrollbackBrowserKey(msg, o)
+	}
+
+	// Check for prefix key in terminal mode
+	msgStr := strings.ToLower(msg.String())
+	leaderKey := strings.ToLower(config.LeaderKey)
+	if msgStr == leaderKey {
+		// If prefix is already active, send the leader key to terminal
+		if o.PrefixActive {
+			o.PrefixActive = false
+			if focusedWindow != nil {
+				// Use CSI u encoding if kitty keyboard is active
+				if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
+					encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focusedWindow.Terminal.KittyKeyboardFlags())
+					if len(encoded) > 0 {
+						_ = focusedWindow.SendInput([]byte(encoded))
+						return o, nil
+					}
+				}
+				// Legacy: send raw Ctrl+B byte
+				_ = focusedWindow.SendInput([]byte{0x02})
+			}
+			return o, nil
+		}
+		// Activate prefix mode
+		o.PrefixActive = true
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	}
+
+	// Handle workspace prefix commands (Ctrl+B, w, ...)
+	if o.WorkspacePrefixActive {
+		return handleTerminalWorkspacePrefix(msg, o)
+	}
+
+	// Handle minimize prefix commands (Ctrl+B, m, ...)
+	if o.MinimizePrefixActive {
+		return handleTerminalMinimizePrefix(msg, o)
+	}
+
+	// Handle tiling prefix commands (Ctrl+B, t, ...)
+	if o.TilingPrefixActive {
+		return handleTerminalTilingPrefix(msg, o)
+	}
+
+	// Handle debug prefix commands (Ctrl+B, D, ...)
+	if o.DebugPrefixActive {
+		return handleTerminalDebugPrefix(msg, o)
+	}
+
+	// Handle tape prefix commands (Ctrl+B, T, ...)
+	if o.TapePrefixActive {
+		return handleTerminalTapePrefix(msg, o)
+	}
+
+	// Handle layout prefix commands (Ctrl+B, L, ...)
+	if o.LayoutPrefixActive {
+		return handleTerminalLayoutPrefix(msg, o)
+	}
+
+	// Handle prefix commands in terminal mode
+	if o.PrefixActive {
+		return handleTerminalPrefixCommand(msg, o)
+	}
+
+	// Handle Alt+1-9 workspace switching in terminal mode
+	// Don't send workspace switching keys to the PTY
+	handled := handleWorkspaceSwitch(msg, o)
+	if handled {
+		return o, nil
+	}
+
+	// Handle Alt+Tab window cycling in terminal mode
+	if handleWindowCycle(msg, o) {
+		return o, nil
+	}
+
+	// Handle Alt+Left/Right for scrolling tiling column navigation
+	if o.AutoTiling && o.UseScrollingLayout {
+		switch msg.String() {
+		case "alt+left":
+			o.ScrollingFocusLeft()
+			return o, nil
+		case "alt+right":
+			o.ScrollingFocusRight()
+			return o, nil
+		}
+	}
+
+	// Handle opt+esc to exit terminal mode (direct shortcut for ctrl+b esc)
+	if handleModeSwitch(msg, o) {
+		return o, nil
+	}
+
+	keyStr := msg.String()
+
+	// Command palette: ctrl+p (configurable, intercepted before terminal forwarding)
+	if keyStr == "ctrl+p" {
+		o.ShowCommandPalette = true
+		o.CommandPaletteQuery = ""
+		o.CommandPaletteSelected = 0
+		o.CommandPaletteScroll = 0
+		return o, nil
+	}
+
+	// Handle paste shortcuts - intercept and request clipboard via OSC 52.
+	// Plain ctrl+v is deliberately excluded so it falls through to the passthrough
+	// block and reaches the child PTY as 0x16 (needed for vim visual-block, etc.),
+	// matching the tmux/zellij convention. Ctrl+Shift+V and host bracketed paste remain.
+	if keyStr == "ctrl+shift+v" || keyStr == "super+v" || keyStr == "super+shift+v" {
+		if focusedWindow != nil {
+			// Use tea.ReadClipboard to request clipboard via OSC 52
+			// This will generate a tea.ClipboardMsg which we handle in handler.go
+			return o, tea.ReadClipboard
+		}
+		return o, nil
+	}
+	// Normal terminal mode - pass through all keys
+	if focusedWindow != nil {
+		appCursorKeys := false
+		if focusedWindow.Terminal != nil {
+			appCursorKeys = focusedWindow.Terminal.ApplicationCursorKeys()
+		}
+
+		// When kitty keyboard protocol is active, encode as CSI u
+		var rawInput []byte
+		if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
+			encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focusedWindow.Terminal.KittyKeyboardFlags())
+			if len(encoded) > 0 {
+				rawInput = []byte(encoded)
+			}
+		}
+		// Fall back to legacy encoding
+		if len(rawInput) == 0 {
+			rawInput = getRawKeyBytesWithMode(msg, appCursorKeys)
+		}
+
+		if len(rawInput) > 0 {
+			if err := focusedWindow.SendInput(rawInput); err != nil {
+				// Terminal unavailable, switch back to window mode
+				o.Mode = app.WindowManagementMode
+				focusedWindow.InvalidateCache()
+			}
+			// Forward keystrokes to all multifocused windows
+			if len(o.MultifocusSet) > 0 {
+				for idx := range o.MultifocusSet {
+					if idx != o.FocusedWindow && idx >= 0 && idx < len(o.Windows) {
+						_ = o.Windows[idx].SendInput(rawInput)
+					}
+				}
+			}
+		}
+	} else {
+		// No focused window, switch back to window mode
+		o.Mode = app.WindowManagementMode
+	}
+	return o, nil
+}
+
+// handleTerminalWorkspacePrefix handles workspace prefix commands in terminal mode
+func handleTerminalWorkspacePrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.WorkspacePrefixActive = false
+	o.PrefixActive = false
+
+	keyStr := msg.String()
+
+	// Handle digit keys for workspace switching
+	if len(keyStr) == 1 && keyStr[0] >= '1' && keyStr[0] <= '9' {
+		num := int(keyStr[0] - '0')
+		o.SwitchToWorkspace(num)
+		return o, nil
+	}
+
+	// Handle Shift+digit for moving window to workspace
+	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
+		workspace := 0
+		switch keyStr {
+		case "shift+1", "!":
+			workspace = 1
+		case "shift+2", "@":
+			workspace = 2
+		case "shift+3", "#":
+			workspace = 3
+		case "shift+4", "$":
+			workspace = 4
+		case "shift+5", "%":
+			workspace = 5
+		case "shift+6", "^":
+			workspace = 6
+		case "shift+7", "&":
+			workspace = 7
+		case "shift+8", "*":
+			workspace = 8
+		case "shift+9", "(":
+			workspace = 9
+		}
+		if workspace > 0 {
+			o.MoveWindowToWorkspaceAndFollow(o.FocusedWindow, workspace)
+		}
+	}
+
+	return o, nil
+}
+
+// handleTerminalMinimizePrefix handles minimize prefix commands in terminal mode.
+// Delegates to HandleMinimizePrefixCommand which contains the shared logic.
+func handleTerminalMinimizePrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return HandleMinimizePrefixCommand(msg, o)
+}
+
+// handleTerminalTilingPrefix handles tiling/window prefix commands in terminal mode
+func handleTerminalTilingPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.TilingPrefixActive = false
+	o.PrefixActive = false
+
+	switch msg.String() {
+	case "n":
+		// New window
+		o.AddWindow("")
+		return o, nil
+	case "x":
+		// Close window
+		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+			w := o.Windows[o.FocusedWindow]
+			o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
+			o.DeleteWindow(o.FocusedWindow)
+			// If we still have windows, stay in terminal mode
+			if len(o.Windows) > 0 {
+				if newFocused := o.GetFocusedWindow(); newFocused != nil {
+					newFocused.InvalidateCache()
+				}
+			} else {
+				// No windows left, exit terminal mode
+				o.Mode = app.WindowManagementMode
+			}
+		}
+		return o, nil
+	case "r":
+		// Rename window - exit terminal mode for this (unless titles are hidden)
+		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+			focusedWindow := o.GetFocusedWindow()
+			if focusedWindow != nil {
+				o.Mode = app.WindowManagementMode
+				o.RenamingWindow = true
+				if fw := o.GetFocusedWindow(); fw != nil {
+					fw.InvalidateCache()
+				}
+				o.RenameBuffer = focusedWindow.CustomName
+			}
+		}
+		return o, nil
+	case "tab":
+		// Next window
+		o.CycleToNextVisibleWindow()
+		// Refresh the new window in terminal mode
+		if newFocused := o.GetFocusedWindow(); newFocused != nil {
+			newFocused.InvalidateCache()
+		}
+		return o, nil
+	case "shift+tab":
+		// Previous window
+		o.CycleToPreviousVisibleWindow()
+		// Refresh the new window in terminal mode
+		if newFocused := o.GetFocusedWindow(); newFocused != nil {
+			newFocused.InvalidateCache()
+		}
+		return o, nil
+	case "t":
+		// Toggle tiling mode
+		o.ToggleAutoTiling()
+		return o, nil
+	case "esc":
+		// Cancel tiling prefix mode
+		return o, nil
+	default:
+		// Unknown tiling command, ignore
+		return o, nil
+	}
+}
+
+// handleTerminalDebugPrefix handles debug prefix commands (Ctrl+B, D, ...) in terminal mode.
+// Delegates to HandleDebugPrefixCommand which contains the shared logic.
+func handleTerminalDebugPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return HandleDebugPrefixCommand(msg, o)
+}
+
+// handleTerminalTapePrefix handles tape prefix commands (Ctrl+B, T, ...) in terminal mode.
+// Delegates to HandleTapePrefixCommand which contains the shared logic.
+func handleTerminalTapePrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return HandleTapePrefixCommand(msg, o)
+}
+
+func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.LayoutPrefixActive = false
+	o.PrefixActive = false
+	switch msg.String() {
+	case "l":
+		// Load layout
+		templates, _ := app.LoadLayoutTemplates()
+		o.ShowLayoutPicker = true
+		o.LayoutPickerMode = "load"
+		o.LayoutPickerItems = templates
+		o.LayoutPickerQuery = ""
+		o.LayoutPickerSelected = 0
+		o.LayoutPickerScroll = 0
+		return o, nil
+	case "s":
+		// Save layout
+		o.ShowLayoutPicker = true
+		o.LayoutPickerMode = "save"
+		o.LayoutPickerQuery = ""
+		o.LayoutPickerSelected = 0
+		o.LayoutPickerScroll = 0
+		return o, nil
+	case "esc":
+		return o, nil
+	default:
+		return o, nil
+	}
+}
+
+// handleTerminalPrefixCommand handles prefix commands in terminal mode
+func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.PrefixActive = false
+	switch msg.String() {
+	case "w":
+		// Activate workspace prefix mode
+		o.WorkspacePrefixActive = true
+		o.PrefixActive = true // Keep prefix active for the next key
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "m":
+		// Activate minimize prefix mode
+		o.MinimizePrefixActive = true
+		o.PrefixActive = true // Keep prefix active for the next key
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "t":
+		// Activate tiling/window prefix mode
+		o.TilingPrefixActive = true
+		o.PrefixActive = true // Keep prefix active for the next key
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "D":
+		// Activate debug prefix mode (Ctrl+B, Shift+D)
+		o.DebugPrefixActive = true
+		o.PrefixActive = true // Keep prefix active for the next key
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "T":
+		// Activate tape prefix mode (Ctrl+B, Shift+T)
+		o.TapePrefixActive = true
+		o.PrefixActive = true // Keep prefix active for the next key
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "d":
+		// Detach from daemon session - quit client but leave session running
+		if o.IsDaemonSession {
+			// Sync state to daemon before detaching
+			o.SyncStateToDaemon()
+			// Don't call Cleanup() - we want the session to persist
+			// Don't show notification - just quit immediately
+			return o, tea.Quit
+		}
+		// Not in daemon mode, just switch to window management mode
+		o.Mode = app.WindowManagementMode
+		o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.InvalidateCache()
+		}
+		return o, nil
+	case "esc":
+		// Escape always just exits terminal mode (doesn't detach)
+		o.Mode = app.WindowManagementMode
+		o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.InvalidateCache()
+		}
+		return o, nil
+
+	// Window navigation commands work in insert mode
+	case "n", "tab":
+		// Next window
+		o.CycleToNextVisibleWindow()
+		// Refresh the new window in terminal mode
+		if newFocused := o.GetFocusedWindow(); newFocused != nil {
+			newFocused.InvalidateCache()
+		}
+		return o, nil
+	case "p", "shift+tab":
+		// Previous window (like tmux with 'p' or like normal mode with 'shift+tab')
+		o.CycleToPreviousVisibleWindow()
+		// Refresh the new window in terminal mode
+		if newFocused := o.GetFocusedWindow(); newFocused != nil {
+			newFocused.InvalidateCache()
+		}
+		return o, nil
+	case "P":
+		// Open command palette
+		o.ShowCommandPalette = true
+		o.CommandPaletteQuery = ""
+		o.CommandPaletteSelected = 0
+		o.CommandPaletteScroll = 0
+		return o, nil
+	case "S":
+		// Open session switcher
+		o.ShowSessionSwitcher = true
+		o.SessionSwitcherQuery = ""
+		o.SessionSwitcherSelected = 0
+		o.SessionSwitcherScroll = 0
+		o.SessionSwitcherError = ""
+		o.SessionSwitcherItems = o.RefreshSessionList()
+		return o, nil
+	case "L":
+		// Enter layout prefix mode (Ctrl+B, L, then l=load / s=save)
+		o.LayoutPrefixActive = true
+		o.PrefixActive = true // Keep prefix active for whichkey overlay
+		o.LastPrefixTime = time.Now()
+		return o, nil
+	case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		// Jump to window by number
+		return handleTerminalWindowSelection(msg, o)
+
+	// Window management
+	case "c":
+		// Create new window
+		o.AddWindow("")
+		return o, nil
+	case "x":
+		// Close current window
+		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+			w := o.Windows[o.FocusedWindow]
+			o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
+			o.DeleteWindow(o.FocusedWindow)
+			// If we still have windows, stay in terminal mode
+			if len(o.Windows) > 0 {
+				if newFocused := o.GetFocusedWindow(); newFocused != nil {
+					newFocused.InvalidateCache()
+				}
+			} else {
+				// No windows left, exit terminal mode
+				o.Mode = app.WindowManagementMode
+			}
+		}
+		return o, nil
+	case ",", "r":
+		// Rename window - exit terminal mode for this (like tmux with ',' or like normal mode with 'r')
+		// Skip if window titles are hidden
+		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+			focusedWindow := o.GetFocusedWindow()
+			if focusedWindow != nil {
+				o.Mode = app.WindowManagementMode
+				o.RenamingWindow = true
+				if fw := o.GetFocusedWindow(); fw != nil {
+					fw.InvalidateCache()
+				}
+				o.RenameBuffer = focusedWindow.CustomName
+			}
+		}
+		return o, nil
+
+	// Layout commands
+	case "space":
+		// Toggle tiling mode (like tmux)
+		o.ToggleAutoTiling()
+		return o, nil
+	case "z":
+		// Toggle zoom for current window (works in both tiling and free-float modes)
+		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+			o.ToggleZoom()
+			fw := o.GetFocusedWindow()
+			if fw != nil && fw.Zoomed {
+				o.ShowNotification("ZOOM", "info", config.NotificationDuration)
+			}
+		}
+		return o, nil
+	case "-":
+		// Split focused window horizontally (top/bottom)
+		if o.AutoTiling {
+			o.SplitFocusedHorizontal()
+			o.ShowNotification("Split Horizontal", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "|", "\\":
+		// Split focused window vertically (left/right)
+		if o.AutoTiling {
+			o.SplitFocusedVertical()
+			o.ShowNotification("Split Vertical", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "R":
+		// Rotate split direction at focused window
+		if o.AutoTiling {
+			o.RotateFocusedSplit()
+			o.ShowNotification("Split Rotated", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "=":
+		// Equalize all split ratios
+		if o.AutoTiling {
+			o.EqualizeSplits()
+			o.ShowNotification("Splits Equalized", "info", config.NotificationDuration)
+		}
+		return o, nil
+	case "[":
+		// Enter copy mode (vim-style scrollback/selection)
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.EnterCopyMode()
+			o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration*2)
+		}
+		return o, nil
+	case "s":
+		// Open scrollback browser
+		OpenScrollbackBrowser(o)
+		return o, nil
+	// Help
+	case "?":
+		// Toggle help
+		o.ShowHelp = !o.ShowHelp
+		return o, nil
+
+	case "q":
+		// Show quit confirmation dialog (only if there are terminals with foreground processes)
+		o.PrefixActive = false
+		if shouldShowQuitDialog(o) {
+			o.ShowQuitConfirm = true
+			o.QuitConfirmSelection = 0 // Default to Yes
+		} else {
+			// No foreground processes - quit and kill daemon session
+			if o.IsDaemonSession && o.DaemonClient != nil {
+				_ = o.DaemonClient.KillSession()
+			}
+			o.Cleanup()
+			return o, tea.Quit
+		}
+		return o, nil
+
+	default:
+		// Unknown prefix command, pass through the key
+		focusedWindow := o.GetFocusedWindow()
+		if focusedWindow != nil {
+			var rawInput []byte
+			if focusedWindow.Terminal != nil && focusedWindow.Terminal.KittyKeyboardFlags() != 0 {
+				encoded := vt.EncodeKeyCSIu(vtKeyFromBubbletea(msg), focusedWindow.Terminal.KittyKeyboardFlags())
+				if len(encoded) > 0 {
+					rawInput = []byte(encoded)
+				}
+			}
+			if len(rawInput) == 0 {
+				appCursorKeys := false
+				if focusedWindow.Terminal != nil {
+					appCursorKeys = focusedWindow.Terminal.ApplicationCursorKeys()
+				}
+				rawInput = getRawKeyBytesWithMode(msg, appCursorKeys)
+			}
+			if len(rawInput) > 0 {
+				_ = focusedWindow.SendInput(rawInput)
+			}
+		}
+	}
+	return o, nil
+}
+
+// handleTerminalWindowSelection handles window selection in terminal mode
+func handleTerminalWindowSelection(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	num := int(msg.String()[0] - '0')
+	if o.AutoTiling {
+		// In tiling mode, select visible window in current workspace
+		visibleIndex := 0
+		for i, win := range o.Windows {
+			if win.Workspace == o.CurrentWorkspace && !win.Minimized {
+				visibleIndex++
+				if visibleIndex == num || (num == 0 && visibleIndex == 10) {
+					o.FocusWindow(i)
+					break
+				}
+			}
+		}
+	} else {
+		// Normal mode, select by absolute index in current workspace
+		windowsInWorkspace := 0
+		for i, win := range o.Windows {
+			if win.Workspace == o.CurrentWorkspace {
+				windowsInWorkspace++
+				if windowsInWorkspace == num || (num == 0 && windowsInWorkspace == 10) {
+					o.FocusWindow(i)
+					break
+				}
+			}
+		}
+	}
+	// Refresh the new window in terminal mode
+	if newFocused := o.GetFocusedWindow(); newFocused != nil {
+		newFocused.InvalidateCache()
+	}
+	return o, nil
+}
+
+// handleWorkspaceSwitch handles Alt+1-9 workspace switching (with macOS Option key support)
+func handleWorkspaceSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
+	keyStr := msg.String()
+
+	// Check for macOS Option+digit keys
+	if len(keyStr) > 0 {
+		firstRune := []rune(keyStr)[0]
+		if digit, ok := IsMacOSOptionKey(firstRune); ok {
+			o.SwitchToWorkspace(digit)
+			return true
+		}
+	}
+
+	// Check for standard Alt+digit keys
+	switch keyStr {
+	case "alt+1":
+		o.SwitchToWorkspace(1)
+		return true
+	case "alt+2":
+		o.SwitchToWorkspace(2)
+		return true
+	case "alt+3":
+		o.SwitchToWorkspace(3)
+		return true
+	case "alt+4":
+		o.SwitchToWorkspace(4)
+		return true
+	case "alt+5":
+		o.SwitchToWorkspace(5)
+		return true
+	case "alt+6":
+		o.SwitchToWorkspace(6)
+		return true
+	case "alt+7":
+		o.SwitchToWorkspace(7)
+		return true
+	case "alt+8":
+		o.SwitchToWorkspace(8)
+		return true
+	case "alt+9":
+		o.SwitchToWorkspace(9)
+		return true
+	default:
+		return false
+	}
+}
+
+// handleModeSwitch handles opt+esc/alt+esc to exit terminal mode directly.
+// This is a shortcut equivalent to ctrl+b esc.
+func handleModeSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
+	keyStr := msg.String()
+
+	// opt+esc on macOS and alt+esc on Linux both produce alt+esc
+	if keyStr == "alt+esc" || keyStr == "alt+escape" {
+		o.Mode = app.WindowManagementMode
+		o.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
+		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
+			focusedWindow.InvalidateCache()
+		}
+		return true
+	}
+	return false
+}
