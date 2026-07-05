@@ -172,6 +172,11 @@ type OS struct {
 	cachedViewContent    string           // Cached full View() output to skip rendering on idle ticks
 	renderSkipped        bool             // True when frame-skip fired; View() returns cached content
 	renderCanvas         *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
+	// Reused per-frame scratch for graphics placement refresh (avoids per-frame allocs)
+	kittyPosMap     map[string]*WindowPositionInfo // Reused map for kitty placement refresh
+	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values
+	sixelWinIndex   map[string]*terminal.Window    // Reused window-by-ID index for sixel placement refresh
+	sixelPosValue   WindowPositionInfo             // Reused value returned to the sixel refresh callback
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
@@ -300,6 +305,13 @@ func createID() string {
 	return uuid.New().String()
 }
 
+// verboseLog controls whether INFO-level logs are formatted and recorded.
+// It is off by default so hot paths (retile traces) pay nothing in production,
+// and is enabled by setting TUIOS_DEBUG_INTERNAL=1, the same switch that gates
+// the internal kitty/sixel passthrough trace logs. WARN and ERROR are always
+// recorded regardless of this flag.
+var verboseLog = os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
+
 // Log adds a new log message to the log buffer.
 func (m *OS) Log(level, format string, args ...any) {
 	message := fmt.Sprintf(format, args...)
@@ -349,8 +361,13 @@ func (m *OS) Log(level, format string, args ...any) {
 	}
 }
 
-// LogInfo logs an informational message.
+// LogInfo logs an informational message. INFO logs are skipped entirely unless
+// verbose logging is enabled, so the format string and args are never evaluated
+// into the ring buffer in the common (non-debug) case.
 func (m *OS) LogInfo(format string, args ...any) {
+	if !verboseLog {
+		return
+	}
 	m.Log("INFO", format, args...)
 }
 

@@ -34,6 +34,24 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	viewportWidth := m.GetRenderWidth()
 	viewportHeight := m.GetUsableHeight()
 
+	// Hoist loop-invariants out of the per-window loop below.
+	// The focused window and its zoom state are the same for every iteration.
+	focusedWindow := m.GetFocusedWindow()
+	focusedZoomed := focusedWindow != nil && focusedWindow.Zoomed
+
+	// Precompute the set of windows with an active (incomplete) animation once
+	// per frame instead of rescanning m.Animations for every window, which was
+	// O(windows*animations).
+	var animatingWindows map[*terminal.Window]struct{}
+	if len(m.Animations) > 0 {
+		animatingWindows = make(map[*terminal.Window]struct{}, len(m.Animations))
+		for _, anim := range m.Animations {
+			if !anim.Complete {
+				animatingWindows[anim.Window] = struct{}{}
+			}
+		}
+	}
+
 	for i := range m.Windows {
 		window := m.Windows[i]
 
@@ -41,23 +59,14 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			continue
 		}
 
-		isAnimating := false
-		// Only check animations if there are any active
-		if len(m.Animations) > 0 {
-			for _, anim := range m.Animations {
-				if anim.Window == m.Windows[i] && !anim.Complete {
-					isAnimating = true
-					break
-				}
-			}
-		}
+		_, isAnimating := animatingWindows[window]
 
 		if window.Minimized && !isAnimating {
 			continue
 		}
 
 		// When any window is zoomed, only render the zoomed window
-		if fw := m.GetFocusedWindow(); fw != nil && fw.Zoomed && window != fw {
+		if focusedZoomed && window != focusedWindow {
 			continue
 		}
 
@@ -396,14 +405,29 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 	// Always refresh placements if there are any - this handles window movement
 	if m.KittyPassthrough.HasPlacements() {
 		m.KittyPassthrough.RefreshAllPlacements(func() map[string]*WindowPositionInfo {
-			result := make(map[string]*WindowPositionInfo)
+			// Reuse a preallocated map and backing slice across frames. The
+			// returned map and its values are only consumed within
+			// RefreshAllPlacements, so reusing them avoids a fresh map plus a
+			// heap *WindowPositionInfo per window every frame.
+			if m.kittyPosMap == nil {
+				m.kittyPosMap = make(map[string]*WindowPositionInfo, len(m.Windows))
+			} else {
+				clear(m.kittyPosMap)
+			}
+			if cap(m.kittyPosBacking) < len(m.Windows) {
+				m.kittyPosBacking = make([]WindowPositionInfo, len(m.Windows))
+			}
+			backing := m.kittyPosBacking[:len(m.Windows)]
+			screenWidth := m.GetRenderWidth()
+			screenHeight := m.GetRenderHeight()
+			n := 0
 			for _, w := range m.Windows {
 				if w.Workspace == m.CurrentWorkspace && !w.Minimized {
 					scrollbackLen := 0
 					if w.Terminal != nil {
 						scrollbackLen = w.Terminal.ScrollbackLen()
 					}
-					result[w.ID] = &WindowPositionInfo{
+					backing[n] = WindowPositionInfo{
 						WindowX:            w.X,
 						WindowY:            w.Y,
 						ContentOffsetX:     w.BorderOffset(),
@@ -416,12 +440,14 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 						IsBeingManipulated: w.IsBeingManipulated,
 						WindowZ:            w.Z,
 						IsAltScreen:        w.IsAltScreen,
-						ScreenWidth:        m.GetRenderWidth(),
-						ScreenHeight:       m.GetRenderHeight(),
+						ScreenWidth:        screenWidth,
+						ScreenHeight:       screenHeight,
 					}
+					m.kittyPosMap[w.ID] = &backing[n]
+					n++
 				}
 			}
-			return result
+			return m.kittyPosMap
 		})
 	}
 
@@ -446,32 +472,49 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 
 	// Refresh placements for all windows
 	if m.SixelPassthrough.PlacementCount() > 0 {
-		m.SixelPassthrough.RefreshAllPlacements(func(windowID string) *WindowPositionInfo {
-			for _, w := range m.Windows {
-				if w.ID == windowID && w.Workspace == m.CurrentWorkspace && !w.Minimized {
-					scrollbackLen := 0
-					if w.Terminal != nil {
-						scrollbackLen = w.Terminal.ScrollbackLen()
-					}
-					return &WindowPositionInfo{
-						WindowX:            w.X,
-						WindowY:            w.Y,
-						ContentOffsetX:     w.BorderOffset(),
-						ContentOffsetY:     w.BorderOffset(),
-						Width:              w.Width,
-						Height:             w.Height,
-						Visible:            true,
-						ScrollbackLen:      scrollbackLen,
-						ScrollOffset:       w.ScrollbackOffset,
-						IsBeingManipulated: w.IsBeingManipulated,
-						WindowZ:            w.Z,
-						IsAltScreen:        w.IsAltScreen,
-						ScreenWidth:        m.GetRenderWidth(),
-						ScreenHeight:       m.GetRenderHeight(),
-					}
-				}
+		// Build a window-by-ID index of eligible windows once per frame and
+		// reuse it across placements, instead of rescanning m.Windows per
+		// placement (which was O(placements*windows)).
+		if m.sixelWinIndex == nil {
+			m.sixelWinIndex = make(map[string]*terminal.Window, len(m.Windows))
+		} else {
+			clear(m.sixelWinIndex)
+		}
+		for _, w := range m.Windows {
+			if w.Workspace == m.CurrentWorkspace && !w.Minimized {
+				m.sixelWinIndex[w.ID] = w
 			}
-			return nil
+		}
+		screenWidth := m.GetRenderWidth()
+		screenHeight := m.GetRenderHeight()
+		m.SixelPassthrough.RefreshAllPlacements(func(windowID string) *WindowPositionInfo {
+			w := m.sixelWinIndex[windowID]
+			if w == nil {
+				return nil
+			}
+			scrollbackLen := 0
+			if w.Terminal != nil {
+				scrollbackLen = w.Terminal.ScrollbackLen()
+			}
+			// Reuse a single value; the callback's result is consumed before
+			// the next call, so a shared value avoids a per-call heap alloc.
+			m.sixelPosValue = WindowPositionInfo{
+				WindowX:            w.X,
+				WindowY:            w.Y,
+				ContentOffsetX:     w.BorderOffset(),
+				ContentOffsetY:     w.BorderOffset(),
+				Width:              w.Width,
+				Height:             w.Height,
+				Visible:            true,
+				ScrollbackLen:      scrollbackLen,
+				ScrollOffset:       w.ScrollbackOffset,
+				IsBeingManipulated: w.IsBeingManipulated,
+				WindowZ:            w.Z,
+				IsAltScreen:        w.IsAltScreen,
+				ScreenWidth:        screenWidth,
+				ScreenHeight:       screenHeight,
+			}
+			return &m.sixelPosValue
 		})
 	}
 

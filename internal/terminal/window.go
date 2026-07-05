@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"image/color"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -420,8 +422,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// Silently recover from panics during process monitoring
-				_ = r // Explicitly ignore the recovered value
+				log.Printf("window %s goroutine panic: %v\n%s", window.ID, r, debug.Stack())
 			}
 		}()
 
@@ -967,8 +968,21 @@ func (w *Window) handleIOOperations() {
 	w.ioWg.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// Silently recover from panics during PTY read
-				_ = r // Explicitly ignore the recovered value
+				log.Printf("window %s goroutine panic: %v\n%s", w.ID, r, debug.Stack())
+				// A panic here leaves a zombie pane: the reader is dead so
+				// the window no longer renders, but nothing marks it for
+				// cleanup. Mirror the normal process-exit path (see the
+				// monitor goroutine in NewWindow) by marking ProcessExited so
+				// the maintenance tick in Update removes the window via
+				// DeleteWindow, and signal PTYDataChan so cleanup happens
+				// promptly instead of on the next poll.
+				w.ProcessExited = true
+				if w.PTYDataChan != nil {
+					select {
+					case w.PTYDataChan <- struct{}{}:
+					default:
+					}
+				}
 			}
 		}()
 
@@ -1048,8 +1062,7 @@ func (w *Window) handleIOOperations() {
 	w.ioWg.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// Silently recover from panics during terminal read
-				_ = r // Explicitly ignore the recovered value
+				log.Printf("window %s goroutine panic: %v\n%s", w.ID, r, debug.Stack())
 			}
 		}()
 

@@ -96,7 +96,9 @@ func (m *OS) TileAllWindows() {
 		for _, win := range visibleWindows {
 			intID := m.getWindowIntID(win.ID)
 			visibleIDs[intID] = true
-			m.LogInfo("BSP: Visible window %s has int ID %d", win.ID[:8], intID)
+			if verboseLog {
+				m.LogInfo("BSP: Visible window %s has int ID %d", win.ID[:8], intID)
+			}
 		}
 		m.LogInfo("BSP: Tree has IDs: %v, visible IDs: %v", treeIDs, visibleIDs)
 
@@ -1188,7 +1190,9 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 	tree := m.GetOrCreateBSPTree()
 	windowIntID := m.getWindowIntID(window.ID)
 
-	m.LogInfo("BSP: AddWindowToBSPTree for window %s (int ID %d)", window.ID[:8], windowIntID)
+	if verboseLog {
+		m.LogInfo("BSP: AddWindowToBSPTree for window %s (int ID %d)", window.ID[:8], windowIntID)
+	}
 
 	// Determine the target window for splitting
 	targetIntID := 0
