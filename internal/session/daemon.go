@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -242,7 +243,29 @@ func (d *Daemon) acceptLoop() {
 	}
 }
 
+// shortID returns the first 8 bytes of s, or all of s if it is shorter. IDs
+// reaching the daemon can be client-controlled and arbitrarily short, so a
+// plain s[:8] slice would panic; this makes ID truncation for logs safe.
+func shortID(s string) string {
+	if len(s) < 8 {
+		return s
+	}
+	return s[:8]
+}
+
 func (d *Daemon) handleConnection(conn net.Conn) {
+	// A panic on the untrusted client-parsed message surface must not take down
+	// the daemon and every other session. Recover, log, and drop just this
+	// client. Registered before the cleanup defer below so cleanup (which closes
+	// the connection and unsubscribes) runs first on unwind; conn.Close here is
+	// a defensive backstop for a panic before that defer is installed.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in handleConnection: %v\n%s", r, debug.Stack())
+			_ = conn.Close()
+		}
+	}()
+
 	clientID := fmt.Sprintf("client-%d", time.Now().UnixNano())
 
 	cs := &connState{
@@ -529,9 +552,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	debugLog("[DEBUG] Session state: %d windows, %d PTYs", len(state.Windows), session.PTYCount())
 	for i, w := range state.Windows {
-		if len(w.ID) >= 8 && len(w.PTYID) >= 8 {
-			debugLog("[DEBUG]   Window %d: ID=%s, PTYID=%s", i, w.ID[:8], w.PTYID[:8])
-		}
+		debugLog("[DEBUG]   Window %d: ID=%s, PTYID=%s", i, shortID(w.ID), shortID(w.PTYID))
 	}
 
 	// Sync PTY pixel dimensions from client's terminal capabilities
@@ -660,10 +681,10 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 
 	if ptyID != "" {
 		if pty := session.GetPTY(ptyID); pty != nil {
-			debugLog("[DEBUG] Writing %d bytes to PTY %s", len(data), ptyID[:8])
+			debugLog("[DEBUG] Writing %d bytes to PTY %s", len(data), shortID(ptyID))
 			_, _ = pty.Write(data)
 		} else {
-			debugLog("[DEBUG] PTY %s not found for input", ptyID[:8])
+			debugLog("[DEBUG] PTY %s not found for input", shortID(ptyID))
 		}
 	}
 
@@ -919,7 +940,7 @@ func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
 	pty := session.GetPTY(payload.PTYID)
 	if pty != nil {
 		pty.Unsubscribe(cs.clientID)
-		debugLog("[DEBUG] Successfully unsubscribed client %s from PTY %s", cs.clientID, payload.PTYID[:8])
+		debugLog("[DEBUG] Successfully unsubscribed client %s from PTY %s", cs.clientID, shortID(payload.PTYID))
 	}
 
 	return nil
@@ -1002,7 +1023,7 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 // notifyPTYClosed sends MsgPTYClosed to all clients subscribed to the given PTY.
 // This is called when the PTY process exits (e.g., user types exit or Ctrl+D).
 func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
-	debugLog("[DEBUG] notifyPTYClosed: sessionID=%s, ptyID=%s", sessionID[:8], ptyID[:8])
+	debugLog("[DEBUG] notifyPTYClosed: sessionID=%s, ptyID=%s", shortID(sessionID), shortID(ptyID))
 
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -1026,6 +1047,11 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 		d.wg.Add(1)
 		go func(client *connState) {
 			defer d.wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("PANIC in notifyPTYClosed send goroutine: %v\n%s", r, debug.Stack())
+				}
+			}()
 			if err := d.sendMessage(client, MsgPTYClosed, &ClosePTYPayload{PTYID: ptyID}); err != nil {
 				debugLog("[DEBUG] notifyPTYClosed: failed to send to client: %v", err)
 			}
@@ -1077,6 +1103,11 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 		d.wg.Add(1)
 		go func(client *connState) {
 			defer d.wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("PANIC in broadcastToSession send goroutine: %v\n%s", r, debug.Stack())
+				}
+			}()
 			if err := d.sendMessage(client, msgType, payload); err != nil {
 				debugLog("[DEBUG] broadcastToSession: failed to send to client %s: %v", client.clientID, err)
 			}
@@ -1216,7 +1247,7 @@ func (d *Daemon) syncPTYPixelDimensions(session *Session, cellWidth, cellHeight 
 	for _, ptyID := range session.ListPTYIDs() {
 		if pty := session.GetPTY(ptyID); pty != nil {
 			if err := pty.UpdatePixelDimensions(cellWidth, cellHeight); err != nil {
-				LogBasic("Failed to set PTY %s pixel size: %v", ptyID[:8], err)
+				LogBasic("Failed to set PTY %s pixel size: %v", shortID(ptyID), err)
 			}
 		}
 	}
