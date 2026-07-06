@@ -76,8 +76,10 @@ func (m *OS) TileAllWindows() {
 			if i < len(visibleWindows) {
 				visibleWindows[i].X = l.X
 				visibleWindows[i].Y = l.Y
-				visibleWindows[i].Resize(l.Width, l.Height)
+				// Set Tiled before Resize so the border deduction (and therefore
+				// the emulator size) matches the shared-borders state.
 				visibleWindows[i].Tiled = config.SharedBorders
+				visibleWindows[i].Resize(l.Width, l.Height)
 				visibleWindows[i].InvalidateCache()
 			}
 		}

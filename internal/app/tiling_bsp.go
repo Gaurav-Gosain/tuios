@@ -157,11 +157,10 @@ func (m *OS) ApplyBSPLayout() {
 			}
 			m.Animations = append(m.Animations, anim)
 		} else {
-			// Already at target - set tiled immediately
-			win.Tiled = config.SharedBorders
-			if win.Tiled != wasTiled {
-				win.InvalidateCache()
-			}
+			// Already at target, or animations disabled (NewSnapAnimation applied
+			// the size instantly). SetTiled re-syncs the emulator for the new
+			// border deduction when the flag actually changes.
+			win.SetTiled(config.SharedBorders)
 		}
 	}
 }

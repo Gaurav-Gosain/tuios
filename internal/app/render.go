@@ -121,7 +121,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			// Scrollbar layer (always fresh, not cached). Alt-screen apps (btop,
 			// vim) have no scrollback, so drawing a scrollback thumb over them
 			// only flickers as their content redraws.
-			if !window.Tiled && !window.IsAltScreen() && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+			if windowNeedsScrollbar(window) {
 				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
@@ -141,7 +141,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.CachedLayer.GetY() == window.Y &&
 			window.CachedLayer.GetZ() == zIndex {
 			layers = append(layers, window.CachedLayer)
-			if !window.Tiled && !window.IsAltScreen() && window.Terminal.ScrollbackLen() > 0 {
+			if windowNeedsScrollbar(window) {
 				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
@@ -160,7 +160,6 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			continue
 		}
 
-		isTiledBorderless := window.Tiled && (!window.Zoomed || config.SharedBorders)
 		boxContent := m.renderWindowBox(window, i, isFocused, borderColorObj)
 
 		clippedContent, finalX, finalY := clipWindowContent(
@@ -173,7 +172,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		layers = append(layers, window.CachedLayer)
 
 		// Scrollbar layer (always fresh, not cached). See the alt-screen note above.
-		if !isTiledBorderless && !window.IsAltScreen() && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+		if windowNeedsScrollbar(window) {
 			if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 				layers = append(layers, sbLayer)
 			}
@@ -254,7 +253,8 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	}
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowLayoutPicker ||
 		m.ShowQuitConfirm || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
-		m.ShowAggregateView || m.ShowTapeManager || m.PrefixActive {
+		m.ShowAggregateView || m.ShowTapeManager || m.ShowSettings || m.ShowThemePicker ||
+		m.PrefixActive {
 		return nil, false
 	}
 	if (config.ShowClock && !config.HideClock) || (m.TapeRecorder != nil && m.TapeRecorder.IsRecording()) {
@@ -283,6 +283,12 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// there, otherwise the fast path re-renders the half-updated buffer mid-frame
 	// and the flicker returns for a zoomed window.
 	if window.Terminal != nil && window.Terminal.IsSyncActive() {
+		return nil, false
+	}
+	// A window with visible scrollback needs a scrollbar thumb, which only the
+	// compositor draws as a separate layer. Fall back so a lone tiled/fullscreen
+	// window does not silently lose its scrollbar.
+	if windowNeedsScrollbar(window) {
 		return nil, false
 	}
 	rw, topMargin, usableH := m.GetRenderWidth(), m.GetTopMargin(), m.GetUsableHeight()
@@ -386,7 +392,8 @@ func (m *OS) View() tea.View {
 		// naturally with the terminal content.
 		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
 			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
-			m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView
+			m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
+			m.ShowSettings || m.ShowThemePicker || m.ShowTapeManager
 		if hasOverlay {
 			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 				m.KittyPassthrough.HideAllPlacements()

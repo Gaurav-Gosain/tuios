@@ -34,6 +34,20 @@ func (w *Window) UnlockIO() { w.ioMu.Unlock() }
 func (w *Window) RLockIO()   { w.ioMu.RLock() }
 func (w *Window) RUnlockIO() { w.ioMu.RUnlock() }
 
+// SetTiled updates the tiled flag and re-syncs the emulator/PTY size. Resize
+// deducts border cells based on Tiled (0 when tiled/borderless, 2 when
+// bordered), so flipping the flag without a resize leaves the terminal one
+// border off in each axis. Callers that toggle tiling (shared-borders changes,
+// tiling enable/disable) must go through here. No-op when unchanged.
+func (w *Window) SetTiled(tiled bool) {
+	if w.Tiled == tiled {
+		return
+	}
+	w.Tiled = tiled
+	w.Resize(w.Width, w.Height)
+	w.InvalidateCache()
+}
+
 // The following scalar/string fields are written by the VT callbacks on the
 // PTY/monitor goroutine and read on the Bubble Tea UI goroutine, so they are
 // stored atomically and accessed only through these methods.

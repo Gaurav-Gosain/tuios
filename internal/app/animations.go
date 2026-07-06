@@ -151,10 +151,11 @@ func (m *OS) UpdateAnimations() {
 				}
 			}
 
-			// Transition window to tiled mode after animation completes
+			// Transition window to tiled mode after animation completes. The
+			// snap resize above ran while Tiled was still false (bordered
+			// deduction); SetTiled re-syncs the emulator to the borderless size.
 			if anim.TileOnComplete && anim.Window != nil {
-				anim.Window.Tiled = true
-				anim.Window.InvalidateCache()
+				anim.Window.SetTiled(true)
 			}
 
 			if m.KittyPassthrough != nil && anim.Window != nil && anim.Window.Terminal != nil {
