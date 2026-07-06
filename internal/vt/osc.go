@@ -86,17 +86,17 @@ func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 			case 10: // Query foreground color
 				xrgb.Color = e.ForegroundColor()
 				if xrgb.Color != nil {
-					_, _ = io.WriteString(e.pw, ansi.SetForegroundColor(xrgb.String()))
+					_, _ = io.WriteString(e.pipe, ansi.SetForegroundColor(xrgb.String()))
 				}
 			case 11: // Query background color
 				xrgb.Color = e.BackgroundColor()
 				if xrgb.Color != nil {
-					_, _ = io.WriteString(e.pw, ansi.SetBackgroundColor(xrgb.String()))
+					_, _ = io.WriteString(e.pipe, ansi.SetBackgroundColor(xrgb.String()))
 				}
 			case 12: // Query cursor color
 				xrgb.Color = e.CursorColor()
 				if xrgb.Color != nil {
-					_, _ = io.WriteString(e.pw, ansi.SetCursorColor(xrgb.String()))
+					_, _ = io.WriteString(e.pipe, ansi.SetCursorColor(xrgb.String()))
 				}
 			}
 		} else if c := ansi.XParseColor(arg); c != nil {
@@ -262,7 +262,7 @@ func (e *Emulator) handlePaletteColor(data []byte) {
 			var xrgb ansi.XRGBColor
 			xrgb.Color = c
 			response := "\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + "\x1b\\"
-			_, _ = io.WriteString(e.pw, response)
+			_, _ = io.WriteString(e.pipe, response)
 		}
 	} else if c := ansi.XParseColor(arg); c != nil {
 		// Set: update the palette entry
@@ -288,11 +288,11 @@ func (e *Emulator) handleClipboard(data []byte) {
 			content := e.cb.ClipboardQuery(selection)
 			encoded := base64.StdEncoding.EncodeToString([]byte(content))
 			response := "\x1b]52;" + selection + ";" + encoded + "\x1b\\"
-			_, _ = io.WriteString(e.pw, response)
+			_, _ = io.WriteString(e.pipe, response)
 		} else {
 			// No callback - respond empty
 			response := "\x1b]52;" + selection + ";\x1b\\"
-			_, _ = io.WriteString(e.pw, response)
+			_, _ = io.WriteString(e.pipe, response)
 		}
 	} else {
 		// Set clipboard

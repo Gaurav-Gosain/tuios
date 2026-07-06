@@ -743,7 +743,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			return false
 		}
 
-		_, _ = io.WriteString(e.pw, ansi.PrimaryDeviceAttributes(
+		_, _ = io.WriteString(e.pipe, ansi.PrimaryDeviceAttributes(
 			62, // VT220
 			1,  // 132 columns
 			4,  // Sixel graphics
@@ -764,7 +764,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		}
 
 		// Do we fully support VT220?
-		_, _ = io.WriteString(e.pw, ansi.SecondaryDeviceAttributes(
+		_, _ = io.WriteString(e.pipe, ansi.SecondaryDeviceAttributes(
 			1,  // VT220
 			10, // Version 1.0
 			0,  // ROM Cartridge is always zero
@@ -858,10 +858,10 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		case 5: // Operating Status
 			// We're always ready ;)
 			// See: https://vt100.net/docs/vt510-rm/DSR-OS.html
-			_, _ = io.WriteString(e.pw, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
+			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
 		case 6: // Cursor Position Report [ansi.CPR]
 			x, y := e.scr.CursorPosition()
-			_, _ = io.WriteString(e.pw, ansi.CursorPositionReport(x+1, y+1))
+			_, _ = io.WriteString(e.pipe, ansi.CursorPositionReport(x+1, y+1))
 		default:
 			return false
 		}
@@ -878,7 +878,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		switch n {
 		case 6: // Extended Cursor Position Report [ansi.DECXCPR]
 			x, y := e.scr.CursorPosition()
-			_, _ = io.WriteString(e.pw, ansi.ExtendedCursorPositionReport(x+1, y+1, 0)) // We don't support page numbers //nolint:errcheck
+			_, _ = io.WriteString(e.pipe, ansi.ExtendedCursorPositionReport(x+1, y+1, 0)) // We don't support page numbers //nolint:errcheck
 		default:
 			return false
 		}
@@ -920,17 +920,17 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			pixelWidth := e.Width() * cellWidth
 			response := ansi.WindowOp(4, pixelHeight, pixelWidth)
 			debugLog(fmt.Sprintf("responding to CSI 14 t with: %q (pixels: %dx%d)", response, pixelWidth, pixelHeight))
-			_, _ = io.WriteString(e.pw, response)
+			_, _ = io.WriteString(e.pipe, response)
 		case 16: // Report cell size in pixels
 			// Respond with: CSI 6 ; cellHeight ; cellWidth t
 			response := ansi.WindowOp(6, cellHeight, cellWidth)
 			debugLog(fmt.Sprintf("responding to CSI 16 t with: %q", response))
-			_, _ = io.WriteString(e.pw, response)
+			_, _ = io.WriteString(e.pipe, response)
 		case 18: // Report text area size in characters
 			// Respond with: CSI 8 ; rows ; cols t
 			response := ansi.WindowOp(8, e.Height(), e.Width())
 			debugLog(fmt.Sprintf("responding to CSI 18 t with: %q", response))
-			_, _ = io.WriteString(e.pw, response)
+			_, _ = io.WriteString(e.pipe, response)
 		default:
 			// Other XTWINOPS commands are not supported
 			debugLog(fmt.Sprintf("unsupported command CSI %d t", n))

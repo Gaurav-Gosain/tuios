@@ -72,9 +72,9 @@ type Emulator struct {
 	// tabstop is the list of tab stops.
 	tabstops *uv.TabStops
 
-	// I/O pipes.
-	pr *io.PipeReader
-	pw *io.PipeWriter
+	// Response pipe: the emulator writes query responses here from inside Write
+	// (under the window IO lock), so writes must never block. bufPipe buffers.
+	pipe *bufPipe
 
 	// The GL and GR character set identifiers.
 	gl, gr  int
@@ -137,7 +137,7 @@ func NewEmulator(w, h int) *Emulator {
 		HandlePm:  t.handlePm,
 		HandleSos: t.handleSos,
 	})
-	t.pr, t.pw = io.Pipe()
+	t.pipe = newBufPipe()
 	t.resetModes()
 	t.tabstops = uv.DefaultTabStops(w)
 
@@ -682,7 +682,7 @@ func (e *Emulator) Resize(width int, height int) {
 	e.setCursor(x, y)
 
 	if e.isModeSet(ansi.ModeInBandResize) {
-		_, _ = io.WriteString(e.pw, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
+		_, _ = io.WriteString(e.pipe, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
 	}
 }
 
@@ -692,7 +692,7 @@ func (e *Emulator) Read(p []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 
-	return e.pr.Read(p) //nolint:wrapcheck
+	return e.pipe.Read(p) //nolint:wrapcheck
 }
 
 // Close closes the terminal.
@@ -702,10 +702,10 @@ func (e *Emulator) Close() error {
 	}
 
 	e.closed.Store(true)
-	// Close the response pipe writer so a reader blocked in pr.Read (the
-	// terminal-response forwarder) unblocks with EOF instead of leaking.
-	if e.pw != nil {
-		_ = e.pw.Close()
+	// Close the response pipe so a reader blocked in Read (the terminal-response
+	// forwarder) unblocks with EOF instead of leaking.
+	if e.pipe != nil {
+		_ = e.pipe.Close()
 	}
 	return nil
 }
@@ -739,7 +739,7 @@ func (e *Emulator) WriteString(s string) (n int, err error) {
 // InputPipe returns the terminal's input pipe.
 // This can be used to send input to the terminal.
 func (e *Emulator) InputPipe() io.Writer {
-	return e.pw
+	return e.pipe
 }
 
 // Paste pastes text into the terminal.
@@ -747,16 +747,16 @@ func (e *Emulator) InputPipe() io.Writer {
 // appropriate escape sequences.
 func (e *Emulator) Paste(text string) {
 	if e.isModeSet(ansi.ModeBracketedPaste) {
-		_, _ = io.WriteString(e.pw, ansi.BracketedPasteStart)
-		defer io.WriteString(e.pw, ansi.BracketedPasteEnd) //nolint:errcheck
+		_, _ = io.WriteString(e.pipe, ansi.BracketedPasteStart)
+		defer io.WriteString(e.pipe, ansi.BracketedPasteEnd) //nolint:errcheck
 	}
 
-	_, _ = io.WriteString(e.pw, text)
+	_, _ = io.WriteString(e.pipe, text)
 }
 
 // SendText sends arbitrary text to the terminal.
 func (e *Emulator) SendText(text string) {
-	_, _ = io.WriteString(e.pw, text)
+	_, _ = io.WriteString(e.pipe, text)
 }
 
 // SendKeys sends multiple keys to the terminal.
@@ -920,7 +920,7 @@ func (e *Emulator) logf(format string, v ...any) {
 // This allows external code (e.g., daemon-side Kitty query handlers)
 // to inject responses that will be forwarded to the PTY.
 func (e *Emulator) WriteResponse(data []byte) {
-	_, _ = e.pw.Write(data)
+	_, _ = e.pipe.Write(data)
 }
 
 func (e *Emulator) registerKittyGraphicsHandler() {
@@ -956,7 +956,7 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 			state = e.kittyAlt
 		}
 
-		handler := NewKittyGraphicsHandler(e.scr, state, e.pw)
+		handler := NewKittyGraphicsHandler(e.scr, state, e.pipe)
 		return handler.HandleCommand(cmd)
 	})
 }

@@ -39,7 +39,7 @@ func (e *Emulator) handleRequestMode(params ansi.Params, isAnsi bool) {
 	}
 
 	setting := e.modes[mode]
-	_, _ = io.WriteString(e.pw, ansi.ReportMode(mode, setting))
+	_, _ = io.WriteString(e.pipe, ansi.ReportMode(mode, setting))
 }
 
 func paramsString(cmd ansi.Cmd, params ansi.Params) string {

@@ -33,7 +33,7 @@ func (e *Emulator) SendKey(k uv.KeyEvent) {
 		// Try kitty keyboard protocol encoding first
 		if e.kittyKbd != nil && e.kittyKbd.CurrentFlags() != 0 {
 			if encoded := EncodeKeyCSIu(key, e.kittyKbd.CurrentFlags()); encoded != "" {
-				_, _ = io.WriteString(e.pw, encoded)
+				_, _ = io.WriteString(e.pipe, encoded)
 				return
 			}
 		}
@@ -302,7 +302,7 @@ func (e *Emulator) SendKey(k uv.KeyEvent) {
 			}
 		}
 
-		_, _ = io.WriteString(e.pw, seq)
+		_, _ = io.WriteString(e.pipe, seq)
 	}
 }
 

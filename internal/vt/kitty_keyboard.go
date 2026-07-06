@@ -127,7 +127,7 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		flags := e.kittyKbd.CurrentFlags()
 		// Respond with CSI ? flags u
 		response := fmt.Sprintf("\x1b[?%du", flags)
-		_, _ = io.WriteString(e.pw, response)
+		_, _ = io.WriteString(e.pipe, response)
 		e.logf("kitty keyboard: query, responding with flags=%d", flags)
 		return true
 	})
