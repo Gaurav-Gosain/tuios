@@ -50,13 +50,12 @@ type pendingRequest struct {
 
 // connState tracks state for a connected client.
 type connState struct {
-	conn       net.Conn
-	clientID   string
-	hello      *HelloPayload
-	done       chan struct{}
-	doneOnce   sync.Once // gates close(done) so shutdown is safe to call twice
-	sendMu     sync.Mutex
-	lastActive time.Time
+	conn     net.Conn
+	clientID string
+	hello    *HelloPayload
+	done     chan struct{}
+	doneOnce sync.Once // gates close(done) so shutdown is safe to call twice
+	sendMu   sync.Mutex
 
 	// Codec negotiated for this connection (gob by default)
 	codec Codec
@@ -271,7 +270,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		conn:             conn,
 		clientID:         clientID,
 		done:             make(chan struct{}),
-		lastActive:       time.Now(),
 		codec:            DefaultCodec(), // Default to gob, may be changed in handleHello
 		ptySubscriptions: make(map[string]struct{}),
 	}
@@ -354,8 +352,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 
 		// Update codec if message came with a different one (shouldn't happen after handshake)
 		_ = codecType // Codec is negotiated at Hello, messages should use that codec
-
-		cs.lastActive = time.Now()
 
 		if err := d.handleMessage(cs, msg); err != nil {
 			LogError("Error handling message from %s: %v", clientID, err)

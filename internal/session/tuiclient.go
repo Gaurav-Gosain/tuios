@@ -38,10 +38,6 @@ type TUIClient struct {
 	sessionID   string
 	sessionName string
 
-	// Effective session dimensions (min of all connected clients)
-	effectiveWidth  int
-	effectiveHeight int
-
 	// Available session names from daemon
 	availableSessionNames []string
 
@@ -78,9 +74,9 @@ type TUIClient struct {
 	pendingResponsesMu sync.Mutex
 
 	// State
-	connected       bool
 	readLoopRunning bool
 	done            chan struct{}
+	doneOnce        sync.Once  // gates close(done) so Close is idempotent
 	switchMu        sync.Mutex // prevents concurrent SwitchSession calls
 }
 
@@ -123,7 +119,6 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	c.conn = conn
-	c.connected = true
 
 	// Build hello payload with capabilities
 	hello := &HelloPayload{
@@ -214,8 +209,6 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		}
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
-		c.effectiveWidth = payload.Width
-		c.effectiveHeight = payload.Height
 		return payload.State, nil
 
 	case MsgError:
@@ -303,8 +296,6 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		}
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
-		c.effectiveWidth = payload.Width
-		c.effectiveHeight = payload.Height
 		windowCount := 0
 		if payload.State != nil {
 			windowCount = len(payload.State.Windows)
@@ -719,15 +710,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		// Do NOT close c.done here; it must stay open for subsequent switches.
 		debugLog("[CLIENT] Received MsgDetached (no-op in handleMessage)")
 
-	case MsgSessionEnded:
-		// Session was killed/ended permanently  - shut down the read loop
-		select {
-		case <-c.done:
-			// Already closed
-		default:
-			close(c.done)
-		}
-
 	case MsgRemoteCommand:
 		// Remote command from CLI routed through daemon
 		var payload RemoteCommandPayload
@@ -849,10 +831,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			return
 		}
 
-		// Update stored effective dimensions
-		c.effectiveWidth = payload.Width
-		c.effectiveHeight = payload.Height
-
 		c.multiClientMu.RLock()
 		handler := c.sessionResizeHandler
 		c.multiClientMu.RUnlock()
@@ -879,13 +857,10 @@ func (c *TUIClient) handleMessage(msg *Message) {
 	}
 }
 
-// Close closes the connection to the daemon.
+// Close closes the connection to the daemon. Idempotent: the done channel is
+// closed at most once, so concurrent or repeated Close calls cannot panic.
 func (c *TUIClient) Close() error {
-	select {
-	case <-c.done:
-	default:
-		close(c.done)
-	}
+	c.doneOnce.Do(func() { close(c.done) })
 
 	if c.conn != nil {
 		return c.conn.Close()
@@ -896,23 +871,6 @@ func (c *TUIClient) Close() error {
 // SessionName returns the attached session name.
 func (c *TUIClient) SessionName() string {
 	return c.sessionName
-}
-
-// EffectiveWidth returns the effective session width (min of all connected clients).
-// Returns 0 if not yet set (before attach).
-func (c *TUIClient) EffectiveWidth() int {
-	return c.effectiveWidth
-}
-
-// EffectiveHeight returns the effective session height (min of all connected clients).
-// Returns 0 if not yet set (before attach).
-func (c *TUIClient) EffectiveHeight() int {
-	return c.effectiveHeight
-}
-
-// IsConnected returns true if connected to daemon.
-func (c *TUIClient) IsConnected() bool {
-	return c.connected
 }
 
 // AvailableSessionNames returns the list of available sessions from the daemon.

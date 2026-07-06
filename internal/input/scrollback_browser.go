@@ -10,6 +10,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
 )
 
+// Bounds on the vim-style count prefix in the scrollback browser. maxVimCount
+// caps digit accumulation; maxHorizCount bounds horizontal and search motions,
+// which saturate at the line edge after a handful of steps.
+const (
+	maxVimCount   = 100000
+	maxHorizCount = 1000
+)
+
 // HandleScrollbackBrowserKey handles keyboard input when the scrollback browser is open.
 func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	browser, ok := o.ScrollbackBrowser.(*scrollback.Browser)
@@ -264,36 +272,47 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 		return o, nil
 	}
 
-	// Count prefix: accumulate digits
+	// Count prefix: accumulate digits, capped so a long digit run cannot build
+	// an enormous multiplier that drives a multi-second motion loop below.
 	if len(keyStr) == 1 && keyStr[0] >= '1' && keyStr[0] <= '9' {
-		vim.PendingCount = vim.PendingCount*10 + int(keyStr[0]-'0')
+		vim.PendingCount = min(vim.PendingCount*10+int(keyStr[0]-'0'), maxVimCount)
 		return o, nil
 	}
 	if keyStr == "0" && vim.PendingCount > 0 {
-		vim.PendingCount = vim.PendingCount * 10
+		vim.PendingCount = min(vim.PendingCount*10, maxVimCount)
 		return o, nil
 	}
 
 	count := vim.ConsumeCount()
+	// Clamp the motion count before the per-motion loops. Every motion saturates
+	// at the buffer edge after a few steps, so a huge count only wastes work (and
+	// the word motions allocate a []rune per iteration). Vertical/line-spanning
+	// motions can repeat up to the line count; horizontal/search motions saturate
+	// far sooner, so a small constant bounds them.
+	vCount := count
+	if n := len(vim.Lines); n > 0 && vCount > n {
+		vCount = n
+	}
+	hCount := min(count, maxHorizCount)
 	center := false
 	isVisual := vim.Mode == scrollback.VimVisualChar || vim.Mode == scrollback.VimVisualLine
 
 	switch keyStr {
 	// Basic movement
 	case "j", "down":
-		for range count {
+		for range vCount {
 			vim.MoveDown()
 		}
 	case "k", "up":
-		for range count {
+		for range vCount {
 			vim.MoveUp()
 		}
 	case "h":
-		for range count {
+		for range hCount {
 			vim.MoveLeft()
 		}
 	case "l":
-		for range count {
+		for range hCount {
 			vim.MoveRight()
 		}
 
@@ -307,27 +326,27 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 
 	// Word movement
 	case "w":
-		for range count {
+		for range vCount {
 			vim.WordForward()
 		}
 	case "b":
-		for range count {
+		for range vCount {
 			vim.WordBackward()
 		}
 	case "e":
-		for range count {
+		for range vCount {
 			vim.WordEnd()
 		}
 	case "W":
-		for range count {
+		for range vCount {
 			vim.WORDForward()
 		}
 	case "B":
-		for range count {
+		for range vCount {
 			vim.WORDBackward()
 		}
 	case "E":
-		for range count {
+		for range vCount {
 			vim.WORDEnd()
 		}
 
@@ -353,11 +372,11 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 		vim.LastCharSearchTill = true
 		return o, nil
 	case ";":
-		for range count {
+		for range hCount {
 			vim.RepeatCharSearch(false)
 		}
 	case ",":
-		for range count {
+		for range hCount {
 			vim.RepeatCharSearch(true)
 		}
 
@@ -402,11 +421,11 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 
 	// Paragraph
 	case "{":
-		for range count {
+		for range vCount {
 			vim.ParagraphUp()
 		}
 	case "}":
-		for range count {
+		for range vCount {
 			vim.ParagraphDown()
 		}
 
@@ -420,11 +439,11 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 		vim.SearchQuery = ""
 		return o, nil
 	case "n":
-		for range count {
+		for range vCount {
 			vim.SearchNext()
 		}
 	case "N":
-		for range count {
+		for range vCount {
 			vim.SearchPrev()
 		}
 
@@ -477,11 +496,11 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 			return o, nil
 		}
 	case "left":
-		for range count {
+		for range hCount {
 			vim.MoveLeft()
 		}
 	case "right":
-		for range count {
+		for range hCount {
 			vim.MoveRight()
 		}
 	}

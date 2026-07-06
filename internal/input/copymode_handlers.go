@@ -551,9 +551,17 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		updateVisualEnd(cm, window)
 
 	// Jump movement
-	case "gg":
-		moveToTop(cm, window)
-		updateVisualEnd(cm, window)
+	case "g":
+		// Detect the 'gg' sequence. Keys arrive singly, so a literal "gg" case
+		// never matches; mirror the pending-g state used in normal mode.
+		if cm.PendingGCount && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
+			moveToTop(cm, window)
+			cm.PendingGCount = false
+			updateVisualEnd(cm, window)
+		} else {
+			cm.PendingGCount = true
+			cm.LastCommandTime = time.Now()
+		}
 	case "G":
 		moveToBottom(cm, window)
 		updateVisualEnd(cm, window)
