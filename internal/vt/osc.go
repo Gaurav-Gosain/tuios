@@ -356,7 +356,7 @@ func (e *Emulator) handleNotify99(data []byte) bool {
 	parts := strings.SplitN(string(data), ";", 3)
 	meta := map[string]string{}
 	if len(parts) >= 2 {
-		for _, kv := range strings.Split(parts[1], ":") {
+		for kv := range strings.SplitSeq(parts[1], ":") {
 			if k, v, ok := strings.Cut(kv, "="); ok {
 				meta[k] = v
 			}

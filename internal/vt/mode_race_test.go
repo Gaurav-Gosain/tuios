@@ -24,13 +24,11 @@ func TestModeConcurrentAccess(t *testing.T) {
 		[]byte("\x1b[?1002h\x1b[?1003h\x1b[?1h\x1b[?1004h\x1b[?2004h"),
 		[]byte("\x1b[?1002l\x1b[?1003l\x1b[?1l\x1b[?1004l\x1b[?2004l"),
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < iterations; i++ {
+	wg.Go(func() {
+		for i := range iterations {
 			_, _ = emu.Write(toggles[i%2])
 		}
-	}()
+	})
 
 	// Readers: hit every accessor that reads the mode map.
 	readers := []func(){
@@ -41,13 +39,11 @@ func TestModeConcurrentAccess(t *testing.T) {
 		},
 	}
 	for _, read := range readers {
-		wg.Add(1)
-		go func(fn func()) {
-			defer wg.Done()
-			for i := 0; i < iterations; i++ {
-				fn()
+		wg.Go(func() {
+			for range iterations {
+				read()
 			}
-		}(read)
+		})
 	}
 
 	wg.Wait()

@@ -339,17 +339,17 @@ func GenerateTapeScript(tmpl LayoutTemplate) string {
 			sb.WriteString("NewWindow\n")
 		}
 		if w.CustomName != "" {
-			sb.WriteString(fmt.Sprintf("RenameWindow %s\n", w.CustomName))
+			fmt.Fprintf(&sb, "RenameWindow %s\n", w.CustomName)
 		}
 		if w.WorkingDir != "" {
-			sb.WriteString(fmt.Sprintf("Type cd %s\nEnter\n", w.WorkingDir))
+			fmt.Fprintf(&sb, "Type cd %s\nEnter\n", w.WorkingDir)
 		}
 		if w.Command != "" {
 			cmd := w.Command
 			if len(w.Args) > 0 {
 				cmd += " " + strings.Join(w.Args, " ")
 			}
-			sb.WriteString(fmt.Sprintf("Type %s\nEnter\n", cmd))
+			fmt.Fprintf(&sb, "Type %s\nEnter\n", cmd)
 		}
 		sb.WriteString("Sleep 200ms\n")
 	}

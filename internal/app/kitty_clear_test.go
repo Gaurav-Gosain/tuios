@@ -163,7 +163,7 @@ func TestKittyNoStaleAccumulation(t *testing.T) {
 
 	// Simulate 10 scroll redraws back-to-back. Drain pendingOutput between
 	// frames (like the render cycle does) so each frame starts clean.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		_, _ = emu.Write(frame())
 		_ = kp.FlushPending()
 	}

@@ -68,10 +68,10 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	chVert := firstRune(border.Left, '│')
 	chHoriz := firstRune(border.Top, '─')
 	chCross := firstRune(border.Middle, '┼')
-	chTRight := firstRune(border.MiddleLeft, '├')  // ├ T pointing right
-	chTLeft := firstRune(border.MiddleRight, '┤')  // ┤ T pointing left
-	chTDown := firstRune(border.MiddleTop, '┬')    // ┬ T pointing down
-	chTUp := firstRune(border.MiddleBottom, '┴')   // ┴ T pointing up
+	chTRight := firstRune(border.MiddleLeft, '├') // ├ T pointing right
+	chTLeft := firstRune(border.MiddleRight, '┤') // ┤ T pointing left
+	chTDown := firstRune(border.MiddleTop, '┬')   // ┬ T pointing down
+	chTUp := firstRune(border.MiddleBottom, '┴')  // ┴ T pointing up
 
 	// Resolve each cell to a character
 	type charPos struct {

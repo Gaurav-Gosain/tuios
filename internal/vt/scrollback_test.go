@@ -188,7 +188,7 @@ func TestSetMaxLinesDownsizeCallsOnTrim(t *testing.T) {
 	sb.SetOnTrim(func(n int) { trimmed += n })
 
 	// Fill 6 lines.
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		sb.PushLine(uv.Line{uv.Cell{Content: "x", Width: 1}})
 	}
 	if sb.Len() != 6 {

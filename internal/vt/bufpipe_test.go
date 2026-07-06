@@ -10,7 +10,7 @@ func TestBufPipeWriteNeverBlocks(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		// Many writes with no reader must not block.
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			_, _ = p.Write([]byte("\x1b[0n"))
 		}
 		close(done)

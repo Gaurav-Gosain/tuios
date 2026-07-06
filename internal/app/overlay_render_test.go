@@ -65,7 +65,7 @@ func TestSettingsPanelRendersSolid(t *testing.T) {
 		t.Errorf("expected settings hit geometry, got bodyY=%d rows=%d", geo.BodyY, len(rows))
 	}
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		m.SettingsCategory = i
 		m.SettingsSelected = 0
 		s, _, _ := m.renderSettings()
