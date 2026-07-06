@@ -10,6 +10,9 @@ import (
 func (e *Emulator) nextTab(n int) {
 	x, y := e.scr.CursorPosition()
 	scroll := e.scr.ScrollRegion()
+	// n comes unclamped from a CSI param; a tab count beyond the column
+	// count is meaningless once the cursor saturates at the edge.
+	n = min(n, e.Width())
 	for range n {
 		ts := e.tabstops.Next(x)
 		if ts < x {
@@ -39,6 +42,9 @@ func (e *Emulator) prevTab(n int) {
 		leftmargin = scroll.Min.X
 	}
 
+	// n comes unclamped from a CSI param; a tab count beyond the column
+	// count is meaningless once the cursor saturates at the edge.
+	n = min(n, e.Width())
 	for range n {
 		ts := e.tabstops.Prev(x)
 		if ts > x {
@@ -103,6 +109,12 @@ func (e *Emulator) carriageReturn() {
 func (e *Emulator) repeatPreviousCharacter(n int) {
 	if e.lastChar == 0 {
 		return
+	}
+	// n comes unclamped from a CSI param (up to ~2.1 billion); repeating
+	// past a full screen only fills and scrolls pointlessly, so cap it to
+	// one screenful of cells. Guard against a zero-sized screen.
+	if maxN := e.Width() * e.Height(); maxN > 0 && n > maxN {
+		n = maxN
 	}
 	for range n {
 		e.handlePrint(e.lastChar)
