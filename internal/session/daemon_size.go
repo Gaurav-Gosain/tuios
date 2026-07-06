@@ -56,11 +56,16 @@ func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
 func (d *Daemon) notifyClientJoined(sessionID string, joiningClient *connState) {
 	clientCount := d.getSessionClientCount(sessionID)
 
+	// width/height are guarded by cs.mu.
+	joiningClient.mu.Lock()
+	jw, jh := joiningClient.width, joiningClient.height
+	joiningClient.mu.Unlock()
+
 	payload := &ClientJoinedPayload{
 		ClientID:    joiningClient.clientID,
 		ClientCount: clientCount,
-		Width:       joiningClient.width,
-		Height:      joiningClient.height,
+		Width:       jw,
+		Height:      jh,
 	}
 
 	d.broadcastToSession(sessionID, MsgClientJoined, payload, joiningClient.clientID)

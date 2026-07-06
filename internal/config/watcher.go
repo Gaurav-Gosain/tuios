@@ -16,11 +16,13 @@ type ConfigReloadCallback func(newConfig *UserConfig, err error)
 
 // Watcher watches the config file for changes and triggers reloads.
 type Watcher struct {
-	watcher  *fsnotify.Watcher
-	path     string
-	callback ConfigReloadCallback
-	stopCh   chan struct{}
-	once     sync.Once
+	watcher       *fsnotify.Watcher
+	path          string
+	callback      ConfigReloadCallback
+	stopCh        chan struct{}
+	once          sync.Once
+	timerMu       sync.Mutex
+	debounceTimer *time.Timer
 }
 
 // NewWatcher creates a file watcher for the config file.
@@ -49,8 +51,6 @@ func NewWatcher(configPath string, callback ConfigReloadCallback) (*Watcher, err
 
 // run is the main watcher loop with debouncing.
 func (cw *Watcher) run() {
-	var debounceTimer *time.Timer
-
 	for {
 		select {
 		case event, ok := <-cw.watcher.Events:
@@ -59,12 +59,14 @@ func (cw *Watcher) run() {
 			}
 			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
 				// Debounce: editors often write files in multiple steps
-				if debounceTimer != nil {
-					debounceTimer.Stop()
+				cw.timerMu.Lock()
+				if cw.debounceTimer != nil {
+					cw.debounceTimer.Stop()
 				}
-				debounceTimer = time.AfterFunc(200*time.Millisecond, func() {
+				cw.debounceTimer = time.AfterFunc(200*time.Millisecond, func() {
 					cw.reload()
 				})
+				cw.timerMu.Unlock()
 			}
 		case err, ok := <-cw.watcher.Errors:
 			if !ok {
@@ -91,6 +93,11 @@ func (cw *Watcher) reload() {
 func (cw *Watcher) Stop() {
 	cw.once.Do(func() {
 		close(cw.stopCh)
+		cw.timerMu.Lock()
+		if cw.debounceTimer != nil {
+			cw.debounceTimer.Stop()
+		}
+		cw.timerMu.Unlock()
 		_ = cw.watcher.Close()
 	})
 }

@@ -287,9 +287,12 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 
 	// Update client dimensions for multi-client size calculation
 	if payload.PTYID == "" {
-		// This is a client resize, not a PTY-specific resize
+		// This is a client resize, not a PTY-specific resize.
+		// width/height are guarded by cs.mu (read under it in calculateEffectiveSize).
+		cs.mu.Lock()
 		cs.width = payload.Width
 		cs.height = payload.Height
+		cs.mu.Unlock()
 		// Recalculate effective session size
 		d.recalculateAndBroadcastSize(cs.sessionID)
 	} else {
@@ -332,8 +335,16 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 		height = 24
 	}
 
+	// Exit callback to notify subscribed clients when the PTY process exits.
+	// Passed into CreatePTY so it is set before the monitor goroutine starts,
+	// avoiding a data race and a lost notification for shells that exit at once.
+	sessionID := cs.sessionID
+	onExit := func(ptyID string) {
+		d.notifyPTYClosed(sessionID, ptyID)
+	}
+
 	debugLog("[DEBUG] Creating PTY %dx%d for session %s", width, height, session.Name)
-	pty, err := session.CreatePTY(payload.WindowID, width, height)
+	pty, err := session.CreatePTY(payload.WindowID, width, height, onExit)
 	if err != nil {
 		debugLog("[DEBUG] handleCreatePTY: failed to create PTY: %v", err)
 		return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to create PTY: %v", err))
@@ -343,12 +354,6 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 	if err := pty.UpdatePixelDimensions(cs.cellWidth, cs.cellHeight); err != nil {
 		debugLog("[DEBUG] handleCreatePTY: failed to set pixel size: %v", err)
 	}
-
-	// Set up exit callback to notify subscribed clients when PTY process exits
-	sessionID := cs.sessionID
-	pty.SetOnExit(func(ptyID string) {
-		d.notifyPTYClosed(sessionID, ptyID)
-	})
 
 	debugLog("[DEBUG] PTY created: %s", pty.ID)
 	return d.sendMessage(cs, MsgPTYCreated, &PTYCreatedPayload{

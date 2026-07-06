@@ -198,8 +198,10 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 }
 
 // CreatePTY creates a new PTY in this session. windowID, if non-empty, is the
-// client-side window UUID exported to the shell as TUIOS_WINDOW_ID.
-func (s *Session) CreatePTY(windowID string, width, height int) (*PTY, error) {
+// client-side window UUID exported to the shell as TUIOS_WINDOW_ID. onExit, if
+// non-nil, is invoked with the PTY ID when the process exits; it is set before
+// the monitor goroutine starts so it is always visible to monitorExit.
+func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
@@ -248,6 +250,7 @@ func (s *Session) CreatePTY(windowID string, width, height int) (*PTY, error) {
 		outputBuffer: make([]byte, 64*1024), // 64KB ring buffer
 		subscribers:  make(map[string]chan []byte),
 		vtWriteChan:  make(chan []byte, 256),
+		onExit:       onExit,
 	}
 
 	// Handle kitty graphics queries on the daemon side for low-latency
@@ -860,11 +863,6 @@ func (p *PTY) monitorExit() {
 	if p.onExit != nil {
 		p.onExit(p.ID)
 	}
-}
-
-// SetOnExit sets the callback to be called when the PTY process exits.
-func (p *PTY) SetOnExit(callback func(ptyID string)) {
-	p.onExit = callback
 }
 
 // forwardTerminalResponses reads responses from the daemon's terminal emulator and
