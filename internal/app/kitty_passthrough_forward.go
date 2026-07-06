@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -668,7 +669,35 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	scrollbackLen int,
 	isAltScreen bool,
 ) {
-	data, err := os.ReadFile(filePath)
+	// filePath is guest-controlled (kitty APC t=f/t=t base64 path, or t=s
+	// /dev/shm name). Stat first and reject anything that is not a regular
+	// file: /dev/zero would read unboundedly and OOM the server, a FIFO would
+	// hang this goroutine, and a device or directory has no image bytes. Only
+	// plain files are safe to slurp, and only up to the transmit cap.
+	info, err := os.Stat(filePath)
+	if err != nil {
+		kittyPassthroughLog("forwardFileTransmitInline: stat %s failed: %v", filePath, err)
+		return
+	}
+	if !info.Mode().IsRegular() {
+		kittyPassthroughLog("forwardFileTransmitInline: refusing non-regular file %s (mode %v)", filePath, info.Mode())
+		return
+	}
+	if info.Size() > maxPassthroughTransmitBytes {
+		kittyPassthroughLog("forwardFileTransmitInline: refusing oversized file %s (%d bytes)", filePath, info.Size())
+		return
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		kittyPassthroughLog("forwardFileTransmitInline: open %s failed: %v", filePath, err)
+		return
+	}
+	// LimitReader is a hard ceiling in case the file grew past its stat size
+	// (or is a special file that slipped past the regular-file check on some
+	// platform); never read more than the cap.
+	data, err := io.ReadAll(io.LimitReader(f, maxPassthroughTransmitBytes))
+	_ = f.Close()
 	if err != nil {
 		kittyPassthroughLog("forwardFileTransmitInline: read %s failed: %v", filePath, err)
 		return

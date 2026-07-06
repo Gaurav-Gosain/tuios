@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -314,7 +315,23 @@ func TriggerAltScreenRedrawCmd() tea.Cmd {
 
 // Update handles all incoming messages and updates the application state.
 // It processes keyboard, mouse, and timer events, managing windows and UI updates.
-func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
+	// Per-event panic isolation. A panic in a single message handler (reachable
+	// from malformed guest input, a bad tape/state-sync payload, or a rarely-hit
+	// UI branch) must not tear down every window: bubbletea only recovers at the
+	// top of Program.Run, where it restores the terminal and exits. Recover here,
+	// write a crash log, and return the model unchanged so the other windows
+	// survive the bad event. Named returns let the deferred recover set them.
+	defer func() {
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			path := WriteCrashLog(r, stack)
+			m.LogError("recovered panic in Update: %v (crash log: %s)\n%s", r, path, stack)
+			model = m
+			cmd = nil
+		}
+	}()
+
 	// Any non-tick message invalidates the render cache
 	if _, isTick := msg.(TickerMsg); !isTick {
 		m.renderSkipped = false
