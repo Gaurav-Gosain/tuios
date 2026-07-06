@@ -18,6 +18,11 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 
+	// Drag an overlay panel that was grabbed by its title bar / right-click.
+	if o.OverlayMouseMotion(mouse.X, mouse.Y) {
+		return o, nil
+	}
+
 	// Update pointer shape based on what we're hovering over (OSC 22)
 	o.UpdatePointerForPosition(mouse.X, mouse.Y)
 

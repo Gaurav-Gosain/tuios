@@ -9,22 +9,13 @@ import (
 
 // handleMouseWheel handles mouse wheel events
 func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Handle scrolling in help and log viewers
-	if o.ShowHelp {
-		switch msg.Button {
-		case tea.MouseWheelUp:
-			// Scroll by 2 rows at a time (1 entry + 1 gap row)
-			if o.HelpScrollOffset > 0 {
-				o.HelpScrollOffset -= 2
-				if o.HelpScrollOffset < 0 {
-					o.HelpScrollOffset = 0
-				}
-			}
-		case tea.MouseWheelDown:
-			// Scroll by 2 rows at a time (1 entry + 1 gap row)
-			o.HelpScrollOffset += 2
+	// Scroll the floating overlay panel under the cursor (help, settings,
+	// palette, theme picker, session/layout lists).
+	if o.OverlayActive() {
+		wm := msg.Mouse()
+		if o.OverlayMouseWheel(wm.X, wm.Y, msg.Button == tea.MouseWheelUp) {
+			return o, nil
 		}
-		return o, nil
 	}
 
 	if o.ShowLogs {

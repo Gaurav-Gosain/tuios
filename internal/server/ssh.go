@@ -189,7 +189,7 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 	}
 }
 
@@ -298,7 +298,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 	registerMultiClientHandlers(tuiosInstance, client)
 
 	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 	}, nil
 }
 

@@ -321,7 +321,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 	}
 }
 
@@ -427,7 +427,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	registerMultiClientHandlers(tuiosInstance, client)
 
 	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 	}, nil
 }
 

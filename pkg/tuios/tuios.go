@@ -336,6 +336,13 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// Allow motion events while a floating overlay panel is being dragged.
+	// Overlay drags don't set os.Dragging, so without this the motion events
+	// that move the panel would be filtered out and the drag would never track.
+	if os.OverlayDragActive() {
+		return msg
+	}
+
 	// Allow motion events for scrollback browser drag-to-select
 	if os.ShowScrollbackBrowser {
 		return msg

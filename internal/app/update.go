@@ -575,6 +575,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
 		// Reset idle counter on any user input to restore full tick rate
 		m.idleFrames = 0
+		// Any user input must produce a fresh frame. Without this a tick that
+		// marked the frame skippable would make View return the cached content,
+		// so state changed by this event (overlay selection, drag offset, etc.)
+		// would not be drawn until some other redraw happened.
+		m.renderSkipped = false
 		// Delegate to the registered input handler
 		if inputHandler != nil {
 			return inputHandler(msg, m)

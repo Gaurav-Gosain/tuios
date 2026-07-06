@@ -12,6 +12,12 @@ import (
 
 // handleMouseRelease handles mouse release events
 func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// End an in-progress overlay drag before anything else.
+	if o.OverlayDragActive() {
+		o.OverlayMouseRelease()
+		return o, nil
+	}
+
 	// Reset pointer shape on release
 	app.ResetPointerShape()
 	// Forward mouse release to terminal if in terminal mode and window has mouse tracking

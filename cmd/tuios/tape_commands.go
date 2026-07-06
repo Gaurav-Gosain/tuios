@@ -82,7 +82,7 @@ func runTapeInteractive(tapeFile string) error {
 
 	p := tea.NewProgram(
 		initialOS,
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(filterMouseMotion),
 	)

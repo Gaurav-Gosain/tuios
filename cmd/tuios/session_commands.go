@@ -98,7 +98,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		ShowCPU:             showCPU,
 		ShowRAM:             showRAM,
 		SharedBorders:       sharedBorders,
-		ZoomMaxWidth:     zoomMaxWidth,
+		ZoomMaxWidth:        zoomMaxWidth,
 		ScrollbackLines:     scrollbackLines,
 		NoAnimations:        noAnimations,
 		ThemeName:           themeName,
@@ -195,7 +195,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 
 	p := tea.NewProgram(
 		initialOS,
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(filterMouseMotion),
 		tea.WithOutput(prw),

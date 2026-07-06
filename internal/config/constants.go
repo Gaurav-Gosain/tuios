@@ -72,8 +72,14 @@ const (
 
 var (
 	// NormalFPS is the normal refresh rate during regular operation.
-	// Set via appearance.max_fps config (default 60, max 120).
+	// Set via appearance.max_fps config (default 60, up to MaxFPSCap).
 	NormalFPS = 60
+
+	// MaxFPSCap is the ceiling the renderer is allowed to reach. The tick loop
+	// throttles actual work to NormalFPS; this is the upper bound so raising
+	// NormalFPS at runtime (including the "unlimited" setting, which pins it to
+	// this value) can take effect without a restart.
+	MaxFPSCap = 240
 
 	// InteractionFPS is the refresh rate during user interactions (drag/resize)
 	// Lower FPS during interactions improves mouse responsiveness
@@ -342,7 +348,6 @@ var BorderStyle = "rounded"
 // DockbarPosition controls the position of the dockbar
 // Set via --dockbar-position flag or appearance.dockbar_position config
 var DockbarPosition = "bottom"
-
 
 // HideWindowButtons controls whether to hide window control buttons
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config
@@ -746,6 +751,12 @@ const (
 
 	// ZIndexLayoutPicker is the z-index for layout picker overlay
 	ZIndexLayoutPicker = 1006
+
+	// ZIndexOverlayBase is the base z-index for the draggable floating overlay
+	// panels (settings, theme picker, palette, etc.). Each open panel is stacked
+	// at this base plus its position in the click-to-raise order, so clicking a
+	// panel brings it above the others.
+	ZIndexOverlayBase = 1100
 
 	// ZIndexNotifications is the z-index for notifications
 	ZIndexNotifications = 2000
