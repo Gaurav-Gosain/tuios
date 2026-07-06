@@ -592,6 +592,11 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		case 2: // erase screen (clear command)
 			e.scr.Clear()
 			e.KittyState().ClearPlacements()
+			// Drop on-screen semantic markers so stale prompt/command markers
+			// don't cause output extraction to read overwritten cells.
+			if e.semanticMarkers != nil {
+				e.semanticMarkers.RemoveOnScreen(e.ScrollbackLen())
+			}
 			if e.cb.ScreenClear != nil {
 				e.cb.ScreenClear()
 			}
@@ -638,7 +643,13 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		// Insert Line [ansi.IL]
 		n, _, _ := params.Param(0, 1)
 		if e.scr.InsertLine(n) {
-			e.scr.setCursorX(0, true)
+			// Move to the left margin, keeping the current absolute row. Using
+			// setCursorX(0,true) would re-add the top margin to the absolute
+			// row and jump the cursor down when the scroll region is not
+			// top-anchored.
+			scroll := e.scr.ScrollRegion()
+			_, y := e.scr.CursorPosition()
+			e.scr.setCursor(scroll.Min.X, y, false)
 		}
 		return true
 	})
@@ -647,7 +658,11 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		// Delete Line [ansi.DL]
 		n, _, _ := params.Param(0, 1)
 		if e.scr.DeleteLine(n) {
-			e.scr.setCursorX(0, true)
+			// Move to the left margin, keeping the current absolute row. See
+			// the IL handler above for why margins=true would jump the row.
+			scroll := e.scr.ScrollRegion()
+			_, y := e.scr.CursorPosition()
+			e.scr.setCursor(scroll.Min.X, y, false)
 		}
 		return true
 	})

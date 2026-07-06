@@ -20,7 +20,8 @@ func (e *Emulator) handleOsc(cmd int, data []byte) {
 }
 
 func (e *Emulator) handleTitle(cmd int, data []byte) {
-	parts := bytes.Split(data, []byte{';'})
+	// Split on the first ';' only; titles may legitimately contain semicolons.
+	parts := bytes.SplitN(data, []byte{';'}, 2)
 	if len(parts) != 2 {
 		// Invalid, ignore
 		return

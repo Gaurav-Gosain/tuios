@@ -14,6 +14,17 @@ import (
 // placeholder characters should be invisible in the text buffer.
 const kittyPlaceholderChar = 0x10EEEE
 
+// asciiStr holds the 128 single-byte ASCII strings so the printable-ASCII fast
+// path in handlePrint can pass a package-lifetime string to handleGrapheme
+// instead of allocating string(r) (which escapes to the heap) for every char.
+var asciiStr [128]string
+
+func init() {
+	for i := range asciiStr {
+		asciiStr[i] = string(rune(i))
+	}
+}
+
 // handlePrint handles printable characters.
 func (e *Emulator) handlePrint(r rune) {
 	// Suppress kitty unicode placeholder characters. They would show as
@@ -27,7 +38,7 @@ func (e *Emulator) handlePrint(r rune) {
 			// If we have a grapheme buffer, flush it before handling the ASCII character.
 			e.flushGrapheme()
 		}
-		e.handleGrapheme(string(r), 1)
+		e.handleGrapheme(asciiStr[r], 1)
 	} else {
 		e.grapheme = append(e.grapheme, r)
 	}

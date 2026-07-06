@@ -94,7 +94,11 @@ func (e *Emulator) carriageReturn() {
 	margins := ok && mode.IsSet()
 	x, y := e.scr.CursorPosition()
 	if margins {
-		e.scr.setCursor(0, y, true)
+		// y is the current absolute row; keep it absolute and only move X to
+		// the left margin. Passing margins=true here would re-add scroll.Min.Y
+		// to an already-absolute y and jump the cursor down by the top margin.
+		region := e.scr.ScrollRegion()
+		e.scr.setCursor(region.Min.X, y, false)
 	} else if region := e.scr.ScrollRegion(); uv.Pos(x, y).In(region) {
 		e.scr.setCursor(region.Min.X, y, false)
 	} else {

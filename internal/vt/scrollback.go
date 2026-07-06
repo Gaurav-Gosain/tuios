@@ -244,6 +244,13 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	sb.head = 0
 	sb.tail = newLen % maxLines
 	sb.full = (newLen == maxLines)
+
+	// Downsizing dropped the oldest oldLen-newLen lines; re-base semantic
+	// markers so their AbsLine stays anchored to the oldest scrollback line,
+	// matching PushLineWithWrap and Clear.
+	if oldLen > newLen && sb.onTrim != nil {
+		sb.onTrim(oldLen - newLen)
+	}
 }
 
 // extractLine extracts a complete line from the buffer at the given Y coordinate.

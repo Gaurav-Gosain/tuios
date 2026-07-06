@@ -293,4 +293,3 @@ func kittyModParam(mod KeyMod) int {
 	}
 	return param
 }
-

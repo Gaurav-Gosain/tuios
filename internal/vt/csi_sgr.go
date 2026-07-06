@@ -63,23 +63,25 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 		case 4: // Underline
 			nextParam, _, ok := params.Param(i+1, 0)
 			if hasMore && ok {
+				// A colon subparameter follows (e.g. 4:3). Always consume it,
+				// even when the style value is out of range, so a stray value
+				// like 4:7 is not reinterpreted as a separate SGR (7 reverse).
+				i++
 				switch nextParam {
-				case 0, 1, 2, 3, 4, 5:
-					i++
-					switch nextParam {
-					case 0:
-						pen.Underline = ansi.UnderlineNone
-					case 1:
-						pen.Underline = ansi.UnderlineSingle
-					case 2:
-						pen.Underline = ansi.UnderlineDouble
-					case 3:
-						pen.Underline = ansi.UnderlineCurly
-					case 4:
-						pen.Underline = ansi.UnderlineDotted
-					case 5:
-						pen.Underline = ansi.UnderlineDashed
-					}
+				case 0:
+					pen.Underline = ansi.UnderlineNone
+				case 1:
+					pen.Underline = ansi.UnderlineSingle
+				case 2:
+					pen.Underline = ansi.UnderlineDouble
+				case 3:
+					pen.Underline = ansi.UnderlineCurly
+				case 4:
+					pen.Underline = ansi.UnderlineDotted
+				case 5:
+					pen.Underline = ansi.UnderlineDashed
+				default:
+					// Unknown underline style: no-op, but still consumed above.
 				}
 			} else {
 				pen.Underline = ansi.UnderlineSingle
@@ -137,6 +139,13 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 			pen.Fg = e.IndexedColor(int(param - 90 + 8)) // 8-15 are bright colors
 		case 100, 101, 102, 103, 104, 105, 106, 107: // Set bright background - USE THEME COLORS
 			pen.Bg = e.IndexedColor(int(param - 100 + 8)) // 8-15 are bright colors
+		default:
+			// Delegate any scalar attribute code this switch does not
+			// special-case to the canonical uv reader, so the themed path
+			// stays attribute-complete with the non-themed path. Color codes
+			// (38/48/58) and their subparameters are handled above, so this
+			// only sees single scalar codes.
+			uv.ReadStyle(params[i:i+1], pen)
 		}
 	}
 }
