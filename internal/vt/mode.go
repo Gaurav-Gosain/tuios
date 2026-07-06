@@ -4,6 +4,7 @@ import "github.com/charmbracelet/x/ansi"
 
 // resetModes resets all modes to their default values.
 func (e *Emulator) resetModes() {
+	e.modesMu.Lock()
 	e.modes = ansi.Modes{
 		// Recognized modes and their default values.
 		ansi.ModeCursorKeys:          ansi.ModeReset, // ?1
@@ -28,8 +29,10 @@ func (e *Emulator) resetModes() {
 		ansi.ModeUnicodeCore:         ansi.ModeReset, // ?2027
 		ansi.ModeLightDark:           ansi.ModeReset, // ?2031
 	}
+	e.modesMu.Unlock()
 
-	// Set mode effects.
+	// Set mode effects. setMode locks modesMu itself, so this must run after the
+	// reassignment above is unlocked to avoid a re-entrant lock.
 	for mode, setting := range e.modes {
 		e.setMode(mode, setting)
 	}

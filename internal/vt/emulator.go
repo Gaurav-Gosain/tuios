@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,8 +40,11 @@ type Emulator struct {
 	defaultFg, defaultBg, defaultCur color.Color
 	fgColor, bgColor, curColor       color.Color
 
-	// Terminal modes.
-	modes ansi.Modes
+	// Terminal modes. Written only by the PTY reader goroutine (via setMode,
+	// RestoreModes, resetModes) but read from the input/render goroutine
+	// (isModeSet). modesMu serializes those cross-goroutine accesses.
+	modes   ansi.Modes
+	modesMu sync.RWMutex
 
 	// Thread-safe cached mouse mode flags (updated on mode set/reset)
 	cachedHasMouse  atomic.Bool
@@ -511,6 +515,8 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 
 	// Restore each mode by directly updating the modes map
 	// This avoids triggering side effects like screen clearing
+	e.modesMu.Lock()
+	defer e.modesMu.Unlock()
 	for modeNum, enabled := range modes {
 		// Convert int back to Mode
 		mode := ansi.DECMode(modeNum)

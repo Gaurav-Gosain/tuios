@@ -75,7 +75,9 @@ func (e *Emulator) restoreCursor() {
 // setMode sets the mode to the given value.
 func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 	e.logf("setting mode %T(%v) to %v", mode, mode, setting)
+	e.modesMu.Lock()
 	e.modes[mode] = setting
+	e.modesMu.Unlock()
 	switch mode {
 	case ansi.ModeTextCursorEnable:
 		e.scr.setCursorHidden(!setting.IsSet())
@@ -122,7 +124,9 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 
 // isModeSet returns true if the mode is set.
 func (e *Emulator) isModeSet(mode ansi.Mode) bool {
+	e.modesMu.RLock()
 	m, ok := e.modes[mode]
+	e.modesMu.RUnlock()
 	return ok && m.IsSet()
 }
 

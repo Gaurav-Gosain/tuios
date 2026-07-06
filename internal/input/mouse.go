@@ -23,6 +23,8 @@ func sendMouseToWindow(win *terminal.Window, event uv.MouseEvent) {
 	if win.Terminal == nil {
 		return
 	}
+	// SendMouse/EncodeMouseEvent read the emulator mode map, which the emulator
+	// guards internally against the PTY reader goroutine.
 	if win.DaemonMode {
 		seq := win.Terminal.EncodeMouseEvent(event)
 		if seq != "" {
