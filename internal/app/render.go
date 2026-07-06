@@ -89,7 +89,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.Y+window.Height <= viewportHeight+topMargin
 
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
-		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[i]
+		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[window.ID]
 		var borderColorObj color.Color
 		if isFocused {
 			if m.Mode == TerminalMode {

@@ -40,7 +40,8 @@ func (m *OS) SwapWindowsInstant(index1, index2 int) {
 	// Swap windows in the BSP tree so the layout is preserved on retile
 	m.SwapWindowsInBSPTree(window1, window2)
 
-	// Swap windows in the slice so the order is persisted
+	// Swap windows in the slice so the order is persisted.
+	// MultifocusSet is keyed by window ID, so the swap needs no remap.
 	m.Windows[index1], m.Windows[index2] = m.Windows[index2], m.Windows[index1]
 
 	// Update focused window index if needed
@@ -70,7 +71,8 @@ func (m *OS) SwapWindowsWithOriginal(draggedIndex, targetIndex int, origX, origY
 	// Swap windows in the BSP tree FIRST so the layout is preserved on retile
 	m.SwapWindowsInBSPTree(draggedWindow, targetWindow)
 
-	// Swap windows in the slice
+	// Swap windows in the slice.
+	// MultifocusSet is keyed by window ID, so the swap needs no remap.
 	m.Windows[draggedIndex], m.Windows[targetIndex] = m.Windows[targetIndex], m.Windows[draggedIndex]
 
 	// Update focused window index if needed

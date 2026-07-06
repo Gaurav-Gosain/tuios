@@ -70,24 +70,25 @@ func (m *OS) ToggleMultifocus(windowIndex int) {
 	if windowIndex < 0 || windowIndex >= len(m.Windows) {
 		return
 	}
+	windowID := m.Windows[windowIndex].ID
 	if m.MultifocusSet == nil {
-		m.MultifocusSet = make(map[int]bool)
+		m.MultifocusSet = make(map[string]bool)
 	}
-	if m.MultifocusSet[windowIndex] {
-		delete(m.MultifocusSet, windowIndex)
+	if m.MultifocusSet[windowID] {
+		delete(m.MultifocusSet, windowID)
 		if len(m.MultifocusSet) == 0 {
 			m.MultifocusSet = nil
 		}
 		m.ShowNotification("Multifocus: removed window", "info", config.NotificationDuration)
 	} else {
-		m.MultifocusSet[windowIndex] = true
+		m.MultifocusSet[windowID] = true
 		m.ShowNotification(fmt.Sprintf("Multifocus: %d windows", len(m.MultifocusSet)), "info", config.NotificationDuration)
 	}
 	// Invalidate caches to show visual indicator on all affected windows
 	m.Windows[windowIndex].InvalidateCache()
-	for idx := range m.MultifocusSet {
-		if idx < len(m.Windows) {
-			m.Windows[idx].InvalidateCache()
+	for _, w := range m.Windows {
+		if m.MultifocusSet[w.ID] {
+			w.InvalidateCache()
 		}
 	}
 }
@@ -95,9 +96,9 @@ func (m *OS) ToggleMultifocus(windowIndex int) {
 // ClearMultifocus removes all windows from the multifocus set.
 func (m *OS) ClearMultifocus() {
 	if m.MultifocusSet != nil {
-		for idx := range m.MultifocusSet {
-			if idx < len(m.Windows) {
-				m.Windows[idx].InvalidateCache()
+		for _, w := range m.Windows {
+			if m.MultifocusSet[w.ID] {
+				w.InvalidateCache()
 			}
 		}
 	}
@@ -105,19 +106,24 @@ func (m *OS) ClearMultifocus() {
 	m.ShowNotification("Multifocus: cleared", "info", 0)
 }
 
-// IsMultifocused returns true if the given window index is in the multifocus set.
+// IsMultifocused returns true if the window at the given index is in the multifocus set.
 func (m *OS) IsMultifocused(windowIndex int) bool {
-	return m.MultifocusSet != nil && m.MultifocusSet[windowIndex]
+	if m.MultifocusSet == nil || windowIndex < 0 || windowIndex >= len(m.Windows) {
+		return false
+	}
+	return m.MultifocusSet[m.Windows[windowIndex].ID]
 }
 
-// GetMultifocusWindows returns all window indices in the multifocus set.
+// GetMultifocusWindows returns the current slice indices of all windows in the multifocus set.
 func (m *OS) GetMultifocusWindows() []int {
 	if m.MultifocusSet == nil {
 		return nil
 	}
 	var indices []int
-	for idx := range m.MultifocusSet {
-		indices = append(indices, idx)
+	for i, w := range m.Windows {
+		if m.MultifocusSet[w.ID] {
+			indices = append(indices, i)
+		}
 	}
 	return indices
 }
@@ -419,21 +425,11 @@ func (m *OS) DeleteWindow(i int) *OS {
 		}
 	}
 
-	// Update MultifocusSet: remove the deleted index and shift higher indices down
+	// MultifocusSet is keyed by window ID, so removal is a plain delete.
 	if len(m.MultifocusSet) > 0 {
-		delete(m.MultifocusSet, i)
-		updated := make(map[int]bool, len(m.MultifocusSet))
-		for idx := range m.MultifocusSet {
-			if idx > i {
-				updated[idx-1] = true
-			} else {
-				updated[idx] = true
-			}
-		}
-		if len(updated) == 0 {
+		delete(m.MultifocusSet, deletedWindow.ID)
+		if len(m.MultifocusSet) == 0 {
 			m.MultifocusSet = nil
-		} else {
-			m.MultifocusSet = updated
 		}
 	}
 

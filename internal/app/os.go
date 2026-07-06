@@ -256,9 +256,9 @@ type OS struct {
 	AggregateViewScroll   int
 	// Layout picker overlay
 	ShowLayoutPicker bool
-	LayoutCycleIndex int          // Current index in saved layouts for cycling
-	MultifocusSet    map[int]bool // Windows that receive keystrokes simultaneously
-	UseBSPLayout     bool         // true = BSP tiling, false = master-stack
+	LayoutCycleIndex int             // Current index in saved layouts for cycling
+	MultifocusSet    map[string]bool // Window IDs that receive keystrokes simultaneously
+	UseBSPLayout     bool            // true = BSP tiling, false = master-stack
 	// Scrolling tiling (niri-like) layout
 	UseScrollingLayout        bool                            // true = scrolling columns mode
 	WorkspaceScrollingLayouts map[int]*layout.ScrollingLayout // per-workspace scrolling layouts

@@ -388,6 +388,23 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// Update window list
 	m.Windows = newWindows
 
+	// MultifocusSet is keyed by window ID and survives the rebuild for windows
+	// that still exist; prune IDs no longer present in the synced window list.
+	if len(m.MultifocusSet) > 0 {
+		present := make(map[string]bool, len(m.Windows))
+		for _, w := range m.Windows {
+			present[w.ID] = true
+		}
+		for id := range m.MultifocusSet {
+			if !present[id] {
+				delete(m.MultifocusSet, id)
+			}
+		}
+		if len(m.MultifocusSet) == 0 {
+			m.MultifocusSet = nil
+		}
+	}
+
 	// Update global state
 	m.SessionName = state.Name
 	m.CurrentWorkspace = state.CurrentWorkspace
