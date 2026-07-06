@@ -80,7 +80,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft {
 		win := o.Windows[clickedWindowIndex]
 		rightBorderX := win.X + win.Width - 1
-		if X == rightBorderX && win.Terminal != nil && win.Terminal.ScrollbackLen() > 0 {
+		win.RLockIO()
+		hasScrollback := win.Terminal != nil && win.Terminal.ScrollbackLen() > 0
+		win.RUnlockIO()
+		if X == rightBorderX && hasScrollback {
 			o.FocusWindow(clickedWindowIndex)
 			scrollToPosition(win, Y)
 			o.ScrollbarDragging = true

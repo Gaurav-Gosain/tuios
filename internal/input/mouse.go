@@ -122,7 +122,9 @@ func scrollToPosition(win *terminal.Window, mouseY int) {
 	if win.Terminal == nil {
 		return
 	}
+	win.RLockIO()
 	scrollbackLen := win.Terminal.ScrollbackLen()
+	win.RUnlockIO()
 	if scrollbackLen <= 0 {
 		return
 	}

@@ -17,6 +17,13 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 		return o, nil
 	}
 
+	// Copy mode navigates the cell buffer (CellAt/Width/Height) from the input
+	// goroutine while the PTY reader mutates it under the write lock. Take the
+	// shared lock for the whole handler; copy-mode code never writes to the PTY
+	// or takes the exclusive lock, so this cannot deadlock.
+	window.RLockIO()
+	defer window.RUnlockIO()
+
 	cm := window.CopyMode
 
 	// Handle by state
@@ -621,6 +628,9 @@ func HandleCopyModeMouseClick(cm *terminal.CopyMode, window *terminal.Window, cl
 		return // Click outside terminal content area
 	}
 
+	window.RLockIO()
+	defer window.RUnlockIO()
+
 	// Move cursor to clicked position
 	cm.CursorX = terminalX
 	cm.CursorY = terminalY
@@ -652,6 +662,9 @@ func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, sta
 	if !inContent {
 		return
 	}
+
+	window.RLockIO()
+	defer window.RUnlockIO()
 
 	// Always exit visual mode first if we're in it, then start fresh
 	// This ensures each click-and-drag creates a new selection
@@ -686,6 +699,9 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 	if cm.State != terminal.CopyModeVisualChar && cm.State != terminal.CopyModeVisualLine {
 		return 0
 	}
+
+	window.RLockIO()
+	defer window.RUnlockIO()
 
 	// Convert window-relative coordinates to terminal coordinates
 	terminalX, terminalY, inContent := window.ScreenToTerminal(mouseX, mouseY)
