@@ -278,6 +278,13 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if window.IsBeingManipulated || window.Minimizing {
 		return nil, false
 	}
+	// The synchronized-output hold (DEC 2026) that suppresses btop flicker lives
+	// only in the compositor path (GetCanvas). A sync-active guest must fall back
+	// there, otherwise the fast path re-renders the half-updated buffer mid-frame
+	// and the flicker returns for a zoomed window.
+	if window.Terminal != nil && window.Terminal.IsSyncActive() {
+		return nil, false
+	}
 	rw, topMargin, usableH := m.GetRenderWidth(), m.GetTopMargin(), m.GetUsableHeight()
 	if window.X != 0 || window.Y != topMargin || window.Width != rw || window.Height != usableH {
 		return nil, false
@@ -309,6 +316,12 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 	}
 	boxContent := m.renderWindowBox(window, windowIndex, isFocused, borderColorObj)
 	window.ClearDirtyFlags()
+	// The fast path does not build a CachedLayer, so the one still held here was
+	// captured the last time the compositor ran (potentially seconds ago). Nil it
+	// so that when the fast path is later disqualified (tmux prefix, an overlay),
+	// the compositor renders a fresh layer instead of appending a stale one and
+	// rewinding the window a frame. Keep CachedContent for the render fast path.
+	window.CachedLayer = nil
 
 	if config.DockbarPosition == "hidden" {
 		return boxContent

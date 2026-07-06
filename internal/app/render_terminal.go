@@ -43,7 +43,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
-	if !isFocused && window.CachedContent != "" && len(window.CachedContent) > 0 {
+	if !isFocused && window.CachedContent != "" {
 		return window.CachedContent
 	}
 
@@ -217,18 +217,35 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	var batchBuilder strings.Builder
 	var currentStyle lipgloss.Style
 	var batchHasStyle bool
+	// When the batch style came straight from the style cache (not a
+	// selection-modified or highlight style), the derived ANSI escape is cached
+	// alongside it, so flushBatch can emit the cached prefix/suffix directly
+	// instead of rebuilding them via styleToANSI. currentStyleCached gates that.
+	var currentStyleCached bool
+	var currentPrefix, currentSuffix string
 	var prevCell *uv.Cell
 	var prevIsCursor, prevIsSelected, prevIsSelectionCursor bool
 
 	flushBatch := func() {
 		if batchBuilder.Len() > 0 {
 			if batchHasStyle {
-				builder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
+				if currentStyleCached {
+					if currentPrefix == "" {
+						builder.WriteString(batchBuilder.String())
+					} else {
+						builder.WriteString(currentPrefix)
+						builder.WriteString(batchBuilder.String())
+						builder.WriteString(currentSuffix)
+					}
+				} else {
+					builder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
+				}
 			} else {
 				builder.WriteString(batchBuilder.String())
 			}
 			batchBuilder.Reset()
 			batchHasStyle = false
+			currentStyleCached = false
 		}
 	}
 
@@ -470,12 +487,18 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 						if isSelectionCursor {
 							currentStyle = currentStyle.Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0"))
 						}
+						// The style was modified after the cache lookup, so the
+						// cached escape no longer matches it; flush via styleToANSI.
+						currentStyleCached = false
 					} else {
+						// Pure cached style: reuse the cached ANSI escape so
+						// flushBatch skips styleToANSI.
 						if useOptimizedRendering {
-							currentStyle = buildOptimizedCellStyleCached(cell)
+							currentStyle, currentPrefix, currentSuffix = buildOptimizedCellStyleCachedANSI(cell)
 						} else {
-							currentStyle = buildCellStyleCached(cell, isCursorPos)
+							currentStyle, currentPrefix, currentSuffix = buildCellStyleCachedANSI(cell, isCursorPos)
 						}
+						currentStyleCached = true
 					}
 					batchHasStyle = true
 				}

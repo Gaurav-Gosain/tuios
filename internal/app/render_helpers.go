@@ -95,7 +95,6 @@ func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer strin
 	return windowName
 }
 
-
 func addToBorder(content string, color color.Color, window *terminal.Window, isRenaming bool, renameBuffer string, isTiling bool) string {
 	width := max(lipgloss.Width(content)-2, 0)
 	titlePos := config.WindowTitlePosition
@@ -330,6 +329,18 @@ func buildOptimizedCellStyleCached(cell *uv.Cell) lipgloss.Style {
 
 func buildCellStyleCached(cell *uv.Cell, isCursor bool) lipgloss.Style {
 	return GetGlobalStyleCache().Get(cell, isCursor, false)
+}
+
+// buildOptimizedCellStyleCachedANSI returns the cached style together with its
+// cached ANSI escape prefix/suffix, avoiding a styleToANSI rebuild on flush.
+func buildOptimizedCellStyleCachedANSI(cell *uv.Cell) (lipgloss.Style, string, string) {
+	return GetGlobalStyleCache().GetWithANSI(cell, false, true)
+}
+
+// buildCellStyleCachedANSI returns the cached style together with its cached
+// ANSI escape prefix/suffix, avoiding a styleToANSI rebuild on flush.
+func buildCellStyleCachedANSI(cell *uv.Cell, isCursor bool) (lipgloss.Style, string, string) {
+	return GetGlobalStyleCache().GetWithANSI(cell, isCursor, false)
 }
 
 func buildOptimizedCellStyle(cell *uv.Cell) lipgloss.Style {

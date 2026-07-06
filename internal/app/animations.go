@@ -79,6 +79,10 @@ func (m *OS) CompleteWindowAnimations(windowIndex int) {
 			anim.Window.Y = anim.EndY
 			anim.Window.Width = anim.EndWidth
 			anim.Window.Height = anim.EndHeight
+			// Invalidate the cached layer captured at the mid-animation position,
+			// matching animation.Update. Without this the window renders at its
+			// stale position until an unrelated event dirties it.
+			anim.Window.MarkPositionDirty()
 
 			// Mark as complete and remove
 			anim.Complete = true
@@ -109,6 +113,10 @@ func (m *OS) CompleteAllAnimations() {
 		anim.Window.Y = anim.EndY
 		anim.Window.Width = anim.EndWidth
 		anim.Window.Height = anim.EndHeight
+		// Invalidate the cached layer captured at the mid-animation position,
+		// matching animation.Update. Without this the window renders at its
+		// stale position until an unrelated event dirties it.
+		anim.Window.MarkPositionDirty()
 
 		// Mark as complete
 		anim.Complete = true

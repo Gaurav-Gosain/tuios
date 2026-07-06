@@ -9,11 +9,20 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
+// styleEntry holds a cached style together with its derived ANSI escape prefix
+// and suffix. The escape is a pure function of the style, so caching it here
+// avoids rebuilding it via styleToANSI on every batch flush.
+type styleEntry struct {
+	style  lipgloss.Style
+	prefix string
+	suffix string
+}
+
 // StyleCache provides thread-safe caching of lipgloss styles with automatic eviction.
 // It significantly reduces allocation pressure by reusing style objects for identical cell attributes.
 type StyleCache struct {
 	mu    sync.RWMutex
-	cache map[uint64]lipgloss.Style
+	cache map[uint64]styleEntry
 	seed  maphash.Seed
 
 	// Statistics for monitoring (atomic counters)
@@ -31,7 +40,7 @@ func NewStyleCache(maxSize int) *StyleCache {
 		maxSize = 512 // Default size
 	}
 	return &StyleCache{
-		cache:   make(map[uint64]lipgloss.Style, maxSize),
+		cache:   make(map[uint64]styleEntry, maxSize),
 		seed:    maphash.MakeSeed(),
 		maxSize: maxSize,
 	}
@@ -115,17 +124,16 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool, isOptimized bo
 	return h.Sum64()
 }
 
-// Get retrieves a cached style or builds and caches it if not found.
-// This is the main entry point for cached style access.
-func (sc *StyleCache) Get(cell *uv.Cell, isCursor bool, optimized bool) lipgloss.Style {
+// getEntry retrieves a cached style entry or builds and caches it if not found.
+func (sc *StyleCache) getEntry(cell *uv.Cell, isCursor bool, optimized bool) styleEntry {
 	hash := sc.hashCellAttrs(cell, isCursor, optimized)
 
 	// Fast path: try read lock first
 	sc.mu.RLock()
-	if style, ok := sc.cache[hash]; ok {
+	if entry, ok := sc.cache[hash]; ok {
 		sc.mu.RUnlock()
 		sc.hits.Add(1)
-		return style
+		return entry
 	}
 	sc.mu.RUnlock()
 
@@ -138,6 +146,8 @@ func (sc *StyleCache) Get(cell *uv.Cell, isCursor bool, optimized bool) lipgloss
 	} else {
 		style = buildCellStyle(cell, isCursor)
 	}
+	prefix, suffix := styleToANSI(style)
+	entry := styleEntry{style: style, prefix: prefix, suffix: suffix}
 
 	// Store in cache with write lock
 	sc.mu.Lock()
@@ -148,8 +158,23 @@ func (sc *StyleCache) Get(cell *uv.Cell, isCursor bool, optimized bool) lipgloss
 		sc.evictHalf()
 	}
 
-	sc.cache[hash] = style
-	return style
+	sc.cache[hash] = entry
+	return entry
+}
+
+// Get retrieves a cached style or builds and caches it if not found.
+// This is the main entry point for cached style access.
+func (sc *StyleCache) Get(cell *uv.Cell, isCursor bool, optimized bool) lipgloss.Style {
+	return sc.getEntry(cell, isCursor, optimized).style
+}
+
+// GetWithANSI retrieves a cached style together with its derived ANSI escape
+// prefix and suffix, building and caching the entry on a miss. The escape is a
+// pure function of the style, so the render loop can emit the cached prefix and
+// suffix directly instead of re-deriving them via styleToANSI on every flush.
+func (sc *StyleCache) GetWithANSI(cell *uv.Cell, isCursor bool, optimized bool) (lipgloss.Style, string, string) {
+	entry := sc.getEntry(cell, isCursor, optimized)
+	return entry.style, entry.prefix, entry.suffix
 }
 
 // evictHalf removes approximately half of the cache entries.
@@ -180,7 +205,7 @@ func (sc *StyleCache) Clear() {
 	defer sc.mu.Unlock()
 
 	// Create new map instead of deleting entries (faster)
-	sc.cache = make(map[uint64]lipgloss.Style, sc.maxSize)
+	sc.cache = make(map[uint64]styleEntry, sc.maxSize)
 	sc.evicts.Add(uint64(len(sc.cache)))
 }
 
