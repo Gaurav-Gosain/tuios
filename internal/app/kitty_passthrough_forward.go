@@ -600,19 +600,23 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			}
 		}
 
+		// This runs on the VT-callback goroutine with kp.mu held (ForwardCommand
+		// takes it at entry). Route the write through writeHostSequence so it
+		// serializes against WriteToHost/asyncFrameWriter/flushToHost via hostMu
+		// (kp.mu outer, hostMu inner) and cannot tear their sync triples.
 		if visible {
 			var posCmd []byte
 			posCmd = append(posCmd, syncBegin...)
 			posCmd = append(posCmd, fmt.Sprintf("\x1b[%d;%dH", hostY+1, hostX+1)...)
 			posCmd = append(posCmd, bufBytes...)
 			posCmd = append(posCmd, syncEnd...)
-			_, _ = kp.hostOut.Write(posCmd)
+			kp.writeHostSequence(posCmd)
 		} else if hostID > 0 {
 			var del []byte
 			del = append(del, syncBegin...)
 			del = append(del, fmt.Sprintf("\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)...)
 			del = append(del, syncEnd...)
-			_, _ = kp.hostOut.Write(del)
+			kp.writeHostSequence(del)
 		}
 	} else {
 		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)

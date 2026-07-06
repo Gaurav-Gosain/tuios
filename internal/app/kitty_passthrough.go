@@ -214,6 +214,31 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 	return kp
 }
 
+// writeHostSequence writes parts to hostOut as one unit that is mutually
+// exclusive with every other host write. Each *os.File.Write is only
+// per-syscall atomic, so without a shared lock a multi-part DEC 2026
+// syncBegin/data/syncEnd triple emitted from one goroutine can interleave
+// with a triple from another, breaking the synchronized-update pairing and
+// mixing two APC sequences. Every writer to kp.hostOut MUST funnel through
+// here so that never happens.
+//
+// Lock ordering: hostMu is the innermost host-output lock. Callers may hold
+// kp.mu when they call this (kp.mu outer, hostMu inner); this method never
+// acquires kp.mu, so there is no lock-order cycle and no deadlock.
+func (kp *KittyPassthrough) writeHostSequence(parts ...[]byte) {
+	if kp.hostOut == nil {
+		return
+	}
+	kp.hostMu.Lock()
+	defer kp.hostMu.Unlock()
+	for _, part := range parts {
+		if len(part) == 0 {
+			continue
+		}
+		_, _ = kp.hostOut.Write(part)
+	}
+}
+
 // WriteToHost writes graphics data directly to the host terminal,
 // wrapped in synchronized update sequences to prevent tearing.
 // asyncFrameWriter drains asyncFrameCh and writes video frames to hostOut
@@ -224,11 +249,7 @@ func (kp *KittyPassthrough) asyncFrameWriter() {
 		if kp.hostOut == nil || len(data) == 0 {
 			continue
 		}
-		kp.hostMu.Lock()
-		_, _ = kp.hostOut.Write(syncBegin)
-		_, _ = kp.hostOut.Write(data)
-		_, _ = kp.hostOut.Write(syncEnd)
-		kp.hostMu.Unlock()
+		kp.writeHostSequence(syncBegin, data, syncEnd)
 	}
 }
 
@@ -236,11 +257,7 @@ func (kp *KittyPassthrough) WriteToHost(data []byte) {
 	if kp.hostOut == nil || len(data) == 0 {
 		return
 	}
-	kp.hostMu.Lock()
-	_, _ = kp.hostOut.Write(syncBegin)
-	_, _ = kp.hostOut.Write(data)
-	_, _ = kp.hostOut.Write(syncEnd)
-	kp.hostMu.Unlock()
+	kp.writeHostSequence(syncBegin, data, syncEnd)
 }
 
 // getOrAllocateHostID returns the host image ID for a given (windowID, guestImageID) pair.
@@ -289,12 +306,11 @@ const maxPassthroughTransmitBytes = 64 * 1024 * 1024
 
 // flushToHost writes any pending output immediately to the host terminal,
 // wrapped in synchronized update sequences to prevent tearing/flickering.
-// Must be called while kp.mu is already held.
+// Must be called while kp.mu is already held; the host write funnels through
+// writeHostSequence, which takes hostMu (kp.mu outer, hostMu inner).
 func (kp *KittyPassthrough) flushToHost() {
 	if len(kp.pendingOutput) > 0 && kp.hostOut != nil {
-		_, _ = kp.hostOut.Write(syncBegin)
-		_, _ = kp.hostOut.Write(kp.pendingOutput)
-		_, _ = kp.hostOut.Write(syncEnd)
+		kp.writeHostSequence(syncBegin, kp.pendingOutput, syncEnd)
 		kp.pendingOutput = kp.pendingOutput[:0]
 	}
 }
