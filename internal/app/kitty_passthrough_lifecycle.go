@@ -118,7 +118,7 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 			borderOff, borderOff,
 			cursorPos.X, cursorPos.Y,
 			scrollbackLen,
-			win.IsAltScreen,
+			win.IsAltScreen(),
 			func(response []byte) {
 				kittyPassthroughLog("ptyInput callback: Pty=%v, DaemonWriteFunc=%v, response=%q", win.Pty != nil, win.DaemonWriteFunc != nil, response)
 				if win.Pty != nil {

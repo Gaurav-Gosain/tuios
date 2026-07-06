@@ -406,7 +406,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Does NOT trigger rendering unless animations/interactions are active.
 		// This ensures windows close even if the exit channel message was missed
 		for i := len(m.Windows) - 1; i >= 0; i-- {
-			if m.Windows[i].ProcessExited {
+			if m.Windows[i].ProcessExited() {
 				m.DeleteWindow(i)
 			}
 		}
@@ -521,7 +521,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		windowID := msg.WindowID
 		for i, w := range m.Windows {
 			if w.ID == windowID {
-				m.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
+				m.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 				m.DeleteWindow(i)
 				break
 			}
@@ -540,7 +540,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		for _, w := range m.Windows {
 			if w.DaemonMode {
 				w.EnableCallbacks()
-				m.LogInfo("[CALLBACKS] Enabled for window %s (IsAltScreen=%v)", w.ID[:8], w.IsAltScreen)
+				m.LogInfo("[CALLBACKS] Enabled for window %s (IsAltScreen=%v)", w.ID[:8], w.IsAltScreen())
 			}
 		}
 		return m, nil
@@ -550,7 +550,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// This triggers SIGWINCH which makes apps like vim/htop/btop redraw
 		m.LogInfo("[REDRAW] Triggering alt screen redraws")
 		for _, w := range m.Windows {
-			if w.DaemonMode && w.IsAltScreen && w.DaemonResizeFunc != nil {
+			if w.DaemonMode && w.IsAltScreen() && w.DaemonResizeFunc != nil {
 				termWidth := w.ContentWidth()
 				termHeight := w.ContentHeight()
 

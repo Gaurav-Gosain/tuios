@@ -95,7 +95,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 
 		state.Windows[i] = session.WindowState{
 			ID:           w.ID,
-			Title:        w.Title,
+			Title:        w.Title(),
 			CustomName:   w.CustomName,
 			X:            x,
 			Y:            y,
@@ -109,7 +109,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			PreMinimizeW: w.PreMinimizeWidth,
 			PreMinimizeH: w.PreMinimizeHeight,
 			PTYID:        w.PTYID,
-			IsAltScreen:  w.IsAltScreen, // Save alt screen state for mouse forwarding on restore
+			IsAltScreen:  w.IsAltScreen(), // Save alt screen state for mouse forwarding on restore
 		}
 	}
 
@@ -233,7 +233,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		window.PreMinimizeY = ws.PreMinimizeY
 		window.PreMinimizeWidth = ws.PreMinimizeW
 		window.PreMinimizeHeight = ws.PreMinimizeH
-		window.IsAltScreen = ws.IsAltScreen // Restore alt screen state for mouse event forwarding
+		window.SetAltScreen(ws.IsAltScreen) // Restore alt screen state for mouse event forwarding
 
 		// CRITICAL: Suppress callbacks during restoration to prevent race condition
 		// where buffered PTY output overwrites the restored IsAltScreen state
@@ -473,7 +473,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	sizeChanged := w.Width != ws.Width || w.Height != ws.Height
 
 	// Update all properties
-	w.Title = ws.Title
+	w.SetTitle(ws.Title)
 	w.CustomName = ws.CustomName
 	w.X = ws.X
 	w.Y = ws.Y
@@ -486,7 +486,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.PreMinimizeY = ws.PreMinimizeY
 	w.PreMinimizeWidth = ws.PreMinimizeW
 	w.PreMinimizeHeight = ws.PreMinimizeH
-	w.IsAltScreen = ws.IsAltScreen
+	w.SetAltScreen(ws.IsAltScreen)
 
 	if sizeChanged {
 		// Resize terminal emulator
@@ -540,7 +540,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	window.PreMinimizeY = ws.PreMinimizeY
 	window.PreMinimizeWidth = ws.PreMinimizeW
 	window.PreMinimizeHeight = ws.PreMinimizeH
-	window.IsAltScreen = ws.IsAltScreen
+	window.SetAltScreen(ws.IsAltScreen)
 
 	m.setupKittyPassthrough(window)
 	m.setupSixelPassthrough(window)
@@ -670,7 +670,7 @@ func (m *OS) SyncDaemonPTYDimensions() {
 // For alt screen apps (vim, htop, etc.), this invalidates caches and triggers re-render.
 func (m *OS) TriggerAltScreenRedraws() {
 	for _, w := range m.Windows {
-		if w.DaemonMode && w.IsAltScreen {
+		if w.DaemonMode && w.IsAltScreen() {
 			// Invalidate all caches to force re-render from fresh state
 			w.InvalidateCache()
 			w.MarkContentDirty()
@@ -706,7 +706,7 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	}
 
 	// Set the window's IsAltScreen flag for mouse event forwarding
-	w.IsAltScreen = state.IsAltScreen
+	w.SetAltScreen(state.IsAltScreen)
 	m.LogInfo("Set window IsAltScreen=%v for window %s", state.IsAltScreen, w.ID[:8])
 
 	// For alt screen apps (vim, htop, etc.), DON'T restore cell content manually.

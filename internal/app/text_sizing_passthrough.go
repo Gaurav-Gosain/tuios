@@ -150,7 +150,7 @@ func (m *OS) RefreshTextSizing() {
 	defer m.TextSizingState.mu.Unlock()
 
 	for _, w := range m.Windows {
-		if w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsAltScreen {
+		if w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsAltScreen() {
 			continue
 		}
 		placements := m.TextSizingState.placements[w.ID]
@@ -173,7 +173,7 @@ func (m *OS) RefreshTextSizing() {
 		curState := textSizingWinState{
 			scrollback:   scrollbackLen,
 			scrollOffset: w.ScrollbackOffset,
-			x: w.X, y: w.Y, w: w.Width, h: w.Height,
+			x:            w.X, y: w.Y, w: w.Width, h: w.Height,
 			count: len(placements),
 		}
 		if m.TextSizingState.lastState[w.ID] == curState {

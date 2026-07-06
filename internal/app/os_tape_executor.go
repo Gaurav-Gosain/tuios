@@ -22,7 +22,7 @@ func (m *OS) getWindowDisplayName(w *terminal.Window) string {
 	if w.CustomName != "" {
 		return w.CustomName
 	}
-	return w.Title
+	return w.Title()
 }
 
 // findWindowsByName returns all windows matching the given name (checks CustomName first, then Title).
@@ -163,7 +163,7 @@ func (m *OS) CreateNewWindowReturningID(name string) (windowID string, displayNa
 func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
 	info := map[string]any{
 		"id":             w.ID,
-		"title":          w.Title,
+		"title":          w.Title(),
 		"display_name":   m.getWindowDisplayName(w),
 		"workspace":      w.Workspace,
 		"focused":        isFocused,

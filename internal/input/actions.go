@@ -174,7 +174,7 @@ func handleNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		w := o.Windows[o.FocusedWindow]
-		o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
+		o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 		o.DeleteWindow(o.FocusedWindow)
 	}
 	return o, nil
@@ -198,7 +198,9 @@ func handleRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
 			o.RenamingWindow = true
-				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
+			if fw := o.GetFocusedWindow(); fw != nil {
+				fw.InvalidateCache()
+			}
 			o.RenameBuffer = focusedWindow.CustomName
 		}
 	}
@@ -498,7 +500,7 @@ func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
-			o.LogInfo("Entering terminal mode for window: %s", focusedWindow.Title)
+			o.LogInfo("Entering terminal mode for window: %s", focusedWindow.Title())
 		}
 		o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
 		// Clear selection state when entering terminal mode
@@ -591,7 +593,6 @@ func handleToggleCacheStats(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	return o, nil
 }
-
 
 func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {

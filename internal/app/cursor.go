@@ -48,8 +48,8 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	screenY := window.Y + borderOffset + pos.Y
 
 	cursor := tea.NewCursor(screenX, screenY)
-	cursor.Shape = mapCursorStyle(window.CursorStyle)
-	cursor.Blink = window.CursorBlink
+	cursor.Shape = mapCursorStyle(window.CursorStyle())
+	cursor.Blink = window.CursorBlink()
 	return cursor
 }
 

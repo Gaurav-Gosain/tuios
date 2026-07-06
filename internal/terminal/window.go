@@ -34,6 +34,56 @@ func (w *Window) UnlockIO() { w.ioMu.Unlock() }
 func (w *Window) RLockIO()   { w.ioMu.RLock() }
 func (w *Window) RUnlockIO() { w.ioMu.RUnlock() }
 
+// The following scalar/string fields are written by the VT callbacks on the
+// PTY/monitor goroutine and read on the Bubble Tea UI goroutine, so they are
+// stored atomically and accessed only through these methods.
+
+// ProcessExited reports whether the window's process has exited.
+func (w *Window) ProcessExited() bool { return w.processExited.Load() }
+
+// SetProcessExited records whether the window's process has exited.
+func (w *Window) SetProcessExited(exited bool) { w.processExited.Store(exited) }
+
+// CursorStyle returns the current cursor style.
+func (w *Window) CursorStyle() vt.CursorStyle { return vt.CursorStyle(w.cursorStyle.Load()) }
+
+// SetCursorStyle records the current cursor style.
+func (w *Window) SetCursorStyle(style vt.CursorStyle) { w.cursorStyle.Store(int32(style)) }
+
+// CursorBlink reports whether the cursor should blink.
+func (w *Window) CursorBlink() bool { return w.cursorBlink.Load() }
+
+// SetCursorBlink records whether the cursor should blink.
+func (w *Window) SetCursorBlink(blink bool) { w.cursorBlink.Store(blink) }
+
+// Title returns the current window title.
+func (w *Window) Title() string {
+	if p := w.title.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// SetTitle records the current window title.
+func (w *Window) SetTitle(t string) { w.title.Store(&t) }
+
+// IsAltScreen reports whether the application is using the alternate screen buffer.
+func (w *Window) IsAltScreen() bool { return w.isAltScreen.Load() }
+
+// SetAltScreen records whether the application is using the alternate screen buffer.
+func (w *Window) SetAltScreen(v bool) { w.isAltScreen.Store(v) }
+
+// clipboard returns the last clipboard content set via OSC 52.
+func (w *Window) clipboard() string {
+	if p := w.clipboardContent.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// setClipboard records the last clipboard content set via OSC 52.
+func (w *Window) setClipboard(content string) { w.clipboardContent.Store(&content) }
+
 func passThroughCursorStyle(data []byte) {
 	// Fast path: DECSCUSR sequences contain " q" (space-q). If neither
 	// byte is present, skip the scan entirely. This avoids O(n) work on
@@ -76,8 +126,8 @@ var (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
-	Title                  string
-	CustomName             string // User-defined window name
+	title                  atomic.Pointer[string] // Written on PTY/monitor goroutine, read on UI goroutine
+	CustomName             string                 // User-defined window name
 	Width                  int
 	Height                 int
 	X                      int
@@ -118,7 +168,7 @@ type Window struct {
 	IsSelecting            bool               // True when selecting text
 	SelectedText           string             // Currently selected text
 	SelectionCursor        struct{ X, Y int } // Current cursor position in selection mode
-	ProcessExited          bool               // True when process has exited
+	processExited          atomic.Bool        // Written on PTY/monitor goroutine, read on UI goroutine
 	// Enhanced text selection support
 	SelectionMode int // 0 = character, 1 = word, 2 = line
 	LastClickTime time.Time
@@ -128,14 +178,16 @@ type Window struct {
 	// Scrollback mode support
 	ScrollbackMode   bool // True when viewing scrollback history
 	ScrollbackOffset int  // Number of lines scrolled back (0 = at bottom, viewing live output)
-	// Alternate screen buffer tracking for TUI detection
-	IsAltScreen bool // True when application is using alternate screen buffer (nvim, vim, etc.)
+	// Alternate screen buffer tracking for TUI detection.
+	// Written on PTY/monitor goroutine, read on UI goroutine.
+	isAltScreen atomic.Bool // True when application is using alternate screen buffer (nvim, vim, etc.)
 	// Floating pane support
 	IsFloating bool // True when window is floating (not in BSP tiling)
 	IsPinned   bool // True when floating pane persists across workspace switches
-	// Cursor style tracking for passthrough to parent terminal
-	CursorStyle vt.CursorStyle // Current cursor style (block, underline, bar)
-	CursorBlink bool           // Whether cursor should blink
+	// Cursor style tracking for passthrough to parent terminal.
+	// Written by the VT callback on the PTY goroutine, read on the UI goroutine.
+	cursorStyle atomic.Int32 // Current cursor style (block, underline, bar)
+	cursorBlink atomic.Bool  // Whether cursor should blink
 	// Cell dimensions in pixels (for TIOCGWINSZ pixel reporting to child processes)
 	CellPixelWidth  int
 	CellPixelHeight int
@@ -148,7 +200,7 @@ type Window struct {
 	DaemonResizeFunc  func(w, h int) error     // Callback for resizing daemon PTY
 	DaemonCloseFunc   func()                   // Callback when window is closed (to notify daemon)
 	OnProcessExit     func()                   // Callback when PTY process exits (to close window)
-	ClipboardContent  string                   // Last clipboard content set via OSC 52
+	clipboardContent  atomic.Pointer[string]   // Written by VT callback on PTY goroutine, read on UI goroutine (OSC 52)
 	ClipboardSetFunc  func(string)             // Callback to propagate clipboard to host
 	NotifyFunc        func(title, body string) // Callback for guest desktop notifications (OSC 9/777/99)
 	BellFunc          func()                   // Callback for guest bell (BEL)
@@ -265,7 +317,6 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	terminal.SetCellSize(10, 20)
 
 	window := &Window{
-		Title:              title,
 		Width:              width,
 		Height:             height,
 		X:                  x,
@@ -281,8 +332,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		CachedContent:      "",
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
-		IsAltScreen:        false,
 	}
+	window.SetTitle(title)
 
 	// Apply theme colors to the terminal (only if theming is enabled)
 	if theme.IsEnabled() {
@@ -303,29 +354,29 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 			// Suppress callback during state restoration to prevent race conditions
 			// where buffered PTY output overwrites restored state
 			if !window.suppressCallbacks.Load() {
-				window.IsAltScreen = enabled
+				window.SetAltScreen(enabled)
 			}
 		},
 		CursorStyle: func(style vt.CursorStyle, steady bool) {
 			// Note: the callback receives "steady" value (true = NOT blinking)
 			// despite the parameter being named "blink" in the Callbacks struct
-			window.CursorStyle = style
-			window.CursorBlink = !steady // Invert: steady=false means blinking=true
+			window.SetCursorStyle(style)
+			window.SetCursorBlink(!steady) // Invert: steady=false means blinking=true
 		},
 		Title: func(title string) {
 			// Update window title from terminal escape sequence
 			if title != "" {
-				window.Title = title
+				window.SetTitle(title)
 			}
 		},
 		ClipboardSet: func(_ string, content string) {
-			window.ClipboardContent = content
+			window.setClipboard(content)
 			if window.ClipboardSetFunc != nil {
 				window.ClipboardSetFunc(content)
 			}
 		},
 		ClipboardQuery: func(_ string) string {
-			return window.ClipboardContent
+			return window.clipboard()
 		},
 		Notify: func(title, body string) {
 			if window.NotifyFunc != nil {
@@ -426,7 +477,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		window.waitForCmd()
 
 		// Mark process as exited
-		window.ProcessExited = true
+		window.SetProcessExited(true)
 
 		// Clean up
 		cancel()
@@ -463,7 +514,6 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 	terminal.SetCellSize(10, 20)
 
 	window := &Window{
-		Title:              title,
 		Width:              width,
 		Height:             height,
 		X:                  x,
@@ -479,13 +529,13 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 		CachedContent:      "",
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
-		IsAltScreen:        false,
 		PTYID:              ptyID,
 		DaemonMode:         true,
 		outputChan:         make(chan []byte, 16384), // Large buffer: kitty images can be 250+ chunks
 		outputDone:         make(chan struct{}),
 		// suppressCallbacks defaults to false (zero value)
 	}
+	window.SetTitle(title)
 
 	// Start output writer goroutine to serialize writes
 	go window.outputWriter()
@@ -510,29 +560,29 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 			// Suppress callback during state restoration to prevent race conditions
 			// where buffered PTY output overwrites restored state
 			if !window.suppressCallbacks.Load() {
-				window.IsAltScreen = enabled
+				window.SetAltScreen(enabled)
 			}
 		},
 		CursorStyle: func(style vt.CursorStyle, steady bool) {
 			// Note: the callback receives "steady" value (true = NOT blinking)
 			// despite the parameter being named "blink" in the Callbacks struct
-			window.CursorStyle = style
-			window.CursorBlink = !steady // Invert: steady=false means blinking=true
+			window.SetCursorStyle(style)
+			window.SetCursorBlink(!steady) // Invert: steady=false means blinking=true
 		},
 		Title: func(title string) {
 			// Update window title from terminal escape sequence
 			if title != "" {
-				window.Title = title
+				window.SetTitle(title)
 			}
 		},
 		ClipboardSet: func(_ string, content string) {
-			window.ClipboardContent = content
+			window.setClipboard(content)
 			if window.ClipboardSetFunc != nil {
 				window.ClipboardSetFunc(content)
 			}
 		},
 		ClipboardQuery: func(_ string) string {
-			return window.ClipboardContent
+			return window.clipboard()
 		},
 		Notify: func(title, body string) {
 			if window.NotifyFunc != nil {

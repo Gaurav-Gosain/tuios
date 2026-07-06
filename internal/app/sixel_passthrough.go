@@ -527,7 +527,7 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 			win.ID,
 			cmd,
 			cursorX, cursorY, absLine,
-			win.IsAltScreen,
+			win.IsAltScreen(),
 			cw, ch,
 		)
 	})

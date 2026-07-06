@@ -184,7 +184,7 @@ func (w *Window) handleIOOperations() {
 				// the maintenance tick in Update removes the window via
 				// DeleteWindow, and signal PTYDataChan so cleanup happens
 				// promptly instead of on the next poll.
-				w.ProcessExited = true
+				w.SetProcessExited(true)
 				if w.PTYDataChan != nil {
 					select {
 					case w.PTYDataChan <- struct{}{}:

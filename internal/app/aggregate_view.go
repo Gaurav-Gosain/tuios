@@ -24,10 +24,10 @@ type AggregateViewItem struct {
 
 // AggregateWorkspaceGroup groups windows by workspace for tree display.
 type AggregateWorkspaceGroup struct {
-	Workspace    int
-	IsCurrent    bool
-	WindowCount  int
-	Items        []AggregateViewItem
+	Workspace   int
+	IsCurrent   bool
+	WindowCount int
+	Items       []AggregateViewItem
 }
 
 // GetAggregateViewItems collects all windows across all workspaces.
@@ -35,7 +35,7 @@ func (m *OS) GetAggregateViewItems() []AggregateViewItem {
 	var items []AggregateViewItem
 
 	for i, w := range m.Windows {
-		title := w.Title
+		title := w.Title()
 		if w.CustomName != "" {
 			title = w.CustomName
 		}
@@ -95,8 +95,8 @@ func GetAggregateWorkspaceGroups(items []AggregateViewItem, currentWorkspace int
 		g, ok := groupMap[item.Workspace]
 		if !ok {
 			g = &AggregateWorkspaceGroup{
-				Workspace:   item.Workspace,
-				IsCurrent:   item.Workspace == currentWorkspace,
+				Workspace: item.Workspace,
+				IsCurrent: item.Workspace == currentWorkspace,
 			}
 			groupMap[item.Workspace] = g
 			order = append(order, item.Workspace)

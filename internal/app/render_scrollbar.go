@@ -24,7 +24,7 @@ func renderScrollbarLayer(window *terminal.Window, borderColor color.Color, zInd
 
 	// Hide scrollbar when the window is in alt screen (nvim, btop, etc.).
 	// Alt screen apps manage their own viewport and scrollback is not used.
-	if window.IsAltScreen {
+	if window.IsAltScreen() {
 		return nil
 	}
 

@@ -352,7 +352,7 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	// Allow motion events when in terminal mode with alt screen apps
 	if os.Mode == TerminalMode {
 		focusedWindow := os.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsAltScreen {
+		if focusedWindow != nil && focusedWindow.IsAltScreen() {
 			return msg
 		}
 	}

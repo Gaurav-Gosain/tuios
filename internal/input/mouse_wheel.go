@@ -110,7 +110,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 							focusedWindow.InvalidateCache()
 						}
 					}
-				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen {
+				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen() {
 					// No mouse tracking and not alt screen  - enter copy mode and scroll.
 					// Copy mode supports selection, search, and vim navigation.
 					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
@@ -161,7 +161,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Handle scrollback in window management mode too
 	if o.Mode == app.WindowManagementMode {
 		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.Terminal != nil && !focusedWindow.IsAltScreen {
+		if focusedWindow != nil && focusedWindow.Terminal != nil && !focusedWindow.IsAltScreen() {
 			switch msg.Button {
 			case tea.MouseWheelUp:
 				scrollbackLen := focusedWindow.ScrollbackLen()

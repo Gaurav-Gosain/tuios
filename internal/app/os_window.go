@@ -222,7 +222,7 @@ func (m *OS) FocusWindow(i int) *OS {
 	// Invalidate cache for new focused window (border color change + fresh content)
 	m.Windows[i].InvalidateCache() // Full invalidation to show latest content
 
-	m.FireHook(hooks.AfterFocusChange, m.Windows[i].ID, m.Windows[i].Title)
+	m.FireHook(hooks.AfterFocusChange, m.Windows[i].ID, m.Windows[i].Title())
 
 	// Sync scrolling layout focus and scroll into view when focus changes
 	// via click or external means (not from scrollingSyncFocusToOS).
@@ -390,7 +390,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 
 	// Clean up window resources
 	deletedWindow := m.Windows[i]
-	m.LogInfo("Deleting window: %s (index: %d, ID: %s)", deletedWindow.Title, i, deletedWindow.ID[:8])
+	m.LogInfo("Deleting window: %s (index: %d, ID: %s)", deletedWindow.Title(), i, deletedWindow.ID[:8])
 
 	// In daemon mode, clean up daemon-managed PTY
 	if deletedWindow.DaemonMode && deletedWindow.PTYID != "" && m.DaemonClient != nil {

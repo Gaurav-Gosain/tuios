@@ -331,7 +331,6 @@ func TestApplyStateSyncUpdatesExistingWindows(t *testing.T) {
 		Windows: []*terminal.Window{
 			{
 				ID:     win1ID,
-				Title:  "Terminal 1",
 				X:      0,
 				Y:      0,
 				Width:  80,
@@ -383,8 +382,8 @@ func TestApplyStateSyncRemovesDeletedWindows(t *testing.T) {
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
 		Windows: []*terminal.Window{
-			{ID: win1ID, Title: "Terminal 1"},
-			{ID: win2ID, Title: "Terminal 2"},
+			{ID: win1ID},
+			{ID: win2ID},
 		},
 		FocusedWindow: 0,
 	}
@@ -433,8 +432,8 @@ func TestApplyStateSyncFocusUpdate(t *testing.T) {
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
 		Windows: []*terminal.Window{
-			{ID: win1ID, Title: "Terminal 1"},
-			{ID: win2ID, Title: "Terminal 2"},
+			{ID: win1ID},
+			{ID: win2ID},
 		},
 		FocusedWindow: 0, // win1 focused
 	}

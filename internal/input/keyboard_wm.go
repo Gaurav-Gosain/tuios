@@ -265,7 +265,7 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 		// Close window
 		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			w := o.Windows[o.FocusedWindow]
-			o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
+			o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 			o.DeleteWindow(o.FocusedWindow)
 		}
 		return o, nil

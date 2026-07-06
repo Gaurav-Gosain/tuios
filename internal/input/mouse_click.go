@@ -223,7 +223,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ResizeStartY = mouse.Y
 		// Save state for resize calculations (avoid mutex copying)
 		o.PreResizeState = terminal.Window{
-			Title:  clickedWindow.Title,
 			Width:  clickedWindow.Width,
 			Height: clickedWindow.Height,
 			X:      clickedWindow.X,

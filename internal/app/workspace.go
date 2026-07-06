@@ -165,7 +165,7 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 		return // Already in target workspace
 	}
 
-	m.LogInfo("Moving window %s: workspace %d → %d", window.Title, oldWorkspace, workspace)
+	m.LogInfo("Moving window %s: workspace %d → %d", window.Title(), oldWorkspace, workspace)
 
 	// If window is moving away from the current visible workspace, unsubscribe from its PTY
 	if m.IsDaemonSession && m.DaemonClient != nil && oldWorkspace == m.CurrentWorkspace {

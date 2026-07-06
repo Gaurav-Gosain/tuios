@@ -15,9 +15,8 @@ func createTestWindow(x, y, width, height int) *terminal.Window {
 	termHeight := max(height-2, 1)
 	term := vt.NewEmulator(termWidth, termHeight)
 
-	return &terminal.Window{
+	w := &terminal.Window{
 		ID:                "test-window-id",
-		Title:             "Test Window",
 		X:                 x,
 		Y:                 y,
 		Width:             width,
@@ -28,6 +27,8 @@ func createTestWindow(x, y, width, height int) *terminal.Window {
 		PreMinimizeWidth:  width,
 		PreMinimizeHeight: height,
 	}
+	w.SetTitle("Test Window")
+	return w
 }
 
 // =============================================================================

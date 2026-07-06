@@ -420,7 +420,7 @@ func handleTerminalTilingPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		// Close window
 		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			w := o.Windows[o.FocusedWindow]
-			o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
+			o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 			o.DeleteWindow(o.FocusedWindow)
 			// If we still have windows, stay in terminal mode
 			if len(o.Windows) > 0 {
@@ -628,7 +628,7 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		// Close current window
 		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			w := o.Windows[o.FocusedWindow]
-			o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
+			o.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 			o.DeleteWindow(o.FocusedWindow)
 			// If we still have windows, stay in terminal mode
 			if len(o.Windows) > 0 {

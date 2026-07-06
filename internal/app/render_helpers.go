@@ -63,9 +63,9 @@ func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer strin
 	windowName := ""
 	if window.CustomName != "" {
 		windowName = window.CustomName
-	} else if window.Title != "" && !isDefaultTitle(window.Title, window.ID) {
+	} else if window.Title() != "" && !isDefaultTitle(window.Title(), window.ID) {
 		// Only show terminal-set title if it's not the default "Terminal <id>" format
-		windowName = window.Title
+		windowName = window.Title()
 	}
 
 	if isRenaming {

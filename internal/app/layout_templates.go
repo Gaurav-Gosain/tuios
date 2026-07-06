@@ -116,7 +116,7 @@ func SaveLayoutTemplate(name string, m *OS) error {
 		lw := LayoutWindow{
 			X: w.X, Y: w.Y,
 			Width: w.Width, Height: w.Height,
-			Title:      w.Title,
+			Title:      w.Title(),
 			CustomName: w.CustomName,
 			Minimized:  w.Minimized,
 		}

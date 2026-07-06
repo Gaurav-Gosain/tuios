@@ -47,7 +47,7 @@ func (w *Window) ApplyScreenDiff(cells []DiffCell, cursorX, cursorY int, cursorH
 	}
 	w.ioMu.Unlock()
 
-	w.IsAltScreen = isAltScreen
+	w.SetAltScreen(isAltScreen)
 
 	w.HasNewOutput.Store(true)
 	w.MarkContentDirty()

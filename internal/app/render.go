@@ -121,7 +121,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			// Scrollbar layer (always fresh, not cached). Alt-screen apps (btop,
 			// vim) have no scrollback, so drawing a scrollback thumb over them
 			// only flickers as their content redraws.
-			if !window.Tiled && !window.IsAltScreen && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+			if !window.Tiled && !window.IsAltScreen() && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
 				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
@@ -141,7 +141,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.CachedLayer.GetY() == window.Y &&
 			window.CachedLayer.GetZ() == zIndex {
 			layers = append(layers, window.CachedLayer)
-			if !window.Tiled && !window.IsAltScreen && window.Terminal.ScrollbackLen() > 0 {
+			if !window.Tiled && !window.IsAltScreen() && window.Terminal.ScrollbackLen() > 0 {
 				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
@@ -173,7 +173,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		layers = append(layers, window.CachedLayer)
 
 		// Scrollbar layer (always fresh, not cached). See the alt-screen note above.
-		if !isTiledBorderless && !window.IsAltScreen && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+		if !isTiledBorderless && !window.IsAltScreen() && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
 			if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 				layers = append(layers, sbLayer)
 			}
@@ -452,7 +452,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 						ScrollOffset:       w.ScrollbackOffset,
 						IsBeingManipulated: w.IsBeingManipulated,
 						WindowZ:            w.Z,
-						IsAltScreen:        w.IsAltScreen,
+						IsAltScreen:        w.IsAltScreen(),
 						ScreenWidth:        screenWidth,
 						ScreenHeight:       screenHeight,
 					}
@@ -523,7 +523,7 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 				ScrollOffset:       w.ScrollbackOffset,
 				IsBeingManipulated: w.IsBeingManipulated,
 				WindowZ:            w.Z,
-				IsAltScreen:        w.IsAltScreen,
+				IsAltScreen:        w.IsAltScreen(),
 				ScreenWidth:        screenWidth,
 				ScreenHeight:       screenHeight,
 			}
