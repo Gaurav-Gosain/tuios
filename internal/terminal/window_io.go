@@ -146,12 +146,21 @@ func (w *Window) WriteOutputAsync(data []byte) {
 	if w.Terminal == nil || w.outputChan == nil {
 		return
 	}
+	// Close() runs on the UI goroutine while this runs on the daemon readLoop
+	// goroutine. outputChan is never closed (only outputDone is), so the send
+	// below cannot panic; the closed flag and the outputDone case just stop
+	// queuing into a channel whose reader is already gone.
+	if w.closed.Load() {
+		return
+	}
 	// Copy data since the caller's buffer may be reused
 	dataCopy := make([]byte, len(data))
 	copy(dataCopy, data)
 
 	// Queue to channel - non-blocking with buffered channel
 	select {
+	case <-w.outputDone:
+		// Writer goroutine has stopped, drop data
 	case w.outputChan <- dataCopy:
 		// Successfully queued
 	default:
@@ -247,11 +256,14 @@ func (w *Window) handleIOOperations() {
 					// The VT emulator absorbs DECSCUSR, so we re-emit them
 					passThroughCursorStyle(buf[:n])
 
-					w.ioMu.RLock()
+					// Terminal.Write mutates the cell buffer, so it needs the
+					// exclusive lock, not the shared read lock the renderer uses
+					// (two RLock holders do not exclude each other).
+					w.ioMu.Lock()
 					if w.Terminal != nil {
 						_, _ = w.Terminal.Write(buf[:n])
 					}
-					w.ioMu.RUnlock()
+					w.ioMu.Unlock()
 				}
 			}
 		}
@@ -432,18 +444,19 @@ func (w *Window) Close() {
 		return
 	}
 
+	// Mark closed before touching outputChan so the external sender
+	// (WriteOutputAsync on the daemon readLoop goroutine) stops queuing.
+	w.closed.Store(true)
+
 	// Disable terminal features before closing
 	w.disableTerminalFeatures()
 
-	// Stop daemon output writer goroutine if running
+	// Stop daemon output writer goroutine if running. outputChan has an
+	// external sender (WriteOutputAsync), so it is never closed; closing
+	// outputDone stops outputWriter, which selects on it.
 	if w.outputDone != nil {
 		close(w.outputDone)
 		w.outputDone = nil
-	}
-	// Close output channel to unblock any pending writes
-	if w.outputChan != nil {
-		close(w.outputChan)
-		w.outputChan = nil
 	}
 
 	// Cancel all goroutines first

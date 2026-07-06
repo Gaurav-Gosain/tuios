@@ -155,6 +155,7 @@ type Window struct {
 	outputChan        chan []byte              // Channel for serializing daemon PTY output writes
 	outputDone        chan struct{}            // Signal to stop output writer goroutine
 	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
+	closed            atomic.Bool              // Set by Close() so the external outputChan sender (WriteOutputAsync) stops before teardown
 
 	// HasNewOutput is set when new data is written to the terminal.
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
