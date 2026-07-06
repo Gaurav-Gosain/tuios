@@ -48,30 +48,3 @@ func WriteCrashLog(panicValue any, stack []byte) string {
 	}
 	return path
 }
-
-// RecoverAndLog is a deferred function that catches panics, writes a crash log,
-// and prints a user-friendly message to stderr.
-func RecoverAndLog(context string) {
-	if r := recover(); r != nil {
-		stack := debug.Stack()
-		path := WriteCrashLog(r, stack)
-
-		fmt.Fprintf(os.Stderr, "\n\033[1;31mtuios crashed!\033[0m (%s)\n", context)
-		fmt.Fprintf(os.Stderr, "  Panic: %v\n", r)
-		if path != "" {
-			fmt.Fprintf(os.Stderr, "  Crash log: %s\n", path)
-		}
-		fmt.Fprintf(os.Stderr, "  Please report: https://github.com/Gaurav-Gosain/tuios/issues\n\n")
-	}
-}
-
-// LogAssert logs an error with stack trace when the condition is false.
-// Does not panic  - just logs for diagnostics.
-func (m *OS) LogAssert(condition bool, format string, args ...any) {
-	if !condition {
-		msg := fmt.Sprintf(format, args...)
-		buf := make([]byte, 2048)
-		n := runtime.Stack(buf, false)
-		m.LogError("ASSERT FAILED: %s\n%s", msg, buf[:n])
-	}
-}

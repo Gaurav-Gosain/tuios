@@ -7,35 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
-// SwapWindows swaps the positions of two windows with animation
-func (m *OS) SwapWindows(index1, index2 int) {
-	if index1 < 0 || index1 >= len(m.Windows) || index2 < 0 || index2 >= len(m.Windows) {
-		return
-	}
-
-	window1 := m.Windows[index1]
-	window2 := m.Windows[index2]
-
-	// Store the positions for swapping
-	x1, y1, width1, height1 := window1.X, window1.Y, window1.Width, window1.Height
-	x2, y2, width2, height2 := window2.X, window2.Y, window2.Width, window2.Height
-
-	// Create animations for both windows to swap positions
-	anim1 := ui.NewSnapAnimation(
-		window1,
-		x2, y2, width2, height2,
-		config.GetFastAnimationDuration(),
-	)
-
-	anim2 := ui.NewSnapAnimation(
-		window2,
-		x1, y1, width1, height1,
-		config.GetFastAnimationDuration(),
-	)
-
-	m.Animations = append(m.Animations, anim1, anim2)
-}
-
 // SwapWindowsInstant swaps the positions of two windows instantly without animation
 func (m *OS) SwapWindowsInstant(index1, index2 int) {
 	if index1 < 0 || index1 >= len(m.Windows) || index2 < 0 || index2 >= len(m.Windows) {

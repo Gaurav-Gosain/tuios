@@ -1037,7 +1037,11 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 		code = tea.KeyEnter
 	case "space":
 		code = tea.KeySpace
-		text = " "
+		// Only set Text when there are no modifiers, otherwise String() drops
+		// the modifier (matching the regular-character branch below).
+		if mod == 0 {
+			text = " "
+		}
 	case "tab":
 		code = tea.KeyTab
 	case "escape", "esc":

@@ -52,6 +52,13 @@ func (m *OS) MinimizeWindow(i int) {
 				sl.RemoveWindow(intID)
 				sl.EnsureFocusedVisible(m.GetRenderWidth())
 				m.scrollingSetPositions()
+			} else if m.UseBSPLayout {
+				// Remove from the BSP tree and reflow the remaining panes,
+				// mirroring the close path (DeleteWindow). Using the
+				// master-stack tiler here would ignore the tree and leave a
+				// stale window ID behind, discarding custom split ratios.
+				m.RemoveWindowFromBSPTree(window)
+				m.ApplyBSPLayout()
 			} else {
 				m.TileRemainingWindows(i)
 			}

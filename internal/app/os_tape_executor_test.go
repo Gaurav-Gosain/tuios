@@ -155,6 +155,22 @@ func TestParseKeyToMessageModifierWithoutText(t *testing.T) {
 	}
 }
 
+// TestParseKeyToMessageSpaceModifier verifies a modified space keeps its
+// modifier: Text must stay empty so String() does not drop Ctrl/Alt.
+func TestParseKeyToMessageSpaceModifier(t *testing.T) {
+	m := &OS{}
+
+	msg := m.parseKeyToMessage("ctrl+space")
+
+	if msg.Mod != tea.ModCtrl {
+		t.Errorf("parseKeyToMessage(\"ctrl+space\").Mod = %v, want %v", msg.Mod, tea.ModCtrl)
+	}
+
+	if msg.Text != "" {
+		t.Errorf("parseKeyToMessage(\"ctrl+space\").Text = %q, want empty string", msg.Text)
+	}
+}
+
 // TestGetWindowDisplayNameLogic tests the display name logic
 func TestGetWindowDisplayNameLogic(t *testing.T) {
 	tests := []struct {

@@ -34,13 +34,9 @@ type LayoutTemplate struct {
 	Version     int       `json:"version"` // Schema version (2)
 
 	// Tiling configuration
-	AutoTiling  bool   `json:"auto_tiling"`
-	TilingScheme string `json:"tiling_scheme,omitempty"` // "spiral", "alternate", "smart_split", etc.
-	MasterRatio float64 `json:"master_ratio,omitempty"`
-
-	// BSP tree structure (for tiled layouts)
-	// When present, this is used instead of individual window coordinates.
-	BSPTree *LayoutBSPNode `json:"bsp_tree,omitempty"`
+	AutoTiling   bool    `json:"auto_tiling"`
+	TilingScheme string  `json:"tiling_scheme,omitempty"` // "spiral", "alternate", "smart_split", etc.
+	MasterRatio  float64 `json:"master_ratio,omitempty"`
 
 	// Windows  - each window's configuration
 	Windows []LayoutWindow `json:"windows"`
@@ -48,15 +44,6 @@ type LayoutTemplate struct {
 	// Screen dimensions at save time (for proportional scaling on different screens)
 	ScreenWidth  int `json:"screen_width,omitempty"`
 	ScreenHeight int `json:"screen_height,omitempty"`
-}
-
-// LayoutBSPNode is a serializable representation of a BSP tree node.
-type LayoutBSPNode struct {
-	SplitType  string          `json:"split_type"` // "vertical", "horizontal", "none"
-	SplitRatio float64         `json:"split_ratio"`
-	WindowIdx  int             `json:"window_idx,omitempty"` // Index into Windows array (-1 for internal nodes)
-	Left       *LayoutBSPNode  `json:"left,omitempty"`
-	Right      *LayoutBSPNode  `json:"right,omitempty"`
 }
 
 // LayoutWindow stores per-window configuration.
@@ -72,10 +59,10 @@ type LayoutWindow struct {
 	CustomName string `json:"custom_name,omitempty"` // User-set name
 
 	// Startup configuration
-	Command    string   `json:"command,omitempty"`    // Shell command to run on creation (e.g., "vim", "htop")
-	Args       []string `json:"args,omitempty"`       // Command arguments
+	Command    string   `json:"command,omitempty"`     // Shell command to run on creation (e.g., "vim", "htop")
+	Args       []string `json:"args,omitempty"`        // Command arguments
 	WorkingDir string   `json:"working_dir,omitempty"` // Working directory for the shell
-	Shell      string   `json:"shell,omitempty"`      // Override shell (empty = default)
+	Shell      string   `json:"shell,omitempty"`       // Override shell (empty = default)
 
 	// State
 	Minimized bool `json:"minimized,omitempty"`
@@ -122,8 +109,6 @@ func SaveLayoutTemplate(name string, m *OS) error {
 	}
 
 	// Collect windows
-	windowIdx := 0
-	bspWindowMap := make(map[int]int) // BSP window ID → template window index
 	for _, w := range m.Windows {
 		if w.Workspace != m.CurrentWorkspace {
 			continue
@@ -147,19 +132,6 @@ func SaveLayoutTemplate(name string, m *OS) error {
 		}
 
 		tmpl.Windows = append(tmpl.Windows, lw)
-
-		// Map BSP window IDs for tree serialization
-		if bspID, ok := m.WindowToBSPID[w.ID]; ok {
-			bspWindowMap[bspID] = windowIdx
-		}
-		windowIdx++
-	}
-
-	// Save BSP tree structure (for tiled mode)
-	if m.AutoTiling {
-		if tree := m.WorkspaceTrees[m.CurrentWorkspace]; tree != nil && tree.Root != nil {
-			tmpl.BSPTree = serializeBSPNode(tree.Root, bspWindowMap)
-		}
 	}
 
 	data, err := json.MarshalIndent(tmpl, "", "  ")
@@ -167,34 +139,6 @@ func SaveLayoutTemplate(name string, m *OS) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 	return os.WriteFile(templateFilePath(name), data, 0600)
-}
-
-func serializeBSPNode(node *layout.TileNode, windowMap map[int]int) *LayoutBSPNode {
-	if node == nil {
-		return nil
-	}
-	n := &LayoutBSPNode{
-		SplitRatio: node.SplitRatio,
-		WindowIdx:  -1,
-	}
-	switch node.SplitType {
-	case layout.SplitVertical:
-		n.SplitType = "vertical"
-	case layout.SplitHorizontal:
-		n.SplitType = "horizontal"
-	default:
-		n.SplitType = "none"
-	}
-
-	if node.WindowID >= 0 {
-		if idx, ok := windowMap[node.WindowID]; ok {
-			n.WindowIdx = idx
-		}
-	}
-
-	n.Left = serializeBSPNode(node.Left, windowMap)
-	n.Right = serializeBSPNode(node.Right, windowMap)
-	return n
 }
 
 // LoadLayoutTemplates reads all templates from the layouts directory.
