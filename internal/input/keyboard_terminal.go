@@ -115,6 +115,16 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Handle theme picker overlay (opens on top of settings)
+	if o.ShowThemePicker {
+		return handleThemePickerInput(msg, o)
+	}
+
+	// Handle settings overlay (takes priority in terminal mode)
+	if o.ShowSettings {
+		return handleSettingsInput(msg, o)
+	}
+
 	// Handle layout picker (takes priority in terminal mode)
 	if o.ShowLayoutPicker {
 		return handleLayoutPickerInput(msg, o)
@@ -643,8 +653,8 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 			}
 		}
 		return o, nil
-	case ",", "r":
-		// Rename window - exit terminal mode for this (like tmux with ',' or like normal mode with 'r')
+	case "r":
+		// Rename window - exit terminal mode for this (like normal mode with 'r')
 		// Skip if window titles are hidden
 		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			focusedWindow := o.GetFocusedWindow()
@@ -657,6 +667,10 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 				o.RenameBuffer = focusedWindow.CustomName
 			}
 		}
+		return o, nil
+	case ",":
+		// Open the settings page (preferences convention: leader + ,)
+		o.OpenSettings()
 		return o, nil
 
 	// Layout commands

@@ -119,8 +119,13 @@ func NewOS(opts OSOptions) *OS {
 	// Initialize hooks manager and load user-defined hooks from config
 	os.HookManager = hooks.NewManager()
 	cfg, cfgErr := config.LoadUserConfig()
-	if cfgErr == nil && cfg.Hooks != nil {
-		os.HookManager.LoadFromConfig(cfg.Hooks)
+	if cfgErr == nil {
+		// Hold the loaded config so the in-app settings page can persist live
+		// changes back to disk.
+		os.UserConfig = cfg
+		if cfg.Hooks != nil {
+			os.HookManager.LoadFromConfig(cfg.Hooks)
+		}
 	}
 
 	// Default to BSP layout mode

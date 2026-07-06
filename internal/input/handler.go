@@ -351,17 +351,23 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.DeleteWindow(o.FocusedWindow)
 		}
 		return o, nil
-	case ",", "r":
-		// Rename window (like tmux with ',' or like normal mode with 'r')
+	case "r":
+		// Rename window (like normal mode with 'r')
 		// Skip if window titles are hidden
 		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
 				o.RenamingWindow = true
-				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
+				if fw := o.GetFocusedWindow(); fw != nil {
+					fw.InvalidateCache()
+				}
 				o.RenameBuffer = focusedWindow.CustomName
 			}
 		}
+		return o, nil
+	case ",":
+		// Open the settings page (preferences convention: leader + ,)
+		o.OpenSettings()
 		return o, nil
 
 	// Window navigation

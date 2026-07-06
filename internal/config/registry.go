@@ -321,6 +321,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_new_window":       "Create new window",
 	"prefix_close_window":     "Close current window",
 	"prefix_rename_window":    "Rename window",
+	"prefix_settings":         "Open settings",
 	"prefix_next_window":      "Next window",
 	"prefix_prev_window":      "Previous window",
 	"prefix_select_0":         "Jump to window 0",

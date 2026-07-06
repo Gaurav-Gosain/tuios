@@ -68,7 +68,8 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 		bindings := []Keybinding{
 			{"c", "Create window"},
 			{"x", "Close window"},
-			{",", "Rename window"},
+			{"r", "Rename window"},
+			{",", "Settings"},
 			{"n", "Next window"},
 			{"p", "Previous window"},
 			{"0-9", "Jump to window"},

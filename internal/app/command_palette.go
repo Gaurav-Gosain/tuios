@@ -450,6 +450,23 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		// Session & Config
 		{
+			Name:     "Settings",
+			Shortcut: "prefix+,",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenSettings()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Theme Picker",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenThemePicker()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Reload Config",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {

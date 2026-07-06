@@ -269,6 +269,36 @@ type OS struct {
 	LayoutPickerQuery         string
 	LayoutPickerMode          string // "load" or "save"
 	LayoutSaveBuffer          string // Buffer for layout name when saving
+
+	// Settings overlay state.
+	ShowSettings     bool
+	SettingsCategory int // active settings category (tab) index
+	SettingsSelected int // selected row within the active category
+	SettingsScroll   int // scroll offset within the active category
+
+	// Theme picker overlay state.
+	ShowThemePicker     bool
+	ThemePickerQuery    string
+	ThemePickerSelected int
+	ThemePickerScroll   int
+	ThemePickerOriginal string // theme active when the picker opened, for cancel
+
+	// Floating overlay placement + mouse hit-testing. Each overlay kind keeps
+	// its own drag displacement in OverlayOffsets so panels (e.g. settings and
+	// the theme picker) can be moved independently. OverlayHits records every
+	// panel rendered in the current frame, back to front, so the mouse handlers
+	// can route clicks to the topmost panel under the cursor.
+	OverlayOffsets map[string][2]int
+	OverlayHits    []overlayPanelHit
+	OverlayDrag    overlayDragState
+	// OverlayZOrder is the stacking order of the currently-open draggable
+	// overlays, bottom to top. Clicking a panel moves it to the end (top).
+	OverlayZOrder []string
+
+	// UserConfig is the loaded user configuration. The settings page mutates
+	// it in place and persists it so live changes survive a restart. May be
+	// nil if the config failed to load at startup.
+	UserConfig *config.UserConfig
 }
 
 // Notification represents a temporary notification message.

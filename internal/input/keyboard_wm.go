@@ -23,6 +23,16 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return HandleScrollbackBrowserKey(msg, o)
 	}
 
+	// Handle theme picker overlay (opens on top of settings)
+	if o.ShowThemePicker {
+		return handleThemePickerInput(msg, o)
+	}
+
+	// Handle settings overlay
+	if o.ShowSettings {
+		return handleSettingsInput(msg, o)
+	}
+
 	// Handle layout picker overlay
 	if o.ShowLayoutPicker {
 		return handleLayoutPickerInput(msg, o)
@@ -142,6 +152,14 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		}
 
 		// Ignore other keys when cache stats is active
+		return o, nil
+	}
+
+	// Settings: comma opens the settings page directly in window mode. Checked
+	// before the config dispatch because the default keybinds map "," to a
+	// tiling resize action, which would otherwise swallow it.
+	if key == "," {
+		o.OpenSettings()
 		return o, nil
 	}
 
