@@ -2,170 +2,67 @@ package app
 
 import (
 	"fmt"
-	"strings"
+	"image/color"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-func (m *OS) renderLayoutPicker() string {
-	paletteWidth := 58
-	maxVisible := 10
+const layoutPickerWidth = 58
 
-	bg := lipgloss.Color("#1a1a2a")
-
-	padLine := func(s string, targetWidth int) string {
-		currentWidth := lipgloss.Width(s)
-		if currentWidth < targetWidth {
-			s += lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", targetWidth-currentWidth))
-		}
-		return s
-	}
-
-	var lines []string
-
-	// Title
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#fbbf24")).
-		Bold(true).
-		Background(bg)
-
+// renderLayoutPicker renders the layout save/load overlay on the shared grammar.
+func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 	if m.LayoutPickerMode == "save" {
-		lines = append(lines, padLine(titleStyle.Render("Save Layout"), paletteWidth))
-	} else {
-		lines = append(lines, padLine(titleStyle.Render("Load Layout"), paletteWidth))
-	}
-
-	// Separator
-	sepStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#4b5563")).
-		Background(bg)
-	lines = append(lines, sepStyle.Render(strings.Repeat("─", paletteWidth)))
-
-	if m.LayoutPickerMode == "save" {
-		// Save mode: show input for layout name
-		promptStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#fbbf24")).
-			Bold(true).
-			Background(bg)
-		queryStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#ffffff")).
-			Background(bg)
-		cursorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#fbbf24")).
-			Background(bg)
-
-		inputLine := promptStyle.Render("Name: ") + queryStyle.Render(m.LayoutSaveBuffer) + cursorStyle.Render("_")
-		lines = append(lines, padLine(inputLine, paletteWidth))
-
-		hintStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6b7280")).
-			Background(bg)
-		lines = append(lines, padLine(hintStyle.Render("  Press Enter to save, Esc to cancel"), paletteWidth))
-	} else {
-		// Load mode: show search and list
-		promptStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#fbbf24")).
-			Bold(true).
-			Background(bg)
-		queryStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#ffffff")).
-			Background(bg)
-		cursorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#fbbf24")).
-			Background(bg)
-
-		searchLine := promptStyle.Render("> ") + queryStyle.Render(m.LayoutPickerQuery) + cursorStyle.Render("_")
-		lines = append(lines, padLine(searchLine, paletteWidth))
-
-		lines = append(lines, sepStyle.Render(strings.Repeat("─", paletteWidth)))
-
-		filtered := FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery)
-
-		if len(filtered) == 0 {
-			emptyStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#6b7280")).
-				Background(bg)
-			lines = append(lines, padLine(emptyStyle.Render("  No saved layouts"), paletteWidth))
-		} else {
-			start := m.LayoutPickerScroll
-			end := min(start+maxVisible, len(filtered))
-
-			nameStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#d1d5db")).
-				Background(bg)
-			nameSelectedStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#ffffff")).
-				Bold(true).
-				Background(lipgloss.Color("#374151"))
-			detailStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#6b7280")).
-				Background(bg)
-			detailSelectedStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#9ca3af")).
-				Background(lipgloss.Color("#374151"))
-			selectedBg := lipgloss.NewStyle().Background(lipgloss.Color("#374151"))
-
-			for i := start; i < end; i++ {
-				item := filtered[i]
-				isSelected := i == m.LayoutPickerSelected
-
-				detail := fmt.Sprintf("%d windows", len(item.Windows))
-				if item.AutoTiling {
-					detail += " [tiling]"
-				}
-
-				nameMaxWidth := paletteWidth - lipgloss.Width(detail) - 7
-				name := item.Name
-				if lipgloss.Width(name) > nameMaxWidth {
-					name = name[:nameMaxWidth-3] + "..."
-				}
-
-				middlePadding := max(paletteWidth-lipgloss.Width(name)-lipgloss.Width(detail)-7, 1)
-
-				var line string
-				if isSelected {
-					padStr := selectedBg.Render(strings.Repeat(" ", middlePadding))
-					line = selectedBg.Render("  ") +
-						nameSelectedStyle.Render(name) +
-						padStr +
-						detailSelectedStyle.Render(detail) +
-						selectedBg.Render("  ")
-				} else {
-					bgStyle := lipgloss.NewStyle().Background(bg)
-					padStr := bgStyle.Render(strings.Repeat(" ", middlePadding))
-					line = bgStyle.Render("  ") +
-						nameStyle.Render(name) +
-						padStr +
-						detailStyle.Render(detail) +
-						bgStyle.Render("  ")
-				}
-				lines = append(lines, padLine(line, paletteWidth))
-			}
-
-			if len(filtered) > maxVisible {
-				infoStyle := lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#6b7280")).
-					Background(bg)
-				scrollInfo := fmt.Sprintf("  %d layouts", len(filtered))
-				lines = append(lines, padLine(infoStyle.Render(scrollInfo), paletteWidth))
-			}
+		pal := theme.UI()
+		bg := pal.Surface
+		input := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("Name  ") +
+			overlay.Style(bg).Foreground(pal.Fg).Render(m.LayoutSaveBuffer) +
+			overlay.Style(bg).Foreground(pal.Accent).Render("█")
+		panel := overlay.Panel{
+			Glyph: "",
+			Title: "Save Layout",
+			Width: layoutPickerWidth,
+			Body:  input,
+			Hints: []overlay.Hint{{Key: "⏎", Label: "save"}, {Key: "esc", Label: "cancel"}},
 		}
-
-		// Hints
-		hintStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6b7280")).
-			Background(bg)
-		lines = append(lines, sepStyle.Render(strings.Repeat("─", paletteWidth)))
-		lines = append(lines, padLine(hintStyle.Render("  Enter: apply  d: delete  Esc: close"), paletteWidth))
+		content, geo := panel.Render(pal)
+		return content, geo, nil
 	}
 
-	content := strings.Join(lines, "\n")
+	filtered := FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery)
+	if len(filtered) > 0 {
+		m.LayoutPickerSelected = clampInt(m.LayoutPickerSelected, 0, len(filtered)-1)
+	}
 
-	return lipgloss.NewStyle().
-		Border(getBorder()).
-		BorderForeground(theme.HelpBorder()).
-		Padding(1, 2).
-		Background(bg).
-		Render(content)
+	return m.renderListOverlay(listOverlay{
+		Glyph:      "",
+		Title:      "Load Layout",
+		Width:      layoutPickerWidth,
+		MaxVisible: 10,
+		Search:     true,
+		Query:      m.LayoutPickerQuery,
+		Count:      len(filtered),
+		Selected:   m.LayoutPickerSelected,
+		Scroll:     m.LayoutPickerScroll,
+		EmptyMsg:   "No saved layouts",
+		Hints: []overlay.Hint{
+			{Key: "⏎", Label: "apply"},
+			{Key: "d", Label: "delete"},
+			{Key: "esc", Label: "close"},
+		},
+		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette) string {
+			item := filtered[i]
+			detail := fmt.Sprintf("%d windows", len(item.Windows))
+			if item.AutoTiling {
+				detail += " · tiling"
+			}
+			labelColor := pal.FgDim
+			if selected {
+				labelColor = pal.Fg
+			}
+			name := overlay.Truncate(item.Name, layoutPickerWidth-lipgloss.Width(detail)-6)
+			return listRowLine(layoutPickerWidth, listRowMarker(selected), name, detail, labelColor, pal.FgMute, selected, rowBg, pal)
+		},
+	})
 }

@@ -1,74 +1,77 @@
 package app
 
 import (
+	"image/color"
+	"strings"
+
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
+const quitDialogInnerWidth = 34
+
+// centerOnSurface centers s within width by padding with surface-background
+// spaces on both sides so the fill stays solid.
+func centerOnSurface(s string, width int, bg color.Color) string {
+	w := lipgloss.Width(s)
+	if w >= width {
+		return s
+	}
+	left := (width - w) / 2
+	right := width - w - left
+	pad := overlay.Style(bg)
+	return pad.Render(strings.Repeat(" ", left)) + s + pad.Render(strings.Repeat(" ", right))
+}
+
+// pillButton renders a confirm/cancel button. The selected button is a solid
+// accent pill; the rest sit on a muted card.
+func pillButton(label string, selected bool, accent color.Color, pal overlay.Palette) string {
+	if selected {
+		return lipgloss.NewStyle().
+			Background(accent).
+			Foreground(pal.PillFg).
+			Bold(true).
+			Padding(0, 2).
+			Render(label)
+	}
+	return lipgloss.NewStyle().
+		Background(pal.Card).
+		Foreground(pal.FgDim).
+		Padding(0, 2).
+		Render(label)
+}
+
 func (m *OS) renderQuitConfirmDialog() (string, int, int) {
-	borderColor := theme.HelpBorder()
-	selectedColor := theme.HelpTabActive()
-	unselectedColor := theme.HelpGray()
+	pal := theme.UI()
+	bg := pal.Surface
 
-	title := lipgloss.NewStyle().
-		Foreground(selectedColor).
-		Bold(true).
-		Render("Quit TUIOS?")
+	question := overlay.Style(bg).Foreground(pal.Fg).Render("Close all windows and quit?")
 
-	yesButtonContent := "yes"
-	noButtonContent := "no"
+	yesSelected := m.QuitConfirmSelection == 0
+	// "Yes" is the destructive action, so it takes the warn color when selected.
+	yes := pillButton("Yes", yesSelected, pal.Warn, pal)
+	no := pillButton("No", !yesSelected, pal.Accent, pal)
+	buttons := yes + overlay.Style(bg).Render("   ") + no
 
-	var yesButton, noButton string
+	body := strings.Join([]string{
+		centerOnSurface(question, quitDialogInnerWidth, bg),
+		overlay.Style(bg).Render(" "),
+		centerOnSurface(buttons, quitDialogInnerWidth, bg),
+	}, "\n")
 
-	if m.QuitConfirmSelection == 0 {
-		yesButton = lipgloss.NewStyle().
-			Foreground(selectedColor).
-			Bold(true).
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(selectedColor).
-			Padding(0, 1).
-			Render(yesButtonContent)
-
-		noButton = lipgloss.NewStyle().
-			Foreground(unselectedColor).
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(unselectedColor).
-			Padding(0, 1).
-			Render(noButtonContent)
-	} else {
-		yesButton = lipgloss.NewStyle().
-			Foreground(unselectedColor).
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(unselectedColor).
-			Padding(0, 1).
-			Render(yesButtonContent)
-
-		noButton = lipgloss.NewStyle().
-			Foreground(selectedColor).
-			Bold(true).
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(selectedColor).
-			Padding(0, 1).
-			Render(noButtonContent)
+	panel := overlay.Panel{
+		Glyph: "", // warning
+		Title: "Quit TUIOS",
+		Width: quitDialogInnerWidth,
+		Body:  body,
+		Hints: []overlay.Hint{
+			{Key: "←→", Label: "select"},
+			{Key: "⏎", Label: "confirm"},
+			{Key: "esc", Label: "cancel"},
+		},
 	}
 
-	buttonRow := lipgloss.JoinHorizontal(lipgloss.Center, yesButton, "   ", noButton)
-
-	dialogContent := lipgloss.JoinVertical(
-		lipgloss.Center,
-		title,
-		"",
-		buttonRow,
-	)
-
-	dialogBox := lipgloss.NewStyle().
-		Border(getBorder()).
-		BorderForeground(borderColor).
-		Padding(1, 3).
-		Render(dialogContent)
-
-	width := lipgloss.Width(dialogBox)
-	height := lipgloss.Height(dialogBox)
-
-	return dialogBox, width, height
+	dialog, _ := panel.Render(pal)
+	return dialog, lipgloss.Width(dialog), lipgloss.Height(dialog)
 }

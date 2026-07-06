@@ -396,7 +396,7 @@ func (m *OS) TapeManagerPlaySelected() {
 }
 
 // RenderTapeManager renders the tape manager overlay
-func (m *OS) RenderTapeManager(width, height int) string {
+func (m *OS) RenderTapeManager() string {
 	if m.TapeManager == nil {
 		m.InitTapeManager()
 	}
@@ -532,10 +532,9 @@ func (m *OS) RenderTapeManager(width, height int) string {
 		Padding(1, 2).
 		Background(theme.LogViewerBg())
 
-	box := boxStyle.Render(content)
-
-	// Center in screen
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+	// Return the content-sized box; the caller centers it as a layer so the
+	// windows behind stay visible.
+	return boxStyle.Render(content)
 }
 
 func formatFileSize(size int64) string {

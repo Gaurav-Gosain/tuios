@@ -15,6 +15,12 @@ import (
 func (m *OS) renderOverlays() []*lipgloss.Layer {
 	var layers []*lipgloss.Layer
 
+	// Keep the overlay glyphs in sync with ASCII mode, and clear last frame's
+	// hit geometry; each panel that renders below re-records itself.
+	syncOverlayASCII()
+	m.OverlayHits = m.OverlayHits[:0]
+	m.reconcileOverlayZOrder()
+
 	isRecording := m.TapeRecorder != nil && m.TapeRecorder.IsRecording()
 
 	// Show clock/status unless hidden (but always show if recording or prefix active)
@@ -68,18 +74,19 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
    ██║   ╚██████╔╝██║╚██████╔╝███████║
    ╚═╝    ╚═════╝ ╚═╝ ╚═════╝ ╚══════╝`
 
+		ui := theme.UI()
 		title := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("14")).
+			Foreground(ui.Accent).
 			Bold(true).
 			Render(asciiArt)
 
 		subtitle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("11")).
+			Foreground(ui.AccentBright).
 			Render("Terminal UI Operating System")
 
 		instruction := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("7")).
-			Render("Press 'n' to create a window, '?' for help")
+			Foreground(ui.FgDim).
+			Render("Press 'n' for a new window   •   '?' for help   •   ',' for settings")
 
 		content := lipgloss.JoinVertical(lipgloss.Center,
 			title,
@@ -91,7 +98,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		boxStyle := lipgloss.NewStyle().
 			Border(getNormalBorder()).
-			BorderForeground(lipgloss.Color("6")).
+			BorderForeground(ui.Accent).
 			Padding(1, 2)
 
 		centeredContent := lipgloss.Place(
@@ -107,36 +114,33 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	}
 
 	if m.ShowCommandPalette {
-		paletteContent := m.renderCommandPalette()
-		paletteWidth := lipgloss.Width(paletteContent)
-		paletteX := max((m.GetRenderWidth()-paletteWidth)/2, 0)
-		paletteLayer := lipgloss.NewLayer(paletteContent).
-			X(paletteX).Y(3).Z(config.ZIndexCommandPalette).ID("command-palette")
-		layers = append(layers, paletteLayer)
+		content, geo, rows := m.renderCommandPalette()
+		layers = m.placeOverlayPanel(layers, "palette", content, geo, rows)
 	}
 
 	if m.ShowSessionSwitcher {
-		content := m.renderSessionSwitcher()
-		w := lipgloss.Width(content)
-		x := max((m.GetRenderWidth()-w)/2, 0)
-		layer := lipgloss.NewLayer(content).X(x).Y(3).Z(config.ZIndexSessionSwitcher).ID("session-switcher")
-		layers = append(layers, layer)
+		content, geo, rows := m.renderSessionSwitcher()
+		layers = m.placeOverlayPanel(layers, "session", content, geo, rows)
 	}
 
 	if m.ShowLayoutPicker {
-		content := m.renderLayoutPicker()
-		w := lipgloss.Width(content)
-		x := max((m.GetRenderWidth()-w)/2, 0)
-		layer := lipgloss.NewLayer(content).X(x).Y(3).Z(config.ZIndexLayoutPicker).ID("layout-picker")
-		layers = append(layers, layer)
+		content, geo, rows := m.renderLayoutPicker()
+		layers = m.placeOverlayPanel(layers, "layout", content, geo, rows)
+	}
+
+	if m.ShowSettings {
+		content, geo, rows := m.renderSettings()
+		layers = m.placeOverlayPanel(layers, "settings", content, geo, rows)
+	}
+
+	if m.ShowThemePicker {
+		content, geo, rows := m.renderThemePicker()
+		layers = m.placeOverlayPanel(layers, "themepicker", content, geo, rows)
 	}
 
 	if m.ShowAggregateView {
-		content := m.renderAggregateView()
-		w := lipgloss.Width(content)
-		x := max((m.GetRenderWidth()-w)/2, 0)
-		layer := lipgloss.NewLayer(content).X(x).Y(3).Z(config.ZIndexLayoutPicker).ID("aggregate-view")
-		layers = append(layers, layer)
+		content, geo, rows := m.renderAggregateView()
+		layers = m.placeOverlayPanel(layers, "aggregate", content, geo, rows)
 	}
 
 	if m.ShowScrollbackBrowser {
@@ -158,19 +162,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	}
 
 	if m.ShowHelp {
-		helpContent := m.RenderHelpMenu(m.GetRenderWidth(), m.GetRenderHeight())
-
-		helpLayer := lipgloss.NewLayer(helpContent).
-			X(0).Y(0).Z(config.ZIndexHelp).ID("help")
-
-		layers = append(layers, helpLayer)
+		content, geo := m.RenderHelpMenu()
+		layers = m.placeOverlayPanel(layers, "help", content, geo, nil)
 	}
 
 	if m.ShowTapeManager {
-		tapeContent := m.RenderTapeManager(m.GetRenderWidth(), m.GetRenderHeight())
-		tapeLayer := lipgloss.NewLayer(tapeContent).
-			X(0).Y(0).Z(config.ZIndexHelp).ID("tape-manager")
-		layers = append(layers, tapeLayer)
+		tapeContent := m.RenderTapeManager()
+		layers = append(layers, m.centeredBoxLayer(tapeContent, config.ZIndexHelp, "tape-manager"))
 	}
 
 	if m.ShowCacheStats {
@@ -238,13 +236,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Background(lipgloss.Color("#1a1a2a")).
 			Render(statsContent)
 
-		centeredStats := lipgloss.Place(m.GetRenderWidth(), m.GetRenderHeight(),
-			lipgloss.Center, lipgloss.Center, statsBox)
-
-		statsLayer := lipgloss.NewLayer(centeredStats).
-			X(0).Y(0).Z(config.ZIndexLogs).ID("cache-stats")
-
-		layers = append(layers, statsLayer)
+		layers = append(layers, m.centeredBoxLayer(statsBox, config.ZIndexLogs, "cache-stats"))
 	}
 
 	if m.ShowLogs {
@@ -321,13 +313,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Background(lipgloss.Color("#1a1a2a")).
 			Render(logContent)
 
-		centeredLogs := lipgloss.Place(m.GetRenderWidth(), m.GetRenderHeight(),
-			lipgloss.Center, lipgloss.Center, logBox)
-
-		logLayer := lipgloss.NewLayer(centeredLogs).
-			X(0).Y(0).Z(config.ZIndexLogs).ID("logs")
-
-		layers = append(layers, logLayer)
+		layers = append(layers, m.centeredBoxLayer(logBox, config.ZIndexLogs, "logs"))
 	}
 
 	showScriptIndicator := true
