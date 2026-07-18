@@ -220,6 +220,29 @@ A verb that genuinely cannot run without a renderer (tiling geometry, animation,
 theming) fails with `needs_client`, whose hint names the `tuios attach` command
 for that session. Everything else works headless.
 
+### Who owns session state
+
+The daemon owns session state. An attached client keeps its own copy and pushes
+it back as it renders, but that push does not replace what the daemon holds.
+
+Every state the daemon hands out carries a `version`, which counts the mutations
+the daemon has made itself. A client echoes the version it last saw back as
+`base_version` on the state it pushes. When the two match, the client has seen
+everything the daemon did and its snapshot is applied as sent. When
+`base_version` is behind, the client built its snapshot before a daemon side
+mutation it has never seen, and the fields the daemon owns are restored on top of
+it: which windows exist, their names, workspaces and minimized flags, the focused
+window, and the current workspace. The client keeps the fields it owns, which are
+the ones derived from its own viewport: pixel geometry, z order, the shell
+reported title, pre restore geometry, and alt screen state. The daemon then sends
+the merged state back to that client so it converges rather than pushing the same
+stale view again.
+
+A `base_version` of `0` means a client that predates state versioning. It cannot
+say what it saw, so its pushes are applied as sent, exactly as before. Input mode
+is not part of session state at all: it is per viewer, so one client switching to
+terminal mode no longer switches every other client with it.
+
 `kill-session` destroys the session for every client, not just the caller. Each
 attached client is told the session ended and exits with a non-zero status, so a
 script that kills a session does not leave a user staring at a dead UI. The

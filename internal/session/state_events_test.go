@@ -495,3 +495,39 @@ func TestRestoredSessionRaisesWindowCreated(t *testing.T) {
 		t.Errorf("window-created window = %v, want w1", events[1]["window"])
 	}
 }
+
+// TestStaleClientSyncRaisesNoPhantomEvents ties state versioning back to the
+// event stream. A daemon-side creation emits window-created once. A stale client
+// sync that predates it used to replace the whole state, which the diff read as
+// the window being closed and, on the client's next sync, created again. Now the
+// creation is preserved through reconciliation, so the sync is a no-op and the
+// stream stays silent.
+func TestStaleClientSyncRaisesNoPhantomEvents(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, err := d.manager.CreateSession("phantom", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	sub := subscribeTo(t, sp, "phantom", lifecycleTypes...)
+
+	stale := sess.GetState()
+	stale.BaseVersion = stale.Version
+	stale.Version = 0
+
+	win, err := sess.AddDaemonWindow("headless", nil)
+	if err != nil {
+		t.Fatalf("AddDaemonWindow: %v", err)
+	}
+
+	events := collectEvents(t, sub, 2, 3*time.Second)
+	if types := eventTypes(events); len(types) != 2 ||
+		types[0] != EventWindowCreated || types[1] != EventWindowFocused {
+		t.Fatalf("events = %v, want window-created then window-focused", types)
+	}
+	if events[0]["window"] != win.ID {
+		t.Fatalf("created window = %v, want %v", events[0]["window"], win.ID)
+	}
+
+	sess.UpdateState(stale)
+	expectNoMoreEvents(t, sub, 300*time.Millisecond)
+}

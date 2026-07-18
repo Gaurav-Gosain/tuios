@@ -102,6 +102,17 @@ type SessionState struct {
 	// misinterpreted. Absent (0) means pre-versioning state, which is a
 	// structural subset of the current schema and loads fine.
 	ResurrectionVersion int `json:"resurrection_version,omitempty"`
+	// Version counts the daemon-side mutations of this state: every headless
+	// window operation bumps it, a client sync does not. It is the daemon's
+	// answer to "how much have I changed since you last looked", and it is
+	// stamped on every state the daemon hands out.
+	Version int `json:"version,omitempty"`
+	// BaseVersion is the Version a client last saw, echoed back on the state it
+	// pushes. It says which daemon state the client's snapshot was built from, so
+	// the daemon can tell a current sync from one that predates its own
+	// mutations. Zero means a client that predates state versioning; its syncs
+	// are taken at face value, as they were before.
+	BaseVersion int `json:"base_version,omitempty"`
 	// Options is a daemon-owned key/value store for session options set through
 	// the JSON verb protocol (set-option / get-option). It is additive: older
 	// clients and older on-disk state simply omit it. Keys are advisory names;
@@ -215,6 +226,11 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 			MasterRatio:      0.5,
 			Width:            width,
 			Height:           height,
+			// Versions start at 1 so that a BaseVersion of 0 on an incoming sync
+			// means one thing only: a client that predates state versioning and
+			// cannot say what it saw. A versioned client always echoes back at
+			// least 1, even before the daemon has mutated anything.
+			Version: 1,
 		},
 		width:      width,
 		height:     height,
@@ -419,6 +435,15 @@ func (s *Session) ListPTYIDs() []string {
 	return ids
 }
 
+// hasLivePTY reports whether a PTY with this ID is still open on the session.
+// A window whose PTY is gone has been closed; see reconcileStale.
+func (s *Session) hasLivePTY(id string) bool {
+	s.ptysMu.RLock()
+	defer s.ptysMu.RUnlock()
+	_, ok := s.ptys[id]
+	return ok
+}
+
 // PTYCount returns the number of PTYs.
 func (s *Session) PTYCount() int {
 	s.ptysMu.RLock()
@@ -512,23 +537,49 @@ func (s *Session) ResurrectionState() *SessionState {
 	return state
 }
 
-// UpdateState updates the session state. Daemon-owned options (set through the
-// JSON verb protocol) are carried over when the incoming state does not include
-// them, so a TUI state sync - which never populates Options - does not wipe them.
+// UpdateState converges a client's view of the session onto the daemon's state.
+//
+// The daemon owns this state, so a client sync does not simply replace it. The
+// incoming snapshot carries the daemon Version the client last saw. When that
+// version is current the client has seen everything the daemon did and its
+// snapshot is taken as sent. When it is behind, the client built its snapshot
+// before a daemon-side mutation it has never seen, and the fields the daemon
+// owns are restored on top of it rather than being silently undone. Fields no
+// client ever sets (Options, Cwd, ResurrectionVersion) are carried over either
+// way.
+//
+// It reports whether the state was applied as the client sent it. False means
+// the result differs from what was pushed, and the caller is expected to send
+// the merged state back so that client converges instead of pushing the same
+// stale view again.
 //
 // This is where an attached TUI's mutations land, so it is also where the window
-// lifecycle events for those mutations are raised: the incoming state is diffed
-// against the state it replaces. See state_events.go.
-func (s *Session) UpdateState(state *SessionState) {
+// lifecycle events for those mutations are raised: the state that ends up
+// canonical is diffed against the state it replaces. See state_events.go.
+func (s *Session) UpdateState(state *SessionState) bool {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
-	if state.Options == nil && s.state != nil {
-		state.Options = s.state.Options
+
+	accepted := true
+	prev := s.state
+	if prev != nil {
+		if state.BaseVersion != 0 && state.BaseVersion < prev.Version {
+			reconcileStale(state, prev, s.hasLivePTY)
+			accepted = false
+		}
+		retainDaemonExclusive(state, prev)
+		// Version counts daemon-side mutations only, so converging on a client
+		// snapshot carries it forward unchanged: the client is not telling the
+		// daemon anything the daemon did not already know.
+		state.Version = prev.Version
 	}
-	before := snapshotLifecycle(s.state)
+	state.BaseVersion = 0
+
+	before := snapshotLifecycle(prev)
 	s.state = state
 	s.LastActive = time.Now()
 	s.emitLifecycleLocked(before)
+	return accepted
 }
 
 // mutateState runs fn against the canonical state under the state lock and
@@ -543,6 +594,11 @@ func (s *Session) mutateState(fn func(state *SessionState) error) error {
 	if err := fn(s.state); err != nil {
 		return err
 	}
+	// A daemon-side mutation is exactly what a client sync must not undo, so it
+	// is what advances the version. A client that pushes a snapshot built before
+	// this point is reconciled by UpdateState rather than winning by arriving
+	// last.
+	s.state.Version++
 	s.emitLifecycleLocked(before)
 	return nil
 }

@@ -485,12 +485,27 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 		return fmt.Errorf("invalid state payload: %w", err)
 	}
 
-	session.UpdateState(&state)
+	accepted := session.UpdateState(&state)
+	merged := session.GetState()
 
-	// Broadcast state change to other clients in the session
+	// A sync built before a daemon-side mutation was reconciled against it, so
+	// what is canonical now is not what this client pushed. Send the merged state
+	// straight back: without it the client keeps rendering its stale view and
+	// pushes it again on the next sync.
+	if !accepted {
+		if err := d.sendMessage(cs, MsgStateSync, &StateSyncPayload{
+			State:       merged,
+			TriggerType: "reconcile",
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Broadcast state change to other clients in the session. Peers get the
+	// merged state, not the raw push, so every client converges on the same view.
 	clientCount := d.getSessionClientCount(cs.sessionID)
 	if clientCount > 1 {
-		d.broadcastStateSync(cs.sessionID, &state, "update", cs.clientID)
+		d.broadcastStateSync(cs.sessionID, merged, "update", cs.clientID)
 	}
 
 	return nil

@@ -182,6 +182,10 @@ type OS struct {
 	DaemonClient      *session.TUIClient // Client for daemon communication (nil in local mode)
 	SessionName       string             // Name of the daemon session (if attached)
 	RestoredFromState bool               // True after RestoreFromState, cleared after first resize
+	// DaemonStateVersion is the daemon state version this client last saw. It is
+	// echoed back on every state sync so the daemon can tell a snapshot built
+	// from its current state apart from one built before a mutation of its own.
+	DaemonStateVersion int
 	SubscribedPTYs    map[string]bool    // Tracks which PTY IDs are currently subscribed (for visibility optimization)
 	// ExitReason records why the program stopped, for the caller to report and
 	// to pick an exit status. Empty means the user quit or detached normally.
