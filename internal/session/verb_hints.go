@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // This file carries the machine-readable remedy surface of the verb protocol.
@@ -141,6 +142,21 @@ func validateCaptureSource(source string) *verbError {
 	return hintedVerbError(ErrVerbInvalidParams, msg, hint)
 }
 
+// maxEchoedName bounds a caller-supplied name echoed back in an error message.
+// The request line cap is 16 MiB, so echoing the name verbatim let a client
+// amplify a small request into a large response. A name this long is already
+// far past anything the caller could have meant.
+const maxEchoedName = 128
+
+// echoName renders a caller-supplied name for an error message, truncating it
+// so the response stays proportional to the request.
+func echoName(name string) string {
+	if len(name) <= maxEchoedName {
+		return name
+	}
+	return name[:maxEchoedName] + "... (" + strconv.Itoa(len(name)) + " bytes)"
+}
+
 // closestMatch returns the candidate closest to target by edit distance, or ""
 // when nothing is close enough to suggest. The threshold scales with the length
 // of the target so short names do not match everything: a 3-character target
@@ -154,12 +170,23 @@ func closestMatch(target string, candidates []string) string {
 	// ("list-windows" and "close-window") are never suggested for each other.
 	limit := min(len(target)/4+1, 3)
 
+	// The Levenshtein distance between two strings is at least the difference in
+	// their lengths, so a candidate whose length is further than the tolerance
+	// can never win and is skipped before the O(n*m) comparison. Without this,
+	// the verb name from a socket client sizes the work: the request line cap is
+	// 16 MiB, and a name that long cost about five seconds of CPU per request,
+	// on the connection's own goroutine, for a suggestion that was always empty.
+	targetLen := utf8.RuneCountInString(target)
+
 	best := ""
 	bestDist := limit + 1
 	for _, c := range candidates {
 		if c == target {
 			// An exact match is never a suggestion; the caller failed for some
 			// other reason and "did you mean the thing you typed" is noise.
+			continue
+		}
+		if diff := targetLen - utf8.RuneCountInString(c); diff > limit || diff < -limit {
 			continue
 		}
 		d := editDistance(strings.ToLower(target), strings.ToLower(c))
