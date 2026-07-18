@@ -497,3 +497,220 @@ func TestResurrectionAcrossDaemonRestart(t *testing.T) {
 		}
 	}
 }
+
+// TestUnknownVerbHintsAtTheRightOne extends the robustness test above: a bad
+// verb must not only be answered with a typed error, it must tell the caller how
+// to recover. This is what lets an agent correct itself without a human.
+func TestUnknownVerbHintsAtTheRightOne(t *testing.T) {
+	e := newEnv(t)
+	e.mustRun("new", "--detach", "hints")
+	e.waitForSocket(10 * time.Second)
+
+	c := e.dial()
+
+	resp := c.call(1, "list-window", nil, 5*time.Second)
+	errObj, ok := resp["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("unknown verb returned success: %v", resp)
+	}
+	hint, ok := errObj["hint"].(map[string]any)
+	if !ok {
+		t.Fatalf("unknown verb carried no hint: %v", errObj)
+	}
+	if got, _ := hint["did_you_mean"].(string); got != "list-windows" {
+		t.Errorf("did_you_mean = %q, want list-windows", got)
+	}
+	if got, _ := hint["verb"].(string); got != "list-verbs" {
+		t.Errorf("hint verb = %q, want list-verbs", got)
+	}
+
+	// Following the hint must actually work.
+	suggested, _ := hint["did_you_mean"].(string)
+	if _, ok := c.result(2, suggested, map[string]any{"session": "hints"}, 5*time.Second)["windows"]; !ok {
+		t.Fatal("the suggested verb did not work")
+	}
+}
+
+// TestSessionNotFoundListsWhatExists proves the most common agent mistake, a
+// wrong session name, comes back with the live names and the closest match.
+func TestSessionNotFoundListsWhatExists(t *testing.T) {
+	e := newEnv(t)
+	e.mustRun("new", "--detach", "alpha")
+	e.mustRun("new", "--detach", "beta")
+	e.waitForSocket(10 * time.Second)
+
+	c := e.dial()
+	resp := c.call(1, "list-windows", map[string]any{"session": "alfa"}, 5*time.Second)
+
+	errObj, ok := resp["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected an error for an unknown session: %v", resp)
+	}
+	if code, _ := errObj["code"].(string); code != "session_not_found" {
+		t.Fatalf("code = %v, want session_not_found", errObj["code"])
+	}
+	hint, ok := errObj["hint"].(map[string]any)
+	if !ok {
+		t.Fatalf("session_not_found carried no hint: %v", errObj)
+	}
+	if got, _ := hint["did_you_mean"].(string); got != "alpha" {
+		t.Errorf("did_you_mean = %q, want alpha", got)
+	}
+
+	available, _ := hint["available"].([]any)
+	found := map[string]bool{}
+	for _, v := range available {
+		if s, ok := v.(string); ok {
+			found[s] = true
+		}
+	}
+	if !found["alpha"] || !found["beta"] {
+		t.Errorf("available = %v, want both live sessions", available)
+	}
+}
+
+// TestHelloReportsTheProtocolRange exercises the handshake over the real socket,
+// which is what a client uses to tell a usable daemon from one left over across
+// an upgrade.
+func TestHelloReportsTheProtocolRange(t *testing.T) {
+	e := newEnv(t)
+	e.mustRun("new", "--detach", "hello")
+	e.waitForSocket(10 * time.Second)
+
+	c := e.dial()
+	res := c.result(1, "hello", map[string]any{
+		"client":   "e2e",
+		"version":  "test",
+		"protocol": 1,
+	}, 5*time.Second)
+
+	if res["type"] != "hello" {
+		t.Errorf("type = %v, want hello", res["type"])
+	}
+	protocol, _ := res["protocol"].(float64)
+	if protocol < 1 {
+		t.Errorf("protocol = %v, want at least 1", res["protocol"])
+	}
+	minProtocol, _ := res["min_protocol"].(float64)
+	if minProtocol > protocol {
+		t.Errorf("min_protocol %v exceeds protocol %v", minProtocol, protocol)
+	}
+	if pid, _ := res["pid"].(float64); pid <= 0 {
+		t.Errorf("pid = %v, want the daemon's process id", res["pid"])
+	}
+
+	// A client claiming a protocol this daemon cannot serve is refused with the
+	// typed code rather than being allowed to proceed.
+	resp := c.call(2, "hello", map[string]any{"version": "9.9.9", "protocol": 9999}, 5*time.Second)
+	errObj, ok := resp["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("a future protocol was accepted: %v", resp)
+	}
+	if code, _ := errObj["code"].(string); code != "protocol_mismatch" {
+		t.Errorf("code = %v, want protocol_mismatch", errObj["code"])
+	}
+	hint, _ := errObj["hint"].(map[string]any)
+	if cmd, _ := hint["command"].(string); cmd != "tuios kill-server" {
+		t.Errorf("hint command = %v, want tuios kill-server", hint["command"])
+	}
+}
+
+// TestListVerbsIsSelfDescribing proves an agent can learn the whole control
+// surface from one call: every verb documented, with parameters typed and
+// examples that parse.
+func TestListVerbsIsSelfDescribing(t *testing.T) {
+	e := newEnv(t)
+	e.mustRun("new", "--detach", "introspect")
+	e.waitForSocket(10 * time.Second)
+
+	c := e.dial()
+	res := c.result(1, "list-verbs", nil, 5*time.Second)
+
+	verbs, ok := res["verbs"].([]any)
+	if !ok || len(verbs) == 0 {
+		t.Fatalf("list-verbs returned no verbs: %v", res)
+	}
+	if _, ok := res["error_codes"].([]any); !ok {
+		t.Error("list-verbs returned no error-code catalog")
+	}
+	if _, ok := res["envelope"].(map[string]any); !ok {
+		t.Error("list-verbs returned no envelope documentation")
+	}
+
+	seen := map[string]bool{}
+	for _, raw := range verbs {
+		v, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("verb entry is not an object: %v", raw)
+		}
+		name, _ := v["verb"].(string)
+		seen[name] = true
+
+		if desc, _ := v["description"].(string); desc == "" {
+			t.Errorf("verb %q has no description", name)
+		}
+		if _, ok := v["params"].([]any); !ok {
+			t.Errorf("verb %q has no params list", name)
+		}
+		// Every example must be a parseable request for this verb.
+		examples, _ := v["examples"].([]any)
+		for _, rawEx := range examples {
+			ex, _ := rawEx.(string)
+			var parsed map[string]any
+			if err := json.Unmarshal([]byte(ex), &parsed); err != nil {
+				t.Errorf("verb %q has an unparseable example %q: %v", name, ex, err)
+				continue
+			}
+			if parsed["verb"] != name {
+				t.Errorf("verb %q has an example for %v", name, parsed["verb"])
+			}
+		}
+	}
+
+	// The verbs a scripting client depends on must all be present.
+	for _, want := range []string{
+		"hello", "list-verbs", "list-sessions", "list-windows", "new-window",
+		"close-window", "send-keys", "send-text", "capture-pane", "kill-session",
+		"subscribe", "wait-for",
+	} {
+		if !seen[want] {
+			t.Errorf("list-verbs omitted %q", want)
+		}
+	}
+}
+
+// TestCLIExplainsAMissingDaemon covers the CLI half over a real process: with no
+// daemon running, the message must name the fix rather than leaking a socket
+// error.
+func TestCLIExplainsAMissingDaemon(t *testing.T) {
+	e := newEnv(t)
+
+	// No daemon has been started in this hermetic environment.
+	out, err := e.run("list-windows")
+	if err == nil {
+		t.Fatalf("expected list-windows to fail with no daemon, got: %s", out)
+	}
+	for _, want := range []string{"daemon is not running", "Most likely cause", "Fix:", "tuios new"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestCLIExplainsAMissingSession covers the other most common CLI mistake: a
+// session name that does not exist must list the ones that do.
+func TestCLIExplainsAMissingSession(t *testing.T) {
+	e := newEnv(t)
+	e.mustRun("new", "--detach", "real")
+	e.waitForSocket(10 * time.Second)
+
+	out, err := e.run("list-windows", "--session", "reel")
+	if err == nil {
+		t.Fatalf("expected a failure for an unknown session, got: %s", out)
+	}
+	for _, want := range []string{"reel", "Did you mean", "real", "Fix:"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+}
