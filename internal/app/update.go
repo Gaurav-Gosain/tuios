@@ -853,6 +853,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if err := executor.Execute(msg.Command); err != nil {
 				// Log error but continue playback
 				m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", config.NotificationDuration)
+			} else {
+				// Tape playback mutates the model outside the input handler, so
+				// it has to push the result like any other mutation would.
+				m.SyncStateToDaemon()
 			}
 		}
 		return m, nil
@@ -984,6 +988,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 
 		m.MarkAllDirty()
+
+		// A routed command mutates this model without going through the input
+		// handler, which is the only other place a daemon session pushes state.
+		// Without this the mutation lives on the client alone and the daemon,
+		// which answers every read verb, keeps reporting the pre-command state.
+		// Push before the result is sent, so a caller that reads back
+		// immediately after a successful command sees what it just did.
+		if err == nil {
+			m.SyncStateToDaemon()
+		}
 
 		// Show notification for the remote command
 		if err != nil {
