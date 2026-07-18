@@ -247,9 +247,11 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		// Apply the new name
+		// Apply the new name. RenameWindowByID is the one rename: in a daemon
+		// session it asks the daemon, which owns the name, and the change comes
+		// back as a state push.
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-			focusedWindow.CustomName = o.RenameBuffer
+			_ = o.RenameWindowByID(focusedWindow.ID, o.RenameBuffer)
 			focusedWindow.InvalidateCache()
 		}
 		o.RenamingWindow = false

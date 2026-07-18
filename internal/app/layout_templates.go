@@ -211,8 +211,14 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 			if title == "" {
 				title = tw.Title
 			}
+			before := len(m.Windows)
 			m.AddWindow(title)
-			if len(m.Windows) > 0 {
+			// In a daemon session the window does not exist yet: the daemon is
+			// creating it and will push it back. Only take the new window when
+			// one actually appeared, or this would grab the last existing window
+			// and move it to the template slot meant for a window that is not
+			// here yet.
+			if len(m.Windows) > before {
 				win = m.Windows[len(m.Windows)-1]
 			}
 		}

@@ -454,7 +454,16 @@ func (m *OS) FocusWindowByName(name string) error {
 }
 
 // RenameWindowByID renames a window by its ID (sets CustomName).
+//
+// In a daemon session the name is the daemon's: it is what every read verb
+// answers with and what survives a detach, so renaming locally and hoping a
+// later sync carried it is how a rename could report success while list-windows
+// kept the old name. The client redraws when the daemon pushes the change back.
 func (m *OS) RenameWindowByID(windowID, name string) error {
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		return m.DaemonClient.SendIntent("RenameWindow", windowID, name)
+	}
+
 	for _, w := range m.Windows {
 		if w.ID == windowID {
 			w.CustomName = name
