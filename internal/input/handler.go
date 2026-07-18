@@ -98,6 +98,48 @@ func shouldShowQuitDialog(o *app.OS) bool {
 	return false
 }
 
+// quitSession ends the session and the client. In a daemon session that means
+// killing the session, not just detaching from it: quitting is the user saying
+// the session is over, and leaving it running would strand it with no way back
+// except an explicit attach.
+//
+// It was written out at six call sites (the three quit keybindings, and the yes
+// button of the confirmation dialog reached by key, by enter and by mouse), each
+// of which could drift from the others about whether to kill the session or run
+// Cleanup. There is one of them now.
+func quitSession(o *app.OS) (*app.OS, tea.Cmd) {
+	if o.IsDaemonSession && o.DaemonClient != nil {
+		_ = o.DaemonClient.KillSession()
+	}
+	o.Cleanup()
+	return o, tea.Quit
+}
+
+// requestQuit is what a quit keybinding does: put up the confirmation dialog
+// when a window is running something the user would lose, and quit outright when
+// nothing is. The dialog's own buttons call quitSession directly.
+func requestQuit(o *app.OS) (*app.OS, tea.Cmd) {
+	if shouldShowQuitDialog(o) {
+		o.ShowQuitConfirm = true
+		o.QuitConfirmSelection = 0 // Default to Yes
+		return o, nil
+	}
+	return quitSession(o)
+}
+
+// detachSession leaves the session running and quits this client. It pushes
+// state first so the session the user comes back to is the one they left.
+// Outside a daemon session there is nothing to detach from, and the caller
+// decides what that means instead.
+func detachSession(o *app.OS) (*app.OS, tea.Cmd, bool) {
+	if !o.IsDaemonSession {
+		return o, nil, false
+	}
+	o.SyncStateToDaemon()
+	// Deliberately no Cleanup: the session outlives this client.
+	return o, tea.Quit, true
+}
+
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers
 func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Capture key event for showkeys overlay if enabled
@@ -129,12 +171,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Quick selection with y/n keys
 		if key == "y" {
 			o.QuitConfirmSelection = 0 // Yes
-			// Kill daemon session if in daemon mode
-			if o.IsDaemonSession && o.DaemonClient != nil {
-				_ = o.DaemonClient.KillSession()
-			}
-			o.Cleanup()
-			return o, tea.Quit
+			return quitSession(o)
 		}
 		if key == "n" {
 			o.QuitConfirmSelection = 1 // No
@@ -145,12 +182,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Confirm selection with enter
 		if key == "enter" {
 			if o.QuitConfirmSelection == 0 {
-				// Yes selected - quit and kill daemon session
-				if o.IsDaemonSession && o.DaemonClient != nil {
-					_ = o.DaemonClient.KillSession()
-				}
-				o.Cleanup()
-				return o, tea.Quit
+				return quitSession(o)
 			}
 			// No selected - close dialog
 			o.ShowQuitConfirm = false
@@ -451,29 +483,14 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	case "d":
 		// Detach from daemon session - quit client but leave session running
-		if o.IsDaemonSession {
-			// Sync state to daemon before detaching
-			o.SyncStateToDaemon()
-			// Don't call Cleanup() - we want the session to persist
-			return o, tea.Quit
+		if m, cmd, detached := detachSession(o); detached {
+			return m, cmd
 		}
 		// Not in daemon mode, ignore
 		return o, nil
 
 	case "q":
-		// Show quit confirmation dialog (only if there are terminals with foreground processes)
-		if shouldShowQuitDialog(o) {
-			o.ShowQuitConfirm = true
-			o.QuitConfirmSelection = 0 // Default to Yes
-		} else {
-			// No foreground processes - quit and kill daemon session
-			if o.IsDaemonSession && o.DaemonClient != nil {
-				_ = o.DaemonClient.KillSession()
-			}
-			o.Cleanup()
-			return o, tea.Quit
-		}
-		return o, nil
+		return requestQuit(o)
 
 	// Session switcher
 	case "S":

@@ -588,12 +588,8 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		return o, nil
 	case "d":
 		// Detach from daemon session - quit client but leave session running
-		if o.IsDaemonSession {
-			// Sync state to daemon before detaching
-			o.SyncStateToDaemon()
-			// Don't call Cleanup() - we want the session to persist
-			// Don't show notification - just quit immediately
-			return o, tea.Quit
+		if m, cmd, detached := detachSession(o); detached {
+			return m, cmd
 		}
 		// Not in daemon mode, just switch to window management mode
 		o.Mode = app.WindowManagementMode
@@ -757,20 +753,8 @@ func handleTerminalPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 		return o, nil
 
 	case "q":
-		// Show quit confirmation dialog (only if there are terminals with foreground processes)
 		o.PrefixActive = false
-		if shouldShowQuitDialog(o) {
-			o.ShowQuitConfirm = true
-			o.QuitConfirmSelection = 0 // Default to Yes
-		} else {
-			// No foreground processes - quit and kill daemon session
-			if o.IsDaemonSession && o.DaemonClient != nil {
-				_ = o.DaemonClient.KillSession()
-			}
-			o.Cleanup()
-			return o, tea.Quit
-		}
-		return o, nil
+		return requestQuit(o)
 
 	default:
 		// Unknown prefix command, pass through the key
