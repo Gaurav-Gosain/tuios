@@ -379,6 +379,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 
 	// Build new window list in the order specified by incoming state
 	newWindows := make([]*terminal.Window, 0, len(state.Windows))
+	var created []*terminal.Window
 
 	for _, ws := range state.Windows {
 		if existingWindow, exists := existingByID[ws.ID]; exists {
@@ -391,12 +392,15 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 			newWindow := m.createWindowFromSync(&ws)
 			if newWindow != nil {
 				newWindows = append(newWindows, newWindow)
+				created = append(created, newWindow)
 			}
 		}
 	}
 
 	// Close windows that were deleted by other client
+	var removed []int
 	for _, w := range existingByID {
+		removed = append(removed, m.getWindowIntID(w.ID))
 		m.closeWindowFromSync(w)
 	}
 
@@ -454,7 +458,12 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 		m.WindowToBSPID = make(map[string]int)
 		maps.Copy(m.WindowToBSPID, state.WindowToBSPID)
 	}
-	m.NextBSPWindowID = state.NextBSPWindowID
+	// Never rewind the BSP ID allocator. The counter only has to be unique
+	// locally, and taking a lower value from a sync hands the next window an int
+	// ID an existing window already holds, which silently merges the two in every
+	// tree and layout keyed by it. That is reachable now that a window can appear
+	// through a sync rather than only through local creation.
+	m.NextBSPWindowID = max(m.NextBSPWindowID, state.NextBSPWindowID)
 	m.TilingScheme = layout.AutoScheme(state.TilingScheme)
 
 	// Update BSP trees
@@ -476,10 +485,21 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// here used to yank this client between window-management and terminal mode
 	// whenever anyone else switched.
 
+	// A sync that changes which windows exist has to be absorbed by the layout,
+	// not just by the window list. The daemon owns window lifecycle but not
+	// layout, so a window it created arrives with nominal geometry and no place
+	// in any tiling structure; left alone it renders as a full-size box on top of
+	// the tiled windows, and a window it closed leaves its tile behind. Retiling
+	// is what turns a daemon-side lifecycle change into something the renderer
+	// has actually absorbed.
+	if m.AutoTiling {
+		m.adoptSyncedWindows(created, removed)
+	}
+
 	// If auto-tiling is enabled and the synced state has different dimensions,
 	// retile to fit our effective render size. This handles the case where
 	// a client with a smaller terminal joins and receives state from a larger client.
-	if m.AutoTiling && len(m.Windows) > 0 {
+	if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 {
 		renderWidth := m.GetRenderWidth()
 		renderHeight := m.GetRenderHeight()
 		// Check if any window extends beyond our render bounds
@@ -628,6 +648,38 @@ func (m *OS) closeWindowFromSync(w *terminal.Window) {
 		m.unsubscribeFromPTY(w)
 	}
 	w.Close()
+}
+
+// adoptSyncedWindows brings the tiling layout in line with a window set that a
+// state sync just changed, then retiles.
+//
+// The BSP path needs no help placing a window it has not seen: TileAllWindows
+// already inserts windows missing from the tree and rebuilds a tree still
+// holding windows that are gone. The scrolling layout has no such repair, so its
+// columns are added and removed here before the retile.
+//
+// The resulting geometry is this client's, derived from its own viewport, so it
+// is pushed back: the daemon's copy of the layout is whatever a client last told
+// it, and after a daemon-side lifecycle change that copy is a layout for a
+// different set of windows.
+func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int) {
+	if len(created) == 0 && len(removed) == 0 {
+		return
+	}
+
+	if m.UseScrollingLayout {
+		for _, intID := range removed {
+			m.ScrollingOnWindowRemoved(intID)
+		}
+		for _, w := range created {
+			if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
+				m.ScrollingOnWindowAdded(w)
+			}
+		}
+	}
+
+	m.TileAllWindows()
+	m.SyncStateToDaemon()
 }
 
 // convertSessionBSPNode converts session.SerializedBSPNode to layout.SerializedNode
