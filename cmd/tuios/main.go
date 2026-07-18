@@ -503,7 +503,11 @@ Debug log levels:
 		Short: "Stop the TUIOS daemon",
 		Long: `Stop the TUIOS daemon.
 
-This will terminate all sessions and disconnect all clients.`,
+This will stop all sessions and disconnect all clients.
+
+The command is synchronous: it returns only once the daemon has saved every
+session's state and removed its socket, so a new daemon can be started as soon
+as it returns. It fails if the daemon has not finished within 10 seconds.`,
 		Example: `  tuios kill-server`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runKillDaemon()

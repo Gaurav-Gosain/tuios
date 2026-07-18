@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -847,7 +848,10 @@ func runKillDaemon() error {
 			pid = session.GetDaemonPID()
 		}
 		if pid > 0 {
-			return killDaemonProcess(pid)
+			if err := killDaemonProcess(pid); err != nil {
+				return err
+			}
+			return awaitDaemonShutdown(pid, diag.SocketPath)
 		}
 		return &diagnosticError{
 			What:  "The TUIOS daemon is running but its process id could not be determined.",
@@ -873,6 +877,42 @@ func runKillDaemon() error {
 	default:
 		fmt.Println("TUIOS daemon is not running.")
 		return nil
+	}
+}
+
+// killServerTimeout bounds how long kill-server waits for the daemon to finish
+// persisting and exit. A shutdown that is going to succeed takes milliseconds;
+// the slow case is Daemon.shutdown's own 5s cap on draining goroutines, so this
+// leaves headroom past that before declaring the daemon wedged.
+const killServerTimeout = 10 * time.Second
+
+// awaitDaemonShutdown blocks until the signalled daemon has finished writing its
+// resurrection state and removed its socket, so that kill-server returning means
+// the next command can safely start a fresh daemon. Reporting success while the
+// old daemon is still saving is what lets 'kill-server && start-server' race:
+// the new daemon reads state the old one has not finished writing, or the old
+// one's final write lands on top of the new one's.
+func awaitDaemonShutdown(pid int, socketPath string) error {
+	err := session.WaitForDaemonShutdown(killServerTimeout)
+	if err == nil {
+		fmt.Println("TUIOS daemon stopped. Session state was saved.")
+		return nil
+	}
+	if !errors.Is(err, session.ErrShutdownTimeout) {
+		return &diagnosticError{
+			What:  fmt.Sprintf("Could not confirm the TUIOS daemon (PID %d) shut down: %v.", pid, err),
+			Cause: "the daemon socket path could not be resolved, so there is no signal to wait on.",
+			Fix:   fmt.Sprintf("check the daemon exited with 'ps -p %d', then retry.", pid),
+			Err:   err,
+		}
+	}
+	return &diagnosticError{
+		What: fmt.Sprintf("The TUIOS daemon (PID %d) was asked to stop but had not finished after %s.",
+			pid, killServerTimeout),
+		Cause: "the daemon is wedged, or a session is taking an unusually long time to write its saved state.",
+		Fix: fmt.Sprintf("wait and run 'tuios kill-server' again to re-check. If it stays stuck, force it with 'kill -9 %d' and remove %s; note that force killing loses any session state that had not been written.",
+			pid, socketPath),
+		Err: err,
 	}
 }
 
