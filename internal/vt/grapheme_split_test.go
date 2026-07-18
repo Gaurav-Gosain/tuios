@@ -23,7 +23,7 @@ func TestEmulator_GraphemeSplitAcrossWrites(t *testing.T) {
 		{"combining marks", "é̂̃"},
 		{"single combining mark", "á"},
 		{"emoji skin tone", "\U0001F44D\U0001F3FD"},
-		{"zwj family", "\U0001F468‍\U0001F469‍\U0001F467"},
+		{"zwj family", "\U0001F468\u200d\U0001F469\u200d\U0001F467"},
 		{"variation selector", "❤️"},
 		{"devanagari cluster", "क्ष"},
 		{"flag sequence", "\U0001F1EF\U0001F1F5"},
