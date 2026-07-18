@@ -312,6 +312,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.
 	// by the browser terminal.
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,
@@ -389,6 +390,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	// sequences reach the browser's xterm.js image addon (sip v0.1.12+).
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,
@@ -471,22 +473,30 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 		}
 	})
 
-	// Handle session resize (min of all clients)
+	// Handle session resize (min of all clients). The callback runs on the daemon
+	// read-loop goroutine, so the actual geometry mutation (TileAllWindows,
+	// emulator resizes) must happen in Update; route it through the event channel.
 	client.OnSessionResize(func(width, height, clientCount int) {
 		log.Printf("[WEB] Session resize: %dx%d (clients: %d)", width, height, clientCount)
-		if m.EffectiveWidth != width || m.EffectiveHeight != height {
-			m.EffectiveWidth = width
-			m.EffectiveHeight = height
-			m.MarkAllDirty()
-			if m.AutoTiling {
-				m.TileAllWindows()
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height}:
+			default:
+				log.Printf("[WEB] Warning: ClientEventChan full, dropping session resize event")
 			}
 		}
 	})
 
-	// Handle force refresh
+	// Handle force refresh (also on the read-loop goroutine; MarkAllDirty must run
+	// on the program goroutine).
 	client.OnForceRefresh(func(reason string) {
 		log.Printf("[WEB] Force refresh requested: %s", reason)
-		m.MarkAllDirty()
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "refresh", Reason: reason}:
+			default:
+				log.Printf("[WEB] Warning: ClientEventChan full, dropping force refresh event")
+			}
+		}
 	})
 }

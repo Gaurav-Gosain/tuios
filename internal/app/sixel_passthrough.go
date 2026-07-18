@@ -259,11 +259,16 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 		if contentHeight <= 0 {
 			contentHeight = info.Height
 		}
-		viewportTop := 0
-		if info.ScrollbackLen > contentHeight {
-			viewportTop = info.ScrollbackLen - info.ScrollOffset - contentHeight
-		}
-		viewportBottom := info.ScrollbackLen - info.ScrollOffset
+		// viewportTop is the absolute scrollback line at the top row of the
+		// content viewport, matching the kitty path
+		// (kitty_passthrough_placement.go). AbsoluteLine is also absolute
+		// (scrollbackLen+cursorY at placement time), so relativeY =
+		// AbsoluteLine - viewportTop is the on-screen row directly. The old
+		// formula subtracted an extra contentHeight, so once scrollback grew
+		// past the window height relativeY overshot by contentHeight and the
+		// bottom-edge guards hid the image.
+		viewportTop := info.ScrollbackLen - info.ScrollOffset
+		viewportBottom := viewportTop + contentHeight
 
 		for _, p := range placements {
 			// Check if placement matches current screen mode

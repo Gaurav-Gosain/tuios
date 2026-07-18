@@ -44,8 +44,8 @@ func (kp *KittyPassthrough) ForwardCommand(
 	// Responses have format "i=N;OK" or "i=N;ERROR_MSG" or just "OK"/"ERROR_MSG"
 	// When parsed, they appear as transmit commands with Data="OK" or error message.
 	// Real transmit commands have binary/base64 image data, not status strings.
-	if cmd.Action == vt.KittyActionTransmit && len(cmd.Data) > 0 && isKittyResponse(cmd.Data) {
-		kittyPassthroughLog("ForwardCommand: DISCARDING echoed response: %q", cmd.Data)
+	if cmd.Action == vt.KittyActionTransmit && len(cmd.RawPayload) > 0 && isKittyResponse(cmd.RawPayload) {
+		kittyPassthroughLog("ForwardCommand: DISCARDING echoed response: %q", cmd.RawPayload)
 		return nil
 	}
 
@@ -943,7 +943,13 @@ func (kp *KittyPassthrough) forwardPlace(
 		ZIndex:       cmd.ZIndex,
 		Virtual:      cmd.Virtual,
 	}
-	kp.placements[windowID][cmd.ImageID] = placement
+	// Key by hostID (allocated above), consistent with forwardTransmit,
+	// forwardFileTransmit, forwardFileTransmitInline, and the by-ID delete
+	// paths. Keying by the guest cmd.ImageID here left delete-by-ID unable to
+	// find this placement (RefreshAllPlacements kept re-emitting a=p forever)
+	// and let a guest ID that numerically equals another image's host ID
+	// silently overwrite that entry.
+	kp.placements[windowID][hostID] = placement
 }
 
 // deleteAllWindowPlacements removes all placements for a window from the host terminal

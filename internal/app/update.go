@@ -123,13 +123,16 @@ type ClientLeftMsg struct {
 	ClientCount int
 }
 
-// ClientEvent represents a client join or leave event for channel-based notification.
+// ClientEvent represents a multi-client notification delivered to the Bubble Tea
+// event loop so the work happens on the program goroutine instead of the daemon
+// read-loop goroutine.
 type ClientEvent struct {
-	Type        string // "joined" or "left"
+	Type        string // "joined", "left", "resize", or "refresh"
 	ClientID    string
 	ClientCount int
-	Width       int // only for "joined"
-	Height      int // only for "joined"
+	Width       int    // "joined" and "resize"
+	Height      int    // "joined" and "resize"
+	Reason      string // "refresh"
 }
 
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
@@ -142,6 +145,13 @@ type SessionResizeMsg struct {
 // ForceRefreshMsg is sent to force all clients to re-render.
 type ForceRefreshMsg struct {
 	Reason string
+}
+
+// DaemonDisconnectedMsg is sent when the daemon connection is lost unexpectedly
+// (crash, reset, or framing desync). The app cannot recover the session, so it
+// surfaces the reason and quits cleanly instead of hanging.
+type DaemonDisconnectedMsg struct {
+	Err error
 }
 
 // InputHandler is a function type that handles input messages.
@@ -236,17 +246,27 @@ func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 			// Channel closed, return nil to stop listening
 			return nil
 		}
-		if event.Type == "joined" {
+		switch event.Type {
+		case "joined":
 			return ClientJoinedMsg{
 				ClientID:    event.ClientID,
 				ClientCount: event.ClientCount,
 				Width:       event.Width,
 				Height:      event.Height,
 			}
-		}
-		return ClientLeftMsg{
-			ClientID:    event.ClientID,
-			ClientCount: event.ClientCount,
+		case "resize":
+			return SessionResizeMsg{
+				Width:       event.Width,
+				Height:      event.Height,
+				ClientCount: event.ClientCount,
+			}
+		case "refresh":
+			return ForceRefreshMsg{Reason: event.Reason}
+		default:
+			return ClientLeftMsg{
+				ClientID:    event.ClientID,
+				ClientCount: event.ClientCount,
+			}
 		}
 	}
 }
@@ -433,6 +453,13 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					return m, TickCmd()
 				}
 
+				// Check if we're blocking on a WaitUntilRegex condition from a
+				// previously dispatched command.
+				if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
+					// Condition not met and not timed out yet, keep waiting.
+					return m, TickCmd()
+				}
+
 				// Check if we're waiting for a sleep to finish
 				if !m.ScriptSleepUntil.IsZero() && time.Now().Before(m.ScriptSleepUntil) {
 					// Still waiting, don't advance yet
@@ -443,13 +470,19 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 				nextCmd := player.NextCommand()
 				if nextCmd != nil {
-					// Handle Sleep commands specially
-					if nextCmd.Type == tape.CommandTypeSleep && nextCmd.Delay > 0 {
+					switch {
+					// Sleep and its Wait alias both just delay playback.
+					case (nextCmd.Type == tape.CommandTypeSleep || nextCmd.Type == tape.CommandTypeWait) && nextCmd.Delay > 0:
 						// Set the sleep deadline
 						m.ScriptSleepUntil = time.Now().Add(nextCmd.Delay)
 						// Advance to next command but don't execute anything yet
 						player.Advance()
-					} else {
+					case nextCmd.Type == tape.CommandTypeWaitUntilRegex:
+						// Arm the wait; playback blocks above until it resolves.
+						// Don't dispatch it to the executor.
+						m.startScriptWaitRegex(nextCmd)
+						player.Advance()
+					default:
 						// Queue the command as a message instead of executing directly
 						cmds = append(cmds, func() tea.Msg {
 							return ScriptCommandMsg{Command: nextCmd}
@@ -776,6 +809,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Force re-render
 		m.MarkAllDirty()
 		return m, nil
+
+	case DaemonDisconnectedMsg:
+		// The daemon connection was lost and cannot be recovered; quit cleanly
+		// so the user is not left staring at a frozen, unresponsive session.
+		return m, tea.Quit
 
 	case ConfigReloadedMsg:
 		// Apply appearance config parsed by the watcher goroutine here, on the

@@ -14,6 +14,13 @@ type OSOptions struct {
 	// KeybindRegistry is required for keybinding support.
 	KeybindRegistry *config.KeybindRegistry
 
+	// UserConfig is the already-loaded user configuration. When set, NewOS uses
+	// it directly instead of re-reading config.toml, so it never re-applies file
+	// values over CLI flags (or races other sessions) via a second load. Callers
+	// are responsible for applying the appearance globals once (via ApplyOverrides
+	// and/or ApplyAppearanceConfig) before constructing the OS.
+	UserConfig *config.UserConfig
+
 	// ShowKeys enables the key display overlay.
 	ShowKeys bool
 
@@ -116,10 +123,19 @@ func NewOS(opts OSOptions) *OS {
 		})
 	}
 
-	// Initialize hooks manager and load user-defined hooks from config
+	// Initialize hooks manager and load user-defined hooks from config. Prefer
+	// the config the caller already loaded so we never trigger a second load
+	// (which used to re-apply appearance globals over CLI flags and, on the
+	// per-connection server paths, race other sessions). Loading is now pure and
+	// has no package-global side effects, so the fallback is safe too.
 	os.HookManager = hooks.NewManager()
-	cfg, cfgErr := config.LoadUserConfig()
-	if cfgErr == nil {
+	cfg := opts.UserConfig
+	if cfg == nil {
+		if loaded, err := config.LoadUserConfig(); err == nil {
+			cfg = loaded
+		}
+	}
+	if cfg != nil {
 		// Hold the loaded config so the in-app settings page can persist live
 		// changes back to disk.
 		os.UserConfig = cfg

@@ -86,6 +86,10 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		userConfig = config.DefaultConfig()
 	}
 
+	// Apply the config appearance globals as the baseline before CLI flags win.
+	// LoadUserConfig no longer applies globals itself.
+	config.ApplyAppearanceConfig(userConfig)
+
 	config.ApplyOverrides(config.Overrides{
 		ASCIIOnly:           asciiOnly,
 		BorderStyle:         borderStyle,
@@ -148,6 +152,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 
 	initialOS := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		IsDaemonSession:           true,
 		DaemonClient:              client,
@@ -261,6 +266,14 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	client.OnForceRefresh(func(reason string) {
 		go func() {
 			p.Send(app.ForceRefreshMsg{Reason: reason})
+		}()
+	})
+
+	// Handle unexpected daemon disconnect (crash/reset/desync): quit cleanly
+	// instead of leaving the TUI frozen.
+	client.OnDisconnect(func(err error) {
+		go func() {
+			p.Send(app.DaemonDisconnectedMsg{Err: err})
 		}()
 	})
 

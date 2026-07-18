@@ -13,13 +13,23 @@ import (
 func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 	outputCh := pty.Subscribe(cs.clientID)
 
+	// On any exit, stop receiving from the PTY and drop the subscription entry so
+	// the connState is left coherent: a later re-subscribe must not be blocked by
+	// a stale "already subscribed" guard (daemon_handlers.go), and no PTY keeps
+	// broadcasting into an unread channel.
+	defer func() {
+		pty.Unsubscribe(cs.clientID)
+		cs.mu.Lock()
+		delete(cs.ptySubscriptions, pty.ID)
+		cs.mu.Unlock()
+	}()
+
 	const maxBatch = 256 * 1024
 	batch := make([]byte, 0, maxBatch)
 
 	for {
 		select {
 		case <-cs.done:
-			pty.Unsubscribe(cs.clientID)
 			return
 		case <-d.ctx.Done():
 			return
@@ -45,10 +55,13 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY) {
 			err := WritePTYOutput(cs.conn, pty.ID, batch)
 			cs.sendMu.Unlock()
 			if err != nil {
-				pty.Unsubscribe(cs.clientID)
+				// The write failed mid-frame (a slow/stuck client hitting the 5s
+				// deadline): the wire now carries a partial frame and every later
+				// send would append onto a desynced stream. Tear the whole client
+				// down rather than leaving it half-subscribed and desynced.
+				cs.drop()
 				return
 			}
-
 		}
 	}
 }
@@ -99,10 +112,16 @@ func (d *Daemon) sendMessage(cs *connState, msgType MessageType, payload any) er
 	}
 
 	cs.sendMu.Lock()
-	defer cs.sendMu.Unlock()
-
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	return WriteMessageWithCodec(cs.conn, msg, cs.codec)
+	err = WriteMessageWithCodec(cs.conn, msg, cs.codec)
+	cs.sendMu.Unlock()
+	if err != nil {
+		// A mid-frame write failure permanently desyncs framing for this
+		// connection; drop the client so the read loop runs its full cleanup
+		// instead of appending later frames onto a corrupt stream.
+		cs.drop()
+	}
+	return err
 }
 
 func (d *Daemon) sendError(cs *connState, code int, message string) error {

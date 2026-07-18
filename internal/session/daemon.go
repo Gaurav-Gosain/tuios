@@ -176,6 +176,18 @@ func (cs *connState) closeDone() {
 	cs.doneOnce.Do(func() { close(cs.done) })
 }
 
+// drop tears a client down after an unrecoverable send failure. A write that
+// fails mid-frame (e.g. a slow client hitting the write deadline) leaves a
+// partial frame on the wire and permanently desyncs framing, so the only
+// coherent recovery is to close done and the connection: that unblocks the read
+// loop, whose deferred cleanup then unsubscribes every PTY, removes the client,
+// and purges its pending requests. Safe to call from any goroutine and more than
+// once (closeDone is once-guarded and Close is idempotent).
+func (cs *connState) drop() {
+	cs.closeDone()
+	_ = cs.conn.Close()
+}
+
 func (d *Daemon) shutdown() error {
 	d.shutdownOnce.Do(func() {
 		log.Println("Shutting down daemon...")

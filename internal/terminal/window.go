@@ -227,6 +227,15 @@ type Window struct {
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
 	HasNewOutput atomic.Bool
 
+	// coalesceSignal is the daemon renderCoalescer's own render-trigger flag.
+	// outputWriter sets it after each batch; renderCoalescer consumes it at a
+	// capped rate to fire PTYDataChan. It is separate from HasNewOutput so the
+	// coalescer no longer consumes that flag: HasNewOutput survives for the UI
+	// goroutine's MarkTerminalsWithNewContent, which does the dirty-marking.
+	// This keeps window model fields (Dirty/ContentDirty/CachedContent) off the
+	// background goroutine, which otherwise races the renderer and Close().
+	coalesceSignal atomic.Bool
+
 	// PTYDataChan is a shared channel (buffered 1) that PTY readers signal
 	// to trigger rendering. Non-blocking send coalesces rapid updates.
 	PTYDataChan chan struct{}

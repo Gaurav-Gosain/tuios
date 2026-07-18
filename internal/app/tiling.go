@@ -333,7 +333,12 @@ func (m *OS) RestoreWorkspaceLayout(workspace int) {
 		}
 	}
 
-	m.WorkspaceHasCustom[workspace] = true
+	// Do NOT force WorkspaceHasCustom = true here. SaveCurrentLayout runs on
+	// every workspace switch, so a saved layout always exists after the first
+	// switch; marking it custom on restore permanently suppressed the
+	// retile-if-not-custom check (workspace.go), disabling auto-retiling for
+	// both workspaces after a single round-trip. The custom flag is owned by
+	// MarkLayoutCustom, which fires on an actual user resize.
 }
 
 // MarkLayoutCustom marks the current workspace as having a custom layout

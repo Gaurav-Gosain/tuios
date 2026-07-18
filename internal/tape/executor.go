@@ -292,11 +292,12 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), keyBytes)
 		}
 
-	case CommandTypeWaitUntilRegex:
-		// WaitUntilRegex requires special handling - it needs to be processed in a different way
-		// by the script playback system since it requires checking PTY output
-		// For now, we return a special error to signal this to the playback system
-		// The actual implementation will be handled in the playback loop
+	case CommandTypeWait, CommandTypeWaitUntilRegex:
+		// Wait (a Sleep alias) and WaitUntilRegex are handled by the interactive
+		// playback loop (internal/app/update.go), which needs to block across
+		// ticks while checking timers and screen contents. They are intentionally
+		// no-ops here so the remote/daemon exec path (which is fire-and-forget)
+		// simply skips them.
 		return nil
 
 	case CommandTypeEnableAnimations:

@@ -4,6 +4,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
@@ -200,6 +201,11 @@ type OS struct {
 	ScriptExecutor     any       // *tape.CommandExecutor - executes tape commands
 	ScriptSleepUntil   time.Time // When to resume after a sleep command
 	ScriptFinishedTime time.Time // When the script finished (for auto-hide)
+	// WaitUntilRegex playback state. When ScriptWaitRegex is non-nil, playback
+	// blocks until the focused window's screen matches it or ScriptWaitDeadline
+	// passes, whichever comes first.
+	ScriptWaitRegex    *regexp.Regexp
+	ScriptWaitDeadline time.Time
 	// Tape manager UI
 	ShowTapeManager    bool              // True when showing tape manager overlay
 	TapeManager        *TapeManagerState // Tape manager state
@@ -369,7 +375,11 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	m.NextBSPWindowID = 1
 	m.Animations = nil
 	m.MultifocusSet = nil
-	m.CurrentWorkspace = 0
+	// Default to workspace 1, not 0: a brand-new target session has no windows,
+	// so RestoreFromState (which repairs the workspace) never runs, and any
+	// window then created would land on workspace 0, which SwitchToWorkspace
+	// refuses to navigate to, leaving it permanently invisible.
+	m.CurrentWorkspace = 1
 	m.SubscribedPTYs = make(map[string]bool)
 
 	// 3. Detach + attach in one operation (safe with read loop running)

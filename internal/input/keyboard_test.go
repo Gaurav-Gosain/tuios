@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
 // TestTransitionGuardCondition directly tests the guard condition that suppresses
@@ -201,5 +202,84 @@ func TestPrefixCommandsAvailableInBothModes(t *testing.T) {
 	result4, _ := HandlePrefixCommand(msg4, o4)
 	if !result4.ShowCommandPalette {
 		t.Error("window management mode: ctrl+b P should open command palette")
+	}
+}
+
+// TestMacOSOptionKeysGatedToDarwin verifies that the macOS Option-key character
+// tables only trigger workspace/window shortcuts on darwin. On other platforms
+// these glyphs (e.g. £, ⇥) are ordinary typed characters and must fall through
+// to the shell rather than being intercepted.
+func TestMacOSOptionKeysGatedToDarwin(t *testing.T) {
+	// £ is Option+3 on a US Mac layout, but Shift+3 on a UK layout.
+	poundMsg := tea.KeyPressMsg{Code: '£', Text: "£"}
+
+	o := &app.OS{Mode: app.TerminalMode, CurrentWorkspace: 1}
+	handled := handleWorkspaceSwitch(poundMsg, o)
+	if handled != runtimeIsDarwin() {
+		t.Errorf("handleWorkspaceSwitch(£) = %v, want %v on GOOS-gated path", handled, runtimeIsDarwin())
+	}
+
+	// ⇥ is Option+Tab on macOS, but an ordinary glyph elsewhere.
+	tabMsg := tea.KeyPressMsg{Code: '⇥', Text: "⇥"}
+	o2 := &app.OS{Mode: app.TerminalMode}
+	handledCycle := handleWindowCycle(tabMsg, o2)
+	if handledCycle != runtimeIsDarwin() {
+		t.Errorf("handleWindowCycle(⇥) = %v, want %v on GOOS-gated path", handledCycle, runtimeIsDarwin())
+	}
+
+	// The pure lookup helper must remain platform-independent so it stays testable.
+	if digit, ok := IsMacOSOptionKey('£'); !ok || digit != 3 {
+		t.Errorf("IsMacOSOptionKey(£) = (%d, %v), want (3, true)", digit, ok)
+	}
+}
+
+// TestTerminalPrefixChordNotRecorded verifies that prefix chords in terminal
+// mode are not captured into a tape recording. Previously the leader key and
+// its following command key were recorded before prefix routing, so a
+// ctrl+b <cmd> chord replayed a stray 0x02 and command character into the shell.
+func TestTerminalPrefixChordNotRecorded(t *testing.T) {
+	rec := tape.NewRecorder()
+	rec.Start()
+	o := &app.OS{Mode: app.TerminalMode, TapeRecorder: rec}
+
+	// ctrl+b activates prefix mode and must not be recorded.
+	ctrlB := tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}
+	HandleTerminalModeKey(ctrlB, o)
+	if !o.PrefixActive {
+		t.Fatal("ctrl+b should activate prefix mode")
+	}
+
+	// The following prefix command key routes to the prefix dispatcher, not the
+	// PTY, and must not be recorded either.
+	esc := tea.KeyPressMsg{Code: tea.KeyEscape}
+	HandleTerminalModeKey(esc, o)
+
+	if got := rec.CommandCount(); got != 0 {
+		t.Errorf("prefix chord recorded %d commands, want 0: %+v", got, rec.GetCommands())
+	}
+}
+
+// TestRecordTerminalKeyClassification verifies that keys forwarded to the PTY
+// are classified correctly: printable ASCII accumulates as a Type command while
+// special keys are recorded as KeyCombos (and flush any pending typed text).
+func TestRecordTerminalKeyClassification(t *testing.T) {
+	rec := tape.NewRecorder()
+	rec.Start()
+	o := &app.OS{TapeRecorder: rec}
+
+	recordTerminalKey(o, tea.KeyPressMsg{Code: 'l', Text: "l"})
+	recordTerminalKey(o, tea.KeyPressMsg{Code: 's', Text: "s"})
+	recordTerminalKey(o, tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	cmds := rec.GetCommands()
+	// "ls" accumulates into one Type command, flushed by the Enter KeyCombo.
+	if len(cmds) != 2 {
+		t.Fatalf("got %d commands, want 2: %+v", len(cmds), cmds)
+	}
+	if cmds[0].Type != tape.CommandTypeType || len(cmds[0].Args) == 0 || cmds[0].Args[0] != "ls" {
+		t.Errorf("first command = %+v, want Type \"ls\"", cmds[0])
+	}
+	if cmds[1].Type != tape.CommandTypeEnter {
+		t.Errorf("second command = %+v, want Enter", cmds[1])
 	}
 }

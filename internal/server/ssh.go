@@ -38,6 +38,15 @@ var sshServerConfig *SSHServerConfig
 func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	sshServerConfig = cfg
 
+	// Apply the user config's appearance globals once, at server startup and
+	// single-threaded, so every per-connection session shares a consistent view
+	// of them. LoadUserConfig is pure and NewOS no longer re-applies per
+	// connection, so this replaces the old per-connection global writes that
+	// raced other sessions' render loops.
+	if userConfig, err := config.LoadUserConfig(); err == nil {
+		config.ApplyAppearanceConfig(userConfig)
+	}
+
 	// Determine host key path
 	var hostKeyPath string
 	if cfg.KeyPath != "" {
@@ -182,6 +191,7 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
 		Width:           width,
 		Height:          height,
 		IsSSHMode:       true,
@@ -261,6 +271,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 	// Create TUIOS instance connected to daemon
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		Width:                     width,
 		Height:                    height,
 		IsSSHMode:                 true,
@@ -342,25 +353,31 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 		}
 	})
 
-	// Handle session resize (min of all clients)
+	// Handle session resize (min of all clients). The callback runs on the daemon
+	// read-loop goroutine, so the actual geometry mutation (TileAllWindows,
+	// emulator resizes) must happen in Update; route it through the event channel.
 	client.OnSessionResize(func(width, height, clientCount int) {
 		log.Printf("[SSH] Session resize: %dx%d (clients: %d)", width, height, clientCount)
-		// Update effective size to match the session size (min of all clients)
-		// This ensures all clients see the same content
-		if m.EffectiveWidth != width || m.EffectiveHeight != height {
-			m.EffectiveWidth = width
-			m.EffectiveHeight = height
-			m.MarkAllDirty()
-			if m.AutoTiling {
-				m.TileAllWindows()
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height}:
+			default:
+				log.Printf("[SSH] Warning: ClientEventChan full, dropping session resize event")
 			}
 		}
 	})
 
-	// Handle force refresh
+	// Handle force refresh (also on the read-loop goroutine; MarkAllDirty must run
+	// on the program goroutine).
 	client.OnForceRefresh(func(reason string) {
 		log.Printf("[SSH] Force refresh requested: %s", reason)
-		m.MarkAllDirty()
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "refresh", Reason: reason}:
+			default:
+				log.Printf("[SSH] Warning: ClientEventChan full, dropping force refresh event")
+			}
+		}
 	})
 }
 

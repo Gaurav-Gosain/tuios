@@ -8,9 +8,21 @@
 package input
 
 import (
+	"runtime"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
+
+// runtimeIsDarwin reports whether the process is running on macOS.
+// The macOS Option-key character tables (IsMacOSOptionKey, IsMacOSOptionTab)
+// must only be consulted on darwin: their glyphs (¡ ™ £ ¢ ∞ § ¶ • ª, ⇥ ⇤) are
+// ordinary typed characters on many non-US layouts (e.g. £ is Shift+3 on UK),
+// so treating them as workspace/window shortcuts on other platforms hijacks
+// real input before it reaches the shell.
+func runtimeIsDarwin() bool {
+	return runtime.GOOS == "darwin"
+}
 
 // Ctrl key combinations mapping
 // Maps the character code to its control code equivalent

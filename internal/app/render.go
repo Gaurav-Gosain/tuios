@@ -442,30 +442,37 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 			screenHeight := m.GetRenderHeight()
 			n := 0
 			for _, w := range m.Windows {
-				if w.Workspace == m.CurrentWorkspace && !w.Minimized {
-					scrollbackLen := 0
-					if w.Terminal != nil {
-						scrollbackLen = w.Terminal.ScrollbackLen()
-					}
-					backing[n] = WindowPositionInfo{
-						WindowX:            w.X,
-						WindowY:            w.Y,
-						ContentOffsetX:     w.BorderOffset(),
-						ContentOffsetY:     w.BorderOffset(),
-						Width:              w.Width,
-						Height:             w.Height,
-						Visible:            true,
-						ScrollbackLen:      scrollbackLen,
-						ScrollOffset:       w.ScrollbackOffset,
-						IsBeingManipulated: w.IsBeingManipulated,
-						WindowZ:            w.Z,
-						IsAltScreen:        w.IsAltScreen(),
-						ScreenWidth:        screenWidth,
-						ScreenHeight:       screenHeight,
-					}
-					m.kittyPosMap[w.ID] = &backing[n]
-					n++
+				// Include EVERY window, but mark off-workspace/minimized ones
+				// Visible:false. RefreshAllPlacements then HIDES their images
+				// (d=i, keeping the bytes in the host store) instead of deleting
+				// tracking. Omitting them made info==nil, which RefreshAllPlacements
+				// treats as "window gone" and permanently destroys the placement,
+				// so a minimized icat/chafa image never reappeared on restore.
+				// The info==nil delete is now reserved for windows genuinely
+				// removed from m.Windows (closed).
+				visible := w.Workspace == m.CurrentWorkspace && !w.Minimized
+				scrollbackLen := 0
+				if w.Terminal != nil {
+					scrollbackLen = w.Terminal.ScrollbackLen()
 				}
+				backing[n] = WindowPositionInfo{
+					WindowX:            w.X,
+					WindowY:            w.Y,
+					ContentOffsetX:     w.BorderOffset(),
+					ContentOffsetY:     w.BorderOffset(),
+					Width:              w.Width,
+					Height:             w.Height,
+					Visible:            visible,
+					ScrollbackLen:      scrollbackLen,
+					ScrollOffset:       w.ScrollbackOffset,
+					IsBeingManipulated: w.IsBeingManipulated,
+					WindowZ:            w.Z,
+					IsAltScreen:        w.IsAltScreen(),
+					ScreenWidth:        screenWidth,
+					ScreenHeight:       screenHeight,
+				}
+				m.kittyPosMap[w.ID] = &backing[n]
+				n++
 			}
 			return m.kittyPosMap
 		})

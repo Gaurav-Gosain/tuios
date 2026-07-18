@@ -509,7 +509,8 @@ func (p *Parser) parseWindowRenameCommand() (Command, bool) {
 	return cmd, true
 }
 
-// parseWaitCommand parses Wait commands (for future use)
+// parseWaitCommand parses Wait <duration> commands. Wait is an alias for Sleep:
+// it delays playback for the given duration.
 func (p *Parser) parseWaitCommand() (Command, bool) {
 	cmd := Command{
 		Type:   CommandTypeWait,
@@ -519,10 +520,23 @@ func (p *Parser) parseWaitCommand() (Command, bool) {
 
 	p.nextToken() // consume Wait
 
-	// Collect all arguments until newline
-	for p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
-		cmd.Args = append(cmd.Args, p.curTok.Literal)
+	if p.curTok.Type == TokenDuration {
+		duration, err := ParseDuration(p.curTok.Literal)
+		if err != nil {
+			p.addError(fmt.Sprintf("invalid duration: %s", p.curTok.Literal))
+		}
+		cmd.Args = []string{p.curTok.Literal}
+		cmd.Delay = duration
+		cmd.Raw = fmt.Sprintf("Wait %s", p.curTok.Literal)
 		p.nextToken()
+	} else {
+		p.addError(fmt.Sprintf("Wait command expects a duration, got %v", p.curTok.Type))
+		p.skipToNextLine()
+		return cmd, false
+	}
+
+	if p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
+		p.skipToNextLine()
 	}
 
 	return cmd, true
