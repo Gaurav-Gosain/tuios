@@ -97,6 +97,7 @@ Response:
 | `needs_client` | The verb needs a live renderer that is not attached. |
 | `option_not_found` | A get-option key was never set. |
 | `command_failed` | A verb routed to the attached client came back failed or timed out. |
+| `timeout` | A wait-for condition did not match before its timeout elapsed. |
 | `internal` | An unexpected server side failure. |
 
 ## How verbs interact with an attached client
@@ -392,6 +393,120 @@ Response:
 
 A key that was never set returns an `option_not_found` error.
 
+## Event stream
+
+The daemon can push events instead of a caller polling. A connection that issues
+the `subscribe` verb is turned into a long-lived event stream; every other
+connection never receives events. Each event is one JSON line carrying a
+daemon-global monotonic `seq`, a `type`, and the fields relevant to that type.
+Two subscribers always see the same `seq` for the same event.
+
+Event types:
+
+| Type | Meaning | Notable fields |
+| --- | --- | --- |
+| `window-created` | A daemon owned window was created. | `session`, `window`, `pty_id`, `title` |
+| `window-closed` | A daemon owned window was removed. | `session`, `window`, `pty_id` |
+| `window-exit` | A window's shell process exited. | `session`, `window`, `pty_id` |
+| `window-retitled` | A window's title or name changed. | `session`, `window`, `title` |
+| `output` | A window produced output (activity signal only; the raw bytes still flow over the binary stream). | `session`, `window`, `pty_id`, `bytes` |
+| `bell` | A window rang the terminal bell. | `session`, `window`, `pty_id` |
+| `mode-changed` | A terminal mode toggled (for example alt-screen). | `session`, `window`, `mode`, `enabled` |
+| `session-created` | A session was created. | `session` |
+| `session-closed` | A session was terminated. | `session` |
+| `gap` | Slow-subscriber marker: `dropped` events were dropped for this connection. | `dropped` |
+
+### subscribe
+
+Open the event stream on this connection.
+
+Params: `session` (optional filter), `window` (optional filter), `types`
+(optional list of event types to include; empty means all), `queue` (optional
+per-connection queue size; defaults to 256).
+
+Request:
+
+```json
+{"id": 1, "verb": "subscribe", "params": {"session": "work", "types": ["output", "bell"]}}
+```
+
+Ack response (the stream begins after this line):
+
+```json
+{"id": 1, "result": {"type": "subscribed", "seq": 42}}
+```
+
+Subsequent lines are events, for example:
+
+```json
+{"seq": 43, "type": "output", "session": "work", "window": "1f3c...", "pty_id": "9ab2...", "bytes": 64, "time": 1737200000000000000}
+```
+
+A second `subscribe` on the same connection is rejected with `invalid_request`.
+
+### Slow subscriber policy
+
+Each subscribed connection has a bounded queue. When it is full the daemon drops
+the event and counts the drop rather than blocking; the next event delivered to
+that connection is preceded by a gap marker:
+
+```json
+{"type": "gap", "dropped": 12}
+```
+
+so the connection learns it fell behind (the `seq` values also jump). One slow
+reader never stalls the daemon or any other subscriber.
+
+### unsubscribe
+
+Close this connection's event stream. Params: none.
+
+```json
+{"verb": "unsubscribe"}
+```
+
+Response: `{"result": {"type": "unsubscribed"}}`. Closing the connection also
+tears the stream down.
+
+### wait-for
+
+Block until a condition matches, then return a `wait_result`; return a `timeout`
+error if the condition does not match in time. This is sugar over a short-lived
+subscription and replaces a caller's capture-pane poll loop.
+
+Params: `condition` (required), `session`, `window`, `pattern` (regex, for
+`window-output`), `source` (`visible` or the default recent/scrollback content,
+for `window-output`), `idle` (quiet-period milliseconds, for `window-idle`;
+default 500), `timeout` (milliseconds; default 30000).
+
+Conditions:
+
+- `window-output` matches `pattern` against the target window's captured
+  content. Checked once immediately, then re-checked as the window produces
+  output.
+- `window-exit` resolves when the target window's shell process exits.
+- `window-idle` resolves after the target window produces no output for `idle`
+  milliseconds.
+- `session-exists` resolves when a session named `session` exists.
+
+Request:
+
+```json
+{"id": 1, "verb": "wait-for", "params": {"condition": "window-output", "session": "work", "pattern": "build succeeded", "timeout": 60000}}
+```
+
+Response on match:
+
+```json
+{"id": 1, "result": {"type": "wait_result", "condition": "window-output", "matched": true, "window": "", "pattern": "build succeeded"}}
+```
+
+Response on timeout:
+
+```json
+{"id": 1, "error": {"code": "timeout", "message": "timed out waiting for output matching build succeeded"}}
+```
+
 ## Examples from a shell
 
 Create a detached session, drive it, and read it back:
@@ -406,6 +521,14 @@ printf '{"id":1,"verb":"list-windows"}\n' | socat - "UNIX-CONNECT:$SOCK" | jq .
 printf '{"verb":"send-text","params":{"text":"date\n"}}\n' | socat - "UNIX-CONNECT:$SOCK"
 printf '{"verb":"capture-pane","params":{"source":"recent","lines":5}}\n' \
   | socat - "UNIX-CONNECT:$SOCK" | jq -r .result.content
+
+# Block until a build finishes instead of polling capture-pane.
+printf '{"verb":"wait-for","params":{"condition":"window-output","pattern":"build succeeded","timeout":120000}}\n' \
+  | socat - "UNIX-CONNECT:$SOCK" | jq .
+
+# Watch every window's activity as newline-delimited events.
+printf '{"verb":"subscribe","params":{"types":["output","bell","window-exit"]}}\n' \
+  | socat - "UNIX-CONNECT:$SOCK" | jq -c .
 ```
 
 The tuios CLI speaks this protocol directly. `tuios ls`, `tuios kill-session`,
