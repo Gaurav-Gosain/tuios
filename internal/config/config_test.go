@@ -505,6 +505,43 @@ func TestApplyOverrides_NoAnimations(t *testing.T) {
 	}
 }
 
+// TestStartupPrecedence_FlagWinsOverConfig checks the startup application order:
+// ApplyAppearanceConfig establishes the config baseline, then ApplyOverrides
+// lets CLI flags win. This is the sequence LoadUserConfig no longer performs
+// implicitly, and the fix that keeps `--no-animations` from being reverted by
+// animations_enabled = true.
+func TestStartupPrecedence_FlagWinsOverConfig(t *testing.T) {
+	original := config.AnimationsEnabled
+	defer func() { config.AnimationsEnabled = original }()
+
+	enabled := true
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.AnimationsEnabled = &enabled
+
+	config.ApplyAppearanceConfig(userCfg)                                // baseline: on
+	config.ApplyOverrides(config.Overrides{NoAnimations: true}, userCfg) // flag wins: off
+
+	if config.AnimationsEnabled {
+		t.Error("CLI --no-animations must win over config animations_enabled = true")
+	}
+}
+
+// TestLoadUserConfig_Pure verifies LoadUserConfig has no package-global side
+// effects, so a second load (e.g. inside NewOS or per server connection) cannot
+// clobber previously applied globals or race other sessions.
+func TestLoadUserConfig_Pure(t *testing.T) {
+	original := config.AnimationsEnabled
+	defer func() { config.AnimationsEnabled = original }()
+
+	config.AnimationsEnabled = false
+	if _, err := config.LoadUserConfig(); err != nil {
+		t.Skipf("LoadUserConfig unavailable in this environment: %v", err)
+	}
+	if config.AnimationsEnabled {
+		t.Error("LoadUserConfig must not mutate appearance globals")
+	}
+}
+
 func TestApplyOverrides_LeaderKey(t *testing.T) {
 	// Save original value
 	originalLeader := config.LeaderKey

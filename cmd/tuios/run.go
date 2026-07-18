@@ -132,6 +132,11 @@ func runLocal() error {
 		userConfig = config.DefaultConfig()
 	}
 
+	// Apply the config appearance globals as the baseline, then let CLI flags
+	// win. LoadUserConfig no longer applies globals itself, so this must run
+	// before ApplyOverrides (which only overrides the fields its flags cover).
+	config.ApplyAppearanceConfig(userConfig)
+
 	config.ApplyOverrides(config.Overrides{
 		ASCIIOnly:           asciiOnly,
 		BorderStyle:         borderStyle,
@@ -198,6 +203,7 @@ func runLocal() error {
 
 	initialOS := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		IsDaemonSession:           isDaemonSession,
 		EnableGraphicsPassthrough: true,

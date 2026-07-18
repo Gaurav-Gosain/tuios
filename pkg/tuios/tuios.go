@@ -287,12 +287,18 @@ func newModel(options Options) *Model {
 		}
 	}
 
+	// LoadUserConfig no longer applies the appearance globals itself, so apply
+	// them here (after the embed options above) exactly once, and pass the
+	// config into NewOS so it does not re-load and re-apply.
+	config.ApplyAppearanceConfig(userConfig)
+
 	// Create keybind registry
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	// Create the model using the factory function
 	return app.NewOS(app.OSOptions{
 		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
 		ShowKeys:        options.ShowKeys,
 		NumWorkspaces:   options.Workspaces,
 		Width:           options.Width,

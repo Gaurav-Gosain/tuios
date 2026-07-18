@@ -312,6 +312,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.
 	// by the browser terminal.
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,
@@ -389,6 +390,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	// sequences reach the browser's xterm.js image addon (sip v0.1.12+).
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,

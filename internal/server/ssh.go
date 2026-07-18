@@ -38,6 +38,15 @@ var sshServerConfig *SSHServerConfig
 func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	sshServerConfig = cfg
 
+	// Apply the user config's appearance globals once, at server startup and
+	// single-threaded, so every per-connection session shares a consistent view
+	// of them. LoadUserConfig is pure and NewOS no longer re-applies per
+	// connection, so this replaces the old per-connection global writes that
+	// raced other sessions' render loops.
+	if userConfig, err := config.LoadUserConfig(); err == nil {
+		config.ApplyAppearanceConfig(userConfig)
+	}
+
 	// Determine host key path
 	var hostKeyPath string
 	if cfg.KeyPath != "" {
@@ -182,6 +191,7 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
 		Width:           width,
 		Height:          height,
 		IsSSHMode:       true,
@@ -261,6 +271,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 	// Create TUIOS instance connected to daemon
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		Width:                     width,
 		Height:                    height,
 		IsSSHMode:                 true,

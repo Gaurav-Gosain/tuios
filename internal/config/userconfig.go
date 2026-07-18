@@ -420,9 +420,11 @@ func LoadUserConfig() (*UserConfig, error) {
 		}
 	}
 
-	// Apply appearance globals at startup (single-threaded, before the program runs).
-	ApplyAppearanceConfig(&cfg)
-
+	// Loading is pure: it never mutates package globals. Callers apply the
+	// appearance globals exactly once, on the Bubble Tea goroutine, via
+	// ApplyOverrides (which lets CLI flags win) and/or ApplyAppearanceConfig.
+	// This keeps a second load (e.g. inside NewOS) from clobbering CLI flags and
+	// stops the per-connection server paths from racing other sessions' globals.
 	return &cfg, nil
 }
 
