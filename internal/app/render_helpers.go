@@ -493,6 +493,14 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 	lines := strings.Split(content, "\n")
 	windowHeight := len(lines)
 
+	// Reject on the axes that cost nothing to test first. Measuring the frame
+	// width walks every line, and a window rejected for being off the right
+	// edge or off the top or bottom does not need the width at all, so paying
+	// for it before these three tests was pure waste.
+	if x >= viewportWidth || y+windowHeight <= 0 || y >= viewportHeight {
+		return "", max(x, 0), max(y, 0)
+	}
+
 	// The window is as wide as its widest line, not as wide as its first one.
 	// Measuring only lines[0] under-reports the width whenever the top row is
 	// blank, and the unfocused fast render path trims trailing spaces, so a
@@ -503,14 +511,9 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 	// background while the rest of the layout carried on. The same
 	// under-measurement also let the horizontal clip below be skipped for
 	// content that really did overrun the viewport.
-	windowWidth := 0
-	for _, line := range lines {
-		if w := ansi.StringWidth(line); w > windowWidth {
-			windowWidth = w
-		}
-	}
+	windowWidth := framesWidth(lines)
 
-	if x+windowWidth <= 0 || x >= viewportWidth || y+windowHeight <= 0 || y >= viewportHeight {
+	if x+windowWidth <= 0 {
 		return "", max(x, 0), max(y, 0)
 	}
 
@@ -544,15 +547,15 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 		clippedLines := make([]string, len(visibleLines))
 
 		for lineIdx, line := range visibleLines {
-			lineWidth := ansi.StringWidth(line)
+			w := lineWidth(line)
 
-			if clipLeft >= lineWidth {
+			if clipLeft >= w {
 				clippedLines[lineIdx] = ""
 				continue
 			}
 
 			tempLine := line
-			if lineWidth > maxWidth+clipLeft {
+			if w > maxWidth+clipLeft {
 				tempLine = truncateToWidth(line, maxWidth+clipLeft)
 			}
 
@@ -605,7 +608,7 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 				clippedLines[lineIdx] = result.String() + "\x1b[0m"
 			} else {
 				clippedLines[lineIdx] = tempLine
-				if lineWidth > maxWidth {
+				if w > maxWidth {
 					clippedLines[lineIdx] += "\x1b[0m"
 				}
 			}
