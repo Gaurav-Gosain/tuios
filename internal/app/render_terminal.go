@@ -126,6 +126,16 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
+	// Whether the host terminal is drawing a real cursor decides only whether
+	// the cell loop paints a fake one. getRealCursor takes the focused window's
+	// read side of ioMu itself, and when this window is the focused one that is
+	// the very same lock acquired just below. w.ioMu is a sync.RWMutex, which is
+	// not reentrant for readers: once the PTY writer queues a Lock, every later
+	// RLock parks behind it, so a second RLock taken while the first is still
+	// held deadlocks against a writer that is waiting on that first one. Query
+	// it here, before the lock is taken, so the two acquisitions never nest.
+	useRealCursor := m.getRealCursor() != nil
+
 	// The emulator cell buffer is written by the PTY reader and daemon paths
 	// under w.ioMu and reallocated by Resize under the same lock, so every VT
 	// read below (Render, CursorPosition, CellAt, scrollback) must hold the
@@ -181,9 +191,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		copyModeCursorX = window.CopyMode.CursorX
 		copyModeCursorY = window.CopyMode.CursorY
 	}
-
-	// Skip fake cursor rendering when real terminal cursor is active
-	useRealCursor := m.getRealCursor() != nil
 
 	// Use pooled highlight grids to reduce allocations
 	var searchHighlights, currentMatchHighlight, visualSelection *pool.HighlightGrid
