@@ -296,15 +296,24 @@ func (d *Daemon) shutdown() error {
 			log.Println("Warning: goroutine shutdown timed out after 5s, forcing shutdown")
 		}
 
+		// Stopping the manager stops every session, and each session's Stop
+		// writes its final resurrection state synchronously. When this returns,
+		// everything that will be persisted has been persisted.
 		d.manager.Shutdown()
 
-		socketPath := d.manager.SocketPath()
-		_ = os.Remove(socketPath)
-
+		// Unlinking the socket is deliberately the last thing the daemon does,
+		// after the final resurrection saves and after the pid file. It is the
+		// signal 'tuios kill-server' waits on, so anything ordered after it
+		// would make that signal a lie: a caller could observe the socket gone,
+		// start a new daemon, and race a write from the old one. Closing the
+		// listener is not a usable signal for the same reason, since it happens
+		// at the top of shutdown while state is still unsaved.
 		pidPath, err := GetPidFilePath()
 		if err == nil {
 			_ = os.Remove(pidPath)
 		}
+
+		_ = os.Remove(d.manager.SocketPath())
 
 		log.Println("Daemon shutdown complete")
 	})

@@ -100,6 +100,41 @@ func DiagnoseDaemon() DaemonDiagnosis {
 	return d
 }
 
+// ErrShutdownTimeout reports that a daemon was asked to stop but did not
+// finish within the caller's deadline. It is distinct from a failure to signal
+// the daemon: the request was delivered, the confirmation never arrived.
+var ErrShutdownTimeout = errors.New("timed out waiting for the daemon to finish shutting down")
+
+// WaitForDaemonShutdown blocks until a daemon that was asked to stop has
+// finished, or until timeout elapses.
+//
+// The completion signal is the socket file being unlinked, which Daemon.shutdown
+// does last, after every session has written its final resurrection state. That
+// makes this a persistence guarantee and not merely a liveness one: a refused
+// connection would prove neither, because the listener closes at the top of
+// shutdown while state is still unsaved.
+//
+// It returns ErrShutdownTimeout if the deadline passes with the socket still in
+// place, so a caller can say that the daemon is wedged rather than reporting
+// success and letting a subsequent start race the old process.
+func WaitForDaemonShutdown(timeout time.Duration) error {
+	socketPath, err := GetSocketPath()
+	if err != nil {
+		return err
+	}
+
+	deadline := time.Now().Add(timeout)
+	for {
+		if _, statErr := os.Stat(socketPath); errors.Is(statErr, fs.ErrNotExist) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return ErrShutdownTimeout
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // Explain renders the diagnosis as a message that states what failed, the most
 // likely cause, and the exact command that resolves it. It returns an empty
 // string when the daemon is running, so a caller can use it as a guard.
