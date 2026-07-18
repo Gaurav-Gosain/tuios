@@ -264,6 +264,14 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		}()
 	})
 
+	// Handle unexpected daemon disconnect (crash/reset/desync): quit cleanly
+	// instead of leaving the TUI frozen.
+	client.OnDisconnect(func(err error) {
+		go func() {
+			p.Send(app.DaemonDisconnectedMsg{Err: err})
+		}()
+	})
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {

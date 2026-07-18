@@ -28,6 +28,11 @@ type ClientLeftHandler func(clientID string, clientCount int)
 type SessionResizeHandler func(width, height, clientCount int)
 type ForceRefreshHandler func(reason string)
 
+// DisconnectHandler is called once when the read loop tears the connection down
+// because of an unexpected disconnect (daemon crash, reset, or framing desync).
+// It is not called for an app-initiated Close.
+type DisconnectHandler func(err error)
+
 // TUIClient is used by the TUIOS TUI to communicate with the daemon.
 // It handles PTY I/O and state synchronization.
 type TUIClient struct {
@@ -67,6 +72,8 @@ type TUIClient struct {
 	clientLeftHandler    ClientLeftHandler
 	sessionResizeHandler SessionResizeHandler
 	forceRefreshHandler  ForceRefreshHandler
+	disconnectHandler    DisconnectHandler
+	disconnectOnce       sync.Once // gates the single disconnect notification
 	multiClientMu        sync.RWMutex
 
 	// Request/response handling for synchronous calls after readLoop starts
@@ -451,6 +458,37 @@ func (c *TUIClient) OnForceRefresh(handler ForceRefreshHandler) {
 	c.multiClientMu.Unlock()
 }
 
+// OnDisconnect registers a handler invoked when the daemon connection is torn
+// down unexpectedly (crash, reset, or framing desync). It fires at most once and
+// runs on the read-loop goroutine, so the handler should only signal the UI
+// (e.g. p.Send), never mutate model state directly.
+func (c *TUIClient) OnDisconnect(handler DisconnectHandler) {
+	c.multiClientMu.Lock()
+	c.disconnectHandler = handler
+	c.multiClientMu.Unlock()
+}
+
+// handleDisconnect tears the connection down and notifies the app exactly once.
+// If Close was already called by the app, the disconnect is expected teardown
+// and no notification fires.
+func (c *TUIClient) handleDisconnect(err error) {
+	select {
+	case <-c.done:
+		// App-initiated Close already ran; stay quiet.
+		return
+	default:
+	}
+	_ = c.Close() // closes done + conn, idempotent
+	c.disconnectOnce.Do(func() {
+		c.multiClientMu.RLock()
+		handler := c.disconnectHandler
+		c.multiClientMu.RUnlock()
+		if handler != nil {
+			handler(err)
+		}
+	})
+}
+
 // SendWindowList sends a window list response back to the daemon.
 func (c *TUIClient) SendWindowList(payload *WindowListPayload) error {
 	msg, err := NewMessageWithCodec(MsgWindowList, payload, c.codec)
@@ -628,12 +666,22 @@ func (c *TUIClient) readLoop() {
 		if err != nil {
 			var netErr net.Error
 			if errors.As(err, &netErr) && netErr.Timeout() {
+				// Deadline hit at a message boundary; loop to re-check c.done.
 				continue
 			}
 			if errors.Is(err, io.EOF) {
+				// Clean daemon-side close.
+				c.handleDisconnect(err)
 				return
 			}
-			continue
+			// Any other error is fatal and non-recoverable: a daemon crash
+			// (ECONNRESET) or a framing desync ("message too large" leaves the
+			// payload in the stream) makes every subsequent read fail instantly.
+			// Continuing would busy-loop at 100% CPU forever, so tear the
+			// connection down and surface a clean disconnect instead.
+			debugLog("[CLIENT] readLoop fatal error, disconnecting: %v", err)
+			c.handleDisconnect(err)
+			return
 		}
 
 		// Check if there's a pending response channel for this message type

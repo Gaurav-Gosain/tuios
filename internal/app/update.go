@@ -147,6 +147,13 @@ type ForceRefreshMsg struct {
 	Reason string
 }
 
+// DaemonDisconnectedMsg is sent when the daemon connection is lost unexpectedly
+// (crash, reset, or framing desync). The app cannot recover the session, so it
+// surfaces the reason and quits cleanly instead of hanging.
+type DaemonDisconnectedMsg struct {
+	Err error
+}
+
 // InputHandler is a function type that handles input messages.
 // This allows the Update method to delegate to the input package without creating a circular dependency.
 type InputHandler func(msg tea.Msg, o *OS) (tea.Model, tea.Cmd)
@@ -802,6 +809,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Force re-render
 		m.MarkAllDirty()
 		return m, nil
+
+	case DaemonDisconnectedMsg:
+		// The daemon connection was lost and cannot be recovered; quit cleanly
+		// so the user is not left staring at a frozen, unresponsive session.
+		return m, tea.Quit
 
 	case ConfigReloadedMsg:
 		// Apply appearance config parsed by the watcher goroutine here, on the
