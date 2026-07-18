@@ -525,6 +525,32 @@ func ReadMessageConn(conn net.Conn, boundaryTimeout, bodyTimeout time.Duration) 
 	return readMessageBody(conn, totalLen)
 }
 
+// ReadMessageBuffered reads a framed binary message the same way as
+// ReadMessageConn, but reads the bytes from r (typically a *bufio.Reader
+// wrapping conn) while still applying the split boundary/body deadlines to conn.
+// The daemon wraps each accepted connection in a bufio.Reader to peek the first
+// byte for JSON-versus-binary detection, so the binary read loop must continue
+// through that same buffered reader rather than reading conn directly.
+func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration) (*Message, CodecType, error) {
+	_ = conn.SetReadDeadline(time.Now().Add(boundaryTimeout))
+
+	var totalLen uint32
+	if err := binary.Read(r, binary.BigEndian, &totalLen); err != nil {
+		if err == io.EOF {
+			return nil, CodecGob, err
+		}
+		return nil, CodecGob, fmt.Errorf("failed to read message length: %w", err)
+	}
+
+	if bodyTimeout > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(bodyTimeout))
+	} else {
+		_ = conn.SetReadDeadline(time.Time{})
+	}
+
+	return readMessageBody(r, totalLen)
+}
+
 // readMessageBody reads the header and payload after the length prefix has
 // already been consumed from r.
 func readMessageBody(r io.Reader, totalLen uint32) (*Message, CodecType, error) {

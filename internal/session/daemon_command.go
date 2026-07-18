@@ -254,6 +254,17 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	}
 	d.pendingRequestsMu.Unlock()
 
+	// Deliver to a JSON verb handler blocked in routeToTUISync, if any.
+	if found && pending != nil && pending.resultCh != nil {
+		result := payload
+		select {
+		case pending.resultCh <- &result:
+		default:
+			// The waiter already gave up (timeout/disconnect); drop the result.
+		}
+		return nil
+	}
+
 	// Forward the result to the original requester
 	if found && pending != nil && pending.requester != nil {
 		requester := pending.requester
@@ -262,6 +273,42 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	}
 
 	return nil
+}
+
+// routeToTUISync sends a remote command to an attached TUI and blocks until the
+// TUI replies with its result, a timeout elapses, or the daemon shuts down. It
+// is the synchronous bridge the JSON verb front-end uses so a control verb that
+// must be handled by the live renderer (WM keys, structural changes, live config)
+// still returns a single request/response over the JSON connection. requestID
+// must be unique per in-flight call.
+func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCommandPayload, timeout time.Duration) (*CommandResultPayload, error) {
+	ch := make(chan *CommandResultPayload, 1)
+
+	d.pendingRequestsMu.Lock()
+	d.pendingRequests[requestID] = &pendingRequest{resultCh: ch, created: time.Now()}
+	d.pendingRequestsMu.Unlock()
+
+	clearPending := func() {
+		d.pendingRequestsMu.Lock()
+		delete(d.pendingRequests, requestID)
+		d.pendingRequestsMu.Unlock()
+	}
+
+	if err := d.sendMessage(tui, MsgRemoteCommand, cmd); err != nil {
+		clearPending()
+		return nil, fmt.Errorf("failed to reach the attached client: %w", err)
+	}
+
+	select {
+	case res := <-ch:
+		return res, nil
+	case <-time.After(timeout):
+		clearPending()
+		return nil, fmt.Errorf("timed out waiting for the attached client")
+	case <-d.ctx.Done():
+		clearPending()
+		return nil, fmt.Errorf("daemon shutting down")
+	}
 }
 
 // findTargetSession finds a session by name, or returns the most recently active session.

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -48,8 +49,15 @@ type Daemon struct {
 
 // pendingRequest tracks a routed command awaiting its result, with the time it
 // was created so cleanupLoop can expire stale entries.
+//
+// A request is delivered one of two ways when the TUI replies:
+//   - requester != nil: the result is forwarded to that connection as a normal
+//     MsgCommandResult (the binary control path).
+//   - resultCh != nil: the result is handed to a goroutine blocked in
+//     routeToTUISync (the JSON verb path), which then writes the JSON response.
 type pendingRequest struct {
 	requester *connState
+	resultCh  chan *CommandResultPayload
 	created   time.Time
 }
 
@@ -347,6 +355,17 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		_ = conn.Close()
 	}()
 
+	// Wrap the connection so the first byte can be inspected without consuming
+	// it from the binary read path. A JSON verb-protocol client sends a line
+	// starting with '{' (or leading whitespace); a binary client's first byte is
+	// the high byte of a big-endian length prefix, which is 0x00 or 0x01 for any
+	// frame under the 16MB cap and so never collides with '{' or whitespace.
+	br := bufio.NewReaderSize(conn, 64*1024)
+	if d.detectJSONClient(cs, br) {
+		d.handleJSONConnection(cs, br)
+		return
+	}
+
 	lastHeartbeat := time.Now()
 	for {
 		select {
@@ -360,7 +379,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		// Short deadline only detects the message boundary (for done/ctx
 		// checks); the body gets a longer deadline so a large payload cannot be
 		// cut mid-frame and desync framing.
-		msg, codecType, err := ReadMessageConn(conn, 100*time.Millisecond, 30*time.Second)
+		msg, codecType, err := ReadMessageBuffered(conn, br, 100*time.Millisecond, 30*time.Second)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
