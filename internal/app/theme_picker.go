@@ -61,10 +61,18 @@ func (m *OS) CloseThemePicker() {
 }
 
 // CancelThemePicker restores the theme that was active when the picker opened
-// and closes it. Used for Esc, so live preview does not stick.
+// and closes it. Used for Esc, so live preview does not stick. It only persists
+// when a live preview actually changed the active theme, so a no-op cancel does
+// not rewrite config.toml (and cannot overwrite the configured theme).
 func (m *OS) CancelThemePicker() {
+	current := theme.CurrentThemeID()
+	if current == "" {
+		current = themeNone
+	}
 	m.applyTheme(m.ThemePickerOriginal)
-	m.persistThemeSelection(m.ThemePickerOriginal)
+	if current != m.ThemePickerOriginal {
+		m.persistThemeSelection(m.ThemePickerOriginal)
+	}
 	m.CloseThemePicker()
 }
 

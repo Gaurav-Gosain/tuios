@@ -46,14 +46,14 @@ func Initialize(themeName string) error {
 	}
 
 	enabled = true
-	tint.NewDefaultRegistry()
 
-	// Load custom themes from user's themes directory
-	if themesDir, err := GetThemesDir(); err == nil {
-		if _, err := LoadCustomThemes(themesDir); err != nil {
-			log.Printf("Warning: error loading custom themes: %v", err)
-		}
-	}
+	// Build the tint registry (built-ins plus custom themes) exactly once for
+	// the process, via the same sync.Once EnsureRegistry uses. Calling
+	// tint.NewDefaultRegistry() directly here would let a later EnsureRegistry()
+	// (fired when the settings page or theme picker first opens) rebuild the
+	// global registry and reset the active tint to the library default,
+	// silently discarding the configured theme.
+	EnsureRegistry()
 
 	// Try to set the theme by ID. An unknown name leaves the registry on its
 	// current tint; warn so a typo is visible instead of silently applying the
