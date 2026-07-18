@@ -8,6 +8,7 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 - [Configuration File Location](#configuration-file-location)
 - [Configuration Structure](#configuration-structure)
 - [Keybinding Sections](#keybinding-sections)
+- [Hooks](HOOKS.md)
 - [Key Syntax](#key-syntax)
 - [Platform-Specific Configuration](#platform-specific-configuration)
 - [Best Practices](#best-practices)
@@ -18,6 +19,7 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 - **Command-Line Options**: See CLI documentation for runtime flags like `--theme` and `--ascii-only`
 - **Keybinding Reference**: See [KEYBINDINGS.md](KEYBINDINGS.md) for complete list of default keybindings
 - **Architecture Overview**: See [ARCHITECTURE.md](ARCHITECTURE.md) for system internals and component structure
+- **Hooks**: See [HOOKS.md](HOOKS.md) for running shell commands on session events
 
 **Note**: Many system constants (window sizes, animation speeds, refresh rates) are currently hardcoded in `internal/config/constants.go` and cannot be configured via TOML.
 
@@ -606,5 +608,6 @@ prefix_prev_window = ["p"]
 ## Related Documentation
 
 - [CLI Reference](CLI_REFERENCE.md) - Command-line options
+- [Hooks](HOOKS.md) - Run shell commands on session events
 - [Keybindings Reference](KEYBINDINGS.md) - Default keybindings
 - [README](../README.md) - Project overview

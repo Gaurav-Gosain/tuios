@@ -68,16 +68,28 @@ func (m *OS) LogInfo(format string, args ...any) {
 	m.Log("INFO", format, args...)
 }
 
-// FireHook fires a hook event with the current context.
+// FireHook fires a hook event for a window, with the current workspace and
+// session as context.
 func (m *OS) FireHook(event hooks.Event, windowID, windowName string) {
+	m.FireHookContext(event, hooks.Context{
+		WindowID:   windowID,
+		WindowName: windowName,
+	})
+}
+
+// FireHookContext fires a hook event with an event-specific context. The
+// workspace and session are filled in here so no caller has to remember them,
+// and so every event carries them; leaving SessionID unset was why hook scripts
+// could not tell which session invoked them.
+func (m *OS) FireHookContext(event hooks.Event, ctx hooks.Context) {
 	if m.HookManager == nil {
 		return
 	}
-	m.HookManager.Fire(event, hooks.Context{
-		WindowID:   windowID,
-		WindowName: windowName,
-		Workspace:  m.CurrentWorkspace,
-	})
+	if ctx.Workspace == 0 {
+		ctx.Workspace = m.CurrentWorkspace
+	}
+	ctx.SessionID = m.SessionName
+	m.HookManager.Fire(event, ctx)
 }
 
 // LogWarn logs a warning message.

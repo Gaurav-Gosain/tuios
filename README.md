@@ -24,6 +24,7 @@ Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (h
 - **[Configuration](docs/CONFIGURATION.md)** - Customize keybindings, themes, and behavior
 - **[CLI Reference](docs/CLI_REFERENCE.md)** - All command-line options
 - **[Tape Scripting](docs/TAPE_SCRIPTING.md)** - Automate workflows
+- **[Hooks](docs/HOOKS.md)** - Run shell commands on session events
 - **[Sessions](docs/SESSIONS.md)** - Daemon mode and session persistence
 - **[Architecture](docs/ARCHITECTURE.md)** - Technical design
 

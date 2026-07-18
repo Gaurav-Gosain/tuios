@@ -147,13 +147,19 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	// Sync state to daemon after workspace switch
 	m.SyncStateToDaemon()
 
-	// Fire the hook last, so a command reading the session sees the switch
-	// already applied. FireHook reports the workspace we just moved to.
+	// Fire after the switch has fully landed (focus resolved, layout applied),
+	// so a hook that inspects the session sees the workspace it was told about.
+	// The newly focused window is reported alongside the workspace pair.
 	focusedID, focusedName := "", ""
 	if w := m.GetFocusedWindow(); w != nil {
 		focusedID, focusedName = w.ID, w.Title()
 	}
-	m.FireHook(hooks.AfterWorkspaceSwitch, focusedID, focusedName)
+	m.FireHookContext(hooks.AfterWorkspaceSwitch, hooks.Context{
+		WindowID:          focusedID,
+		WindowName:        focusedName,
+		Workspace:         workspace,
+		PreviousWorkspace: oldWorkspace,
+	})
 }
 
 // MoveWindowToWorkspace moves a window to the specified workspace without changing focus.

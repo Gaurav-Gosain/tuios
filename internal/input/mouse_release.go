@@ -285,6 +285,13 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.TileAllWindows()
 		}
 
+		// Announce the finished resize. Firing here rather than during the drag
+		// means one event per gesture carrying the size the window settled at,
+		// instead of one per mouse-motion event carrying intermediate sizes.
+		if wasResizing && resizedWindowIndex >= 0 && resizedWindowIndex < len(o.Windows) {
+			o.FireResized(o.Windows[resizedWindowIndex])
+		}
+
 		// Comprehensive state cleanup to prevent stale values from affecting subsequent operations
 		o.DragOffsetX = 0
 		o.DragOffsetY = 0

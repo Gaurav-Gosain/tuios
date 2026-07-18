@@ -139,6 +139,7 @@ func detachSession(o *app.OS) (*app.OS, tea.Cmd, bool) {
 		return o, nil, false
 	}
 	o.SyncStateToDaemon()
+	o.FireDetached()
 	// Deliberately no Cleanup: the session outlives this client.
 	return o, tea.Quit, true
 }

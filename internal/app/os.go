@@ -442,6 +442,10 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	m.MarkAllDirty()
 	m.LogInfo("Session switch complete: now on %s with %d windows", m.SessionName, len(m.Windows))
 	m.ShowNotification("Session: "+m.SessionName, "success", config.NotificationDuration)
+	// Switching sessions is an attach: this client is now driving a different
+	// session, and a hook that tracks which session is live has to hear about it
+	// here as well as at startup.
+	m.FireAttached()
 	return nil
 }
 

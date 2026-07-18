@@ -389,6 +389,7 @@ func (m *OS) ToggleTiling() error {
 		m.TileAllWindows()
 	}
 	m.MarkAllDirty()
+	m.FireLayoutChanged()
 	return nil
 }
 
