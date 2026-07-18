@@ -21,10 +21,15 @@ Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (h
 ### Quick Links
 - **[Getting Started](docs/KEYBINDINGS.md)** - Keybindings and quick reference
 - **[BSP Tiling](docs/BSP_TILING.md)** - Tiling with preselection and split control
+- **[Layout Modes](docs/LAYOUT_MODES.md)** - BSP, master-stack and scrolling layouts, aggregate view, multifocus
 - **[Configuration](docs/CONFIGURATION.md)** - Customize keybindings, themes, and behavior
+- **[Hooks](docs/HOOKS.md)** - Run shell commands on window events
+- **[Themes](docs/THEMES.md)** - Built-in themes and custom theme JSON
 - **[CLI Reference](docs/CLI_REFERENCE.md)** - All command-line options
 - **[Tape Scripting](docs/TAPE_SCRIPTING.md)** - Automate workflows
-- **[Sessions](docs/SESSIONS.md)** - Daemon mode and session persistence
+- **[Sessions](docs/SESSIONS.md)** - Daemon mode, attach/detach, and what survives
+- **[Multi-Client](docs/MULTI_CLIENT.md)** - Several clients on one session
+- **[Control Protocol](docs/protocol.md)** - JSON verb protocol for driving the daemon
 - **[Architecture](docs/ARCHITECTURE.md)** - Technical design
 
 <details>
@@ -92,6 +97,8 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 
 ### Tiling
 - **BSP Tiling** - Binary Space Partitioning with spiral layout
+- **Scrolling Layout** - niri-style columns on an infinite horizontal strip ([docs](docs/LAYOUT_MODES.md))
+- **Master-Stack Layout** - One master pane with the rest stacked beside it
 - **Smart Auto-Split** - Aspect-ratio-aware splitting (opt-in)
 - **Shared Borders** - tmux-style separator lines between panes (`--shared-borders`)
 - **Preselection** - Control where the next pane spawns
@@ -117,6 +124,7 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 
 ### Session Management
 - **Daemon Mode** - Persistent sessions with detach/reattach (like tmux)
+- **Session Resurrection** - Sessions come back after a daemon restart or reboot with their structure and working directories ([docs](docs/SESSIONS.md))
 - **Session Switcher** - In-app session list (<kbd>Prefix</kbd>+<kbd>S</kbd>)
 - **Layout Templates** - Save/load window arrangements with working directories and startup commands
 - **Layout CLI** - `tuios layout list`, `tuios layout delete`, `tuios layout export`
@@ -127,13 +135,19 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **Headless Execution** - Run scripts in CI/CD with `tuios tape run`
 - **Layout Export** - Convert layouts to tape scripts for sharing
 
+### Discovery & Navigation
+- **Which-Key Popup** - Hold the prefix key to see the chords available ([docs](docs/CONFIGURATION.md#whichkey_enabled))
+- **Aggregate View** - Searchable list of every window across every workspace, with previews ([docs](docs/LAYOUT_MODES.md#aggregate-view))
+- **Multifocus** - Broadcast typing to several panes at once, `Ctrl`+click to select ([docs](docs/LAYOUT_MODES.md#multifocus))
+
 ### More
 - **Showkeys Overlay** - Display pressed keys for presentations
 - **Customizable Keybindings** - TOML configuration with Kitty protocol support
+- **Hooks** - Run shell commands on window create, close and focus events ([docs](docs/HOOKS.md))
 - **Mouse Support** - Click, drag, resize, scrollbar interaction
 - **SSH Server Mode** - Remote terminal multiplexing
 - **Web Terminal Mode** - Browser-based access (separate `tuios-web` binary)
-- **Themes** - Bundled themes with custom theme support
+- **Themes** - Bundled themes plus custom themes from JSON ([docs](docs/THEMES.md))
 
 ## Quick Start
 
