@@ -139,6 +139,11 @@ type PTY struct {
 
 	// Callback when PTY process exits - used by daemon to notify clients
 	onExit func(ptyID string)
+
+	// emit, when set, raises a control-plane event (output activity, bell, mode
+	// change, process exit) already tagged with this PTY's window and PTY ID. It
+	// is a no-op when the session has no event sink installed.
+	emit func(SessionEvent)
 }
 
 // Session represents a persistent TUIOS session.
@@ -156,6 +161,13 @@ type Session struct {
 	state            *SessionState
 	stopResurrection func() // Stops periodic resurrection saving
 	stateMu          sync.RWMutex
+
+	// eventSink, when set, receives control-plane events raised by this session
+	// and its PTYs (window lifecycle, output activity, bell, mode changes). The
+	// daemon installs it so events reach the event hub; nil for a session with no
+	// hub (e.g. bare unit tests).
+	eventSink   func(SessionEvent)
+	eventSinkMu sync.RWMutex
 
 	// Terminal size
 	width  int
@@ -212,6 +224,25 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 	})
 
 	return session, nil
+}
+
+// SetEventSink installs the control-plane event sink for this session. It is
+// safe to call concurrently and may be set after windows already exist; the
+// per-PTY emitters read it dynamically.
+func (s *Session) SetEventSink(fn func(SessionEvent)) {
+	s.eventSinkMu.Lock()
+	s.eventSink = fn
+	s.eventSinkMu.Unlock()
+}
+
+// emit forwards a control-plane event to the installed sink, if any.
+func (s *Session) emit(ev SessionEvent) {
+	s.eventSinkMu.RLock()
+	fn := s.eventSink
+	s.eventSinkMu.RUnlock()
+	if fn != nil {
+		fn(ev)
+	}
 }
 
 // CreatePTY creates a new PTY in this session. windowID, if non-empty, is the
@@ -298,6 +329,27 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 		vtWriteChan:  make(chan []byte, 256),
 		onExit:       onExit,
 	}
+
+	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
+	// ID. It routes through the session's event sink so events reach the daemon's
+	// event hub; when no sink is installed it is a cheap no-op.
+	pty.emit = func(ev SessionEvent) {
+		ev.Window = windowID
+		ev.PTYID = id
+		s.emit(ev)
+	}
+
+	// Raise control-plane events from the daemon-side VT emulator: bell, an
+	// app-driven title change, and alt-screen mode toggles. These fire from the
+	// single vtWriter goroutine; the emitter only does a non-blocking hub publish,
+	// so it never re-enters the terminal lock held during Write.
+	terminal.SetCallbacks(vt.Callbacks{
+		Bell:  func() { pty.emit(SessionEvent{Type: EventBell}) },
+		Title: func(title string) { pty.emit(SessionEvent{Type: EventWindowRetitled, Title: title}) },
+		AltScreen: func(on bool) {
+			pty.emit(SessionEvent{Type: EventModeChanged, Mode: "alt-screen", Enabled: on})
+		},
+	})
 
 	// Handle kitty graphics queries on the daemon side for low-latency
 	// responses. All other commands flow through the raw PTY broadcast.
@@ -965,6 +1017,14 @@ func (p *PTY) readOutput() {
 
 			// Broadcast to subscribers
 			p.broadcast(data)
+
+			// Raise a control-plane output-activity event. This is a lightweight
+			// signal (byte count only, no content) that drives wait-for-output and
+			// window-idle waits and lets a subscriber know the pane is active; the
+			// raw bytes still flow only through the binary subscriber stream.
+			if p.emit != nil {
+				p.emit(SessionEvent{Type: EventOutput, Bytes: n})
+			}
 		}
 	}
 }
@@ -1037,6 +1097,11 @@ func (p *PTY) monitorExit() {
 	// Notify callback (used by daemon to inform clients)
 	if p.onExit != nil {
 		p.onExit(p.ID)
+	}
+
+	// Raise a control-plane window-exit event so wait-for window-exit resolves.
+	if p.emit != nil {
+		p.emit(SessionEvent{Type: EventWindowExit})
 	}
 }
 

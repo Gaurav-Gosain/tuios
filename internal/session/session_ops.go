@@ -96,7 +96,6 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 	}
 
 	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
 
 	if s.state.WorkspaceFocus == nil {
 		s.state.WorkspaceFocus = make(map[int]string)
@@ -120,7 +119,9 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 	s.state.Windows = append(s.state.Windows, win)
 	s.state.FocusedWindowID = windowID
 	s.state.WorkspaceFocus[workspace] = windowID
+	s.stateMu.Unlock()
 
+	s.emit(SessionEvent{Type: EventWindowCreated, Window: windowID, PTYID: pty.ID, Title: title})
 	return win, nil
 }
 
@@ -168,6 +169,7 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 	if closed.PTYID != "" {
 		_ = s.ClosePTY(closed.PTYID)
 	}
+	s.emit(SessionEvent{Type: EventWindowClosed, Window: closed.ID, PTYID: closed.PTYID})
 	return closed.ID, nil
 }
 
@@ -234,13 +236,17 @@ func (s *Session) CycleDaemonFocus(delta int) error {
 // RenameDaemonWindow sets the CustomName of the window matching target.
 func (s *Session) RenameDaemonWindow(target, name string) error {
 	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
 
 	idx, err := findWindowStateIndex(s.state.Windows, target)
 	if err != nil {
+		s.stateMu.Unlock()
 		return err
 	}
 	s.state.Windows[idx].CustomName = name
+	winID := s.state.Windows[idx].ID
+	s.stateMu.Unlock()
+
+	s.emit(SessionEvent{Type: EventWindowRetitled, Window: winID, Title: name})
 	return nil
 }
 

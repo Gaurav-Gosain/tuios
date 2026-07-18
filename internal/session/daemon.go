@@ -32,6 +32,10 @@ type Daemon struct {
 	pendingRequests   map[string]*pendingRequest
 	pendingRequestsMu sync.RWMutex
 
+	// events is the control-plane event hub backing the subscribe verb's event
+	// stream and the wait-for verb's blocking waits.
+	events *eventHub
+
 	// Goroutine tracking for clean shutdown
 	wg sync.WaitGroup
 
@@ -83,6 +87,15 @@ type connState struct {
 	sessionID        string // Session they're attached to
 	ptySubscriptions map[string]struct{}
 
+	// Event stream state (JSON verb protocol). eventSub is the hub subscription
+	// once this connection has issued a subscribe verb; streaming guards against a
+	// second subscribe on the same connection; pendingStream hands the fresh
+	// subscription from the subscribe handler to the dispatch loop, which starts
+	// the streamer only after the ack response has been written.
+	eventSub      *eventSub
+	pendingStream *eventSub
+	streaming     bool
+
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool
@@ -122,6 +135,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		cancel:             cancel,
 		clients:            make(map[string]*connState),
 		pendingRequests:    make(map[string]*pendingRequest),
+		events:             newEventHub(),
 		version:            cfg.Version,
 		disableAutoRestore: cfg.DisableAutoRestore,
 	}
@@ -130,7 +144,37 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		d.manager.SetSocketPath(cfg.SocketPath)
 	}
 
+	// Wire session lifecycle to the event hub: every session created through the
+	// manager gets an event sink that publishes to the hub, and creation/deletion
+	// raise session lifecycle events.
+	d.manager.SetSessionHooks(d.onSessionCreated, d.onSessionDeleted)
+
 	return d
+}
+
+// onSessionCreated installs a session's event sink and publishes a
+// session-created event. It runs on the manager's create hook.
+func (d *Daemon) onSessionCreated(s *Session) {
+	name := s.Name
+	s.SetEventSink(func(ev SessionEvent) {
+		d.events.publish(streamEvent{
+			Type:    ev.Type,
+			Session: name,
+			Window:  ev.Window,
+			PTYID:   ev.PTYID,
+			Title:   ev.Title,
+			Bytes:   ev.Bytes,
+			Mode:    ev.Mode,
+			Enabled: ev.Enabled,
+		})
+	})
+	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
+}
+
+// onSessionDeleted publishes a session-closed event. It runs on the manager's
+// delete hook.
+func (d *Daemon) onSessionDeleted(s *Session) {
+	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name})
 }
 
 // Start starts the daemon.
@@ -317,6 +361,18 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 
 	defer func() {
 		LogBasic("Client %s disconnected", clientID)
+
+		// Wake any per-connection background goroutines (the event streamer) so
+		// they observe the disconnect and unwind, and release a lingering event
+		// subscription if the streamer never started (e.g. the ack write failed).
+		cs.closeDone()
+		cs.mu.Lock()
+		sub := cs.eventSub
+		cs.eventSub = nil
+		cs.mu.Unlock()
+		if sub != nil {
+			d.events.unsubscribe(sub)
+		}
 
 		d.clientsMu.Lock()
 		delete(d.clients, clientID)
