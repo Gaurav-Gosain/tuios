@@ -2,6 +2,8 @@ package vt_test
 
 import (
 	"io"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -113,6 +115,26 @@ var fuzzSeeds = []string{
 	"\x1b[1;80H\xf0\x9f\x91\x8d",
 }
 
+// addCapturedCorpus seeds a target with output captured from real programs
+// running under a PTY (see testdata/corpus). Hand-written seeds cover the
+// sequences we thought to write down; these cover the ones programs actually
+// emit, including the interleavings a colourised pager or progress line
+// produces.
+func addCapturedCorpus(f *testing.F, add func([]byte)) {
+	f.Helper()
+	matches, err := filepath.Glob(filepath.Join("testdata", "corpus", "*.bin"))
+	if err != nil {
+		return
+	}
+	for _, m := range matches {
+		b, err := os.ReadFile(m) //nolint:gosec // fixed test corpus path
+		if err != nil {
+			f.Fatalf("reading corpus %s: %v", m, err)
+		}
+		add(b)
+	}
+}
+
 // writeWithBudget feeds data to the emulator on a goroutine and fails if the
 // write has not returned within budget. A hostile repeat count that drives an
 // O(n) loop per parameter shows up here as a hang rather than as a panic.
@@ -158,6 +180,7 @@ func FuzzEmulatorWrite(f *testing.F) {
 	for _, s := range fuzzSeeds {
 		f.Add([]byte(s))
 	}
+	addCapturedCorpus(f, func(b []byte) { f.Add(b) })
 
 	const (
 		width  = 80
@@ -228,6 +251,7 @@ func FuzzEmulatorWriteChunked(f *testing.F) {
 	for _, s := range fuzzSeeds {
 		f.Add([]byte(s), uint8(1))
 	}
+	addCapturedCorpus(f, func(b []byte) { f.Add(b, uint8(1)) })
 	f.Add([]byte("\xe4\xb8\x96"), uint8(1))
 	f.Add([]byte("\x1b[31mred"), uint8(2))
 
@@ -271,6 +295,7 @@ func FuzzEmulatorResize(f *testing.F) {
 	f.Add([]byte("\x1b[?1049h\x1b[10;10Hx"), uint8(5), uint8(3))
 	f.Add([]byte("\x1b[1;1r\x1b[999H"), uint8(200), uint8(200))
 	f.Add([]byte("\xe4\xb8\x96\xe4\xb8\x96\xe4\xb8\x96"), uint8(2), uint8(1))
+	addCapturedCorpus(f, func(b []byte) { f.Add(b, uint8(80), uint8(24)) })
 
 	f.Fuzz(func(t *testing.T, data []byte, w, h uint8) {
 		if len(data) > 1<<15 {
