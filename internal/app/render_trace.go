@@ -145,7 +145,7 @@ func stripANSIForTrace(s string) string {
 // branch is the path taken through renderTerminal, and out is what that path
 // returned, so a focus change can be read as a pair of lines for the same
 // window that differ only in branch.
-func traceRender(window *terminal.Window, isFocused, inTerminalMode bool, branch, out string) {
+func traceRender(window *terminal.Window, isFocused, inTerminalMode, entryDirty bool, branch, out string) {
 	if !renderTraceEnabled || window == nil {
 		return
 	}
@@ -157,15 +157,39 @@ func traceRender(window *terminal.Window, isFocused, inTerminalMode bool, branch
 		altMode = window.Terminal.IsAltScreen()
 		altBuf = window.Terminal.ActiveScreenIsAlt()
 	}
+	// entryDirty is ContentDirty as it was on entry to renderTerminal. The
+	// render paths clear the flag before returning, so reading it here would
+	// always report false and hide which frames were actually asked to repaint.
 	traceWrite(fmt.Sprintf(
 		"render id=%s title=%q focused=%t termMode=%t branch=%-22s "+
-			"contentDirty=%t cachedLen=%d altMode=%t altBuf=%t winAlt=%t "+
+			"dirtyIn=%t dirtyOut=%t cachedLen=%d altMode=%t altBuf=%t winAlt=%t "+
 			"emu=%dx%d content=%dx%d tiled=%t zoomed=%t min=%t %s",
 		shortID(window.ID), window.Title(), isFocused, inTerminalMode, branch,
-		window.ContentDirty, len(window.CachedContent), altMode, altBuf, window.IsAltScreen(),
+		entryDirty, window.ContentDirty, len(window.CachedContent), altMode, altBuf, window.IsAltScreen(),
 		emuW, emuH, window.ContentWidth(), window.ContentHeight(),
 		window.Tiled, window.Zoomed, window.Minimized,
 		traceSample(out),
+	))
+}
+
+// traceLayerReuse records a frame where the compositor reused a window's cached
+// layer and never called renderTerminal. This is the quiet steady state, and it
+// is worth logging because a pane frozen on a bad layer looks identical to a
+// pane that simply has nothing new to draw.
+func traceLayerReuse(window *terminal.Window, isFocused, needsRedraw bool) {
+	if !renderTraceEnabled || window == nil {
+		return
+	}
+	altBuf := false
+	if window.Terminal != nil {
+		altBuf = window.Terminal.ActiveScreenIsAlt()
+	}
+	traceWrite(fmt.Sprintf(
+		"layer  id=%s title=%q focused=%t branch=layer-reuse          "+
+			"needsRedraw=%t dirty=%t contentDirty=%t posDirty=%t cachedLen=%d altBuf=%t",
+		shortID(window.ID), window.Title(), isFocused, needsRedraw,
+		window.Dirty, window.ContentDirty, window.PositionDirty,
+		len(window.CachedContent), altBuf,
 	))
 }
 

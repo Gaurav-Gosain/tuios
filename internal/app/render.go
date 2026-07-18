@@ -156,6 +156,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.CachedLayer.GetZ() != window.Z
 
 		if !needsRedraw || (!isFocused && !isFullyVisible && !window.ContentDirty && !window.PositionDirty && !window.IsBeingManipulated && window.CachedLayer != nil) {
+			// renderTerminal is never entered on this path, so without a line
+			// here the trace simply stops for a window that has settled, which
+			// reads misleadingly like a missing branch rather than a reused
+			// layer.
+			if renderTraceEnabled {
+				traceLayerReuse(window, isFocused, needsRedraw)
+			}
 			layers = append(layers, window.CachedLayer)
 			continue
 		}
