@@ -197,7 +197,28 @@ func SetInputHandler(handler InputHandler) {
 // It starts the tick timer and listens for window exits.
 // Note: Mouse tracking, bracketed paste, and focus reporting are now configured
 // in the View() method as per bubbletea v2.0.0-beta.5 API changes.
+// reportConfigWarnings puts the config problems found at load time in front of
+// the user. They are written to the in-app log (leader D l) rather than to
+// stdout, because loading happens before the alternate screen is entered and
+// anything printed then is wiped by the first frame. A notification points at
+// the log so the problems are noticed rather than merely recorded.
+func (m *OS) reportConfigWarnings() {
+	if len(m.ConfigWarnings) == 0 {
+		return
+	}
+	for _, warning := range m.ConfigWarnings {
+		m.LogWarn("Config: %s", warning)
+	}
+	m.ShowNotification(
+		fmt.Sprintf("%d config problem(s), see the log viewer", len(m.ConfigWarnings)),
+		"warning",
+		5*time.Second,
+	)
+}
+
 func (m *OS) Init() tea.Cmd {
+	m.reportConfigWarnings()
+
 	cmds := []tea.Cmd{
 		TickCmd(),
 		ListenForWindowExits(m.WindowExitChan),

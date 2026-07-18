@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
@@ -417,12 +416,12 @@ func LoadUserConfig() (*UserConfig, error) {
 		return nil, fmt.Errorf("configuration has %d error(s), please fix and restart", len(validation.Errors))
 	}
 
-	// Log warnings (non-fatal)
-	if validation.HasWarnings() {
-		for _, warn := range validation.Warnings {
-			tea.Println(fmt.Sprintf("Config warning in [%s]: %s - %s", warn.Field, warn.Key, warn.Message))
-		}
-	}
+	// Warnings are deliberately not printed here. Loading happens before the
+	// alternate screen is entered, so anything written to stdout or stderr at
+	// this point is wiped by the first frame; the previous tea.Println call was
+	// worse than that, since its return value (a command) was discarded and it
+	// never printed anything at all. The warnings are surfaced inside the TUI
+	// instead, by ConfigWarnings below.
 
 	// Loading is pure: it never mutates package globals. Callers apply the
 	// appearance globals exactly once, on the Bubble Tea goroutine, via
@@ -647,6 +646,25 @@ func fillMapDefaults(target, defaults map[string][]string) {
 			target[k] = v
 		}
 	}
+}
+
+// ConfigWarnings returns the non-fatal problems in cfg as human-readable lines,
+// for surfacing inside the running TUI. Config problems used to be reported
+// only to a stream nobody sees, so a typo in a keybinding looked like the
+// feature was broken rather than like the config was.
+func ConfigWarnings(cfg *UserConfig) []string {
+	if cfg == nil {
+		return nil
+	}
+	validation := ValidateConfig(cfg)
+	lines := make([]string, 0, len(validation.Errors)+len(validation.Warnings))
+	for _, issue := range validation.Errors {
+		lines = append(lines, fmt.Sprintf("[%s] %s: %s", issue.Field, issue.Key, issue.Message))
+	}
+	for _, issue := range validation.Warnings {
+		lines = append(lines, fmt.Sprintf("[%s] %s: %s", issue.Field, issue.Key, issue.Message))
+	}
+	return lines
 }
 
 // GetConfigPath returns the path to the config file
