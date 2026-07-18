@@ -349,6 +349,11 @@ func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 	resized.Resize(resized.Width, resized.Height)
 	resized.MarkPositionDirty()
 	m.MarkLayoutCustom()
+
+	// This is the keyboard resize path, where every press is a finished resize.
+	// The mouse path goes through AdjustTilingNeighborsVisual and announces
+	// itself once on release instead of once per motion event.
+	m.FireResized(resized)
 }
 
 // AdjustTilingNeighborsVisual is like AdjustTilingNeighbors but uses visual-only resize.

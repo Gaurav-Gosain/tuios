@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -145,6 +146,13 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 
 	// Sync state to daemon after workspace switch
 	m.SyncStateToDaemon()
+
+	// Fire after the switch has fully landed (focus resolved, layout applied),
+	// so a hook that inspects the session sees the workspace it was told about.
+	m.FireHookContext(hooks.AfterWorkspaceSwitch, hooks.Context{
+		Workspace:         workspace,
+		PreviousWorkspace: oldWorkspace,
+	})
 }
 
 // MoveWindowToWorkspace moves a window to the specified workspace without changing focus.

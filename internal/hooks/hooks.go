@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Event represents a hook event type.
@@ -38,24 +39,77 @@ func AllEvents() []Event {
 }
 
 // Context provides environment variables passed to hook commands.
+//
+// The fields below WindowID apply to every event. The ones after it are
+// event-specific and stay at their zero value for the events they do not
+// describe, so a hook script can read them unconditionally.
 type Context struct {
 	WindowID   string
 	WindowName string
 	Workspace  int
 	SessionID  string
 	EventType  Event
+	// PreviousWorkspace is the workspace that was active before an
+	// after-workspace-switch. Zero for every other event.
+	PreviousWorkspace int
+	// Layout names the tiling layout in force after an after-layout-change:
+	// one of bsp, master-stack, scrolling or floating. Empty otherwise.
+	Layout string
+	// Width and Height are the window's new size in cells after an
+	// after-resize. Zero for every other event.
+	Width  int
+	Height int
 }
 
 // Manager manages hook registrations and execution.
 type Manager struct {
 	mu    sync.RWMutex
 	hooks map[Event][]string // event -> list of shell commands
+	// run executes one hook command. It is a field so tests can observe which
+	// hooks fired, with what context, without spawning a shell per event.
+	run func(command string, ctx Context)
+	// inFlight tracks running hooks so a test (or a caller that needs the
+	// side effects to have landed) can join them instead of sleeping.
+	inFlight sync.WaitGroup
 }
 
 // NewManager creates a new hooks manager.
 func NewManager() *Manager {
 	return &Manager{
 		hooks: make(map[Event][]string),
+		run:   executeHook,
+	}
+}
+
+// SetRunner replaces the command runner. It exists for tests: the real runner
+// spawns a shell, which makes asserting that an event fired with the right
+// payload both slow and timing-dependent.
+func (m *Manager) SetRunner(run func(command string, ctx Context)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.run = run
+}
+
+// Wait blocks until every hook fired so far has finished.
+func (m *Manager) Wait() {
+	m.inFlight.Wait()
+}
+
+// WaitTimeout waits for in-flight hooks, giving up after d. It exists for the
+// events fired on the way out: hooks run in their own goroutines, which the
+// process exit would otherwise kill before they ran at all. The timeout is what
+// keeps a hook that never returns from holding the client open, which is the
+// failure this is supposed to prevent rather than cause.
+func (m *Manager) WaitTimeout(d time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		m.inFlight.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(d):
+		log.Printf("hooks: gave up waiting for hooks to finish after %s", d)
 	}
 }
 
@@ -113,6 +167,7 @@ func (m *Manager) LoadFromConfig(hookConfig map[string]any) {
 func (m *Manager) Fire(event Event, ctx Context) {
 	m.mu.RLock()
 	commands := m.hooks[event]
+	run := m.run
 	m.mu.RUnlock()
 
 	if len(commands) == 0 {
@@ -122,7 +177,11 @@ func (m *Manager) Fire(event Event, ctx Context) {
 	ctx.EventType = event
 
 	for _, cmdStr := range commands {
-		go executeHook(cmdStr, ctx)
+		m.inFlight.Add(1)
+		go func() {
+			defer m.inFlight.Done()
+			run(cmdStr, ctx)
+		}()
 	}
 }
 
@@ -145,6 +204,10 @@ func executeHook(cmdStr string, ctx Context) {
 		fmt.Sprintf("TUIOS_WINDOW_NAME=%s", ctx.WindowName),
 		fmt.Sprintf("TUIOS_WORKSPACE=%d", ctx.Workspace),
 		fmt.Sprintf("TUIOS_SESSION_ID=%s", ctx.SessionID),
+		fmt.Sprintf("TUIOS_PREV_WORKSPACE=%d", ctx.PreviousWorkspace),
+		fmt.Sprintf("TUIOS_LAYOUT=%s", ctx.Layout),
+		fmt.Sprintf("TUIOS_WIDTH=%d", ctx.Width),
+		fmt.Sprintf("TUIOS_HEIGHT=%d", ctx.Height),
 	)
 
 	// Run silently - don't capture output or block

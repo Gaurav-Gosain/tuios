@@ -2,8 +2,10 @@ package app
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -67,6 +69,63 @@ func (m *OS) LayoutModeName() string {
 	}
 }
 
+// LayoutName returns the layout the user sees, which is the layout mode when
+// tiling is on and "floating" when it is off. LayoutModeName deliberately keeps
+// reporting the remembered mode while tiling is disabled, so it cannot answer
+// this on its own.
+func (m *OS) LayoutName() string {
+	if !m.AutoTiling {
+		return LayoutFloating
+	}
+	return m.LayoutModeName()
+}
+
+// LayoutFloating is the layout name reported when tiling is off.
+const LayoutFloating = "floating"
+
+// FireLayoutChanged announces the layout the session ended up in. Layout
+// mutations report through this one place rather than building the payload
+// themselves, so every one of them names the layout the same way.
+func (m *OS) FireLayoutChanged() {
+	m.FireHookContext(hooks.AfterLayoutChange, hooks.Context{Layout: m.LayoutName()})
+}
+
+// FireResized announces that a window settled at a new size. It takes the
+// window rather than reading the focused one so the caller cannot report the
+// size of a window other than the one it resized.
+func (m *OS) FireResized(w *terminal.Window) {
+	if w == nil {
+		return
+	}
+	m.FireHookContext(hooks.AfterResize, hooks.Context{
+		WindowID:   w.ID,
+		WindowName: w.Title(),
+		Workspace:  w.Workspace,
+		Width:      w.Width,
+		Height:     w.Height,
+	})
+}
+
+// hookDrainTimeout bounds how long an exiting client waits for its hooks.
+const hookDrainTimeout = 2 * time.Second
+
+// FireAttached announces that this client is now driving a session, after its
+// windows have been restored so a hook that queries the session sees it whole.
+func (m *OS) FireAttached() {
+	m.FireHookContext(hooks.AfterAttach, hooks.Context{})
+}
+
+// FireDetached announces that this client is leaving. It waits for the hooks it
+// just fired, because the caller quits immediately afterwards and hooks run in
+// goroutines the process exit would otherwise discard unrun.
+func (m *OS) FireDetached() {
+	if m.HookManager == nil {
+		return
+	}
+	m.FireHookContext(hooks.AfterDetach, hooks.Context{})
+	m.HookManager.WaitTimeout(hookDrainTimeout)
+}
+
 // ApplyLayoutModeName sets the layout mode from the name session state carries,
 // without retiling or notifying: it is the state-sync half of the Enable*
 // functions, and the caller retiles once it has applied the rest of the sync.
@@ -113,6 +172,7 @@ func (m *OS) ToggleLayoutMode() {
 	if m.AutoTiling {
 		m.TileAllWindows()
 	}
+	m.FireLayoutChanged()
 }
 
 // resetTiledFlags clears the Tiled flag on all current workspace windows
@@ -139,6 +199,7 @@ func (m *OS) EnableScrollingLayout() {
 	delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
 	m.TileAllWindows()
 	m.ShowNotification("Layout: scrolling (niri)", "info", config.NotificationDuration)
+	m.FireLayoutChanged()
 }
 
 // EnableBSPLayout directly enables BSP layout mode.
@@ -156,6 +217,7 @@ func (m *OS) EnableBSPLayout() {
 	m.WorkspaceTrees[m.CurrentWorkspace] = nil
 	m.TileAllWindows()
 	m.ShowNotification("Layout: BSP tiling", "info", config.NotificationDuration)
+	m.FireLayoutChanged()
 }
 
 // EnableMasterStackLayout directly enables master-stack layout mode.
@@ -168,6 +230,7 @@ func (m *OS) EnableMasterStackLayout() {
 	}
 	m.TileAllWindows()
 	m.ShowNotification("Layout: master-stack", "info", config.NotificationDuration)
+	m.FireLayoutChanged()
 }
 
 // DisableAllTiling disables all tiling modes and resets window state.
@@ -176,6 +239,7 @@ func (m *OS) DisableAllTiling() {
 	m.UseScrollingLayout = false
 	m.resetTiledFlags()
 	m.ShowNotification("Tiling disabled", "info", config.NotificationDuration)
+	m.FireLayoutChanged()
 }
 
 // NextLayout cycles to the next saved layout template.

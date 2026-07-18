@@ -139,6 +139,7 @@ func detachSession(o *app.OS) (*app.OS, tea.Cmd, bool) {
 		return o, nil, false
 	}
 	o.SyncStateToDaemon()
+	o.FireDetached()
 	// Deliberately no Cleanup: the session outlives this client.
 	return o, tea.Quit, true
 }
@@ -421,6 +422,7 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.AutoTiling {
 			o.TileAllWindows()
 		}
+		o.FireLayoutChanged()
 		return o, nil
 	case "z":
 		// Toggle zoom for current window

@@ -117,6 +117,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				} else {
 					m.ShowNotification("Tiling Mode Disabled", "info", config.NotificationDuration)
 				}
+				m.FireLayoutChanged()
 				return m, nil
 			},
 		},

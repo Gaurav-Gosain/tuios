@@ -177,6 +177,8 @@ func (m *OS) TileAllWindows() {
 // ToggleAutoTiling toggles automatic tiling mode
 func (m *OS) ToggleAutoTiling() {
 	m.AutoTiling = !m.AutoTiling
+	// Deferred because the enabling branch returns early for scrolling mode.
+	defer m.FireLayoutChanged()
 
 	if m.AutoTiling {
 		// If scrolling mode was active, re-enable it
