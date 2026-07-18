@@ -405,16 +405,64 @@ Event types:
 
 | Type | Meaning | Notable fields |
 | --- | --- | --- |
-| `window-created` | A daemon owned window was created. | `session`, `window`, `pty_id`, `title` |
-| `window-closed` | A daemon owned window was removed. | `session`, `window`, `pty_id` |
+| `window-created` | A window was created. | `session`, `window`, `pty_id`, `title` |
+| `window-closed` | A window was removed. | `session`, `window`, `pty_id` |
 | `window-exit` | A window's shell process exited. | `session`, `window`, `pty_id` |
 | `window-retitled` | A window's title or name changed. | `session`, `window`, `title` |
+| `window-focused` | A window became the focused window. | `session`, `window`, `pty_id` |
+| `window-moved` | A window moved to another workspace. | `session`, `window`, `pty_id`, `workspace` |
+| `window-minimized` | A window was minimized. | `session`, `window`, `pty_id` |
+| `window-restored` | A minimized window was restored. | `session`, `window`, `pty_id` |
+| `workspace-switched` | The session's current workspace changed. | `session`, `workspace` |
 | `output` | A window produced output (activity signal only; the raw bytes still flow over the binary stream). | `session`, `window`, `pty_id`, `bytes` |
 | `bell` | A window rang the terminal bell. | `session`, `window`, `pty_id` |
 | `mode-changed` | A terminal mode toggled (for example alt-screen). | `session`, `window`, `mode`, `enabled` |
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
 | `gap` | Slow-subscriber marker: `dropped` events were dropped for this connection. | `dropped` |
+
+### What fires when
+
+A mutation reaches the daemon's canonical state by one of two routes. With no
+TUI client attached the daemon mutates its own state. With a TUI attached the
+daemon routes the command to it, the TUI performs the mutation, and it syncs the
+result back. Both routes converge on the same state, and the window lifecycle
+events are derived from that convergence by diffing the state before and after
+it, so:
+
+- Every window lifecycle event fires **exactly once** per mutation, with the same
+  payload fields and the same relative ordering, whether or not a client is
+  attached. There is no separate "headless only" set of events.
+- Lifecycle events fire for mutations a **human drives from the TUI**, not just
+  for ones a control-plane verb requested. Creating a window with the keyboard
+  raises `window-created` exactly as `new-window` does.
+- The PTY-driven events (`output`, `bell`, `mode-changed`, `window-exit`) hang
+  off the PTY rather than off window state, so they have always fired on both
+  routes and are unaffected.
+
+Ordering within a single mutation is stable: closes, then creates, then
+per-window changes (`window-retitled`, `window-moved`,
+`window-minimized`/`window-restored`), then `workspace-switched`, then
+`window-focused`. Focus comes last because it is usually a consequence of an
+earlier event in the same batch, so a consumer building a model from the stream
+already knows about the window being focused by the time it is told to focus it.
+
+Two cases are worth stating plainly because they are easy to guess wrong:
+
+- `window-retitled` fires for an **explicit rename** (the `rename-window` verb or
+  the TUI's rename) and, separately, when the **shell changes its own title** via
+  an OSC escape sequence. The shell-driven case is reported by the PTY, not by
+  the state diff, so a shell retitling itself raises the event once, not twice.
+- A change that is not a lifecycle change raises nothing. Window geometry,
+  z-order, and alt-screen flags move constantly as a TUI renders and re-tiles;
+  none of them produce events, so an attached client does not flood the stream.
+
+Restoring a session (daemon cold start, or the `resurrect` verb) raises
+`session-created` followed by a `window-created` for each restored window, since
+from a subscriber's point of view those windows come into existence at that
+moment. A subscriber that connects afterwards sees no backfill: the stream
+carries what happens from the subscription onward, and the ack's `seq` is the
+baseline. Use `list-windows` to establish initial state, then follow the stream.
 
 ### subscribe
 

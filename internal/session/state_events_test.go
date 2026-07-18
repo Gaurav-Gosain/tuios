@@ -466,3 +466,32 @@ func TestUpdateStateFromDisconnectedClientStillEmits(t *testing.T) {
 		t.Fatalf("events = %v, want one window-created for 'added'", events)
 	}
 }
+
+// TestRestoredSessionRaisesWindowCreated pins the documented resurrection
+// behavior: restoring a session raises session-created and then a window-created
+// per restored window, because from a subscriber's point of view those windows
+// come into existence at that moment.
+func TestRestoredSessionRaisesWindowCreated(t *testing.T) {
+	d, sp := startTestDaemon(t)
+
+	sub := dialVerb(t, sp)
+	result(t, sub.call(t, `{"id":1,"verb":"subscribe","params":{"session":"revived","types":["session-created","window-created"]}}`))
+
+	if _, err := d.restoreSession(&SessionState{
+		Name:             "revived",
+		Windows:          []WindowState{{ID: "w1", Title: "one", Width: 80, Height: 24, Workspace: 1}},
+		CurrentWorkspace: 1,
+		Width:            80,
+		Height:           24,
+	}); err != nil {
+		t.Fatalf("restoreSession: %v", err)
+	}
+
+	events := collectEvents(t, sub, 2, 3*time.Second)
+	if got := eventTypes(events); !reflect.DeepEqual(got, []string{EventSessionCreated, EventWindowCreated}) {
+		t.Fatalf("event types = %v, want session-created then window-created", got)
+	}
+	if events[1]["window"] != "w1" {
+		t.Errorf("window-created window = %v, want w1", events[1]["window"])
+	}
+}
