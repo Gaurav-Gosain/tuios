@@ -448,6 +448,14 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 		}
 	}
 
+	// Terminal mode with nothing focused is a dead end: keystrokes have no
+	// terminal to reach. Closing the last window used to drop back to window
+	// management as part of the local close; now that closing is the daemon's,
+	// this is where that happens.
+	if m.FocusedWindow < 0 && m.Mode == TerminalMode {
+		m.Mode = WindowManagementMode
+	}
+
 	// Update workspace focus map
 	m.WorkspaceFocus = make(map[int]int)
 	for workspace, windowID := range state.WorkspaceFocus {
@@ -663,11 +671,43 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	return window
 }
 
-// closeWindowFromSync closes a window that was deleted by another client
+// closeWindowFromSync tears down a window the daemon has removed from the window
+// set. This is now the only teardown a daemon session performs, including for a
+// close the user asked for, so it has to release everything the window is
+// referenced from and not just its PTY subscription: an animation still holding
+// the pointer keeps the whole window alive and keeps animating a window that is
+// gone, and a stale BSP id mapping hands a later window an id this one still
+// owns.
 func (m *OS) closeWindowFromSync(w *terminal.Window) {
 	if m.DaemonClient != nil && w.PTYID != "" {
 		m.unsubscribeFromPTY(w)
 	}
+
+	if m.WindowToBSPID != nil {
+		intID := m.getWindowIntID(w.ID)
+		delete(m.WindowToBSPID, w.ID)
+		if m.BSPIDToWindowID != nil {
+			delete(m.BSPIDToWindowID, intID)
+		}
+	}
+
+	if m.KittyPassthrough != nil {
+		m.KittyPassthrough.OnWindowClose(w.ID)
+		if data := m.KittyPassthrough.FlushPending(); len(data) > 0 {
+			m.KittyPassthrough.WriteToHost(data)
+		}
+	}
+
+	if len(m.Animations) > 0 {
+		kept := make([]*ui.Animation, 0, len(m.Animations))
+		for _, anim := range m.Animations {
+			if anim.Window != w {
+				kept = append(kept, anim)
+			}
+		}
+		m.Animations = kept
+	}
+
 	w.Close()
 }
 
@@ -1024,27 +1064,6 @@ func (m *OS) UnsubscribeWorkspaceWindows(workspace int) {
 			m.unsubscribeFromPTY(w)
 		}
 	}
-}
-
-// DeleteDaemonWindow removes a daemon-mode window and cleans up its PTY.
-func (m *OS) DeleteDaemonWindow(i int) *OS {
-	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
-		m.LogWarn("Cannot delete window: invalid index %d", i)
-		return m
-	}
-
-	window := m.Windows[i]
-
-	// Close PTY in daemon if this is a daemon window
-	if window.DaemonMode && window.PTYID != "" && m.DaemonClient != nil {
-		m.DaemonClient.UnsubscribePTY(window.PTYID)
-		if err := m.DaemonClient.ClosePTY(window.PTYID); err != nil {
-			m.LogError("Failed to close PTY in daemon: %v", err)
-		}
-	}
-
-	// Use existing DeleteWindow logic for the rest
-	return m.DeleteWindow(i)
 }
 
 // SyncStateToDaemon sends the current state to the daemon.

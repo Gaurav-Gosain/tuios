@@ -392,10 +392,23 @@ func (m *OS) UpdateAllWindowThemes() {
 }
 
 // DeleteWindow removes the window at the specified index.
-// In daemon mode, this also cleans up the daemon-managed PTY.
+//
+// In a daemon session this asks the daemon to close it rather than closing it
+// here: the window set and the PTY are the daemon's, so it removes the window,
+// kills the shell, repairs focus and pushes the result. This client tears down
+// its own copy when that push lands, in the same code that handles a window
+// closed by a script or by another client.
 func (m *OS) DeleteWindow(i int) *OS {
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
 		m.LogWarn("Cannot delete window: invalid index %d (total windows: %d)", i, len(m.Windows))
+		return m
+	}
+
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		windowID := m.Windows[i].ID
+		if err := m.DaemonClient.SendIntent("CloseWindow", windowID); err != nil {
+			m.LogError("Failed to ask the daemon to close window %s: %v", windowID[:8], err)
+		}
 		return m
 	}
 

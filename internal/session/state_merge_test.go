@@ -285,3 +285,51 @@ func TestClientSyncKeepsDaemonExclusiveFields(t *testing.T) {
 		t.Errorf("window = %+v, want the daemon-captured cwd to survive", w)
 	}
 }
+
+// TestStaleClientSyncCannotResurrectAClosedWindow is the counterpart to
+// TestStaleClientSyncKeepsDaemonCreatedWindow, and it is the bug the converged
+// close ran into first. Pressing the close chord sends a CloseWindow intent and
+// then, as every keystroke does, pushes the client's state. That push was built
+// before the close landed, so it still lists the window. Treating an unknown
+// window as one the client had just created put it straight back, and the window
+// never closed.
+//
+// Clients do not create windows any more, so an incoming window the daemon does
+// not know is never news. It is always a snapshot from before a close.
+func TestStaleClientSyncCannotResurrectAClosedWindow(t *testing.T) {
+	sess, err := NewSession("resurrect", &SessionConfig{Shell: "/bin/sh"}, 80, 24)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	defer sess.Stop()
+
+	keeper, err := sess.AddDaemonWindow("keeper", nil)
+	if err != nil {
+		t.Fatalf("AddDaemonWindow: %v", err)
+	}
+	doomed, err := sess.AddDaemonWindow("doomed", nil)
+	if err != nil {
+		t.Fatalf("AddDaemonWindow: %v", err)
+	}
+
+	// The client's snapshot, taken before the close.
+	stale := clientSnapshot(sess)
+
+	if _, err := sess.CloseDaemonWindow(doomed.ID); err != nil {
+		t.Fatalf("CloseDaemonWindow: %v", err)
+	}
+
+	// The keystroke's own state push arrives afterwards, still listing both.
+	sess.UpdateState(stale)
+
+	got := sess.GetState()
+	if windowByID(t, got, doomed.ID) != nil {
+		t.Error("the closed window came back through the client's own state push")
+	}
+	if windowByID(t, got, keeper.ID) == nil {
+		t.Error("reconciliation dropped a window the daemon still holds")
+	}
+	if len(got.Windows) != 1 {
+		t.Errorf("state holds %d windows, want 1", len(got.Windows))
+	}
+}

@@ -59,19 +59,26 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 	}
 
 	seen := make(map[string]bool, len(incoming.Windows))
+	kept := incoming.Windows[:0]
 	for i := range incoming.Windows {
-		win := &incoming.Windows[i]
-		seen[win.ID] = true
+		win := incoming.Windows[i]
 		cw, ok := canonicalByID[win.ID]
 		if !ok {
-			// A window the daemon does not know about yet: the client just
-			// created it, and this sync is how the daemon learns of it.
+			// A window the daemon has never heard of. Clients do not create
+			// windows any more (they ask the daemon to, and it pushes the result
+			// back), so this is not news, it is a snapshot taken before the daemon
+			// closed the window. Keeping it would undo the close, which is exactly
+			// what happened when the user pressed the close chord: the intent
+			// removed the window and the keystroke's own state push put it back.
 			continue
 		}
 		win.CustomName = cw.CustomName
 		win.Workspace = cw.Workspace
 		win.Minimized = cw.Minimized
+		seen[win.ID] = true
+		kept = append(kept, win)
 	}
+	incoming.Windows = kept
 
 	for i := range canonical.Windows {
 		win := canonical.Windows[i]
