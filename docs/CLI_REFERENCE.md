@@ -24,6 +24,7 @@ This document provides a complete reference for TUIOS command-line interface.
 - [Global Flags](#global-flags)
 - [Common Usage Examples](#common-usage-examples)
 - [Environment Variables](#environment-variables)
+- [When Something Goes Wrong](#when-something-goes-wrong)
 - [Exit Codes](#exit-codes)
 - [Version Information](#version-information)
 - [Command Migration Guide](#command-migration-guide)
@@ -513,6 +514,33 @@ tuios set-config -s mysession dockbar_position bottom
 Query the state of a running TUIOS session. These commands are designed for scripting and return structured data about windows and session state.
 
 **Note:** These commands query the daemon's stored state directly and work even when no TUI client is attached to the session. This makes them ideal for background scripting and monitoring.
+
+### `tuios list-verbs`
+
+Print the control protocol's verb catalog: every verb with its parameter schema,
+accepted values, and example requests, plus the protocol version and the stable
+error codes.
+
+```bash
+tuios list-verbs [verb] [--json]
+```
+
+This is the discovery entry point for scripting and for agents driving TUIOS. It
+needs no documentation to interpret: the schema, the value sets, and the error
+vocabulary are all in the output.
+
+**Examples:**
+
+```bash
+# Every verb with its parameters
+tuios list-verbs
+
+# Just one verb
+tuios list-verbs capture-pane
+
+# Machine-readable
+tuios list-verbs --json | jq '.verbs[].verb'
+```
 
 ### `tuios list-windows`
 
@@ -1353,10 +1381,101 @@ export COLORTERM=truecolor
 
 ---
 
+## When Something Goes Wrong
+
+Every failure `tuios` reports answers three questions in order: what failed, the
+most likely cause, and the exact command that fixes it. If you meet a message
+that does not, it is a bug worth reporting.
+
+### The daemon is not running
+
+There are three distinct versions of this, and they have different fixes:
+
+| Message says | What it means | Fix |
+| --- | --- | --- |
+| "is not running" | No socket exists. The daemon has never run, or was stopped. | `tuios new` |
+| "a stale socket is left over at ..." | The daemon crashed without cleaning up. | `tuios kill-server`, which removes it |
+| "Permission denied ... socket" | The socket belongs to another user, or its mode changed. | Check `ls -l` on the path; set `XDG_RUNTIME_DIR` to a directory you own |
+
+### The daemon is older than the CLI
+
+After upgrading TUIOS, the old daemon keeps running and serving the socket. It
+cannot speak the control protocol the new CLI uses, so commands fail:
+
+```
+The running TUIOS daemon does not speak this CLI's control protocol (daemon 0.9.0, CLI 1.4.0).
+Most likely cause: TUIOS was upgraded while the daemon kept running, so the old daemon is still serving the socket.
+Fix: run 'tuios kill-server', then run this command again.
+```
+
+Run `tuios kill-server`. Sessions are saved before the daemon exits and restored
+when it next starts; `tuios resurrect` lists what is restorable.
+
+### A session name is not found
+
+The message lists the sessions that do exist and suggests the closest name:
+
+```
+Session "wrok" was not found.
+Most likely cause: the name does not match any live session.
+Did you mean "work"?
+Sessions: notes, work.
+Fix: run 'tuios ls' to list sessions, or 'tuios new wrok' to create this one.
+```
+
+A session killed with `tuios kill-session` is gone for good: killing is a
+deliberate teardown, so its saved state is removed too. A session that merely
+outlived its daemon is still restorable with `tuios resurrect`.
+
+### A saved session will not restore
+
+`tuios resurrect <name>` distinguishes three cases: no saved state at all, state
+that is corrupt, and state written by a newer TUIOS. Unreadable state is moved
+into an archive directory rather than deleted, and the message names that
+directory so you can inspect or recover the file.
+
+### The terminal cannot host the interface
+
+`tuios attach`, `tuios new`, and `tuios resurrect` check the terminal before
+taking over the screen, and refuse with an explanation when it is too small
+(minimum 40x12), when `TERM` is unset or `dumb`, or when stdout is not a
+terminal at all. For non-interactive use, drive a session with `tuios send-keys`
+and `tuios capture-pane` instead of attaching.
+
+### A session was killed while you were attached
+
+The client exits with a non-zero status and says so, rather than leaving you in a
+dead UI:
+
+```
+Session "work" was terminated while you were attached.
+```
+
+The same applies when the daemon itself goes away, which reports a lost
+connection instead.
+
+### Discovering the control protocol
+
+`tuios list-verbs` prints every verb the daemon supports with its parameters,
+accepted values, and runnable examples, plus the stable error codes. It is the
+discovery entry point that the error hints point at, and `--json` makes it
+machine-readable for an agent or a script.
+
+```bash
+tuios list-verbs                 # everything
+tuios list-verbs capture-pane    # one verb
+tuios list-verbs --json          # for scripting
+```
+
+---
+
 ## Exit Codes
 
 - `0` - Success
 - `1` - Error (configuration error, network error, file not found, etc.)
+
+A `tuios attach` that ends because its session was killed, or because the daemon
+was lost, exits `1`. A normal detach exits `0`.
 
 ---
 

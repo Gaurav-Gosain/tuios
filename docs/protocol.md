@@ -45,12 +45,43 @@ A success response carries a `result` object:
 {"id": 1, "result": {"type": "window_list", "total": 2, "windows": [ ... ]}}
 ```
 
-An error response carries an `error` object with a stable string `code` and a
-human readable `message`:
+An error response carries an `error` object with a stable string `code`, a human
+readable `message`, and usually a structured `hint` naming what resolves the
+failure:
 
 ```json
-{"id": 1, "error": {"code": "session_not_found", "message": "session work not found"}}
+{"id": 1, "error": {
+  "code": "session_not_found",
+  "message": "session wrok not found",
+  "hint": {
+    "param": "session",
+    "command": "tuios ls",
+    "did_you_mean": "work",
+    "available": ["notes", "work"],
+    "detail": "the name matches no live session. ..."
+  }
+}}
 ```
+
+### The hint object
+
+`hint` exists so a caller never has to guess what to do next, and never has to
+make a second call just to learn what values are legal. Every field is optional
+and omitted when empty, so a consumer that reads only `code` and `message` is
+unaffected.
+
+| Field | Meaning |
+| --- | --- |
+| `verb` | The verb that resolves or explains the failure, e.g. `list-verbs` for an unknown verb. |
+| `command` | The exact CLI command that resolves it, written to be run as-is. Placeholders are in `<angle brackets>`. |
+| `param` | The offending parameter, for `invalid_params` and anything that failed on one input. |
+| `accepted` | The values `param` will take, when that set is closed. |
+| `did_you_mean` | The closest match to what the caller asked for, when one is close enough to suggest. |
+| `available` | What does exist: session names, addressable windows, verb names, option keys. |
+| `detail` | One sentence of context that does not fit the fields above. |
+
+A hint is advisory. Acting on `command` or `did_you_mean` is always optional, and
+the absence of a hint never changes what `code` means.
 
 Every `result` carries a `type` discriminator string so a generic client can
 dispatch on the result shape without tracking which verb it sent.
@@ -62,7 +93,54 @@ resolves to the most recently active session.
 
 The protocol carries a version integer. Bump it only on an incompatible change
 to the envelope or to an existing verb; adding a new verb is backward compatible
-and does not bump it. Read the version and the full verb list with `list-verbs`:
+and does not bump it.
+
+### The hello handshake
+
+`hello` is the first call a client should make. It reports the protocol range the
+daemon serves and identifies the daemon, so a version mismatch is reported as a
+`protocol_mismatch` error rather than surfacing later as a decode failure or a
+dropped connection.
+
+Request:
+
+```json
+{"id": 1, "verb": "hello", "params": {"client": "tuios", "version": "1.4.0", "protocol": 1}}
+```
+
+Result:
+
+```json
+{"id": 1, "result": {
+  "type": "hello",
+  "protocol": 1,
+  "min_protocol": 1,
+  "daemon_version": "1.4.0",
+  "pid": 4242,
+  "sessions": 2
+}}
+```
+
+The handshake is optional, not a gate: a daemon serves every other verb whether
+or not `hello` was called, and a daemon older than the handshake answers
+`unknown_verb`, which a client should treat as "older but usable" rather than as
+a failure.
+
+There is one case the handshake cannot answer on this protocol, because the
+daemon predates the protocol entirely. Such a daemon reads the leading `{` of a
+request line as the high byte of a binary length prefix, fails its frame check,
+and closes the connection. A client that sees the connection die with no response
+line should read that as a version mismatch, not as a transport fault; the
+`tuios` CLI confirms it by asking over the older binary handshake, which every
+daemon has always answered, and reports both versions along with the
+`tuios kill-server` command that resolves it.
+
+### list-verbs
+
+`list-verbs` is the discovery entry point. It returns every verb with its full
+parameter schema and runnable examples, the protocol range, the error-code
+catalog, and the envelope shapes, which together are enough to drive the control
+plane without reading this document.
 
 Request:
 
@@ -70,18 +148,38 @@ Request:
 {"id": 1, "verb": "list-verbs"}
 ```
 
-Response:
+Response (abridged):
 
 ```json
 {"id": 1, "result": {
   "type": "verb_list",
   "version": 1,
+  "min_version": 1,
+  "daemon_version": "1.4.0",
   "verbs": [
-    {"verb": "capture-pane", "description": "Capture a pane's content ..."},
-    {"verb": "close-window", "description": "Close a window ..."}
-  ]
+    {
+      "verb": "capture-pane",
+      "description": "Capture a pane's content.",
+      "params": [
+        {"name": "session", "type": "string", "description": "Session name. Omit to target the most recently active session."},
+        {"name": "source", "type": "string", "description": "Which buffer to capture.",
+         "accepted": ["visible", "recent", "recent-unwrapped"], "default": "visible"}
+      ],
+      "examples": ["{\"id\":1,\"verb\":\"capture-pane\",\"params\":{\"session\":\"work\",\"source\":\"recent\"}}"]
+    }
+  ],
+  "error_codes": [{"code": "session_not_found", "description": "The named session does not exist. ..."}],
+  "envelope": {"request": "{\"id\":<any>,\"verb\":\"<name>\",\"params\":{...}}", "...": "..."}
 }}
 ```
+
+Pass a `verb` param to describe only that verb. Each parameter carries its
+`name`, `type` (`string`, `int`, `bool`, or `[]string`), `description`, and
+optionally `required`, `accepted`, and `default`. The `accepted` lists are the
+same lists the handlers enforce, so they cannot drift from the implementation.
+
+From the shell, `tuios list-verbs` and `tuios list-verbs --json` render the same
+catalog.
 
 ## Error codes
 
@@ -98,7 +196,13 @@ Response:
 | `option_not_found` | A get-option key was never set. |
 | `command_failed` | A verb routed to the attached client came back failed or timed out. |
 | `timeout` | A wait-for condition did not match before its timeout elapsed. |
+| `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
 | `internal` | An unexpected server side failure. |
+
+Codes are stable and additive: existing codes never change meaning, and a new
+code is only ever introduced for a condition that previously had none. A client
+should treat an unrecognized code as a generic failure and fall back to
+`message`. The live catalog with descriptions is in the `list-verbs` result.
 
 ## How verbs interact with an attached client
 
@@ -112,11 +216,27 @@ Structural verbs that a live renderer must own to stay in sync (`new-window`,
 the attached TUI when one is present and act on daemon owned state otherwise. The
 routing is transparent to the caller: it is still one request and one response.
 
+A verb that genuinely cannot run without a renderer (tiling geometry, animation,
+theming) fails with `needs_client`, whose hint names the `tuios attach` command
+for that session. Everything else works headless.
+
+`kill-session` destroys the session for every client, not just the caller. Each
+attached client is told the session ended and exits with a non-zero status, so a
+script that kills a session does not leave a user staring at a dead UI. The
+`session-closed` event fires on the event stream at the same time.
+
 ## Verbs
+
+### hello
+
+Handshake: report the protocol range this daemon serves. Params: `client`,
+`version`, `protocol`. Result type: `hello`. See the versioning section above.
 
 ### list-verbs
 
-List every supported verb and the protocol version. No params.
+List every verb with its parameter schema and examples, plus the protocol range,
+the error-code catalog, and the envelope shapes. Params: `verb` (optional, to
+describe just one).
 
 Request:
 
