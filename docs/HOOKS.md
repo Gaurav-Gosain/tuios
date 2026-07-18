@@ -17,7 +17,7 @@ not stall the interface.
 ## Configuration
 
 Hooks live under a `[hooks]` table in the TUIOS config file (run
-`tuios --config-path` to find it). Each key is an event name and each value is
+`tuios config path` to find it). Each key is an event name and each value is
 either a single command or a list of commands:
 
 ```toml

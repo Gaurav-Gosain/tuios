@@ -332,13 +332,13 @@ All keybindings can be customized in the configuration file. See the [Configurat
 
 ```bash
 # Edit your keybindings
-tuios --edit-config
+tuios config edit
 
 # View current configuration
-tuios --list-keybinds
+tuios keybinds list
 
 # View only your customizations
-tuios --list-custom-keybinds
+tuios keybinds list-custom
 ```
 
 ## Platform-Specific Notes

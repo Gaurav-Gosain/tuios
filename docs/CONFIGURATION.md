@@ -28,29 +28,29 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 ### Find Your Configuration
 
 ```bash
-tuios --config-path
+tuios config path
 ```
 
 ### Edit Configuration
 
 ```bash
-tuios --edit-config
+tuios config edit
 ```
 
 ### View Current Keybindings
 
 ```bash
 # View all keybindings
-tuios --list-keybinds
+tuios keybinds list
 
 # View only your customizations
-tuios --list-custom-keybinds
+tuios keybinds list-custom
 ```
 
 ### Reset to Defaults
 
 ```bash
-tuios --reset-config
+tuios config reset
 ```
 
 ## Configuration File Location
@@ -174,7 +174,19 @@ Individual minimized window restoration by number.
 - `restore_minimized_1` through `restore_minimized_9` - Restore specific minimized window by number (Shift+1 through Shift+9)
 
 ### prefix_mode
-Tmux-style prefix commands (Ctrl+B followed by another key). Not directly configurable - prefix commands are hardcoded.
+Tmux-style prefix commands (the leader key followed by another key). Every
+action in this section is configurable, and the leader key itself is set by
+`leader_key` under `[keybindings]`.
+
+**Example:**
+
+```toml
+[keybindings]
+leader_key = "ctrl+a"
+
+[keybindings.prefix_mode]
+prefix_new_window = ["y"]
+```
 
 ### window_prefix, minimize_prefix, workspace_prefix
 Sub-menus accessible after prefix key (Ctrl+B + w/m/t). These provide alternative access to window management, minimize, and workspace commands through the prefix interface.
@@ -577,7 +589,7 @@ prev_window = ["ctrl+shift+tab"]
 ### Check Your Customizations
 
 ```bash
-tuios --list-custom-keybinds
+tuios keybinds list-custom
 ```
 
 This shows only what you've changed, making it easy to review.
@@ -596,7 +608,7 @@ close_window = ["ctrl+w"]  # Browser-style close
 
 1. Check file location:
 ```bash
-tuios --config-path
+tuios config path
 ```
 
 2. Verify TOML syntax:
@@ -623,7 +635,7 @@ If the same key is bound to multiple actions, TUIOS will warn you during startup
 
 View conflicts:
 ```bash
-tuios --list-keybinds | grep <your-key>
+tuios keybinds list | grep <your-key>
 ```
 
 ### Platform Detection Issues
