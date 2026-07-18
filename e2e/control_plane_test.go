@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -140,6 +141,44 @@ func (e *env) mustRun(args ...string) string {
 func (e *env) killServer() {
 	_, _ = e.run("kill-server")
 	e.awaitDaemonGone(10 * time.Second)
+	e.awaitStateSettled(3 * time.Second)
+}
+
+// awaitStateSettled waits until the resurrection state directory stops changing.
+//
+// Socket removal is not quite the last write a shutting-down daemon makes: a
+// session created moments earlier can still be saved after the socket is gone,
+// and a save writes a temp file before renaming it. Removing the test's TempDir
+// during that window fails with "directory not empty", which shows up as a
+// cleanup error on whichever short test happened to race it. Waiting for two
+// identical readings makes teardown deterministic instead. Best effort: it
+// returns on timeout, since callers use it during cleanup.
+func (e *env) awaitStateSettled(timeout time.Duration) {
+	dir := filepath.Join(e.dirs["XDG_STATE_HOME"], "tuios", "sessions")
+
+	read := func() string {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return "<none>"
+		}
+		names := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		sort.Strings(names)
+		return strings.Join(names, ",")
+	}
+
+	deadline := time.Now().Add(timeout)
+	previous := read()
+	for time.Now().Before(deadline) {
+		time.Sleep(150 * time.Millisecond)
+		current := read()
+		if current == previous {
+			return
+		}
+		previous = current
+	}
 }
 
 // awaitDaemonGone blocks until the daemon has fully finished shutting down.
