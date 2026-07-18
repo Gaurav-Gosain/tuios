@@ -17,6 +17,12 @@ import (
 // renderer would. Everything still absent from it is routed as before.
 var daemonOwnedCommands = map[string]bool{
 	"RenameWindow": true,
+	// Closing a window is removing it from the window set and killing its PTY,
+	// both of which the daemon owns outright. The renderer has nothing to
+	// contribute: it learns the window is gone from the state push and gives the
+	// space back. Creating one is deliberately not here yet, because a new window
+	// needs a position and the daemon has no viewport to choose one from.
+	"CloseWindow": true,
 }
 
 // handleExecuteCommand routes a tape command to the TUI client attached to the session.

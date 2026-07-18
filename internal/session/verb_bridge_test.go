@@ -231,3 +231,61 @@ func newDiscardConn(t *testing.T) net.Conn {
 	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
 	return a
 }
+
+// TestCloseWindowWithAttachedTUIRunsOnTheDaemon pins the converged close. Closing
+// used to be routed to the attached client, which meant a close needed a live
+// renderer to round-trip through, could fail with command_failed when that
+// renderer was busy, and left the daemon holding the window until the client
+// happened to sync back. Closing is now the daemon's: it removes the window,
+// kills the PTY, and tells the client what it did.
+func TestCloseWindowWithAttachedTUIRunsOnTheDaemon(t *testing.T) {
+	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
+	defer d.manager.Shutdown()
+
+	sess := makeSessionWithWindow(t, d, "closing")
+	win := sess.GetState().Windows[0]
+
+	_, clientSide := newFakeTUI(t, d, sess.ID)
+	// Collect what the daemon pushes at the client, so the test can assert the
+	// client was told rather than left to find out on its next sync.
+	pushed := make(chan *SessionState, 8)
+	go func() {
+		for {
+			msg, _, err := ReadMessageWithCodec(clientSide)
+			if err != nil {
+				return
+			}
+			if msg.Type != MsgStateSync {
+				continue
+			}
+			var p StateSyncPayload
+			if err := msg.ParsePayloadWithCodec(&p, DefaultCodec()); err == nil {
+				pushed <- p.State
+			}
+		}
+	}()
+
+	out, verr := d.verbCloseWindow(nil, json.RawMessage(`{"session":"closing","window":"`+win.ID+`"}`))
+	if verr != nil {
+		t.Fatalf("verbCloseWindow: %v", verr)
+	}
+	if m := out.(map[string]any); m["type"] != "ok" {
+		t.Fatalf("result = %v, want ok", m)
+	}
+
+	if got := len(sess.GetState().Windows); got != 0 {
+		t.Errorf("daemon state still holds %d windows after close", got)
+	}
+	if pty := sess.GetPTY(win.PTYID); pty != nil && !pty.IsExited() {
+		t.Error("the closed window's PTY is still running")
+	}
+
+	select {
+	case state := <-pushed:
+		if len(state.Windows) != 0 {
+			t.Errorf("pushed state still holds %d windows", len(state.Windows))
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the attached client was never told the window closed")
+	}
+}

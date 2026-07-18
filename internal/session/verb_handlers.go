@@ -231,21 +231,10 @@ func (d *Daemon) verbCloseWindow(_ *connState, params json.RawMessage) (any, *ve
 		args = []string{p.Window}
 	}
 
-	if tui := d.findTUIClient(sess.ID); tui != nil {
-		res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
-			CommandType: "tape_command",
-			TapeCommand: "CloseWindow",
-			TapeArgs:    args,
-		}, routedVerbTimeout)
-		if err != nil {
-			return nil, newVerbError(ErrVerbCommandFailed, err.Error())
-		}
-		if !res.Success {
-			return nil, newVerbError(ErrVerbCommandFailed, res.Message)
-		}
-		return map[string]any{"type": "ok"}, nil
-	}
-
+	// Closing runs against daemon state whether or not a client is attached: the
+	// window set and the PTY are the daemon's, and an attached renderer is told
+	// through the state push that the mutation raises. There is no second
+	// implementation to keep in step and no round trip to the client to fail.
 	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
 	if _, err := d.executeDaemonCommand(sess, "CloseWindow", args, onExit); err != nil {
 		return nil, mapResolveErr(err, sess)

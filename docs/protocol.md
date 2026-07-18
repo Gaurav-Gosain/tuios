@@ -211,10 +211,16 @@ input verbs (`send-text`, `capture-pane`, `resize`) always answer from daemon
 owned state and the daemon owned PTYs, so they work with or without an attached
 TUI.
 
-Structural verbs that a live renderer must own to stay in sync (`new-window`,
-`close-window`, `send-keys`, and the live apply half of `set-option`) route to
-the attached TUI when one is present and act on daemon owned state otherwise. The
-routing is transparent to the caller: it is still one request and one response.
+`close-window` and the `RenameWindow` command always act on daemon owned state,
+attached or not. Removing a window from the window set, killing its PTY, and
+naming a window are the daemon's to do; an attached client is told what happened
+and re-renders. There is no second implementation for these and no round trip to
+a client that can time out.
+
+The verbs a live renderer still has to own to stay in sync (`new-window`,
+`send-keys`, and the live apply half of `set-option`) route to the attached TUI
+when one is present and act on daemon owned state otherwise. The routing is
+transparent to the caller: it is still one request and one response.
 
 A verb that genuinely cannot run without a renderer (tiling geometry, animation,
 theming) fails with `needs_client`, whose hint names the `tuios attach` command
@@ -237,6 +243,13 @@ the ones derived from its own viewport: pixel geometry, z order, the shell
 reported title, pre restore geometry, and alt screen state. The daemon then sends
 the merged state back to that client so it converges rather than pushing the same
 stale view again.
+
+The daemon does not wait to be asked. Every mutation it makes itself is pushed to
+the attached clients as a state sync the moment it lands, so a change made by a
+headless verb, a script, or another client shows up in a live TUI rather than
+waiting for that client's next push to reveal the disagreement. Pushes are
+ordered by `version`, and one overtaken by a newer state is dropped, so a client
+is never handed a state older than one it has already applied.
 
 A `base_version` of `0` means a client that predates state versioning. It cannot
 say what it saw, so its pushes are applied as sent, exactly as before. Input mode
@@ -575,9 +588,9 @@ Event types:
 
 ### What fires when
 
-A mutation reaches the daemon's canonical state by one of two routes. With no
-TUI client attached the daemon mutates its own state. With a TUI attached the
-daemon routes the command to it, the TUI performs the mutation, and it syncs the
+A mutation reaches the daemon's canonical state by one of two routes. Either the
+daemon mutates its own state (every headless mutation, and the ones it owns even
+with a client attached), or an attached TUI performs the mutation and syncs the
 result back. Both routes converge on the same state, and the window lifecycle
 events are derived from that convergence by diffing the state before and after
 it, so:
