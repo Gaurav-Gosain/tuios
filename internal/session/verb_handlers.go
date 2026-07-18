@@ -335,7 +335,7 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 	var p struct {
 		Session    string `json:"session"`
 		Window     string `json:"window"`
-		Source     string `json:"source"`     // visible | recent | recent-unwrapped
+		Source     string `json:"source"`     // visible | recent
 		Styled     bool   `json:"styled"`     // include ANSI styling
 		Scrollback bool   `json:"scrollback"` // alias for source=recent
 		ANSI       bool   `json:"ansi"`       // alias for styled
@@ -344,6 +344,9 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 		End        int    `json:"end"`        // 1-based inclusive region end
 	}
 	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if verr := validateCaptureSource(p.Source); verr != nil {
 		return nil, verr
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
@@ -356,7 +359,7 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 		return nil, mapResolveErr(err, sess)
 	}
 
-	scrollback := p.Scrollback || p.Source == "recent" || p.Source == "recent-unwrapped"
+	scrollback := p.Scrollback || p.Source == "recent"
 	ansi := p.Styled || p.ANSI
 	content := pty.CaptureContent(scrollback, ansi)
 	content = sliceCaptureLines(content, p.Start, p.End, p.Lines)

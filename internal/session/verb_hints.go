@@ -1,7 +1,9 @@
 package session
 
 import (
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -19,7 +21,17 @@ import (
 // invalid_params hint, so the two can never drift apart.
 var (
 	// captureSources are the buffers capture-pane can read.
-	captureSources = []string{"visible", "recent", "recent-unwrapped"}
+	captureSources = []string{"visible", "recent"}
+	// retiredCaptureSources maps a capture source that was once accepted to the
+	// reason it no longer is, so the rejection can say what happened rather than
+	// only listing what is allowed. "recent-unwrapped" was documented as reserved
+	// and behaved as a silent alias for "recent"; the emulator does not record
+	// which rows are soft wrapped (the scrollback wrap flag is written as a
+	// constant and the live screen carries none), so unwrapping cannot be
+	// implemented without guessing at row boundaries.
+	retiredCaptureSources = map[string]string{
+		"recent-unwrapped": "unwrapped capture is not implemented; it previously returned the same physical rows as \"recent\" without unwrapping them",
+	}
 	// waitConditions are the conditions wait-for understands.
 	waitConditions = []string{"session-exists", "window-output", "window-exit", "window-idle"}
 	// knownEventTypes are the event types a subscribe filter can name.
@@ -101,6 +113,32 @@ func invalidParam(param, message string, accepted ...string) *verbError {
 		Accepted: accepted,
 		Verb:     "list-verbs",
 	})
+}
+
+// validateCaptureSource checks a capture-pane source against the accepted set.
+// An empty source is valid and means the default. A source that was once
+// accepted is rejected with the reason it went away, so a caller that was
+// relying on it learns why rather than only what to use instead.
+func validateCaptureSource(source string) *verbError {
+	if source == "" || slices.Contains(captureSources, source) {
+		return nil
+	}
+	msg := "unknown capture source " + strconv.Quote(source)
+	hint := &VerbHint{
+		Param:    "source",
+		Accepted: captureSources,
+		Verb:     "list-verbs",
+	}
+	if reason, retired := retiredCaptureSources[source]; retired {
+		// A retired value is a closed-set miss with history: name the successor
+		// directly instead of relying on edit distance, which would not connect
+		// "recent-unwrapped" to "recent".
+		hint.DidYouMean = "recent"
+		hint.Detail = reason
+	} else {
+		hint.DidYouMean = closestMatch(source, captureSources)
+	}
+	return hintedVerbError(ErrVerbInvalidParams, msg, hint)
 }
 
 // closestMatch returns the candidate closest to target by edit distance, or ""

@@ -163,7 +163,7 @@ Response (abridged):
       "params": [
         {"name": "session", "type": "string", "description": "Session name. Omit to target the most recently active session."},
         {"name": "source", "type": "string", "description": "Which buffer to capture.",
-         "accepted": ["visible", "recent", "recent-unwrapped"], "default": "visible"}
+         "accepted": ["visible", "recent"], "default": "visible"}
       ],
       "examples": ["{\"id\":1,\"verb\":\"capture-pane\",\"params\":{\"session\":\"work\",\"source\":\"recent\"}}"]
     }
@@ -411,9 +411,9 @@ Capture a pane's content, rendered from the daemon side terminal emulator.
 Params:
 
 - `session` (optional), `window` (optional).
-- `source` (optional): `visible` (the viewport, the default), `recent`
-  (viewport plus scrollback), or `recent-unwrapped` (reserved; currently
-  identical to `recent`).
+- `source` (optional): `visible` (the viewport, the default) or `recent`
+  (viewport plus scrollback). Any other value is rejected with
+  `invalid_params`; the hint names the accepted set.
 - `styled` (optional bool): include ANSI styling escape sequences. Default is
   plain text.
 - `scrollback` (optional bool): alias for `source: "recent"`.
@@ -434,6 +434,15 @@ Response:
 ```json
 {"result": {"type": "pane_content", "source": "recent", "styled": false, "content": "..."}}
 ```
+
+Content is physical rows, not logical lines: a line longer than the pane width
+was wrapped by the emulator and comes back as several rows, so `lines`, `start`
+and `end` count wrapped rows. There is no unwrapped capture. Earlier builds
+documented a reserved `recent-unwrapped` source that was accepted but behaved
+exactly like `recent`; it is now rejected rather than silently ignored, because
+the emulator does not record which rows are continuations and unwrapping them
+would mean guessing. A caller that needs logical lines should widen the pane
+with `resize` before capturing.
 
 ### resize
 

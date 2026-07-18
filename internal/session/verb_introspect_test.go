@@ -179,6 +179,60 @@ func TestListVerbsAcceptedValuesMatchTheImplementation(t *testing.T) {
 	}
 }
 
+// TestCaptureSourcesMatchTheImplementation is the capture-pane half of the same
+// contract: the documented source list must equal the enforced set, and every
+// documented source must survive the handler's validation. This is what stops a
+// source from being advertised while doing nothing, which is how
+// "recent-unwrapped" became a silent alias for "recent".
+func TestCaptureSourcesMatchTheImplementation(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "work")
+	c := dialVerb(t, sp)
+
+	res := result(t, c.call(t, `{"id":1,"verb":"list-verbs","params":{"verb":"capture-pane"}}`))
+	doc := res["verbs"].([]any)[0].(map[string]any)
+
+	var accepted []string
+	for _, raw := range doc["params"].([]any) {
+		p := raw.(map[string]any)
+		if p["name"] != "source" {
+			continue
+		}
+		for _, v := range p["accepted"].([]any) {
+			accepted = append(accepted, v.(string))
+		}
+	}
+	if !slices.Equal(accepted, captureSources) {
+		t.Fatalf("documented sources %v do not match the implemented set %v", accepted, captureSources)
+	}
+
+	// Each documented source must capture rather than be rejected, and must be
+	// echoed back as the source that was actually used.
+	for _, source := range accepted {
+		res := result(t, c.call(t, `{"id":2,"verb":"capture-pane","params":{"session":"work","source":"`+source+`"}}`))
+		if got, _ := res["source"].(string); got != source {
+			t.Errorf("capture with source %q reported source %q", source, got)
+		}
+	}
+
+	// A retired source must not merely be undocumented, it must be refused, so a
+	// caller still passing it finds out instead of silently getting "recent".
+	for retired := range retiredCaptureSources {
+		if slices.Contains(captureSources, retired) {
+			t.Errorf("%q is listed as both accepted and retired", retired)
+		}
+		resp := c.call(t, `{"id":3,"verb":"capture-pane","params":{"session":"work","source":"`+retired+`"}}`)
+		e, ok := resp["error"].(map[string]any)
+		if !ok {
+			t.Errorf("retired source %q was accepted: %v", retired, resp)
+			continue
+		}
+		if code, _ := e["code"].(string); code != ErrVerbInvalidParams {
+			t.Errorf("retired source %q rejected with %q, want %q", retired, code, ErrVerbInvalidParams)
+		}
+	}
+}
+
 // TestListVerbsForUnknownVerbSuggestsOne checks the introspection verb is itself
 // self-explaining when misused.
 func TestListVerbsForUnknownVerbSuggestsOne(t *testing.T) {

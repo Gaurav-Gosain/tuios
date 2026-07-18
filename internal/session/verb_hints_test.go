@@ -154,6 +154,32 @@ func TestVerbErrorHints(t *testing.T) {
 			wantAccepted: waitConditions,
 		},
 		{
+			name:     "an unknown capture source lists the sources that exist",
+			req:      `{"id":1,"verb":"capture-pane","params":{"session":"work","source":"visable"}}`,
+			wantCode: ErrVerbInvalidParams,
+			wantHint: map[string]string{
+				"param":        "source",
+				"did_you_mean": "visible",
+			},
+			wantAccepted: captureSources,
+		},
+		{
+			name:        "the retired capture source says why it went away",
+			req:         `{"id":1,"verb":"capture-pane","params":{"session":"work","source":"recent-unwrapped"}}`,
+			wantCode:    ErrVerbInvalidParams,
+			wantMessage: []string{"recent-unwrapped"},
+			wantHint: map[string]string{
+				"param":        "source",
+				// did_you_mean here proves the retired-value branch ran: the
+				// edit distance from "recent-unwrapped" to "recent" is far
+				// outside closestMatch's tolerance, so the generic path could
+				// never suggest it.
+				"did_you_mean": "recent",
+				"detail":       retiredCaptureSources["recent-unwrapped"],
+			},
+			wantAccepted: captureSources,
+		},
+		{
 			name:     "a wrongly typed parameter points at the schema",
 			req:      `{"id":1,"verb":"resize","params":{"width":"wide"}}`,
 			wantCode: ErrVerbInvalidParams,
