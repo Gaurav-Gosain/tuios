@@ -28,6 +28,19 @@ import (
 //
 // This is a race-detector test. It asserts nothing itself and only fails under
 // -race, where the unsynchronized buffer access is reported.
+//
+// Its detection power has been verified rather than assumed: compiled against
+// the parent commit b0cd5e9, which lacks the LockIO calls, it fails with a
+// reported race on the emulator cell buffer, and it passes with them. Keep it
+// that way. If a later refactor makes it pass on unlocked code it has stopped
+// guarding anything.
+//
+// Note for anyone extending this coverage: the black box tuitest scenarios that
+// drive a real binary and assert on rendered pane text do NOT have this
+// property. A focus-cycling scenario of that kind passes against both the
+// locked and unlocked builds, because a torn buffer does not reliably surface
+// as missing text within the run. The race detector is the mechanism that
+// works here, so express regressions of this class as -race tests.
 func TestApplyStateSyncResizeRacesOutput(t *testing.T) {
 	ptyDataChan := make(chan struct{}, 1)
 	drainDone := make(chan struct{})

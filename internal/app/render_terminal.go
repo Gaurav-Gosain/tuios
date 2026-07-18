@@ -36,14 +36,24 @@ var (
 
 func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalMode bool) string {
 	if window.IsBeingManipulated && m.Resizing {
-		return m.renderResizeIndicator(window)
+		out := m.renderResizeIndicator(window)
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, "resize-indicator", out)
+		}
+		return out
 	}
 
 	if (window.IsBeingManipulated || !window.ContentDirty) && window.CachedContent != "" {
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, "cache-clean", window.CachedContent)
+		}
 		return window.CachedContent
 	}
 
 	if !isFocused && window.CachedContent != "" {
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, "cache-unfocused", window.CachedContent)
+		}
 		return window.CachedContent
 	}
 
@@ -52,12 +62,18 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	if window.Terminal == nil {
 		window.CachedContent = "Terminal not initialized"
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, "no-terminal", window.CachedContent)
+		}
 		return window.CachedContent
 	}
 
 	screen := window.Terminal
 	if screen == nil {
 		window.CachedContent = "No screen"
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, "no-screen", window.CachedContent)
+		}
 		return window.CachedContent
 	}
 
@@ -75,12 +91,18 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		rendered := screen.Render()
 		window.CachedContent = rendered
 		window.ContentDirty = false
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, "fast-unfocused", rendered)
+		}
 		return rendered
 	}
 
 	// Fast path for scrollback mode: content is static at a given scroll
 	// position, so reuse the cache if the offset hasn't changed.
 	if window.ScrollbackOffset > 0 && window.CachedContent != "" && !window.ContentDirty {
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, "cache-scrollback", window.CachedContent)
+		}
 		return window.CachedContent
 	}
 
@@ -527,6 +549,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	window.CachedContent = content
 	window.ContentDirty = false
+	if renderTraceEnabled {
+		traceRender(window, isFocused, inTerminalMode, "slow", content)
+	}
 	return content
 }
 

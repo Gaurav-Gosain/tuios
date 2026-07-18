@@ -542,6 +542,10 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.PreMinimizeHeight = ws.PreMinimizeH
 	w.SetAltScreen(ws.IsAltScreen)
 
+	if renderTraceEnabled && !sizeChanged {
+		traceSync(w, ws.IsAltScreen, false, w.Width, w.Height, "SetAltScreen; no resize")
+	}
+
 	if sizeChanged {
 		// Resize terminal emulator.
 		//
@@ -573,6 +577,11 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 
 		w.InvalidateCache()
 		w.MarkContentDirty()
+
+		if renderTraceEnabled {
+			traceSync(w, ws.IsAltScreen, true, w.ContentWidth(), w.ContentHeight(),
+				"SetAltScreen; Terminal.Resize under LockIO; cache invalidated")
+		}
 	}
 }
 
@@ -812,6 +821,14 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	// Set the window's IsAltScreen flag for mouse event forwarding
 	w.SetAltScreen(state.IsAltScreen)
 	m.LogInfo("Set window IsAltScreen=%v for window %s", state.IsAltScreen, w.ID[:8])
+
+	if renderTraceEnabled {
+		note := "restore: SetAltScreen only"
+		if state.IsAltScreen {
+			note = "restore: RestoreAltScreenMode(true) + SetAltScreen"
+		}
+		traceSync(w, state.IsAltScreen, false, state.Width, state.Height, note)
+	}
 
 	// For alt screen apps (vim, htop, etc.), DON'T restore cell content manually.
 	// Instead, rely on SIGWINCH (triggered by resize in RestoreTerminalStates) to make
