@@ -315,6 +315,13 @@ func checkTerminalSize(fd int) error {
 		// with a default. Do not block the user on it.
 		return nil
 	}
+	// A zero dimension means the terminal has no window size set (a pty opened
+	// by script(1), some CI runners, a detached pty). That is unknown, not
+	// small: the renderer sizes itself from the first resize event instead, so
+	// blocking here would reject setups that go on to work.
+	if width == 0 || height == 0 {
+		return nil
+	}
 	if width >= minTerminalWidth && height >= minTerminalHeight {
 		return nil
 	}

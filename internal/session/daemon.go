@@ -172,10 +172,20 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
 }
 
-// onSessionDeleted publishes a session-closed event. It runs on the manager's
-// delete hook.
+// onSessionDeleted publishes a session-closed event and tells every client
+// attached to the session that it is gone. It runs on the manager's delete hook,
+// so every deletion path (the kill-session verb, the legacy kill message, and
+// any internal teardown) notifies clients through one place.
+//
+// Without this a killed session leaves its clients attached to nothing: their
+// PTYs are closed and their windows are gone, but the socket stays open, so the
+// client sits in a dead session with no way to learn what happened.
 func (d *Daemon) onSessionDeleted(s *Session) {
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name})
+	d.broadcastToSession(s.ID, MsgSessionEnded, &SessionEndedPayload{
+		SessionName: s.Name,
+		Reason:      "the session was terminated",
+	}, "")
 }
 
 // Start starts the daemon.

@@ -138,6 +138,7 @@ func init() {
 	gob.Register(SessionInfo{})
 	gob.Register(SessionListPayload{})
 	gob.Register(KillPayload{})
+	gob.Register(SessionEndedPayload{})
 	gob.Register(ResizePayload{})
 	gob.Register(ErrorPayload{})
 	gob.Register(PTYInfo{})

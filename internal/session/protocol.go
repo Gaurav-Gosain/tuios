@@ -171,6 +171,15 @@ type ResurrectPayload struct {
 	SessionName string `json:"session_name"` // Session to resurrect from saved state
 }
 
+// SessionEndedPayload tells an attached client that its session was terminated.
+// It is sent on MsgSessionEnded, a message type that has existed since the first
+// protocol version but had no payload defined, so both fields are optional and
+// an older client that ignores the message is unaffected.
+type SessionEndedPayload struct {
+	SessionName string `json:"session_name,omitempty"` // Session that ended
+	Reason      string `json:"reason,omitempty"`       // Short human explanation
+}
+
 // ResizePayload notifies of terminal resize.
 type ResizePayload struct {
 	Width  int `json:"width"`

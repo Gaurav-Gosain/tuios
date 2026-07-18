@@ -154,6 +154,31 @@ type DaemonDisconnectedMsg struct {
 	Err error
 }
 
+// SessionEndedMsg is sent when the daemon reports that the attached session was
+// terminated (killed from another client, from the CLI, or over the control
+// plane). The session no longer exists, so there is nothing to detach from and
+// nothing to reconnect to: the client must exit.
+type SessionEndedMsg struct {
+	// SessionName is the session that ended, as the daemon named it.
+	SessionName string
+	// Reason is the daemon's short explanation, when it gave one.
+	Reason string
+}
+
+// ExitReason explains why the program stopped, so the caller can print an
+// accurate message and choose an exit status. A client that quits because its
+// session was destroyed must not report a normal detach.
+type ExitReason int
+
+const (
+	// ExitNormal is a user-initiated quit or detach.
+	ExitNormal ExitReason = iota
+	// ExitSessionKilled means the attached session was terminated.
+	ExitSessionKilled
+	// ExitDaemonLost means the daemon connection was lost unrecoverably.
+	ExitDaemonLost
+)
+
 // InputHandler is a function type that handles input messages.
 // This allows the Update method to delegate to the input package without creating a circular dependency.
 type InputHandler func(msg tea.Msg, o *OS) (tea.Model, tea.Cmd)
@@ -813,6 +838,15 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case DaemonDisconnectedMsg:
 		// The daemon connection was lost and cannot be recovered; quit cleanly
 		// so the user is not left staring at a frozen, unresponsive session.
+		m.ExitReason = ExitDaemonLost
+		return m, tea.Quit
+
+	case SessionEndedMsg:
+		// The session was destroyed underneath this client. Its windows are
+		// gone and its PTYs are closed, so there is nothing left to render and
+		// nothing to sync back. Record why and quit; the caller reports it and
+		// exits non-zero.
+		m.ExitReason = ExitSessionKilled
 		return m, tea.Quit
 
 	case ConfigReloadedMsg:
