@@ -162,6 +162,45 @@ func TestKeyNormalizer(t *testing.T) {
 	}
 }
 
+// TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey pins the rule that a
+// binding written one way still matches when the terminal reports the other:
+// terminals disagree about whether Shift+1 arrives as "!" or as "shift+1", and
+// a binding that only matches one spelling works on one terminal and silently
+// does nothing on the next.
+func TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey(t *testing.T) {
+	normalizer := config.NewKeyNormalizer()
+
+	tests := []struct {
+		input string
+		want  []string
+	}{
+		{"shift+1", []string{"shift+1", "!"}},
+		{"!", []string{"!", "shift+1"}},
+		{"shift+9", []string{"shift+9", "("}},
+		{"shift+m", []string{"shift+m", "M"}},
+		{"M", []string{"M", "shift+m"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got := normalizer.NormalizeKey(tc.input)
+			for _, want := range tc.want {
+				if !slices.Contains(got, want) {
+					t.Errorf("NormalizeKey(%q) = %v, want to contain %q", tc.input, got, want)
+				}
+			}
+		})
+	}
+
+	// Keys that are not shifted spellings must not grow spurious aliases.
+	for _, key := range []string{"shift+tab", "ctrl+a", "esc", "m"} {
+		got := normalizer.NormalizeKey(key)
+		if len(got) != 1 {
+			t.Errorf("NormalizeKey(%q) = %v, want exactly one spelling", key, got)
+		}
+	}
+}
+
 func TestKeyNormalizer_ValidateKey(t *testing.T) {
 	normalizer := config.NewKeyNormalizer()
 
