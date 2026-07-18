@@ -75,6 +75,25 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 	return -1, fmt.Errorf("no window found matching %q", target)
 }
 
+// firstVisibleOnWorkspace returns the ID of the first window in slice order that
+// sits on the given workspace and is not minimized, or "" when the workspace has
+// no such window.
+//
+// This is the focus-repair rule, and it is deliberately the same rule the
+// renderer applies (OS.FocusNextVisibleWindow): first in order, minimized
+// windows skipped, no focus at all when nothing visible remains. The daemon used
+// to take the first window on the workspace whether or not it was minimized,
+// which put focus on a window sitting in the dock while a visible one went
+// unfocused. TestDaemonFocusRepairAfterClose pins every case.
+func firstVisibleOnWorkspace(windows []WindowState, workspace int) string {
+	for i := range windows {
+		if windows[i].Workspace == workspace && !windows[i].Minimized {
+			return windows[i].ID
+		}
+	}
+	return ""
+}
+
 // AddDaemonWindow spawns a fresh PTY and appends a canonical window for it to
 // the session state, focusing it on the current workspace. onExit (may be nil)
 // is invoked with the PTY ID when the shell process exits. It returns a copy of
@@ -147,13 +166,7 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 
 		// Repair focus if we removed the focused window.
 		if state.FocusedWindowID == closed.ID {
-			state.FocusedWindowID = ""
-			for i := range state.Windows {
-				if state.Windows[i].Workspace == workspace {
-					state.FocusedWindowID = state.Windows[i].ID
-					break
-				}
-			}
+			state.FocusedWindowID = firstVisibleOnWorkspace(state.Windows, workspace)
 		}
 		if state.WorkspaceFocus != nil && state.WorkspaceFocus[workspace] == closed.ID {
 			delete(state.WorkspaceFocus, workspace)
