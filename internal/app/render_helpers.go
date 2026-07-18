@@ -465,6 +465,30 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 	return cellStyle
 }
 
+// truncateToWidth cuts line to at most width cells as measured by
+// ansi.StringWidth.
+//
+// ansi.Truncate and ansi.StringWidth disagree about malformed UTF-8: for a line
+// carrying invalid bytes, Truncate can return a string that StringWidth then
+// measures one or more cells over the limit. That reaches the compositor as a
+// row wider than the space the layer was given, which bleeds into the pane next
+// door. Guest programs can put arbitrary bytes in an OSC title and those titles
+// are rendered into the window chrome, so this is reachable input, not a
+// theoretical one. Re-measure and keep cutting until the result really fits.
+func truncateToWidth(line string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	out := ansi.Truncate(line, width, "")
+	// The overshoot is a cell or two in practice; the loop is bounded by width
+	// regardless so a pathological line cannot spin here.
+	for target := width; ansi.StringWidth(out) > width && target > 0; {
+		target--
+		out = ansi.Truncate(line, target, "")
+	}
+	return out
+}
+
 func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) (string, int, int) {
 	lines := strings.Split(content, "\n")
 	windowHeight := len(lines)
@@ -529,7 +553,7 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 
 			tempLine := line
 			if lineWidth > maxWidth+clipLeft {
-				tempLine = ansi.Truncate(line, maxWidth+clipLeft, "")
+				tempLine = truncateToWidth(line, maxWidth+clipLeft)
 			}
 
 			if clipLeft > 0 {
@@ -584,6 +608,20 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 				if lineWidth > maxWidth {
 					clippedLines[lineIdx] += "\x1b[0m"
 				}
+			}
+		}
+
+		// Enforce the width contract on the finished rows rather than trusting
+		// the arithmetic that built them. The left-skip above walks runes and
+		// counts one position per rune, but converting a line that carries
+		// invalid bytes to runes turns each bad byte into a replacement
+		// character with a width of its own, so the assembled row can come out
+		// several cells wider than the space it is being placed in and bleed
+		// into the pane next door. Guest programs can put arbitrary bytes in an
+		// OSC title and those titles are rendered into the window chrome.
+		for i, line := range clippedLines {
+			if ansi.StringWidth(line) > maxWidth {
+				clippedLines[i] = truncateToWidth(line, maxWidth) + "\x1b[0m"
 			}
 		}
 
