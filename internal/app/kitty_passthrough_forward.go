@@ -943,7 +943,13 @@ func (kp *KittyPassthrough) forwardPlace(
 		ZIndex:       cmd.ZIndex,
 		Virtual:      cmd.Virtual,
 	}
-	kp.placements[windowID][cmd.ImageID] = placement
+	// Key by hostID (allocated above), consistent with forwardTransmit,
+	// forwardFileTransmit, forwardFileTransmitInline, and the by-ID delete
+	// paths. Keying by the guest cmd.ImageID here left delete-by-ID unable to
+	// find this placement (RefreshAllPlacements kept re-emitting a=p forever)
+	// and let a guest ID that numerically equals another image's host ID
+	// silently overwrite that entry.
+	kp.placements[windowID][hostID] = placement
 }
 
 // deleteAllWindowPlacements removes all placements for a window from the host terminal
