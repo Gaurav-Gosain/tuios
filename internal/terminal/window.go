@@ -158,30 +158,55 @@ var (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
-	title                  atomic.Pointer[string] // Written on PTY/monitor goroutine, read on UI goroutine
-	CustomName             string                 // User-defined window name
-	Width                  int
-	Height                 int
-	X                      int
-	Y                      int
-	Z                      int
-	ID                     string
-	Terminal               *vt.Emulator
-	Pty                    xpty.Pty
-	Cmd                    *exec.Cmd
-	ShellPgid              int      // Process group ID of the shell
-	cwd                    cwdCache // Memoised working directory, see CWD
-	LastUpdate             time.Time
-	Dirty                  bool
-	ContentDirty           bool
-	PositionDirty          bool
-	CachedContent          string
-	CachedLayer            *lipgloss.Layer
-	LastTerminalSeq        int
-	IsBeingManipulated     bool               // True when being dragged or resized
-	UpdateCounter          int                // Counter for throttling background updates
-	cancelFunc             context.CancelFunc // For graceful goroutine cleanup
-	ioMu                   sync.RWMutex       // Protect I/O operations
+	title              atomic.Pointer[string] // Written on PTY/monitor goroutine, read on UI goroutine
+	CustomName         string                 // User-defined window name
+	Width              int
+	Height             int
+	X                  int
+	Y                  int
+	Z                  int
+	ID                 string
+	Terminal           *vt.Emulator
+	Pty                xpty.Pty
+	Cmd                *exec.Cmd
+	ShellPgid          int      // Process group ID of the shell
+	cwd                cwdCache // Memoised working directory, see CWD
+	LastUpdate         time.Time
+	Dirty              bool
+	ContentDirty       bool
+	PositionDirty      bool
+	CachedContent      string
+	CachedLayer        *lipgloss.Layer
+	LastTerminalSeq    int
+	IsBeingManipulated bool               // True when being dragged or resized
+	UpdateCounter      int                // Counter for throttling background updates
+	cancelFunc         context.CancelFunc // For graceful goroutine cleanup
+	// ioMu guards the emulator cell buffer and the Pty/Terminal handles. See
+	// the block comment above LockIO for the full contract; the short version:
+	//
+	//   LOCK ORDER (global, whole process):
+	//       app.OS.terminalMu  ->  Window.ioMu  ->  KittyPassthrough.mu / SixelPassthrough.mu
+	//
+	//   May be held together: terminalMu and ioMu, in that order only
+	//   (renderTerminal does exactly this). Never take terminalMu while
+	//   holding ioMu. Never take ioMu inside a passthrough callback: the PTY
+	//   reader already holds ioMu across Terminal.Write, which dispatches
+	//   those callbacks under kp.mu/sp.mu, so the reverse order closes a
+	//   cycle (see OS.snapshotPlacementScrollbackLens).
+	//
+	//   NOT REENTRANT, either side, on the same window. sync.RWMutex starves
+	//   readers behind a queued writer, so RLock-inside-RLock deadlocks
+	//   against a writer waiting on the outer RLock.
+	//
+	//   NEVER BLOCK WHILE HOLDING IT. No Pty.Write, no Pty.Read, no channel
+	//   send, no Cmd.Wait. Snapshot the handle under the lock, release, then
+	//   block (SendInput and both handleIOOperations goroutines do this). A
+	//   blocking write under the read lock wedges the renderer, because the
+	//   PTY reader's queued LockIO starves every later RLock.
+	//
+	//   Two windows' ioMu are never held simultaneously, so there is no
+	//   window-to-window ordering to respect.
+	ioMu                   sync.RWMutex
 	Minimized              bool               // True when window is minimized to dock
 	Minimizing             bool               // True when window is being minimized (animation playing)
 	MinimizeHighlightUntil time.Time          // Highlight dock tab until this time

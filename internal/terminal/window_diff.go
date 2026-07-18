@@ -30,7 +30,14 @@ func (w *Window) ApplyScreenDiff(cells []DiffCell, cursorX, cursorY int, cursorH
 		return
 	}
 
+	// Re-check Terminal under the lock. The guard above runs unlocked on the
+	// daemon readLoop goroutine, and Close() nils the field under this same
+	// lock, so a Close() landing between the two would dereference nil here.
 	w.ioMu.Lock()
+	if w.Terminal == nil {
+		w.ioMu.Unlock()
+		return
+	}
 	for _, c := range cells {
 		cell := &uv.Cell{
 			Content: c.Content,

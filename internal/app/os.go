@@ -106,25 +106,44 @@ type OS struct {
 	X                        int
 	Y                        int
 	Mode                     Mode
-	terminalMu               sync.RWMutex
-	LastMouseX               int
-	LastMouseY               int
-	HasActiveTerminals       bool
-	idleFrames               int // Consecutive frames with no content changes (for adaptive tick)
-	ShowHelp                 bool
-	InteractionMode          bool                       // True when actively dragging/resizing
-	MouseSnapping            bool                       // Enable/disable mouse snapping
-	WindowExitChan           chan string                // Channel to signal window closure
-	PTYDataChan              chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
-	StateSyncChan            chan *session.SessionState // Channel for thread-safe state sync from callbacks
-	ClientEventChan          chan ClientEvent           // Channel for thread-safe client join/leave notifications
-	Animations               []*ui.Animation            // Active animations
-	CPUHistory               []float64                  // CPU usage history for graph
-	LastCPUUpdate            time.Time                  // Last time CPU was updated
-	RAMUsage                 float64                    // Cached RAM usage percentage
-	LastRAMUpdate            time.Time                  // Last time RAM was updated
-	AutoTiling               bool                       // Automatic tiling mode enabled
-	MasterRatio              float64                    // Master window width ratio for tiling (0.3-0.7)
+	// terminalMu guards the m.Windows slice and the per-window dirty flags and
+	// render caches against the UI goroutine's render pass. It does NOT guard
+	// emulator cell data; that is Window.ioMu.
+	//
+	//   LOCK ORDER (global, whole process):
+	//       app.OS.terminalMu  ->  Window.ioMu  ->  KittyPassthrough.mu / SixelPassthrough.mu
+	//
+	//   terminalMu is the outermost of the three. renderTerminal is the only
+	//   place that holds terminalMu and a window's ioMu at once, and it takes
+	//   them in that order. Nothing may take terminalMu while holding any
+	//   window's ioMu.
+	//
+	//   NOT REENTRANT. The holders here (MarkAllDirty,
+	//   MarkTerminalsWithNewContent, FlushPTYBuffersAfterResize,
+	//   renderTerminal) must not call each other. In particular do not call
+	//   MarkAllDirty from inside a renderTerminal locked region.
+	//
+	//   NEVER BLOCK WHILE HOLDING IT: it is taken on the UI goroutine every
+	//   frame, so any block here is a visible stall.
+	terminalMu         sync.RWMutex
+	LastMouseX         int
+	LastMouseY         int
+	HasActiveTerminals bool
+	idleFrames         int // Consecutive frames with no content changes (for adaptive tick)
+	ShowHelp           bool
+	InteractionMode    bool                       // True when actively dragging/resizing
+	MouseSnapping      bool                       // Enable/disable mouse snapping
+	WindowExitChan     chan string                // Channel to signal window closure
+	PTYDataChan        chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
+	StateSyncChan      chan *session.SessionState // Channel for thread-safe state sync from callbacks
+	ClientEventChan    chan ClientEvent           // Channel for thread-safe client join/leave notifications
+	Animations         []*ui.Animation            // Active animations
+	CPUHistory         []float64                  // CPU usage history for graph
+	LastCPUUpdate      time.Time                  // Last time CPU was updated
+	RAMUsage           float64                    // Cached RAM usage percentage
+	LastRAMUpdate      time.Time                  // Last time RAM was updated
+	AutoTiling         bool                       // Automatic tiling mode enabled
+	MasterRatio        float64                    // Master window width ratio for tiling (0.3-0.7)
 	// BSP tiling state
 	WorkspaceTrees        map[int]*layout.BSPTree // BSP tree per workspace
 	PreselectionDir       layout.PreselectionDir  // Pending preselection direction (0 = none)

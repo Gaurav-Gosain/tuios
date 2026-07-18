@@ -34,6 +34,20 @@ import (
 // does. Against the unfixed code it deadlocks and fails on the deadline.
 // Against the fixed code the cursor query happens before the lock is taken, the
 // two acquisitions never nest, and it completes promptly.
+
+// Deliberately NOT ported to testing/synctest, despite the deadline-based
+// failure below looking like exactly what synctest is for. A goroutine blocked
+// on a sync.Mutex or sync.RWMutex is not "durably blocked" as synctest defines
+// it - only channel operations, select, time.Sleep, WaitGroup.Wait and
+// Cond.Wait qualify. A lock-reentry deadlock inside a bubble therefore does not
+// trip synctest's deadlock detector; the bubble simply stops making progress
+// and the test binary hangs until the package timeout, with a worse diagnostic
+// than the explicit deadline here gives.
+//
+// synctest is the right tool for the sibling tests that assert on goroutine
+// lifetime and on lock state sampled with TryLock (see
+// internal/terminal/window_goroutine_leak_test.go and
+// window_lock_discipline_test.go). It is the wrong tool for a mutex deadlock.
 func TestRenderTerminalDoesNotReenterIOLock(t *testing.T) {
 	win := newTestWindow(t, "reentry", 80, 24)
 	win.WriteOutput([]byte("hello from the shell\r\n"))

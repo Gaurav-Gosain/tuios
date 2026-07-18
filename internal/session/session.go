@@ -157,7 +157,24 @@ type PTY struct {
 
 	// Terminal emulator - maintains scrollback, screen state, cursor position
 	// This persists across client disconnect/reconnect
-	terminal   *vt.Emulator
+	terminal *vt.Emulator
+	// terminalMu guards the daemon-side VT emulator (p.terminal) and the
+	// p.width/p.height it is sized to. This is the daemon process; it is a
+	// different lock from app.OS.terminalMu and the two never coexist.
+	//
+	//   LOCK ORDER (within the daemon):
+	//       PTY.terminalMu  ->  (nothing)
+	//
+	//   It is a leaf lock. No holder may take p.outputMu, send on a channel,
+	//   or touch p.pty while holding it. Resize deliberately drops it before
+	//   calling p.pty.Resize, and vtWriter drops it between queue items, for
+	//   exactly that reason: p.pty operations are syscalls that can block, and
+	//   the subscriber/capture paths take the read side constantly.
+	//
+	//   NOT REENTRANT. Size, SetCellSize, Resize, GetTerminalState,
+	//   CaptureContent and vtWriter must not call one another
+	//   (UpdatePixelDimensions calls SetCellSize and Size in sequence, not
+	//   nested, which is why it is written that way).
 	terminalMu sync.RWMutex
 	width      int
 	height     int

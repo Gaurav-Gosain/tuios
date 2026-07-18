@@ -599,7 +599,10 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 			termWidth := w.ContentWidth()
 			termHeight := w.ContentHeight()
 			w.LockIO()
-			w.Terminal.Resize(termWidth, termHeight)
+			// Re-check under the lock; Close() nils Terminal while holding it.
+			if w.Terminal != nil {
+				w.Terminal.Resize(termWidth, termHeight)
+			}
 			w.UnlockIO()
 		}
 
@@ -879,7 +882,10 @@ func (m *OS) SyncDaemonPTYDimensions() {
 			// output goroutine and the renderer, so a resize needs ioMu.
 			if w.Terminal != nil {
 				w.LockIO()
-				w.Terminal.Resize(termWidth, termHeight)
+				// Re-check under the lock; Close() nils Terminal while holding it.
+				if w.Terminal != nil {
+					w.Terminal.Resize(termWidth, termHeight)
+				}
 				w.UnlockIO()
 			}
 		}
