@@ -27,6 +27,10 @@ func record(t *testing.T, m *OS) *hookRecorder {
 	if m.HookManager == nil {
 		m.HookManager = hooks.NewManager()
 	}
+	// NewOS loads the config of whoever is running the tests, hooks included.
+	// Drop those first: a developer with a real hook configured would otherwise
+	// see it fire alongside the test's and fail the one-event-per-action checks.
+	m.HookManager.ClearAll()
 	r := &hookRecorder{}
 	m.HookManager.SetRunner(func(_ string, ctx hooks.Context) {
 		r.mu.Lock()
