@@ -271,6 +271,22 @@ func (m *OS) RecalcZOrder() {
 	m.MarkAllDirty()
 }
 
+// QuitSession performs a deliberate, user-initiated quit. In a daemon session
+// that also kills the session, so it records the intent first: the daemon
+// announces the session ending and the connection dropping, and either can
+// arrive before the program finishes quitting. Update consults QuitRequested so
+// those announcements are not mistaken for a session killed from elsewhere,
+// which would make a normal exit report an error.
+//
+// Every deliberate quit path routes through here so they cannot drift apart.
+func (m *OS) QuitSession() {
+	m.QuitRequested = true
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		_ = m.DaemonClient.KillSession()
+	}
+	m.Cleanup()
+}
+
 // AddWindow adds a new window to the current workspace.
 // In daemon mode, this creates a daemon-managed PTY and window.
 func (m *OS) AddWindow(title string) *OS {

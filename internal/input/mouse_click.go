@@ -42,10 +42,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				midX := dialogX + dialogW/2
 				if X < midX {
 					// Clicked "Yes" (left side)
-					if o.IsDaemonSession && o.DaemonClient != nil {
-						_ = o.DaemonClient.KillSession()
-					}
-					o.Cleanup()
+					o.QuitSession()
 					return o, tea.Quit
 				} else {
 					// Clicked "No" (right side)

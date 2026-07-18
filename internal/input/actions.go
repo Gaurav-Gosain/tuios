@@ -559,10 +559,7 @@ func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.QuitConfirmSelection = 0 // Default to Yes
 	} else {
 		// No foreground processes - quit and kill daemon session
-		if o.IsDaemonSession && o.DaemonClient != nil {
-			_ = o.DaemonClient.KillSession()
-		}
-		o.Cleanup()
+		o.QuitSession()
 		return o, tea.Quit
 	}
 	return o, nil

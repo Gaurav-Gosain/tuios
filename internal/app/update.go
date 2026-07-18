@@ -827,7 +827,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case DaemonDisconnectedMsg:
 		// The daemon connection was lost and cannot be recovered; quit cleanly
 		// so the user is not left staring at a frozen, unresponsive session.
-		m.ExitReason = ExitDaemonLost
+		// After a deliberate quit the drop is the expected consequence of
+		// killing the session, not a failure, so leave the reason alone.
+		if !m.QuitRequested {
+			m.ExitReason = ExitDaemonLost
+		}
 		return m, tea.Quit
 
 	case SessionEndedMsg:
@@ -835,7 +839,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// gone and its PTYs are closed, so there is nothing left to render and
 		// nothing to sync back. Record why and quit; the caller reports it and
 		// exits non-zero.
-		m.ExitReason = ExitSessionKilled
+		//
+		// Unless this client asked for it: quitting a daemon session kills it,
+		// and the daemon announces that back to us. Reporting the user's own
+		// quit as an unexpected termination is what made a deliberate exit
+		// print an error.
+		if !m.QuitRequested {
+			m.ExitReason = ExitSessionKilled
+		}
 		return m, tea.Quit
 
 	case ConfigReloadedMsg:

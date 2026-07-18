@@ -191,6 +191,14 @@ type OS struct {
 	// to pick an exit status. Empty means the user quit or detached normally.
 	// It is written only on the Bubble Tea goroutine, in Update.
 	ExitReason ExitReason
+	// QuitRequested records that the user deliberately quit this client, which
+	// in a daemon session also kills the session. The daemon then announces the
+	// session ending and the connection dropping, and both announcements can
+	// arrive before the program finishes quitting. Without this flag those
+	// announcements are indistinguishable from a session killed from elsewhere,
+	// and a deliberate quit reports an error. Written only on the Bubble Tea
+	// goroutine, like ExitReason.
+	QuitRequested bool
 	// Multi-client effective size (min of all clients in session)
 	EffectiveWidth  int // Effective width for rendering (min of all clients, 0 = use terminal size)
 	EffectiveHeight int // Effective height for rendering (min of all clients, 0 = use terminal size)

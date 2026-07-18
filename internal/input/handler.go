@@ -130,10 +130,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if key == "y" {
 			o.QuitConfirmSelection = 0 // Yes
 			// Kill daemon session if in daemon mode
-			if o.IsDaemonSession && o.DaemonClient != nil {
-				_ = o.DaemonClient.KillSession()
-			}
-			o.Cleanup()
+			o.QuitSession()
 			return o, tea.Quit
 		}
 		if key == "n" {
@@ -146,10 +143,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if key == "enter" {
 			if o.QuitConfirmSelection == 0 {
 				// Yes selected - quit and kill daemon session
-				if o.IsDaemonSession && o.DaemonClient != nil {
-					_ = o.DaemonClient.KillSession()
-				}
-				o.Cleanup()
+				o.QuitSession()
 				return o, tea.Quit
 			}
 			// No selected - close dialog
@@ -465,10 +459,7 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.QuitConfirmSelection = 0 // Default to Yes
 		} else {
 			// No foreground processes - quit and kill daemon session
-			if o.IsDaemonSession && o.DaemonClient != nil {
-				_ = o.DaemonClient.KillSession()
-			}
-			o.Cleanup()
+			o.QuitSession()
 			return o, tea.Quit
 		}
 		return o, nil
@@ -612,4 +603,3 @@ func logScrollBounds(screenHeight, totalLogs int) (logsPerPage, maxScroll int) {
 	maxScroll = max(totalLogs-logsPerPage, 0)
 	return logsPerPage, maxScroll
 }
-
