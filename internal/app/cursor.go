@@ -23,14 +23,28 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		return nil
 	}
 
-	// Hide during copy mode, scrollback, or when VT hides cursor
+	// Hide during copy mode, scrollback, or when VT hides cursor.
+	// IsCursorHidden and CursorPosition read emulator state that the PTY and
+	// daemon output goroutines mutate under the window's I/O lock, so both
+	// reads take the read side of it.
 	if (window.CopyMode != nil && window.CopyMode.Active) ||
-		window.ScrollbackOffset > 0 ||
-		window.Terminal.IsCursorHidden() {
+		window.ScrollbackOffset > 0 {
 		return nil
 	}
 
+	window.RLockIO()
+	// Re-check under the lock: Close() nils Terminal while holding it.
+	if window.Terminal == nil {
+		window.RUnlockIO()
+		return nil
+	}
+	hidden := window.Terminal.IsCursorHidden()
 	pos := window.Terminal.CursorPosition()
+	window.RUnlockIO()
+
+	if hidden {
+		return nil
+	}
 	contentWidth := window.ContentWidth()
 	contentHeight := window.ContentHeight()
 

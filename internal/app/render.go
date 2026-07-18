@@ -453,7 +453,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 				visible := w.Workspace == m.CurrentWorkspace && !w.Minimized
 				scrollbackLen := 0
 				if w.Terminal != nil {
-					scrollbackLen = w.Terminal.ScrollbackLen()
+					scrollbackLen = w.ScrollbackLenSync()
 				}
 				backing[n] = WindowPositionInfo{
 					WindowX:            w.X,
@@ -521,7 +521,7 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 			}
 			scrollbackLen := 0
 			if w.Terminal != nil {
-				scrollbackLen = w.Terminal.ScrollbackLen()
+				scrollbackLen = w.ScrollbackLenSync()
 			}
 			// Reuse a single value; the callback's result is consumed before
 			// the next call, so a shared value avoids a per-call heap alloc.

@@ -543,11 +543,25 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.SetAltScreen(ws.IsAltScreen)
 
 	if sizeChanged {
-		// Resize terminal emulator
+		// Resize terminal emulator.
+		//
+		// This must hold the window's I/O lock, exactly as Window.Resize does.
+		// Terminal has no lock of its own: the daemon outputWriter goroutine
+		// writes the cell buffer under ioMu and the renderer reads it under
+		// RLockIO, while Resize reallocates every line in that buffer. An
+		// unlocked resize here tears the buffer out from under a concurrent
+		// write or render, and the pane composites as empty cells. Because
+		// renderTerminal caches whatever it produced and an idle shell emits
+		// nothing to re-dirty it, the pane then stays blank.
+		//
+		// This path is reached on every daemon state sync, and any input in a
+		// daemon session syncs state, so a focus change is the common trigger.
 		if w.Terminal != nil {
 			termWidth := w.ContentWidth()
 			termHeight := w.ContentHeight()
+			w.LockIO()
 			w.Terminal.Resize(termWidth, termHeight)
+			w.UnlockIO()
 		}
 
 		// Resize PTY in daemon
@@ -743,9 +757,13 @@ func (m *OS) SyncDaemonPTYDimensions() {
 					w.ID[:8], termWidth, termHeight)
 			}
 
-			// Ensure local VT emulator dimensions also match
+			// Ensure local VT emulator dimensions also match. Same rule as
+			// updateWindowFromState: the emulator buffer is shared with the
+			// output goroutine and the renderer, so a resize needs ioMu.
 			if w.Terminal != nil {
+				w.LockIO()
 				w.Terminal.Resize(termWidth, termHeight)
+				w.UnlockIO()
 			}
 		}
 	}
