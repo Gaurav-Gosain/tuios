@@ -117,6 +117,9 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		}
 
 		if window.CachedLayer != nil && !window.Dirty && !window.ContentDirty && !window.PositionDirty {
+			if renderTraceEnabled {
+				traceLayerHold(window, isFocused, "clean")
+			}
 			layers = append(layers, window.CachedLayer)
 			// Scrollbar layer (always fresh, not cached). Alt-screen apps (btop,
 			// vim) have no scrollback, so drawing a scrollback thumb over them
@@ -140,6 +143,9 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.CachedLayer.GetX() == window.X &&
 			window.CachedLayer.GetY() == window.Y &&
 			window.CachedLayer.GetZ() == zIndex {
+			if renderTraceEnabled {
+				traceLayerHold(window, isFocused, "sync-2026")
+			}
 			layers = append(layers, window.CachedLayer)
 			if windowNeedsScrollbar(window) {
 				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
@@ -156,6 +162,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.CachedLayer.GetZ() != window.Z
 
 		if !needsRedraw || (!isFocused && !isFullyVisible && !window.ContentDirty && !window.PositionDirty && !window.IsBeingManipulated && window.CachedLayer != nil) {
+			// renderTerminal is never entered on this path, so without a line
+			// here the trace simply stops for a window that has settled, which
+			// reads misleadingly like a missing branch rather than a reused
+			// layer.
+			if renderTraceEnabled {
+				traceLayerHold(window, isFocused, "not-needed")
+			}
 			layers = append(layers, window.CachedLayer)
 			continue
 		}
@@ -167,6 +180,11 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.X, window.Y,
 			viewportWidth, viewportHeight+topMargin,
 		)
+
+		if renderTraceEnabled {
+			traceLayerBuild(window, isFocused, boxContent, clippedContent,
+				window.X, window.Y, finalX, finalY, zIndex, viewportWidth, viewportHeight+topMargin)
+		}
 
 		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
 		layers = append(layers, window.CachedLayer)
@@ -453,7 +471,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 				visible := w.Workspace == m.CurrentWorkspace && !w.Minimized
 				scrollbackLen := 0
 				if w.Terminal != nil {
-					scrollbackLen = w.Terminal.ScrollbackLen()
+					scrollbackLen = w.ScrollbackLenSync()
 				}
 				backing[n] = WindowPositionInfo{
 					WindowX:            w.X,
@@ -521,7 +539,7 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 			}
 			scrollbackLen := 0
 			if w.Terminal != nil {
-				scrollbackLen = w.Terminal.ScrollbackLen()
+				scrollbackLen = w.ScrollbackLenSync()
 			}
 			// Reuse a single value; the callback's result is consumed before
 			// the next call, so a shared value avoids a per-call heap alloc.

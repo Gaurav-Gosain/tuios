@@ -461,9 +461,21 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 	lines := strings.Split(content, "\n")
 	windowHeight := len(lines)
 
+	// The window is as wide as its widest line, not as wide as its first one.
+	// Measuring only lines[0] under-reports the width whenever the top row is
+	// blank, and the unfocused fast render path trims trailing spaces, so a
+	// full-screen application with an empty first row (nvim, among others)
+	// produced a frame starting with an empty line and measured as zero wide.
+	// The offscreen guard below then read x+0 <= 0 as true for the leftmost
+	// tile and discarded the whole frame, compositing the pane as bare
+	// background while the rest of the layout carried on. The same
+	// under-measurement also let the horizontal clip below be skipped for
+	// content that really did overrun the viewport.
 	windowWidth := 0
-	if len(lines) > 0 {
-		windowWidth = ansi.StringWidth(lines[0])
+	for _, line := range lines {
+		if w := ansi.StringWidth(line); w > windowWidth {
+			windowWidth = w
+		}
 	}
 
 	if x+windowWidth <= 0 || x >= viewportWidth || y+windowHeight <= 0 || y >= viewportHeight {

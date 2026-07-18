@@ -27,7 +27,7 @@ func windowNeedsScrollbar(window *terminal.Window) bool {
 	if window.Tiled && (!window.Zoomed || config.SharedBorders) {
 		return false
 	}
-	scrollbackLen := window.Terminal.ScrollbackLen()
+	scrollbackLen := window.ScrollbackLenSync()
 	if scrollbackLen <= 0 {
 		return false
 	}
@@ -58,7 +58,7 @@ func renderScrollbarLayer(window *terminal.Window, borderColor color.Color, zInd
 		return nil
 	}
 
-	scrollbackLen := window.Terminal.ScrollbackLen()
+	scrollbackLen := window.ScrollbackLenSync()
 	if scrollbackLen <= 0 {
 		return nil
 	}

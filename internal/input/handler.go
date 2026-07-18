@@ -107,11 +107,14 @@ func shouldShowQuitDialog(o *app.OS) bool {
 // button of the confirmation dialog reached by key, by enter and by mouse), each
 // of which could drift from the others about whether to kill the session or run
 // Cleanup. There is one of them now.
+//
+// The kill-and-clean sequence itself lives on OS.QuitSession, which also records
+// that the quit was deliberate. That matters because killing the session makes
+// the daemon announce the session ending and the connection dropping back to us,
+// and either can land before the program finishes quitting; without the recorded
+// intent Update reports the user's own quit as an unexpected termination.
 func quitSession(o *app.OS) (*app.OS, tea.Cmd) {
-	if o.IsDaemonSession && o.DaemonClient != nil {
-		_ = o.DaemonClient.KillSession()
-	}
-	o.Cleanup()
+	o.QuitSession()
 	return o, tea.Quit
 }
 

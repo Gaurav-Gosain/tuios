@@ -447,6 +447,16 @@ func (e *Emulator) IsAltScreen() bool {
 	return e.isModeSet(ansi.ModeAltScreen) || e.isModeSet(ansi.ModeAltScreenSaveCursor)
 }
 
+// ActiveScreenIsAlt reports whether the active screen pointer currently
+// addresses the alternate buffer. This is a diagnostic accessor: it exists so
+// the render trace can distinguish the buffer actually being read from the mode
+// bits reported by IsAltScreen, which RestoreAltScreenMode deliberately leaves
+// untouched. It is not part of the emulator's behavioural contract, so do not
+// build rendering or input logic on it.
+func (e *Emulator) ActiveScreenIsAlt() bool {
+	return e.scr == &e.scrs[1]
+}
+
 // RestoreAltScreenMode restores the alternate screen mode state.
 // This is used when reconnecting to a daemon session to restore the emulator state
 // without re-sending the escape sequences that would trigger the mode change.

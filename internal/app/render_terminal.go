@@ -34,30 +34,95 @@ var (
 				Foreground(lipgloss.Color("#000000"))
 )
 
+// isBlankRender reports whether a rendered frame carries no visible text, so
+// styling and cursor positioning alone do not count as content. It walks bytes
+// and returns on the first visible one, so the ordinary non-blank frame costs a
+// few comparisons and no allocation.
+func isBlankRender(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == 0x1b:
+			// Skip an escape sequence up to its final byte.
+			i++
+			for i < len(s) && !((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')) {
+				i++
+			}
+		case c == ' ', c == '\n', c == '\r', c == '\t':
+			// Whitespace is not content.
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// cacheRender stores a freshly rendered frame as the window's cached content and
+// clears the repaint request, but refuses to do either for a frame with no
+// visible text.
+//
+// A full-screen application clears the alternate screen when it enters it and
+// paints a moment later. A render landing in that gap produces a genuinely
+// blank frame, which is correct to display right then but must not become the
+// window's cached truth: caching it also clears ContentDirty, and if focus
+// moves away before the application paints, nothing re-reads the emulator. The
+// pane then serves the blank cache from the branch above for as long as the
+// application stays idle, which is exactly what a full-screen editor does once
+// it has drawn. Leaving the frame uncached and the window dirty costs one cheap
+// re-render per frame while a pane is genuinely blank, and guarantees the next
+// frame reads the emulator again rather than freezing the gap.
+func cacheRender(window *terminal.Window, content string) {
+	if isBlankRender(content) {
+		return
+	}
+	window.CachedContent = content
+	window.ContentDirty = false
+}
+
 func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalMode bool) string {
+	entryDirty := window.ContentDirty
+
 	if window.IsBeingManipulated && m.Resizing {
-		return m.renderResizeIndicator(window)
+		out := m.renderResizeIndicator(window)
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, entryDirty, "resize-indicator", out)
+		}
+		return out
 	}
 
 	if (window.IsBeingManipulated || !window.ContentDirty) && window.CachedContent != "" {
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-clean", window.CachedContent)
+		}
 		return window.CachedContent
 	}
 
-	if !isFocused && window.CachedContent != "" {
-		return window.CachedContent
-	}
+	// An unfocused window used to return its cache here unconditionally, even
+	// with ContentDirty set. That silently discarded a repaint request: the
+	// paths that mark content dirty without dropping the cache (WriteToPTY and
+	// the drag and resize release handler) left the window able to serve stale
+	// bytes indefinitely, because nothing else re-reads the emulator while a
+	// window is unfocused. Once the flag is honoured the branch is subsumed by
+	// the one above, which already serves the cache whenever the content is
+	// clean, focused or not, so there is nothing left for it to do.
 
 	m.terminalMu.Lock()
 	defer m.terminalMu.Unlock()
 
 	if window.Terminal == nil {
 		window.CachedContent = "Terminal not initialized"
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, entryDirty, "no-terminal", window.CachedContent)
+		}
 		return window.CachedContent
 	}
 
 	screen := window.Terminal
 	if screen == nil {
 		window.CachedContent = "No screen"
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, entryDirty, "no-screen", window.CachedContent)
+		}
 		return window.CachedContent
 	}
 
@@ -73,14 +138,19 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// the slow path for cursor overlay and selection highlighting.
 	if !isFocused && window.CopyMode == nil && !window.IsSelecting && window.SelectedText == "" && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
-		window.CachedContent = rendered
-		window.ContentDirty = false
+		cacheRender(window, rendered)
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, entryDirty, "fast-unfocused", rendered)
+		}
 		return rendered
 	}
 
 	// Fast path for scrollback mode: content is static at a given scroll
 	// position, so reuse the cache if the offset hasn't changed.
 	if window.ScrollbackOffset > 0 && window.CachedContent != "" && !window.ContentDirty {
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-scrollback", window.CachedContent)
+		}
 		return window.CachedContent
 	}
 
@@ -525,8 +595,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	content := builder.String()
 
-	window.CachedContent = content
-	window.ContentDirty = false
+	cacheRender(window, content)
+	if renderTraceEnabled {
+		traceRender(window, isFocused, inTerminalMode, entryDirty, "slow", content)
+	}
 	return content
 }
 

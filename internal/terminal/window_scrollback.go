@@ -4,6 +4,21 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
+// ScrollbackLenSync returns the scrollback length under the window's I/O lock.
+// Callers on the render loop must use this rather than ScrollbackLen, because
+// the PTY reader and the daemon outputWriter push scrollback lines from
+// background goroutines. ScrollbackLen itself stays lock-free: renderTerminal
+// calls it while already holding RLockIO, and RWMutex read locks do not nest
+// safely against a waiting writer.
+func (w *Window) ScrollbackLenSync() int {
+	w.ioMu.RLock()
+	defer w.ioMu.RUnlock()
+	if w.Terminal == nil {
+		return 0
+	}
+	return w.Terminal.ScrollbackLen()
+}
+
 // ScrollbackLen returns the number of lines in the scrollback buffer.
 func (w *Window) ScrollbackLen() int {
 	if w.Terminal == nil {
