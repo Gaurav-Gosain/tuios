@@ -204,12 +204,25 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 		name = d.manager.GenerateSessionName()
 	}
 
-	_, err := d.manager.CreateSession(name, cfg, payload.Width, payload.Height)
+	sess, err := d.manager.CreateSession(name, cfg, payload.Width, payload.Height)
 	if err != nil {
 		if err.Error() == fmt.Sprintf("session '%s' already exists", name) {
 			return d.sendError(cs, ErrCodeSessionExists, err.Error())
 		}
 		return fmt.Errorf("failed to create session: %w", err)
+	}
+
+	// A detached session has no client to create its first window, so spawn one
+	// daemon-side. This makes the session immediately usable by control verbs
+	// and gives a later 'tuios attach' a window to restore. Non-detach creation
+	// keeps its historical behavior of an empty session the TUI populates.
+	if payload.Detach {
+		sessionID := sess.ID
+		onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
+		if _, err := sess.AddDaemonWindow("Window", onExit); err != nil {
+			return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to create initial window: %v", err))
+		}
+		log.Printf("Created detached session %q with an initial window", name)
 	}
 
 	return d.handleList(cs)

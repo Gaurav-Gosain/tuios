@@ -60,6 +60,44 @@ func runNewSession(sessionName string) error {
 	return runDaemonSession(sessionName, true)
 }
 
+// runNewSessionDetached creates a headless session in the daemon and returns
+// without launching the TUI. The session holds an initial window, is usable by
+// control verbs immediately, and can be attached later with 'tuios attach'.
+func runNewSessionDetached(sessionName string) error {
+	if !session.IsDaemonRunning() {
+		fmt.Println("Starting TUIOS daemon...")
+		if err := startDaemonBackground(); err != nil {
+			return fmt.Errorf("failed to start daemon: %w", err)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	client := session.NewClient(&session.ClientConfig{Version: version})
+	if err := client.Connect(); err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if sessionName == "" {
+		sessions, err := client.ListSessions()
+		if err != nil {
+			return fmt.Errorf("failed to list sessions: %w", err)
+		}
+		existing := make([]string, len(sessions))
+		for i, s := range sessions {
+			existing[i] = s.Name
+		}
+		sessionName = generateUniqueSessionName(existing)
+	}
+
+	if err := client.CreateDetachedSession(sessionName, 80, 24); err != nil {
+		return err
+	}
+
+	fmt.Printf("Created detached session '%s'. Attach with 'tuios attach %s'.\n", sessionName, sessionName)
+	return nil
+}
+
 func generateUniqueSessionName(existingNames []string) string {
 	existing := make(map[string]bool)
 	for _, name := range existingNames {

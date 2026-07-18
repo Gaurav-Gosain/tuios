@@ -358,6 +358,7 @@ This requires the TUIOS daemon to be running.`,
 	}
 	attachCmd.Flags().BoolVarP(&createIfMissing, "create", "c", false, "Create session if it doesn't exist")
 
+	var newDetach bool
 	newCmd := &cobra.Command{
 		Use:   "new [session-name]",
 		Short: "Create a new TUIOS session",
@@ -366,22 +367,33 @@ This requires the TUIOS daemon to be running.`,
 This starts a new session in the daemon (starting the daemon if needed)
 and immediately attaches you to it.
 
+With --detach the session is created headless (no client attached): it
+gets an initial window, is immediately usable by control commands
+(send-keys, run-command, capture-pane), and can be attached later.
+
 Sessions persist even when you detach, allowing you to reconnect later
 with 'tuios attach'.`,
 		Example: `  # Create a new session with auto-generated name
   tuios new
 
   # Create a named session
-  tuios new mysession`,
+  tuios new mysession
+
+  # Create a headless session without attaching
+  tuios new mysession --detach`,
 		Aliases: []string{"n"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
 			if len(args) > 0 {
 				name = args[0]
 			}
+			if newDetach {
+				return runNewSessionDetached(name)
+			}
 			return runNewSession(name)
 		},
 	}
+	newCmd.Flags().BoolVarP(&newDetach, "detach", "d", false, "Create the session headless without attaching a client")
 
 	var lsJSON bool
 	lsCmd := &cobra.Command{

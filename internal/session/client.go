@@ -148,6 +148,45 @@ func (c *Client) KillSession(name string) error {
 	}
 }
 
+// CreateDetachedSession asks the daemon to create a headless session (with an
+// initial window) and no attached client. name may be empty to let the daemon
+// generate one. It returns an error if the name is already taken.
+func (c *Client) CreateDetachedSession(name string, width, height int) error {
+	msg, err := NewMessageWithCodec(MsgNew, &NewPayload{
+		SessionName: name,
+		Width:       width,
+		Height:      height,
+		Detach:      true,
+	}, c.codec)
+	if err != nil {
+		return err
+	}
+
+	if err := c.send(msg); err != nil {
+		return err
+	}
+
+	resp, err := c.recv()
+	if err != nil {
+		return err
+	}
+
+	switch resp.Type {
+	case MsgSessionList:
+		return nil // Success
+
+	case MsgError:
+		var errPayload ErrorPayload
+		if err := resp.ParsePayloadWithCodec(&errPayload, c.codec); err != nil {
+			return fmt.Errorf("create failed")
+		}
+		return fmt.Errorf("create failed: %s", errPayload.Message)
+
+	default:
+		return fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+}
+
 // ResurrectSession asks the daemon to restore a saved session on demand. It is
 // a no-op (success) if the session is already live.
 func (c *Client) ResurrectSession(name string) error {

@@ -136,6 +136,12 @@ type NewPayload struct {
 	SessionName string `json:"session_name,omitempty"` // Desired session name (auto-generated if empty)
 	Width       int    `json:"width"`                  // Initial terminal width
 	Height      int    `json:"height"`                 // Initial terminal height
+	// Detach requests a headless session: the daemon spawns an initial window
+	// with no client attached, so the session is immediately usable by control
+	// verbs. Additive and backward compatible; older daemons ignore it and
+	// simply create an empty session. Zero value keeps the pre-existing
+	// "create an empty session" behavior.
+	Detach bool `json:"detach,omitempty"`
 }
 
 // SessionInfo describes a single session for listing.
