@@ -433,6 +433,14 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		}()
 	})
 
+	// Handle the session being killed out from under this client. The session
+	// no longer exists, so the client must exit rather than sit in a dead UI.
+	client.OnSessionEnded(func(name, reason string) {
+		go func() {
+			p.Send(app.SessionEndedMsg{SessionName: name, Reason: reason})
+		}()
+	})
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -442,8 +450,16 @@ func runDaemonSession(sessionName string, createNew bool) error {
 
 	finalModel, err := p.Run()
 
+	reason := app.ExitNormal
 	if finalOS, ok := finalModel.(*app.OS); ok {
-		finalOS.SyncStateToDaemon()
+		reason = finalOS.ExitReason
+		// Syncing state back is meaningful only while the session still exists.
+		// After it was killed the daemon has no session to receive the state,
+		// and after the connection was lost the write cannot land, so skip it
+		// rather than block on a dead socket on the way out.
+		if reason == app.ExitNormal {
+			finalOS.SyncStateToDaemon()
+		}
 		finalOS.Cleanup()
 	}
 
@@ -455,8 +471,32 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		return fmt.Errorf("program error: %w", err)
 	}
 
-	fmt.Printf("[detached from session '%s']\n", sessionName)
-	return nil
+	return reportSessionExit(sessionName, reason)
+}
+
+// reportSessionExit prints why the client stopped and returns an error for the
+// cases that are not a normal detach, so a script or an agent driving tuios sees
+// a non-zero status instead of a message that reads like success.
+func reportSessionExit(sessionName string, reason app.ExitReason) error {
+	switch reason {
+	case app.ExitSessionKilled:
+		return &diagnosticError{
+			What:  fmt.Sprintf("Session %q was terminated while you were attached.", sessionName),
+			Cause: "the session was killed from another client, from 'tuios kill-session', or over the control plane.",
+			Fix:   "run 'tuios ls' to see remaining sessions, or 'tuios new' to start another.",
+		}
+
+	case app.ExitDaemonLost:
+		return &diagnosticError{
+			What:  "The connection to the TUIOS daemon was lost.",
+			Cause: "the daemon exited, crashed, or was stopped while this client was attached.",
+			Fix:   "run 'tuios ls' to check the daemon, then 'tuios attach " + sessionName + "' to reconnect if the session survived.",
+		}
+
+	default:
+		fmt.Printf("[detached from session '%s']\n", sessionName)
+		return nil
+	}
 }
 
 func runListSessions(jsonOutput bool) error {

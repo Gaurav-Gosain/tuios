@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -280,5 +281,50 @@ func TestClosestNameMatchesTheDaemonPolicy(t *testing.T) {
 		if got := closestName(tc.target, names); got != tc.want {
 			t.Errorf("closestName(%q) = %q, want %q", tc.target, got, tc.want)
 		}
+	}
+}
+
+// TestReportSessionExitDistinguishesTheOutcomes pins the three ways an attached
+// client can stop. A kill and a lost daemon are not detaches: they must be
+// reported as such and must not exit zero, or a script cannot tell whether its
+// session survived.
+func TestReportSessionExitDistinguishesTheOutcomes(t *testing.T) {
+	tests := []struct {
+		name      string
+		reason    app.ExitReason
+		wantError bool
+		want      []string
+	}{
+		{
+			name:      "normal detach",
+			reason:    app.ExitNormal,
+			wantError: false,
+		},
+		{
+			name:      "session killed underneath the client",
+			reason:    app.ExitSessionKilled,
+			wantError: true,
+			want:      []string{`Session "work" was terminated`, "kill-session", "tuios ls"},
+		},
+		{
+			name:      "daemon lost",
+			reason:    app.ExitDaemonLost,
+			wantError: true,
+			want:      []string{"connection to the TUIOS daemon was lost", "tuios attach work"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := reportSessionExit("work", tc.reason)
+
+			if !tc.wantError {
+				if err != nil {
+					t.Fatalf("a normal detach must not be an error, got: %v", err)
+				}
+				return
+			}
+			requireLines(t, tc.name, err, tc.want...)
+		})
 	}
 }
