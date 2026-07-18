@@ -186,7 +186,7 @@ type OS struct {
 	// echoed back on every state sync so the daemon can tell a snapshot built
 	// from its current state apart from one built before a mutation of its own.
 	DaemonStateVersion int
-	SubscribedPTYs    map[string]bool    // Tracks which PTY IDs are currently subscribed (for visibility optimization)
+	SubscribedPTYs     map[string]bool // Tracks which PTY IDs are currently subscribed (for visibility optimization)
 	// ExitReason records why the program stopped, for the caller to report and
 	// to pick an exit status. Empty means the user quit or detached normally.
 	// It is written only on the Bubble Tea goroutine, in Update.

@@ -155,3 +155,79 @@ func TestVerbSetOptionRecordsAndRoutes(t *testing.T) {
 		t.Errorf("option not recorded: %q,%v", v, ok)
 	}
 }
+
+// TestRenameWindowWithAttachedTUIUpdatesDaemonState reproduces a bug a user hits
+// today: with a TUI attached, "tuios run-command RenameWindow" was routed to the
+// client, which renamed its own copy of the window and reported success. The
+// daemon's state, which every read verb answers from, kept the old name, so the
+// rename reported success and list-windows still showed the old name.
+//
+// The rename is a change to a field the daemon owns, so the daemon performs it.
+func TestRenameWindowWithAttachedTUIUpdatesDaemonState(t *testing.T) {
+	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
+	defer d.manager.Shutdown()
+
+	sess := makeSessionWithWindow(t, d, "renamed")
+	win := sess.GetState().Windows[0]
+
+	_, clientSide := newFakeTUI(t, d, sess.ID)
+	// The client-side pipe must be drained or a daemon push would block.
+	go func() {
+		for {
+			if _, _, err := ReadMessageWithCodec(clientSide); err != nil {
+				return
+			}
+		}
+	}()
+
+	requester := &connState{
+		conn: newDiscardConn(t), clientID: "ctl",
+		done: make(chan struct{}), codec: DefaultCodec(),
+	}
+	msg, err := NewMessage(MsgExecuteCommand, &ExecuteCommandPayload{
+		RequestID:   "req-rename",
+		SessionName: "renamed",
+		CommandType: "RenameWindow",
+		Args:        []string{win.ID, "build"},
+	})
+	if err != nil {
+		t.Fatalf("NewMessage: %v", err)
+	}
+	if err := d.handleExecuteCommand(requester, msg); err != nil {
+		t.Fatalf("handleExecuteCommand: %v", err)
+	}
+
+	got := sess.GetState().Windows[0]
+	if got.CustomName != "build" {
+		t.Fatalf("daemon state CustomName = %q, want %q: a rename that reports success "+
+			"but leaves daemon state stale makes list-windows report the old name", got.CustomName, "build")
+	}
+
+	// The window list is what the user actually reads back.
+	data := buildWindowListData(sess.GetState())
+	windows, ok := data["windows"].([]map[string]any)
+	if !ok || len(windows) != 1 {
+		t.Fatalf("window list = %v", data["windows"])
+	}
+	if windows[0]["display_name"] != "build" {
+		t.Errorf("list-windows display_name = %v, want build", windows[0]["display_name"])
+	}
+
+}
+
+// newDiscardConn returns a connection whose writes go nowhere, for a fake
+// requester that never reads its replies.
+func newDiscardConn(t *testing.T) net.Conn {
+	t.Helper()
+	a, b := net.Pipe()
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := b.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
+	return a
+}

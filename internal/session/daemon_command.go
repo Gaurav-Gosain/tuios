@@ -6,6 +6,19 @@ import (
 	"time"
 )
 
+// daemonOwnedCommands are the commands the daemon executes itself whether or not
+// a client is attached, because their entire effect is a change to a field the
+// daemon owns and no renderer has to be consulted to make it. Routing one of
+// these to the client instead is what made a remote rename report success while
+// list-windows kept reporting the old name: the client renamed its own copy and
+// the daemon, which every read verb answers from, never heard about it.
+//
+// Commands leave this set only when the daemon cannot produce the same result a
+// renderer would. Everything still absent from it is routed as before.
+var daemonOwnedCommands = map[string]bool{
+	"RenameWindow": true,
+}
+
 // handleExecuteCommand routes a tape command to the TUI client attached to the session.
 func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	var payload ExecuteCommandPayload
@@ -23,11 +36,11 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	}
 	LogBasic("Execute command: found session %s (ID=%s)", session.Name, session.ID)
 
-	// Find the TUI client attached to this session. When one is present the
-	// command is routed to it (unchanged behavior). With no client attached,
+	// Find the TUI client attached to this session. When one is present most
+	// commands are routed to it (unchanged behavior). With no client attached,
 	// structural verbs execute directly against daemon-owned state.
 	tuiClient := d.findTUIClient(session.ID)
-	if tuiClient == nil {
+	if tuiClient == nil || daemonOwnedCommands[payload.CommandType] {
 		if payload.TapeScript != "" {
 			return d.sendCommandResult(cs, payload.RequestID, false,
 				"tape scripts require an attached client (the headless daemon has no renderer)")
@@ -36,6 +49,12 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		data, err := d.executeDaemonCommand(session, payload.CommandType, payload.Args, onExit)
 		if err != nil {
 			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
+		}
+		// Hand the result to any attached client so its render catches up. The
+		// state carries a version the client is now behind on, so its next sync
+		// is reconciled against this mutation rather than undoing it.
+		if tuiClient != nil {
+			d.broadcastStateSync(session.ID, session.GetState(), "update", "")
 		}
 		return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
 			RequestID: payload.RequestID,
