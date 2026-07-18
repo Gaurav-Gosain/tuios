@@ -25,6 +25,12 @@ import (
 // the same technique prise uses (8ms render timer) to eliminate flicker
 // from fast-updating TUIs.
 func (w *Window) outputWriter() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("window %s outputWriter panic: %v\n%s", w.ID, r, debug.Stack())
+		}
+	}()
+
 	if w.outputDone == nil || w.outputChan == nil {
 		return
 	}
@@ -56,11 +62,17 @@ func (w *Window) outputWriter() {
 		}
 
 	write:
-		if w.Terminal != nil {
-			w.ioMu.Lock()
-			_, _ = w.Terminal.Write(batch)
-			w.ioMu.Unlock()
+		// Snapshot and dereference Terminal entirely under ioMu: Close()
+		// nils the field under the same lock, so an unlocked check-then-use
+		// would panic once teardown races an in-flight batch.
+		w.ioMu.Lock()
+		t := w.Terminal
+		if t != nil {
+			_, _ = t.Write(batch)
+		}
+		w.ioMu.Unlock()
 
+		if t != nil {
 			w.HasNewOutput.Store(true)
 			w.MarkContentDirty()
 			// Don't signal PTYDataChan here. The renderCoalescer
@@ -108,11 +120,25 @@ func (w *Window) StartDaemonResponseReader() {
 	}
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("window %s daemon response reader panic: %v\n%s", w.ID, r, debug.Stack())
+			}
+		}()
+
+		// Snapshot Terminal once. Re-reading w.Terminal each iteration would
+		// race Close(), which nils the field under ioMu and dereferences nil.
+		// Terminal.Close() unblocks the pending Read with EOF, so the loop
+		// still exits promptly on teardown.
+		term := w.Terminal
+		if term == nil {
+			return
+		}
 		buf := make([]byte, 4096)
 		for {
 			// Terminal.Read() blocks, so we can't use select here.
 			// The goroutine will exit when Terminal is closed (returns error).
-			_, err := w.Terminal.Read(buf)
+			_, err := term.Read(buf)
 			if err != nil {
 				return
 			}
@@ -124,26 +150,38 @@ func (w *Window) StartDaemonResponseReader() {
 // WriteOutput writes output data to the terminal emulator.
 // Used in daemon mode to process PTY output received from the daemon.
 func (w *Window) WriteOutput(data []byte) {
-	if w.Terminal != nil {
-		w.HasNewOutput.Store(true)
-		if w.PTYDataChan != nil {
-			select {
-			case w.PTYDataChan <- struct{}{}:
-			default:
-			}
-		}
-		w.ioMu.Lock()
-		_, _ = w.Terminal.Write(data)
-		w.ioMu.Unlock()
-		w.MarkContentDirty()
+	// Snapshot and write under ioMu so Close() nilling w.Terminal cannot
+	// slip between the check and the dereference.
+	w.ioMu.Lock()
+	t := w.Terminal
+	if t != nil {
+		_, _ = t.Write(data)
 	}
+	w.ioMu.Unlock()
+
+	if t == nil {
+		return
+	}
+	w.HasNewOutput.Store(true)
+	if w.PTYDataChan != nil {
+		select {
+		case w.PTYDataChan <- struct{}{}:
+		default:
+		}
+	}
+	w.MarkContentDirty()
 }
 
 // WriteOutputAsync writes output data to the terminal emulator without blocking.
 // Used in daemon mode to process PTY output received from the daemon.
 // Data is queued to a channel and written in order by the outputWriter goroutine.
 func (w *Window) WriteOutputAsync(data []byte) {
-	if w.Terminal == nil || w.outputChan == nil {
+	// outputChan is set once at construction and never nilled, so reading it
+	// here is safe. w.Terminal must NOT be read: Close() nils it under ioMu,
+	// so an unlocked read would race teardown. The closed flag below is the
+	// real lifecycle guard, and outputWriter drops the batch under ioMu if
+	// Terminal is already gone.
+	if w.outputChan == nil {
 		return
 	}
 	// Close() runs on the UI goroutine while this runs on the daemon readLoop
@@ -209,18 +247,26 @@ func (w *Window) handleIOOperations() {
 		bufPtr := pool.GetByteSlice()
 		buf := *bufPtr
 		defer pool.PutByteSlice(bufPtr)
+
+		// Snapshot the PTY once under the lock. Close() nils w.Pty under
+		// ioMu; re-reading the interface value each iteration without the
+		// lock is a torn read (undefined behaviour) and calling Read on a
+		// nilled interface panics. Pty.Close() unblocks the pending Read,
+		// so the snapshot still tears down promptly. The sibling
+		// Terminal->PTY goroutine below uses the same discipline.
+		w.ioMu.RLock()
+		pty := w.Pty
+		w.ioMu.RUnlock()
+		if pty == nil {
+			return
+		}
 		for {
 			select {
 			case <-ctx.Done():
 				// Context cancelled, exit gracefully
 				return
 			default:
-				// Set a reasonable timeout for read operations
-				if w.Pty == nil {
-					return
-				}
-
-				n, err := w.Pty.Read(buf)
+				n, err := pty.Read(buf)
 				if err != nil {
 					if err != io.EOF && !strings.Contains(err.Error(), "file already closed") &&
 						!strings.Contains(err.Error(), "input/output error") {
@@ -446,17 +492,24 @@ func (w *Window) Close() {
 
 	// Mark closed before touching outputChan so the external sender
 	// (WriteOutputAsync on the daemon readLoop goroutine) stops queuing.
-	w.closed.Store(true)
+	// CompareAndSwap makes Close idempotent: a second (or concurrent) call
+	// returns early instead of double-closing outputDone below.
+	if !w.closed.CompareAndSwap(false, true) {
+		return
+	}
 
 	// Disable terminal features before closing
 	w.disableTerminalFeatures()
 
 	// Stop daemon output writer goroutine if running. outputChan has an
 	// external sender (WriteOutputAsync), so it is never closed; closing
-	// outputDone stops outputWriter, which selects on it.
+	// outputDone stops outputWriter and renderCoalescer, which select on it.
+	// The field is deliberately NOT nilled: both goroutines re-read it on
+	// every select iteration, and a nil channel blocks forever (leaking the
+	// goroutines, the 8ms ticker, and the whole Window/Emulator). The CAS
+	// above guarantees this close runs exactly once.
 	if w.outputDone != nil {
 		close(w.outputDone)
-		w.outputDone = nil
 	}
 
 	// Cancel all goroutines first
