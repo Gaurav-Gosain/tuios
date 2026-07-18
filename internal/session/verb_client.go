@@ -18,13 +18,19 @@ type VerbClient struct {
 	r      *bufio.Reader
 	nextID int
 	callMu sync.Mutex
+
+	// daemon is what the daemon reported during the hello handshake, or nil
+	// when no handshake was performed.
+	daemon *DaemonHandshake
 }
 
 // VerbCallError is returned by VerbClient.Call when the daemon answers with an
-// error envelope. It exposes the stable string code alongside the message.
+// error envelope. It exposes the stable string code and the structured hint
+// alongside the message, so a caller can render the remedy the daemon named.
 type VerbCallError struct {
 	Code    string
 	Message string
+	Hint    *VerbHint
 }
 
 func (e *VerbCallError) Error() string {
@@ -34,8 +40,20 @@ func (e *VerbCallError) Error() string {
 	return fmt.Sprintf("%s (%s)", e.Message, e.Code)
 }
 
-// DialVerbClient connects to the running daemon's socket for JSON verb calls.
+// DialVerbClient connects to the running daemon's socket for JSON verb calls,
+// without announcing a client version.
 func DialVerbClient() (*VerbClient, error) {
+	return DialVerbClientAs("")
+}
+
+// DialVerbClientAs connects to the running daemon's socket and performs the
+// hello handshake, announcing clientVersion.
+//
+// A daemon too old to speak the JSON protocol fails here with a
+// *ProtocolMismatchError naming both versions and the command that fixes it,
+// rather than surfacing later as an unexplained connection reset. A daemon that
+// speaks the protocol but predates the handshake verb connects normally.
+func DialVerbClientAs(clientVersion string) (*VerbClient, error) {
 	socketPath, err := GetSocketPath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get socket path: %w", err)
@@ -44,8 +62,21 @@ func DialVerbClient() (*VerbClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
-	return &VerbClient{conn: conn, r: bufio.NewReader(conn)}, nil
+	c := &VerbClient{conn: conn, r: bufio.NewReader(conn)}
+
+	hs, err := c.handshake(clientVersion)
+	if err != nil {
+		_ = c.Close()
+		return nil, err
+	}
+	c.daemon = hs
+	return c, nil
 }
+
+// Daemon returns what the daemon reported during the handshake. Its Protocol is
+// zero when the daemon predates the handshake verb. It is nil only for a client
+// built without dialing.
+func (c *VerbClient) Daemon() *DaemonHandshake { return c.daemon }
 
 // Close closes the underlying connection.
 func (c *VerbClient) Close() error {
@@ -100,7 +131,11 @@ func (c *VerbClient) Call(verb string, params any) (json.RawMessage, error) {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	if resp.Error != nil {
-		return nil, &VerbCallError{Code: resp.Error.Code, Message: resp.Error.Message}
+		return nil, &VerbCallError{
+			Code:    resp.Error.Code,
+			Message: resp.Error.Message,
+			Hint:    resp.Error.Hint,
+		}
 	}
 
 	rawResult, err := json.Marshal(resp.Result)
