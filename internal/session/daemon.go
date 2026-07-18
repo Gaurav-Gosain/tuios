@@ -158,14 +158,15 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	name := s.Name
 	s.SetEventSink(func(ev SessionEvent) {
 		d.events.publish(streamEvent{
-			Type:    ev.Type,
-			Session: name,
-			Window:  ev.Window,
-			PTYID:   ev.PTYID,
-			Title:   ev.Title,
-			Bytes:   ev.Bytes,
-			Mode:    ev.Mode,
-			Enabled: ev.Enabled,
+			Type:      ev.Type,
+			Session:   name,
+			Window:    ev.Window,
+			PTYID:     ev.PTYID,
+			Title:     ev.Title,
+			Bytes:     ev.Bytes,
+			Mode:      ev.Mode,
+			Enabled:   ev.Enabled,
+			Workspace: ev.Workspace,
 		})
 	})
 	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
