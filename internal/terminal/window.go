@@ -26,6 +26,24 @@ import (
 // and writes them directly to stdout to pass through to the parent terminal.
 // The VT emulator absorbs these sequences, so we need to re-emit them.
 // DECSCUSR format: CSI Ps SP q (ESC [ Ps SPACE q) where Ps is optional (0-6)
+// ioMu guards the emulator cell buffer: the PTY reader and the daemon output
+// path write it, Resize reallocates it, and the renderer reads it.
+//
+// It is NOT reentrant, and that is not a style preference but a hard
+// correctness rule. sync.RWMutex starves readers once a writer is queued, so a
+// goroutine that holds RLockIO and then takes RLockIO again on the same window
+// parks behind that queued writer while still holding the read lock the writer
+// is waiting for. Neither side can proceed and the process wedges at zero CPU.
+// A live PTY produces output constantly, so the writer is queued often and the
+// window for this is wide.
+//
+// The rule for callers: never take either lock while already holding either
+// lock on the same window, and do not call a helper that takes one from inside
+// a locked region. Where a value is needed on both sides of that boundary,
+// follow the split this package already uses - a locking entry point plus a
+// lock-free variant for callers that are already inside (ScrollbackLenSync
+// versus ScrollbackLen) - or hoist the read out of the locked region entirely.
+
 // LockIO/UnlockIO: exclusive lock for PTY writes (mutates cell buffer).
 func (w *Window) LockIO()   { w.ioMu.Lock() }
 func (w *Window) UnlockIO() { w.ioMu.Unlock() }

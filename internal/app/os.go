@@ -174,6 +174,12 @@ type OS struct {
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values
 	sixelWinIndex   map[string]*terminal.Window    // Reused window-by-ID index for sixel placement refresh
 	sixelPosValue   WindowPositionInfo             // Reused value returned to the sixel refresh callback
+	// Scrollback lengths snapshotted before a placement refresh takes the
+	// passthrough lock. The refresh callbacks run under kp.mu/sp.mu and must
+	// not take a window's ioMu there: the PTY reader holds ioMu while
+	// Terminal.Write drives the kitty and sixel callbacks, which take
+	// kp.mu/sp.mu, so reading ioMu under kp.mu/sp.mu closes a lock cycle.
+	placementScrollbackLen map[string]int
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
