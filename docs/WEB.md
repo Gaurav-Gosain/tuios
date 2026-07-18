@@ -25,7 +25,8 @@ TUIOS can be accessed through any modern web browser using the `tuios-web` binar
 **Separate Binary Required:**
 
 ```bash
-# Homebrew (macOS/Linux)
+# Homebrew (macOS/Linux) - ships via the maintainer's tap
+brew tap Gaurav-Gosain/tap
 brew install tuios-web
 
 # Arch Linux (AUR)
