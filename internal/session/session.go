@@ -85,9 +85,13 @@ type SessionState struct {
 	AutoTiling       bool           `json:"auto_tiling"`
 	Width            int            `json:"width"`
 	Height           int            `json:"height"`
-	// Mode: 0 = WindowManagementMode, 1 = TerminalMode
-	Mode int `json:"mode"`
+	// Input mode (window-management vs terminal) is deliberately absent: it is
+	// per-viewer, not per-session. It used to live here, which meant one client
+	// entering terminal mode flipped the input mode of every other client
+	// attached to the same session. Clients own their own mode.
+	//
 	// BSP tiling state
+
 	WorkspaceTrees  map[int]*SerializedBSPTree `json:"workspace_trees,omitempty"`  // BSP tree per workspace
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`

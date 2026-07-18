@@ -20,7 +20,6 @@ func TestResurrectionRoundTripMultiWindowMultiWorkspace(t *testing.T) {
 		MasterRatio:      0.65,
 		Width:            200,
 		Height:           60,
-		Mode:             1,
 		FocusedWindowID:  "win-c",
 		Windows: []WindowState{
 			{ID: "win-a", Title: "shell", CustomName: "main", X: 0, Y: 0, Width: 100, Height: 30, Z: 0, Workspace: 1, PTYID: "pty-a", Cwd: "/home/user/project"},

@@ -40,3 +40,18 @@ func TestRestoreFromStateClampsWorkspace(t *testing.T) {
 		t.Errorf("CurrentWorkspace = %d after restoring workspace 0, want 1", m.CurrentWorkspace)
 	}
 }
+
+// TestApplyStateSyncLeavesModeAlone pins that input mode is per-viewer. A state
+// sync from another client used to carry that client's Mode and apply it here,
+// so one client entering terminal mode flipped every attached client's input
+// mode out from under its user.
+func TestApplyStateSyncLeavesModeAlone(t *testing.T) {
+	m := &OS{Mode: WindowManagementMode}
+	state := &session.SessionState{Name: "shared", CurrentWorkspace: 1}
+	if err := m.ApplyStateSync(state); err != nil {
+		t.Fatalf("ApplyStateSync returned error: %v", err)
+	}
+	if m.Mode != WindowManagementMode {
+		t.Errorf("Mode = %v after a state sync, want it untouched (%v)", m.Mode, WindowManagementMode)
+	}
+}

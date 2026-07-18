@@ -762,7 +762,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Another client updated state - apply incrementally
 		if msg.State != nil {
 			// Track what changed for notifications
-			oldMode := m.Mode
 			oldWindowCount := len(m.Windows)
 			oldWorkspace := m.CurrentWorkspace
 
@@ -770,18 +769,8 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				m.LogError("Failed to apply state sync: %v", err)
 			} else {
 				// Show notifications for significant changes
-				newMode := m.Mode
 				newWindowCount := len(m.Windows)
 				newWorkspace := m.CurrentWorkspace
-
-				// Mode change notification
-				if oldMode != newMode {
-					if newMode == TerminalMode {
-						m.ShowNotification("Switched to Terminal mode", "info", 2*time.Second)
-					} else {
-						m.ShowNotification("Switched to Window mode", "info", 2*time.Second)
-					}
-				}
 
 				// Window count change notification
 				if newWindowCount > oldWindowCount {

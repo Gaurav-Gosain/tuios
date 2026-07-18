@@ -66,7 +66,6 @@ func (m *OS) BuildSessionState() *session.SessionState {
 		AutoTiling:       m.AutoTiling,
 		Width:            m.GetRenderWidth(),
 		Height:           m.GetRenderHeight(),
-		Mode:             int(m.Mode),
 		WorkspaceFocus:   make(map[int]string),
 	}
 
@@ -195,7 +194,6 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
-	m.Mode = Mode(state.Mode)
 
 	// Set effective dimensions from state - this is the min of all connected clients
 	// as calculated by the daemon. This ensures a new client joining respects
@@ -469,8 +467,9 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 		}
 	}
 
-	// Sync mode from other client
-	m.Mode = Mode(state.Mode)
+	// Input mode is not synced: it is per-viewer. Applying another client's mode
+	// here used to yank this client between window-management and terminal mode
+	// whenever anyone else switched.
 
 	// If auto-tiling is enabled and the synced state has different dimensions,
 	// retile to fit our effective render size. This handles the case where
