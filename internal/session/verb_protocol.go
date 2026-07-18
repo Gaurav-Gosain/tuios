@@ -45,6 +45,7 @@ const (
 	ErrVerbNeedsClient     = "needs_client"      // verb needs a live renderer that is not attached
 	ErrVerbOptionNotFound  = "option_not_found"  // get-option key was never set
 	ErrVerbCommandFailed   = "command_failed"    // a verb routed to the attached client came back failed
+	ErrVerbTimeout         = "timeout"           // a wait-for condition did not match before its timeout
 	ErrVerbInternal        = "internal"          // unexpected server-side failure
 )
 
@@ -146,6 +147,18 @@ func init() {
 		"get-option": {
 			description: "Read a session option (params: session, key).",
 			handler:     (*Daemon).verbGetOption,
+		},
+		"subscribe": {
+			description: "Open a long-lived event stream on this connection (params: session, window, types, queue).",
+			handler:     (*Daemon).verbSubscribe,
+		},
+		"unsubscribe": {
+			description: "Close this connection's event stream.",
+			handler:     (*Daemon).verbUnsubscribe,
+		},
+		"wait-for": {
+			description: "Block until a condition matches (params: condition, session, window, pattern, idle, timeout).",
+			handler:     (*Daemon).verbWaitFor,
 		},
 	}
 }
@@ -261,7 +274,13 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 	if verr != nil {
 		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Error: verr})
 	}
-	return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Result: result})
+	if err := d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Result: result}); err != nil {
+		return err
+	}
+	// A subscribe verb stashes its fresh subscription for the streamer, which must
+	// start only after the ack line above is on the wire so no event precedes it.
+	d.startPendingStream(cs)
+	return nil
 }
 
 // writeVerbResponse serializes resp as one newline-terminated JSON line and
