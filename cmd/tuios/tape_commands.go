@@ -52,6 +52,11 @@ func runTapeInteractive(tapeFile string) error {
 
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
+	// Force animations off for deterministic playback of hand-written tapes,
+	// matching recorded tapes (the recorder prepends DisableAnimations). Tapes
+	// can still re-enable them explicitly with EnableAnimations.
+	config.AnimationsEnabled = false
+
 	player := tape.NewPlayer(commands)
 
 	initialOS := &app.OS{

@@ -433,6 +433,13 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					return m, TickCmd()
 				}
 
+				// Check if we're blocking on a WaitUntilRegex condition from a
+				// previously dispatched command.
+				if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
+					// Condition not met and not timed out yet, keep waiting.
+					return m, TickCmd()
+				}
+
 				// Check if we're waiting for a sleep to finish
 				if !m.ScriptSleepUntil.IsZero() && time.Now().Before(m.ScriptSleepUntil) {
 					// Still waiting, don't advance yet
@@ -443,13 +450,19 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 				nextCmd := player.NextCommand()
 				if nextCmd != nil {
-					// Handle Sleep commands specially
-					if nextCmd.Type == tape.CommandTypeSleep && nextCmd.Delay > 0 {
+					switch {
+					// Sleep and its Wait alias both just delay playback.
+					case (nextCmd.Type == tape.CommandTypeSleep || nextCmd.Type == tape.CommandTypeWait) && nextCmd.Delay > 0:
 						// Set the sleep deadline
 						m.ScriptSleepUntil = time.Now().Add(nextCmd.Delay)
 						// Advance to next command but don't execute anything yet
 						player.Advance()
-					} else {
+					case nextCmd.Type == tape.CommandTypeWaitUntilRegex:
+						// Arm the wait; playback blocks above until it resolves.
+						// Don't dispatch it to the executor.
+						m.startScriptWaitRegex(nextCmd)
+						player.Advance()
+					default:
 						// Queue the command as a message instead of executing directly
 						cmds = append(cmds, func() tea.Msg {
 							return ScriptCommandMsg{Command: nextCmd}

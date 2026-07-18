@@ -2,11 +2,90 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
+
+// focusedOS builds a minimal OS with a single focused window whose terminal
+// renders the given screen content.
+func focusedOS(t *testing.T, screen string) *OS {
+	t.Helper()
+	em := vt.NewEmulator(80, 24)
+	if _, err := em.Write([]byte(screen)); err != nil {
+		t.Fatalf("write to emulator: %v", err)
+	}
+	win := &terminal.Window{Terminal: em, Workspace: 1}
+	return &OS{
+		Windows:          []*terminal.Window{win},
+		FocusedWindow:    0,
+		CurrentWorkspace: 1,
+	}
+}
+
+func TestStartScriptWaitRegexBadPattern(t *testing.T) {
+	m := &OS{}
+	m.startScriptWaitRegex(&tape.Command{Type: tape.CommandTypeWaitUntilRegex, Args: []string{"("}})
+	if m.ScriptWaitRegex != nil {
+		t.Error("expected no wait to be armed for an invalid pattern")
+	}
+
+	m.startScriptWaitRegex(&tape.Command{Type: tape.CommandTypeWaitUntilRegex})
+	if m.ScriptWaitRegex != nil {
+		t.Error("expected no wait to be armed for a missing pattern")
+	}
+}
+
+func TestScriptWaitRegexDefaultTimeout(t *testing.T) {
+	m := &OS{}
+	before := time.Now()
+	m.startScriptWaitRegex(&tape.Command{Type: tape.CommandTypeWaitUntilRegex, Args: []string{"x"}})
+	if m.ScriptWaitRegex == nil {
+		t.Fatal("expected wait to be armed")
+	}
+	// Default timeout is 5000ms; deadline should be roughly now+5s.
+	if got := m.ScriptWaitDeadline.Sub(before); got < 4*time.Second || got > 6*time.Second {
+		t.Errorf("default timeout deadline = %v, want ~5s", got)
+	}
+}
+
+func TestCheckScriptWaitRegexMatch(t *testing.T) {
+	m := focusedOS(t, "build complete\n")
+	m.startScriptWaitRegex(&tape.Command{
+		Type: tape.CommandTypeWaitUntilRegex,
+		Args: []string{"build complete", "3000"},
+	})
+	if !m.checkScriptWaitRegex() {
+		t.Error("expected match to resume playback")
+	}
+	if m.ScriptWaitRegex != nil {
+		t.Error("expected wait state cleared after match")
+	}
+}
+
+func TestCheckScriptWaitRegexBlocksThenTimesOut(t *testing.T) {
+	m := focusedOS(t, "still running\n")
+	m.startScriptWaitRegex(&tape.Command{
+		Type: tape.CommandTypeWaitUntilRegex,
+		Args: []string{"never appears", "5000"},
+	})
+	if m.checkScriptWaitRegex() {
+		t.Error("expected to keep waiting while pattern is absent")
+	}
+
+	// Force the deadline into the past to exercise the timeout path.
+	m.ScriptWaitDeadline = time.Now().Add(-time.Millisecond)
+	if !m.checkScriptWaitRegex() {
+		t.Error("expected timeout to resume playback")
+	}
+	if m.ScriptWaitRegex != nil {
+		t.Error("expected wait state cleared after timeout")
+	}
+}
 
 // TestParseKeyToMessage tests the key parsing function
 func TestParseKeyToMessage(t *testing.T) {
