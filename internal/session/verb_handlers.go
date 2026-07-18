@@ -2,7 +2,7 @@ package session
 
 import (
 	"encoding/json"
-	"sort"
+	"errors"
 	"strings"
 	"time"
 
@@ -13,12 +13,6 @@ import (
 // that client's result before failing with command_failed.
 const routedVerbTimeout = 10 * time.Second
 
-// sortVerbEntries sorts the list-verbs output by verb name for deterministic
-// output.
-func sortVerbEntries(verbs []map[string]string) {
-	sort.Slice(verbs, func(i, j int) bool { return verbs[i]["verb"] < verbs[j]["verb"] })
-}
-
 // decodeParams unmarshals a request's params into v, returning an invalid_params
 // error on failure. Empty params decode to the zero value of v.
 func decodeParams(params json.RawMessage, v any) *verbError {
@@ -26,35 +20,96 @@ func decodeParams(params json.RawMessage, v any) *verbError {
 		return nil
 	}
 	if err := json.Unmarshal(params, v); err != nil {
-		return newVerbError(ErrVerbInvalidParams, "could not decode params: "+err.Error())
+		return hintedVerbError(ErrVerbInvalidParams, "could not decode params: "+err.Error(), &VerbHint{
+			Verb:   "list-verbs",
+			Detail: "Call list-verbs to get this verb's parameter schema, including each parameter's type.",
+		})
 	}
 	return nil
 }
 
 // resolveVerbSession resolves a session name (empty means most recently active)
-// to a live session, or a session_not_found error.
+// to a live session, or a session_not_found error whose hint lists the sessions
+// that do exist and suggests the closest name.
 func (d *Daemon) resolveVerbSession(name string) (*Session, *verbError) {
 	sess := d.findTargetSession(name)
-	if sess == nil {
-		if name == "" {
-			return nil, newVerbError(ErrVerbSessionNotFound, "no sessions exist")
-		}
-		return nil, newVerbError(ErrVerbSessionNotFound, "session "+name+" not found")
+	if sess != nil {
+		return sess, nil
 	}
-	return sess, nil
+
+	available := d.sessionNames()
+	if name == "" {
+		return nil, hintedVerbError(ErrVerbSessionNotFound, "no sessions exist", &VerbHint{
+			Param:   "session",
+			Command: "tuios new --detach",
+			Detail:  "The daemon is running but holds no sessions. Create one, or restore a saved one with 'tuios resurrect'.",
+		})
+	}
+	return nil, hintedVerbError(ErrVerbSessionNotFound, "session "+name+" not found", &VerbHint{
+		Param:      "session",
+		Command:    "tuios ls",
+		DidYouMean: closestMatch(name, available),
+		Available:  available,
+	})
 }
 
-// mapResolveErr classifies a window/PTY resolution error into a stable code.
-func mapResolveErr(err error) *verbError {
+// mapResolveErr classifies a window/PTY resolution error into a stable code and
+// attaches the remedy for that class. sess may be nil when the caller has no
+// session context, in which case the available-window list is omitted.
+func mapResolveErr(err error, sess *Session) *verbError {
 	msg := err.Error()
+
+	// A command that genuinely needs a renderer is its own class: the caller has
+	// to attach a client, not fix a parameter.
+	var needsClient errNeedsClient
+	if errors.As(err, &needsClient) {
+		hint := &VerbHint{
+			Command: "tuios attach",
+			Detail:  "This command changes what is drawn on screen, so it only runs with a client attached. Attach to the session, then retry.",
+		}
+		if sess != nil {
+			hint.Command = "tuios attach " + sess.Name
+		}
+		return hintedVerbError(ErrVerbNeedsClient, msg, hint)
+	}
+
 	switch {
 	case strings.Contains(msg, "no windows"):
-		return newVerbError(ErrVerbNoWindows, msg)
+		return hintedVerbError(ErrVerbNoWindows, msg, &VerbHint{
+			Verb:    "new-window",
+			Command: "tuios run-command NewWindow",
+			Detail:  "The session exists but holds no windows. Create one before addressing a window.",
+		})
 	case strings.Contains(msg, "has no PTY"), strings.Contains(msg, "is gone"):
-		return newVerbError(ErrVerbPTYNotFound, msg)
+		return hintedVerbError(ErrVerbPTYNotFound, msg, &VerbHint{
+			Verb:   "list-windows",
+			Detail: "The window exists but its shell has already exited, so there is nothing to write to. Close it or create a new window.",
+		})
 	default:
-		return newVerbError(ErrVerbWindowNotFound, msg)
+		hint := &VerbHint{Param: "window", Verb: "list-windows", Command: "tuios list-windows --json"}
+		if sess != nil {
+			hint.Available = windowTargets(sess.GetState())
+			hint.DidYouMean = closestMatch(targetFromError(msg), hint.Available)
+		}
+		return hintedVerbError(ErrVerbWindowNotFound, msg, hint)
 	}
+}
+
+// targetFromError extracts the window target from a resolution error message so
+// a did-you-mean suggestion can be computed. Every resolution error quotes the
+// target it failed on (`no window found matching "build"`), so the first quoted
+// run is the target. A message without one yields no target and therefore no
+// suggestion, which is the safe outcome.
+func targetFromError(msg string) string {
+	_, rest, ok := strings.Cut(msg, `"`)
+	if !ok {
+		return ""
+	}
+	target, _, ok := strings.Cut(rest, `"`)
+	if !ok {
+		return ""
+	}
+	return target
 }
 
 // commonParams are the fields shared by session/window-targeted verbs.
@@ -146,7 +201,7 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
 	data, err := d.executeDaemonCommand(sess, "NewWindow", args, onExit)
 	if err != nil {
-		return nil, newVerbError(ErrVerbInternal, err.Error())
+		return nil, mapResolveErr(err, sess)
 	}
 	out := map[string]any{"type": "window_created"}
 	for k, v := range data {
@@ -187,7 +242,7 @@ func (d *Daemon) verbCloseWindow(_ *connState, params json.RawMessage) (any, *ve
 
 	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
 	if _, err := d.executeDaemonCommand(sess, "CloseWindow", args, onExit); err != nil {
-		return nil, mapResolveErr(err)
+		return nil, mapResolveErr(err, sess)
 	}
 	return map[string]any{"type": "ok"}, nil
 }
@@ -204,7 +259,7 @@ func (d *Daemon) verbSendKeys(_ *connState, params json.RawMessage) (any, *verbE
 		return nil, verr
 	}
 	if p.Keys == "" {
-		return nil, newVerbError(ErrVerbInvalidParams, "keys is required")
+		return nil, invalidParam("keys", `keys is required, e.g. "ls,Enter" or "ctrl+c"`)
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -238,7 +293,7 @@ func (d *Daemon) verbSendKeys(_ *connState, params json.RawMessage) (any, *verbE
 	}
 
 	if err := d.sendKeysDaemonSide(sess, payload); err != nil {
-		return nil, mapResolveErr(err)
+		return nil, mapResolveErr(err, sess)
 	}
 	return map[string]any{"type": "ok"}, nil
 }
@@ -262,7 +317,7 @@ func (d *Daemon) verbSendText(_ *connState, params json.RawMessage) (any, *verbE
 	// straight to the daemon-owned PTY.
 	pty, err := d.resolvePTYForTarget(sess, p.Window)
 	if err != nil {
-		return nil, mapResolveErr(err)
+		return nil, mapResolveErr(err, sess)
 	}
 	if _, err := pty.Write([]byte(p.Text)); err != nil {
 		return nil, newVerbError(ErrVerbInternal, err.Error())
@@ -292,7 +347,7 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 
 	pty, err := d.resolvePTYForTarget(sess, p.Window)
 	if err != nil {
-		return nil, mapResolveErr(err)
+		return nil, mapResolveErr(err, sess)
 	}
 
 	scrollback := p.Scrollback || p.Source == "recent" || p.Source == "recent-unwrapped"
@@ -327,7 +382,7 @@ func (d *Daemon) verbResize(_ *connState, params json.RawMessage) (any, *verbErr
 		return nil, verr
 	}
 	if p.Width <= 0 || p.Height <= 0 {
-		return nil, newVerbError(ErrVerbInvalidParams, "width and height must be positive")
+		return nil, invalidParam("width", "width and height must both be positive")
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -335,7 +390,7 @@ func (d *Daemon) verbResize(_ *connState, params json.RawMessage) (any, *verbErr
 	}
 	pty, err := d.resolvePTYForTarget(sess, p.Window)
 	if err != nil {
-		return nil, mapResolveErr(err)
+		return nil, mapResolveErr(err, sess)
 	}
 	if err := pty.Resize(p.Width, p.Height); err != nil {
 		return nil, newVerbError(ErrVerbInternal, err.Error())
@@ -351,10 +406,18 @@ func (d *Daemon) verbKillSession(_ *connState, params json.RawMessage) (any, *ve
 		return nil, verr
 	}
 	if p.Session == "" {
-		return nil, newVerbError(ErrVerbInvalidParams, "session is required")
+		return nil, hintedVerbError(ErrVerbInvalidParams,
+			"session is required (kill-session never guesses which session to destroy)",
+			&VerbHint{Param: "session", Command: "tuios ls", Available: d.sessionNames()})
 	}
 	if err := d.manager.DeleteSession(p.Session); err != nil {
-		return nil, newVerbError(ErrVerbSessionNotFound, err.Error())
+		available := d.sessionNames()
+		return nil, hintedVerbError(ErrVerbSessionNotFound, err.Error(), &VerbHint{
+			Param:      "session",
+			Command:    "tuios ls",
+			DidYouMean: closestMatch(p.Session, available),
+			Available:  available,
+		})
 	}
 	return map[string]any{"type": "ok"}, nil
 }
@@ -369,7 +432,7 @@ func (d *Daemon) verbSetOption(_ *connState, params json.RawMessage) (any, *verb
 		return nil, verr
 	}
 	if p.Key == "" {
-		return nil, newVerbError(ErrVerbInvalidParams, "key is required")
+		return nil, invalidParam("key", `key is required, e.g. "appearance.dockbar_position"`)
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -404,7 +467,7 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 		return nil, verr
 	}
 	if p.Key == "" {
-		return nil, newVerbError(ErrVerbInvalidParams, "key is required")
+		return nil, invalidParam("key", `key is required, e.g. "appearance.dockbar_position"`)
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -412,7 +475,15 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 	}
 	value, ok := sess.GetOption(p.Key)
 	if !ok {
-		return nil, newVerbError(ErrVerbOptionNotFound, "option "+p.Key+" is not set")
+		available := sess.OptionKeys()
+		return nil, hintedVerbError(ErrVerbOptionNotFound, "option "+p.Key+" is not set on session "+sess.Name, &VerbHint{
+			Param:      "key",
+			Verb:       "set-option",
+			Command:    "tuios set-config " + p.Key + " <value>",
+			DidYouMean: closestMatch(p.Key, available),
+			Available:  available,
+			Detail:     "get-option only reads options previously set through set-option on this session; it does not read the config file.",
+		})
 	}
 	return map[string]any{"type": "option", "key": p.Key, "value": value}, nil
 }

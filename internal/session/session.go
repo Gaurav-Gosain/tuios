@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -462,6 +463,20 @@ func (s *Session) GetOption(key string) (string, bool) {
 	}
 	v, ok := s.state.Options[key]
 	return v, ok
+}
+
+// OptionKeys returns every option key set on this session, sorted. It backs the
+// available-keys hint on a get-option miss, so a caller that guessed a key wrong
+// learns which keys exist without a second round trip.
+func (s *Session) OptionKeys() []string {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	keys := make([]string, 0, len(s.state.Options))
+	for k := range s.state.Options {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // AllOptions returns a copy of every daemon-owned session option.

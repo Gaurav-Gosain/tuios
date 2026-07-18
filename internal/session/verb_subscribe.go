@@ -44,7 +44,10 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 	cs.mu.Lock()
 	if cs.streaming {
 		cs.mu.Unlock()
-		return nil, newVerbError(ErrVerbInvalidRequest, "connection is already subscribed")
+		return nil, hintedVerbError(ErrVerbInvalidRequest, "connection is already subscribed", &VerbHint{
+			Verb:   "unsubscribe",
+			Detail: "One event stream per connection. Call unsubscribe first, or open a second connection for the second filter.",
+		})
 	}
 	cs.mu.Unlock()
 
@@ -75,7 +78,10 @@ func (d *Daemon) verbUnsubscribe(cs *connState, _ json.RawMessage) (any, *verbEr
 	sub := cs.eventSub
 	cs.mu.Unlock()
 	if sub == nil {
-		return nil, newVerbError(ErrVerbInvalidRequest, "connection is not subscribed")
+		return nil, hintedVerbError(ErrVerbInvalidRequest, "connection is not subscribed", &VerbHint{
+			Verb:   "subscribe",
+			Detail: "There is no event stream on this connection to close.",
+		})
 	}
 	// Signal the streamer to exit; it clears cs.eventSub/streaming and removes the
 	// hub subscription on its way out.
@@ -189,8 +195,15 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 	case "window-idle":
 		return d.waitWindowIdle(p.Session, p.Window, p.Idle, deadline)
 	default:
-		return nil, newVerbError(ErrVerbInvalidParams,
-			"unknown condition "+p.Condition+" (want session-exists, window-output, window-exit, or window-idle)")
+		message := "unknown condition " + p.Condition
+		if p.Condition == "" {
+			message = "condition is required"
+		}
+		return nil, hintedVerbError(ErrVerbInvalidParams, message, &VerbHint{
+			Param:      "condition",
+			Accepted:   waitConditions,
+			DidYouMean: closestMatch(p.Condition, waitConditions),
+		})
 	}
 }
 
@@ -207,7 +220,7 @@ func waitMatched(condition string, extra map[string]any) map[string]any {
 // before the initial check so a session created in the race window is not missed.
 func (d *Daemon) waitSessionExists(name string, deadline <-chan time.Time) (any, *verbError) {
 	if name == "" {
-		return nil, newVerbError(ErrVerbInvalidParams, "session is required for session-exists")
+		return nil, invalidParam("session", "session is required for the session-exists condition")
 	}
 	sub := d.events.subscribe(eventFilter{
 		session: name,
@@ -221,7 +234,11 @@ func (d *Daemon) waitSessionExists(name string, deadline <-chan time.Time) (any,
 	for {
 		select {
 		case <-deadline:
-			return nil, newVerbError(ErrVerbTimeout, "timed out waiting for session "+name)
+			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for session "+name, &VerbHint{
+				Param:  "timeout",
+				Verb:   "list-sessions",
+				Detail: "The session was never created within the timeout. Check the name, or raise timeout (milliseconds).",
+			})
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case <-sub.ch:
@@ -240,7 +257,7 @@ func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time
 	}
 	pty, err := d.resolvePTYForTarget(sess, window)
 	if err != nil {
-		return nil, mapResolveErr(err)
+		return nil, mapResolveErr(err, sess)
 	}
 
 	sub := d.events.subscribe(eventFilter{
@@ -256,7 +273,10 @@ func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time
 	for {
 		select {
 		case <-deadline:
-			return nil, newVerbError(ErrVerbTimeout, "timed out waiting for window "+window+" to exit")
+			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for window "+window+" to exit", &VerbHint{
+				Param:  "timeout",
+				Detail: "The window's shell was still running when the timeout elapsed. Raise timeout (milliseconds), or send the command that ends it.",
+			})
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case <-sub.ch:
@@ -274,7 +294,7 @@ func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline
 	}
 	pty, err := d.resolvePTYForTarget(sess, window)
 	if err != nil {
-		return nil, mapResolveErr(err)
+		return nil, mapResolveErr(err, sess)
 	}
 
 	idle := defaultIdleWindow
@@ -294,7 +314,10 @@ func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline
 	for {
 		select {
 		case <-deadline:
-			return nil, newVerbError(ErrVerbTimeout, "timed out waiting for window "+window+" to go idle")
+			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for window "+window+" to go idle", &VerbHint{
+				Param:  "idle",
+				Detail: "The window never stayed quiet for the idle window. Raise timeout, or raise idle if the process outputs in bursts.",
+			})
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case <-sub.ch:
@@ -319,11 +342,14 @@ func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline
 // re-checks.
 func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, deadline <-chan time.Time) (any, *verbError) {
 	if pattern == "" {
-		return nil, newVerbError(ErrVerbInvalidParams, "pattern is required for window-output")
+		return nil, invalidParam("pattern", "pattern is required for the window-output condition")
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, newVerbError(ErrVerbInvalidParams, "invalid pattern: "+err.Error())
+		return nil, hintedVerbError(ErrVerbInvalidParams, "invalid pattern: "+err.Error(), &VerbHint{
+			Param:  "pattern",
+			Detail: "pattern is a Go regular expression (RE2 syntax).",
+		})
 	}
 	sess, verr := d.resolveVerbSession(sessionName)
 	if verr != nil {
@@ -331,7 +357,7 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 	}
 	pty, err := d.resolvePTYForTarget(sess, window)
 	if err != nil {
-		return nil, mapResolveErr(err)
+		return nil, mapResolveErr(err, sess)
 	}
 
 	// Default to matching recent (scrollback-inclusive) content so output that has
@@ -356,7 +382,11 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 	for {
 		select {
 		case <-deadline:
-			return nil, newVerbError(ErrVerbTimeout, "timed out waiting for output matching "+pattern)
+			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for output matching "+pattern, &VerbHint{
+				Param:  "pattern",
+				Verb:   "capture-pane",
+				Detail: "No output matched before the timeout. Capture the pane to see what it actually printed, then adjust the pattern or raise timeout.",
+			})
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case <-sub.ch:
