@@ -172,25 +172,63 @@ func traceRender(window *terminal.Window, isFocused, inTerminalMode, entryDirty 
 	))
 }
 
-// traceLayerReuse records a frame where the compositor reused a window's cached
-// layer and never called renderTerminal. This is the quiet steady state, and it
-// is worth logging because a pane frozen on a bad layer looks identical to a
-// pane that simply has nothing new to draw.
-func traceLayerReuse(window *terminal.Window, isFocused, needsRedraw bool) {
+// traceLayerBuild records the step between the terminal renderer and the
+// compositor: what renderWindowBox produced, what clipWindowContent did to it,
+// and where the resulting layer was placed. A pane can render perfectly and
+// still composite as bare background if the clip discards the frame, so this is
+// the seam where healthy bytes go missing.
+func traceLayerBuild(window *terminal.Window, isFocused bool, boxContent, clipped string,
+	wx, wy, finalX, finalY, z, viewportW, viewportH int,
+) {
 	if !renderTraceEnabled || window == nil {
 		return
 	}
+	traceWrite(fmt.Sprintf(
+		"layerb id=%s title=%q focused=%t tiled=%t win=(%d,%d) %dx%d final=(%d,%d) z=%d "+
+			"viewport=%dx%d boxBytes=%d boxLines=%d clipBytes=%d clipLines=%d clipBlank=%t "+
+			"boxHead=%q",
+		shortID(window.ID), window.Title(), isFocused, window.Tiled,
+		wx, wy, window.Width, window.Height, finalX, finalY, z,
+		viewportW, viewportH,
+		len(boxContent), strings.Count(boxContent, "\n")+1,
+		len(clipped), strings.Count(clipped, "\n")+1,
+		strings.TrimSpace(stripANSIForTrace(clipped)) == "",
+		firstN(boxContent, 40),
+	))
+}
+
+// traceLayerHold records the compositor reusing a cached layer, with the reason
+// it did so. There are three such paths and they are easy to confuse, so each
+// names itself.
+func traceLayerHold(window *terminal.Window, isFocused bool, reason string) {
+	if !renderTraceEnabled || window == nil {
+		return
+	}
+	syncActive := false
 	altBuf := false
 	if window.Terminal != nil {
+		syncActive = window.Terminal.IsSyncActive()
 		altBuf = window.Terminal.ActiveScreenIsAlt()
 	}
+	cachedBlank := true
+	if window.CachedLayer != nil {
+		cachedBlank = strings.TrimSpace(stripANSIForTrace(window.CachedContent)) == ""
+	}
 	traceWrite(fmt.Sprintf(
-		"layer  id=%s title=%q focused=%t branch=layer-reuse          "+
-			"needsRedraw=%t dirty=%t contentDirty=%t posDirty=%t cachedLen=%d altBuf=%t",
-		shortID(window.ID), window.Title(), isFocused, needsRedraw,
+		"hold   id=%s title=%q focused=%t reason=%-16s dirty=%t contentDirty=%t posDirty=%t "+
+			"syncActive=%t altBuf=%t cachedLen=%d cachedBlank=%t hasLayer=%t",
+		shortID(window.ID), window.Title(), isFocused, reason,
 		window.Dirty, window.ContentDirty, window.PositionDirty,
-		len(window.CachedContent), altBuf,
+		syncActive, altBuf, len(window.CachedContent), cachedBlank,
+		window.CachedLayer != nil,
 	))
+}
+
+func firstN(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }
 
 // traceSync records one window's pass through the daemon state sync. This path
