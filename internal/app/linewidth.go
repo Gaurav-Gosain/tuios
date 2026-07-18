@@ -1,6 +1,36 @@
 package app
 
-import "github.com/charmbracelet/x/ansi"
+import (
+	"sync/atomic"
+
+	"github.com/charmbracelet/x/ansi"
+)
+
+// lineWidthFallbacks counts how often lineWidth had to defer to
+// ansi.StringWidth. The fast path is a performance fix, and an allocation
+// guard cannot protect it, because ansi.StringWidth does not allocate either:
+// a change that quietly narrowed the fast path until ordinary SGR output
+// stopped matching it would cost roughly five times the CPU per frame and
+// every allocation assertion would still pass. That was checked by reverting
+// the fast path and watching those assertions stay green.
+//
+// The counter makes that regression visible as a deterministic operation
+// count, which holds up on a loaded machine where a wall-time assertion would
+// flake. It is incremented only on the slow path, which is already about to
+// run a grapheme segmentation, so the atomic add costs nothing measurable.
+var lineWidthFallbacks atomic.Uint64
+
+// LineWidthFallbackCount reports how many times the width fast path has
+// deferred to the reference implementation. Exposed for the render performance
+// guards in the test suite.
+func LineWidthFallbackCount() uint64 { return lineWidthFallbacks.Load() }
+
+// slowLineWidth records a fast-path miss and measures the line the reference
+// way.
+func slowLineWidth(line string) int {
+	lineWidthFallbacks.Add(1)
+	return ansi.StringWidth(line)
+}
 
 // lineWidth returns the display width of one rendered line, in cells.
 //
@@ -28,7 +58,7 @@ func lineWidth(line string) int {
 		switch {
 		case c >= 0x80:
 			// Multi-byte rune: may be wide, may combine with its neighbours.
-			return ansi.StringWidth(line)
+			return slowLineWidth(line)
 
 		case c == 0x1b:
 			// Escape sequence. Only CSI is handled here, because SGR is the
@@ -39,7 +69,7 @@ func lineWidth(line string) int {
 			// them (a bare ESC in the body, a C1 ST byte), and a line carrying
 			// one is rare enough that measuring it the slow way costs nothing.
 			if i+1 >= len(line) {
-				return ansi.StringWidth(line)
+				return slowLineWidth(line)
 			}
 			switch line[i+1] {
 			case '[':
@@ -56,11 +86,11 @@ func lineWidth(line string) int {
 					j++
 				}
 				if j >= len(line) || line[j] < 0x40 || line[j] > 0x7e {
-					return ansi.StringWidth(line)
+					return slowLineWidth(line)
 				}
 				i = j
 			default:
-				return ansi.StringWidth(line)
+				return slowLineWidth(line)
 			}
 
 		case c < 0x20 || c == 0x7f:
