@@ -375,7 +375,8 @@ prod-server$ systemctl status myapp
 
 - [CLI Reference](CLI_REFERENCE.md) - Session commands
 - [Architecture](ARCHITECTURE.md) - Multi-client architecture details
-- [SSH Server](SSH.md) - SSH-based multi-client access
+- [`tuios ssh`](CLI_REFERENCE.md#tuios-ssh) - SSH-based multi-client access
+- [Sessions](SESSIONS.md) - The session model and what survives an interruption
 - [Web Terminal](WEB.md) - Web-based multi-client access
 
 ## Future Enhancements
