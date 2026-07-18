@@ -7,10 +7,20 @@ import (
 	"github.com/google/uuid"
 )
 
-// maxDaemonWorkspaces bounds the workspace indices the daemon-side state
-// operations accept. It mirrors the TUI's workspace count (config.MaxWorkspaces)
-// but is duplicated here to keep the session package free of a config import.
-const maxDaemonWorkspaces = 9
+// defaultWorkspaces bounds the workspace indices the daemon-side state
+// operations accept when the session state does not say how many it has. State
+// written by a client that reports its workspace count uses that instead, so the
+// bound is the session's own rather than a number this package guesses.
+const defaultWorkspaces = 9
+
+// workspaceBound returns how many workspaces this state has, for the range check
+// on the operations that take a workspace index.
+func (s *SessionState) workspaceBound() int {
+	if s.NumWorkspaces > 0 {
+		return s.NumWorkspaces
+	}
+	return defaultWorkspaces
+}
 
 // These daemon-side operations mutate a session's canonical SessionState
 // directly, so mutating control verbs (create/close/focus/rename/move a window,
@@ -273,11 +283,10 @@ func (s *Session) RenameDaemonWindow(target, name string) error {
 
 // MoveDaemonWindowToWorkspace moves the window matching target to workspace ws.
 func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
-	if ws < 1 || ws > maxDaemonWorkspaces {
-		return fmt.Errorf("workspace %d out of range (1-%d)", ws, maxDaemonWorkspaces)
-	}
-
 	return s.mutateState(func(state *SessionState) error {
+		if ws < 1 || ws > state.workspaceBound() {
+			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+		}
 		idx, err := findWindowStateIndex(state.Windows, target)
 		if err != nil {
 			return err
@@ -296,11 +305,10 @@ func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 // SwitchDaemonWorkspace sets the current workspace, restoring that workspace's
 // last-focused window when one is recorded.
 func (s *Session) SwitchDaemonWorkspace(ws int) error {
-	if ws < 1 || ws > maxDaemonWorkspaces {
-		return fmt.Errorf("workspace %d out of range (1-%d)", ws, maxDaemonWorkspaces)
-	}
-
 	return s.mutateState(func(state *SessionState) error {
+		if ws < 1 || ws > state.workspaceBound() {
+			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+		}
 		state.CurrentWorkspace = ws
 		if state.WorkspaceFocus != nil {
 			if focus, ok := state.WorkspaceFocus[ws]; ok {

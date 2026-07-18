@@ -348,10 +348,10 @@ func buildWindowListData(state *SessionState) map[string]any {
 		windows = append(windows, windowStateToData(state, i))
 	}
 
-	workspaceWindows := make([]int, maxDaemonWorkspaces)
+	workspaceWindows := make([]int, state.workspaceBound())
 	for i := range state.Windows {
 		ws := state.Windows[i].Workspace
-		if ws >= 1 && ws <= maxDaemonWorkspaces {
+		if ws >= 1 && ws <= state.workspaceBound() {
 			workspaceWindows[ws-1]++
 		}
 	}
@@ -408,12 +408,20 @@ func buildSessionInfoData(sess *Session, state *SessionState, hasClient bool) ma
 	if state.AutoTiling {
 		tilingMode = "tiling"
 	}
+	// layout_mode names which tiling layout is in use, which tiling_mode cannot
+	// say: it reports only whether tiling is on at all, and has to keep doing so
+	// because callers already dispatch on its two values.
+	layoutMode := state.LayoutMode
+	if layoutMode == "" {
+		layoutMode = "unknown"
+	}
 	return map[string]any{
 		"session_name":      state.Name,
 		"session_id":        sess.ID,
 		"mode":              "unknown",
 		"current_workspace": state.CurrentWorkspace,
-		"num_workspaces":    maxDaemonWorkspaces,
+		"num_workspaces":    state.workspaceBound(),
+		"layout_mode":       layoutMode,
 		"window_count":      len(state.Windows),
 		"tiling_mode":       tilingMode,
 		"master_ratio":      state.MasterRatio,

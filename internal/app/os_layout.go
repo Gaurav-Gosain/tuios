@@ -45,6 +45,46 @@ func (m *OS) RebuildBSPTreeFromPositions() {
 	tree.SyncRatiosFromGeometry(windowRects, m.GetBSPBounds())
 }
 
+// Layout mode names as they travel in session state. They name the selection
+// between tiling layouts only; whether tiling is on at all is AutoTiling, which
+// is carried separately and is why disabling tiling does not erase the mode.
+const (
+	LayoutModeBSP         = "bsp"
+	LayoutModeMasterStack = "master-stack"
+	LayoutModeScrolling   = "scrolling"
+)
+
+// LayoutModeName returns the current layout mode under the name session state
+// uses for it.
+func (m *OS) LayoutModeName() string {
+	switch {
+	case m.UseScrollingLayout:
+		return LayoutModeScrolling
+	case m.UseBSPLayout:
+		return LayoutModeBSP
+	default:
+		return LayoutModeMasterStack
+	}
+}
+
+// ApplyLayoutModeName sets the layout mode from the name session state carries,
+// without retiling or notifying: it is the state-sync half of the Enable*
+// functions, and the caller retiles once it has applied the rest of the sync.
+//
+// An empty or unrecognized name leaves the mode alone. That is what lets the
+// field be additive: a daemon or a peer client that never sets it cannot reset
+// this client's layout to a default it did not choose.
+func (m *OS) ApplyLayoutModeName(name string) {
+	switch name {
+	case LayoutModeScrolling:
+		m.UseScrollingLayout, m.UseBSPLayout = true, false
+	case LayoutModeBSP:
+		m.UseScrollingLayout, m.UseBSPLayout = false, true
+	case LayoutModeMasterStack:
+		m.UseScrollingLayout, m.UseBSPLayout = false, false
+	}
+}
+
 // ToggleLayoutMode cycles through layout modes: BSP -> master-stack -> scrolling -> BSP.
 func (m *OS) ToggleLayoutMode() {
 	m.resetTiledFlags()

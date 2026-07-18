@@ -152,6 +152,11 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	}
 	state.NextBSPWindowID = m.NextBSPWindowID
 	state.TilingScheme = int(m.TilingScheme)
+	// The layout mode travels with the topology it selects between. Without it a
+	// scrolling session reattached as a BSP one: the tree survived and the mode
+	// that reads it did not.
+	state.LayoutMode = m.LayoutModeName()
+	state.NumWorkspaces = m.NumWorkspaces
 
 	return state
 }
@@ -314,7 +319,11 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	}
 	m.NextBSPWindowID = state.NextBSPWindowID
 	m.TilingScheme = layout.AutoScheme(state.TilingScheme)
-	m.LogInfo("[RESTORE] NextBSPWindowID=%d, TilingScheme=%d", m.NextBSPWindowID, m.TilingScheme)
+	// Reattaching is the case this field exists for: the mode is what a user
+	// most obviously notices losing, and it was the one part of the tiling state
+	// that did not survive.
+	m.ApplyLayoutModeName(state.LayoutMode)
+	m.LogInfo("[RESTORE] NextBSPWindowID=%d, TilingScheme=%d, LayoutMode=%s", m.NextBSPWindowID, m.TilingScheme, m.LayoutModeName())
 
 	// Restore BSP trees
 	if state.WorkspaceTrees != nil && state.AutoTiling {
@@ -479,6 +488,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// through a sync rather than only through local creation.
 	m.NextBSPWindowID = max(m.NextBSPWindowID, state.NextBSPWindowID)
 	m.TilingScheme = layout.AutoScheme(state.TilingScheme)
+	m.ApplyLayoutModeName(state.LayoutMode)
 
 	// Update BSP trees
 	if state.WorkspaceTrees != nil && state.AutoTiling {

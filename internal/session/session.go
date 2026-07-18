@@ -105,6 +105,22 @@ type SessionState struct {
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`
 	TilingScheme    int                        `json:"tiling_scheme,omitempty"` // Default auto-insertion scheme
+	// LayoutMode is which tiling layout the session uses: "bsp", "master-stack"
+	// or "scrolling". It sits beside the BSP topology it selects between, which
+	// was already carried here; without it a scrolling session came back as a BSP
+	// one on reattach, because the topology survived and the mode that reads it
+	// did not.
+	//
+	// Empty means unstated, and a client that receives it leaves its own mode
+	// alone. That is what makes the field additive: state written before it
+	// existed, and clients that never send it, behave exactly as they did.
+	LayoutMode string `json:"layout_mode,omitempty"`
+	// NumWorkspaces is how many workspaces this session has. The daemon-side
+	// operations bound workspace indices by it; it used to be a constant 9
+	// duplicated here to keep this package free of a config import, which meant
+	// the daemon disagreed with a client configured for any other number.
+	// Zero means unstated, and the bound falls back to defaultWorkspaces.
+	NumWorkspaces int `json:"num_workspaces,omitempty"`
 	// ResurrectionVersion tags the on-disk state schema. It is stamped by
 	// SaveSessionForResurrection (not by clients) and checked on load so that
 	// state written by a newer, incompatible tuios is archived rather than

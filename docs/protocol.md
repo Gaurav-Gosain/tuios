@@ -261,6 +261,22 @@ waiting for that client's next push to reveal the disagreement. Pushes are
 ordered by `version`, and one overtaken by a newer state is dropped, so a client
 is never handed a state older than one it has already applied.
 
+Layout is split the same way, along the line between intent and pixels. The
+daemon carries the layout intent: `layout_mode` (`bsp`, `master-stack` or
+`scrolling`), the BSP tree per workspace, the split ratios, the master ratio, the
+tiling scheme, and `num_workspaces`. It does not carry the pixel rectangles for
+tiled windows, because those depend on the viewport of whichever client is
+rendering, and two clients attached at different sizes must derive different
+rectangles from the same topology. So intent persists across a detach and each
+client re-tiles from it.
+
+`layout_mode` and `num_workspaces` are both additive and both mean "unstated"
+when absent: a client that receives a state without `layout_mode` leaves its own
+layout alone rather than resetting to a default, and the daemon falls back to
+nine workspaces when no client has told it otherwise. Before `layout_mode`
+existed the BSP tree survived a reattach but the mode selecting between layouts
+did not, so a scrolling session came back as a BSP one.
+
 A `base_version` of `0` means a client that predates state versioning. It cannot
 say what it saw, so its pushes are applied as sent, exactly as before. Input mode
 is not part of session state at all: it is per viewer, so one client switching to
@@ -330,13 +346,20 @@ Response:
   "session_name": "work",
   "session_id": "5f...",
   "current_workspace": 1,
+  "num_workspaces": 9,
   "window_count": 3,
   "tiling_mode": "tiling",
+  "layout_mode": "bsp",
   "width": 120,
   "height": 40,
   "tui_attached": true
 }}
 ```
+
+`tiling_mode` says only whether tiling is on (`tiling` or `floating`) and keeps
+doing so, because callers already dispatch on those two values. `layout_mode`
+says which tiling layout is in use (`bsp`, `master-stack`, `scrolling`, or
+`unknown` when no client has reported one yet).
 
 ### list-windows
 

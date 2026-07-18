@@ -162,7 +162,7 @@ func TestConcurrentMutationsPushInVersionOrder(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_ = sess.SwitchDaemonWorkspace(i%maxDaemonWorkspaces + 1)
+			_ = sess.SwitchDaemonWorkspace(i%defaultWorkspaces + 1)
 		}(i)
 	}
 	wg.Wait()
