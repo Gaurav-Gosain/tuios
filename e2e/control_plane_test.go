@@ -133,11 +133,12 @@ func (e *env) mustRun(args ...string) string {
 
 // killServer stops the isolated daemon and waits for it to actually exit.
 //
-// kill-server only sends SIGTERM and returns immediately, while the daemon then
-// writes its final resurrection state into XDG_STATE_HOME. Returning before it
-// finishes would race t.TempDir cleanup, which deletes that directory out from
-// under the still-running daemon. Errors are ignored: this runs as cleanup and
-// the server may already be gone.
+// kill-server is itself synchronous, so the waits below are belt and braces for
+// teardown: they also cover the case where kill-server failed or timed out and
+// the daemon is still writing its final resurrection state into XDG_STATE_HOME.
+// Returning while that is in flight would race t.TempDir cleanup, which deletes
+// the directory out from under the daemon. Errors are ignored: this runs as
+// cleanup and the server may already be gone.
 func (e *env) killServer() {
 	_, _ = e.run("kill-server")
 	e.awaitDaemonGone(10 * time.Second)
@@ -146,13 +147,15 @@ func (e *env) killServer() {
 
 // awaitStateSettled waits until the resurrection state directory stops changing.
 //
-// Socket removal is not quite the last write a shutting-down daemon makes: a
-// session created moments earlier can still be saved after the socket is gone,
-// and a save writes a temp file before renaming it. Removing the test's TempDir
-// during that window fails with "directory not empty", which shows up as a
-// cleanup error on whichever short test happened to race it. Waiting for two
-// identical readings makes teardown deterministic instead. Best effort: it
-// returns on timeout, since callers use it during cleanup.
+// Daemon.shutdown now unlinks the socket last, after every final save, so on the
+// normal path awaitDaemonGone already implies the state directory is quiet. This
+// remains as teardown insurance for the one path where that does not hold:
+// shutdown caps draining goroutines at 5s and proceeds regardless, so a wedged
+// session can still write after the unlink. A save writes a temp file before
+// renaming it, and removing the test's TempDir during that window fails with
+// "directory not empty", which surfaces as a cleanup error on whichever short
+// test raced it. Waiting for two identical readings keeps teardown deterministic.
+// Best effort: it returns on timeout, since callers use it during cleanup.
 func (e *env) awaitStateSettled(timeout time.Duration) {
 	dir := filepath.Join(e.dirs["XDG_STATE_HOME"], "tuios", "sessions")
 
@@ -184,10 +187,12 @@ func (e *env) awaitStateSettled(timeout time.Duration) {
 // awaitDaemonGone blocks until the daemon has fully finished shutting down.
 //
 // It waits for the socket FILE to be removed, not merely for connections to be
-// refused. The daemon closes its listener before saving resurrection state and
-// only unlinks the socket afterwards (see Daemon.shutdown), so an unconnectable
-// socket does not yet mean state has been persisted. Best effort: it returns on
-// timeout rather than failing, since callers use it during cleanup.
+// refused. The daemon closes its listener at the top of shutdown and only unlinks
+// the socket at the very end, after the final resurrection saves (see
+// Daemon.shutdown), so an unconnectable socket does not yet mean state has been
+// persisted while a removed one does. This is the same signal 'tuios kill-server'
+// waits on. Best effort: it returns on timeout rather than failing, since callers
+// use it during cleanup.
 func (e *env) awaitDaemonGone(timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -199,8 +204,10 @@ func (e *env) awaitDaemonGone(timeout time.Duration) {
 }
 
 // waitForStateFile blocks until a session's resurrection state lands on disk.
-// State is persisted by a periodic saver and by the final save during shutdown,
-// so it appears asynchronously after kill-server returns.
+// State is persisted by a periodic saver and by the final save during shutdown.
+// After a completed kill-server the final save has already happened, so this
+// returns at once; the wait is for callers that have not stopped the daemon and
+// are waiting on the periodic saver.
 func (e *env) waitForStateFile(session string, timeout time.Duration) string {
 	e.t.Helper()
 	path := filepath.Join(e.dirs["XDG_STATE_HOME"], "tuios", "sessions", session+".json")
@@ -459,6 +466,60 @@ func TestUnknownVerbDoesNotKillConnection(t *testing.T) {
 	}
 }
 
+// TestKillServerIsSynchronous proves the contract scripts depend on: when
+// kill-server returns, the daemon has finished. Session state is already on
+// disk and the socket is already gone, with no polling in between.
+//
+// The old behaviour was fire and forget: kill-server sent SIGTERM and returned
+// while the daemon was still saving, so 'kill-server && start-server' could
+// start a new daemon that read state the old one had not finished writing.
+func TestKillServerIsSynchronous(t *testing.T) {
+	e := newEnv(t)
+
+	e.mustRun("new", "--detach", "synckill")
+	e.waitForSocket(10 * time.Second)
+
+	c := e.dial()
+	c.result(1, "new-window", map[string]any{"session": "synckill", "name": "durable"}, 10*time.Second)
+
+	// Delete anything the periodic saver has already written, so a state file
+	// seen after kill-server can only have been written by the shutdown path.
+	stateDir := filepath.Join(e.dirs["XDG_STATE_HOME"], "tuios", "sessions")
+	statePath := filepath.Join(stateDir, "synckill.json")
+	if err := os.Remove(statePath); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("clearing pre-shutdown state: %v", err)
+	}
+
+	e.mustRun("kill-server")
+
+	// No waiting: the point of the contract is that these hold on return.
+	if _, err := os.Stat(statePath); err != nil {
+		t.Fatalf("kill-server returned before session state was saved: %v", err)
+	}
+	if _, err := os.Stat(e.socket); !os.IsNotExist(err) {
+		t.Errorf("kill-server returned while the socket was still present: %v", err)
+	}
+
+	// The saved state must be complete, not a partial write caught mid-flight.
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("reading state: %v", err)
+	}
+	var saved map[string]any
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		t.Fatalf("state written by shutdown is not valid JSON (%d bytes): %v", len(raw), err)
+	}
+	if !strings.Contains(string(raw), "durable") {
+		t.Errorf("saved state is missing the window created before shutdown: %s", raw)
+	}
+
+	// Running it again with no daemon left must succeed rather than report a
+	// failure to stop something that is already stopped.
+	if out, err := e.run("kill-server"); err != nil {
+		t.Errorf("second kill-server failed: %v (%s)", err, out)
+	}
+}
+
 // TestResurrectionAcrossDaemonRestart proves the cold start path: a session's
 // windows come back after the daemon process dies, with live PTYs that still
 // respond to control verbs. This is the resurrection feature's real contract,
@@ -477,9 +538,7 @@ func TestResurrectionAcrossDaemonRestart(t *testing.T) {
 	wantTotal := int(before["total"].(float64))
 
 	// Resurrection state is written by a periodic saver and on shutdown; the
-	// clean kill-server path performs the final save. kill-server only sends
-	// SIGTERM and returns before that save completes, so both the state file
-	// and the socket teardown have to be waited for.
+	// clean kill-server path performs the final save before returning.
 	e.mustRun("kill-server")
 
 	// The state file must actually exist, otherwise the restore below would be
