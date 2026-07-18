@@ -71,6 +71,10 @@ const (
 	MsgSessionResize   // Session effective size changed (min of all clients)
 	MsgForceRefresh    // Force all clients to re-render
 	MsgRequestFullSync // Client requests full state sync from leader
+
+	// Appended after all existing types to keep every value above stable for
+	// older clients that share this iota order.
+	MsgResurrect // Restore a saved session on demand (cold-start restore)
 )
 
 // Message is the base protocol message structure.
@@ -154,6 +158,11 @@ type SessionListPayload struct {
 // KillPayload requests termination of a session.
 type KillPayload struct {
 	SessionName string `json:"session_name"` // Session to kill
+}
+
+// ResurrectPayload requests restoring a saved session on demand.
+type ResurrectPayload struct {
+	SessionName string `json:"session_name"` // Session to resurrect from saved state
 }
 
 // ResizePayload notifies of terminal resize.

@@ -235,6 +235,34 @@ func (d *Daemon) handleKill(cs *connState, msg *Message) error {
 	return d.handleList(cs)
 }
 
+func (d *Daemon) handleResurrect(cs *connState, msg *Message) error {
+	var payload ResurrectPayload
+	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+		return fmt.Errorf("invalid resurrect payload: %w", err)
+	}
+
+	if payload.SessionName == "" {
+		return d.sendError(cs, ErrCodeInvalidMessage, "session name required")
+	}
+
+	// Already live (e.g. auto-restored on start): nothing to do, report success.
+	if d.manager.GetSession(payload.SessionName) != nil {
+		return d.handleList(cs)
+	}
+
+	state, err := LoadResurrectionState(payload.SessionName)
+	if err != nil {
+		return d.sendError(cs, ErrCodeSessionNotFound, err.Error())
+	}
+
+	if _, err := d.restoreSession(state); err != nil {
+		return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to restore session: %v", err))
+	}
+
+	log.Printf("Resurrected session %q on demand (%d windows)", payload.SessionName, len(state.Windows))
+	return d.handleList(cs)
+}
+
 func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
 		return nil

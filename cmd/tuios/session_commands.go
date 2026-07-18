@@ -445,7 +445,115 @@ func runKillSession(sessionName string) error {
 	return nil
 }
 
-func runDaemon(foreground bool) error {
+// runResurrect lists resurrectable sessions (no name) or restores one on demand
+// and attaches to it (name given).
+func runResurrect(sessionName string) error {
+	if sessionName == "" {
+		return listResurrectableSessions()
+	}
+
+	// Ensure the daemon is running so it can hold the restored session.
+	if !session.IsDaemonRunning() {
+		fmt.Println("Starting TUIOS daemon...")
+		if err := startDaemonBackground(); err != nil {
+			return fmt.Errorf("failed to start daemon: %w", err)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Ask the daemon to restore the session from saved state. This is a no-op if
+	// the daemon already auto-restored it on start.
+	client := session.NewClient(&session.ClientConfig{Version: version})
+	if err := client.Connect(); err != nil {
+		return fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	if err := client.ResurrectSession(sessionName); err != nil {
+		_ = client.Close()
+		return err
+	}
+	_ = client.Close()
+
+	fmt.Printf("Resurrected session '%s'\n", sessionName)
+
+	// Attach to the now-live session.
+	return runDaemonSession(sessionName, false)
+}
+
+// listResurrectableSessions prints the sessions that can be restored from saved
+// state on disk.
+func listResurrectableSessions() error {
+	infos, err := session.ListResurrectableInfos()
+	if err != nil {
+		return err
+	}
+
+	// Sessions currently live in the daemon are already available via attach;
+	// still list them so the user sees the full set, but mark their status.
+	liveNames := make(map[string]bool)
+	if session.IsDaemonRunning() {
+		client := session.NewClient(&session.ClientConfig{Version: version})
+		if err := client.Connect(); err == nil {
+			if sessions, err := client.ListSessions(); err == nil {
+				for _, s := range sessions {
+					liveNames[s.Name] = true
+				}
+			}
+			_ = client.Close()
+		}
+	}
+
+	if len(infos) == 0 {
+		fmt.Println("No resurrectable sessions.")
+		return nil
+	}
+
+	rows := make([][]string, 0, len(infos))
+	for _, info := range infos {
+		status := "restorable"
+		if liveNames[info.Name] {
+			status = "live"
+		}
+		saved := "-"
+		if !info.SavedAt.IsZero() {
+			saved = formatTimeAgo(info.SavedAt.Unix())
+		}
+		rows = append(rows, []string{
+			info.Name,
+			fmt.Sprintf("%d", info.WindowCount),
+			status,
+			saved,
+		})
+	}
+
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
+		Headers("NAME", "WINDOWS", "STATUS", "SAVED").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			baseStyle := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return baseStyle.Bold(true).Foreground(lipgloss.Color("12"))
+			}
+			switch col {
+			case 0:
+				return baseStyle.Foreground(lipgloss.Color("3")).Bold(true)
+			case 2:
+				if rows[row][col] == "live" {
+					return baseStyle.Foreground(lipgloss.Color("10"))
+				}
+				return baseStyle.Foreground(lipgloss.Color("11"))
+			default:
+				return baseStyle.Foreground(lipgloss.Color("8"))
+			}
+		})
+
+	fmt.Println(t.Render())
+	fmt.Printf("\n%d resurrectable session(s). Use 'tuios resurrect <name>' to restore.\n", len(infos))
+	return nil
+}
+
+func runDaemon(foreground, disableAutoRestore bool) error {
 	if session.IsDaemonRunning() {
 		pid := session.GetDaemonPID()
 		if pid > 0 {
@@ -466,7 +574,8 @@ func runDaemon(foreground bool) error {
 	}
 
 	daemon := session.NewDaemon(&session.DaemonConfig{
-		Version: version,
+		Version:            version,
+		DisableAutoRestore: disableAutoRestore,
 	})
 
 	return daemon.Run()

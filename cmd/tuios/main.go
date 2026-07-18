@@ -413,6 +413,35 @@ This will close all windows in the session and disconnect any attached clients.`
 		},
 	}
 
+	resurrectCmd := &cobra.Command{
+		Use:   "resurrect [session-name]",
+		Short: "Restore a previously saved session",
+		Long: `Restore a session that was saved before a daemon restart, crash, or reboot.
+
+With no arguments, lists the sessions that can be resurrected (from saved
+state on disk). With a session name, restores that session in the daemon
+(respawning fresh shells in each window's saved working directory) and
+attaches to it.
+
+Sessions are normally auto-restored when the daemon starts; this command is
+useful when the daemon was started with --no-restore, or to bring back a
+specific session on demand.`,
+		Example: `  # List resurrectable sessions
+  tuios resurrect
+
+  # Restore and attach to a saved session
+  tuios resurrect mysession`,
+		Aliases: []string{"restore"},
+		Args:    cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			return runResurrect(name)
+		},
+	}
+
 	startDaemonCmd := &cobra.Command{
 		Use:   "start-server",
 		Short: "Start the TUIOS daemon",
@@ -424,11 +453,12 @@ run this command manually.`,
 		Example: `  tuios start-server`,
 		Hidden:  true,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runDaemon(false)
+			return runDaemon(false, false)
 		},
 	}
 
 	var daemonLogLevel string
+	var daemonNoRestore bool
 	daemonCmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Run the TUIOS daemon in the foreground",
@@ -450,10 +480,11 @@ Debug log levels:
 			if daemonLogLevel != "" {
 				session.SetDebugLevel(session.ParseDebugLevel(daemonLogLevel))
 			}
-			return runDaemon(true)
+			return runDaemon(true, daemonNoRestore)
 		},
 	}
 	daemonCmd.Flags().StringVar(&daemonLogLevel, "log-level", "", "Debug log level: off, errors, basic, messages, verbose, trace")
+	daemonCmd.Flags().BoolVar(&daemonNoRestore, "no-restore", false, "Do not auto-restore saved sessions on start (use 'tuios resurrect' to restore on demand)")
 
 	killDaemonCmd := &cobra.Command{
 		Use:   "kill-server",
@@ -893,7 +924,7 @@ Use --json for machine-readable output.`,
 	layoutCmd.AddCommand(layoutListCmd, layoutDeleteCmd, layoutDirCmd, layoutExportCmd)
 
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd)
-	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd)
+	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, logsCmd, capturePaneCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd)

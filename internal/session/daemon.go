@@ -39,6 +39,11 @@ type Daemon struct {
 
 	// Configuration
 	version string
+
+	// disableAutoRestore, when true, skips cold-start resurrection of saved
+	// sessions on daemon start. Sessions can still be brought back on demand
+	// with the resurrect verb.
+	disableAutoRestore bool
 }
 
 // pendingRequest tracks a routed command awaiting its result, with the time it
@@ -95,6 +100,8 @@ type DaemonConfig struct {
 	SocketPath string
 	Foreground bool
 	LogFile    string
+	// DisableAutoRestore skips restoring saved sessions on daemon start.
+	DisableAutoRestore bool
 }
 
 // NewDaemon creates a new daemon instance.
@@ -102,12 +109,13 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	d := &Daemon{
-		manager:         NewManager(),
-		ctx:             ctx,
-		cancel:          cancel,
-		clients:         make(map[string]*connState),
-		pendingRequests: make(map[string]*pendingRequest),
-		version:         cfg.Version,
+		manager:            NewManager(),
+		ctx:                ctx,
+		cancel:             cancel,
+		clients:            make(map[string]*connState),
+		pendingRequests:    make(map[string]*pendingRequest),
+		version:            cfg.Version,
+		disableAutoRestore: cfg.DisableAutoRestore,
 	}
 
 	if cfg.SocketPath != "" {
@@ -147,6 +155,13 @@ func (d *Daemon) Start() error {
 	}
 
 	log.Printf("TUIOS daemon started on %s (PID %d)", socketPath, os.Getpid())
+
+	// Restore sessions saved before the previous shutdown/crash before we start
+	// accepting clients, so an attach immediately after start finds them. Runs
+	// synchronously; a single corrupt file is archived and skipped, never fatal.
+	if !d.disableAutoRestore {
+		d.restoreAllSessions()
+	}
 
 	go d.handleSignals()
 	go d.acceptLoop()
@@ -386,6 +401,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleList(cs)
 	case MsgKill:
 		return d.handleKill(cs, msg)
+	case MsgResurrect:
+		return d.handleResurrect(cs, msg)
 	case MsgInput:
 		return d.handleInput(cs, msg)
 	case MsgResize:

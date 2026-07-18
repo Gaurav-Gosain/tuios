@@ -148,6 +148,41 @@ func (c *Client) KillSession(name string) error {
 	}
 }
 
+// ResurrectSession asks the daemon to restore a saved session on demand. It is
+// a no-op (success) if the session is already live.
+func (c *Client) ResurrectSession(name string) error {
+	msg, err := NewMessageWithCodec(MsgResurrect, &ResurrectPayload{
+		SessionName: name,
+	}, c.codec)
+	if err != nil {
+		return err
+	}
+
+	if err := c.send(msg); err != nil {
+		return err
+	}
+
+	resp, err := c.recv()
+	if err != nil {
+		return err
+	}
+
+	switch resp.Type {
+	case MsgSessionList:
+		return nil // Success
+
+	case MsgError:
+		var errPayload ErrorPayload
+		if err := resp.ParsePayloadWithCodec(&errPayload, c.codec); err != nil {
+			return fmt.Errorf("resurrect failed")
+		}
+		return fmt.Errorf("resurrect failed: %s", errPayload.Message)
+
+	default:
+		return fmt.Errorf("unexpected response type: %d", resp.Type)
+	}
+}
+
 func (c *Client) sendHello() error {
 	// Detect terminal capabilities
 	termType, colorTerm := detectTerminalEnv()
