@@ -344,6 +344,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 
 		if len(rawInput) > 0 {
+			// Record the keystroke for tape capture here, at the point where it
+			// is actually forwarded to the PTY. Recording earlier (before prefix,
+			// overlay, and copy-mode routing) captured keys that never reach the
+			// shell, so tapes replayed prefix chords and stray characters.
+			recordTerminalKey(o, msg)
 			if err := focusedWindow.SendInput(rawInput); err != nil {
 				// Terminal unavailable, switch back to window mode
 				o.Mode = app.WindowManagementMode
@@ -365,6 +370,24 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.Mode = app.WindowManagementMode
 	}
 	return o, nil
+}
+
+// recordTerminalKey records a keystroke that is being forwarded to the focused
+// window's PTY into the active tape recording. Printable single-byte ASCII is
+// accumulated as a Type command; everything else is recorded as a KeyCombo.
+// Workspace switches, mode switches, and overlay/prefix keys return before the
+// PTY-forward path, so they are never recorded here (workspace switches are
+// captured separately by SwitchToWorkspace).
+func recordTerminalKey(o *app.OS, msg tea.KeyPressMsg) {
+	if o.TapeRecorder == nil || !o.TapeRecorder.IsRecording() || o.ShowTapeManager {
+		return
+	}
+	keyStr := msg.String()
+	if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] < 127 {
+		o.TapeRecorder.RecordType(keyStr)
+	} else {
+		o.TapeRecorder.RecordKey(keyStr)
+	}
 }
 
 // handleTerminalWorkspacePrefix handles workspace prefix commands in terminal mode
