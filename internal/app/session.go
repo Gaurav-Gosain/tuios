@@ -167,6 +167,16 @@ func convertBSPNode(node *layout.SerializedNode) *session.SerializedBSPNode {
 	}
 }
 
+// clampWorkspace returns a valid workspace index. Workspaces are 1-based and
+// SwitchToWorkspace refuses anything below 1, so a persisted or synced value of
+// 0 must be normalized to 1 to keep every workspace reachable.
+func clampWorkspace(ws int) int {
+	if ws < 1 {
+		return 1
+	}
+	return ws
+}
+
 // RestoreFromState restores the OS state from a SessionState.
 // This is called when attaching to an existing session.
 // The caller must set up PTY output handlers after calling this.
@@ -179,7 +189,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.LogInfo("[RESTORE] RestoreFromState: restoring %d windows", len(state.Windows))
 
 	m.SessionName = state.Name
-	m.CurrentWorkspace = state.CurrentWorkspace
+	// Clamp to a valid workspace: SwitchToWorkspace rejects workspace < 1, so a
+	// state carrying 0 (legacy, or a freshly created session with no windows)
+	// would strand every subsequently created window on an unreachable workspace.
+	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
 	m.Mode = Mode(state.Mode)
@@ -407,7 +420,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 
 	// Update global state
 	m.SessionName = state.Name
-	m.CurrentWorkspace = state.CurrentWorkspace
+	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
 
