@@ -611,3 +611,31 @@ func TestApplyOverrides_HideClock(t *testing.T) {
 		t.Error("Expected HideClock to be true from user config (OR)")
 	}
 }
+
+// TestApplyAppearanceConfig_ScrollLines covers the wheel scroll speed option:
+// it must reach the global the input layer reads, and an unset value must not
+// clobber the default.
+func TestApplyAppearanceConfig_ScrollLines(t *testing.T) {
+	original := config.ScrollLines
+	defer func() { config.ScrollLines = original }()
+
+	if cfg := config.DefaultConfig(); cfg.Appearance.ScrollLines != 3 {
+		t.Errorf("default scroll_lines = %d, want 3", cfg.Appearance.ScrollLines)
+	}
+
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.ScrollLines = 8
+	config.ApplyAppearanceConfig(userCfg)
+	if config.ScrollLines != 8 {
+		t.Errorf("ScrollLines = %d, want 8", config.ScrollLines)
+	}
+
+	// An absent value in a hand-written config must leave the current setting
+	// alone rather than scrolling zero lines per notch.
+	config.ScrollLines = 5
+	userCfg.Appearance.ScrollLines = 0
+	config.ApplyAppearanceConfig(userCfg)
+	if config.ScrollLines != 5 {
+		t.Errorf("ScrollLines = %d after an unset value, want it unchanged at 5", config.ScrollLines)
+	}
+}

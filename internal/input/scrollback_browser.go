@@ -520,7 +520,7 @@ func handleScrollbackBrowserMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.O
 		return o, nil
 	}
 
-	const scrollAmount = 3
+	scrollAmount := config.ScrollLines
 
 	if browser.OutputMode && browser.Vim != nil {
 		vim := browser.Vim

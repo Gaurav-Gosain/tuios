@@ -257,6 +257,16 @@ Controls the number of lines stored in the scrollback buffer for each terminal w
 
 **CLI override:** `--scrollback-lines <number>`
 
+### scroll_lines
+
+Controls how many lines a single mouse wheel notch scrolls in scrollback, copy mode and the scrollback browser.
+
+**Valid values:** Integer between 1 and 50
+
+**Default:** `3`
+
+**Note:** Values outside the valid range are automatically clamped. Also settable from the in-app settings page (Advanced, "Scroll lines").
+
 ### window_title_position
 
 Controls where window titles are displayed. Titles show the custom name if set by the user, otherwise the terminal's title (e.g., from shell prompt).

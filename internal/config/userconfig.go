@@ -33,6 +33,7 @@ type AppearanceConfig struct {
 	HideWindowButtons   bool   `toml:"hide_window_buttons"`   // Hide window control buttons (minimize, maximize, close)
 	HideScrollbar       bool   `toml:"hide_scrollbar"`        // Hide the window scrollbar thumb on the border
 	ScrollbackLines     int    `toml:"scrollback_lines"`      // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
+	ScrollLines         int    `toml:"scroll_lines"`          // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
 	DockbarPosition     string `toml:"dockbar_position"`      // Dockbar position: bottom, top, hidden
 	PreferredShell      string `toml:"preferred_shell"`       // Preferred shell: if empty, auto-detect based on platform.
 	AnimationsEnabled   *bool  `toml:"animations_enabled"`    // Enable UI animations (default: true). Set to false for instant transitions.
@@ -86,6 +87,7 @@ func DefaultConfig() *UserConfig {
 			BorderStyle:       "rounded",
 			HideWindowButtons: false,
 			ScrollbackLines:   10000,
+			ScrollLines:       3,
 			DockbarPosition:   "bottom",
 			PreferredShell:    "",
 		},
@@ -469,6 +471,13 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	} else if cfg.Appearance.ScrollbackLines > 1000000 {
 		cfg.Appearance.ScrollbackLines = 1000000
 	}
+
+	// Validate and set wheel scroll speed (min: 1, max: 50)
+	if cfg.Appearance.ScrollLines <= 0 {
+		cfg.Appearance.ScrollLines = defaultCfg.Appearance.ScrollLines
+	} else if cfg.Appearance.ScrollLines > 50 {
+		cfg.Appearance.ScrollLines = 50
+	}
 }
 
 // ApplyAppearanceConfig applies parsed appearance settings to the package
@@ -513,6 +522,11 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// Only apply from config if not already set via flag (run.go applies flags separately)
 	if !HideClock {
 		HideClock = cfg.Appearance.HideClock
+	}
+
+	// ScrollLines (lines per wheel notch)
+	if cfg.Appearance.ScrollLines > 0 {
+		ScrollLines = cfg.Appearance.ScrollLines
 	}
 
 	// ZoomMaxWidth (0 = fullscreen)
