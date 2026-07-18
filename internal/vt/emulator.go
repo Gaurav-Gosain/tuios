@@ -60,6 +60,12 @@ type Emulator struct {
 	lastChar rune // either ansi.Rune or ansi.Grapheme
 	// A slice of runes to compose a grapheme.
 	grapheme []rune
+	// The cell handleGrapheme last drew into. A pending wrap makes the target
+	// differ from the cursor position observed beforehand, so it is recorded
+	// rather than recomputed.
+	lastCellX, lastCellY int
+	// The cluster left open across a Write boundary, if any.
+	openGrapheme openGrapheme
 
 	// The ANSI parser to use.
 	parser *ansi.Parser
@@ -653,6 +659,10 @@ func (e *Emulator) EncodeMouseEvent(m Mouse) string {
 
 // Resize resizes the terminal.
 func (e *Emulator) Resize(width int, height int) {
+	// A resize reflows and reclamps, so the cell an open cluster was drawn into
+	// no longer identifies that cluster. Close it.
+	e.openGrapheme = openGrapheme{}
+
 	x, y := e.scr.CursorPosition()
 	oldHeight := e.Height()
 
@@ -738,8 +748,12 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 		// flush grapheme if we transitioned to a non-utf8 state or we have
 		// written the whole byte slice.
 		if len(e.grapheme) > 0 {
-			if (e.lastState == parser.GroundState && state != parser.Utf8State) || i == len(p)-1 {
+			if e.lastState == parser.GroundState && state != parser.Utf8State {
 				e.flushGrapheme()
+			} else if i == len(p)-1 {
+				// Out of bytes, possibly mid-cluster: draw what we have but
+				// keep the trailing cluster open for the next Write.
+				e.flushGraphemeAtWriteEnd()
 			}
 		}
 		e.lastState = state
