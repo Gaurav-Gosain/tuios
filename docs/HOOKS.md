@@ -12,6 +12,7 @@ not stall the interface.
 - [Environment Variables](#environment-variables)
 - [Examples](#examples)
 - [Behavior and Limits](#behavior-and-limits)
+- [Related Documentation](#related-documentation)
 
 ## Configuration
 
@@ -72,7 +73,7 @@ Every hook command receives the full parent environment plus:
 | `TUIOS_SESSION_ID` | Name of the session the event came from |
 | `TUIOS_WORKSPACE` | Workspace the event applies to |
 | `TUIOS_WINDOW_ID` | Stable ID of the window, empty for events with no window |
-| `TUIOS_WINDOW_NAME` | Window title, empty for events with no window |
+| `TUIOS_WINDOW_NAME` | The window's terminal title, as set by the shell or program running in it. This is not the custom name set with `Ctrl+B` `r`, and it is empty for events with no window and for a window whose program has not set a title yet |
 | `TUIOS_PREV_WORKSPACE` | Workspace active before an `after-workspace-switch`, `0` otherwise |
 | `TUIOS_LAYOUT` | Layout after an `after-layout-change`: `bsp`, `master-stack`, `scrolling` or `floating`. Empty otherwise |
 | `TUIOS_WIDTH`, `TUIOS_HEIGHT` | Window size in cells after an `after-resize`, `0` otherwise |
@@ -134,3 +135,9 @@ esac
 - Hooks run on the client, not the daemon. In a multi-client session each
   attached client fires its own hooks for the events it observes.
 - Hooks are read at startup from the config file.
+
+## Related Documentation
+
+- [CONFIGURATION.md](CONFIGURATION.md) - the config file and every other option
+- [SESSIONS.md](SESSIONS.md) - the session model
+- [protocol.md](protocol.md) - controlling a daemon session from outside

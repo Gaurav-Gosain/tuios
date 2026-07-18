@@ -8,7 +8,7 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 - [Configuration File Location](#configuration-file-location)
 - [Configuration Structure](#configuration-structure)
 - [Keybinding Sections](#keybinding-sections)
-- [Hooks](HOOKS.md)
+- [Hooks](#hooks)
 - [Key Syntax](#key-syntax)
 - [Platform-Specific Configuration](#platform-specific-configuration)
 - [Best Practices](#best-practices)
@@ -358,6 +358,78 @@ Controls whether windows share borders when tiling (reducing visual clutter).
 
 **CLI override:** `--shared-borders`
 
+### whichkey_enabled
+
+Controls the which-key popup: a panel listing the keys available in the current
+prefix chord, shown after you press the leader key and then wait.
+
+The popup appears 500 milliseconds after the leader key is pressed and lists the
+bindings for whichever chord is active (the top-level prefix, or the workspace,
+minimize, window, debug, tape or layout submenu). It disappears as soon as you
+press the next key, so it costs nothing if you already know the chord. It is
+suppressed while the help overlay is open.
+
+**Valid values:**
+- `true` - Show the popup (default)
+- `false` - Never show it
+
+**Default:** `true`
+
+**Also settable from:** the in-app settings page (`Ctrl+B` `,`), which persists
+the change back to the config file.
+
+**Note:** the popup draws with fixed colors and does not follow the active theme.
+
+### whichkey_position
+
+Which corner the which-key popup appears in.
+
+**Valid values:**
+- `"bottom-right"` (default)
+- `"bottom-left"`
+- `"top-right"`
+- `"top-left"`
+- `"center"`
+
+**Default:** `"bottom-right"`
+
+**Also settable from:** the in-app settings page.
+
+### niri_reverse_scroll
+
+Reverses the mouse wheel direction when scrolling the viewport in the scrolling
+(niri-style) layout. Has no effect in the other layout modes. See
+[LAYOUT_MODES.md](LAYOUT_MODES.md).
+
+**Valid values:**
+- `false` - Wheel down scrolls the strip right (default)
+- `true` - Inverted
+
+**Default:** `false`
+
+### theme
+
+The color theme to use, by ID. Custom themes loaded from
+`~/.config/tuios/themes/` can be named here exactly like built-in ones. Leave it
+unset to disable theming and use your terminal's own colors. See
+[THEMES.md](THEMES.md).
+
+**CLI override:** `--theme <id>`
+
+## Hooks
+
+The `[hooks]` table runs shell commands on session events: windows created,
+closed or focused, workspace switches, layout changes, resizes, attach and
+detach:
+
+```toml
+[hooks]
+after-new-window = "notify-send 'TUIOS' 'new window'"
+```
+
+See [HOOKS.md](HOOKS.md) for the event list, the environment variables passed to
+each command, and the execution model.
+
 ## Keybindings Prefix Configuration
 
 ### leader_key
@@ -610,4 +682,8 @@ prefix_prev_window = ["p"]
 - [CLI Reference](CLI_REFERENCE.md) - Command-line options
 - [Hooks](HOOKS.md) - Run shell commands on session events
 - [Keybindings Reference](KEYBINDINGS.md) - Default keybindings
+- [Hooks](HOOKS.md) - Shell commands run on window events
+- [Themes](THEMES.md) - Built-in and custom themes
+- [Layout Modes](LAYOUT_MODES.md) - BSP, master-stack and scrolling layouts
+- [Sessions](SESSIONS.md) - Local and daemon sessions, persistence
 - [README](../README.md) - Project overview
