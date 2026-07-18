@@ -18,7 +18,11 @@ func (kp *KittyPassthrough) isOccludedByHigherWindow(
 	excludeWindowID string,
 ) bool {
 	for id, info := range allWindows {
-		if id == excludeWindowID || info.WindowZ <= windowZ {
+		// Off-workspace / minimized windows are now present in allWindows with
+		// Visible:false (so their own images get hidden rather than deleted).
+		// Such a window is not on screen and cannot occlude anything, even if
+		// its retained geometry still overlaps the image region.
+		if id == excludeWindowID || !info.Visible || info.WindowZ <= windowZ {
 			continue
 		}
 		// Check if higher-z window overlaps the image region
