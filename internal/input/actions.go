@@ -129,6 +129,9 @@ func (d *ActionDispatcher) registerHandlers() {
 	for i := range 9 {
 		d.Register("restore_minimized_"+string(rune('1'+i)), makeRestoreMinimizedHandler(i))
 	}
+
+	// Prefix-chord and terminal-mode actions (see prefix_actions.go)
+	d.registerPrefixHandlers()
 }
 
 // Register adds an action handler

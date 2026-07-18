@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -169,7 +170,8 @@ func DefaultConfig() *UserConfig {
 				"prefix_workspace":        {"w"},
 				"prefix_minimize":         {"m"},
 				"prefix_window":           {"t"},
-				"prefix_detach":           {"d", "esc"},
+				"prefix_detach":           {"d"},
+				"prefix_exit_mode":        {"esc"},
 				"prefix_selection":        {"["},
 				"prefix_help":             {"?"},
 				"prefix_debug":            {"D"},
@@ -181,6 +183,9 @@ func DefaultConfig() *UserConfig {
 				"prefix_rotate_split":     {"R"},
 				"prefix_equalize_splits":  {"="},
 				"prefix_scrollback":       {"s"},
+				"prefix_command_palette":  {"P"},
+				"prefix_session_switcher": {"S"},
+				"prefix_layout":           {"L"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -230,6 +235,7 @@ func DefaultConfig() *UserConfig {
 				"debug_prefix_logs":       {"l"},
 				"debug_prefix_cache":      {"c"},
 				"debug_prefix_animations": {"a"},
+				"debug_prefix_showkeys":   {"k"},
 				"debug_prefix_cancel":     {"esc"},
 			},
 			TapePrefix: map[string][]string{
@@ -249,8 +255,8 @@ func DefaultConfig() *UserConfig {
 func getDefaultTerminalModeKeybinds() map[string][]string {
 	if isMacOS() {
 		return map[string][]string{
-			"terminal_next_window": {"opt+tab"},
-			"terminal_prev_window": {"opt+shift+tab"},
+			"terminal_next_window": {"opt+tab", "alt+n"},
+			"terminal_prev_window": {"opt+shift+tab", "alt+p"},
 			"terminal_exit_mode":   {"opt+esc"},
 		}
 	}
@@ -536,6 +542,32 @@ func fillMissingDaemon(cfg, defaultCfg *UserConfig) {
 	// SocketPath defaults to empty (use XDG default), so we don't override it
 }
 
+// migrateLegacyKeybinds rewrites bindings whose meaning changed, so a config
+// written by an older version keeps behaving the way its author expects.
+//
+// Older defaults bound prefix_detach to both "d" and "esc" while the prefix
+// handler hard-coded esc to leave terminal mode and never detach. Now that the
+// binding is what actually runs, leaving esc on prefix_detach would start
+// detaching the session on a key that used to just switch modes, so it moves to
+// the prefix_exit_mode action that carries the old behaviour.
+// It must run before the defaults are filled in, so that the presence of
+// prefix_exit_mode still distinguishes a config written by a version that knew
+// about the split (leave it alone) from an older one (migrate it).
+func migrateLegacyKeybinds(cfg *UserConfig) {
+	if _, ok := cfg.Keybindings.PrefixMode["prefix_exit_mode"]; ok {
+		return
+	}
+	detach := cfg.Keybindings.PrefixMode["prefix_detach"]
+	if !slices.Contains(detach, "esc") {
+		return
+	}
+	remaining := slices.DeleteFunc(slices.Clone(detach), func(key string) bool {
+		return key == "esc"
+	})
+	cfg.Keybindings.PrefixMode["prefix_detach"] = remaining
+	cfg.Keybindings.PrefixMode["prefix_exit_mode"] = []string{"esc"}
+}
+
 // fillMissingKeybinds fills in any missing keybindings with defaults
 func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// Initialize nil maps
@@ -581,6 +613,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.TerminalMode == nil {
 		cfg.Keybindings.TerminalMode = make(map[string][]string)
 	}
+
+	migrateLegacyKeybinds(cfg)
 
 	// Set default leader key if not specified
 	if cfg.Keybindings.LeaderKey == "" {
