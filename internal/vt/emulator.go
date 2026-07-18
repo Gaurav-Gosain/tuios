@@ -739,7 +739,7 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 
 // WriteString writes a string to the terminal output buffer.
 func (e *Emulator) WriteString(s string) (n int, err error) {
-	return io.WriteString(e, s) //nolint:wrapcheck
+	return e.Write([]byte(s)) //nolint:wrapcheck
 }
 
 // InputPipe returns the terminal's input pipe.
