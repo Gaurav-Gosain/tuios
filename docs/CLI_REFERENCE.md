@@ -306,12 +306,34 @@ tuios kill-session mysession   # Kill session named "mysession"
 
 ### `tuios kill-server`
 
-Stop the TUIOS daemon process. This kills all sessions.
+Stop the TUIOS daemon process. This stops all sessions.
 
 **Usage:**
 ```bash
 tuios kill-server
 ```
+
+**Contract:** the command is synchronous. It returns only once the daemon has
+written every session's resurrection state and removed its socket, so a script
+may start a new daemon as soon as it returns:
+
+```bash
+tuios kill-server && tuios start-server   # safe: no race
+```
+
+The daemon unlinks its socket last, after the final saves, and that unlink is
+what this command waits for. A refused connection is not the same signal: the
+daemon closes its listener at the start of shutdown, while state is still
+unsaved, so polling the socket for connectivity can report "stopped" before
+anything has been persisted.
+
+If the daemon has not finished within 10 seconds the command fails, naming the
+pid and the socket, rather than returning success while the old process is still
+running. Re-running it re-checks. Force killing with `kill -9` skips the final
+save and loses any state written since the last periodic save.
+
+When no daemon is running, the command reports that and removes a stale socket
+if one is present. It exits 0 in that case.
 
 ### `tuios daemon`
 
