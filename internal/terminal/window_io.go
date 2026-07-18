@@ -73,10 +73,17 @@ func (w *Window) outputWriter() {
 		w.ioMu.Unlock()
 
 		if t != nil {
+			// HasNewOutput drives the UI goroutine's dirty-marking;
+			// coalesceSignal drives the render trigger. Do NOT mark the
+			// window dirty here: Dirty/ContentDirty/CachedContent are
+			// window model fields owned by the UI goroutine, and writing
+			// them from this background goroutine races the renderer and
+			// Close(). MarkTerminalsWithNewContent marks them on the UI
+			// goroutine once the coalescer fires PTYDataChan.
 			w.HasNewOutput.Store(true)
-			w.MarkContentDirty()
+			w.coalesceSignal.Store(true)
 			// Don't signal PTYDataChan here. The renderCoalescer
-			// goroutine checks HasNewOutput at a capped rate and
+			// goroutine checks coalesceSignal at a capped rate and
 			// signals then. This prevents partial-frame renders.
 		}
 	}
@@ -95,7 +102,9 @@ func (w *Window) renderCoalescer() {
 		case <-w.outputDone:
 			return
 		case <-ticker.C:
-			if w.HasNewOutput.CompareAndSwap(true, false) {
+			// Consume the coalescer's own flag, not HasNewOutput, so the
+			// latter survives for the UI goroutine's MarkTerminalsWithNewContent.
+			if w.coalesceSignal.CompareAndSwap(true, false) {
 				if w.PTYDataChan != nil {
 					select {
 					case w.PTYDataChan <- struct{}{}:
