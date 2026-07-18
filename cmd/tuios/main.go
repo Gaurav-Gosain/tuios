@@ -710,6 +710,29 @@ Supported configuration paths:
 	setConfigCmd.Flags().StringVarP(&setConfigSession, "session", "s", "", "Target session (default: most recently active)")
 	_ = setConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var getConfigSession string
+	getConfigCmd := &cobra.Command{
+		Use:   "get-config <path>",
+		Short: "Read a session option from a running TUIOS session",
+		Long: `Read a session option previously set with 'tuios set-config' from a
+running TUIOS session. Options are recorded in daemon-owned state, so this works
+whether or not a TUI client is attached.`,
+		Example: `  # Read the border style
+  tuios get-config border_style`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runGetConfig(getConfigSession, args[0])
+		},
+	}
+	getConfigCmd.Flags().StringVarP(&getConfigSession, "session", "s", "", "Target session (default: most recently active)")
+	_ = getConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	getConfigCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			return getConfigPathCompletions(toComplete), cobra.ShellCompDirectiveNoFileComp
+		}
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
 	// Add completion for set-config
 	setConfigCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
@@ -938,7 +961,7 @@ Use --json for machine-readable output.`,
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
-	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, logsCmd, capturePaneCmd)
+	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd)
 
 	if err := fang.Execute(

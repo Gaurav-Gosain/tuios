@@ -351,19 +351,23 @@ func runListSessions(jsonOutput bool) error {
 		return nil
 	}
 
-	client := session.NewClient(&session.ClientConfig{
-		Version: version,
-	})
-
-	if err := client.Connect(); err != nil {
+	client, err := session.DialVerbClient()
+	if err != nil {
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	defer func() { _ = client.Close() }()
 
-	sessions, err := client.ListSessions()
+	raw, err := client.Call("list-sessions", nil)
 	if err != nil {
 		return err
 	}
+	var listed struct {
+		Sessions []session.SessionInfo `json:"sessions"`
+	}
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		return fmt.Errorf("failed to parse sessions: %w", err)
+	}
+	sessions := listed.Sessions
 
 	if jsonOutput {
 		data, err := json.MarshalIndent(sessions, "", "  ")
@@ -466,16 +470,13 @@ func runKillSession(sessionName string) error {
 		return fmt.Errorf("TUIOS daemon is not running")
 	}
 
-	client := session.NewClient(&session.ClientConfig{
-		Version: version,
-	})
-
-	if err := client.Connect(); err != nil {
+	client, err := session.DialVerbClient()
+	if err != nil {
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	defer func() { _ = client.Close() }()
 
-	if err := client.KillSession(sessionName); err != nil {
+	if _, err := client.Call("kill-session", map[string]any{"session": sessionName}); err != nil {
 		return err
 	}
 
