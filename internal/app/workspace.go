@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -145,6 +146,14 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 
 	// Sync state to daemon after workspace switch
 	m.SyncStateToDaemon()
+
+	// Fire the hook last, so a command reading the session sees the switch
+	// already applied. FireHook reports the workspace we just moved to.
+	focusedID, focusedName := "", ""
+	if w := m.GetFocusedWindow(); w != nil {
+		focusedID, focusedName = w.ID, w.Title()
+	}
+	m.FireHook(hooks.AfterWorkspaceSwitch, focusedID, focusedName)
 }
 
 // MoveWindowToWorkspace moves a window to the specified workspace without changing focus.

@@ -321,6 +321,12 @@ func (m *OS) settingsCategories() []settingsCategory {
 					config.ScrollbackLines = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.ScrollbackLines = v })
 				}),
+			intItem("Scroll lines", "Lines scrolled per mouse wheel notch", 1, 50, 1,
+				func() int { return config.ScrollLines },
+				func(m *OS, v int) {
+					config.ScrollLines = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.ScrollLines = v })
+				}),
 			intItem("Zoom width", "Max columns in zoom mode (0 = fullscreen)", 0, 400, 10,
 				func() int { return config.ZoomMaxWidth },
 				func(m *OS, v int) {

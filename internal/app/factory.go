@@ -6,6 +6,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/ssh"
 )
 
@@ -122,6 +123,15 @@ func NewOS(opts OSOptions) *OS {
 			Output:      opts.GraphicsOutput,
 		})
 	}
+
+	// Tell the terminal package what tuios can forward, so shells spawned
+	// locally advertise a terminal identity their image tools recognise. The
+	// passthroughs are the source of truth here: they already fold detection
+	// and the force flag together, and a nil passthrough means no forwarding.
+	terminal.SetGraphicsCapabilities(
+		os.KittyPassthrough != nil && os.KittyPassthrough.IsEnabled(),
+		os.SixelPassthrough != nil && os.SixelPassthrough.IsEnabled(),
+	)
 
 	// Initialize hooks manager and load user-defined hooks from config. Prefer
 	// the config the caller already loaded so we never trigger a second load

@@ -75,6 +75,12 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		return fmt.Errorf("failed to get/create session: %w", err)
 	}
 
+	// Record what the attaching client's host terminal can display so shells
+	// started from now on advertise a matching terminal identity (see
+	// guestenv.TermProgram). Without this the daemon's own environment decides,
+	// and image tools inside a window fall back to block art.
+	session.SetGraphicsCapabilities(cs.kittyGraphics, cs.sixelGraphics)
+
 	// Record the new client's dimensions from the attach payload. Previously
 	// these were zeroed out on the theory that 80x24 might be a bubbletea
 	// placeholder; but leaving them at 0 excludes the client from

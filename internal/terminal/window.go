@@ -437,8 +437,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	cmd.Env = append(os.Environ(),
 		"TERM="+termType,
 		"COLORTERM="+colorTerm,
-		"TERM_PROGRAM=TUIOS",         // Identify as TUIOS terminal emulator
-		"TERM_PROGRAM_VERSION=0.1.0", // Version for compatibility checking
+		"TERM_PROGRAM="+guestTermProgram(), // Terminal identity guests can act on
+		"TERM_PROGRAM_VERSION=0.1.0",       // Version for compatibility checking
 		"TUIOS_WINDOW_ID="+id,
 	)
 

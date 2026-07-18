@@ -417,6 +417,11 @@ func NeedsDockTick() bool {
 // Set via --scrollback-lines flag or appearance.scrollback_lines config
 var ScrollbackLines = 10000
 
+// ScrollLines is how many lines one mouse wheel notch scrolls in scrollback,
+// copy mode and the scrollback browser.
+// Set via appearance.scroll_lines config
+var ScrollLines = 3
+
 // NiriReverseScroll reverses mouse scroll direction in niri scrolling mode.
 // When true, scroll-up moves viewport right and scroll-down moves left.
 // Set via appearance.niri_reverse_scroll config

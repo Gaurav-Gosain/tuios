@@ -19,6 +19,7 @@ import (
 	xpty "github.com/charmbracelet/x/xpty"
 	"github.com/google/uuid"
 
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -236,6 +237,31 @@ type Session struct {
 
 	// Configuration
 	config *SessionConfig
+
+	// Graphics capabilities of the attached client's host terminal. The daemon
+	// records them on attach so shells spawned afterwards can advertise a
+	// terminal identity the guest's image tools recognise.
+	graphicsMu    sync.RWMutex
+	kittyGraphics bool
+	sixelGraphics bool
+}
+
+// SetGraphicsCapabilities records the graphics protocols tuios can forward to
+// the attached client's host terminal. It is called on every attach, so the
+// most recent client wins; PTYs already running keep the environment they were
+// started with.
+func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
+	s.graphicsMu.Lock()
+	defer s.graphicsMu.Unlock()
+	s.kittyGraphics = kitty
+	s.sixelGraphics = sixel
+}
+
+// GraphicsCapabilities returns the recorded kitty and sixel support.
+func (s *Session) GraphicsCapabilities() (kitty, sixel bool) {
+	s.graphicsMu.RLock()
+	defer s.graphicsMu.RUnlock()
+	return s.kittyGraphics, s.sixelGraphics
 }
 
 // SessionConfig holds configuration for a session.
@@ -805,7 +831,8 @@ func (s *Session) buildEnv(windowID string, restored bool) []string {
 		colorTerm = s.config.ColorTerm
 	}
 	env = append(env, "COLORTERM="+colorTerm)
-	env = append(env, "TERM_PROGRAM=TUIOS")
+	kitty, sixel := s.GraphicsCapabilities()
+	env = append(env, "TERM_PROGRAM="+guestenv.TermProgram(kitty, sixel))
 	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
 	env = append(env, "TUIOS_SESSION="+s.Name)
 	if windowID != "" {
