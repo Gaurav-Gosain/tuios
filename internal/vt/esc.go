@@ -34,6 +34,7 @@ func (e *Emulator) fullReset() {
 	e.charsets = [4]CharSet{}
 	e.atPhantom = false
 	e.grapheme = e.grapheme[:0]
+	e.openGrapheme = openGrapheme{}
 	e.lastChar = 0
 	e.lastState = parser.GroundState
 

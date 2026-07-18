@@ -1,0 +1,43 @@
+* [33m76348ef[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtest/fuzz-parsers[m[33m)[m test(vt): fuzz the emulator's parsers
+* [33mf3f7896[m fix(vt): clamp the ECH count to the right margin
+* [33ma670f25[m fix(vt): keep a grapheme cluster open across a Write boundary
+* [33m060b96e[m[33m ([m[1;32mtest/e2e-regressions[m[33m, [m[1;32mfeat/daemon-state-convergence[m[33m)[m docs: correct CLI invocations and the prefix-configurability claim
+*   [33m8536e6e[m Merge branch 'fix/render-io-lock-reentry-deadlock' into feat/daemon-state-convergence
+[32m|[m[33m\[m  
+[32m|[m * [33m6ca26b1[m[33m ([m[1;32mfix/render-io-lock-reentry-deadlock[m[33m)[m fix(app): stop the render path from taking the window I/O lock twice
+* [33m|[m   [33m56ced66[m Merge branch 'docs/undocumented-features' into feat/daemon-state-convergence
+[34m|[m[35m\[m [33m\[m  
+[34m|[m * [33m|[m [33m50c394e[m[33m ([m[1;32mdocs/undocumented-features[m[33m)[m docs: document hooks, themes, layout modes and which-key
+[34m|[m * [33m|[m [33m7b2d6b7[m docs: add SESSIONS.md covering the session model end to end
+[34m|[m * [33m|[m [33m820db31[m fix: correct wrong keybinding guidance in help, palette and docs
+[34m|[m [33m|[m[33m/[m  
+* [33m|[m   [33mff2ca0c[m Merge branch 'fix/hooks-events-and-attach-exit' into feat/daemon-state-convergence
+[36m|[m[1;31m\[m [33m\[m  
+[36m|[m * [33m|[m [33mf778dae[m[33m ([m[1;32mfix/hooks-events-and-attach-exit[m[33m)[m test: isolate hook event tests from the developer's config
+[36m|[m * [33m|[m [33m86ee1d7[m cli: stop a failed command from stalling four seconds before it exits
+[36m|[m * [33m|[m [33m72bed51[m docs: document the hooks system
+[36m|[m * [33m|[m [33m92c9efa[m hooks: fire the five declared events that never fired
+[36m|[m [33m|[m[33m/[m  
+* [33m|[m   [33me89cf78[m Merge branch 'fix/stale-issue-followups' into feat/daemon-state-convergence
+[1;32m|[m[1;33m\[m [33m\[m  
+[1;32m|[m * [33m|[m [33mad621a5[m[33m ([m[1;32mfix/stale-issue-followups[m[33m)[m fix(hooks): fire after-workspace-switch
+[1;32m|[m * [33m|[m [33m734a7d9[m feat(config): make mouse wheel scroll speed configurable
+[1;32m|[m * [33m|[m [33m8bbdfd6[m fix(graphics): advertise forwarded graphics support to guest processes
+[1;32m|[m [33m|[m[33m/[m  
+* [33m|[m   [33m982a4fe[m Merge branch 'fix/config-options-that-do-nothing' into feat/daemon-state-convergence
+[33m|[m[1;35m\[m [33m\[m  
+[33m|[m [1;35m|[m[33m/[m  
+[33m|[m[33m/[m[1;35m|[m   
+[33m|[m * [33m226e3d1[m[33m ([m[1;32mfix/config-options-that-do-nothing[m[33m)[m feat(config): surface config problems inside the running TUI
+[33m|[m * [33m3ecf82d[m feat(app): apply window_title_format, drop the gap and separator_style options
+[33m|[m * [33m999c43f[m fix(input): resolve prefix and terminal-mode keys through the keybind registry
+[33m|[m * [33md06b9b5[m feat(config): accept both spellings of a shifted key in the normalizer
+[33m|[m[33m/[m  
+*   [33mfb1c0b8[m[33m ([m[1;33mtag: [m[1;33mpremerge-integration-20260718[m[33m, [m[1;31morigin/feat/daemon-state-convergence[m[33m)[m Merge branch 'feat/shared-border-focus' into feat/daemon-state-convergence
+[1;36m|[m[31m\[m  
+[1;36m|[m * [33m6358295[m[33m ([m[1;32mfeat/shared-border-focus[m[33m)[m app: make the focused pane visible in shared-border mode
+* [31m|[m   [33m9de402d[m Merge branch 'fix/alt-screen-blank-on-focus-switch' into feat/daemon-state-convergence
+[32m|[m[33m\[m [31m\[m  
+[32m|[m * [31m|[m [33mb9f770b[m[33m ([m[1;32mfix/alt-screen-blank-on-focus-switch[m[33m)[m fix(app): measure window width from the widest line when clipping
+[32m|[m * [31m|[m [33m34467fb[m app: drop the unfocused cache branch subsumed by the clean-cache check
+[32m|[m * [31m|[m [33me459ccc[m fix(app): do not report a deliberate quit as an unexpected termination

@@ -417,7 +417,7 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 		known := knownVerbNames()
 		return d.writeVerbResponse(cs, &verbResponse{
 			ID: req.ID,
-			Error: hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+req.Verb, &VerbHint{
+			Error: hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(req.Verb), &VerbHint{
 				Verb:       "list-verbs",
 				Command:    "tuios list-verbs",
 				DidYouMean: closestMatch(req.Verb, known),
@@ -474,7 +474,7 @@ func (d *Daemon) verbListVerbs(_ *connState, params json.RawMessage) (any, *verb
 		entry, ok := verbRegistry[p.Verb]
 		if !ok {
 			known := knownVerbNames()
-			return nil, hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+p.Verb, &VerbHint{
+			return nil, hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(p.Verb), &VerbHint{
 				Param:      "verb",
 				DidYouMean: closestMatch(p.Verb, known),
 				Available:  known,
