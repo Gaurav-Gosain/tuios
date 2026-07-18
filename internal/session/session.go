@@ -97,6 +97,12 @@ type SessionState struct {
 	// misinterpreted. Absent (0) means pre-versioning state, which is a
 	// structural subset of the current schema and loads fine.
 	ResurrectionVersion int `json:"resurrection_version,omitempty"`
+	// Options is a daemon-owned key/value store for session options set through
+	// the JSON verb protocol (set-option / get-option). It is additive: older
+	// clients and older on-disk state simply omit it. Keys are advisory names;
+	// the daemon records them verbatim so a later get-option can read them back
+	// and an attached TUI can apply the ones it understands.
+	Options map[string]string `json:"options,omitempty"`
 }
 
 // PTY represents a daemon-managed pseudo-terminal.
@@ -376,7 +382,43 @@ func (s *Session) GetState() *SessionState {
 		stateCopy.WorkspaceFocus = make(map[int]string)
 		maps.Copy(stateCopy.WorkspaceFocus, s.state.WorkspaceFocus)
 	}
+	if s.state.Options != nil {
+		stateCopy.Options = make(map[string]string, len(s.state.Options))
+		maps.Copy(stateCopy.Options, s.state.Options)
+	}
 	return &stateCopy
+}
+
+// SetOption records a daemon-owned session option under stateMu. It is the write
+// side of the JSON verb protocol's set-option and is safe for concurrent use.
+func (s *Session) SetOption(key, value string) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if s.state.Options == nil {
+		s.state.Options = make(map[string]string)
+	}
+	s.state.Options[key] = value
+}
+
+// GetOption reads a daemon-owned session option under stateMu, returning the
+// value and whether the key was set. It is the read side of get-option.
+func (s *Session) GetOption(key string) (string, bool) {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	if s.state.Options == nil {
+		return "", false
+	}
+	v, ok := s.state.Options[key]
+	return v, ok
+}
+
+// AllOptions returns a copy of every daemon-owned session option.
+func (s *Session) AllOptions() map[string]string {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	out := make(map[string]string, len(s.state.Options))
+	maps.Copy(out, s.state.Options)
+	return out
 }
 
 // ResurrectionState returns a copy of the session state enriched for on-disk
@@ -399,10 +441,15 @@ func (s *Session) ResurrectionState() *SessionState {
 	return state
 }
 
-// UpdateState updates the session state.
+// UpdateState updates the session state. Daemon-owned options (set through the
+// JSON verb protocol) are carried over when the incoming state does not include
+// them, so a TUI state sync - which never populates Options - does not wipe them.
 func (s *Session) UpdateState(state *SessionState) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
+	if state.Options == nil && s.state != nil {
+		state.Options = s.state.Options
+	}
 	s.state = state
 	s.LastActive = time.Now()
 }
