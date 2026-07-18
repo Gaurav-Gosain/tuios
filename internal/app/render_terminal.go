@@ -102,14 +102,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// paths that mark content dirty without dropping the cache (WriteToPTY and
 	// the drag and resize release handler) left the window able to serve stale
 	// bytes indefinitely, because nothing else re-reads the emulator while a
-	// window is unfocused. Honour the flag; the branch above still serves the
-	// cache for the common case where nothing changed.
-	if !isFocused && !window.ContentDirty && window.CachedContent != "" {
-		if renderTraceEnabled {
-			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-unfocused", window.CachedContent)
-		}
-		return window.CachedContent
-	}
+	// window is unfocused. Once the flag is honoured the branch is subsumed by
+	// the one above, which already serves the cache whenever the content is
+	// clean, focused or not, so there is nothing left for it to do.
 
 	m.terminalMu.Lock()
 	defer m.terminalMu.Unlock()
