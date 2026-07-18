@@ -814,8 +814,9 @@ func handleTerminalWindowSelection(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 func handleWorkspaceSwitch(msg tea.KeyPressMsg, o *app.OS) bool {
 	keyStr := msg.String()
 
-	// Check for macOS Option+digit keys
-	if len(keyStr) > 0 {
+	// Check for macOS Option+digit keys (darwin only; these glyphs are ordinary
+	// typed characters on non-US layouts and must fall through to the shell there).
+	if runtimeIsDarwin() && len(keyStr) > 0 {
 		firstRune := []rune(keyStr)[0]
 		if digit, ok := IsMacOSOptionKey(firstRune); ok {
 			o.SwitchToWorkspace(digit)

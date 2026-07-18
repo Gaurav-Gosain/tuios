@@ -203,3 +203,31 @@ func TestPrefixCommandsAvailableInBothModes(t *testing.T) {
 		t.Error("window management mode: ctrl+b P should open command palette")
 	}
 }
+
+// TestMacOSOptionKeysGatedToDarwin verifies that the macOS Option-key character
+// tables only trigger workspace/window shortcuts on darwin. On other platforms
+// these glyphs (e.g. £, ⇥) are ordinary typed characters and must fall through
+// to the shell rather than being intercepted.
+func TestMacOSOptionKeysGatedToDarwin(t *testing.T) {
+	// £ is Option+3 on a US Mac layout, but Shift+3 on a UK layout.
+	poundMsg := tea.KeyPressMsg{Code: '£', Text: "£"}
+
+	o := &app.OS{Mode: app.TerminalMode, CurrentWorkspace: 1}
+	handled := handleWorkspaceSwitch(poundMsg, o)
+	if handled != runtimeIsDarwin() {
+		t.Errorf("handleWorkspaceSwitch(£) = %v, want %v on GOOS-gated path", handled, runtimeIsDarwin())
+	}
+
+	// ⇥ is Option+Tab on macOS, but an ordinary glyph elsewhere.
+	tabMsg := tea.KeyPressMsg{Code: '⇥', Text: "⇥"}
+	o2 := &app.OS{Mode: app.TerminalMode}
+	handledCycle := handleWindowCycle(tabMsg, o2)
+	if handledCycle != runtimeIsDarwin() {
+		t.Errorf("handleWindowCycle(⇥) = %v, want %v on GOOS-gated path", handledCycle, runtimeIsDarwin())
+	}
+
+	// The pure lookup helper must remain platform-independent so it stays testable.
+	if digit, ok := IsMacOSOptionKey('£'); !ok || digit != 3 {
+		t.Errorf("IsMacOSOptionKey(£) = (%d, %v), want (3, true)", digit, ok)
+	}
+}

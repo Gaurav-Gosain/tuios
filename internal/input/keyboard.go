@@ -14,8 +14,9 @@ import (
 func handleWindowCycle(msg tea.KeyPressMsg, o *app.OS) bool {
 	keyStr := msg.String()
 
-	// Check for macOS Option+Tab unicode characters first
-	if len(keyStr) > 0 {
+	// Check for macOS Option+Tab unicode characters first (darwin only; ⇥/⇤ are
+	// ordinary characters elsewhere and must fall through to the shell).
+	if runtimeIsDarwin() && len(keyStr) > 0 {
 		if dir := IsMacOSOptionTab([]rune(keyStr)[0]); dir != "" {
 			if o.AutoTiling && o.UseScrollingLayout {
 				if dir == "next" {
