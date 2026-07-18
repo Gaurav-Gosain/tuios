@@ -191,9 +191,15 @@ func getCPUUsageLinux() float64 {
 }
 
 // getCPUUsageDarwin retrieves CPU usage on macOS systems using gopsutil.
+//
+// It uses a zero interval so the call never sleeps: gopsutil retains the CPU
+// times from the previous call and returns the usage over the elapsed window
+// (here ~500ms, one CPUUpdateInterval). A blocking cpu.Percent(100ms, ...) here
+// would stall the single Bubble Tea goroutine 100ms out of every 500ms whenever
+// ShowCPU is enabled. The first call has no baseline and returns 0, mirroring
+// the Linux delta path.
 func getCPUUsageDarwin() float64 {
-	// Get CPU percent over a short interval
-	percentages, err := cpu.Percent(100*time.Millisecond, false)
+	percentages, err := cpu.Percent(0, false)
 	if err != nil || len(percentages) == 0 {
 		return 0
 	}
