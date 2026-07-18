@@ -496,14 +496,49 @@ func (s *Session) ResurrectionState() *SessionState {
 // UpdateState updates the session state. Daemon-owned options (set through the
 // JSON verb protocol) are carried over when the incoming state does not include
 // them, so a TUI state sync - which never populates Options - does not wipe them.
+//
+// This is where an attached TUI's mutations land, so it is also where the window
+// lifecycle events for those mutations are raised: the incoming state is diffed
+// against the state it replaces. See state_events.go.
 func (s *Session) UpdateState(state *SessionState) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 	if state.Options == nil && s.state != nil {
 		state.Options = s.state.Options
 	}
+	before := snapshotLifecycle(s.state)
 	s.state = state
 	s.LastActive = time.Now()
+	s.emitLifecycleLocked(before)
+}
+
+// mutateState runs fn against the canonical state under the state lock and
+// raises the window lifecycle events implied by whatever fn changed. Daemon-side
+// (headless) window operations go through it so they emit through the same diff
+// as a TUI state sync, rather than each op emitting for itself.
+func (s *Session) mutateState(fn func(state *SessionState) error) error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	before := snapshotLifecycle(s.state)
+	if err := fn(s.state); err != nil {
+		return err
+	}
+	s.emitLifecycleLocked(before)
+	return nil
+}
+
+// emitLifecycleLocked diffs the current state against before and emits the
+// resulting events. It is called with the state lock held, deliberately: holding
+// it across the emit is what keeps a session's events in the same order as the
+// mutations that caused them when several callers mutate concurrently. It is
+// safe because the sink only stamps a sequence number and does non-blocking
+// channel sends; it never re-enters the session.
+func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
+	events := diffLifecycle(before, snapshotLifecycle(s.state))
+	for _, ev := range events {
+		s.emit(ev)
+	}
 }
 
 // Stop closes all PTYs and cleans up.

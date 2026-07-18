@@ -18,17 +18,22 @@ import (
 // Event type discriminators carried in a stream event's "type" field. These are
 // part of the public protocol surface; keep the string values stable.
 const (
-	EventWindowCreated  = "window-created"  // a daemon-owned window was created
-	EventWindowClosed   = "window-closed"   // a daemon-owned window was closed/removed
-	EventWindowExit     = "window-exit"     // a window's shell process exited
-	EventWindowRetitled = "window-retitled" // a window's title/name changed
-	EventOutput         = "output"          // a window produced output (activity)
-	EventBell           = "bell"            // a window rang the terminal bell
-	EventModeChanged    = "mode-changed"    // a terminal mode toggled (e.g. alt-screen)
-	EventSessionCreated = "session-created" // a session was created
-	EventSessionClosed  = "session-closed"  // a session was terminated
-	EventGap            = "gap"             // slow-subscriber marker: N events were dropped
-	EventSubscribed     = "subscribed"      // subscribe ack result type
+	EventWindowCreated     = "window-created"     // a window was created
+	EventWindowClosed      = "window-closed"      // a window was closed/removed
+	EventWindowExit        = "window-exit"        // a window's shell process exited
+	EventWindowRetitled    = "window-retitled"    // a window's title/name changed
+	EventWindowFocused     = "window-focused"     // a window became the focused window
+	EventWindowMoved       = "window-moved"       // a window moved to another workspace
+	EventWindowMinimized   = "window-minimized"   // a window was minimized
+	EventWindowRestored    = "window-restored"    // a minimized window was restored
+	EventWorkspaceSwitched = "workspace-switched" // the session's current workspace changed
+	EventOutput            = "output"             // a window produced output (activity)
+	EventBell              = "bell"               // a window rang the terminal bell
+	EventModeChanged       = "mode-changed"       // a terminal mode toggled (e.g. alt-screen)
+	EventSessionCreated    = "session-created"    // a session was created
+	EventSessionClosed     = "session-closed"     // a session was terminated
+	EventGap               = "gap"                // slow-subscriber marker: N events were dropped
+	EventSubscribed        = "subscribed"         // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -50,8 +55,12 @@ type streamEvent struct {
 	Bytes   int    `json:"bytes,omitempty"`
 	Mode    string `json:"mode,omitempty"`
 	Enabled bool   `json:"enabled,omitempty"`
-	Dropped uint64 `json:"dropped,omitempty"`
-	Time    int64  `json:"time,omitempty"`
+	// Workspace carries the workspace a window moved to (window-moved) or the
+	// workspace that became current (workspace-switched). Workspaces are 1-based,
+	// so a zero value is always "not applicable" and is omitted.
+	Workspace int    `json:"workspace,omitempty"`
+	Dropped   uint64 `json:"dropped,omitempty"`
+	Time      int64  `json:"time,omitempty"`
 }
 
 // SessionEvent is the source-side event a Session emits through its event sink.
@@ -59,13 +68,14 @@ type streamEvent struct {
 // before publishing to the hub. Window/PTYID are filled in by the per-PTY emitter
 // or the window op that raises the event.
 type SessionEvent struct {
-	Type    string
-	Window  string
-	PTYID   string
-	Title   string
-	Bytes   int
-	Mode    string
-	Enabled bool
+	Type      string
+	Window    string
+	PTYID     string
+	Title     string
+	Bytes     int
+	Mode      string
+	Enabled   bool
+	Workspace int
 }
 
 // eventFilter selects which events a subscriber receives. A zero value matches

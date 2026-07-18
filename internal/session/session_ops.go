@@ -19,6 +19,12 @@ const maxDaemonWorkspaces = 9
 // these methods are the headless path. The TUI, on its next attach, rebuilds
 // from this same state (the resurrection restore path), so a window created
 // headless shows up when a client later connects.
+//
+// Every mutation here runs inside Session.mutateState, which diffs the state
+// before and after and raises the window lifecycle events. None of these
+// operations emits an event itself: the diff is the single emit site shared with
+// the TUI's UpdateState path, which is what makes the events fire exactly once
+// and identically on both paths.
 
 // findWindowStateIndex resolves a window target string to an index into
 // state.Windows. It matches, in order: an exact window ID, a unique window ID
@@ -95,33 +101,32 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 		return WindowState{}, err
 	}
 
-	s.stateMu.Lock()
+	var win WindowState
+	_ = s.mutateState(func(state *SessionState) error {
+		if state.WorkspaceFocus == nil {
+			state.WorkspaceFocus = make(map[int]string)
+		}
+		workspace := state.CurrentWorkspace
+		if workspace < 1 {
+			workspace = 1
+			state.CurrentWorkspace = 1
+		}
 
-	if s.state.WorkspaceFocus == nil {
-		s.state.WorkspaceFocus = make(map[int]string)
-	}
-	workspace := s.state.CurrentWorkspace
-	if workspace < 1 {
-		workspace = 1
-		s.state.CurrentWorkspace = 1
-	}
-
-	win := WindowState{
-		ID:        windowID,
-		Title:     title,
-		X:         0,
-		Y:         0,
-		Width:     width,
-		Height:    height,
-		Workspace: workspace,
-		PTYID:     pty.ID,
-	}
-	s.state.Windows = append(s.state.Windows, win)
-	s.state.FocusedWindowID = windowID
-	s.state.WorkspaceFocus[workspace] = windowID
-	s.stateMu.Unlock()
-
-	s.emit(SessionEvent{Type: EventWindowCreated, Window: windowID, PTYID: pty.ID, Title: title})
+		win = WindowState{
+			ID:        windowID,
+			Title:     title,
+			X:         0,
+			Y:         0,
+			Width:     width,
+			Height:    height,
+			Workspace: workspace,
+			PTYID:     pty.ID,
+		}
+		state.Windows = append(state.Windows, win)
+		state.FocusedWindowID = windowID
+		state.WorkspaceFocus[workspace] = windowID
+		return nil
+	})
 	return win, nil
 }
 
@@ -129,125 +134,120 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 // and closes its PTY. It moves focus to another window in the same workspace
 // when the closed window was focused. It returns the closed window's ID.
 func (s *Session) CloseDaemonWindow(target string) (string, error) {
-	s.stateMu.Lock()
-
-	idx, err := findWindowStateIndex(s.state.Windows, target)
-	if err != nil {
-		s.stateMu.Unlock()
-		return "", err
-	}
-
-	closed := s.state.Windows[idx]
-	workspace := closed.Workspace
-	s.state.Windows = append(s.state.Windows[:idx], s.state.Windows[idx+1:]...)
-
-	// Repair focus if we removed the focused window.
-	if s.state.FocusedWindowID == closed.ID {
-		s.state.FocusedWindowID = ""
-		for i := range s.state.Windows {
-			if s.state.Windows[i].Workspace == workspace {
-				s.state.FocusedWindowID = s.state.Windows[i].ID
-				break
-			}
+	var closed WindowState
+	err := s.mutateState(func(state *SessionState) error {
+		idx, err := findWindowStateIndex(state.Windows, target)
+		if err != nil {
+			return err
 		}
-	}
-	if s.state.WorkspaceFocus != nil && s.state.WorkspaceFocus[workspace] == closed.ID {
-		delete(s.state.WorkspaceFocus, workspace)
-		if s.state.FocusedWindowID != "" {
-			// Only re-point the workspace focus at a window that is actually on it.
-			for i := range s.state.Windows {
-				if s.state.Windows[i].ID == s.state.FocusedWindowID && s.state.Windows[i].Workspace == workspace {
-					s.state.WorkspaceFocus[workspace] = s.state.FocusedWindowID
+
+		closed = state.Windows[idx]
+		workspace := closed.Workspace
+		state.Windows = append(state.Windows[:idx], state.Windows[idx+1:]...)
+
+		// Repair focus if we removed the focused window.
+		if state.FocusedWindowID == closed.ID {
+			state.FocusedWindowID = ""
+			for i := range state.Windows {
+				if state.Windows[i].Workspace == workspace {
+					state.FocusedWindowID = state.Windows[i].ID
 					break
 				}
 			}
 		}
+		if state.WorkspaceFocus != nil && state.WorkspaceFocus[workspace] == closed.ID {
+			delete(state.WorkspaceFocus, workspace)
+			if state.FocusedWindowID != "" {
+				// Only re-point the workspace focus at a window that is actually on it.
+				for i := range state.Windows {
+					if state.Windows[i].ID == state.FocusedWindowID && state.Windows[i].Workspace == workspace {
+						state.WorkspaceFocus[workspace] = state.FocusedWindowID
+						break
+					}
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
 	}
-	s.stateMu.Unlock()
 
 	// Close the PTY outside the state lock.
 	if closed.PTYID != "" {
 		_ = s.ClosePTY(closed.PTYID)
 	}
-	s.emit(SessionEvent{Type: EventWindowClosed, Window: closed.ID, PTYID: closed.PTYID})
 	return closed.ID, nil
 }
 
 // FocusDaemonWindow makes the window matching target the focused window,
 // switching the current workspace to that window's workspace.
 func (s *Session) FocusDaemonWindow(target string) error {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-
-	idx, err := findWindowStateIndex(s.state.Windows, target)
-	if err != nil {
-		return err
-	}
-	win := s.state.Windows[idx]
-	s.state.FocusedWindowID = win.ID
-	s.state.CurrentWorkspace = win.Workspace
-	if s.state.WorkspaceFocus == nil {
-		s.state.WorkspaceFocus = make(map[int]string)
-	}
-	s.state.WorkspaceFocus[win.Workspace] = win.ID
-	return nil
+	return s.mutateState(func(state *SessionState) error {
+		idx, err := findWindowStateIndex(state.Windows, target)
+		if err != nil {
+			return err
+		}
+		win := state.Windows[idx]
+		state.FocusedWindowID = win.ID
+		state.CurrentWorkspace = win.Workspace
+		if state.WorkspaceFocus == nil {
+			state.WorkspaceFocus = make(map[int]string)
+		}
+		state.WorkspaceFocus[win.Workspace] = win.ID
+		return nil
+	})
 }
 
 // CycleDaemonFocus moves focus to the next (delta > 0) or previous (delta < 0)
 // window on the current workspace, wrapping around. It is a no-op when the
 // current workspace has fewer than two windows.
 func (s *Session) CycleDaemonFocus(delta int) error {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-
-	// Collect indices of windows on the current workspace, in slice order.
-	var order []int
-	current := -1
-	for i := range s.state.Windows {
-		if s.state.Windows[i].Workspace != s.state.CurrentWorkspace {
-			continue
+	return s.mutateState(func(state *SessionState) error {
+		// Collect indices of windows on the current workspace, in slice order.
+		var order []int
+		current := -1
+		for i := range state.Windows {
+			if state.Windows[i].Workspace != state.CurrentWorkspace {
+				continue
+			}
+			if state.Windows[i].ID == state.FocusedWindowID {
+				current = len(order)
+			}
+			order = append(order, i)
 		}
-		if s.state.Windows[i].ID == s.state.FocusedWindowID {
-			current = len(order)
+		if len(order) == 0 {
+			return fmt.Errorf("no windows on workspace %d", state.CurrentWorkspace)
 		}
-		order = append(order, i)
-	}
-	if len(order) == 0 {
-		return fmt.Errorf("no windows on workspace %d", s.state.CurrentWorkspace)
-	}
-	if current == -1 {
-		current = 0
-	}
+		if current == -1 {
+			current = 0
+		}
 
-	step := 1
-	if delta < 0 {
-		step = -1
-	}
-	next := ((current+step)%len(order) + len(order)) % len(order)
-	win := s.state.Windows[order[next]]
-	s.state.FocusedWindowID = win.ID
-	if s.state.WorkspaceFocus == nil {
-		s.state.WorkspaceFocus = make(map[int]string)
-	}
-	s.state.WorkspaceFocus[s.state.CurrentWorkspace] = win.ID
-	return nil
+		step := 1
+		if delta < 0 {
+			step = -1
+		}
+		next := ((current+step)%len(order) + len(order)) % len(order)
+		win := state.Windows[order[next]]
+		state.FocusedWindowID = win.ID
+		if state.WorkspaceFocus == nil {
+			state.WorkspaceFocus = make(map[int]string)
+		}
+		state.WorkspaceFocus[state.CurrentWorkspace] = win.ID
+		return nil
+	})
 }
 
 // RenameDaemonWindow sets the CustomName of the window matching target.
 func (s *Session) RenameDaemonWindow(target, name string) error {
-	s.stateMu.Lock()
-
-	idx, err := findWindowStateIndex(s.state.Windows, target)
-	if err != nil {
-		s.stateMu.Unlock()
-		return err
-	}
-	s.state.Windows[idx].CustomName = name
-	winID := s.state.Windows[idx].ID
-	s.stateMu.Unlock()
-
-	s.emit(SessionEvent{Type: EventWindowRetitled, Window: winID, Title: name})
-	return nil
+	return s.mutateState(func(state *SessionState) error {
+		idx, err := findWindowStateIndex(state.Windows, target)
+		if err != nil {
+			return err
+		}
+		state.Windows[idx].CustomName = name
+		return nil
+	})
 }
 
 // MoveDaemonWindowToWorkspace moves the window matching target to workspace ws.
@@ -256,21 +256,20 @@ func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 		return fmt.Errorf("workspace %d out of range (1-%d)", ws, maxDaemonWorkspaces)
 	}
 
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
+	return s.mutateState(func(state *SessionState) error {
+		idx, err := findWindowStateIndex(state.Windows, target)
+		if err != nil {
+			return err
+		}
+		oldWorkspace := state.Windows[idx].Workspace
+		state.Windows[idx].Workspace = ws
 
-	idx, err := findWindowStateIndex(s.state.Windows, target)
-	if err != nil {
-		return err
-	}
-	oldWorkspace := s.state.Windows[idx].Workspace
-	s.state.Windows[idx].Workspace = ws
-
-	// If the moved window held its old workspace's focus, drop it there.
-	if s.state.WorkspaceFocus != nil && s.state.WorkspaceFocus[oldWorkspace] == s.state.Windows[idx].ID {
-		delete(s.state.WorkspaceFocus, oldWorkspace)
-	}
-	return nil
+		// If the moved window held its old workspace's focus, drop it there.
+		if state.WorkspaceFocus != nil && state.WorkspaceFocus[oldWorkspace] == state.Windows[idx].ID {
+			delete(state.WorkspaceFocus, oldWorkspace)
+		}
+		return nil
+	})
 }
 
 // SwitchDaemonWorkspace sets the current workspace, restoring that workspace's
@@ -280,27 +279,25 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 		return fmt.Errorf("workspace %d out of range (1-%d)", ws, maxDaemonWorkspaces)
 	}
 
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-
-	s.state.CurrentWorkspace = ws
-	if s.state.WorkspaceFocus != nil {
-		if focus, ok := s.state.WorkspaceFocus[ws]; ok {
-			s.state.FocusedWindowID = focus
+	return s.mutateState(func(state *SessionState) error {
+		state.CurrentWorkspace = ws
+		if state.WorkspaceFocus != nil {
+			if focus, ok := state.WorkspaceFocus[ws]; ok {
+				state.FocusedWindowID = focus
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // SetDaemonWindowMinimized sets the minimized flag on the window matching target.
 func (s *Session) SetDaemonWindowMinimized(target string, minimized bool) error {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-
-	idx, err := findWindowStateIndex(s.state.Windows, target)
-	if err != nil {
-		return err
-	}
-	s.state.Windows[idx].Minimized = minimized
-	return nil
+	return s.mutateState(func(state *SessionState) error {
+		idx, err := findWindowStateIndex(state.Windows, target)
+		if err != nil {
+			return err
+		}
+		state.Windows[idx].Minimized = minimized
+		return nil
+	})
 }
