@@ -97,38 +97,6 @@ func TestRouteToTUISyncTimeout(t *testing.T) {
 	}
 }
 
-// TestVerbNewWindowRoutesToAttachedTUI verifies that with a TUI attached the
-// new-window verb routes to it (rather than mutating daemon-owned state), so the
-// daemon and the live renderer stay in sync.
-func TestVerbNewWindowRoutesToAttachedTUI(t *testing.T) {
-	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
-	defer d.manager.Shutdown()
-
-	sess, err := d.manager.CreateSession("routed", &SessionConfig{}, 80, 24)
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-
-	tui, clientSide := newFakeTUI(t, d, sess.ID)
-	answerRemoteCommand(t, d, tui, clientSide, &CommandResultPayload{
-		Success: true, Data: map[string]any{"window_id": "tui-win", "name": "build"},
-	})
-
-	requester := &connState{clientID: "ctl", done: make(chan struct{}), codec: DefaultCodec()}
-	out, verr := d.verbNewWindow(requester, json.RawMessage(`{"session":"routed","name":"build"}`))
-	if verr != nil {
-		t.Fatalf("verbNewWindow: %v", verr)
-	}
-	m := out.(map[string]any)
-	if m["window_id"] != "tui-win" {
-		t.Fatalf("expected routed window_id, got %v", m)
-	}
-	// The routed path must not have created a daemon-owned window.
-	if got := len(sess.GetState().Windows); got != 0 {
-		t.Errorf("routed new-window mutated daemon state: %d windows", got)
-	}
-}
-
 // TestVerbSetOptionRecordsAndRoutes verifies set-option records the value in
 // daemon-owned state and reports applied=true when the attached TUI accepts it.
 func TestVerbSetOptionRecordsAndRoutes(t *testing.T) {

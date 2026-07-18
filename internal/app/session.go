@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -341,6 +342,11 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		m.CurrentWorkspace = state.CurrentWorkspace
 	}
 
+	// A window created while nothing was attached has never been placed by
+	// anyone, and RestoredFromState below suppresses the first retile, so without
+	// this it would render as a full-size box over the restored layout.
+	m.placeUnplacedWindows(state)
+
 	m.MarkAllDirty()
 	m.LogInfo("[RESTORE] Restored session state: %d windows, FocusedWindow=%d, AutoTiling=%v, Workspace=%d", len(m.Windows), m.FocusedWindow, m.AutoTiling, m.CurrentWorkspace)
 
@@ -485,15 +491,26 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// here used to yank this client between window-management and terminal mode
 	// whenever anyone else switched.
 
-	// A sync that changes which windows exist has to be absorbed by the layout,
-	// not just by the window list. The daemon owns window lifecycle but not
-	// layout, so a window it created arrives with nominal geometry and no place
-	// in any tiling structure; left alone it renders as a full-size box on top of
-	// the tiled windows, and a window it closed leaves its tile behind. Retiling
-	// is what turns a daemon-side lifecycle change into something the renderer
-	// has actually absorbed.
-	if m.AutoTiling {
+	// A window the daemon created carries a nominal box, not a position: the
+	// daemon has no viewport and says so with Unplaced rather than guessing.
+	// Placing it is this client's job and has to happen whether or not tiling is
+	// on, because with tiling off nothing else will ever move it and it would
+	// render full-screen over everything.
+	placed := m.placeUnplacedWindows(state)
+
+	// A sync that changes which windows exist also has to be absorbed by the
+	// layout, not just by the window list: a new window needs a slot in the
+	// tiling structure and a closed one leaves its tile behind. Retiling is what
+	// turns a daemon-side lifecycle change into something the renderer has
+	// actually absorbed.
+	switch {
+	case m.AutoTiling:
 		m.adoptSyncedWindows(created, removed)
+	case placed:
+		// Untiled, so there is nothing to retile, but the geometry this client
+		// just chose is news to the daemon.
+		m.RecalcZOrder()
+		m.SyncStateToDaemon()
 	}
 
 	// If auto-tiling is enabled and the synced state has different dimensions,
@@ -639,6 +656,10 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		window.EnableCallbacks()
 	}
 
+	// Every window a daemon session shows now arrives through here, including the
+	// ones this user asked for, so this is where the new-window hook belongs.
+	m.FireHook(hooks.AfterNewWindow, window.ID, window.Title())
+
 	return window
 }
 
@@ -648,6 +669,43 @@ func (m *OS) closeWindowFromSync(w *terminal.Window) {
 		m.unsubscribeFromPTY(w)
 	}
 	w.Close()
+}
+
+// placeUnplacedWindows gives a position and size to every window in state that
+// the daemon marked Unplaced, and reports whether it moved any.
+//
+// The daemon creates windows but has no viewport to place them in, so it hands
+// over a nominal box and says the box is not a decision. Only a client can turn
+// that into a position, and it does so with exactly the rule it uses for a window
+// it was asked for directly. The flag is cleared implicitly: the client's next
+// sync never sets Unplaced, so placing a window and pushing the result is what
+// tells the daemon the question has been answered.
+func (m *OS) placeUnplacedWindows(state *session.SessionState) bool {
+	byID := make(map[string]*terminal.Window, len(m.Windows))
+	for _, w := range m.Windows {
+		byID[w.ID] = w
+	}
+
+	placed := false
+	for i := range state.Windows {
+		if !state.Windows[i].Unplaced {
+			continue
+		}
+		w := byID[state.Windows[i].ID]
+		if w == nil {
+			continue
+		}
+		w.X, w.Y, w.Width, w.Height = m.NewWindowPlacement()
+		if w.Terminal != nil {
+			w.Terminal.Resize(w.ContentWidth(), w.ContentHeight())
+		}
+		if w.DaemonResizeFunc != nil {
+			_ = w.DaemonResizeFunc(w.ContentWidth(), w.ContentHeight())
+		}
+		w.InvalidateCache()
+		placed = true
+	}
+	return placed
 }
 
 // adoptSyncedWindows brings the tiling layout in line with a window set that a
@@ -966,153 +1024,6 @@ func (m *OS) UnsubscribeWorkspaceWindows(workspace int) {
 			m.unsubscribeFromPTY(w)
 		}
 	}
-}
-
-// AddDaemonWindow creates a new window using a daemon-managed PTY.
-// This is the daemon-mode equivalent of AddWindow.
-func (m *OS) AddDaemonWindow(title string) *OS {
-	m.LogInfo("[DAEMON] AddDaemonWindow called, DaemonClient=%v", m.DaemonClient != nil)
-
-	if m.DaemonClient == nil {
-		m.LogError("Cannot add daemon window: not connected to daemon")
-		return m
-	}
-
-	newID := createID()
-	if title == "" {
-		title = "Terminal " + newID[:8]
-	}
-
-	m.LogInfo("[DAEMON] Creating new daemon window: %s (workspace %d)", title, m.CurrentWorkspace)
-
-	// Handle case where screen dimensions aren't available yet
-	screenWidth := m.GetRenderWidth()
-	screenHeight := m.GetUsableHeight()
-
-	if screenWidth == 0 || screenHeight == 0 {
-		screenWidth = 80
-		screenHeight = 24
-		m.LogWarn("Screen dimensions unknown, using defaults (%dx%d)", screenWidth, screenHeight)
-	}
-
-	width := screenWidth / 2
-	height := screenHeight / 2
-
-	// Calculate position
-	var x, y int
-	if !m.AutoTiling && m.LastMouseX > 0 && m.LastMouseY > 0 {
-		x = m.LastMouseX
-		y = m.LastMouseY
-		if x+width > screenWidth {
-			x = screenWidth - width
-		}
-		if y+height > screenHeight {
-			y = screenHeight - height
-		}
-		if x < 0 {
-			x = 0
-		}
-		if y < 0 {
-			y = 0
-		}
-	} else {
-		x = screenWidth / 4
-		y = screenHeight / 4
-	}
-
-	// Calculate terminal dimensions (accounting for borders)
-	termWidth := max(width-2, 1)
-	termHeight := max(height-2, 1)
-
-	// Create PTY in daemon. newID is the window UUID, exported to the shell as
-	// TUIOS_WINDOW_ID.
-	m.LogInfo("[DAEMON] Calling CreatePTY(%s, %d, %d)", title, termWidth, termHeight)
-	ptyID, err := m.DaemonClient.CreatePTY(title, newID, termWidth, termHeight)
-	if err != nil {
-		m.LogError("[DAEMON] Failed to create PTY in daemon: %v", err)
-		return m
-	}
-	m.LogInfo("[DAEMON] PTY created with ID: %s", ptyID)
-
-	window := terminal.NewDaemonWindow(newID, title, x, y, width, height, len(m.Windows), ptyID, m.PTYDataChan)
-	if window == nil {
-		m.LogError("Failed to create daemon window %s", title)
-		_ = m.DaemonClient.ClosePTY(ptyID)
-		return m
-	}
-
-	caps := GetHostCapabilities()
-	if caps.CellWidth > 0 && caps.CellHeight > 0 {
-		window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
-	}
-
-	window.Workspace = m.CurrentWorkspace
-
-	m.setupKittyPassthrough(window)
-	m.setupSixelPassthrough(window)
-	m.setupTextSizingPassthrough(window)
-	m.setupClipboardPassthrough(window)
-	m.setupNotificationPassthrough(window)
-
-	// Set up the daemon write function for input
-	window.DaemonWriteFunc = func(data []byte) error {
-		return m.DaemonClient.WritePTY(ptyID, data)
-	}
-
-	// Set up the daemon resize function
-	window.DaemonResizeFunc = func(width, height int) error {
-		return m.DaemonClient.ResizePTY(ptyID, width, height)
-	}
-
-	// Start the response reader to handle DA queries and other terminal responses
-	window.StartDaemonResponseReader()
-
-	// Subscribe to PTY output (new windows are always in current workspace, so always subscribe)
-	// Use the helper function to track the subscription
-	m.subscribeToPTY(window)
-
-	// Register handler for when PTY process exits (e.g., Ctrl+D)
-	windowID := window.ID
-	m.DaemonClient.OnPTYClosed(ptyID, func() {
-		// Send window exit notification through the channel
-		if m.WindowExitChan != nil {
-			m.WindowExitChan <- windowID
-		}
-	})
-
-	m.Windows = append(m.Windows, window)
-	m.LogInfo("Daemon window created: %s (PTY: %s)", title, ptyID[:8])
-
-	// Register with scrolling layout BEFORE focusing (FocusWindow triggers
-	// ScrollingOnFocusChange which needs the window in the layout).
-	if m.AutoTiling && m.UseScrollingLayout {
-		m.ScrollingOnWindowAdded(window)
-	}
-
-	// Focus the new window
-	m.FocusWindow(len(m.Windows) - 1)
-
-	// Auto-tile if in tiling mode
-	if m.AutoTiling {
-		if m.UseScrollingLayout {
-			// Scrolling mode: just retile (FocusWindow already synced
-			// the scrolling layout focus via ScrollingOnFocusChange).
-			m.TileAllWindows()
-		} else {
-			// BSP mode
-			tree := m.GetOrCreateBSPTree()
-			if tree != nil {
-				m.AddWindowToBSPTree(window)
-			} else {
-				m.TileAllWindows()
-			}
-		}
-	}
-
-	// Sync state to daemon
-	m.SyncStateToDaemon()
-
-	return m
 }
 
 // DeleteDaemonWindow removes a daemon-mode window and cleans up its PTY.

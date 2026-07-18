@@ -211,16 +211,26 @@ input verbs (`send-text`, `capture-pane`, `resize`) always answer from daemon
 owned state and the daemon owned PTYs, so they work with or without an attached
 TUI.
 
-`close-window` and the `RenameWindow` command always act on daemon owned state,
-attached or not. Removing a window from the window set, killing its PTY, and
-naming a window are the daemon's to do; an attached client is told what happened
-and re-renders. There is no second implementation for these and no round trip to
-a client that can time out.
+`new-window`, `close-window` and the `RenameWindow` command always act on daemon
+owned state, attached or not. Adding a window to the window set with a PTY under
+it, removing one and killing its PTY, and naming a window are the daemon's to do;
+an attached client is told what happened and re-renders. There is no second
+implementation for these and no round trip to a client that can time out. This is
+also the path a keystroke takes: pressing the create or close chord in an
+attached TUI sends the same command the CLI would.
 
-The verbs a live renderer still has to own to stay in sync (`new-window`,
-`send-keys`, and the live apply half of `set-option`) route to the attached TUI
-when one is present and act on daemon owned state otherwise. The routing is
-transparent to the caller: it is still one request and one response.
+The one thing the daemon cannot decide about a window it creates is where the
+window goes, because it has no viewport and attached clients may have different
+ones. Rather than guess, it sets `unplaced` on the window it hands out. A client
+that receives an unplaced window puts it where it would have put a window of its
+own and clears the flag by pushing the geometry it chose. A window state without
+the field is placed, so state written before this existed is read exactly as
+before.
+
+The verbs a live renderer still has to own to stay in sync (`send-keys` and the
+live apply half of `set-option`) route to the attached TUI when one is present
+and act on daemon owned state otherwise. The routing is transparent to the
+caller: it is still one request and one response.
 
 A verb that genuinely cannot run without a renderer (tiling geometry, animation,
 theming) fails with `needs_client`, whose hint names the `tuios attach` command

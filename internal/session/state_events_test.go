@@ -84,52 +84,28 @@ var lifecycleTypes = []string{
 	EventWorkspaceSwitched,
 }
 
-// syncingTUI is a fake attached TUI that behaves like the real one: it applies a
-// routed remote command to the session itself and pushes the resulting state
-// back to the daemon with UpdateState, which is the convergence point the
-// lifecycle events are derived from. It never emits events itself.
+// syncingTUI is a fake attached TUI that behaves like the real one: it receives
+// the daemon's state pushes and echoes the state back with UpdateState, which is
+// what a real client does after absorbing a daemon-side change into its layout.
+// It never emits events itself.
 type syncingTUI struct {
 	d    *Daemon
 	sess *Session
 	conn *connState
 }
 
-// attachSyncingTUI registers the fake TUI and serves routed remote commands with
-// apply until the test ends.
-func attachSyncingTUI(t *testing.T, d *Daemon, sess *Session, apply func(state *SessionState) *CommandResultPayload) *syncingTUI {
+// attachSyncingTUI registers the fake TUI and drains whatever the daemon pushes
+// at it, so a push can never block a mutation for the rest of the test.
+func attachSyncingTUI(t *testing.T, d *Daemon, sess *Session) *syncingTUI {
 	t.Helper()
 	tui, clientSide := newFakeTUI(t, d, sess.ID)
 	s := &syncingTUI{d: d, sess: sess, conn: tui}
 
-	done := make(chan struct{})
-	t.Cleanup(func() { close(done) })
-
 	go func() {
 		for {
-			msg, _, err := ReadMessageWithCodec(clientSide)
-			if err != nil {
+			if _, _, err := ReadMessageWithCodec(clientSide); err != nil {
 				return
 			}
-			select {
-			case <-done:
-				return
-			default:
-			}
-			var rc RemoteCommandPayload
-			if err := msg.ParsePayloadWithCodec(&rc, DefaultCodec()); err != nil {
-				return
-			}
-			state := sess.GetState()
-			res := apply(state)
-			// The real TUI owns the state and syncs it back; do the same, so the
-			// daemon converges through the one path that raises the events.
-			s.sync(state)
-			res.RequestID = rc.RequestID
-			resMsg, err := NewMessage(MsgCommandResult, res)
-			if err != nil {
-				return
-			}
-			_ = d.handleCommandResult(tui, resMsg)
 		}
 	}()
 	return s
@@ -177,58 +153,50 @@ func TestLifecycleEventsMatchHeadlessAndAttached(t *testing.T) {
 	d, sp := startTestDaemon(t)
 
 	// Headless: no client attached, the daemon mutates its own state.
-	headless := makeSessionWithWindow(t, d, "headless")
+	makeSessionWithWindow(t, d, "headless")
 	hsub := subscribeTo(t, sp, "headless", lifecycleTypes...)
 
-	created, err := headless.AddDaemonWindow("build", nil)
-	if err != nil {
-		t.Fatalf("AddDaemonWindow: %v", err)
+	out, verr := d.verbNewWindow(nil, json.RawMessage(`{"session":"headless","name":"build"}`))
+	if verr != nil {
+		t.Fatalf("verbNewWindow: %v", verr)
 	}
-	if _, err := headless.CloseDaemonWindow(created.ID); err != nil {
-		t.Fatalf("CloseDaemonWindow: %v", err)
+	createdID := out.(map[string]any)["window_id"].(string)
+	if _, verr := d.verbCloseWindow(nil, json.RawMessage(`{"session":"headless","window":"`+createdID+`"}`)); verr != nil {
+		t.Fatalf("verbCloseWindow: %v", verr)
 	}
-	// Creating focuses the new window and closing it hands focus back, so each
-	// mutation raises its lifecycle event plus the focus change it caused.
-	headlessEvents := collectEvents(t, hsub, 4, 3*time.Second)
+	// Creating focuses the new window and names it, and closing it hands focus
+	// back, so each mutation raises its lifecycle event plus the changes it
+	// caused.
+	headlessEvents := collectEvents(t, hsub, 5, 3*time.Second)
 
-	// Attached: an attached TUI performs the same two mutations and syncs.
+	// Attached: a client is attached, and the same two verbs run. There is no
+	// second implementation for them to reach any more, so what this asserts is
+	// that attaching a client does not change the event stream, including that
+	// the client echoing the state back raises nothing extra.
 	attached := makeSessionWithWindow(t, d, "attached")
-	firstWindow := attached.GetState().Windows[0].ID
-
-	var closeTarget string
-	tui := attachSyncingTUI(t, d, attached, func(state *SessionState) *CommandResultPayload {
-		if closeTarget == "" {
-			newTUIWindow(t, attached, state, "tui-window-id", "build")
-			return &CommandResultPayload{Success: true, Data: map[string]any{"window_id": "tui-window-id"}}
-		}
-		for i := range state.Windows {
-			if state.Windows[i].ID != closeTarget {
-				continue
-			}
-			state.Windows = append(state.Windows[:i], state.Windows[i+1:]...)
-			state.FocusedWindowID = firstWindow
-			break
-		}
-		return &CommandResultPayload{Success: true}
-	})
-	_ = tui
+	tui := attachSyncingTUI(t, d, attached)
 
 	asub := subscribeTo(t, sp, "attached", lifecycleTypes...)
 
-	if _, verr := d.verbNewWindow(nil, json.RawMessage(`{"session":"attached","name":"build"}`)); verr != nil {
+	out, verr = d.verbNewWindow(nil, json.RawMessage(`{"session":"attached","name":"build"}`))
+	if verr != nil {
 		t.Fatalf("verbNewWindow: %v", verr)
 	}
-	closeTarget = "tui-window-id"
-	if _, verr := d.verbCloseWindow(nil, json.RawMessage(`{"session":"attached","window":"tui-window-id"}`)); verr != nil {
+	newID := out.(map[string]any)["window_id"].(string)
+	tui.sync(attached.GetState())
+
+	if _, verr := d.verbCloseWindow(nil, json.RawMessage(`{"session":"attached","window":"`+newID+`"}`)); verr != nil {
 		t.Fatalf("verbCloseWindow: %v", verr)
 	}
-	attachedEvents := collectEvents(t, asub, 4, 3*time.Second)
+	tui.sync(attached.GetState())
+
+	attachedEvents := collectEvents(t, asub, 5, 3*time.Second)
 
 	if got, want := eventTypes(headlessEvents), eventTypes(attachedEvents); !reflect.DeepEqual(got, want) {
 		t.Fatalf("event streams differ:\n headless = %v\n attached = %v", got, want)
 	}
 	if got := eventTypes(headlessEvents); !reflect.DeepEqual(got, []string{
-		EventWindowCreated, EventWindowFocused, EventWindowClosed, EventWindowFocused,
+		EventWindowCreated, EventWindowFocused, EventWindowRetitled, EventWindowClosed, EventWindowFocused,
 	}) {
 		t.Fatalf("unexpected event sequence: %v", got)
 	}
@@ -242,8 +210,12 @@ func TestLifecycleEventsMatchHeadlessAndAttached(t *testing.T) {
 					i, h["type"], field, ok, hasKey(a, field))
 			}
 		}
-		if h["type"] == EventWindowCreated && h["title"] != a["title"] {
-			t.Errorf("window-created title = %v headless, %v attached", h["title"], a["title"])
+		// The default title carries the window's own UUID, so two windows never
+		// share one. What must match is that both paths report a title at all.
+		if h["type"] == EventWindowCreated {
+			if h["title"] == "" || a["title"] == "" {
+				t.Errorf("window-created title = %q headless, %q attached, want both set", h["title"], a["title"])
+			}
 		}
 	}
 }

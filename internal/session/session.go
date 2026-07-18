@@ -56,6 +56,15 @@ type WindowState struct {
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
 	Cwd string `json:"cwd,omitempty"`
+	// Unplaced marks a window the daemon created whose X/Y/Width/Height are a
+	// nominal box rather than a position anyone chose. The daemon has no viewport
+	// and cannot place a window; a client that receives an unplaced window puts it
+	// where it would have put one of its own and clears the flag on its next sync.
+	//
+	// The default is the safe one: a state without the field (an older client, or
+	// resurrection state written before this existed) reads as placed, which is
+	// exactly the pre-existing behavior of trusting the geometry as sent.
+	Unplaced bool `json:"unplaced,omitempty"`
 }
 
 // SerializedBSPNode represents a BSP tree node for serialization

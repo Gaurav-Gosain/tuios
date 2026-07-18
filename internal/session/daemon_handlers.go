@@ -219,7 +219,7 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 	if payload.Detach {
 		sessionID := sess.ID
 		onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
-		if _, err := sess.AddDaemonWindow("Window", onExit); err != nil {
+		if _, err := sess.AddDaemonWindow("", onExit); err != nil {
 			return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to create initial window: %v", err))
 		}
 		log.Printf("Created detached session %q with an initial window", name)

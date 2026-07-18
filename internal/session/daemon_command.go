@@ -20,9 +20,13 @@ var daemonOwnedCommands = map[string]bool{
 	// Closing a window is removing it from the window set and killing its PTY,
 	// both of which the daemon owns outright. The renderer has nothing to
 	// contribute: it learns the window is gone from the state push and gives the
-	// space back. Creating one is deliberately not here yet, because a new window
-	// needs a position and the daemon has no viewport to choose one from.
+	// space back.
 	"CloseWindow": true,
+	// Creating one is the same trade in reverse. The daemon spawns the PTY and
+	// adds the window; the one thing it cannot supply is where the window goes,
+	// because it has no viewport. It says so with WindowState.Unplaced instead of
+	// guessing, and the client that receives the push places it.
+	"NewWindow": true,
 }
 
 // handleExecuteCommand routes a tape command to the TUI client attached to the session.

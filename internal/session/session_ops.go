@@ -115,6 +115,11 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 	ptyHeight := max(height-2, 1)
 
 	windowID := uuid.New().String()
+	if title == "" {
+		// The same default the renderer used when it still created windows
+		// itself, so a window looks the same however it was asked for.
+		title = "Terminal " + windowID[:8]
+	}
 	pty, err := s.CreatePTY(windowID, ptyWidth, ptyHeight, onExit)
 	if err != nil {
 		return WindowState{}, err
@@ -140,6 +145,9 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 			Height:    height,
 			Workspace: workspace,
 			PTYID:     pty.ID,
+			// The daemon has no viewport, so this box is a placeholder that keeps
+			// the PTY a usable size until a client places the window properly.
+			Unplaced: true,
 		}
 		state.Windows = append(state.Windows, win)
 		state.FocusedWindowID = windowID

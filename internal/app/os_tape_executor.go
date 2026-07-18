@@ -126,39 +126,21 @@ func (m *OS) SendToWindow(windowID string, data []byte) error {
 
 // CreateNewWindow creates a new window with an optional name.
 func (m *OS) CreateNewWindow() error {
-	m.AddWindow("Window")
+	m.AddWindow("")
 	m.MarkAllDirty()
 	return nil
 }
 
 // CreateNewWindowWithName creates a new window with a specific name.
+//
+// The name is passed to AddWindow rather than written onto the last window
+// afterwards. In a daemon session the window does not exist yet when this
+// returns (the daemon creates it and pushes it back), so naming it by position
+// would name whatever happened to be last.
 func (m *OS) CreateNewWindowWithName(name string) error {
-	m.AddWindow("")
-	// Set the CustomName on the newly created window
-	if len(m.Windows) > 0 {
-		m.Windows[len(m.Windows)-1].CustomName = name
-	}
+	m.AddWindow(name)
 	m.MarkAllDirty()
 	return nil
-}
-
-// CreateNewWindowReturningID creates a new window and returns its ID and display name.
-// This is safe because Bubble Tea's Update runs on a single goroutine.
-func (m *OS) CreateNewWindowReturningID(name string) (windowID string, displayName string, err error) {
-	prevCount := len(m.Windows)
-	m.AddWindow("")
-
-	// Check if window was actually created
-	if len(m.Windows) <= prevCount {
-		return "", "", fmt.Errorf("failed to create window")
-	}
-
-	newWindow := m.Windows[len(m.Windows)-1]
-	if name != "" {
-		newWindow.CustomName = name
-	}
-	m.MarkAllDirty()
-	return newWindow.ID, m.getWindowDisplayName(newWindow), nil
 }
 
 // getWindowInfo returns detailed information about a window.

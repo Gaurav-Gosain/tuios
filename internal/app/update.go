@@ -911,32 +911,15 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 				return m, nil
 			default:
-				// Handle tape commands that return data specially
-				switch tape.CommandType(msg.TapeCommand) {
-				case tape.CommandTypeNewWindow:
-					// Create window and capture ID
-					name := ""
-					if len(msg.TapeArgs) > 0 {
-						name = msg.TapeArgs[0]
-					}
-					windowID, displayName, createErr := m.CreateNewWindowReturningID(name)
-					if createErr != nil {
-						err = createErr
-					} else {
-						resultData = map[string]any{
-							"window_id": windowID,
-							"name":      displayName,
-						}
-					}
-				default:
-					// Execute normally for other commands
-					tapeCmd := &tape.Command{
-						Type: tape.CommandType(msg.TapeCommand),
-						Args: msg.TapeArgs,
-					}
-					executor := tape.NewCommandExecutor(m)
-					err = executor.Execute(tapeCmd)
+				// NewWindow and CloseWindow never arrive here: they are daemon
+				// owned, so the daemon runs them itself and the client hears the
+				// result as a state push like any other.
+				tapeCmd := &tape.Command{
+					Type: tape.CommandType(msg.TapeCommand),
+					Args: msg.TapeArgs,
 				}
+				executor := tape.NewCommandExecutor(m)
+				err = executor.Execute(tapeCmd)
 			}
 			// Retile if in tiling mode after command execution
 			if m.AutoTiling {

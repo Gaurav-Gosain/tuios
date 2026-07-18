@@ -579,6 +579,29 @@ func (c *TUIClient) NotifyTerminalSize(width, height int) error {
 	return c.send(msg)
 }
 
+// SendIntent asks the daemon to perform a session mutation on this client's
+// behalf. It is the keyboard's route to the same operations the CLI reaches over
+// the verb protocol: commandType and args are the verb vocabulary, so a
+// keystroke and a `tuios run-command` do not merely agree, they are the same
+// call.
+//
+// It does not wait for a result. The mutation's effect arrives as a state push
+// like any other daemon-side change, which is the only channel a client applies
+// state from; a second, synchronous answer would be a second way to learn the
+// same news. A send error means the socket is gone, which the read loop is
+// already reporting as a disconnect.
+func (c *TUIClient) SendIntent(commandType string, args ...string) error {
+	msg, err := NewMessageWithCodec(MsgExecuteCommand, &ExecuteCommandPayload{
+		SessionName: c.sessionName,
+		CommandType: commandType,
+		Args:        args,
+	}, c.codec)
+	if err != nil {
+		return err
+	}
+	return c.send(msg)
+}
+
 // UpdateState sends a state update to the daemon.
 func (c *TUIClient) UpdateState(state *SessionState) error {
 	msg, err := NewMessageWithCodec(MsgUpdateState, state, c.codec)

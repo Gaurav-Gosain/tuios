@@ -48,7 +48,7 @@ func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []
 		if len(args) > 0 {
 			name = args[0]
 		}
-		win, err := sess.AddDaemonWindow("Window", onExit)
+		win, err := sess.AddDaemonWindow("", onExit)
 		if err != nil {
 			return nil, err
 		}

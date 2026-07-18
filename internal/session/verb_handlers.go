@@ -182,28 +182,10 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		args = []string{p.Name}
 	}
 
-	// With a TUI attached, route so the daemon and the live renderer stay in
-	// sync (the TUI overwrites daemon state on its next sync). Headless, create
-	// the window directly against daemon-owned state.
-	if tui := d.findTUIClient(sess.ID); tui != nil {
-		res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
-			CommandType: "tape_command",
-			TapeCommand: "NewWindow",
-			TapeArgs:    args,
-		}, routedVerbTimeout)
-		if err != nil {
-			return nil, newVerbError(ErrVerbCommandFailed, err.Error())
-		}
-		if !res.Success {
-			return nil, newVerbError(ErrVerbCommandFailed, res.Message)
-		}
-		out := map[string]any{"type": "window_created"}
-		for k, v := range res.Data {
-			out[k] = v
-		}
-		return out, nil
-	}
-
+	// Creating runs against daemon state whether or not a client is attached: the
+	// PTY and the window set are the daemon's. An attached renderer learns of the
+	// window from the state push and places it, so there is no round trip to the
+	// client that can time out and no second creation path to keep in step.
 	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
 	data, err := d.executeDaemonCommand(sess, "NewWindow", args, onExit)
 	if err != nil {
