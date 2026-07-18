@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -682,6 +683,47 @@ func (p *PTY) GetTerminalState() *TerminalState {
 	}
 
 	return state
+}
+
+// CaptureContent renders the PTY's current screen (and optionally its
+// scrollback) to text from the daemon-side VT emulator. When ansi is true the
+// output keeps SGR escape sequences; otherwise it is plain text. This lets
+// capture-pane answer from daemon state with no TUI client attached, mirroring
+// the client-side OS.capturePane rendering.
+func (p *PTY) CaptureContent(scrollback, ansi bool) string {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+
+	if p.terminal == nil {
+		return ""
+	}
+
+	var content string
+	if ansi {
+		content = p.terminal.Render()
+	} else {
+		content = p.terminal.String()
+	}
+
+	if scrollback {
+		scrollbackLen := p.terminal.ScrollbackLen()
+		if scrollbackLen > 0 {
+			var sb strings.Builder
+			for i := 0; i < scrollbackLen; i++ {
+				line := p.terminal.ScrollbackLine(i)
+				if ansi {
+					sb.WriteString(line.Render())
+				} else {
+					sb.WriteString(line.String())
+				}
+				sb.WriteByte('\n')
+			}
+			sb.WriteString(content)
+			content = sb.String()
+		}
+	}
+
+	return content
 }
 
 // TerminalState represents the serializable state of a terminal.
