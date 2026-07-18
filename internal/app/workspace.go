@@ -165,7 +165,7 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 		return // Already in target workspace
 	}
 
-	m.LogInfo("Moving window %s: workspace %d → %d", window.Title, oldWorkspace, workspace)
+	m.LogInfo("Moving window %s: workspace %d → %d", window.Title(), oldWorkspace, workspace)
 
 	// If window is moving away from the current visible workspace, unsubscribe from its PTY
 	if m.IsDaemonSession && m.DaemonClient != nil && oldWorkspace == m.CurrentWorkspace {
@@ -285,10 +285,21 @@ func (m *OS) GetWorkspaceWindowCount(workspace int) int {
 
 // TileVisibleWorkspaceWindows tiles all visible windows in the current workspace with animations.
 func (m *OS) TileVisibleWorkspaceWindows() {
-	// Only tile windows in current workspace
+	// BSP and scrolling layouts carry their own geometry (split ratios, column
+	// offsets) that the master-stack tiler below would silently overwrite,
+	// desyncing the separator overlay and eventually tripping the stale-ID check
+	// in TileAllWindows (which then discards the whole tree). Defer to
+	// TileAllWindows, which branches correctly per layout mode and filters
+	// floating windows.
+	if m.UseBSPLayout || m.UseScrollingLayout {
+		m.TileAllWindows()
+		return
+	}
+
+	// Master-stack path: animate visible, non-floating windows into place.
 	visibleWindows := make([]int, 0)
 	for i, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing && !w.IsFloating {
 			visibleWindows = append(visibleWindows, i)
 		}
 	}

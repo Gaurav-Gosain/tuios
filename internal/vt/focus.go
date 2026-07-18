@@ -19,11 +19,14 @@ func (e *Emulator) Blur() {
 }
 
 func (e *Emulator) focus(focus bool) {
-	if mode, ok := e.modes[ansi.ModeFocusEvent]; ok && mode.IsSet() {
+	e.modesMu.RLock()
+	mode, ok := e.modes[ansi.ModeFocusEvent]
+	e.modesMu.RUnlock()
+	if ok && mode.IsSet() {
 		if focus {
-			_, _ = io.WriteString(e.pw, ansi.Focus)
+			_, _ = io.WriteString(e.pipe, ansi.Focus)
 		} else {
-			_, _ = io.WriteString(e.pw, ansi.Blur)
+			_, _ = io.WriteString(e.pipe, ansi.Blur)
 		}
 	}
 }

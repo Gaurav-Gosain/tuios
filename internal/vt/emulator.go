@@ -4,7 +4,9 @@ import (
 	"image/color"
 	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/screen"
@@ -38,14 +40,21 @@ type Emulator struct {
 	defaultFg, defaultBg, defaultCur color.Color
 	fgColor, bgColor, curColor       color.Color
 
-	// Terminal modes.
-	modes ansi.Modes
+	// Terminal modes. Written only by the PTY reader goroutine (via setMode,
+	// RestoreModes, resetModes) but read from the input/render goroutine
+	// (isModeSet). modesMu serializes those cross-goroutine accesses.
+	modes   ansi.Modes
+	modesMu sync.RWMutex
 
 	// Thread-safe cached mouse mode flags (updated on mode set/reset)
-	cachedHasMouse    atomic.Bool
-	cachedAllMotion   atomic.Bool
+	cachedHasMouse  atomic.Bool
+	cachedAllMotion atomic.Bool
+	// Thread-safe cached synchronized-output flag (DEC 2026, updated on set/reset)
+	cachedSyncOutput atomic.Bool
+	// Unix-nanos timestamp of the last sync begin, for the present-anyway timeout
+	syncSetAtNanos atomic.Int64
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
-	cachedKittyFlags  atomic.Int32
+	cachedKittyFlags atomic.Int32
 
 	// The last written character.
 	lastChar rune // either ansi.Rune or ansi.Grapheme
@@ -67,9 +76,9 @@ type Emulator struct {
 	// tabstop is the list of tab stops.
 	tabstops *uv.TabStops
 
-	// I/O pipes.
-	pr *io.PipeReader
-	pw *io.PipeWriter
+	// Response pipe: the emulator writes query responses here from inside Write
+	// (under the window IO lock), so writes must never block. bufPipe buffers.
+	pipe *bufPipe
 
 	// The GL and GR character set identifiers.
 	gl, gr  int
@@ -108,12 +117,6 @@ type Emulator struct {
 
 	// semanticMarkers tracks OSC 133 shell integration markers
 	semanticMarkers *SemanticMarkerList
-
-	// Passthrough configuration: when enabled, unhandled sequences of each
-	// type are forwarded to the host terminal via the Passthrough callback.
-	passthroughDCS bool
-	passthroughAPC bool
-	passthroughOSC bool
 }
 
 // NewEmulator creates a new virtual terminal emulator.
@@ -138,7 +141,7 @@ func NewEmulator(w, h int) *Emulator {
 		HandlePm:  t.handlePm,
 		HandleSos: t.handleSos,
 	})
-	t.pr, t.pw = io.Pipe()
+	t.pipe = newBufPipe()
 	t.resetModes()
 	t.tabstops = uv.DefaultTabStops(w)
 
@@ -413,7 +416,9 @@ func (e *Emulator) ReserveImageSpace(rows, cols int) {
 	endY := startY + rows
 	scrollCount := 0
 	if endY > height {
-		scrollCount = endY - height
+		// clamp: rows beyond the viewport cannot be shown, and a hostile r=
+		// could otherwise drive ~1e9 ScrollUp calls while holding the IO lock.
+		scrollCount = min(endY-height, height)
 		for range scrollCount {
 			e.scr.ScrollUp(1)
 		}
@@ -510,6 +515,8 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 
 	// Restore each mode by directly updating the modes map
 	// This avoids triggering side effects like screen clearing
+	e.modesMu.Lock()
+	defer e.modesMu.Unlock()
 	for modeNum, enabled := range modes {
 		// Convert int back to Mode
 		mode := ansi.DECMode(modeNum)
@@ -533,6 +540,22 @@ func (e *Emulator) HasMouseMode() bool {
 // Thread-safe: reads from an atomic cache updated on mode set/reset.
 func (e *Emulator) HasAllMotionMode() bool {
 	return e.cachedAllMotion.Load()
+}
+
+// syncMaxHold bounds how long a synchronized update is honored. An app that
+// opens sync and never closes it (a crash, or a screen switch mid-frame) must
+// not freeze the window; real terminals present anyway after a short timeout.
+const syncMaxHold = 150 * time.Millisecond
+
+// IsSyncActive reports whether the guest has an open synchronized update
+// (DEC private mode 2026): it has begun drawing a frame and does not want it
+// presented until it resets the mode. Thread-safe: reads from atomics updated on
+// mode set/reset. Returns false once the update has been open past syncMaxHold.
+func (e *Emulator) IsSyncActive() bool {
+	if !e.cachedSyncOutput.Load() {
+		return false
+	}
+	return time.Now().UnixNano()-e.syncSetAtNanos.Load() < int64(syncMaxHold)
 }
 
 // updateMouseModeCache recalculates the cached mouse mode flags.
@@ -665,7 +688,7 @@ func (e *Emulator) Resize(width int, height int) {
 	e.setCursor(x, y)
 
 	if e.isModeSet(ansi.ModeInBandResize) {
-		_, _ = io.WriteString(e.pw, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
+		_, _ = io.WriteString(e.pipe, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
 	}
 }
 
@@ -675,7 +698,7 @@ func (e *Emulator) Read(p []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 
-	return e.pr.Read(p) //nolint:wrapcheck
+	return e.pipe.Read(p) //nolint:wrapcheck
 }
 
 // Close closes the terminal.
@@ -685,6 +708,11 @@ func (e *Emulator) Close() error {
 	}
 
 	e.closed.Store(true)
+	// Close the response pipe so a reader blocked in Read (the terminal-response
+	// forwarder) unblocks with EOF instead of leaking.
+	if e.pipe != nil {
+		_ = e.pipe.Close()
+	}
 	return nil
 }
 
@@ -711,13 +739,13 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 
 // WriteString writes a string to the terminal output buffer.
 func (e *Emulator) WriteString(s string) (n int, err error) {
-	return io.WriteString(e, s) //nolint:wrapcheck
+	return e.Write([]byte(s)) //nolint:wrapcheck
 }
 
 // InputPipe returns the terminal's input pipe.
 // This can be used to send input to the terminal.
 func (e *Emulator) InputPipe() io.Writer {
-	return e.pw
+	return e.pipe
 }
 
 // Paste pastes text into the terminal.
@@ -725,16 +753,16 @@ func (e *Emulator) InputPipe() io.Writer {
 // appropriate escape sequences.
 func (e *Emulator) Paste(text string) {
 	if e.isModeSet(ansi.ModeBracketedPaste) {
-		_, _ = io.WriteString(e.pw, ansi.BracketedPasteStart)
-		defer io.WriteString(e.pw, ansi.BracketedPasteEnd) //nolint:errcheck
+		_, _ = io.WriteString(e.pipe, ansi.BracketedPasteStart)
+		defer io.WriteString(e.pipe, ansi.BracketedPasteEnd) //nolint:errcheck
 	}
 
-	_, _ = io.WriteString(e.pw, text)
+	_, _ = io.WriteString(e.pipe, text)
 }
 
 // SendText sends arbitrary text to the terminal.
 func (e *Emulator) SendText(text string) {
-	_, _ = io.WriteString(e.pw, text)
+	_, _ = io.WriteString(e.pipe, text)
 }
 
 // SendKeys sends multiple keys to the terminal.
@@ -898,7 +926,7 @@ func (e *Emulator) logf(format string, v ...any) {
 // This allows external code (e.g., daemon-side Kitty query handlers)
 // to inject responses that will be forwarded to the PTY.
 func (e *Emulator) WriteResponse(data []byte) {
-	_, _ = e.pw.Write(data)
+	_, _ = e.pipe.Write(data)
 }
 
 func (e *Emulator) registerKittyGraphicsHandler() {
@@ -934,7 +962,7 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 			state = e.kittyAlt
 		}
 
-		handler := NewKittyGraphicsHandler(e.scr, state, e.pw)
+		handler := NewKittyGraphicsHandler(e.scr, state, e.pipe)
 		return handler.HandleCommand(cmd)
 	})
 }
@@ -1060,33 +1088,9 @@ func (e *Emulator) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, sc
 	e.textSizingFunc = fn
 }
 
-// SetPassthroughFunc sets the callback for forwarding unhandled escape sequences
-// to the host terminal. This is analogous to tmux's allow-passthrough option.
-func (e *Emulator) SetPassthroughFunc(fn func(data []byte)) {
-	e.cb.Passthrough = fn
-}
-
-// SetPassthroughConfig enables or disables passthrough for specific sequence types.
-// When enabled and a Passthrough callback is set, unhandled sequences of the
-// specified types are forwarded to the host terminal instead of being silently consumed.
-func (e *Emulator) SetPassthroughConfig(dcs, apc, osc bool) {
-	e.passthroughDCS = dcs
-	e.passthroughAPC = apc
-	e.passthroughOSC = osc
-}
-
-
 func (e *Emulator) SixelState() *SixelState {
 	if e.IsAltScreen() {
 		return e.sixelAlt
 	}
 	return e.sixelMain
-}
-
-func (e *Emulator) SixelMainState() *SixelState {
-	return e.sixelMain
-}
-
-func (e *Emulator) SixelAltState() *SixelState {
-	return e.sixelAlt
 }

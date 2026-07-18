@@ -8,11 +8,23 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
-	canvas := lipgloss.NewCanvas(m.GetRenderWidth(), m.GetRenderHeight())
+	// Reuse the canvas across frames. Allocating a fresh one each frame was the
+	// single largest source of allocations (a full-screen cell buffer per frame).
+	// Resize is a no-op when the dimensions are unchanged; Clear resets the cells
+	// in place. Safe because GetCanvas is only called from View on one goroutine.
+	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
+	if m.renderCanvas == nil {
+		m.renderCanvas = lipgloss.NewCanvas(rw, rh)
+	} else {
+		m.renderCanvas.Resize(rw, rh)
+		m.renderCanvas.Clear()
+	}
+	canvas := m.renderCanvas
 
 	layersPtr := pool.GetLayerSlice()
 	layers := (*layersPtr)[:0]
@@ -22,11 +34,23 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	viewportWidth := m.GetRenderWidth()
 	viewportHeight := m.GetUsableHeight()
 
-	box := lipgloss.NewStyle().
-		Align(lipgloss.Left).
-		AlignVertical(lipgloss.Top).
-		Border(getBorder()).
-		BorderTop(false)
+	// Hoist loop-invariants out of the per-window loop below.
+	// The focused window and its zoom state are the same for every iteration.
+	focusedWindow := m.GetFocusedWindow()
+	focusedZoomed := focusedWindow != nil && focusedWindow.Zoomed
+
+	// Precompute the set of windows with an active (incomplete) animation once
+	// per frame instead of rescanning m.Animations for every window, which was
+	// O(windows*animations).
+	var animatingWindows map[*terminal.Window]struct{}
+	if len(m.Animations) > 0 {
+		animatingWindows = make(map[*terminal.Window]struct{}, len(m.Animations))
+		for _, anim := range m.Animations {
+			if !anim.Complete {
+				animatingWindows[anim.Window] = struct{}{}
+			}
+		}
+	}
 
 	for i := range m.Windows {
 		window := m.Windows[i]
@@ -35,23 +59,14 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			continue
 		}
 
-		isAnimating := false
-		// Only check animations if there are any active
-		if len(m.Animations) > 0 {
-			for _, anim := range m.Animations {
-				if anim.Window == m.Windows[i] && !anim.Complete {
-					isAnimating = true
-					break
-				}
-			}
-		}
+		_, isAnimating := animatingWindows[window]
 
 		if window.Minimized && !isAnimating {
 			continue
 		}
 
 		// When any window is zoomed, only render the zoomed window
-		if fw := m.GetFocusedWindow(); fw != nil && fw.Zoomed && window != fw {
+		if focusedZoomed && window != focusedWindow {
 			continue
 		}
 
@@ -74,7 +89,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.Y+window.Height <= viewportHeight+topMargin
 
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
-		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[i]
+		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[window.ID]
 		var borderColorObj color.Color
 		if isFocused {
 			if m.Mode == TerminalMode {
@@ -89,11 +104,45 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			borderColorObj = theme.BorderUnfocused()
 		}
 
+		// Effective z-index, computed once so the cached and freshly-rendered
+		// paths place the window and its scrollbar at the same depth. Computing
+		// it only in the fresh path left the cached path's scrollbar at a
+		// different depth, so it flickered as the window toggled dirty/clean.
+		zIndex := window.Z
+		if window.IsFloating {
+			zIndex = config.ZIndexSeparators + 1 + window.Z
+		}
+		if (isAnimating || window.IsBeingManipulated) && !window.Tiled {
+			zIndex = config.ZIndexAnimating
+		}
+
 		if window.CachedLayer != nil && !window.Dirty && !window.ContentDirty && !window.PositionDirty {
 			layers = append(layers, window.CachedLayer)
-			// Scrollbar layer (always fresh, not cached)
-			if !window.Tiled && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
-				if sbLayer := renderScrollbarLayer(window, borderColorObj, window.Z+1); sbLayer != nil {
+			// Scrollbar layer (always fresh, not cached). Alt-screen apps (btop,
+			// vim) have no scrollback, so drawing a scrollback thumb over them
+			// only flickers as their content redraws.
+			if windowNeedsScrollbar(window) {
+				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
+					layers = append(layers, sbLayer)
+				}
+			}
+			continue
+		}
+
+		// Synchronized output (DEC 2026): the guest has begun a frame and does
+		// not want it shown until it closes the update. Hold the last complete
+		// frame instead of rendering the half-updated buffer, which is what made
+		// apps like btop flicker. ContentDirty stays set, so the frame that
+		// arrives when the guest closes sync renders the finished screen. Only
+		// hold when nothing but content changed (position/z match the cache).
+		if window.Terminal != nil && window.Terminal.IsSyncActive() &&
+			window.CachedLayer != nil &&
+			window.CachedLayer.GetX() == window.X &&
+			window.CachedLayer.GetY() == window.Y &&
+			window.CachedLayer.GetZ() == zIndex {
+			layers = append(layers, window.CachedLayer)
+			if windowNeedsScrollbar(window) {
+				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
 			}
@@ -111,44 +160,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			continue
 		}
 
-		content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
-
-		var boxContent string
-		isTiledBorderless := window.Tiled && (!window.Zoomed || config.SharedBorders)
-		if isTiledBorderless {
-			// Shared borders mode: no individual window borders, content fills full rect
-			boxContent = content
-		} else {
-			isRenaming := m.RenamingWindow && i == m.FocusedWindow
-
-			boxContent = addToBorder(
-				box.Width(window.Width).
-					Height(window.Height-1).
-					BorderForeground(borderColorObj).
-					Render(content),
-				borderColorObj,
-				window,
-				isRenaming,
-				m.RenameBuffer,
-				m.AutoTiling,
-			)
-
-		}
-
-		zIndex := window.Z
-		if window.IsFloating {
-			// Floating windows render above tiled windows and separators.
-			// Use window.Z offset above ZIndexSeparators to preserve relative
-			// ordering between multiple floating windows (focused on top).
-			zIndex = config.ZIndexSeparators + 1 + window.Z
-		}
-		if isAnimating || window.IsBeingManipulated {
-			// Only elevate non-tiled windows above separators.
-			// Tiled windows stay below Z=998 so separator lines remain visible.
-			if !window.Tiled {
-				zIndex = config.ZIndexAnimating // Above separators (Z=998)
-			}
-		}
+		boxContent := m.renderWindowBox(window, i, isFocused, borderColorObj)
 
 		clippedContent, finalX, finalY := clipWindowContent(
 			boxContent,
@@ -159,8 +171,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
 		layers = append(layers, window.CachedLayer)
 
-		// Scrollbar layer (always fresh, not cached)
-		if !isTiledBorderless && window.Terminal != nil && window.Terminal.ScrollbackLen() > 0 {
+		// Scrollbar layer (always fresh, not cached). See the alt-screen note above.
+		if windowNeedsScrollbar(window) {
 			if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
 				layers = append(layers, sbLayer)
 			}
@@ -191,6 +203,142 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	return canvas
 }
 
+// renderWindowBox renders a window's content, wrapped in its border unless the
+// window is borderless. Shared by the compositor path and the fullscreen fast
+// path so both produce identical output.
+func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool, borderColorObj color.Color) string {
+	content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
+	if window.Tiled && (!window.Zoomed || config.SharedBorders) {
+		return content
+	}
+	box := lipgloss.NewStyle().
+		Align(lipgloss.Left).
+		AlignVertical(lipgloss.Top).
+		Border(getBorder()).
+		BorderTop(false)
+	isRenaming := m.RenamingWindow && index == m.FocusedWindow
+	return addToBorder(
+		box.Width(window.Width).
+			Height(window.Height-1).
+			BorderForeground(borderColorObj).
+			Render(content),
+		borderColorObj,
+		window,
+		isRenaming,
+		m.RenameBuffer,
+		m.AutoTiling,
+	)
+}
+
+// fastPathDisabled turns the fullscreen fast path off (TUIOS_NO_FASTPATH=1) so it
+// can be compared against the compositor path.
+var fastPathDisabled = os.Getenv("TUIOS_NO_FASTPATH") == "1"
+
+// composeFrame renders the full frame, using the fullscreen fast path when it is
+// eligible and falling back to the compositor otherwise.
+func (m *OS) composeFrame() string {
+	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled {
+		return m.buildFullscreenFrame(window)
+	}
+	return lipgloss.Sprint(m.GetCanvas(true).Render())
+}
+
+// fullscreenFastWindow returns the single window that fills the content area with
+// nothing overlapping it, or ok=false when the compositor is required: multiple
+// visible windows, any overlay, separators, graphics, or active manipulation or
+// animation. Pure: it does not mutate render state.
+func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
+	if len(m.Animations) > 0 || m.RenamingWindow {
+		return nil, false
+	}
+	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowLayoutPicker ||
+		m.ShowQuitConfirm || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
+		m.ShowAggregateView || m.ShowTapeManager || m.ShowSettings || m.ShowThemePicker ||
+		m.PrefixActive {
+		return nil, false
+	}
+	if (config.ShowClock && !config.HideClock) || (m.TapeRecorder != nil && m.TapeRecorder.IsRecording()) {
+		return nil, false
+	}
+	if config.SharedBorders && m.AutoTiling && !m.UseScrollingLayout {
+		return nil, false
+	}
+	if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
+		return nil, false
+	}
+	if m.SixelPassthrough != nil && m.SixelPassthrough.PlacementCount() > 0 {
+		return nil, false
+	}
+
+	visible := m.GetVisibleWindows()
+	if len(visible) != 1 {
+		return nil, false
+	}
+	window := visible[0]
+	if window.IsBeingManipulated || window.Minimizing {
+		return nil, false
+	}
+	// The synchronized-output hold (DEC 2026) that suppresses btop flicker lives
+	// only in the compositor path (GetCanvas). A sync-active guest must fall back
+	// there, otherwise the fast path re-renders the half-updated buffer mid-frame
+	// and the flicker returns for a zoomed window.
+	if window.Terminal != nil && window.Terminal.IsSyncActive() {
+		return nil, false
+	}
+	// A window with visible scrollback needs a scrollbar thumb, which only the
+	// compositor draws as a separate layer. Fall back so a lone tiled/fullscreen
+	// window does not silently lose its scrollbar.
+	if windowNeedsScrollbar(window) {
+		return nil, false
+	}
+	rw, topMargin, usableH := m.GetRenderWidth(), m.GetTopMargin(), m.GetUsableHeight()
+	if window.X != 0 || window.Y != topMargin || window.Width != rw || window.Height != usableH {
+		return nil, false
+	}
+	return window, true
+}
+
+// buildFullscreenFrame renders the window box and stacks it with the dock,
+// skipping the compositor. Mutates render state (renders the window, clears its
+// dirty flags), so it must only be called after eligibility is confirmed.
+func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
+	isFocused := m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == window
+	var borderColorObj color.Color
+	switch {
+	case isFocused && m.Mode == TerminalMode:
+		borderColorObj = theme.BorderFocusedTerminal()
+	case isFocused:
+		borderColorObj = theme.BorderFocusedWindow()
+	default:
+		borderColorObj = theme.BorderUnfocused()
+	}
+
+	windowIndex := -1
+	for i := range m.Windows {
+		if m.Windows[i] == window {
+			windowIndex = i
+			break
+		}
+	}
+	boxContent := m.renderWindowBox(window, windowIndex, isFocused, borderColorObj)
+	window.ClearDirtyFlags()
+	// The fast path does not build a CachedLayer, so the one still held here was
+	// captured the last time the compositor ran (potentially seconds ago). Nil it
+	// so that when the fast path is later disqualified (tmux prefix, an overlay),
+	// the compositor renders a fresh layer instead of appending a stale one and
+	// rewinding the window a frame. Keep CachedContent for the render fast path.
+	window.CachedLayer = nil
+
+	if config.DockbarPosition == "hidden" {
+		return boxContent
+	}
+	dockStr, _ := m.renderDockString()
+	if config.DockbarPosition == "top" {
+		return dockStr + "\n" + boxContent
+	}
+	return boxContent + "\n" + dockStr
+}
+
 func (m *OS) View() tea.View {
 	var view tea.View
 
@@ -199,7 +347,7 @@ func (m *OS) View() tea.View {
 	if m.renderSkipped && m.cachedViewContent != "" {
 		view.SetContent(m.cachedViewContent)
 	} else {
-		content := lipgloss.Sprint(m.GetCanvas(true).Render())
+		content := m.composeFrame()
 		m.cachedViewContent = content
 		view.SetContent(content)
 	}
@@ -244,7 +392,8 @@ func (m *OS) View() tea.View {
 		// naturally with the terminal content.
 		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
 			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
-			m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView
+			m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
+			m.ShowSettings || m.ShowThemePicker || m.ShowTapeManager
 		if hasOverlay {
 			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 				m.KittyPassthrough.HideAllPlacements()
@@ -276,32 +425,56 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 	// Always refresh placements if there are any - this handles window movement
 	if m.KittyPassthrough.HasPlacements() {
 		m.KittyPassthrough.RefreshAllPlacements(func() map[string]*WindowPositionInfo {
-			result := make(map[string]*WindowPositionInfo)
-			for _, w := range m.Windows {
-				if w.Workspace == m.CurrentWorkspace && !w.Minimized {
-					scrollbackLen := 0
-					if w.Terminal != nil {
-						scrollbackLen = w.Terminal.ScrollbackLen()
-					}
-					result[w.ID] = &WindowPositionInfo{
-						WindowX:            w.X,
-						WindowY:            w.Y,
-						ContentOffsetX:     w.BorderOffset(),
-						ContentOffsetY:     w.BorderOffset(),
-						Width:              w.Width,
-						Height:             w.Height,
-						Visible:            true,
-						ScrollbackLen:      scrollbackLen,
-						ScrollOffset:       w.ScrollbackOffset,
-						IsBeingManipulated: w.IsBeingManipulated,
-						WindowZ:            w.Z,
-						IsAltScreen:        w.IsAltScreen,
-						ScreenWidth:        m.GetRenderWidth(),
-						ScreenHeight:       m.GetRenderHeight(),
-					}
-				}
+			// Reuse a preallocated map and backing slice across frames. The
+			// returned map and its values are only consumed within
+			// RefreshAllPlacements, so reusing them avoids a fresh map plus a
+			// heap *WindowPositionInfo per window every frame.
+			if m.kittyPosMap == nil {
+				m.kittyPosMap = make(map[string]*WindowPositionInfo, len(m.Windows))
+			} else {
+				clear(m.kittyPosMap)
 			}
-			return result
+			if cap(m.kittyPosBacking) < len(m.Windows) {
+				m.kittyPosBacking = make([]WindowPositionInfo, len(m.Windows))
+			}
+			backing := m.kittyPosBacking[:len(m.Windows)]
+			screenWidth := m.GetRenderWidth()
+			screenHeight := m.GetRenderHeight()
+			n := 0
+			for _, w := range m.Windows {
+				// Include EVERY window, but mark off-workspace/minimized ones
+				// Visible:false. RefreshAllPlacements then HIDES their images
+				// (d=i, keeping the bytes in the host store) instead of deleting
+				// tracking. Omitting them made info==nil, which RefreshAllPlacements
+				// treats as "window gone" and permanently destroys the placement,
+				// so a minimized icat/chafa image never reappeared on restore.
+				// The info==nil delete is now reserved for windows genuinely
+				// removed from m.Windows (closed).
+				visible := w.Workspace == m.CurrentWorkspace && !w.Minimized
+				scrollbackLen := 0
+				if w.Terminal != nil {
+					scrollbackLen = w.Terminal.ScrollbackLen()
+				}
+				backing[n] = WindowPositionInfo{
+					WindowX:            w.X,
+					WindowY:            w.Y,
+					ContentOffsetX:     w.BorderOffset(),
+					ContentOffsetY:     w.BorderOffset(),
+					Width:              w.Width,
+					Height:             w.Height,
+					Visible:            visible,
+					ScrollbackLen:      scrollbackLen,
+					ScrollOffset:       w.ScrollbackOffset,
+					IsBeingManipulated: w.IsBeingManipulated,
+					WindowZ:            w.Z,
+					IsAltScreen:        w.IsAltScreen(),
+					ScreenWidth:        screenWidth,
+					ScreenHeight:       screenHeight,
+				}
+				m.kittyPosMap[w.ID] = &backing[n]
+				n++
+			}
+			return m.kittyPosMap
 		})
 	}
 
@@ -326,32 +499,49 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 
 	// Refresh placements for all windows
 	if m.SixelPassthrough.PlacementCount() > 0 {
-		m.SixelPassthrough.RefreshAllPlacements(func(windowID string) *WindowPositionInfo {
-			for _, w := range m.Windows {
-				if w.ID == windowID && w.Workspace == m.CurrentWorkspace && !w.Minimized {
-					scrollbackLen := 0
-					if w.Terminal != nil {
-						scrollbackLen = w.Terminal.ScrollbackLen()
-					}
-					return &WindowPositionInfo{
-						WindowX:            w.X,
-						WindowY:            w.Y,
-						ContentOffsetX:     w.BorderOffset(),
-						ContentOffsetY:     w.BorderOffset(),
-						Width:              w.Width,
-						Height:             w.Height,
-						Visible:            true,
-						ScrollbackLen:      scrollbackLen,
-						ScrollOffset:       w.ScrollbackOffset,
-						IsBeingManipulated: w.IsBeingManipulated,
-						WindowZ:            w.Z,
-						IsAltScreen:        w.IsAltScreen,
-						ScreenWidth:        m.GetRenderWidth(),
-						ScreenHeight:       m.GetRenderHeight(),
-					}
-				}
+		// Build a window-by-ID index of eligible windows once per frame and
+		// reuse it across placements, instead of rescanning m.Windows per
+		// placement (which was O(placements*windows)).
+		if m.sixelWinIndex == nil {
+			m.sixelWinIndex = make(map[string]*terminal.Window, len(m.Windows))
+		} else {
+			clear(m.sixelWinIndex)
+		}
+		for _, w := range m.Windows {
+			if w.Workspace == m.CurrentWorkspace && !w.Minimized {
+				m.sixelWinIndex[w.ID] = w
 			}
-			return nil
+		}
+		screenWidth := m.GetRenderWidth()
+		screenHeight := m.GetRenderHeight()
+		m.SixelPassthrough.RefreshAllPlacements(func(windowID string) *WindowPositionInfo {
+			w := m.sixelWinIndex[windowID]
+			if w == nil {
+				return nil
+			}
+			scrollbackLen := 0
+			if w.Terminal != nil {
+				scrollbackLen = w.Terminal.ScrollbackLen()
+			}
+			// Reuse a single value; the callback's result is consumed before
+			// the next call, so a shared value avoids a per-call heap alloc.
+			m.sixelPosValue = WindowPositionInfo{
+				WindowX:            w.X,
+				WindowY:            w.Y,
+				ContentOffsetX:     w.BorderOffset(),
+				ContentOffsetY:     w.BorderOffset(),
+				Width:              w.Width,
+				Height:             w.Height,
+				Visible:            true,
+				ScrollbackLen:      scrollbackLen,
+				ScrollOffset:       w.ScrollbackOffset,
+				IsBeingManipulated: w.IsBeingManipulated,
+				WindowZ:            w.Z,
+				IsAltScreen:        w.IsAltScreen(),
+				ScreenWidth:        screenWidth,
+				ScreenHeight:       screenHeight,
+			}
+			return &m.sixelPosValue
 		})
 	}
 

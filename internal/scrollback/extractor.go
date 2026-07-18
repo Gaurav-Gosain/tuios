@@ -18,8 +18,8 @@ type JSONBlock struct {
 type PathBlock struct {
 	Raw   string
 	Path  string
-	Line  int  // extracted line number, 0 if none
-	Col   int  // extracted column number, 0 if none
+	Line  int // extracted line number, 0 if none
+	Col   int // extracted column number, 0 if none
 	IsURL bool
 }
 

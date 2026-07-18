@@ -3,6 +3,8 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,7 +24,7 @@ func (m *OS) getWindowDisplayName(w *terminal.Window) string {
 	if w.CustomName != "" {
 		return w.CustomName
 	}
-	return w.Title
+	return w.Title()
 }
 
 // findWindowsByName returns all windows matching the given name (checks CustomName first, then Title).
@@ -163,7 +165,7 @@ func (m *OS) CreateNewWindowReturningID(name string) (windowID string, displayNa
 func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
 	info := map[string]any{
 		"id":             w.ID,
-		"title":          w.Title,
+		"title":          w.Title(),
 		"display_name":   m.getWindowDisplayName(w),
 		"workspace":      w.Workspace,
 		"focused":        isFocused,
@@ -1037,7 +1039,11 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 		code = tea.KeyEnter
 	case "space":
 		code = tea.KeySpace
-		text = " "
+		// Only set Text when there are no modifiers, otherwise String() drops
+		// the modifier (matching the regular-character branch below).
+		if mod == 0 {
+			text = " "
+		}
 	case "tab":
 		code = tea.KeyTab
 	case "escape", "esc":
@@ -1183,6 +1189,63 @@ func (m *OS) findWindowInDirection(from *terminal.Window, dx, dy int) int {
 	}
 
 	return targetIndex
+}
+
+// startScriptWaitRegex arms a WaitUntilRegex condition for tape playback. It
+// compiles Args[0] as the pattern and Args[1] (optional, milliseconds) as the
+// timeout, defaulting to 5000ms. A bad or missing pattern is reported and the
+// command is skipped without arming a wait.
+func (m *OS) startScriptWaitRegex(cmd *tape.Command) {
+	if len(cmd.Args) == 0 {
+		m.ShowNotification("WaitUntilRegex: missing pattern", "error", config.NotificationDuration)
+		return
+	}
+	re, err := regexp.Compile(cmd.Args[0])
+	if err != nil {
+		m.ShowNotification(fmt.Sprintf("WaitUntilRegex: invalid pattern: %v", err), "error", config.NotificationDuration)
+		return
+	}
+	timeout := 5000 * time.Millisecond
+	if len(cmd.Args) > 1 {
+		if ms, convErr := strconv.Atoi(cmd.Args[1]); convErr == nil && ms > 0 {
+			timeout = time.Duration(ms) * time.Millisecond
+		}
+	}
+	m.ScriptWaitRegex = re
+	m.ScriptWaitDeadline = time.Now().Add(timeout)
+}
+
+// checkScriptWaitRegex reports whether a pending WaitUntilRegex condition is
+// satisfied, so playback may resume. It returns true (clearing the wait state)
+// on a match against the focused window's visible screen or once the deadline
+// passes, warning on timeout. It returns false while still waiting.
+func (m *OS) checkScriptWaitRegex() bool {
+	if m.ScriptWaitRegex == nil {
+		return true
+	}
+
+	matched := false
+	if win := m.GetFocusedWindow(); win != nil && win.Terminal != nil {
+		win.RLockIO()
+		content := win.Terminal.String()
+		win.RUnlockIO()
+		matched = m.ScriptWaitRegex.MatchString(content)
+	}
+
+	if matched {
+		m.ScriptWaitRegex = nil
+		m.ScriptWaitDeadline = time.Time{}
+		return true
+	}
+
+	if !m.ScriptWaitDeadline.IsZero() && time.Now().After(m.ScriptWaitDeadline) {
+		m.ShowNotification("WaitUntilRegex: timed out", "warning", config.NotificationDuration)
+		m.ScriptWaitRegex = nil
+		m.ScriptWaitDeadline = time.Time{}
+		return true
+	}
+
+	return false
 }
 
 // capturePane captures the content of a pane.

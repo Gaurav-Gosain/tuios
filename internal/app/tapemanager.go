@@ -15,6 +15,9 @@ import (
 	"github.com/adrg/xdg"
 )
 
+// tapeManagerVisibleRows is the number of tape files shown at once in the list.
+const tapeManagerVisibleRows = 10
+
 // TapeManagerMode represents the current mode of the tape manager
 type TapeManagerMode int
 
@@ -180,6 +183,30 @@ func (m *OS) RefreshTapeFiles() {
 	if m.TapeManager.SelectedIndex >= len(files) {
 		m.TapeManager.SelectedIndex = max(0, len(files)-1)
 	}
+	m.clampTapeScroll()
+}
+
+// clampTapeScroll keeps ScrollOffset positioned so the selected file stays
+// within the visible window and never scrolls past the end of the list.
+func (m *OS) clampTapeScroll() {
+	tm := m.TapeManager
+	if tm == nil {
+		return
+	}
+
+	if tm.SelectedIndex < tm.ScrollOffset {
+		tm.ScrollOffset = tm.SelectedIndex
+	} else if tm.SelectedIndex >= tm.ScrollOffset+tapeManagerVisibleRows {
+		tm.ScrollOffset = tm.SelectedIndex - tapeManagerVisibleRows + 1
+	}
+
+	maxOffset := max(len(tm.Files)-tapeManagerVisibleRows, 0)
+	if tm.ScrollOffset > maxOffset {
+		tm.ScrollOffset = maxOffset
+	}
+	if tm.ScrollOffset < 0 {
+		tm.ScrollOffset = 0
+	}
 }
 
 // ToggleTapeManager toggles the tape manager overlay
@@ -205,6 +232,7 @@ func (m *OS) TapeManagerSelectNext() {
 	if m.TapeManager.SelectedIndex >= len(m.TapeManager.Files) {
 		m.TapeManager.SelectedIndex = 0
 	}
+	m.clampTapeScroll()
 }
 
 // TapeManagerSelectPrev moves selection up
@@ -217,6 +245,7 @@ func (m *OS) TapeManagerSelectPrev() {
 	if m.TapeManager.SelectedIndex < 0 {
 		m.TapeManager.SelectedIndex = len(m.TapeManager.Files) - 1
 	}
+	m.clampTapeScroll()
 }
 
 // TapeManagerDelete initiates delete confirmation
@@ -358,9 +387,8 @@ func (m *OS) TapeManagerPlaySelected() {
 	m.ScriptPaused = false
 	m.ScriptFinishedTime = time.Time{}
 
-	// Create executor and converter
+	// Create executor
 	m.ScriptExecutor = tape.NewCommandExecutor(m)
-	m.ScriptConverter = tape.NewScriptMessageConverter()
 
 	// Close the manager UI
 	m.ShowTapeManager = false
@@ -368,7 +396,7 @@ func (m *OS) TapeManagerPlaySelected() {
 }
 
 // RenderTapeManager renders the tape manager overlay
-func (m *OS) RenderTapeManager(width, height int) string {
+func (m *OS) RenderTapeManager() string {
 	if m.TapeManager == nil {
 		m.InitTapeManager()
 	}
@@ -458,7 +486,7 @@ func (m *OS) RenderTapeManager(width, height int) string {
 			lines = append(lines, "")
 
 			// Calculate visible range
-			maxVisible := 10
+			maxVisible := tapeManagerVisibleRows
 			startIdx := m.TapeManager.ScrollOffset
 			endIdx := min(startIdx+maxVisible, len(m.TapeManager.Files))
 
@@ -504,10 +532,9 @@ func (m *OS) RenderTapeManager(width, height int) string {
 		Padding(1, 2).
 		Background(theme.LogViewerBg())
 
-	box := boxStyle.Render(content)
-
-	// Center in screen
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+	// Return the content-sized box; the caller centers it as a layer so the
+	// windows behind stay visible.
+	return boxStyle.Render(content)
 }
 
 func formatFileSize(size int64) string {
@@ -520,10 +547,18 @@ func formatFileSize(size int64) string {
 }
 
 func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if maxLen <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	// Too small to fit an ellipsis: hard-truncate on a rune boundary.
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
 
 // HandleTapeManagerInput handles keyboard input for the tape manager

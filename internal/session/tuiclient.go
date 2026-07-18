@@ -28,6 +28,16 @@ type ClientLeftHandler func(clientID string, clientCount int)
 type SessionResizeHandler func(width, height, clientCount int)
 type ForceRefreshHandler func(reason string)
 
+// SessionEndedHandler is called when the daemon reports that the attached
+// session was terminated. It runs on the read-loop goroutine, so the handler
+// should only signal the UI (e.g. p.Send), never mutate model state directly.
+type SessionEndedHandler func(sessionName, reason string)
+
+// DisconnectHandler is called once when the read loop tears the connection down
+// because of an unexpected disconnect (daemon crash, reset, or framing desync).
+// It is not called for an app-initiated Close.
+type DisconnectHandler func(err error)
+
 // TUIClient is used by the TUIOS TUI to communicate with the daemon.
 // It handles PTY I/O and state synchronization.
 type TUIClient struct {
@@ -38,24 +48,15 @@ type TUIClient struct {
 	sessionID   string
 	sessionName string
 
-	// Effective session dimensions (min of all connected clients)
-	effectiveWidth  int
-	effectiveHeight int
-
 	// Available session names from daemon
 	availableSessionNames []string
 
 	// Codec negotiated with daemon (gob by default)
 	codec Codec
 
-	// PTY output handlers (legacy raw-byte path)
+	// PTY output handlers (raw-byte path)
 	ptyHandlers   map[string]func([]byte)
 	ptyHandlersMu sync.RWMutex
-
-	// Screen diff handlers (event-based path). Keyed by PTY ID.
-	// Called when the daemon sends a screen diff (MsgScreenDiff).
-	screenDiffHandlers   map[string]func(*ScreenDiff)
-	screenDiffHandlersMu sync.RWMutex
 
 	// PTY closed handlers - called when a PTY process exits
 	ptyClosedHandlers   map[string]func()
@@ -76,6 +77,10 @@ type TUIClient struct {
 	clientLeftHandler    ClientLeftHandler
 	sessionResizeHandler SessionResizeHandler
 	forceRefreshHandler  ForceRefreshHandler
+	disconnectHandler    DisconnectHandler
+	sessionEndedHandler  SessionEndedHandler
+	sessionEndedOnce     sync.Once // gates the single session-ended notification
+	disconnectOnce       sync.Once // gates the single disconnect notification
 	multiClientMu        sync.RWMutex
 
 	// Request/response handling for synchronous calls after readLoop starts
@@ -83,21 +88,20 @@ type TUIClient struct {
 	pendingResponsesMu sync.Mutex
 
 	// State
-	connected       bool
 	readLoopRunning bool
 	done            chan struct{}
+	doneOnce        sync.Once  // gates close(done) so Close is idempotent
 	switchMu        sync.Mutex // prevents concurrent SwitchSession calls
 }
 
 // NewTUIClient creates a new TUI client for daemon communication.
 func NewTUIClient() *TUIClient {
 	return &TUIClient{
-		codec:              DefaultCodec(), // gob by default
-		ptyHandlers:        make(map[string]func([]byte)),
-		screenDiffHandlers: make(map[string]func(*ScreenDiff)),
-		ptyClosedHandlers:  make(map[string]func()),
-		pendingResponses:   make(map[MessageType]chan *Message),
-		done:               make(chan struct{}),
+		codec:             DefaultCodec(), // gob by default
+		ptyHandlers:       make(map[string]func([]byte)),
+		ptyClosedHandlers: make(map[string]func()),
+		pendingResponses:  make(map[MessageType]chan *Message),
+		done:              make(chan struct{}),
 	}
 }
 
@@ -129,7 +133,6 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	c.conn = conn
-	c.connected = true
 
 	// Build hello payload with capabilities
 	hello := &HelloPayload{
@@ -220,8 +223,6 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		}
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
-		c.effectiveWidth = payload.Width
-		c.effectiveHeight = payload.Height
 		return payload.State, nil
 
 	case MsgError:
@@ -309,8 +310,6 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		}
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
-		c.effectiveWidth = payload.Width
-		c.effectiveHeight = payload.Height
 		windowCount := 0
 		if payload.State != nil {
 			windowCount = len(payload.State.Windows)
@@ -328,12 +327,14 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 	}
 }
 
-// CreatePTY creates a new PTY in the session.
-func (c *TUIClient) CreatePTY(title string, width, height int) (string, error) {
+// CreatePTY creates a new PTY in the session. windowID, if non-empty, is the
+// client-side window UUID exported to the shell as TUIOS_WINDOW_ID.
+func (c *TUIClient) CreatePTY(title, windowID string, width, height int) (string, error) {
 	msg, err := NewMessageWithCodec(MsgCreatePTY, &CreatePTYPayload{
-		Title:  title,
-		Width:  width,
-		Height: height,
+		Title:    title,
+		Width:    width,
+		Height:   height,
+		WindowID: windowID,
 	}, c.codec)
 	if err != nil {
 		return "", err
@@ -371,10 +372,8 @@ func (c *TUIClient) ClosePTY(ptyID string) error {
 	return c.send(msg)
 }
 
-// SubscribePTY subscribes to PTY output and registers handlers.
-// The raw handler receives legacy byte streams (MsgPTYOutput).
-// Use SetScreenDiffHandler to additionally (or instead) handle the
-// event-based screen diff protocol (MsgScreenDiff).
+// SubscribePTY subscribes to PTY output and registers a handler.
+// The handler receives raw byte streams (MsgPTYOutput).
 func (c *TUIClient) SubscribePTY(ptyID string, handler func([]byte)) error {
 	c.ptyHandlersMu.Lock()
 	c.ptyHandlers[ptyID] = handler
@@ -385,15 +384,6 @@ func (c *TUIClient) SubscribePTY(ptyID string, handler func([]byte)) error {
 		return err
 	}
 	return c.send(msg)
-}
-
-// SetScreenDiffHandler registers a handler for screen diffs from a PTY.
-// The daemon sends diffs when the PTY's VT state changes (event-based,
-// no timers, natural coalescing). The handler receives only changed cells.
-func (c *TUIClient) SetScreenDiffHandler(ptyID string, handler func(*ScreenDiff)) {
-	c.screenDiffHandlersMu.Lock()
-	c.screenDiffHandlers[ptyID] = handler
-	c.screenDiffHandlersMu.Unlock()
 }
 
 // UnsubscribePTY removes the PTY output handler and tells the daemon to stop streaming.
@@ -473,6 +463,45 @@ func (c *TUIClient) OnForceRefresh(handler ForceRefreshHandler) {
 	c.multiClientMu.Lock()
 	c.forceRefreshHandler = handler
 	c.multiClientMu.Unlock()
+}
+
+// OnSessionEnded registers a handler invoked when the daemon reports that the
+// attached session was terminated. It fires at most once per client.
+func (c *TUIClient) OnSessionEnded(handler SessionEndedHandler) {
+	c.multiClientMu.Lock()
+	c.sessionEndedHandler = handler
+	c.multiClientMu.Unlock()
+}
+
+// OnDisconnect registers a handler invoked when the daemon connection is torn
+// down unexpectedly (crash, reset, or framing desync). It fires at most once and
+// runs on the read-loop goroutine, so the handler should only signal the UI
+// (e.g. p.Send), never mutate model state directly.
+func (c *TUIClient) OnDisconnect(handler DisconnectHandler) {
+	c.multiClientMu.Lock()
+	c.disconnectHandler = handler
+	c.multiClientMu.Unlock()
+}
+
+// handleDisconnect tears the connection down and notifies the app exactly once.
+// If Close was already called by the app, the disconnect is expected teardown
+// and no notification fires.
+func (c *TUIClient) handleDisconnect(err error) {
+	select {
+	case <-c.done:
+		// App-initiated Close already ran; stay quiet.
+		return
+	default:
+	}
+	_ = c.Close() // closes done + conn, idempotent
+	c.disconnectOnce.Do(func() {
+		c.multiClientMu.RLock()
+		handler := c.disconnectHandler
+		c.multiClientMu.RUnlock()
+		if handler != nil {
+			handler(err)
+		}
+	})
 }
 
 // SendWindowList sends a window list response back to the daemon.
@@ -643,19 +672,31 @@ func (c *TUIClient) readLoop() {
 		}
 
 		c.readMu.Lock()
-		_ = c.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-		msg, _, err := ReadMessageWithCodec(c.conn)
+		// Short deadline detects the message boundary for done-channel checks;
+		// the body then gets a longer deadline so a large payload cannot be cut
+		// mid-frame and desync framing.
+		msg, _, err := ReadMessageConn(c.conn, 100*time.Millisecond, 30*time.Second)
 		c.readMu.Unlock()
 
 		if err != nil {
 			var netErr net.Error
 			if errors.As(err, &netErr) && netErr.Timeout() {
+				// Deadline hit at a message boundary; loop to re-check c.done.
 				continue
 			}
 			if errors.Is(err, io.EOF) {
+				// Clean daemon-side close.
+				c.handleDisconnect(err)
 				return
 			}
-			continue
+			// Any other error is fatal and non-recoverable: a daemon crash
+			// (ECONNRESET) or a framing desync ("message too large" leaves the
+			// payload in the stream) makes every subsequent read fail instantly.
+			// Continuing would busy-loop at 100% CPU forever, so tear the
+			// connection down and surface a clean disconnect instead.
+			debugLog("[CLIENT] readLoop fatal error, disconnecting: %v", err)
+			c.handleDisconnect(err)
+			return
 		}
 
 		// Check if there's a pending response channel for this message type
@@ -703,20 +744,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			handler(data)
 		}
 
-	case MsgScreenDiff:
-		ptyID, diff, err := DecodeScreenDiff(msg.Payload)
-		if err != nil || ptyID == "" || diff == nil {
-			return
-		}
-
-		c.screenDiffHandlersMu.RLock()
-		handler := c.screenDiffHandlers[ptyID]
-		c.screenDiffHandlersMu.RUnlock()
-
-		if handler != nil {
-			handler(diff)
-		}
-
 	case MsgPTYClosed:
 		var payload ClosePTYPayload
 		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
@@ -741,19 +768,31 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			closedHandler()
 		}
 
+	case MsgSessionEnded:
+		// The attached session was destroyed (killed from the CLI, from another
+		// client, or over the control plane). Notify once so the app can exit;
+		// the connection itself is still usable, so it is not torn down here.
+		var payload SessionEndedPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[CLIENT] Failed to parse session ended: %v", err)
+		}
+		name := payload.SessionName
+		if name == "" {
+			name = c.SessionName()
+		}
+		c.sessionEndedOnce.Do(func() {
+			c.multiClientMu.RLock()
+			handler := c.sessionEndedHandler
+			c.multiClientMu.RUnlock()
+			if handler != nil {
+				handler(name, payload.Reason)
+			}
+		})
+
 	case MsgDetached:
 		// Session detached  - handled via pendingResponses in SwitchSession.
 		// Do NOT close c.done here; it must stay open for subsequent switches.
 		debugLog("[CLIENT] Received MsgDetached (no-op in handleMessage)")
-
-	case MsgSessionEnded:
-		// Session was killed/ended permanently  - shut down the read loop
-		select {
-		case <-c.done:
-			// Already closed
-		default:
-			close(c.done)
-		}
 
 	case MsgRemoteCommand:
 		// Remote command from CLI routed through daemon
@@ -876,10 +915,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			return
 		}
 
-		// Update stored effective dimensions
-		c.effectiveWidth = payload.Width
-		c.effectiveHeight = payload.Height
-
 		c.multiClientMu.RLock()
 		handler := c.sessionResizeHandler
 		c.multiClientMu.RUnlock()
@@ -906,13 +941,10 @@ func (c *TUIClient) handleMessage(msg *Message) {
 	}
 }
 
-// Close closes the connection to the daemon.
+// Close closes the connection to the daemon. Idempotent: the done channel is
+// closed at most once, so concurrent or repeated Close calls cannot panic.
 func (c *TUIClient) Close() error {
-	select {
-	case <-c.done:
-	default:
-		close(c.done)
-	}
+	c.doneOnce.Do(func() { close(c.done) })
 
 	if c.conn != nil {
 		return c.conn.Close()
@@ -923,23 +955,6 @@ func (c *TUIClient) Close() error {
 // SessionName returns the attached session name.
 func (c *TUIClient) SessionName() string {
 	return c.sessionName
-}
-
-// EffectiveWidth returns the effective session width (min of all connected clients).
-// Returns 0 if not yet set (before attach).
-func (c *TUIClient) EffectiveWidth() int {
-	return c.effectiveWidth
-}
-
-// EffectiveHeight returns the effective session height (min of all connected clients).
-// Returns 0 if not yet set (before attach).
-func (c *TUIClient) EffectiveHeight() int {
-	return c.effectiveHeight
-}
-
-// IsConnected returns true if connected to daemon.
-func (c *TUIClient) IsConnected() bool {
-	return c.connected
 }
 
 // AvailableSessionNames returns the list of available sessions from the daemon.

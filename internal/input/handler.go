@@ -161,22 +161,12 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Record keystrokes when recording is active (before any other handling)
-	// Only record in terminal mode - WM mode actions are recorded at dispatch time
-	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() && !o.ShowTapeManager {
-		if o.Mode == app.TerminalMode {
-			keyStr := msg.String()
-			// Skip workspace switch keys - they're recorded by SwitchToWorkspace
-			if isWorkspaceSwitchKey(keyStr) {
-				// Don't record - will be captured by SwitchToWorkspace
-			} else if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] < 127 {
-				// Accumulate printable characters as Type command
-				o.TapeRecorder.RecordType(keyStr)
-			} else {
-				o.TapeRecorder.RecordKey(keyStr)
-			}
-		}
-	}
+	// Terminal-mode keystrokes are recorded at the point they are actually
+	// forwarded to the PTY (see recordTerminalKey in HandleTerminalModeKey), not
+	// here: recording before prefix/overlay routing captured prefix chords,
+	// copy-mode keys, palette queries, and transition-suppressed fragments that
+	// never reach the shell, so tapes replayed garbage. WM-mode actions are
+	// recorded at dispatch time.
 
 	// Handle tape manager overlay (high priority - intercepts keys when shown)
 	if o.ShowTapeManager {
@@ -351,17 +341,23 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.DeleteWindow(o.FocusedWindow)
 		}
 		return o, nil
-	case ",", "r":
-		// Rename window (like tmux with ',' or like normal mode with 'r')
+	case "r":
+		// Rename window (like normal mode with 'r')
 		// Skip if window titles are hidden
 		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			focusedWindow := o.GetFocusedWindow()
 			if focusedWindow != nil {
 				o.RenamingWindow = true
-				if fw := o.GetFocusedWindow(); fw != nil { fw.InvalidateCache() }
+				if fw := o.GetFocusedWindow(); fw != nil {
+					fw.InvalidateCache()
+				}
 				o.RenameBuffer = focusedWindow.CustomName
 			}
 		}
+		return o, nil
+	case ",":
+		// Open the settings page (preferences convention: leader + ,)
+		o.OpenSettings()
 		return o, nil
 
 	// Window navigation
@@ -617,13 +613,3 @@ func logScrollBounds(screenHeight, totalLogs int) (logsPerPage, maxScroll int) {
 	return logsPerPage, maxScroll
 }
 
-// isWorkspaceSwitchKey returns true if the key is a workspace switch shortcut
-// These are recorded separately by SwitchToWorkspace, not as raw keystrokes
-func isWorkspaceSwitchKey(key string) bool {
-	switch key {
-	case "alt+1", "alt+2", "alt+3", "alt+4", "alt+5", "alt+6", "alt+7", "alt+8", "alt+9",
-		"opt+1", "opt+2", "opt+3", "opt+4", "opt+5", "opt+6", "opt+7", "opt+8", "opt+9":
-		return true
-	}
-	return false
-}

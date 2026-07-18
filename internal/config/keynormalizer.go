@@ -4,7 +4,22 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
+
+// isSingleRuneLetter reports whether s is exactly one rune and that rune is a
+// letter. Keys that are a single letter must preserve case (m and M, é and É
+// are distinct keys in Bubbletea); compound keys are lowercased. The rune-aware
+// check is required so multi-byte AZERTY letters (é, è, à, ç) are not rejected
+// or case-folded by a byte-length test.
+func isSingleRuneLetter(s string) bool {
+	if utf8.RuneCountInString(s) != 1 {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(s)
+	return unicode.IsLetter(r)
+}
 
 // optionToAltReplacer converts opt/option to alt for consistent key naming
 var optionToAltReplacer = strings.NewReplacer("opt+", "alt+", "option+", "alt+")
@@ -83,7 +98,7 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 	// For single letters, preserve case (M and m are different keys in Bubbletea)
 	// For everything else, normalize to lowercase
 	var normalized string
-	if len(key) == 1 && ((key[0] >= 'a' && key[0] <= 'z') || (key[0] >= 'A' && key[0] <= 'Z')) {
+	if isSingleRuneLetter(key) {
 		normalized = key // Preserve case for single letters
 	} else {
 		normalized = strings.ToLower(key) // Lowercase for compound keys (ctrl+m, shift+tab, etc.)
@@ -233,8 +248,9 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 	parts = strings.Split(keyLower, "+")
 	actualKey := parts[len(parts)-1]
 
-	// Single character keys are always valid (a-z, 0-9, symbols)
-	if len(actualKey) == 1 {
+	// Single-rune keys are always valid (a-z, 0-9, symbols, and multi-byte
+	// AZERTY accented letters such as é/è/à/ç).
+	if utf8.RuneCountInString(actualKey) == 1 {
 		return true, ""
 	}
 

@@ -120,6 +120,9 @@ func (s *ScrollingLayout) CycleWidth() {
 	if current == 0 {
 		current = s.DefaultWidth
 	}
+	// A prior keyboard resize pins FixedWidth, which resolveWidth prefers over
+	// Proportion; clear it so the cycled preset proportion takes effect.
+	col.FixedWidth = 0
 
 	// Find next preset
 	for i, w := range s.PresetWidths {

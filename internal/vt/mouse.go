@@ -126,8 +126,8 @@ func (e *Emulator) SendMouse(m Mouse) {
 	// XXX: Support [ansi.Utf8ExtMouseMode], [ansi.UrxvtExtMouseMode], and
 	// [ansi.SgrPixelExtMouseMode].
 	case nil: // X10 mouse encoding
-		_, _ = io.WriteString(e.pw, ansi.MouseX10(b, mouse.X, mouse.Y))
+		_, _ = io.WriteString(e.pipe, ansi.MouseX10(b, mouse.X, mouse.Y))
 	case ansi.ModeMouseExtSgr: // SGR mouse encoding
-		_, _ = io.WriteString(e.pw, ansi.MouseSgr(b, mouse.X, mouse.Y, isRelease))
+		_, _ = io.WriteString(e.pipe, ansi.MouseSgr(b, mouse.X, mouse.Y, isRelease))
 	}
 }

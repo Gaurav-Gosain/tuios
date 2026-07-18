@@ -271,7 +271,25 @@ func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut)
 	}
 
+	// Close the daemon client when the web session ends, otherwise the client
+	// read loop, its socket, and the daemon-side connState leak per connection.
+	if o, ok := model.(*app.OS); ok {
+		go func() {
+			<-sess.Context().Done()
+			o.Cleanup()
+		}()
+	}
+
 	return model, opts
+}
+
+// shortID returns the first 8 characters of an id for logging, or the whole id
+// when it is shorter, so a non-UUID id cannot panic the log call.
+func shortID(id string) string {
+	if len(id) < 8 {
+		return id
+	}
+	return id[:8]
 }
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
@@ -294,6 +312,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.
 	// by the browser terminal.
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,
@@ -303,7 +322,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 	}
 }
 
@@ -371,6 +390,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	// sequences reach the browser's xterm.js image addon (sip v0.1.12+).
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,
@@ -409,7 +429,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	registerMultiClientHandlers(tuiosInstance, client)
 
 	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 	}, nil
 }
 
@@ -417,7 +437,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 	// Handle state sync from other clients via channel (thread-safe)
 	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
-		log.Printf("[WEB] Received state sync: trigger=%s, source=%s", triggerType, sourceID[:8])
+		log.Printf("[WEB] Received state sync: trigger=%s, source=%s", triggerType, shortID(sourceID))
 		// Send state to channel for processing in Bubble Tea event loop
 		// This ensures thread-safe access to m.Windows
 		if m.StateSyncChan != nil {
@@ -431,7 +451,7 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 
 	// Handle client join notifications via channel (thread-safe)
 	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
-		log.Printf("[WEB] Client joined: %s (total: %d, size: %dx%d)", clientID[:8], clientCount, width, height)
+		log.Printf("[WEB] Client joined: %s (total: %d, size: %dx%d)", shortID(clientID), clientCount, width, height)
 		if m.ClientEventChan != nil {
 			select {
 			case m.ClientEventChan <- app.ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height}:
@@ -443,7 +463,7 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 
 	// Handle client leave notifications via channel (thread-safe)
 	client.OnClientLeft(func(clientID string, clientCount int) {
-		log.Printf("[WEB] Client left: %s (remaining: %d)", clientID[:8], clientCount)
+		log.Printf("[WEB] Client left: %s (remaining: %d)", shortID(clientID), clientCount)
 		if m.ClientEventChan != nil {
 			select {
 			case m.ClientEventChan <- app.ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount}:
@@ -453,22 +473,30 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 		}
 	})
 
-	// Handle session resize (min of all clients)
+	// Handle session resize (min of all clients). The callback runs on the daemon
+	// read-loop goroutine, so the actual geometry mutation (TileAllWindows,
+	// emulator resizes) must happen in Update; route it through the event channel.
 	client.OnSessionResize(func(width, height, clientCount int) {
 		log.Printf("[WEB] Session resize: %dx%d (clients: %d)", width, height, clientCount)
-		if m.EffectiveWidth != width || m.EffectiveHeight != height {
-			m.EffectiveWidth = width
-			m.EffectiveHeight = height
-			m.MarkAllDirty()
-			if m.AutoTiling {
-				m.TileAllWindows()
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height}:
+			default:
+				log.Printf("[WEB] Warning: ClientEventChan full, dropping session resize event")
 			}
 		}
 	})
 
-	// Handle force refresh
+	// Handle force refresh (also on the read-loop goroutine; MarkAllDirty must run
+	// on the program goroutine).
 	client.OnForceRefresh(func(reason string) {
 		log.Printf("[WEB] Force refresh requested: %s", reason)
-		m.MarkAllDirty()
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "refresh", Reason: reason}:
+			default:
+				log.Printf("[WEB] Warning: ClientEventChan full, dropping force refresh event")
+			}
+		}
 	})
 }

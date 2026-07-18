@@ -66,9 +66,20 @@ func (g *HighlightGrid) Init(maxY, maxX int) {
 	if cap(g.rows) >= maxY {
 		g.rows = g.rows[:maxY]
 		for i := range g.rows {
-			if g.rows[i] != nil {
-				// Clear the row
+			row := g.rows[i]
+			if row == nil {
+				continue
+			}
+			if cap(row) >= maxX {
+				// Reuse the backing array at the new width and clear it. A
+				// pooled grid can be reused by windows of different widths, so
+				// the stored row length may differ from maxX.
+				g.rows[i] = row[:maxX]
 				clear(g.rows[i])
+			} else {
+				// Backing is too small for the new width; drop it so Set
+				// reallocates at the correct size on first touch.
+				g.rows[i] = nil
 			}
 		}
 	} else {
@@ -104,13 +115,31 @@ func (g *HighlightGrid) HasRow(y int) bool {
 	if y < 0 || y >= g.maxY {
 		return false
 	}
-	return g.rows[y] != nil
+	row := g.rows[y]
+	if row == nil {
+		return false
+	}
+	// Reset keeps cleared rows non-nil so their backing arrays can be reused, so
+	// a non-nil row is no longer proof of a highlight. Scan for an actual set
+	// cell instead. Only reached in visual copy-mode, a cold path.
+	for x := 0; x < g.maxX && x < len(row); x++ {
+		if row[x] {
+			return true
+		}
+	}
+	return false
 }
 
 // Reset clears the grid for reuse.
 func (g *HighlightGrid) Reset() {
+	// Clear each row in place instead of nilling it so the backing []bool
+	// arrays survive for the next Init/Set cycle. Nilling forced Set to
+	// reallocate make([]bool, maxX) for every touched row on each reuse,
+	// defeating the pool. Init resizes reused rows to the next maxX.
 	for i := range g.rows {
-		g.rows[i] = nil
+		if g.rows[i] != nil {
+			clear(g.rows[i])
+		}
 	}
 	g.inited = false
 }

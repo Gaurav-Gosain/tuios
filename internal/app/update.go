@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -122,13 +123,16 @@ type ClientLeftMsg struct {
 	ClientCount int
 }
 
-// ClientEvent represents a client join or leave event for channel-based notification.
+// ClientEvent represents a multi-client notification delivered to the Bubble Tea
+// event loop so the work happens on the program goroutine instead of the daemon
+// read-loop goroutine.
 type ClientEvent struct {
-	Type        string // "joined" or "left"
+	Type        string // "joined", "left", "resize", or "refresh"
 	ClientID    string
 	ClientCount int
-	Width       int // only for "joined"
-	Height      int // only for "joined"
+	Width       int    // "joined" and "resize"
+	Height      int    // "joined" and "resize"
+	Reason      string // "refresh"
 }
 
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
@@ -142,6 +146,38 @@ type SessionResizeMsg struct {
 type ForceRefreshMsg struct {
 	Reason string
 }
+
+// DaemonDisconnectedMsg is sent when the daemon connection is lost unexpectedly
+// (crash, reset, or framing desync). The app cannot recover the session, so it
+// surfaces the reason and quits cleanly instead of hanging.
+type DaemonDisconnectedMsg struct {
+	Err error
+}
+
+// SessionEndedMsg is sent when the daemon reports that the attached session was
+// terminated (killed from another client, from the CLI, or over the control
+// plane). The session no longer exists, so there is nothing to detach from and
+// nothing to reconnect to: the client must exit.
+type SessionEndedMsg struct {
+	// SessionName is the session that ended, as the daemon named it.
+	SessionName string
+	// Reason is the daemon's short explanation, when it gave one.
+	Reason string
+}
+
+// ExitReason explains why the program stopped, so the caller can print an
+// accurate message and choose an exit status. A client that quits because its
+// session was destroyed must not report a normal detach.
+type ExitReason int
+
+const (
+	// ExitNormal is a user-initiated quit or detach.
+	ExitNormal ExitReason = iota
+	// ExitSessionKilled means the attached session was terminated.
+	ExitSessionKilled
+	// ExitDaemonLost means the daemon connection was lost unrecoverably.
+	ExitDaemonLost
+)
 
 // InputHandler is a function type that handles input messages.
 // This allows the Update method to delegate to the input package without creating a circular dependency.
@@ -167,6 +203,7 @@ func (m *OS) Init() tea.Cmd {
 		ListenForWindowExits(m.WindowExitChan),
 		ListenForPTYData(m.PTYDataChan),
 		ListenForClipboardSet(m.PendingClipboardSet),
+		ListenForNotification(m.ensureNotificationChan()),
 	}
 
 	// Listen for state sync from other clients (daemon/SSH/web mode)
@@ -234,17 +271,27 @@ func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 			// Channel closed, return nil to stop listening
 			return nil
 		}
-		if event.Type == "joined" {
+		switch event.Type {
+		case "joined":
 			return ClientJoinedMsg{
 				ClientID:    event.ClientID,
 				ClientCount: event.ClientCount,
 				Width:       event.Width,
 				Height:      event.Height,
 			}
-		}
-		return ClientLeftMsg{
-			ClientID:    event.ClientID,
-			ClientCount: event.ClientCount,
+		case "resize":
+			return SessionResizeMsg{
+				Width:       event.Width,
+				Height:      event.Height,
+				ClientCount: event.ClientCount,
+			}
+		case "refresh":
+			return ForceRefreshMsg{Reason: event.Reason}
+		default:
+			return ClientLeftMsg{
+				ClientID:    event.ClientID,
+				ClientCount: event.ClientCount,
+			}
 		}
 	}
 }
@@ -313,7 +360,23 @@ func TriggerAltScreenRedrawCmd() tea.Cmd {
 
 // Update handles all incoming messages and updates the application state.
 // It processes keyboard, mouse, and timer events, managing windows and UI updates.
-func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
+	// Per-event panic isolation. A panic in a single message handler (reachable
+	// from malformed guest input, a bad tape/state-sync payload, or a rarely-hit
+	// UI branch) must not tear down every window: bubbletea only recovers at the
+	// top of Program.Run, where it restores the terminal and exits. Recover here,
+	// write a crash log, and return the model unchanged so the other windows
+	// survive the bad event. Named returns let the deferred recover set them.
+	defer func() {
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			path := WriteCrashLog(r, stack)
+			m.LogError("recovered panic in Update: %v (crash log: %s)\n%s", r, path, stack)
+			model = m
+			cmd = nil
+		}
+	}()
+
 	// Any non-tick message invalidates the render cache
 	if _, isTick := msg.(TickerMsg); !isTick {
 		m.renderSkipped = false
@@ -388,14 +451,13 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Does NOT trigger rendering unless animations/interactions are active.
 		// This ensures windows close even if the exit channel message was missed
 		for i := len(m.Windows) - 1; i >= 0; i-- {
-			if m.Windows[i].ProcessExited {
+			if m.Windows[i].ProcessExited() {
 				m.DeleteWindow(i)
 			}
 		}
 
 		// Update animations
 		m.UpdateAnimations()
-
 
 		// Update system info (only when explicitly enabled)
 		if config.ShowCPU {
@@ -416,6 +478,13 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, TickCmd()
 				}
 
+				// Check if we're blocking on a WaitUntilRegex condition from a
+				// previously dispatched command.
+				if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
+					// Condition not met and not timed out yet, keep waiting.
+					return m, TickCmd()
+				}
+
 				// Check if we're waiting for a sleep to finish
 				if !m.ScriptSleepUntil.IsZero() && time.Now().Before(m.ScriptSleepUntil) {
 					// Still waiting, don't advance yet
@@ -426,13 +495,19 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				nextCmd := player.NextCommand()
 				if nextCmd != nil {
-					// Handle Sleep commands specially
-					if nextCmd.Type == tape.CommandTypeSleep && nextCmd.Delay > 0 {
+					switch {
+					// Sleep and its Wait alias both just delay playback.
+					case (nextCmd.Type == tape.CommandTypeSleep || nextCmd.Type == tape.CommandTypeWait) && nextCmd.Delay > 0:
 						// Set the sleep deadline
 						m.ScriptSleepUntil = time.Now().Add(nextCmd.Delay)
 						// Advance to next command but don't execute anything yet
 						player.Advance()
-					} else {
+					case nextCmd.Type == tape.CommandTypeWaitUntilRegex:
+						// Arm the wait; playback blocks above until it resolves.
+						// Don't dispatch it to the executor.
+						m.startScriptWaitRegex(nextCmd)
+						player.Advance()
+					default:
 						// Queue the command as a message instead of executing directly
 						cmds = append(cmds, func() tea.Msg {
 							return ScriptCommandMsg{Command: nextCmd}
@@ -494,11 +569,17 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ListenForClipboardSet(m.PendingClipboardSet),
 		)
 
+	case NotificationMsg:
+		// Guest desktop notification or bell delivered off the PTY goroutine;
+		// apply it here on the Bubble Tea goroutine where notification state is owned.
+		m.ShowNotification(msg.Message, msg.Type, msg.Duration)
+		return m, ListenForNotification(m.PendingNotification)
+
 	case WindowExitMsg:
 		windowID := msg.WindowID
 		for i, w := range m.Windows {
 			if w.ID == windowID {
-				m.FireHook(hooks.AfterCloseWindow, w.ID, w.Title)
+				m.FireHook(hooks.AfterCloseWindow, w.ID, w.Title())
 				m.DeleteWindow(i)
 				break
 			}
@@ -517,7 +598,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, w := range m.Windows {
 			if w.DaemonMode {
 				w.EnableCallbacks()
-				m.LogInfo("[CALLBACKS] Enabled for window %s (IsAltScreen=%v)", w.ID[:8], w.IsAltScreen)
+				m.LogInfo("[CALLBACKS] Enabled for window %s (IsAltScreen=%v)", w.ID[:8], w.IsAltScreen())
 			}
 		}
 		return m, nil
@@ -527,7 +608,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// This triggers SIGWINCH which makes apps like vim/htop/btop redraw
 		m.LogInfo("[REDRAW] Triggering alt screen redraws")
 		for _, w := range m.Windows {
-			if w.DaemonMode && w.IsAltScreen && w.DaemonResizeFunc != nil {
+			if w.DaemonMode && w.IsAltScreen() && w.DaemonResizeFunc != nil {
 				termWidth := w.ContentWidth()
 				termHeight := w.ContentHeight()
 
@@ -552,6 +633,11 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
 		// Reset idle counter on any user input to restore full tick rate
 		m.idleFrames = 0
+		// Any user input must produce a fresh frame. Without this a tick that
+		// marked the frame skippable would make View return the cached content,
+		// so state changed by this event (overlay selection, drag offset, etc.)
+		// would not be drawn until some other redraw happened.
+		m.renderSkipped = false
 		// Delegate to the registered input handler
 		if inputHandler != nil {
 			return inputHandler(msg, m)
@@ -747,6 +833,29 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ForceRefreshMsg:
 		// Force re-render
 		m.MarkAllDirty()
+		return m, nil
+
+	case DaemonDisconnectedMsg:
+		// The daemon connection was lost and cannot be recovered; quit cleanly
+		// so the user is not left staring at a frozen, unresponsive session.
+		m.ExitReason = ExitDaemonLost
+		return m, tea.Quit
+
+	case SessionEndedMsg:
+		// The session was destroyed underneath this client. Its windows are
+		// gone and its PTYs are closed, so there is nothing left to render and
+		// nothing to sync back. Record why and quit; the caller reports it and
+		// exits non-zero.
+		m.ExitReason = ExitSessionKilled
+		return m, tea.Quit
+
+	case ConfigReloadedMsg:
+		// Apply appearance config parsed by the watcher goroutine here, on the
+		// Bubble Tea goroutine, so the render loop never reads the globals mid-write.
+		if msg.Config != nil {
+			config.ApplyAppearanceConfig(msg.Config)
+			m.MarkAllDirty()
+		}
 		return m, nil
 
 	case ScriptCommandMsg:

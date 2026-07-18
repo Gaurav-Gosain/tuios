@@ -145,6 +145,38 @@ func TestLexerDurations(t *testing.T) {
 	}
 }
 
+func TestLexerCompoundDuration(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedValue string
+	}{
+		{"Minutes and seconds", `Sleep 1m30s`, "1m30s"},
+		{"Hours minutes seconds", `Sleep 1h2m3s`, "1h2m3s"},
+		{"Decimal compound", `Sleep 1.5m30s`, "1.5m30s"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := Tokenize(tt.input)
+
+			var durationTokens []Token
+			for _, tok := range tokens {
+				if tok.Type == TokenDuration {
+					durationTokens = append(durationTokens, tok)
+				}
+			}
+
+			if len(durationTokens) != 1 {
+				t.Fatalf("expected 1 duration token, got %d: %v", len(durationTokens), durationTokens)
+			}
+			if durationTokens[0].Literal != tt.expectedValue {
+				t.Errorf("expected %q, got %q", tt.expectedValue, durationTokens[0].Literal)
+			}
+		})
+	}
+}
+
 func TestLexerComments(t *testing.T) {
 	input := `# This is a comment
 Type "hello"

@@ -11,6 +11,29 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
+// Highlight styles used by the terminal render loop are invariant, so they are
+// built once instead of per matching cell per frame.
+var (
+	copyModeCursorStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#00D7FF")).
+				Foreground(lipgloss.Color("#000000")).
+				Bold(true)
+
+	visualSelectionStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#5F5FAF")).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Bold(true)
+
+	currentMatchStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#FF00FF")).
+				Foreground(lipgloss.Color("#000000")).
+				Bold(true)
+
+	searchMatchStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#FF8700")).
+				Foreground(lipgloss.Color("#000000"))
+)
+
 func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalMode bool) string {
 	if window.IsBeingManipulated && m.Resizing {
 		return m.renderResizeIndicator(window)
@@ -20,7 +43,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
-	if !isFocused && window.CachedContent != "" && len(window.CachedContent) > 0 {
+	if !isFocused && window.CachedContent != "" {
 		return window.CachedContent
 	}
 
@@ -37,6 +60,13 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		window.CachedContent = "No screen"
 		return window.CachedContent
 	}
+
+	// The emulator cell buffer is written by the PTY reader and daemon paths
+	// under w.ioMu and reallocated by Resize under the same lock, so every VT
+	// read below (Render, CursorPosition, CellAt, scrollback) must hold the
+	// read side. terminalMu still guards the m.Windows slice and dirty flags.
+	window.RLockIO()
+	defer window.RUnlockIO()
 
 	// Fast path for unfocused windows: use the emulator's built-in Render()
 	// which is faster than cell-by-cell iteration. The focused window uses
@@ -187,23 +217,42 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	var batchBuilder strings.Builder
 	var currentStyle lipgloss.Style
 	var batchHasStyle bool
+	// When the batch style came straight from the style cache (not a
+	// selection-modified or highlight style), the derived ANSI escape is cached
+	// alongside it, so flushBatch can emit the cached prefix/suffix directly
+	// instead of rebuilding them via styleToANSI. currentStyleCached gates that.
+	var currentStyleCached bool
+	var currentPrefix, currentSuffix string
 	var prevCell *uv.Cell
 	var prevIsCursor, prevIsSelected, prevIsSelectionCursor bool
 
-	flushBatch := func(lineBuilder *strings.Builder) {
+	flushBatch := func() {
 		if batchBuilder.Len() > 0 {
 			if batchHasStyle {
-				lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
+				if currentStyleCached {
+					if currentPrefix == "" {
+						builder.WriteString(batchBuilder.String())
+					} else {
+						builder.WriteString(currentPrefix)
+						builder.WriteString(batchBuilder.String())
+						builder.WriteString(currentSuffix)
+					}
+				} else {
+					builder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
+				}
 			} else {
-				lineBuilder.WriteString(batchBuilder.String())
+				builder.WriteString(batchBuilder.String())
 			}
 			batchBuilder.Reset()
 			batchHasStyle = false
+			currentStyleCached = false
 		}
 	}
 
 	safeColorEquals := func(a, b color.Color) bool {
-		if a == nil && b == nil {
+		// Adjacent cells almost always share the same color interface value, so
+		// compare identity before falling back to the four RGBA computations.
+		if a == b {
 			return true
 		}
 		if a == nil || b == nil {
@@ -233,8 +282,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		if y > 0 {
 			builder.WriteRune('\n')
 		}
-
-		lineBuilder := pool.GetStringBuilder()
 
 		batchBuilder.Reset()
 		batchHasStyle = false
@@ -324,22 +371,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					}
 				}
 
-				cursorStyle := lipgloss.NewStyle().
-					Background(lipgloss.Color("#00D7FF")).
-					Foreground(lipgloss.Color("#000000")).
-					Bold(true)
+				flushBatch()
 
-				if batchBuilder.Len() > 0 {
-					if batchHasStyle {
-						lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
-					} else {
-						lineBuilder.WriteString(batchBuilder.String())
-					}
-					batchBuilder.Reset()
-					batchHasStyle = false
-				}
-
-				lineBuilder.WriteString(renderStyledText(cursorStyle, char))
+				builder.WriteString(renderStyledText(copyModeCursorStyle, char))
 
 				prevCell = nil
 				prevIsCursor = false
@@ -375,22 +409,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 
 			if inVisualMode && visualSelection != nil && visualSelection.Get(y, x) && x <= lineEndX {
-				selStyle := lipgloss.NewStyle().
-					Background(lipgloss.Color("#5F5FAF")).
-					Foreground(lipgloss.Color("#FFFFFF")).
-					Bold(true)
+				flushBatch()
 
-				if batchBuilder.Len() > 0 {
-					if batchHasStyle {
-						lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
-					} else {
-						lineBuilder.WriteString(batchBuilder.String())
-					}
-					batchBuilder.Reset()
-					batchHasStyle = false
-				}
-
-				lineBuilder.WriteString(renderStyledText(selStyle, char))
+				builder.WriteString(renderStyledText(visualSelectionStyle, char))
 				prevCell = cell
 				prevIsCursor = false
 				prevIsSelected = false
@@ -405,22 +426,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 			if inCopyMode && !inVisualMode {
 				if currentMatchHighlight != nil && currentMatchHighlight.Get(y, x) {
-					matchStyle := lipgloss.NewStyle().
-						Background(lipgloss.Color("#FF00FF")).
-						Foreground(lipgloss.Color("#000000")).
-						Bold(true)
+					flushBatch()
 
-					if batchBuilder.Len() > 0 {
-						if batchHasStyle {
-							lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
-						} else {
-							lineBuilder.WriteString(batchBuilder.String())
-						}
-						batchBuilder.Reset()
-						batchHasStyle = false
-					}
-
-					lineBuilder.WriteString(renderStyledText(matchStyle, char))
+					builder.WriteString(renderStyledText(currentMatchStyle, char))
 					prevCell = cell
 					prevIsCursor = false
 					prevIsSelected = false
@@ -434,21 +442,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				}
 
 				if searchHighlights != nil && searchHighlights.Get(y, x) {
-					matchStyle := lipgloss.NewStyle().
-						Background(lipgloss.Color("#FF8700")).
-						Foreground(lipgloss.Color("#000000"))
+					flushBatch()
 
-					if batchBuilder.Len() > 0 {
-						if batchHasStyle {
-							lineBuilder.WriteString(renderStyledText(currentStyle, batchBuilder.String()))
-						} else {
-							lineBuilder.WriteString(batchBuilder.String())
-						}
-						batchBuilder.Reset()
-						batchHasStyle = false
-					}
-
-					lineBuilder.WriteString(renderStyledText(matchStyle, char))
+					builder.WriteString(renderStyledText(searchMatchStyle, char))
 					prevCell = cell
 					prevIsCursor = false
 					prevIsSelected = false
@@ -472,7 +468,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			needsStyling := shouldApplyStyle(cell) || isCursorPos || isSelected || isSelectionCursor
 
 			if x > 0 && !styleMatches(cell, isCursorPos, isSelected, isSelectionCursor) {
-				flushBatch(lineBuilder)
+				flushBatch()
 			}
 
 			if needsStyling {
@@ -491,12 +487,18 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 						if isSelectionCursor {
 							currentStyle = currentStyle.Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0"))
 						}
+						// The style was modified after the cache lookup, so the
+						// cached escape no longer matches it; flush via styleToANSI.
+						currentStyleCached = false
 					} else {
+						// Pure cached style: reuse the cached ANSI escape so
+						// flushBatch skips styleToANSI.
 						if useOptimizedRendering {
-							currentStyle = buildOptimizedCellStyleCached(cell)
+							currentStyle, currentPrefix, currentSuffix = buildOptimizedCellStyleCachedANSI(cell)
 						} else {
-							currentStyle = buildCellStyleCached(cell, isCursorPos)
+							currentStyle, currentPrefix, currentSuffix = buildCellStyleCachedANSI(cell, isCursorPos)
 						}
+						currentStyleCached = true
 					}
 					batchHasStyle = true
 				}
@@ -518,9 +520,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			x += cellWidth
 		}
 
-		flushBatch(lineBuilder)
-		builder.WriteString(lineBuilder.String())
-		pool.PutStringBuilder(lineBuilder)
+		flushBatch()
 	}
 
 	content := builder.String()

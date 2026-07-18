@@ -152,6 +152,64 @@ func TestRecorder_String(t *testing.T) {
 	}
 }
 
+func TestRecorder_TypeEscapingRoundTrip(t *testing.T) {
+	inputs := []string{
+		`he"llo`,
+		`C:\path\x`,
+		"line1\nline2",
+		"tab\there",
+		`mixed "quote" and \ backslash`,
+	}
+
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			r := NewRecorder()
+			r.Start()
+			r.RecordType(in)
+			r.Stop()
+
+			commands := r.GetCommands()
+			if len(commands) != 1 {
+				t.Fatalf("expected 1 command, got %d", len(commands))
+			}
+
+			// The recorded Raw must reparse back to the original text.
+			parsed, errs := ParseFile(commands[0].Raw)
+			if len(errs) > 0 {
+				t.Fatalf("reparse errors for %q: %v", commands[0].Raw, errs)
+			}
+			if len(parsed) != 1 || len(parsed[0].Args) == 0 {
+				t.Fatalf("reparse produced no usable command: %q", commands[0].Raw)
+			}
+			if parsed[0].Args[0] != in {
+				t.Errorf("round-trip mismatch: got %q, want %q (raw %q)", parsed[0].Args[0], in, commands[0].Raw)
+			}
+		})
+	}
+}
+
+func TestRecorder_SingleCharEscapingRoundTrip(t *testing.T) {
+	// keyToCommand records single printable characters as Type commands; the
+	// quote character must escape so the tape reparses.
+	r := NewRecorder()
+	r.Start()
+	r.RecordKey(`"`)
+	r.Stop()
+
+	commands := r.GetCommands()
+	if len(commands) != 1 {
+		t.Fatalf("expected 1 command, got %d", len(commands))
+	}
+
+	parsed, errs := ParseFile(commands[0].Raw)
+	if len(errs) > 0 {
+		t.Fatalf("reparse errors for %q: %v", commands[0].Raw, errs)
+	}
+	if len(parsed) != 1 || len(parsed[0].Args) == 0 || parsed[0].Args[0] != `"` {
+		t.Errorf("round-trip mismatch for quote char, raw %q", commands[0].Raw)
+	}
+}
+
 func TestRecorder_Clear(t *testing.T) {
 	r := NewRecorder()
 	r.Start()

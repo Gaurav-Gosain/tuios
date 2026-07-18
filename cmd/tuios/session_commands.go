@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,26 +22,123 @@ import (
 )
 
 func runAttach(sessionName string, createIfMissing bool) error {
-	if !session.IsDaemonRunning() {
-		if createIfMissing {
-			fmt.Println("Starting TUIOS daemon...")
-			if err := startDaemonBackground(); err != nil {
-				return fmt.Errorf("failed to start daemon: %w", err)
-			}
-			time.Sleep(500 * time.Millisecond)
-		} else {
-			return fmt.Errorf("TUIOS daemon is not running. Use 'tuios new' to create a session")
+	// Check the terminal before anything else: a session that cannot be
+	// rendered is much harder to diagnose once the TUI has taken the screen.
+	if err := checkTerminal(); err != nil {
+		return err
+	}
+
+	diag := session.DiagnoseDaemon()
+	if !diag.Running() {
+		if !createIfMissing {
+			return explainAttachWithoutDaemon(sessionName, diag)
 		}
+		fmt.Println("Starting TUIOS daemon...")
+		if err := startDaemonBackground(); err != nil {
+			return &diagnosticError{
+				What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
+				Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
+				Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
+				Err:   err,
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if err := ensureAttachTarget(sessionName, createIfMissing); err != nil {
+		return err
 	}
 
 	return runDaemonSession(sessionName, createIfMissing)
+}
+
+// explainAttachWithoutDaemon reports that attach found no daemon, and adds the
+// one thing a user in that state most wants to know: whether the session they
+// asked for is saved and can be brought back.
+func explainAttachWithoutDaemon(sessionName string, diag session.DaemonDiagnosis) error {
+	e := &diagnosticError{What: diag.Explain(), Err: diag.Err}
+
+	if sessionName == "" {
+		return e
+	}
+	infos, err := session.ListResurrectableInfos()
+	if err != nil {
+		return e
+	}
+	for _, info := range infos {
+		if info.Name == sessionName {
+			e.Extra = append(e.Extra, fmt.Sprintf("Session %q has saved state (%d window(s)) and can be restored.", sessionName, info.WindowCount))
+			e.Fix = fmt.Sprintf("run 'tuios resurrect %s' to restore it and attach.", sessionName)
+			return e
+		}
+	}
+	return e
+}
+
+// ensureAttachTarget verifies the named session exists before the TUI starts,
+// so a typo produces a list of real names instead of an empty screen or a
+// silently created session. It is a no-op when no name was given (attach picks
+// the most recent session) or when the caller asked to create the session.
+func ensureAttachTarget(sessionName string, createIfMissing bool) error {
+	if sessionName == "" || createIfMissing {
+		return nil
+	}
+
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	sessions, err := listSessionInfos(client)
+	if err != nil {
+		// Listing is a courtesy; if it fails, let the attach itself report.
+		return nil
+	}
+
+	names := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		names = append(names, s.Name)
+		if s.Name != sessionName {
+			continue
+		}
+		if s.Attached {
+			// Attaching to an already-attached session is supported, not an
+			// error, but the shared screen size surprises people who expect
+			// tmux's exclusive attach. Say so rather than letting them wonder
+			// why their window shrank.
+			fmt.Printf("Session %q already has a client attached; TUIOS shares it between clients and renders at the smallest client's size.\n", sessionName)
+		}
+		return nil
+	}
+	return explainMissingSession(sessionName, names)
+}
+
+// listSessionInfos returns the live sessions over the verb protocol.
+func listSessionInfos(client *session.VerbClient) ([]session.SessionInfo, error) {
+	raw, err := client.Call("list-sessions", nil)
+	if err != nil {
+		return nil, err
+	}
+	var listed struct {
+		Sessions []session.SessionInfo `json:"sessions"`
+	}
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		return nil, err
+	}
+	return listed.Sessions, nil
 }
 
 func runNewSession(sessionName string) error {
 	if !session.IsDaemonRunning() {
 		fmt.Println("Starting TUIOS daemon...")
 		if err := startDaemonBackground(); err != nil {
-			return fmt.Errorf("failed to start daemon: %w", err)
+			return &diagnosticError{
+				What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
+				Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
+				Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
+				Err:   err,
+			}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -47,7 +146,7 @@ func runNewSession(sessionName string) error {
 	if sessionName == "" {
 		client := session.NewTUIClient()
 		if err := client.Connect(version, 80, 24); err != nil {
-			return fmt.Errorf("failed to connect to daemon: %w", err)
+			return explainDialError(err)
 		}
 
 		existingNames := client.AvailableSessionNames()
@@ -58,6 +157,49 @@ func runNewSession(sessionName string) error {
 	}
 
 	return runDaemonSession(sessionName, true)
+}
+
+// runNewSessionDetached creates a headless session in the daemon and returns
+// without launching the TUI. The session holds an initial window, is usable by
+// control verbs immediately, and can be attached later with 'tuios attach'.
+func runNewSessionDetached(sessionName string) error {
+	if !session.IsDaemonRunning() {
+		fmt.Println("Starting TUIOS daemon...")
+		if err := startDaemonBackground(); err != nil {
+			return &diagnosticError{
+				What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
+				Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
+				Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
+				Err:   err,
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	client := session.NewClient(&session.ClientConfig{Version: version})
+	if err := client.Connect(); err != nil {
+		return explainDialError(err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if sessionName == "" {
+		sessions, err := client.ListSessions()
+		if err != nil {
+			return fmt.Errorf("failed to list sessions: %w", err)
+		}
+		existing := make([]string, len(sessions))
+		for i, s := range sessions {
+			existing[i] = s.Name
+		}
+		sessionName = generateUniqueSessionName(existing)
+	}
+
+	if err := client.CreateDetachedSession(sessionName, 80, 24); err != nil {
+		return err
+	}
+
+	fmt.Printf("Created detached session '%s'. Attach with 'tuios attach %s'.\n", sessionName, sessionName)
+	return nil
 }
 
 func generateUniqueSessionName(existingNames []string) string {
@@ -75,6 +217,12 @@ func generateUniqueSessionName(existingNames []string) string {
 }
 
 func runDaemonSession(sessionName string, createNew bool) error {
+	// Every path into the TUI funnels through here, so this is the one place
+	// that guarantees the terminal can host it before the screen is taken over.
+	if err := checkTerminal(); err != nil {
+		return err
+	}
+
 	if debugMode {
 		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
 		fmt.Println("Debug mode enabled")
@@ -85,6 +233,10 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
 		userConfig = config.DefaultConfig()
 	}
+
+	// Apply the config appearance globals as the baseline before CLI flags win.
+	// LoadUserConfig no longer applies globals itself.
+	config.ApplyAppearanceConfig(userConfig)
 
 	config.ApplyOverrides(config.Overrides{
 		ASCIIOnly:           asciiOnly,
@@ -98,7 +250,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		ShowCPU:             showCPU,
 		ShowRAM:             showRAM,
 		SharedBorders:       sharedBorders,
-		ZoomMaxWidth:     zoomMaxWidth,
+		ZoomMaxWidth:        zoomMaxWidth,
 		ScrollbackLines:     scrollbackLines,
 		NoAnimations:        noAnimations,
 		ThemeName:           themeName,
@@ -129,15 +281,24 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	width, height := 80, 24
 
 	if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+		return explainDialError(err)
 	}
 	log.Printf("[CLIENT] Connected to daemon")
 
 	log.Printf("[CLIENT] Attaching to session '%s' (createNew=%v)", sessionName, createNew)
 	state, err := client.AttachSession(sessionName, createNew, width, height)
 	if err != nil {
+		names := client.AvailableSessionNames()
 		_ = client.Close()
-		return fmt.Errorf("failed to attach to session: %w", err)
+		if !createNew && sessionName != "" {
+			return explainMissingSession(sessionName, names)
+		}
+		return &diagnosticError{
+			What:  fmt.Sprintf("Could not attach to session %q: %v.", sessionName, err),
+			Cause: "the daemon refused the attach, usually because the session was killed between listing and attaching.",
+			Fix:   "run 'tuios ls' to see live sessions, or 'tuios new' to create one.",
+			Err:   err,
+		}
 	}
 	log.Printf("[CLIENT] Attached to session, got state")
 
@@ -148,6 +309,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 
 	initialOS := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		IsDaemonSession:           true,
 		DaemonClient:              client,
@@ -195,7 +357,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 
 	p := tea.NewProgram(
 		initialOS,
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(filterMouseMotion),
 		tea.WithOutput(prw),
@@ -264,6 +426,22 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		}()
 	})
 
+	// Handle unexpected daemon disconnect (crash/reset/desync): quit cleanly
+	// instead of leaving the TUI frozen.
+	client.OnDisconnect(func(err error) {
+		go func() {
+			p.Send(app.DaemonDisconnectedMsg{Err: err})
+		}()
+	})
+
+	// Handle the session being killed out from under this client. The session
+	// no longer exists, so the client must exit rather than sit in a dead UI.
+	client.OnSessionEnded(func(name, reason string) {
+		go func() {
+			p.Send(app.SessionEndedMsg{SessionName: name, Reason: reason})
+		}()
+	})
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -273,8 +451,16 @@ func runDaemonSession(sessionName string, createNew bool) error {
 
 	finalModel, err := p.Run()
 
+	reason := app.ExitNormal
 	if finalOS, ok := finalModel.(*app.OS); ok {
-		finalOS.SyncStateToDaemon()
+		reason = finalOS.ExitReason
+		// Syncing state back is meaningful only while the session still exists.
+		// After it was killed the daemon has no session to receive the state,
+		// and after the connection was lost the write cannot land, so skip it
+		// rather than block on a dead socket on the way out.
+		if reason == app.ExitNormal {
+			finalOS.SyncStateToDaemon()
+		}
 		finalOS.Cleanup()
 	}
 
@@ -286,33 +472,62 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		return fmt.Errorf("program error: %w", err)
 	}
 
-	fmt.Printf("[detached from session '%s']\n", sessionName)
-	return nil
+	return reportSessionExit(sessionName, reason)
+}
+
+// reportSessionExit prints why the client stopped and returns an error for the
+// cases that are not a normal detach, so a script or an agent driving tuios sees
+// a non-zero status instead of a message that reads like success.
+func reportSessionExit(sessionName string, reason app.ExitReason) error {
+	switch reason {
+	case app.ExitSessionKilled:
+		return &diagnosticError{
+			What:  fmt.Sprintf("Session %q was terminated while you were attached.", sessionName),
+			Cause: "the session was killed from another client, from 'tuios kill-session', or over the control plane.",
+			Fix:   "run 'tuios ls' to see remaining sessions, or 'tuios new' to start another.",
+		}
+
+	case app.ExitDaemonLost:
+		return &diagnosticError{
+			What:  "The connection to the TUIOS daemon was lost.",
+			Cause: "the daemon exited, crashed, or was stopped while this client was attached.",
+			Fix:   "run 'tuios ls' to check the daemon, then 'tuios attach " + sessionName + "' to reconnect if the session survived.",
+		}
+
+	default:
+		fmt.Printf("[detached from session '%s']\n", sessionName)
+		return nil
+	}
 }
 
 func runListSessions(jsonOutput bool) error {
-	if !session.IsDaemonRunning() {
+	diag := session.DiagnoseDaemon()
+	if !diag.Running() {
 		if jsonOutput {
 			fmt.Println("[]")
 		} else {
-			fmt.Println("TUIOS daemon is not running. No sessions available.")
+			fmt.Println(diag.Explain())
 		}
 		return nil
 	}
 
-	client := session.NewClient(&session.ClientConfig{
-		Version: version,
-	})
-
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	sessions, err := client.ListSessions()
+	client, err := dialVerb()
 	if err != nil {
 		return err
 	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("list-sessions", nil)
+	if err != nil {
+		return explainVerbError("list-sessions", err)
+	}
+	var listed struct {
+		Sessions []session.SessionInfo `json:"sessions"`
+	}
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		return fmt.Errorf("failed to parse sessions: %w", err)
+	}
+	sessions := listed.Sessions
 
 	if jsonOutput {
 		data, err := json.MarshalIndent(sessions, "", "  ")
@@ -324,7 +539,7 @@ func runListSessions(jsonOutput bool) error {
 	}
 
 	if len(sessions) == 0 {
-		fmt.Println("No sessions.")
+		fmt.Println("No sessions. Create one with 'tuios new', or run 'tuios resurrect' to see saved sessions.")
 		return nil
 	}
 
@@ -411,28 +626,191 @@ func formatTimeAgo(unixTime int64) string {
 }
 
 func runKillSession(sessionName string) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running")
-	}
-
-	client := session.NewClient(&session.ClientConfig{
-		Version: version,
-	})
-
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+	client, err := dialVerb()
+	if err != nil {
+		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	if err := client.KillSession(sessionName); err != nil {
-		return err
+	if _, err := client.Call("kill-session", map[string]any{"session": sessionName}); err != nil {
+		return explainVerbError("kill-session", err)
 	}
 
 	fmt.Printf("Killed session: %s\n", sessionName)
 	return nil
 }
 
-func runDaemon(foreground bool) error {
+// runResurrect lists resurrectable sessions (no name) or restores one on demand
+// and attaches to it (name given).
+func runResurrect(sessionName string) error {
+	if sessionName == "" {
+		return listResurrectableSessions()
+	}
+
+	// Ensure the daemon is running so it can hold the restored session.
+	if !session.IsDaemonRunning() {
+		fmt.Println("Starting TUIOS daemon...")
+		if err := startDaemonBackground(); err != nil {
+			return fmt.Errorf("failed to start daemon: %w", err)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Ask the daemon to restore the session from saved state. This is a no-op if
+	// the daemon already auto-restored it on start.
+	client := session.NewClient(&session.ClientConfig{Version: version})
+	if err := client.Connect(); err != nil {
+		return explainDialError(err)
+	}
+	if err := client.ResurrectSession(sessionName); err != nil {
+		_ = client.Close()
+		return explainResurrectFailure(sessionName, err)
+	}
+	_ = client.Close()
+
+	fmt.Printf("Resurrected session '%s'\n", sessionName)
+
+	// Attach to the now-live session.
+	return runDaemonSession(sessionName, false)
+}
+
+// explainResurrectFailure turns a failed restore into a message that says which
+// of the several reasons applies: no saved state at all, or state that exists
+// but cannot be read by this build. The daemon archives unreadable state rather
+// than deleting it, so the message says where it went.
+func explainResurrectFailure(sessionName string, err error) error {
+	msg := err.Error()
+
+	switch {
+	case strings.Contains(msg, "was written by a newer TUIOS"):
+		return &diagnosticError{
+			What:  fmt.Sprintf("Session %q has saved state that this build of TUIOS cannot read.", sessionName),
+			Cause: "the state was written by a newer TUIOS, so its format is not understood here.",
+			Extra: []string{
+				"The state file was moved out of the way so it is not retried: " + session.ResurrectionArchiveDir(),
+				"Detail: " + msg,
+			},
+			Fix: "upgrade TUIOS to restore it, or run 'tuios new " + sessionName + "' to start fresh.",
+			Err: err,
+		}
+
+	case strings.Contains(msg, "is corrupt"):
+		return &diagnosticError{
+			What:  fmt.Sprintf("Session %q has saved state that is corrupt and cannot be restored.", sessionName),
+			Cause: "the state file was truncated or damaged, usually by an unclean shutdown or a full disk.",
+			Extra: []string{
+				"The damaged file was moved out of the way so it is not retried: " + session.ResurrectionArchiveDir(),
+				"Detail: " + msg,
+			},
+			Fix: "run 'tuios new " + sessionName + "' to start a fresh session.",
+			Err: err,
+		}
+
+	case strings.Contains(msg, "no resurrection data"):
+		e := &diagnosticError{
+			What:  fmt.Sprintf("Session %q has no saved state to restore.", sessionName),
+			Cause: "the name does not match any saved session. Sessions killed with 'tuios kill-session' are removed from saved state deliberately.",
+			Fix:   "run 'tuios resurrect' to list restorable sessions, or 'tuios new " + sessionName + "' to create it.",
+			Err:   err,
+		}
+		if infos, listErr := session.ListResurrectableInfos(); listErr == nil && len(infos) > 0 {
+			names := make([]string, 0, len(infos))
+			for _, info := range infos {
+				names = append(names, info.Name)
+			}
+			if closest := closestName(sessionName, names); closest != "" {
+				e.Extra = append(e.Extra, fmt.Sprintf("Did you mean %q?", closest))
+			}
+			e.Extra = append(e.Extra, "Restorable: "+strings.Join(truncateList(names, 12), ", ")+".")
+		}
+		return e
+	}
+
+	return &diagnosticError{
+		What:  fmt.Sprintf("Session %q could not be restored: %v.", sessionName, err),
+		Cause: "the daemon refused the restore.",
+		Fix:   "run 'tuios resurrect' to list restorable sessions.",
+		Err:   err,
+	}
+}
+
+// listResurrectableSessions prints the sessions that can be restored from saved
+// state on disk.
+func listResurrectableSessions() error {
+	infos, err := session.ListResurrectableInfos()
+	if err != nil {
+		return err
+	}
+
+	// Sessions currently live in the daemon are already available via attach;
+	// still list them so the user sees the full set, but mark their status.
+	liveNames := make(map[string]bool)
+	if session.IsDaemonRunning() {
+		client := session.NewClient(&session.ClientConfig{Version: version})
+		if err := client.Connect(); err == nil {
+			if sessions, err := client.ListSessions(); err == nil {
+				for _, s := range sessions {
+					liveNames[s.Name] = true
+				}
+			}
+			_ = client.Close()
+		}
+	}
+
+	if len(infos) == 0 {
+		fmt.Println("No resurrectable sessions.")
+		fmt.Printf("Saved state lives in %s; unreadable state is moved to %s.\n",
+			session.ResurrectionStateDir(), session.ResurrectionArchiveDir())
+		return nil
+	}
+
+	rows := make([][]string, 0, len(infos))
+	for _, info := range infos {
+		status := "restorable"
+		if liveNames[info.Name] {
+			status = "live"
+		}
+		saved := "-"
+		if !info.SavedAt.IsZero() {
+			saved = formatTimeAgo(info.SavedAt.Unix())
+		}
+		rows = append(rows, []string{
+			info.Name,
+			fmt.Sprintf("%d", info.WindowCount),
+			status,
+			saved,
+		})
+	}
+
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
+		Headers("NAME", "WINDOWS", "STATUS", "SAVED").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			baseStyle := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return baseStyle.Bold(true).Foreground(lipgloss.Color("12"))
+			}
+			switch col {
+			case 0:
+				return baseStyle.Foreground(lipgloss.Color("3")).Bold(true)
+			case 2:
+				if rows[row][col] == "live" {
+					return baseStyle.Foreground(lipgloss.Color("10"))
+				}
+				return baseStyle.Foreground(lipgloss.Color("11"))
+			default:
+				return baseStyle.Foreground(lipgloss.Color("8"))
+			}
+		})
+
+	fmt.Println(t.Render())
+	fmt.Printf("\n%d resurrectable session(s). Use 'tuios resurrect <name>' to restore.\n", len(infos))
+	return nil
+}
+
+func runDaemon(foreground, disableAutoRestore bool) error {
 	if session.IsDaemonRunning() {
 		pid := session.GetDaemonPID()
 		if pid > 0 {
@@ -453,25 +831,89 @@ func runDaemon(foreground bool) error {
 	}
 
 	daemon := session.NewDaemon(&session.DaemonConfig{
-		Version: version,
+		Version:            version,
+		DisableAutoRestore: disableAutoRestore,
 	})
 
 	return daemon.Run()
 }
 
 func runKillDaemon() error {
-	if !session.IsDaemonRunning() {
+	diag := session.DiagnoseDaemon()
+
+	switch diag.State {
+	case session.DaemonRunning:
+		pid := diag.PID
+		if pid == 0 {
+			pid = session.GetDaemonPID()
+		}
+		if pid > 0 {
+			if err := killDaemonProcess(pid); err != nil {
+				return err
+			}
+			return awaitDaemonShutdown(pid, diag.SocketPath)
+		}
+		return &diagnosticError{
+			What:  "The TUIOS daemon is running but its process id could not be determined.",
+			Cause: "the pid file is missing or unreadable, which happens when the daemon was started by an older build or by another user.",
+			Fix:   fmt.Sprintf("find it with 'pgrep -f \"tuios daemon\"' and stop it with 'kill <pid>', or remove %s.", diag.SocketPath),
+		}
+
+	case session.DaemonStaleSocket:
+		// kill-server is the command every other message points at for this
+		// state, so it has to actually clear it rather than report "not
+		// running" and leave the socket in place.
+		if err := os.Remove(diag.SocketPath); err != nil && !os.IsNotExist(err) {
+			return &diagnosticError{
+				What:  fmt.Sprintf("A stale daemon socket at %s could not be removed: %v.", diag.SocketPath, err),
+				Cause: "the socket belongs to another user, or its directory is not writable.",
+				Fix:   fmt.Sprintf("remove it manually with 'rm %s'.", diag.SocketPath),
+				Err:   err,
+			}
+		}
+		fmt.Printf("TUIOS daemon was not running. Removed a stale socket at %s.\n", diag.SocketPath)
+		return nil
+
+	default:
 		fmt.Println("TUIOS daemon is not running.")
 		return nil
 	}
+}
 
-	pid := session.GetDaemonPID()
-	if pid > 0 {
-		return killDaemonProcess(pid)
+// killServerTimeout bounds how long kill-server waits for the daemon to finish
+// persisting and exit. A shutdown that is going to succeed takes milliseconds;
+// the slow case is Daemon.shutdown's own 5s cap on draining goroutines, so this
+// leaves headroom past that before declaring the daemon wedged.
+const killServerTimeout = 10 * time.Second
+
+// awaitDaemonShutdown blocks until the signalled daemon has finished writing its
+// resurrection state and removed its socket, so that kill-server returning means
+// the next command can safely start a fresh daemon. Reporting success while the
+// old daemon is still saving is what lets 'kill-server && start-server' race:
+// the new daemon reads state the old one has not finished writing, or the old
+// one's final write lands on top of the new one's.
+func awaitDaemonShutdown(pid int, socketPath string) error {
+	err := session.WaitForDaemonShutdown(killServerTimeout)
+	if err == nil {
+		fmt.Println("TUIOS daemon stopped. Session state was saved.")
+		return nil
 	}
-
-	fmt.Println("Could not determine daemon PID. Try connecting to stop it.")
-	return nil
+	if !errors.Is(err, session.ErrShutdownTimeout) {
+		return &diagnosticError{
+			What:  fmt.Sprintf("Could not confirm the TUIOS daemon (PID %d) shut down: %v.", pid, err),
+			Cause: "the daemon socket path could not be resolved, so there is no signal to wait on.",
+			Fix:   fmt.Sprintf("check the daemon exited with 'ps -p %d', then retry.", pid),
+			Err:   err,
+		}
+	}
+	return &diagnosticError{
+		What: fmt.Sprintf("The TUIOS daemon (PID %d) was asked to stop but had not finished after %s.",
+			pid, killServerTimeout),
+		Cause: "the daemon is wedged, or a session is taking an unusually long time to write its saved state.",
+		Fix: fmt.Sprintf("wait and run 'tuios kill-server' again to re-check. If it stays stuck, force it with 'kill -9 %d' and remove %s; note that force killing loses any session state that had not been written.",
+			pid, socketPath),
+		Err: err,
+	}
 }
 
 // startDaemonBackground is defined in platform-specific files:

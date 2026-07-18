@@ -38,6 +38,15 @@ var sshServerConfig *SSHServerConfig
 func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	sshServerConfig = cfg
 
+	// Apply the user config's appearance globals once, at server startup and
+	// single-threaded, so every per-connection session shares a consistent view
+	// of them. LoadUserConfig is pure and NewOS no longer re-applies per
+	// connection, so this replaces the old per-connection global writes that
+	// raced other sessions' render loops.
+	if userConfig, err := config.LoadUserConfig(); err == nil {
+		config.ApplyAppearanceConfig(userConfig)
+	}
+
 	// Determine host key path
 	var hostKeyPath string
 	if cfg.KeyPath != "" {
@@ -94,14 +103,13 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	return server.Shutdown(ctx)
 }
 
-// StartSSHServerLegacy is the legacy function signature for backward compatibility
-func StartSSHServerLegacy(ctx context.Context, host, port, keyPath string) error {
-	return StartSSHServer(ctx, &SSHServerConfig{
-		Host:      host,
-		Port:      port,
-		KeyPath:   keyPath,
-		Ephemeral: true, // Legacy mode is ephemeral
-	})
+// shortID returns the first 8 characters of an id for logging, or the whole id
+// when it is shorter, so a non-UUID id cannot panic the log call.
+func shortID(id string) string {
+	if len(id) < 8 {
+		return id
+	}
+	return id[:8]
 }
 
 // teaHandler creates a TUIOS instance for each SSH session
@@ -131,6 +139,15 @@ func teaHandler(sshSession ssh.Session) (tea.Model, []tea.ProgramOption) {
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
 		return createEphemeralTUIOSInstance(sshSession, pty.Window.Width, pty.Window.Height)
+	}
+
+	// Close the daemon client when the SSH session ends, otherwise the client
+	// read loop, its socket, and the daemon-side connState leak per connection.
+	if o, ok := model.(*app.OS); ok {
+		go func() {
+			<-sshSession.Context().Done()
+			o.Cleanup()
+		}()
 	}
 
 	return model, opts
@@ -174,6 +191,7 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
 		Width:           width,
 		Height:          height,
 		IsSSHMode:       true,
@@ -181,7 +199,7 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 	}
 }
 
@@ -253,6 +271,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 	// Create TUIOS instance connected to daemon
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		Width:                     width,
 		Height:                    height,
 		IsSSHMode:                 true,
@@ -290,7 +309,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 	registerMultiClientHandlers(tuiosInstance, client)
 
 	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 	}, nil
 }
 
@@ -298,7 +317,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 	// Handle state sync from other clients via channel (thread-safe)
 	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
-		log.Printf("[SSH] Received state sync: trigger=%s, source=%s", triggerType, sourceID[:8])
+		log.Printf("[SSH] Received state sync: trigger=%s, source=%s", triggerType, shortID(sourceID))
 		// Send state to channel for processing in Bubble Tea event loop
 		// This ensures thread-safe access to m.Windows
 		if m.StateSyncChan != nil {
@@ -312,7 +331,7 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 
 	// Handle client join notifications via channel (thread-safe)
 	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
-		log.Printf("[SSH] Client joined: %s (total: %d, size: %dx%d)", clientID[:8], clientCount, width, height)
+		log.Printf("[SSH] Client joined: %s (total: %d, size: %dx%d)", shortID(clientID), clientCount, width, height)
 		if m.ClientEventChan != nil {
 			select {
 			case m.ClientEventChan <- app.ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height}:
@@ -324,7 +343,7 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 
 	// Handle client leave notifications via channel (thread-safe)
 	client.OnClientLeft(func(clientID string, clientCount int) {
-		log.Printf("[SSH] Client left: %s (remaining: %d)", clientID[:8], clientCount)
+		log.Printf("[SSH] Client left: %s (remaining: %d)", shortID(clientID), clientCount)
 		if m.ClientEventChan != nil {
 			select {
 			case m.ClientEventChan <- app.ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount}:
@@ -334,25 +353,31 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 		}
 	})
 
-	// Handle session resize (min of all clients)
+	// Handle session resize (min of all clients). The callback runs on the daemon
+	// read-loop goroutine, so the actual geometry mutation (TileAllWindows,
+	// emulator resizes) must happen in Update; route it through the event channel.
 	client.OnSessionResize(func(width, height, clientCount int) {
 		log.Printf("[SSH] Session resize: %dx%d (clients: %d)", width, height, clientCount)
-		// Update effective size to match the session size (min of all clients)
-		// This ensures all clients see the same content
-		if m.EffectiveWidth != width || m.EffectiveHeight != height {
-			m.EffectiveWidth = width
-			m.EffectiveHeight = height
-			m.MarkAllDirty()
-			if m.AutoTiling {
-				m.TileAllWindows()
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height}:
+			default:
+				log.Printf("[SSH] Warning: ClientEventChan full, dropping session resize event")
 			}
 		}
 	})
 
-	// Handle force refresh
+	// Handle force refresh (also on the read-loop goroutine; MarkAllDirty must run
+	// on the program goroutine).
 	client.OnForceRefresh(func(reason string) {
 		log.Printf("[SSH] Force refresh requested: %s", reason)
-		m.MarkAllDirty()
+		if m.ClientEventChan != nil {
+			select {
+			case m.ClientEventChan <- app.ClientEvent{Type: "refresh", Reason: reason}:
+			default:
+				log.Printf("[SSH] Warning: ClientEventChan full, dropping force refresh event")
+			}
+		}
 	})
 }
 

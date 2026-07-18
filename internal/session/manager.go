@@ -15,6 +15,22 @@ type Manager struct {
 
 	// Configuration
 	socketPath string // Path to socket
+
+	// Lifecycle hooks (set by the daemon). onCreate fires after a session is
+	// registered; onDelete fires after it is removed but before it is stopped.
+	// Both run outside m.mu so a hook may safely call back into the manager.
+	onCreate func(*Session)
+	onDelete func(*Session)
+}
+
+// SetSessionHooks installs lifecycle callbacks invoked when a session is created
+// or deleted. The daemon uses these to install each session's event sink and to
+// publish session lifecycle events.
+func (m *Manager) SetSessionHooks(onCreate, onDelete func(*Session)) {
+	m.mu.Lock()
+	m.onCreate = onCreate
+	m.onDelete = onDelete
+	m.mu.Unlock()
 }
 
 // NewManager creates a new session manager.
@@ -46,11 +62,11 @@ func (m *Manager) SocketPath() string {
 // CreateSession creates a new session with the given name.
 func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height int) (*Session, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	// Check if name already exists
 	if name != "" {
 		if _, exists := m.sessions[name]; exists {
+			m.mu.Unlock()
 			return nil, fmt.Errorf("session '%s' already exists", name)
 		}
 	}
@@ -58,6 +74,7 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	// Create the session
 	session, err := NewSession(name, cfg, width, height)
 	if err != nil {
+		m.mu.Unlock()
 		return nil, err
 	}
 
@@ -67,7 +84,14 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	// Register the session
 	m.sessions[name] = session
 	m.byID[session.ID] = session
+	onCreate := m.onCreate
+	m.mu.Unlock()
 
+	// Fire the create hook outside the lock so it may install the event sink and
+	// publish a session-created event without risking a manager re-entry deadlock.
+	if onCreate != nil {
+		onCreate(session)
+	}
 	return session, nil
 }
 
@@ -115,10 +139,19 @@ func (m *Manager) DeleteSession(name string) error {
 	}
 	delete(m.sessions, name)
 	delete(m.byID, session.ID)
+	onDelete := m.onDelete
 	m.mu.Unlock()
 
-	// Stop the session (outside lock to avoid deadlock)
+	// Fire the delete hook outside the lock (publishes a session-closed event).
+	if onDelete != nil {
+		onDelete(session)
+	}
+
+	// Stop the session (outside lock to avoid deadlock). Stop performs a final
+	// resurrection save, so remove the state file afterwards: an explicit kill
+	// is a deliberate teardown and must not leave the session resurrectable.
 	session.Stop()
+	RemoveResurrectionState(name)
 	return nil
 }
 

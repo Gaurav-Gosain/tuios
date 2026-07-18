@@ -3,6 +3,7 @@ package tape
 import (
 	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -93,51 +94,63 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		return nil
 	}
 
+	// sendRepeated sends data to the focused window once per repeat count. Basic
+	// key commands carry an optional trailing count (e.g. Down 5, Backspace 10).
+	sendRepeated := func(data []byte) error {
+		id := ce.executor.GetFocusedWindowID()
+		for i := 0; i < repeatCount(cmd); i++ {
+			if err := ce.executor.SendToWindow(id, data); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	switch cmd.Type {
 	case CommandTypeType:
 		if len(cmd.Args) > 0 {
 			return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte(cmd.Args[0]))
 		}
 
-    case CommandTypeEnter:
-        // Windows requires \r\n, Unix accepts \n
-        if runtime.GOOS == "windows" {
-            return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\r', '\n'})
-        }
-        return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\n'})
+	case CommandTypeEnter:
+		// Windows requires \r\n, Unix accepts \n
+		if runtime.GOOS == "windows" {
+			return sendRepeated([]byte{'\r', '\n'})
+		}
+		return sendRepeated([]byte{'\n'})
 
 	case CommandTypeSpace:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{' '})
+		return sendRepeated([]byte{' '})
 
 	case CommandTypeBackspace:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\b'})
+		return sendRepeated([]byte{'\b'})
 
 	case CommandTypeTab:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{'\t'})
+		return sendRepeated([]byte{'\t'})
 
 	case CommandTypeEscape:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b})
+		return sendRepeated([]byte{0x1b})
 
 	case CommandTypeDelete:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', '3', '~'})
+		return sendRepeated([]byte{0x1b, '[', '3', '~'})
 
 	case CommandTypeUp:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'A'})
+		return sendRepeated([]byte{0x1b, '[', 'A'})
 
 	case CommandTypeDown:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'B'})
+		return sendRepeated([]byte{0x1b, '[', 'B'})
 
 	case CommandTypeRight:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'C'})
+		return sendRepeated([]byte{0x1b, '[', 'C'})
 
 	case CommandTypeLeft:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'D'})
+		return sendRepeated([]byte{0x1b, '[', 'D'})
 
 	case CommandTypeHome:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'H'})
+		return sendRepeated([]byte{0x1b, '[', 'H'})
 
 	case CommandTypeEnd:
-		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte{0x1b, '[', 'F'})
+		return sendRepeated([]byte{0x1b, '[', 'F'})
 
 	// Mode switching
 	case CommandTypeTerminalMode:
@@ -279,11 +292,12 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), keyBytes)
 		}
 
-	case CommandTypeWaitUntilRegex:
-		// WaitUntilRegex requires special handling - it needs to be processed in a different way
-		// by the script playback system since it requires checking PTY output
-		// For now, we return a special error to signal this to the playback system
-		// The actual implementation will be handled in the playback loop
+	case CommandTypeWait, CommandTypeWaitUntilRegex:
+		// Wait (a Sleep alias) and WaitUntilRegex are handled by the interactive
+		// playback loop (internal/app/update.go), which needs to block across
+		// ticks while checking timers and screen contents. They are intentionally
+		// no-ops here so the remote/daemon exec path (which is fire-and-forget)
+		// simply skips them.
 		return nil
 
 	case CommandTypeEnableAnimations:
@@ -366,6 +380,19 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	return nil
 }
 
+// repeatCount returns the trailing repeat count of a basic key command, taken
+// from its first argument. It defaults to 1 when absent or not a positive int.
+func repeatCount(cmd *Command) int {
+	if len(cmd.Args) == 0 {
+		return 1
+	}
+	n, err := strconv.Atoi(cmd.Args[0])
+	if err != nil || n < 1 {
+		return 1
+	}
+	return n
+}
+
 // convertKeyComboToBytes converts a key combination string to actual bytes to send to the PTY
 // Examples: "Ctrl+b" -> [0x02], "Alt+x" -> [0x1b, 'x']
 func convertKeyComboToBytes(comboStr string) []byte {
@@ -375,7 +402,7 @@ func convertKeyComboToBytes(comboStr string) []byte {
 	}
 
 	var result []byte
-	var ctrlModifier, altModifier bool
+	var ctrlModifier, altModifier, shiftModifier bool
 	var keyStr string
 
 	// Parse modifiers and key
@@ -387,7 +414,7 @@ func convertKeyComboToBytes(comboStr string) []byte {
 		case "alt", "opt":
 			altModifier = true
 		case "shift":
-			// Shift is harder to handle without more context, just ignore for now
+			shiftModifier = true
 		default:
 			keyStr = part
 		}
@@ -416,11 +443,21 @@ func convertKeyComboToBytes(comboStr string) []byte {
 			// Alt modifier: send ESC followed by the character
 			result = append(result, 0x1b) // ESC
 			result = append(result, keyChar)
+		} else if shiftModifier {
+			// Shift without Ctrl/Alt: send the upper-case form of the key
+			result = append(result, byte(unicode.ToUpper(rune(keyChar))))
 		} else {
 			result = append(result, keyChar)
 		}
 	} else {
 		// Multi-character key (like "space", "enter", etc.)
+		lowerKey := strings.ToLower(keyStr)
+
+		// Shift+Tab is the back-tab sequence ESC [ Z
+		if lowerKey == "tab" && shiftModifier && !ctrlModifier && !altModifier {
+			return []byte{0x1b, '[', 'Z'}
+		}
+
 		// Map special keys
 		specialKeys := map[string][]byte{
 			"space":     {' '},
@@ -433,7 +470,7 @@ func convertKeyComboToBytes(comboStr string) []byte {
 			"delete":    {0x7f},
 		}
 
-		if keyBytes, exists := specialKeys[strings.ToLower(keyStr)]; exists {
+		if keyBytes, exists := specialKeys[lowerKey]; exists {
 			if altModifier {
 				result = append(result, 0x1b) // ESC prefix for Alt
 			}

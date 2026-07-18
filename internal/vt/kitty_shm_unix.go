@@ -8,6 +8,10 @@ import (
 	"syscall"
 )
 
+// maxShmSize caps a single shared-memory transmission so a hostile guest
+// cannot force an enormous mmap. 512 MiB is far above any real image frame.
+const maxShmSize = 512 * 1024 * 1024
+
 func loadSharedMemory(name string, size int) ([]byte, error) {
 	if name == "" {
 		return nil, fmt.Errorf("empty shared memory name")
@@ -21,16 +25,27 @@ func loadSharedMemory(name string, size int) ([]byte, error) {
 	}
 	defer func() { _ = f.Close() }()
 
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat shm: %w", err)
+	}
+	fileSize := fi.Size()
+
 	if size <= 0 {
-		fi, err := f.Stat()
-		if err != nil {
-			return nil, fmt.Errorf("stat shm: %w", err)
-		}
-		size = int(fi.Size())
+		size = int(fileSize)
+	}
+
+	// clamp: mmap beyond EOF raises SIGBUS which recover cannot catch, so the
+	// guest-supplied S= must never exceed the backing file.
+	if fileSize < int64(size) {
+		size = int(fileSize)
 	}
 
 	if size <= 0 {
 		return nil, fmt.Errorf("invalid shm size")
+	}
+	if size > maxShmSize {
+		return nil, fmt.Errorf("shm size %d exceeds maximum %d", size, maxShmSize)
 	}
 
 	data, err := syscall.Mmap(int(f.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED)

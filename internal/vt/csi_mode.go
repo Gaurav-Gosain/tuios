@@ -2,6 +2,7 @@ package vt
 
 import (
 	"io"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -49,6 +50,10 @@ func (e *Emulator) setAltScreenMode(on bool) {
 	} else {
 		e.scr = &e.scrs[0]
 	}
+	// A screen switch ends any frame in progress; clear a stuck sync flag so a
+	// window is never left holding a stale frame (e.g. when an app exits without
+	// closing its synchronized update).
+	e.cachedSyncOutput.Store(false)
 	if e.cb.AltScreen != nil {
 		e.cb.AltScreen(on)
 	}
@@ -70,7 +75,9 @@ func (e *Emulator) restoreCursor() {
 // setMode sets the mode to the given value.
 func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 	e.logf("setting mode %T(%v) to %v", mode, mode, setting)
+	e.modesMu.Lock()
 	e.modes[mode] = setting
+	e.modesMu.Unlock()
 	switch mode {
 	case ansi.ModeTextCursorEnable:
 		e.scr.setCursorHidden(!setting.IsSet())
@@ -92,7 +99,7 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 		e.setAltScreenMode(setting.IsSet())
 	case ansi.ModeInBandResize:
 		if setting.IsSet() {
-			_, _ = io.WriteString(e.pw, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
+			_, _ = io.WriteString(e.pipe, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
 		}
 	}
 	if setting.IsSet() {
@@ -105,13 +112,21 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 		}
 	}
 
-	// Update thread-safe mouse mode cache
+	// Update thread-safe mode caches read from the render goroutine.
 	e.updateMouseModeCache()
+	if mode == ansi.ModeSynchronizedOutput {
+		e.cachedSyncOutput.Store(setting.IsSet())
+		if setting.IsSet() {
+			e.syncSetAtNanos.Store(time.Now().UnixNano())
+		}
+	}
 }
 
 // isModeSet returns true if the mode is set.
 func (e *Emulator) isModeSet(mode ansi.Mode) bool {
+	e.modesMu.RLock()
 	m, ok := e.modes[mode]
+	e.modesMu.RUnlock()
 	return ok && m.IsSet()
 }
 

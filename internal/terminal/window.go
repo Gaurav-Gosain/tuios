@@ -6,22 +6,18 @@ import (
 	"context"
 	"fmt"
 	"image/color"
-	"io"
+	"log"
 	"os"
 	"os/exec"
-	"runtime"
-	"strings"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/colorprofile"
-	uv "github.com/charmbracelet/ultraviolet"
 	xpty "github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -37,6 +33,70 @@ func (w *Window) UnlockIO() { w.ioMu.Unlock() }
 // RLockIO/RUnlockIO: shared lock for rendering (reads cell buffer).
 func (w *Window) RLockIO()   { w.ioMu.RLock() }
 func (w *Window) RUnlockIO() { w.ioMu.RUnlock() }
+
+// SetTiled updates the tiled flag and re-syncs the emulator/PTY size. Resize
+// deducts border cells based on Tiled (0 when tiled/borderless, 2 when
+// bordered), so flipping the flag without a resize leaves the terminal one
+// border off in each axis. Callers that toggle tiling (shared-borders changes,
+// tiling enable/disable) must go through here. No-op when unchanged.
+func (w *Window) SetTiled(tiled bool) {
+	if w.Tiled == tiled {
+		return
+	}
+	w.Tiled = tiled
+	w.Resize(w.Width, w.Height)
+	w.InvalidateCache()
+}
+
+// The following scalar/string fields are written by the VT callbacks on the
+// PTY/monitor goroutine and read on the Bubble Tea UI goroutine, so they are
+// stored atomically and accessed only through these methods.
+
+// ProcessExited reports whether the window's process has exited.
+func (w *Window) ProcessExited() bool { return w.processExited.Load() }
+
+// SetProcessExited records whether the window's process has exited.
+func (w *Window) SetProcessExited(exited bool) { w.processExited.Store(exited) }
+
+// CursorStyle returns the current cursor style.
+func (w *Window) CursorStyle() vt.CursorStyle { return vt.CursorStyle(w.cursorStyle.Load()) }
+
+// SetCursorStyle records the current cursor style.
+func (w *Window) SetCursorStyle(style vt.CursorStyle) { w.cursorStyle.Store(int32(style)) }
+
+// CursorBlink reports whether the cursor should blink.
+func (w *Window) CursorBlink() bool { return w.cursorBlink.Load() }
+
+// SetCursorBlink records whether the cursor should blink.
+func (w *Window) SetCursorBlink(blink bool) { w.cursorBlink.Store(blink) }
+
+// Title returns the current window title.
+func (w *Window) Title() string {
+	if p := w.title.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// SetTitle records the current window title.
+func (w *Window) SetTitle(t string) { w.title.Store(&t) }
+
+// IsAltScreen reports whether the application is using the alternate screen buffer.
+func (w *Window) IsAltScreen() bool { return w.isAltScreen.Load() }
+
+// SetAltScreen records whether the application is using the alternate screen buffer.
+func (w *Window) SetAltScreen(v bool) { w.isAltScreen.Store(v) }
+
+// clipboard returns the last clipboard content set via OSC 52.
+func (w *Window) clipboard() string {
+	if p := w.clipboardContent.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// setClipboard records the last clipboard content set via OSC 52.
+func (w *Window) setClipboard(content string) { w.clipboardContent.Store(&content) }
 
 func passThroughCursorStyle(data []byte) {
 	// Fast path: DECSCUSR sequences contain " q" (space-q). If neither
@@ -80,8 +140,8 @@ var (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
-	Title                  string
-	CustomName             string // User-defined window name
+	title                  atomic.Pointer[string] // Written on PTY/monitor goroutine, read on UI goroutine
+	CustomName             string                 // User-defined window name
 	Width                  int
 	Height                 int
 	X                      int
@@ -122,7 +182,7 @@ type Window struct {
 	IsSelecting            bool               // True when selecting text
 	SelectedText           string             // Currently selected text
 	SelectionCursor        struct{ X, Y int } // Current cursor position in selection mode
-	ProcessExited          bool               // True when process has exited
+	processExited          atomic.Bool        // Written on PTY/monitor goroutine, read on UI goroutine
 	// Enhanced text selection support
 	SelectionMode int // 0 = character, 1 = word, 2 = line
 	LastClickTime time.Time
@@ -132,35 +192,49 @@ type Window struct {
 	// Scrollback mode support
 	ScrollbackMode   bool // True when viewing scrollback history
 	ScrollbackOffset int  // Number of lines scrolled back (0 = at bottom, viewing live output)
-	// Alternate screen buffer tracking for TUI detection
-	IsAltScreen bool // True when application is using alternate screen buffer (nvim, vim, etc.)
+	// Alternate screen buffer tracking for TUI detection.
+	// Written on PTY/monitor goroutine, read on UI goroutine.
+	isAltScreen atomic.Bool // True when application is using alternate screen buffer (nvim, vim, etc.)
 	// Floating pane support
 	IsFloating bool // True when window is floating (not in BSP tiling)
 	IsPinned   bool // True when floating pane persists across workspace switches
-	// Cursor style tracking for passthrough to parent terminal
-	CursorStyle vt.CursorStyle // Current cursor style (block, underline, bar)
-	CursorBlink bool           // Whether cursor should blink
+	// Cursor style tracking for passthrough to parent terminal.
+	// Written by the VT callback on the PTY goroutine, read on the UI goroutine.
+	cursorStyle atomic.Int32 // Current cursor style (block, underline, bar)
+	cursorBlink atomic.Bool  // Whether cursor should blink
 	// Cell dimensions in pixels (for TIOCGWINSZ pixel reporting to child processes)
 	CellPixelWidth  int
 	CellPixelHeight int
 	// Vim-style copy mode
 	CopyMode *CopyMode // Copy mode state (nil when not active)
 	// Daemon session support
-	PTYID             string               // ID of daemon-managed PTY (empty for local PTYs)
-	DaemonMode        bool                 // True when PTY is managed by daemon
-	DaemonWriteFunc   func([]byte) error   // Callback for sending input to daemon PTY
-	DaemonResizeFunc  func(w, h int) error // Callback for resizing daemon PTY
-	DaemonCloseFunc   func()               // Callback when window is closed (to notify daemon)
-	OnProcessExit     func()               // Callback when PTY process exits (to close window)
-	ClipboardContent  string               // Last clipboard content set via OSC 52
-	ClipboardSetFunc  func(string)         // Callback to propagate clipboard to host
-	outputChan        chan []byte          // Channel for serializing daemon PTY output writes
-	outputDone        chan struct{}        // Signal to stop output writer goroutine
-	suppressCallbacks atomic.Bool          // Suppress VT emulator callbacks during state restoration (prevents race conditions)
+	PTYID             string                   // ID of daemon-managed PTY (empty for local PTYs)
+	DaemonMode        bool                     // True when PTY is managed by daemon
+	DaemonWriteFunc   func([]byte) error       // Callback for sending input to daemon PTY
+	DaemonResizeFunc  func(w, h int) error     // Callback for resizing daemon PTY
+	DaemonCloseFunc   func()                   // Callback when window is closed (to notify daemon)
+	OnProcessExit     func()                   // Callback when PTY process exits (to close window)
+	clipboardContent  atomic.Pointer[string]   // Written by VT callback on PTY goroutine, read on UI goroutine (OSC 52)
+	ClipboardSetFunc  func(string)             // Callback to propagate clipboard to host
+	NotifyFunc        func(title, body string) // Callback for guest desktop notifications (OSC 9/777/99)
+	BellFunc          func()                   // Callback for guest bell (BEL)
+	outputChan        chan []byte              // Channel for serializing daemon PTY output writes
+	outputDone        chan struct{}            // Signal to stop output writer goroutine
+	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
+	closed            atomic.Bool              // Set by Close() so the external outputChan sender (WriteOutputAsync) stops before teardown
 
 	// HasNewOutput is set when new data is written to the terminal.
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
 	HasNewOutput atomic.Bool
+
+	// coalesceSignal is the daemon renderCoalescer's own render-trigger flag.
+	// outputWriter sets it after each batch; renderCoalescer consumes it at a
+	// capped rate to fire PTYDataChan. It is separate from HasNewOutput so the
+	// coalescer no longer consumes that flag: HasNewOutput survives for the UI
+	// goroutine's MarkTerminalsWithNewContent, which does the dirty-marking.
+	// This keeps window model fields (Dirty/ContentDirty/CachedContent) off the
+	// background goroutine, which otherwise races the renderer and Close().
+	coalesceSignal atomic.Bool
 
 	// PTYDataChan is a shared channel (buffered 1) that PTY readers signal
 	// to trigger rendering. Non-blocking send coalesces rapid updates.
@@ -266,7 +340,6 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	terminal.SetCellSize(10, 20)
 
 	window := &Window{
-		Title:              title,
 		Width:              width,
 		Height:             height,
 		X:                  x,
@@ -282,8 +355,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		CachedContent:      "",
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
-		IsAltScreen:        false,
 	}
+	window.SetTitle(title)
 
 	// Apply theme colors to the terminal (only if theming is enabled)
 	if theme.IsEnabled() {
@@ -304,29 +377,39 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 			// Suppress callback during state restoration to prevent race conditions
 			// where buffered PTY output overwrites restored state
 			if !window.suppressCallbacks.Load() {
-				window.IsAltScreen = enabled
+				window.SetAltScreen(enabled)
 			}
 		},
 		CursorStyle: func(style vt.CursorStyle, steady bool) {
 			// Note: the callback receives "steady" value (true = NOT blinking)
 			// despite the parameter being named "blink" in the Callbacks struct
-			window.CursorStyle = style
-			window.CursorBlink = !steady // Invert: steady=false means blinking=true
+			window.SetCursorStyle(style)
+			window.SetCursorBlink(!steady) // Invert: steady=false means blinking=true
 		},
 		Title: func(title string) {
 			// Update window title from terminal escape sequence
 			if title != "" {
-				window.Title = title
+				window.SetTitle(title)
 			}
 		},
 		ClipboardSet: func(_ string, content string) {
-			window.ClipboardContent = content
+			window.setClipboard(content)
 			if window.ClipboardSetFunc != nil {
 				window.ClipboardSetFunc(content)
 			}
 		},
 		ClipboardQuery: func(_ string) string {
-			return window.ClipboardContent
+			return window.clipboard()
+		},
+		Notify: func(title, body string) {
+			if window.NotifyFunc != nil {
+				window.NotifyFunc(title, body)
+			}
+		},
+		Bell: func() {
+			if window.BellFunc != nil {
+				window.BellFunc()
+			}
 		},
 	})
 
@@ -408,8 +491,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// Silently recover from panics during process monitoring
-				_ = r // Explicitly ignore the recovered value
+				log.Printf("window %s goroutine panic: %v\n%s", window.ID, r, debug.Stack())
 			}
 		}()
 
@@ -418,7 +500,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		window.waitForCmd()
 
 		// Mark process as exited
-		window.ProcessExited = true
+		window.SetProcessExited(true)
 
 		// Clean up
 		cancel()
@@ -455,7 +537,6 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 	terminal.SetCellSize(10, 20)
 
 	window := &Window{
-		Title:              title,
 		Width:              width,
 		Height:             height,
 		X:                  x,
@@ -471,13 +552,13 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 		CachedContent:      "",
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
-		IsAltScreen:        false,
 		PTYID:              ptyID,
 		DaemonMode:         true,
 		outputChan:         make(chan []byte, 16384), // Large buffer: kitty images can be 250+ chunks
 		outputDone:         make(chan struct{}),
 		// suppressCallbacks defaults to false (zero value)
 	}
+	window.SetTitle(title)
 
 	// Start output writer goroutine to serialize writes
 	go window.outputWriter()
@@ -502,1044 +583,41 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 			// Suppress callback during state restoration to prevent race conditions
 			// where buffered PTY output overwrites restored state
 			if !window.suppressCallbacks.Load() {
-				window.IsAltScreen = enabled
+				window.SetAltScreen(enabled)
 			}
 		},
 		CursorStyle: func(style vt.CursorStyle, steady bool) {
 			// Note: the callback receives "steady" value (true = NOT blinking)
 			// despite the parameter being named "blink" in the Callbacks struct
-			window.CursorStyle = style
-			window.CursorBlink = !steady // Invert: steady=false means blinking=true
+			window.SetCursorStyle(style)
+			window.SetCursorBlink(!steady) // Invert: steady=false means blinking=true
 		},
 		Title: func(title string) {
 			// Update window title from terminal escape sequence
 			if title != "" {
-				window.Title = title
+				window.SetTitle(title)
 			}
 		},
 		ClipboardSet: func(_ string, content string) {
-			window.ClipboardContent = content
+			window.setClipboard(content)
 			if window.ClipboardSetFunc != nil {
 				window.ClipboardSetFunc(content)
 			}
 		},
 		ClipboardQuery: func(_ string) string {
-			return window.ClipboardContent
+			return window.clipboard()
+		},
+		Notify: func(title, body string) {
+			if window.NotifyFunc != nil {
+				window.NotifyFunc(title, body)
+			}
+		},
+		Bell: func() {
+			if window.BellFunc != nil {
+				window.BellFunc()
+			}
 		},
 	})
 
 	return window
-}
-
-// outputWriter is a goroutine that serializes writes to the terminal emulator.
-// It batches pending chunks into capped VT writes and coalesces render
-// signals to prevent partial-frame flickering.
-//
-// The anti-flicker mechanism: instead of signaling a re-render on every
-// VT write (which shows incomplete frames mid-sync-update), we defer the
-// signal. A separate renderCoalescer goroutine fires at a capped rate
-// (~120fps) and only signals when there's actually new output. This is
-// the same technique prise uses (8ms render timer) to eliminate flicker
-// from fast-updating TUIs.
-func (w *Window) outputWriter() {
-	if w.outputDone == nil || w.outputChan == nil {
-		return
-	}
-
-	const maxBatch = 256 * 1024
-	batch := make([]byte, 0, maxBatch)
-
-	for {
-		select {
-		case <-w.outputDone:
-			return
-		case data, ok := <-w.outputChan:
-			if !ok {
-				return
-			}
-			batch = append(batch[:0], data...)
-		}
-
-		for len(batch) < maxBatch {
-			select {
-			case more, ok := <-w.outputChan:
-				if !ok {
-					goto write
-				}
-				batch = append(batch, more...)
-			default:
-				goto write
-			}
-		}
-
-	write:
-		if w.Terminal != nil {
-			w.ioMu.Lock()
-			_, _ = w.Terminal.Write(batch)
-			w.ioMu.Unlock()
-
-			w.HasNewOutput.Store(true)
-			w.MarkContentDirty()
-			// Don't signal PTYDataChan here. The renderCoalescer
-			// goroutine checks HasNewOutput at a capped rate and
-			// signals then. This prevents partial-frame renders.
-		}
-	}
-}
-
-// renderCoalescer runs for daemon mode windows and fires render signals
-// at a capped rate. Multiple VT writes between ticks coalesce into a
-// single render that shows the latest complete frame.
-func (w *Window) renderCoalescer() {
-	const interval = 8 * time.Millisecond // ~120fps cap
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-w.outputDone:
-			return
-		case <-ticker.C:
-			if w.HasNewOutput.CompareAndSwap(true, false) {
-				if w.PTYDataChan != nil {
-					select {
-					case w.PTYDataChan <- struct{}{}:
-					default:
-					}
-				}
-			}
-		}
-	}
-}
-
-// StartDaemonResponseReader starts a goroutine to read and DRAIN responses from
-// the terminal emulator. We don't forward these to the PTY because:
-//  1. Responses were appearing as visible escape sequences in the output
-//  2. Applications in daemon mode receive queries from the daemon's VT emulator
-//     and don't need responses from client emulators
-//
-// This must be called after the Terminal is set up.
-func (w *Window) StartDaemonResponseReader() {
-	if !w.DaemonMode || w.Terminal == nil {
-		return
-	}
-
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			// Terminal.Read() blocks, so we can't use select here.
-			// The goroutine will exit when Terminal is closed (returns error).
-			_, err := w.Terminal.Read(buf)
-			if err != nil {
-				return
-			}
-			// Drain responses - don't send to PTY to avoid escape sequence leaks
-		}
-	}()
-}
-
-// WriteOutput writes output data to the terminal emulator.
-// Used in daemon mode to process PTY output received from the daemon.
-func (w *Window) WriteOutput(data []byte) {
-	if w.Terminal != nil {
-		w.HasNewOutput.Store(true)
-		if w.PTYDataChan != nil {
-			select {
-			case w.PTYDataChan <- struct{}{}:
-			default:
-			}
-		}
-		w.ioMu.Lock()
-		_, _ = w.Terminal.Write(data)
-		w.ioMu.Unlock()
-		w.MarkContentDirty()
-	}
-}
-
-// WriteOutputAsync writes output data to the terminal emulator without blocking.
-// Used in daemon mode to process PTY output received from the daemon.
-// Data is queued to a channel and written in order by the outputWriter goroutine.
-func (w *Window) WriteOutputAsync(data []byte) {
-	if w.Terminal == nil || w.outputChan == nil {
-		return
-	}
-	// Copy data since the caller's buffer may be reused
-	dataCopy := make([]byte, len(data))
-	copy(dataCopy, data)
-
-	// Queue to channel - non-blocking with buffered channel
-	select {
-	case w.outputChan <- dataCopy:
-		// Successfully queued
-	default:
-		// Channel full - drop data (shouldn't happen with large buffer)
-	}
-}
-
-// DiffCell is a minimal cell representation for the screen diff protocol.
-// Avoids importing the session package (which would create a cycle).
-type DiffCell struct {
-	Row, Col int
-	Content  string
-	Width    int
-	Fg, Bg   uint32
-	Attrs    uint16
-	UlColor  uint32
-	UlStyle  uint8
-}
-
-// ApplyScreenDiff writes changed cells from a daemon screen diff directly
-// into the terminal emulator's screen buffer. This bypasses the VT parser
-// entirely: no raw bytes, no escape sequences, just cell data. Used by
-// the event-based screen diff protocol to update daemon windows without
-// risk of byte-stream corruption.
-func (w *Window) ApplyScreenDiff(cells []DiffCell, cursorX, cursorY int, cursorHidden, isAltScreen bool) {
-	if w.Terminal == nil {
-		return
-	}
-
-	w.ioMu.Lock()
-	for _, c := range cells {
-		cell := &uv.Cell{
-			Content: c.Content,
-			Width:   c.Width,
-			Style: uv.Style{
-				Fg:             unpackColor(c.Fg),
-				Bg:             unpackColor(c.Bg),
-				Attrs:          unpackDiffAttrs(c.Attrs),
-				Underline:      uv.Underline(c.UlStyle),
-				UnderlineColor: unpackColor(c.UlColor),
-			},
-		}
-		w.Terminal.SetCell(c.Col, c.Row, cell)
-	}
-	w.ioMu.Unlock()
-
-	w.IsAltScreen = isAltScreen
-
-	w.HasNewOutput.Store(true)
-	w.MarkContentDirty()
-	if w.PTYDataChan != nil {
-		select {
-		case w.PTYDataChan <- struct{}{}:
-		default:
-		}
-	}
-}
-
-// unpackColor converts a packed RGBA uint32 to a color.Color.
-// 0 means "default terminal color" (nil).
-func unpackColor(rgba uint32) color.Color {
-	if rgba == 0 {
-		return nil
-	}
-	return color.RGBA{
-		R: uint8(rgba >> 24),
-		G: uint8(rgba >> 16),
-		B: uint8(rgba >> 8),
-		A: uint8(rgba),
-	}
-}
-
-// unpackDiffAttrs converts DiffCell attrs bitmask to ultraviolet's uint8 Attrs.
-func unpackDiffAttrs(attrs uint16) uint8 {
-	// DiffCell bitmask matches ultraviolet's AttrBold..AttrStrikethrough order
-	return uint8(attrs & 0xFF)
-}
-
-// UpdateThemeColors updates the terminal colors when the theme changes
-func (w *Window) UpdateThemeColors() {
-	if w.Terminal != nil {
-		if theme.IsEnabled() {
-			w.Terminal.SetThemeColors(
-				theme.TerminalFg(),
-				theme.TerminalBg(),
-				theme.TerminalCursor(),
-				theme.GetANSIPalette(),
-			)
-		} else {
-			w.Terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
-		}
-		// Mark the window as dirty to trigger a redraw
-		w.Dirty = true
-		w.ContentDirty = true
-	}
-}
-
-func detectShell() string {
-	// Check user configuration first
-	if cfg, err := config.LoadUserConfig(); err == nil && cfg.Appearance.PreferredShell != "" {
-		preferredShell := cfg.Appearance.PreferredShell
-
-		// just do a check in case
-		if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(preferredShell), ".exe") {
-			preferredShell += ".exe"
-		}
-
-		shellExists := false
-		if runtime.GOOS == "windows" {
-			_, err = exec.LookPath(preferredShell)
-			shellExists = err == nil
-		} else {
-			_, err = os.Stat(preferredShell)
-			shellExists = err == nil
-		}
-
-		if shellExists {
-			return preferredShell
-		}
-		fmt.Fprintf(os.Stderr, "Warning: Configured shell '%s' not found. Falling back to defaults.\n", preferredShell)
-	}
-
-	// Check environment variable
-	if shell := os.Getenv("SHELL"); shell != "" {
-		return shell
-	}
-
-	// Check if we're on Windows
-	if runtime.GOOS == "windows" {
-		// Check for PowerShell or CMD
-		shells := []string{
-			"powershell.exe",
-			"pwsh.exe", // PowerShell Core/7+
-			"cmd.exe",
-		}
-		for _, shell := range shells {
-			if _, err := exec.LookPath(shell); err == nil {
-				return shell
-			}
-		}
-		// Windows fallback
-		return "cmd.exe"
-	}
-
-	// Unix/Linux/macOS shells
-	shells := []string{"/bin/bash", "/bin/zsh", "/bin/fish", "/bin/sh"}
-	for _, shell := range shells {
-		if _, err := os.Stat(shell); err == nil {
-			return shell
-		}
-	}
-	// Unix fallback
-	return "/bin/sh"
-}
-
-// getTerminalEnv returns TERM and COLORTERM values for the current environment.
-// For local sessions, this is cached after first detection.
-// The environment is detected from os.Environ() which includes SSH forwarded vars.
-func getTerminalEnv() (termType, colorTerm string) {
-	// Use sync.Once to cache local terminal detection
-	// This runs once per process lifetime for efficiency
-	localEnvOnce.Do(func() {
-		// First check if TERM/COLORTERM are already set in the environment
-		// This handles the case where tuios-web sets them explicitly because
-		// os.Stdout is not a TTY in web mode
-		envTerm := os.Getenv("TERM")
-		envColorTerm := os.Getenv("COLORTERM")
-
-		// If COLORTERM=truecolor is set, trust the environment
-		// This is the case for web sessions where we explicitly set these
-		if envColorTerm == "truecolor" && envTerm != "" && envTerm != "dumb" {
-			localTermType = envTerm
-			localColorTerm = envColorTerm
-			return
-		}
-
-		// Detect terminal capabilities using colorprofile (from charm)
-		// This handles TERM, COLORTERM, NO_COLOR, CLICOLOR, terminfo, and tmux detection
-		// For SSH sessions, os.Environ() will include the SSH client's environment
-		profile := colorprofile.Detect(os.Stdout, os.Environ())
-		localTermType, localColorTerm = profileToEnv(profile)
-	})
-	return localTermType, localColorTerm
-}
-
-// profileToEnv converts a colorprofile.Profile to TERM and COLORTERM environment variables.
-// Returns (termType, colorTerm) where colorTerm may be empty string.
-func profileToEnv(profile colorprofile.Profile) (termType, colorTerm string) {
-	// Get parent TERM for preserving specific terminal types
-	parentTerm := os.Getenv("TERM")
-
-	switch profile {
-	case colorprofile.TrueColor:
-		// Prefer parent TERM, fallback to xterm-256color
-		// Note: We support XTWINOPS but xterm-256color terminfo doesn't advertise it
-		// Applications must query the terminal directly (which works via our CSI 't' handler)
-		if parentTerm != "" {
-			termType = parentTerm
-		} else {
-			termType = "xterm-256color"
-		}
-		colorTerm = "truecolor"
-
-	case colorprofile.ANSI256:
-		// 256 color support
-		if parentTerm != "" && strings.Contains(parentTerm, "256color") {
-			termType = parentTerm
-		} else if strings.HasPrefix(parentTerm, "screen") {
-			termType = "screen-256color"
-		} else if strings.HasPrefix(parentTerm, "tmux") {
-			termType = "tmux-256color"
-		} else {
-			termType = "xterm-256color"
-		}
-		colorTerm = "" // Don't set COLORTERM for 256 color
-
-	case colorprofile.ANSI:
-		// Basic 16 color support
-		if parentTerm != "" && parentTerm != "dumb" {
-			termType = parentTerm
-		} else {
-			termType = "xterm"
-		}
-		colorTerm = ""
-
-	case colorprofile.Ascii, colorprofile.NoTTY:
-		// No color support or not a TTY
-		termType = "dumb"
-		colorTerm = ""
-
-	default:
-		// Fallback to sensible default
-		termType = "xterm-256color"
-		colorTerm = ""
-	}
-
-	return termType, colorTerm
-}
-
-// enableTerminalFeatures enables advanced terminal features
-func (w *Window) enableTerminalFeatures() {
-	if w.Pty == nil {
-		return
-	}
-
-	// Bracketed paste mode is handled by wrapping paste content with escape sequences
-	// when pasting (see input.go handleClipboardPaste). We don't need to enable it
-	// via the PTY as that sends the sequence to the shell's stdin, which can cause
-	// the escape codes to be echoed back and appear as garbage in the terminal.
-	// The shell/application running in the PTY will handle bracketed paste mode
-	// if it supports it, based on receiving the wrapped paste content.
-
-	// Don't enable mouse modes automatically - let applications request them
-	// Applications like vim, less, htop will enable mouse support themselves
-	// by sending the appropriate escape sequences
-}
-
-// disableTerminalFeatures disables advanced terminal features before closing
-func (w *Window) disableTerminalFeatures() {
-	if w.Pty == nil {
-		return
-	}
-
-	// No terminal features to explicitly disable
-	// Bracketed paste is handled at the application level
-	// Mouse tracking is managed by applications themselves
-}
-
-func (w *Window) handleIOOperations() {
-	ctx, cancel := context.WithCancel(context.Background())
-	w.cancelFunc = cancel
-
-	// PTY to Terminal copy (output from shell) - with proper context handling
-	w.ioWg.Go(func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Silently recover from panics during PTY read
-				_ = r // Explicitly ignore the recovered value
-			}
-		}()
-
-		// Signal bubbletea when PTY reader exits so the tick handler
-		// can detect ProcessExited and close the window promptly.
-		defer func() {
-			if w.PTYDataChan != nil {
-				select {
-				case w.PTYDataChan <- struct{}{}:
-				default:
-				}
-			}
-		}()
-
-		// Get buffer from pool for better memory management
-		bufPtr := pool.GetByteSlice()
-		buf := *bufPtr
-		defer pool.PutByteSlice(bufPtr)
-		for {
-			select {
-			case <-ctx.Done():
-				// Context cancelled, exit gracefully
-				return
-			default:
-				// Set a reasonable timeout for read operations
-				if w.Pty == nil {
-					return
-				}
-
-				n, err := w.Pty.Read(buf)
-				if err != nil {
-					if err != io.EOF && !strings.Contains(err.Error(), "file already closed") &&
-						!strings.Contains(err.Error(), "input/output error") {
-						// Log unexpected errors for debugging
-						_ = err
-					}
-					return
-				}
-				if n > 0 {
-					w.HasNewOutput.Store(true)
-
-					// Signal bubbletea that PTY data arrived (non-blocking, coalesces rapid updates)
-					if w.PTYDataChan != nil {
-						select {
-						case w.PTYDataChan <- struct{}{}:
-						default:
-						}
-					}
-
-					// Debug: Log all data from PTY (applications sending queries)
-					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-						if len(buf[:n]) >= 2 && buf[0] == '\x1b' {
-							debugMsg := fmt.Sprintf("[%s] PTY->Terminal query: %q (hex: % x)\n",
-								time.Now().Format("15:04:05.000"), string(buf[:n]), buf[:n])
-							if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-								_, _ = f.WriteString(debugMsg)
-								_ = f.Close()
-							}
-						}
-					}
-
-					// Pass through cursor style sequences to parent terminal
-					// The VT emulator absorbs DECSCUSR, so we re-emit them
-					passThroughCursorStyle(buf[:n])
-
-					w.ioMu.RLock()
-					if w.Terminal != nil {
-						_, _ = w.Terminal.Write(buf[:n])
-					}
-					w.ioMu.RUnlock()
-				}
-			}
-		}
-	})
-
-	// Terminal to PTY copy (input to shell) - with proper context handling
-	w.ioWg.Go(func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Silently recover from panics during terminal read
-				_ = r // Explicitly ignore the recovered value
-			}
-		}()
-
-		// Use a smaller buffer for terminal-to-PTY operations
-		buf := make([]byte, 4096)
-		for {
-			select {
-			case <-ctx.Done():
-				// Context cancelled, exit gracefully
-				return
-			default:
-				// Set a reasonable timeout for read operations
-				// Use lock to synchronize with Close() which may set w.Terminal = nil
-				w.ioMu.RLock()
-				terminal := w.Terminal
-				w.ioMu.RUnlock()
-
-				if terminal == nil {
-					return
-				}
-
-				n, err := terminal.Read(buf)
-				if err != nil {
-					if err != io.EOF && !strings.Contains(err.Error(), "file already closed") &&
-						!strings.Contains(err.Error(), "input/output error") {
-						// Log unexpected errors for debugging
-						_ = err
-					}
-					return
-				}
-				if n > 0 {
-					data := buf[:n]
-
-					// Debug: Log ALL data from terminal response pipe when debug mode is enabled
-					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-						debugMsg := fmt.Sprintf("[%s] Terminal->PTY [%s] ALL data (%d bytes): %q (hex: % x)\n",
-							time.Now().Format("15:04:05.000"), w.ID[:8], len(data), string(data), data)
-						if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-							_, _ = f.WriteString(debugMsg)
-							_ = f.Close()
-						}
-					}
-
-					// Fix incorrect CPR responses from VT library for nushell compatibility
-					// The VT library responds to ESC[6n queries but returns stale/incorrect cursor positions
-					// This causes nushell to incorrectly clear the screen thinking it's at the wrong position
-					// We detect CPR responses (ESC[{row};{col}R) and replace with actual cursor position
-					if len(data) >= 6 && data[0] == '\x1b' && data[1] == '[' && data[len(data)-1] == 'R' {
-						// This looks like a CPR response, check if it contains semicolon
-						if bytes.Contains(data, []byte(";")) {
-							w.ioMu.RLock()
-							if w.Terminal != nil {
-								pos := w.Terminal.CursorPosition()
-								// Get the actual current cursor position (1-indexed for terminal protocol)
-								actualY := pos.Y + 1
-								actualX := pos.X + 1
-								// Replace with corrected cursor position
-								data = fmt.Appendf(nil, "\x1b[%d;%dR", actualY, actualX)
-							}
-							w.ioMu.RUnlock()
-						}
-					}
-
-					// Debug: Log XTWINOPS responses when debug mode is enabled
-					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-						if len(data) >= 6 && data[0] == '\x1b' && data[1] == '[' && data[len(data)-1] == 't' {
-							// This looks like an XTWINOPS response
-							debugMsg := fmt.Sprintf("[%s] XTWINOPS response to PTY: %q (hex: % x)\n",
-								time.Now().Format("15:04:05.000"), string(data), data)
-							// Append to debug log file
-							if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-								_, _ = f.WriteString(debugMsg)
-								_ = f.Close()
-							}
-						}
-					}
-
-					// Write to PTY
-					w.ioMu.RLock()
-					if w.Pty != nil {
-						if _, err := w.Pty.Write(data); err != nil {
-							// Ignore write errors during I/O operations
-							_ = err
-						}
-					}
-					w.ioMu.RUnlock()
-				}
-			}
-		}
-	})
-}
-
-// ContentWidth returns the usable content width (excluding borders if not tiled).
-func (w *Window) ContentWidth() int {
-	if w.Tiled {
-		return max(w.Width, 1)
-	}
-	return max(w.Width-2, 1)
-}
-
-// ContentHeight returns the usable content height (excluding borders if not tiled).
-func (w *Window) ContentHeight() int {
-	if w.Tiled {
-		return max(w.Height, 1)
-	}
-	return max(w.Height-2, 1)
-}
-
-// BorderOffset returns the number of cells used by each border edge.
-// Returns 0 for tiled windows (no individual borders), 1 otherwise.
-func (w *Window) BorderOffset() int {
-	if w.Tiled {
-		return 0
-	}
-	return 1
-}
-
-// ScreenToTerminal converts screen coordinates (X, Y) to terminal-relative coordinates.
-// Returns the terminal X, Y and whether the coordinates are within the content area.
-func (w *Window) ScreenToTerminal(screenX, screenY int) (termX, termY int, ok bool) {
-	off := w.BorderOffset()
-	termX = screenX - w.X - off
-	termY = screenY - w.Y - off
-	ok = termX >= 0 && termY >= 0 && termX < w.ContentWidth() && termY < w.ContentHeight()
-	return
-}
-
-func (w *Window) Resize(width, height int) {
-	if w.Terminal == nil {
-		return
-	}
-
-	borderDeduct := 2
-	if w.Tiled {
-		borderDeduct = 0
-	}
-	termWidth := max(width-borderDeduct, 1)
-	termHeight := max(height-borderDeduct, 1)
-
-	// Check if size actually changed
-	sizeChanged := w.Width != width || w.Height != height
-
-	w.Terminal.Resize(termWidth, termHeight)
-	if w.Pty != nil {
-		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
-			_ = err
-		}
-		if w.CellPixelWidth > 0 && w.CellPixelHeight > 0 {
-			xpixel := termWidth * w.CellPixelWidth
-			ypixel := termHeight * w.CellPixelHeight
-			_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
-		}
-	} else if w.DaemonMode && w.DaemonResizeFunc != nil {
-		// In daemon mode, use the resize callback to notify the daemon
-		if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
-			_ = err // Acknowledge error but don't break functionality
-		}
-	}
-	w.Width = width
-	w.Height = height
-
-	// Mark both position and content dirty for resize operations
-	w.MarkPositionDirty()
-	w.MarkContentDirty()
-
-	// Trigger redraw if size changed to force applications to adapt
-	if sizeChanged && w.Pty != nil {
-		w.TriggerRedraw()
-	}
-}
-
-// ResizeVisual updates the window dimensions without triggering PTY resize.
-// This is used during mouse drag to provide immediate visual feedback while
-// deferring expensive PTY resize operations until the drag completes.
-// The terminal emulator dimensions are updated to ensure correct rendering.
-func (w *Window) ResizeVisual(width, height int) {
-	w.Width = width
-	w.Height = height
-
-	// Critical: Update terminal emulator dimensions so rendering uses correct bounds.
-	// This prevents the "stuck" height and dimension mismatch issues during drag.
-	// PTY resize is still deferred until mouse release (via pending resizes).
-	if w.Terminal != nil {
-		borderDeduct := 2
-		if w.Tiled {
-			borderDeduct = 0
-		}
-		termWidth := max(width-borderDeduct, 1)
-		termHeight := max(height-borderDeduct, 1)
-		w.Terminal.Resize(termWidth, termHeight)
-	}
-
-	w.MarkPositionDirty()
-	// Note: NOT marking ContentDirty to preserve cached content during drag
-	// This improves responsiveness during resize operations
-}
-
-// SetCellPixelDimensions sets the cell pixel dimensions for the window.
-// This is used to report accurate pixel dimensions to child processes via TIOCGWINSZ.
-// Call this after window creation with the host terminal's cell dimensions.
-func (w *Window) SetCellPixelDimensions(cellWidth, cellHeight int) {
-	w.CellPixelWidth = cellWidth
-	w.CellPixelHeight = cellHeight
-
-	w.Terminal.SetCellSize(cellWidth, cellHeight)
-
-	if w.Pty != nil && cellWidth > 0 && cellHeight > 0 {
-		termWidth := w.ContentWidth()
-		termHeight := w.ContentHeight()
-		xpixel := termWidth * cellWidth
-		ypixel := termHeight * cellHeight
-		_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
-	}
-}
-
-// waitForCmd waits for the command to exit, ensuring Wait() is only called once.
-// This prevents race conditions when both the process monitor goroutine and Close()
-// try to wait for the process.
-func (w *Window) waitForCmd() {
-	if w == nil || w.Cmd == nil {
-		return
-	}
-	w.cmdWaitOnce.Do(func() {
-		_ = w.Cmd.Wait() // Best effort, ignore error
-	})
-}
-
-// Close closes the window and cleans up resources.
-func (w *Window) Close() {
-	// Nil safety check
-	if w == nil {
-		return
-	}
-
-	// Disable terminal features before closing
-	w.disableTerminalFeatures()
-
-	// Stop daemon output writer goroutine if running
-	if w.outputDone != nil {
-		close(w.outputDone)
-		w.outputDone = nil
-	}
-	// Close output channel to unblock any pending writes
-	if w.outputChan != nil {
-		close(w.outputChan)
-		w.outputChan = nil
-	}
-
-	// Cancel all goroutines first
-	if w.cancelFunc != nil {
-		w.cancelFunc()
-		w.cancelFunc = nil
-	}
-
-	// Close PTY and Terminal to unblock I/O goroutines
-	// Must close both because:
-	// - PTY close unblocks the PTY->Terminal goroutine
-	// - Terminal close unblocks the Terminal->PTY goroutine (reads from emulator response pipe)
-	w.ioMu.Lock()
-	if w.Pty != nil {
-		_ = w.Pty.Close()
-		w.Pty = nil
-	}
-	if w.Terminal != nil {
-		_ = w.Terminal.Close()
-		w.Terminal = nil
-	}
-	w.ioMu.Unlock()
-
-	// Wait briefly for I/O goroutines (they should exit fast after PTY/Terminal close)
-	done := make(chan struct{})
-	go func() {
-		w.ioWg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(10 * time.Millisecond):
-	}
-
-	// Kill the process
-	if w.Cmd != nil && w.Cmd.Process != nil {
-		_ = w.Cmd.Process.Kill()
-		w.waitForCmd()
-		w.Cmd = nil
-	}
-
-	// Clear caches to free memory
-	w.CachedContent = ""
-	w.CachedLayer = nil
-	w.SelectedText = ""
-
-	// Clear copy mode to free memory
-	if w.CopyMode != nil {
-		w.CopyMode.SearchMatches = nil
-		w.CopyMode.SearchCache.Matches = nil
-		w.CopyMode = nil
-	}
-}
-
-// SendInput sends input to the window's terminal with enhanced error handling.
-func (w *Window) SendInput(input []byte) error {
-	if w == nil {
-		return fmt.Errorf("window is nil")
-	}
-
-	if len(input) == 0 {
-		return nil // Nothing to send
-	}
-
-	// In daemon mode, use the callback to send input to daemon PTY
-	if w.DaemonMode {
-		if w.DaemonWriteFunc == nil {
-			// Debug: this might be why input fails
-			if f, _ := os.OpenFile("/tmp/tuios-input-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); f != nil {
-				_, _ = fmt.Fprintf(f, "[%s] SendInput: DaemonWriteFunc is nil! PTYID=%s\n",
-					time.Now().Format("15:04:05.000"), w.PTYID)
-				_ = f.Close()
-			}
-			return fmt.Errorf("daemon write function not set")
-		}
-		return w.DaemonWriteFunc(input)
-	}
-
-	// Debug: Log all SendInput calls when debug mode is enabled
-	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		debugMsg := fmt.Sprintf("[%s] SendInput [%s] (%d bytes): %q (hex: % x)\n",
-			time.Now().Format("15:04:05.000"), w.ID[:8], len(input), string(input), input)
-		if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-			_, _ = f.WriteString(debugMsg)
-			_ = f.Close()
-		}
-	}
-
-	// Local mode - write directly to PTY
-	w.ioMu.RLock()
-	defer w.ioMu.RUnlock()
-
-	if w.Pty == nil {
-		return fmt.Errorf("no PTY available")
-	}
-
-	n, err := w.Pty.Write(input)
-	if err != nil {
-		return fmt.Errorf("failed to write to PTY: %w", err)
-	}
-
-	if n != len(input) {
-		return fmt.Errorf("partial write to PTY: wrote %d of %d bytes", n, len(input))
-	}
-
-	// Only mark as dirty - don't clear cache here for better input performance
-	// Cache will be invalidated during render if content actually changed
-	w.Dirty = true
-	w.ContentDirty = true
-
-	return nil
-}
-
-// MarkPositionDirty marks the window position as dirty.
-func (w *Window) MarkPositionDirty() {
-	w.Dirty = true
-	w.PositionDirty = true
-	// Position changes invalidate the cached layer but NOT the content cache
-	// This allows us to keep the expensive terminal content rendering
-	w.CachedLayer = nil
-	// DON'T clear w.CachedContent here - keep it for performance
-}
-
-// MarkContentDirty marks the window content as dirty.
-func (w *Window) MarkContentDirty() {
-	w.Dirty = true
-	w.ContentDirty = true
-	// Content changes invalidate both cached content and layer
-	w.CachedContent = ""
-	w.CachedLayer = nil
-}
-
-// ClearDirtyFlags clears all dirty flags.
-func (w *Window) ClearDirtyFlags() {
-	w.Dirty = false
-	w.ContentDirty = false
-	w.PositionDirty = false
-}
-
-// InvalidateCache invalidates the cached content.
-func (w *Window) InvalidateCache() {
-	w.CachedLayer = nil
-	w.CachedContent = ""
-}
-
-// ScrollbackLen returns the number of lines in the scrollback buffer.
-func (w *Window) ScrollbackLen() int {
-	if w.Terminal == nil {
-		return 0
-	}
-	return w.Terminal.ScrollbackLen()
-}
-
-// ScrollbackLine returns a line from the scrollback buffer at the given index.
-// Index 0 is the oldest line. Returns nil if index is out of bounds.
-func (w *Window) ScrollbackLine(index int) uv.Line {
-	if w.Terminal == nil {
-		return nil
-	}
-	return w.Terminal.ScrollbackLine(index)
-}
-
-// ClearScrollback clears the scrollback buffer.
-func (w *Window) ClearScrollback() {
-	if w.Terminal != nil {
-		w.Terminal.ClearScrollback()
-	}
-}
-
-// SetScrollbackMaxLines sets the maximum number of lines for the scrollback buffer.
-func (w *Window) SetScrollbackMaxLines(maxLines int) {
-	if w.Terminal != nil {
-		w.Terminal.SetScrollbackMaxLines(maxLines)
-	}
-}
-
-// EnterScrollbackMode enters scrollback viewing mode.
-func (w *Window) EnterScrollbackMode() {
-	w.ScrollbackMode = true
-	w.ScrollbackOffset = 0 // Start at the bottom (most recent scrollback)
-	w.InvalidateCache()
-}
-
-// ExitScrollbackMode exits scrollback viewing mode.
-func (w *Window) ExitScrollbackMode() {
-	w.ScrollbackMode = false
-	w.ScrollbackOffset = 0
-	w.InvalidateCache()
-}
-
-// ScrollUp scrolls up in the scrollback buffer.
-func (w *Window) ScrollUp(lines int) {
-	if !w.ScrollbackMode || w.Terminal == nil {
-		return
-	}
-
-	maxOffset := w.ScrollbackLen()
-	w.ScrollbackOffset = min(w.ScrollbackOffset+lines, maxOffset)
-	w.InvalidateCache()
-}
-
-// ScrollDown scrolls down in the scrollback buffer.
-func (w *Window) ScrollDown(lines int) {
-	if !w.ScrollbackMode {
-		return
-	}
-
-	w.ScrollbackOffset = max(w.ScrollbackOffset-lines, 0)
-	if w.ScrollbackOffset == 0 {
-		// If we scrolled all the way down, exit scrollback mode
-		w.ExitScrollbackMode()
-	} else {
-		w.InvalidateCache()
-	}
-}
-
-// EnterCopyMode enters vim-style copy/scrollback mode.
-// This replaces both ScrollbackMode and SelectionMode with a unified vim interface.
-func (w *Window) EnterCopyMode() {
-	if w.CopyMode == nil {
-		w.CopyMode = &CopyMode{}
-	}
-
-	w.CopyMode.Active = true
-	w.CopyMode.State = CopyModeNormal
-	w.CopyMode.CursorX = 0
-	w.CopyMode.CursorY = w.Height / 2 // Start in MIDDLE (vim-style)
-	w.CopyMode.ScrollOffset = 0       // Start at live content
-	w.CopyMode.SearchQuery = ""
-	w.CopyMode.SearchMatches = nil
-	w.CopyMode.CurrentMatch = 0
-	w.CopyMode.CaseSensitive = false
-	w.CopyMode.PendingGCount = false
-
-	// Sync with window scrollback
-	w.ScrollbackOffset = 0
-
-	w.InvalidateCache()
-}
-
-// ExitCopyMode exits copy mode and returns to normal terminal mode.
-func (w *Window) ExitCopyMode() {
-	if w.CopyMode != nil {
-		w.CopyMode.Active = false
-		w.CopyMode.State = CopyModeNormal
-		w.CopyMode.ScrollOffset = 0
-		// Clear search state
-		w.CopyMode.SearchQuery = ""
-		w.CopyMode.SearchMatches = nil
-		w.CopyMode.SearchCache.Valid = false
-	}
-
-	// CRITICAL: Return to live content (bottom of scrollback)
-	w.ScrollbackOffset = 0
-	w.InvalidateCache()
-}
-
-// EnableCallbacks re-enables VT emulator callbacks after state restoration.
-// This is used to prevent race conditions where buffered PTY output overwrites
-// restored state during daemon session reattachment.
-func (w *Window) EnableCallbacks() {
-	w.suppressCallbacks.Store(false)
-}
-
-// DisableCallbacks temporarily disables VT emulator callbacks.
-// This is used during state restoration to prevent race conditions.
-func (w *Window) DisableCallbacks() {
-	w.suppressCallbacks.Store(true)
 }

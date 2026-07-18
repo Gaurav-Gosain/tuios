@@ -10,6 +10,36 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
+// windowNeedsScrollbar reports whether window should show a scrollbar thumb.
+// It is the single source of truth shared by every render path (compositor
+// cached, sync-hold, redraw, and the fullscreen fast path) so they never
+// disagree about whether the thumb is present. It mirrors the eligibility in
+// renderScrollbarLayer minus the transient IsBeingManipulated check.
+func windowNeedsScrollbar(window *terminal.Window) bool {
+	if config.HideScrollbar || config.BorderStyle == "hidden" {
+		return false
+	}
+	if window.Terminal == nil || window.IsAltScreen() {
+		return false
+	}
+	// Tiled-borderless windows have no border column to host the thumb without
+	// covering content, and multi-pane shared-border layouts would clutter.
+	if window.Tiled && (!window.Zoomed || config.SharedBorders) {
+		return false
+	}
+	scrollbackLen := window.Terminal.ScrollbackLen()
+	if scrollbackLen <= 0 {
+		return false
+	}
+	contentH := window.ContentHeight()
+	if contentH <= 2 {
+		return false
+	}
+	totalLines := scrollbackLen + contentH
+	thumbHeight := max((contentH*contentH+totalLines-1)/totalLines, 1)
+	return thumbHeight < contentH
+}
+
 // renderScrollbarLayer creates a 1-column layer overlaying the right border
 // with a scrollbar indicator. Hidden during window manipulation, when the
 // scrollbar is disabled via config, or when the border style is "hidden"
@@ -24,7 +54,7 @@ func renderScrollbarLayer(window *terminal.Window, borderColor color.Color, zInd
 
 	// Hide scrollbar when the window is in alt screen (nvim, btop, etc.).
 	// Alt screen apps manage their own viewport and scrollback is not used.
-	if window.IsAltScreen {
+	if window.IsAltScreen() {
 		return nil
 	}
 

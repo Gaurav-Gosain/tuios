@@ -7,6 +7,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
+// ConfigReloadedMsg carries a config parsed by the file watcher goroutine so it
+// can be applied on the Bubble Tea goroutine. The watcher must not touch the
+// appearance globals directly (the render loop reads them concurrently); it
+// delivers this message via the program's Send instead, and Update applies it
+// with config.ApplyAppearanceConfig.
+type ConfigReloadedMsg struct {
+	Config *config.UserConfig
+}
+
 // CommandPaletteItem represents a single command in the command palette.
 type CommandPaletteItem struct {
 	Name     string // Display name: "Split Horizontal"
@@ -441,6 +450,23 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		// Session & Config
 		{
+			Name:     "Settings",
+			Shortcut: "prefix+,",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenSettings()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Theme Picker",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenThemePicker()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Reload Config",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -454,7 +480,9 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 					m.ShowNotification("Config error: "+err.Error(), "error", 0)
 					return m, nil
 				}
-				_ = newCfg // TODO: apply new config (keybinds, appearance)
+				// Runs on the Bubble Tea goroutine, so applying the appearance
+				// globals here is single-threaded and takes effect immediately.
+				config.ApplyAppearanceConfig(newCfg)
 				m.ShowNotification("Config reloaded", "success", 0)
 				return m, nil
 			},

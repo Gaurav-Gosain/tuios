@@ -5,8 +5,9 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // HelpBinding represents a single keybinding for the help menu
@@ -21,14 +22,6 @@ type HelpBinding struct {
 type HelpCategory struct {
 	Name     string        // Display name
 	Bindings []HelpBinding // Bindings in this category
-}
-
-// HelpDimensions holds fixed dimensions for consistent table rendering
-type HelpDimensions struct {
-	MaxKeyWidth      int // Maximum width of key column across ALL content
-	MaxActionWidth   int // Maximum width of action column across ALL content
-	MaxCategoryWidth int // Maximum width of category column (for search)
-	FixedRows        int // Fixed number of rows to always display (15)
 }
 
 // GetHelpCategories generates all help categories from the keybind registry
@@ -230,7 +223,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		"prefix_select_6", "prefix_select_7", "prefix_select_8", "prefix_select_9",
 		"prefix_toggle_tiling", "prefix_workspace", "prefix_minimize",
 		"prefix_window", "prefix_detach", "prefix_selection",
-		"prefix_help", "prefix_quit", "prefix_fullscreen",
+		"prefix_help", "prefix_quit", "prefix_fullscreen", "prefix_settings",
 	}
 
 	// Add debug commands (Leader Key + D ...)
@@ -301,105 +294,6 @@ func formatActionName(action string) string {
 	return strings.Join(parts, " ")
 }
 
-// formatKeysWithStyle styles individual key combos with pill-shaped background
-// Truncates to maxWidth to prevent table overflow
-func formatKeysWithStyle(keys []string, maxWidth int) string {
-	styledKeys := []string{}
-	currentWidth := 0
-
-	for _, key := range keys {
-		// Each pill adds: left_char(1) + " " + key + " " + right_char(1)
-		// Approximate styled width
-		styledWidth := len(key) + 4 // 2 for padding, 2 for pill chars
-
-		// Check if adding this key would exceed max width
-		if currentWidth > 0 {
-			styledWidth += 1 // Add space separator
-		}
-
-		if currentWidth+styledWidth > maxWidth && currentWidth > 0 {
-			// Would exceed, truncate here
-			styledKeys = append(styledKeys, "...")
-			break
-		}
-
-		// Create pill-style key badge
-		bgColor := "5" // Darker purple/magenta
-		fgColor := "0" // Black text
-
-		leftCircle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(bgColor)).
-			Render(config.GetWindowPillLeft())
-
-		keyLabel := lipgloss.NewStyle().
-			Background(lipgloss.Color(bgColor)).
-			Foreground(lipgloss.Color(fgColor)).
-			Render(" " + key + " ")
-
-		rightCircle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(bgColor)).
-			Render(config.GetWindowPillRight())
-
-		styledKeys = append(styledKeys, leftCircle+keyLabel+rightCircle)
-		currentWidth += styledWidth
-	}
-	return strings.Join(styledKeys, " ")
-}
-
-// CalculateHelpDimensions scans all categories and calculates fixed dimensions
-// This ensures all tables have consistent sizes and don't jump when switching tabs/searching
-func CalculateHelpDimensions(categories []HelpCategory) HelpDimensions {
-	dims := HelpDimensions{
-		MaxKeyWidth:      len("Keys"),     // Start with header width
-		MaxActionWidth:   len("Action"),   // Start with header width
-		MaxCategoryWidth: len("Category"), // Start with header width
-		FixedRows:        15,              // Always display 15 rows
-	}
-
-	// Scan ALL bindings in ALL categories to find maximum widths
-	for _, category := range categories {
-		// Check category name width for search results
-		if len(category.Name) > dims.MaxCategoryWidth {
-			dims.MaxCategoryWidth = len(category.Name)
-		}
-
-		for _, binding := range category.Bindings {
-			// Check keys width
-			keysStr := strings.Join(binding.Keys, ", ")
-			if len(keysStr) > dims.MaxKeyWidth {
-				dims.MaxKeyWidth = len(keysStr)
-			}
-
-			// Check action/description width
-			if len(binding.Description) > dims.MaxActionWidth {
-				dims.MaxActionWidth = len(binding.Description)
-			}
-		}
-	}
-
-	// Cap maximum widths to prevent table overflow
-	// Need to be conservative because search results have 3 columns
-	// Table border chars + padding add ~10-15 chars of overhead per column
-	// Target total width: ~100 chars to fit comfortably
-
-	// Keys column: shorter is better (most keys are concise)
-	if dims.MaxKeyWidth > 25 {
-		dims.MaxKeyWidth = 25
-	}
-
-	// Action column: medium width (descriptions can be longer)
-	if dims.MaxActionWidth > 45 {
-		dims.MaxActionWidth = 45
-	}
-
-	// Category column: short (category names are brief)
-	if dims.MaxCategoryWidth > 18 {
-		dims.MaxCategoryWidth = 18
-	}
-
-	return dims
-}
-
 // FuzzyMatch performs fuzzy matching on a string
 func FuzzyMatch(query, target string) (bool, []int) {
 	query = strings.ToLower(query)
@@ -456,13 +350,47 @@ func SearchBindings(query string, categories []HelpCategory) []HelpBinding {
 	return results
 }
 
-// RenderHelpMenu renders the new table-based help menu
-func (m *OS) RenderHelpMenu(width, height int) string {
-	categories := GetHelpCategories(m.KeybindRegistry)
+// Help overlay layout constants.
+const (
+	helpPanelInnerWidth = 74
+	helpVisibleRows     = 14
+	helpKeyColMax       = 30
+)
 
-	// Auto-select appropriate category based on mode
+// helpTabNames maps full category names to short tab labels.
+var helpTabNames = map[string]string{
+	"Window Management": "Windows",
+	"Workspaces":        "Workspaces",
+	"Layout":            "Layout",
+	"Tiling":            "Tiling",
+	"BSP":               "BSP",
+	"Copy Mode":         "Copy",
+	"Modes":             "Modes",
+	"Debug":             "Debug",
+	"Tape":              "Tape",
+	"Prefix":            "Prefix",
+	"Selection":         "Selection",
+	"System":            "System",
+	"Prefix Commands":   "Prefix",
+}
+
+func helpTabLabel(name string) string {
+	if short, ok := helpTabNames[name]; ok {
+		return short
+	}
+	return name
+}
+
+// RenderHelpMenu renders the keybindings overlay on the shared panel grammar.
+func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
+	categories := GetHelpCategories(m.KeybindRegistry)
+	if len(categories) == 0 {
+		return "", overlay.Geometry{}
+	}
+
+	// Auto-select an appropriate category based on mode when first opened.
 	if m.HelpCategory < 0 {
-		// Auto-select "Modes" category when opening from terminal mode
+		m.HelpCategory = 0
 		if m.Mode == TerminalMode {
 			for i, cat := range categories {
 				if cat.Name == "Modes" {
@@ -470,389 +398,151 @@ func (m *OS) RenderHelpMenu(width, height int) string {
 					break
 				}
 			}
-		} else {
-			m.HelpCategory = 0
 		}
 	}
-
-	// Ensure category index is valid
 	if m.HelpCategory >= len(categories) {
 		m.HelpCategory = len(categories) - 1
 	}
 
-	// Calculate FIXED dimensions for all tables
-	// This ensures tables NEVER change size when switching tabs or searching
-	dims := CalculateHelpDimensions(categories)
+	pal := theme.UI()
+	inSearch := m.HelpSearchMode
 
-	// Hide tabs when in search mode
-	showTabs := !m.HelpSearchMode
-	inSearchMode := m.HelpSearchMode && m.HelpSearchQuery != ""
-
-	// Render bindings table
-	var bindingsTable string
-	var rowCount int
-	if inSearchMode {
-		results := SearchBindings(m.HelpSearchQuery, categories)
-		bindingsTable, rowCount = renderSearchResults(results, m.HelpScrollOffset, dims)
-	} else if m.HelpSearchMode {
-		// Search mode but no query - render empty table with placeholder to maintain height
-		bindingsTable, rowCount = renderEmptySearchTable(dims)
+	var bindings []HelpBinding
+	showCategoryTag := false
+	if inSearch {
+		bindings = SearchBindings(m.HelpSearchQuery, categories)
+		showCategoryTag = true
 	} else {
-		if m.HelpCategory < len(categories) {
-			bindingsTable, rowCount = renderCategoryTable(categories[m.HelpCategory], m.HelpScrollOffset, dims)
+		bindings = categories[m.HelpCategory].Bindings
+	}
+
+	body := m.renderHelpBody(bindings, inSearch, showCategoryTag, pal)
+
+	panel := overlay.Panel{
+		Glyph: "", // keyboard
+		Title: "Keybindings",
+		Width: helpPanelInnerWidth,
+		Body:  body,
+		Hints: helpHints(inSearch),
+	}
+	if !inSearch {
+		panel.Tabs = make([]string, len(categories))
+		for i, cat := range categories {
+			panel.Tabs[i] = helpTabLabel(cat.Name)
 		}
+		panel.ActiveTab = m.HelpCategory
 	}
 
-	// Constrain scroll offset
-	maxScroll := max(rowCount-dims.FixedRows, 0)
-	if m.HelpScrollOffset > maxScroll {
-		m.HelpScrollOffset = maxScroll
-	}
-	if m.HelpScrollOffset < 0 {
-		m.HelpScrollOffset = 0
-	}
+	return panel.Render(pal)
+}
 
-	hasScrollIndicator := rowCount > dims.FixedRows
-
-	// Build content with EXACT same structure for all states
+// renderHelpBody builds the multi-line body: an optional search box, the
+// scrolling list of binding rows, and a scroll indicator, padded to a fixed
+// height so the panel never jumps.
+func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bool, pal overlay.Palette) string {
+	bg := pal.Surface
 	var lines []string
 
-	// Line 1-2: Tabs or Search box (2 lines total including blank)
-	if showTabs {
-		tabs := renderCategoryTabs(categories, m.HelpCategory)
-		centeredTabs := lipgloss.NewStyle().Width(85).Align(lipgloss.Center).Render(tabs)
-		lines = append(lines, centeredTabs, "")
+	if inSearch {
+		cursor := overlay.Style(bg).Foreground(pal.Accent).Render("█")
+		prompt := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("Search ") +
+			overlay.Style(bg).Foreground(pal.Fg).Render(m.HelpSearchQuery) + cursor
+		lines = append(lines, prompt, overlay.Rule(helpPanelInnerWidth, bg, pal))
+	}
+
+	// Clamp scroll to the row count.
+	maxScroll := max(len(bindings)-helpVisibleRows, 0)
+	m.HelpScrollOffset = max(0, min(m.HelpScrollOffset, maxScroll))
+
+	// Compute a stable key column width from the visible window.
+	keyColW := 0
+	end := min(m.HelpScrollOffset+helpVisibleRows, len(bindings))
+	for i := m.HelpScrollOffset; i < end; i++ {
+		w := lipgloss.Width(overlay.KeyBadges(bindings[i].Keys, bg, pal))
+		keyColW = max(keyColW, w)
+	}
+	keyColW = min(keyColW, helpKeyColMax)
+
+	if len(bindings) == 0 {
+		msg := "No matching keybindings"
+		if !inSearch {
+			msg = "No keybindings in this section"
+		}
+		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+msg))
+	}
+
+	rowCount := 0
+	for i := m.HelpScrollOffset; i < end; i++ {
+		lines = append(lines, helpBindingRow(bindings[i], keyColW, showCategoryTag, pal))
+		rowCount++
+	}
+	// Pad to a fixed number of rows so the panel height is stable.
+	for rowCount < helpVisibleRows {
+		lines = append(lines, overlay.Style(bg).Render(" "))
+		rowCount++
+	}
+
+	// Scroll indicator.
+	if len(bindings) > helpVisibleRows {
+		info := fmt.Sprintf("%d-%d of %d", m.HelpScrollOffset+1, end, len(bindings))
+		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+info))
 	} else {
-		searchBox := renderSearchBox(m.HelpSearchQuery)
-		centeredSearch := lipgloss.NewStyle().Width(85).Align(lipgloss.Center).Render(searchBox)
-		lines = append(lines, centeredSearch, "")
+		lines = append(lines, overlay.Style(bg).Render(" "))
 	}
 
-	// Line 3: Table (centered)
-	centeredTable := lipgloss.NewStyle().Width(85).Align(lipgloss.Center).Render(bindingsTable)
-	lines = append(lines, centeredTable)
-
-	// Line 4-5: Scroll indicator space (always 2 lines to maintain height)
-	if hasScrollIndicator {
-		scrollInfo := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")).
-			Italic(true).
-			Width(85).
-			Align(lipgloss.Center).
-			Render(fmt.Sprintf("Row %d-%d of %d", m.HelpScrollOffset+1, min(m.HelpScrollOffset+dims.FixedRows, rowCount), rowCount))
-		lines = append(lines, "", scrollInfo)
-	} else {
-		lines = append(lines, "", "") // Empty lines to maintain height
-	}
-
-	// Line 6-7: Footer (always 2 lines)
-	footer := renderHelpFooter(m.HelpSearchMode, hasScrollIndicator)
-	centeredFooter := lipgloss.NewStyle().Width(85).Align(lipgloss.Center).Render(footer)
-	lines = append(lines, "", centeredFooter)
-
-	helpContent := strings.Join(lines, "\n")
-
-	// Add border
-	helpBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("14")).
-		Padding(1, 2).
-		Render(helpContent)
-
-	// Center the entire box
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, helpBox)
+	return strings.Join(lines, "\n")
 }
 
-// renderCategoryTabs renders the category navigation tabs
-func renderCategoryTabs(categories []HelpCategory, activeIdx int) string {
-	if len(categories) == 0 {
-		return ""
+// helpBindingRow renders one keybinding row: key badges in a fixed-width gutter,
+// the description, and an optional right-aligned category tag (in search view).
+func helpBindingRow(b HelpBinding, keyColW int, showCategoryTag bool, pal overlay.Palette) string {
+	bg := pal.Surface
+	badges := overlay.KeyBadges(b.Keys, bg, pal)
+	bw := lipgloss.Width(badges)
+	if bw < keyColW {
+		badges += overlay.Style(bg).Render(strings.Repeat(" ", keyColW-bw))
 	}
 
-	// Shorter tab names to prevent wrapping
-	tabNames := map[string]string{
-		"Window Management": "Windows",
-		"Workspaces":        "Workspaces",
-		"Layout":            "Layout",
-		"Modes":             "Modes",
-		"Selection":         "Selection",
-		"System":            "System",
-		"Prefix Commands":   "Prefix",
+	// Reserve space for a right-aligned category tag when searching.
+	tag := ""
+	tagW := 0
+	if showCategoryTag && b.Category != "" {
+		label := helpTabLabel(b.Category)
+		tag = overlay.Style(bg).Foreground(pal.FgMute).Render(label)
+		tagW = lipgloss.Width(label) + 2
 	}
 
-	tabs := []string{}
-	for i, cat := range categories {
-		displayName := tabNames[cat.Name]
-		if displayName == "" {
-			displayName = cat.Name
+	descMax := helpPanelInnerWidth - keyColW - 2 - tagW
+	desc := b.Description
+	if descMax > 1 && lipgloss.Width(desc) > descMax {
+		desc = overlay.Truncate(desc, descMax)
+	}
+
+	line := badges + overlay.Style(bg).Render("  ") + overlay.Style(bg).Foreground(pal.Fg).Render(desc)
+	if tag != "" {
+		used := lipgloss.Width(line)
+		gap := helpPanelInnerWidth - used - lipgloss.Width(tag)
+		if gap > 0 {
+			line += overlay.Style(bg).Render(strings.Repeat(" ", gap)) + tag
 		}
-
-		var style lipgloss.Style
-		if i == activeIdx {
-			// Active tab
-			style = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("0")).
-				Background(lipgloss.Color("12")).
-				Padding(0, 1)
-		} else {
-			// Inactive tab
-			style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("8")).
-				Padding(0, 1)
-		}
-		tabs = append(tabs, style.Render(displayName))
 	}
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	return line
 }
 
-// renderSearchBox renders the search input box
-func renderSearchBox(query string) string {
-	searchLabel := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("11")).
-		Render("Search: ")
-
-	queryStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("15")).
-		Render(query + "█") // Blinking cursor effect
-
-	return searchLabel + queryStyle
-}
-
-// renderCategoryTable renders a table for a single category using FIXED dimensions
-// This ensures the table NEVER changes size regardless of content
-func renderCategoryTable(category HelpCategory, scrollOffset int, dims HelpDimensions) (string, int) {
-	// Build all rows with styled keys and gap rows for clarity
-	allRows := [][]string{}
-	for _, binding := range category.Bindings {
-		// Format keys with styling (each key gets purple background)
-		keysStr := formatKeysWithStyle(binding.Keys, dims.MaxKeyWidth)
-
-		// Truncate description to fit within max width
-		desc := binding.Description
-		if len(desc) > dims.MaxActionWidth {
-			desc = desc[:dims.MaxActionWidth-3] + "..."
-		}
-
-		// Add the actual row
-		allRows = append(allRows, []string{keysStr, desc})
-		// Add a gap row for visual separation
-		allRows = append(allRows, []string{"", ""})
-	}
-
-	totalRows := len(allRows)
-
-	// Apply scrolling
-	startIdx := scrollOffset
-	endIdx := scrollOffset + dims.FixedRows
-	if startIdx >= totalRows {
-		startIdx = max(totalRows-1, 0)
-	}
-	if endIdx > totalRows {
-		endIdx = totalRows
-	}
-
-	// Get visible rows
-	displayRows := [][]string{}
-	if startIdx < endIdx {
-		displayRows = allRows[startIdx:endIdx]
-	}
-
-	// ALWAYS pad to exactly FixedRows (15)
-	for len(displayRows) < dims.FixedRows {
-		displayRows = append(displayRows, []string{"", ""})
-	}
-
-	// Create table - allow vertical overflow for readability
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("12")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	actionStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	t := table.New().
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
-		Headers("Keys", "Action").
-		Rows(displayRows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == -1 {
-				return headerStyle
-			}
-			if col == 0 {
-				return keyStyle
-			}
-			return actionStyle
-		})
-
-	return t.Render(), totalRows
-}
-
-// renderEmptySearchTable renders an empty table with placeholder text to maintain fixed height
-func renderEmptySearchTable(dims HelpDimensions) (string, int) {
-	// Create empty rows to maintain fixed height
-	displayRows := [][]string{}
-	for i := 0; i < dims.FixedRows; i++ {
-		if i == dims.FixedRows/2 {
-			// Put placeholder in middle row
-			displayRows = append(displayRows, []string{"", "Type to search across all keybindings...", ""})
-		} else {
-			displayRows = append(displayRows, []string{"", "", ""})
+// helpHints returns the footer key hints for the current help mode.
+func helpHints(inSearch bool) []overlay.Hint {
+	if inSearch {
+		return []overlay.Hint{
+			{Key: "type", Label: "filter"},
+			{Key: "↑↓", Label: "scroll"},
+			{Key: "esc", Label: "clear"},
+			{Key: "?", Label: "close"},
 		}
 	}
-
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("12")).
-		Padding(0, 1)
-
-	placeholderStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("8")).
-		Italic(true).
-		Padding(0, 1).
-		Align(lipgloss.Center)
-
-	t := table.New().
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
-		Headers("Keys", "Action", "Category").
-		Rows(displayRows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == -1 {
-				return headerStyle
-			}
-			if col == 1 {
-				return placeholderStyle
-			}
-			return lipgloss.NewStyle().Padding(0, 1)
-		})
-
-	return t.Render(), 0
-}
-
-// renderSearchResults renders search results using FIXED dimensions
-// This ensures the table NEVER changes size regardless of content
-func renderSearchResults(results []HelpBinding, scrollOffset int, dims HelpDimensions) (string, int) {
-	// Build all rows with styled keys and gap rows for clarity
-	allRows := [][]string{}
-	for _, binding := range results {
-		// Format keys with styling (each key gets purple background)
-		keysStr := formatKeysWithStyle(binding.Keys, dims.MaxKeyWidth)
-
-		// Truncate description to fit within max width
-		desc := binding.Description
-		if len(desc) > dims.MaxActionWidth {
-			desc = desc[:dims.MaxActionWidth-3] + "..."
-		}
-
-		// Truncate category to fit
-		cat := binding.Category
-		if len(cat) > dims.MaxCategoryWidth {
-			cat = cat[:dims.MaxCategoryWidth-3] + "..."
-		}
-
-		// Add the actual row
-		allRows = append(allRows, []string{keysStr, desc, cat})
-		// Add a gap row for visual separation
-		allRows = append(allRows, []string{"", "", ""})
+	return []overlay.Hint{
+		{Key: "/", Label: "search"},
+		{Key: "←→", Label: "section"},
+		{Key: "↑↓", Label: "scroll"},
+		{Key: "?", Label: "close"},
 	}
-
-	totalRows := len(allRows)
-
-	// Apply scrolling
-	startIdx := scrollOffset
-	endIdx := scrollOffset + dims.FixedRows
-	if startIdx >= totalRows {
-		startIdx = max(totalRows-1, 0)
-	}
-	if endIdx > totalRows {
-		endIdx = totalRows
-	}
-
-	// Get visible rows
-	displayRows := [][]string{}
-	if startIdx < endIdx {
-		displayRows = allRows[startIdx:endIdx]
-	}
-
-	// ALWAYS pad to exactly FixedRows (15)
-	for len(displayRows) < dims.FixedRows {
-		displayRows = append(displayRows, []string{"", "", ""})
-	}
-
-	// Create table - allow vertical overflow for readability
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("12")).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	actionStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-
-	categoryStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("8")).
-		Padding(0, 1)
-
-	t := table.New().
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
-		Headers("Keys", "Action", "Category").
-		Rows(displayRows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == -1 {
-				return headerStyle
-			}
-			switch col {
-			case 0:
-				return keyStyle
-			case 1:
-				return actionStyle
-			case 2:
-				return categoryStyle
-			}
-			return lipgloss.NewStyle()
-		})
-
-	// Return just the table - no result count (to maintain consistent height)
-	// The scroll indicator will show the count
-	return t.Render(), totalRows
-}
-
-// renderHelpFooter renders the help menu footer with instructions
-func renderHelpFooter(searchMode bool, hasScroll bool) string {
-	var instructions []string
-
-	if searchMode {
-		instructions = []string{
-			"Type to search",
-			"Backspace: Delete",
-			"Esc: Clear/Exit",
-			"?: Close help",
-		}
-	} else {
-		instructions = []string{
-			"←/→: Navigate categories",
-			"/: Search",
-			"?: Close help",
-		}
-	}
-
-	if hasScroll {
-		instructions = append(instructions, "↑/↓: Scroll")
-	}
-
-	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("8")).
-		Italic(true)
-
-	return footerStyle.Render(strings.Join(instructions, "  •  "))
 }

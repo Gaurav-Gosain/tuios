@@ -1,5 +1,4 @@
 // Package vt provides a virtual terminal implementation.
-// SKIP: Fix typecheck errors - function signature mismatches and undefined types
 package vt
 
 import (
@@ -7,6 +6,7 @@ import (
 	"encoding/base64"
 	"image/color"
 	"io"
+	"strings"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -15,21 +15,13 @@ import (
 func (e *Emulator) handleOsc(cmd int, data []byte) {
 	e.flushGrapheme() // Flush any pending grapheme before handling OSC sequences.
 	if !e.handlers.handleOsc(cmd, data) {
-		if e.passthroughOSC && e.cb.Passthrough != nil {
-			// Build raw OSC sequence: ESC ] <data> ST
-			raw := make([]byte, 0, len(data)+4)
-			raw = append(raw, '\x1b', ']') // OSC introducer
-			raw = append(raw, data...)
-			raw = append(raw, '\x1b', '\\') // ST terminator
-			e.cb.Passthrough(raw)
-		} else {
-			e.logf("unhandled sequence: OSC %q", data)
-		}
+		e.logf("unhandled sequence: OSC %q", data)
 	}
 }
 
 func (e *Emulator) handleTitle(cmd int, data []byte) {
-	parts := bytes.Split(data, []byte{';'})
+	// Split on the first ';' only; titles may legitimately contain semicolons.
+	parts := bytes.SplitN(data, []byte{';'}, 2)
 	if len(parts) != 2 {
 		// Invalid, ignore
 		return
@@ -94,17 +86,17 @@ func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 			case 10: // Query foreground color
 				xrgb.Color = e.ForegroundColor()
 				if xrgb.Color != nil {
-					_, _ = io.WriteString(e.pw, ansi.SetForegroundColor(xrgb.String()))
+					_, _ = io.WriteString(e.pipe, ansi.SetForegroundColor(xrgb.String()))
 				}
 			case 11: // Query background color
 				xrgb.Color = e.BackgroundColor()
 				if xrgb.Color != nil {
-					_, _ = io.WriteString(e.pw, ansi.SetBackgroundColor(xrgb.String()))
+					_, _ = io.WriteString(e.pipe, ansi.SetBackgroundColor(xrgb.String()))
 				}
 			case 12: // Query cursor color
 				xrgb.Color = e.CursorColor()
 				if xrgb.Color != nil {
-					_, _ = io.WriteString(e.pw, ansi.SetCursorColor(xrgb.String()))
+					_, _ = io.WriteString(e.pipe, ansi.SetCursorColor(xrgb.String()))
 				}
 			}
 		} else if c := ansi.XParseColor(arg); c != nil {
@@ -270,7 +262,7 @@ func (e *Emulator) handlePaletteColor(data []byte) {
 			var xrgb ansi.XRGBColor
 			xrgb.Color = c
 			response := "\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + "\x1b\\"
-			_, _ = io.WriteString(e.pw, response)
+			_, _ = io.WriteString(e.pipe, response)
 		}
 	} else if c := ansi.XParseColor(arg); c != nil {
 		// Set: update the palette entry
@@ -296,11 +288,11 @@ func (e *Emulator) handleClipboard(data []byte) {
 			content := e.cb.ClipboardQuery(selection)
 			encoded := base64.StdEncoding.EncodeToString([]byte(content))
 			response := "\x1b]52;" + selection + ";" + encoded + "\x1b\\"
-			_, _ = io.WriteString(e.pw, response)
+			_, _ = io.WriteString(e.pipe, response)
 		} else {
 			// No callback - respond empty
 			response := "\x1b]52;" + selection + ";\x1b\\"
-			_, _ = io.WriteString(e.pw, response)
+			_, _ = io.WriteString(e.pipe, response)
 		}
 	} else {
 		// Set clipboard
@@ -323,4 +315,72 @@ func (e *Emulator) handleHyperlink(cmd int, data []byte) {
 
 	e.scr.cur.Link.URL = string(parts[1])
 	e.scr.cur.Link.Params = string(parts[2])
+}
+
+// handleNotify9 handles OSC 9 (iTerm2 desktop notification): "9;<msg>".
+func (e *Emulator) handleNotify9(data []byte) bool {
+	parts := strings.SplitN(string(data), ";", 2)
+	if len(parts) < 2 {
+		return true
+	}
+	msg := parts[1]
+	// OSC 9;4 is the ConEmu progress-report sequence, not a notification.
+	if strings.HasPrefix(msg, "4;") || strings.HasPrefix(msg, "4\a") {
+		return true
+	}
+	if e.cb.Notify != nil {
+		e.cb.Notify("", msg)
+	}
+	return true
+}
+
+// handleNotify777 handles OSC 777 (urxvt desktop notification):
+// "777;notify;<title>;<body>".
+func (e *Emulator) handleNotify777(data []byte) bool {
+	parts := strings.SplitN(string(data), ";", 4)
+	if len(parts) < 4 || parts[1] != "notify" {
+		return true
+	}
+	if e.cb.Notify != nil {
+		e.cb.Notify(parts[2], parts[3])
+	}
+	return true
+}
+
+// handleNotify99 handles OSC 99 (kitty desktop notification):
+// "99;<metadata>;<payload>". Metadata is a colon-separated list of key=val
+// pairs. This is a best-effort v1 parse: e=1 base64-decodes the payload,
+// p=title routes the payload as the title, and d=0 continuation chunks are
+// ignored rather than accumulated.
+func (e *Emulator) handleNotify99(data []byte) bool {
+	parts := strings.SplitN(string(data), ";", 3)
+	meta := map[string]string{}
+	if len(parts) >= 2 {
+		for kv := range strings.SplitSeq(parts[1], ":") {
+			if k, v, ok := strings.Cut(kv, "="); ok {
+				meta[k] = v
+			}
+		}
+	}
+	// d=0 signals more chunks follow; skip continuation chunks best-effort.
+	if meta["d"] == "0" {
+		return true
+	}
+	payload := ""
+	if len(parts) >= 3 {
+		payload = parts[2]
+	}
+	if meta["e"] == "1" {
+		if decoded, err := base64.StdEncoding.DecodeString(payload); err == nil {
+			payload = string(decoded)
+		}
+	}
+	title, body := "", payload
+	if meta["p"] == "title" {
+		title, body = payload, ""
+	}
+	if e.cb.Notify != nil {
+		e.cb.Notify(title, body)
+	}
+	return true
 }

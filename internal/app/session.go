@@ -95,7 +95,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 
 		state.Windows[i] = session.WindowState{
 			ID:           w.ID,
-			Title:        w.Title,
+			Title:        w.Title(),
 			CustomName:   w.CustomName,
 			X:            x,
 			Y:            y,
@@ -109,7 +109,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			PreMinimizeW: w.PreMinimizeWidth,
 			PreMinimizeH: w.PreMinimizeHeight,
 			PTYID:        w.PTYID,
-			IsAltScreen:  w.IsAltScreen, // Save alt screen state for mouse forwarding on restore
+			IsAltScreen:  w.IsAltScreen(), // Save alt screen state for mouse forwarding on restore
 		}
 	}
 
@@ -167,6 +167,16 @@ func convertBSPNode(node *layout.SerializedNode) *session.SerializedBSPNode {
 	}
 }
 
+// clampWorkspace returns a valid workspace index. Workspaces are 1-based and
+// SwitchToWorkspace refuses anything below 1, so a persisted or synced value of
+// 0 must be normalized to 1 to keep every workspace reachable.
+func clampWorkspace(ws int) int {
+	if ws < 1 {
+		return 1
+	}
+	return ws
+}
+
 // RestoreFromState restores the OS state from a SessionState.
 // This is called when attaching to an existing session.
 // The caller must set up PTY output handlers after calling this.
@@ -179,7 +189,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.LogInfo("[RESTORE] RestoreFromState: restoring %d windows", len(state.Windows))
 
 	m.SessionName = state.Name
-	m.CurrentWorkspace = state.CurrentWorkspace
+	// Clamp to a valid workspace: SwitchToWorkspace rejects workspace < 1, so a
+	// state carrying 0 (legacy, or a freshly created session with no windows)
+	// would strand every subsequently created window on an unreachable workspace.
+	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
 	m.Mode = Mode(state.Mode)
@@ -233,7 +246,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		window.PreMinimizeY = ws.PreMinimizeY
 		window.PreMinimizeWidth = ws.PreMinimizeW
 		window.PreMinimizeHeight = ws.PreMinimizeH
-		window.IsAltScreen = ws.IsAltScreen // Restore alt screen state for mouse event forwarding
+		window.SetAltScreen(ws.IsAltScreen) // Restore alt screen state for mouse event forwarding
 
 		// CRITICAL: Suppress callbacks during restoration to prevent race condition
 		// where buffered PTY output overwrites the restored IsAltScreen state
@@ -242,8 +255,9 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 
 		m.setupKittyPassthrough(window)
 		m.setupSixelPassthrough(window)
-	m.setupTextSizingPassthrough(window)
-	m.setupClipboardPassthrough(window)
+		m.setupTextSizingPassthrough(window)
+		m.setupClipboardPassthrough(window)
+		m.setupNotificationPassthrough(window)
 
 		m.Windows = append(m.Windows, window)
 		m.LogInfo("[RESTORE] Window %d created: DaemonMode=%v, PTYID=%s", i, window.DaemonMode, window.PTYID[:8])
@@ -387,9 +401,26 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// Update window list
 	m.Windows = newWindows
 
+	// MultifocusSet is keyed by window ID and survives the rebuild for windows
+	// that still exist; prune IDs no longer present in the synced window list.
+	if len(m.MultifocusSet) > 0 {
+		present := make(map[string]bool, len(m.Windows))
+		for _, w := range m.Windows {
+			present[w.ID] = true
+		}
+		for id := range m.MultifocusSet {
+			if !present[id] {
+				delete(m.MultifocusSet, id)
+			}
+		}
+		if len(m.MultifocusSet) == 0 {
+			m.MultifocusSet = nil
+		}
+	}
+
 	// Update global state
 	m.SessionName = state.Name
-	m.CurrentWorkspace = state.CurrentWorkspace
+	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
 
@@ -472,7 +503,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	sizeChanged := w.Width != ws.Width || w.Height != ws.Height
 
 	// Update all properties
-	w.Title = ws.Title
+	w.SetTitle(ws.Title)
 	w.CustomName = ws.CustomName
 	w.X = ws.X
 	w.Y = ws.Y
@@ -485,7 +516,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.PreMinimizeY = ws.PreMinimizeY
 	w.PreMinimizeWidth = ws.PreMinimizeW
 	w.PreMinimizeHeight = ws.PreMinimizeH
-	w.IsAltScreen = ws.IsAltScreen
+	w.SetAltScreen(ws.IsAltScreen)
 
 	if sizeChanged {
 		// Resize terminal emulator
@@ -539,12 +570,13 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	window.PreMinimizeY = ws.PreMinimizeY
 	window.PreMinimizeWidth = ws.PreMinimizeW
 	window.PreMinimizeHeight = ws.PreMinimizeH
-	window.IsAltScreen = ws.IsAltScreen
+	window.SetAltScreen(ws.IsAltScreen)
 
 	m.setupKittyPassthrough(window)
 	m.setupSixelPassthrough(window)
 	m.setupTextSizingPassthrough(window)
 	m.setupClipboardPassthrough(window)
+	m.setupNotificationPassthrough(window)
 
 	// Set up PTY handlers if we have a daemon client
 	if m.DaemonClient != nil {
@@ -668,7 +700,7 @@ func (m *OS) SyncDaemonPTYDimensions() {
 // For alt screen apps (vim, htop, etc.), this invalidates caches and triggers re-render.
 func (m *OS) TriggerAltScreenRedraws() {
 	for _, w := range m.Windows {
-		if w.DaemonMode && w.IsAltScreen {
+		if w.DaemonMode && w.IsAltScreen() {
 			// Invalidate all caches to force re-render from fresh state
 			w.InvalidateCache()
 			w.MarkContentDirty()
@@ -704,7 +736,7 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	}
 
 	// Set the window's IsAltScreen flag for mouse event forwarding
-	w.IsAltScreen = state.IsAltScreen
+	w.SetAltScreen(state.IsAltScreen)
 	m.LogInfo("Set window IsAltScreen=%v for window %s", state.IsAltScreen, w.ID[:8])
 
 	// For alt screen apps (vim, htop, etc.), DON'T restore cell content manually.
@@ -936,9 +968,10 @@ func (m *OS) AddDaemonWindow(title string) *OS {
 	termWidth := max(width-2, 1)
 	termHeight := max(height-2, 1)
 
-	// Create PTY in daemon
+	// Create PTY in daemon. newID is the window UUID, exported to the shell as
+	// TUIOS_WINDOW_ID.
 	m.LogInfo("[DAEMON] Calling CreatePTY(%s, %d, %d)", title, termWidth, termHeight)
-	ptyID, err := m.DaemonClient.CreatePTY(title, termWidth, termHeight)
+	ptyID, err := m.DaemonClient.CreatePTY(title, newID, termWidth, termHeight)
 	if err != nil {
 		m.LogError("[DAEMON] Failed to create PTY in daemon: %v", err)
 		return m
@@ -963,6 +996,7 @@ func (m *OS) AddDaemonWindow(title string) *OS {
 	m.setupSixelPassthrough(window)
 	m.setupTextSizingPassthrough(window)
 	m.setupClipboardPassthrough(window)
+	m.setupNotificationPassthrough(window)
 
 	// Set up the daemon write function for input
 	window.DaemonWriteFunc = func(data []byte) error {

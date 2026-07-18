@@ -79,6 +79,10 @@ func (m *OS) CompleteWindowAnimations(windowIndex int) {
 			anim.Window.Y = anim.EndY
 			anim.Window.Width = anim.EndWidth
 			anim.Window.Height = anim.EndHeight
+			// Invalidate the cached layer captured at the mid-animation position,
+			// matching animation.Update. Without this the window renders at its
+			// stale position until an unrelated event dirties it.
+			anim.Window.MarkPositionDirty()
 
 			// Mark as complete and remove
 			anim.Complete = true
@@ -109,6 +113,10 @@ func (m *OS) CompleteAllAnimations() {
 		anim.Window.Y = anim.EndY
 		anim.Window.Width = anim.EndWidth
 		anim.Window.Height = anim.EndHeight
+		// Invalidate the cached layer captured at the mid-animation position,
+		// matching animation.Update. Without this the window renders at its
+		// stale position until an unrelated event dirties it.
+		anim.Window.MarkPositionDirty()
 
 		// Mark as complete
 		anim.Complete = true
@@ -143,10 +151,11 @@ func (m *OS) UpdateAnimations() {
 				}
 			}
 
-			// Transition window to tiled mode after animation completes
+			// Transition window to tiled mode after animation completes. The
+			// snap resize above ran while Tiled was still false (bordered
+			// deduction); SetTiled re-syncs the emulator to the borderless size.
 			if anim.TileOnComplete && anim.Window != nil {
-				anim.Window.Tiled = true
-				anim.Window.InvalidateCache()
+				anim.Window.SetTiled(true)
 			}
 
 			if m.KittyPassthrough != nil && anim.Window != nil && anim.Window.Terminal != nil {

@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof" // registers /debug/pprof handlers on http.DefaultServeMux
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/pprof"
 	"syscall"
 	"time"
@@ -85,6 +89,13 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// Allow motion events while a floating overlay panel is being dragged.
+	// Overlay drags don't set os.Dragging, so without this the motion events
+	// that move the panel are filtered out and the drag never tracks.
+	if os.OverlayDragActive() {
+		return msg
+	}
+
 	// Allow motion events for scrollback browser drag-to-select
 	if os.ShowScrollbackBrowser {
 		return msg
@@ -121,6 +132,11 @@ func runLocal() error {
 		userConfig = config.DefaultConfig()
 	}
 
+	// Apply the config appearance globals as the baseline, then let CLI flags
+	// win. LoadUserConfig no longer applies globals itself, so this must run
+	// before ApplyOverrides (which only overrides the fields its flags cover).
+	config.ApplyAppearanceConfig(userConfig)
+
 	config.ApplyOverrides(config.Overrides{
 		ASCIIOnly:           asciiOnly,
 		BorderStyle:         borderStyle,
@@ -133,7 +149,7 @@ func runLocal() error {
 		ShowCPU:             showCPU,
 		ShowRAM:             showRAM,
 		SharedBorders:       sharedBorders,
-		ZoomMaxWidth:     zoomMaxWidth,
+		ZoomMaxWidth:        zoomMaxWidth,
 		ScrollbackLines:     scrollbackLines,
 		NoAnimations:        noAnimations,
 		ConfirmQuit:         confirmQuit,
@@ -157,6 +173,21 @@ func runLocal() error {
 		defer pprof.StopCPUProfile()
 	}
 
+	// Live profiling endpoint. Block/mutex profiling is sampled, not exhaustive:
+	// rate 1 samples every event and adds heavy overhead under load, which is not
+	// worth it for representative contention data. Output is not printed so it
+	// cannot corrupt the TUI on stdout.
+	if pprofAddr != "" {
+		runtime.SetBlockProfileRate(10000) // one sample per ~10us blocked
+		runtime.SetMutexProfileFraction(100)
+		go func() {
+			srv := &http.Server{Addr: pprofAddr, ReadHeaderTimeout: 5 * time.Second}
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("pprof server error: %v", err)
+			}
+		}()
+	}
+
 	app.SetInputHandler(input.HandleInput)
 
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
@@ -172,32 +203,36 @@ func runLocal() error {
 
 	initialOS := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
+		UserConfig:                userConfig,
 		ShowKeys:                  showKeys,
 		IsDaemonSession:           isDaemonSession,
 		EnableGraphicsPassthrough: true,
 	})
 	initialOS.PostRenderWriter = prw
 
-	// Start config file watcher for hot-reload
+	p := tea.NewProgram(
+		initialOS,
+		tea.WithFPS(config.MaxFPSCap),
+		tea.WithoutSignalHandler(),
+		tea.WithFilter(filterMouseMotion),
+		tea.WithOutput(prw),
+	)
+
+	// Start config file watcher for hot-reload. The watcher goroutine only
+	// parses the config; it must not apply the appearance globals directly
+	// because the render loop reads them concurrently. Delivery goes through
+	// p.Send so the apply happens on the Bubble Tea goroutine.
 	if configPath, err := config.GetConfigPath(); err == nil {
 		if watcher, err := config.NewWatcher(configPath, func(newConfig *config.UserConfig, err error) {
 			if err != nil {
 				log.Printf("Config reload error: %v", err)
 				return
 			}
-			_ = newConfig // Config watcher fires; manual reload via command palette applies changes
+			p.Send(app.ConfigReloadedMsg{Config: newConfig})
 		}); err == nil {
 			defer watcher.Stop()
 		}
 	}
-
-	p := tea.NewProgram(
-		initialOS,
-		tea.WithFPS(config.NormalFPS),
-		tea.WithoutSignalHandler(),
-		tea.WithFilter(filterMouseMotion),
-		tea.WithOutput(prw),
-	)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)

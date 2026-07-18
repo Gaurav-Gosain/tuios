@@ -163,7 +163,7 @@ func (c *Command) String() string {
 	case CommandTypeSleep:
 		return fmt.Sprintf("Sleep %v", c.Args)
 	case CommandTypeKeyCombo:
-		return fmt.Sprintf("%s", c.Args)
+		return strings.Join(c.Args, " ")
 	case CommandTypeSwitchWS:
 		return fmt.Sprintf("SwitchWorkspace %s", c.Args)
 	default:

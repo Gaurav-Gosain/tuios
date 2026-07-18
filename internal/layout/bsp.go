@@ -408,6 +408,14 @@ func (t *BSPTree) ApplyLayout(bounds Rect) map[int]Rect {
 		return result
 	}
 	t.applyLayoutRecursive(t.Root, bounds, result)
+	// Keep leaves that were grown to the minimum size within the root bounds, so
+	// a terminal too small to fit every pane pushes tiles back on-screen instead
+	// of off the edge.
+	for id, r := range result {
+		r.X = max(bounds.X, min(r.X, bounds.X+bounds.W-r.W))
+		r.Y = max(bounds.Y, min(r.Y, bounds.Y+bounds.H-r.H))
+		result[id] = r
+	}
 	return result
 }
 
@@ -512,21 +520,30 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		return
 	}
 
-	// Find a window in the left subtree to determine the split position
-	leftWindowID := t.findAnyWindowInSubtree(node.Left)
-	if leftWindowID == -1 {
-		return
-	}
-
-	leftRect, ok := windows[leftWindowID]
-	if !ok {
-		return
-	}
-
-	// Calculate the actual split ratio from window geometry
+	// Calculate the actual split ratio from window geometry.
 	if node.SplitType == SplitVertical {
-		// The right edge of left windows defines the split position
-		splitX := leftRect.X + leftRect.W
+		// The split boundary is the near edge of the right subtree's leftmost
+		// leaf, which sits flush against the divider. Reading node.Right gives
+		// the true boundary even when node.Left is itself split on this axis
+		// (its leftmost leaf would report an inner divider, not the boundary).
+		// Fall back to the left subtree's far edge only when the right subtree
+		// has no known geometry.
+		splitX, ok := -1, false
+		if id := t.findAnyWindowInSubtree(node.Right); id != -1 {
+			if r, found := windows[id]; found {
+				splitX, ok = r.X, true
+			}
+		}
+		if !ok {
+			if id := t.findAnyWindowInSubtree(node.Left); id != -1 {
+				if r, found := windows[id]; found {
+					splitX, ok = r.X+r.W, true
+				}
+			}
+		}
+		if !ok {
+			return
+		}
 		if bounds.W > 0 {
 			node.SplitRatio = float64(splitX-bounds.X) / float64(bounds.W)
 		}
@@ -536,8 +553,25 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		t.syncRatiosRecursive(node.Left, leftBounds, windows)
 		t.syncRatiosRecursive(node.Right, rightBounds, windows)
 	} else {
-		// The bottom edge of top windows defines the split position
-		splitY := leftRect.Y + leftRect.H
+		// The split boundary is the near (top) edge of the bottom subtree's
+		// topmost leaf. Fall back to the top subtree's bottom edge only when the
+		// bottom subtree has no known geometry.
+		splitY, ok := -1, false
+		if id := t.findAnyWindowInSubtree(node.Right); id != -1 {
+			if r, found := windows[id]; found {
+				splitY, ok = r.Y, true
+			}
+		}
+		if !ok {
+			if id := t.findAnyWindowInSubtree(node.Left); id != -1 {
+				if r, found := windows[id]; found {
+					splitY, ok = r.Y+r.H, true
+				}
+			}
+		}
+		if !ok {
+			return
+		}
 		if bounds.H > 0 {
 			node.SplitRatio = float64(splitY-bounds.Y) / float64(bounds.H)
 		}
@@ -609,13 +643,24 @@ func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitTyp
 		}
 		return SplitHorizontal
 
-	case SchemeAlternate, SchemeSpiral:
+	case SchemeAlternate:
 		// Alternate V, H, V, H based on total number of splits (internal nodes) in tree
 		// This gives a proper alternating pattern regardless of which window is split
 		splitCount := t.countInternalNodes()
 		// Even count (0, 2, 4...) = Vertical (left|right)
 		// Odd count (1, 3, 5...) = Horizontal (top/bottom)
 		if splitCount%2 == 0 {
+			return SplitVertical
+		}
+		return SplitHorizontal
+
+	case SchemeSpiral:
+		// bspwm-style spiral: alternate the split axis on the depth of the
+		// window being split, so repeatedly splitting the newest (deepest)
+		// window rotates V, H, V, H. Unlike SchemeAlternate this keys off the
+		// target node rather than the global split count, so splitting a
+		// shallower window follows that window's own depth parity.
+		if targetNode.Depth()%2 == 0 {
 			return SplitVertical
 		}
 		return SplitHorizontal
@@ -790,18 +835,50 @@ func (t *BSPTree) GetAllWindowIDs() []int {
 }
 
 // GetNextSplitDirection returns the direction of the next auto-split ("V" or "H")
-// based on the current tree state and auto scheme.
+// based on the current tree state and auto scheme. It mirrors determineAutoSplit
+// so the dock indicator agrees with the axis an auto-insert would actually pick.
 func (t *BSPTree) GetNextSplitDirection() string {
 	if t == nil {
 		return "V" // Default to vertical for empty tree
 	}
 
-	// For spiral/alternate schemes, based on internal node count
-	splitCount := t.countInternalNodes()
-	if splitCount%2 == 0 {
+	if t.AutoScheme == SchemeSpiral {
+		// Spiral alternates on the depth of the window being split. The next
+		// auto-insert splits the deepest (most recently split) leaf, so predict
+		// from that leaf's depth to stay consistent with determineAutoSplit.
+		if t.deepestLeafDepth()%2 == 0 {
+			return "V"
+		}
+		return "H"
+	}
+
+	// Alternate and the remaining schemes fall back to global split parity.
+	if t.countInternalNodes()%2 == 0 {
 		return "V" // Vertical split (left|right)
 	}
 	return "H" // Horizontal split (top/bottom)
+}
+
+// deepestLeafDepth returns the depth of the deepest leaf in the tree, or 0 if
+// the tree is empty. In a spiral workflow the next window splits the most
+// recently split (deepest) leaf, so its depth predicts the next split axis.
+func (t *BSPTree) deepestLeafDepth() int {
+	return maxLeafDepth(t.Root, 0)
+}
+
+func maxLeafDepth(node *TileNode, depth int) int {
+	if node == nil {
+		return 0
+	}
+	if node.IsLeaf() {
+		return depth
+	}
+	left := maxLeafDepth(node.Left, depth+1)
+	right := maxLeafDepth(node.Right, depth+1)
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func collectWindowIDs(node *TileNode, ids *[]int) {
@@ -814,149 +891,6 @@ func collectWindowIDs(node *TileNode, ids *[]int) {
 	}
 	collectWindowIDs(node.Left, ids)
 	collectWindowIDs(node.Right, ids)
-}
-
-// BuildTreeFromWindows creates a BSP tree from existing window geometries.
-// This is used when enabling tiling mode to create a tree that matches
-// the current window layout.
-func BuildTreeFromWindows(windows []Rect, windowIDs []int, bounds Rect, scheme AutoScheme) *BSPTree {
-	tree := NewBSPTree()
-	tree.AutoScheme = scheme
-
-	if len(windows) == 0 || len(windowIDs) == 0 {
-		return tree
-	}
-
-	if len(windows) != len(windowIDs) {
-		return tree
-	}
-
-	// For a single window, just create a leaf
-	if len(windows) == 1 {
-		tree.Root = NewLeafNode(windowIDs[0])
-		tree.WindowToNode[windowIDs[0]] = tree.Root
-		return tree
-	}
-
-	// Build tree by recursively partitioning windows
-	tree.Root = buildTreeRecursive(windows, windowIDs, bounds, tree)
-	return tree
-}
-
-// buildTreeRecursive builds a subtree from windows within the given bounds
-func buildTreeRecursive(windows []Rect, windowIDs []int, bounds Rect, tree *BSPTree) *TileNode {
-	if len(windows) == 0 {
-		return nil
-	}
-
-	if len(windows) == 1 {
-		node := NewLeafNode(windowIDs[0])
-		tree.WindowToNode[windowIDs[0]] = node
-		return node
-	}
-
-	// Try to find a split that partitions the windows
-	// First, try vertical split
-	splitX, leftWindows, leftIDs, rightWindows, rightIDs := findVerticalSplit(windows, windowIDs, bounds)
-	if len(leftWindows) > 0 && len(rightWindows) > 0 {
-		ratio := float64(splitX-bounds.X) / float64(bounds.W)
-		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-		rightBounds := Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
-
-		leftNode := buildTreeRecursive(leftWindows, leftIDs, leftBounds, tree)
-		rightNode := buildTreeRecursive(rightWindows, rightIDs, rightBounds, tree)
-		return NewInternalNode(SplitVertical, ratio, leftNode, rightNode)
-	}
-
-	// Try horizontal split
-	splitY, topWindows, topIDs, bottomWindows, bottomIDs := findHorizontalSplit(windows, windowIDs, bounds)
-	if len(topWindows) > 0 && len(bottomWindows) > 0 {
-		ratio := float64(splitY-bounds.Y) / float64(bounds.H)
-		topBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-		bottomBounds := Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
-
-		topNode := buildTreeRecursive(topWindows, topIDs, topBounds, tree)
-		bottomNode := buildTreeRecursive(bottomWindows, bottomIDs, bottomBounds, tree)
-		return NewInternalNode(SplitHorizontal, ratio, topNode, bottomNode)
-	}
-
-	// Can't partition cleanly - just take the first window
-	// This handles overlapping or irregular layouts
-	node := NewLeafNode(windowIDs[0])
-	tree.WindowToNode[windowIDs[0]] = node
-	return node
-}
-
-// findVerticalSplit finds a vertical split line that partitions windows into left and right groups
-func findVerticalSplit(windows []Rect, windowIDs []int, bounds Rect) (splitX int, leftWindows []Rect, leftIDs []int, rightWindows []Rect, rightIDs []int) {
-	// Collect all right edges as potential split points
-	splitCandidates := make(map[int]bool)
-	for _, w := range windows {
-		rightEdge := w.X + w.W
-		if rightEdge > bounds.X && rightEdge < bounds.X+bounds.W {
-			splitCandidates[rightEdge] = true
-		}
-	}
-
-	// Try each candidate split
-	for candidate := range splitCandidates {
-		var left, right []Rect
-		var leftI, rightI []int
-
-		for i, w := range windows {
-			center := w.X + w.W/2
-			if center < candidate {
-				left = append(left, w)
-				leftI = append(leftI, windowIDs[i])
-			} else {
-				right = append(right, w)
-				rightI = append(rightI, windowIDs[i])
-			}
-		}
-
-		// Valid split if both sides have windows
-		if len(left) > 0 && len(right) > 0 {
-			return candidate, left, leftI, right, rightI
-		}
-	}
-
-	return 0, nil, nil, nil, nil
-}
-
-// findHorizontalSplit finds a horizontal split line that partitions windows into top and bottom groups
-func findHorizontalSplit(windows []Rect, windowIDs []int, bounds Rect) (splitY int, topWindows []Rect, topIDs []int, bottomWindows []Rect, bottomIDs []int) {
-	// Collect all bottom edges as potential split points
-	splitCandidates := make(map[int]bool)
-	for _, w := range windows {
-		bottomEdge := w.Y + w.H
-		if bottomEdge > bounds.Y && bottomEdge < bounds.Y+bounds.H {
-			splitCandidates[bottomEdge] = true
-		}
-	}
-
-	// Try each candidate split
-	for candidate := range splitCandidates {
-		var top, bottom []Rect
-		var topI, bottomI []int
-
-		for i, w := range windows {
-			center := w.Y + w.H/2
-			if center < candidate {
-				top = append(top, w)
-				topI = append(topI, windowIDs[i])
-			} else {
-				bottom = append(bottom, w)
-				bottomI = append(bottomI, windowIDs[i])
-			}
-		}
-
-		// Valid split if both sides have windows
-		if len(top) > 0 && len(bottom) > 0 {
-			return candidate, top, topI, bottom, bottomI
-		}
-	}
-
-	return 0, nil, nil, nil, nil
 }
 
 // Clone creates a deep copy of the tree

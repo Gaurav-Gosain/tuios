@@ -12,6 +12,29 @@ import (
 
 var enabled bool
 
+// Border color overrides from user config. When non-nil they take precedence
+// over the theme-derived border colors. A single focused override applies to
+// both window-mode and terminal-mode focused borders.
+var (
+	borderFocusedOverride   color.Color
+	borderUnfocusedOverride color.Color
+)
+
+// SetBorderOverrides sets custom border colors from hex strings (e.g. "#89b4fa").
+// An empty string clears the corresponding override and restores the theme color.
+func SetBorderOverrides(focusedHex, unfocusedHex string) {
+	if focusedHex != "" {
+		borderFocusedOverride = lipgloss.Color(focusedHex)
+	} else {
+		borderFocusedOverride = nil
+	}
+	if unfocusedHex != "" {
+		borderUnfocusedOverride = lipgloss.Color(unfocusedHex)
+	} else {
+		borderUnfocusedOverride = nil
+	}
+}
+
 // Initialize sets up the theme registry with the specified theme name.
 // Call this once at application startup.
 // If themeName is empty, theming will be disabled and standard terminal colors will be used.
@@ -23,20 +46,20 @@ func Initialize(themeName string) error {
 	}
 
 	enabled = true
-	tint.NewDefaultRegistry()
 
-	// Load custom themes from user's themes directory
-	if themesDir, err := GetThemesDir(); err == nil {
-		if _, err := LoadCustomThemes(themesDir); err != nil {
-			log.Printf("Warning: error loading custom themes: %v", err)
-		}
-	}
+	// Build the tint registry (built-ins plus custom themes) exactly once for
+	// the process, via the same sync.Once EnsureRegistry uses. Calling
+	// tint.NewDefaultRegistry() directly here would let a later EnsureRegistry()
+	// (fired when the settings page or theme picker first opens) rebuild the
+	// global registry and reset the active tint to the library default,
+	// silently discarding the configured theme.
+	EnsureRegistry()
 
-	// Try to set the theme by ID
-	ok := tint.SetTintID(themeName)
-	if !ok {
-		// Theme not found, set to default
-		tint.SetTintID("default")
+	// Try to set the theme by ID. An unknown name leaves the registry on its
+	// current tint; warn so a typo is visible instead of silently applying the
+	// wrong palette. Behavior is otherwise unchanged (theming stays enabled).
+	if ok := tint.SetTintID(themeName); !ok {
+		log.Printf("Warning: theme %q not found; using default theme colors", themeName)
 	}
 
 	return nil
@@ -118,6 +141,9 @@ func TerminalCursor() color.Color {
 
 // BorderUnfocused returns the color for unfocused window borders.
 func BorderUnfocused() color.Color {
+	if borderUnfocusedOverride != nil {
+		return borderUnfocusedOverride
+	}
 	t := Current()
 	if t == nil {
 		return lipgloss.Color("#FAAAAA")
@@ -129,6 +155,9 @@ func BorderUnfocused() color.Color {
 
 // BorderFocusedWindow returns the color for focused window borders in window management mode.
 func BorderFocusedWindow() color.Color {
+	if borderFocusedOverride != nil {
+		return borderFocusedOverride
+	}
 	t := Current()
 	if t == nil {
 		return lipgloss.Color("#AFFFFF")
@@ -139,6 +168,9 @@ func BorderFocusedWindow() color.Color {
 
 // BorderFocusedTerminal returns the color for focused window borders in terminal mode.
 func BorderFocusedTerminal() color.Color {
+	if borderFocusedOverride != nil {
+		return borderFocusedOverride
+	}
 	t := Current()
 	if t == nil {
 		return lipgloss.Color("#AAFFAA")
@@ -247,30 +279,6 @@ func ButtonFg() color.Color {
 	return t.Black
 }
 
-// TimeOverlayBg returns the background color for the time overlay.
-func TimeOverlayBg() color.Color {
-	return lipgloss.Color("#1a1a2e")
-}
-
-// TimeOverlayFg returns the foreground color for the time overlay.
-func TimeOverlayFg() color.Color {
-	return lipgloss.Color("#a0a0b0")
-}
-
-// TimeOverlayPrefixActive returns the color for active prefix commands in the time overlay.
-func TimeOverlayPrefixActive() color.Color {
-	t := Current()
-	if t == nil {
-		return lipgloss.Color("#cd0000")
-	}
-	return t.Red
-}
-
-// TimeOverlayPrefixInactive returns the color for inactive prefix commands in the time overlay.
-func TimeOverlayPrefixInactive() color.Color {
-	return lipgloss.Color("#ffffff")
-}
-
 // WelcomeTitle returns the color for welcome screen titles.
 func WelcomeTitle() color.Color {
 	return lipgloss.Color("14") // Bright cyan
@@ -286,79 +294,9 @@ func WelcomeText() color.Color {
 	return lipgloss.Color("7") // White
 }
 
-// WelcomeHighlight returns the color for highlighted elements on the welcome screen.
-func WelcomeHighlight() color.Color {
-	return lipgloss.Color("6") // Cyan
-}
-
-// CacheStatsTitle returns the color for cache stats overlay titles.
-func CacheStatsTitle() color.Color {
-	return lipgloss.Color("14")
-}
-
-// CacheStatsLabel returns the color for cache stats overlay labels.
-func CacheStatsLabel() color.Color {
-	return lipgloss.Color("11")
-}
-
-// CacheStatsValue returns the color for cache stats overlay values.
-func CacheStatsValue() color.Color {
-	return lipgloss.Color("10")
-}
-
-// CacheStatsAccent returns the accent color for cache stats overlay.
-func CacheStatsAccent() color.Color {
-	return lipgloss.Color("13")
-}
-
-// LogViewerTitle returns the color for log viewer titles.
-func LogViewerTitle() color.Color {
-	return lipgloss.Color("14")
-}
-
-// LogViewerError returns the color for error messages in the log viewer.
-func LogViewerError() color.Color {
-	return lipgloss.Color("9")
-}
-
-// LogViewerWarn returns the color for warning messages in the log viewer.
-func LogViewerWarn() color.Color {
-	return lipgloss.Color("11")
-}
-
-// LogViewerInfo returns the color for info messages in the log viewer.
-func LogViewerInfo() color.Color {
-	return lipgloss.Color("10")
-}
-
-// LogViewerDebug returns the color for debug messages in the log viewer.
-func LogViewerDebug() color.Color {
-	return lipgloss.Color("12")
-}
-
 // LogViewerBg returns the background color for the log viewer.
 func LogViewerBg() color.Color {
 	return lipgloss.Color("#1a1a2a")
-}
-
-// WhichKeyTitle returns the color for which-key overlay titles.
-func WhichKeyTitle() color.Color {
-	return lipgloss.Color("11")
-}
-
-// WhichKeyText returns the color for which-key overlay text.
-func WhichKeyText() color.Color {
-	return lipgloss.Color("7")
-}
-
-// WhichKeyHighlight returns the highlight color for which-key overlay.
-func WhichKeyHighlight() color.Color {
-	return lipgloss.Color("#ff6b6b")
-}
-
-// WhichKeyBg returns the background color for which-key overlay.
-func WhichKeyBg() color.Color {
-	return lipgloss.Color("#1a1a2e")
 }
 
 // NotificationError returns the color for error notifications.
@@ -454,11 +392,6 @@ func HelpKeyBadge() color.Color {
 	return lipgloss.Color("5") // Purple/magenta
 }
 
-// HelpKeyBadgeBg returns the background color for key badges in help menu.
-func HelpKeyBadgeBg() color.Color {
-	return lipgloss.Color("0") // Black
-}
-
 // HelpGray returns the gray color for help menu elements.
 func HelpGray() color.Color {
 	return lipgloss.Color("8")
@@ -472,36 +405,6 @@ func HelpBorder() color.Color {
 // HelpTabActive returns the color for active tabs in help menu.
 func HelpTabActive() color.Color {
 	return lipgloss.Color("12")
-}
-
-// HelpTabInactive returns the color for inactive tabs in help menu.
-func HelpTabInactive() color.Color {
-	return lipgloss.Color("8")
-}
-
-// HelpTabBg returns the background color for tabs in help menu.
-func HelpTabBg() color.Color {
-	return lipgloss.Color("0")
-}
-
-// HelpSearchFg returns the foreground color for search in help menu.
-func HelpSearchFg() color.Color {
-	return lipgloss.Color("11")
-}
-
-// HelpSearchBg returns the background color for search in help menu.
-func HelpSearchBg() color.Color {
-	return lipgloss.Color("15")
-}
-
-// HelpTableHeader returns the color for table headers in help menu.
-func HelpTableHeader() color.Color {
-	return lipgloss.Color("12")
-}
-
-// HelpTableRow returns the color for table rows in help menu.
-func HelpTableRow() color.Color {
-	return lipgloss.Color("8")
 }
 
 // CLITableHeader returns the color for CLI table headers.

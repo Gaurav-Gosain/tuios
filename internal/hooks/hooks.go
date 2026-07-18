@@ -6,6 +6,7 @@ package hooks
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"slices"
@@ -87,7 +88,11 @@ func (m *Manager) LoadFromConfig(hookConfig map[string]any) {
 	m.hooks = make(map[Event][]string)
 
 	for key, val := range hookConfig {
-		event := Event(key)
+		event, ok := ParseEventName(key)
+		if !ok {
+			log.Printf("hooks: ignoring unknown event %q (valid events: %v)", key, AllEvents())
+			continue
+		}
 		switch v := val.(type) {
 		case string:
 			if v != "" {

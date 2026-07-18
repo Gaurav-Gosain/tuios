@@ -235,13 +235,21 @@ func (l *Lexer) NextToken() Token {
 
 			// Check if it's a duration (has a letter after the number)
 			if unicode.IsLetter(rune(l.ch)) {
-				var unitBuilder strings.Builder
+				var sb strings.Builder
+				sb.WriteString(num)
+				// Consume alternating unit/number runs so compound Go durations
+				// like 1m30s tokenize as a single duration rather than splitting.
 				for unicode.IsLetter(rune(l.ch)) {
-					unitBuilder.WriteByte(l.ch)
-					l.readChar()
+					for unicode.IsLetter(rune(l.ch)) {
+						sb.WriteByte(l.ch)
+						l.readChar()
+					}
+					if isDigit(l.ch) {
+						sb.WriteString(l.readNumberWithDecimal())
+					}
 				}
 				tok.Type = TokenDuration
-				tok.Literal = num + unitBuilder.String()
+				tok.Literal = sb.String()
 			} else {
 				tok.Type = TokenNumber
 				tok.Literal = num

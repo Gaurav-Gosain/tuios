@@ -287,12 +287,18 @@ func newModel(options Options) *Model {
 		}
 	}
 
+	// LoadUserConfig no longer applies the appearance globals itself, so apply
+	// them here (after the embed options above) exactly once, and pass the
+	// config into NewOS so it does not re-load and re-apply.
+	config.ApplyAppearanceConfig(userConfig)
+
 	// Create keybind registry
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	// Create the model using the factory function
 	return app.NewOS(app.OSOptions{
 		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
 		ShowKeys:        options.ShowKeys,
 		NumWorkspaces:   options.Workspaces,
 		Width:           options.Width,
@@ -336,6 +342,13 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// Allow motion events while a floating overlay panel is being dragged.
+	// Overlay drags don't set os.Dragging, so without this the motion events
+	// that move the panel would be filtered out and the drag would never track.
+	if os.OverlayDragActive() {
+		return msg
+	}
+
 	// Allow motion events for scrollback browser drag-to-select
 	if os.ShowScrollbackBrowser {
 		return msg
@@ -352,7 +365,7 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	// Allow motion events when in terminal mode with alt screen apps
 	if os.Mode == TerminalMode {
 		focusedWindow := os.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsAltScreen {
+		if focusedWindow != nil && focusedWindow.IsAltScreen() {
 			return msg
 		}
 	}

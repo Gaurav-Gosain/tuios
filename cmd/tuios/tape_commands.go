@@ -44,6 +44,11 @@ func runTapeInteractive(tapeFile string) error {
 		userConfig = config.DefaultConfig()
 	}
 
+	// LoadUserConfig no longer applies globals; apply the config appearance so
+	// tape playback honors the user's borders/dock/etc. Animations are forced
+	// off below for deterministic playback.
+	config.ApplyAppearanceConfig(userConfig)
+
 	if err := theme.Initialize(themeName); err != nil {
 		log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
 	}
@@ -52,8 +57,12 @@ func runTapeInteractive(tapeFile string) error {
 
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
+	// Force animations off for deterministic playback of hand-written tapes,
+	// matching recorded tapes (the recorder prepends DisableAnimations). Tapes
+	// can still re-enable them explicitly with EnableAnimations.
+	config.AnimationsEnabled = false
+
 	player := tape.NewPlayer(commands)
-	converter := tape.NewScriptMessageConverter()
 
 	initialOS := &app.OS{
 		FocusedWindow:        -1,
@@ -76,7 +85,6 @@ func runTapeInteractive(tapeFile string) error {
 		ScriptMode:           true,
 		ScriptPlayer:         player,
 		ScriptPaused:         false,
-		ScriptConverter:      converter,
 		ScriptExecutor:       tape.NewCommandExecutor(nil),
 	}
 
@@ -84,7 +92,7 @@ func runTapeInteractive(tapeFile string) error {
 
 	p := tea.NewProgram(
 		initialOS,
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.MaxFPSCap),
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(filterMouseMotion),
 	)

@@ -131,6 +131,55 @@ func TestParserSleepCommand(t *testing.T) {
 	}
 }
 
+func TestParserWaitAliasesSleep(t *testing.T) {
+	commands, errors := ParseFile("Wait 750ms")
+	if len(errors) != 0 {
+		t.Fatalf("Unexpected parse errors: %v", errors)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("Expected 1 command, got %d", len(commands))
+	}
+	cmd := commands[0]
+	if cmd.Type != CommandTypeWait {
+		t.Errorf("Expected CommandTypeWait, got %v", cmd.Type)
+	}
+	if cmd.Delay != 750*time.Millisecond {
+		t.Errorf("Expected delay 750ms, got %v", cmd.Delay)
+	}
+
+	// Wait without a duration is an error.
+	_, errors = ParseFile("Wait")
+	if len(errors) == 0 {
+		t.Error("Expected an error for Wait without a duration")
+	}
+}
+
+func TestParserWaitUntilRegex(t *testing.T) {
+	commands, errors := ParseFile(`WaitUntilRegex "\$" 3000`)
+	if len(errors) != 0 {
+		t.Fatalf("Unexpected parse errors: %v", errors)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("Expected 1 command, got %d", len(commands))
+	}
+	cmd := commands[0]
+	if cmd.Type != CommandTypeWaitUntilRegex {
+		t.Errorf("Expected CommandTypeWaitUntilRegex, got %v", cmd.Type)
+	}
+	if len(cmd.Args) != 2 || cmd.Args[0] != `$` || cmd.Args[1] != "3000" {
+		t.Errorf("Unexpected args: %v", cmd.Args)
+	}
+
+	// Default timeout: no numeric arg.
+	commands, errors = ParseFile(`WaitUntilRegex "done"`)
+	if len(errors) != 0 {
+		t.Fatalf("Unexpected parse errors: %v", errors)
+	}
+	if len(commands) != 1 || len(commands[0].Args) != 1 || commands[0].Args[0] != "done" {
+		t.Errorf("Unexpected parse result: %+v", commands)
+	}
+}
+
 func TestParserKeyCombo(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -375,6 +424,40 @@ Backspace@200ms 3`
 		if commands[i].Delay != expectedDelay {
 			t.Errorf("Command %d: expected delay %v, got %v", i, expectedDelay, commands[i].Delay)
 		}
+	}
+}
+
+func TestParserKeyComboNoPanic(t *testing.T) {
+	// A modifier with no trailing key must error rather than panic on the
+	// raw-byte index of an empty final token.
+	inputs := []string{"Ctrl", "Ctrl+", "Alt+", "Ctrl+Alt+"}
+
+	for _, in := range inputs {
+		t.Run(in, func(t *testing.T) {
+			commands, errors := ParseFile(in)
+			if len(errors) == 0 {
+				t.Errorf("expected a parse error for %q, got none", in)
+			}
+			if len(commands) != 0 {
+				t.Errorf("expected no commands for %q, got %d", in, len(commands))
+			}
+		})
+	}
+}
+
+func TestParserCompoundDuration(t *testing.T) {
+	commands, errors := ParseFile("Sleep 1m30s")
+	if len(errors) > 0 {
+		t.Fatalf("unexpected parse errors: %v", errors)
+	}
+	if len(commands) != 1 {
+		t.Fatalf("expected 1 command, got %d", len(commands))
+	}
+	if commands[0].Args[0] != "1m30s" {
+		t.Errorf("expected arg 1m30s, got %q", commands[0].Args[0])
+	}
+	if commands[0].Delay != 90*time.Second {
+		t.Errorf("expected delay 90s, got %v", commands[0].Delay)
 	}
 }
 

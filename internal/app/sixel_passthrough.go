@@ -87,12 +87,6 @@ type SixelPassthroughOptions struct {
 	Output *os.File
 }
 
-// NewSixelPassthrough creates a new SixelPassthrough using auto-detected
-// capabilities and os.Stdout for output.
-func NewSixelPassthrough() *SixelPassthrough {
-	return NewSixelPassthroughWithOptions(SixelPassthroughOptions{})
-}
-
 // NewSixelPassthroughWithOptions creates a new SixelPassthrough with custom
 // options. Use this in web mode to pass the sip session's PtySlave() so
 // sixel bytes flow through the same PTY as the browser's text output.
@@ -265,11 +259,16 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 		if contentHeight <= 0 {
 			contentHeight = info.Height
 		}
-		viewportTop := 0
-		if info.ScrollbackLen > contentHeight {
-			viewportTop = info.ScrollbackLen - info.ScrollOffset - contentHeight
-		}
-		viewportBottom := info.ScrollbackLen - info.ScrollOffset
+		// viewportTop is the absolute scrollback line at the top row of the
+		// content viewport, matching the kitty path
+		// (kitty_passthrough_placement.go). AbsoluteLine is also absolute
+		// (scrollbackLen+cursorY at placement time), so relativeY =
+		// AbsoluteLine - viewportTop is the on-screen row directly. The old
+		// formula subtracted an extra contentHeight, so once scrollback grew
+		// past the window height relativeY overshot by contentHeight and the
+		// bottom-edge guards hid the image.
+		viewportTop := info.ScrollbackLen - info.ScrollOffset
+		viewportBottom := viewportTop + contentHeight
 
 		for _, p := range placements {
 			// Check if placement matches current screen mode
@@ -533,7 +532,7 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 			win.ID,
 			cmd,
 			cursorX, cursorY, absLine,
-			win.IsAltScreen,
+			win.IsAltScreen(),
 			cw, ch,
 		)
 	})
