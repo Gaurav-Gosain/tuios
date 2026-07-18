@@ -48,11 +48,9 @@ type AppearanceConfig struct {
 	Theme               string `toml:"theme"`                 // Color theme name (e.g., dracula, nord, my-custom-theme)
 	SharedBorders       *bool  `toml:"shared_borders"`        // Share borders between adjacent tiled windows (default: false)
 	// Customization
-	Gap                  int    `toml:"gap"`                    // Gap in cells between tiled panes (default: 0)
 	BorderFocusedColor   string `toml:"border_focused_color"`   // Hex color for focused pane border (e.g., "#89b4fa")
 	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
 	WindowTitleFormat    string `toml:"window_title_format"`    // Format string for window titles: {title}, {index}, {cwd}
-	SeparatorStyle       string `toml:"separator_style"`        // Separator pill style: rounded (default), powerline, flat, none
 	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
 	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
 	MaxFPS               int    `toml:"max_fps"`                // Maximum render FPS (default: 60, max: 120)
@@ -520,6 +518,11 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	if !HideClock {
 		HideClock = cfg.Appearance.HideClock
 	}
+
+	// WindowTitleFormat defaults to empty, meaning the title is shown as-is.
+	// An empty string in the config also clears a previously set format on
+	// reload, which is why it is assigned unconditionally.
+	WindowTitleFormat = cfg.Appearance.WindowTitleFormat
 
 	// ZoomMaxWidth (0 = fullscreen)
 	if cfg.Appearance.ZoomMaxWidth > 0 {

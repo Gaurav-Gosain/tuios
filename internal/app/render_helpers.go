@@ -59,7 +59,9 @@ func isDefaultTitle(title, windowID string) bool {
 
 // getWindowTitle returns the display name for a window, truncated to fit within maxWidth.
 // Returns empty string if title should be hidden or doesn't fit.
-func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer string, maxWidth int) string {
+// position is the window's 1-based place in its workspace, used by the {index}
+// placeholder of appearance.window_title_format.
+func getWindowTitle(window *terminal.Window, position int, isRenaming bool, renameBuffer string, maxWidth int) string {
 	windowName := ""
 	if window.CustomName != "" {
 		windowName = window.CustomName
@@ -69,7 +71,13 @@ func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer strin
 	}
 
 	if isRenaming {
+		// While renaming, the buffer is the title: running it through the format
+		// would show the user something other than what they are typing.
 		windowName = renameBuffer + "_"
+	} else if windowName != "" || config.WindowTitleFormat != "" {
+		// A format that mentions only {index} or {cwd} still has something to
+		// say about a window whose title is empty.
+		windowName = config.FormatWindowTitle(windowName, position, window.CWD())
 	}
 
 	if windowName == "" {
@@ -95,7 +103,7 @@ func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer strin
 	return windowName
 }
 
-func addToBorder(content string, color color.Color, window *terminal.Window, isRenaming bool, renameBuffer string, isTiling bool) string {
+func addToBorder(content string, color color.Color, window *terminal.Window, position int, isRenaming bool, renameBuffer string, isTiling bool) string {
 	width := max(lipgloss.Width(content)-2, 0)
 	titlePos := config.WindowTitlePosition
 
@@ -133,7 +141,7 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 
 	windowName := ""
 	if titlePos != "hidden" {
-		windowName = getWindowTitle(window, isRenaming, renameBuffer, titleMaxWidth)
+		windowName = getWindowTitle(window, position, isRenaming, renameBuffer, titleMaxWidth)
 	}
 
 	borderStyle := style.Foreground(color)
@@ -610,4 +618,24 @@ func (m *OS) isPositionInSelection(window *terminal.Window, x, y int) bool {
 	} else {
 		return true
 	}
+}
+
+// workspacePosition returns the window's 1-based place among the windows of its
+// workspace, the same number the leader-digit shortcuts address it by. Returns
+// 0 for a window that is not in the list, which the title format renders as-is.
+func (m *OS) workspacePosition(window *terminal.Window) int {
+	position := 0
+	for _, w := range m.Windows {
+		if w.Workspace != window.Workspace {
+			continue
+		}
+		if m.AutoTiling && w.Minimized {
+			continue
+		}
+		position++
+		if w == window {
+			return position
+		}
+	}
+	return 0
 }
