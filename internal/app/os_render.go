@@ -1,12 +1,16 @@
 package app
 
-// MarkAllDirty marks all windows as dirty for re-rendering.
+// MarkAllDirty marks all windows as dirty for re-rendering. It goes through
+// MarkContentDirty so ContentDirty always implies the cached content string is
+// dropped; otherwise renderTerminal's unfocused early return would hand back
+// the stale cache and ClearDirtyFlags would then discard the repaint request.
 func (m *OS) MarkAllDirty() {
 	m.terminalMu.Lock()
 	defer m.terminalMu.Unlock()
 	for i := range m.Windows {
-		m.Windows[i].Dirty = true
-		m.Windows[i].ContentDirty = true
+		if m.Windows[i] != nil {
+			m.Windows[i].MarkContentDirty()
+		}
 	}
 	m.cachedViewContent = "" // Invalidate view cache
 }

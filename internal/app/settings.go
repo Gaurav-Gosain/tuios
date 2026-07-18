@@ -83,6 +83,12 @@ func (m *OS) applyTheme(name string) {
 	} else {
 		_ = theme.Initialize(name)
 	}
+	// Push the new palette into every emulator: SGR indexed colors resolve
+	// through the emulator's color table at render time, so without this the
+	// chrome recolors but terminal content keeps the old palette until fresh
+	// guest output arrives. MarkAllDirty then forces a repaint with dropped
+	// caches.
+	m.UpdateAllWindowThemes()
 	m.MarkAllDirty()
 }
 
