@@ -631,4 +631,3 @@ func logScrollBounds(screenHeight, totalLogs int) (logsPerPage, maxScroll int) {
 	maxScroll = max(totalLogs-logsPerPage, 0)
 	return logsPerPage, maxScroll
 }
-

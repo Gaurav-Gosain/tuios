@@ -992,9 +992,14 @@ func (p *PTY) GetTerminalState() *TerminalState {
 
 // CaptureContent renders the PTY's current screen (and optionally its
 // scrollback) to text from the daemon-side VT emulator. When ansi is true the
-// output keeps SGR escape sequences; otherwise it is plain text. This lets
-// capture-pane answer from daemon state with no TUI client attached, mirroring
-// the client-side OS.capturePane rendering.
+// output keeps SGR escape sequences; otherwise it is plain text.
+//
+// This is how capture-pane is answered, attached or not. It used to be answered
+// here only when nothing was attached and routed to the client otherwise, which
+// made the result of a read depend on whether someone happened to be watching.
+// The client's OS.capturePane is the same rendering of a VT emulator fed by the
+// same PTY, so there was nothing the round trip could add; it survives only as
+// the local scrollback browser's own reader.
 func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()

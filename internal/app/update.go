@@ -937,15 +937,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
 				return m, cmd
 			}
-		case "capture_pane":
-			notificationMsg = "Remote: capture-pane"
-			content, captureErr := m.capturePane(msg.WindowTarget, msg.Keys)
-			if captureErr != nil {
-				err = captureErr
-			} else if m.DaemonClient != nil {
-				_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "captured", map[string]any{"content": content})
-				return m, nil
-			}
+		// capture_pane never arrives here: the daemon renders the pane from its
+		// own VT emulator whether or not a client is attached, because that is
+		// the same rendering of the same PTY and routing it only added a way for
+		// the two to disagree.
 		case "set_config":
 			// Show what config is being changed
 			notificationMsg = fmt.Sprintf("Remote: set %s=%s", msg.ConfigPath, msg.ConfigValue)

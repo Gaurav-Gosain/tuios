@@ -2,7 +2,6 @@ package session
 
 import (
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -152,7 +151,7 @@ func (d *Daemon) handleSendKeys(cs *connState, msg *Message) error {
 	return nil
 }
 
-// handleCapturePane routes a capture-pane request to the TUI client.
+// handleCapturePane answers a capture-pane request from daemon state.
 func (d *Daemon) handleCapturePane(cs *connState, msg *Message) error {
 	var payload CapturePanePayload
 	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
@@ -164,49 +163,22 @@ func (d *Daemon) handleCapturePane(cs *connState, msg *Message) error {
 		return d.sendCommandResult(cs, payload.RequestID, false, "session not found")
 	}
 
-	// With no client attached, render the pane from the daemon-side VT emulator.
-	tuiClient := d.findTUIClient(session.ID)
-	if tuiClient == nil {
-		content, err := d.capturePaneDaemonSide(session, &payload)
-		if err != nil {
-			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
-		}
-		return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
-			RequestID: payload.RequestID,
-			Success:   true,
-			Message:   "captured",
-			Data:      map[string]any{"content": content},
-		})
+	// Always render the pane from the daemon-side VT emulator. This used to route
+	// to an attached client and answer here only when nothing was attached, which
+	// meant the same read returned a result produced by different code depending
+	// on whether someone was watching. Both were the same rendering of a VT
+	// emulator fed by the same PTY, so the round trip added a way to disagree and
+	// nothing else.
+	content, err := d.capturePaneDaemonSide(session, &payload)
+	if err != nil {
+		return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
 	}
-
-	remoteCmd := &RemoteCommandPayload{
-		RequestID:    payload.RequestID,
-		CommandType:  "capture_pane",
-		WindowTarget: payload.WindowTarget,
-	}
-	// Pack options into Keys field as a simple flag string
-	var flags []string
-	if payload.Scrollback {
-		flags = append(flags, "scrollback")
-	}
-	if payload.ANSI {
-		flags = append(flags, "ansi")
-	}
-	if len(flags) > 0 {
-		remoteCmd.Keys = strings.Join(flags, ",")
-	}
-
-	if err := d.sendMessage(tuiClient, MsgRemoteCommand, remoteCmd); err != nil {
-		return d.sendCommandResult(cs, payload.RequestID, false, fmt.Sprintf("failed to send to TUI: %v", err))
-	}
-
-	if cs.clientID != tuiClient.clientID {
-		d.pendingRequestsMu.Lock()
-		d.pendingRequests[payload.RequestID] = &pendingRequest{requester: cs, created: time.Now()}
-		d.pendingRequestsMu.Unlock()
-	}
-
-	return nil
+	return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
+		RequestID: payload.RequestID,
+		Success:   true,
+		Message:   "captured",
+		Data:      map[string]any{"content": content},
+	})
 }
 
 // handleSetConfig routes a config change to the TUI client attached to the session.
