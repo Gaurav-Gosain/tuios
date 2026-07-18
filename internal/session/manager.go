@@ -117,8 +117,11 @@ func (m *Manager) DeleteSession(name string) error {
 	delete(m.byID, session.ID)
 	m.mu.Unlock()
 
-	// Stop the session (outside lock to avoid deadlock)
+	// Stop the session (outside lock to avoid deadlock). Stop performs a final
+	// resurrection save, so remove the state file afterwards: an explicit kill
+	// is a deliberate teardown and must not leave the session resurrectable.
 	session.Stop()
+	RemoveResurrectionState(name)
 	return nil
 }
 

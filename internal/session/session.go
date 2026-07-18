@@ -50,6 +50,10 @@ type WindowState struct {
 	PreMinimizeH int    `json:"pre_minimize_h,omitempty"`
 	PTYID        string `json:"pty_id"`                  // Reference to daemon-managed PTY
 	IsAltScreen  bool   `json:"is_alt_screen,omitempty"` // Alternate screen buffer active (for mouse forwarding)
+	// Cwd is the working directory of the window's shell process, captured on the
+	// daemon side when saving resurrection state. On cold-start restore a fresh
+	// shell is respawned here. Empty for live state syncs (clients do not set it).
+	Cwd string `json:"cwd,omitempty"`
 }
 
 // SerializedBSPNode represents a BSP tree node for serialization
@@ -86,6 +90,12 @@ type SessionState struct {
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`
 	TilingScheme    int                        `json:"tiling_scheme,omitempty"` // Default auto-insertion scheme
+	// ResurrectionVersion tags the on-disk state schema. It is stamped by
+	// SaveSessionForResurrection (not by clients) and checked on load so that
+	// state written by a newer, incompatible tuios is archived rather than
+	// misinterpreted. Absent (0) means pre-versioning state, which is a
+	// structural subset of the current schema and loads fine.
+	ResurrectionVersion int `json:"resurrection_version,omitempty"`
 }
 
 // PTY represents a daemon-managed pseudo-terminal.
@@ -191,7 +201,7 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 
 	// Start periodic resurrection saving
 	session.stopResurrection = StartPeriodicSave(func() *SessionState {
-		return session.GetState()
+		return session.ResurrectionState()
 	})
 
 	return session, nil
@@ -202,6 +212,19 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 // non-nil, is invoked with the PTY ID when the process exits; it is set before
 // the monitor goroutine starts so it is always visible to monitorExit.
 func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
+	return s.createPTY(windowID, width, height, "", false, onExit)
+}
+
+// RestorePTY creates a fresh PTY for a resurrected window. It behaves like
+// CreatePTY but starts the shell in cwd (when that directory still exists) and
+// marks the shell as restored: the shell's environment carries TUIOS_RESTORED=1
+// and a one-line banner is written to the terminal so the user can see the
+// process is a freshly respawned shell, not the original long-lived one.
+func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
+	return s.createPTY(windowID, width, height, cwd, true, onExit)
+}
+
+func (s *Session) createPTY(windowID string, width, height int, cwd string, restored bool, onExit func(ptyID string)) (*PTY, error) {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
@@ -219,7 +242,14 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 
 	// Create command
 	cmd := exec.Command(shell)
-	cmd.Env = s.buildEnv(windowID)
+	cmd.Env = s.buildEnv(windowID, restored)
+	// Start a restored shell in its saved working directory when it still
+	// exists; otherwise fall back to the shell's default (inherited) directory.
+	if restored && cwd != "" {
+		if info, statErr := os.Stat(cwd); statErr == nil && info.IsDir() {
+			cmd.Dir = cwd
+		}
+	}
 
 	// Set up the command to use the PTY as controlling terminal
 	// This is required for interactive shells to work properly
@@ -237,6 +267,15 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 	// This maintains scrollback, screen content, cursor position across reconnects
 	terminal := vt.NewEmulator(width, height)
 	terminal.SetScrollbackMaxLines(10000) // Match default scrollback
+
+	// For a restored shell, seed the emulator with a one-line banner so the
+	// respawned process is clearly marked. This is written directly (before the
+	// reader/writer goroutines start) so it lands at the top of the screen ahead
+	// of the shell's first prompt; it only touches the daemon-side emulator and
+	// never the real PTY, so the shell is unaffected.
+	if restored {
+		_, _ = terminal.Write([]byte(restoredBanner(cwd)))
+	}
 
 	pty := &PTY{
 		ID:           id,
@@ -339,6 +378,26 @@ func (s *Session) GetState() *SessionState {
 	return &stateCopy
 }
 
+// ResurrectionState returns a copy of the session state enriched for on-disk
+// resurrection: each window's Cwd is filled from its live PTY process so a
+// cold-start restore can respawn the shell in the same directory. Clients never
+// send Cwd, so this daemon-side capture is the only source of it.
+func (s *Session) ResurrectionState() *SessionState {
+	state := s.GetState()
+	for i := range state.Windows {
+		ptyID := state.Windows[i].PTYID
+		if ptyID == "" {
+			continue
+		}
+		if pty := s.GetPTY(ptyID); pty != nil {
+			if cwd, ok := pty.ProcessCwd(); ok {
+				state.Windows[i].Cwd = cwd
+			}
+		}
+	}
+	return state
+}
+
 // UpdateState updates the session state.
 func (s *Session) UpdateState(state *SessionState) {
 	s.stateMu.Lock()
@@ -353,8 +412,8 @@ func (s *Session) Stop() {
 	if s.stopResurrection != nil {
 		s.stopResurrection()
 	}
-	// Final save before stopping
-	_ = SaveSessionForResurrection(s.GetState())
+	// Final save before stopping. Capture cwds while the shells are still alive.
+	_ = SaveSessionForResurrection(s.ResurrectionState())
 
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
@@ -426,7 +485,7 @@ func (s *Session) getShell() string {
 	return "/bin/sh"
 }
 
-func (s *Session) buildEnv(windowID string) []string {
+func (s *Session) buildEnv(windowID string, restored bool) []string {
 	env := os.Environ()
 
 	term := "xterm-256color"
@@ -446,8 +505,25 @@ func (s *Session) buildEnv(windowID string) []string {
 	if windowID != "" {
 		env = append(env, "TUIOS_WINDOW_ID="+windowID)
 	}
+	// Mark restored shells so the user's shell rc (and scripts) can react, and
+	// so the restore is observable without relying on the visual banner.
+	if restored {
+		env = append(env, "TUIOS_RESTORED=1")
+	}
 
 	return env
+}
+
+// restoredBanner returns the dim one-line notice written to a restored shell's
+// terminal emulator. cwd, when set, is included so the user sees where the
+// fresh shell was spawned.
+func restoredBanner(cwd string) string {
+	msg := "-- tuios: session restored, fresh shell"
+	if cwd != "" {
+		msg += " in " + cwd
+	}
+	msg += " --"
+	return "\x1b[2m" + msg + "\x1b[0m\r\n"
 }
 
 // PTY methods
@@ -739,6 +815,16 @@ func (p *PTY) Close() error {
 		return p.pty.Close()
 	}
 	return nil
+}
+
+// ProcessCwd returns the current working directory of the PTY's shell process.
+// The second return is false when it cannot be determined (process gone, or an
+// unsupported platform). Used to capture cwd for session resurrection.
+func (p *PTY) ProcessCwd() (string, bool) {
+	if p.cmd == nil || p.cmd.Process == nil {
+		return "", false
+	}
+	return processCwd(p.cmd.Process.Pid)
 }
 
 // IsExited returns true if the shell process has exited.
