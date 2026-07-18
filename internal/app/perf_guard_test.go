@@ -168,3 +168,67 @@ func TestRenderTerminalAllocationsDoNotScaleWithCells(t *testing.T) {
 		t.Fatalf("guard ceilings assume a grid far larger than %d cells", cells)
 	}
 }
+
+// TestCompositorSkipsCleanWindows answers the question the review asked: does
+// damage tracking limit work at 207x55, or does every frame redraw everything?
+//
+// It does limit it, at window granularity. Composing nine windows with one
+// dirty costs 137 allocations against 745 with all nine dirty, so the eight
+// idle panes are genuinely not re-rendered.
+//
+// What this test catches, and what it does not, was established by injection
+// rather than assumed, and the answer is worth writing down because it is not
+// the obvious one. There are three independent mechanisms that skip work for a
+// clean window: the compositor's clean-layer branch, the !needsRedraw test just
+// below it, and renderTerminal's own CachedContent branch. They are redundant
+// with each other. Disabling any single one of them moves this measurement by
+// nothing at all (137 allocations became 137, or 152 in one case) because
+// another catches the window first. Only disabling all three together takes it
+// to 517 and trips the assertion below.
+//
+// So this is a guard against damage tracking failing as a whole, not against
+// any one layer of it regressing. A change that breaks a single mechanism will
+// not be caught here, and the reason is redundancy in the code under test, not
+// weakness in the assertion: with the other two still standing, the work
+// genuinely is still being skipped.
+//
+// Note also what it does not claim. Damage tracking stops at the window
+// boundary: within a dirty window a single changed cell still re-renders every
+// cell, because the dirty signal is one boolean per window. That is measured by
+// BenchmarkDamageOneCellVsFullScreen, not asserted here.
+func TestCompositorSkipsCleanWindows(t *testing.T) {
+	const windows = 9
+
+	allDirty := benchOS(t, windows)
+	dirtyAll := testing.AllocsPerRun(10, func() {
+		for _, w := range allDirty.Windows {
+			w.MarkContentDirty()
+		}
+		_ = allDirty.GetCanvas(false)
+	})
+
+	oneDirty := benchOS(t, windows)
+	for _, w := range oneDirty.Windows {
+		w.MarkContentDirty()
+	}
+	_ = oneDirty.GetCanvas(false)
+	dirtyOne := testing.AllocsPerRun(10, func() {
+		oneDirty.Windows[0].MarkContentDirty()
+		_ = oneDirty.GetCanvas(false)
+	})
+
+	t.Logf("compose %d windows: all dirty %.0f allocs, one dirty %.0f allocs", windows, dirtyAll, dirtyOne)
+
+	if dirtyOne >= dirtyAll {
+		t.Fatalf("composing with one dirty window (%.0f allocs) costs no less than with all %d dirty (%.0f allocs): clean windows are being re-rendered",
+			dirtyOne, windows, dirtyAll)
+	}
+
+	// A single dirty pane out of nine should cost well under half of a full
+	// redraw. Anything approaching the full cost means the cache is being
+	// missed for reasons other than damage.
+	if dirtyOne > dirtyAll/2 {
+		t.Errorf("one dirty window costs %.0f allocs against %.0f for all %d: damage tracking is not limiting work as expected",
+			dirtyOne, dirtyAll, windows)
+	}
+}
