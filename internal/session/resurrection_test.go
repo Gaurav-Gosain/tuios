@@ -11,8 +11,7 @@ import (
 // BSP tree) and verifies every structural field survives a save/load cycle.
 func TestResurrectionRoundTripMultiWindowMultiWorkspace(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	original := &SessionState{
 		Name:             "multi",
@@ -106,8 +105,7 @@ func TestResurrectionRoundTripMultiWindowMultiWorkspace(t *testing.T) {
 // archived (not deleted, not fatal) and reported as an error.
 func TestLoadResurrectionCorruptFileArchived(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	path := filepath.Join(tmpDir, "broken.json")
 	if err := os.WriteFile(path, []byte("{ this is not valid json"), 0600); err != nil {
@@ -156,8 +154,7 @@ func TestLoadResurrectionCorruptFileArchived(t *testing.T) {
 // newer, incompatible schema is archived and refused.
 func TestLoadResurrectionIncompatibleVersionArchived(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	// Write a state file directly with a future version. Bypass Save (which
 	// would stamp the current version) by writing JSON by hand.
@@ -180,8 +177,7 @@ func TestLoadResurrectionIncompatibleVersionArchived(t *testing.T) {
 // the in-memory state has no version set (clients never set it).
 func TestSaveStampsCurrentVersion(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	state := &SessionState{Name: "stamp"} // ResurrectionVersion left at 0
 	if err := SaveSessionForResurrection(state); err != nil {
@@ -202,8 +198,7 @@ func TestSaveStampsCurrentVersion(t *testing.T) {
 
 func TestSaveAndLoadResurrection(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	state := &SessionState{
 		Name:             "test-session",
@@ -248,8 +243,7 @@ func TestSaveAndLoadResurrection(t *testing.T) {
 
 func TestListResurrectableSessions(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	// Save two sessions
 	_ = SaveSessionForResurrection(&SessionState{Name: "session-a"})
@@ -266,8 +260,7 @@ func TestListResurrectableSessions(t *testing.T) {
 
 func TestRemoveResurrectionState(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	_ = SaveSessionForResurrection(&SessionState{Name: "to-remove"})
 

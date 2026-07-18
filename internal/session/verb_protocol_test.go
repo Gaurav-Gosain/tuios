@@ -12,10 +12,16 @@ import (
 
 // startTestDaemon starts a real daemon listening on an isolated unix socket in a
 // temp XDG_RUNTIME_DIR, so it does not touch the developer's live daemon, socket,
-// or pid file. It returns the daemon and the socket path.
+// or pid file. Resurrection state is redirected to a temp directory too, because
+// the state dir is resolved at package init and cannot be redirected by setting
+// an environment variable; without this, every test that creates a session writes
+// a real state file into the developer's state directory. It returns the daemon
+// and the socket path.
 func startTestDaemon(t *testing.T) (*Daemon, string) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
+	t.Cleanup(useResurrectionDir(t.TempDir()))
 
 	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
 	if err := d.Start(); err != nil {
