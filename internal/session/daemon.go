@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -31,6 +32,10 @@ type Daemon struct {
 	pendingRequests   map[string]*pendingRequest
 	pendingRequestsMu sync.RWMutex
 
+	// events is the control-plane event hub backing the subscribe verb's event
+	// stream and the wait-for verb's blocking waits.
+	events *eventHub
+
 	// Goroutine tracking for clean shutdown
 	wg sync.WaitGroup
 
@@ -48,8 +53,15 @@ type Daemon struct {
 
 // pendingRequest tracks a routed command awaiting its result, with the time it
 // was created so cleanupLoop can expire stale entries.
+//
+// A request is delivered one of two ways when the TUI replies:
+//   - requester != nil: the result is forwarded to that connection as a normal
+//     MsgCommandResult (the binary control path).
+//   - resultCh != nil: the result is handed to a goroutine blocked in
+//     routeToTUISync (the JSON verb path), which then writes the JSON response.
 type pendingRequest struct {
 	requester *connState
+	resultCh  chan *CommandResultPayload
 	created   time.Time
 }
 
@@ -74,6 +86,15 @@ type connState struct {
 	mu               sync.Mutex
 	sessionID        string // Session they're attached to
 	ptySubscriptions map[string]struct{}
+
+	// Event stream state (JSON verb protocol). eventSub is the hub subscription
+	// once this connection has issued a subscribe verb; streaming guards against a
+	// second subscribe on the same connection; pendingStream hands the fresh
+	// subscription from the subscribe handler to the dispatch loop, which starts
+	// the streamer only after the ack response has been written.
+	eventSub      *eventSub
+	pendingStream *eventSub
+	streaming     bool
 
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
@@ -114,6 +135,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		cancel:             cancel,
 		clients:            make(map[string]*connState),
 		pendingRequests:    make(map[string]*pendingRequest),
+		events:             newEventHub(),
 		version:            cfg.Version,
 		disableAutoRestore: cfg.DisableAutoRestore,
 	}
@@ -122,7 +144,48 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		d.manager.SetSocketPath(cfg.SocketPath)
 	}
 
+	// Wire session lifecycle to the event hub: every session created through the
+	// manager gets an event sink that publishes to the hub, and creation/deletion
+	// raise session lifecycle events.
+	d.manager.SetSessionHooks(d.onSessionCreated, d.onSessionDeleted)
+
 	return d
+}
+
+// onSessionCreated installs a session's event sink and publishes a
+// session-created event. It runs on the manager's create hook.
+func (d *Daemon) onSessionCreated(s *Session) {
+	name := s.Name
+	s.SetEventSink(func(ev SessionEvent) {
+		d.events.publish(streamEvent{
+			Type:      ev.Type,
+			Session:   name,
+			Window:    ev.Window,
+			PTYID:     ev.PTYID,
+			Title:     ev.Title,
+			Bytes:     ev.Bytes,
+			Mode:      ev.Mode,
+			Enabled:   ev.Enabled,
+			Workspace: ev.Workspace,
+		})
+	})
+	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
+}
+
+// onSessionDeleted publishes a session-closed event and tells every client
+// attached to the session that it is gone. It runs on the manager's delete hook,
+// so every deletion path (the kill-session verb, the legacy kill message, and
+// any internal teardown) notifies clients through one place.
+//
+// Without this a killed session leaves its clients attached to nothing: their
+// PTYs are closed and their windows are gone, but the socket stays open, so the
+// client sits in a dead session with no way to learn what happened.
+func (d *Daemon) onSessionDeleted(s *Session) {
+	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name})
+	d.broadcastToSession(s.ID, MsgSessionEnded, &SessionEndedPayload{
+		SessionName: s.Name,
+		Reason:      "the session was terminated",
+	}, "")
 }
 
 // Start starts the daemon.
@@ -233,15 +296,24 @@ func (d *Daemon) shutdown() error {
 			log.Println("Warning: goroutine shutdown timed out after 5s, forcing shutdown")
 		}
 
+		// Stopping the manager stops every session, and each session's Stop
+		// writes its final resurrection state synchronously. When this returns,
+		// everything that will be persisted has been persisted.
 		d.manager.Shutdown()
 
-		socketPath := d.manager.SocketPath()
-		_ = os.Remove(socketPath)
-
+		// Unlinking the socket is deliberately the last thing the daemon does,
+		// after the final resurrection saves and after the pid file. It is the
+		// signal 'tuios kill-server' waits on, so anything ordered after it
+		// would make that signal a lie: a caller could observe the socket gone,
+		// start a new daemon, and race a write from the old one. Closing the
+		// listener is not a usable signal for the same reason, since it happens
+		// at the top of shutdown while state is still unsaved.
 		pidPath, err := GetPidFilePath()
 		if err == nil {
 			_ = os.Remove(pidPath)
 		}
+
+		_ = os.Remove(d.manager.SocketPath())
 
 		log.Println("Daemon shutdown complete")
 	})
@@ -310,6 +382,18 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	defer func() {
 		LogBasic("Client %s disconnected", clientID)
 
+		// Wake any per-connection background goroutines (the event streamer) so
+		// they observe the disconnect and unwind, and release a lingering event
+		// subscription if the streamer never started (e.g. the ack write failed).
+		cs.closeDone()
+		cs.mu.Lock()
+		sub := cs.eventSub
+		cs.eventSub = nil
+		cs.mu.Unlock()
+		if sub != nil {
+			d.events.unsubscribe(sub)
+		}
+
 		d.clientsMu.Lock()
 		delete(d.clients, clientID)
 		d.clientsMu.Unlock()
@@ -347,6 +431,17 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		_ = conn.Close()
 	}()
 
+	// Wrap the connection so the first byte can be inspected without consuming
+	// it from the binary read path. A JSON verb-protocol client sends a line
+	// starting with '{' (or leading whitespace); a binary client's first byte is
+	// the high byte of a big-endian length prefix, which is 0x00 or 0x01 for any
+	// frame under the 16MB cap and so never collides with '{' or whitespace.
+	br := bufio.NewReaderSize(conn, 64*1024)
+	if d.detectJSONClient(cs, br) {
+		d.handleJSONConnection(cs, br)
+		return
+	}
+
 	lastHeartbeat := time.Now()
 	for {
 		select {
@@ -360,7 +455,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		// Short deadline only detects the message boundary (for done/ctx
 		// checks); the body gets a longer deadline so a large payload cannot be
 		// cut mid-frame and desync framing.
-		msg, codecType, err := ReadMessageConn(conn, 100*time.Millisecond, 30*time.Second)
+		msg, codecType, err := ReadMessageBuffered(conn, br, 100*time.Millisecond, 30*time.Second)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return

@@ -13,8 +13,7 @@ import (
 // window's saved cwd, clearly marked as restored.
 func TestDaemonRestartRestoresWindows(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	cwd1 := t.TempDir()
 	cwd2 := t.TempDir()
@@ -93,8 +92,7 @@ func TestDaemonRestartRestoresWindows(t *testing.T) {
 // session that is already live.
 func TestDaemonRestoreSkipsLiveSession(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	d := NewDaemon(&DaemonConfig{})
 	defer d.manager.Shutdown()
@@ -154,8 +152,7 @@ func TestResurrectionStateCapturesCwd(t *testing.T) {
 // state so the session is not resurrectable afterwards.
 func TestKillRemovesResurrectionState(t *testing.T) {
 	tmpDir := t.TempDir()
-	resurrectionDirOverride = tmpDir
-	defer func() { resurrectionDirOverride = "" }()
+	defer useResurrectionDir(tmpDir)()
 
 	mgr := NewManager()
 	if _, err := mgr.CreateSession("doomed", &SessionConfig{}, 80, 24); err != nil {

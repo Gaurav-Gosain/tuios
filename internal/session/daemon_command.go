@@ -23,11 +23,26 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	}
 	LogBasic("Execute command: found session %s (ID=%s)", session.Name, session.ID)
 
-	// Find the TUI client attached to this session
+	// Find the TUI client attached to this session. When one is present the
+	// command is routed to it (unchanged behavior). With no client attached,
+	// structural verbs execute directly against daemon-owned state.
 	tuiClient := d.findTUIClient(session.ID)
 	if tuiClient == nil {
-		LogBasic("Execute command: no TUI client found for session %s", session.ID)
-		return d.sendCommandResult(cs, payload.RequestID, false, "no TUI client attached to session")
+		if payload.TapeScript != "" {
+			return d.sendCommandResult(cs, payload.RequestID, false,
+				"tape scripts require an attached client (the headless daemon has no renderer)")
+		}
+		onExit := func(ptyID string) { d.notifyPTYClosed(session.ID, ptyID) }
+		data, err := d.executeDaemonCommand(session, payload.CommandType, payload.Args, onExit)
+		if err != nil {
+			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
+		}
+		return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
+			RequestID: payload.RequestID,
+			Success:   true,
+			Message:   "command executed",
+			Data:      data,
+		})
 	}
 	LogBasic("Execute command: found TUI client %s", tuiClient.clientID)
 
@@ -78,10 +93,13 @@ func (d *Daemon) handleSendKeys(cs *connState, msg *Message) error {
 		return d.sendCommandResult(cs, payload.RequestID, false, "session not found")
 	}
 
-	// Find the TUI client attached to this session
+	// With no client attached, deliver the keys straight to the target PTY.
 	tuiClient := d.findTUIClient(session.ID)
 	if tuiClient == nil {
-		return d.sendCommandResult(cs, payload.RequestID, false, "no TUI client attached to session")
+		if err := d.sendKeysDaemonSide(session, &payload); err != nil {
+			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
+		}
+		return d.sendCommandResult(cs, payload.RequestID, true, "keys sent")
 	}
 
 	// Forward the command to the TUI client
@@ -121,9 +139,19 @@ func (d *Daemon) handleCapturePane(cs *connState, msg *Message) error {
 		return d.sendCommandResult(cs, payload.RequestID, false, "session not found")
 	}
 
+	// With no client attached, render the pane from the daemon-side VT emulator.
 	tuiClient := d.findTUIClient(session.ID)
 	if tuiClient == nil {
-		return d.sendCommandResult(cs, payload.RequestID, false, "no TUI client attached to session")
+		content, err := d.capturePaneDaemonSide(session, &payload)
+		if err != nil {
+			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
+		}
+		return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
+			RequestID: payload.RequestID,
+			Success:   true,
+			Message:   "captured",
+			Data:      map[string]any{"content": content},
+		})
 	}
 
 	remoteCmd := &RemoteCommandPayload{
@@ -169,10 +197,13 @@ func (d *Daemon) handleSetConfig(cs *connState, msg *Message) error {
 		return d.sendCommandResult(cs, payload.RequestID, false, "session not found")
 	}
 
-	// Find the TUI client attached to this session
+	// Find the TUI client attached to this session. set_config changes live
+	// appearance, which only a renderer can apply, so headless it is refused
+	// with a clear message rather than silently dropped.
 	tuiClient := d.findTUIClient(session.ID)
 	if tuiClient == nil {
-		return d.sendCommandResult(cs, payload.RequestID, false, "no TUI client attached to session")
+		return d.sendCommandResult(cs, payload.RequestID, false,
+			"set-config requires an attached client (appearance changes need a renderer)")
 	}
 
 	// Forward the command to the TUI client
@@ -223,6 +254,17 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	}
 	d.pendingRequestsMu.Unlock()
 
+	// Deliver to a JSON verb handler blocked in routeToTUISync, if any.
+	if found && pending != nil && pending.resultCh != nil {
+		result := payload
+		select {
+		case pending.resultCh <- &result:
+		default:
+			// The waiter already gave up (timeout/disconnect); drop the result.
+		}
+		return nil
+	}
+
 	// Forward the result to the original requester
 	if found && pending != nil && pending.requester != nil {
 		requester := pending.requester
@@ -231,6 +273,46 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	}
 
 	return nil
+}
+
+// routeToTUISync sends a remote command to an attached TUI and blocks until the
+// TUI replies with its result, a timeout elapses, or the daemon shuts down. It
+// is the synchronous bridge the JSON verb front-end uses so a control verb that
+// must be handled by the live renderer (WM keys, structural changes, live config)
+// still returns a single request/response over the JSON connection. requestID
+// must be unique per in-flight call.
+func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCommandPayload, timeout time.Duration) (*CommandResultPayload, error) {
+	// Stamp the request ID onto the outgoing command so the TUI echoes it back on
+	// its result and handleCommandResult can match it to this pending waiter.
+	cmd.RequestID = requestID
+
+	ch := make(chan *CommandResultPayload, 1)
+
+	d.pendingRequestsMu.Lock()
+	d.pendingRequests[requestID] = &pendingRequest{resultCh: ch, created: time.Now()}
+	d.pendingRequestsMu.Unlock()
+
+	clearPending := func() {
+		d.pendingRequestsMu.Lock()
+		delete(d.pendingRequests, requestID)
+		d.pendingRequestsMu.Unlock()
+	}
+
+	if err := d.sendMessage(tui, MsgRemoteCommand, cmd); err != nil {
+		clearPending()
+		return nil, fmt.Errorf("failed to reach the attached client: %w", err)
+	}
+
+	select {
+	case res := <-ch:
+		return res, nil
+	case <-time.After(timeout):
+		clearPending()
+		return nil, fmt.Errorf("timed out waiting for the attached client")
+	case <-d.ctx.Done():
+		clearPending()
+		return nil, fmt.Errorf("daemon shutting down")
+	}
 }
 
 // findTargetSession finds a session by name, or returns the most recently active session.
@@ -316,61 +398,8 @@ func (d *Daemon) handleQueryWindows(cs *connState, msg *Message) error {
 		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
 	}
 
-	// Get state from session (daemon stores this)
-	state := session.GetState()
-
-	// Build window list from state
-	windows := make([]map[string]any, 0, len(state.Windows))
-	for i, w := range state.Windows {
-		displayName := w.Title
-		if w.CustomName != "" {
-			displayName = w.CustomName
-		}
-
-		winInfo := map[string]any{
-			"window_id":    w.ID,
-			"index":        i,
-			"title":        w.Title,
-			"display_name": displayName,
-			"workspace":    w.Workspace,
-			"minimized":    w.Minimized,
-			"focused":      w.ID == state.FocusedWindowID,
-			"x":            w.X,
-			"y":            w.Y,
-			"width":        w.Width,
-			"height":       w.Height,
-		}
-		if w.CustomName != "" {
-			winInfo["custom_name"] = w.CustomName
-		}
-		windows = append(windows, winInfo)
-	}
-
-	// Count windows per workspace
-	workspaceWindows := make([]int, 9) // Assume 9 workspaces
-	for _, w := range state.Windows {
-		if w.Workspace >= 1 && w.Workspace <= 9 {
-			workspaceWindows[w.Workspace-1]++
-		}
-	}
-
-	// Find focused index
-	focusedIndex := -1
-	for i, w := range state.Windows {
-		if w.ID == state.FocusedWindowID {
-			focusedIndex = i
-			break
-		}
-	}
-
-	resultData := map[string]any{
-		"windows":           windows,
-		"total":             len(state.Windows),
-		"focused_index":     focusedIndex,
-		"focused_window_id": state.FocusedWindowID,
-		"current_workspace": state.CurrentWorkspace,
-		"workspace_windows": workspaceWindows,
-	}
+	// Get state from session (daemon stores this) and build the window list.
+	resultData := buildWindowListData(session.GetState())
 
 	return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
 		RequestID: payload.RequestID,
@@ -394,32 +423,9 @@ func (d *Daemon) handleQuerySession(cs *connState, msg *Message) error {
 		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
 	}
 
-	// Get state from session
-	state := session.GetState()
-
-	// Check if TUI is attached
-	tuiClient := d.findTUIClient(session.ID)
-	hasClient := tuiClient != nil
-
-	// Build session info from state
-	tilingMode := "floating"
-	if state.AutoTiling {
-		tilingMode = "tiling"
-	}
-
-	resultData := map[string]any{
-		"session_name":      state.Name,
-		"session_id":        session.ID,
-		"mode":              "unknown", // Can't know mode without TUI
-		"current_workspace": state.CurrentWorkspace,
-		"num_workspaces":    9, // Default
-		"window_count":      len(state.Windows),
-		"tiling_mode":       tilingMode,
-		"master_ratio":      state.MasterRatio,
-		"width":             state.Width,
-		"height":            state.Height,
-		"tui_attached":      hasClient,
-	}
+	// Build session info from state, noting whether a TUI is attached.
+	hasClient := d.findTUIClient(session.ID) != nil
+	resultData := buildSessionInfoData(session, session.GetState(), hasClient)
 
 	return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
 		RequestID: payload.RequestID,

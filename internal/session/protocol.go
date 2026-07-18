@@ -136,6 +136,12 @@ type NewPayload struct {
 	SessionName string `json:"session_name,omitempty"` // Desired session name (auto-generated if empty)
 	Width       int    `json:"width"`                  // Initial terminal width
 	Height      int    `json:"height"`                 // Initial terminal height
+	// Detach requests a headless session: the daemon spawns an initial window
+	// with no client attached, so the session is immediately usable by control
+	// verbs. Additive and backward compatible; older daemons ignore it and
+	// simply create an empty session. Zero value keeps the pre-existing
+	// "create an empty session" behavior.
+	Detach bool `json:"detach,omitempty"`
 }
 
 // SessionInfo describes a single session for listing.
@@ -163,6 +169,15 @@ type KillPayload struct {
 // ResurrectPayload requests restoring a saved session on demand.
 type ResurrectPayload struct {
 	SessionName string `json:"session_name"` // Session to resurrect from saved state
+}
+
+// SessionEndedPayload tells an attached client that its session was terminated.
+// It is sent on MsgSessionEnded, a message type that has existed since the first
+// protocol version but had no payload defined, so both fields are optional and
+// an older client that ignores the message is unaffected.
+type SessionEndedPayload struct {
+	SessionName string `json:"session_name,omitempty"` // Session that ended
+	Reason      string `json:"reason,omitempty"`       // Short human explanation
 }
 
 // ResizePayload notifies of terminal resize.
@@ -517,6 +532,32 @@ func ReadMessageConn(conn net.Conn, boundaryTimeout, bodyTimeout time.Duration) 
 	}
 
 	return readMessageBody(conn, totalLen)
+}
+
+// ReadMessageBuffered reads a framed binary message the same way as
+// ReadMessageConn, but reads the bytes from r (typically a *bufio.Reader
+// wrapping conn) while still applying the split boundary/body deadlines to conn.
+// The daemon wraps each accepted connection in a bufio.Reader to peek the first
+// byte for JSON-versus-binary detection, so the binary read loop must continue
+// through that same buffered reader rather than reading conn directly.
+func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration) (*Message, CodecType, error) {
+	_ = conn.SetReadDeadline(time.Now().Add(boundaryTimeout))
+
+	var totalLen uint32
+	if err := binary.Read(r, binary.BigEndian, &totalLen); err != nil {
+		if err == io.EOF {
+			return nil, CodecGob, err
+		}
+		return nil, CodecGob, fmt.Errorf("failed to read message length: %w", err)
+	}
+
+	if bodyTimeout > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(bodyTimeout))
+	} else {
+		_ = conn.SetReadDeadline(time.Time{})
+	}
+
+	return readMessageBody(r, totalLen)
 }
 
 // readMessageBody reads the header and payload after the length prefix has

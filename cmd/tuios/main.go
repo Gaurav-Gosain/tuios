@@ -358,6 +358,7 @@ This requires the TUIOS daemon to be running.`,
 	}
 	attachCmd.Flags().BoolVarP(&createIfMissing, "create", "c", false, "Create session if it doesn't exist")
 
+	var newDetach bool
 	newCmd := &cobra.Command{
 		Use:   "new [session-name]",
 		Short: "Create a new TUIOS session",
@@ -366,22 +367,33 @@ This requires the TUIOS daemon to be running.`,
 This starts a new session in the daemon (starting the daemon if needed)
 and immediately attaches you to it.
 
+With --detach the session is created headless (no client attached): it
+gets an initial window, is immediately usable by control commands
+(send-keys, run-command, capture-pane), and can be attached later.
+
 Sessions persist even when you detach, allowing you to reconnect later
 with 'tuios attach'.`,
 		Example: `  # Create a new session with auto-generated name
   tuios new
 
   # Create a named session
-  tuios new mysession`,
+  tuios new mysession
+
+  # Create a headless session without attaching
+  tuios new mysession --detach`,
 		Aliases: []string{"n"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
 			if len(args) > 0 {
 				name = args[0]
 			}
+			if newDetach {
+				return runNewSessionDetached(name)
+			}
 			return runNewSession(name)
 		},
 	}
+	newCmd.Flags().BoolVarP(&newDetach, "detach", "d", false, "Create the session headless without attaching a client")
 
 	var lsJSON bool
 	lsCmd := &cobra.Command{
@@ -491,7 +503,11 @@ Debug log levels:
 		Short: "Stop the TUIOS daemon",
 		Long: `Stop the TUIOS daemon.
 
-This will terminate all sessions and disconnect all clients.`,
+This will stop all sessions and disconnect all clients.
+
+The command is synchronous: it returns only once the daemon has saved every
+session's state and removed its socket, so a new daemon can be started as soon
+as it returns. It fails if the daemon has not finished within 10 seconds.`,
 		Example: `  tuios kill-server`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runKillDaemon()
@@ -698,6 +714,29 @@ Supported configuration paths:
 	setConfigCmd.Flags().StringVarP(&setConfigSession, "session", "s", "", "Target session (default: most recently active)")
 	_ = setConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var getConfigSession string
+	getConfigCmd := &cobra.Command{
+		Use:   "get-config <path>",
+		Short: "Read a session option from a running TUIOS session",
+		Long: `Read a session option previously set with 'tuios set-config' from a
+running TUIOS session. Options are recorded in daemon-owned state, so this works
+whether or not a TUI client is attached.`,
+		Example: `  # Read the border style
+  tuios get-config border_style`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runGetConfig(getConfigSession, args[0])
+		},
+	}
+	getConfigCmd.Flags().StringVarP(&getConfigSession, "session", "s", "", "Target session (default: most recently active)")
+	_ = getConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	getConfigCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			return getConfigPathCompletions(toComplete), cobra.ShellCompDirectiveNoFileComp
+		}
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
 	// Add completion for set-config
 	setConfigCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
@@ -855,6 +894,38 @@ Use --json for machine-readable output.`,
 	sessionInfoCmd.Flags().BoolVar(&sessionInfoJSON, "json", false, "Output as JSON")
 	_ = sessionInfoCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var listVerbsJSON bool
+	listVerbsCmd := &cobra.Command{
+		Use:   "list-verbs [verb]",
+		Short: "List the control-protocol verbs the daemon supports",
+		Long: `List every verb the daemon's JSON control protocol supports, with its
+parameter schema and example requests.
+
+This is the discovery entry point for scripting and for agents driving TUIOS:
+it reports the protocol version, every verb and parameter, the stable error
+codes, and the request/response envelope shape, so no documentation is needed
+to drive the control plane.
+
+Name a verb to describe only that verb.`,
+		Example: `  # Every verb with its parameters
+  tuios list-verbs
+
+  # Just one verb
+  tuios list-verbs capture-pane
+
+  # Machine-readable, for an agent or a script
+  tuios list-verbs --json`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			verb := ""
+			if len(args) > 0 {
+				verb = args[0]
+			}
+			return runListVerbs(verb, listVerbsJSON)
+		},
+	}
+	listVerbsCmd.Flags().BoolVar(&listVerbsJSON, "json", false, "Output as JSON")
+
 	// Layout template commands
 	layoutCmd := &cobra.Command{
 		Use:   "layout",
@@ -926,13 +997,14 @@ Use --json for machine-readable output.`,
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
-	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, logsCmd, capturePaneCmd)
-	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd)
+	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd)
+	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd)
 
 	if err := fang.Execute(
 		context.Background(),
 		rootCmd,
 		fang.WithVersion(fmt.Sprintf("%s\nCommit: %s\nBuilt: %s\nBy: %s", version, commit, date, builtBy)),
+		fang.WithErrorHandler(diagnosticErrorHandler),
 	); err != nil {
 		os.Exit(1)
 	}

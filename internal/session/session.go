@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -96,6 +98,12 @@ type SessionState struct {
 	// misinterpreted. Absent (0) means pre-versioning state, which is a
 	// structural subset of the current schema and loads fine.
 	ResurrectionVersion int `json:"resurrection_version,omitempty"`
+	// Options is a daemon-owned key/value store for session options set through
+	// the JSON verb protocol (set-option / get-option). It is additive: older
+	// clients and older on-disk state simply omit it. Keys are advisory names;
+	// the daemon records them verbatim so a later get-option can read them back
+	// and an attached TUI can apply the ones it understands.
+	Options map[string]string `json:"options,omitempty"`
 }
 
 // PTY represents a daemon-managed pseudo-terminal.
@@ -132,6 +140,11 @@ type PTY struct {
 
 	// Callback when PTY process exits - used by daemon to notify clients
 	onExit func(ptyID string)
+
+	// emit, when set, raises a control-plane event (output activity, bell, mode
+	// change, process exit) already tagged with this PTY's window and PTY ID. It
+	// is a no-op when the session has no event sink installed.
+	emit func(SessionEvent)
 }
 
 // Session represents a persistent TUIOS session.
@@ -149,6 +162,13 @@ type Session struct {
 	state            *SessionState
 	stopResurrection func() // Stops periodic resurrection saving
 	stateMu          sync.RWMutex
+
+	// eventSink, when set, receives control-plane events raised by this session
+	// and its PTYs (window lifecycle, output activity, bell, mode changes). The
+	// daemon installs it so events reach the event hub; nil for a session with no
+	// hub (e.g. bare unit tests).
+	eventSink   func(SessionEvent)
+	eventSinkMu sync.RWMutex
 
 	// Terminal size
 	width  int
@@ -205,6 +225,25 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 	})
 
 	return session, nil
+}
+
+// SetEventSink installs the control-plane event sink for this session. It is
+// safe to call concurrently and may be set after windows already exist; the
+// per-PTY emitters read it dynamically.
+func (s *Session) SetEventSink(fn func(SessionEvent)) {
+	s.eventSinkMu.Lock()
+	s.eventSink = fn
+	s.eventSinkMu.Unlock()
+}
+
+// emit forwards a control-plane event to the installed sink, if any.
+func (s *Session) emit(ev SessionEvent) {
+	s.eventSinkMu.RLock()
+	fn := s.eventSink
+	s.eventSinkMu.RUnlock()
+	if fn != nil {
+		fn(ev)
+	}
 }
 
 // CreatePTY creates a new PTY in this session. windowID, if non-empty, is the
@@ -292,6 +331,27 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 		onExit:       onExit,
 	}
 
+	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
+	// ID. It routes through the session's event sink so events reach the daemon's
+	// event hub; when no sink is installed it is a cheap no-op.
+	pty.emit = func(ev SessionEvent) {
+		ev.Window = windowID
+		ev.PTYID = id
+		s.emit(ev)
+	}
+
+	// Raise control-plane events from the daemon-side VT emulator: bell, an
+	// app-driven title change, and alt-screen mode toggles. These fire from the
+	// single vtWriter goroutine; the emitter only does a non-blocking hub publish,
+	// so it never re-enters the terminal lock held during Write.
+	terminal.SetCallbacks(vt.Callbacks{
+		Bell:  func() { pty.emit(SessionEvent{Type: EventBell}) },
+		Title: func(title string) { pty.emit(SessionEvent{Type: EventWindowRetitled, Title: title}) },
+		AltScreen: func(on bool) {
+			pty.emit(SessionEvent{Type: EventModeChanged, Mode: "alt-screen", Enabled: on})
+		},
+	})
+
 	// Handle kitty graphics queries on the daemon side for low-latency
 	// responses. All other commands flow through the raw PTY broadcast.
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
@@ -375,7 +435,57 @@ func (s *Session) GetState() *SessionState {
 		stateCopy.WorkspaceFocus = make(map[int]string)
 		maps.Copy(stateCopy.WorkspaceFocus, s.state.WorkspaceFocus)
 	}
+	if s.state.Options != nil {
+		stateCopy.Options = make(map[string]string, len(s.state.Options))
+		maps.Copy(stateCopy.Options, s.state.Options)
+	}
 	return &stateCopy
+}
+
+// SetOption records a daemon-owned session option under stateMu. It is the write
+// side of the JSON verb protocol's set-option and is safe for concurrent use.
+func (s *Session) SetOption(key, value string) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if s.state.Options == nil {
+		s.state.Options = make(map[string]string)
+	}
+	s.state.Options[key] = value
+}
+
+// GetOption reads a daemon-owned session option under stateMu, returning the
+// value and whether the key was set. It is the read side of get-option.
+func (s *Session) GetOption(key string) (string, bool) {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	if s.state.Options == nil {
+		return "", false
+	}
+	v, ok := s.state.Options[key]
+	return v, ok
+}
+
+// OptionKeys returns every option key set on this session, sorted. It backs the
+// available-keys hint on a get-option miss, so a caller that guessed a key wrong
+// learns which keys exist without a second round trip.
+func (s *Session) OptionKeys() []string {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	keys := make([]string, 0, len(s.state.Options))
+	for k := range s.state.Options {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// AllOptions returns a copy of every daemon-owned session option.
+func (s *Session) AllOptions() map[string]string {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	out := make(map[string]string, len(s.state.Options))
+	maps.Copy(out, s.state.Options)
+	return out
 }
 
 // ResurrectionState returns a copy of the session state enriched for on-disk
@@ -398,12 +508,52 @@ func (s *Session) ResurrectionState() *SessionState {
 	return state
 }
 
-// UpdateState updates the session state.
+// UpdateState updates the session state. Daemon-owned options (set through the
+// JSON verb protocol) are carried over when the incoming state does not include
+// them, so a TUI state sync - which never populates Options - does not wipe them.
+//
+// This is where an attached TUI's mutations land, so it is also where the window
+// lifecycle events for those mutations are raised: the incoming state is diffed
+// against the state it replaces. See state_events.go.
 func (s *Session) UpdateState(state *SessionState) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
+	if state.Options == nil && s.state != nil {
+		state.Options = s.state.Options
+	}
+	before := snapshotLifecycle(s.state)
 	s.state = state
 	s.LastActive = time.Now()
+	s.emitLifecycleLocked(before)
+}
+
+// mutateState runs fn against the canonical state under the state lock and
+// raises the window lifecycle events implied by whatever fn changed. Daemon-side
+// (headless) window operations go through it so they emit through the same diff
+// as a TUI state sync, rather than each op emitting for itself.
+func (s *Session) mutateState(fn func(state *SessionState) error) error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	before := snapshotLifecycle(s.state)
+	if err := fn(s.state); err != nil {
+		return err
+	}
+	s.emitLifecycleLocked(before)
+	return nil
+}
+
+// emitLifecycleLocked diffs the current state against before and emits the
+// resulting events. It is called with the state lock held, deliberately: holding
+// it across the emit is what keeps a session's events in the same order as the
+// mutations that caused them when several callers mutate concurrently. It is
+// safe because the sink only stamps a sequence number and does non-blocking
+// channel sends; it never re-enters the session.
+func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
+	events := diffLifecycle(before, snapshotLifecycle(s.state))
+	for _, ev := range events {
+		s.emit(ev)
+	}
 }
 
 // Stop closes all PTYs and cleans up.
@@ -684,6 +834,47 @@ func (p *PTY) GetTerminalState() *TerminalState {
 	return state
 }
 
+// CaptureContent renders the PTY's current screen (and optionally its
+// scrollback) to text from the daemon-side VT emulator. When ansi is true the
+// output keeps SGR escape sequences; otherwise it is plain text. This lets
+// capture-pane answer from daemon state with no TUI client attached, mirroring
+// the client-side OS.capturePane rendering.
+func (p *PTY) CaptureContent(scrollback, ansi bool) string {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+
+	if p.terminal == nil {
+		return ""
+	}
+
+	var content string
+	if ansi {
+		content = p.terminal.Render()
+	} else {
+		content = p.terminal.String()
+	}
+
+	if scrollback {
+		scrollbackLen := p.terminal.ScrollbackLen()
+		if scrollbackLen > 0 {
+			var sb strings.Builder
+			for i := 0; i < scrollbackLen; i++ {
+				line := p.terminal.ScrollbackLine(i)
+				if ansi {
+					sb.WriteString(line.Render())
+				} else {
+					sb.WriteString(line.String())
+				}
+				sb.WriteByte('\n')
+			}
+			sb.WriteString(content)
+			content = sb.String()
+		}
+	}
+
+	return content
+}
+
 // TerminalState represents the serializable state of a terminal.
 type TerminalState struct {
 	Width         int           `json:"width"`
@@ -876,6 +1067,14 @@ func (p *PTY) readOutput() {
 
 			// Broadcast to subscribers
 			p.broadcast(data)
+
+			// Raise a control-plane output-activity event. This is a lightweight
+			// signal (byte count only, no content) that drives wait-for-output and
+			// window-idle waits and lets a subscriber know the pane is active; the
+			// raw bytes still flow only through the binary subscriber stream.
+			if p.emit != nil {
+				p.emit(SessionEvent{Type: EventOutput, Bytes: n})
+			}
 		}
 	}
 }
@@ -948,6 +1147,11 @@ func (p *PTY) monitorExit() {
 	// Notify callback (used by daemon to inform clients)
 	if p.onExit != nil {
 		p.onExit(p.ID)
+	}
+
+	// Raise a control-plane window-exit event so wait-for window-exit resolves.
+	if p.emit != nil {
+		p.emit(SessionEvent{Type: EventWindowExit})
 	}
 }
 

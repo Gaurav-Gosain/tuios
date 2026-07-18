@@ -28,6 +28,11 @@ type ClientLeftHandler func(clientID string, clientCount int)
 type SessionResizeHandler func(width, height, clientCount int)
 type ForceRefreshHandler func(reason string)
 
+// SessionEndedHandler is called when the daemon reports that the attached
+// session was terminated. It runs on the read-loop goroutine, so the handler
+// should only signal the UI (e.g. p.Send), never mutate model state directly.
+type SessionEndedHandler func(sessionName, reason string)
+
 // DisconnectHandler is called once when the read loop tears the connection down
 // because of an unexpected disconnect (daemon crash, reset, or framing desync).
 // It is not called for an app-initiated Close.
@@ -73,6 +78,8 @@ type TUIClient struct {
 	sessionResizeHandler SessionResizeHandler
 	forceRefreshHandler  ForceRefreshHandler
 	disconnectHandler    DisconnectHandler
+	sessionEndedHandler  SessionEndedHandler
+	sessionEndedOnce     sync.Once // gates the single session-ended notification
 	disconnectOnce       sync.Once // gates the single disconnect notification
 	multiClientMu        sync.RWMutex
 
@@ -458,6 +465,14 @@ func (c *TUIClient) OnForceRefresh(handler ForceRefreshHandler) {
 	c.multiClientMu.Unlock()
 }
 
+// OnSessionEnded registers a handler invoked when the daemon reports that the
+// attached session was terminated. It fires at most once per client.
+func (c *TUIClient) OnSessionEnded(handler SessionEndedHandler) {
+	c.multiClientMu.Lock()
+	c.sessionEndedHandler = handler
+	c.multiClientMu.Unlock()
+}
+
 // OnDisconnect registers a handler invoked when the daemon connection is torn
 // down unexpectedly (crash, reset, or framing desync). It fires at most once and
 // runs on the read-loop goroutine, so the handler should only signal the UI
@@ -752,6 +767,27 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		if closedHandler != nil {
 			closedHandler()
 		}
+
+	case MsgSessionEnded:
+		// The attached session was destroyed (killed from the CLI, from another
+		// client, or over the control plane). Notify once so the app can exit;
+		// the connection itself is still usable, so it is not torn down here.
+		var payload SessionEndedPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[CLIENT] Failed to parse session ended: %v", err)
+		}
+		name := payload.SessionName
+		if name == "" {
+			name = c.SessionName()
+		}
+		c.sessionEndedOnce.Do(func() {
+			c.multiClientMu.RLock()
+			handler := c.sessionEndedHandler
+			c.multiClientMu.RUnlock()
+			if handler != nil {
+				handler(name, payload.Reason)
+			}
+		})
 
 	case MsgDetached:
 		// Session detached  - handled via pendingResponses in SwitchSession.

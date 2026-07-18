@@ -15,100 +15,179 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// runSendKeys sends keystrokes to a running TUIOS session.
-func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
-	}
-
-	client := session.NewClient(&session.ClientConfig{
-		Version: version,
-	})
-
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+// runListVerbs prints the control protocol's verb catalog. It is the discovery
+// entry point the daemon's own error hints point at, so it must work whenever
+// the daemon does, and say why when it does not.
+func runListVerbs(verb string, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	requestID := uuid.New().String()
-
-	// Send the keys command
-	msg, err := session.NewMessage(session.MsgSendKeys, &session.SendKeysPayload{
-		SessionName:  sessionName,
-		Keys:         keys,
-		Literal:      literal,
-		Raw:          raw,
-		WindowTarget: windowTarget,
-		RequestID:    requestID,
-	})
+	var params any
+	if verb != "" {
+		params = map[string]any{"verb": verb}
+	}
+	raw, err := client.Call("list-verbs", params)
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return explainVerbError("list-verbs", err)
 	}
 
-	if err := sendAndWaitForResult(client, msg, requestID); err != nil {
+	if jsonOutput {
+		var pretty any
+		if err := json.Unmarshal(raw, &pretty); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		outputJSON(pretty)
+		return nil
+	}
+
+	var catalog struct {
+		Version       int    `json:"version"`
+		MinVersion    int    `json:"min_version"`
+		DaemonVersion string `json:"daemon_version"`
+		Verbs         []struct {
+			Verb        string `json:"verb"`
+			Description string `json:"description"`
+			Params      []struct {
+				Name        string   `json:"name"`
+				Type        string   `json:"type"`
+				Required    bool     `json:"required"`
+				Description string   `json:"description"`
+				Accepted    []string `json:"accepted"`
+				Default     string   `json:"default"`
+			} `json:"params"`
+			Examples []string `json:"examples"`
+		} `json:"verbs"`
+		ErrorCodes []struct {
+			Code        string `json:"code"`
+			Description string `json:"description"`
+		} `json:"error_codes"`
+	}
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	fmt.Printf("Control protocol version %d (daemon %s, oldest supported %d)\n\n",
+		catalog.Version, catalog.DaemonVersion, catalog.MinVersion)
+
+	for _, v := range catalog.Verbs {
+		fmt.Printf("%s\n  %s\n", v.Verb, v.Description)
+		for _, p := range v.Params {
+			required := ""
+			if p.Required {
+				required = " (required)"
+			}
+			fmt.Printf("    %-10s %-8s%s %s\n", p.Name, p.Type, required, p.Description)
+			if len(p.Accepted) > 0 {
+				fmt.Printf("    %-10s %s\n", "", "one of: "+strings.Join(p.Accepted, ", "))
+			}
+			if p.Default != "" {
+				fmt.Printf("    %-10s %s\n", "", "default: "+p.Default)
+			}
+		}
+		for _, ex := range v.Examples {
+			fmt.Printf("    example: %s\n", ex)
+		}
+		fmt.Println()
+	}
+
+	// The error vocabulary only makes sense alongside the whole catalog, so it
+	// is omitted when a single verb was requested.
+	if verb == "" && len(catalog.ErrorCodes) > 0 {
+		fmt.Println("Error codes:")
+		for _, e := range catalog.ErrorCodes {
+			fmt.Printf("  %-18s %s\n", e.Code, e.Description)
+		}
+	}
+	return nil
+}
+
+// printVerbResult renders a verb result in the CLI's --json contract shape
+// (success/message plus the result fields), or a short human line otherwise.
+func printVerbResult(raw json.RawMessage, jsonOutput bool) error {
+	if !jsonOutput {
+		fmt.Println("Command executed successfully")
+		return nil
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	out := map[string]any{"success": true, "message": "command executed"}
+	for k, v := range fields {
+		if k == "type" {
+			continue
+		}
+		out[k] = v
+	}
+	outputJSON(out)
+	return nil
+}
+
+// reportVerbError renders a failed verb call, honoring --json by printing a
+// {success:false,error} object and exiting non-zero.
+func reportVerbError(err error, jsonOutput bool) error {
+	if jsonOutput {
+		outputJSON(map[string]any{"success": false, "error": err.Error()})
+		os.Exit(1)
+	}
+	return err
+}
+
+// runSendKeys sends keystrokes to a running TUIOS session over the verb protocol.
+func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string) error {
+	client, err := dialVerb()
+	if err != nil {
 		return err
 	}
+	defer func() { _ = client.Close() }()
 
+	if _, err := client.Call("send-keys", map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+		"keys":    keys,
+		"literal": literal,
+		"raw":     raw,
+	}); err != nil {
+		return explainVerbError("send-keys", err)
+	}
 	return nil
 }
 
 // runCapturePane captures the content of a pane and prints to stdout.
 func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
-	}
-
-	client := session.NewClient(&session.ClientConfig{
-		Version: version,
-	})
-
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+	client, err := dialVerb()
+	if err != nil {
+		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	requestID := uuid.New().String()
-
-	msg, err := session.NewMessage(session.MsgCapturePane, &session.CapturePanePayload{
-		SessionName:  sessionName,
-		WindowTarget: windowTarget,
-		Scrollback:   scrollback,
-		ANSI:         ansi,
-		RequestID:    requestID,
+	raw, err := client.Call("capture-pane", map[string]any{
+		"session":    sessionName,
+		"window":     windowTarget,
+		"scrollback": scrollback,
+		"ansi":       ansi,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return explainVerbError("capture-pane", err)
 	}
 
-	resp, err := client.SendControlMessage(msg)
-	if err != nil {
-		return fmt.Errorf("failed to send command: %w", err)
+	var res struct {
+		Content string `json:"content"`
 	}
-
-	switch resp.Type {
-	case session.MsgCommandResult:
-		var result session.CommandResultPayload
-		if err := resp.ParsePayloadWithCodec(&result, client.GetCodec()); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-		if !result.Success {
-			return fmt.Errorf("capture failed: %s", result.Message)
-		}
-		if content, ok := result.Data["content"].(string); ok {
-			fmt.Print(content)
-		}
-		return nil
-	case session.MsgError:
-		return fmt.Errorf("server error: %s", string(resp.Payload))
-	default:
-		return fmt.Errorf("unexpected response type: %d", resp.Type)
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
 	}
+	fmt.Print(res.Content)
+	return nil
 }
 
 // runCommand executes a tape command in a running TUIOS session.
 func runCommand(sessionName, command string, args []string, jsonOutput bool) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
+	if err := requireDaemon(); err != nil {
+		return err
 	}
 
 	client := session.NewClient(&session.ClientConfig{
@@ -116,7 +195,7 @@ func runCommand(sessionName, command string, args []string, jsonOutput bool) err
 	})
 
 	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+		return explainDialError(err)
 	}
 	defer func() { _ = client.Close() }()
 
@@ -140,109 +219,85 @@ func runCommand(sessionName, command string, args []string, jsonOutput bool) err
 	return nil
 }
 
-// queryWindows queries window list directly from daemon (doesn't require TUI).
+// queryWindows queries the window list over the verb protocol (no TUI required).
 func queryWindows(sessionName string, jsonOutput bool) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
-	}
-
-	client := session.NewClient(&session.ClientConfig{
-		Version: version,
-	})
-
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+	client, err := dialVerb()
+	if err != nil {
+		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	requestID := uuid.New().String()
-
-	msg, err := session.NewMessage(session.MsgQueryWindows, &session.QueryWindowsPayload{
-		SessionName: sessionName,
-		RequestID:   requestID,
-	})
+	raw, err := client.Call("list-windows", map[string]any{"session": sessionName})
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return reportVerbError(explainVerbError("list-windows", err), jsonOutput)
 	}
-
-	if err := sendAndWaitForResultWithFormat(client, msg, requestID, jsonOutput); err != nil {
-		return err
-	}
-
-	return nil
+	return printVerbResult(raw, jsonOutput)
 }
 
-// querySession queries session info directly from daemon (doesn't require TUI).
+// querySession queries session info over the verb protocol (no TUI required).
 func querySession(sessionName string, jsonOutput bool) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
-	}
-
-	client := session.NewClient(&session.ClientConfig{
-		Version: version,
-	})
-
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+	client, err := dialVerb()
+	if err != nil {
+		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	requestID := uuid.New().String()
-
-	msg, err := session.NewMessage(session.MsgQuerySession, &session.QuerySessionPayload{
-		SessionName: sessionName,
-		RequestID:   requestID,
-	})
+	raw, err := client.Call("session-info", map[string]any{"session": sessionName})
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return reportVerbError(explainVerbError("session-info", err), jsonOutput)
 	}
+	return printVerbResult(raw, jsonOutput)
+}
 
-	if err := sendAndWaitForResultWithFormat(client, msg, requestID, jsonOutput); err != nil {
+// runSetConfig sets a session option over the verb protocol. The value is
+// recorded in daemon-owned state and, when a TUI is attached, applied live.
+func runSetConfig(sessionName, path, value string) error {
+	client, err := dialVerb()
+	if err != nil {
 		return err
 	}
+	defer func() { _ = client.Close() }()
 
+	if _, err := client.Call("set-option", map[string]any{
+		"session": sessionName,
+		"key":     path,
+		"value":   value,
+	}); err != nil {
+		return explainVerbError("set-option", err)
+	}
+	fmt.Printf("Set %s = %s\n", path, value)
 	return nil
 }
 
-// runSetConfig sets a configuration option in a running TUIOS session.
-func runSetConfig(sessionName, path, value string) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
-	}
-
-	client := session.NewClient(&session.ClientConfig{
-		Version: version,
-	})
-
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+// runGetConfig reads a session option over the verb protocol.
+func runGetConfig(sessionName, path string) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	requestID := uuid.New().String()
-
-	// Send the set config command
-	msg, err := session.NewMessage(session.MsgSetConfig, &session.SetConfigPayload{
-		SessionName: sessionName,
-		Path:        path,
-		Value:       value,
-		RequestID:   requestID,
+	raw, err := client.Call("get-option", map[string]any{
+		"session": sessionName,
+		"key":     path,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return explainVerbError("get-option", err)
 	}
-
-	if err := sendAndWaitForResult(client, msg, requestID); err != nil {
-		return err
+	var res struct {
+		Value string `json:"value"`
 	}
-
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Println(res.Value)
 	return nil
 }
 
 // runTapeExec executes a tape file in a running TUIOS session.
 func runTapeExec(sessionName, filePath string) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
+	if err := requireDaemon(); err != nil {
+		return err
 	}
 
 	// Read the tape file
@@ -266,7 +321,7 @@ func runTapeExec(sessionName, filePath string) error {
 	})
 
 	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+		return explainDialError(err)
 	}
 	defer func() { _ = client.Close() }()
 
@@ -646,8 +701,8 @@ func getConfigValueCompletions(path, _ string) []string {
 
 // runGetLogs retrieves and displays daemon logs.
 func runGetLogs(count int, clear bool, follow bool) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running")
+	if err := requireDaemon(); err != nil {
+		return err
 	}
 
 	client := session.NewClient(&session.ClientConfig{
@@ -655,7 +710,7 @@ func runGetLogs(count int, clear bool, follow bool) error {
 	})
 
 	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+		return explainDialError(err)
 	}
 	defer func() { _ = client.Close() }()
 

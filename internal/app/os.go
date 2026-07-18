@@ -183,6 +183,10 @@ type OS struct {
 	SessionName       string             // Name of the daemon session (if attached)
 	RestoredFromState bool               // True after RestoreFromState, cleared after first resize
 	SubscribedPTYs    map[string]bool    // Tracks which PTY IDs are currently subscribed (for visibility optimization)
+	// ExitReason records why the program stopped, for the caller to report and
+	// to pick an exit status. Empty means the user quit or detached normally.
+	// It is written only on the Bubble Tea goroutine, in Update.
+	ExitReason ExitReason
 	// Multi-client effective size (min of all clients in session)
 	EffectiveWidth  int // Effective width for rendering (min of all clients, 0 = use terminal size)
 	EffectiveHeight int // Effective height for rendering (min of all clients, 0 = use terminal size)
