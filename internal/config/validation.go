@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -187,8 +188,28 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 		[]string{"bottom-right", "bottom-left", "top-right", "top-left", "center"})
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition,
 		[]string{"bottom", "top", "hidden"})
-	checkEnum("separator_style", cfg.Appearance.SeparatorStyle,
-		[]string{"rounded", "powerline", "flat", "none"})
+	validateTitleFormat(cfg.Appearance.WindowTitleFormat, result)
+}
+
+// knownTitlePlaceholders are the placeholders FormatWindowTitle expands.
+var knownTitlePlaceholders = []string{"{title}", "{index}", "{cwd}"}
+
+// titlePlaceholderPattern matches anything written as a placeholder, so a typo
+// like {name} can be reported instead of being rendered literally in the title.
+var titlePlaceholderPattern = regexp.MustCompile(`\{[^{}]*\}`)
+
+func validateTitleFormat(format string, result *ValidationResult) {
+	for _, placeholder := range titlePlaceholderPattern.FindAllString(format, -1) {
+		if slices.Contains(knownTitlePlaceholders, placeholder) {
+			continue
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "appearance",
+			Key:   "window_title_format",
+			Message: fmt.Sprintf("'%s' is not a known placeholder (allowed: %s); it will be shown literally",
+				placeholder, strings.Join(knownTitlePlaceholders, ", ")),
+		})
+	}
 }
 
 // findConflicts finds keys that are bound to multiple actions within the same context

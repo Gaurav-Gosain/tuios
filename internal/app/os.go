@@ -206,6 +206,9 @@ type OS struct {
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// Keybind registry for user-configurable keybindings
 	KeybindRegistry *config.KeybindRegistry
+	// ConfigWarnings holds the problems found in the loaded config, reported to
+	// the user once the TUI is up (see reportConfigWarnings).
+	ConfigWarnings []string
 	// Showkeys feature
 	ShowKeys          bool       // True when showkeys overlay is enabled
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys

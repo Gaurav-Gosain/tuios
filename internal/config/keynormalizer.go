@@ -90,6 +90,51 @@ var macOptionTabMap = map[string]string{
 	"opt+shift+tab": "⇤", "option+shift+tab": "⇤",
 }
 
+// shiftedDigits maps a digit to the character a US layout produces when it is
+// typed with Shift. Terminals disagree about which of the two spellings they
+// report for the same physical chord: some send the shifted character ("!"),
+// others report the chord ("shift+1"). Binding one spelling has to match both,
+// otherwise a binding works on one terminal and silently does nothing on
+// another.
+var shiftedDigits = map[string]string{
+	"1": "!", "2": "@", "3": "#", "4": "$", "5": "%",
+	"6": "^", "7": "&", "8": "*", "9": "(", "0": ")",
+}
+
+// shiftedDigitsReverse is shiftedDigits inverted, for the "!" → "shift+1"
+// direction.
+var shiftedDigitsReverse = func() map[string]string {
+	m := make(map[string]string, len(shiftedDigits))
+	for digit, symbol := range shiftedDigits {
+		m[symbol] = digit
+	}
+	return m
+}()
+
+// shiftAliases returns the alternate spellings of a shifted key: the shifted
+// character for a "shift+x" chord and the "shift+x" chord for a shifted
+// character. Returns nil when key is not a shifted key in either spelling.
+func shiftAliases(key, keyLower string) []string {
+	if after, ok := strings.CutPrefix(keyLower, "shift+"); ok {
+		base := after
+		if symbol, ok := shiftedDigits[base]; ok {
+			return []string{symbol}
+		}
+		if isSingleRuneLetter(base) {
+			return []string{strings.ToUpper(base)}
+		}
+		return nil
+	}
+	if digit, ok := shiftedDigitsReverse[key]; ok {
+		return []string{"shift+" + digit}
+	}
+	// An uppercase letter is the shifted spelling of its lowercase self.
+	if isSingleRuneLetter(key) && key != keyLower {
+		return []string{"shift+" + keyLower}
+	}
+	return nil
+}
+
 // NormalizeKey converts a key string to its canonical form for the current platform
 // For example, on macOS: "opt+1" → "¡" or "alt+1" depending on context
 func (kn *KeyNormalizer) NormalizeKey(key string) []string {
@@ -108,6 +153,9 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 
 	// Always include the normalized version
 	result := []string{normalized}
+
+	// Accept both spellings of a shifted key, on every platform.
+	result = append(result, shiftAliases(key, keyLower)...)
 
 	// On macOS, expand opt+N and option+N to unicode and alt+N
 	if kn.isMacOS {

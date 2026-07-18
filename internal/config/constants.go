@@ -2,6 +2,8 @@
 package config
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
@@ -363,6 +365,31 @@ var HideScrollbar = false
 // Options: bottom, top, hidden
 // Set via --window-title-position flag or appearance.window_title_position config
 var WindowTitlePosition = "bottom"
+
+// WindowTitleFormat is the template used to build a window's displayed title.
+// Empty (the default) means the title is shown as-is. See FormatWindowTitle for
+// the supported placeholders.
+// Set via appearance.window_title_format config
+var WindowTitleFormat = ""
+
+// FormatWindowTitle expands WindowTitleFormat for one window. The placeholders
+// are {title} (the custom or terminal-reported title), {index} (the window's
+// 1-based position in its workspace, the same number the leader-digit shortcuts
+// use) and {cwd} (the shell's working directory, empty where it cannot be
+// read).
+//
+// An empty format returns the title unchanged, which is what keeps the default
+// rendering free of any formatting work.
+func FormatWindowTitle(title string, index int, cwd string) string {
+	if WindowTitleFormat == "" {
+		return title
+	}
+	return strings.NewReplacer(
+		"{title}", title,
+		"{index}", strconv.Itoa(index),
+		"{cwd}", cwd,
+	).Replace(WindowTitleFormat)
+}
 
 // HideClock controls whether the clock overlay is hidden
 // Set via --hide-clock flag or appearance.hide_clock config
