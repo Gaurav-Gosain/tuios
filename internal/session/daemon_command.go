@@ -282,6 +282,10 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 // still returns a single request/response over the JSON connection. requestID
 // must be unique per in-flight call.
 func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCommandPayload, timeout time.Duration) (*CommandResultPayload, error) {
+	// Stamp the request ID onto the outgoing command so the TUI echoes it back on
+	// its result and handleCommandResult can match it to this pending waiter.
+	cmd.RequestID = requestID
+
 	ch := make(chan *CommandResultPayload, 1)
 
 	d.pendingRequestsMu.Lock()
