@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // The maintainer runs a 207x55 host terminal. Every benchmark here uses that as
@@ -160,6 +161,40 @@ func BenchmarkIsBlankRenderReal(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			_ = isBlankRender(blank)
+		}
+	})
+}
+
+// BenchmarkFrameWidthImplementations compares the width measurement against the
+// ansi.StringWidth loop it replaced.
+//
+// It exists because the machine these numbers are taken on is shared, and a
+// wall-time figure quoted from one run and compared against a figure from
+// another is worthless when load average swings between 5 and 60: the same
+// benchmark measured 278us and 2.5ms an hour apart with no code change. Both
+// variants here run in one process, interleaved by -count, so they see the same
+// load and the same cache state, and the ratio between them is meaningful even
+// when neither absolute number is.
+func BenchmarkFrameWidthImplementations(b *testing.B) {
+	lines := strings.Split(renderedFrame(b, realCols, realRows), "\n")
+
+	b.Run("reference-stringwidth", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			widest := 0
+			for _, line := range lines {
+				if w := ansi.StringWidth(line); w > widest {
+					widest = w
+				}
+			}
+			_ = widest
+		}
+	})
+
+	b.Run("fast-path", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = framesWidth(lines)
 		}
 	})
 }
