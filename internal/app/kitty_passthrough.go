@@ -21,18 +21,43 @@ func kittyPassthroughLog(format string, args ...any) {
 	_, _ = fmt.Fprintf(f, "[%s] KITTY-PASSTHROUGH: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
 }
 
-// isKittyResponse checks if data looks like a kitty graphics protocol response
-// rather than real image data. Responses are "OK" or POSIX error names like
-// "ENOENT", "EINVAL", "EBADMSG" (start with 'E' followed by uppercase).
-func isKittyResponse(data []byte) bool {
-	if len(data) == 0 {
+// isKittyResponse checks if a graphics payload looks like an echoed kitty
+// protocol response rather than real image data.
+//
+// It is matched against the RAW wire payload (the base64 text between ';' and
+// the APC terminator), NOT the base64-decoded bytes. A real transmit payload
+// is a long base64 string that decodes cleanly; an echoed response is a short
+// status token: "OK", or a POSIX error name optionally followed by a ":message"
+// (e.g. "ENOENT", "EINVAL:bad params"). Matching the decoded bytes instead let
+// arbitrary binary chunks (a chafa/mpv direct stream) collide with the 'E'+A-Z
+// shape ~0.04% of the time and silently drop a chunk, corrupting the image.
+//
+// The shape required is ^(OK|E[A-Z]+(:.*)?)$ with a hard length cap so that a
+// legitimate (necessarily longer, mixed-case) base64 payload cannot match.
+func isKittyResponse(payload string) bool {
+	if len(payload) == 0 || len(payload) > 256 {
 		return false
 	}
-	if string(data) == "OK" {
+	if payload == "OK" {
 		return true
 	}
-	// POSIX error codes: start with 'E', second char is uppercase A-Z
-	return len(data) >= 2 && data[0] == 'E' && data[1] >= 'A' && data[1] <= 'Z'
+	// POSIX error name: 'E' followed by one or more uppercase letters, then an
+	// optional ":<message>". A base64 image payload is not all-uppercase.
+	if payload[0] != 'E' {
+		return false
+	}
+	i := 1
+	for i < len(payload) && payload[i] >= 'A' && payload[i] <= 'Z' {
+		i++
+	}
+	if i < 2 {
+		// Need at least one uppercase letter after the leading 'E'.
+		return false
+	}
+	if i == len(payload) {
+		return true
+	}
+	return payload[i] == ':'
 }
 
 type KittyPassthrough struct {
