@@ -222,7 +222,8 @@ Press `Ctrl+B`, release, then press the command key (tmux-style).
 | `Ctrl+B` `t` | Enter window prefix menu |
 | `Ctrl+B` `D` | Enter debug prefix menu |
 | `Ctrl+B` `[` | Enter copy mode |
-| `Ctrl+B` `d` or `Esc` | Detach (exit terminal mode) |
+| `Ctrl+B` `Esc` (or `Alt+Esc`) | Exit terminal mode, never detaches |
+| `Ctrl+B` `d` | Detach from a daemon session, leaving it running. Outside a daemon session it exits terminal mode |
 | `Ctrl+B` `q` | Quit TUIOS |
 | `Ctrl+B` `?` | Toggle help |
 | `Ctrl+B` `S` | Session Switcher |

@@ -226,17 +226,10 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		"prefix_help", "prefix_quit", "prefix_fullscreen", "prefix_settings",
 	}
 
-	// Add debug commands (Leader Key + D ...)
-	debugCommands := []string{"d_logs", "d_cache_stats", "d_showkeys"}
-	for _, cmd := range debugCommands {
-		// Add debug commands with special display format
-		bindings = append(bindings, HelpBinding{
-			Action:      "debug_" + cmd,
-			Keys:        []string{config.LeaderKey + ", d, " + cmd[2:]}, // Extract the command part (logs, cache_stats, showkeys)
-			Description: getDebugCommandDescription(cmd),
-			Category:    "Prefix Commands",
-		})
-	}
+	// Debug commands are deliberately not listed here. They used to be, built
+	// from action names by slicing off a prefix, which rendered them as the
+	// action name rather than the key ("ctrl+b, d, cache_stats" for what is
+	// actually ctrl+b, D, c). The Debug category above lists the real keys.
 
 	for _, action := range prefixActions {
 		keys := registry.GetKeys(action)
@@ -264,20 +257,6 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 	}
 
 	return bindings
-}
-
-// getDebugCommandDescription returns the description for debug commands
-func getDebugCommandDescription(cmd string) string {
-	switch cmd {
-	case "d_logs":
-		return "Toggle log viewer"
-	case "d_cache_stats":
-		return "Toggle cache statistics"
-	case "d_showkeys":
-		return "Toggle showkeys overlay"
-	default:
-		return formatActionName(cmd)
-	}
 }
 
 // formatActionName formats an action name for display

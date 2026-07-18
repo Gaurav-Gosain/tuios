@@ -149,7 +149,8 @@ tuios --show-keys        # Launch with key overlay for learning
 | <kbd>Ctrl</kbd>+<kbd>P</kbd> | **Command palette** - search and run any action |
 | <kbd>n</kbd> | New pane (Window Management mode) |
 | <kbd>i</kbd> / <kbd>Enter</kbd> | Enter Terminal mode |
-| <kbd>Esc</kbd> / <kbd>Prefix</kbd>+<kbd>d</kbd> | Back to Window Management mode |
+| <kbd>Prefix</kbd>+<kbd>Esc</kbd> or <kbd>Alt</kbd>+<kbd>Esc</kbd> | Back to Window Management mode (a bare <kbd>Esc</kbd> goes to the shell) |
+| <kbd>Prefix</kbd>+<kbd>d</kbd> | Detach in a daemon session, otherwise back to Window Management mode |
 | <kbd>z</kbd> (WM) or <kbd>Prefix</kbd>+<kbd>z</kbd> | Toggle pane zoom (fullscreen) |
 | <kbd>Prefix</kbd>+<kbd>Space</kbd> | Toggle BSP tiling |
 | <kbd>Prefix</kbd>+<kbd>[</kbd> | Enter copy mode (vim scrollback) |

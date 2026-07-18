@@ -50,7 +50,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Rename Window",
-			Shortcut: "prefix+,",
+			Shortcut: "prefix+r",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if config.WindowTitlePosition != "hidden" && len(m.Windows) > 0 && m.FocusedWindow >= 0 {
@@ -437,8 +437,9 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		// Navigation
 		{
+			// No Shortcut: the aggregate view has no default binding and is
+			// reached from this palette (or a user binding) only.
 			Name:     "Aggregate View (All Windows)",
-			Shortcut: "Alt+G",
 			Category: "Navigation",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.ShowAggregateView = true
