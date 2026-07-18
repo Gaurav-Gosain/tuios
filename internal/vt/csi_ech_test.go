@@ -13,13 +13,25 @@ import (
 //
 // Any program can print ESC[999999999X. The erase runs under the window IO
 // lock, so an unclamped count froze the whole pane rather than just wasting
-// time. The budget here is generous: unclamped, the same input takes minutes.
+// time.
+//
+// The budget is sized from measurement, not guessed. Clamped, the slowest of
+// these inputs costs about 100us; unclamped it costs about 2.3s. A 1s budget
+// therefore sits roughly four orders of magnitude above correct behaviour and
+// less than half of broken behaviour, so it discriminates on a quiet machine
+// and cannot flake on a loaded one. An earlier 5s budget sat above BOTH costs
+// and passed against the unclamped code, which is why it is stated here.
+//
+// Only the two inputs marked below actually exercise the clamp. The other two
+// carry counts at or past the int32 boundary, which the parameter parser
+// discards before the erase runs, so they cost nothing either way and are kept
+// as parser-robustness cases.
 func TestEmulator_EraseCharacterHugeCount(t *testing.T) {
 	inputs := []string{
-		"\x1b[999999999X",
+		"\x1b[999999999X",           // exercises the clamp
+		"\x1b[1;80H\x1b[999999999X", // exercises the clamp
 		"\x1b[2147483647X",
 		"hello\x1b[1;1H\x1b[4294967295X",
-		"\x1b[1;80H\x1b[999999999X",
 	}
 
 	for _, in := range inputs {
@@ -35,8 +47,8 @@ func TestEmulator_EraseCharacterHugeCount(t *testing.T) {
 
 			select {
 			case <-done:
-			case <-time.After(5 * time.Second):
-				t.Fatalf("ECH with an unclamped count did not return within 5s")
+			case <-time.After(1 * time.Second):
+				t.Fatalf("ECH with an unclamped count did not return within 1s")
 			}
 		})
 	}
