@@ -50,12 +50,8 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		if err != nil {
 			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
 		}
-		// Hand the result to any attached client so its render catches up. The
-		// state carries a version the client is now behind on, so its next sync
-		// is reconciled against this mutation rather than undoing it.
-		if tuiClient != nil {
-			d.broadcastStateSync(session.ID, session.GetState(), "update", "")
-		}
+		// The attached client, if any, has already been told: the mutation went
+		// through Session.mutateState, whose state sink broadcasts to it.
 		return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
 			RequestID: payload.RequestID,
 			Success:   true,

@@ -185,6 +185,21 @@ type Session struct {
 	eventSink   func(SessionEvent)
 	eventSinkMu sync.RWMutex
 
+	// stateSink, when set, receives the canonical state after every daemon-side
+	// mutation, so an attached client can be told what the daemon just did. The
+	// daemon installs it and broadcasts the snapshot to the session's clients;
+	// nil for a session with no clients (bare unit tests, resurrection loads).
+	stateSink   func(*SessionState)
+	stateSinkMu sync.RWMutex
+
+	// pushMu serializes state-sink deliveries and pushedVersion records the
+	// highest version already delivered. Snapshots are taken under stateMu but
+	// delivered without it, so two concurrent mutations can reach the sink in
+	// either order; this drops the loser rather than letting a client see the
+	// daemon go backwards.
+	pushMu        sync.Mutex
+	pushedVersion int
+
 	// Terminal size
 	width  int
 	height int
@@ -264,6 +279,39 @@ func (s *Session) emit(ev SessionEvent) {
 	if fn != nil {
 		fn(ev)
 	}
+}
+
+// SetStateSink installs the sink that receives the canonical state after every
+// daemon-side mutation. It is safe to call concurrently and may be set after the
+// session already holds windows.
+func (s *Session) SetStateSink(fn func(*SessionState)) {
+	s.stateSinkMu.Lock()
+	s.stateSink = fn
+	s.stateSinkMu.Unlock()
+}
+
+// publishState hands a post-mutation snapshot to the state sink, in version
+// order and never twice for the same version. It must be called without stateMu
+// held: the sink writes to client sockets, and a slow client must be able to
+// delay other pushes without also blocking every mutation of the session.
+func (s *Session) publishState(snap *SessionState) {
+	if snap == nil {
+		return
+	}
+	s.stateSinkMu.RLock()
+	fn := s.stateSink
+	s.stateSinkMu.RUnlock()
+	if fn == nil {
+		return
+	}
+
+	s.pushMu.Lock()
+	defer s.pushMu.Unlock()
+	if snap.Version <= s.pushedVersion {
+		return
+	}
+	s.pushedVersion = snap.Version
+	fn(snap)
 }
 
 // CreatePTY creates a new PTY in this session. windowID, if non-empty, is the
@@ -455,7 +503,12 @@ func (s *Session) PTYCount() int {
 func (s *Session) GetState() *SessionState {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
+	return s.snapshotStateLocked()
+}
 
+// snapshotStateLocked returns a copy of the canonical state. The caller must
+// hold stateMu (for read or write).
+func (s *Session) snapshotStateLocked() *SessionState {
 	// Return a copy
 	stateCopy := *s.state
 	stateCopy.Windows = make([]WindowState, len(s.state.Windows))
@@ -582,17 +635,35 @@ func (s *Session) UpdateState(state *SessionState) bool {
 	return accepted
 }
 
-// mutateState runs fn against the canonical state under the state lock and
-// raises the window lifecycle events implied by whatever fn changed. Daemon-side
-// (headless) window operations go through it so they emit through the same diff
-// as a TUI state sync, rather than each op emitting for itself.
+// mutateState runs fn against the canonical state under the state lock, raises
+// the window lifecycle events implied by whatever fn changed, and hands the
+// resulting state to the state sink. Daemon-side (headless) window operations go
+// through it so they emit through the same diff as a TUI state sync, rather than
+// each op emitting for itself.
+//
+// The sink call is what makes an attached client a subscriber to the daemon
+// rather than the daemon's only writer: every mutation the daemon makes itself
+// reaches the client's renderer through this one place, so a new daemon-side
+// operation is live in the TUI without a line of routing code of its own.
 func (s *Session) mutateState(fn func(state *SessionState) error) error {
+	snap, err := s.mutateStateLocked(fn)
+	if err != nil {
+		return err
+	}
+	// Deliberately outside the state lock: the sink writes to client sockets.
+	s.publishState(snap)
+	return nil
+}
+
+// mutateStateLocked is mutateState's critical section. It returns the snapshot
+// to publish once the lock is released.
+func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*SessionState, error) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
 	before := snapshotLifecycle(s.state)
 	if err := fn(s.state); err != nil {
-		return err
+		return nil, err
 	}
 	// A daemon-side mutation is exactly what a client sync must not undo, so it
 	// is what advances the version. A client that pushes a snapshot built before
@@ -600,7 +671,7 @@ func (s *Session) mutateState(fn func(state *SessionState) error) error {
 	// last.
 	s.state.Version++
 	s.emitLifecycleLocked(before)
-	return nil
+	return s.snapshotStateLocked(), nil
 }
 
 // emitLifecycleLocked diffs the current state against before and emits the
