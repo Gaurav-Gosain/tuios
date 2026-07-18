@@ -123,13 +123,16 @@ type ClientLeftMsg struct {
 	ClientCount int
 }
 
-// ClientEvent represents a client join or leave event for channel-based notification.
+// ClientEvent represents a multi-client notification delivered to the Bubble Tea
+// event loop so the work happens on the program goroutine instead of the daemon
+// read-loop goroutine.
 type ClientEvent struct {
-	Type        string // "joined" or "left"
+	Type        string // "joined", "left", "resize", or "refresh"
 	ClientID    string
 	ClientCount int
-	Width       int // only for "joined"
-	Height      int // only for "joined"
+	Width       int    // "joined" and "resize"
+	Height      int    // "joined" and "resize"
+	Reason      string // "refresh"
 }
 
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
@@ -236,17 +239,27 @@ func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 			// Channel closed, return nil to stop listening
 			return nil
 		}
-		if event.Type == "joined" {
+		switch event.Type {
+		case "joined":
 			return ClientJoinedMsg{
 				ClientID:    event.ClientID,
 				ClientCount: event.ClientCount,
 				Width:       event.Width,
 				Height:      event.Height,
 			}
-		}
-		return ClientLeftMsg{
-			ClientID:    event.ClientID,
-			ClientCount: event.ClientCount,
+		case "resize":
+			return SessionResizeMsg{
+				Width:       event.Width,
+				Height:      event.Height,
+				ClientCount: event.ClientCount,
+			}
+		case "refresh":
+			return ForceRefreshMsg{Reason: event.Reason}
+		default:
+			return ClientLeftMsg{
+				ClientID:    event.ClientID,
+				ClientCount: event.ClientCount,
+			}
 		}
 	}
 }
