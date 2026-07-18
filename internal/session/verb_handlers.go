@@ -50,6 +50,7 @@ func (d *Daemon) resolveVerbSession(name string) (*Session, *verbError) {
 		Command:    "tuios ls",
 		DidYouMean: closestMatch(name, available),
 		Available:  available,
+		Detail:     "the name matches no live session. A session that was killed is gone; one that was never started may still have saved state ('tuios resurrect').",
 	})
 }
 
@@ -86,7 +87,12 @@ func mapResolveErr(err error, sess *Session) *verbError {
 			Detail: "The window exists but its shell has already exited, so there is nothing to write to. Close it or create a new window.",
 		})
 	default:
-		hint := &VerbHint{Param: "window", Verb: "list-windows", Command: "tuios list-windows --json"}
+		hint := &VerbHint{
+			Param:   "window",
+			Verb:    "list-windows",
+			Command: "tuios list-windows --json",
+			Detail:  "the window target matched no window. A window is addressable by its id, a unique id prefix, or its exact name.",
+		}
 		if sess != nil {
 			hint.Available = windowTargets(sess.GetState())
 			hint.DidYouMean = closestMatch(targetFromError(msg), hint.Available)

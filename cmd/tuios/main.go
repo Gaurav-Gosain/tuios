@@ -890,6 +890,38 @@ Use --json for machine-readable output.`,
 	sessionInfoCmd.Flags().BoolVar(&sessionInfoJSON, "json", false, "Output as JSON")
 	_ = sessionInfoCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var listVerbsJSON bool
+	listVerbsCmd := &cobra.Command{
+		Use:   "list-verbs [verb]",
+		Short: "List the control-protocol verbs the daemon supports",
+		Long: `List every verb the daemon's JSON control protocol supports, with its
+parameter schema and example requests.
+
+This is the discovery entry point for scripting and for agents driving TUIOS:
+it reports the protocol version, every verb and parameter, the stable error
+codes, and the request/response envelope shape, so no documentation is needed
+to drive the control plane.
+
+Name a verb to describe only that verb.`,
+		Example: `  # Every verb with its parameters
+  tuios list-verbs
+
+  # Just one verb
+  tuios list-verbs capture-pane
+
+  # Machine-readable, for an agent or a script
+  tuios list-verbs --json`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			verb := ""
+			if len(args) > 0 {
+				verb = args[0]
+			}
+			return runListVerbs(verb, listVerbsJSON)
+		},
+	}
+	listVerbsCmd.Flags().BoolVar(&listVerbsJSON, "json", false, "Output as JSON")
+
 	// Layout template commands
 	layoutCmd := &cobra.Command{
 		Use:   "layout",
@@ -962,12 +994,13 @@ Use --json for machine-readable output.`,
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd)
-	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd)
+	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd)
 
 	if err := fang.Execute(
 		context.Background(),
 		rootCmd,
 		fang.WithVersion(fmt.Sprintf("%s\nCommit: %s\nBuilt: %s\nBy: %s", version, commit, date, builtBy)),
+		fang.WithErrorHandler(diagnosticErrorHandler),
 	); err != nil {
 		os.Exit(1)
 	}

@@ -41,27 +41,48 @@ func getResurrectionPath(sessionName string) string {
 	return filepath.Join(getResurrectionDir(), sessionName+".json")
 }
 
-// getResurrectionArchiveDir returns the directory where corrupt or incompatible
-// state files are moved instead of being deleted, so they can be inspected.
-func getResurrectionArchiveDir() string {
+// ResurrectionStateDir returns the directory holding saved session state, so a
+// message can name where sessions are persisted.
+func ResurrectionStateDir() string {
+	return getResurrectionDir()
+}
+
+// ResurrectionArchiveDir returns the directory where corrupt or incompatible
+// state files are moved instead of being deleted, so they can be inspected. It
+// is exported so an error message can tell the user where their session went
+// rather than only that it is gone.
+func ResurrectionArchiveDir() string {
 	return filepath.Join(getResurrectionDir(), "archive")
 }
 
 // archiveResurrectionFile moves a bad state file into the archive directory,
-// tagging it with a timestamp. Best effort: on any failure the original file is
-// removed so it is not retried on every load. Never returns an error to callers
-// because the load must continue regardless.
-func archiveResurrectionFile(path string) {
-	archiveDir := getResurrectionArchiveDir()
+// tagging it with a timestamp, and returns where it landed. Best effort: on any
+// failure the original file is removed so it is not retried on every load, and
+// an empty path is returned. Never returns an error to callers because the load
+// must continue regardless.
+func archiveResurrectionFile(path string) string {
+	archiveDir := ResurrectionArchiveDir()
 	if err := os.MkdirAll(archiveDir, 0700); err != nil {
 		_ = os.Remove(path)
-		return
+		return ""
 	}
 	base := filepath.Base(path)
 	dest := filepath.Join(archiveDir, fmt.Sprintf("%s.%d.bak", base, time.Now().UnixNano()))
 	if err := os.Rename(path, dest); err != nil {
 		_ = os.Remove(path)
+		return ""
 	}
+	return dest
+}
+
+// archivedNote renders where an archived state file was moved to, for inclusion
+// in the error that reports it. It degrades to naming the archive directory when
+// the move itself failed.
+func archivedNote(dest string) string {
+	if dest == "" {
+		return "it could not be archived and was removed"
+	}
+	return "archived to " + dest
 }
 
 // SaveSessionForResurrection persists the session state to disk.
@@ -111,14 +132,15 @@ func LoadResurrectionState(sessionName string) (*SessionState, error) {
 
 	var state SessionState
 	if err := json.Unmarshal(data, &state); err != nil {
-		archiveResurrectionFile(path)
-		return nil, fmt.Errorf("corrupt resurrection data for session %q (archived): %w", sessionName, err)
+		dest := archiveResurrectionFile(path)
+		return nil, fmt.Errorf("saved state for session %q is corrupt and cannot be restored (%s): %w",
+			sessionName, archivedNote(dest), err)
 	}
 
 	if state.ResurrectionVersion > ResurrectionVersion {
-		archiveResurrectionFile(path)
-		return nil, fmt.Errorf("incompatible resurrection version %d for session %q (archived), this daemon supports up to %d",
-			state.ResurrectionVersion, sessionName, ResurrectionVersion)
+		dest := archiveResurrectionFile(path)
+		return nil, fmt.Errorf("saved state for session %q was written by a newer TUIOS (state version %d, this build reads up to %d) and cannot be restored (%s)",
+			sessionName, state.ResurrectionVersion, ResurrectionVersion, archivedNote(dest))
 	}
 
 	return &state, nil

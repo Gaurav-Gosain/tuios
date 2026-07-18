@@ -81,7 +81,7 @@ type ProtocolMismatchError struct {
 
 func (e *ProtocolMismatchError) Error() string {
 	var b strings.Builder
-	b.WriteString("the running TUIOS daemon does not speak this CLI's control protocol")
+	b.WriteString("The running TUIOS daemon does not speak this CLI's control protocol")
 
 	switch {
 	case e.DaemonVersion != "" && e.ClientVersion != "":

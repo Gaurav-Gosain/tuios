@@ -15,17 +15,93 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// dialVerb connects to the daemon for a JSON verb-protocol call, or returns a
-// helpful error when the daemon is not running.
-func dialVerb() (*session.VerbClient, error) {
-	if !session.IsDaemonRunning() {
-		return nil, fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
-	}
-	client, err := session.DialVerbClient()
+// runListVerbs prints the control protocol's verb catalog. It is the discovery
+// entry point the daemon's own error hints point at, so it must work whenever
+// the daemon does, and say why when it does not.
+func runListVerbs(verb string, jsonOutput bool) error {
+	client, err := dialVerb()
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
+		return err
 	}
-	return client, nil
+	defer func() { _ = client.Close() }()
+
+	var params any
+	if verb != "" {
+		params = map[string]any{"verb": verb}
+	}
+	raw, err := client.Call("list-verbs", params)
+	if err != nil {
+		return explainVerbError("list-verbs", err)
+	}
+
+	if jsonOutput {
+		var pretty any
+		if err := json.Unmarshal(raw, &pretty); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		outputJSON(pretty)
+		return nil
+	}
+
+	var catalog struct {
+		Version       int    `json:"version"`
+		MinVersion    int    `json:"min_version"`
+		DaemonVersion string `json:"daemon_version"`
+		Verbs         []struct {
+			Verb        string `json:"verb"`
+			Description string `json:"description"`
+			Params      []struct {
+				Name        string   `json:"name"`
+				Type        string   `json:"type"`
+				Required    bool     `json:"required"`
+				Description string   `json:"description"`
+				Accepted    []string `json:"accepted"`
+				Default     string   `json:"default"`
+			} `json:"params"`
+			Examples []string `json:"examples"`
+		} `json:"verbs"`
+		ErrorCodes []struct {
+			Code        string `json:"code"`
+			Description string `json:"description"`
+		} `json:"error_codes"`
+	}
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	fmt.Printf("Control protocol version %d (daemon %s, oldest supported %d)\n\n",
+		catalog.Version, catalog.DaemonVersion, catalog.MinVersion)
+
+	for _, v := range catalog.Verbs {
+		fmt.Printf("%s\n  %s\n", v.Verb, v.Description)
+		for _, p := range v.Params {
+			required := ""
+			if p.Required {
+				required = " (required)"
+			}
+			fmt.Printf("    %-10s %-8s%s %s\n", p.Name, p.Type, required, p.Description)
+			if len(p.Accepted) > 0 {
+				fmt.Printf("    %-10s %s\n", "", "one of: "+strings.Join(p.Accepted, ", "))
+			}
+			if p.Default != "" {
+				fmt.Printf("    %-10s %s\n", "", "default: "+p.Default)
+			}
+		}
+		for _, ex := range v.Examples {
+			fmt.Printf("    example: %s\n", ex)
+		}
+		fmt.Println()
+	}
+
+	// The error vocabulary only makes sense alongside the whole catalog, so it
+	// is omitted when a single verb was requested.
+	if verb == "" && len(catalog.ErrorCodes) > 0 {
+		fmt.Println("Error codes:")
+		for _, e := range catalog.ErrorCodes {
+			fmt.Printf("  %-18s %s\n", e.Code, e.Description)
+		}
+	}
+	return nil
 }
 
 // printVerbResult renders a verb result in the CLI's --json contract shape
@@ -75,7 +151,7 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 		"literal": literal,
 		"raw":     raw,
 	}); err != nil {
-		return fmt.Errorf("send-keys failed: %w", err)
+		return explainVerbError("send-keys", err)
 	}
 	return nil
 }
@@ -95,7 +171,7 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool) err
 		"ansi":       ansi,
 	})
 	if err != nil {
-		return fmt.Errorf("capture failed: %w", err)
+		return explainVerbError("capture-pane", err)
 	}
 
 	var res struct {
@@ -110,8 +186,8 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool) err
 
 // runCommand executes a tape command in a running TUIOS session.
 func runCommand(sessionName, command string, args []string, jsonOutput bool) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
+	if err := requireDaemon(); err != nil {
+		return err
 	}
 
 	client := session.NewClient(&session.ClientConfig{
@@ -119,7 +195,7 @@ func runCommand(sessionName, command string, args []string, jsonOutput bool) err
 	})
 
 	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+		return explainDialError(err)
 	}
 	defer func() { _ = client.Close() }()
 
@@ -153,7 +229,7 @@ func queryWindows(sessionName string, jsonOutput bool) error {
 
 	raw, err := client.Call("list-windows", map[string]any{"session": sessionName})
 	if err != nil {
-		return reportVerbError(fmt.Errorf("list-windows failed: %w", err), jsonOutput)
+		return reportVerbError(explainVerbError("list-windows", err), jsonOutput)
 	}
 	return printVerbResult(raw, jsonOutput)
 }
@@ -168,7 +244,7 @@ func querySession(sessionName string, jsonOutput bool) error {
 
 	raw, err := client.Call("session-info", map[string]any{"session": sessionName})
 	if err != nil {
-		return reportVerbError(fmt.Errorf("session-info failed: %w", err), jsonOutput)
+		return reportVerbError(explainVerbError("session-info", err), jsonOutput)
 	}
 	return printVerbResult(raw, jsonOutput)
 }
@@ -187,7 +263,7 @@ func runSetConfig(sessionName, path, value string) error {
 		"key":     path,
 		"value":   value,
 	}); err != nil {
-		return fmt.Errorf("set-option failed: %w", err)
+		return explainVerbError("set-option", err)
 	}
 	fmt.Printf("Set %s = %s\n", path, value)
 	return nil
@@ -206,7 +282,7 @@ func runGetConfig(sessionName, path string) error {
 		"key":     path,
 	})
 	if err != nil {
-		return fmt.Errorf("get-option failed: %w", err)
+		return explainVerbError("get-option", err)
 	}
 	var res struct {
 		Value string `json:"value"`
@@ -220,8 +296,8 @@ func runGetConfig(sessionName, path string) error {
 
 // runTapeExec executes a tape file in a running TUIOS session.
 func runTapeExec(sessionName, filePath string) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running. Start a session first with 'tuios new'")
+	if err := requireDaemon(); err != nil {
+		return err
 	}
 
 	// Read the tape file
@@ -245,7 +321,7 @@ func runTapeExec(sessionName, filePath string) error {
 	})
 
 	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+		return explainDialError(err)
 	}
 	defer func() { _ = client.Close() }()
 
@@ -625,8 +701,8 @@ func getConfigValueCompletions(path, _ string) []string {
 
 // runGetLogs retrieves and displays daemon logs.
 func runGetLogs(count int, clear bool, follow bool) error {
-	if !session.IsDaemonRunning() {
-		return fmt.Errorf("TUIOS daemon is not running")
+	if err := requireDaemon(); err != nil {
+		return err
 	}
 
 	client := session.NewClient(&session.ClientConfig{
@@ -634,7 +710,7 @@ func runGetLogs(count int, clear bool, follow bool) error {
 	})
 
 	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+		return explainDialError(err)
 	}
 	defer func() { _ = client.Close() }()
 
