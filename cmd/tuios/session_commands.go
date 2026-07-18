@@ -660,11 +660,11 @@ func runResurrect(sessionName string) error {
 	// the daemon already auto-restored it on start.
 	client := session.NewClient(&session.ClientConfig{Version: version})
 	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+		return explainDialError(err)
 	}
 	if err := client.ResurrectSession(sessionName); err != nil {
 		_ = client.Close()
-		return err
+		return explainResurrectFailure(sessionName, err)
 	}
 	_ = client.Close()
 
