@@ -366,6 +366,17 @@ func (m *OS) View() tea.View {
 	if m.renderSkipped && m.cachedViewContent != "" {
 		view.SetContent(m.cachedViewContent)
 	} else {
+		// A resize drag applies the new geometry to the windows immediately but
+		// defers the matching BSP ratio sync, because the sync is whole-tree
+		// work and motion events outnumber frames. The separator overlay reads
+		// its positions from the tree and its highlight from live window
+		// geometry, so composing while the two disagree draws the divider at the
+		// position the drag has already left, in the unfocused color because it
+		// is no longer on the focused pane's perimeter. Flushing here rather
+		// than on the drag's own code path covers every way a frame can be
+		// composed mid-drag, including PTY output, which arrives on a path that
+		// knows nothing about the drag.
+		m.FlushPendingBSPSync()
 		content := m.composeFrame()
 		m.cachedViewContent = content
 		view.SetContent(content)

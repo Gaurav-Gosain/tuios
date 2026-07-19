@@ -246,9 +246,13 @@ func (m *OS) MarkBSPSyncPending() {
 	m.pendingBSPSync = true
 }
 
-// FlushPendingBSPSync runs a deferred ratio sync if one is outstanding. Call it
-// immediately before composing a frame so the separator overlay is drawn from
-// ratios that match the geometry in that same frame.
+// FlushPendingBSPSync runs a deferred ratio sync if one is outstanding. Its one
+// caller is View, immediately before it composes, and that is the only correct
+// place for it: the overlay mixes tree ratios with live window geometry, so the
+// sync has to happen on every frame that is composed rather than on the paths
+// that change geometry. Frames arrive from elsewhere too, PTY output most of
+// all, and one composed between a motion event and its sync draws the divider
+// where the drag has already left.
 func (m *OS) FlushPendingBSPSync() {
 	if m.pendingBSPSync {
 		m.SyncBSPTreeFromGeometry()

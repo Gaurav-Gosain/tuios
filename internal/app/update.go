@@ -578,9 +578,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// would draw again immediately and the budget would not hold.
 		if m.InteractionMode {
 			m.lastInteractionRender = time.Now()
-			// This is the tick that flushes a motion whose draw was coalesced
-			// away, so it has to carry that motion's ratio sync with it.
-			m.FlushPendingBSPSync()
 		}
 		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
 
@@ -691,11 +688,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			} else {
 				m.lastInteractionRender = now
 			}
-		}
-		// A frame is about to be composed for this event, so any ratio sync the
-		// handler deferred has to happen now, before View reads the tree.
-		if !m.renderSkipped {
-			m.FlushPendingBSPSync()
 		}
 		return newModel, cmd
 
