@@ -229,9 +229,37 @@ func (m *OS) RemoveWindowFromBSPTree(window *terminal.Window) {
 	m.ApplyBSPLayout()
 }
 
+// MarkBSPSyncPending records that window geometry moved during a drag and the
+// BSP tree's ratios no longer match it. The sync itself is deferred to the next
+// composed frame by FlushPendingBSPSync, because its only job during a drag is
+// to keep the separator overlay under the pointer, and a frame that is never
+// drawn cannot show a stale separator.
+//
+// The deferral is only safe because it is bounded on both ends: the interaction
+// tick composes a frame for as long as a drag is live, so a pending sync is
+// never held for more than one frame interval, and mouse release calls
+// SyncBSPTreeFromGeometry unconditionally. That last one cannot be skipped -
+// the tree ratios, not the window rectangles, are what survives a retile, so a
+// drag that ended without a final sync would have its result discarded the next
+// time the layout was applied.
+func (m *OS) MarkBSPSyncPending() {
+	m.pendingBSPSync = true
+}
+
+// FlushPendingBSPSync runs a deferred ratio sync if one is outstanding. Call it
+// immediately before composing a frame so the separator overlay is drawn from
+// ratios that match the geometry in that same frame.
+func (m *OS) FlushPendingBSPSync() {
+	if m.pendingBSPSync {
+		m.SyncBSPTreeFromGeometry()
+	}
+}
+
 // SyncBSPTreeFromGeometry updates the BSP tree's split ratios to match current window positions.
 // This should be called after mouse resize operations complete.
 func (m *OS) SyncBSPTreeFromGeometry() {
+	m.pendingBSPSync = false
+
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil || tree.IsEmpty() {
 		return

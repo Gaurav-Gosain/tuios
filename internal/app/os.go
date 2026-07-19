@@ -191,7 +191,13 @@ type OS struct {
 	// frame. Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
 	lastInteractionRender time.Time
-	renderCanvas          *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
+	// pendingBSPSync is set when a resize motion changed window geometry and the
+	// BSP tree's ratios have not been re-derived from it yet. The sync exists so
+	// the shared-borders separator overlay follows the drag, so it only has to
+	// run on frames that are actually composed; it is whole-tree work and running
+	// it per motion event makes the drag cost scale with window count.
+	pendingBSPSync bool
+	renderCanvas   *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
 	// Reused per-frame scratch for graphics placement refresh (avoids per-frame allocs)
 	kittyPosMap     map[string]*WindowPositionInfo // Reused map for kitty placement refresh
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values
