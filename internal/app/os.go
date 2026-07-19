@@ -197,7 +197,10 @@ type OS struct {
 	// run on frames that are actually composed; it is whole-tree work and running
 	// it per motion event makes the drag cost scale with window count.
 	pendingBSPSync bool
-	renderCanvas   *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
+	// bspResizeScratch holds the layout rebuilt on each resize step. It is
+	// reused so a mouse drag does not allocate a map per motion event.
+	bspResizeScratch map[int]layout.Rect
+	renderCanvas     *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
 	// Reused per-frame scratch for graphics placement refresh (avoids per-frame allocs)
 	kittyPosMap     map[string]*WindowPositionInfo // Reused map for kitty placement refresh
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values
