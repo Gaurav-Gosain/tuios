@@ -793,41 +793,6 @@ func (t *BSPTree) findAnyWindowInSubtree(node *TileNode) int {
 	return t.findAnyWindowInSubtree(node.Right)
 }
 
-// nodeRect computes the actual rectangle a node occupies by walking up from
-// the node to the root and applying split ratios along the way.
-func (t *BSPTree) nodeRect(node *TileNode, bounds Rect) Rect {
-	if node == nil {
-		return bounds
-	}
-	// Collect ancestors from root to node's parent
-	var ancestors []*TileNode
-	for cur := node; cur.Parent != nil; cur = cur.Parent {
-		ancestors = append(ancestors, cur)
-	}
-	// Walk from root down, narrowing bounds at each split
-	rect := bounds
-	for i := len(ancestors) - 1; i >= 0; i-- {
-		child := ancestors[i]
-		parent := child.Parent
-		if parent.SplitType == SplitVertical {
-			splitX := rect.X + int(float64(rect.W)*parent.SplitRatio)
-			if child.IsLeftChild() {
-				rect = Rect{X: rect.X, Y: rect.Y, W: splitX - rect.X, H: rect.H}
-			} else {
-				rect = Rect{X: splitX, Y: rect.Y, W: rect.X + rect.W - splitX, H: rect.H}
-			}
-		} else {
-			splitY := rect.Y + int(float64(rect.H)*parent.SplitRatio)
-			if child.IsLeftChild() {
-				rect = Rect{X: rect.X, Y: rect.Y, W: rect.W, H: splitY - rect.Y}
-			} else {
-				rect = Rect{X: rect.X, Y: splitY, W: rect.W, H: rect.Y + rect.H - splitY}
-			}
-		}
-	}
-	return rect
-}
-
 // determineAutoSplit determines the split direction based on the auto scheme
 func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitType {
 	switch t.AutoScheme {
@@ -862,7 +827,13 @@ func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitTyp
 
 	case SchemeSmartSplit:
 		// Compute the focused window's actual rect from the BSP tree
-		r := t.nodeRect(targetNode, bounds)
+		// nodeBounds mirrors the layout exactly, separator gap and stacked
+		// title bars included, so the aspect ratio this heuristic reads is the
+		// one on screen.
+		r, ok := t.nodeBounds(targetNode, bounds)
+		if !ok {
+			r = bounds
+		}
 		w, h := r.W, r.H
 		if w > h*2 {
 			// Very wide window: split vertically (side by side)
@@ -983,43 +954,36 @@ func (t *BSPTree) collectSplitsRecursive(node *TileNode, bounds Rect, splits *[]
 		return
 	}
 
-	if node.SplitType == SplitVertical {
-		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
-		if splitX <= bounds.X {
-			splitX = bounds.X + 1
+	// The separator the user sees and grabs has to be the one the layout
+	// actually put there, so the position comes from childBounds rather than
+	// from a second copy of the split arithmetic. A separator drawn where no
+	// divider is means the pointer offers a resize cursor over a line that
+	// dragging will not move.
+	leftBounds, rightBounds := childBounds(node, bounds)
+
+	// A stacked node splits by raising one child's title bar, not by a
+	// separator, and ResizeSplit will not move one. Emitting a line for it
+	// would advertise a divider that cannot be dragged.
+	if node.SplitType != SplitStacked {
+		if node.SplitType == SplitVertical {
+			*splits = append(*splits, SplitLine{
+				Vertical: true,
+				Pos:      bounds.X + leftBounds.W,
+				From:     bounds.Y,
+				To:       bounds.Y + bounds.H - 1,
+			})
+		} else {
+			*splits = append(*splits, SplitLine{
+				Vertical: false,
+				Pos:      bounds.Y + leftBounds.H,
+				From:     bounds.X,
+				To:       bounds.X + bounds.W - 1,
+			})
 		}
-		if splitX >= bounds.X+bounds.W-1 {
-			splitX = bounds.X + bounds.W - 2
-		}
-		*splits = append(*splits, SplitLine{
-			Vertical: true,
-			Pos:      splitX,
-			From:     bounds.Y,
-			To:       bounds.Y + bounds.H - 1,
-		})
-		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-		rightBounds := Rect{X: splitX + 1, Y: bounds.Y, W: bounds.X + bounds.W - splitX - 1, H: bounds.H}
-		t.collectSplitsRecursive(node.Left, leftBounds, splits)
-		t.collectSplitsRecursive(node.Right, rightBounds, splits)
-	} else {
-		splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
-		if splitY <= bounds.Y {
-			splitY = bounds.Y + 1
-		}
-		if splitY >= bounds.Y+bounds.H-1 {
-			splitY = bounds.Y + bounds.H - 2
-		}
-		*splits = append(*splits, SplitLine{
-			Vertical: false,
-			Pos:      splitY,
-			From:     bounds.X,
-			To:       bounds.X + bounds.W - 1,
-		})
-		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-		rightBounds := Rect{X: bounds.X, Y: splitY + 1, W: bounds.W, H: bounds.Y + bounds.H - splitY - 1}
-		t.collectSplitsRecursive(node.Left, leftBounds, splits)
-		t.collectSplitsRecursive(node.Right, rightBounds, splits)
 	}
+
+	t.collectSplitsRecursive(node.Left, leftBounds, splits)
+	t.collectSplitsRecursive(node.Right, rightBounds, splits)
 }
 
 // GetAllWindowIDs returns all window IDs in the tree (in-order traversal)

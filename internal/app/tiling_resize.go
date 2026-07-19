@@ -337,6 +337,12 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
+		// Unconditionally, before the unchanged-geometry check below: a window
+		// this resize leaves alone can still be mid-snap from an earlier
+		// layout change, and that animation would go on stamping its own
+		// rectangles over the drag on every tick.
+		m.CancelSnapAnimation(win)
+
 		if win.X == rect.X && win.Y == rect.Y && win.Width == rect.W && win.Height == rect.H {
 			continue
 		}

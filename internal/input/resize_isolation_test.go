@@ -3,11 +3,13 @@ package input
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // Resizing a divider in a BSP layout may only move the two subtrees that
@@ -370,5 +372,102 @@ func TestMouseResizeMovesOnlyTheDividersSubtrees(t *testing.T) {
 				checkSurvivesRetile(t, label, m, after)
 			})
 		}
+	}
+}
+
+// TestResizeSurvivesAnInFlightSnapAnimation pins the other way a pane can move
+// on its own. A snap animation writes an interpolated rectangle to its window
+// on every tick and does not care what else has set the geometry since, so a
+// drag that begins while windows are still animating into place gets stamped
+// over on the next tick and the layout jumps back to a frame of the transition
+// the user had already moved past.
+//
+// Windows animate on any layout change - opening a pane, closing one,
+// switching workspace, applying a template - so starting a drag on top of one
+// is ordinary, not a corner case.
+func TestResizeSurvivesAnInFlightSnapAnimation(t *testing.T) {
+	app.SetInputHandler(HandleInput)
+
+	for _, shared := range []bool{false, true} {
+		t.Run(fmt.Sprintf("shared=%v", shared), func(t *testing.T) {
+			prev := config.SharedBorders
+			config.SharedBorders = shared
+			t.Cleanup(func() { config.SharedBorders = prev })
+
+			m := isoOS(t, 4)
+			// isoOS turns animations off for the other tests; this one is about
+			// what happens when they are on.
+			config.AnimationsEnabled = true
+			buildTree(m, func(leaf func(int) *layout.TileNode) *layout.TileNode {
+				return v(0.5, h(0.5, leaf(1), leaf(2)), h(0.5, leaf(3), leaf(4)))
+			})
+
+			// Nudge the panes off their tiled positions so the retile below has
+			// somewhere to animate from; a window already at its target gets no
+			// animation. The offset is deliberately small: displacing them to
+			// full screen would park the dragged edge on the screen boundary,
+			// where the resize is blocked outright and the test would pass
+			// without ever exercising a resize.
+			for _, w := range m.Windows {
+				w.X, w.Y = w.X+3, w.Y+2
+			}
+
+			// Retiling queues a snap animation per window, which is the state a
+			// user drags on top of when they resize right after a layout change.
+			m.TileAllWindows()
+			if !m.HasActiveAnimations() {
+				t.Fatal("no snap animations queued; this test needs some in flight to be meaningful")
+			}
+
+			win := m.Windows[0]
+			startX, startY := win.X+win.Width, win.Y+win.Height
+			m.Resizing = true
+			m.InteractionMode = true
+			m.ResizeCorner = app.BottomRight
+			m.PreResizeState = terminal.Window{
+				ID: win.ID, X: win.X, Y: win.Y, Z: win.Z,
+				Width: win.Width, Height: win.Height,
+			}
+			m.ResizeStartX, m.ResizeStartY = startX, startY
+
+			// One motion event, deliberately. Asserting on geometry after a run
+			// of ticks would be a race against the animation's 300ms wall clock
+			// rather than a statement about the resize: on a slow enough run the
+			// animations finish on their own and the test passes for the wrong
+			// reason. Retiring them is the contract, so assert exactly that.
+			preDrag := geomOf(m)
+			_, _ = m.Update(motionAt(startX-6, startY))
+			if geomOf(m)[win.ID] == preDrag[win.ID] {
+				t.Fatal("the motion event did not resize anything, so this test would " +
+					"pass whether or not animations are retired")
+			}
+
+			for _, w := range m.Windows {
+				for _, a := range m.Animations {
+					if a.Window == w && a.Type == ui.AnimationSnap {
+						t.Fatalf("pane %s still has a snap animation after a resize motion; "+
+							"it will overwrite the drag on the next tick", w.ID)
+					}
+				}
+			}
+
+			// And the user-visible consequence: ticking now moves nothing.
+			settled := geomOf(m)
+			for range 5 {
+				_, _ = m.Update(app.TickerMsg(time.Now()))
+			}
+			for id, want := range settled {
+				var got [4]int
+				for _, w := range m.Windows {
+					if w.ID == id {
+						got = [4]int{w.X, w.Y, w.Width, w.Height}
+					}
+				}
+				if got != want {
+					t.Errorf("pane %s moved after the gesture ended: %v -> %v; "+
+						"an in-flight snap animation overwrote the resize", id, want, got)
+				}
+			}
+		})
 	}
 }
