@@ -136,6 +136,38 @@ func (m *OS) ApplyBSPLayout() {
 			}
 		}
 
+		// A live resize drag reapplies this layout on every composed frame, to
+		// keep the separator overlay's ratios in step with the geometry the
+		// pointer is producing. Set that geometry directly.
+		//
+		// A resize is direct manipulation: the edge is where the pointer is,
+		// so there is nothing to ease toward. Animating instead built a fresh
+		// 300ms snap per window per frame, each one discarded and restarted by
+		// the next frame before it could finish, so the panes never arrived
+		// anywhere and trailed the cursor on a curve that kept resetting. That
+		// costs almost no CPU, which is why it read as mush rather than as a
+		// slow frame, and why no timing measurement found it.
+		//
+		// The normal path is also what tells the PTY, and in daemon mode the
+		// daemon over its socket, about the new size: one round trip per window
+		// per frame for a size the user is still in the middle of choosing.
+		// Resize visually instead and record it in PendingResizes, which mouse
+		// release already drains into one real resize per window.
+		if m.Resizing {
+			win.X, win.Y = rect.X, rect.Y
+			if win.Tiled != config.SharedBorders {
+				win.Tiled = config.SharedBorders
+				win.InvalidateCache()
+			}
+			if win.Width != rect.W || win.Height != rect.H {
+				win.ResizeVisual(rect.W, rect.H)
+				win.IsBeingManipulated = true
+				m.PendingResizes[win.ID] = [2]int{rect.W, rect.H}
+			}
+			win.MarkPositionDirty()
+			continue
+		}
+
 		// Create animation for smooth transition
 		anim := ui.NewSnapAnimation(
 			win,
