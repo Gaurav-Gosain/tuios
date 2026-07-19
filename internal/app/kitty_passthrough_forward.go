@@ -161,14 +161,58 @@ func (kp *KittyPassthrough) ForwardCommand(
 	return nil
 }
 
+// forwardQuery answers a guest's a=q capability probe.
+//
+// The answer has to be honest about the transmission medium, not just about
+// graphics in general. kitten icat opens with three probes - direct, temp file
+// and shared memory - and commits to whichever medium comes back OK. Answering
+// OK to all three makes it pick a file medium and send us a path, which we
+// forward to the host; a host that does not share our filesystem (sip's
+// browser client) drops it silently and no image is ever drawn. Reporting file
+// media unsupported when the host cannot read files makes the guest stream the
+// bytes instead, which passes through cleanly.
 func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInput func([]byte)) {
-	if ptyInput != nil && cmd.Quiet < 2 {
-		response := vt.BuildKittyResponse(true, cmd.ImageID, "")
-		kittyPassthroughLog("forwardQuery: sending response for imageID=%d, response=%q, ptyInput=%v", cmd.ImageID, response, ptyInput != nil)
-		ptyInput(response)
-	} else {
-		kittyPassthroughLog("forwardQuery: NOT sending response, ptyInput=%v, quiet=%d", ptyInput != nil, cmd.Quiet)
+	if ptyInput == nil {
+		kittyPassthroughLog("forwardQuery: NOT sending response, no ptyInput")
+		return
 	}
+
+	ok := true
+	errMsg := ""
+	if isFileMedium(cmd.Medium) && !kp.hostReadsFiles() {
+		ok = false
+		errMsg = "ENOTSUPPORTED:host terminal cannot read files from this machine"
+	}
+
+	// Quiet mode: q=1 suppresses successes, q=2 suppresses everything. An
+	// error still has to reach a guest that asked for q=1, or it waits out its
+	// timeout instead of moving on to the next medium.
+	if cmd.Quiet >= 2 || (cmd.Quiet >= 1 && ok) {
+		kittyPassthroughLog("forwardQuery: suppressed by quiet=%d (ok=%v)", cmd.Quiet, ok)
+		return
+	}
+
+	response := vt.BuildKittyResponse(ok, cmd.ImageID, errMsg)
+	kittyPassthroughLog("forwardQuery: imageID=%d medium=%c ok=%v response=%q", cmd.ImageID, cmd.Medium, ok, response)
+	ptyInput(response)
+}
+
+// isFileMedium reports whether a transmission medium names a path on this
+// machine rather than carrying the image bytes inline.
+func isFileMedium(medium vt.KittyGraphicsMedium) bool {
+	return medium == vt.KittyMediumFile ||
+		medium == vt.KittyMediumTempFile ||
+		medium == vt.KittyMediumSharedMemory
+}
+
+// hostReadsFiles reports whether a file path forwarded to the host terminal
+// will actually resolve there. False for a browser client, whose only view of
+// an image is the bytes we send it.
+func (kp *KittyPassthrough) hostReadsFiles() bool {
+	if kp.inlineGraphics {
+		return false
+	}
+	return GetHostCapabilities().KittyFileTransfer
 }
 
 func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
@@ -419,13 +463,16 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 
 	kittyPassthroughLog("forwardFileTransmit: file=%s, andPlace=%v, medium=%c", filePath, andPlace, cmd.Medium)
 
-	// In inline-graphics mode (tuios-web) the host terminal cannot read
-	// files on the server. Read the file ourselves and divert into the
-	// direct-transmission path so the bytes reach the browser over the
-	// sip PTY. This is critical for apps like youterm / mpv that use
-	// shared-memory frames (t=s, /dev/shm/...) and for any t=f / t=t
-	// transmission.
-	if kp.inlineGraphics {
+	// When the host terminal cannot read files on this machine, read the file
+	// ourselves and divert into the direct-transmission path so the bytes
+	// reach it inline. That is always the case for a browser target: the
+	// tuios-web build (inlineGraphics), and equally a native tuios whose own
+	// host happens to be a browser client such as sip's, which the capability
+	// probe reports through KittyFileTransfer. Critical for apps like youterm
+	// / mpv that use shared-memory frames (t=s, /dev/shm/...) and for any t=f
+	// / t=t transmission. Guests that honour our a=q answer stream directly
+	// and never reach this path; this covers the ones that do not ask.
+	if !kp.hostReadsFiles() {
 		kp.forwardFileTransmitInline(cmd, filePath, windowID, andPlace,
 			windowX, windowY, windowWidth, windowHeight,
 			contentOffsetX, contentOffsetY,
