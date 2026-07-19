@@ -404,6 +404,16 @@ func (t *BSPTree) RemoveWindow(windowID int) {
 // Returns a map of windowID -> Rect with the calculated layout.
 func (t *BSPTree) ApplyLayout(bounds Rect) map[int]Rect {
 	result := make(map[int]Rect)
+	t.ApplyLayoutInto(bounds, result)
+	return result
+}
+
+// ApplyLayoutInto is ApplyLayout writing into a caller-owned map. A mouse drag
+// reapplies the layout on every motion event, and allocating a fresh map each
+// time makes the cost of a single event scale with how many panes the workspace
+// holds; reusing one keeps it flat.
+func (t *BSPTree) ApplyLayoutInto(bounds Rect, result map[int]Rect) map[int]Rect {
+	clear(result)
 	if t.Root == nil {
 		return result
 	}
@@ -439,71 +449,228 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 		return
 	}
 
-	// Internal node - split the bounds
-	var leftBounds, rightBounds Rect
-
-	if config.SharedBorders {
-		// Shared borders mode: reserve 1 cell for separator line between panes
-		if node.SplitType == SplitVertical {
-			// Vertical split: left | separator | right
-			splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
-			// Clamp so separator stays within bounds
-			if splitX <= bounds.X {
-				splitX = bounds.X + 1
-			}
-			if splitX >= bounds.X+bounds.W-1 {
-				splitX = bounds.X + bounds.W - 2
-			}
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-			rightBounds = Rect{X: splitX + 1, Y: bounds.Y, W: bounds.X + bounds.W - splitX - 1, H: bounds.H}
-		} else {
-			// Horizontal split: top / separator / bottom
-			splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
-			// Clamp so separator stays within bounds
-			if splitY <= bounds.Y {
-				splitY = bounds.Y + 1
-			}
-			if splitY >= bounds.Y+bounds.H-1 {
-				splitY = bounds.Y + bounds.H - 2
-			}
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-			rightBounds = Rect{X: bounds.X, Y: splitY + 1, W: bounds.W, H: bounds.Y + bounds.H - splitY - 1}
-		}
-	} else {
-		if node.SplitType == SplitVertical {
-			// Vertical split: left | right
-			splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-			rightBounds = Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
-		} else {
-			// Horizontal split: top / bottom
-			splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-			rightBounds = Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
-		}
-	}
-
-	if node.SplitType == SplitStacked {
-		// Stacked: active child gets full bounds minus 1 row for inactive child's title bar
-		titleBarHeight := 1
-		if node.StackedActiveLeft {
-			// Left is active: gets content area, right gets title bar at bottom
-			activeBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: bounds.H - titleBarHeight}
-			inactiveBounds := Rect{X: bounds.X, Y: bounds.Y + bounds.H - titleBarHeight, W: bounds.W, H: titleBarHeight}
-			t.applyLayoutRecursive(node.Left, activeBounds, result)
-			t.applyLayoutRecursive(node.Right, inactiveBounds, result)
-		} else {
-			// Right is active: left gets title bar at top, right gets content area
-			inactiveBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: titleBarHeight}
-			activeBounds := Rect{X: bounds.X, Y: bounds.Y + titleBarHeight, W: bounds.W, H: bounds.H - titleBarHeight}
-			t.applyLayoutRecursive(node.Left, inactiveBounds, result)
-			t.applyLayoutRecursive(node.Right, activeBounds, result)
-		}
-		return
-	}
-
+	leftBounds, rightBounds := childBounds(node, bounds)
 	t.applyLayoutRecursive(node.Left, leftBounds, result)
 	t.applyLayoutRecursive(node.Right, rightBounds, result)
+}
+
+// childBounds divides an internal node's rectangle between its two children.
+// It is the single definition of the split model: every other part of the
+// layout that needs to know where a divider sits, or what rectangle a node was
+// laid out in, has to derive it from here rather than reimplement it. Resizing
+// in particular depends on that, because a ratio computed against a rectangle
+// the layout does not agree with puts the divider somewhere the drag did not
+// ask for.
+func childBounds(node *TileNode, bounds Rect) (leftBounds, rightBounds Rect) {
+	if node.SplitType == SplitStacked {
+		// Stacked: the active child gets the content area, the inactive one is
+		// reduced to a single title bar row.
+		const titleBarHeight = 1
+		if node.StackedActiveLeft {
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: bounds.H - titleBarHeight}
+			rightBounds = Rect{X: bounds.X, Y: bounds.Y + bounds.H - titleBarHeight, W: bounds.W, H: titleBarHeight}
+		} else {
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: titleBarHeight}
+			rightBounds = Rect{X: bounds.X, Y: bounds.Y + titleBarHeight, W: bounds.W, H: bounds.H - titleBarHeight}
+		}
+		return leftBounds, rightBounds
+	}
+
+	// Shared borders reserve one cell between the two children for the drawn
+	// separator, so the far child starts one past the divider line.
+	gap := 0
+	if config.SharedBorders {
+		gap = 1
+	}
+
+	if node.SplitType == SplitVertical {
+		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
+		if gap > 0 {
+			// Keep the separator cell inside the node's own rectangle.
+			splitX = max(bounds.X+1, min(splitX, bounds.X+bounds.W-2))
+		}
+		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
+		rightBounds = Rect{X: splitX + gap, Y: bounds.Y, W: bounds.X + bounds.W - splitX - gap, H: bounds.H}
+		return leftBounds, rightBounds
+	}
+
+	splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
+	if gap > 0 {
+		splitY = max(bounds.Y+1, min(splitY, bounds.Y+bounds.H-2))
+	}
+	leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
+	rightBounds = Rect{X: bounds.X, Y: splitY + gap, W: bounds.W, H: bounds.Y + bounds.H - splitY - gap}
+	return leftBounds, rightBounds
+}
+
+// ResizeEdge names the side of a pane that a resize gesture drags.
+type ResizeEdge int
+
+const (
+	ResizeEdgeRight ResizeEdge = iota
+	ResizeEdgeLeft
+	ResizeEdgeBottom
+	ResizeEdgeTop
+)
+
+func (e ResizeEdge) vertical() bool {
+	return e == ResizeEdgeRight || e == ResizeEdgeLeft
+}
+
+// far reports whether the edge is on the high side of the pane, which is the
+// side the divider sits on when the pane's subtree is the near child.
+func (e ResizeEdge) far() bool {
+	return e == ResizeEdgeRight || e == ResizeEdgeBottom
+}
+
+// ResizeSplit moves the divider that owns one edge of a window to pos, given in
+// the same coordinate space as bounds. It reports whether a divider was found:
+// an edge that lies on the outer boundary of the whole layout has none, and the
+// caller should leave the geometry alone rather than invent one.
+//
+// This is the only correct way to resize a BSP layout. Matching panes by
+// geometry instead - collecting every window whose edge happens to fall on the
+// dragged line - sweeps in panes from unrelated subtrees whenever two dividers
+// coincide, which they do by default because fresh splits are all 0.5. The tree
+// says exactly which two subtrees the divider separates, and nothing outside
+// them may move.
+func (t *BSPTree) ResizeSplit(windowID int, e ResizeEdge, pos int, bounds Rect) bool {
+	leaf := t.WindowToNode[windowID]
+	if leaf == nil {
+		return false
+	}
+
+	// Walk up to the nearest ancestor that splits on this axis with the window's
+	// subtree on the near side of the divider. Stacked ancestors have no
+	// draggable divider, so they are skipped rather than treated as the split.
+	var node *TileNode
+	for cur := leaf; cur.Parent != nil; cur = cur.Parent {
+		p := cur.Parent
+		if p.SplitType == SplitStacked {
+			continue
+		}
+		if (p.SplitType == SplitVertical) != e.vertical() {
+			continue
+		}
+		if e.far() == cur.IsLeftChild() {
+			node = p
+			break
+		}
+	}
+	if node == nil {
+		return false
+	}
+
+	rect, ok := t.nodeBounds(node, bounds)
+	if !ok {
+		return false
+	}
+
+	gap := 0
+	if config.SharedBorders {
+		gap = 1
+	}
+
+	// The near child's far edge is the divider line itself; the far child's near
+	// edge sits one separator cell past it.
+	line := pos
+	if !e.far() {
+		line -= gap
+	}
+
+	origin, extent := rect.X, rect.W
+	if !e.vertical() {
+		origin, extent = rect.Y, rect.H
+	}
+	if extent <= 0 {
+		return false
+	}
+
+	// Neither subtree may be squeezed below what its own leaves need, and a
+	// subtree split along the same axis needs the sum of its children.
+	lo := origin + minExtent(node.Left, e.vertical())
+	hi := origin + extent - gap - minExtent(node.Right, e.vertical())
+	if lo > hi {
+		return false
+	}
+	line = max(lo, min(line, hi))
+
+	// Aim at the middle of the target cell. applyLayoutRecursive truncates
+	// ratio*extent, so a ratio derived from the cell's left edge can round down
+	// to the previous cell and make a drag lose a step, or creep on re-apply.
+	node.SplitRatio = (float64(line-origin) + 0.5) / float64(extent)
+	return true
+}
+
+// minExtent is the smallest width (or height) a subtree can be laid out in
+// without pushing one of its leaves under the minimum window size.
+func minExtent(node *TileNode, vertical bool) int {
+	if node == nil {
+		return 0
+	}
+	if node.IsLeaf() {
+		if vertical {
+			return config.DefaultWindowWidth
+		}
+		return config.DefaultWindowHeight
+	}
+
+	left := minExtent(node.Left, vertical)
+	right := minExtent(node.Right, vertical)
+
+	if node.SplitType == SplitStacked {
+		if vertical {
+			return max(left, right)
+		}
+		// The inactive child is collapsed to a title bar row on top of the
+		// active child's content.
+		return max(left, right) + 1
+	}
+
+	if (node.SplitType == SplitVertical) != vertical {
+		// Split runs the other way: both children span the full extent.
+		return max(left, right)
+	}
+
+	gap := 0
+	if config.SharedBorders {
+		gap = 1
+	}
+	return left + right + gap
+}
+
+// nodeBounds returns the rectangle applyLayoutRecursive would hand to target.
+// It descends from the root through childBounds rather than recomputing the
+// split model, so a ratio derived from it lands the divider where the caller
+// asked.
+func (t *BSPTree) nodeBounds(target *TileNode, bounds Rect) (Rect, bool) {
+	if target == nil || t.Root == nil {
+		return Rect{}, false
+	}
+
+	// Path from the root down to target, collected by walking parent links up.
+	var path []*TileNode
+	for cur := target; cur != nil; cur = cur.Parent {
+		path = append(path, cur)
+	}
+	if path[len(path)-1] != t.Root {
+		return Rect{}, false
+	}
+
+	rect := bounds
+	for i := len(path) - 1; i > 0; i-- {
+		node := path[i]
+		if node.IsLeaf() {
+			return Rect{}, false
+		}
+		leftBounds, rightBounds := childBounds(node, rect)
+		if path[i-1] == node.Left {
+			rect = leftBounds
+		} else {
+			rect = rightBounds
+		}
+	}
+	return rect, true
 }
 
 // SyncRatiosFromGeometry updates the tree's split ratios based on actual window positions.
@@ -548,6 +715,22 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		return
 	}
 
+	// A split whose divider already sits where its stored ratio puts it has
+	// nothing to learn from the geometry, and re-deriving it is not free: the
+	// ratio is a float, the geometry is whole cells, and applyLayoutRecursive
+	// truncates. Reading a truncated divider back as line/extent therefore
+	// rounds the ratio down every time, never up, so a split nobody dragged
+	// walks off centre one pass at a time. An exact 0.5 in a 29-row region comes
+	// back as 0.482759 after a single pass, and the next region size that ratio
+	// is applied at hands the extra rows to one child instead of sharing them.
+	//
+	// So the rule is: sync may only move the ratios whose geometry actually
+	// disagrees with the tree. That is exactly the set the paths this function
+	// exists for change - master-stack, floating windows, windows outside the
+	// tree, and the geometry-scan fallback - and it leaves every other split
+	// holding the value a resize deliberately put there.
+	expectedLeft, expectedRight := childBounds(node, bounds)
+
 	// Calculate the actual split ratio from window geometry.
 	if node.SplitType == SplitVertical {
 		// The split boundary is the near edge of the right subtree's leftmost
@@ -572,12 +755,15 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		if !ok {
 			return
 		}
-		if bounds.W > 0 {
-			node.SplitRatio = float64(splitX-bounds.X) / float64(bounds.W)
+		leftBounds, rightBounds := expectedLeft, expectedRight
+		if splitX != expectedLeft.X+expectedLeft.W {
+			if bounds.W > 0 {
+				node.SplitRatio = float64(splitX-bounds.X) / float64(bounds.W)
+			}
+			// Recurse with updated bounds
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
+			rightBounds = Rect{X: splitX + gap, Y: bounds.Y, W: bounds.X + bounds.W - splitX - gap, H: bounds.H}
 		}
-		// Recurse with updated bounds
-		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-		rightBounds := Rect{X: splitX + gap, Y: bounds.Y, W: bounds.X + bounds.W - splitX - gap, H: bounds.H}
 		t.syncRatiosRecursive(node.Left, leftBounds, windows)
 		t.syncRatiosRecursive(node.Right, rightBounds, windows)
 	} else {
@@ -600,12 +786,15 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		if !ok {
 			return
 		}
-		if bounds.H > 0 {
-			node.SplitRatio = float64(splitY-bounds.Y) / float64(bounds.H)
+		leftBounds, rightBounds := expectedLeft, expectedRight
+		if splitY != expectedLeft.Y+expectedLeft.H {
+			if bounds.H > 0 {
+				node.SplitRatio = float64(splitY-bounds.Y) / float64(bounds.H)
+			}
+			// Recurse with updated bounds
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
+			rightBounds = Rect{X: bounds.X, Y: splitY + gap, W: bounds.W, H: bounds.Y + bounds.H - splitY - gap}
 		}
-		// Recurse with updated bounds
-		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-		rightBounds := Rect{X: bounds.X, Y: splitY + gap, W: bounds.W, H: bounds.Y + bounds.H - splitY - gap}
 		t.syncRatiosRecursive(node.Left, leftBounds, windows)
 		t.syncRatiosRecursive(node.Right, rightBounds, windows)
 	}
@@ -624,41 +813,6 @@ func (t *BSPTree) findAnyWindowInSubtree(node *TileNode) int {
 		return id
 	}
 	return t.findAnyWindowInSubtree(node.Right)
-}
-
-// nodeRect computes the actual rectangle a node occupies by walking up from
-// the node to the root and applying split ratios along the way.
-func (t *BSPTree) nodeRect(node *TileNode, bounds Rect) Rect {
-	if node == nil {
-		return bounds
-	}
-	// Collect ancestors from root to node's parent
-	var ancestors []*TileNode
-	for cur := node; cur.Parent != nil; cur = cur.Parent {
-		ancestors = append(ancestors, cur)
-	}
-	// Walk from root down, narrowing bounds at each split
-	rect := bounds
-	for i := len(ancestors) - 1; i >= 0; i-- {
-		child := ancestors[i]
-		parent := child.Parent
-		if parent.SplitType == SplitVertical {
-			splitX := rect.X + int(float64(rect.W)*parent.SplitRatio)
-			if child.IsLeftChild() {
-				rect = Rect{X: rect.X, Y: rect.Y, W: splitX - rect.X, H: rect.H}
-			} else {
-				rect = Rect{X: splitX, Y: rect.Y, W: rect.X + rect.W - splitX, H: rect.H}
-			}
-		} else {
-			splitY := rect.Y + int(float64(rect.H)*parent.SplitRatio)
-			if child.IsLeftChild() {
-				rect = Rect{X: rect.X, Y: rect.Y, W: rect.W, H: splitY - rect.Y}
-			} else {
-				rect = Rect{X: rect.X, Y: splitY, W: rect.W, H: rect.Y + rect.H - splitY}
-			}
-		}
-	}
-	return rect
 }
 
 // determineAutoSplit determines the split direction based on the auto scheme
@@ -695,7 +849,13 @@ func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitTyp
 
 	case SchemeSmartSplit:
 		// Compute the focused window's actual rect from the BSP tree
-		r := t.nodeRect(targetNode, bounds)
+		// nodeBounds mirrors the layout exactly, separator gap and stacked
+		// title bars included, so the aspect ratio this heuristic reads is the
+		// one on screen.
+		r, ok := t.nodeBounds(targetNode, bounds)
+		if !ok {
+			r = bounds
+		}
 		w, h := r.W, r.H
 		if w > h*2 {
 			// Very wide window: split vertically (side by side)
@@ -816,43 +976,36 @@ func (t *BSPTree) collectSplitsRecursive(node *TileNode, bounds Rect, splits *[]
 		return
 	}
 
-	if node.SplitType == SplitVertical {
-		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
-		if splitX <= bounds.X {
-			splitX = bounds.X + 1
+	// The separator the user sees and grabs has to be the one the layout
+	// actually put there, so the position comes from childBounds rather than
+	// from a second copy of the split arithmetic. A separator drawn where no
+	// divider is means the pointer offers a resize cursor over a line that
+	// dragging will not move.
+	leftBounds, rightBounds := childBounds(node, bounds)
+
+	// A stacked node splits by raising one child's title bar, not by a
+	// separator, and ResizeSplit will not move one. Emitting a line for it
+	// would advertise a divider that cannot be dragged.
+	if node.SplitType != SplitStacked {
+		if node.SplitType == SplitVertical {
+			*splits = append(*splits, SplitLine{
+				Vertical: true,
+				Pos:      bounds.X + leftBounds.W,
+				From:     bounds.Y,
+				To:       bounds.Y + bounds.H - 1,
+			})
+		} else {
+			*splits = append(*splits, SplitLine{
+				Vertical: false,
+				Pos:      bounds.Y + leftBounds.H,
+				From:     bounds.X,
+				To:       bounds.X + bounds.W - 1,
+			})
 		}
-		if splitX >= bounds.X+bounds.W-1 {
-			splitX = bounds.X + bounds.W - 2
-		}
-		*splits = append(*splits, SplitLine{
-			Vertical: true,
-			Pos:      splitX,
-			From:     bounds.Y,
-			To:       bounds.Y + bounds.H - 1,
-		})
-		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-		rightBounds := Rect{X: splitX + 1, Y: bounds.Y, W: bounds.X + bounds.W - splitX - 1, H: bounds.H}
-		t.collectSplitsRecursive(node.Left, leftBounds, splits)
-		t.collectSplitsRecursive(node.Right, rightBounds, splits)
-	} else {
-		splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
-		if splitY <= bounds.Y {
-			splitY = bounds.Y + 1
-		}
-		if splitY >= bounds.Y+bounds.H-1 {
-			splitY = bounds.Y + bounds.H - 2
-		}
-		*splits = append(*splits, SplitLine{
-			Vertical: false,
-			Pos:      splitY,
-			From:     bounds.X,
-			To:       bounds.X + bounds.W - 1,
-		})
-		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-		rightBounds := Rect{X: bounds.X, Y: splitY + 1, W: bounds.W, H: bounds.Y + bounds.H - splitY - 1}
-		t.collectSplitsRecursive(node.Left, leftBounds, splits)
-		t.collectSplitsRecursive(node.Right, rightBounds, splits)
 	}
+
+	t.collectSplitsRecursive(node.Left, leftBounds, splits)
+	t.collectSplitsRecursive(node.Right, rightBounds, splits)
 }
 
 // GetAllWindowIDs returns all window IDs in the tree (in-order traversal)

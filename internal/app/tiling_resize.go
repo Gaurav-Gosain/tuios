@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -273,6 +274,85 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 	return newX, newY, newRight, newBottom
 }
 
+// applyBSPResize moves the dividers that own the edges the caller changed and
+// rebuilds every pane's geometry from the tree. It reports false when the
+// workspace is not on a BSP tree that holds this window, in which case the
+// caller falls back to the geometry scan, which is still what master-stack and
+// untracked windows need.
+//
+// Driving the resize through the tree rather than through the geometry scan is
+// what keeps unrelated panes still: the tree knows the divider separates
+// exactly two subtrees, while a geometry scan cannot tell the dragged divider
+// apart from another one that happens to sit on the same line. It also removes
+// a whole class of staleness, because the tree is updated first and the window
+// rectangles are derived from it, so there is never a window of time in which
+// the two disagree and a retile can throw the resize away.
+func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newHeight int, resize resizeOp) bool {
+	if !m.AutoTiling || !m.UseBSPLayout || m.UseScrollingLayout || resized.IsFloating {
+		return false
+	}
+
+	tree := m.WorkspaceTrees[m.CurrentWorkspace]
+	if tree == nil || tree.IsEmpty() {
+		return false
+	}
+
+	intID := m.getWindowIntID(resized.ID)
+	if !tree.HasWindow(intID) {
+		return false
+	}
+
+	bounds := m.GetBSPBounds()
+	moved := false
+	for _, edge := range []struct {
+		e   layout.ResizeEdge
+		old int
+		new int
+	}{
+		{layout.ResizeEdgeRight, resized.X + resized.Width, newX + newWidth},
+		{layout.ResizeEdgeLeft, resized.X, newX},
+		{layout.ResizeEdgeBottom, resized.Y + resized.Height, newY + newHeight},
+		{layout.ResizeEdgeTop, resized.Y, newY},
+	} {
+		if edge.old == edge.new {
+			continue
+		}
+		if tree.ResizeSplit(intID, edge.e, edge.new, bounds) {
+			moved = true
+		}
+	}
+	if !moved {
+		return false
+	}
+
+	// A pending deferred sync would re-derive ratios from geometry that has not
+	// been rebuilt yet, undoing the divider that was just moved.
+	m.pendingBSPSync = false
+
+	if m.bspResizeScratch == nil {
+		m.bspResizeScratch = make(map[int]layout.Rect, len(m.Windows))
+	}
+	for windowIntID, rect := range tree.ApplyLayoutInto(bounds, m.bspResizeScratch) {
+		win := m.getWindowByIntID(windowIntID)
+		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
+			continue
+		}
+		// Unconditionally, before the unchanged-geometry check below: a window
+		// this resize leaves alone can still be mid-snap from an earlier
+		// layout change, and that animation would go on stamping its own
+		// rectangles over the drag on every tick.
+		m.CancelSnapAnimation(win)
+
+		if win.X == rect.X && win.Y == rect.Y && win.Width == rect.W && win.Height == rect.H {
+			continue
+		}
+		win.X, win.Y = rect.X, rect.Y
+		resize(m, win, rect.W, rect.H)
+		win.MarkPositionDirty()
+	}
+	return true
+}
+
 // constrainVerticalSplit calculates the valid position for a vertical split line
 func (m *OS) constrainVerticalSplit(requested int, leftWindows, rightWindows []*terminal.Window, minWidth, maxX int) int {
 	minValidX := 0
@@ -343,11 +423,13 @@ func (m *OS) applyTilingResult(resized *terminal.Window, finalX, finalY, finalRi
 // AdjustTilingNeighbors adjusts ALL windows on affected split lines with constraint-based positioning.
 // This is the core tiling resize algorithm used by both mouse and keyboard resize operations.
 func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidth, newHeight int) {
-	finalX, finalY, finalRight, finalBottom := m.adjustTilingNeighborsGeneric(resized, newX, newY, newWidth, newHeight, resizeImmediate)
-	m.applyTilingResult(resized, finalX, finalY, finalRight, finalBottom)
+	if !m.applyBSPResize(resized, newX, newY, newWidth, newHeight, resizeImmediate) {
+		finalX, finalY, finalRight, finalBottom := m.adjustTilingNeighborsGeneric(resized, newX, newY, newWidth, newHeight, resizeImmediate)
+		m.applyTilingResult(resized, finalX, finalY, finalRight, finalBottom)
 
-	resized.Resize(resized.Width, resized.Height)
-	resized.MarkPositionDirty()
+		resized.Resize(resized.Width, resized.Height)
+		resized.MarkPositionDirty()
+	}
 	m.MarkLayoutCustom()
 
 	// This is the keyboard resize path, where every press is a finished resize.
@@ -359,13 +441,23 @@ func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 // AdjustTilingNeighborsVisual is like AdjustTilingNeighbors but uses visual-only resize.
 // This defers PTY resize operations until the drag completes, improving responsiveness
 // during mouse resize operations while still constraining window sizes appropriately.
-func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, newWidth, newHeight int) {
+//
+// It reports whether the BSP tree already describes the resulting geometry. When
+// it does, the caller must not ask for a ratio sync: the tree led and the
+// windows followed, so re-deriving ratios from geometry would be work at best
+// and would undo the divider that was just moved at worst.
+func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, newWidth, newHeight int) (treeInSync bool) {
+	if m.applyBSPResize(resized, newX, newY, newWidth, newHeight, resizeVisual) {
+		return true
+	}
+
 	finalX, finalY, finalRight, finalBottom := m.adjustTilingNeighborsGeneric(resized, newX, newY, newWidth, newHeight, resizeVisual)
 	m.applyTilingResult(resized, finalX, finalY, finalRight, finalBottom)
 
 	resized.ResizeVisual(resized.Width, resized.Height)
 	m.PendingResizes[resized.ID] = [2]int{resized.Width, resized.Height}
 	resized.MarkPositionDirty()
+	return false
 }
 
 // findWindowsOnVerticalSplitAll finds all windows on a vertical split line (not excluding any window)

@@ -327,12 +327,14 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 			// In tiling mode, update visual state but defer PTY resize until drag completes
 			// Store pending resizes for all affected windows
-			o.AdjustTilingNeighborsVisual(focusedWindow, newX, newY, newWidth, newHeight)
+			treeInSync := o.AdjustTilingNeighborsVisual(focusedWindow, newX, newY, newWidth, newHeight)
 			// The separator overlay is drawn from the tree's ratios, so they have
 			// to catch up with the new geometry before the next frame. Mark it
 			// rather than syncing here: syncing walks every node in the tree and
-			// reapplies the layout, and motion events outnumber frames.
-			if config.SharedBorders {
+			// reapplies the layout, and motion events outnumber frames. A resize
+			// the BSP tree drove needs none of this - the ratios are already what
+			// the geometry was built from.
+			if config.SharedBorders && !treeInSync {
 				o.MarkBSPSyncPending()
 			}
 		} else if o.UseScrollingLayout {

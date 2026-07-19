@@ -130,10 +130,38 @@ func (m *OS) ApplyBSPLayout() {
 
 		// Cancel any existing snap animation for this window to prevent
 		// animation pileup during continuous resize.
-		for j := len(m.Animations) - 1; j >= 0; j-- {
-			if m.Animations[j].Window == win && m.Animations[j].Type == ui.AnimationSnap {
-				m.Animations = append(m.Animations[:j], m.Animations[j+1:]...)
+		m.CancelSnapAnimation(win)
+
+		// A live resize drag reapplies this layout on every composed frame, to
+		// keep the separator overlay's ratios in step with the geometry the
+		// pointer is producing. Set that geometry directly.
+		//
+		// A resize is direct manipulation: the edge is where the pointer is,
+		// so there is nothing to ease toward. Animating instead built a fresh
+		// 300ms snap per window per frame, each one discarded and restarted by
+		// the next frame before it could finish, so the panes never arrived
+		// anywhere and trailed the cursor on a curve that kept resetting. That
+		// costs almost no CPU, which is why it read as mush rather than as a
+		// slow frame, and why no timing measurement found it.
+		//
+		// The normal path is also what tells the PTY, and in daemon mode the
+		// daemon over its socket, about the new size: one round trip per window
+		// per frame for a size the user is still in the middle of choosing.
+		// Resize visually instead and record it in PendingResizes, which mouse
+		// release already drains into one real resize per window.
+		if m.Resizing {
+			win.X, win.Y = rect.X, rect.Y
+			if win.Tiled != config.SharedBorders {
+				win.Tiled = config.SharedBorders
+				win.InvalidateCache()
 			}
+			if win.Width != rect.W || win.Height != rect.H {
+				win.ResizeVisual(rect.W, rect.H)
+				win.IsBeingManipulated = true
+				m.PendingResizes[win.ID] = [2]int{rect.W, rect.H}
+			}
+			win.MarkPositionDirty()
+			continue
 		}
 
 		// Create animation for smooth transition
@@ -161,6 +189,25 @@ func (m *OS) ApplyBSPLayout() {
 			// the size instantly). SetTiled re-syncs the emulator for the new
 			// border deduction when the flag actually changes.
 			win.SetTiled(config.SharedBorders)
+		}
+	}
+}
+
+// CancelSnapAnimation drops any in-flight snap animation for win.
+//
+// A snap animation owns its window's geometry until it finishes: every tick it
+// writes an interpolated rectangle, ignoring whatever else has set X, Y, Width
+// or Height in the meantime. So anything that positions a window directly has
+// to retire the animation first, or the next tick will overwrite it with a
+// frame of a transition the user has already moved past. Starting a resize
+// drag while a window is still animating into place is the ordinary way to hit
+// that: the drag sets geometry per motion event, the animation stamps its own
+// back over all of it on the next tick, and the layout jumps to wherever the
+// old transition had got to.
+func (m *OS) CancelSnapAnimation(win *terminal.Window) {
+	for i := len(m.Animations) - 1; i >= 0; i-- {
+		if m.Animations[i].Window == win && m.Animations[i].Type == ui.AnimationSnap {
+			m.Animations = append(m.Animations[:i], m.Animations[i+1:]...)
 		}
 	}
 }
