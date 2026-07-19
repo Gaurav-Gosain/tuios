@@ -185,9 +185,13 @@ type OS struct {
 	cachedSeparator      string // Cached dock separator string
 	cachedSeparatorWidth int    // Width of cached separator
 	workspaceActiveStyle *lipgloss.Style
-	cachedViewContent    string           // Cached full View() output to skip rendering on idle ticks
-	renderSkipped        bool             // True when frame-skip fired; View() returns cached content
-	renderCanvas         *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
+	cachedViewContent    string // Cached full View() output to skip rendering on idle ticks
+	renderSkipped        bool   // True when frame-skip fired; View() returns cached content
+	// lastInteractionRender is when a drag/resize motion event last produced a
+	// frame. Motion events arrive faster than a frame can be composed, so this
+	// bounds how often they are allowed to redraw.
+	lastInteractionRender time.Time
+	renderCanvas          *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
 	// Reused per-frame scratch for graphics placement refresh (avoids per-frame allocs)
 	kittyPosMap     map[string]*WindowPositionInfo // Reused map for kitty placement refresh
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values

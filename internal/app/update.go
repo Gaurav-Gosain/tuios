@@ -325,14 +325,6 @@ func TickCmd() tea.Cmd {
 	})
 }
 
-// SlowTickCmd creates a command that generates tick messages at 30 FPS.
-// Used during user interactions to improve responsiveness.
-func SlowTickCmd() tea.Cmd {
-	return tea.Tick(time.Second/time.Duration(config.InteractionFPS), func(t time.Time) tea.Msg {
-		return TickerMsg(t)
-	})
-}
-
 // IdleTickCmd creates a command that generates tick messages at 10 FPS.
 // Used when the terminal has been idle for a sustained period to reduce CPU.
 func IdleTickCmd() tea.Cmd {
@@ -553,7 +545,12 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Determine next tick rate
 		var nextTick tea.Cmd
 		if m.InteractionMode {
-			nextTick = SlowTickCmd() // 30 FPS during drag/resize
+			// Motion events are coalesced to a frame budget in the input path,
+			// so this tick is what flushes the most recent skipped position.
+			// It runs at the normal rate: dropping it to a lower one used to
+			// cost smoothness without limiting the motion flood, since motion
+			// events drove their own renders regardless of the tick rate.
+			nextTick = TickCmd()
 		} else if hasAnimations || m.PrefixActive || m.ScriptMode || needsDockTick {
 			nextTick = TickCmd() // Normal FPS when things need periodic updates
 		} else {
@@ -576,6 +573,12 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, nextTick
 		}
 		m.renderSkipped = false
+		// This tick is about to draw, so it counts against the interaction frame
+		// budget too. Without this a motion event landing just after a tick
+		// would draw again immediately and the budget would not hold.
+		if m.InteractionMode {
+			m.lastInteractionRender = time.Now()
+		}
 		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
 
 		if len(cmds) > 1 {
@@ -660,10 +663,33 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// would not be drawn until some other redraw happened.
 		m.renderSkipped = false
 		// Delegate to the registered input handler
-		if inputHandler != nil {
-			return inputHandler(msg, m)
+		if inputHandler == nil {
+			return m, nil
 		}
-		return m, nil
+		newModel, cmd := inputHandler(msg, m)
+
+		// Motion events during a drag or resize arrive far faster than a frame
+		// can be composed: the pointer emits one per cell it crosses, while a
+		// frame costs milliseconds. Rendering every one builds a backlog that
+		// grows for as long as the drag lasts, which is why the layout trails
+		// the pointer instead of merely being a frame behind it.
+		//
+		// Only the redundant intermediate frames are dropped, never the input.
+		// The handler above has already applied this event's geometry, so the
+		// model always reflects the newest pointer position; skipping the draw
+		// just means the next draw shows a later position. The interaction tick
+		// forces a render while InteractionMode is set, so a skipped motion is
+		// always flushed within one tick, and mouse release is not a motion
+		// event so the final position is drawn unconditionally.
+		if _, isMotion := msg.(tea.MouseMotionMsg); isMotion && m.InteractionMode {
+			now := time.Now()
+			if now.Sub(m.lastInteractionRender) < time.Second/time.Duration(config.NormalFPS) {
+				m.renderSkipped = true
+			} else {
+				m.lastInteractionRender = now
+			}
+		}
+		return newModel, cmd
 
 	case tea.WindowSizeMsg:
 		oldWidth, oldHeight := m.Width, m.Height
