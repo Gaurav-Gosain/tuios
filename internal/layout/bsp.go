@@ -715,6 +715,22 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		return
 	}
 
+	// A split whose divider already sits where its stored ratio puts it has
+	// nothing to learn from the geometry, and re-deriving it is not free: the
+	// ratio is a float, the geometry is whole cells, and applyLayoutRecursive
+	// truncates. Reading a truncated divider back as line/extent therefore
+	// rounds the ratio down every time, never up, so a split nobody dragged
+	// walks off centre one pass at a time. An exact 0.5 in a 29-row region comes
+	// back as 0.482759 after a single pass, and the next region size that ratio
+	// is applied at hands the extra rows to one child instead of sharing them.
+	//
+	// So the rule is: sync may only move the ratios whose geometry actually
+	// disagrees with the tree. That is exactly the set the paths this function
+	// exists for change - master-stack, floating windows, windows outside the
+	// tree, and the geometry-scan fallback - and it leaves every other split
+	// holding the value a resize deliberately put there.
+	expectedLeft, expectedRight := childBounds(node, bounds)
+
 	// Calculate the actual split ratio from window geometry.
 	if node.SplitType == SplitVertical {
 		// The split boundary is the near edge of the right subtree's leftmost
@@ -739,12 +755,15 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		if !ok {
 			return
 		}
-		if bounds.W > 0 {
-			node.SplitRatio = float64(splitX-bounds.X) / float64(bounds.W)
+		leftBounds, rightBounds := expectedLeft, expectedRight
+		if splitX != expectedLeft.X+expectedLeft.W {
+			if bounds.W > 0 {
+				node.SplitRatio = float64(splitX-bounds.X) / float64(bounds.W)
+			}
+			// Recurse with updated bounds
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
+			rightBounds = Rect{X: splitX + gap, Y: bounds.Y, W: bounds.X + bounds.W - splitX - gap, H: bounds.H}
 		}
-		// Recurse with updated bounds
-		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-		rightBounds := Rect{X: splitX + gap, Y: bounds.Y, W: bounds.X + bounds.W - splitX - gap, H: bounds.H}
 		t.syncRatiosRecursive(node.Left, leftBounds, windows)
 		t.syncRatiosRecursive(node.Right, rightBounds, windows)
 	} else {
@@ -767,12 +786,15 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		if !ok {
 			return
 		}
-		if bounds.H > 0 {
-			node.SplitRatio = float64(splitY-bounds.Y) / float64(bounds.H)
+		leftBounds, rightBounds := expectedLeft, expectedRight
+		if splitY != expectedLeft.Y+expectedLeft.H {
+			if bounds.H > 0 {
+				node.SplitRatio = float64(splitY-bounds.Y) / float64(bounds.H)
+			}
+			// Recurse with updated bounds
+			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
+			rightBounds = Rect{X: bounds.X, Y: splitY + gap, W: bounds.W, H: bounds.Y + bounds.H - splitY - gap}
 		}
-		// Recurse with updated bounds
-		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-		rightBounds := Rect{X: bounds.X, Y: splitY + gap, W: bounds.W, H: bounds.Y + bounds.H - splitY - gap}
 		t.syncRatiosRecursive(node.Left, leftBounds, windows)
 		t.syncRatiosRecursive(node.Right, rightBounds, windows)
 	}
