@@ -83,10 +83,6 @@ var (
 	// this value) can take effect without a restart.
 	MaxFPSCap = 240
 
-	// InteractionFPS is the refresh rate during user interactions (drag/resize)
-	// Lower FPS during interactions improves mouse responsiveness
-	InteractionFPS = 30
-
 	// IdleFPS is the refresh rate when the terminal is idle (no output for ~500ms).
 	// Reduces CPU usage from ~10% to near-zero on idle.
 	IdleFPS = 10

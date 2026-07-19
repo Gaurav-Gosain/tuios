@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"regexp"
@@ -14,15 +15,26 @@ import (
 // These are used to determine which features TUIOS can use for rendering.
 type HostCapabilities struct {
 	KittyGraphics bool
-	SixelGraphics bool
-	TrueColor     bool
-	TerminalName  string
-	PixelWidth    int
-	PixelHeight   int
-	CellWidth     int
-	CellHeight    int
-	Cols          int
-	Rows          int
+	// KittyFileTransfer reports whether the host terminal can read a
+	// server-local path out of a kitty t=f / t=t / t=s transmission.
+	//
+	// A terminal sharing our filesystem (kitty, ghostty, wezterm) can, and
+	// forwarding the path is far cheaper than shipping the pixels. A browser
+	// client such as sip's cannot: it only ever sees the bytes we send it, so
+	// a forwarded path is silently dropped and the image never appears. When
+	// this is false the passthrough reads the file itself and re-encodes it as
+	// a direct (t=d) transmission, and tells guests that file media are
+	// unsupported so they stream instead.
+	KittyFileTransfer bool
+	SixelGraphics     bool
+	TrueColor         bool
+	TerminalName      string
+	PixelWidth        int
+	PixelHeight       int
+	CellWidth         int
+	CellHeight        int
+	Cols              int
+	Rows              int
 }
 
 var cachedCapabilities *HostCapabilities
@@ -149,12 +161,27 @@ func queryGraphicsSupport(caps *HostCapabilities) {
 	}
 	defer restoreTerminal(tty.Fd(), oldState)
 
-	// Send both queries at once
+	// Probe direct transmission (i=1) and, if we can stage a file for it,
+	// file transmission (i=2). The ids let the two answers be told apart; the
+	// spec requires a terminal to echo the id it was asked about.
+	probeFile, probeFileErr := writeGraphicsProbeFile()
+	if probeFileErr == nil {
+		defer func() { _ = os.Remove(probeFile) }()
+	}
+
+	terminators := 2                                                    // DA1 'c' plus the direct probe's ST
 	_, _ = tty.WriteString("\x1b[c")                                    // DA1 for sixel
 	_, _ = tty.WriteString("\x1b_Gi=1,a=q,t=d,f=24,s=1,v=1;AAAA\x1b\\") // Kitty graphics query
+	if probeFileErr == nil {
+		// t=f rather than t=t: a terminal that honours a temp-file
+		// transmission deletes the file, and this one is ours to clean up.
+		_, _ = fmt.Fprintf(tty, "\x1b_Gi=2,a=q,t=f,f=24,s=1,v=1;%s\x1b\\",
+			base64.StdEncoding.EncodeToString([]byte(probeFile)))
+		terminators++
+	}
 
 	// Read response with timeout (300ms to account for slower terminals)
-	response := readTTYResponse(tty, 300*time.Millisecond)
+	response := readTTYResponse(tty, 300*time.Millisecond, terminators)
 
 	// Parse DA1 response for sixel (look for "4" in params)
 	da1Re := regexp.MustCompile(`\x1b\[\?([0-9;]+)c`)
@@ -168,16 +195,56 @@ func queryGraphicsSupport(caps *HostCapabilities) {
 	if strings.Contains(response, "OK") {
 		caps.KittyGraphics = true
 	}
+	// File transfer is only claimed on an explicit OK for the i=2 probe. A
+	// terminal that ignores the probe, answers without an id, or reports an
+	// error leaves this false, and the passthrough re-encodes file
+	// transmissions as direct ones. That costs a copy but always renders;
+	// guessing the other way renders nothing at all.
+	caps.KittyFileTransfer = probeFileErr == nil && kittyProbeOK(response, 2)
+}
+
+// kittyProbeOK reports whether the host answered "OK" to the a=q probe sent
+// with the given image id.
+func kittyProbeOK(response string, id int) bool {
+	re := regexp.MustCompile(`\x1b_G([^;\x1b]*);([^\x1b]*)\x1b\\`)
+	want := fmt.Sprintf("i=%d", id)
+	for _, m := range re.FindAllStringSubmatch(response, -1) {
+		if !slices.Contains(strings.Split(m[1], ","), want) {
+			continue
+		}
+		return strings.HasPrefix(m[2], "OK")
+	}
+	return false
+}
+
+// writeGraphicsProbeFile stages a one-pixel RGB payload on disk for the
+// file-transmission capability probe.
+func writeGraphicsProbeFile() (string, error) {
+	f, err := os.CreateTemp("", "tuios-gfx-probe-*")
+	if err != nil {
+		return "", err
+	}
+	name := f.Name()
+	if _, err := f.Write([]byte{0, 0, 0}); err != nil {
+		_ = f.Close()
+		_ = os.Remove(name)
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(name)
+		return "", err
+	}
+	return name, nil
 }
 
 // readTTYResponse reads from tty with a timeout using poll-based I/O
-func readTTYResponse(tty *os.File, timeout time.Duration) string {
+func readTTYResponse(tty *os.File, timeout time.Duration, wantTerminators int) string {
 	buf := make([]byte, 512)
 	var result strings.Builder
 	terminators := 0
 	deadline := time.Now().Add(timeout)
 
-	for terminators < 2 {
+	for terminators < wantTerminators {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			break
@@ -245,7 +312,7 @@ func queryPixelDimensions(caps *HostCapabilities) {
 
 	// Query window size in pixels
 	_, _ = tty.WriteString("\x1b[14t")
-	response := readTTYResponse(tty, 100*time.Millisecond)
+	response := readTTYResponse(tty, 100*time.Millisecond, 2)
 	if re := regexp.MustCompile(`\x1b\[4;(\d+);(\d+)t`); response != "" {
 		if matches := re.FindStringSubmatch(response); len(matches) == 3 {
 			caps.PixelHeight, _ = strconv.Atoi(matches[1])
@@ -255,7 +322,7 @@ func queryPixelDimensions(caps *HostCapabilities) {
 
 	// Query cell size
 	_, _ = tty.WriteString("\x1b[16t")
-	response = readTTYResponse(tty, 100*time.Millisecond)
+	response = readTTYResponse(tty, 100*time.Millisecond, 2)
 	if re := regexp.MustCompile(`\x1b\[6;(\d+);(\d+)t`); response != "" {
 		if matches := re.FindStringSubmatch(response); len(matches) == 3 {
 			caps.CellHeight, _ = strconv.Atoi(matches[1])

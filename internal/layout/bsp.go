@@ -520,6 +520,34 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		return
 	}
 
+	// Shared-border layouts reserve one cell for the separator, so the near edge
+	// of the right/bottom subtree sits one cell past the divider. Sync has to use
+	// the same model applyLayoutRecursive does; otherwise every ratio in the tree
+	// is re-derived one cell off on each sync, and a resize on one axis walks the
+	// dividers on the other axis. Nested bounds must account for it too.
+	gap := 0
+	if config.SharedBorders {
+		gap = 1
+	}
+
+	if node.SplitType == SplitStacked {
+		// Stacked nodes ignore SplitRatio; mirror applyLayoutRecursive's bounds so
+		// descendants still resolve against the rectangle they were laid out in.
+		const titleBarHeight = 1
+		content := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: bounds.H - titleBarHeight}
+		title := Rect{X: bounds.X, Y: bounds.Y + bounds.H - titleBarHeight, W: bounds.W, H: titleBarHeight}
+		if node.StackedActiveLeft {
+			t.syncRatiosRecursive(node.Left, content, windows)
+			t.syncRatiosRecursive(node.Right, title, windows)
+		} else {
+			title.Y = bounds.Y
+			content.Y = bounds.Y + titleBarHeight
+			t.syncRatiosRecursive(node.Left, title, windows)
+			t.syncRatiosRecursive(node.Right, content, windows)
+		}
+		return
+	}
+
 	// Calculate the actual split ratio from window geometry.
 	if node.SplitType == SplitVertical {
 		// The split boundary is the near edge of the right subtree's leftmost
@@ -531,7 +559,7 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		splitX, ok := -1, false
 		if id := t.findAnyWindowInSubtree(node.Right); id != -1 {
 			if r, found := windows[id]; found {
-				splitX, ok = r.X, true
+				splitX, ok = r.X-gap, true
 			}
 		}
 		if !ok {
@@ -549,7 +577,7 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		}
 		// Recurse with updated bounds
 		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
-		rightBounds := Rect{X: splitX, Y: bounds.Y, W: bounds.X + bounds.W - splitX, H: bounds.H}
+		rightBounds := Rect{X: splitX + gap, Y: bounds.Y, W: bounds.X + bounds.W - splitX - gap, H: bounds.H}
 		t.syncRatiosRecursive(node.Left, leftBounds, windows)
 		t.syncRatiosRecursive(node.Right, rightBounds, windows)
 	} else {
@@ -559,7 +587,7 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		splitY, ok := -1, false
 		if id := t.findAnyWindowInSubtree(node.Right); id != -1 {
 			if r, found := windows[id]; found {
-				splitY, ok = r.Y, true
+				splitY, ok = r.Y-gap, true
 			}
 		}
 		if !ok {
@@ -577,7 +605,7 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		}
 		// Recurse with updated bounds
 		leftBounds := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
-		rightBounds := Rect{X: bounds.X, Y: splitY, W: bounds.W, H: bounds.Y + bounds.H - splitY}
+		rightBounds := Rect{X: bounds.X, Y: splitY + gap, W: bounds.W, H: bounds.Y + bounds.H - splitY - gap}
 		t.syncRatiosRecursive(node.Left, leftBounds, windows)
 		t.syncRatiosRecursive(node.Right, rightBounds, windows)
 	}
