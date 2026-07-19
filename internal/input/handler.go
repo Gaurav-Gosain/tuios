@@ -98,6 +98,52 @@ func shouldShowQuitDialog(o *app.OS) bool {
 	return false
 }
 
+// quitSession ends the session and the client. In a daemon session that means
+// killing the session, not just detaching from it: quitting is the user saying
+// the session is over, and leaving it running would strand it with no way back
+// except an explicit attach.
+//
+// It was written out at six call sites (the three quit keybindings, and the yes
+// button of the confirmation dialog reached by key, by enter and by mouse), each
+// of which could drift from the others about whether to kill the session or run
+// Cleanup. There is one of them now.
+//
+// The kill-and-clean sequence itself lives on OS.QuitSession, which also records
+// that the quit was deliberate. That matters because killing the session makes
+// the daemon announce the session ending and the connection dropping back to us,
+// and either can land before the program finishes quitting; without the recorded
+// intent Update reports the user's own quit as an unexpected termination.
+func quitSession(o *app.OS) (*app.OS, tea.Cmd) {
+	o.QuitSession()
+	return o, tea.Quit
+}
+
+// requestQuit is what a quit keybinding does: put up the confirmation dialog
+// when a window is running something the user would lose, and quit outright when
+// nothing is. The dialog's own buttons call quitSession directly.
+func requestQuit(o *app.OS) (*app.OS, tea.Cmd) {
+	if shouldShowQuitDialog(o) {
+		o.ShowQuitConfirm = true
+		o.QuitConfirmSelection = 0 // Default to Yes
+		return o, nil
+	}
+	return quitSession(o)
+}
+
+// detachSession leaves the session running and quits this client. It pushes
+// state first so the session the user comes back to is the one they left.
+// Outside a daemon session there is nothing to detach from, and the caller
+// decides what that means instead.
+func detachSession(o *app.OS) (*app.OS, tea.Cmd, bool) {
+	if !o.IsDaemonSession {
+		return o, nil, false
+	}
+	o.SyncStateToDaemon()
+	o.FireDetached()
+	// Deliberately no Cleanup: the session outlives this client.
+	return o, tea.Quit, true
+}
+
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers
 func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Capture key event for showkeys overlay if enabled
@@ -129,12 +175,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Quick selection with y/n keys
 		if key == "y" {
 			o.QuitConfirmSelection = 0 // Yes
-			// Kill daemon session if in daemon mode
-			if o.IsDaemonSession && o.DaemonClient != nil {
-				_ = o.DaemonClient.KillSession()
-			}
-			o.Cleanup()
-			return o, tea.Quit
+			return quitSession(o)
 		}
 		if key == "n" {
 			o.QuitConfirmSelection = 1 // No
@@ -145,12 +186,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Confirm selection with enter
 		if key == "enter" {
 			if o.QuitConfirmSelection == 0 {
-				// Yes selected - quit and kill daemon session
-				if o.IsDaemonSession && o.DaemonClient != nil {
-					_ = o.DaemonClient.KillSession()
-				}
-				o.Cleanup()
-				return o, tea.Quit
+				return quitSession(o)
 			}
 			// No selected - close dialog
 			o.ShowQuitConfirm = false
@@ -247,9 +283,11 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		// Apply the new name
+		// Apply the new name. RenameWindowByID is the one rename: in a daemon
+		// session it asks the daemon, which owns the name, and the change comes
+		// back as a state push.
 		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-			focusedWindow.CustomName = o.RenameBuffer
+			_ = o.RenameWindowByID(focusedWindow.ID, o.RenameBuffer)
 			focusedWindow.InvalidateCache()
 		}
 		o.RenamingWindow = false
@@ -291,250 +329,6 @@ func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Activate prefix mode
 	o.PrefixActive = true
 	o.LastPrefixTime = time.Now()
-	return o, nil
-}
-
-// HandlePrefixCommand handles prefix commands (Ctrl+B followed by another key)
-func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Deactivate prefix after handling command
-	o.PrefixActive = false
-
-	switch msg.String() {
-	case "w":
-		// Activate workspace prefix mode
-		o.WorkspacePrefixActive = true
-		o.PrefixActive = true // Keep prefix active for the next key
-		o.LastPrefixTime = time.Now()
-		return o, nil
-	case "m":
-		// Activate minimize prefix mode
-		o.MinimizePrefixActive = true
-		o.PrefixActive = true // Keep prefix active for the next key
-		o.LastPrefixTime = time.Now()
-		return o, nil
-	case "t":
-		// Activate tiling/window prefix mode
-		o.TilingPrefixActive = true
-		o.PrefixActive = true // Keep prefix active for the next key
-		o.LastPrefixTime = time.Now()
-		return o, nil
-	case "D":
-		// Activate debug prefix mode (Ctrl+B, Shift+D)
-		o.DebugPrefixActive = true
-		o.PrefixActive = true // Keep prefix active for the next key
-		o.LastPrefixTime = time.Now()
-		return o, nil
-	case "T":
-		// Activate tape prefix mode (Ctrl+B, Shift+T)
-		o.TapePrefixActive = true
-		o.PrefixActive = true // Keep prefix active for the next key
-		o.LastPrefixTime = time.Now()
-		return o, nil
-	// Window management
-	case "c":
-		// Create new window (like tmux)
-		o.AddWindow("")
-		return o, nil
-	case "x":
-		// Close current window
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.DeleteWindow(o.FocusedWindow)
-		}
-		return o, nil
-	case "r":
-		// Rename window (like normal mode with 'r')
-		// Skip if window titles are hidden
-		if config.WindowTitlePosition != "hidden" && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			focusedWindow := o.GetFocusedWindow()
-			if focusedWindow != nil {
-				o.RenamingWindow = true
-				if fw := o.GetFocusedWindow(); fw != nil {
-					fw.InvalidateCache()
-				}
-				o.RenameBuffer = focusedWindow.CustomName
-			}
-		}
-		return o, nil
-	case ",":
-		// Open the settings page (preferences convention: leader + ,)
-		o.OpenSettings()
-		return o, nil
-
-	// Window navigation
-	case "n", "tab":
-		// Next window
-		if len(o.Windows) > 0 {
-			o.CycleToNextVisibleWindow()
-		}
-		return o, nil
-	case "p", "shift+tab":
-		// Previous window (like tmux with 'p' or like normal mode with 'shift+tab')
-		if len(o.Windows) > 0 {
-			o.CycleToPreviousVisibleWindow()
-		}
-		return o, nil
-	case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		// Jump to window by number
-		return handlePrefixWindowSelection(msg, o)
-
-	// Layout commands
-	case "space":
-		// Toggle tiling mode (like tmux)
-		o.AutoTiling = !o.AutoTiling
-		if o.AutoTiling {
-			o.TileAllWindows()
-		}
-		return o, nil
-	case "z":
-		// Toggle zoom for current window
-		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-			o.ToggleZoom()
-			fw := o.GetFocusedWindow()
-			if fw != nil && fw.Zoomed {
-				o.ShowNotification("ZOOM", "info", config.NotificationDuration)
-			} else {
-				o.ShowNotification("", "info", 0)
-			}
-		}
-		return o, nil
-	case "L":
-		// Enter layout prefix mode
-		o.LayoutPrefixActive = true
-		o.PrefixActive = true
-		o.LastPrefixTime = time.Now()
-		return o, nil
-	case "-":
-		// Split focused window horizontally (top/bottom)
-		if o.AutoTiling {
-			o.SplitFocusedHorizontal()
-			o.ShowNotification("Split Horizontal", "info", config.NotificationDuration)
-		}
-		return o, nil
-	case "|", "\\":
-		// Split focused window vertically (left/right)
-		if o.AutoTiling {
-			o.SplitFocusedVertical()
-			o.ShowNotification("Split Vertical", "info", config.NotificationDuration)
-		}
-		return o, nil
-	case "R":
-		// Rotate split direction at focused window
-		if o.AutoTiling {
-			o.RotateFocusedSplit()
-			o.ShowNotification("Split Rotated", "info", config.NotificationDuration)
-		}
-		return o, nil
-	case "=":
-		// Equalize all split ratios
-		if o.AutoTiling {
-			o.EqualizeSplits()
-			o.ShowNotification("Splits Equalized", "info", config.NotificationDuration)
-		}
-		return o, nil
-
-	// Copy mode
-	case "[":
-		// Enter copy mode (vim-style scrollback/selection)
-		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-			focusedWindow.EnterCopyMode()
-			o.ShowNotification("COPY MODE (hjkl/q)", "info", 2*time.Second)
-		}
-		return o, nil
-
-	// Help
-	case "?":
-		// Toggle help
-		o.ShowHelp = !o.ShowHelp
-		return o, nil
-
-	case "d":
-		// Detach from daemon session - quit client but leave session running
-		if o.IsDaemonSession {
-			// Sync state to daemon before detaching
-			o.SyncStateToDaemon()
-			// Don't call Cleanup() - we want the session to persist
-			return o, tea.Quit
-		}
-		// Not in daemon mode, ignore
-		return o, nil
-
-	case "q":
-		// Show quit confirmation dialog (only if there are terminals with foreground processes)
-		if shouldShowQuitDialog(o) {
-			o.ShowQuitConfirm = true
-			o.QuitConfirmSelection = 0 // Default to Yes
-		} else {
-			// No foreground processes - quit and kill daemon session
-			if o.IsDaemonSession && o.DaemonClient != nil {
-				_ = o.DaemonClient.KillSession()
-			}
-			o.Cleanup()
-			return o, tea.Quit
-		}
-		return o, nil
-
-	// Session switcher
-	case "S":
-		o.ShowSessionSwitcher = true
-		o.SessionSwitcherQuery = ""
-		o.SessionSwitcherSelected = 0
-		o.SessionSwitcherScroll = 0
-		o.SessionSwitcherError = ""
-		o.SessionSwitcherItems = o.RefreshSessionList()
-		return o, nil
-
-	// Command palette
-	case "P":
-		o.ShowCommandPalette = true
-		o.CommandPaletteQuery = ""
-		o.CommandPaletteSelected = 0
-		o.CommandPaletteScroll = 0
-		return o, nil
-
-	// Scrollback browser
-	case "s":
-		OpenScrollbackBrowser(o)
-		return o, nil
-
-	// Exit prefix mode
-	case "esc", "ctrl+c":
-		// Just cancel prefix mode
-		return o, nil
-
-	default:
-		// Unknown command, ignore
-		return o, nil
-	}
-}
-
-// handlePrefixWindowSelection handles window selection via prefix+number
-func handlePrefixWindowSelection(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	num := int(msg.String()[0] - '0')
-	if o.AutoTiling {
-		// In tiling mode, select visible window in current workspace
-		visibleIndex := 0
-		for i, win := range o.Windows {
-			if win.Workspace == o.CurrentWorkspace && !win.Minimized {
-				visibleIndex++
-				if visibleIndex == num || (num == 0 && visibleIndex == 10) {
-					o.FocusWindow(i)
-					break
-				}
-			}
-		}
-	} else {
-		// Normal mode, select by absolute index in current workspace
-		windowsInWorkspace := 0
-		for i, win := range o.Windows {
-			if win.Workspace == o.CurrentWorkspace {
-				windowsInWorkspace++
-				if windowsInWorkspace == num || (num == 0 && windowsInWorkspace == 10) {
-					o.FocusWindow(i)
-					break
-				}
-			}
-		}
-	}
 	return o, nil
 }
 
@@ -612,4 +406,3 @@ func logScrollBounds(screenHeight, totalLogs int) (logsPerPage, maxScroll int) {
 	maxScroll = max(totalLogs-logsPerPage, 0)
 	return logsPerPage, maxScroll
 }
-

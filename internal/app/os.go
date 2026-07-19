@@ -106,25 +106,44 @@ type OS struct {
 	X                        int
 	Y                        int
 	Mode                     Mode
-	terminalMu               sync.RWMutex
-	LastMouseX               int
-	LastMouseY               int
-	HasActiveTerminals       bool
-	idleFrames               int // Consecutive frames with no content changes (for adaptive tick)
-	ShowHelp                 bool
-	InteractionMode          bool                       // True when actively dragging/resizing
-	MouseSnapping            bool                       // Enable/disable mouse snapping
-	WindowExitChan           chan string                // Channel to signal window closure
-	PTYDataChan              chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
-	StateSyncChan            chan *session.SessionState // Channel for thread-safe state sync from callbacks
-	ClientEventChan          chan ClientEvent           // Channel for thread-safe client join/leave notifications
-	Animations               []*ui.Animation            // Active animations
-	CPUHistory               []float64                  // CPU usage history for graph
-	LastCPUUpdate            time.Time                  // Last time CPU was updated
-	RAMUsage                 float64                    // Cached RAM usage percentage
-	LastRAMUpdate            time.Time                  // Last time RAM was updated
-	AutoTiling               bool                       // Automatic tiling mode enabled
-	MasterRatio              float64                    // Master window width ratio for tiling (0.3-0.7)
+	// terminalMu guards the m.Windows slice and the per-window dirty flags and
+	// render caches against the UI goroutine's render pass. It does NOT guard
+	// emulator cell data; that is Window.ioMu.
+	//
+	//   LOCK ORDER (global, whole process):
+	//       app.OS.terminalMu  ->  Window.ioMu  ->  KittyPassthrough.mu / SixelPassthrough.mu
+	//
+	//   terminalMu is the outermost of the three. renderTerminal is the only
+	//   place that holds terminalMu and a window's ioMu at once, and it takes
+	//   them in that order. Nothing may take terminalMu while holding any
+	//   window's ioMu.
+	//
+	//   NOT REENTRANT. The holders here (MarkAllDirty,
+	//   MarkTerminalsWithNewContent, FlushPTYBuffersAfterResize,
+	//   renderTerminal) must not call each other. In particular do not call
+	//   MarkAllDirty from inside a renderTerminal locked region.
+	//
+	//   NEVER BLOCK WHILE HOLDING IT: it is taken on the UI goroutine every
+	//   frame, so any block here is a visible stall.
+	terminalMu         sync.RWMutex
+	LastMouseX         int
+	LastMouseY         int
+	HasActiveTerminals bool
+	idleFrames         int // Consecutive frames with no content changes (for adaptive tick)
+	ShowHelp           bool
+	InteractionMode    bool                       // True when actively dragging/resizing
+	MouseSnapping      bool                       // Enable/disable mouse snapping
+	WindowExitChan     chan string                // Channel to signal window closure
+	PTYDataChan        chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
+	StateSyncChan      chan *session.SessionState // Channel for thread-safe state sync from callbacks
+	ClientEventChan    chan ClientEvent           // Channel for thread-safe client join/leave notifications
+	Animations         []*ui.Animation            // Active animations
+	CPUHistory         []float64                  // CPU usage history for graph
+	LastCPUUpdate      time.Time                  // Last time CPU was updated
+	RAMUsage           float64                    // Cached RAM usage percentage
+	LastRAMUpdate      time.Time                  // Last time RAM was updated
+	AutoTiling         bool                       // Automatic tiling mode enabled
+	MasterRatio        float64                    // Master window width ratio for tiling (0.3-0.7)
 	// BSP tiling state
 	WorkspaceTrees        map[int]*layout.BSPTree // BSP tree per workspace
 	PreselectionDir       layout.PreselectionDir  // Pending preselection direction (0 = none)
@@ -174,6 +193,12 @@ type OS struct {
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values
 	sixelWinIndex   map[string]*terminal.Window    // Reused window-by-ID index for sixel placement refresh
 	sixelPosValue   WindowPositionInfo             // Reused value returned to the sixel refresh callback
+	// Scrollback lengths snapshotted before a placement refresh takes the
+	// passthrough lock. The refresh callbacks run under kp.mu/sp.mu and must
+	// not take a window's ioMu there: the PTY reader holds ioMu while
+	// Terminal.Write drives the kitty and sixel callbacks, which take
+	// kp.mu/sp.mu, so reading ioMu under kp.mu/sp.mu closes a lock cycle.
+	placementScrollbackLen map[string]int
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
@@ -182,11 +207,23 @@ type OS struct {
 	DaemonClient      *session.TUIClient // Client for daemon communication (nil in local mode)
 	SessionName       string             // Name of the daemon session (if attached)
 	RestoredFromState bool               // True after RestoreFromState, cleared after first resize
-	SubscribedPTYs    map[string]bool    // Tracks which PTY IDs are currently subscribed (for visibility optimization)
+	// DaemonStateVersion is the daemon state version this client last saw. It is
+	// echoed back on every state sync so the daemon can tell a snapshot built
+	// from its current state apart from one built before a mutation of its own.
+	DaemonStateVersion int
+	SubscribedPTYs     map[string]bool // Tracks which PTY IDs are currently subscribed (for visibility optimization)
 	// ExitReason records why the program stopped, for the caller to report and
 	// to pick an exit status. Empty means the user quit or detached normally.
 	// It is written only on the Bubble Tea goroutine, in Update.
 	ExitReason ExitReason
+	// QuitRequested records that the user deliberately quit this client, which
+	// in a daemon session also kills the session. The daemon then announces the
+	// session ending and the connection dropping, and both announcements can
+	// arrive before the program finishes quitting. Without this flag those
+	// announcements are indistinguishable from a session killed from elsewhere,
+	// and a deliberate quit reports an error. Written only on the Bubble Tea
+	// goroutine, like ExitReason.
+	QuitRequested bool
 	// Multi-client effective size (min of all clients in session)
 	EffectiveWidth  int // Effective width for rendering (min of all clients, 0 = use terminal size)
 	EffectiveHeight int // Effective height for rendering (min of all clients, 0 = use terminal size)
@@ -194,6 +231,9 @@ type OS struct {
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// Keybind registry for user-configurable keybindings
 	KeybindRegistry *config.KeybindRegistry
+	// ConfigWarnings holds the problems found in the loaded config, reported to
+	// the user once the TUI is up (see reportConfigWarnings).
+	ConfigWarnings []string
 	// Showkeys feature
 	ShowKeys          bool       // True when showkeys overlay is enabled
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
@@ -427,6 +467,10 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	m.MarkAllDirty()
 	m.LogInfo("Session switch complete: now on %s with %d windows", m.SessionName, len(m.Windows))
 	m.ShowNotification("Session: "+m.SessionName, "success", config.NotificationDuration)
+	// Switching sessions is an attach: this client is now driving a different
+	// session, and a hook that tracks which session is live has to hear about it
+	// here as well as at startup.
+	m.FireAttached()
 	return nil
 }
 

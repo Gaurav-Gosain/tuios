@@ -152,10 +152,18 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	return d
 }
 
-// onSessionCreated installs a session's event sink and publishes a
+// onSessionCreated installs a session's event and state sinks and publishes a
 // session-created event. It runs on the manager's create hook.
 func (d *Daemon) onSessionCreated(s *Session) {
 	name := s.Name
+	// Every daemon-side mutation reaches the attached clients from here, so a
+	// change the daemon made itself shows up in a live TUI without the verb that
+	// made it knowing a client exists. Source is empty because the daemon, not a
+	// client, is the origin: every attached client needs to hear it.
+	sessionID := s.ID
+	s.SetStateSink(func(state *SessionState) {
+		d.broadcastStateSync(sessionID, state, "update", "")
+	})
 	s.SetEventSink(func(ev SessionEvent) {
 		d.events.publish(streamEvent{
 			Type:      ev.Type,

@@ -7,10 +7,20 @@ import (
 	"github.com/google/uuid"
 )
 
-// maxDaemonWorkspaces bounds the workspace indices the daemon-side state
-// operations accept. It mirrors the TUI's workspace count (config.MaxWorkspaces)
-// but is duplicated here to keep the session package free of a config import.
-const maxDaemonWorkspaces = 9
+// defaultWorkspaces bounds the workspace indices the daemon-side state
+// operations accept when the session state does not say how many it has. State
+// written by a client that reports its workspace count uses that instead, so the
+// bound is the session's own rather than a number this package guesses.
+const defaultWorkspaces = 9
+
+// workspaceBound returns how many workspaces this state has, for the range check
+// on the operations that take a workspace index.
+func (s *SessionState) workspaceBound() int {
+	if s.NumWorkspaces > 0 {
+		return s.NumWorkspaces
+	}
+	return defaultWorkspaces
+}
 
 // These daemon-side operations mutate a session's canonical SessionState
 // directly, so mutating control verbs (create/close/focus/rename/move a window,
@@ -75,6 +85,25 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 	return -1, fmt.Errorf("no window found matching %q", target)
 }
 
+// firstVisibleOnWorkspace returns the ID of the first window in slice order that
+// sits on the given workspace and is not minimized, or "" when the workspace has
+// no such window.
+//
+// This is the focus-repair rule, and it is deliberately the same rule the
+// renderer applies (OS.FocusNextVisibleWindow): first in order, minimized
+// windows skipped, no focus at all when nothing visible remains. The daemon used
+// to take the first window on the workspace whether or not it was minimized,
+// which put focus on a window sitting in the dock while a visible one went
+// unfocused. TestDaemonFocusRepairAfterClose pins every case.
+func firstVisibleOnWorkspace(windows []WindowState, workspace int) string {
+	for i := range windows {
+		if windows[i].Workspace == workspace && !windows[i].Minimized {
+			return windows[i].ID
+		}
+	}
+	return ""
+}
+
 // AddDaemonWindow spawns a fresh PTY and appends a canonical window for it to
 // the session state, focusing it on the current workspace. onExit (may be nil)
 // is invoked with the PTY ID when the shell process exits. It returns a copy of
@@ -96,6 +125,11 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 	ptyHeight := max(height-2, 1)
 
 	windowID := uuid.New().String()
+	if title == "" {
+		// The same default the renderer used when it still created windows
+		// itself, so a window looks the same however it was asked for.
+		title = "Terminal " + windowID[:8]
+	}
 	pty, err := s.CreatePTY(windowID, ptyWidth, ptyHeight, onExit)
 	if err != nil {
 		return WindowState{}, err
@@ -121,6 +155,9 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 			Height:    height,
 			Workspace: workspace,
 			PTYID:     pty.ID,
+			// The daemon has no viewport, so this box is a placeholder that keeps
+			// the PTY a usable size until a client places the window properly.
+			Unplaced: true,
 		}
 		state.Windows = append(state.Windows, win)
 		state.FocusedWindowID = windowID
@@ -147,13 +184,7 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 
 		// Repair focus if we removed the focused window.
 		if state.FocusedWindowID == closed.ID {
-			state.FocusedWindowID = ""
-			for i := range state.Windows {
-				if state.Windows[i].Workspace == workspace {
-					state.FocusedWindowID = state.Windows[i].ID
-					break
-				}
-			}
+			state.FocusedWindowID = firstVisibleOnWorkspace(state.Windows, workspace)
 		}
 		if state.WorkspaceFocus != nil && state.WorkspaceFocus[workspace] == closed.ID {
 			delete(state.WorkspaceFocus, workspace)
@@ -252,11 +283,10 @@ func (s *Session) RenameDaemonWindow(target, name string) error {
 
 // MoveDaemonWindowToWorkspace moves the window matching target to workspace ws.
 func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
-	if ws < 1 || ws > maxDaemonWorkspaces {
-		return fmt.Errorf("workspace %d out of range (1-%d)", ws, maxDaemonWorkspaces)
-	}
-
 	return s.mutateState(func(state *SessionState) error {
+		if ws < 1 || ws > state.workspaceBound() {
+			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+		}
 		idx, err := findWindowStateIndex(state.Windows, target)
 		if err != nil {
 			return err
@@ -275,11 +305,10 @@ func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 // SwitchDaemonWorkspace sets the current workspace, restoring that workspace's
 // last-focused window when one is recorded.
 func (s *Session) SwitchDaemonWorkspace(ws int) error {
-	if ws < 1 || ws > maxDaemonWorkspaces {
-		return fmt.Errorf("workspace %d out of range (1-%d)", ws, maxDaemonWorkspaces)
-	}
-
 	return s.mutateState(func(state *SessionState) error {
+		if ws < 1 || ws > state.workspaceBound() {
+			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+		}
 		state.CurrentWorkspace = ws
 		if state.WorkspaceFocus != nil {
 			if focus, ok := state.WorkspaceFocus[ws]; ok {

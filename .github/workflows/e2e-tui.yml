@@ -1,0 +1,57 @@
+name: End-to-end TUI regressions
+
+# Drives a real tuios binary in a real PTY and asserts on the rendered screen.
+# No terminal is needed: the harness allocates the pty itself, so this runs on a
+# stock runner with no xvfb or tmux.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-tui:
+    runs-on: ubuntu-latest
+    # The suite spawns multiplexer daemons and shells. The job timeout is a
+    # backstop; every individual wait inside the suite has its own deadline, so
+    # a hang is reported as the assertion that timed out rather than as a job
+    # that was killed.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            e2e/tui/go.sum
+
+      - name: Build the binary under test
+        run: go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+
+      - name: Run the end-to-end suite
+        working-directory: e2e/tui
+        env:
+          TUIOS_E2E: "1"
+          # -count=1 is enforced on the command line too, but pointing the suite
+          # at an explicit binary keeps the build step's output out of the test
+          # log and makes the artifact obvious.
+          TUIOS_E2E_BIN: ${{ runner.temp }}/tuios
+        # -count=1 defeats Go's test cache, which otherwise can replay a stale
+        # result across a change of binary. -race is deliberately absent: the
+        # program under test is a child process, so the detector would
+        # instrument only the harness.
+        run: go test -count=1 -timeout 15m -v ./...
+
+      - name: Reap any surviving daemons
+        # The harness tears down its own process groups, but a hard job failure
+        # can leave one behind, and a leaked daemon would poison a self-hosted
+        # runner. Never fail the job on this.
+        if: always()
+        run: pkill -f "$RUNNER_TEMP/tuios" || true

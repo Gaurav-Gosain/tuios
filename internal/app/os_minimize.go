@@ -136,7 +136,10 @@ func (m *OS) ToggleZoom() {
 		termH := fw.ContentHeight()
 		if fw.Terminal != nil {
 			fw.LockIO()
-			fw.Terminal.Resize(termW, termH)
+			// Re-check under the lock; Close() nils Terminal while holding it.
+			if fw.Terminal != nil {
+				fw.Terminal.Resize(termW, termH)
+			}
 			fw.UnlockIO()
 		}
 		if fw.Pty != nil {
@@ -180,7 +183,10 @@ func (m *OS) ToggleZoom() {
 		termH := fw.ContentHeight()
 		if fw.Terminal != nil {
 			fw.LockIO()
-			fw.Terminal.Resize(termW, termH)
+			// Re-check under the lock; Close() nils Terminal while holding it.
+			if fw.Terminal != nil {
+				fw.Terminal.Resize(termW, termH)
+			}
 			fw.UnlockIO()
 		}
 		if fw.Pty != nil {

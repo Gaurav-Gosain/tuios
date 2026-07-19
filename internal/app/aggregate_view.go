@@ -43,7 +43,9 @@ func (m *OS) GetAggregateViewItems() []AggregateViewItem {
 			title = fmt.Sprintf("Window %s", w.ID[:8])
 		}
 
-		cwd := "" // CWD not directly accessible from emulator
+		// Cached per window and refreshed at most once a second, so building
+		// the list does not cost a readlink per window per keystroke.
+		cwd := w.CWD()
 
 		preview := ""
 		if w.Terminal != nil {

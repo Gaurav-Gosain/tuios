@@ -8,62 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// handleWindowCycle handles Alt+Tab/Opt+Tab window cycling in terminal mode.
-// This allows cycling through windows without needing the prefix key.
-// On macOS, opt+tab produces ⇥ and opt+shift+tab produces ⇤.
-func handleWindowCycle(msg tea.KeyPressMsg, o *app.OS) bool {
-	keyStr := msg.String()
-
-	// Check for macOS Option+Tab unicode characters first (darwin only; ⇥/⇤ are
-	// ordinary characters elsewhere and must fall through to the shell).
-	if runtimeIsDarwin() && len(keyStr) > 0 {
-		if dir := IsMacOSOptionTab([]rune(keyStr)[0]); dir != "" {
-			if o.AutoTiling && o.UseScrollingLayout {
-				if dir == "next" {
-					o.ScrollingFocusRight()
-				} else {
-					o.ScrollingFocusLeft()
-				}
-			} else {
-				if dir == "next" {
-					o.CycleToNextVisibleWindow()
-				} else {
-					o.CycleToPreviousVisibleWindow()
-				}
-			}
-			if newFocused := o.GetFocusedWindow(); newFocused != nil {
-				newFocused.InvalidateCache()
-			}
-			return true
-		}
-	}
-
-	// Linux/Windows alt+n/alt+p fallback (alt+tab conflicts with OS window switcher)
-	switch keyStr {
-	case "alt+n":
-		if o.AutoTiling && o.UseScrollingLayout {
-			o.ScrollingFocusRight()
-		} else {
-			o.CycleToNextVisibleWindow()
-		}
-		if newFocused := o.GetFocusedWindow(); newFocused != nil {
-			newFocused.InvalidateCache()
-		}
-		return true
-	case "alt+p":
-		if o.AutoTiling && o.UseScrollingLayout {
-			o.ScrollingFocusLeft()
-		} else {
-			o.CycleToPreviousVisibleWindow()
-		}
-		if newFocused := o.GetFocusedWindow(); newFocused != nil {
-			newFocused.InvalidateCache()
-		}
-		return true
-	}
-	return false
-}
-
 func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	num := int(msg.String()[0] - '0')
 

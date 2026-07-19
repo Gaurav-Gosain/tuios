@@ -6,11 +6,40 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/colorprofile"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 )
+
+// Graphics capabilities of the host terminal, set by the app once passthrough
+// has been initialised and read when building a guest shell's environment.
+// Guarded because windows can be created from the update loop while the
+// capabilities are refreshed on reattach.
+var (
+	graphicsMu        sync.RWMutex
+	kittyGraphicsHost bool
+	sixelGraphicsHost bool
+)
+
+// SetGraphicsCapabilities records which graphics protocols tuios can forward to
+// the host terminal. Windows created afterwards advertise a matching terminal
+// identity to their shell (see guestenv.TermProgram).
+func SetGraphicsCapabilities(kitty, sixel bool) {
+	graphicsMu.Lock()
+	defer graphicsMu.Unlock()
+	kittyGraphicsHost = kitty
+	sixelGraphicsHost = sixel
+}
+
+// guestTermProgram returns the TERM_PROGRAM value for a newly spawned shell.
+func guestTermProgram() string {
+	graphicsMu.RLock()
+	defer graphicsMu.RUnlock()
+	return guestenv.TermProgram(kittyGraphicsHost, sixelGraphicsHost)
+}
 
 func detectShell() string {
 	// Check user configuration first

@@ -60,6 +60,12 @@ type Emulator struct {
 	lastChar rune // either ansi.Rune or ansi.Grapheme
 	// A slice of runes to compose a grapheme.
 	grapheme []rune
+	// The cell handleGrapheme last drew into. A pending wrap makes the target
+	// differ from the cursor position observed beforehand, so it is recorded
+	// rather than recomputed.
+	lastCellX, lastCellY int
+	// The cluster left open across a Write boundary, if any.
+	openGrapheme openGrapheme
 
 	// The ANSI parser to use.
 	parser *ansi.Parser
@@ -447,6 +453,16 @@ func (e *Emulator) IsAltScreen() bool {
 	return e.isModeSet(ansi.ModeAltScreen) || e.isModeSet(ansi.ModeAltScreenSaveCursor)
 }
 
+// ActiveScreenIsAlt reports whether the active screen pointer currently
+// addresses the alternate buffer. This is a diagnostic accessor: it exists so
+// the render trace can distinguish the buffer actually being read from the mode
+// bits reported by IsAltScreen, which RestoreAltScreenMode deliberately leaves
+// untouched. It is not part of the emulator's behavioural contract, so do not
+// build rendering or input logic on it.
+func (e *Emulator) ActiveScreenIsAlt() bool {
+	return e.scr == &e.scrs[1]
+}
+
 // RestoreAltScreenMode restores the alternate screen mode state.
 // This is used when reconnecting to a daemon session to restore the emulator state
 // without re-sending the escape sequences that would trigger the mode change.
@@ -643,6 +659,10 @@ func (e *Emulator) EncodeMouseEvent(m Mouse) string {
 
 // Resize resizes the terminal.
 func (e *Emulator) Resize(width int, height int) {
+	// A resize reflows and reclamps, so the cell an open cluster was drawn into
+	// no longer identifies that cluster. Close it.
+	e.openGrapheme = openGrapheme{}
+
 	x, y := e.scr.CursorPosition()
 	oldHeight := e.Height()
 
@@ -728,8 +748,12 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 		// flush grapheme if we transitioned to a non-utf8 state or we have
 		// written the whole byte slice.
 		if len(e.grapheme) > 0 {
-			if (e.lastState == parser.GroundState && state != parser.Utf8State) || i == len(p)-1 {
+			if e.lastState == parser.GroundState && state != parser.Utf8State {
 				e.flushGrapheme()
+			} else if i == len(p)-1 {
+				// Out of bytes, possibly mid-cluster: draw what we have but
+				// keep the trailing cluster open for the next Write.
+				e.flushGraphemeAtWriteEnd()
 			}
 		}
 		e.lastState = state

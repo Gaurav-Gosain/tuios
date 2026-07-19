@@ -1,0 +1,6 @@
+go test fuzz v1
+string("世世世世世\xe4\xb800\xb80")
+int(70)
+int(20)
+int(80)
+int(31)

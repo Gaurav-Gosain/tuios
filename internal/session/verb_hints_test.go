@@ -169,7 +169,7 @@ func TestVerbErrorHints(t *testing.T) {
 			wantCode:    ErrVerbInvalidParams,
 			wantMessage: []string{"recent-unwrapped"},
 			wantHint: map[string]string{
-				"param":        "source",
+				"param": "source",
 				// did_you_mean here proves the retired-value branch ran: the
 				// edit distance from "recent-unwrapped" to "recent" is far
 				// outside closestMatch's tolerance, so the generic path could

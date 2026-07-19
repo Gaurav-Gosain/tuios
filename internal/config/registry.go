@@ -93,6 +93,12 @@ func (r *KeybindRegistry) GetTapePrefixAction(key string) string {
 	return r.lookupKeyInSection(key, r.config.Keybindings.TapePrefix)
 }
 
+// GetTerminalModeAction returns the action name for a given key among the
+// direct terminal-mode binds (no prefix required).
+func (r *KeybindRegistry) GetTerminalModeAction(key string) string {
+	return r.lookupKeyInSection(key, r.config.Keybindings.TerminalMode)
+}
+
 // lookupKeyInSection looks up a key in a specific config section
 func (r *KeybindRegistry) lookupKeyInSection(key string, section map[string][]string) string {
 	// Build a temporary map for this section
@@ -145,6 +151,8 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 		r.config.Keybindings.WindowPrefix,
 		r.config.Keybindings.MinimizePrefix,
 		r.config.Keybindings.WorkspacePrefix,
+		r.config.Keybindings.DebugPrefix,
+		r.config.Keybindings.TapePrefix,
 		r.config.Keybindings.TerminalMode,
 	}
 
@@ -339,6 +347,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_minimize":         "Enter minimize prefix",
 	"prefix_window":           "Enter window prefix",
 	"prefix_detach":           "Detach (daemon: session keeps running)",
+	"prefix_exit_mode":        "Leave terminal mode",
 	"prefix_selection":        "Enter copy/scrollback mode",
 	"prefix_help":             "Toggle help",
 	"prefix_logs":             "Toggle log viewer",
@@ -350,6 +359,10 @@ var ActionDescriptions = map[string]string{
 	"prefix_split_vertical":   "Split window vertically",
 	"prefix_rotate_split":     "Rotate split direction",
 	"prefix_equalize_splits":  "Equalize all splits",
+	"prefix_scrollback":       "Open the scrollback browser",
+	"prefix_command_palette":  "Open the command palette",
+	"prefix_session_switcher": "Open the session switcher",
+	"prefix_layout":           "Enter layout prefix",
 
 	// Tape Prefix
 	"tape_prefix_manager": "Open tape manager",
@@ -365,6 +378,7 @@ var ActionDescriptions = map[string]string{
 	"debug_prefix_logs":       "Toggle log viewer",
 	"debug_prefix_cache":      "Toggle cache statistics",
 	"debug_prefix_animations": "Toggle animations",
+	"debug_prefix_showkeys":   "Toggle showkeys overlay",
 	"debug_prefix_cancel":     "Cancel debug prefix",
 
 	// Terminal Mode (direct keybinds, no prefix required)

@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
@@ -168,63 +169,56 @@ func TestTransitionGuardBypassedWhenPrefixActive(t *testing.T) {
 // like S (session switcher) and P (command palette) are handled in both
 // terminal mode and window management mode.
 func TestPrefixCommandsAvailableInBothModes(t *testing.T) {
-	// Terminal mode: handleTerminalPrefixCommand should handle "S"
-	o := &app.OS{Mode: app.TerminalMode, PrefixActive: true}
-	msg := tea.KeyPressMsg{Code: 'S', Text: "S"}
+	registry := config.NewKeybindRegistry(config.DefaultConfig())
 
-	result, _ := handleTerminalPrefixCommand(msg, o)
-	if !result.ShowSessionSwitcher {
-		t.Error("terminal mode: ctrl+b S should open session switcher")
+	modes := []struct {
+		name string
+		mode app.Mode
+	}{
+		{"terminal mode", app.TerminalMode},
+		{"window management mode", app.WindowManagementMode},
 	}
 
-	// Terminal mode: handleTerminalPrefixCommand should handle "P"
-	o2 := &app.OS{Mode: app.TerminalMode, PrefixActive: true}
-	msg2 := tea.KeyPressMsg{Code: 'P', Text: "P"}
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			o := &app.OS{Mode: mode.mode, PrefixActive: true, KeybindRegistry: registry}
+			result, _ := HandlePrefixCommand(tea.KeyPressMsg{Code: 'S', Text: "S"}, o)
+			if !result.ShowSessionSwitcher {
+				t.Error("leader S should open the session switcher")
+			}
 
-	result2, _ := handleTerminalPrefixCommand(msg2, o2)
-	if !result2.ShowCommandPalette {
-		t.Error("terminal mode: ctrl+b P should open command palette")
-	}
-
-	// Window management mode: HandlePrefixCommand should handle "S"
-	o3 := &app.OS{Mode: app.WindowManagementMode, PrefixActive: true}
-	msg3 := tea.KeyPressMsg{Code: 'S', Text: "S"}
-
-	result3, _ := HandlePrefixCommand(msg3, o3)
-	if !result3.ShowSessionSwitcher {
-		t.Error("window management mode: ctrl+b S should open session switcher")
-	}
-
-	// Window management mode: HandlePrefixCommand should handle "P"
-	o4 := &app.OS{Mode: app.WindowManagementMode, PrefixActive: true}
-	msg4 := tea.KeyPressMsg{Code: 'P', Text: "P"}
-
-	result4, _ := HandlePrefixCommand(msg4, o4)
-	if !result4.ShowCommandPalette {
-		t.Error("window management mode: ctrl+b P should open command palette")
+			o2 := &app.OS{Mode: mode.mode, PrefixActive: true, KeybindRegistry: registry}
+			result2, _ := HandlePrefixCommand(tea.KeyPressMsg{Code: 'P', Text: "P"}, o2)
+			if !result2.ShowCommandPalette {
+				t.Error("leader P should open the command palette")
+			}
+		})
 	}
 }
 
-// TestMacOSOptionKeysGatedToDarwin verifies that the macOS Option-key character
-// tables only trigger workspace/window shortcuts on darwin. On other platforms
+// TestMacOSOptionGlyphsAreReservedOnlyOnDarwin verifies that the macOS
+// Option-key glyphs only count as reserved chords on darwin. On other platforms
 // these glyphs (e.g. £, ⇥) are ordinary typed characters and must fall through
-// to the shell rather than being intercepted.
-func TestMacOSOptionKeysGatedToDarwin(t *testing.T) {
+// to the shell rather than being intercepted as workspace or window shortcuts.
+func TestMacOSOptionGlyphsAreReservedOnlyOnDarwin(t *testing.T) {
 	// £ is Option+3 on a US Mac layout, but Shift+3 on a UK layout.
-	poundMsg := tea.KeyPressMsg{Code: '£', Text: "£"}
-
-	o := &app.OS{Mode: app.TerminalMode, CurrentWorkspace: 1}
-	handled := handleWorkspaceSwitch(poundMsg, o)
-	if handled != runtimeIsDarwin() {
-		t.Errorf("handleWorkspaceSwitch(£) = %v, want %v on GOOS-gated path", handled, runtimeIsDarwin())
+	if got := isReservedTerminalChord(tea.KeyPressMsg{Code: '£', Text: "£"}); got != runtimeIsDarwin() {
+		t.Errorf("isReservedTerminalChord(£) = %v, want %v", got, runtimeIsDarwin())
 	}
 
 	// ⇥ is Option+Tab on macOS, but an ordinary glyph elsewhere.
-	tabMsg := tea.KeyPressMsg{Code: '⇥', Text: "⇥"}
-	o2 := &app.OS{Mode: app.TerminalMode}
-	handledCycle := handleWindowCycle(tabMsg, o2)
-	if handledCycle != runtimeIsDarwin() {
-		t.Errorf("handleWindowCycle(⇥) = %v, want %v on GOOS-gated path", handledCycle, runtimeIsDarwin())
+	if got := isReservedTerminalChord(tea.KeyPressMsg{Code: '⇥', Text: "⇥"}); got != runtimeIsDarwin() {
+		t.Errorf("isReservedTerminalChord(⇥) = %v, want %v", got, runtimeIsDarwin())
+	}
+
+	// A real Alt chord is reserved on every platform.
+	if !isReservedTerminalChord(tea.KeyPressMsg{Code: '1', Mod: tea.ModAlt, Text: "1"}) {
+		t.Error("alt+1 should be a reserved chord on every platform")
+	}
+
+	// A bare letter never is, whatever it happens to be bound to.
+	if isReservedTerminalChord(tea.KeyPressMsg{Code: 'a', Text: "a"}) {
+		t.Error("a bare letter must reach the shell, not be treated as a chord")
 	}
 
 	// The pure lookup helper must remain platform-independent so it stays testable.

@@ -59,7 +59,9 @@ func isDefaultTitle(title, windowID string) bool {
 
 // getWindowTitle returns the display name for a window, truncated to fit within maxWidth.
 // Returns empty string if title should be hidden or doesn't fit.
-func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer string, maxWidth int) string {
+// position is the window's 1-based place in its workspace, used by the {index}
+// placeholder of appearance.window_title_format.
+func getWindowTitle(window *terminal.Window, position int, isRenaming bool, renameBuffer string, maxWidth int) string {
 	windowName := ""
 	if window.CustomName != "" {
 		windowName = window.CustomName
@@ -69,7 +71,13 @@ func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer strin
 	}
 
 	if isRenaming {
+		// While renaming, the buffer is the title: running it through the format
+		// would show the user something other than what they are typing.
 		windowName = renameBuffer + "_"
+	} else if windowName != "" || config.WindowTitleFormat != "" {
+		// A format that mentions only {index} or {cwd} still has something to
+		// say about a window whose title is empty.
+		windowName = config.FormatWindowTitle(windowName, position, window.CWD())
 	}
 
 	if windowName == "" {
@@ -95,7 +103,7 @@ func getWindowTitle(window *terminal.Window, isRenaming bool, renameBuffer strin
 	return windowName
 }
 
-func addToBorder(content string, color color.Color, window *terminal.Window, isRenaming bool, renameBuffer string, isTiling bool) string {
+func addToBorder(content string, color color.Color, window *terminal.Window, position int, isRenaming bool, renameBuffer string, isTiling bool) string {
 	width := max(lipgloss.Width(content)-2, 0)
 	titlePos := config.WindowTitlePosition
 
@@ -133,7 +141,7 @@ func addToBorder(content string, color color.Color, window *terminal.Window, isR
 
 	windowName := ""
 	if titlePos != "hidden" {
-		windowName = getWindowTitle(window, isRenaming, renameBuffer, titleMaxWidth)
+		windowName = getWindowTitle(window, position, isRenaming, renameBuffer, titleMaxWidth)
 	}
 
 	borderStyle := style.Foreground(color)
@@ -457,16 +465,55 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 	return cellStyle
 }
 
+// truncateToWidth cuts line to at most width cells as measured by
+// ansi.StringWidth.
+//
+// ansi.Truncate and ansi.StringWidth disagree about malformed UTF-8: for a line
+// carrying invalid bytes, Truncate can return a string that StringWidth then
+// measures one or more cells over the limit. That reaches the compositor as a
+// row wider than the space the layer was given, which bleeds into the pane next
+// door. Guest programs can put arbitrary bytes in an OSC title and those titles
+// are rendered into the window chrome, so this is reachable input, not a
+// theoretical one. Re-measure and keep cutting until the result really fits.
+func truncateToWidth(line string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	out := ansi.Truncate(line, width, "")
+	// The overshoot is a cell or two in practice; the loop is bounded by width
+	// regardless so a pathological line cannot spin here.
+	for target := width; ansi.StringWidth(out) > width && target > 0; {
+		target--
+		out = ansi.Truncate(line, target, "")
+	}
+	return out
+}
+
 func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) (string, int, int) {
 	lines := strings.Split(content, "\n")
 	windowHeight := len(lines)
 
-	windowWidth := 0
-	if len(lines) > 0 {
-		windowWidth = ansi.StringWidth(lines[0])
+	// Reject on the axes that cost nothing to test first. Measuring the frame
+	// width walks every line, and a window rejected for being off the right
+	// edge or off the top or bottom does not need the width at all, so paying
+	// for it before these three tests was pure waste.
+	if x >= viewportWidth || y+windowHeight <= 0 || y >= viewportHeight {
+		return "", max(x, 0), max(y, 0)
 	}
 
-	if x+windowWidth <= 0 || x >= viewportWidth || y+windowHeight <= 0 || y >= viewportHeight {
+	// The window is as wide as its widest line, not as wide as its first one.
+	// Measuring only lines[0] under-reports the width whenever the top row is
+	// blank, and the unfocused fast render path trims trailing spaces, so a
+	// full-screen application with an empty first row (nvim, among others)
+	// produced a frame starting with an empty line and measured as zero wide.
+	// The offscreen guard below then read x+0 <= 0 as true for the leftmost
+	// tile and discarded the whole frame, compositing the pane as bare
+	// background while the rest of the layout carried on. The same
+	// under-measurement also let the horizontal clip below be skipped for
+	// content that really did overrun the viewport.
+	windowWidth := framesWidth(lines)
+
+	if x+windowWidth <= 0 {
 		return "", max(x, 0), max(y, 0)
 	}
 
@@ -500,16 +547,16 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 		clippedLines := make([]string, len(visibleLines))
 
 		for lineIdx, line := range visibleLines {
-			lineWidth := ansi.StringWidth(line)
+			w := lineWidth(line)
 
-			if clipLeft >= lineWidth {
+			if clipLeft >= w {
 				clippedLines[lineIdx] = ""
 				continue
 			}
 
 			tempLine := line
-			if lineWidth > maxWidth+clipLeft {
-				tempLine = ansi.Truncate(line, maxWidth+clipLeft, "")
+			if w > maxWidth+clipLeft {
+				tempLine = truncateToWidth(line, maxWidth+clipLeft)
 			}
 
 			if clipLeft > 0 {
@@ -561,9 +608,23 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 				clippedLines[lineIdx] = result.String() + "\x1b[0m"
 			} else {
 				clippedLines[lineIdx] = tempLine
-				if lineWidth > maxWidth {
+				if w > maxWidth {
 					clippedLines[lineIdx] += "\x1b[0m"
 				}
+			}
+		}
+
+		// Enforce the width contract on the finished rows rather than trusting
+		// the arithmetic that built them. The left-skip above walks runes and
+		// counts one position per rune, but converting a line that carries
+		// invalid bytes to runes turns each bad byte into a replacement
+		// character with a width of its own, so the assembled row can come out
+		// several cells wider than the space it is being placed in and bleed
+		// into the pane next door. Guest programs can put arbitrary bytes in an
+		// OSC title and those titles are rendered into the window chrome.
+		for i, line := range clippedLines {
+			if ansi.StringWidth(line) > maxWidth {
+				clippedLines[i] = truncateToWidth(line, maxWidth) + "\x1b[0m"
 			}
 		}
 
@@ -598,4 +659,24 @@ func (m *OS) isPositionInSelection(window *terminal.Window, x, y int) bool {
 	} else {
 		return true
 	}
+}
+
+// workspacePosition returns the window's 1-based place among the windows of its
+// workspace, the same number the leader-digit shortcuts address it by. Returns
+// 0 for a window that is not in the list, which the title format renders as-is.
+func (m *OS) workspacePosition(window *terminal.Window) int {
+	position := 0
+	for _, w := range m.Windows {
+		if w.Workspace != window.Workspace {
+			continue
+		}
+		if m.AutoTiling && w.Minimized {
+			continue
+		}
+		position++
+		if w == window {
+			return position
+		}
+	}
+	return 0
 }

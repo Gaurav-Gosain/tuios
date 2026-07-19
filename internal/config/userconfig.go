@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
@@ -33,6 +33,7 @@ type AppearanceConfig struct {
 	HideWindowButtons   bool   `toml:"hide_window_buttons"`   // Hide window control buttons (minimize, maximize, close)
 	HideScrollbar       bool   `toml:"hide_scrollbar"`        // Hide the window scrollbar thumb on the border
 	ScrollbackLines     int    `toml:"scrollback_lines"`      // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
+	ScrollLines         int    `toml:"scroll_lines"`          // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
 	DockbarPosition     string `toml:"dockbar_position"`      // Dockbar position: bottom, top, hidden
 	PreferredShell      string `toml:"preferred_shell"`       // Preferred shell: if empty, auto-detect based on platform.
 	AnimationsEnabled   *bool  `toml:"animations_enabled"`    // Enable UI animations (default: true). Set to false for instant transitions.
@@ -47,11 +48,9 @@ type AppearanceConfig struct {
 	Theme               string `toml:"theme"`                 // Color theme name (e.g., dracula, nord, my-custom-theme)
 	SharedBorders       *bool  `toml:"shared_borders"`        // Share borders between adjacent tiled windows (default: false)
 	// Customization
-	Gap                  int    `toml:"gap"`                    // Gap in cells between tiled panes (default: 0)
 	BorderFocusedColor   string `toml:"border_focused_color"`   // Hex color for focused pane border (e.g., "#89b4fa")
 	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
 	WindowTitleFormat    string `toml:"window_title_format"`    // Format string for window titles: {title}, {index}, {cwd}
-	SeparatorStyle       string `toml:"separator_style"`        // Separator pill style: rounded (default), powerline, flat, none
 	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
 	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
 	MaxFPS               int    `toml:"max_fps"`                // Maximum render FPS (default: 60, max: 120)
@@ -86,6 +85,7 @@ func DefaultConfig() *UserConfig {
 			BorderStyle:       "rounded",
 			HideWindowButtons: false,
 			ScrollbackLines:   10000,
+			ScrollLines:       3,
 			DockbarPosition:   "bottom",
 			PreferredShell:    "",
 		},
@@ -169,7 +169,8 @@ func DefaultConfig() *UserConfig {
 				"prefix_workspace":        {"w"},
 				"prefix_minimize":         {"m"},
 				"prefix_window":           {"t"},
-				"prefix_detach":           {"d", "esc"},
+				"prefix_detach":           {"d"},
+				"prefix_exit_mode":        {"esc"},
 				"prefix_selection":        {"["},
 				"prefix_help":             {"?"},
 				"prefix_debug":            {"D"},
@@ -181,6 +182,9 @@ func DefaultConfig() *UserConfig {
 				"prefix_rotate_split":     {"R"},
 				"prefix_equalize_splits":  {"="},
 				"prefix_scrollback":       {"s"},
+				"prefix_command_palette":  {"P"},
+				"prefix_session_switcher": {"S"},
+				"prefix_layout":           {"L"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -230,6 +234,7 @@ func DefaultConfig() *UserConfig {
 				"debug_prefix_logs":       {"l"},
 				"debug_prefix_cache":      {"c"},
 				"debug_prefix_animations": {"a"},
+				"debug_prefix_showkeys":   {"k"},
 				"debug_prefix_cancel":     {"esc"},
 			},
 			TapePrefix: map[string][]string{
@@ -249,8 +254,8 @@ func DefaultConfig() *UserConfig {
 func getDefaultTerminalModeKeybinds() map[string][]string {
 	if isMacOS() {
 		return map[string][]string{
-			"terminal_next_window": {"opt+tab"},
-			"terminal_prev_window": {"opt+shift+tab"},
+			"terminal_next_window": {"opt+tab", "alt+n"},
+			"terminal_prev_window": {"opt+shift+tab", "alt+p"},
 			"terminal_exit_mode":   {"opt+esc"},
 		}
 	}
@@ -413,12 +418,12 @@ func LoadUserConfig() (*UserConfig, error) {
 		return nil, fmt.Errorf("configuration has %d error(s), please fix and restart", len(validation.Errors))
 	}
 
-	// Log warnings (non-fatal)
-	if validation.HasWarnings() {
-		for _, warn := range validation.Warnings {
-			tea.Println(fmt.Sprintf("Config warning in [%s]: %s - %s", warn.Field, warn.Key, warn.Message))
-		}
-	}
+	// Warnings are deliberately not printed here. Loading happens before the
+	// alternate screen is entered, so anything written to stdout or stderr at
+	// this point is wiped by the first frame; the previous tea.Println call was
+	// worse than that, since its return value (a command) was discarded and it
+	// never printed anything at all. The warnings are surfaced inside the TUI
+	// instead, by ConfigWarnings below.
 
 	// Loading is pure: it never mutates package globals. Callers apply the
 	// appearance globals exactly once, on the Bubble Tea goroutine, via
@@ -469,6 +474,13 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	} else if cfg.Appearance.ScrollbackLines > 1000000 {
 		cfg.Appearance.ScrollbackLines = 1000000
 	}
+
+	// Validate and set wheel scroll speed (min: 1, max: 50)
+	if cfg.Appearance.ScrollLines <= 0 {
+		cfg.Appearance.ScrollLines = defaultCfg.Appearance.ScrollLines
+	} else if cfg.Appearance.ScrollLines > 50 {
+		cfg.Appearance.ScrollLines = 50
+	}
 }
 
 // ApplyAppearanceConfig applies parsed appearance settings to the package
@@ -515,6 +527,16 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 		HideClock = cfg.Appearance.HideClock
 	}
 
+	// WindowTitleFormat defaults to empty, meaning the title is shown as-is.
+	// An empty string in the config also clears a previously set format on
+	// reload, which is why it is assigned unconditionally.
+	WindowTitleFormat = cfg.Appearance.WindowTitleFormat
+
+	// ScrollLines (lines per wheel notch)
+	if cfg.Appearance.ScrollLines > 0 {
+		ScrollLines = cfg.Appearance.ScrollLines
+	}
+
 	// ZoomMaxWidth (0 = fullscreen)
 	if cfg.Appearance.ZoomMaxWidth > 0 {
 		ZoomMaxWidth = cfg.Appearance.ZoomMaxWidth
@@ -534,6 +556,32 @@ func fillMissingDaemon(cfg, defaultCfg *UserConfig) {
 		cfg.Daemon.DefaultCodec = defaultCfg.Daemon.DefaultCodec
 	}
 	// SocketPath defaults to empty (use XDG default), so we don't override it
+}
+
+// migrateLegacyKeybinds rewrites bindings whose meaning changed, so a config
+// written by an older version keeps behaving the way its author expects.
+//
+// Older defaults bound prefix_detach to both "d" and "esc" while the prefix
+// handler hard-coded esc to leave terminal mode and never detach. Now that the
+// binding is what actually runs, leaving esc on prefix_detach would start
+// detaching the session on a key that used to just switch modes, so it moves to
+// the prefix_exit_mode action that carries the old behaviour.
+// It must run before the defaults are filled in, so that the presence of
+// prefix_exit_mode still distinguishes a config written by a version that knew
+// about the split (leave it alone) from an older one (migrate it).
+func migrateLegacyKeybinds(cfg *UserConfig) {
+	if _, ok := cfg.Keybindings.PrefixMode["prefix_exit_mode"]; ok {
+		return
+	}
+	detach := cfg.Keybindings.PrefixMode["prefix_detach"]
+	if !slices.Contains(detach, "esc") {
+		return
+	}
+	remaining := slices.DeleteFunc(slices.Clone(detach), func(key string) bool {
+		return key == "esc"
+	})
+	cfg.Keybindings.PrefixMode["prefix_detach"] = remaining
+	cfg.Keybindings.PrefixMode["prefix_exit_mode"] = []string{"esc"}
 }
 
 // fillMissingKeybinds fills in any missing keybindings with defaults
@@ -582,6 +630,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		cfg.Keybindings.TerminalMode = make(map[string][]string)
 	}
 
+	migrateLegacyKeybinds(cfg)
+
 	// Set default leader key if not specified
 	if cfg.Keybindings.LeaderKey == "" {
 		cfg.Keybindings.LeaderKey = defaultCfg.Keybindings.LeaderKey
@@ -610,6 +660,25 @@ func fillMapDefaults(target, defaults map[string][]string) {
 			target[k] = v
 		}
 	}
+}
+
+// ConfigWarnings returns the non-fatal problems in cfg as human-readable lines,
+// for surfacing inside the running TUI. Config problems used to be reported
+// only to a stream nobody sees, so a typo in a keybinding looked like the
+// feature was broken rather than like the config was.
+func ConfigWarnings(cfg *UserConfig) []string {
+	if cfg == nil {
+		return nil
+	}
+	validation := ValidateConfig(cfg)
+	lines := make([]string, 0, len(validation.Errors)+len(validation.Warnings))
+	for _, issue := range validation.Errors {
+		lines = append(lines, fmt.Sprintf("[%s] %s: %s", issue.Field, issue.Key, issue.Message))
+	}
+	for _, issue := range validation.Warnings {
+		lines = append(lines, fmt.Sprintf("[%s] %s: %s", issue.Field, issue.Key, issue.Message))
+	}
+	return lines
 }
 
 // GetConfigPath returns the path to the config file

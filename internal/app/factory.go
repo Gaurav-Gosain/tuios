@@ -6,6 +6,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/ssh"
 )
 
@@ -123,6 +124,15 @@ func NewOS(opts OSOptions) *OS {
 		})
 	}
 
+	// Tell the terminal package what tuios can forward, so shells spawned
+	// locally advertise a terminal identity their image tools recognise. The
+	// passthroughs are the source of truth here: they already fold detection
+	// and the force flag together, and a nil passthrough means no forwarding.
+	terminal.SetGraphicsCapabilities(
+		os.KittyPassthrough != nil && os.KittyPassthrough.IsEnabled(),
+		os.SixelPassthrough != nil && os.SixelPassthrough.IsEnabled(),
+	)
+
 	// Initialize hooks manager and load user-defined hooks from config. Prefer
 	// the config the caller already loaded so we never trigger a second load
 	// (which used to re-apply appearance globals over CLI flags and, on the
@@ -139,6 +149,9 @@ func NewOS(opts OSOptions) *OS {
 		// Hold the loaded config so the in-app settings page can persist live
 		// changes back to disk.
 		os.UserConfig = cfg
+		// Collected here and reported from Init, once there is a TUI to report
+		// them in.
+		os.ConfigWarnings = config.ConfigWarnings(cfg)
 		if cfg.Hooks != nil {
 			os.HookManager.LoadFromConfig(cfg.Hooks)
 		}

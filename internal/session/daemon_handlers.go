@@ -75,6 +75,12 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		return fmt.Errorf("failed to get/create session: %w", err)
 	}
 
+	// Record what the attaching client's host terminal can display so shells
+	// started from now on advertise a matching terminal identity (see
+	// guestenv.TermProgram). Without this the daemon's own environment decides,
+	// and image tools inside a window fall back to block art.
+	session.SetGraphicsCapabilities(cs.kittyGraphics, cs.sixelGraphics)
+
 	// Record the new client's dimensions from the attach payload. Previously
 	// these were zeroed out on the theory that 80x24 might be a bubbletea
 	// placeholder; but leaving them at 0 excludes the client from
@@ -219,7 +225,7 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 	if payload.Detach {
 		sessionID := sess.ID
 		onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
-		if _, err := sess.AddDaemonWindow("Window", onExit); err != nil {
+		if _, err := sess.AddDaemonWindow("", onExit); err != nil {
 			return d.sendError(cs, ErrCodeInternal, fmt.Sprintf("failed to create initial window: %v", err))
 		}
 		log.Printf("Created detached session %q with an initial window", name)
@@ -485,12 +491,27 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 		return fmt.Errorf("invalid state payload: %w", err)
 	}
 
-	session.UpdateState(&state)
+	accepted := session.UpdateState(&state)
+	merged := session.GetState()
 
-	// Broadcast state change to other clients in the session
+	// A sync built before a daemon-side mutation was reconciled against it, so
+	// what is canonical now is not what this client pushed. Send the merged state
+	// straight back: without it the client keeps rendering its stale view and
+	// pushes it again on the next sync.
+	if !accepted {
+		if err := d.sendMessage(cs, MsgStateSync, &StateSyncPayload{
+			State:       merged,
+			TriggerType: "reconcile",
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Broadcast state change to other clients in the session. Peers get the
+	// merged state, not the raw push, so every client converges on the same view.
 	clientCount := d.getSessionClientCount(cs.sessionID)
 	if clientCount > 1 {
-		d.broadcastStateSync(cs.sessionID, &state, "update", cs.clientID)
+		d.broadcastStateSync(cs.sessionID, merged, "update", cs.clientID)
 	}
 
 	return nil

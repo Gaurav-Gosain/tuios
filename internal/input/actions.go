@@ -129,6 +129,9 @@ func (d *ActionDispatcher) registerHandlers() {
 	for i := range 9 {
 		d.Register("restore_minimized_"+string(rune('1'+i)), makeRestoreMinimizedHandler(i))
 	}
+
+	// Prefix-chord and terminal-mode actions (see prefix_actions.go)
+	d.registerPrefixHandlers()
 }
 
 // Register adds an action handler
@@ -553,19 +556,7 @@ func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-	// Show quit confirmation dialog (only if there are terminals with foreground processes)
-	if shouldShowQuitDialog(o) {
-		o.ShowQuitConfirm = true
-		o.QuitConfirmSelection = 0 // Default to Yes
-	} else {
-		// No foreground processes - quit and kill daemon session
-		if o.IsDaemonSession && o.DaemonClient != nil {
-			_ = o.DaemonClient.KillSession()
-		}
-		o.Cleanup()
-		return o, tea.Quit
-	}
-	return o, nil
+	return requestQuit(o)
 }
 
 // ============================================================================

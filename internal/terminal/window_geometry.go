@@ -54,7 +54,11 @@ func (w *Window) Resize(width, height int) {
 	// reader (RLockIO) and the PTY writers; Terminal has no lock of its own.
 	// TriggerRedraw below takes ioMu.RLock, so the lock is scoped to the resize.
 	w.ioMu.Lock()
-	w.Terminal.Resize(termWidth, termHeight)
+	// Re-check under the lock: the guard at the top of Resize runs unlocked
+	// and Close() nils Terminal while holding this lock.
+	if w.Terminal != nil {
+		w.Terminal.Resize(termWidth, termHeight)
+	}
 	w.ioMu.Unlock()
 	if w.Pty != nil {
 		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
@@ -105,7 +109,10 @@ func (w *Window) ResizeVisual(width, height int) {
 		// ioMu serializes the buffer reallocation with the render reader and
 		// PTY writers; Terminal has no lock of its own.
 		w.ioMu.Lock()
-		w.Terminal.Resize(termWidth, termHeight)
+		// Re-check under the lock; Close() nils Terminal while holding it.
+		if w.Terminal != nil {
+			w.Terminal.Resize(termWidth, termHeight)
+		}
 		w.ioMu.Unlock()
 	}
 

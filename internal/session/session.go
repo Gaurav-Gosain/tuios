@@ -19,6 +19,7 @@ import (
 	xpty "github.com/charmbracelet/x/xpty"
 	"github.com/google/uuid"
 
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -56,6 +57,15 @@ type WindowState struct {
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
 	Cwd string `json:"cwd,omitempty"`
+	// Unplaced marks a window the daemon created whose X/Y/Width/Height are a
+	// nominal box rather than a position anyone chose. The daemon has no viewport
+	// and cannot place a window; a client that receives an unplaced window puts it
+	// where it would have put one of its own and clears the flag on its next sync.
+	//
+	// The default is the safe one: a state without the field (an older client, or
+	// resurrection state written before this existed) reads as placed, which is
+	// exactly the pre-existing behavior of trusting the geometry as sent.
+	Unplaced bool `json:"unplaced,omitempty"`
 }
 
 // SerializedBSPNode represents a BSP tree node for serialization
@@ -85,19 +95,50 @@ type SessionState struct {
 	AutoTiling       bool           `json:"auto_tiling"`
 	Width            int            `json:"width"`
 	Height           int            `json:"height"`
-	// Mode: 0 = WindowManagementMode, 1 = TerminalMode
-	Mode int `json:"mode"`
+	// Input mode (window-management vs terminal) is deliberately absent: it is
+	// per-viewer, not per-session. It used to live here, which meant one client
+	// entering terminal mode flipped the input mode of every other client
+	// attached to the same session. Clients own their own mode.
+	//
 	// BSP tiling state
+
 	WorkspaceTrees  map[int]*SerializedBSPTree `json:"workspace_trees,omitempty"`  // BSP tree per workspace
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`
 	TilingScheme    int                        `json:"tiling_scheme,omitempty"` // Default auto-insertion scheme
+	// LayoutMode is which tiling layout the session uses: "bsp", "master-stack"
+	// or "scrolling". It sits beside the BSP topology it selects between, which
+	// was already carried here; without it a scrolling session came back as a BSP
+	// one on reattach, because the topology survived and the mode that reads it
+	// did not.
+	//
+	// Empty means unstated, and a client that receives it leaves its own mode
+	// alone. That is what makes the field additive: state written before it
+	// existed, and clients that never send it, behave exactly as they did.
+	LayoutMode string `json:"layout_mode,omitempty"`
+	// NumWorkspaces is how many workspaces this session has. The daemon-side
+	// operations bound workspace indices by it; it used to be a constant 9
+	// duplicated here to keep this package free of a config import, which meant
+	// the daemon disagreed with a client configured for any other number.
+	// Zero means unstated, and the bound falls back to defaultWorkspaces.
+	NumWorkspaces int `json:"num_workspaces,omitempty"`
 	// ResurrectionVersion tags the on-disk state schema. It is stamped by
 	// SaveSessionForResurrection (not by clients) and checked on load so that
 	// state written by a newer, incompatible tuios is archived rather than
 	// misinterpreted. Absent (0) means pre-versioning state, which is a
 	// structural subset of the current schema and loads fine.
 	ResurrectionVersion int `json:"resurrection_version,omitempty"`
+	// Version counts the daemon-side mutations of this state: every headless
+	// window operation bumps it, a client sync does not. It is the daemon's
+	// answer to "how much have I changed since you last looked", and it is
+	// stamped on every state the daemon hands out.
+	Version int `json:"version,omitempty"`
+	// BaseVersion is the Version a client last saw, echoed back on the state it
+	// pushes. It says which daemon state the client's snapshot was built from, so
+	// the daemon can tell a current sync from one that predates its own
+	// mutations. Zero means a client that predates state versioning; its syncs
+	// are taken at face value, as they were before.
+	BaseVersion int `json:"base_version,omitempty"`
 	// Options is a daemon-owned key/value store for session options set through
 	// the JSON verb protocol (set-option / get-option). It is additive: older
 	// clients and older on-disk state simply omit it. Keys are advisory names;
@@ -116,7 +157,24 @@ type PTY struct {
 
 	// Terminal emulator - maintains scrollback, screen state, cursor position
 	// This persists across client disconnect/reconnect
-	terminal   *vt.Emulator
+	terminal *vt.Emulator
+	// terminalMu guards the daemon-side VT emulator (p.terminal) and the
+	// p.width/p.height it is sized to. This is the daemon process; it is a
+	// different lock from app.OS.terminalMu and the two never coexist.
+	//
+	//   LOCK ORDER (within the daemon):
+	//       PTY.terminalMu  ->  (nothing)
+	//
+	//   It is a leaf lock. No holder may take p.outputMu, send on a channel,
+	//   or touch p.pty while holding it. Resize deliberately drops it before
+	//   calling p.pty.Resize, and vtWriter drops it between queue items, for
+	//   exactly that reason: p.pty operations are syscalls that can block, and
+	//   the subscriber/capture paths take the read side constantly.
+	//
+	//   NOT REENTRANT. Size, SetCellSize, Resize, GetTerminalState,
+	//   CaptureContent and vtWriter must not call one another
+	//   (UpdatePixelDimensions calls SetCellSize and Size in sequence, not
+	//   nested, which is why it is written that way).
 	terminalMu sync.RWMutex
 	width      int
 	height     int
@@ -170,6 +228,21 @@ type Session struct {
 	eventSink   func(SessionEvent)
 	eventSinkMu sync.RWMutex
 
+	// stateSink, when set, receives the canonical state after every daemon-side
+	// mutation, so an attached client can be told what the daemon just did. The
+	// daemon installs it and broadcasts the snapshot to the session's clients;
+	// nil for a session with no clients (bare unit tests, resurrection loads).
+	stateSink   func(*SessionState)
+	stateSinkMu sync.RWMutex
+
+	// pushMu serializes state-sink deliveries and pushedVersion records the
+	// highest version already delivered. Snapshots are taken under stateMu but
+	// delivered without it, so two concurrent mutations can reach the sink in
+	// either order; this drops the loser rather than letting a client see the
+	// daemon go backwards.
+	pushMu        sync.Mutex
+	pushedVersion int
+
 	// Terminal size
 	width  int
 	height int
@@ -181,6 +254,31 @@ type Session struct {
 
 	// Configuration
 	config *SessionConfig
+
+	// Graphics capabilities of the attached client's host terminal. The daemon
+	// records them on attach so shells spawned afterwards can advertise a
+	// terminal identity the guest's image tools recognise.
+	graphicsMu    sync.RWMutex
+	kittyGraphics bool
+	sixelGraphics bool
+}
+
+// SetGraphicsCapabilities records the graphics protocols tuios can forward to
+// the attached client's host terminal. It is called on every attach, so the
+// most recent client wins; PTYs already running keep the environment they were
+// started with.
+func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
+	s.graphicsMu.Lock()
+	defer s.graphicsMu.Unlock()
+	s.kittyGraphics = kitty
+	s.sixelGraphics = sixel
+}
+
+// GraphicsCapabilities returns the recorded kitty and sixel support.
+func (s *Session) GraphicsCapabilities() (kitty, sixel bool) {
+	s.graphicsMu.RLock()
+	defer s.graphicsMu.RUnlock()
+	return s.kittyGraphics, s.sixelGraphics
 }
 
 // SessionConfig holds configuration for a session.
@@ -211,6 +309,11 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 			MasterRatio:      0.5,
 			Width:            width,
 			Height:           height,
+			// Versions start at 1 so that a BaseVersion of 0 on an incoming sync
+			// means one thing only: a client that predates state versioning and
+			// cannot say what it saw. A versioned client always echoes back at
+			// least 1, even before the daemon has mutated anything.
+			Version: 1,
 		},
 		width:      width,
 		height:     height,
@@ -244,6 +347,39 @@ func (s *Session) emit(ev SessionEvent) {
 	if fn != nil {
 		fn(ev)
 	}
+}
+
+// SetStateSink installs the sink that receives the canonical state after every
+// daemon-side mutation. It is safe to call concurrently and may be set after the
+// session already holds windows.
+func (s *Session) SetStateSink(fn func(*SessionState)) {
+	s.stateSinkMu.Lock()
+	s.stateSink = fn
+	s.stateSinkMu.Unlock()
+}
+
+// publishState hands a post-mutation snapshot to the state sink, in version
+// order and never twice for the same version. It must be called without stateMu
+// held: the sink writes to client sockets, and a slow client must be able to
+// delay other pushes without also blocking every mutation of the session.
+func (s *Session) publishState(snap *SessionState) {
+	if snap == nil {
+		return
+	}
+	s.stateSinkMu.RLock()
+	fn := s.stateSink
+	s.stateSinkMu.RUnlock()
+	if fn == nil {
+		return
+	}
+
+	s.pushMu.Lock()
+	defer s.pushMu.Unlock()
+	if snap.Version <= s.pushedVersion {
+		return
+	}
+	s.pushedVersion = snap.Version
+	fn(snap)
 }
 
 // CreatePTY creates a new PTY in this session. windowID, if non-empty, is the
@@ -415,6 +551,15 @@ func (s *Session) ListPTYIDs() []string {
 	return ids
 }
 
+// hasLivePTY reports whether a PTY with this ID is still open on the session.
+// A window whose PTY is gone has been closed; see reconcileStale.
+func (s *Session) hasLivePTY(id string) bool {
+	s.ptysMu.RLock()
+	defer s.ptysMu.RUnlock()
+	_, ok := s.ptys[id]
+	return ok
+}
+
 // PTYCount returns the number of PTYs.
 func (s *Session) PTYCount() int {
 	s.ptysMu.RLock()
@@ -426,7 +571,12 @@ func (s *Session) PTYCount() int {
 func (s *Session) GetState() *SessionState {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
+	return s.snapshotStateLocked()
+}
 
+// snapshotStateLocked returns a copy of the canonical state. The caller must
+// hold stateMu (for read or write).
+func (s *Session) snapshotStateLocked() *SessionState {
 	// Return a copy
 	stateCopy := *s.state
 	stateCopy.Windows = make([]WindowState, len(s.state.Windows))
@@ -508,39 +658,88 @@ func (s *Session) ResurrectionState() *SessionState {
 	return state
 }
 
-// UpdateState updates the session state. Daemon-owned options (set through the
-// JSON verb protocol) are carried over when the incoming state does not include
-// them, so a TUI state sync - which never populates Options - does not wipe them.
+// UpdateState converges a client's view of the session onto the daemon's state.
+//
+// The daemon owns this state, so a client sync does not simply replace it. The
+// incoming snapshot carries the daemon Version the client last saw. When that
+// version is current the client has seen everything the daemon did and its
+// snapshot is taken as sent. When it is behind, the client built its snapshot
+// before a daemon-side mutation it has never seen, and the fields the daemon
+// owns are restored on top of it rather than being silently undone. Fields no
+// client ever sets (Options, Cwd, ResurrectionVersion) are carried over either
+// way.
+//
+// It reports whether the state was applied as the client sent it. False means
+// the result differs from what was pushed, and the caller is expected to send
+// the merged state back so that client converges instead of pushing the same
+// stale view again.
 //
 // This is where an attached TUI's mutations land, so it is also where the window
-// lifecycle events for those mutations are raised: the incoming state is diffed
-// against the state it replaces. See state_events.go.
-func (s *Session) UpdateState(state *SessionState) {
+// lifecycle events for those mutations are raised: the state that ends up
+// canonical is diffed against the state it replaces. See state_events.go.
+func (s *Session) UpdateState(state *SessionState) bool {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
-	if state.Options == nil && s.state != nil {
-		state.Options = s.state.Options
+
+	accepted := true
+	prev := s.state
+	if prev != nil {
+		if state.BaseVersion != 0 && state.BaseVersion < prev.Version {
+			reconcileStale(state, prev, s.hasLivePTY)
+			accepted = false
+		}
+		retainDaemonExclusive(state, prev)
+		// Version counts daemon-side mutations only, so converging on a client
+		// snapshot carries it forward unchanged: the client is not telling the
+		// daemon anything the daemon did not already know.
+		state.Version = prev.Version
 	}
-	before := snapshotLifecycle(s.state)
+	state.BaseVersion = 0
+
+	before := snapshotLifecycle(prev)
 	s.state = state
 	s.LastActive = time.Now()
 	s.emitLifecycleLocked(before)
+	return accepted
 }
 
-// mutateState runs fn against the canonical state under the state lock and
-// raises the window lifecycle events implied by whatever fn changed. Daemon-side
-// (headless) window operations go through it so they emit through the same diff
-// as a TUI state sync, rather than each op emitting for itself.
+// mutateState runs fn against the canonical state under the state lock, raises
+// the window lifecycle events implied by whatever fn changed, and hands the
+// resulting state to the state sink. Daemon-side (headless) window operations go
+// through it so they emit through the same diff as a TUI state sync, rather than
+// each op emitting for itself.
+//
+// The sink call is what makes an attached client a subscriber to the daemon
+// rather than the daemon's only writer: every mutation the daemon makes itself
+// reaches the client's renderer through this one place, so a new daemon-side
+// operation is live in the TUI without a line of routing code of its own.
 func (s *Session) mutateState(fn func(state *SessionState) error) error {
+	snap, err := s.mutateStateLocked(fn)
+	if err != nil {
+		return err
+	}
+	// Deliberately outside the state lock: the sink writes to client sockets.
+	s.publishState(snap)
+	return nil
+}
+
+// mutateStateLocked is mutateState's critical section. It returns the snapshot
+// to publish once the lock is released.
+func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*SessionState, error) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
 	before := snapshotLifecycle(s.state)
 	if err := fn(s.state); err != nil {
-		return err
+		return nil, err
 	}
+	// A daemon-side mutation is exactly what a client sync must not undo, so it
+	// is what advances the version. A client that pushes a snapshot built before
+	// this point is reconciled by UpdateState rather than winning by arriving
+	// last.
+	s.state.Version++
 	s.emitLifecycleLocked(before)
-	return nil
+	return s.snapshotStateLocked(), nil
 }
 
 // emitLifecycleLocked diffs the current state against before and emits the
@@ -649,7 +848,8 @@ func (s *Session) buildEnv(windowID string, restored bool) []string {
 		colorTerm = s.config.ColorTerm
 	}
 	env = append(env, "COLORTERM="+colorTerm)
-	env = append(env, "TERM_PROGRAM=TUIOS")
+	kitty, sixel := s.GraphicsCapabilities()
+	env = append(env, "TERM_PROGRAM="+guestenv.TermProgram(kitty, sixel))
 	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
 	env = append(env, "TUIOS_SESSION="+s.Name)
 	if windowID != "" {
@@ -836,9 +1036,14 @@ func (p *PTY) GetTerminalState() *TerminalState {
 
 // CaptureContent renders the PTY's current screen (and optionally its
 // scrollback) to text from the daemon-side VT emulator. When ansi is true the
-// output keeps SGR escape sequences; otherwise it is plain text. This lets
-// capture-pane answer from daemon state with no TUI client attached, mirroring
-// the client-side OS.capturePane rendering.
+// output keeps SGR escape sequences; otherwise it is plain text.
+//
+// This is how capture-pane is answered, attached or not. It used to be answered
+// here only when nothing was attached and routed to the client otherwise, which
+// made the result of a read depend on whether someone happened to be watching.
+// The client's OS.capturePane is the same rendering of a VT emulator fed by the
+// same PTY, so there was nothing the round trip could add; it survives only as
+// the local scrollback browser's own reader.
 func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()

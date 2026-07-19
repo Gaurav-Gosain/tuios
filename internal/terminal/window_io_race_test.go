@@ -12,7 +12,12 @@ import (
 // the fields. It opens a daemon window (which starts outputWriter and
 // renderCoalescer), floods it with output from several goroutines, and closes
 // it concurrently. Run with -race to detect torn field access; a passing run
-// also proves Close is panic-free and idempotent under load.
+// also proves Close is panic-free and idempotent under load. It is kept
+// alongside the synctest version in window_goroutine_leak_test.go rather than
+// replaced by it: this one runs with real goroutine scheduling and real
+// parallelism, which is what makes the race detector useful, while the synctest
+// version adds the goroutine-lifetime assertion that real scheduling cannot
+// give deterministically.
 func TestDaemonWindowCloseUnderOutputFlood(t *testing.T) {
 	ptyDataChan := make(chan struct{}, 1)
 

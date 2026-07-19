@@ -355,6 +355,10 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		log.Printf("[CLIENT] No existing state to restore")
 	}
 
+	// The session is now whole: state restored, PTYs wired, layout applied. A
+	// hook that inspects the session here sees what the user is about to see.
+	initialOS.FireAttached()
+
 	p := tea.NewProgram(
 		initialOS,
 		tea.WithFPS(config.MaxFPSCap),

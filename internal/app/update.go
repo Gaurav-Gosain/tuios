@@ -197,7 +197,28 @@ func SetInputHandler(handler InputHandler) {
 // It starts the tick timer and listens for window exits.
 // Note: Mouse tracking, bracketed paste, and focus reporting are now configured
 // in the View() method as per bubbletea v2.0.0-beta.5 API changes.
+// reportConfigWarnings puts the config problems found at load time in front of
+// the user. They are written to the in-app log (leader D l) rather than to
+// stdout, because loading happens before the alternate screen is entered and
+// anything printed then is wiped by the first frame. A notification points at
+// the log so the problems are noticed rather than merely recorded.
+func (m *OS) reportConfigWarnings() {
+	if len(m.ConfigWarnings) == 0 {
+		return
+	}
+	for _, warning := range m.ConfigWarnings {
+		m.LogWarn("Config: %s", warning)
+	}
+	m.ShowNotification(
+		fmt.Sprintf("%d config problem(s), see the log viewer", len(m.ConfigWarnings)),
+		"warning",
+		5*time.Second,
+	)
+}
+
 func (m *OS) Init() tea.Cmd {
+	m.reportConfigWarnings()
+
 	cmds := []tea.Cmd{
 		TickCmd(),
 		ListenForWindowExits(m.WindowExitChan),
@@ -762,7 +783,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Another client updated state - apply incrementally
 		if msg.State != nil {
 			// Track what changed for notifications
-			oldMode := m.Mode
 			oldWindowCount := len(m.Windows)
 			oldWorkspace := m.CurrentWorkspace
 
@@ -770,18 +790,8 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				m.LogError("Failed to apply state sync: %v", err)
 			} else {
 				// Show notifications for significant changes
-				newMode := m.Mode
 				newWindowCount := len(m.Windows)
 				newWorkspace := m.CurrentWorkspace
-
-				// Mode change notification
-				if oldMode != newMode {
-					if newMode == TerminalMode {
-						m.ShowNotification("Switched to Terminal mode", "info", 2*time.Second)
-					} else {
-						m.ShowNotification("Switched to Window mode", "info", 2*time.Second)
-					}
-				}
 
 				// Window count change notification
 				if newWindowCount > oldWindowCount {
@@ -838,7 +848,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case DaemonDisconnectedMsg:
 		// The daemon connection was lost and cannot be recovered; quit cleanly
 		// so the user is not left staring at a frozen, unresponsive session.
-		m.ExitReason = ExitDaemonLost
+		// After a deliberate quit the drop is the expected consequence of
+		// killing the session, not a failure, so leave the reason alone.
+		if !m.QuitRequested {
+			m.ExitReason = ExitDaemonLost
+		}
 		return m, tea.Quit
 
 	case SessionEndedMsg:
@@ -846,7 +860,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// gone and its PTYs are closed, so there is nothing left to render and
 		// nothing to sync back. Record why and quit; the caller reports it and
 		// exits non-zero.
-		m.ExitReason = ExitSessionKilled
+		//
+		// Unless this client asked for it: quitting a daemon session kills it,
+		// and the daemon announces that back to us. Reporting the user's own
+		// quit as an unexpected termination is what made a deliberate exit
+		// print an error.
+		if !m.QuitRequested {
+			m.ExitReason = ExitSessionKilled
+		}
 		return m, tea.Quit
 
 	case ConfigReloadedMsg:
@@ -864,6 +885,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if err := executor.Execute(msg.Command); err != nil {
 				// Log error but continue playback
 				m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", config.NotificationDuration)
+			} else {
+				// Tape playback mutates the model outside the input handler, so
+				// it has to push the result like any other mutation would.
+				m.SyncStateToDaemon()
 			}
 		}
 		return m, nil
@@ -918,32 +943,15 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 				return m, nil
 			default:
-				// Handle tape commands that return data specially
-				switch tape.CommandType(msg.TapeCommand) {
-				case tape.CommandTypeNewWindow:
-					// Create window and capture ID
-					name := ""
-					if len(msg.TapeArgs) > 0 {
-						name = msg.TapeArgs[0]
-					}
-					windowID, displayName, createErr := m.CreateNewWindowReturningID(name)
-					if createErr != nil {
-						err = createErr
-					} else {
-						resultData = map[string]any{
-							"window_id": windowID,
-							"name":      displayName,
-						}
-					}
-				default:
-					// Execute normally for other commands
-					tapeCmd := &tape.Command{
-						Type: tape.CommandType(msg.TapeCommand),
-						Args: msg.TapeArgs,
-					}
-					executor := tape.NewCommandExecutor(m)
-					err = executor.Execute(tapeCmd)
+				// NewWindow and CloseWindow never arrive here: they are daemon
+				// owned, so the daemon runs them itself and the client hears the
+				// result as a state push like any other.
+				tapeCmd := &tape.Command{
+					Type: tape.CommandType(msg.TapeCommand),
+					Args: msg.TapeArgs,
 				}
+				executor := tape.NewCommandExecutor(m)
+				err = executor.Execute(tapeCmd)
 			}
 			// Retile if in tiling mode after command execution
 			if m.AutoTiling {
@@ -961,15 +969,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
 				return m, cmd
 			}
-		case "capture_pane":
-			notificationMsg = "Remote: capture-pane"
-			content, captureErr := m.capturePane(msg.WindowTarget, msg.Keys)
-			if captureErr != nil {
-				err = captureErr
-			} else if m.DaemonClient != nil {
-				_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "captured", map[string]any{"content": content})
-				return m, nil
-			}
+		// capture_pane never arrives here: the daemon renders the pane from its
+		// own VT emulator whether or not a client is attached, because that is
+		// the same rendering of the same PTY and routing it only added a way for
+		// the two to disagree.
 		case "set_config":
 			// Show what config is being changed
 			notificationMsg = fmt.Sprintf("Remote: set %s=%s", msg.ConfigPath, msg.ConfigValue)
@@ -995,6 +998,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 
 		m.MarkAllDirty()
+
+		// A routed command mutates this model without going through the input
+		// handler, which is the only other place a daemon session pushes state.
+		// Without this the mutation lives on the client alone and the daemon,
+		// which answers every read verb, keeps reporting the pre-command state.
+		// Push before the result is sent, so a caller that reads back
+		// immediately after a successful command sees what it just did.
+		if err == nil {
+			m.SyncStateToDaemon()
+		}
 
 		// Show notification for the remote command
 		if err != nil {

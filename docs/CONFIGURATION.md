@@ -8,6 +8,7 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 - [Configuration File Location](#configuration-file-location)
 - [Configuration Structure](#configuration-structure)
 - [Keybinding Sections](#keybinding-sections)
+- [Hooks](#hooks)
 - [Key Syntax](#key-syntax)
 - [Platform-Specific Configuration](#platform-specific-configuration)
 - [Best Practices](#best-practices)
@@ -18,6 +19,7 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 - **Command-Line Options**: See CLI documentation for runtime flags like `--theme` and `--ascii-only`
 - **Keybinding Reference**: See [KEYBINDINGS.md](KEYBINDINGS.md) for complete list of default keybindings
 - **Architecture Overview**: See [ARCHITECTURE.md](ARCHITECTURE.md) for system internals and component structure
+- **Hooks**: See [HOOKS.md](HOOKS.md) for running shell commands on session events
 
 **Note**: Many system constants (window sizes, animation speeds, refresh rates) are currently hardcoded in `internal/config/constants.go` and cannot be configured via TOML.
 
@@ -26,29 +28,29 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 ### Find Your Configuration
 
 ```bash
-tuios --config-path
+tuios config path
 ```
 
 ### Edit Configuration
 
 ```bash
-tuios --edit-config
+tuios config edit
 ```
 
 ### View Current Keybindings
 
 ```bash
 # View all keybindings
-tuios --list-keybinds
+tuios keybinds list
 
 # View only your customizations
-tuios --list-custom-keybinds
+tuios keybinds list-custom
 ```
 
 ### Reset to Defaults
 
 ```bash
-tuios --reset-config
+tuios config reset
 ```
 
 ## Configuration File Location
@@ -172,7 +174,19 @@ Individual minimized window restoration by number.
 - `restore_minimized_1` through `restore_minimized_9` - Restore specific minimized window by number (Shift+1 through Shift+9)
 
 ### prefix_mode
-Tmux-style prefix commands (Ctrl+B followed by another key). Not directly configurable - prefix commands are hardcoded.
+Tmux-style prefix commands (the leader key followed by another key). Every
+action in this section is configurable, and the leader key itself is set by
+`leader_key` under `[keybindings]`.
+
+**Example:**
+
+```toml
+[keybindings]
+leader_key = "ctrl+a"
+
+[keybindings.prefix_mode]
+prefix_new_window = ["y"]
+```
 
 ### window_prefix, minimize_prefix, workspace_prefix
 Sub-menus accessible after prefix key (Ctrl+B + w/m/t). These provide alternative access to window management, minimize, and workspace commands through the prefix interface.
@@ -256,6 +270,16 @@ Controls the number of lines stored in the scrollback buffer for each terminal w
 **Note:** Values outside the valid range are automatically clamped. Higher values consume more memory.
 
 **CLI override:** `--scrollback-lines <number>`
+
+### scroll_lines
+
+Controls how many lines a single mouse wheel notch scrolls in scrollback, copy mode and the scrollback browser.
+
+**Valid values:** Integer between 1 and 50
+
+**Default:** `3`
+
+**Note:** Values outside the valid range are automatically clamped. Also settable from the in-app settings page (Advanced, "Scroll lines").
 
 ### window_title_position
 
@@ -345,6 +369,78 @@ Controls whether windows share borders when tiling (reducing visual clutter).
 **Default:** `false`
 
 **CLI override:** `--shared-borders`
+
+### whichkey_enabled
+
+Controls the which-key popup: a panel listing the keys available in the current
+prefix chord, shown after you press the leader key and then wait.
+
+The popup appears 500 milliseconds after the leader key is pressed and lists the
+bindings for whichever chord is active (the top-level prefix, or the workspace,
+minimize, window, debug, tape or layout submenu). It disappears as soon as you
+press the next key, so it costs nothing if you already know the chord. It is
+suppressed while the help overlay is open.
+
+**Valid values:**
+- `true` - Show the popup (default)
+- `false` - Never show it
+
+**Default:** `true`
+
+**Also settable from:** the in-app settings page (`Ctrl+B` `,`), which persists
+the change back to the config file.
+
+**Note:** the popup draws with fixed colors and does not follow the active theme.
+
+### whichkey_position
+
+Which corner the which-key popup appears in.
+
+**Valid values:**
+- `"bottom-right"` (default)
+- `"bottom-left"`
+- `"top-right"`
+- `"top-left"`
+- `"center"`
+
+**Default:** `"bottom-right"`
+
+**Also settable from:** the in-app settings page.
+
+### niri_reverse_scroll
+
+Reverses the mouse wheel direction when scrolling the viewport in the scrolling
+(niri-style) layout. Has no effect in the other layout modes. See
+[LAYOUT_MODES.md](LAYOUT_MODES.md).
+
+**Valid values:**
+- `false` - Wheel down scrolls the strip right (default)
+- `true` - Inverted
+
+**Default:** `false`
+
+### theme
+
+The color theme to use, by ID. Custom themes loaded from
+`~/.config/tuios/themes/` can be named here exactly like built-in ones. Leave it
+unset to disable theming and use your terminal's own colors. See
+[THEMES.md](THEMES.md).
+
+**CLI override:** `--theme <id>`
+
+## Hooks
+
+The `[hooks]` table runs shell commands on session events: windows created,
+closed or focused, workspace switches, layout changes, resizes, attach and
+detach:
+
+```toml
+[hooks]
+after-new-window = "notify-send 'TUIOS' 'new window'"
+```
+
+See [HOOKS.md](HOOKS.md) for the event list, the environment variables passed to
+each command, and the execution model.
 
 ## Keybindings Prefix Configuration
 
@@ -493,7 +589,7 @@ prev_window = ["ctrl+shift+tab"]
 ### Check Your Customizations
 
 ```bash
-tuios --list-custom-keybinds
+tuios keybinds list-custom
 ```
 
 This shows only what you've changed, making it easy to review.
@@ -512,7 +608,7 @@ close_window = ["ctrl+w"]  # Browser-style close
 
 1. Check file location:
 ```bash
-tuios --config-path
+tuios config path
 ```
 
 2. Verify TOML syntax:
@@ -539,7 +635,7 @@ If the same key is bound to multiple actions, TUIOS will warn you during startup
 
 View conflicts:
 ```bash
-tuios --list-keybinds | grep <your-key>
+tuios keybinds list | grep <your-key>
 ```
 
 ### Platform Detection Issues
@@ -596,5 +692,10 @@ prefix_prev_window = ["p"]
 ## Related Documentation
 
 - [CLI Reference](CLI_REFERENCE.md) - Command-line options
+- [Hooks](HOOKS.md) - Run shell commands on session events
 - [Keybindings Reference](KEYBINDINGS.md) - Default keybindings
+- [Hooks](HOOKS.md) - Shell commands run on window events
+- [Themes](THEMES.md) - Built-in and custom themes
+- [Layout Modes](LAYOUT_MODES.md) - BSP, master-stack and scrolling layouts
+- [Sessions](SESSIONS.md) - Local and daemon sessions, persistence
 - [README](../README.md) - Project overview

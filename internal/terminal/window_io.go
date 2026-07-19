@@ -406,15 +406,20 @@ func (w *Window) handleIOOperations() {
 						}
 					}
 
-					// Write to PTY
+					// Write to PTY. Snapshot the handle under the read lock
+					// and write outside it: Pty.Write blocks on a full kernel
+					// input buffer, and holding RLockIO across that block
+					// starves the renderer behind the PTY reader's queued
+					// LockIO. See SendInput for the full reasoning.
 					w.ioMu.RLock()
-					if w.Pty != nil {
-						if _, err := w.Pty.Write(data); err != nil {
+					pty := w.Pty
+					w.ioMu.RUnlock()
+					if pty != nil {
+						if _, err := pty.Write(data); err != nil {
 							// Ignore write errors during I/O operations
 							_ = err
 						}
 					}
-					w.ioMu.RUnlock()
 				}
 			}
 		}
@@ -455,15 +460,30 @@ func (w *Window) SendInput(input []byte) error {
 		}
 	}
 
-	// Local mode - write directly to PTY
+	// Local mode - write directly to PTY.
+	//
+	// Snapshot the PTY under the read lock and write OUTSIDE it. Pty.Write
+	// blocks once the kernel input buffer fills (a guest that is not reading
+	// stdin, e.g. a paste into a stopped process), and holding the read lock
+	// across that block wedges the whole UI: the render path cannot take its
+	// own read side, because a queued LockIO writer (the PTY reader, which
+	// runs constantly) starves all later readers on a sync.RWMutex.
+	//
+	// Snapshotting is what makes this safe: Close() nils w.Pty under the
+	// exclusive lock, so an unlocked field read would be a torn read of an
+	// interface value and a nil dereference. The snapshot keeps the handle
+	// alive for the call; a concurrent Close() closes the descriptor and the
+	// write just returns an error, which is the same discipline the PTY
+	// reader and Terminal->PTY goroutines already use.
 	w.ioMu.RLock()
-	defer w.ioMu.RUnlock()
+	pty := w.Pty
+	w.ioMu.RUnlock()
 
-	if w.Pty == nil {
+	if pty == nil {
 		return fmt.Errorf("no PTY available")
 	}
 
-	n, err := w.Pty.Write(input)
+	n, err := pty.Write(input)
 	if err != nil {
 		return fmt.Errorf("failed to write to PTY: %w", err)
 	}

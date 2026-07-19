@@ -162,6 +162,45 @@ func TestKeyNormalizer(t *testing.T) {
 	}
 }
 
+// TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey pins the rule that a
+// binding written one way still matches when the terminal reports the other:
+// terminals disagree about whether Shift+1 arrives as "!" or as "shift+1", and
+// a binding that only matches one spelling works on one terminal and silently
+// does nothing on the next.
+func TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey(t *testing.T) {
+	normalizer := config.NewKeyNormalizer()
+
+	tests := []struct {
+		input string
+		want  []string
+	}{
+		{"shift+1", []string{"shift+1", "!"}},
+		{"!", []string{"!", "shift+1"}},
+		{"shift+9", []string{"shift+9", "("}},
+		{"shift+m", []string{"shift+m", "M"}},
+		{"M", []string{"M", "shift+m"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got := normalizer.NormalizeKey(tc.input)
+			for _, want := range tc.want {
+				if !slices.Contains(got, want) {
+					t.Errorf("NormalizeKey(%q) = %v, want to contain %q", tc.input, got, want)
+				}
+			}
+		})
+	}
+
+	// Keys that are not shifted spellings must not grow spurious aliases.
+	for _, key := range []string{"shift+tab", "ctrl+a", "esc", "m"} {
+		got := normalizer.NormalizeKey(key)
+		if len(got) != 1 {
+			t.Errorf("NormalizeKey(%q) = %v, want exactly one spelling", key, got)
+		}
+	}
+}
+
 func TestKeyNormalizer_ValidateKey(t *testing.T) {
 	normalizer := config.NewKeyNormalizer()
 
@@ -609,5 +648,33 @@ func TestApplyOverrides_HideClock(t *testing.T) {
 	config.ApplyOverrides(config.Overrides{HideClock: false}, userCfg)
 	if !config.HideClock {
 		t.Error("Expected HideClock to be true from user config (OR)")
+	}
+}
+
+// TestApplyAppearanceConfig_ScrollLines covers the wheel scroll speed option:
+// it must reach the global the input layer reads, and an unset value must not
+// clobber the default.
+func TestApplyAppearanceConfig_ScrollLines(t *testing.T) {
+	original := config.ScrollLines
+	defer func() { config.ScrollLines = original }()
+
+	if cfg := config.DefaultConfig(); cfg.Appearance.ScrollLines != 3 {
+		t.Errorf("default scroll_lines = %d, want 3", cfg.Appearance.ScrollLines)
+	}
+
+	userCfg := config.DefaultConfig()
+	userCfg.Appearance.ScrollLines = 8
+	config.ApplyAppearanceConfig(userCfg)
+	if config.ScrollLines != 8 {
+		t.Errorf("ScrollLines = %d, want 8", config.ScrollLines)
+	}
+
+	// An absent value in a hand-written config must leave the current setting
+	// alone rather than scrolling zero lines per notch.
+	config.ScrollLines = 5
+	userCfg.Appearance.ScrollLines = 0
+	config.ApplyAppearanceConfig(userCfg)
+	if config.ScrollLines != 5 {
+		t.Errorf("ScrollLines = %d after an unset value, want it unchanged at 5", config.ScrollLines)
 	}
 }

@@ -26,6 +26,24 @@ import (
 // and writes them directly to stdout to pass through to the parent terminal.
 // The VT emulator absorbs these sequences, so we need to re-emit them.
 // DECSCUSR format: CSI Ps SP q (ESC [ Ps SPACE q) where Ps is optional (0-6)
+// ioMu guards the emulator cell buffer: the PTY reader and the daemon output
+// path write it, Resize reallocates it, and the renderer reads it.
+//
+// It is NOT reentrant, and that is not a style preference but a hard
+// correctness rule. sync.RWMutex starves readers once a writer is queued, so a
+// goroutine that holds RLockIO and then takes RLockIO again on the same window
+// parks behind that queued writer while still holding the read lock the writer
+// is waiting for. Neither side can proceed and the process wedges at zero CPU.
+// A live PTY produces output constantly, so the writer is queued often and the
+// window for this is wide.
+//
+// The rule for callers: never take either lock while already holding either
+// lock on the same window, and do not call a helper that takes one from inside
+// a locked region. Where a value is needed on both sides of that boundary,
+// follow the split this package already uses - a locking entry point plus a
+// lock-free variant for callers that are already inside (ScrollbackLenSync
+// versus ScrollbackLen) - or hoist the read out of the locked region entirely.
+
 // LockIO/UnlockIO: exclusive lock for PTY writes (mutates cell buffer).
 func (w *Window) LockIO()   { w.ioMu.Lock() }
 func (w *Window) UnlockIO() { w.ioMu.Unlock() }
@@ -140,29 +158,55 @@ var (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
-	title                  atomic.Pointer[string] // Written on PTY/monitor goroutine, read on UI goroutine
-	CustomName             string                 // User-defined window name
-	Width                  int
-	Height                 int
-	X                      int
-	Y                      int
-	Z                      int
-	ID                     string
-	Terminal               *vt.Emulator
-	Pty                    xpty.Pty
-	Cmd                    *exec.Cmd
-	ShellPgid              int // Process group ID of the shell
-	LastUpdate             time.Time
-	Dirty                  bool
-	ContentDirty           bool
-	PositionDirty          bool
-	CachedContent          string
-	CachedLayer            *lipgloss.Layer
-	LastTerminalSeq        int
-	IsBeingManipulated     bool               // True when being dragged or resized
-	UpdateCounter          int                // Counter for throttling background updates
-	cancelFunc             context.CancelFunc // For graceful goroutine cleanup
-	ioMu                   sync.RWMutex       // Protect I/O operations
+	title              atomic.Pointer[string] // Written on PTY/monitor goroutine, read on UI goroutine
+	CustomName         string                 // User-defined window name
+	Width              int
+	Height             int
+	X                  int
+	Y                  int
+	Z                  int
+	ID                 string
+	Terminal           *vt.Emulator
+	Pty                xpty.Pty
+	Cmd                *exec.Cmd
+	ShellPgid          int      // Process group ID of the shell
+	cwd                cwdCache // Memoised working directory, see CWD
+	LastUpdate         time.Time
+	Dirty              bool
+	ContentDirty       bool
+	PositionDirty      bool
+	CachedContent      string
+	CachedLayer        *lipgloss.Layer
+	LastTerminalSeq    int
+	IsBeingManipulated bool               // True when being dragged or resized
+	UpdateCounter      int                // Counter for throttling background updates
+	cancelFunc         context.CancelFunc // For graceful goroutine cleanup
+	// ioMu guards the emulator cell buffer and the Pty/Terminal handles. See
+	// the block comment above LockIO for the full contract; the short version:
+	//
+	//   LOCK ORDER (global, whole process):
+	//       app.OS.terminalMu  ->  Window.ioMu  ->  KittyPassthrough.mu / SixelPassthrough.mu
+	//
+	//   May be held together: terminalMu and ioMu, in that order only
+	//   (renderTerminal does exactly this). Never take terminalMu while
+	//   holding ioMu. Never take ioMu inside a passthrough callback: the PTY
+	//   reader already holds ioMu across Terminal.Write, which dispatches
+	//   those callbacks under kp.mu/sp.mu, so the reverse order closes a
+	//   cycle (see OS.snapshotPlacementScrollbackLens).
+	//
+	//   NOT REENTRANT, either side, on the same window. sync.RWMutex starves
+	//   readers behind a queued writer, so RLock-inside-RLock deadlocks
+	//   against a writer waiting on the outer RLock.
+	//
+	//   NEVER BLOCK WHILE HOLDING IT. No Pty.Write, no Pty.Read, no channel
+	//   send, no Cmd.Wait. Snapshot the handle under the lock, release, then
+	//   block (SendInput and both handleIOOperations goroutines do this). A
+	//   blocking write under the read lock wedges the renderer, because the
+	//   PTY reader's queued LockIO starves every later RLock.
+	//
+	//   Two windows' ioMu are never held simultaneously, so there is no
+	//   window-to-window ordering to respect.
+	ioMu                   sync.RWMutex
 	Minimized              bool               // True when window is minimized to dock
 	Minimizing             bool               // True when window is being minimized (animation playing)
 	MinimizeHighlightUntil time.Time          // Highlight dock tab until this time
@@ -436,8 +480,8 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	cmd.Env = append(os.Environ(),
 		"TERM="+termType,
 		"COLORTERM="+colorTerm,
-		"TERM_PROGRAM=TUIOS",         // Identify as TUIOS terminal emulator
-		"TERM_PROGRAM_VERSION=0.1.0", // Version for compatibility checking
+		"TERM_PROGRAM="+guestTermProgram(), // Terminal identity guests can act on
+		"TERM_PROGRAM_VERSION=0.1.0",       // Version for compatibility checking
 		"TUIOS_WINDOW_ID="+id,
 	)
 

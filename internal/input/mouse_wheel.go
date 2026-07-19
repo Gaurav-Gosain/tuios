@@ -94,7 +94,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					if focusedWindow.Terminal != nil {
 						scrollbackLen := focusedWindow.ScrollbackLen()
 						if scrollbackLen > 0 && focusedWindow.ScrollbackOffset < scrollbackLen {
-							focusedWindow.ScrollbackOffset += 3
+							focusedWindow.ScrollbackOffset += config.ScrollLines
 							if focusedWindow.ScrollbackOffset > scrollbackLen {
 								focusedWindow.ScrollbackOffset = scrollbackLen
 							}
@@ -109,14 +109,14 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration)
 					}
 					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-						for range 3 {
+						for range config.ScrollLines {
 							MoveUp(focusedWindow.CopyMode, focusedWindow)
 						}
 						focusedWindow.InvalidateCache()
 					}
 				} else if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
 					// Already in copy mode  - scroll up
-					for range 3 {
+					for range config.ScrollLines {
 						MoveUp(focusedWindow.CopyMode, focusedWindow)
 					}
 					focusedWindow.InvalidateCache()
@@ -126,7 +126,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				if o.SelectionMode {
 					// In selection mode, scroll without entering scrollback mode
 					if focusedWindow.ScrollbackOffset > 0 {
-						focusedWindow.ScrollbackOffset -= 3
+						focusedWindow.ScrollbackOffset -= config.ScrollLines
 						if focusedWindow.ScrollbackOffset < 0 {
 							focusedWindow.ScrollbackOffset = 0
 						}
@@ -134,7 +134,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					}
 				} else if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
 					// In copy mode, scroll down
-					for range 3 {
+					for range config.ScrollLines {
 						MoveDown(focusedWindow.CopyMode, focusedWindow)
 					}
 					// Exit copy mode if at bottom
@@ -162,7 +162,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration)
 					}
 					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-						for range 3 {
+						for range config.ScrollLines {
 							MoveUp(focusedWindow.CopyMode, focusedWindow)
 						}
 						focusedWindow.InvalidateCache()
@@ -170,7 +170,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 			case tea.MouseWheelDown:
 				if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-					for range 3 {
+					for range config.ScrollLines {
 						MoveDown(focusedWindow.CopyMode, focusedWindow)
 					}
 					if focusedWindow.CopyMode.ScrollOffset == 0 && focusedWindow.CopyMode.CursorY >= focusedWindow.ContentHeight()-1 {

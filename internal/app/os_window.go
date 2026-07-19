@@ -271,61 +271,81 @@ func (m *OS) RecalcZOrder() {
 	m.MarkAllDirty()
 }
 
-// AddWindow adds a new window to the current workspace.
-// In daemon mode, this creates a daemon-managed PTY and window.
-func (m *OS) AddWindow(title string) *OS {
-	// In daemon mode, use daemon PTY management
+// NewWindowPlacement returns the position and size a freshly created window gets
+// on this client: half the usable screen, at the mouse in floating mode and
+// centered otherwise. Auto-tiling overwrites it on the next retile; floating mode
+// is where it is what the user actually sees.
+//
+// It is a property of the viewport, which is why the daemon cannot compute it and
+// why a window the daemon created arrives marked Unplaced for a client to run
+// this on.
+func (m *OS) NewWindowPlacement() (x, y, width, height int) {
+	screenWidth := m.GetRenderWidth()
+	screenHeight := m.GetUsableHeight()
+	if screenWidth == 0 || screenHeight == 0 {
+		// Sensible defaults when the screen size is not known yet.
+		screenWidth = 80
+		screenHeight = 24
+	}
+
+	width = screenWidth / 2
+	height = screenHeight / 2
+
+	if !m.AutoTiling && m.LastMouseX > 0 && m.LastMouseY > 0 {
+		// Spawn at the cursor, kept on screen.
+		x = min(m.LastMouseX, screenWidth-width)
+		y = min(m.LastMouseY, screenHeight-height)
+		return max(x, 0), max(y, 0), width, height
+	}
+	return screenWidth / 4, screenHeight / 4, width, height
+}
+
+// QuitSession performs a deliberate, user-initiated quit. In a daemon session
+// that also kills the session, so it records the intent first: the daemon
+// announces the session ending and the connection dropping, and either can
+// arrive before the program finishes quitting. Update consults QuitRequested so
+// those announcements are not mistaken for a session killed from elsewhere,
+// which would make a normal exit report an error.
+//
+// Every deliberate quit path routes through here so they cannot drift apart.
+func (m *OS) QuitSession() {
+	m.QuitRequested = true
 	if m.IsDaemonSession && m.DaemonClient != nil {
-		return m.AddDaemonWindow(title)
+		_ = m.DaemonClient.KillSession()
+	}
+	m.Cleanup()
+}
+
+// AddWindow adds a new window to the current workspace.
+//
+// In a daemon session this asks the daemon for the window rather than building
+// one: the daemon owns the PTY and the window set, so it creates both and pushes
+// the resulting state. Everything a renderer contributes (placement, a slot in
+// the tiling layout, the PTY subscription, the terminal content) happens when
+// that push lands, in the same code that materializes a window created by a
+// script or by another client. That is the point: one creation path, whoever
+// asked for it.
+// name, when non-empty, becomes the window's CustomName. It is the same argument
+// the NewWindow verb takes and it means the same thing on both paths, which it
+// did not when the daemon set CustomName and the client set the shell title.
+func (m *OS) AddWindow(name string) *OS {
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		var args []string
+		if name != "" {
+			args = []string{name}
+		}
+		if err := m.DaemonClient.SendIntent("NewWindow", args...); err != nil {
+			m.LogError("Failed to ask the daemon for a new window: %v", err)
+		}
+		return m
 	}
 
 	newID := createID()
-	if title == "" {
-		title = fmt.Sprintf("Terminal %s", newID[:8])
-	}
+	title := fmt.Sprintf("Terminal %s", newID[:8])
 
 	m.LogInfo("Creating new window: %s (workspace %d)", title, m.CurrentWorkspace)
 
-	// Handle case where screen dimensions aren't available yet
-	screenWidth := m.GetRenderWidth()
-	screenHeight := m.GetUsableHeight()
-
-	if screenWidth == 0 || screenHeight == 0 {
-		// Use sensible defaults when screen size is unknown
-		screenWidth = 80
-		screenHeight = 24
-		m.LogWarn("Screen dimensions unknown, using defaults (%dx%d)", screenWidth, screenHeight)
-	}
-
-	width := screenWidth / 2
-	height := screenHeight / 2
-
-	// In floating mode, spawn at cursor position
-	// In tiling mode, position doesn't matter as it will be auto-tiled
-	var x, y int
-	if !m.AutoTiling && m.LastMouseX > 0 && m.LastMouseY > 0 {
-		// Spawn at cursor position, but ensure window stays on screen
-		x = m.LastMouseX
-		y = m.LastMouseY
-
-		// Adjust if window would go off screen
-		if x+width > screenWidth {
-			x = screenWidth - width
-		}
-		if y+height > screenHeight {
-			y = screenHeight - height
-		}
-		if x < 0 {
-			x = 0
-		}
-		if y < 0 {
-			y = 0
-		}
-	} else {
-		// Center the window (default behavior for tiling mode or no cursor position)
-		x = screenWidth / 4
-		y = screenHeight / 4
-	}
+	x, y, width, height := m.NewWindowPlacement()
 
 	window := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan)
 	if window == nil {
@@ -339,6 +359,7 @@ func (m *OS) AddWindow(title string) *OS {
 	}
 
 	window.Workspace = m.CurrentWorkspace
+	window.CustomName = name
 
 	m.setupKittyPassthrough(window)
 	m.setupSixelPassthrough(window)
@@ -387,10 +408,23 @@ func (m *OS) UpdateAllWindowThemes() {
 }
 
 // DeleteWindow removes the window at the specified index.
-// In daemon mode, this also cleans up the daemon-managed PTY.
+//
+// In a daemon session this asks the daemon to close it rather than closing it
+// here: the window set and the PTY are the daemon's, so it removes the window,
+// kills the shell, repairs focus and pushes the result. This client tears down
+// its own copy when that push lands, in the same code that handles a window
+// closed by a script or by another client.
 func (m *OS) DeleteWindow(i int) *OS {
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
 		m.LogWarn("Cannot delete window: invalid index %d (total windows: %d)", i, len(m.Windows))
+		return m
+	}
+
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		windowID := m.Windows[i].ID
+		if err := m.DaemonClient.SendIntent("CloseWindow", windowID); err != nil {
+			m.LogError("Failed to ask the daemon to close window %s: %v", windowID[:8], err)
+		}
 		return m
 	}
 

@@ -8,8 +8,11 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/fang"
+	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
@@ -79,6 +82,77 @@ func diagnosticErrorHandler(w io.Writer, styles fang.Styles, err error) {
 		_, _ = fmt.Fprintln(w, styles.ErrorText.UnsetTransform().Render(line))
 	}
 	_, _ = fmt.Fprintln(w)
+}
+
+// errorStyles builds the styles the error renderer needs without asking the
+// terminal anything.
+//
+// This exists because of how long fang takes to answer that question itself.
+// fang builds its styles only on the error path, and to pick colors it calls
+// lipgloss.HasDarkBackground, which writes an OSC 11 query and waits up to two
+// seconds for a reply, against stdin and then stdout: four seconds when nothing
+// answers. Terminals that do not implement the query, multiplexers that swallow
+// it, and a stdin that has just been handed back by a torn-down TUI all fail to
+// answer, so `tuios attach` would print its diagnostic and then sit there for
+// four seconds after its interface was already gone, which reads as a hung
+// client.
+//
+// Fixed ANSI red-on-black needs no query and is legible on a light or a dark
+// background, so nothing is lost by not asking.
+func errorStyles() fang.Styles {
+	width := 80
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+		width = w
+	}
+	return fang.Styles{
+		ErrorText: lipgloss.NewStyle().
+			MarginLeft(2).
+			Width(width - 4),
+		ErrorHeader: lipgloss.NewStyle().
+			Foreground(lipgloss.Black).
+			Background(lipgloss.Red).
+			Bold(true).
+			Padding(0, 1).
+			Margin(1).
+			MarginLeft(2).
+			SetString("ERROR"),
+	}
+}
+
+// reportCommandError prints a failed command's error and reports whether there
+// was one, so the caller can pick an exit status.
+func reportCommandError(err error) bool {
+	if err == nil {
+		return false
+	}
+	diagnosticErrorHandler(colorprofile.NewWriter(os.Stderr, os.Environ()), errorStyles(), err)
+	return true
+}
+
+// interceptErrors routes every command's failure through reportCommandError
+// instead of returning it to fang, whose renderer is the slow path errorStyles
+// describes. The error is stashed and the command reports success, so fang sees
+// nothing to render; main prints it and picks the exit status afterwards.
+//
+// This covers failures from running a command, which is every failure the
+// session and attach paths can produce. A malformed flag is rejected by cobra
+// before any RunE runs and still goes through fang.
+func interceptErrors(cmd *cobra.Command, stash *error) {
+	for _, sub := range cmd.Commands() {
+		interceptErrors(sub, stash)
+	}
+	run := cmd.RunE
+	if run == nil {
+		return
+	}
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		if err := run(c, args); err != nil {
+			*stash = err
+			// The error is already explained; usage would bury it.
+			c.SilenceUsage = true
+		}
+		return nil
+	}
 }
 
 // requireDaemon returns a diagnostic error when no daemon is reachable, naming

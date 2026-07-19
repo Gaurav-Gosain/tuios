@@ -2,6 +2,8 @@
 package config
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
@@ -364,6 +366,31 @@ var HideScrollbar = false
 // Set via --window-title-position flag or appearance.window_title_position config
 var WindowTitlePosition = "bottom"
 
+// WindowTitleFormat is the template used to build a window's displayed title.
+// Empty (the default) means the title is shown as-is. See FormatWindowTitle for
+// the supported placeholders.
+// Set via appearance.window_title_format config
+var WindowTitleFormat = ""
+
+// FormatWindowTitle expands WindowTitleFormat for one window. The placeholders
+// are {title} (the custom or terminal-reported title), {index} (the window's
+// 1-based position in its workspace, the same number the leader-digit shortcuts
+// use) and {cwd} (the shell's working directory, empty where it cannot be
+// read).
+//
+// An empty format returns the title unchanged, which is what keeps the default
+// rendering free of any formatting work.
+func FormatWindowTitle(title string, index int, cwd string) string {
+	if WindowTitleFormat == "" {
+		return title
+	}
+	return strings.NewReplacer(
+		"{title}", title,
+		"{index}", strconv.Itoa(index),
+		"{cwd}", cwd,
+	).Replace(WindowTitleFormat)
+}
+
 // HideClock controls whether the clock overlay is hidden
 // Set via --hide-clock flag or appearance.hide_clock config
 // Deprecated: Use ShowClock instead. HideClock takes precedence when true.
@@ -389,6 +416,11 @@ func NeedsDockTick() bool {
 // ScrollbackLines controls the number of lines to keep in scrollback buffer
 // Set via --scrollback-lines flag or appearance.scrollback_lines config
 var ScrollbackLines = 10000
+
+// ScrollLines is how many lines one mouse wheel notch scrolls in scrollback,
+// copy mode and the scrollback browser.
+// Set via appearance.scroll_lines config
+var ScrollLines = 3
 
 // NiriReverseScroll reverses mouse scroll direction in niri scrolling mode.
 // When true, scroll-up moves viewport right and scroll-down moves left.

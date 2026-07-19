@@ -260,7 +260,10 @@ func (l *Lexer) NextToken() Token {
 			tok.Literal = literal
 		} else {
 			tok.Type = TokenIllegal
-			tok.Literal = string(l.ch)
+			// l.ch is a byte, so string(l.ch) would re-encode it as a rune:
+			// a stray 0xA8 came back as the two bytes of U+00A8, and the error
+			// pointed at a character that was never in the file. Keep the byte.
+			tok.Literal = string([]byte{l.ch})
 			l.readChar()
 		}
 	}

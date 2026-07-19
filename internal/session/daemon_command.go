@@ -2,9 +2,31 @@ package session
 
 import (
 	"fmt"
-	"strings"
 	"time"
 )
+
+// daemonOwnedCommands are the commands the daemon executes itself whether or not
+// a client is attached, because their entire effect is a change to a field the
+// daemon owns and no renderer has to be consulted to make it. Routing one of
+// these to the client instead is what made a remote rename report success while
+// list-windows kept reporting the old name: the client renamed its own copy and
+// the daemon, which every read verb answers from, never heard about it.
+//
+// Commands leave this set only when the daemon cannot produce the same result a
+// renderer would. Everything still absent from it is routed as before.
+var daemonOwnedCommands = map[string]bool{
+	"RenameWindow": true,
+	// Closing a window is removing it from the window set and killing its PTY,
+	// both of which the daemon owns outright. The renderer has nothing to
+	// contribute: it learns the window is gone from the state push and gives the
+	// space back.
+	"CloseWindow": true,
+	// Creating one is the same trade in reverse. The daemon spawns the PTY and
+	// adds the window; the one thing it cannot supply is where the window goes,
+	// because it has no viewport. It says so with WindowState.Unplaced instead of
+	// guessing, and the client that receives the push places it.
+	"NewWindow": true,
+}
 
 // handleExecuteCommand routes a tape command to the TUI client attached to the session.
 func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
@@ -23,11 +45,11 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	}
 	LogBasic("Execute command: found session %s (ID=%s)", session.Name, session.ID)
 
-	// Find the TUI client attached to this session. When one is present the
-	// command is routed to it (unchanged behavior). With no client attached,
+	// Find the TUI client attached to this session. When one is present most
+	// commands are routed to it (unchanged behavior). With no client attached,
 	// structural verbs execute directly against daemon-owned state.
 	tuiClient := d.findTUIClient(session.ID)
-	if tuiClient == nil {
+	if tuiClient == nil || daemonOwnedCommands[payload.CommandType] {
 		if payload.TapeScript != "" {
 			return d.sendCommandResult(cs, payload.RequestID, false,
 				"tape scripts require an attached client (the headless daemon has no renderer)")
@@ -37,6 +59,8 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		if err != nil {
 			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
 		}
+		// The attached client, if any, has already been told: the mutation went
+		// through Session.mutateState, whose state sink broadcasts to it.
 		return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
 			RequestID: payload.RequestID,
 			Success:   true,
@@ -127,7 +151,7 @@ func (d *Daemon) handleSendKeys(cs *connState, msg *Message) error {
 	return nil
 }
 
-// handleCapturePane routes a capture-pane request to the TUI client.
+// handleCapturePane answers a capture-pane request from daemon state.
 func (d *Daemon) handleCapturePane(cs *connState, msg *Message) error {
 	var payload CapturePanePayload
 	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
@@ -139,49 +163,22 @@ func (d *Daemon) handleCapturePane(cs *connState, msg *Message) error {
 		return d.sendCommandResult(cs, payload.RequestID, false, "session not found")
 	}
 
-	// With no client attached, render the pane from the daemon-side VT emulator.
-	tuiClient := d.findTUIClient(session.ID)
-	if tuiClient == nil {
-		content, err := d.capturePaneDaemonSide(session, &payload)
-		if err != nil {
-			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
-		}
-		return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
-			RequestID: payload.RequestID,
-			Success:   true,
-			Message:   "captured",
-			Data:      map[string]any{"content": content},
-		})
+	// Always render the pane from the daemon-side VT emulator. This used to route
+	// to an attached client and answer here only when nothing was attached, which
+	// meant the same read returned a result produced by different code depending
+	// on whether someone was watching. Both were the same rendering of a VT
+	// emulator fed by the same PTY, so the round trip added a way to disagree and
+	// nothing else.
+	content, err := d.capturePaneDaemonSide(session, &payload)
+	if err != nil {
+		return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
 	}
-
-	remoteCmd := &RemoteCommandPayload{
-		RequestID:    payload.RequestID,
-		CommandType:  "capture_pane",
-		WindowTarget: payload.WindowTarget,
-	}
-	// Pack options into Keys field as a simple flag string
-	var flags []string
-	if payload.Scrollback {
-		flags = append(flags, "scrollback")
-	}
-	if payload.ANSI {
-		flags = append(flags, "ansi")
-	}
-	if len(flags) > 0 {
-		remoteCmd.Keys = strings.Join(flags, ",")
-	}
-
-	if err := d.sendMessage(tuiClient, MsgRemoteCommand, remoteCmd); err != nil {
-		return d.sendCommandResult(cs, payload.RequestID, false, fmt.Sprintf("failed to send to TUI: %v", err))
-	}
-
-	if cs.clientID != tuiClient.clientID {
-		d.pendingRequestsMu.Lock()
-		d.pendingRequests[payload.RequestID] = &pendingRequest{requester: cs, created: time.Now()}
-		d.pendingRequestsMu.Unlock()
-	}
-
-	return nil
+	return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
+		RequestID: payload.RequestID,
+		Success:   true,
+		Message:   "captured",
+		Data:      map[string]any{"content": content},
+	})
 }
 
 // handleSetConfig routes a config change to the TUI client attached to the session.

@@ -25,6 +25,14 @@ func init() {
 	}
 }
 
+// openGrapheme records a cluster that was drawn at the end of a Write while
+// more of it may still be in flight, along with the cell it landed in.
+type openGrapheme struct {
+	active bool
+	x, y   int
+	width  int
+}
+
 // handlePrint handles printable characters.
 func (e *Emulator) handlePrint(r rune) {
 	// Suppress kitty unicode placeholder characters. They would show as
@@ -41,6 +49,9 @@ func (e *Emulator) handlePrint(r rune) {
 		e.handleGrapheme(asciiStr[r], 1)
 	} else {
 		e.grapheme = append(e.grapheme, r)
+		if e.openGrapheme.active {
+			e.extendOpenGrapheme()
+		}
 	}
 }
 
@@ -50,7 +61,20 @@ func (e *Emulator) flushGrapheme() {
 	if len(e.grapheme) == 0 {
 		return
 	}
+	// An open cluster is already on screen; the arriving sequence closes it,
+	// so retire the buffer instead of drawing it a second time.
+	if e.openGrapheme.active {
+		e.openGrapheme.active = false
+		e.grapheme = e.grapheme[:0]
+		return
+	}
+	e.renderGraphemeBuffer()
+	e.grapheme = e.grapheme[:0] // Reset the grapheme buffer.
+}
 
+// renderGraphemeBuffer draws every cluster held in the grapheme buffer. It does
+// not clear the buffer; callers decide whether the trailing cluster stays open.
+func (e *Emulator) renderGraphemeBuffer() {
 	// We always use ansi.GraphemeWidth here to report accurate widths
 	// and it's up to the caller to decide how to handle Unicode vs non-Unicode
 	// modes.
@@ -61,7 +85,85 @@ func (e *Emulator) flushGrapheme() {
 		e.handleGrapheme(cluster, width)
 		graphemes = graphemes[len(cluster):]
 	}
-	e.grapheme = e.grapheme[:0] // Reset the grapheme buffer.
+}
+
+// flushGraphemeAtWriteEnd draws the buffered clusters when a Write runs out of
+// bytes mid-cluster.
+//
+// A PTY read boundary can fall anywhere, including between a base character and
+// its combining marks. The trailing cluster must be drawn now, because the user
+// has to see the last character of a burst without waiting for more output, but
+// it must also stay open: runes arriving in a later Write belong to that same
+// cluster and have to re-render the cell they were split from. Closing the
+// cluster here instead would drop the marks already drawn and leave the
+// continuation sitting in the next cell.
+func (e *Emulator) flushGraphemeAtWriteEnd() {
+	if len(e.grapheme) == 0 || e.openGrapheme.active {
+		return
+	}
+
+	method := ansi.GraphemeWidth
+	graphemes := string(e.grapheme)
+	var open string
+	for len(graphemes) > 0 {
+		cluster, width := ansi.FirstGraphemeCluster(graphemes, method)
+		e.handleGrapheme(cluster, width)
+		graphemes = graphemes[len(cluster):]
+		if len(graphemes) == 0 {
+			// handleGrapheme records where it actually drew, which is not
+			// derivable from the cursor beforehand: a pending wrap makes it
+			// index to the next line first.
+			open = cluster
+			e.openGrapheme = openGrapheme{
+				active: true,
+				x:      e.lastCellX,
+				y:      e.lastCellY,
+				width:  width,
+			}
+		}
+	}
+	// Keep only the open cluster so a continuation extends it and nothing else.
+	e.grapheme = append(e.grapheme[:0], []rune(open)...)
+}
+
+// extendOpenGrapheme re-renders the cluster left open by a previous Write, now
+// that a continuation rune has arrived, into the cell it was originally drawn
+// in rather than at the cursor.
+func (e *Emulator) extendOpenGrapheme() {
+	method := ansi.GraphemeWidth
+	s := string(e.grapheme)
+	cluster, width := ansi.FirstGraphemeCluster(s, method)
+	if len(cluster) != len(s) {
+		// The new rune began a fresh cluster instead of extending the open one.
+		// Close the open cluster and leave the remainder buffered for the
+		// normal path.
+		e.openGrapheme.active = false
+		e.grapheme = append(e.grapheme[:0], []rune(s[len(cluster):])...)
+		return
+	}
+
+	cell := uv.Cell{
+		Content: cluster,
+		Width:   width,
+		Style:   e.scr.cursorPen(),
+		Link:    e.scr.cursorLink(),
+	}
+	e.scr.SetCell(e.openGrapheme.x, e.openGrapheme.y, &cell)
+
+	// A continuation can change the cluster's width (a variation selector turns
+	// a narrow base wide); move the cursor by the delta so following output
+	// still lands after it.
+	if width != e.openGrapheme.width {
+		x, y := e.scr.CursorPosition()
+		x += width - e.openGrapheme.width
+		x = max(x, 0)
+		if w := e.scr.Width(); x >= w {
+			x = w - 1
+			e.atPhantom = e.isModeSet(ansi.ModeAutoWrap)
+		}
+		e.scr.setCursor(x, y, false)
+		e.openGrapheme.width = width
+	}
 }
 
 // handleGrapheme handles UTF-8 graphemes.
@@ -109,6 +211,7 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 		e.lastChar, _ = utf8.DecodeRuneInString(content)
 	}
 
+	e.lastCellX, e.lastCellY = x, y
 	e.scr.SetCell(x, y, &cell)
 
 	// Handle phantom state at the end of the line

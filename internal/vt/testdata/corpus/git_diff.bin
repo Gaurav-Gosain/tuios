@@ -1,0 +1,22 @@
+[33mcommit 76348ef5096eaad544b41497ae9cda635a9bc2fc[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtest/fuzz-parsers[m[33m)[m
+Author: Gaurav Gosain <itsgauravgosain@gmail.com>
+Date:   Sat Jul 18 20:47:11 2026 +0400
+
+    test(vt): fuzz the emulator's parsers
+    
+    Feeds arbitrary byte streams to the emulator and asserts the invariants
+    a multiplexer depends on: parsing never panics, returns within a budget,
+    never changes the screen dimensions the host configured, leaves the
+    cursor inside the screen, and retains bounded heap.
+    
+    The chunked target writes the same input one byte at a time and requires
+    the rendered screen to match, since a PTY read boundary can land
+    anywhere. The resize target interleaves parsing with resizes.
+    
+    Seeds are drawn from sequences real programs emit plus the hostile
+    shapes a review flagged: unbounded repeat counts, oversized graphics
+    payloads, guest file and shm transfers, zlib payloads, unterminated
+    accumulators and truncated introducers.
+
+ internal/vt/fuzz_test.go | 309 [32m+++++++++++++++++++++++++++++++++++++++++++++++[m
+ 1 file changed, 309 insertions(+)
