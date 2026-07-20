@@ -12,6 +12,21 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
+)
+
+const (
+	// maxBatch caps how much pending PTY output one pass of outputWriter
+	// coalesces before writing it to the emulator.
+	maxBatch = 256 * 1024
+
+	// maxVTChunk caps how much of that batch is written to the emulator under a
+	// single acquisition of ioMu. It bounds how long the compositor can be kept
+	// out of a pane by that pane's own output. It is a latency knob, not a
+	// throughput one: the whole batch is still written before the next one is
+	// read, so shrinking it costs only extra lock round trips and buys a
+	// proportionally shorter worst-case stall for the renderer.
+	maxVTChunk = 8 * 1024
 )
 
 // outputWriter is a goroutine that serializes writes to the terminal emulator.
@@ -35,7 +50,6 @@ func (w *Window) outputWriter() {
 		return
 	}
 
-	const maxBatch = 256 * 1024
 	batch := make([]byte, 0, maxBatch)
 
 	for {
@@ -65,12 +79,34 @@ func (w *Window) outputWriter() {
 		// Snapshot and dereference Terminal entirely under ioMu: Close()
 		// nils the field under the same lock, so an unlocked check-then-use
 		// would panic once teardown races an in-flight batch.
-		w.ioMu.Lock()
-		t := w.Terminal
-		if t != nil {
-			_, _ = t.Write(batch)
+		//
+		// Write the batch in bounded chunks, taking the lock once per chunk
+		// rather than once for the whole batch. Terminal.Write parses the bytes
+		// and mutates the cell buffer, and for a pane emitting thousands of
+		// lines a second most of that cost is scrolling the buffer once per
+		// line, so a full 256KiB batch holds the exclusive lock for tens of
+		// milliseconds. The compositor must take the read side of this same
+		// lock on every window on every frame, and sync.RWMutex parks readers
+		// behind a queued writer. A pane whose outputChan always has more data
+		// therefore re-queues the writer immediately and starves the renderer
+		// indefinitely: frames stop, and the keystroke echo the user is waiting
+		// for is never composited, however promptly the input itself was
+		// delivered. Unlock releases the readers waiting at that moment, so
+		// chunking hands the renderer a turn between chunks and bounds the
+		// stall at one chunk's parse instead of one batch's.
+		var t *vt.Emulator
+		for off := 0; off < len(batch); off += maxVTChunk {
+			end := min(off+maxVTChunk, len(batch))
+			w.ioMu.Lock()
+			t = w.Terminal
+			if t != nil {
+				_, _ = t.Write(batch[off:end])
+			}
+			w.ioMu.Unlock()
+			if t == nil {
+				break
+			}
 		}
-		w.ioMu.Unlock()
 
 		if t != nil {
 			// HasNewOutput drives the UI goroutine's dirty-marking;

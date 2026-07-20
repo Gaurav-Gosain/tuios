@@ -223,6 +223,8 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		return err
 	}
 
+	startPprofServer()
+
 	if debugMode {
 		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
 		fmt.Println("Debug mode enabled")
