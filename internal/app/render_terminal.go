@@ -140,7 +140,27 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// under w.ioMu and reallocated by Resize under the same lock, so every VT
 	// read below (Render, CursorPosition, CellAt, scrollback) must hold the
 	// read side. terminalMu still guards the m.Windows slice and dirty flags.
-	window.RLockIO()
+	//
+	// Try rather than wait. A pane emitting thousands of lines a second holds
+	// the exclusive side almost continuously, and blocking here stalls the
+	// whole composited frame on that one pane, so the user's keystroke echo in
+	// a completely different pane waits behind output nobody can read. Serving
+	// the previous frame for the busy pane and leaving it dirty sheds that
+	// intermediate frame instead: the pane repaints on the next frame that
+	// acquires, so it still converges on its true final state once the burst
+	// ends, and no input is affected.
+	if !window.TryRLockIO() {
+		if window.CachedContent != "" {
+			if renderTraceEnabled {
+				traceRender(window, isFocused, inTerminalMode, entryDirty, "shed-locked", window.CachedContent)
+			}
+			return window.CachedContent
+		}
+		// No cache to fall back on yet, so this pane has never rendered. Wait,
+		// because showing nothing at all is worse than one blocked frame, and
+		// it can only happen in the first frames of a pane's life.
+		window.RLockIO()
+	}
 	defer window.RUnlockIO()
 
 	// Fast path for unfocused windows: use the emulator's built-in Render()

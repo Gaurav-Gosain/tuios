@@ -52,6 +52,17 @@ func (w *Window) UnlockIO() { w.ioMu.Unlock() }
 func (w *Window) RLockIO()   { w.ioMu.RLock() }
 func (w *Window) RUnlockIO() { w.ioMu.RUnlock() }
 
+// TryRLockIO takes the read side only if it is free, and reports whether it
+// did. The compositor uses it so that a pane which is mid-VT-write cannot hold
+// up the frame: a pane under a heavy burst has the exclusive lock taken and
+// retaken continuously, and a blocking RLockIO there stalls the whole screen,
+// including the pane the user is typing into. A caller that fails to acquire
+// must fall back to the pane's last rendered frame and leave it dirty, so the
+// pane repaints as soon as the lock is free. Dropping an intermediate frame
+// from a pane producing thousands of lines a second loses nothing a user could
+// have read; stalling the frame that carries their keystroke does.
+func (w *Window) TryRLockIO() bool { return w.ioMu.TryRLock() }
+
 // SetTiled updates the tiled flag and re-syncs the emulator/PTY size. Resize
 // deducts border cells based on Tiled (0 when tiled/borderless, 2 when
 // bordered), so flipping the flag without a resize leaves the terminal one
@@ -279,6 +290,11 @@ type Window struct {
 	// This keeps window model fields (Dirty/ContentDirty/CachedContent) off the
 	// background goroutine, which otherwise races the renderer and Close().
 	coalesceSignal atomic.Bool
+
+	// lastScrollbackLen is the most recent scrollback length ScrollbackLenSync
+	// managed to read. It answers that call when the I/O lock is busy, so the
+	// compositor never waits on a bursting pane just to size a scrollbar.
+	lastScrollbackLen atomic.Int64
 
 	// PTYDataChan is a shared channel (buffered 1) that PTY readers signal
 	// to trigger rendering. Non-blocking send coalesces rapid updates.

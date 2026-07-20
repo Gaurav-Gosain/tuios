@@ -23,6 +23,29 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
+// startPprofServer serves net/http/pprof on --pprof when that flag is set.
+//
+// Block/mutex profiling is sampled, not exhaustive: rate 1 samples every event
+// and adds heavy overhead under load, which is not worth it for representative
+// contention data. Output is not printed so it cannot corrupt the TUI on stdout.
+//
+// Every path that runs the TUI calls this, including the daemon-attached one.
+// Profiling an attached client is the only way to see the compositor under a
+// real multi-pane session, which is where the interesting contention lives.
+func startPprofServer() {
+	if pprofAddr == "" {
+		return
+	}
+	runtime.SetBlockProfileRate(10000) // one sample per ~10us blocked
+	runtime.SetMutexProfileFraction(100)
+	go func() {
+		srv := &http.Server{Addr: pprofAddr, ReadHeaderTimeout: 5 * time.Second}
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("pprof server error: %v", err)
+		}
+	}()
+}
+
 // debugLogEvent logs events to /tmp/tuios-events.log when TUIOS_DEBUG_INTERNAL=1.
 // Only logs KeyPressMsg, MouseMotionMsg, and unknown events in TerminalMode
 // to diagnose phantom keypresses (issue #78).
@@ -173,20 +196,7 @@ func runLocal() error {
 		defer pprof.StopCPUProfile()
 	}
 
-	// Live profiling endpoint. Block/mutex profiling is sampled, not exhaustive:
-	// rate 1 samples every event and adds heavy overhead under load, which is not
-	// worth it for representative contention data. Output is not printed so it
-	// cannot corrupt the TUI on stdout.
-	if pprofAddr != "" {
-		runtime.SetBlockProfileRate(10000) // one sample per ~10us blocked
-		runtime.SetMutexProfileFraction(100)
-		go func() {
-			srv := &http.Server{Addr: pprofAddr, ReadHeaderTimeout: 5 * time.Second}
-			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				log.Printf("pprof server error: %v", err)
-			}
-		}()
-	}
+	startPprofServer()
 
 	app.SetInputHandler(input.HandleInput)
 
