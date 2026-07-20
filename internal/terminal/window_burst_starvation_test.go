@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // burstPayload is line-heavy on purpose. The dominant cost of writing PTY
@@ -145,6 +147,46 @@ func TestBackgroundBurstDoesNotStarveCompositor(t *testing.T) {
 	if mean > maxMean || p95 > maxP95 {
 		t.Errorf("compositor starved by a background burst: mean wait %v (limit %v), p95 %v (limit %v)",
 			mean, maxMean, p95, maxP95)
+	}
+}
+
+// TestChunkedVTWriteMatchesSingleWrite guards the risk the chunking introduces.
+//
+// outputWriter now splits a batch at fixed byte offsets, which can fall in the
+// middle of an escape sequence or a grapheme cluster. The emulator is built to
+// take that (a PTY read boundary already falls anywhere), but the fix depends
+// on it, so it is worth pinning: the same bytes must produce the same screen
+// whether they arrive whole or in chunks.
+func TestChunkedVTWriteMatchesSingleWrite(t *testing.T) {
+	// Escapes, wide runes, combining marks and wrapping, so the split lands
+	// mid-sequence and mid-cluster many times over.
+	var stream []byte
+	for i := 0; i < 400; i++ {
+		stream = append(stream, fmt.Sprintf(
+			"\x1b[3%dm line %04d é́ 你好 \U0001f600 padding-to-force-wrap-%d\x1b[0m\r\n",
+			i%8, i, i)...)
+	}
+
+	whole := vt.NewEmulator(80, 24)
+	defer whole.Close()
+	if _, err := whole.Write(stream); err != nil {
+		t.Fatalf("whole write: %v", err)
+	}
+
+	chunked := vt.NewEmulator(80, 24)
+	defer chunked.Close()
+	// A chunk size that is not a divisor of anything in the stream, so the
+	// boundaries land in awkward places rather than lining up with newlines.
+	const chunk = 97
+	for off := 0; off < len(stream); off += chunk {
+		end := min(off+chunk, len(stream))
+		if _, err := chunked.Write(stream[off:end]); err != nil {
+			t.Fatalf("chunked write at %d: %v", off, err)
+		}
+	}
+
+	if got, want := chunked.Render(), whole.Render(); got != want {
+		t.Errorf("chunked writes rendered differently from one write:\n got %q\nwant %q", got, want)
 	}
 }
 
