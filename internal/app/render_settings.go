@@ -54,6 +54,10 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	if len(cat.Items) > 0 {
 		desc = cat.Items[m.SettingsSelected].Desc
 	}
+	// "  " prefix counts against the inner width budget, same as the row
+	// marker does for setting rows, so the truncation target leaves room
+	// for it.
+	desc = overlay.Truncate(desc, settingsInnerWidth-2)
 	lines = append(lines,
 		overlay.Style(bg).Render(" "),
 		overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+desc),
