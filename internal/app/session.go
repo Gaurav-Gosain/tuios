@@ -521,9 +521,21 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// tiling structure and a closed one leaves its tile behind. Retiling is what
 	// turns a daemon-side lifecycle change into something the renderer has
 	// actually absorbed.
+	//
+	// placed matters here even when no window was created or removed. The daemon
+	// broadcasts the creation state (the window still marked Unplaced) more than
+	// once around a single creation: a mutation that follows it, a focus change
+	// or a PTY resize, re-emits canonical state that still carries the Unplaced
+	// flag until this client's placing push has landed. A later such broadcast is
+	// processed after this client already placed and tiled the window, and it
+	// re-runs placeUnplacedWindows, knocking the window out of its tile back to
+	// the raw placement box. Under tiling that has to be folded straight back
+	// into the layout; otherwise the window is left floating over the tiled panes
+	// even though the daemon's own geometry for it is already correct (which is
+	// how it looked on screen: a full-size window over an otherwise clean split).
 	switch {
-	case m.AutoTiling:
-		m.adoptSyncedWindows(created, removed)
+	case m.AutoTiling && (len(created) > 0 || len(removed) > 0 || placed):
+		m.adoptSyncedWindows(created, removed, placed)
 	case placed:
 		// Untiled, so there is nothing to retile, but the geometry this client
 		// just chose is news to the daemon.
@@ -796,8 +808,14 @@ func (m *OS) placeUnplacedWindows(state *session.SessionState) bool {
 // is pushed back: the daemon's copy of the layout is whatever a client last told
 // it, and after a daemon-side lifecycle change that copy is a layout for a
 // different set of windows.
-func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int) {
-	if len(created) == 0 && len(removed) == 0 {
+//
+// placed is true when this sync re-placed a window the daemon still had marked
+// Unplaced. It forces a retile on its own because a re-placed window has been
+// knocked out of the tiling layout back to a raw placement box, which the tree
+// path cannot detect from created/removed alone (the window already exists in
+// the tree); only re-running the layout folds it back in.
+func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, placed bool) {
+	if len(created) == 0 && len(removed) == 0 && !placed {
 		return
 	}
 
