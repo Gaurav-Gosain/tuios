@@ -366,6 +366,7 @@ func (m *OS) AddWindow(name string) *OS {
 	m.setupTextSizingPassthrough(window)
 	m.setupClipboardPassthrough(window)
 	m.setupNotificationPassthrough(window)
+	m.setupCwdWatch(window)
 
 	m.Windows = append(m.Windows, window)
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))

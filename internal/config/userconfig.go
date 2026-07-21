@@ -17,7 +17,27 @@ type UserConfig struct {
 	Appearance  AppearanceConfig  `toml:"appearance"`
 	Keybindings KeybindingsConfig `toml:"keybindings"`
 	Daemon      DaemonConfig      `toml:"daemon"`
+	Tape        TapeConfig        `toml:"tape"`
 	Hooks       HooksConfig       `toml:"hooks"`
+}
+
+// TapeConfig holds settings for per-directory project tapes (.tuios.tape).
+//
+// Autorun is the master switch for detecting a project tape when the focused
+// window's shell enters a directory that carries one:
+//   - "off":  no detection, no indicator, the feature is invisible.
+//   - "ask":  detection on; an encountered tape surfaces a passive indicator
+//     (a dock badge and a non-focus-stealing notification) showing its trust
+//     status. Nothing runs without the user's explicit action.
+//   - "auto": trusted, unedited tapes are meant to run automatically on entry;
+//     untrusted or changed tapes fall back to the "ask" behavior.
+//
+// Execution is not implemented yet: it arrives in a later stage. In this stage
+// "ask" and "auto" behave identically (indicator only, no execution), and
+// nothing runs in either mode. The default is "ask", which is safe by
+// construction because it only shows an indicator.
+type TapeConfig struct {
+	Autorun string `toml:"autorun"` // off | ask | auto (default: ask)
 }
 
 // DaemonConfig holds daemon-related settings
@@ -56,6 +76,16 @@ type AppearanceConfig struct {
 	MaxFPS               int    `toml:"max_fps"`                // Maximum render FPS (default: 60, max: 120)
 }
 
+// Tape autorun modes. See TapeConfig.Autorun.
+const (
+	TapeAutorunOff  = "off"
+	TapeAutorunAsk  = "ask"
+	TapeAutorunAuto = "auto"
+)
+
+// TapeAutorunModes lists the valid values for tape.autorun.
+var TapeAutorunModes = []string{TapeAutorunOff, TapeAutorunAsk, TapeAutorunAuto}
+
 // HooksConfig holds shell command hooks for events.
 type HooksConfig map[string]any
 
@@ -93,6 +123,9 @@ func DefaultConfig() *UserConfig {
 			LogLevel:     "off",
 			DefaultCodec: "gob",
 			SocketPath:   "", // Empty means use default XDG path
+		},
+		Tape: TapeConfig{
+			Autorun: TapeAutorunAsk,
 		},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
@@ -406,6 +439,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	defaultCfg := DefaultConfig()
 	fillMissingAppearance(&cfg, defaultCfg)
 	fillMissingDaemon(&cfg, defaultCfg)
+	fillMissingTape(&cfg, defaultCfg)
 	fillMissingKeybinds(&cfg, defaultCfg)
 
 	// Validate configuration
@@ -545,6 +579,15 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// Custom border colors override the theme-derived colors. Empty strings
 	// clear any override and restore theme colors.
 	theme.SetBorderOverrides(cfg.Appearance.BorderFocusedColor, cfg.Appearance.BorderUnfocusedColor)
+}
+
+// fillMissingTape fills in any missing tape settings with defaults. An unset or
+// unrecognized autorun mode falls back to the safe default ("ask"); validation
+// reports the unrecognized value separately as a warning.
+func fillMissingTape(cfg, defaultCfg *UserConfig) {
+	if !slices.Contains(TapeAutorunModes, cfg.Tape.Autorun) {
+		cfg.Tape.Autorun = defaultCfg.Tape.Autorun
+	}
 }
 
 // fillMissingDaemon fills in any missing daemon settings with defaults

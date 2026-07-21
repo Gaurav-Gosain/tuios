@@ -266,6 +266,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		m.setupTextSizingPassthrough(window)
 		m.setupClipboardPassthrough(window)
 		m.setupNotificationPassthrough(window)
+		m.setupCwdWatch(window)
 
 		m.Windows = append(m.Windows, window)
 		m.LogInfo("[RESTORE] Window %d created: DaemonMode=%v, PTYID=%s", i, window.DaemonMode, window.PTYID[:8])
@@ -674,6 +675,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	m.setupTextSizingPassthrough(window)
 	m.setupClipboardPassthrough(window)
 	m.setupNotificationPassthrough(window)
+	m.setupCwdWatch(window)
 
 	// Set up PTY handlers if we have a daemon client
 	if m.DaemonClient != nil {

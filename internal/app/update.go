@@ -225,6 +225,7 @@ func (m *OS) Init() tea.Cmd {
 		ListenForPTYData(m.PTYDataChan),
 		ListenForClipboardSet(m.PendingClipboardSet),
 		ListenForNotification(m.ensureNotificationChan()),
+		ListenForCwdChange(m.ensureCwdChangeChan()),
 	}
 
 	// Listen for state sync from other clients (daemon/SSH/web mode)
@@ -598,6 +599,18 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// apply it here on the Bubble Tea goroutine where notification state is owned.
 		m.ShowNotification(msg.Message, msg.Type, msg.Duration)
 		return m, ListenForNotification(m.PendingNotification)
+
+	case CwdChangedMsg:
+		// OSC 7 working-directory change delivered off the PTY goroutine. Filter
+		// to the focused window and schedule a debounced project-tape check. This
+		// never executes anything; it only decides whether to look.
+		cmd := m.onCwdChange(msg)
+		return m, tea.Batch(cmd, ListenForCwdChange(m.PendingCwdChange))
+
+	case tapeDebounceMsg:
+		// The focused cwd held still long enough; evaluate it for a project tape.
+		m.handleTapeDebounce(msg.gen)
+		return m, nil
 
 	case WindowExitMsg:
 		windowID := msg.WindowID
