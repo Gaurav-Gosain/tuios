@@ -8,6 +8,7 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 - [Configuration File Location](#configuration-file-location)
 - [Configuration Structure](#configuration-structure)
 - [Keybinding Sections](#keybinding-sections)
+- [Startup Settings](#startup-settings)
 - [Hooks](#hooks)
 - [Key Syntax](#key-syntax)
 - [Platform-Specific Configuration](#platform-specific-configuration)
@@ -85,6 +86,11 @@ border_style = "rounded"
 dockbar_position = "bottom"
 hide_window_buttons = false
 scrollback_lines = 10000
+
+[startup]
+open_default_window = false
+tiled = false
+start_in_terminal_mode = false
 ```
 
 ### Minimal Configuration (Recommended)
@@ -427,6 +433,91 @@ unset to disable theming and use your terminal's own colors. See
 [THEMES.md](THEMES.md).
 
 **CLI override:** `--theme <id>`
+
+## Startup Settings
+
+The `[startup]` section controls what a session looks like the moment it starts.
+All options default to `false`, so by default a session comes up empty and
+floating, in window-management mode, and you open the first window yourself.
+
+```toml
+[startup]
+open_default_window = false
+tiled = false
+start_in_terminal_mode = false
+```
+
+### open_default_window
+
+Opens one terminal window automatically when a session starts with none, so you
+land in a shell instead of an empty screen. It only acts on an empty session:
+attaching to a session that already has windows leaves them untouched.
+
+**Valid values:**
+- `false` - Start empty; press `n` (or the leader key then `c`) to open the first window (default)
+- `true` - Open one terminal window automatically on start
+
+**Default:** `false`
+
+**Also settable from:** the in-app settings page (`Ctrl+B` `,`, under Startup),
+which persists the change back to the config file. The change applies on the
+next launch.
+
+### tiled
+
+Starts a new session with tiling enabled instead of floating. Windows are laid
+out with the default BSP tiling layout, and windows opened afterwards tile
+automatically. Like `open_default_window`, this only seeds a fresh session;
+attaching to an existing session restores that session's own layout.
+
+Combine it with `open_default_window` to launch straight into a tiled session
+with one terminal already open.
+
+**Valid values:**
+- `false` - Start in floating mode (default)
+- `true` - Start with tiling on (BSP layout)
+
+**Default:** `false`
+
+**Also settable from:** the in-app settings page (`Ctrl+B` `,`, under Startup).
+The change applies on the next launch.
+
+### start_in_terminal_mode
+
+Starts focused in terminal mode instead of window-management mode, so keystrokes
+go straight to the focused terminal and you can start typing in the shell
+immediately rather than having your keys interpreted as window-manager commands.
+
+Terminal mode needs a window to type into, so this only takes effect when a
+window is present and focused at startup. On its own it does nothing on an empty
+session; pair it with `open_default_window` so there is a shell to land in. If no
+window is present, the session stays in window-management mode.
+
+**Valid values:**
+- `false` - Start in window-management mode (default)
+- `true` - Start in terminal mode when a window is present
+
+**Default:** `false`
+
+**Also settable from:** the in-app settings page (`Ctrl+B` `,`, under Startup).
+The change applies on the next launch.
+
+### Combining the startup options
+
+The three options are designed to stack. The intended full combination is:
+
+```toml
+[startup]
+open_default_window = true
+tiled = true
+start_in_terminal_mode = true
+```
+
+which launches straight into a tiled session with one terminal already open and
+the cursor in the shell, ready to type. `start_in_terminal_mode` depends on a
+focused window, so it is only meaningful alongside `open_default_window` (or an
+attach that restores a window); enabling it alone leaves an empty session in
+window-management mode.
 
 ## Hooks
 

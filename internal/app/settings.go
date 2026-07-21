@@ -111,6 +111,15 @@ func (m *OS) setAppearance(fn func(a *config.AppearanceConfig)) {
 	}
 }
 
+// setStartup runs fn against the held config's startup section when a config is
+// present, so a change to a [startup] setting can be persisted. These settings
+// take effect on the next launch, so there is nothing to apply live.
+func (m *OS) setStartup(fn func(s *config.StartupConfig)) {
+	if m.UserConfig != nil {
+		fn(&m.UserConfig.Startup)
+	}
+}
+
 const themeNone = "none"
 
 var (
@@ -312,6 +321,27 @@ func (m *OS) settingsCategories() []settingsCategory {
 		},
 	}
 
+	startup := settingsCategory{
+		Name: "Startup",
+		Items: []settingItem{
+			boolItem("Open default window", "Open a terminal when a session starts empty (next launch)",
+				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.OpenDefaultWindow },
+				func(m *OS, v bool) {
+					m.setStartup(func(s *config.StartupConfig) { s.OpenDefaultWindow = v })
+				}),
+			boolItem("Start tiled", "Start a new session tiled, not floating (next launch)",
+				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.Tiled },
+				func(m *OS, v bool) {
+					m.setStartup(func(s *config.StartupConfig) { s.Tiled = v })
+				}),
+			boolItem("Start in terminal mode", "Land in the shell, ready to type (next launch)",
+				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.StartInTerminalMode },
+				func(m *OS, v bool) {
+					m.setStartup(func(s *config.StartupConfig) { s.StartInTerminalMode = v })
+				}),
+		},
+	}
+
 	advanced := settingsCategory{
 		Name: "Advanced",
 		Items: []settingItem{
@@ -336,7 +366,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		},
 	}
 
-	return []settingsCategory{appearance, dock, behavior, advanced}
+	return []settingsCategory{appearance, dock, behavior, startup, advanced}
 }
 
 // OpenSettings shows the settings overlay, initializing the theme registry so

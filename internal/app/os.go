@@ -362,6 +362,18 @@ type OS struct {
 	// it in place and persists it so live changes survive a restart. May be
 	// nil if the config failed to load at startup.
 	UserConfig *config.UserConfig
+
+	// startupApplied guards the one-shot startup preferences (open a default
+	// window, start tiled) so they run only on the first WindowSizeMsg, once
+	// the real terminal dimensions are known, and never again.
+	startupApplied bool
+
+	// pendingStartTerminalMode records that the start_in_terminal_mode startup
+	// preference still needs to be applied but had no window to focus yet. In a
+	// daemon session the default window is created asynchronously, so entry into
+	// terminal mode is deferred until that window materializes through a state
+	// sync and can be focused.
+	pendingStartTerminalMode bool
 }
 
 // Notification represents a temporary notification message.

@@ -697,6 +697,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.Height = msg.Height
 		m.MarkAllDirty()
 
+		// Apply the one-shot [startup] preferences now that the real terminal
+		// size is known: NewOS runs before the first WindowSizeMsg, so opening a
+		// window or tiling there would place them against a zero-sized screen.
+		if !m.startupApplied {
+			m.startupApplied = true
+			m.applyStartupPreferences()
+		}
+
 		// Notify daemon of our terminal size for multi-client size calculation
 		// This allows the daemon to compute effective size = min(all clients)
 		if m.IsDaemonSession && m.DaemonClient != nil {
@@ -815,6 +823,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if err := m.ApplyStateSync(msg.State); err != nil {
 				m.LogError("Failed to apply state sync: %v", err)
 			} else {
+				// The daemon-created startup window arrives here; if the user asked
+				// to start in terminal mode, enter it now that there is a focused
+				// window to type into.
+				m.maybeEnterPendingTerminalMode()
+
 				// Show notifications for significant changes
 				newWindowCount := len(m.Windows)
 				newWorkspace := m.CurrentWorkspace
