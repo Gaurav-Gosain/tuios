@@ -61,6 +61,48 @@ func TestStartupPreferences_BothOn(t *testing.T) {
 	}
 }
 
+// TestStartupPreferences_AllThreeOn is the full intended combination: open a
+// window, tile it, and land focused in terminal mode so typing reaches the
+// shell straight away.
+func TestStartupPreferences_AllThreeOn(t *testing.T) {
+	m := newStartupOS(t, true, true)
+	m.UserConfig.Startup.StartInTerminalMode = true
+	defer closeWindows(m)
+
+	m.applyStartupPreferences()
+
+	if len(m.Windows) != 1 {
+		t.Fatalf("expected 1 window opened on start, got %d", len(m.Windows))
+	}
+	if !m.AutoTiling {
+		t.Fatal("expected AutoTiling on after start-tiled")
+	}
+	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+		t.Fatalf("expected a focused window for terminal mode, got index %d", m.FocusedWindow)
+	}
+	if m.Mode != TerminalMode {
+		t.Fatalf("expected to start in terminal mode, got mode %v", m.Mode)
+	}
+}
+
+// TestStartupPreferences_TerminalModeNeedsWindow confirms the guard: with
+// start_in_terminal_mode on but no window to focus, the session stays in
+// window-management mode rather than becoming a dead end that swallows keys.
+func TestStartupPreferences_TerminalModeNeedsWindow(t *testing.T) {
+	m := newStartupOS(t, false, false)
+	m.UserConfig.Startup.StartInTerminalMode = true
+	defer closeWindows(m)
+
+	m.applyStartupPreferences()
+
+	if len(m.Windows) != 0 {
+		t.Fatalf("expected no windows, got %d", len(m.Windows))
+	}
+	if m.Mode != WindowManagementMode {
+		t.Fatalf("expected to stay in window-management mode with no window, got mode %v", m.Mode)
+	}
+}
+
 // TestStartupPreferences_BothOff confirms the default: nothing is opened and
 // tiling stays off.
 func TestStartupPreferences_BothOff(t *testing.T) {

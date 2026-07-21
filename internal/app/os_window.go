@@ -429,6 +429,36 @@ func (m *OS) applyStartupPreferences() {
 	if s.OpenDefaultWindow {
 		m.AddWindow("")
 	}
+
+	// Start focused in terminal mode so the user can type into the shell straight
+	// away. This only makes sense with a window to type into: terminal mode with
+	// nothing focused is a dead end where keystrokes reach no terminal. On the
+	// local path AddWindow above already created and focused the window, so this
+	// enters terminal mode immediately. On the daemon path the window is created
+	// asynchronously and does not exist here yet; the entry is deferred until it
+	// arrives (see maybeEnterPendingTerminalMode), but only when a window was
+	// actually requested. With neither a focused window nor one on the way, the
+	// session is left in window-management mode.
+	if s.StartInTerminalMode && (s.OpenDefaultWindow || m.hasFocusedWindow()) {
+		m.pendingStartTerminalMode = true
+		m.maybeEnterPendingTerminalMode()
+	}
+}
+
+// hasFocusedWindow reports whether FocusedWindow points at a real window.
+func (m *OS) hasFocusedWindow() bool {
+	return m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
+}
+
+// maybeEnterPendingTerminalMode applies the deferred start_in_terminal_mode
+// startup preference once a window exists to focus. It is a no-op unless the
+// preference is still pending and a window is focused, and it fires at most once.
+func (m *OS) maybeEnterPendingTerminalMode() {
+	if !m.pendingStartTerminalMode || !m.hasFocusedWindow() {
+		return
+	}
+	m.pendingStartTerminalMode = false
+	m.EnterTerminalMode()
 }
 
 // UpdateAllWindowThemes updates the terminal colors for all windows when the theme changes

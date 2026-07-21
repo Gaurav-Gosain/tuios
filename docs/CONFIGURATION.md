@@ -90,6 +90,7 @@ scrollback_lines = 10000
 [startup]
 open_default_window = false
 tiled = false
+start_in_terminal_mode = false
 ```
 
 ### Minimal Configuration (Recommended)
@@ -436,13 +437,14 @@ unset to disable theming and use your terminal's own colors. See
 ## Startup Settings
 
 The `[startup]` section controls what a session looks like the moment it starts.
-Both options default to `false`, so by default a session comes up empty and
-floating and you open the first window yourself.
+All options default to `false`, so by default a session comes up empty and
+floating, in window-management mode, and you open the first window yourself.
 
 ```toml
 [startup]
 open_default_window = false
 tiled = false
+start_in_terminal_mode = false
 ```
 
 ### open_default_window
@@ -479,6 +481,43 @@ with one terminal already open.
 
 **Also settable from:** the in-app settings page (`Ctrl+B` `,`, under Startup).
 The change applies on the next launch.
+
+### start_in_terminal_mode
+
+Starts focused in terminal mode instead of window-management mode, so keystrokes
+go straight to the focused terminal and you can start typing in the shell
+immediately rather than having your keys interpreted as window-manager commands.
+
+Terminal mode needs a window to type into, so this only takes effect when a
+window is present and focused at startup. On its own it does nothing on an empty
+session; pair it with `open_default_window` so there is a shell to land in. If no
+window is present, the session stays in window-management mode.
+
+**Valid values:**
+- `false` - Start in window-management mode (default)
+- `true` - Start in terminal mode when a window is present
+
+**Default:** `false`
+
+**Also settable from:** the in-app settings page (`Ctrl+B` `,`, under Startup).
+The change applies on the next launch.
+
+### Combining the startup options
+
+The three options are designed to stack. The intended full combination is:
+
+```toml
+[startup]
+open_default_window = true
+tiled = true
+start_in_terminal_mode = true
+```
+
+which launches straight into a tiled session with one terminal already open and
+the cursor in the shell, ready to type. `start_in_terminal_mode` depends on a
+focused window, so it is only meaningful alongside `open_default_window` (or an
+attach that restores a window); enabling it alone leaves an empty session in
+window-management mode.
 
 ## Hooks
 

@@ -334,6 +334,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v bool) {
 					m.setStartup(func(s *config.StartupConfig) { s.Tiled = v })
 				}),
+			boolItem("Start in terminal mode", "Land in the shell, ready to type (next launch)",
+				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.StartInTerminalMode },
+				func(m *OS, v bool) {
+					m.setStartup(func(s *config.StartupConfig) { s.StartInTerminalMode = v })
+				}),
 		},
 	}
 

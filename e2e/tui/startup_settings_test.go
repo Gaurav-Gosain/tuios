@@ -23,18 +23,20 @@ func writeConfig(t *testing.T, base, body string) {
 	}
 }
 
-// TestStartupBothSettings is the combined behavior the [startup] section exists
-// for: with open_default_window and tiled both on, launching tuios drops the
-// user straight into a session that already has one terminal open AND is tiled,
-// and windows opened afterwards tile without ever pressing the tiling toggle.
+// TestStartupAllThreeSettings is the full combined behavior the [startup]
+// section exists for: with open_default_window, tiled and start_in_terminal_mode
+// all on, launching tuios drops the user straight into a session that already
+// has one terminal open, is tiled, and is focused in terminal mode so typing
+// reaches the shell. Windows opened afterwards tile without ever toggling tiling.
 //
 // It runs against a daemon session so the placed geometry can be read back with
 // `list-windows --json`, which is what makes "the panes are tiled" a hard,
 // non-visual assertion (no overlap, none left at the full-screen box) on top of
-// the rendered snapshot.
-func TestStartupBothSettings(t *testing.T) {
+// the rendered snapshot. Terminal mode is proved behaviorally: a shell command
+// is typed at boot with no manual mode switch, and its output must appear.
+func TestStartupAllThreeSettings(t *testing.T) {
 	base := t.TempDir()
-	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\n")
+	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nstart_in_terminal_mode = true\n")
 
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "e2e"}})
 	killDaemon(t, base)
@@ -55,6 +57,22 @@ func TestStartupBothSettings(t *testing.T) {
 			w.X, w.Y, w.Width, w.Height)
 	}
 	t.Logf("rendered screen at boot (one terminal open, tiled full-screen):\n%s", term.Snapshot())
+
+	// Setting 3: we are already in terminal mode, so a command typed WITHOUT any
+	// manual mode switch reaches the shell. In window-management mode the same
+	// keys would be swallowed as window-manager bindings and never run, so the
+	// command's computed output appearing proves input landed in the terminal.
+	if err := term.SendKeys("echo STARTUP_TERMINAL_OK"); err != nil {
+		t.Fatalf("type shell command at boot: %v", err)
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("send Enter: %v", err)
+	}
+	if err := term.WaitForText("STARTUP_TERMINAL_OK", uiTimeout); err != nil {
+		t.Fatalf("typed input did not reach the shell at boot (not in terminal mode): %v\n%s",
+			err, term.Snapshot())
+	}
+	t.Logf("rendered screen after typing at boot (terminal mode, no manual switch):\n%s", term.Snapshot())
 
 	// Open two more windows WITHOUT ever toggling tiling. If the session started
 	// tiled, they join the layout and partition the screen; if it had started

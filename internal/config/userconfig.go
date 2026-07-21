@@ -25,8 +25,9 @@ type UserConfig struct {
 // Both default to false so a fresh install behaves exactly as before: the
 // session comes up empty and floating, and the user opens the first window.
 type StartupConfig struct {
-	OpenDefaultWindow bool `toml:"open_default_window"` // Open one terminal window automatically when a session starts with none (default: false)
-	Tiled             bool `toml:"tiled"`               // Start a new session with tiling enabled instead of floating (default: false)
+	OpenDefaultWindow   bool `toml:"open_default_window"`    // Open one terminal window automatically when a session starts with none (default: false)
+	Tiled               bool `toml:"tiled"`                  // Start a new session with tiling enabled instead of floating (default: false)
+	StartInTerminalMode bool `toml:"start_in_terminal_mode"` // Start focused in terminal mode so typing goes straight to the shell, when a window is present (default: false)
 }
 
 // DaemonConfig holds daemon-related settings
@@ -104,8 +105,9 @@ func DefaultConfig() *UserConfig {
 			SocketPath:   "", // Empty means use default XDG path
 		},
 		Startup: StartupConfig{
-			OpenDefaultWindow: false,
-			Tiled:             false,
+			OpenDefaultWindow:   false,
+			Tiled:               false,
+			StartInTerminalMode: false,
 		},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",

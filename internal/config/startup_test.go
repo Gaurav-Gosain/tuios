@@ -17,6 +17,9 @@ func TestStartupConfigDefaults(t *testing.T) {
 	if cfg.Startup.Tiled {
 		t.Error("tiled should default to false")
 	}
+	if cfg.Startup.StartInTerminalMode {
+		t.Error("start_in_terminal_mode should default to false")
+	}
 }
 
 // TestStartupConfigParsing confirms both options round-trip from TOML.
@@ -25,6 +28,7 @@ func TestStartupConfigParsing(t *testing.T) {
 [startup]
 open_default_window = true
 tiled = true
+start_in_terminal_mode = true
 `
 	var cfg config.UserConfig
 	if err := toml.Unmarshal([]byte(src), &cfg); err != nil {
@@ -35,6 +39,9 @@ tiled = true
 	}
 	if !cfg.Startup.Tiled {
 		t.Error("expected tiled = true after parsing")
+	}
+	if !cfg.Startup.StartInTerminalMode {
+		t.Error("expected start_in_terminal_mode = true after parsing")
 	}
 }
 
@@ -49,8 +56,8 @@ border_style = "rounded"
 	if err := toml.Unmarshal([]byte(src), &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if cfg.Startup.OpenDefaultWindow || cfg.Startup.Tiled {
-		t.Errorf("absent [startup] should leave both options false, got open=%v tiled=%v",
-			cfg.Startup.OpenDefaultWindow, cfg.Startup.Tiled)
+	if cfg.Startup.OpenDefaultWindow || cfg.Startup.Tiled || cfg.Startup.StartInTerminalMode {
+		t.Errorf("absent [startup] should leave every option false, got open=%v tiled=%v terminal=%v",
+			cfg.Startup.OpenDefaultWindow, cfg.Startup.Tiled, cfg.Startup.StartInTerminalMode)
 	}
 }

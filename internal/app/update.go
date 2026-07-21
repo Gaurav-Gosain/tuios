@@ -823,6 +823,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if err := m.ApplyStateSync(msg.State); err != nil {
 				m.LogError("Failed to apply state sync: %v", err)
 			} else {
+				// The daemon-created startup window arrives here; if the user asked
+				// to start in terminal mode, enter it now that there is a focused
+				// window to type into.
+				m.maybeEnterPendingTerminalMode()
+
 				// Show notifications for significant changes
 				newWindowCount := len(m.Windows)
 				newWorkspace := m.CurrentWorkspace
