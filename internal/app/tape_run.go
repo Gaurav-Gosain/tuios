@@ -20,7 +20,7 @@ const tapeSeedSettle = 400 * time.Millisecond
 // tapeFinishRefreshDelay is how long after a tape finishes the client waits
 // before re-fetching every pane's content from the daemon. It lets the last
 // commands' output land on the daemon first.
-const tapeFinishRefreshDelay = 700 * time.Millisecond
+const tapeFinishRefreshDelay = 1200 * time.Millisecond
 
 // tapeLayoutRefreshMsg asks the Update loop to refresh all panes from the daemon
 // after a project tape has built its layout. See refreshAllPanesAfterTape.
@@ -37,18 +37,22 @@ func (m *OS) refreshAllPanesAfterTape() {
 	if m.DaemonClient == nil {
 		return
 	}
-	// Best-effort repaint: re-fetch each current-workspace pane's content from the
-	// daemon, drop the stale cached layer, flag new output, and nudge the render
-	// path. This reconciles panes whose output landed while the client was still
-	// building the layout.
+	// Reconcile every current-workspace pane with the daemon once playback and
+	// its output have settled. This mirrors the size-changed sync path
+	// (updateWindowFromState): re-size the emulator to the pane's tiled geometry,
+	// pull the authoritative screen from the daemon, and flag a redraw. It catches
+	// panes whose output landed after their last resize, so nothing built by the
+	// tape is left blank on this client.
 	for _, w := range m.Windows {
-		if w == nil || !w.DaemonMode || w.PTYID == "" || w.Workspace != m.CurrentWorkspace {
+		if w == nil || !w.DaemonMode || w.PTYID == "" || w.Workspace != m.CurrentWorkspace || w.Terminal == nil {
 			continue
 		}
+		w.Resize(w.Width, w.Height)
 		if state, err := m.DaemonClient.GetTerminalState(w.PTYID, true); err == nil && state != nil {
 			m.restoreTerminalContent(w, state)
 		}
 		w.InvalidateCache()
+		w.MarkContentDirty()
 		w.HasNewOutput.Store(true)
 	}
 	m.MarkAllDirty()

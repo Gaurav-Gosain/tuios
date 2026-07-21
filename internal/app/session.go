@@ -626,6 +626,23 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 			_ = w.DaemonResizeFunc(termWidth, termHeight)
 		}
 
+		// While a tape is building a layout, re-fetch the pane's content from the
+		// daemon after the resize. Resizing the local emulator reflows whatever
+		// cells the client already held, but those can be stale or empty: when a
+		// pane is split, the SOURCE pane shrinks and re-syncs here, and if its
+		// output landed while the client was mid-build (so the render tick dropped
+		// it) the local buffer is blank and the reflow keeps it blank, with an
+		// idle shell emitting nothing to re-dirty it. The daemon holds the
+		// authoritative screen, so pull it. Gated to script playback so an
+		// interactive resize drag (which syncs sizes rapidly) never pays for a
+		// per-motion round-trip.
+		if m.ScriptMode && w.DaemonMode && w.PTYID != "" && m.DaemonClient != nil {
+			if state, err := m.DaemonClient.GetTerminalState(w.PTYID, true); err == nil && state != nil {
+				m.restoreTerminalContent(w, state)
+			}
+			w.HasNewOutput.Store(true)
+		}
+
 		w.InvalidateCache()
 		w.MarkContentDirty()
 
