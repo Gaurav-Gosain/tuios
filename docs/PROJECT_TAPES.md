@@ -105,8 +105,8 @@ The environment variable `TUIOS_TAPE_AUTORUN` overrides the config for one run
 
 ## The tape header
 
-A project tape is the ordinary [tape language](TAPE_SCRIPTING.md) with an
-optional declarative header at the very top, before any action command:
+A project tape has an optional declarative header at the very top, before any
+body command:
 
 | Directive | Meaning | Default |
 |-----------|---------|---------|
@@ -114,6 +114,33 @@ optional declarative header at the very top, before any action command:
 | `Scope session\|current` | Where the tape runs | `session` |
 | `Workspace N` | Workspace to build in | none |
 | `Require "command"` | Skip with a notice if a binary is missing | - |
+
+Header directives must precede any body command; a directive that appears after a
+body command is treated as body. A tape with no header runs with the defaults.
+
+## The tape body
+
+The body is a small, explicit layout language - a defined subset tuned for
+building a project layout, not the full [recorder tape language](TAPE_SCRIPTING.md)
+(whose one-command-per-line grammar cannot express `Type "x" Enter`,
+`Split vertical`, or `Focus "name"` the way a project tape needs). One command per
+line, keyword case-insensitive:
+
+| Command | Effect |
+|---------|--------|
+| `Type "text" [Enter]` | Type text into the focused pane; optional `Enter` submits it |
+| `Run "cmd"` | Shorthand for `Type "cmd" Enter` |
+| `Enter` | Submit a line in the focused pane |
+| `Split vertical\|horizontal` | Split the focused pane into a new tiled pane (`v`/`h` accepted) |
+| `NewWindow ["name"]` | Create a new tiled pane |
+| `RenameWindow "name"` | Name the focused pane (`Rename` is an alias) |
+| `Focus "name"` | Focus a pane by name |
+| `Sleep <duration>` | Pause (e.g. `500ms`, `1s`) |
+| `EnableTiling` / `DisableTiling` | Toggle tiling |
+
+Blank lines and lines starting with `#` are ignored, as is any unrecognized
+command. A settle delay is inserted after each `Split`/`NewWindow` so the
+asynchronously created pane is ready before the next command types into it.
 
 A typical project tape:
 
@@ -134,9 +161,6 @@ RenameWindow "sh"
 
 Focus "edit"
 ```
-
-Header directives must precede any action command; a directive that appears after
-one is treated as part of the body. A tape with no header runs with the defaults.
 
 ## Scope: what running a tape does
 

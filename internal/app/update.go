@@ -534,6 +534,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// Script just finished - record the time if not already set
 				if m.ScriptFinishedTime.IsZero() {
 					m.ScriptFinishedTime = time.Now()
+					// A tape that builds a layout creates panes whose early output
+					// (a split pane's shell prompt, an echo) can land before the
+					// client subscribed, leaving an unfocused pane blank on screen
+					// while the daemon holds the real content. Refresh every pane
+					// from the daemon a beat after playback, once output has settled.
+					if m.DaemonClient != nil {
+						cmds = append(cmds, tea.Tick(tapeFinishRefreshDelay, func(time.Time) tea.Msg {
+							return tapeLayoutRefreshMsg{}
+						}))
+					}
 				}
 			}
 		}
@@ -916,6 +926,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			config.ApplyAppearanceConfig(msg.Config)
 			m.MarkAllDirty()
 		}
+		return m, nil
+
+	case tapeLayoutRefreshMsg:
+		// Fired a beat after a project tape finished. Re-fetch every pane's
+		// content from the daemon and repaint, so panes created during the tape
+		// (splits whose early output the client subscribed too late to catch)
+		// show what actually ran.
+		m.refreshAllPanesAfterTape()
 		return m, nil
 
 	case ScriptCommandMsg:

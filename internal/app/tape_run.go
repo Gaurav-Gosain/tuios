@@ -17,6 +17,50 @@ import (
 // pushes it back), so the body waits this out before its first keystroke.
 const tapeSeedSettle = 400 * time.Millisecond
 
+// tapeFinishRefreshDelay is how long after a tape finishes the client waits
+// before re-fetching every pane's content from the daemon. It lets the last
+// commands' output land on the daemon first.
+const tapeFinishRefreshDelay = 700 * time.Millisecond
+
+// tapeLayoutRefreshMsg asks the Update loop to refresh all panes from the daemon
+// after a project tape has built its layout. See refreshAllPanesAfterTape.
+type tapeLayoutRefreshMsg struct{}
+
+// refreshAllPanesAfterTape re-fetches terminal content for every daemon pane in
+// the session and repaints. A project tape creates panes rapidly; a split
+// pane's first output can land before the client subscribed to its PTY, so its
+// content sits on the daemon but not in the client's emulator. Re-fetching every
+// pane's state (not just unsubscribed ones, which SubscribeWorkspaceWindows
+// limits itself to) reconciles the client with the daemon and marks the frame
+// dirty so the finished layout shows what actually ran.
+func (m *OS) refreshAllPanesAfterTape() {
+	if m.DaemonClient == nil {
+		return
+	}
+	// Best-effort repaint: re-fetch each current-workspace pane's content from the
+	// daemon, drop the stale cached layer, flag new output, and nudge the render
+	// path. This reconciles panes whose output landed while the client was still
+	// building the layout.
+	for _, w := range m.Windows {
+		if w == nil || !w.DaemonMode || w.PTYID == "" || w.Workspace != m.CurrentWorkspace {
+			continue
+		}
+		if state, err := m.DaemonClient.GetTerminalState(w.PTYID, true); err == nil && state != nil {
+			m.restoreTerminalContent(w, state)
+		}
+		w.InvalidateCache()
+		w.HasNewOutput.Store(true)
+	}
+	m.MarkAllDirty()
+	if m.PTYDataChan != nil {
+		select {
+		case m.PTYDataChan <- struct{}{}:
+		default:
+		}
+	}
+	m.renderSkipped = false
+}
+
 // runProjectTape executes a reviewed, eligible tape. content is the exact bytes
 // that were hashed and shown to the user (trust.Result.Content); it is never
 // re-read from disk. dir is the project root (the directory holding the tape).
@@ -59,7 +103,11 @@ func (m *OS) runProjectTape(content []byte, dir string) {
 		m.runTapeSessionScope(header, body, dir)
 		return
 	}
-	m.startTapePlayback(body, header.Workspace)
+	// Scope current: build in the current session from the focused window,
+	// best-effort. The body is compiled to the executor commands that work
+	// (see tape_body.go); it is not forced into tiling, so it composes with
+	// whatever layout state exists.
+	m.startTapePlayback(compileProjectBody(body), header.Workspace)
 }
 
 // runTapeSessionScope implements the default session-per-project behavior: the
@@ -80,7 +128,7 @@ func (m *OS) runTapeSessionScope(header tape.ProjectHeader, body, dir string) {
 	// is honest best-effort and documented.
 	if m.DaemonClient == nil {
 		m.ShowNotification("Tape: no session backend, running in current session", "warning", config.NotificationDuration*2)
-		m.startTapePlayback(body, header.Workspace)
+		m.startTapePlayback(compileProjectBody(body), header.Workspace)
 		return
 	}
 
@@ -99,29 +147,27 @@ func (m *OS) runTapeSessionScope(header tape.ProjectHeader, body, dir string) {
 	}
 
 	// A freshly created session is empty. Seed a single window whose shell is put
-	// at the project root, then build the layout from the tape body. The seed and
-	// cd are prepended to the body so the whole thing runs through the one
-	// interactive player.
+	// at the project root, turn tiling on so Split creates real tiled panes, then
+	// build the layout from the compiled body. The seed, the EnableTiling, and the
+	// body run as one command list through the interactive player, which spaces
+	// them across ticks so the daemon's asynchronous window creation keeps up.
 	m.AddWindow("")
-	seeded := seedPrefix(dir) + body
-	m.startTapePlayback(seeded, header.Workspace)
+	cmds := seedCommands(dir)
+	cmds = append(cmds, tape.Command{Type: tape.CommandTypeEnableTiling})
+	cmds = append(cmds, compileProjectBody(body)...)
+	m.startTapePlayback(cmds, header.Workspace)
 	m.ShowNotification("Building project session "+name, "info", config.NotificationDuration)
 }
 
-// startTapePlayback parses body and starts the interactive tape player, exactly
-// like the tape manager does for a saved tape. workspace, when non-zero, is the
-// workspace to build in.
-func (m *OS) startTapePlayback(body string, workspace int) {
-	if strings.TrimSpace(body) == "" {
+// startTapePlayback starts the interactive tape player over an already-compiled
+// command list. workspace, when non-zero, is the workspace to build in.
+func (m *OS) startTapePlayback(commands []tape.Command, workspace int) {
+	if len(commands) == 0 {
 		return
 	}
 	if workspace > 0 && workspace <= m.NumWorkspaces {
 		m.SwitchToWorkspace(workspace)
 	}
-
-	lexer := tape.New(body)
-	parser := tape.NewParser(lexer)
-	commands := parser.Parse()
 
 	player := tape.NewPlayer(commands)
 	m.ScriptPlayer = player
@@ -131,19 +177,16 @@ func (m *OS) startTapePlayback(body string, workspace int) {
 	m.ScriptExecutor = tape.NewCommandExecutor(m)
 }
 
-// seedPrefix builds the leading tape fragment that gives an asynchronously
-// created session window time to appear and puts its shell at the project root,
-// so a session-scoped tape starts from a known, deterministic state.
-func seedPrefix(dir string) string {
-	var b strings.Builder
-	b.WriteString("Sleep ")
-	b.WriteString(tapeSeedSettle.String())
-	b.WriteString("\n")
-	b.WriteString("Type ")
-	b.WriteString(quoteTapeString("cd " + shellSingleQuote(dir)))
-	b.WriteString(" Enter\n")
-	b.WriteString("Sleep 150ms\n")
-	return b.String()
+// seedCommands builds the leading commands that give an asynchronously created
+// session window time to appear and put its shell at the project root, so a
+// session-scoped tape starts from a known, deterministic state.
+func seedCommands(dir string) []tape.Command {
+	return []tape.Command{
+		{Type: tape.CommandTypeSleep, Delay: tapeSeedSettle},
+		{Type: tape.CommandTypeType, Args: []string{"cd " + shellSingleQuote(dir)}},
+		{Type: tape.CommandTypeEnter},
+		{Type: tape.CommandTypeSleep, Delay: 200 * time.Millisecond},
+	}
 }
 
 // sessionExists reports whether a daemon session with the given name is present.
@@ -196,14 +239,6 @@ func sanitizeSessionName(s string) string {
 // so it survives as one argument when typed into a POSIX shell.
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-// quoteTapeString renders s as a double-quoted tape string literal for the Type
-// command, escaping backslashes and double quotes.
-func quoteTapeString(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	return `"` + s + `"`
 }
 
 // reCheckTape re-reads and re-classifies the tape at path through the trust
