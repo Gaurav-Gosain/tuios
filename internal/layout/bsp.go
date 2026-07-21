@@ -418,9 +418,9 @@ func (t *BSPTree) ApplyLayoutInto(bounds Rect, result map[int]Rect) map[int]Rect
 		return result
 	}
 	t.applyLayoutRecursive(t.Root, bounds, result)
-	// Keep leaves that were grown to the minimum size within the root bounds, so
-	// a terminal too small to fit every pane pushes tiles back on-screen instead
-	// of off the edge.
+	// Safety net: keep every laid-out rectangle inside the root bounds. The
+	// recursive partition already stays within bounds, so this is a no-op in the
+	// normal case; it only bites if a future change lets a rectangle escape.
 	for id, r := range result {
 		r.X = max(bounds.X, min(r.X, bounds.X+bounds.W-r.W))
 		r.Y = max(bounds.Y, min(r.Y, bounds.Y+bounds.H-r.H))
@@ -436,16 +436,13 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 
 	// Leaf node - this is a window
 	if node.IsLeaf() {
-		// Enforce minimum sizes
-		w := bounds.W
-		h := bounds.H
-		if w < config.DefaultWindowWidth {
-			w = config.DefaultWindowWidth
-		}
-		if h < config.DefaultWindowHeight {
-			h = config.DefaultWindowHeight
-		}
-		result[node.WindowID] = Rect{X: bounds.X, Y: bounds.Y, W: w, H: h}
+		// A leaf occupies exactly the rectangle the tree partitioned for it.
+		// Growing it to a fixed minimum instead pushed it past that rectangle and
+		// into its sibling's space, so a workspace holding more panes than fit at
+		// the default size rendered them overlapping rather than simply smaller.
+		// Tiling never overlaps: when space runs short the panes shrink. Floor at
+		// one cell so a degenerate split cannot yield a zero- or negative-size box.
+		result[node.WindowID] = Rect{X: bounds.X, Y: bounds.Y, W: max(bounds.W, 1), H: max(bounds.H, 1)}
 		return
 	}
 

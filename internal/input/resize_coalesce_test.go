@@ -205,9 +205,15 @@ func TestSharedBorderMotionCostDoesNotScaleWithWindowCount(t *testing.T) {
 	}
 
 	small, large := motionAllocs(4), motionAllocs(9)
-	// Slack for anything genuinely proportional to window count in the geometry
-	// adjust itself. The regression this catches more than quadrupled the count.
-	if large > small+4 {
+	// Slack for the honest per-window work a drag does: each pane whose size
+	// crosses a cell boundary this motion reflows its emulator, and a crowded
+	// workspace has more of them, so the geometry adjust is mildly proportional to
+	// window count by design. It grew when BSP tiles stopped being inflated to a
+	// fixed minimum: the smallest panes now hold their true size and reflow with
+	// the drag instead of sitting pinned (and overlapping). The regression this
+	// still catches is the whole-tree ratio sync running per motion, which more
+	// than quadrupled the count.
+	if large > small+8 {
 		t.Fatalf("motion event allocated %v times at 9 windows against %v at 4; "+
 			"per-event work is scaling with window count again", large, small)
 	}
