@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -112,9 +113,12 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette) (
 
 	isBool := item.Control == controlBool
 	var control string
-	if isBool {
+	switch item.Control {
+	case controlBool:
 		control = overlay.Toggle(item.boolVal(m), selected, bg, pal)
-	} else {
+	case controlString:
+		control = m.settingsStringControl(item, selected, bg, pal)
+	default:
 		control = overlay.Cycler(item.value(m), selected, bg, pal)
 	}
 
@@ -127,4 +131,42 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette) (
 
 	gap := max(settingsInnerWidth-lipgloss.Width(left)-lipgloss.Width(control), 1)
 	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + control, control, isBool
+}
+
+// settingsStringControl renders a free-text setting as a bracketed field. An
+// empty value shows the placeholder greyed out; while the row is being edited it
+// shows the live buffer with a trailing cursor.
+func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Color, pal overlay.Palette) string {
+	editing := m.SettingsEditing && selected
+	val := item.value(m)
+	if editing {
+		val = m.SettingsEditBuffer
+	}
+
+	fg := pal.Fg
+	if !selected {
+		fg = pal.FgDim
+	}
+	text := val
+	if val == "" && !editing {
+		text = item.Placeholder
+		fg = pal.FgMute
+	}
+	text = overlay.Truncate(text, 30)
+	if editing {
+		cursor := "▏"
+		if overlay.ASCII {
+			cursor = "_"
+		}
+		text += cursor
+	}
+
+	bracketColor := pal.FgMute
+	if selected {
+		bracketColor = pal.AccentBright
+	}
+	bracket := overlay.Style(bg).Foreground(bracketColor)
+	return bracket.Render("[ ") +
+		overlay.Style(bg).Foreground(fg).Render(text) +
+		bracket.Render(" ]")
 }
