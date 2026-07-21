@@ -334,10 +334,12 @@ type OS struct {
 	LayoutSaveBuffer          string // Buffer for layout name when saving
 
 	// Settings overlay state.
-	ShowSettings     bool
-	SettingsCategory int // active settings category (tab) index
-	SettingsSelected int // selected row within the active category
-	SettingsScroll   int // scroll offset within the active category
+	ShowSettings       bool
+	SettingsCategory   int    // active settings category (tab) index
+	SettingsSelected   int    // selected row within the active category
+	SettingsScroll     int    // scroll offset within the active category
+	SettingsEditing    bool   // true while a text setting is being edited inline
+	SettingsEditBuffer string // in-progress text for the setting being edited
 
 	// Theme picker overlay state.
 	ShowThemePicker     bool
