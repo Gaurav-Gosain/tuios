@@ -54,6 +54,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 	case "tape":
 		return []Keybinding{
 			{"m", "Open tape manager"},
+			{"t", "Review project tape"},
 			{"r", "Start recording"},
 			{"s", "Stop recording"},
 			{"Esc", "Cancel"},
@@ -332,6 +333,7 @@ func getStaticHelpSections() []KeybindingSection {
 			Title: "TAPE PREFIX (Ctrl+B, T):",
 			Bindings: []Keybinding{
 				{"m", "Open tape manager"},
+				{"t", "Review project tape"},
 				{"r", "Start recording"},
 				{"s", "Stop recording"},
 			},

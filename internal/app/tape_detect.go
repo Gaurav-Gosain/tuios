@@ -139,6 +139,13 @@ func (m *OS) onCwdChange(msg CwdChangedMsg) tea.Cmd {
 		return nil
 	}
 
+	// Suppression during playback: while any tape is executing, the trigger
+	// pipeline is disabled entirely, so a tape whose scripted shell cd's onward
+	// cannot chain another run.
+	if m.ScriptMode {
+		return nil
+	}
+
 	// Focused window only: a background window changing directory (a build
 	// script, a watcher) never triggers detection.
 	focused := m.GetFocusedWindow()
@@ -258,6 +265,20 @@ func (m *OS) evaluateTapeDir(dir string) {
 	// Reflect the current location in the dock badge on every evaluation.
 	m.tapeDetect.indicator = tapeIndicator{active: true, status: res.Status, dir: dir}
 
+	// Auto mode: a trusted, unedited tape runs automatically. Untrusted or
+	// changed tapes never auto-run; they fall through to the passive indicator
+	// and the review dialog exactly as in ask mode. The destination root is
+	// marked handled before playback starts so an autorun can never chain.
+	if m.tapeAutorunMode() == config.TapeAutorunAuto && res.Status == trust.StatusTrusted {
+		if m.tapeDetect.handled[dir] {
+			return
+		}
+		m.tapeDetect.handled[dir] = true
+		m.ShowNotification("Running trusted project tape", "info", 2*time.Second)
+		m.runProjectTape(res.Content, dir)
+		return
+	}
+
 	// One banner per directory per run.
 	if m.tapeDetect.handled[dir] {
 		return
@@ -269,15 +290,18 @@ func (m *OS) evaluateTapeDir(dir string) {
 }
 
 // tapeBanner returns the passive banner text and notification type for a check
-// result. It is deliberately informational: stage 1 has no review dialog and no
-// run action, so the banner states what was found and its trust status, and
-// nothing more.
+// result. It is informational and never steals focus: it states what was found,
+// its trust status, and how to act on it (open the review dialog). Nothing runs
+// from the banner.
 func tapeBanner(res trust.Result) (string, string) {
+	// The tape prefix chord that opens the review dialog. The leader is
+	// configurable, so read it rather than hard-coding ctrl+b.
+	hint := config.LeaderKey + " T t"
 	switch res.Status {
 	case trust.StatusTrusted:
-		return "Project tape found (trusted)", "info"
+		return "Project tape ready (trusted). Press " + hint + " to run.", "info"
 	case trust.StatusUntrusted:
-		return "Project tape found (untrusted)", "info"
+		return "Project tape found (untrusted). Press " + hint + " to review.", "info"
 	case trust.StatusIneligible:
 		reason := res.Reason
 		if reason == "" {
@@ -285,7 +309,7 @@ func tapeBanner(res trust.Result) (string, string) {
 		}
 		return "Project tape ignored: " + reason, "warning"
 	default:
-		return "Project tape found", "info"
+		return "Project tape found. Press " + hint + " to review.", "info"
 	}
 }
 

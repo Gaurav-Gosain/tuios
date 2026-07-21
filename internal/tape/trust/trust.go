@@ -352,6 +352,20 @@ func (s *Store) Forget(path string) error {
 	return err
 }
 
+// TrustedHash returns the stored trusted hash for a canonical path and whether
+// one exists. It lets a caller tell a never-seen tape apart from one that was
+// trusted and has since been edited (a stored hash that no longer matches),
+// which the review dialog flags as "changed since you trusted it".
+func (s *Store) TrustedHash(path string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.trusted[path]
+	if !ok {
+		return "", false
+	}
+	return e.SHA256, true
+}
+
 // save persists the store, taking the lock.
 func (s *Store) save() error {
 	s.mu.Lock()

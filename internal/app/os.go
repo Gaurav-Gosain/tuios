@@ -302,6 +302,11 @@ type OS struct {
 	// memory of handled directories, debounce bookkeeping, and the current
 	// passive indicator). See tape_detect.go.
 	tapeDetect tapeDetectState
+	// ShowTapeReview is true when the project-tape review/trust dialog is open.
+	// TapeReview holds its state (path, trust status, reviewed content, header).
+	// See tape_review.go.
+	ShowTapeReview bool
+	TapeReview     *TapeReviewState
 	// TerminalModeEnteredAt tracks when we last switched to TerminalMode.
 	// Used to suppress misparsed mouse-sequence fragments (phantom keypresses)
 	// during the AllMotion→CellMotion transition window.

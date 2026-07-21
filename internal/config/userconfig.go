@@ -29,13 +29,15 @@ type UserConfig struct {
 //   - "ask":  detection on; an encountered tape surfaces a passive indicator
 //     (a dock badge and a non-focus-stealing notification) showing its trust
 //     status. Nothing runs without the user's explicit action.
-//   - "auto": trusted, unedited tapes are meant to run automatically on entry;
-//     untrusted or changed tapes fall back to the "ask" behavior.
+//   - "auto": a trusted, unedited tape runs automatically on entry; an untrusted
+//     or changed tape falls back to the "ask" behavior and never auto-runs.
 //
-// Execution is not implemented yet: it arrives in a later stage. In this stage
-// "ask" and "auto" behave identically (indicator only, no execution), and
-// nothing runs in either mode. The default is "ask", which is safe by
-// construction because it only shows an indicator.
+// In "ask" the passive indicator plus the review dialog (leader T t, or the
+// command palette) are the only path to running a tape; nothing executes without
+// the user opening the dialog and choosing Run. "auto" is the only mode that
+// runs anything without a keypress, and only content the user already read and
+// trusted. The default is "ask", which is safe by construction. A tape edited
+// since it was trusted reverts to untrusted (hash mismatch) and re-prompts.
 type TapeConfig struct {
 	Autorun string `toml:"autorun"` // off | ask | auto (default: ask)
 }
@@ -272,6 +274,7 @@ func DefaultConfig() *UserConfig {
 			},
 			TapePrefix: map[string][]string{
 				"tape_prefix_manager": {"m"},
+				"tape_prefix_review":  {"t"},
 				"tape_prefix_record":  {"r"},
 				"tape_prefix_stop":    {"s"},
 				"tape_prefix_cancel":  {"esc"},
