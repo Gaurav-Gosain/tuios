@@ -397,6 +397,40 @@ func (m *OS) AddWindow(name string) *OS {
 	return m
 }
 
+// applyStartupPreferences runs the one-shot [startup] settings once the real
+// terminal size is known (on the first WindowSizeMsg). It opens a default
+// terminal window and/or enables tiling, but only for a fresh, empty session:
+// attaching to a session that already has windows restores that session's own
+// layout from daemon state, and forcing a window or a tiling mode on top of it
+// would silently override the user's saved session.
+func (m *OS) applyStartupPreferences() {
+	if m.UserConfig == nil {
+		return
+	}
+	if len(m.Windows) > 0 {
+		return
+	}
+
+	s := m.UserConfig.Startup
+
+	// Enable tiling first, through the manual toggle path (the `t` key). Going
+	// through ToggleAutoTiling is deliberate: it builds the BSP tree, applies the
+	// layout, and syncs the tiling state to the daemon rather than only flipping a
+	// local flag. Doing it before the window is opened matters in a daemon
+	// session: the daemon owns window creation and only tiles the window it
+	// creates when the session's AutoTiling is already on, so the flag has to
+	// reach the daemon before the NewWindow request does.
+	if s.Tiled && !m.AutoTiling {
+		m.ToggleAutoTiling()
+	}
+
+	// Open the first window through the same path the `n` key uses, so it is
+	// created, focused and (with tiling now on) tiled exactly like a manual one.
+	if s.OpenDefaultWindow {
+		m.AddWindow("")
+	}
+}
+
 // UpdateAllWindowThemes updates the terminal colors for all windows when the theme changes
 func (m *OS) UpdateAllWindowThemes() {
 	m.LogInfo("Updating terminal colors for all windows after theme change")

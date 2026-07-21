@@ -17,7 +17,16 @@ type UserConfig struct {
 	Appearance  AppearanceConfig  `toml:"appearance"`
 	Keybindings KeybindingsConfig `toml:"keybindings"`
 	Daemon      DaemonConfig      `toml:"daemon"`
+	Startup     StartupConfig     `toml:"startup"`
 	Hooks       HooksConfig       `toml:"hooks"`
+}
+
+// StartupConfig holds settings that only take effect when a session starts.
+// Both default to false so a fresh install behaves exactly as before: the
+// session comes up empty and floating, and the user opens the first window.
+type StartupConfig struct {
+	OpenDefaultWindow bool `toml:"open_default_window"` // Open one terminal window automatically when a session starts with none (default: false)
+	Tiled             bool `toml:"tiled"`               // Start a new session with tiling enabled instead of floating (default: false)
 }
 
 // DaemonConfig holds daemon-related settings
@@ -93,6 +102,10 @@ func DefaultConfig() *UserConfig {
 			LogLevel:     "off",
 			DefaultCodec: "gob",
 			SocketPath:   "", // Empty means use default XDG path
+		},
+		Startup: StartupConfig{
+			OpenDefaultWindow: false,
+			Tiled:             false,
 		},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",

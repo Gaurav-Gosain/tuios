@@ -362,6 +362,11 @@ type OS struct {
 	// it in place and persists it so live changes survive a restart. May be
 	// nil if the config failed to load at startup.
 	UserConfig *config.UserConfig
+
+	// startupApplied guards the one-shot startup preferences (open a default
+	// window, start tiled) so they run only on the first WindowSizeMsg, once
+	// the real terminal dimensions are known, and never again.
+	startupApplied bool
 }
 
 // Notification represents a temporary notification message.
