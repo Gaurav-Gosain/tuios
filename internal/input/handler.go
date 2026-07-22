@@ -204,6 +204,15 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// never reach the shell, so tapes replayed garbage. WM-mode actions are
 	// recorded at dispatch time.
 
+	// Handle the project-tape review/trust dialog (modal, highest priority after
+	// quit): it must swallow keys so a keystroke meant for the dialog never leaks
+	// to the shell or a window-manager binding.
+	if o.ShowTapeReview {
+		if o.HandleTapeReviewInput(msg.String()) {
+			return o, nil
+		}
+	}
+
 	// Handle tape manager overlay (high priority - intercepts keys when shown)
 	if o.ShowTapeManager {
 		if o.HandleTapeManagerInput(msg.String()) {

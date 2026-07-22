@@ -586,6 +586,24 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Tape: Review Project Tape",
+			Shortcut: "prefix+T t",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenTapeReview()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Open Tape Manager",
+			Shortcut: "prefix+T m",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ToggleTapeManager()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Enter Copy Mode",
 			Shortcut: "prefix+[",
 			Category: "Session",
