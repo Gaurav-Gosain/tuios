@@ -16,6 +16,51 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
+// scriptDoneLinger is how long the "DONE" completion indicator stays on screen
+// after a tape script finishes. Once it elapses, script mode is left entirely
+// (see maybeExitFinishedScript). It matches the auto-hide window used by the
+// script indicator renderer.
+const scriptDoneLinger = 2 * time.Second
+
+// maybeExitFinishedScript leaves script mode once a finished tape's completion
+// indicator has been shown for scriptDoneLinger. This is what re-arms Ctrl+P:
+// while ScriptMode is set, Ctrl+P is intercepted for script pause/resume
+// (internal/input/handler.go) and never reaches the command palette. Neither the
+// local playback finish path nor the remote-exec done path cleared ScriptMode,
+// so after any in-session tape ran, Ctrl+P silently toggled pause forever
+// instead of opening the palette. Resetting here, keyed off ScriptFinishedTime,
+// covers both the local (ScriptPlayer) and remote (RemoteScript*) paths because
+// both stamp ScriptFinishedTime on completion.
+//
+// It returns true when it actually left script mode, so the caller can force a
+// render to clear the indicator.
+func (m *OS) maybeExitFinishedScript() bool {
+	if !m.ScriptMode || m.ScriptFinishedTime.IsZero() {
+		return false
+	}
+	if time.Since(m.ScriptFinishedTime) < scriptDoneLinger {
+		return false
+	}
+	m.exitScriptMode()
+	return true
+}
+
+// exitScriptMode clears all tape-playback state so the session behaves as if no
+// script were running: notably, the Ctrl+P pause/resume intercept is disabled
+// and the command palette binding works again.
+func (m *OS) exitScriptMode() {
+	m.ScriptMode = false
+	m.ScriptPaused = false
+	m.ScriptPlayer = nil
+	m.ScriptExecutor = nil
+	m.ScriptSleepUntil = time.Time{}
+	m.ScriptFinishedTime = time.Time{}
+	m.ScriptWaitRegex = nil
+	m.ScriptWaitDeadline = time.Time{}
+	m.RemoteScriptIndex = 0
+	m.RemoteScriptTotal = 0
+}
+
 // The following methods implement the tape.Executor interface for
 // scripted automation and tape playback functionality.
 

@@ -324,7 +324,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	showScriptIndicator := true
 	if m.ScriptMode && !m.ScriptFinishedTime.IsZero() {
 		elapsed := time.Since(m.ScriptFinishedTime)
-		if elapsed > 2*time.Second {
+		if elapsed > scriptDoneLinger {
 			showScriptIndicator = false
 		}
 	}
