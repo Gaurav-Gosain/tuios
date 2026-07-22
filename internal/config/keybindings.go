@@ -48,7 +48,6 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"l", "Toggle log viewer"},
 			{"c", "Toggle cache statistics"},
 			{"k", "Toggle showkeys overlay"},
-			{"e", "Toggle key events overlay"},
 			{"a", "Toggle animations"},
 			{"Esc", "Cancel"},
 		}
