@@ -279,6 +279,15 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if (config.ShowClock && !config.HideClock) || (m.TapeRecorder != nil && m.TapeRecorder.IsRecording()) {
 		return nil, false
 	}
+	// The showkeys keycast is a compositor overlay (renderOverlays), which the
+	// fast path skips entirely. A lone fullscreen window is the common terminal-mode
+	// case, so without this a keypress captured into RecentKeys would never be drawn
+	// until an unrelated redraw disqualified the fast path, which is the keycast lag.
+	// Only fall back while there are keys to show; an empty history draws nothing, so
+	// the fast path stays eligible when the overlay is idle.
+	if m.ShowKeys && len(m.RecentKeys) > 0 {
+		return nil, false
+	}
 	if config.SharedBorders && m.AutoTiling && !m.UseScrollingLayout {
 		return nil, false
 	}
