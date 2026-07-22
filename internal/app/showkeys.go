@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -61,6 +62,121 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	if len(m.RecentKeys) > m.KeyHistoryMaxSize {
 		m.RecentKeys = m.RecentKeys[1:]
 	}
+}
+
+// keyEventLogMaxSize caps the key-events diagnostic ring buffer. Enough to see a
+// short chord sequence without the overlay dominating the screen or the capture
+// path allocating unboundedly.
+const keyEventLogMaxSize = 12
+
+// CaptureKeyEventDiagnostic records the decoded key event for the key-events
+// diagnostic overlay. It is called at the very top of the input path, before any
+// handler can consume the key, so it reports exactly what the terminal delivered
+// regardless of mode. It only observes; it never mutates the event or the model
+// beyond appending to the ring buffer.
+func (m *OS) CaptureKeyEventDiagnostic(msg tea.KeyPressMsg) {
+	rec := KeyEventRecord{
+		String: msg.String(),
+		Code:   msg.Code,
+		Mod:    int(msg.Mod),
+		Text:   msg.Text,
+		Count:  1,
+		Time:   time.Now(),
+	}
+
+	// Collapse an immediate repeat of the same decoded event into a count, so
+	// holding a key does not scroll the whole history off screen in one frame.
+	if n := len(m.KeyEventLog); n > 0 {
+		last := m.KeyEventLog[n-1]
+		if last.String == rec.String && last.Code == rec.Code &&
+			last.Mod == rec.Mod && last.Text == rec.Text {
+			m.KeyEventLog[n-1].Count++
+			m.KeyEventLog[n-1].Time = rec.Time
+			return
+		}
+	}
+
+	m.KeyEventLog = append(m.KeyEventLog, rec)
+	if len(m.KeyEventLog) > keyEventLogMaxSize {
+		m.KeyEventLog = m.KeyEventLog[len(m.KeyEventLog)-keyEventLogMaxSize:]
+	}
+}
+
+// decodeKeyMods renders a tea.KeyMod bitmask as a compact "+"-joined list of the
+// modifier names that are set, or "-" when none are. The lock modifiers are
+// included because they are exactly the bits that made an exact-equality
+// Ctrl+P match fail, so a diagnostic that hides them would hide the bug.
+func decodeKeyMods(mod int) string {
+	km := tea.KeyMod(mod)
+	var parts []string
+	for _, m := range []struct {
+		bit  tea.KeyMod
+		name string
+	}{
+		{tea.ModCtrl, "Ctrl"},
+		{tea.ModAlt, "Alt"},
+		{tea.ModShift, "Shift"},
+		{tea.ModSuper, "Super"},
+		{tea.ModMeta, "Meta"},
+		{tea.ModHyper, "Hyper"},
+		{tea.ModCapsLock, "Caps"},
+		{tea.ModNumLock, "Num"},
+	} {
+		if km&m.bit != 0 {
+			parts = append(parts, m.name)
+		}
+	}
+	if len(parts) == 0 {
+		return "-"
+	}
+	return strings.Join(parts, "+")
+}
+
+// keyEventCodeField formats a decoded key code as its number plus, when the code
+// is a printable rune, that rune in quotes: `112 'p'`. Non-printable codes show
+// the number alone so control bytes and special keys stay unambiguous.
+func keyEventCodeField(code rune) string {
+	if code == 0 {
+		return "0"
+	}
+	if unicode.IsPrint(code) && code != ' ' {
+		return fmt.Sprintf("%d %q", code, string(code))
+	}
+	return fmt.Sprintf("%d", code)
+}
+
+// renderKeyEvents renders the key-events diagnostic overlay: a compact bordered
+// panel listing the last several decoded key events, newest at the bottom. It is
+// deliberately plain (aligned columns, no expiry) so it reads as a debug tool.
+func (m *OS) renderKeyEvents() string {
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#f9e2af"))
+	rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#cdd6f4"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086"))
+
+	lines := []string{titleStyle.Render("Key events")}
+	if len(m.KeyEventLog) == 0 {
+		lines = append(lines, dimStyle.Render("press a key..."))
+	}
+	for _, rec := range m.KeyEventLog {
+		text := rec.Text
+		if text == "" {
+			text = "-"
+		}
+		row := fmt.Sprintf("%-14s code=%-8s mod=%-14s text=%q",
+			rec.String, keyEventCodeField(rec.Code), decodeKeyMods(rec.Mod), text)
+		if rec.Count > 1 {
+			row += fmt.Sprintf(" x%d", rec.Count)
+		}
+		lines = append(lines, rowStyle.Render(row))
+	}
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#f9e2af")).
+		Background(lipgloss.Color("#11111b")).
+		Padding(0, 1)
+
+	return box.Render(strings.Join(lines, "\n"))
 }
 
 // isSingleLetter checks if a key string is a single letter (for shift detection)

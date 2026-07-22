@@ -32,6 +32,12 @@ func TestIsCtrlPAcrossEncodings(t *testing.T) {
 		"kitty associated text":     []byte("\x1b[112;5;112u"),
 		"kitty alternate/base keys": []byte("\x1b[112::80;5u"),
 		"modifyOtherKeys level 2":   []byte("\x1b[27;5;112~"),
+		// Lock modifiers ride along in the Kitty modifier field and stay on the
+		// decoded event. Num Lock (mod 133) is the boot default on most desktop
+		// keyboards, so this case is the owner's real-world failure: an exact
+		// Mod == ModCtrl check missed it and the palette never opened.
+		"kitty ctrl+capslock": []byte("\x1b[112;69u"),
+		"kitty ctrl+numlock":  []byte("\x1b[112;133u"),
 	}
 	for name, raw := range cases {
 		msg := decodeKey(t, raw)
@@ -46,10 +52,12 @@ func TestIsCtrlPAcrossEncodings(t *testing.T) {
 // typing into the shell is not swallowed by the palette intercept.
 func TestIsCtrlPRejectsBareP(t *testing.T) {
 	for name, raw := range map[string][]byte{
-		"bare p":  []byte("p"),
-		"alt+p":   []byte("\x1bp"),
-		"bare P":  []byte("P"),
-		"ctrl+o":  {0x0f},
+		"bare p":             []byte("p"),
+		"alt+p":              []byte("\x1bp"),
+		"bare P":             []byte("P"),
+		"ctrl+o":             {0x0f},
+		"kitty ctrl+shift+p": []byte("\x1b[112;6u"),
+		"kitty ctrl+alt+p":   []byte("\x1b[112;7u"),
 	} {
 		msg := decodeKey(t, raw)
 		if isCtrlP(msg) {

@@ -151,6 +151,14 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CaptureKeyEvent(msg)
 	}
 
+	// Capture the raw decoded key event for the diagnostic overlay. This is the
+	// earliest shared point in the input path, before any mode routing or handler
+	// can consume the key, so the overlay shows exactly what the terminal
+	// delivered in both window-management and terminal mode. It only observes.
+	if o.ShowKeyEvents {
+		o.CaptureKeyEventDiagnostic(msg)
+	}
+
 	// Handle quit confirmation dialog (highest priority - works in any mode)
 	if o.ShowQuitConfirm {
 		key := msg.String()

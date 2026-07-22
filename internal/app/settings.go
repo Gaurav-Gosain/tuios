@@ -148,6 +148,24 @@ func (m *OS) setTape(fn func(t *config.TapeConfig)) {
 	}
 }
 
+// setDebug runs fn against the held config's [debug] section when a config is
+// present, so a change to a diagnostic toggle can be persisted.
+func (m *OS) setDebug(fn func(d *config.DebugConfig)) {
+	if m.UserConfig != nil {
+		fn(&m.UserConfig.Debug)
+	}
+}
+
+// ToggleKeyEventsOverlay flips the key-events diagnostic overlay, mirrors the new
+// state into the persisted [debug] config, and saves it. Shared by the settings
+// toggle, the command-palette entry, and the keybinding so all three stay in
+// sync and survive a restart.
+func (m *OS) ToggleKeyEventsOverlay() {
+	m.ShowKeyEvents = !m.ShowKeyEvents
+	m.setDebug(func(d *config.DebugConfig) { d.ShowKeyEvents = m.ShowKeyEvents })
+	m.persistSettings()
+}
+
 // tapeAutorunConfigValue returns the configured [tape] autorun mode (not the
 // TUIOS_TAPE_AUTORUN env override), for the settings row.
 func (m *OS) tapeAutorunConfigValue() string {
@@ -156,6 +174,7 @@ func (m *OS) tapeAutorunConfigValue() string {
 	}
 	return config.TapeAutorunAsk
 }
+
 const themeNone = "none"
 
 var (
@@ -455,6 +474,12 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v int) {
 					config.ZoomMaxWidth = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.ZoomMaxWidth = v })
+				}),
+			boolItem("Key events overlay", "Show decoded key events on screen to diagnose input (both modes)",
+				func() bool { return m.ShowKeyEvents },
+				func(m *OS, v bool) {
+					m.ShowKeyEvents = v
+					m.setDebug(func(d *config.DebugConfig) { d.ShowKeyEvents = v })
 				}),
 		},
 	}

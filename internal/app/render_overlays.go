@@ -648,6 +648,20 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, searchLayer)
 	}
 
+	if m.ShowKeyEvents {
+		keyEventsContent := m.renderKeyEvents()
+		zIndex := config.ZIndexNotifications + 2
+		if m.ShowHelp {
+			zIndex = config.ZIndexHelp + 2
+		}
+		keyEventsLayer := lipgloss.NewLayer(keyEventsContent).
+			X(1).
+			Y(1).
+			Z(zIndex).
+			ID("key-events")
+		layers = append(layers, keyEventsLayer)
+	}
+
 	if m.ShowKeys && len(m.RecentKeys) > 0 {
 		m.CleanupExpiredKeys(3 * time.Second)
 		if len(m.RecentKeys) > 0 {
