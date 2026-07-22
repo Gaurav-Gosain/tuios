@@ -292,6 +292,21 @@ type OS struct {
 	// The bubbletea Update loop drains this and calls ShowNotification, mirroring the
 	// PendingClipboardSet path.
 	PendingNotification chan NotificationMsg
+	// PendingCwdChange receives OSC 7 working-directory changes from windows'
+	// PTY goroutines. The bubbletea Update loop drains it and, for the focused
+	// window only, checks whether the new directory carries a .tuios.tape. This
+	// is the detection half of the project-tape feature; it never executes
+	// anything, it only stats, reads to hash, and surfaces a passive indicator.
+	PendingCwdChange chan CwdChangedMsg
+	// tapeDetect holds the project-tape detection state (trust store, session
+	// memory of handled directories, debounce bookkeeping, and the current
+	// passive indicator). See tape_detect.go.
+	tapeDetect tapeDetectState
+	// ShowTapeReview is true when the project-tape review/trust dialog is open.
+	// TapeReview holds its state (path, trust status, reviewed content, header).
+	// See tape_review.go.
+	ShowTapeReview bool
+	TapeReview     *TapeReviewState
 	// TerminalModeEnteredAt tracks when we last switched to TerminalMode.
 	// Used to suppress misparsed mouse-sequence fragments (phantom keypresses)
 	// during the AllMotion→CellMotion transition window.
@@ -334,10 +349,12 @@ type OS struct {
 	LayoutSaveBuffer          string // Buffer for layout name when saving
 
 	// Settings overlay state.
-	ShowSettings     bool
-	SettingsCategory int // active settings category (tab) index
-	SettingsSelected int // selected row within the active category
-	SettingsScroll   int // scroll offset within the active category
+	ShowSettings       bool
+	SettingsCategory   int    // active settings category (tab) index
+	SettingsSelected   int    // selected row within the active category
+	SettingsScroll     int    // scroll offset within the active category
+	SettingsEditing    bool   // true while a text setting is being edited inline
+	SettingsEditBuffer string // in-progress text for the setting being edited
 
 	// Theme picker overlay state.
 	ShowThemePicker     bool
@@ -362,6 +379,18 @@ type OS struct {
 	// it in place and persists it so live changes survive a restart. May be
 	// nil if the config failed to load at startup.
 	UserConfig *config.UserConfig
+
+	// startupApplied guards the one-shot startup preferences (open a default
+	// window, start tiled) so they run only on the first WindowSizeMsg, once
+	// the real terminal dimensions are known, and never again.
+	startupApplied bool
+
+	// pendingStartTerminalMode records that the start_in_terminal_mode startup
+	// preference still needs to be applied but had no window to focus yet. In a
+	// daemon session the default window is created asynchronously, so entry into
+	// terminal mode is deferred until that window materializes through a state
+	// sync and can be focused.
+	pendingStartTerminalMode bool
 }
 
 // Notification represents a temporary notification message.

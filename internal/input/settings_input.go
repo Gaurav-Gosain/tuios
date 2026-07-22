@@ -8,6 +8,9 @@ import (
 // handleSettingsInput handles keyboard input while the settings overlay is open.
 // Changes apply live and are persisted by the OS as they are made.
 func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SettingsEditActive() {
+		return handleSettingsEditInput(msg, o)
+	}
 	switch msg.String() {
 	case "esc", "q", "ctrl+c":
 		o.CloseSettings()
@@ -25,6 +28,29 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SettingsNextCategory()
 	case "shift+tab", "[":
 		o.SettingsPrevCategory()
+	}
+	return o, nil
+}
+
+// handleSettingsEditInput handles keystrokes while a text setting is being
+// edited inline. Enter commits, Esc cancels, and printable input is appended to
+// the buffer.
+func handleSettingsEditInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		o.SettingsEditCancel()
+	case "enter":
+		o.SettingsEditCommit()
+	case "backspace":
+		o.SettingsEditBackspace()
+	case "ctrl+u":
+		o.SettingsEditClear()
+	default:
+		if msg.String() == "space" {
+			o.SettingsEditAppend(" ")
+		} else if msg.Text != "" {
+			o.SettingsEditAppend(msg.Text)
+		}
 	}
 	return o, nil
 }

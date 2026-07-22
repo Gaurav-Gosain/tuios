@@ -292,8 +292,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	keyStr := msg.String()
 
-	// Command palette: ctrl+p (configurable, intercepted before terminal forwarding)
-	if keyStr == "ctrl+p" {
+	// Command palette: ctrl+p (intercepted before terminal forwarding). Matched
+	// on the decoded key event, not msg.String(), so it fires under the legacy
+	// control byte and under every Kitty keyboard encoding (see isCtrlP).
+	if isCtrlP(msg) {
 		o.ShowCommandPalette = true
 		o.CommandPaletteQuery = ""
 		o.CommandPaletteSelected = 0

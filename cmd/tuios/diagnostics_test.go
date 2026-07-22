@@ -316,7 +316,7 @@ func TestReportSessionExitDistinguishesTheOutcomes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := reportSessionExit("work", tc.reason)
+			err := reportSessionExit("work", tc.reason, false)
 
 			if !tc.wantError {
 				if err != nil {

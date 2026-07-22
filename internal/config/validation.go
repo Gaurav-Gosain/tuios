@@ -98,6 +98,9 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	// Validate enum appearance options (warn on unknown values; they fall back to defaults)
 	validateAppearanceEnums(cfg, result)
 
+	// Validate the tape section (warn on an unknown autorun mode)
+	validateTapeConfig(cfg, result)
+
 	// Check for keybinding conflicts (same key bound to multiple actions)
 	conflicts := findConflicts(cfg, normalizer)
 	for key, actions := range conflicts {
@@ -160,6 +163,21 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	}
 
 	return result
+}
+
+// validateTapeConfig warns when tape.autorun holds a value outside its allowed
+// set. An unknown value silently falls back to the safe default ("ask"), so a
+// typo would otherwise go unnoticed. An empty value is left to the default.
+func validateTapeConfig(cfg *UserConfig, result *ValidationResult) {
+	value := cfg.Tape.Autorun
+	if value == "" || slices.Contains(TapeAutorunModes, value) {
+		return
+	}
+	result.Warnings = append(result.Warnings, ValidationError{
+		Field:   "tape",
+		Key:     "autorun",
+		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to default", value, strings.Join(TapeAutorunModes, ", ")),
+	})
 }
 
 // validateAppearanceEnums warns when an enum appearance option holds a value

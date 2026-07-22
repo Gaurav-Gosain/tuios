@@ -187,6 +187,12 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	switch kind {
 	case "settings":
 		m.SettingsSelected = row.Idx
+		items := m.settingsCurrentItems()
+		if row.Idx < len(items) && items[row.Idx].Control == controlString {
+			// A click anywhere on a text row opens its inline editor.
+			m.SettingsBeginEdit()
+			break
+		}
 		switch {
 		case !row.Dec.Empty() && row.Dec.Contains(lx, ly):
 			m.SettingsAdjust(-1)

@@ -171,6 +171,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, m.centeredBoxLayer(tapeContent, config.ZIndexHelp, "tape-manager"))
 	}
 
+	if m.ShowTapeReview {
+		reviewContent := m.RenderTapeReview()
+		layers = append(layers, m.centeredBoxLayer(reviewContent, config.ZIndexHelp+1, "tape-review"))
+	}
+
 	if m.ShowCacheStats {
 		stats := GetGlobalStyleCache().GetStats()
 
@@ -319,7 +324,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	showScriptIndicator := true
 	if m.ScriptMode && !m.ScriptFinishedTime.IsZero() {
 		elapsed := time.Since(m.ScriptFinishedTime)
-		if elapsed > 2*time.Second {
+		if elapsed > scriptDoneLinger {
 			showScriptIndicator = false
 		}
 	}

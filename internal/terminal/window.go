@@ -273,6 +273,7 @@ type Window struct {
 	ClipboardSetFunc  func(string)             // Callback to propagate clipboard to host
 	NotifyFunc        func(title, body string) // Callback for guest desktop notifications (OSC 9/777/99)
 	BellFunc          func()                   // Callback for guest bell (BEL)
+	CwdFunc           func(cwd string)         // Callback for the shell's working directory changing (OSC 7)
 	outputChan        chan []byte              // Channel for serializing daemon PTY output writes
 	outputDone        chan struct{}            // Signal to stop output writer goroutine
 	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
@@ -469,6 +470,11 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		Bell: func() {
 			if window.BellFunc != nil {
 				window.BellFunc()
+			}
+		},
+		WorkingDirectory: func(cwd string) {
+			if window.CwdFunc != nil {
+				window.CwdFunc(cwd)
 			}
 		},
 	})
@@ -675,6 +681,11 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 		Bell: func() {
 			if window.BellFunc != nil {
 				window.BellFunc()
+			}
+		},
+		WorkingDirectory: func(cwd string) {
+			if window.CwdFunc != nil {
+				window.CwdFunc(cwd)
 			}
 		},
 	})
