@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -93,15 +95,17 @@ func TestAttachExitStatusPerReason(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		reason    app.ExitReason
+		killed    bool
 		wantExit1 bool
 		wantText  string
 	}{
-		{"deliberate quit or detach", app.ExitNormal, false, ""},
-		{"session killed externally", app.ExitSessionKilled, true, "was terminated while you were attached"},
-		{"daemon lost", app.ExitDaemonLost, true, "connection to the TUIOS daemon was lost"},
+		{"detach", app.ExitNormal, false, false, ""},
+		{"deliberate quit that killed the session", app.ExitNormal, true, false, ""},
+		{"session killed externally", app.ExitSessionKilled, false, true, "was terminated while you were attached"},
+		{"daemon lost", app.ExitDaemonLost, false, true, "connection to the TUIOS daemon was lost"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := reportSessionExit("work", tc.reason)
+			err := reportSessionExit("work", tc.reason, tc.killed)
 
 			if got := err != nil; got != tc.wantExit1 {
 				t.Fatalf("reportSessionExit returned error=%v, want error=%v (err: %v)", got, tc.wantExit1, err)
@@ -118,6 +122,54 @@ func TestAttachExitStatusPerReason(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The two normal exits print different lines: a detach says the session was
+// left running, a deliberate quit says it was killed. Reporting a detach after a
+// kill is what made leader q look like it only detached, so the wording is
+// pinned here. Both name the session they are given, which is the current
+// session at exit, not the one attached to on the command line.
+func TestReportSessionExitNormalMessages(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		killed  bool
+		session string
+		want    string
+	}{
+		{"detach", false, "myproj", "Detached from session 'myproj'."},
+		{"kill", true, "myproj", "Killed session 'myproj'."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := captureStdout(t, func() {
+				if err := reportSessionExit(tc.session, app.ExitNormal, tc.killed); err != nil {
+					t.Fatalf("reportSessionExit returned error: %v", err)
+				}
+			})
+			if strings.TrimSpace(out) != tc.want {
+				t.Fatalf("exit message = %q, want %q", strings.TrimSpace(out), tc.want)
+			}
+		})
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns what was
+// written.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+	fn()
+	_ = w.Close()
+	os.Stdout = orig
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read captured stdout: %v", err)
+	}
+	return string(data)
 }
 
 // The header has to survive not asking the terminal anything: dropping the

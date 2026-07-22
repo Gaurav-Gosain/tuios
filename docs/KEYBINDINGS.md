@@ -265,15 +265,19 @@ Alternative prefix-based access to window commands:
 
 ### Tape Prefix (`Ctrl+B` `T`)
 
-Record and manage tape sessions:
+Record and manage tape sessions, and review a project tape:
 
 | Key Sequence | Action |
 |--------------|--------|
+| `Ctrl+B` `T` `m` | Open the tape manager |
+| `Ctrl+B` `T` `t` | Review the project tape in the current directory |
 | `Ctrl+B` `T` `r` | Start recording (prompts for name) |
 | `Ctrl+B` `T` `s` | Stop recording and save |
 | `Ctrl+B` `T` `Esc` | Cancel tape menu |
 
-See [Tape Recording Guide](TAPE_RECORDING.md) for details on recording workflows.
+See [Tape Recording Guide](TAPE_RECORDING.md) for recording workflows and
+[Project Tapes](PROJECT_TAPES.md) for the per-directory `.tuios.tape` autorun
+feature that `Ctrl+B` `T` `t` reviews.
 
 ### Layout Prefix (`Ctrl+B` `L`)
 

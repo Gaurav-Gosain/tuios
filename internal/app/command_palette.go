@@ -158,6 +158,22 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Toggle Shared Borders",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				config.SharedBorders = !config.SharedBorders
+				m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = boolPtr(config.SharedBorders) })
+				m.applyAppearanceLive(true)
+				m.persistSettings()
+				if config.SharedBorders {
+					m.ShowNotification("Shared Borders Enabled", "success", config.NotificationDuration)
+				} else {
+					m.ShowNotification("Shared Borders Disabled", "info", config.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
 			Name:     "Rotate Split",
 			Shortcut: "prefix+R",
 			Category: "Layout",
@@ -566,6 +582,24 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				if focusedWindow := m.GetFocusedWindow(); focusedWindow != nil {
 					focusedWindow.InvalidateCache()
 				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Tape: Review Project Tape",
+			Shortcut: "prefix+T t",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenTapeReview()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Open Tape Manager",
+			Shortcut: "prefix+T m",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ToggleTapeManager()
 				return m, nil
 			},
 		},

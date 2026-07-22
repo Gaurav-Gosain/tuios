@@ -225,6 +225,7 @@ func (m *OS) Init() tea.Cmd {
 		ListenForPTYData(m.PTYDataChan),
 		ListenForClipboardSet(m.PendingClipboardSet),
 		ListenForNotification(m.ensureNotificationChan()),
+		ListenForCwdChange(m.ensureCwdChangeChan()),
 	}
 
 	// Listen for state sync from other clients (daemon/SSH/web mode)
@@ -480,6 +481,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.UpdateRAMUsage()
 		}
 
+		// Leave script mode once a finished script's completion indicator has
+		// been shown. This re-arms Ctrl+P (the palette binding), which is
+		// intercepted for script pause/resume while ScriptMode is set.
+		m.maybeExitFinishedScript()
+
 		// Handle script playback if in script mode
 		cmds := []tea.Cmd{TickCmd()}
 		if m.ScriptMode && !m.ScriptPaused && m.ScriptPlayer != nil {
@@ -533,6 +539,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// Script just finished - record the time if not already set
 				if m.ScriptFinishedTime.IsZero() {
 					m.ScriptFinishedTime = time.Now()
+					// A tape that builds a layout creates panes whose early output
+					// (a split pane's shell prompt, an echo) can land before the
+					// client subscribed, leaving an unfocused pane blank on screen
+					// while the daemon holds the real content. Refresh every pane
+					// from the daemon a beat after playback, once output has settled.
+					if m.DaemonClient != nil {
+						cmds = append(cmds, tea.Tick(tapeFinishRefreshDelay, func(time.Time) tea.Msg {
+							return tapeLayoutRefreshMsg{}
+						}))
+					}
 				}
 			}
 		}
@@ -598,6 +614,18 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// apply it here on the Bubble Tea goroutine where notification state is owned.
 		m.ShowNotification(msg.Message, msg.Type, msg.Duration)
 		return m, ListenForNotification(m.PendingNotification)
+
+	case CwdChangedMsg:
+		// OSC 7 working-directory change delivered off the PTY goroutine. Filter
+		// to the focused window and schedule a debounced project-tape check. This
+		// never executes anything; it only decides whether to look.
+		cmd := m.onCwdChange(msg)
+		return m, tea.Batch(cmd, ListenForCwdChange(m.PendingCwdChange))
+
+	case tapeDebounceMsg:
+		// The focused cwd held still long enough; evaluate it for a project tape.
+		m.handleTapeDebounce(msg.gen)
+		return m, nil
 
 	case WindowExitMsg:
 		windowID := msg.WindowID
@@ -696,6 +724,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 		m.MarkAllDirty()
+
+		// Apply the one-shot [startup] preferences now that the real terminal
+		// size is known: NewOS runs before the first WindowSizeMsg, so opening a
+		// window or tiling there would place them against a zero-sized screen.
+		if !m.startupApplied {
+			m.startupApplied = true
+			m.applyStartupPreferences()
+		}
 
 		// Notify daemon of our terminal size for multi-client size calculation
 		// This allows the daemon to compute effective size = min(all clients)
@@ -815,6 +851,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if err := m.ApplyStateSync(msg.State); err != nil {
 				m.LogError("Failed to apply state sync: %v", err)
 			} else {
+				// The daemon-created startup window arrives here; if the user asked
+				// to start in terminal mode, enter it now that there is a focused
+				// window to type into.
+				m.maybeEnterPendingTerminalMode()
+
 				// Show notifications for significant changes
 				newWindowCount := len(m.Windows)
 				newWorkspace := m.CurrentWorkspace
@@ -903,6 +944,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			config.ApplyAppearanceConfig(msg.Config)
 			m.MarkAllDirty()
 		}
+		return m, nil
+
+	case tapeLayoutRefreshMsg:
+		// Fired a beat after a project tape finished. Re-fetch every pane's
+		// content from the daemon and repaint, so panes created during the tape
+		// (splits whose early output the client subscribed too late to catch)
+		// show what actually ran.
+		m.refreshAllPanesAfterTape()
 		return m, nil
 
 	case ScriptCommandMsg:

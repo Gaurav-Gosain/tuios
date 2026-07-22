@@ -17,7 +17,48 @@ type UserConfig struct {
 	Appearance  AppearanceConfig  `toml:"appearance"`
 	Keybindings KeybindingsConfig `toml:"keybindings"`
 	Daemon      DaemonConfig      `toml:"daemon"`
+	Startup     StartupConfig     `toml:"startup"`
+	Tape        TapeConfig        `toml:"tape"`
 	Hooks       HooksConfig       `toml:"hooks"`
+}
+
+// StartupConfig holds settings that only take effect when a session starts.
+// Both default to false so a fresh install behaves exactly as before: the
+// session comes up empty and floating, and the user opens the first window.
+type StartupConfig struct {
+	OpenDefaultWindow   bool `toml:"open_default_window"`    // Open one terminal window automatically when a session starts with none (default: false)
+	Tiled               bool `toml:"tiled"`                  // Start a new session with tiling enabled instead of floating (default: false)
+	StartInTerminalMode bool `toml:"start_in_terminal_mode"` // Start focused in terminal mode so typing goes straight to the shell, when a window is present (default: false)
+}
+
+// TapeConfig holds settings for per-directory project tapes (.tuios.tape).
+//
+// Autorun is the master switch for detecting a project tape when the focused
+// window's shell enters a directory that carries one:
+//   - "off":  no detection, no indicator, the feature is invisible.
+//   - "ask":  detection on; an encountered tape surfaces a passive indicator
+//     (a dock badge and a non-focus-stealing notification) showing its trust
+//     status. Nothing runs without the user's explicit action.
+//   - "auto": a trusted, unedited tape runs automatically on entry; an untrusted
+//     or changed tape falls back to the "ask" behavior and never auto-runs.
+//
+// In "ask" the passive indicator plus the review dialog (leader T t, or the
+// command palette) are the only path to running a tape; nothing executes without
+// the user opening the dialog and choosing Run. "auto" is the only mode that
+// runs anything without a keypress, and only content the user already read and
+// trusted. The default is "ask", which is safe by construction. A tape edited
+// since it was trusted reverts to untrusted (hash mismatch) and re-prompts.
+//
+// AutoReview (default false) is an opt-in convenience: when true, entering a
+// directory with a reviewable tape opens the review/trust dialog automatically
+// instead of only surfacing the passive banner and badge, saving the keypress
+// that opens it. It never weakens the trust boundary - the user still chooses Run
+// once / Trust and run / Never / Not now - and it never auto-opens for a denied
+// tape, an already-handled directory this session, or (in auto mode) a
+// trusted-unedited tape that runs on its own.
+type TapeConfig struct {
+	Autorun    string `toml:"autorun"`     // off | ask | auto (default: ask)
+	AutoReview bool   `toml:"auto_review"` // auto-open the review dialog on detection (default: false)
 }
 
 // DaemonConfig holds daemon-related settings
@@ -56,6 +97,16 @@ type AppearanceConfig struct {
 	MaxFPS               int    `toml:"max_fps"`                // Maximum render FPS (default: 60, max: 120)
 }
 
+// Tape autorun modes. See TapeConfig.Autorun.
+const (
+	TapeAutorunOff  = "off"
+	TapeAutorunAsk  = "ask"
+	TapeAutorunAuto = "auto"
+)
+
+// TapeAutorunModes lists the valid values for tape.autorun.
+var TapeAutorunModes = []string{TapeAutorunOff, TapeAutorunAsk, TapeAutorunAuto}
+
 // HooksConfig holds shell command hooks for events.
 type HooksConfig map[string]any
 
@@ -93,6 +144,15 @@ func DefaultConfig() *UserConfig {
 			LogLevel:     "off",
 			DefaultCodec: "gob",
 			SocketPath:   "", // Empty means use default XDG path
+		},
+		Startup: StartupConfig{
+			OpenDefaultWindow:   false,
+			Tiled:               false,
+			StartInTerminalMode: false,
+		},
+		Tape: TapeConfig{
+			Autorun:    TapeAutorunAsk,
+			AutoReview: false,
 		},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
@@ -239,6 +299,7 @@ func DefaultConfig() *UserConfig {
 			},
 			TapePrefix: map[string][]string{
 				"tape_prefix_manager": {"m"},
+				"tape_prefix_review":  {"t"},
 				"tape_prefix_record":  {"r"},
 				"tape_prefix_stop":    {"s"},
 				"tape_prefix_cancel":  {"esc"},
@@ -406,6 +467,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	defaultCfg := DefaultConfig()
 	fillMissingAppearance(&cfg, defaultCfg)
 	fillMissingDaemon(&cfg, defaultCfg)
+	fillMissingTape(&cfg, defaultCfg)
 	fillMissingKeybinds(&cfg, defaultCfg)
 
 	// Validate configuration
@@ -545,6 +607,15 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// Custom border colors override the theme-derived colors. Empty strings
 	// clear any override and restore theme colors.
 	theme.SetBorderOverrides(cfg.Appearance.BorderFocusedColor, cfg.Appearance.BorderUnfocusedColor)
+}
+
+// fillMissingTape fills in any missing tape settings with defaults. An unset or
+// unrecognized autorun mode falls back to the safe default ("ask"); validation
+// reports the unrecognized value separately as a warning.
+func fillMissingTape(cfg, defaultCfg *UserConfig) {
+	if !slices.Contains(TapeAutorunModes, cfg.Tape.Autorun) {
+		cfg.Tape.Autorun = defaultCfg.Tape.Autorun
+	}
 }
 
 // fillMissingDaemon fills in any missing daemon settings with defaults

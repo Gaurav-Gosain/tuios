@@ -366,6 +366,7 @@ func (m *OS) AddWindow(name string) *OS {
 	m.setupTextSizingPassthrough(window)
 	m.setupClipboardPassthrough(window)
 	m.setupNotificationPassthrough(window)
+	m.setupCwdWatch(window)
 
 	m.Windows = append(m.Windows, window)
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))
@@ -395,6 +396,70 @@ func (m *OS) AddWindow(name string) *OS {
 	}
 
 	return m
+}
+
+// applyStartupPreferences runs the one-shot [startup] settings once the real
+// terminal size is known (on the first WindowSizeMsg). It opens a default
+// terminal window and/or enables tiling, but only for a fresh, empty session:
+// attaching to a session that already has windows restores that session's own
+// layout from daemon state, and forcing a window or a tiling mode on top of it
+// would silently override the user's saved session.
+func (m *OS) applyStartupPreferences() {
+	if m.UserConfig == nil {
+		return
+	}
+	if len(m.Windows) > 0 {
+		return
+	}
+
+	s := m.UserConfig.Startup
+
+	// Enable tiling first, through the manual toggle path (the `t` key). Going
+	// through ToggleAutoTiling is deliberate: it builds the BSP tree, applies the
+	// layout, and syncs the tiling state to the daemon rather than only flipping a
+	// local flag. Doing it before the window is opened matters in a daemon
+	// session: the daemon owns window creation and only tiles the window it
+	// creates when the session's AutoTiling is already on, so the flag has to
+	// reach the daemon before the NewWindow request does.
+	if s.Tiled && !m.AutoTiling {
+		m.ToggleAutoTiling()
+	}
+
+	// Open the first window through the same path the `n` key uses, so it is
+	// created, focused and (with tiling now on) tiled exactly like a manual one.
+	if s.OpenDefaultWindow {
+		m.AddWindow("")
+	}
+
+	// Start focused in terminal mode so the user can type into the shell straight
+	// away. This only makes sense with a window to type into: terminal mode with
+	// nothing focused is a dead end where keystrokes reach no terminal. On the
+	// local path AddWindow above already created and focused the window, so this
+	// enters terminal mode immediately. On the daemon path the window is created
+	// asynchronously and does not exist here yet; the entry is deferred until it
+	// arrives (see maybeEnterPendingTerminalMode), but only when a window was
+	// actually requested. With neither a focused window nor one on the way, the
+	// session is left in window-management mode.
+	if s.StartInTerminalMode && (s.OpenDefaultWindow || m.hasFocusedWindow()) {
+		m.pendingStartTerminalMode = true
+		m.maybeEnterPendingTerminalMode()
+	}
+}
+
+// hasFocusedWindow reports whether FocusedWindow points at a real window.
+func (m *OS) hasFocusedWindow() bool {
+	return m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
+}
+
+// maybeEnterPendingTerminalMode applies the deferred start_in_terminal_mode
+// startup preference once a window exists to focus. It is a no-op unless the
+// preference is still pending and a window is focused, and it fires at most once.
+func (m *OS) maybeEnterPendingTerminalMode() {
+	if !m.pendingStartTerminalMode || !m.hasFocusedWindow() {
+		return
+	}
+	m.pendingStartTerminalMode = false
+	m.EnterTerminalMode()
 }
 
 // UpdateAllWindowThemes updates the terminal colors for all windows when the theme changes

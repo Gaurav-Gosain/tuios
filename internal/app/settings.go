@@ -2,6 +2,7 @@ package app
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -11,9 +12,10 @@ import (
 type settingControl int
 
 const (
-	controlEnum settingControl = iota // ‹ value › cycler
-	controlBool                       // [ on ] / [ off ] toggle
-	controlInt                        // ‹ n › numeric stepper
+	controlEnum   settingControl = iota // ‹ value › cycler
+	controlBool                         // [ on ] / [ off ] toggle
+	controlInt                          // ‹ n › numeric stepper
+	controlString                       // free-text field edited inline
 )
 
 // settingItem is one row on the settings page. adjust changes the value by dir
@@ -24,9 +26,13 @@ type settingItem struct {
 	Desc    string
 	Control settingControl
 	Options []string
-	value   func(m *OS) string
-	boolVal func(m *OS) bool
-	adjust  func(m *OS, dir int)
+	// Placeholder is shown greyed out for an empty controlString value.
+	Placeholder string
+	value       func(m *OS) string
+	boolVal     func(m *OS) bool
+	adjust      func(m *OS, dir int)
+	// setStr commits an edited controlString value.
+	setStr func(m *OS, v string)
 	// activate, when set, runs on Enter/click instead of adjusting the value
 	// (e.g. the Theme row opens the theme picker).
 	activate func(m *OS)
@@ -92,6 +98,19 @@ func (m *OS) applyTheme(name string) {
 	m.MarkAllDirty()
 }
 
+// applyBorderColors pushes the configured border color overrides into the theme
+// package and repaints so the new colors show immediately. Empty values clear
+// the override and restore the theme-derived colors.
+func (m *OS) applyBorderColors() {
+	focused, unfocused := "", ""
+	if m.UserConfig != nil {
+		focused = m.UserConfig.Appearance.BorderFocusedColor
+		unfocused = m.UserConfig.Appearance.BorderUnfocusedColor
+	}
+	theme.SetBorderOverrides(focused, unfocused)
+	m.MarkAllDirty()
+}
+
 // persistSettings writes the current config to disk. Called after any settings
 // change so it survives a restart.
 func (m *OS) persistSettings() {
@@ -111,6 +130,32 @@ func (m *OS) setAppearance(fn func(a *config.AppearanceConfig)) {
 	}
 }
 
+// setStartup runs fn against the held config's startup section when a config is
+// present, so a change to a [startup] setting can be persisted. These settings
+// take effect on the next launch, so there is nothing to apply live.
+func (m *OS) setStartup(fn func(s *config.StartupConfig)) {
+	if m.UserConfig != nil {
+		fn(&m.UserConfig.Startup)
+	}
+}
+
+// setTape runs fn against the held config's [tape] section. Project-tape
+// settings are read straight off UserConfig (not appearance globals), so a
+// change takes effect on the next detection with no extra apply step.
+func (m *OS) setTape(fn func(t *config.TapeConfig)) {
+	if m.UserConfig != nil {
+		fn(&m.UserConfig.Tape)
+	}
+}
+
+// tapeAutorunConfigValue returns the configured [tape] autorun mode (not the
+// TUIOS_TAPE_AUTORUN env override), for the settings row.
+func (m *OS) tapeAutorunConfigValue() string {
+	if m.UserConfig != nil && m.UserConfig.Tape.Autorun != "" {
+		return m.UserConfig.Tape.Autorun
+	}
+	return config.TapeAutorunAsk
+}
 const themeNone = "none"
 
 var (
@@ -163,6 +208,33 @@ func intItem(label, desc string, lo, hi, step int, get func() int, set func(m *O
 		},
 	}
 }
+
+// stringItem builds a free-text field. get reads the current value (nil-safe
+// against a missing config), set commits a trimmed value. Editing happens inline
+// via the settings input handler; set is called on commit and the change is
+// persisted afterward.
+func stringItem(label, desc, placeholder string, get func(m *OS) string, set func(m *OS, v string)) settingItem {
+	return settingItem{
+		Label:       label,
+		Desc:        desc,
+		Control:     controlString,
+		Placeholder: placeholder,
+		value:       get,
+		setStr:      set,
+	}
+}
+
+// appearanceString reads a string field off the held appearance config, or ""
+// when no config is present (e.g. in unit tests that build a bare OS).
+func (m *OS) appearanceString(get func(a *config.AppearanceConfig) string) string {
+	if m.UserConfig == nil {
+		return ""
+	}
+	return get(&m.UserConfig.Appearance)
+}
+
+// daemonLogLevelOptions lists the daemon debug verbosity levels, lowest first.
+var daemonLogLevelOptions = []string{"off", "errors", "basic", "messages", "verbose", "trace"}
 
 // settingsCategories builds the full settings model, binding each row to its
 // config global, persisted field, and live-apply behavior.
@@ -219,6 +291,29 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v bool) {
 					config.HideScrollbar = !v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.HideScrollbar = !v })
+					m.applyAppearanceLive(false)
+				}),
+			stringItem("Focused border color", "Hex color for the focused pane border (empty = theme)", "#89b4fa",
+				func(m *OS) string {
+					return m.appearanceString(func(a *config.AppearanceConfig) string { return a.BorderFocusedColor })
+				},
+				func(m *OS, v string) {
+					m.setAppearance(func(a *config.AppearanceConfig) { a.BorderFocusedColor = v })
+					m.applyBorderColors()
+				}),
+			stringItem("Unfocused border color", "Hex color for unfocused pane borders (empty = theme)", "#585b70",
+				func(m *OS) string {
+					return m.appearanceString(func(a *config.AppearanceConfig) string { return a.BorderUnfocusedColor })
+				},
+				func(m *OS, v string) {
+					m.setAppearance(func(a *config.AppearanceConfig) { a.BorderUnfocusedColor = v })
+					m.applyBorderColors()
+				}),
+			stringItem("Window title format", "Template: {title}, {index}, {cwd} (empty = raw title)", "{index}: {title}",
+				func(m *OS) string { return config.WindowTitleFormat },
+				func(m *OS, v string) {
+					config.WindowTitleFormat = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowTitleFormat = v })
 					m.applyAppearanceLive(false)
 				}),
 		},
@@ -309,6 +404,34 @@ func (m *OS) settingsCategories() []settingsCategory {
 					config.NormalFPS = fps
 					m.setAppearance(func(a *config.AppearanceConfig) { a.MaxFPS = fps })
 				}),
+			stringItem("Preferred shell", "Shell for new windows, empty = auto-detect (applies to new windows)", "/bin/bash",
+				func(m *OS) string {
+					return m.appearanceString(func(a *config.AppearanceConfig) string { return a.PreferredShell })
+				},
+				func(m *OS, v string) {
+					m.setAppearance(func(a *config.AppearanceConfig) { a.PreferredShell = v })
+				}),
+		},
+	}
+
+	startup := settingsCategory{
+		Name: "Startup",
+		Items: []settingItem{
+			boolItem("Open default window", "Open a terminal when a session starts empty (next launch)",
+				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.OpenDefaultWindow },
+				func(m *OS, v bool) {
+					m.setStartup(func(s *config.StartupConfig) { s.OpenDefaultWindow = v })
+				}),
+			boolItem("Start tiled", "Start a new session tiled, not floating (next launch)",
+				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.Tiled },
+				func(m *OS, v bool) {
+					m.setStartup(func(s *config.StartupConfig) { s.Tiled = v })
+				}),
+			boolItem("Start in terminal mode", "Land in the shell, ready to type (next launch)",
+				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.StartInTerminalMode },
+				func(m *OS, v bool) {
+					m.setStartup(func(s *config.StartupConfig) { s.StartInTerminalMode = v })
+				}),
 		},
 	}
 
@@ -336,7 +459,62 @@ func (m *OS) settingsCategories() []settingsCategory {
 		},
 	}
 
-	return []settingsCategory{appearance, dock, behavior, advanced}
+	daemon := settingsCategory{
+		Name: "Daemon",
+		Items: []settingItem{
+			{
+				Label:   "Log level",
+				Desc:    "Daemon debug log verbosity (applies to the daemon on restart)",
+				Control: controlEnum,
+				Options: daemonLogLevelOptions,
+				value:   func(m *OS) string { return m.daemonLogLevel() },
+				adjust: func(m *OS, dir int) {
+					next := cycleEnum(daemonLogLevelOptions, m.daemonLogLevel(), dir)
+					if m.UserConfig != nil {
+						m.UserConfig.Daemon.LogLevel = next
+					}
+				},
+			},
+		},
+	}
+
+	tape := settingsCategory{
+		Name: "Tape",
+		Items: []settingItem{
+			{
+				Label:   "Autorun",
+				Desc:    "Project-tape detection: off, ask (passive), or auto (run trusted)",
+				Control: controlEnum,
+				Options: config.TapeAutorunModes,
+				value:   func(m *OS) string { return m.tapeAutorunConfigValue() },
+				adjust: func(m *OS, dir int) {
+					next := cycleEnum(config.TapeAutorunModes, m.tapeAutorunConfigValue(), dir)
+					m.setTape(func(t *config.TapeConfig) { t.Autorun = next })
+				},
+			},
+			{
+				Label:   "Auto-open review",
+				Desc:    "Open the review dialog automatically on entering a tape directory",
+				Control: controlBool,
+				boolVal: func(m *OS) bool { return m.UserConfig != nil && m.UserConfig.Tape.AutoReview },
+				adjust: func(m *OS, _ int) {
+					cur := m.UserConfig != nil && m.UserConfig.Tape.AutoReview
+					m.setTape(func(t *config.TapeConfig) { t.AutoReview = !cur })
+				},
+			},
+		},
+	}
+
+	return []settingsCategory{appearance, dock, behavior, startup, advanced, daemon, tape}
+}
+
+// daemonLogLevel returns the configured daemon log level, defaulting to "off"
+// when unset or no config is held.
+func (m *OS) daemonLogLevel() string {
+	if m.UserConfig != nil && m.UserConfig.Daemon.LogLevel != "" {
+		return m.UserConfig.Daemon.LogLevel
+	}
+	return "off"
 }
 
 // OpenSettings shows the settings overlay, initializing the theme registry so
@@ -347,11 +525,15 @@ func (m *OS) OpenSettings() {
 	m.SettingsCategory = 0
 	m.SettingsSelected = 0
 	m.SettingsScroll = 0
+	m.SettingsEditing = false
+	m.SettingsEditBuffer = ""
 }
 
 // CloseSettings hides the settings overlay.
 func (m *OS) CloseSettings() {
 	m.ShowSettings = false
+	m.SettingsEditing = false
+	m.SettingsEditBuffer = ""
 }
 
 // settingsCurrentItems returns the items in the active category, clamping the
@@ -406,9 +588,14 @@ func (m *OS) SettingsPrevCategory() {
 }
 
 // SettingsAdjust changes the focused setting by dir (-1 or +1) and persists it.
+// Text (controlString) settings are edited inline rather than stepped, so the
+// arrow keys are a no-op on them.
 func (m *OS) SettingsAdjust(dir int) {
 	items := m.settingsCurrentItems()
 	if len(items) == 0 {
+		return
+	}
+	if items[m.SettingsSelected].Control == controlString {
 		return
 	}
 	items[m.SettingsSelected].adjust(m, dir)
@@ -416,15 +603,86 @@ func (m *OS) SettingsAdjust(dir int) {
 }
 
 // SettingsActivate runs a setting's activate hook if it has one (e.g. opening
-// the theme picker), otherwise toggles/advances the value. Bound to Enter.
+// the theme picker), begins inline editing for a text setting, otherwise
+// toggles/advances the value. Bound to Enter.
 func (m *OS) SettingsActivate() {
 	items := m.settingsCurrentItems()
 	if len(items) == 0 {
 		return
 	}
-	if fn := items[m.SettingsSelected].activate; fn != nil {
+	item := items[m.SettingsSelected]
+	if fn := item.activate; fn != nil {
 		fn(m)
 		return
 	}
+	if item.Control == controlString {
+		m.SettingsBeginEdit()
+		return
+	}
 	m.SettingsAdjust(1)
+}
+
+// SettingsEditActive reports whether a text setting is currently being edited.
+func (m *OS) SettingsEditActive() bool { return m.SettingsEditing }
+
+// SettingsBeginEdit starts inline editing of the focused text setting, seeding
+// the buffer with its current value.
+func (m *OS) SettingsBeginEdit() {
+	items := m.settingsCurrentItems()
+	if len(items) == 0 {
+		return
+	}
+	item := items[m.SettingsSelected]
+	if item.Control != controlString {
+		return
+	}
+	m.SettingsEditing = true
+	m.SettingsEditBuffer = item.value(m)
+}
+
+// SettingsEditAppend adds typed text to the edit buffer.
+func (m *OS) SettingsEditAppend(s string) {
+	if m.SettingsEditing {
+		m.SettingsEditBuffer += s
+	}
+}
+
+// SettingsEditBackspace removes the last rune from the edit buffer.
+func (m *OS) SettingsEditBackspace() {
+	if !m.SettingsEditing || m.SettingsEditBuffer == "" {
+		return
+	}
+	r := []rune(m.SettingsEditBuffer)
+	m.SettingsEditBuffer = string(r[:len(r)-1])
+}
+
+// SettingsEditClear empties the edit buffer.
+func (m *OS) SettingsEditClear() {
+	if m.SettingsEditing {
+		m.SettingsEditBuffer = ""
+	}
+}
+
+// SettingsEditCancel abandons the edit without applying it.
+func (m *OS) SettingsEditCancel() {
+	m.SettingsEditing = false
+	m.SettingsEditBuffer = ""
+}
+
+// SettingsEditCommit applies the edited (trimmed) value to the focused text
+// setting and persists it.
+func (m *OS) SettingsEditCommit() {
+	if !m.SettingsEditing {
+		return
+	}
+	value := strings.TrimSpace(m.SettingsEditBuffer)
+	items := m.settingsCurrentItems()
+	if len(items) > 0 {
+		if set := items[m.SettingsSelected].setStr; set != nil {
+			set(m, value)
+		}
+	}
+	m.SettingsEditing = false
+	m.SettingsEditBuffer = ""
+	m.persistSettings()
 }

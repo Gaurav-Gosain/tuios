@@ -272,7 +272,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	}
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowLayoutPicker ||
 		m.ShowQuitConfirm || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
-		m.ShowAggregateView || m.ShowTapeManager || m.ShowSettings || m.ShowThemePicker ||
+		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker ||
 		m.PrefixActive {
 		return nil, false
 	}
@@ -423,7 +423,7 @@ func (m *OS) View() tea.View {
 		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
 			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
 			m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
-			m.ShowSettings || m.ShowThemePicker || m.ShowTapeManager
+			m.ShowSettings || m.ShowThemePicker || m.ShowTapeManager || m.ShowTapeReview
 		if hasOverlay {
 			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 				m.KittyPassthrough.HideAllPlacements()
