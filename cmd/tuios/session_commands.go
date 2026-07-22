@@ -458,13 +458,24 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	finalModel, err := p.Run()
 
 	reason := app.ExitNormal
+	// The client may have switched sessions since it attached, so the name to
+	// report at exit is the one it is in now, not the one on the command line.
+	exitSession := sessionName
+	// A deliberate quit in a daemon session kills it (leader q); a detach leaves
+	// it running (leader d). Both exit normally, so QuitRequested is what tells
+	// the two apart and picks the message the user sees.
+	killed := false
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		reason = finalOS.ExitReason
-		// Syncing state back is meaningful only while the session still exists.
-		// After it was killed the daemon has no session to receive the state,
-		// and after the connection was lost the write cannot land, so skip it
-		// rather than block on a dead socket on the way out.
-		if reason == app.ExitNormal {
+		if name := finalOS.SessionName; name != "" {
+			exitSession = name
+		}
+		killed = finalOS.QuitRequested
+		// Syncing state back is meaningful only for a detach, while the session
+		// still exists. A quit already killed it, a kill from elsewhere left no
+		// session to receive the state, and a lost connection cannot carry the
+		// write, so skip it rather than block on a dead socket on the way out.
+		if reason == app.ExitNormal && !killed {
 			finalOS.SyncStateToDaemon()
 		}
 		finalOS.Cleanup()
@@ -478,13 +489,18 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		return fmt.Errorf("program error: %w", err)
 	}
 
-	return reportSessionExit(sessionName, reason)
+	return reportSessionExit(exitSession, reason, killed)
 }
 
 // reportSessionExit prints why the client stopped and returns an error for the
-// cases that are not a normal detach, so a script or an agent driving tuios sees
+// cases that are not a normal exit, so a script or an agent driving tuios sees
 // a non-zero status instead of a message that reads like success.
-func reportSessionExit(sessionName string, reason app.ExitReason) error {
+//
+// killed distinguishes the two normal exits: a deliberate quit that killed the
+// session (leader q) from a detach that left it running (leader d). They read
+// differently on the way out so the user is not told a session was detached when
+// it was in fact destroyed.
+func reportSessionExit(sessionName string, reason app.ExitReason, killed bool) error {
 	switch reason {
 	case app.ExitSessionKilled:
 		return &diagnosticError{
@@ -501,7 +517,11 @@ func reportSessionExit(sessionName string, reason app.ExitReason) error {
 		}
 
 	default:
-		fmt.Printf("[detached from session '%s']\n", sessionName)
+		if killed {
+			fmt.Printf("Killed session '%s'.\n", sessionName)
+		} else {
+			fmt.Printf("Detached from session '%s'.\n", sessionName)
+		}
 		return nil
 	}
 }
@@ -642,7 +662,7 @@ func runKillSession(sessionName string) error {
 		return explainVerbError("kill-session", err)
 	}
 
-	fmt.Printf("Killed session: %s\n", sessionName)
+	fmt.Printf("Killed session '%s'.\n", sessionName)
 	return nil
 }
 
