@@ -171,6 +171,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, m.centeredBoxLayer(tapeContent, config.ZIndexHelp, "tape-manager"))
 	}
 
+	if m.ShowTapeReview {
+		reviewContent := m.RenderTapeReview()
+		layers = append(layers, m.centeredBoxLayer(reviewContent, config.ZIndexHelp+1, "tape-review"))
+	}
+
 	if m.ShowCacheStats {
 		stats := GetGlobalStyleCache().GetStats()
 

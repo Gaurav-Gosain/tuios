@@ -155,12 +155,20 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 		workspacesUsed,
 		config.GetDockIconWorkspaceCount())
 
+	// Passive project-tape badge: when the focused window is inside a directory
+	// carrying a .tuios.tape, a small status marker rides in the dock. It is
+	// informational only; it opens no dialog and runs nothing.
+	tapeBadge := ""
+	if badge := m.tapeDockBadge(); badge != "" {
+		tapeBadge = " " + badge + " "
+	}
+
 	// Combine mode and workspace
-	leftText := modeText + workspaceText
+	leftText := modeText + workspaceText + tapeBadge
 
 	// Calculate actual rendered width (handles Unicode, Nerd Fonts, etc.)
 	// Use lipgloss.Width instead of len() to get proper display width
-	width := lipgloss.Width(modeText) + lipgloss.Width(workspaceText) + 4 // +4 for margins/padding
+	width := lipgloss.Width(modeText) + lipgloss.Width(workspaceText) + lipgloss.Width(tapeBadge) + 4 // +4 for margins/padding
 
 	return leftText, width, modeInfo
 }

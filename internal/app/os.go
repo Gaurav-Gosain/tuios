@@ -292,6 +292,21 @@ type OS struct {
 	// The bubbletea Update loop drains this and calls ShowNotification, mirroring the
 	// PendingClipboardSet path.
 	PendingNotification chan NotificationMsg
+	// PendingCwdChange receives OSC 7 working-directory changes from windows'
+	// PTY goroutines. The bubbletea Update loop drains it and, for the focused
+	// window only, checks whether the new directory carries a .tuios.tape. This
+	// is the detection half of the project-tape feature; it never executes
+	// anything, it only stats, reads to hash, and surfaces a passive indicator.
+	PendingCwdChange chan CwdChangedMsg
+	// tapeDetect holds the project-tape detection state (trust store, session
+	// memory of handled directories, debounce bookkeeping, and the current
+	// passive indicator). See tape_detect.go.
+	tapeDetect tapeDetectState
+	// ShowTapeReview is true when the project-tape review/trust dialog is open.
+	// TapeReview holds its state (path, trust status, reviewed content, header).
+	// See tape_review.go.
+	ShowTapeReview bool
+	TapeReview     *TapeReviewState
 	// TerminalModeEnteredAt tracks when we last switched to TerminalMode.
 	// Used to suppress misparsed mouse-sequence fragments (phantom keypresses)
 	// during the AllMotion→CellMotion transition window.

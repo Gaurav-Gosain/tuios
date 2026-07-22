@@ -533,6 +533,36 @@ after-new-window = "notify-send 'TUIOS' 'new window'"
 See [HOOKS.md](HOOKS.md) for the event list, the environment variables passed to
 each command, and the execution model.
 
+## Project Tapes
+
+The `[tape]` table controls per-directory project tapes (`.tuios.tape`). When the
+focused shell enters a directory that carries one, TUIOS can build a project
+session from it - after you review and trust the content.
+
+```toml
+[tape]
+autorun = "ask"        # off | ask | auto (default: ask)
+auto_review = false    # auto-open the review dialog on detection (default: false)
+```
+
+- `off` - no scanning, no indicators, feature invisible.
+- `ask` (default) - a detected tape surfaces a passive banner and a `tape` dock
+  badge; nothing runs until you open the review dialog (`Ctrl+B` `T` `t`) and
+  choose Run.
+- `auto` - a trusted, unedited tape runs automatically on entry; an untrusted or
+  changed tape falls back to `ask` and never auto-runs.
+- `auto_review` - when `true`, entering a directory with a reviewable tape opens
+  the review dialog automatically instead of only showing the passive banner. It
+  never runs anything on its own (you still choose Run/Trust/Never/Not now), never
+  auto-opens for a denied or ineligible tape, and pops at most once per directory
+  per session. Configurable from the settings menu (`Ctrl+B` `,` -> Tape).
+
+`TUIOS_TAPE_AUTORUN` overrides this for a single run. An untrusted tape is inert:
+it is never parsed as a program or executed until you review its content and
+choose to run or trust it. See [PROJECT_TAPES.md](PROJECT_TAPES.md) for the trust
+model, the review dialog, the tape header (`Session`, `Scope`, `Workspace`,
+`Require`), and session scope.
+
 ## Keybindings Prefix Configuration
 
 ### leader_key

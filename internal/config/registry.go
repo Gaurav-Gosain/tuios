@@ -366,6 +366,7 @@ var ActionDescriptions = map[string]string{
 
 	// Tape Prefix
 	"tape_prefix_manager": "Open tape manager",
+	"tape_prefix_review":  "Review project tape",
 	"tape_prefix_record":  "Start recording",
 	"tape_prefix_stop":    "Stop recording",
 	"tape_prefix_cancel":  "Cancel tape prefix",

@@ -93,6 +93,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 
 	// Tape prefix (leader, T, ...)
 	d.Register("tape_prefix_manager", handleToggleTapeManager)
+	d.Register("tape_prefix_review", handleTapeReview)
 	d.Register("tape_prefix_record", handleTapeRecord)
 	d.Register("tape_prefix_stop", handleTapeStop)
 	d.Register("tape_prefix_cancel", handlePrefixCancel)
@@ -424,6 +425,14 @@ func handleDebugAnimations(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // ============================================================================
 // Tape prefix
 // ============================================================================
+
+// handleTapeReview opens the project-tape review/trust dialog for the tape in
+// the focused window's current directory. It is the deliberate action that lets
+// the user read a detected tape and choose to run or trust it.
+func handleTapeReview(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenTapeReview()
+	return o, nil
+}
 
 func handleTapeRecord(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
