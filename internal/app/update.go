@@ -480,6 +480,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.UpdateRAMUsage()
 		}
 
+		// Leave script mode once a finished script's completion indicator has
+		// been shown. This re-arms Ctrl+P (the palette binding), which is
+		// intercepted for script pause/resume while ScriptMode is set.
+		m.maybeExitFinishedScript()
+
 		// Handle script playback if in script mode
 		cmds := []tea.Cmd{TickCmd()}
 		if m.ScriptMode && !m.ScriptPaused && m.ScriptPlayer != nil {

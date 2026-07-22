@@ -212,8 +212,11 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Key not handled by tape manager, fall through
 	}
 
-	// Handle script pause/resume (Ctrl+P)
-	if msg.String() == "ctrl+p" && o.ScriptMode {
+	// Handle script pause/resume (Ctrl+P) while a script is actively playing.
+	// Once a script finishes, ScriptMode is left (see maybeExitFinishedScript),
+	// so this no longer shadows the command palette binding. Matched on the
+	// decoded key event so it works under every Kitty keyboard encoding.
+	if o.ScriptMode && isCtrlP(msg) {
 		o.ScriptPaused = !o.ScriptPaused
 		return o, nil
 	}
