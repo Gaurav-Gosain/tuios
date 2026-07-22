@@ -88,6 +88,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("debug_prefix_logs", handleDebugLogs)
 	d.Register("debug_prefix_cache", handleDebugCache)
 	d.Register("debug_prefix_showkeys", handleDebugShowkeys)
+	d.Register("debug_prefix_keyevents", handleDebugKeyEvents)
 	d.Register("debug_prefix_animations", handleDebugAnimations)
 	d.Register("debug_prefix_cancel", handlePrefixCancel)
 
@@ -413,6 +414,12 @@ func handleDebugCache(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleDebugShowkeys(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ShowKeys = !o.ShowKeys
 	toggleNotify(o, "Showkeys", o.ShowKeys)
+	return o, nil
+}
+
+func handleDebugKeyEvents(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.ToggleKeyEventsOverlay()
+	toggleNotify(o, "Key Events Overlay", o.ShowKeyEvents)
 	return o, nil
 }
 
