@@ -156,13 +156,13 @@ func (m *OS) setDebug(fn func(d *config.DebugConfig)) {
 	}
 }
 
-// ToggleKeyEventsOverlay flips the key-events diagnostic overlay, mirrors the new
-// state into the persisted [debug] config, and saves it. Shared by the settings
-// toggle, the command-palette entry, and the keybinding so all three stay in
+// ToggleShowKeys flips the showkeys overlay, mirrors the new state into the
+// persisted [debug] show_key_events config, and saves it. Shared by the settings
+// toggle, the command-palette entry, and the keybinding so all of them stay in
 // sync and survive a restart.
-func (m *OS) ToggleKeyEventsOverlay() {
-	m.ShowKeyEvents = !m.ShowKeyEvents
-	m.setDebug(func(d *config.DebugConfig) { d.ShowKeyEvents = m.ShowKeyEvents })
+func (m *OS) ToggleShowKeys() {
+	m.ShowKeys = !m.ShowKeys
+	m.setDebug(func(d *config.DebugConfig) { d.ShowKeyEvents = m.ShowKeys })
 	m.persistSettings()
 }
 
@@ -475,10 +475,10 @@ func (m *OS) settingsCategories() []settingsCategory {
 					config.ZoomMaxWidth = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.ZoomMaxWidth = v })
 				}),
-			boolItem("Key events overlay", "Show decoded key events on screen to diagnose input (both modes)",
-				func() bool { return m.ShowKeyEvents },
+			boolItem("Show keys overlay", "Show pressed keys as a keycast in the bottom-right corner",
+				func() bool { return m.ShowKeys },
 				func(m *OS, v bool) {
-					m.ShowKeyEvents = v
+					m.ShowKeys = v
 					m.setDebug(func(d *config.DebugConfig) { d.ShowKeyEvents = v })
 				}),
 		},

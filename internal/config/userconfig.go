@@ -26,11 +26,11 @@ type UserConfig struct {
 // DebugConfig holds diagnostic settings. These are off by default so a normal
 // session is unaffected; they exist to diagnose input and rendering problems.
 type DebugConfig struct {
-	// ShowKeyEvents enables the on-screen key-events overlay, which prints the
-	// decoded key event (String(), Code as a number and rune, the decoded
-	// modifier bits, and Text) for the last several keypresses in both window
-	// management and terminal mode. It is the tool for diagnosing which key a
-	// terminal actually delivers. Default false.
+	// ShowKeyEvents enables the on-screen showkeys overlay, a bottom-right
+	// keycast that shows the last several keypresses as styled pills in both
+	// window management and terminal mode. The same overlay is toggled by the
+	// --show-keys flag, the settings entry, the command palette, and the
+	// leader-D-k keybinding. Default false.
 	ShowKeyEvents bool `toml:"show_key_events"`
 }
 
@@ -307,7 +307,6 @@ func DefaultConfig() *UserConfig {
 				"debug_prefix_cache":      {"c"},
 				"debug_prefix_animations": {"a"},
 				"debug_prefix_showkeys":   {"k"},
-				"debug_prefix_keyevents":  {"e"},
 				"debug_prefix_cancel":     {"esc"},
 			},
 			TapePrefix: map[string][]string{
