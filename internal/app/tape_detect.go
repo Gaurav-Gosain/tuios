@@ -279,14 +279,31 @@ func (m *OS) evaluateTapeDir(dir string) {
 		return
 	}
 
-	// One banner per directory per run.
+	// One prompt per directory per run.
 	if m.tapeDetect.handled[dir] {
 		return
 	}
 	m.tapeDetect.handled[dir] = true
 
+	// Auto-open the review dialog when the user opted in and the tape is one they
+	// can act on (eligible: untrusted, changed, or trusted). This only saves the
+	// keypress that opens the dialog - the user still chooses Run once / Trust and
+	// run / Never / Not now, so the trust boundary is unchanged. An ineligible
+	// tape keeps the passive notice: a dismiss-only popup for something you cannot
+	// act on would only be in the way.
+	if m.tapeAutoReviewEnabled() && (res.Status == trust.StatusUntrusted || res.Status == trust.StatusTrusted) {
+		m.openTapeReviewForDir(dir)
+		return
+	}
+
 	message, notifType := tapeBanner(res)
 	m.ShowNotification(message, notifType, tapeBannerDuration)
+}
+
+// tapeAutoReviewEnabled reports whether the user opted into auto-opening the
+// review dialog on detection ([tape] auto_review = true).
+func (m *OS) tapeAutoReviewEnabled() bool {
+	return m.UserConfig != nil && m.UserConfig.Tape.AutoReview
 }
 
 // tapeBanner returns the passive banner text and notification type for a check

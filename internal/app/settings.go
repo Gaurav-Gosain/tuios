@@ -111,6 +111,24 @@ func (m *OS) setAppearance(fn func(a *config.AppearanceConfig)) {
 	}
 }
 
+// setTape runs fn against the held config's [tape] section. Project-tape
+// settings are read straight off UserConfig (not appearance globals), so a
+// change takes effect on the next detection with no extra apply step.
+func (m *OS) setTape(fn func(t *config.TapeConfig)) {
+	if m.UserConfig != nil {
+		fn(&m.UserConfig.Tape)
+	}
+}
+
+// tapeAutorunConfigValue returns the configured [tape] autorun mode (not the
+// TUIOS_TAPE_AUTORUN env override), for the settings row.
+func (m *OS) tapeAutorunConfigValue() string {
+	if m.UserConfig != nil && m.UserConfig.Tape.Autorun != "" {
+		return m.UserConfig.Tape.Autorun
+	}
+	return config.TapeAutorunAsk
+}
+
 const themeNone = "none"
 
 var (
@@ -336,7 +354,34 @@ func (m *OS) settingsCategories() []settingsCategory {
 		},
 	}
 
-	return []settingsCategory{appearance, dock, behavior, advanced}
+	tape := settingsCategory{
+		Name: "Tape",
+		Items: []settingItem{
+			{
+				Label:   "Autorun",
+				Desc:    "Project-tape detection: off, ask (passive), or auto (run trusted)",
+				Control: controlEnum,
+				Options: config.TapeAutorunModes,
+				value:   func(m *OS) string { return m.tapeAutorunConfigValue() },
+				adjust: func(m *OS, dir int) {
+					next := cycleEnum(config.TapeAutorunModes, m.tapeAutorunConfigValue(), dir)
+					m.setTape(func(t *config.TapeConfig) { t.Autorun = next })
+				},
+			},
+			{
+				Label:   "Auto-open review",
+				Desc:    "Open the review dialog automatically on entering a tape directory",
+				Control: controlBool,
+				boolVal: func(m *OS) bool { return m.UserConfig != nil && m.UserConfig.Tape.AutoReview },
+				adjust: func(m *OS, _ int) {
+					cur := m.UserConfig != nil && m.UserConfig.Tape.AutoReview
+					m.setTape(func(t *config.TapeConfig) { t.AutoReview = !cur })
+				},
+			},
+		},
+	}
+
+	return []settingsCategory{appearance, dock, behavior, advanced, tape}
 }
 
 // OpenSettings shows the settings overlay, initializing the theme registry so

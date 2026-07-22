@@ -90,7 +90,8 @@ never steals focus because you typed `cd`. It shows:
 
 ```toml
 [tape]
-autorun = "ask"   # off | ask | auto
+autorun = "ask"        # off | ask | auto
+auto_review = false    # auto-open the review dialog on detection
 ```
 
 - **`off`** - no scanning, no indicators, feature invisible.
@@ -102,6 +103,30 @@ autorun = "ask"   # off | ask | auto
 
 The environment variable `TUIOS_TAPE_AUTORUN` overrides the config for one run
 (`TUIOS_TAPE_AUTORUN=off tuios ...`), useful for CI or poking at hostile code.
+
+### `auto_review` (opt-in, default off)
+
+By default a detected tape is passive: a banner and a dock badge, and you open
+the review dialog yourself. Set `auto_review = true` to have the review dialog
+open **automatically** when you enter a directory with a reviewable tape, saving
+the keypress that opens it.
+
+It never weakens the trust boundary - the auto-opened dialog still requires you to
+choose Run once / Trust and run / Never / Not now. The behavior matrix:
+
+| Mode | Tape | `auto_review = false` (default) | `auto_review = true` |
+|------|------|--------------------------------|----------------------|
+| `off` | any | nothing | nothing |
+| `ask` | untrusted / trusted / changed | passive banner + badge | dialog opens automatically |
+| `auto` | trusted, unedited | runs automatically (no dialog) | runs automatically (no dialog) |
+| `auto` | untrusted / changed | passive banner + badge | dialog opens automatically |
+| any | **denied** | nothing | nothing (deny is respected) |
+| any | **ineligible** | passive notice | passive notice (no dismiss-only popup) |
+
+The dialog auto-opens at most once per directory per session (the same
+once-per-directory rule as the banner), only for the focused window, and never
+while a tape is running. An ineligible tape keeps its passive one-line notice
+rather than popping a dialog you cannot act on.
 
 ## The tape header
 

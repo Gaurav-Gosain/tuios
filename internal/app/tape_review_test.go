@@ -267,3 +267,136 @@ func TestSessionNameDerivedFromDir(t *testing.T) {
 		t.Fatalf("sanitizeSessionName = %q, want .hidden", got)
 	}
 }
+
+// --- Auto-review (auto_review setting) ---
+
+func TestAutoReviewOpensDialogOnUntrusted(t *testing.T) {
+	m, _ := newDetectOS(t, config.TapeAutorunAsk)
+	m.UserConfig.Tape.AutoReview = true
+	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
+
+	drive(t, m, "focused", dir)
+
+	if !m.ShowTapeReview || m.TapeReview == nil {
+		t.Fatalf("review dialog did not auto-open with auto_review=true")
+	}
+	if m.TapeReview.Status != trust.StatusUntrusted {
+		t.Fatalf("dialog status = %v, want untrusted", m.TapeReview.Status)
+	}
+	if m.ScriptMode {
+		t.Fatalf("auto-review must not run anything; it only opens the dialog")
+	}
+}
+
+func TestNoAutoReviewShowsBannerNotDialog(t *testing.T) {
+	m, _ := newDetectOS(t, config.TapeAutorunAsk) // AutoReview defaults false
+	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
+
+	before := len(m.Notifications)
+	drive(t, m, "focused", dir)
+
+	if m.ShowTapeReview {
+		t.Fatalf("dialog auto-opened with auto_review=false (default must stay passive)")
+	}
+	if len(m.Notifications) <= before {
+		t.Fatalf("no passive banner shown with auto_review=false")
+	}
+}
+
+func TestAutoReviewDeniedNeverOpens(t *testing.T) {
+	m, store := newDetectOS(t, config.TapeAutorunAsk)
+	m.UserConfig.Tape.AutoReview = true
+	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
+	res := checkTape(t, store, dir)
+	if err := store.Deny(res.Path); err != nil {
+		t.Fatalf("deny: %v", err)
+	}
+
+	drive(t, m, "focused", dir)
+
+	if m.ShowTapeReview {
+		t.Fatalf("a denied tape auto-opened the dialog; deny must be respected")
+	}
+}
+
+func TestAutoReviewDoesNotRepopSameDir(t *testing.T) {
+	m, _ := newDetectOS(t, config.TapeAutorunAsk)
+	m.UserConfig.Tape.AutoReview = true
+	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
+
+	drive(t, m, "focused", dir)
+	if !m.ShowTapeReview {
+		t.Fatalf("first entry should auto-open the dialog")
+	}
+	m.CloseTapeReview() // user dismisses
+
+	drive(t, m, "focused", dir) // re-enter / cwd churns within the same dir
+	if m.ShowTapeReview {
+		t.Fatalf("re-entering a handled dir re-popped the dialog; must dedup per session")
+	}
+}
+
+func TestAutoReviewIneligibleKeepsPassive(t *testing.T) {
+	m, _ := newDetectOS(t, config.TapeAutorunAsk)
+	m.UserConfig.Tape.AutoReview = true
+	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
+	if err := os.Chmod(filepath.Join(dir, trust.TapeFileName), 0o666); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	before := len(m.Notifications)
+	drive(t, m, "focused", dir)
+
+	if m.ShowTapeReview {
+		t.Fatalf("an ineligible tape auto-opened a dismiss-only dialog; keep the passive notice")
+	}
+	if len(m.Notifications) <= before {
+		t.Fatalf("ineligible tape should still show the passive warning notice")
+	}
+}
+
+func TestAutoReviewAutoModeTrustedStillRuns(t *testing.T) {
+	m, store := newDetectOS(t, config.TapeAutorunAuto)
+	m.UserConfig.Tape.AutoReview = true
+	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
+	res := checkTape(t, store, dir)
+	if err := store.Trust(res.Path, res.Hash); err != nil {
+		t.Fatalf("trust: %v", err)
+	}
+
+	drive(t, m, "focused", dir)
+
+	if m.ShowTapeReview {
+		t.Fatalf("a trusted tape in auto mode should run, not open the dialog")
+	}
+	if !m.ScriptMode {
+		t.Fatalf("a trusted tape in auto mode should have auto-run")
+	}
+}
+
+func TestAutoReviewAutoModeUntrustedOpensNoRun(t *testing.T) {
+	m, _ := newDetectOS(t, config.TapeAutorunAuto)
+	m.UserConfig.Tape.AutoReview = true
+	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
+
+	drive(t, m, "focused", dir)
+
+	if !m.ShowTapeReview {
+		t.Fatalf("an untrusted tape in auto mode with auto_review should open the dialog")
+	}
+	if m.ScriptMode {
+		t.Fatalf("an untrusted tape must never run without review")
+	}
+}
+
+func TestAutoReviewOffModeNothing(t *testing.T) {
+	m, _ := newDetectOS(t, config.TapeAutorunOff)
+	m.UserConfig.Tape.AutoReview = true
+	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
+
+	drive(t, m, "focused", dir)
+
+	if m.ShowTapeReview {
+		t.Fatalf("off mode auto-opened the dialog; off means the feature is invisible")
+	}
+}

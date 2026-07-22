@@ -38,8 +38,17 @@ type UserConfig struct {
 // runs anything without a keypress, and only content the user already read and
 // trusted. The default is "ask", which is safe by construction. A tape edited
 // since it was trusted reverts to untrusted (hash mismatch) and re-prompts.
+//
+// AutoReview (default false) is an opt-in convenience: when true, entering a
+// directory with a reviewable tape opens the review/trust dialog automatically
+// instead of only surfacing the passive banner and badge, saving the keypress
+// that opens it. It never weakens the trust boundary - the user still chooses Run
+// once / Trust and run / Never / Not now - and it never auto-opens for a denied
+// tape, an already-handled directory this session, or (in auto mode) a
+// trusted-unedited tape that runs on its own.
 type TapeConfig struct {
-	Autorun string `toml:"autorun"` // off | ask | auto (default: ask)
+	Autorun    string `toml:"autorun"`     // off | ask | auto (default: ask)
+	AutoReview bool   `toml:"auto_review"` // auto-open the review dialog on detection (default: false)
 }
 
 // DaemonConfig holds daemon-related settings
@@ -127,7 +136,8 @@ func DefaultConfig() *UserConfig {
 			SocketPath:   "", // Empty means use default XDG path
 		},
 		Tape: TapeConfig{
-			Autorun: TapeAutorunAsk,
+			Autorun:    TapeAutorunAsk,
+			AutoReview: false,
 		},
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
