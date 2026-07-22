@@ -100,6 +100,20 @@ func HandleTapePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetTapePrefixAction)
 }
 
+// isCtrlP reports whether a key press is Ctrl+P, regardless of how the terminal
+// encoded it. The command palette binding must fire under the legacy control
+// byte (0x10) and under every Kitty keyboard protocol variant a terminal might
+// send. Matching on msg.String() is fragile: with associated-text reporting the
+// stringified key is "p", and with alternate-key reporting it is "ctrl+P", so a
+// raw-string comparison against "ctrl+p" silently misses and the key falls
+// through to the shell (in fish, Ctrl+P is history-back). The decoded key event
+// is stable across all of them: the code is 'p' and the only modifier is Ctrl.
+// Requiring Mod == ModCtrl exactly means a bare 'p' can never match, so ordinary
+// typing into the shell is untouched.
+func isCtrlP(msg tea.KeyPressMsg) bool {
+	return msg.Mod == tea.ModCtrl && (msg.Code == 'p' || msg.Code == 'P')
+}
+
 // handleTerminalModeBinds dispatches the direct (prefix-less) binds from the
 // [keybindings.terminal_mode] section, plus the handful of main-section actions
 // that must keep working while typing into a shell. It reports whether the key
