@@ -380,6 +380,7 @@ var ActionDescriptions = map[string]string{
 	"debug_prefix_cache":      "Toggle cache statistics",
 	"debug_prefix_animations": "Toggle animations",
 	"debug_prefix_showkeys":   "Toggle showkeys overlay",
+	"debug_prefix_keyevents":  "Toggle key events overlay",
 	"debug_prefix_cancel":     "Cancel debug prefix",
 
 	// Terminal Mode (direct keybinds, no prefix required)

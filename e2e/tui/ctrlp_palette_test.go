@@ -54,6 +54,14 @@ const kittyCtrlP = "\x1b[112;5u"
 // legacyCtrlP is the legacy control byte for Ctrl+P (0x10, DLE).
 var legacyCtrlP = tuitest.Ctrl('p')
 
+// numLockCtrlP is Ctrl+P under the Kitty keyboard protocol with Num Lock
+// active: ESC [ 112 ; 133 u. The modifier field 133 = 1 + ctrl(4) + num_lock(128).
+// Num Lock is the boot default on most desktop keyboards, so this is the
+// real-world encoding the owner's terminal delivers. The decoder keeps the Num
+// Lock bit on the event (Mod = ModCtrl|ModNumLock), which an exact Mod == ModCtrl
+// check missed; this case guards the palette still opens.
+const numLockCtrlP = "\x1b[112;133u"
+
 // attachClient creates a detached daemon session with one window and attaches a
 // client. This is the owner's real setup: a daemon-backed session reached with
 // `tuios attach`. The returned client is settled in window-management mode with
@@ -132,6 +140,35 @@ func TestCtrlPOpensPaletteTerminalModeKitty(t *testing.T) {
 	}
 	closePalette(t, term, "kitty terminal mode")
 	alive(t, term, "after kitty ctrl+p terminal mode")
+}
+
+// TestCtrlPOpensPaletteTerminalModeNumLock reproduces the owner's real failure:
+// under the Kitty keyboard protocol with Num Lock on (the keyboard boot default),
+// Ctrl+P arrives as CSI 112;133u and decodes to Mod = ModCtrl|ModNumLock. The
+// exact-equality match missed the lock bit and the palette never opened; on the
+// fixed binary the lock bit is masked off and the palette opens.
+func TestCtrlPOpensPaletteTerminalModeNumLock(t *testing.T) {
+	term := attachTerminalModeClient(t)
+	if err := term.SendKeys(tuitest.Key(numLockCtrlP)); err != nil {
+		t.Fatalf("send numlock ctrl+p: %v", err)
+	}
+	waitPaletteOpen(t, term, "on numlock ctrl+p in terminal mode")
+	if strings.Contains(term.Screen().Text(), "^P") {
+		t.Fatalf("ctrl+p leaked to the shell (found ^P on screen)\n%s", term.Snapshot())
+	}
+	closePalette(t, term, "numlock terminal mode")
+	alive(t, term, "after numlock ctrl+p terminal mode")
+}
+
+// TestCtrlPOpensPaletteWindowModeNumLock is the window-management-mode counterpart.
+func TestCtrlPOpensPaletteWindowModeNumLock(t *testing.T) {
+	term := attachClient(t) // already in window-management mode
+	if err := term.SendKeys(tuitest.Key(numLockCtrlP)); err != nil {
+		t.Fatalf("send numlock ctrl+p: %v", err)
+	}
+	waitPaletteOpen(t, term, "on numlock ctrl+p in window mode")
+	closePalette(t, term, "numlock window mode")
+	alive(t, term, "after numlock ctrl+p window mode")
 }
 
 // TestCtrlPOpensPaletteWindowModeKitty checks the window-management-mode path

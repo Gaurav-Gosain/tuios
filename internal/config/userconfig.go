@@ -20,6 +20,18 @@ type UserConfig struct {
 	Startup     StartupConfig     `toml:"startup"`
 	Tape        TapeConfig        `toml:"tape"`
 	Hooks       HooksConfig       `toml:"hooks"`
+	Debug       DebugConfig       `toml:"debug"`
+}
+
+// DebugConfig holds diagnostic settings. These are off by default so a normal
+// session is unaffected; they exist to diagnose input and rendering problems.
+type DebugConfig struct {
+	// ShowKeyEvents enables the on-screen key-events overlay, which prints the
+	// decoded key event (String(), Code as a number and rune, the decoded
+	// modifier bits, and Text) for the last several keypresses in both window
+	// management and terminal mode. It is the tool for diagnosing which key a
+	// terminal actually delivers. Default false.
+	ShowKeyEvents bool `toml:"show_key_events"`
 }
 
 // StartupConfig holds settings that only take effect when a session starts.
@@ -295,6 +307,7 @@ func DefaultConfig() *UserConfig {
 				"debug_prefix_cache":      {"c"},
 				"debug_prefix_animations": {"a"},
 				"debug_prefix_showkeys":   {"k"},
+				"debug_prefix_keyevents":  {"e"},
 				"debug_prefix_cancel":     {"esc"},
 			},
 			TapePrefix: map[string][]string{

@@ -107,11 +107,26 @@ func HandleTapePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 // stringified key is "p", and with alternate-key reporting it is "ctrl+P", so a
 // raw-string comparison against "ctrl+p" silently misses and the key falls
 // through to the shell (in fish, Ctrl+P is history-back). The decoded key event
-// is stable across all of them: the code is 'p' and the only modifier is Ctrl.
-// Requiring Mod == ModCtrl exactly means a bare 'p' can never match, so ordinary
-// typing into the shell is untouched.
+// is stable across all of them: the code is 'p' and the only real modifier is
+// Ctrl.
+//
+// The lock modifiers (Caps Lock, Num Lock, Scroll Lock) are masked off before
+// the comparison. A terminal that has negotiated the Kitty keyboard protocol
+// reports the lock state in the modifier field, and the decoder keeps those bits
+// on the event, so with Num Lock on (the boot default on most keyboards) Ctrl+P
+// decodes to ModCtrl|ModNumLock rather than exactly ModCtrl. An exact-equality
+// check silently missed that and the palette never opened; this is the failure
+// the owner hit on a real terminal that the CSI-u e2e cases (which send mod 5,
+// no lock bit) did not reproduce. Masking the lock bits and then requiring the
+// remaining modifier set to be exactly Ctrl keeps a bare 'p' and every other
+// chord (Ctrl+Shift+P, Ctrl+Alt+P, Alt+P) from matching, so ordinary shell
+// typing and the other Ctrl+<letter> binds are untouched.
 func isCtrlP(msg tea.KeyPressMsg) bool {
-	return msg.Mod == tea.ModCtrl && (msg.Code == 'p' || msg.Code == 'P')
+	if msg.Code != 'p' && msg.Code != 'P' {
+		return false
+	}
+	mods := msg.Mod &^ (tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock)
+	return mods == tea.ModCtrl
 }
 
 // handleTerminalModeBinds dispatches the direct (prefix-less) binds from the

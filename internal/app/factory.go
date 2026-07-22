@@ -97,6 +97,11 @@ func NewOS(opts OSOptions) *OS {
 		ShowKeys:          opts.ShowKeys,
 		RecentKeys:        []KeyEvent{},
 		KeyHistoryMaxSize: 5,
+		// The --show-keys flag also turns on the key-events diagnostic overlay so
+		// the flag the owner reaches for shows the decoded events, not only the
+		// keycast pills. The [debug] show_key_events config can enable it on its
+		// own too (folded in below once the config is resolved).
+		ShowKeyEvents: opts.ShowKeys,
 
 		// Dimensions
 		Width:  opts.Width,
@@ -152,6 +157,9 @@ func NewOS(opts OSOptions) *OS {
 		// Collected here and reported from Init, once there is a TUI to report
 		// them in.
 		os.ConfigWarnings = config.ConfigWarnings(cfg)
+		if cfg.Debug.ShowKeyEvents {
+			os.ShowKeyEvents = true
+		}
 		if cfg.Hooks != nil {
 			os.HookManager.LoadFromConfig(cfg.Hooks)
 		}
