@@ -146,17 +146,12 @@ func detachSession(o *app.OS) (*app.OS, tea.Cmd, bool) {
 
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers
 func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Capture key event for showkeys overlay if enabled
+	// Capture the keypress for the showkeys overlay when it is enabled. This is
+	// the earliest shared point in the input path, before any mode routing or
+	// handler can consume the key, so the overlay reflects keys in both
+	// window-management and terminal mode. It only observes; it never consumes.
 	if o.ShowKeys {
 		o.CaptureKeyEvent(msg)
-	}
-
-	// Capture the raw decoded key event for the diagnostic overlay. This is the
-	// earliest shared point in the input path, before any mode routing or handler
-	// can consume the key, so the overlay shows exactly what the terminal
-	// delivered in both window-management and terminal mode. It only observes.
-	if o.ShowKeyEvents {
-		o.CaptureKeyEventDiagnostic(msg)
 	}
 
 	// Handle quit confirmation dialog (highest priority - works in any mode)

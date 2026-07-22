@@ -554,21 +554,12 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Shortcut: "prefix+D k",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ShowKeys = !m.ShowKeys
-				return m, nil
-			},
-		},
-		{
-			Name:     "Toggle Key Events Overlay",
-			Shortcut: "prefix+D e",
-			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ToggleKeyEventsOverlay()
+				m.ToggleShowKeys()
 				state := "Disabled"
-				if m.ShowKeyEvents {
+				if m.ShowKeys {
 					state = "Enabled"
 				}
-				m.ShowNotification("Key Events Overlay "+state, "success", config.NotificationDuration)
+				m.ShowNotification("Show Keys Overlay "+state, "success", config.NotificationDuration)
 				return m, nil
 			},
 		},

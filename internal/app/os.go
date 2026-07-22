@@ -247,16 +247,12 @@ type OS struct {
 	// ConfigWarnings holds the problems found in the loaded config, reported to
 	// the user once the TUI is up (see reportConfigWarnings).
 	ConfigWarnings []string
-	// Showkeys feature
-	ShowKeys          bool       // True when showkeys overlay is enabled
+	// Showkeys overlay: a bottom-right, dock-aware keycast that shows the last
+	// few keypresses as styled pills and expires them after a short timeout. It
+	// renders purely from ShowKeys plus RecentKeys, gated on nothing else.
+	ShowKeys          bool       // True when the showkeys overlay is enabled
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
-	// Key-events diagnostic overlay. Separate from the showkeys keycast above:
-	// this prints the raw decoded event (String, Code, Mod bits, Text) for the
-	// last few keypresses so an input problem can be diagnosed on screen. It
-	// observes the key at the top of the input path and never consumes it.
-	ShowKeyEvents bool             // True when the key-events diagnostic overlay is enabled
-	KeyEventLog   []KeyEventRecord // Ring buffer of recently decoded key events (newest last)
 	// Tape scripting support
 	ScriptPlayer       any       // *tape.Player - script playback engine
 	ScriptMode         bool      // True when running a tape script
@@ -423,18 +419,6 @@ type KeyEvent struct {
 	Timestamp time.Time // When the key was pressed
 	Count     int       // Number of consecutive identical keys
 	Action    string    // Resolved action name (optional)
-}
-
-// KeyEventRecord is one decoded keypress as seen at the top of the input path,
-// captured for the key-events diagnostic overlay. It records the fields needed
-// to tell exactly what the terminal delivered.
-type KeyEventRecord struct {
-	String string    // msg.String() (e.g. "ctrl+p")
-	Code   rune      // Decoded key code
-	Mod    int       // Raw modifier bitmask (tea.KeyMod)
-	Text   string    // Associated text, when the terminal reported any
-	Count  int       // Consecutive identical events, collapsed into one row
-	Time   time.Time // When the most recent identical event arrived
 }
 
 func createID() string {
