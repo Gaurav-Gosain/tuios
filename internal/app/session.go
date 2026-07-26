@@ -711,13 +711,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		// Only subscribe to PTY output if window is in current workspace
 		// Windows in other workspaces will be subscribed when switching to them
 		if ws.Workspace == m.CurrentWorkspace {
-			m.subscribeToPTY(window)
-
-			// Get terminal content for visible windows
-			termState, err := m.DaemonClient.GetTerminalState(ptyID, true)
-			if err == nil && termState != nil {
-				m.restoreTerminalContent(window, termState)
-			}
+			m.primePaneFromDaemon(window)
 		}
 
 		// Register exit handler (always needed regardless of workspace)
@@ -967,25 +961,74 @@ func (m *OS) TriggerAltScreenRedraws() {
 }
 
 // restoreTerminalContent populates a window's terminal with content from daemon state.
+//
+// Everything it does to the emulator happens under the window's I/O lock. The
+// emulator has no lock of its own; the daemon outputWriter goroutine writes its
+// cell buffer under ioMu and the renderer reads it under RLockIO. Restoring is
+// a mode switch plus a blit of roughly a screenful of cells, and on the paths
+// that reach it with the pane already subscribed (an in-flight resize during
+// tape playback, and every attach before the subscribe order below was fixed)
+// that ran straight into live output: torn cells on screen, and a RestoreModes
+// racing a mode change from the guest leaving mouse tracking or bracketed paste
+// set from whichever side landed last.
+//
+// Ordering against a live subscription is a separate matter from the lock and
+// is handled by the callers, which restore before they subscribe.
 func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalState) {
 	if w.Terminal == nil || state == nil {
 		return
 	}
 
-	// CRITICAL FIX: Use RestoreAltScreenMode instead of sending escape sequences
-	// Sending ESC[?1049h triggers setAltScreenMode() which CLEARS the screen buffer!
-	// RestoreAltScreenMode() just switches the buffer pointer without clearing.
+	restoredModes, cellsRestored := 0, 0
+
+	w.LockIO()
+	// Re-check under the lock; Close() nils Terminal while holding it.
+	if t := w.Terminal; t != nil {
+		// CRITICAL FIX: Use RestoreAltScreenMode instead of sending escape sequences
+		// Sending ESC[?1049h triggers setAltScreenMode() which CLEARS the screen buffer!
+		// RestoreAltScreenMode() just switches the buffer pointer without clearing.
+		if state.IsAltScreen {
+			t.RestoreAltScreenMode(true)
+		}
+
+		// CRITICAL: Restore terminal modes (mouse tracking, bracketed paste, etc.)
+		// This must happen AFTER RestoreAltScreenMode so the modes map is properly updated
+		// These modes are essential for apps like vim/htop to receive mouse events
+		if len(state.Modes) > 0 {
+			t.RestoreModes(state.Modes)
+			restoredModes = len(state.Modes)
+		}
+
+		// For alt screen apps (vim, htop, etc.), DON'T restore cell content manually.
+		// Instead, rely on SIGWINCH (triggered by resize in RestoreTerminalStates) to make
+		// the app redraw itself. This is cleaner and avoids ANSI leakage issues.
+		// Only restore cell content for non-alt-screen terminals (normal shell).
+		if !state.IsAltScreen && len(state.Screen) > 0 {
+			for y := 0; y < len(state.Screen) && y < state.Height; y++ {
+				if state.Screen[y] == nil {
+					continue
+				}
+				for x := 0; x < len(state.Screen[y]) && x < state.Width; x++ {
+					cellState := state.Screen[y][x]
+					// Only restore non-empty cells
+					if cellState.Content != "" {
+						cell := session.StateToCell(cellState)
+						if cell != nil {
+							t.SetCell(x, y, cell)
+							cellsRestored++
+						}
+					}
+				}
+			}
+		}
+	}
+	w.UnlockIO()
+
 	if state.IsAltScreen {
-		w.Terminal.RestoreAltScreenMode(true)
 		m.LogInfo("Restored alt screen mode for window %s", w.ID[:8])
 	}
-
-	// CRITICAL: Restore terminal modes (mouse tracking, bracketed paste, etc.)
-	// This must happen AFTER RestoreAltScreenMode so the modes map is properly updated
-	// These modes are essential for apps like vim/htop to receive mouse events
-	if len(state.Modes) > 0 {
-		w.Terminal.RestoreModes(state.Modes)
-		m.LogInfo("Restored %d terminal modes for window %s", len(state.Modes), w.ID[:8])
+	if restoredModes > 0 {
+		m.LogInfo("Restored %d terminal modes for window %s", restoredModes, w.ID[:8])
 	}
 
 	// Set the window's IsAltScreen flag for mouse event forwarding
@@ -1000,28 +1043,7 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 		traceSync(w, state.IsAltScreen, false, state.Width, state.Height, note)
 	}
 
-	// For alt screen apps (vim, htop, etc.), DON'T restore cell content manually.
-	// Instead, rely on SIGWINCH (triggered by resize in RestoreTerminalStates) to make
-	// the app redraw itself. This is cleaner and avoids ANSI leakage issues.
-	// Only restore cell content for non-alt-screen terminals (normal shell).
-	if !state.IsAltScreen && state.Screen != nil && len(state.Screen) > 0 {
-		cellsRestored := 0
-		for y := 0; y < len(state.Screen) && y < state.Height; y++ {
-			if state.Screen[y] == nil {
-				continue
-			}
-			for x := 0; x < len(state.Screen[y]) && x < state.Width; x++ {
-				cellState := state.Screen[y][x]
-				// Only restore non-empty cells
-				if cellState.Content != "" {
-					cell := session.StateToCell(cellState)
-					if cell != nil {
-						w.Terminal.SetCell(x, y, cell)
-						cellsRestored++
-					}
-				}
-			}
-		}
+	if cellsRestored > 0 {
 		m.LogInfo("Restored %d cells for window %s", cellsRestored, w.ID[:8])
 	}
 
@@ -1085,6 +1107,29 @@ func (m *OS) SetupPTYOutputHandlers() error {
 	return nil
 }
 
+// primePaneFromDaemon fills a pane's local emulator with the daemon's copy of
+// the screen and then starts the live stream, in that order.
+//
+// The order is the point of the function existing. Subscribing first meant the
+// output goroutine was already writing the emulator while the snapshot was
+// blitted into it on the UI goroutine: a torn buffer, and a pane showing a
+// mixture of stale snapshot and live output, since the blit writes cells that
+// are by definition older than anything arriving live. Restoring first costs
+// only the output emitted between the state request and the subscribe, which is
+// one round trip and cannot be interleaved into the wrong frame.
+//
+// Both call sites route through here so the ordering is stated once.
+func (m *OS) primePaneFromDaemon(window *terminal.Window) {
+	if m.DaemonClient == nil || window.PTYID == "" {
+		return
+	}
+
+	if state, err := m.DaemonClient.GetTerminalState(window.PTYID, true); err == nil && state != nil {
+		m.restoreTerminalContent(window, state)
+	}
+	m.subscribeToPTY(window)
+}
+
 // subscribeToPTY subscribes to PTY output for a window.
 // Safe to call multiple times - will not double-subscribe.
 func (m *OS) subscribeToPTY(window *terminal.Window) {
@@ -1144,15 +1189,7 @@ func (m *OS) SubscribeWorkspaceWindows(workspace int) {
 		if w.DaemonMode && w.PTYID != "" && w.Workspace == workspace {
 			// Only subscribe if not already subscribed
 			if !m.SubscribedPTYs[w.PTYID] {
-				// Fetch terminal state first to populate the buffer
-				termState, err := m.DaemonClient.GetTerminalState(w.PTYID, true)
-				if err == nil && termState != nil {
-					m.restoreTerminalContent(w, termState)
-					m.LogInfo("[WORKSPACE] Restored terminal state for window %s", w.ID[:8])
-				}
-
-				// Then subscribe for live updates
-				m.subscribeToPTY(w)
+				m.primePaneFromDaemon(w)
 			}
 		}
 	}
