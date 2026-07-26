@@ -25,9 +25,18 @@ var narrowScreens = []struct {
 	{"desktop", 120, 40},
 }
 
-// assertFitsScreen fails if any line of out is wider than w or the block is
-// taller than h. An overlay wider than the screen has its right-hand side drawn
-// off the edge, where it cannot be read or scrolled to.
+// assertFitsScreen fails if any line of out is wider than w, the block is
+// taller than h, or any line pads itself with a control character. An overlay
+// wider than the screen has its right-hand side drawn off the edge, where it
+// cannot be read or scrolled to.
+//
+// The control-character half guards a different way of getting the same answer
+// wrong. Every row here is padded to the panel width with literal spaces, and
+// the fitting arithmetic in overlay_fit.go measures those rows to decide what
+// else fits. A tab would break that: it is one byte that lipgloss measures as
+// one cell but a terminal advances to its next tab stop, so the panel's own
+// idea of where a row ends would stop matching the screen's. Carriage returns
+// and the rest are the same failure with a different glyph.
 func assertFitsScreen(t *testing.T, name, out string, w, h int) {
 	t.Helper()
 	if out == "" {
@@ -35,6 +44,11 @@ func assertFitsScreen(t *testing.T, name, out string, w, h int) {
 	}
 	lines := strings.Split(out, "\n")
 	for i, ln := range lines {
+		if j := strings.IndexAny(ln, "\t\r\v\f"); j >= 0 {
+			t.Errorf("%s: line %d pads with a control character (%q at byte %d): %q",
+				name, i, ln[j], j, ln)
+			return
+		}
 		if lw := lipgloss.Width(ln); lw > w {
 			t.Errorf("%s: line %d is %d cells wide, screen is %d: %q", name, i, lw, w, ln)
 			return
