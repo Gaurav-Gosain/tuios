@@ -243,7 +243,26 @@ func (s *Screen) InsertCell(n int) {
 	}
 
 	x, y := s.cur.X, s.cur.Y
-	s.buf.InsertCellArea(x, y, n, s.blankCell(), s.scroll)
+	line, n, ok := s.shiftBounds(x, y, n)
+	if !ok {
+		return
+	}
+	right := s.scroll.Max.X
+
+	// Copied by assignment rather than through the buffer's Set, which blanks
+	// the other half of any wide rune it lands on. That is right for an
+	// overwrite but ruinous inside a shift, where the cells being moved are
+	// still live: blanking the neighbour of a cell that has just been copied
+	// erases the copy, and a single shift over a line of CJK empties the line.
+	for i := right - 1; i >= x+n; i-- {
+		line[i] = line[i-n]
+	}
+	blank := s.blankCell()
+	for i := x; i < x+n; i++ {
+		putBlank(line, i, blank)
+	}
+	repairWide(line)
+	s.buf.TouchLine(x, y, right-x)
 }
 
 // DeleteCell deletes n cells at the cursor position moving cells to the left.
@@ -254,7 +273,83 @@ func (s *Screen) DeleteCell(n int) {
 	}
 
 	x, y := s.cur.X, s.cur.Y
-	s.buf.DeleteCellArea(x, y, n, s.blankCell(), s.scroll)
+	line, n, ok := s.shiftBounds(x, y, n)
+	if !ok {
+		return
+	}
+	right := s.scroll.Max.X
+
+	for i := x; i < right-n; i++ {
+		line[i] = line[i+n]
+	}
+	blank := s.blankCell()
+	for i := right - n; i < right; i++ {
+		putBlank(line, i, blank)
+	}
+	repairWide(line)
+	s.buf.TouchLine(x, y, right-x)
+}
+
+// shiftBounds validates a cell shift at (x, y) and returns the row it operates
+// on together with the count clamped to the space between x and the right
+// margin. It reports false when the position is outside the margins or the
+// screen, which is the case every caller treats as a no-op.
+func (s *Screen) shiftBounds(x, y, n int) (uv.Line, int, bool) {
+	area := s.scroll
+	if n <= 0 || y < area.Min.Y || y >= area.Max.Y || y >= s.buf.Height() ||
+		x < area.Min.X || x >= area.Max.X || x >= s.buf.Width() {
+		return nil, 0, false
+	}
+	if x+n > area.Max.X {
+		n = area.Max.X - x
+	}
+	return s.buf.Lines[y], n, true
+}
+
+// putBlank overwrites one column with the erase cell. Like the shift itself it
+// assigns rather than calling Set, because the columns it fills have already
+// been vacated and any wide rune the fill cuts is dealt with by repairWide.
+func putBlank(line uv.Line, x int, blank *uv.Cell) {
+	if blank == nil {
+		line[x] = uv.EmptyCell
+		return
+	}
+	line[x] = *blank
+}
+
+// repairWide blanks every half of a wide rune whose partner a shift left
+// behind. A rune that moved by an odd number of columns, or whose second half
+// fell off the right margin, leaves a cell claiming a column it no longer
+// shares with anything; a terminal has no way to draw that, so both ends of the
+// broken pair become spaces.
+//
+// One pass afterwards is deliberate. Proving which end of which shift can orphan
+// which half is fiddly and easy to get subtly wrong, whereas the invariant here
+// (a lead of width w is followed by exactly w-1 continuation cells, and no
+// continuation stands alone) is stated once and checked over the whole row.
+func repairWide(line uv.Line) {
+	for i := 0; i < len(line); i++ {
+		w := line[i].Width
+		switch {
+		case w > 1:
+			whole := true
+			for j := 1; j < w; j++ {
+				if i+j >= len(line) || line[i+j].Width != 0 {
+					whole = false
+					break
+				}
+			}
+			if !whole {
+				line[i].Empty()
+				continue
+			}
+			i += w - 1
+		case w == 0:
+			// Reached without being skipped over above, so there is no lead in
+			// front of it.
+			line[i].Empty()
+		}
+	}
 }
 
 // ScrollUp scrolls the content up n lines within the given region. Lines
