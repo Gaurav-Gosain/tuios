@@ -23,13 +23,31 @@ type listOverlay struct {
 	Query      string
 	Count      int
 	Selected   int
-	Scroll     int
-	EmptyMsg   string
-	Hints      []overlay.Hint
-	// RenderRow returns the content for row i on the given row background. It
-	// should be at most Width cells wide; the helper fills the remainder with
-	// rowBg so the selection highlight spans the row.
-	RenderRow func(i int, selected bool, rowBg color.Color, pal overlay.Palette) string
+	// Scroll points at the caller's scroll offset; the renderer clamps it to the
+	// rows it can actually show, which depends on the screen height.
+	Scroll   *int
+	EmptyMsg string
+	Hints    []overlay.Hint
+	// RenderRow returns the content for row i on the given row background, at
+	// most width cells wide (width is the fitted panel width, not the requested
+	// one); the helper fills the remainder with rowBg so the selection highlight
+	// spans the row.
+	RenderRow func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string
+}
+
+// listOverlayLayout returns the fitted inner width and visible row count for a
+// list overlay, so the keyboard and wheel navigation can scroll by the same
+// number of rows the renderer draws.
+func (m *OS) listOverlayLayout(cfg listOverlay) (width, rows int, hints []overlay.Hint) {
+	width = m.panelWidth(cfg.Width)
+	// Body lines that are not list rows: the scroll indicator, plus the search
+	// input and its rule when the list has one.
+	extra := 1
+	if cfg.Search {
+		extra += 2
+	}
+	rows, hints = m.panelBody(cfg.MaxVisible, extra, width, nil, cfg.Hints)
+	return width, rows, hints
 }
 
 // renderListOverlay renders cfg into a panel and returns the string, geometry
@@ -37,6 +55,13 @@ type listOverlay struct {
 func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []overlayRowHit) {
 	pal := theme.UI()
 	bg := pal.Surface
+
+	cfg.Width, cfg.MaxVisible, cfg.Hints = m.listOverlayLayout(cfg)
+	scroll := 0
+	if cfg.Scroll != nil {
+		*cfg.Scroll = scrollWindow(*cfg.Scroll, cfg.Selected, cfg.Count, cfg.MaxVisible)
+		scroll = *cfg.Scroll
+	}
 
 	var lines []string
 	rowYOffset := 0
@@ -48,7 +73,7 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 		rowYOffset = 2
 	}
 
-	start := cfg.Scroll
+	start := scroll
 	end := min(start+cfg.MaxVisible, cfg.Count)
 	shown := 0
 	for i := start; i < end; i++ {
@@ -56,7 +81,7 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 		if i == cfg.Selected {
 			rowBg = pal.RowSel
 		}
-		lines = append(lines, overlay.Fill(cfg.RenderRow(i, i == cfg.Selected, rowBg, pal), cfg.Width, rowBg))
+		lines = append(lines, overlay.Fill(cfg.RenderRow(i, i == cfg.Selected, rowBg, pal, cfg.Width), cfg.Width, rowBg))
 		shown++
 	}
 	if cfg.Count == 0 {
@@ -87,7 +112,7 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	}
 	content, geo := panel.Render(pal)
 
-	rows := make([]overlayRowHit, 0, end-start)
+	rows := make([]overlayRowHit, 0, max(end-start, 0))
 	for i := start; i < end; i++ {
 		rowY := geo.BodyY + (i - start) + rowYOffset
 		rows = append(rows, overlayRowHit{
@@ -103,19 +128,74 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 func (m *OS) simpleOverlayPanel(glyph, title string, bodyLines []string, hints []overlay.Hint) (string, overlay.Geometry, []overlayRowHit) {
 	pal := theme.UI()
 	bg := pal.Surface
-	styled := make([]string, len(bodyLines))
-	for i, l := range bodyLines {
-		styled[i] = overlay.Style(bg).Foreground(pal.FgDim).Render("  " + l)
+	width := m.panelWidth(simplePanelWidth)
+	// A message narrower than the panel is one line; a longer one wraps rather
+	// than running off the edge.
+	var styled []string
+	for _, l := range bodyLines {
+		for _, wrapped := range wrapPlain(l, width-2) {
+			styled = append(styled, overlay.Style(bg).Foreground(pal.FgDim).Render("  "+wrapped))
+		}
 	}
 	panel := overlay.Panel{
 		Glyph: glyph,
 		Title: title,
-		Width: 52,
+		Width: width,
 		Body:  strings.Join(styled, "\n"),
 		Hints: hints,
 	}
 	content, geo := panel.Render(pal)
 	return content, geo, nil
+}
+
+// simplePanelWidth is the preferred inner width of an informational panel.
+const simplePanelWidth = 52
+
+// wrapPlain breaks an unstyled string onto lines of at most width cells,
+// preferring word boundaries. An empty input yields one empty line so blank
+// spacer lines survive.
+func wrapPlain(s string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+	if s == "" || lipgloss.Width(s) <= width {
+		return []string{s}
+	}
+	var out []string
+	line := ""
+	flush := func() {
+		if line != "" {
+			out = append(out, line)
+			line = ""
+		}
+	}
+	for _, word := range strings.Fields(s) {
+		// A word longer than the line (a path, say) is broken across lines
+		// rather than dropped.
+		for lipgloss.Width(word) > width {
+			flush()
+			runes := []rune(word)
+			cut := len(runes)
+			for cut > 1 && lipgloss.Width(string(runes[:cut])) > width {
+				cut--
+			}
+			out = append(out, string(runes[:cut]))
+			word = string(runes[cut:])
+		}
+		switch {
+		case line == "":
+			line = word
+		case lipgloss.Width(line)+1+lipgloss.Width(word) <= width:
+			line += " " + word
+		default:
+			flush()
+			line = word
+		}
+	}
+	if line != "" {
+		out = append(out, line)
+	}
+	return out
 }
 
 // moveListSelection advances a (selected, scroll) pair by delta within a list

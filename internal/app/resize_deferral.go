@@ -1,0 +1,154 @@
+package app
+
+import "time"
+
+// The deferred half of a resize, and the rule that it can never outlive the
+// gesture that asked for it.
+//
+// A retile that happens while a resize is still in progress places panes
+// directly and resizes them visually only, recording the real size in
+// PendingResizes for later. That is right while the size is still moving: the
+// expensive half (reallocating every emulator's backing store, TIOCSWINSZ,
+// SIGWINCH, the daemon round trip, every guest's full repaint) costs more than
+// a frame and the user is not finished choosing a size yet.
+//
+// It is wrong the moment the gesture ends, and the original design ended it
+// only when a message arrived: ViewportResizeSettledMsg for a terminal resize,
+// mouse release for a drag. Neither is guaranteed. Update recovers panics and
+// returns a nil command when it does, which drops the settle that the very same
+// handler had just armed; the mouse release itself goes missing whenever the
+// pointer leaves the surface the events come from mid-drag, which a browser
+// client does every time. Either way the flag stayed set for the rest
+// of the session, so every retile after it - including the one a new window
+// triggers - took the visual-only branch, no pane ever got its real size, and
+// the layout was left showing whatever rectangles happened to be current.
+//
+// So the deferral is keyed on freshness instead. It holds only while a resize
+// event has arrived recently; past that it expires by itself and drains the
+// work it was holding. Nothing has to arrive for the layout to become correct
+// again. The cost of expiring early during a genuine pause mid-gesture is one
+// retile taking the full path, which is what it would have done anyway had the
+// gesture ended there.
+
+// resizeDeferralTimeout is how long after the last resize event the deferral
+// still counts as live.
+//
+// Comfortably longer than viewportResizeSettleDelay, so the settle message
+// remains the normal way a terminal resize ends and this only acts when that
+// message never comes. Short enough that a lost mouse release is not something
+// the user has to notice: the next retile after half a second is a real one.
+const resizeDeferralTimeout = 500 * time.Millisecond
+
+// resizeDeferralActive reports whether a retile happening now should place
+// panes directly and defer the expensive half.
+//
+// It has a side effect on purpose: finding the deferral stale is the only
+// reliable moment to end it, so it ends it, and drains what was deferred. Call
+// it once per retile rather than per pane.
+func (m *OS) resizeDeferralActive() bool {
+	if !m.Resizing && !m.viewportResizing {
+		return false
+	}
+
+	now := time.Now()
+	fresh := false
+	if m.Resizing && !m.lastPointerAt.IsZero() && now.Sub(m.lastPointerAt) <= resizeDeferralTimeout {
+		fresh = true
+	}
+	if m.viewportResizing && !m.viewportResizeAt.IsZero() && now.Sub(m.viewportResizeAt) <= resizeDeferralTimeout {
+		fresh = true
+	}
+	if fresh {
+		return true
+	}
+
+	m.endResizeDeferral()
+	return false
+}
+
+// endResizeDeferral finishes a deferred resize now: the recorded sizes are
+// pushed through to the emulators, the PTYs and the daemon, and the next retile
+// lays panes out for real.
+//
+// m.Resizing is left alone. It belongs to the mouse handlers and describes
+// whether a button is down, which is not this function's business; with the
+// timestamp stale the deferral stays off until a fresh resize step refreshes
+// it, and a gesture that resumes simply re-enters the deferral.
+func (m *OS) endResizeDeferral() {
+	m.viewportResizing = false
+	m.renderSkipped = false
+	m.ApplyPendingResizes()
+}
+
+// noteResizeStep records that a resize event just arrived, which is what keeps
+// the deferral alive.
+func (m *OS) noteResizeStep(at time.Time) {
+	m.viewportResizeAt = at
+}
+
+// notePointerEvent records that a mouse event just arrived. A resize drag is
+// only live while the pointer is still reporting.
+func (m *OS) notePointerEvent(at time.Time) {
+	m.lastPointerAt = at
+}
+
+// requireRealLayout ends any deferred resize before a structural change to the
+// layout - a window opening, closing or splitting, tiling being toggled, a
+// layout being loaded. Those are not resize steps, and their result is what the
+// user is left looking at, so they must never be laid out visually-only and
+// left for a message that may not come.
+func (m *OS) requireRealLayout() {
+	if m.viewportResizing || len(m.PendingResizes) > 0 {
+		m.endResizeDeferral()
+	}
+}
+
+// endLostGesture retires a drag or resize whose release never arrived.
+//
+// It does what mouse release does minus the parts that need the release's own
+// coordinates: the gesture is over, the panes keep the geometry the last motion
+// gave them, and the deferred resizes are pushed through. The alternative is a
+// gesture that never ends, and that is not merely a stuck flag - while it is
+// set, MarkTerminalsWithNewContent refuses to look at any pane, so no window
+// shows another byte of output for the rest of the session.
+func (m *OS) endLostGesture() {
+	wasResizing := m.Resizing
+	m.Dragging = false
+	m.Resizing = false
+	m.InteractionMode = false
+	m.DraggedWindowIndex = -1
+
+	m.endResizeDeferral()
+	m.clearStaleManipulation()
+
+	// A resize drag is what the BSP tree derives its ratios from; without this
+	// the next retile discards everything the drag did.
+	if wasResizing && m.AutoTiling && !m.UseScrollingLayout {
+		m.SyncBSPTreeFromGeometry()
+	}
+	m.renderSkipped = false
+}
+
+// clearStaleManipulation drops IsBeingManipulated from any window still
+// carrying it while no drag or resize is in progress.
+//
+// The flag freezes a pane's content at its last cached frame, which is right
+// for a pane the pointer is moving and is silent, total corruption once the
+// gesture is over: the pane keeps drawing a screenshot of itself and never
+// shows another byte of output. Mouse release clears it, and mouse release is
+// exactly the event that is lost when the pointer leaves the surface the events
+// come from. Outside a gesture no window should carry it, so this is a safe
+// sweep rather than a guess.
+func (m *OS) clearStaleManipulation() {
+	if m.Dragging || m.Resizing || m.InteractionMode {
+		return
+	}
+	for _, w := range m.Windows {
+		if w == nil || !w.IsBeingManipulated {
+			continue
+		}
+		w.IsBeingManipulated = false
+		w.MarkContentDirty()
+		w.InvalidateCache()
+	}
+}

@@ -6,7 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 func (m *OS) renderDock() *lipgloss.Layer {
@@ -162,28 +161,31 @@ func (m *OS) renderDockString() (string, int) {
 		styledWorkspaceText,
 	)
 
+	actualLeftWidth := lipgloss.Width(leftInfo)
+	centerWidth := lipgloss.Width(dockItemsStr.String())
+	// The right block never takes more room than the left block and the dock
+	// items leave, so the bar as a whole stays inside the screen.
+	rightWidth := max(min(layout.RightWidth, m.GetRenderWidth()-actualLeftWidth-centerWidth), 0)
+
 	var rightInfo string
 	focusedWindow := m.GetFocusedWindow()
 
 	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
 	if inCopyMode {
-		var helpText string
-		switch focusedWindow.CopyMode.State {
-		case terminal.CopyModeNormal:
-			helpText = "hjkl:move w/b/e:word f/F/t/T:char /:search n/N:next/prev C-l:clear ;,:repeat v:visual y:yank i:term q:quit"
-		case terminal.CopyModeSearch:
-			helpText = "Type to search  n/N:next/prev  Enter:done  Esc:cancel"
-		case terminal.CopyModeVisualChar:
-			helpText = "hjkl:extend w/b/e:word f/F/t/T:char ;,:repeat {/}:para %:bracket y:yank Esc:cancel"
-		case terminal.CopyModeVisualLine:
-			helpText = "jk:extend  y:yank  Esc:cancel"
-		}
+		helpTexts := copyModeHelpTexts(focusedWindow.CopyMode.State)
 
 		helpStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#a0a0b0")).
 			Background(lipgloss.Color("#1a1a2e")).
 			Padding(0, 1)
-		rightInfo = helpStyle.Render(helpText)
+		// Take the longest help line that fits; the copy-mode keys are worth a
+		// dock's width but not worth spilling off the end of it.
+		for i, text := range helpTexts {
+			rightInfo = helpStyle.Render(text)
+			if lipgloss.Width(rightInfo) <= rightWidth || i == len(helpTexts)-1 {
+				break
+			}
+		}
 	} else {
 		var sysInfoParts []string
 		if config.ShowCPU {
@@ -192,14 +194,20 @@ func (m *OS) renderDockString() (string, int) {
 		if config.ShowRAM {
 			sysInfoParts = append(sysInfoParts, m.GetRAMUsage())
 		}
-		if len(sysInfoParts) > 0 {
+		// The CPU graph is the first thing dropped on a dock too narrow for
+		// both readouts, then the RAM figure; a clipped graph reads as noise.
+		for len(sysInfoParts) > 0 {
 			rightInfo = sysInfoStyle.Render(strings.Join(sysInfoParts, " "))
+			if lipgloss.Width(rightInfo) <= rightWidth {
+				break
+			}
+			sysInfoParts = sysInfoParts[1:]
+			rightInfo = ""
 		}
 	}
-
-	actualLeftWidth := lipgloss.Width(leftInfo)
-	centerWidth := lipgloss.Width(dockItemsStr.String())
-	rightWidth := layout.RightWidth
+	if w := lipgloss.Width(rightInfo); w > rightWidth {
+		rightInfo = truncateToWidth(rightInfo, rightWidth)
+	}
 
 	availableSpace := m.GetRenderWidth() - actualLeftWidth - rightWidth - centerWidth
 	leftSpacer := availableSpace / 2
@@ -225,6 +233,11 @@ func (m *OS) renderDockString() (string, int) {
 	)
 
 	renderWidth := m.GetRenderWidth()
+	// Backstop: whatever the parts add up to, the bar is one screen wide.
+	if lipgloss.Width(dockBar) > renderWidth {
+		dockBar = truncateToWidth(dockBar, renderWidth)
+	}
+
 	if m.cachedSeparatorWidth != renderWidth {
 		m.cachedSeparator = strings.Repeat(config.GetWindowSeparatorChar(), renderWidth)
 		m.cachedSeparatorWidth = renderWidth

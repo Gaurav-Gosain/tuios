@@ -96,6 +96,33 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 	return hasChanges
 }
 
+// ApplyPendingResizes performs the deferred half of every resize recorded while
+// a drag or a terminal-resize storm was in progress: the emulator's real
+// resize, the PTY's TIOCSWINSZ and SIGWINCH, the daemon notification and the
+// backend's own resize, followed by a full repaint so the guests' answers are
+// picked up.
+//
+// The visual half already happened, per step, through ResizeVisual. Everything
+// here is the part whose cost scales with the number of panes and with what is
+// running in them, which is why it waits for the size to stop moving.
+func (m *OS) ApplyPendingResizes() {
+	if len(m.PendingResizes) == 0 {
+		m.FlushPTYBuffersAfterResize()
+		return
+	}
+	for i := range m.Windows {
+		win := m.Windows[i]
+		if win == nil {
+			continue
+		}
+		if dims, ok := m.PendingResizes[win.ID]; ok {
+			win.Resize(dims[0], dims[1])
+		}
+	}
+	m.PendingResizes = make(map[string][2]int)
+	m.FlushPTYBuffersAfterResize()
+}
+
 // FlushPTYBuffersAfterResize flushes buffered PTY content and forces content polling
 // after a resize operation completes. This ensures that shell prompt redraws in response
 // to SIGWINCH are properly processed and displayed.

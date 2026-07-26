@@ -361,6 +361,29 @@ func EnableCallbacksAfterDelay() tea.Cmd {
 	})
 }
 
+// viewportResizeSettleDelay is how long the model waits for a terminal-resize
+// storm to stop before it does the expensive half of a resize.
+//
+// Long enough that a drag of the terminal's own edge, which delivers one size
+// per frame for as long as the pointer is down, never pays it mid-gesture;
+// short enough that letting go feels immediate.
+const viewportResizeSettleDelay = 120 * time.Millisecond
+
+// ViewportResizeSettledMsg says no new terminal size has arrived for
+// [viewportResizeSettleDelay], so the sizes recorded during the storm can be
+// pushed through to the emulators, the PTYs and the daemon.
+type ViewportResizeSettledMsg struct {
+	// Gen is the resize generation this settle was armed for. A later resize
+	// bumps the generation, which retires every settle already in flight.
+	Gen uint64
+}
+
+func viewportResizeSettleCmd(gen uint64) tea.Cmd {
+	return tea.Tick(viewportResizeSettleDelay, func(time.Time) tea.Msg {
+		return ViewportResizeSettledMsg{Gen: gen}
+	})
+}
+
 // TriggerAltScreenRedrawMsg triggers alt screen apps to redraw.
 type TriggerAltScreenRedrawMsg struct{}
 
@@ -470,8 +493,25 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 		}
 
-		// Update animations
+		// Update animations. Whether any were running is captured BEFORE the
+		// update, because the tick that finishes the last one is the tick that
+		// matters most: Animation.Update leaves the VT alone while a transition
+		// is in flight and only resizes it on the final tick, so that tick is
+		// where the panes first render at the size they actually settled at. Ask
+		// HasActiveAnimations afterwards and it answers "none", the frame-skip
+		// below decides nothing needs drawing, and View serves the previous
+		// frame: the last thing the user sees is the second-to-last animation
+		// step, with every pane still drawn to its pre-animation size. Nothing
+		// dirties the model after that, so the wrong frame is final.
+		hadAnimations := m.HasActiveAnimations()
 		m.UpdateAnimations()
+
+		// Retire interaction state no gesture is holding any more. A mouse
+		// release is the only thing that clears IsBeingManipulated, and it is
+		// lost whenever the pointer leaves the surface the events come from
+		// mid-drag; the pane it was set on then renders its cached frame
+		// forever.
+		m.clearStaleManipulation()
 
 		// Update system info (only when explicitly enabled)
 		if config.ShowCPU {
@@ -580,7 +620,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		hasBackgroundChanges := m.MarkTerminalsWithNewContent()
 
 		// Render on tick if something periodic needs visual updates OR background windows changed
-		needsRender := hasAnimations || m.InteractionMode || m.PrefixActive || needsDockTick || hasBackgroundChanges
+		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive || needsDockTick || hasBackgroundChanges
 		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {
@@ -685,6 +725,27 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
 		// Reset idle counter on any user input to restore full tick rate
 		m.idleFrames = 0
+		// A resize drag is live only while the pointer is still reporting. This
+		// is what lets the deferral in resize_deferral.go expire when a mouse
+		// release is lost, without a timeout that would cut short a slow drag:
+		// any further motion refreshes it.
+		switch mm := msg.(type) {
+		case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg:
+			m.notePointerEvent(time.Now())
+		case tea.MouseMotionMsg:
+			m.notePointerEvent(time.Now())
+			// Motion with no button held while a drag is supposedly in
+			// progress means the release happened somewhere we never heard
+			// about, which is what a pointer leaving the surface the events
+			// come from does: the button comes up out of reach and what comes
+			// back is motion reporting no buttons. Left alone the pane stays
+			// glued to the pointer and is dragged around a tiled layout with
+			// nothing pressed, which is exactly how tiled panes end up at
+			// overlapping positions.
+			if (m.Dragging || m.Resizing) && mm.Button == tea.MouseNone {
+				m.endLostGesture()
+			}
+		}
 		// Any user input must produce a fresh frame. Without this a tick that
 		// marked the frame skippable would make View return the cached content,
 		// so state changed by this event (overlay selection, drag offset, etc.)
@@ -724,6 +785,22 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 		m.MarkAllDirty()
+		// A resize is drawn immediately and finished later. Everything below
+		// lays the panes out at the new size; the expensive half - resizing each
+		// emulator's backing store for real, telling the PTY and the daemon,
+		// and asking every guest to redraw - waits until the sizes stop
+		// arriving. Without this a drag of the terminal's own edge pays that
+		// whole bill once per delivered size.
+		m.viewportResizing = true
+		m.renderSkipped = false
+		m.viewportResizeGen++
+		// The timestamp, not the flag, is what keeps the deferral alive. The
+		// settle below is the normal way it ends; noteResizeStep is what makes
+		// sure it ends at all if the settle never arrives - which it does not
+		// when a panic in this handler is recovered, since the recovery returns
+		// a nil command and takes the settle with it.
+		m.noteResizeStep(time.Now())
+		settle := viewportResizeSettleCmd(m.viewportResizeGen)
 
 		// Apply the one-shot [startup] preferences now that the real terminal
 		// size is known: NewOS runs before the first WindowSizeMsg, so opening a
@@ -794,7 +871,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				m.KittyPassthrough.HideAllPlacements()
 			}
 
-			return m, nil
+			return m, settle
 		}
 
 		// Retile windows if in tiling mode
@@ -805,16 +882,26 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ClampWindowsToView()
 		}
 
-		// Flush PTY buffers after resize to ensure TUI apps (btop, vim, etc.)
-		// redraw properly. The PTY resize sends SIGWINCH, but we also need to
-		// mark all content dirty and invalidate caches for the new output.
-		m.FlushPTYBuffersAfterResize()
-
 		// NOTE: Don't HideAllPlacements on kitty here  - the delete+re-place cycle
 		// can lose image data on some terminals. RefreshAllPlacements runs every
 		// render and will reposition in place via `a=p` (the image data persists
 		// across `d=i` deletes per the kitty protocol).
 
+		// The PTY resize, the SIGWINCH it carries and the whole-screen redraw
+		// every guest answers with land in ViewportResizeSettledMsg instead.
+		return m, settle
+
+	case ViewportResizeSettledMsg:
+		if msg.Gen != m.viewportResizeGen {
+			// A newer resize has already superseded this one; its own settle
+			// will end the deferral, and ending it here would pay the expensive
+			// half in the middle of the storm this exists to coalesce.
+			return m, nil
+		}
+		// Deliberately not conditional on viewportResizing: this is the settle
+		// for the newest resize, so whatever state the flag is in, the deferred
+		// work is due now. Draining an empty PendingResizes costs nothing.
+		m.endResizeDeferral()
 		return m, nil
 
 	case tea.MouseMsg:

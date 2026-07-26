@@ -189,9 +189,17 @@ type Window struct {
 	CachedContent      string
 	CachedLayer        *lipgloss.Layer
 	LastTerminalSeq    int
-	IsBeingManipulated bool               // True when being dragged or resized
-	UpdateCounter      int                // Counter for throttling background updates
-	cancelFunc         context.CancelFunc // For graceful goroutine cleanup
+	IsBeingManipulated bool // True when being dragged or resized
+	// announcedW/H are the emulator dimensions last handed downstream: to the
+	// PTY, to the daemon, and to the guest as a redraw. Resize used to decide
+	// "did the size change" by comparing against Width and Height, which is
+	// wrong the moment a resize is split in two. ResizeVisual sets Width and
+	// Height for the live preview, so by the time the deferred half runs they
+	// already match, Resize concludes nothing changed, and nothing downstream is
+	// told - the guest keeps drawing to the size it had before the drag.
+	announcedW, announcedH int
+	UpdateCounter          int                // Counter for throttling background updates
+	cancelFunc             context.CancelFunc // For graceful goroutine cleanup
 	// ioMu guards the emulator cell buffer and the Pty/Terminal handles. See
 	// the block comment above LockIO for the full contract; the short version:
 	//

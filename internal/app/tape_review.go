@@ -243,16 +243,24 @@ func (r *TapeReviewState) tapeContentLines() []string {
 	return strings.Split(strings.ReplaceAll(string(r.Content), "\t", "    "), "\n")
 }
 
+// tapeReviewRows is how many lines of the tape the dialog shows on the screen
+// it is actually drawn on: the preferred viewport, or fewer when the screen is
+// short. The header, the content box's own frame and the footer come off first.
+func (m *OS) tapeReviewRows() int {
+	return m.dialogRows(tapeReviewViewportRows, 14)
+}
+
 // tapeReviewMaxScroll is the furthest the content can scroll.
 func (m *OS) tapeReviewMaxScroll() int {
 	if m.TapeReview == nil {
 		return 0
 	}
 	n := len(m.TapeReview.tapeContentLines())
-	if n <= tapeReviewViewportRows {
+	rows := m.tapeReviewRows()
+	if n <= rows {
 		return 0
 	}
-	return n - tapeReviewViewportRows
+	return n - rows
 }
 
 // RenderTapeReview renders the review/trust dialog box. The caller centers it.
@@ -270,16 +278,22 @@ func (m *OS) RenderTapeReview() string {
 	codeStyle := lipgloss.NewStyle().Foreground(theme.WelcomeText())
 	warnStyle := lipgloss.NewStyle().Foreground(theme.NotificationWarning())
 
+	// The dialog is content-sized, so its longest line decides its width; every
+	// line is built against what the screen can hold.
+	textW := m.dialogTextWidth()
+	rows := m.tapeReviewRows()
+
 	var lines []string
 	lines = append(lines, titleStyle.Render("Project Tape"))
 	lines = append(lines, "")
 
-	// Header: path + trust status.
-	lines = append(lines, labelStyle.Render("Path:  ")+pathStyle.Render(shortTapePath(r.Path)))
+	// Header: path + trust status. A long path keeps its tail, which is the
+	// part that says which project this is.
+	lines = append(lines, labelStyle.Render("Path:  ")+pathStyle.Render(tailFit(shortTapePath(r.Path), max(textW-7, 1))))
 	lines = append(lines, labelStyle.Render("Trust: ")+tapeStatusLabel(r.Status, r.Changed))
 
 	// What running it will do, from a cheap header parse (no execution).
-	lines = append(lines, labelStyle.Render("Runs:  ")+pathStyle.Render(tapeRunSummary(r.Header, r.Dir)))
+	lines = append(lines, labelStyle.Render("Runs:  ")+pathStyle.Render(truncateString(tapeRunSummary(r.Header, r.Dir), max(textW-7, 1))))
 	if r.Status == trust.StatusIneligible && r.Reason != "" {
 		lines = append(lines, warnStyle.Render("Ignored: "+r.Reason))
 	}
@@ -289,28 +303,30 @@ func (m *OS) RenderTapeReview() string {
 	if r.Status != trust.StatusIneligible {
 		content := r.tapeContentLines()
 		start := min(r.Scroll, m.tapeReviewMaxScroll())
-		end := min(start+tapeReviewViewportRows, len(content))
+		end := min(start+rows, len(content))
 		box := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(theme.HelpBorder()).
 			Padding(0, 1)
 		var body []string
+		// The content box adds a border and a column of padding on each side.
+		lineW := min(72, max(textW-4, 8))
 		for i := start; i < end; i++ {
-			body = append(body, codeStyle.Render(truncateString(content[i], 72)))
+			body = append(body, codeStyle.Render(truncateString(content[i], lineW)))
 		}
 		if len(body) == 0 {
 			body = append(body, dimStyle.Render("(empty)"))
 		}
 		lines = append(lines, box.Render(strings.Join(body, "\n")))
-		if len(content) > tapeReviewViewportRows {
+		if len(content) > rows {
 			lines = append(lines, dimStyle.Render(fmt.Sprintf("lines %d-%d of %d  (↑/↓ scroll)", start+1, end, len(content))))
 		}
 	}
 
 	lines = append(lines, "")
-	lines = append(lines, dimStyle.Render(tapeReviewFooter(r, keyStyle, dimStyle)))
+	lines = append(lines, dimStyle.Render(tapeReviewFooter(r, keyStyle, dimStyle, textW)))
 
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	content := clipStyledLines(lipgloss.JoinVertical(lipgloss.Left, lines...), textW)
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.HelpBorder()).
@@ -320,20 +336,51 @@ func (m *OS) RenderTapeReview() string {
 }
 
 // tapeReviewFooter builds the action hint line for the dialog's current status.
-func tapeReviewFooter(r *TapeReviewState, keyStyle, dimStyle lipgloss.Style) string {
+func tapeReviewFooter(r *TapeReviewState, keyStyle, dimStyle lipgloss.Style, width int) string {
+	var full, short string
 	switch r.Status {
 	case trust.StatusIneligible:
-		return keyStyle.Render("Esc") + " Dismiss"
+		full = keyStyle.Render("Esc") + " Dismiss"
+		short = full
 	case trust.StatusTrusted:
-		return keyStyle.Render("r") + " Run   " +
+		full = keyStyle.Render("r") + " Run   " +
 			keyStyle.Render("n") + " Revoke trust   " +
 			keyStyle.Render("Esc") + " Close"
+		short = keyStyle.Render("r") + " Run   " +
+			keyStyle.Render("n") + " Revoke   " +
+			keyStyle.Render("Esc") + " Close"
 	default:
-		return keyStyle.Render("r") + " Run once   " +
+		full = keyStyle.Render("r") + " Run once   " +
 			keyStyle.Render("t") + " Trust and run   " +
 			keyStyle.Render("n") + " Never   " +
 			keyStyle.Render("Esc") + " Not now"
+		short = keyStyle.Render("r") + " Run   " +
+			keyStyle.Render("t") + " Trust   " +
+			keyStyle.Render("n") + " Never   " +
+			keyStyle.Render("Esc") + " Close"
 	}
+	// The actions are the point of the dialog, so a narrow screen gets shorter
+	// labels rather than fewer keys.
+	if lipgloss.Width(full) > width {
+		return short
+	}
+	return full
+}
+
+// tailFit shortens s from the left, keeping its last width cells behind an
+// ellipsis. Paths read from the right.
+func tailFit(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= width {
+		return s
+	}
+	if width <= 3 {
+		return string(runes[len(runes)-width:])
+	}
+	return "..." + string(runes[len(runes)-(width-3):])
 }
 
 // tapeStatusLabel renders a colored trust-status word for the dialog header.
