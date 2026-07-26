@@ -38,21 +38,45 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		})
 
 	case 2:
-		// Two windows - side by side with configurable ratio
-		masterWidth := int(float64(screenWidth) * masterRatio)
-		slaveWidth := screenWidth - masterWidth
+		// Two windows, split along whichever axis the screen is longer on as it
+		// is drawn. A cell is about twice as tall as it is wide, so a tall
+		// 51x37 terminal reads as landscape by the numbers while being
+		// obviously upright to the eye; splitting it side by side hands out two
+		// 25 column panes. Compare against the scaled height so the split
+		// follows the shape on screen, and stack when it is taller.
+		if screenWidth >= usableHeight*cellAspect {
+			masterWidth := int(float64(screenWidth) * masterRatio)
+			slaveWidth := screenWidth - masterWidth
+			layouts = append(layouts,
+				TileLayout{
+					X:      0,
+					Y:      topMargin,
+					Width:  masterWidth,
+					Height: usableHeight,
+				},
+				TileLayout{
+					X:      masterWidth,
+					Y:      topMargin,
+					Width:  slaveWidth,
+					Height: usableHeight,
+				},
+			)
+			break
+		}
+		masterHeight := int(float64(usableHeight) * masterRatio)
+		slaveHeight := usableHeight - masterHeight
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
 				Y:      topMargin,
-				Width:  masterWidth,
-				Height: usableHeight,
+				Width:  screenWidth,
+				Height: masterHeight,
 			},
 			TileLayout{
-				X:      masterWidth,
-				Y:      topMargin,
-				Width:  slaveWidth,
-				Height: usableHeight,
+				X:      0,
+				Y:      topMargin + masterHeight,
+				Width:  screenWidth,
+				Height: slaveHeight,
 			},
 		)
 
