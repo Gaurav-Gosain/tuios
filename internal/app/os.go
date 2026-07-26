@@ -191,6 +191,26 @@ type OS struct {
 	// frame. Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
 	lastInteractionRender time.Time
+	// viewportResizing is set while terminal sizes are still arriving. A retile
+	// it drives places panes directly instead of easing them into position, and
+	// resizes them visually only, exactly as a mouse resize drag does: a resize
+	// is not a transition to be animated, and telling every PTY and backend
+	// about a size the user is still choosing is the single most expensive thing
+	// in the path.
+	viewportResizing bool
+	// viewportResizeGen counts terminal resizes so a settle armed by an earlier
+	// one can be recognised as stale and ignored.
+	viewportResizeGen uint64
+	// viewportResizeAt is when the last terminal size arrived, and
+	// lastPointerAt when the last mouse event did. They are what make the two
+	// deferrals above expire on their own: see resizeDeferralActive. A flag that
+	// is only ever cleared by a message arriving is a flag that stays set
+	// forever the one time that message does not arrive, and there is no way to
+	// guarantee it does - a panic recovered in Update drops the command that
+	// would have armed the settle, and a mouse release is lost whenever the
+	// pointer leaves the surface the events come from.
+	viewportResizeAt time.Time
+	lastPointerAt    time.Time
 	// pendingBSPSync is set when a resize motion changed window geometry and the
 	// BSP tree's ratios have not been re-derived from it yet. The sync exists so
 	// the shared-borders separator overlay follows the drag, so it only has to
