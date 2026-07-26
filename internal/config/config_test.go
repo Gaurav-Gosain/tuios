@@ -678,3 +678,83 @@ func TestApplyAppearanceConfig_ScrollLines(t *testing.T) {
 		t.Errorf("ScrollLines = %d after an unset value, want it unchanged at 5", config.ScrollLines)
 	}
 }
+
+// TestApplyAppearanceConfig_CoversTheWholeFile guards the gap that made the
+// settings page look like it did not save anything.
+//
+// Every option below is written to config.toml by the settings page and read
+// back from a package global. They used to be applied only by ApplyOverrides,
+// which cmd/tuios calls and nothing else does, so a session that loaded its
+// config through ApplyAppearanceConfig alone (`tuios tape`, the pkg/tuios
+// embed, and every live reload through ConfigReloadedMsg) came back with the
+// defaults and the change looked lost.
+func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
+	orig := struct {
+		border, dock            string
+		buttons, scrollbar      bool
+		clock, cpu, ram, revScr bool
+		scrollback, fps         int
+		leader                  string
+	}{
+		config.BorderStyle, config.DockbarPosition,
+		config.HideWindowButtons, config.HideScrollbar,
+		config.ShowClock, config.ShowCPU, config.ShowRAM, config.NiriReverseScroll,
+		config.ScrollbackLines, config.NormalFPS,
+		config.LeaderKey,
+	}
+	defer func() {
+		config.BorderStyle, config.DockbarPosition = orig.border, orig.dock
+		config.HideWindowButtons, config.HideScrollbar = orig.buttons, orig.scrollbar
+		config.ShowClock, config.ShowCPU, config.ShowRAM = orig.clock, orig.cpu, orig.ram
+		config.NiriReverseScroll = orig.revScr
+		config.ScrollbackLines, config.NormalFPS = orig.scrollback, orig.fps
+		config.LeaderKey = orig.leader
+	}()
+
+	cfg := config.DefaultConfig()
+	cfg.Appearance.BorderStyle = "double"
+	cfg.Appearance.DockbarPosition = "top"
+	cfg.Appearance.HideWindowButtons = true
+	cfg.Appearance.HideScrollbar = true
+	cfg.Appearance.ShowClock = true
+	cfg.Appearance.ShowCPU = true
+	cfg.Appearance.ShowRAM = true
+	cfg.Appearance.NiriReverseScroll = true
+	cfg.Appearance.ScrollbackLines = 12345
+	cfg.Appearance.MaxFPS = 30
+	cfg.Keybindings.LeaderKey = "ctrl+a"
+
+	config.ApplyAppearanceConfig(cfg)
+
+	checks := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"BorderStyle", config.BorderStyle, "double"},
+		{"DockbarPosition", config.DockbarPosition, "top"},
+		{"HideWindowButtons", config.HideWindowButtons, true},
+		{"HideScrollbar", config.HideScrollbar, true},
+		{"ShowClock", config.ShowClock, true},
+		{"ShowCPU", config.ShowCPU, true},
+		{"ShowRAM", config.ShowRAM, true},
+		{"NiriReverseScroll", config.NiriReverseScroll, true},
+		{"ScrollbackLines", config.ScrollbackLines, 12345},
+		{"NormalFPS", config.NormalFPS, 30},
+		{"LeaderKey", config.LeaderKey, "ctrl+a"},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
+		}
+	}
+
+	// Turning a toggle back off has to survive too: these are plain bools with
+	// no unset state, so a conditional assignment would make "off" unsaveable.
+	cfg.Appearance.HideWindowButtons = false
+	cfg.Appearance.ShowClock = false
+	config.ApplyAppearanceConfig(cfg)
+	if config.HideWindowButtons || config.ShowClock {
+		t.Error("clearing hide_window_buttons/show_clock did not reach the globals")
+	}
+}
