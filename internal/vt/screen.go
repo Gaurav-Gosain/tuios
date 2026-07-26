@@ -367,7 +367,7 @@ func (s *Screen) ScrollUp(n int) {
 
 	// Only save to scrollback if we're scrolling the main screen area
 	// (not a limited scroll region) and the scroll region starts at Y=0
-	if scroll.Min.Y == 0 && scroll.Min.X == 0 && scroll.Dx() == width {
+	if s.scrollback != nil && scroll.Min.Y == 0 && scroll.Min.X == 0 && scroll.Dx() == width {
 		// Save the top n lines to scrollback before they're deleted.
 		// extractLine allocates the line and hands over its only reference, so
 		// the ring takes it without a second copy.
@@ -521,6 +521,13 @@ func (s *Screen) blankCell() *uv.Cell {
 // Scrollback returns the scrollback buffer for this screen.
 func (s *Screen) Scrollback() *Scrollback {
 	return s.scrollback
+}
+
+// DisableScrollback drops this screen's scrollback ring, so lines scrolled off
+// the top are discarded instead of retained. Every other scrollback method here
+// already tolerates the nil, and ScrollUp checks it before pushing.
+func (s *Screen) DisableScrollback() {
+	s.scrollback = nil
 }
 
 // ClearScrollback clears all lines from the scrollback buffer.

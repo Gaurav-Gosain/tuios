@@ -236,3 +236,46 @@ func TestScrollUpAllocatesOnlyTheRetainedLine(t *testing.T) {
 		t.Errorf("a whole-screen scroll allocates %.1f times per call, want 1 (the retained scrollback line)", got)
 	}
 }
+
+// TestAltScreenRetainsNothing pins the alternate screen keeping no scrollback,
+// which is what every accessor on Emulator already assumes: Scrollback,
+// ScrollbackLen, ScrollbackLine, ClearScrollback and SetScrollbackMaxLines all
+// read the main screen. Its ring was filled anyway, by every scroll a
+// full-screen application made, and no line of it could be read back.
+//
+// A scroll in the alternate screen must therefore allocate nothing at all, and
+// the main screen's scrollback must survive the excursion untouched.
+func TestAltScreenRetainsNothing(t *testing.T) {
+	const w, h = 80, 24
+
+	e := NewEmulator(w, h)
+	for i := range 40 {
+		e.WriteString(fmt.Sprintf("main-%02d\r\n", i))
+	}
+	mainLines := e.ScrollbackLen()
+	if mainLines == 0 {
+		t.Fatal("main screen retained no scrollback, the test proves nothing")
+	}
+
+	e.WriteString("\x1b[?1049h")
+	fillScreen(e, w, h)
+
+	if got := testing.AllocsPerRun(200, func() {
+		e.WriteString("\x1b[S")
+	}); got > 0 {
+		t.Errorf("a scroll in the alternate screen allocates %.1f times per call, want 0", got)
+	}
+
+	e.WriteString("\x1b[?1049l")
+	if got := e.ScrollbackLen(); got != mainLines {
+		t.Errorf("main scrollback holds %d lines after an alternate-screen excursion, want %d", got, mainLines)
+	}
+	line := e.ScrollbackLine(0)
+	var b strings.Builder
+	for _, c := range line {
+		b.WriteString(c.Content)
+	}
+	if got, want := strings.TrimRight(b.String(), " "), "main-00"; got != want {
+		t.Errorf("oldest scrollback line is %q after the excursion, want %q", got, want)
+	}
+}
