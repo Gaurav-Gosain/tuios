@@ -32,12 +32,12 @@ var paletteHints = []overlay.Hint{
 // paletteLayout returns the palette's fitted inner width and visible row count.
 // The keyboard navigation uses the same numbers as the renderer so the
 // selection cannot scroll out of the rows actually drawn.
-func (m *OS) paletteLayout() (width, rows int) {
+func (m *OS) paletteLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(paletteInnerWidth)
 	// Body lines that are not command rows: the search input, its rule, and the
 	// match count.
-	rows = m.panelBodyRows(paletteMaxVisible, 3, width, nil, paletteHints)
-	return width, rows
+	rows, hints = m.panelBody(paletteMaxVisible, 3, width, nil, paletteHints)
+	return width, rows, hints
 }
 
 // renderCommandPalette draws the command palette on the shared panel grammar: a
@@ -50,7 +50,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	pal := theme.UI()
 	bg := pal.Surface
 
-	width, visible := m.paletteLayout()
+	width, visible, hints := m.paletteLayout()
 	m.CommandPaletteScroll = scrollWindow(m.CommandPaletteScroll, m.CommandPaletteSelected, len(filtered), visible)
 
 	var lines []string
@@ -88,7 +88,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		Title: "Command Palette",
 		Width: width,
 		Body:  strings.Join(lines, "\n"),
-		Hints: paletteHints,
+		Hints: hints,
 	}
 	content, geo := panel.Render(pal)
 

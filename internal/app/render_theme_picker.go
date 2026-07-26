@@ -26,12 +26,12 @@ var themePickerHints = []overlay.Hint{
 }
 
 // themePickerLayout returns the fitted inner width and visible row count.
-func (m *OS) themePickerLayout() (width, rows int) {
+func (m *OS) themePickerLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(themePickerInnerWidth)
 	// Body lines that are not theme rows: the search input, its rule, and the
 	// count line.
-	rows = m.panelBodyRows(themePickerVisibleRows, 3, width, nil, themePickerHints)
-	return width, rows
+	rows, hints = m.panelBody(themePickerVisibleRows, 3, width, nil, themePickerHints)
+	return width, rows, hints
 }
 
 // renderThemePicker draws the searchable theme picker with a live color-swatch
@@ -47,7 +47,7 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 	} else {
 		m.ThemePickerSelected = 0
 	}
-	width, visible := m.themePickerLayout()
+	width, visible, hints := m.themePickerLayout()
 	m.ThemePickerScroll = scrollWindow(m.ThemePickerScroll, m.ThemePickerSelected, len(items), visible)
 
 	var lines []string
@@ -86,7 +86,7 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 		Title: "Theme",
 		Width: width,
 		Body:  strings.Join(lines, "\n"),
-		Hints: themePickerHints,
+		Hints: hints,
 	}
 	content, geo := panel.Render(pal)
 

@@ -37,6 +37,11 @@ func (m *OS) panelBodyRows(preferred, extra, width int, tabs []string, hints []o
 	if rh <= 0 {
 		return preferred // size not known yet; the caller's preference stands
 	}
+	return max(min(preferred, rh-panelChrome(extra, width, tabs, hints)), minPanelRows)
+}
+
+// panelChrome is every row of a panel that is not a body row.
+func panelChrome(extra, width int, tabs []string, hints []overlay.Hint) int {
 	chrome := panelChromeRows + extra
 	if len(tabs) > 0 {
 		chrome += overlay.TabRowCount(tabs, width) + 2 // rule + blank
@@ -44,7 +49,20 @@ func (m *OS) panelBodyRows(preferred, extra, width int, tabs []string, hints []o
 	if len(hints) > 0 {
 		chrome += 2 + overlay.HintRowCount(hints, width) // blank + rule + hints
 	}
-	return max(min(preferred, rh-chrome), minPanelRows)
+	return chrome
+}
+
+// panelBody fits both the row count and the footer to the screen height. On a
+// screen too short to hold the minimum body and the footer both, the footer
+// goes: the keys it names are still on the keyboard, whereas a body squeezed
+// below three rows stops being a list.
+func (m *OS) panelBody(preferred, extra, width int, tabs []string, hints []overlay.Hint) (int, []overlay.Hint) {
+	rows := m.panelBodyRows(preferred, extra, width, tabs, hints)
+	rh := m.GetRenderHeight()
+	if rh <= 0 || len(hints) == 0 || rows+panelChrome(extra, width, tabs, hints) <= rh {
+		return rows, hints
+	}
+	return m.panelBodyRows(preferred, extra, width, tabs, nil), nil
 }
 
 // scrollWindow clamps a scroll offset so that a list of count items showing

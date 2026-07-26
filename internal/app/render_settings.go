@@ -27,11 +27,11 @@ var settingsHints = []overlay.Hint{
 
 // settingsLayout returns the fitted inner width and the number of setting rows
 // that fit, given the category tabs (which may wrap onto several rows).
-func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int) {
+func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(settingsInnerWidth)
 	// Body lines that are not setting rows: a blank and the description.
-	rows = m.panelBodyRows(max(itemCount, settingsVisibleRows), 2, width, tabs, settingsHints)
-	return width, rows
+	rows, hints = m.panelBody(max(itemCount, settingsVisibleRows), 2, width, tabs, settingsHints)
+	return width, rows, hints
 }
 
 // renderSettings draws the settings overlay and returns the rendered panel, its
@@ -57,7 +57,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		tabs[i] = c.Name
 	}
 
-	width, visible := m.settingsLayout(tabs, len(cat.Items))
+	width, visible, hints := m.settingsLayout(tabs, len(cat.Items))
 	// A category with more settings than fit scrolls; the selection stays in
 	// view so the arrow keys can always reach every setting.
 	m.SettingsScroll = scrollWindow(m.SettingsScroll, m.SettingsSelected, len(cat.Items), visible)
@@ -107,7 +107,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		Tabs:      tabs,
 		ActiveTab: m.SettingsCategory,
 		Body:      strings.Join(lines, "\n"),
-		Hints:     settingsHints,
+		Hints:     hints,
 	}
 	content, geo := panel.Render(pal)
 

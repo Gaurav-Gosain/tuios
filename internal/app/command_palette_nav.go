@@ -17,7 +17,7 @@ func (m *OS) PaletteMove(delta int) {
 		return
 	}
 	m.CommandPaletteSelected = clampInt(m.CommandPaletteSelected+delta, 0, n-1)
-	_, visible := m.paletteLayout()
+	_, visible, _ := m.paletteLayout()
 	if m.CommandPaletteSelected < m.CommandPaletteScroll {
 		m.CommandPaletteScroll = m.CommandPaletteSelected
 	}

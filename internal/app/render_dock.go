@@ -6,7 +6,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 func (m *OS) renderDock() *lipgloss.Layer {
@@ -173,28 +172,7 @@ func (m *OS) renderDockString() (string, int) {
 
 	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
 	if inCopyMode {
-		var helpTexts []string
-		switch focusedWindow.CopyMode.State {
-		case terminal.CopyModeNormal:
-			helpTexts = []string{
-				"hjkl:move w/b/e:word f/F/t/T:char /:search n/N:next/prev C-l:clear ;,:repeat v:visual y:yank i:term q:quit",
-				"hjkl:move w/b/e:word /:search v:visual y:yank q:quit",
-				"hjkl /:search v y q",
-			}
-		case terminal.CopyModeSearch:
-			helpTexts = []string{
-				"Type to search  n/N:next/prev  Enter:done  Esc:cancel",
-				"n/N:next  Enter:done  Esc:cancel",
-			}
-		case terminal.CopyModeVisualChar:
-			helpTexts = []string{
-				"hjkl:extend w/b/e:word f/F/t/T:char ;,:repeat {/}:para %:bracket y:yank Esc:cancel",
-				"hjkl:extend w/b/e:word y:yank Esc:cancel",
-				"hjkl y:yank Esc",
-			}
-		case terminal.CopyModeVisualLine:
-			helpTexts = []string{"jk:extend  y:yank  Esc:cancel", "jk y Esc"}
-		}
+		helpTexts := copyModeHelpTexts(focusedWindow.CopyMode.State)
 
 		helpStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#a0a0b0")).

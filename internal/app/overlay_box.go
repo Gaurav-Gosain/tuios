@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -42,6 +43,51 @@ func (m *OS) dialogTextWidth() int {
 		return 1 << 20 // size not known yet; do not clip anything
 	}
 	return max(rw-dialogChrome, 8)
+}
+
+// dialogContentRows is the tallest a content-sized dialog's body may be before
+// the box around it would reach past the top or bottom of the screen.
+func (m *OS) dialogContentRows() int {
+	rh := m.GetRenderHeight()
+	if rh <= 0 {
+		return 1 << 20 // size not known yet; do not drop anything
+	}
+	return max(rh-4, 1) // border and padding, top and bottom
+}
+
+// squeezeLines shortens a dialog body to rows lines. The blank spacer lines go
+// first, since a dialog that reads a little tighter is better than one whose
+// last rows are off the bottom of the screen; only if that is not enough does
+// it drop content, keeping the last line (which is where the key hints live).
+func squeezeLines(lines []string, rows int) []string {
+	// An entry can itself be several lines tall (a bordered input field, say),
+	// so the budget is measured in rendered lines, not in entries.
+	height := func(ls []string) int {
+		n := 0
+		for _, ln := range ls {
+			n += lipgloss.Height(ln)
+		}
+		return n
+	}
+	if rows < 1 || height(lines) <= rows {
+		return lines
+	}
+
+	out := make([]string, 0, len(lines))
+	drop := height(lines) - rows
+	for i, ln := range lines {
+		if drop > 0 && i > 0 && i < len(lines)-1 && strings.TrimSpace(ln) == "" {
+			drop--
+			continue
+		}
+		out = append(out, ln)
+	}
+	// Still too tall: keep the top and the last line, which is where a dialog
+	// puts its key hints.
+	for len(out) > 1 && height(out) > rows {
+		out = append(out[:len(out)-2], out[len(out)-1])
+	}
+	return out
 }
 
 // clipStyled cuts an already-styled line to at most width cells, keeping its

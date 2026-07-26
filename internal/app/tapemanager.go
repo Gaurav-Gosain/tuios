@@ -542,6 +542,7 @@ func (m *OS) RenderTapeManager() string {
 		lines = append(lines, dimStyle.Render(controls))
 	}
 
+	lines = squeezeLines(lines, m.dialogContentRows())
 	content := clipStyledLines(lipgloss.JoinVertical(lipgloss.Left, lines...), textW)
 
 	// Create bordered box

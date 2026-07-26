@@ -86,10 +86,14 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			hintCols     = 68
 		)
 		avail := m.GetRenderWidth() - 6 // both borders, both paddings
+		// The same argument applies to the height: the block letters are six
+		// rows of a box that also carries a border, padding, a subtitle and up
+		// to three stacked hints, which is more than a short terminal has.
+		availRows := m.dialogContentRows()
 
 		ui := theme.UI()
 		titleText := asciiArt
-		if avail < artCols {
+		if avail < artCols || availRows < 12 {
 			titleText = "TUIOS"
 		}
 		title := lipgloss.NewStyle().
@@ -99,7 +103,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		parts := []string{title}
 
-		if avail >= subtitleCols {
+		if avail >= subtitleCols && availRows >= 8 {
 			parts = append(parts, "", lipgloss.NewStyle().
 				Foreground(ui.AccentBright).
 				Render("Terminal UI Operating System"))
@@ -121,7 +125,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Align(lipgloss.Center).
 			Render(strings.Join(hints, sep)))
 
-		content := lipgloss.JoinVertical(lipgloss.Center, parts...)
+		content := lipgloss.JoinVertical(lipgloss.Center, squeezeLines(parts, availRows)...)
 
 		boxStyle := lipgloss.NewStyle().
 			Border(getNormalBorder()).
@@ -260,6 +264,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Foreground(lipgloss.Color("8")).
 			Render("Press 'q'/'esc' to exit, 'r' to reset stats"))
 
+		statsLines = squeezeLines(statsLines, m.dialogContentRows())
 		statsContent := clipStyledLines(strings.Join(statsLines, "\n"), m.dialogWidth(60)-dialogChrome)
 
 		statsBox := lipgloss.NewStyle().

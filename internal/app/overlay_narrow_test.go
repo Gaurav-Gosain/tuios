@@ -8,6 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // narrowScreens are the sizes the overlays have to survive: a tall narrow
@@ -20,6 +21,7 @@ var narrowScreens = []struct {
 	{"tall-narrow", 51, 37},
 	{"short-wide", 90, 20},
 	{"very-narrow", 30, 24},
+	{"very-short", 100, 12},
 	{"desktop", 120, 40},
 }
 
@@ -128,7 +130,16 @@ func TestOverlayPanelsFitNarrowScreens(t *testing.T) {
 			m.LayoutPickerMode = ""
 
 			out, _, _ = m.renderAggregateView()
+			assertFitsScreen(t, "aggregate (empty)", out, sc.w, sc.h)
+
+			m.Windows = []*terminal.Window{
+				{ID: "a", CustomName: "a-window-title-far-too-long-for-a-narrow-screen", Width: 100, Height: 40, Workspace: 1},
+				{ID: "b", CustomName: "second", Width: 80, Height: 24, Workspace: 1, Minimized: true},
+			}
+			m.CurrentWorkspace = 1
+			out, _, _ = m.renderAggregateView()
 			assertFitsScreen(t, "aggregate", out, sc.w, sc.h)
+			m.Windows = nil
 
 			quit, _, _ := m.renderQuitConfirmDialog()
 			assertFitsScreen(t, "quit", quit, sc.w, sc.h)
@@ -192,10 +203,10 @@ func TestOverlayDesktopSizesUnchanged(t *testing.T) {
 	if got := m.panelWidth(helpPanelInnerWidth); got != helpPanelInnerWidth {
 		t.Errorf("help width = %d, want %d", got, helpPanelInnerWidth)
 	}
-	if w, rows := m.paletteLayout(); w != paletteInnerWidth || rows != paletteMaxVisible {
+	if w, rows, _ := m.paletteLayout(); w != paletteInnerWidth || rows != paletteMaxVisible {
 		t.Errorf("palette layout = %d x %d, want %d x %d", w, rows, paletteInnerWidth, paletteMaxVisible)
 	}
-	if w, rows := m.themePickerLayout(); w != themePickerInnerWidth || rows != themePickerVisibleRows {
+	if w, rows, _ := m.themePickerLayout(); w != themePickerInnerWidth || rows != themePickerVisibleRows {
 		t.Errorf("theme picker layout = %d x %d, want %d x %d", w, rows, themePickerInnerWidth, themePickerVisibleRows)
 	}
 	if got := m.dialogWidth(80); got != 80 {
@@ -208,7 +219,7 @@ func TestOverlayDesktopSizesUnchanged(t *testing.T) {
 	cats := m.settingsCategories()
 	for i, cat := range cats {
 		m.SettingsCategory = i
-		w, rows := m.settingsLayout([]string{"Appearance", "Dock", "Behavior"}, len(cat.Items))
+		w, rows, _ := m.settingsLayout([]string{"Appearance", "Dock", "Behavior"}, len(cat.Items))
 		if w != settingsInnerWidth {
 			t.Errorf("settings[%s] width = %d, want %d", cat.Name, w, settingsInnerWidth)
 		}
@@ -326,6 +337,25 @@ func TestDockFitsNarrowScreens(t *testing.T) {
 			m := newNarrowOS(t, sc.w, sc.h)
 			dock, _ := m.renderDockString()
 			assertFitsScreen(t, "dock", dock, sc.w, sc.h)
+
+			// With the system readouts on, the right-hand block asks for 32
+			// columns; in copy mode its help line asks for 110.
+			config.ShowCPU, config.ShowRAM = true, true
+			defer func() { config.ShowCPU, config.ShowRAM = false, false }()
+			dock, _ = m.renderDockString()
+			assertFitsScreen(t, "dock with stats", dock, sc.w, sc.h)
+
+			m.Windows = []*terminal.Window{{ID: "a", Width: sc.w, Height: sc.h, Workspace: 1}}
+			m.CurrentWorkspace, m.FocusedWindow = 1, 0
+			for _, state := range []terminal.CopyModeState{
+				terminal.CopyModeNormal, terminal.CopyModeSearch,
+				terminal.CopyModeVisualChar, terminal.CopyModeVisualLine,
+			} {
+				m.Windows[0].CopyMode = &terminal.CopyMode{Active: true, State: state}
+				dock, _ = m.renderDockString()
+				assertFitsScreen(t, fmt.Sprintf("dock in copy mode %d", state), dock, sc.w, sc.h)
+			}
+			m.Windows = nil
 		})
 	}
 }
