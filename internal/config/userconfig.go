@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 	"slices"
@@ -557,12 +558,61 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	}
 }
 
-// ApplyAppearanceConfig applies parsed appearance settings to the package
-// globals read by the render loop. It must be called on the Bubble Tea
+// ApplyAppearanceConfig applies a parsed config file to the package globals the
+// render loop and the input handler read. It must be called on the Bubble Tea
 // goroutine (from Update or at startup before the program runs), never from the
 // file-watcher goroutine, because the globals are read concurrently on the
 // render path.
+//
+// This is the whole of the config-file-to-globals mapping, deliberately: an
+// entrypoint that loads a config and calls this gets every setting the settings
+// page can write, with nothing left needing a second call. It used to cover
+// only part of the [appearance] section and the rest lived in ApplyOverrides,
+// so border style, dock position, the dock meters, the scrollbar, the window
+// buttons, scrollback, scroll direction, the frame cap and the theme were
+// applied by cmd/tuios (which calls both) and silently dropped everywhere else:
+// `tuios tape`, the pkg/tuios embed, and every live config reload through
+// ConfigReloadedMsg. ApplyOverrides still layers CLI flags on top, so flags
+// keep winning where they are set.
 func ApplyAppearanceConfig(cfg *UserConfig) {
+	// BorderStyle defaults to rounded. Empty means "not configured", so the
+	// current value (a flag, or the default) stands.
+	if cfg.Appearance.BorderStyle != "" {
+		BorderStyle = cfg.Appearance.BorderStyle
+	}
+
+	// DockbarPosition defaults to bottom.
+	if cfg.Appearance.DockbarPosition != "" {
+		DockbarPosition = cfg.Appearance.DockbarPosition
+	}
+
+	// The hide/show toggles are plain bools with no "unset" state, so they are
+	// assigned unconditionally: turning one off in the settings page has to
+	// survive a reload just as turning it on does.
+	HideWindowButtons = cfg.Appearance.HideWindowButtons
+	HideScrollbar = cfg.Appearance.HideScrollbar
+	ShowClock = cfg.Appearance.ShowClock
+	ShowCPU = cfg.Appearance.ShowCPU
+	ShowRAM = cfg.Appearance.ShowRAM
+	NiriReverseScroll = cfg.Appearance.NiriReverseScroll
+
+	if cfg.Appearance.ScrollbackLines > 0 {
+		ScrollbackLines = cfg.Appearance.ScrollbackLines
+	}
+
+	// Clamped exactly as ApplyOverrides clamps it, because this is now the
+	// other place a saved max_fps reaches the tick loop from and the two must
+	// not disagree about what the file is allowed to ask for.
+	if cfg.Appearance.MaxFPS > 0 {
+		NormalFPS = max(min(cfg.Appearance.MaxFPS, MaxFPSCap), 10)
+	}
+
+	// LeaderKey lives in [keybindings] rather than [appearance], but it is a
+	// package global fed by the same file and it had the same gap.
+	if cfg.Keybindings.LeaderKey != "" {
+		LeaderKey = cfg.Keybindings.LeaderKey
+	}
+
 	// AnimationsEnabled defaults to true (nil means use default)
 	// Only set global if explicitly configured
 	if cfg.Appearance.AnimationsEnabled != nil {
@@ -616,8 +666,19 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 		ZoomMaxWidth = cfg.Appearance.ZoomMaxWidth
 	}
 
+	// Theme. An empty name means "no theme, use the terminal's own colors",
+	// which is also the startup state, so there is nothing to undo and the
+	// initialize is skipped. This matches ApplyOverrides, which then re-applies
+	// with the --theme flag's name when one was given.
+	if cfg.Appearance.Theme != "" {
+		if err := theme.Initialize(cfg.Appearance.Theme); err != nil {
+			log.Printf("Warning: Failed to load theme '%s': %v", cfg.Appearance.Theme, err)
+		}
+	}
+
 	// Custom border colors override the theme-derived colors. Empty strings
-	// clear any override and restore theme colors.
+	// clear any override and restore theme colors. This runs after the theme
+	// switch above, which resets the derived colors.
 	theme.SetBorderOverrides(cfg.Appearance.BorderFocusedColor, cfg.Appearance.BorderUnfocusedColor)
 }
 
