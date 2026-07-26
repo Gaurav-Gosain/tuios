@@ -47,8 +47,12 @@ func (w *Window) Resize(width, height int) {
 	termWidth := max(width-borderDeduct, 1)
 	termHeight := max(height-borderDeduct, 1)
 
-	// Check if size actually changed
-	sizeChanged := w.Width != width || w.Height != height
+	// Did anything downstream actually change? Measured against what was last
+	// announced, not against Width and Height: a deferred resize has already
+	// applied those visually, and comparing with them makes the announcement
+	// look redundant exactly when it is not.
+	sizeChanged := termWidth != w.announcedW || termHeight != w.announcedH
+	w.announcedW, w.announcedH = termWidth, termHeight
 
 	// ioMu serializes the emulator buffer reallocation against the render
 	// reader (RLockIO) and the PTY writers; Terminal has no lock of its own.

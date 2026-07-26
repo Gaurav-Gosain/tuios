@@ -120,6 +120,10 @@ func (m *OS) ApplyBSPLayout() {
 	bounds := m.GetBSPBounds()
 	layouts := tree.ApplyLayout(bounds)
 
+	// Asked once for the whole layout, not per pane: it is what decides between
+	// the two branches below, and it ends a stale deferral as a side effect.
+	deferring := m.resizeDeferralActive()
+
 	for windowIntID, rect := range layouts {
 		win := m.getWindowByIntID(windowIntID)
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
@@ -149,7 +153,19 @@ func (m *OS) ApplyBSPLayout() {
 		// per frame for a size the user is still in the middle of choosing.
 		// Resize visually instead and record it in PendingResizes, which mouse
 		// release already drains into one real resize per window.
-		if m.Resizing {
+		// A terminal resize is the same kind of event, one step removed: the
+		// browser or the terminal emulator delivers a size per frame for as long
+		// as the user drags the window edge, and easing toward each one built a
+		// fresh 300ms snap per pane per step. The panes were still easing when
+		// the next size arrived, so they never arrived anywhere, and after the
+		// pointer stopped the layout kept moving for the rest of the last
+		// animation - which is exactly the catch-up a drag feels like. The size
+		// is not a destination to travel to; it is where the panes already are.
+		//
+		// Only while the resize is actually live, though. See
+		// resize_deferral.go: a deferral that outlives its gesture leaves every
+		// later retile placing panes visually and never giving them a real size.
+		if deferring {
 			win.X, win.Y = rect.X, rect.Y
 			if win.Tiled != config.SharedBorders {
 				win.Tiled = config.SharedBorders
@@ -157,7 +173,13 @@ func (m *OS) ApplyBSPLayout() {
 			}
 			if win.Width != rect.W || win.Height != rect.H {
 				win.ResizeVisual(rect.W, rect.H)
-				win.IsBeingManipulated = true
+				// IsBeingManipulated freezes a pane's content at its cached
+				// frame, which is right for a pane the pointer is dragging and
+				// wrong for a terminal resize: nothing is being manipulated, and
+				// the panes should keep drawing their live contents.
+				if m.Resizing {
+					win.IsBeingManipulated = true
+				}
 				m.PendingResizes[win.ID] = [2]int{rect.W, rect.H}
 			}
 			win.MarkPositionDirty()
@@ -215,6 +237,11 @@ func (m *OS) CancelSnapAnimation(win *terminal.Window) {
 // AddWindowToBSPTree adds a window to the BSP tree and applies the layout.
 // This should be called when a new window is created in tiling mode.
 func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
+	// A new pane is a structural change, not a resize step. Whatever resize was
+	// in flight, the layout this produces is what the user is left looking at,
+	// so it has to be a real one.
+	m.requireRealLayout()
+
 	tree := m.GetOrCreateBSPTree()
 	windowIntID := m.getWindowIntID(window.ID)
 
@@ -264,6 +291,10 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 // RemoveWindowFromBSPTree removes a window from the BSP tree and reapplies the layout.
 // This should be called when a window is closed in tiling mode.
 func (m *OS) RemoveWindowFromBSPTree(window *terminal.Window) {
+	// Closing a pane is structural too; the panes that inherit its space must
+	// end up at real sizes. See AddWindowToBSPTree.
+	m.requireRealLayout()
+
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil {
 		return
