@@ -127,6 +127,14 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 				return o, nil
 			}
 		}
+
+		// Help is showing but the key wasn't handled - ignore it, exactly as
+		// terminal mode does. Falling through sent it on to the window-manager
+		// dispatch below, where the overlay hides what it does: n created and
+		// focused a window behind the help panel, x closed one, t toggled
+		// tiling, and every other single-letter binding fired unseen. Help is
+		// the only overlay in this function that was not modal.
+		return o, nil
 	}
 
 	// Handle log viewer (takes priority in window management mode)

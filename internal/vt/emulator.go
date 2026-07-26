@@ -130,6 +130,14 @@ func NewEmulator(w, h int) *Emulator {
 	t := new(Emulator)
 	t.scrs[0] = *NewScreen(w, h)
 	t.scrs[1] = *NewScreen(w, h)
+	// The alternate screen keeps no scrollback, which every accessor on this
+	// type already assumes: Scrollback, ScrollbackLen, ScrollbackLine,
+	// ClearScrollback and SetScrollbackMaxLines all read scrs[0]. Its ring was
+	// still being filled by every scroll a full-screen application made, at a
+	// terminal width of cells per line and 112 bytes per cell, up to the
+	// default 10000 lines that SetScrollbackMaxLines never reached because that
+	// only resizes the main screen's. Nothing could read a line of it.
+	t.scrs[1].DisableScrollback()
 	t.scr = &t.scrs[0]
 	t.scrs[0].cb = &t.cb
 	t.scrs[1].cb = &t.cb

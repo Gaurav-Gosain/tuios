@@ -122,3 +122,196 @@ func TestApplyStateSyncResizeRacesOutput(t *testing.T) {
 	wg.Wait()
 	win.Close()
 }
+
+// TestRestoreTerminalContentRacesOutput pins the lock discipline in
+// restoreTerminalContent, the third emulator mutation on the state-sync path
+// that ran without the window's I/O lock.
+//
+// Restoring is a mode switch plus a blit of a screenful of cells from the
+// daemon's snapshot. It reaches a pane that is already subscribed on two paths:
+// the tape-playback re-fetch in updateWindowFromState, and (before the callers
+// were reordered) every window created by a state sync, which subscribed first
+// and restored afterwards. Either way the outputWriter goroutine is writing the
+// same cell buffer, so the restore tore it and painted cells from an older
+// frame over live output.
+//
+// The test drives the restore against live output directly, so it keeps
+// guarding the lock even if a later change reorders the callers again. Like the
+// tests above it asserts nothing and only fails under -race; verified failing
+// against the unlocked code with a race on the emulator cell buffer.
+func TestRestoreTerminalContentRacesOutput(t *testing.T) {
+	ptyDataChan := make(chan struct{}, 1)
+	drainDone := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ptyDataChan:
+			case <-drainDone:
+				return
+			}
+		}
+	}()
+	defer close(drainDone)
+
+	const cols, rows = 60, 20
+	win := terminal.NewDaemonWindow("restore-race-win-01", "race", 0, 0, cols+2, rows+2, 0, "pty-restore-001", ptyDataChan)
+	if win == nil {
+		t.Fatal("NewDaemonWindow returned nil")
+	}
+
+	m := &OS{
+		Windows:        []*terminal.Window{win},
+		FocusedWindow:  0,
+		WorkspaceFocus: map[int]int{},
+		NumWorkspaces:  9,
+		Width:          120,
+		Height:         40,
+	}
+
+	// A full screenful of snapshot cells, the shape GetTerminalState returns for
+	// a shell pane, plus the modes a guest application leaves set.
+	screen := make([][]session.CellState, rows)
+	for y := range screen {
+		screen[y] = make([]session.CellState, cols)
+		for x := range screen[y] {
+			screen[y][x] = session.CellState{Content: "x", Width: 1}
+		}
+	}
+	state := &session.TerminalState{
+		Width:  cols,
+		Height: rows,
+		Modes:  map[int]bool{1000: true, 1002: true, 2004: true},
+		Screen: screen,
+	}
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	payload := []byte("the quick brown fox jumps over the lazy dog 0123456789\r\n")
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					win.WriteOutputAsync(payload)
+				}
+			}
+		}()
+	}
+
+	for i := range 200 {
+		m.restoreTerminalContent(win, state)
+		_ = m.renderTerminal(win, i%2 == 0, false)
+	}
+
+	close(stop)
+	wg.Wait()
+	win.Close()
+}
+
+// TestPlaceUnplacedWindowsRacesOutput is the sibling of the test above for the
+// other unlocked emulator resize on the state-sync path.
+//
+// A window the daemon creates arrives marked Unplaced, because the daemon has
+// no viewport and will not guess a position. placeUnplacedWindows turns that
+// into a real box on the client, and resizing the emulator to the new box was
+// the one resize on this path that did not take the window's I/O lock. By the
+// time the placing sync arrives the window is already subscribed, so the
+// outputWriter goroutine is writing the same cell buffer that Resize is
+// reallocating: the symptom is the same permanently blank pane, since a torn
+// render is cached and an idle shell never re-dirties it.
+//
+// The trigger on a real session is pressing n, or any other route that has the
+// daemon rather than this client create the window.
+//
+// Like the test above this asserts nothing and only fails under -race. Its
+// detection power was verified by running it against the unlocked code, where
+// it reports a race on the emulator buffer inside placeUnplacedWindows.
+func TestPlaceUnplacedWindowsRacesOutput(t *testing.T) {
+	ptyDataChan := make(chan struct{}, 1)
+	drainDone := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ptyDataChan:
+			case <-drainDone:
+				return
+			}
+		}
+	}()
+	defer close(drainDone)
+
+	const winID = "place-race-window-001"
+	win := terminal.NewDaemonWindow(winID, "race", 0, 0, 60, 20, 0, "pty-place-0001", ptyDataChan)
+	if win == nil {
+		t.Fatal("NewDaemonWindow returned nil")
+	}
+
+	m := &OS{
+		Windows:        []*terminal.Window{win},
+		FocusedWindow:  0,
+		WorkspaceFocus: map[int]int{},
+		NumWorkspaces:  9,
+		Width:          120,
+		Height:         40,
+	}
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	payload := []byte("the quick brown fox jumps over the lazy dog 0123456789\r\n")
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					win.WriteOutputAsync(payload)
+				}
+			}
+		}()
+	}
+
+	// The daemon re-broadcasts the creation state until this client's placing
+	// push lands, so Unplaced arriving repeatedly is the real shape. The screen
+	// size alternates so NewWindowPlacement returns a different box each time
+	// and the emulator really reallocates rather than taking Buffer.Resize's
+	// same-dimensions early return.
+	for i := range 300 {
+		m.Width, m.Height = 120, 40
+		if i%2 == 0 {
+			m.Width, m.Height = 100, 30
+		}
+		state := &session.SessionState{
+			Name:             "race",
+			CurrentWorkspace: 1,
+			FocusedWindowID:  winID,
+			Windows: []session.WindowState{{
+				ID:        winID,
+				Title:     "race",
+				PTYID:     "pty-place-0001",
+				X:         0,
+				Y:         0,
+				Width:     60,
+				Height:    20,
+				Workspace: 1,
+				Unplaced:  true,
+			}},
+		}
+		if err := m.ApplyStateSync(state); err != nil {
+			t.Fatalf("ApplyStateSync: %v", err)
+		}
+		_ = m.renderTerminal(win, i%2 == 0, false)
+	}
+
+	close(stop)
+	wg.Wait()
+	win.Close()
+}

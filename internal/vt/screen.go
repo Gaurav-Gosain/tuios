@@ -367,19 +367,87 @@ func (s *Screen) ScrollUp(n int) {
 
 	// Only save to scrollback if we're scrolling the main screen area
 	// (not a limited scroll region) and the scroll region starts at Y=0
-	if scroll.Min.Y == 0 && scroll.Min.X == 0 && scroll.Dx() == width {
-		// Save the top n lines to scrollback before they're deleted
+	if s.scrollback != nil && scroll.Min.Y == 0 && scroll.Min.X == 0 && scroll.Dx() == width {
+		// Save the top n lines to scrollback before they're deleted.
+		// extractLine allocates the line and hands over its only reference, so
+		// the ring takes it without a second copy.
 		for i := 0; i < n && i < scroll.Dy(); i++ {
 			y := scroll.Min.Y + i
 			line := extractLine(s.buf.Buffer, y, width)
-			s.scrollback.PushLine(line)
+			s.scrollback.PushLineOwned(line, true)
 		}
 	}
 
 	x, y := s.CursorPosition()
 	s.setCursor(s.cur.X, 0, true)
-	s.DeleteLine(n)
+	if !s.rotateWholeScreenUp(n) {
+		s.DeleteLine(n)
+	}
 	s.setCursor(x, y, false)
+}
+
+// rotateWholeScreenUp scrolls the whole buffer up n lines by moving line
+// headers instead of cells, and reports whether it applied.
+//
+// It only applies when the scroll region is the entire buffer, which is what a
+// shell printing output uses and so is the overwhelming majority of scrolls. A
+// limited region (DECSTBM) still goes through Buffer.DeleteLineArea.
+//
+// The cost being avoided is real: DeleteLineArea copies every cell of the
+// region up one row in a nested loop, and a uv.Cell is 112 bytes carrying three
+// colour interfaces and three strings, so one newline at 207x55 is 11,178
+// struct copies each with a pointer write barrier, and the garbage collector
+// then scans all of it. Rotating touches the rows themselves and reuses the
+// slices that fall off the top as the new blank rows at the bottom, so nothing
+// is allocated and no cell moves.
+//
+// Every row is marked touched, because every row's index changed and the
+// renderer diffs by index.
+func (s *Screen) rotateWholeScreenUp(n int) bool {
+	lines := s.buf.Lines
+	height := len(lines)
+	area := s.scroll
+	if height == 0 || area.Min.X != 0 || area.Min.Y != 0 ||
+		area.Max.Y != height || area.Dx() != s.buf.Width() {
+		return false
+	}
+
+	// A scroll of the whole screen or more clears it; there is nothing to move.
+	if n >= height {
+		n = height
+	}
+
+	// Lift the rows leaving the top, slide the rest up, and put the lifted
+	// slices back at the bottom to be blanked. The scratch array keeps the
+	// common case (one line, printing output) free of allocation; only a large
+	// CSI S needs the heap, and then for one slice of line headers rather than
+	// for any cells.
+	var scratch [16]uv.Line
+	var recycled []uv.Line
+	if n <= len(scratch) {
+		recycled = scratch[:n]
+	} else {
+		recycled = make([]uv.Line, n)
+	}
+	copy(recycled, lines[:n])
+	copy(lines, lines[n:])
+	copy(lines[height-n:], recycled)
+
+	blank := uv.EmptyCell
+	if c := s.blankCell(); c != nil {
+		blank = *c
+	}
+	for y := height - n; y < height; y++ {
+		row := lines[y]
+		for x := range row {
+			row[x] = blank
+		}
+	}
+
+	for y := range height {
+		s.buf.TouchLine(0, y, area.Max.X)
+	}
+	return true
 }
 
 // ScrollDown scrolls the content down n lines within the given region. Lines
@@ -453,6 +521,13 @@ func (s *Screen) blankCell() *uv.Cell {
 // Scrollback returns the scrollback buffer for this screen.
 func (s *Screen) Scrollback() *Scrollback {
 	return s.scrollback
+}
+
+// DisableScrollback drops this screen's scrollback ring, so lines scrolled off
+// the top are discarded instead of retained. Every other scrollback method here
+// already tolerates the nil, and ScrollUp checks it before pushing.
+func (s *Screen) DisableScrollback() {
+	s.scrollback = nil
 }
 
 // ClearScrollback clears all lines from the scrollback buffer.
