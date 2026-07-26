@@ -123,6 +123,96 @@ func TestApplyStateSyncResizeRacesOutput(t *testing.T) {
 	win.Close()
 }
 
+// TestRestoreTerminalContentRacesOutput pins the lock discipline in
+// restoreTerminalContent, the third emulator mutation on the state-sync path
+// that ran without the window's I/O lock.
+//
+// Restoring is a mode switch plus a blit of a screenful of cells from the
+// daemon's snapshot. It reaches a pane that is already subscribed on two paths:
+// the tape-playback re-fetch in updateWindowFromState, and (before the callers
+// were reordered) every window created by a state sync, which subscribed first
+// and restored afterwards. Either way the outputWriter goroutine is writing the
+// same cell buffer, so the restore tore it and painted cells from an older
+// frame over live output.
+//
+// The test drives the restore against live output directly, so it keeps
+// guarding the lock even if a later change reorders the callers again. Like the
+// tests above it asserts nothing and only fails under -race; verified failing
+// against the unlocked code with a race on the emulator cell buffer.
+func TestRestoreTerminalContentRacesOutput(t *testing.T) {
+	ptyDataChan := make(chan struct{}, 1)
+	drainDone := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ptyDataChan:
+			case <-drainDone:
+				return
+			}
+		}
+	}()
+	defer close(drainDone)
+
+	const cols, rows = 60, 20
+	win := terminal.NewDaemonWindow("restore-race-win-01", "race", 0, 0, cols+2, rows+2, 0, "pty-restore-001", ptyDataChan)
+	if win == nil {
+		t.Fatal("NewDaemonWindow returned nil")
+	}
+
+	m := &OS{
+		Windows:        []*terminal.Window{win},
+		FocusedWindow:  0,
+		WorkspaceFocus: map[int]int{},
+		NumWorkspaces:  9,
+		Width:          120,
+		Height:         40,
+	}
+
+	// A full screenful of snapshot cells, the shape GetTerminalState returns for
+	// a shell pane, plus the modes a guest application leaves set.
+	screen := make([][]session.CellState, rows)
+	for y := range screen {
+		screen[y] = make([]session.CellState, cols)
+		for x := range screen[y] {
+			screen[y][x] = session.CellState{Content: "x", Width: 1}
+		}
+	}
+	state := &session.TerminalState{
+		Width:  cols,
+		Height: rows,
+		Modes:  map[int]bool{1000: true, 1002: true, 2004: true},
+		Screen: screen,
+	}
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	payload := []byte("the quick brown fox jumps over the lazy dog 0123456789\r\n")
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					win.WriteOutputAsync(payload)
+				}
+			}
+		}()
+	}
+
+	for i := range 200 {
+		m.restoreTerminalContent(win, state)
+		_ = m.renderTerminal(win, i%2 == 0, false)
+	}
+
+	close(stop)
+	wg.Wait()
+	win.Close()
+}
+
 // TestPlaceUnplacedWindowsRacesOutput is the sibling of the test above for the
 // other unlocked emulator resize on the state-sync path.
 //
