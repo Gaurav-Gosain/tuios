@@ -27,7 +27,14 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          # The nested e2e module asks for a newer Go than the root module, and
+          # this job needs both: it builds cmd/tuios from the root and then runs
+          # the suite from e2e/tui. Installing the higher of the two satisfies
+          # each, since a module's go directive is a minimum. Reading the root
+          # go.mod here used to work only because Go quietly fetched the newer
+          # toolchain when the tests ran, which setup-go now prevents by pinning
+          # GOTOOLCHAIN to what it installed.
+          go-version-file: e2e/tui/go.mod
           cache-dependency-path: |
             go.sum
             e2e/tui/go.sum
