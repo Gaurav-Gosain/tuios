@@ -60,6 +60,14 @@ type Overrides struct {
 
 // ApplyOverrides applies CLI flag overrides to global config, falling back to user config defaults.
 // If userConfig is nil, only CLI flag values (when set) are applied.
+//
+// The userConfig fallbacks below duplicate what ApplyAppearanceConfig already
+// does, and they compute the same values from the same fields. They stay here
+// because this function must also work on its own, for the entrypoints that
+// only call it (cmd/tuios-web). Callers that do both (cmd/tuios) get the config
+// applied twice with the flags winning, which is the intended precedence; any
+// new setting belongs in ApplyAppearanceConfig, and only needs a line here if a
+// CLI flag can override it.
 func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 	// ASCII Only - simple flag override
 	if overrides.ASCIIOnly {

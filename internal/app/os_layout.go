@@ -178,7 +178,13 @@ func (m *OS) ToggleLayoutMode() {
 // resetTiledFlags clears the Tiled flag on all current workspace windows
 // and invalidates caches. Call when switching layout modes to prevent
 // stale shared-border state from bleeding between modes.
+// Its callers are the layout-mode switches, every one of them a structural
+// change whose result is final, so this is also where a resize deferral that is
+// still in flight gets finished rather than being allowed to make the new
+// layout visual-only. See resize_deferral.go.
 func (m *OS) resetTiledFlags() {
+	m.requireRealLayout()
+
 	for i := range m.Windows {
 		if m.Windows[i].Workspace == m.CurrentWorkspace {
 			m.Windows[i].Tiled = false

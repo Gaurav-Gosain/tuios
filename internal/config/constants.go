@@ -515,7 +515,19 @@ const (
 	WindowBorderVertical = "│" // U+2502
 
 	// WindowButtonClose is the close/kill window button character.
-	WindowButtonClose = " ⤫ " // Close/kill window
+	//
+	// U+2715 MULTIPLICATION X, not the U+292B RISING DIAGONAL CROSSING FALLING
+	// DIAGONAL it used to be. U+292B lives in Miscellaneous Mathematical
+	// Symbols-B, which JetBrainsMono Nerd Font does not cover at all, so a
+	// terminal running it falls back to whatever proportional system font
+	// happens to have the codepoint. That substitute's advance is wider than
+	// one cell, so the glyph draws past the column the layout budgeted for it
+	// and the falling diagonal is clipped by whatever is painted next.
+	// U+2715 is in the font, has an advance of exactly one cell, and keeps its
+	// ink well inside it. It carries the same East Asian Width class "N" as
+	// U+292B, so it still measures 1 cell and the button pill keeps its old
+	// width. See the hit-test offsets below, which depend on that width.
+	WindowButtonClose = " ✕ " // Close/kill window
 	// WindowSeparatorChar is the separator character for window elements.
 	WindowSeparatorChar = "─" // U+2500
 )

@@ -45,8 +45,11 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	// Build left side text (compact format)
 	layout.LeftText, layout.LeftWidth, layout.ModeInfo = m.buildDockLeftText()
 
-	// Calculate right side width
-	layout.RightWidth = m.calculateDockRightWidth()
+	// Calculate right side width. The estimate below is what the right block
+	// would like; on a narrow screen it is capped at what the left block leaves,
+	// otherwise the two together are wider than the dock and the right-hand end
+	// (the system stats, or the copy-mode help) is drawn off the screen.
+	layout.RightWidth = min(m.calculateDockRightWidth(), max(m.GetRenderWidth()-layout.LeftWidth, 0))
 
 	// Get all dock items
 	allItems := m.getDockItems()
@@ -173,26 +176,51 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 	return leftText, width, modeInfo
 }
 
+// copyModeHelpTexts returns the dock's copy-mode help line for a sub-state,
+// longest first. The renderer takes the longest one that fits the room the dock
+// has; on a narrow screen that is the shortest of them, which still names the
+// keys that matter. Shared with the width calculation so the space reserved
+// matches the line actually drawn.
+func copyModeHelpTexts(state terminal.CopyModeState) []string {
+	switch state {
+	case terminal.CopyModeNormal:
+		return []string{
+			"hjkl:move w/b/e:word f/F/t/T:char /:search n/N:next/prev C-l:clear ;,:repeat v:visual y:yank i:term q:quit",
+			"hjkl:move w/b/e:word /:search v:visual y:yank q:quit",
+			"hjkl /:search v y q",
+		}
+	case terminal.CopyModeSearch:
+		return []string{
+			"Type to search  n/N:next/prev  Enter:done  Esc:cancel",
+			"n/N:next  Enter:done  Esc:cancel",
+		}
+	case terminal.CopyModeVisualChar:
+		return []string{
+			"hjkl:extend w/b/e:word f/F/t/T:char ;,:repeat {/}:para %:bracket y:yank Esc:cancel",
+			"hjkl:extend w/b/e:word y:yank Esc:cancel",
+			"hjkl y:yank Esc",
+		}
+	case terminal.CopyModeVisualLine:
+		return []string{"jk:extend  y:yank  Esc:cancel", "jk y Esc"}
+	}
+	return nil
+}
+
 // calculateDockRightWidth calculates the width of the right side of the dock
 func (m *OS) calculateDockRightWidth() int {
 	focusedWindow := m.GetFocusedWindow()
 	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
 
 	if inCopyMode {
-		// In copy mode, help text can be very long - estimate based on copy mode state
-		// These widths match the actual help text lengths in render.go
-		switch focusedWindow.CopyMode.State {
-		case terminal.CopyModeNormal:
-			return 110 // Length of normal mode help text + padding
-		case terminal.CopyModeSearch:
-			return 60 // Length of search mode help text + padding
-		case terminal.CopyModeVisualChar:
-			return 90 // Length of visual char mode help text + padding
-		case terminal.CopyModeVisualLine:
-			return 35 // Length of visual line mode help text + padding
-		default:
+		// In copy mode the help line is the right-hand block. Measure the
+		// longest variant rather than guessing at it, so a terminal with room
+		// for it reserves exactly enough and one without falls to a shorter
+		// line instead of being one cell short of the full one.
+		texts := copyModeHelpTexts(focusedWindow.CopyMode.State)
+		if len(texts) == 0 {
 			return 32
 		}
+		return lipgloss.Width(texts[0]) + 2 // the help style's own padding
 	}
 
 	return 32 // CPU graph (~19 chars) + space + RAM (~11 chars) = ~31 chars

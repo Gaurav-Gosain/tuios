@@ -221,11 +221,44 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	return canvas
 }
 
+// fitToContentBox trims a rendered pane body to the window's content
+// rectangle.
+//
+// A pane's frame is its rectangle, and nothing it draws may land outside it.
+// renderTerminal does not guarantee that on its own: the unfocused fast path
+// returns the emulator's own Render(), sized by the emulator rather than by the
+// window, and a window's rectangle can change without the emulator following it
+// in the same frame. A snap animation is the ordinary way that happens - it
+// interpolates X, Y, Width and Height every tick and deliberately leaves the VT
+// alone until the transition ends, so mid-animation the body is still the size
+// the pane used to be.
+//
+// lipgloss's Width and Height pad but never truncate, so an oversized body used
+// to push the box past the pane: the bottom border landed a row or more below
+// the pane's own bottom edge, over the neighbouring pane or in the status bar.
+// Trimming here keeps the box a function of the window rectangle alone.
+//
+// The common case costs one lipgloss.Size, which is a single pass over a string
+// the caller has already built, and changes nothing.
+func fitToContentBox(content string, w, h int) string {
+	if w < 1 || h < 1 {
+		return content
+	}
+	cw, ch := lipgloss.Size(content)
+	if cw <= w && ch <= h {
+		return content
+	}
+	return lipgloss.NewStyle().MaxWidth(w).MaxHeight(h).Render(content)
+}
+
 // renderWindowBox renders a window's content, wrapped in its border unless the
 // window is borderless. Shared by the compositor path and the fullscreen fast
 // path so both produce identical output.
 func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool, borderColorObj color.Color) string {
-	content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
+	content := fitToContentBox(
+		m.renderTerminal(window, isFocused, m.Mode == TerminalMode),
+		window.ContentWidth(), window.ContentHeight(),
+	)
 	if window.Tiled && (!window.Zoomed || config.SharedBorders) {
 		return content
 	}

@@ -74,32 +74,64 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
    ██║   ╚██████╔╝██║╚██████╔╝███████║
    ╚═╝    ╚═════╝ ╚═╝ ╚═════╝ ╚══════╝`
 
+		// The splash is the first thing anyone sees, at whatever width. Its
+		// three parts have fixed widths - 38 columns of block letters, a 28
+		// column subtitle and a 68 column hint line - and the box adds a border
+		// and two columns of padding on each side. Asking for all of it needs 74
+		// columns, so on anything narrower it used to run off the right edge
+		// with the border cut away. Drop to what fits instead.
+		const (
+			artCols      = 38
+			subtitleCols = 28
+			hintCols     = 68
+		)
+		avail := m.GetRenderWidth() - 6 // both borders, both paddings
+		// The same argument applies to the height: the block letters are six
+		// rows of a box that also carries a border, padding, a subtitle and up
+		// to three stacked hints, which is more than a short terminal has.
+		availRows := m.dialogContentRows()
+
 		ui := theme.UI()
+		titleText := asciiArt
+		if avail < artCols || availRows < 12 {
+			titleText = "TUIOS"
+		}
 		title := lipgloss.NewStyle().
 			Foreground(ui.Accent).
 			Bold(true).
-			Render(asciiArt)
+			Render(titleText)
 
-		subtitle := lipgloss.NewStyle().
-			Foreground(ui.AccentBright).
-			Render("Terminal UI Operating System")
+		parts := []string{title}
 
-		instruction := lipgloss.NewStyle().
+		if avail >= subtitleCols && availRows >= 8 {
+			parts = append(parts, "", lipgloss.NewStyle().
+				Foreground(ui.AccentBright).
+				Render("Terminal UI Operating System"))
+		}
+
+		// The hints read as one line when there is room for one, and stack when
+		// there is not, so no width loses a hint entirely.
+		hints := []string{
+			"Press 'n' for a new window",
+			"'?' for help",
+			"',' for settings",
+		}
+		sep := "\n"
+		if avail >= hintCols {
+			sep = "   •   "
+		}
+		parts = append(parts, "", lipgloss.NewStyle().
 			Foreground(ui.FgDim).
-			Render("Press 'n' for a new window   •   '?' for help   •   ',' for settings")
+			Align(lipgloss.Center).
+			Render(strings.Join(hints, sep)))
 
-		content := lipgloss.JoinVertical(lipgloss.Center,
-			title,
-			"",
-			subtitle,
-			"",
-			instruction,
-		)
+		content := lipgloss.JoinVertical(lipgloss.Center, squeezeLines(parts, availRows)...)
 
 		boxStyle := lipgloss.NewStyle().
 			Border(getNormalBorder()).
 			BorderForeground(ui.Accent).
-			Padding(1, 2)
+			Padding(1, 2).
+			MaxWidth(m.GetRenderWidth())
 
 		centeredContent := lipgloss.Place(
 			m.GetRenderWidth(), m.GetRenderHeight(),
@@ -232,7 +264,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Foreground(lipgloss.Color("8")).
 			Render("Press 'q'/'esc' to exit, 'r' to reset stats"))
 
-		statsContent := strings.Join(statsLines, "\n")
+		statsLines = squeezeLines(statsLines, m.dialogContentRows())
+		statsContent := clipStyledLines(strings.Join(statsLines, "\n"), m.dialogWidth(60)-dialogChrome)
 
 		statsBox := lipgloss.NewStyle().
 			Border(getBorder()).
@@ -249,6 +282,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Foreground(lipgloss.Color("14")).
 			Bold(true).
 			Render("System Logs")
+
+		// The viewer prefers 80 columns; a narrower screen gets a narrower
+		// viewer rather than a viewer with its right-hand side off the edge.
+		logBoxWidth := m.dialogWidth(80)
+		logTextWidth := logBoxWidth - dialogChrome
 
 		maxDisplayHeight := max(m.GetRenderHeight()-8, 8)
 		totalLogs := len(m.LogMessages)
@@ -290,7 +328,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				Render(fmt.Sprintf("[%s]", msg.Level))
 
 			logLine := fmt.Sprintf("%s %s %s", timeStr, levelStr, msg.Message)
-			logLines = append(logLines, logLine)
+			logLines = append(logLines, clipStyled(logLine, logTextWidth))
 			displayCount++
 		}
 
@@ -304,9 +342,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 
 		logLines = append(logLines, "")
+		hints := "q:close  j/k:scroll  E:copy errors  A:copy all"
+		if logTextWidth < lipgloss.Width(hints) {
+			hints = "q:close  j/k:scroll"
+		}
 		logLines = append(logLines, lipgloss.NewStyle().
 			Foreground(lipgloss.Color("8")).
-			Render("q:close  j/k:scroll  E:copy errors  A:copy all"))
+			Render(clipStyled(hints, logTextWidth)))
 
 		logContent := strings.Join(logLines, "\n")
 
@@ -314,7 +356,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Border(getBorder()).
 			BorderForeground(theme.HelpBorder()).
 			Padding(1, 2).
-			Width(80).
+			Width(logBoxWidth).
 			Background(lipgloss.Color("#1a1a2a")).
 			Render(logContent)
 
@@ -436,6 +478,19 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			bindings = config.GetPrefixKeybindings("", m.IsDaemonSession)
 		}
 
+		// The overlay spends four rows on a blank pad above and below, the title
+		// and its rule. A prefix with more bindings than the rest of the screen
+		// can hold says how many it left out rather than running off the bottom
+		// where they cannot be read.
+		moreCount := 0
+		if rh := m.GetRenderHeight(); rh > 0 {
+			maxRows := max(rh-5, 1)
+			if len(bindings) > maxRows {
+				moreCount = len(bindings) - (maxRows - 1)
+				bindings = bindings[:maxRows-1]
+			}
+		}
+
 		maxKeyLen := 0
 		maxDescLen := 0
 		for _, binding := range bindings {
@@ -447,6 +502,14 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			}
 		}
 		contentWidth := max(maxKeyLen+2+maxDescLen, len(title))
+		// The overlay carries two cells of padding on each side and sits two
+		// cells in from the screen edge, so it can ask for at most that much
+		// less than the screen. Descriptions are cut to whatever is left; the
+		// key column is what the overlay is for and keeps its width.
+		if maxWidth := m.GetRenderWidth() - 8; maxWidth > 0 && contentWidth > maxWidth {
+			contentWidth = max(maxWidth, maxKeyLen+2)
+		}
+		descWidth := max(contentWidth-maxKeyLen-2, 1)
 
 		bg := lipgloss.Color("#1f2937")
 
@@ -464,7 +527,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Foreground(lipgloss.Color("#ffffff")).
 			Bold(true).
 			Background(bg).
-			Render(title)
+			Render(truncateString(title, contentWidth))
 		styledLines = append(styledLines, padLine(titleStyled, contentWidth))
 
 		sepStyled := lipgloss.NewStyle().
@@ -485,9 +548,17 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			descStyled := lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#d1d5db")).
 				Background(bg).
-				Render(binding.Description)
+				Render(truncateString(binding.Description, descWidth))
 			line := keyStyled + paddingStyled + descStyled
 			styledLines = append(styledLines, padLine(line, contentWidth))
+		}
+
+		if moreCount > 0 {
+			more := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#9ca3af")).
+				Background(bg).
+				Render(truncateString(fmt.Sprintf("+%d more", moreCount), contentWidth))
+			styledLines = append(styledLines, padLine(more, contentWidth))
 		}
 
 		paddingH := lipgloss.NewStyle().Background(bg).Render("  ")
@@ -525,6 +596,10 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			overlayX = renderWidth - overlayWidth - 2
 			overlayY = renderHeight - overlayHeight - 2
 		}
+		// A binding list taller than the screen would otherwise be positioned
+		// off the top, hiding the first entries with no way to reach them.
+		overlayX = max(min(overlayX, renderWidth-overlayWidth), 0)
+		overlayY = max(min(overlayY, renderHeight-overlayHeight), 0)
 
 		whichKeyLayer := lipgloss.NewLayer(renderedOverlay).
 			X(overlayX).
@@ -651,18 +726,21 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ShowKeys && len(m.RecentKeys) > 0 {
 		m.CleanupExpiredKeys(3 * time.Second)
 		if len(m.RecentKeys) > 0 {
-			showkeysContent := m.renderShowkeys()
+			rightMargin := 2
+			// The strip grows to the left from the right edge, so on a narrow
+			// screen it would start off the left edge; drop the oldest keys
+			// until what is left fits instead.
+			showkeysContent := m.renderShowkeysFitted(max(m.GetRenderWidth()-rightMargin, 1))
 			contentWidth := lipgloss.Width(showkeysContent)
 			contentHeight := lipgloss.Height(showkeysContent)
 
-			rightMargin := 2
 			dockOffset := 0
 			if config.DockbarPosition == "bottom" {
 				dockOffset = config.DockHeight
 			}
 
-			x := m.GetRenderWidth() - contentWidth - rightMargin
-			y := m.GetRenderHeight() - contentHeight - dockOffset
+			x := max(m.GetRenderWidth()-contentWidth-rightMargin, 0)
+			y := max(m.GetRenderHeight()-contentHeight-dockOffset, 0)
 
 			zIndex := config.ZIndexNotifications + 1
 			if m.ShowHelp {

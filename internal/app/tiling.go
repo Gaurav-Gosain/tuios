@@ -60,6 +60,10 @@ func (m *OS) TileAllWindows() {
 
 	m.LogInfo("TileAllWindows called with %d visible windows, BSP=%v, Scrolling=%v", len(visibleWindows), m.UseBSPLayout, m.UseScrollingLayout)
 
+	// Ends a deferral whose gesture is over, so the master-stack branch below
+	// and ApplyBSPLayout further down agree about which path they are on.
+	deferring := m.resizeDeferralActive()
+
 	// Scrolling layout mode (niri-like)
 	if m.UseScrollingLayout {
 		sl := m.GetOrCreateScrollingLayout()
@@ -79,7 +83,14 @@ func (m *OS) TileAllWindows() {
 				// Set Tiled before Resize so the border deduction (and therefore
 				// the emulator size) matches the shared-borders state.
 				visibleWindows[i].Tiled = config.SharedBorders
-				visibleWindows[i].Resize(l.Width, l.Height)
+				// Mid-resize the PTY round trip is deferred, exactly as the BSP
+				// path does it; ViewportResizeSettledMsg drains PendingResizes.
+				if deferring {
+					visibleWindows[i].ResizeVisual(l.Width, l.Height)
+					m.PendingResizes[visibleWindows[i].ID] = [2]int{l.Width, l.Height}
+				} else {
+					visibleWindows[i].Resize(l.Width, l.Height)
+				}
 				visibleWindows[i].InvalidateCache()
 			}
 		}
@@ -176,6 +187,10 @@ func (m *OS) TileAllWindows() {
 
 // ToggleAutoTiling toggles automatic tiling mode
 func (m *OS) ToggleAutoTiling() {
+	// Switching mode is structural: the layout it lands on is final, not a step
+	// on the way to a size the user is still choosing.
+	m.requireRealLayout()
+
 	m.AutoTiling = !m.AutoTiling
 	// Deferred because the enabling branch returns early for scrolling mode.
 	defer m.FireLayoutChanged()

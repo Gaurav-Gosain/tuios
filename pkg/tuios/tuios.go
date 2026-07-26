@@ -250,6 +250,29 @@ func newModel(options Options) *Model {
 	// Set up input handler
 	app.SetInputHandler(input.HandleInput)
 
+	// Load or create user config
+	var userConfig *config.UserConfig
+	if options.UserConfig != nil {
+		userConfig = options.UserConfig
+	} else {
+		var err error
+		userConfig, err = config.LoadUserConfig()
+		if err != nil {
+			userConfig = config.DefaultConfig()
+		}
+	}
+
+	// LoadUserConfig no longer applies the appearance globals itself, so apply
+	// them here exactly once, and pass the config into NewOS so it does not
+	// re-load and re-apply.
+	//
+	// This runs BEFORE the embed options below, not after: ApplyAppearanceConfig
+	// now covers border style, dock position, the hide toggles, scrollback and
+	// the theme, so applying the options first would let the user's config file
+	// silently overrule what the embedder asked for. Options are the outer
+	// layer here, exactly as CLI flags are in cmd/tuios.
+	config.ApplyAppearanceConfig(userConfig)
+
 	// Apply global config options
 	if options.ASCIIOnly {
 		config.UseASCIIOnly = true
@@ -274,23 +297,6 @@ func newModel(options Options) *Model {
 	if options.Theme != "" {
 		_ = theme.Initialize(options.Theme)
 	}
-
-	// Load or create user config
-	var userConfig *config.UserConfig
-	if options.UserConfig != nil {
-		userConfig = options.UserConfig
-	} else {
-		var err error
-		userConfig, err = config.LoadUserConfig()
-		if err != nil {
-			userConfig = config.DefaultConfig()
-		}
-	}
-
-	// LoadUserConfig no longer applies the appearance globals itself, so apply
-	// them here (after the embed options above) exactly once, and pass the
-	// config into NewOS so it does not re-load and re-apply.
-	config.ApplyAppearanceConfig(userConfig)
 
 	// Create keybind registry
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
