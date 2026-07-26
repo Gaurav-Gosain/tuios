@@ -803,8 +803,27 @@ func (m *OS) placeUnplacedWindows(state *session.SessionState) bool {
 			continue
 		}
 		w.X, w.Y, w.Width, w.Height = m.NewWindowPlacement()
+		// Same rule as updateWindowFromState and SyncDaemonPTYDimensions: the
+		// emulator has no lock of its own, the daemon outputWriter goroutine
+		// writes its cell buffer under ioMu and the renderer reads it under
+		// RLockIO, and Resize reallocates every line in that buffer. Resizing
+		// here unlocked tore the buffer out from under an in-flight write and
+		// the pane composited as empty cells, which renderTerminal then cached;
+		// an idle shell emits nothing to re-dirty it, so the pane stayed blank.
+		//
+		// Every window this loop touches is newly created by the daemon and is
+		// already subscribed by the time the placing sync arrives, so a pane
+		// that has printed anything at all (a shell prompt is enough) has output
+		// in flight here.
 		if w.Terminal != nil {
-			w.Terminal.Resize(w.ContentWidth(), w.ContentHeight())
+			termWidth := w.ContentWidth()
+			termHeight := w.ContentHeight()
+			w.LockIO()
+			// Re-check under the lock; Close() nils Terminal while holding it.
+			if w.Terminal != nil {
+				w.Terminal.Resize(termWidth, termHeight)
+			}
+			w.UnlockIO()
 		}
 		if w.DaemonResizeFunc != nil {
 			_ = w.DaemonResizeFunc(w.ContentWidth(), w.ContentHeight())
