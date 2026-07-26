@@ -173,6 +173,15 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	}
 	// A predictable POSIX shell, and no user rc files changing the prompt.
 	env = append(env, "SHELL=/bin/sh", "ENV=", "PS1=$ ")
+	// GORACE is forwarded so a tuios built with -race can be driven through this
+	// suite and have its findings survive. tuitest replaces the child's whole
+	// environment, so without this the child runs with GORACE unset and the race
+	// detector writes to stderr, which is the PTY the assertions read: the report
+	// is painted into the terminal, shredded across the emulator's line wrapping,
+	// and lost. With log_path set, each process writes its own file instead.
+	if gorace := os.Getenv("GORACE"); gorace != "" {
+		env = append(env, "GORACE="+gorace)
+	}
 	env = append(env, o.env...)
 
 	cols, rows := o.cols, o.rows
