@@ -45,8 +45,15 @@ func pillButton(label string, selected bool, accent color.Color, pal overlay.Pal
 func (m *OS) renderQuitConfirmDialog() (string, int, int) {
 	pal := theme.UI()
 	bg := pal.Surface
+	width := m.panelWidth(quitDialogInnerWidth)
 
-	question := overlay.Style(bg).Foreground(pal.Fg).Render("Close all windows and quit?")
+	// The full question needs 27 columns; a narrower dialog asks it shorter
+	// rather than spilling the text past its own edge.
+	text := "Close all windows and quit?"
+	if width < lipgloss.Width(text) {
+		text = "Quit?"
+	}
+	question := overlay.Style(bg).Foreground(pal.Fg).Render(text)
 
 	yesSelected := m.QuitConfirmSelection == 0
 	// "Yes" is the destructive action, so it takes the warn color when selected.
@@ -55,15 +62,15 @@ func (m *OS) renderQuitConfirmDialog() (string, int, int) {
 	buttons := yes + overlay.Style(bg).Render("   ") + no
 
 	body := strings.Join([]string{
-		centerOnSurface(question, quitDialogInnerWidth, bg),
+		centerOnSurface(question, width, bg),
 		overlay.Style(bg).Render(" "),
-		centerOnSurface(buttons, quitDialogInnerWidth, bg),
+		centerOnSurface(buttons, width, bg),
 	}, "\n")
 
 	panel := overlay.Panel{
 		Glyph: "", // warning
 		Title: "Quit TUIOS",
-		Width: quitDialogInnerWidth,
+		Width: width,
 		Body:  body,
 		Hints: []overlay.Hint{
 			{Key: "←→", Label: "select"},

@@ -45,8 +45,11 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	// Build left side text (compact format)
 	layout.LeftText, layout.LeftWidth, layout.ModeInfo = m.buildDockLeftText()
 
-	// Calculate right side width
-	layout.RightWidth = m.calculateDockRightWidth()
+	// Calculate right side width. The estimate below is what the right block
+	// would like; on a narrow screen it is capped at what the left block leaves,
+	// otherwise the two together are wider than the dock and the right-hand end
+	// (the system stats, or the copy-mode help) is drawn off the screen.
+	layout.RightWidth = min(m.calculateDockRightWidth(), max(m.GetRenderWidth()-layout.LeftWidth, 0))
 
 	// Get all dock items
 	allItems := m.getDockItems()
