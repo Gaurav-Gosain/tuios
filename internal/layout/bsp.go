@@ -812,12 +812,20 @@ func (t *BSPTree) findAnyWindowInSubtree(node *TileNode) int {
 	return t.findAnyWindowInSubtree(node.Right)
 }
 
+// cellAspect is how many times taller a character cell is than it is wide.
+// Every rect here is measured in cells, but the reader is looking at pixels, so
+// comparing W against H directly calls a shape wide when it is visibly tall. A
+// tall narrow terminal of 51x37 cells is landscape by the numbers and upright
+// to the eye, and splitting it side by side gives two 25 column panes. Scale
+// the height before comparing so the split follows the shape on screen.
+const cellAspect = 2
+
 // determineAutoSplit determines the split direction based on the auto scheme
 func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitType {
 	switch t.AutoScheme {
 	case SchemeLongestSide:
-		// Split along the longest dimension
-		if bounds.W >= bounds.H {
+		// Split along the longest dimension as it appears on screen.
+		if bounds.W >= bounds.H*cellAspect {
 			return SplitVertical
 		}
 		return SplitHorizontal
@@ -839,7 +847,17 @@ func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitTyp
 		// window rotates V, H, V, H. Unlike SchemeAlternate this keys off the
 		// target node rather than the global split count, so splitting a
 		// shallower window follows that window's own depth parity.
-		if targetNode.Depth()%2 == 0 {
+		//
+		// Which axis it starts on follows the screen rather than being fixed.
+		// A spiral that always opened side by side split a tall 51x37 terminal
+		// into two 25 column panes on the very first window; see cellAspect for
+		// why the height is scaled before the comparison. Seeding the parity
+		// this way keeps the rotation intact and only chooses where it begins.
+		vertical := targetNode.Depth()%2 == 0
+		if bounds.W < bounds.H*cellAspect {
+			vertical = !vertical
+		}
+		if vertical {
 			return SplitVertical
 		}
 		return SplitHorizontal
@@ -853,7 +871,9 @@ func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitTyp
 		if !ok {
 			r = bounds
 		}
-		w, h := r.W, r.H
+		// Both comparisons are against the height as it is drawn, not as it is
+		// counted; see cellAspect.
+		w, h := r.W, r.H*cellAspect
 		if w > h*2 {
 			// Very wide window: split vertically (side by side)
 			return SplitVertical
