@@ -38,7 +38,7 @@ type listOverlay struct {
 // listOverlayLayout returns the fitted inner width and visible row count for a
 // list overlay, so the keyboard and wheel navigation can scroll by the same
 // number of rows the renderer draws.
-func (m *OS) listOverlayLayout(cfg listOverlay) (width, rows int) {
+func (m *OS) listOverlayLayout(cfg listOverlay) (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(cfg.Width)
 	// Body lines that are not list rows: the scroll indicator, plus the search
 	// input and its rule when the list has one.
@@ -46,8 +46,8 @@ func (m *OS) listOverlayLayout(cfg listOverlay) (width, rows int) {
 	if cfg.Search {
 		extra += 2
 	}
-	rows = m.panelBodyRows(cfg.MaxVisible, extra, width, nil, cfg.Hints)
-	return width, rows
+	rows, hints = m.panelBody(cfg.MaxVisible, extra, width, nil, cfg.Hints)
+	return width, rows, hints
 }
 
 // renderListOverlay renders cfg into a panel and returns the string, geometry
@@ -56,7 +56,7 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	pal := theme.UI()
 	bg := pal.Surface
 
-	cfg.Width, cfg.MaxVisible = m.listOverlayLayout(cfg)
+	cfg.Width, cfg.MaxVisible, cfg.Hints = m.listOverlayLayout(cfg)
 	scroll := 0
 	if cfg.Scroll != nil {
 		*cfg.Scroll = scrollWindow(*cfg.Scroll, cfg.Selected, cfg.Count, cfg.MaxVisible)

@@ -25,6 +25,14 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	treeWidth := totalWidth*2/5 - 2
 	previewWidth := totalWidth - treeWidth - 5
+	// Two panes need room for two panes. On a narrow screen the tree column comes
+	// out around sixteen cells, which wraps every row it holds and shows a preview
+	// too narrow to read, so the preview is dropped and the tree takes the lot.
+	showPreview := previewWidth >= 24 && treeWidth >= 24
+	if !showPreview {
+		treeWidth = totalWidth - 4 // the box's own border and padding
+		previewWidth = 0
+	}
 	totalHeight := m.GetRenderHeight() * 3 / 4
 	if totalHeight < 15 {
 		totalHeight = min(m.GetRenderHeight()-4, 15)
@@ -96,12 +104,17 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 
 	var treeContent strings.Builder
 	if query := m.AggregateViewQuery; query != "" {
-		treeContent.WriteString(lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true).Render("Filter ") + normalStyle.Render(query) + "\n")
+		treeContent.WriteString(lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true).Render("Filter ") +
+			normalStyle.Render(truncateString(query, max(treeWidth-7, 1))) + "\n")
 	} else {
-		treeContent.WriteString(lipgloss.NewStyle().Bold(true).Foreground(pal.Fg).Render(fmt.Sprintf("Choose window (%d total)", len(items))) + "\n")
+		header := fmt.Sprintf("Choose window (%d total)", len(items))
+		if treeWidth < lipgloss.Width(header) {
+			header = fmt.Sprintf("%d windows", len(items))
+		}
+		treeContent.WriteString(lipgloss.NewStyle().Bold(true).Foreground(pal.Fg).Render(truncateString(header, treeWidth)) + "\n")
 	}
 	if len(filtered) == 0 {
-		treeContent.WriteString(dimStyle.Italic(true).Render("(no matching windows)") + "\n")
+		treeContent.WriteString(dimStyle.Italic(true).Render(truncateString("(no matching windows)", treeWidth)) + "\n")
 	}
 
 	startRow := 0
@@ -129,13 +142,17 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 	linesRendered := 0
 	for ri := startRow; ri < len(treeRows) && linesRendered < maxTreeLines; ri++ {
 		r := treeRows[ri]
+		// The tree is a fixed-width column: a row longer than it would be
+		// wrapped by lipgloss onto a second line, pushing the pane and the box
+		// around it past the height they were given.
+		text := truncateString(r.text, treeWidth)
 		switch {
 		case strings.HasPrefix(r.text, "Workspace"):
-			treeContent.WriteString(headerStyle.Render(r.text) + "\n")
+			treeContent.WriteString(headerStyle.Render(text) + "\n")
 		case r.selected:
-			treeContent.WriteString(selectedStyle.Render(r.text) + "\n")
+			treeContent.WriteString(selectedStyle.Render(text) + "\n")
 		default:
-			treeContent.WriteString(normalStyle.Render(r.text) + "\n")
+			treeContent.WriteString(normalStyle.Render(text) + "\n")
 		}
 		linesRendered++
 	}
@@ -147,7 +164,7 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 		raw := w.Terminal.String()
 		w.RUnlockIO()
 
-		previewContent.WriteString(lipgloss.NewStyle().Bold(true).Foreground(pal.Fg).Render(selectedItem.Title) +
+		previewContent.WriteString(lipgloss.NewStyle().Bold(true).Foreground(pal.Fg).Render(truncateString(selectedItem.Title, max(previewWidth-12, 4))) +
 			dimStyle.Render(fmt.Sprintf(" [%dx%d]", w.Width, w.Height)) + "\n")
 		previewContent.WriteString(dimStyle.Render(strings.Repeat("─", previewWidth)) + "\n")
 
@@ -158,14 +175,12 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 			start = len(lines) - previewLines
 		}
 		for i := start; i < len(lines) && i < start+previewLines; i++ {
-			line := lines[i]
-			if len(line) > previewWidth*3 {
-				line = line[:previewWidth*3]
-			}
-			previewContent.WriteString(line + "\n")
+			// Live window output, measured in cells rather than bytes: a row
+			// wider than the pane wraps and grows the box past its own height.
+			previewContent.WriteString(truncateToWidth(lines[i], previewWidth) + "\n")
 		}
 	} else if selectedItem != nil {
-		previewContent.WriteString(lipgloss.NewStyle().Bold(true).Foreground(pal.Fg).Render(selectedItem.Title) + "\n")
+		previewContent.WriteString(lipgloss.NewStyle().Bold(true).Foreground(pal.Fg).Render(truncateString(selectedItem.Title, previewWidth)) + "\n")
 		previewContent.WriteString(dimStyle.Render("(no content)") + "\n")
 	}
 
@@ -177,12 +192,14 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 	treeContent.WriteString(hint)
 
 	treePane := lipgloss.NewStyle().Width(treeWidth).Height(totalHeight).Render(treeContent.String())
-	previewPane := lipgloss.NewStyle().
-		Width(previewWidth).Height(totalHeight).
-		BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(pal.FgMute).
-		PaddingLeft(1).Render(previewContent.String())
-
-	combined := lipgloss.JoinHorizontal(lipgloss.Top, treePane, previewPane)
+	combined := treePane
+	if showPreview {
+		previewPane := lipgloss.NewStyle().
+			Width(previewWidth).Height(totalHeight).
+			BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(pal.FgMute).
+			PaddingLeft(1).Render(previewContent.String())
+		combined = lipgloss.JoinHorizontal(lipgloss.Top, treePane, previewPane)
+	}
 
 	// A solid lipgloss box (whose Background lipgloss keeps intact across the
 	// inner fg-only styles) rather than the manual-fill panel, so the tree/live

@@ -418,7 +418,7 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 	if inSearch {
 		extra += 2
 	}
-	rows := m.panelBodyRows(helpVisibleRows, extra, width, tabs, hints)
+	rows, hints := m.panelBody(helpVisibleRows, extra, width, tabs, hints)
 	if width < helpCategoryTagWidth {
 		showCategoryTag = false
 	}
