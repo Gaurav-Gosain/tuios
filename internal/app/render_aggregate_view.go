@@ -169,7 +169,11 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 		previewContent.WriteString(dimStyle.Render("(no content)") + "\n")
 	}
 
-	hint := dimStyle.Render("↑↓ navigate   ⏎ jump   esc close")
+	hintText := "↑↓ navigate   ⏎ jump   esc close"
+	if treeWidth < lipgloss.Width(hintText) {
+		hintText = "↑↓ ⏎ esc"
+	}
+	hint := dimStyle.Render(truncateString(hintText, treeWidth))
 	treeContent.WriteString(hint)
 
 	treePane := lipgloss.NewStyle().Width(treeWidth).Height(totalHeight).Render(treeContent.String())

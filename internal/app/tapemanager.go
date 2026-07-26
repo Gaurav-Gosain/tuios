@@ -432,6 +432,10 @@ func (m *OS) RenderTapeManager() string {
 		Foreground(theme.HelpKeyBadge()).
 		Bold(true)
 
+	// The dialog is content-sized, so every line has to be built against what
+	// the screen can hold rather than against a comfortable desktop width.
+	textW := m.dialogTextWidth()
+
 	// Build content based on mode
 	var lines []string
 
@@ -453,8 +457,8 @@ func (m *OS) RenderTapeManager() string {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(theme.HelpBorder()).
 			Padding(0, 1).
-			Width(40)
-		lines = append(lines, inputStyle.Render(m.TapeManager.NameBuffer+"█"))
+			Width(min(40, textW))
+		lines = append(lines, inputStyle.Render(truncateString(m.TapeManager.NameBuffer, max(textW-4, 1))+"█"))
 		lines = append(lines, "")
 		lines = append(lines, dimStyle.Render(keyStyle.Render("Enter")+" Confirm  "+keyStyle.Render("Esc")+" Cancel"))
 
@@ -486,7 +490,7 @@ func (m *OS) RenderTapeManager() string {
 			lines = append(lines, "")
 
 			// Calculate visible range
-			maxVisible := tapeManagerVisibleRows
+			maxVisible := m.dialogRows(tapeManagerVisibleRows, 10)
 			startIdx := m.TapeManager.ScrollOffset
 			endIdx := min(startIdx+maxVisible, len(m.TapeManager.Files))
 
@@ -496,7 +500,14 @@ func (m *OS) RenderTapeManager() string {
 				// Format file info
 				sizeStr := formatFileSize(file.Size)
 				timeStr := file.Modified.Format("Jan 02 15:04")
-				info := fmt.Sprintf("%-20s %8s  %s", truncateString(file.Name, 20), sizeStr, timeStr)
+				// The name column gives way first, then the timestamp: a row
+				// that keeps its full name at the cost of the screen edge is
+				// not a row anyone can read.
+				nameW := clampInt(textW-26, 6, 20)
+				info := fmt.Sprintf("%-*s %8s  %s", nameW, truncateString(file.Name, nameW), sizeStr, timeStr)
+				if textW < nameW+24 {
+					info = fmt.Sprintf("%-*s %8s", nameW, truncateString(file.Name, nameW), sizeStr)
+				}
 
 				if i == m.TapeManager.SelectedIndex {
 					lines = append(lines, selectedStyle.Render(config.TapeSelectedIcon+" "+info))
@@ -515,15 +526,23 @@ func (m *OS) RenderTapeManager() string {
 
 		// Controls
 		lines = append(lines, "")
-		lines = append(lines, dimStyle.Render(
-			keyStyle.Render("↑/↓")+" Select  "+
-				keyStyle.Render("Enter")+" Play  "+
-				keyStyle.Render("r")+" Record  "+
-				keyStyle.Render("d")+" Delete  "+
-				keyStyle.Render("Esc")+" Close"))
+		controls := keyStyle.Render("↑/↓") + " Select  " +
+			keyStyle.Render("Enter") + " Play  " +
+			keyStyle.Render("r") + " Record  " +
+			keyStyle.Render("d") + " Delete  " +
+			keyStyle.Render("Esc") + " Close"
+		if lipgloss.Width(controls) > textW {
+			// A narrow dialog gets the same actions under shorter labels.
+			controls = keyStyle.Render("↑↓") + " Sel  " +
+				keyStyle.Render("⏎") + " Play  " +
+				keyStyle.Render("r") + " Rec  " +
+				keyStyle.Render("d") + " Del  " +
+				keyStyle.Render("Esc") + " Close"
+		}
+		lines = append(lines, dimStyle.Render(controls))
 	}
 
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	content := clipStyledLines(lipgloss.JoinVertical(lipgloss.Left, lines...), textW)
 
 	// Create bordered box
 	boxStyle := lipgloss.NewStyle().

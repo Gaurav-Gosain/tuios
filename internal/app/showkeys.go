@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // CaptureKeyEvent captures a keyboard event for the showkeys overlay.
@@ -185,10 +186,35 @@ func (m *OS) CleanupExpiredKeys(timeout time.Duration) {
 	}
 }
 
+// renderShowkeysFitted renders the showkeys strip, dropping the oldest keys
+// until it fits in maxWidth cells. The strip is anchored to the right edge, so
+// an over-wide strip would otherwise start off the left edge of the screen with
+// its first pills unreadable.
+func (m *OS) renderShowkeysFitted(maxWidth int) string {
+	out := m.renderShowkeys()
+	if maxWidth <= 0 || lipgloss.Width(out) <= maxWidth {
+		return out
+	}
+	keys := m.RecentKeys
+	for len(keys) > 1 && lipgloss.Width(out) > maxWidth {
+		keys = keys[1:]
+		out = renderShowkeysFrom(keys)
+	}
+	if lipgloss.Width(out) > maxWidth {
+		out = ansi.Truncate(out, maxWidth, "")
+	}
+	return out
+}
+
 // renderShowkeys renders the showkeys overlay with styled key display.
 // Returns the rendered content as a styled lipgloss string.
 func (m *OS) renderShowkeys() string {
-	if len(m.RecentKeys) == 0 {
+	return renderShowkeysFrom(m.RecentKeys)
+}
+
+// renderShowkeysFrom renders a specific run of key events as the pill strip.
+func renderShowkeysFrom(recentKeys []KeyEvent) string {
+	if len(recentKeys) == 0 {
 		return ""
 	}
 
@@ -223,7 +249,7 @@ func (m *OS) renderShowkeys() string {
 
 	var renderedKeys []string
 
-	for _, keyEvent := range m.RecentKeys {
+	for _, keyEvent := range recentKeys {
 		var keyStr string
 		var modifierStr string
 

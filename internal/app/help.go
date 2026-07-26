@@ -329,11 +329,18 @@ func SearchBindings(query string, categories []HelpCategory) []HelpBinding {
 	return results
 }
 
-// Help overlay layout constants.
+// Help overlay layout constants. These are the preferred sizes; a screen
+// narrower or shorter than the panel prefers gets a panel fitted to it (see
+// overlay_fit.go).
 const (
 	helpPanelInnerWidth = 74
 	helpVisibleRows     = 14
 	helpKeyColMax       = 30
+
+	// helpCategoryTagWidth is the narrowest inner width that still has room for
+	// the right-aligned category tag next to a search result. Below it the tag
+	// is dropped so the description keeps the space.
+	helpCategoryTagWidth = 48
 )
 
 // helpTabNames maps full category names to short tab labels.
@@ -395,20 +402,38 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 		bindings = categories[m.HelpCategory].Bindings
 	}
 
-	body := m.renderHelpBody(bindings, inSearch, showCategoryTag, pal)
+	var tabs []string
+	if !inSearch {
+		tabs = make([]string, len(categories))
+		for i, cat := range categories {
+			tabs[i] = helpTabLabel(cat.Name)
+		}
+	}
+
+	width := m.panelWidth(helpPanelInnerWidth)
+	hints := helpHints(inSearch)
+	// Body lines that are not binding rows: the scroll indicator, plus the
+	// search prompt and its rule when searching.
+	extra := 1
+	if inSearch {
+		extra += 2
+	}
+	rows := m.panelBodyRows(helpVisibleRows, extra, width, tabs, hints)
+	if width < helpCategoryTagWidth {
+		showCategoryTag = false
+	}
+
+	body := m.renderHelpBody(bindings, inSearch, showCategoryTag, pal, width, rows)
 
 	panel := overlay.Panel{
 		Glyph: "", // keyboard
 		Title: "Keybindings",
-		Width: helpPanelInnerWidth,
+		Width: width,
 		Body:  body,
-		Hints: helpHints(inSearch),
+		Hints: hints,
 	}
 	if !inSearch {
-		panel.Tabs = make([]string, len(categories))
-		for i, cat := range categories {
-			panel.Tabs[i] = helpTabLabel(cat.Name)
-		}
+		panel.Tabs = tabs
 		panel.ActiveTab = m.HelpCategory
 	}
 
@@ -418,7 +443,7 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 // renderHelpBody builds the multi-line body: an optional search box, the
 // scrolling list of binding rows, and a scroll indicator, padded to a fixed
 // height so the panel never jumps.
-func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bool, pal overlay.Palette) string {
+func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bool, pal overlay.Palette, width, visibleRows int) string {
 	bg := pal.Surface
 	var lines []string
 
@@ -426,21 +451,23 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 		cursor := overlay.Style(bg).Foreground(pal.Accent).Render("█")
 		prompt := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("Search ") +
 			overlay.Style(bg).Foreground(pal.Fg).Render(m.HelpSearchQuery) + cursor
-		lines = append(lines, prompt, overlay.Rule(helpPanelInnerWidth, bg, pal))
+		lines = append(lines, prompt, overlay.Rule(width, bg, pal))
 	}
 
 	// Clamp scroll to the row count.
-	maxScroll := max(len(bindings)-helpVisibleRows, 0)
+	maxScroll := max(len(bindings)-visibleRows, 0)
 	m.HelpScrollOffset = max(0, min(m.HelpScrollOffset, maxScroll))
 
-	// Compute a stable key column width from the visible window.
+	// Compute a stable key column width from the visible window. On a narrow
+	// panel the badges may not leave a usable description column, so the key
+	// column never takes more than half the width.
 	keyColW := 0
-	end := min(m.HelpScrollOffset+helpVisibleRows, len(bindings))
+	end := min(m.HelpScrollOffset+visibleRows, len(bindings))
 	for i := m.HelpScrollOffset; i < end; i++ {
 		w := lipgloss.Width(overlay.KeyBadges(bindings[i].Keys, bg, pal))
 		keyColW = max(keyColW, w)
 	}
-	keyColW = min(keyColW, helpKeyColMax)
+	keyColW = min(keyColW, min(helpKeyColMax, max(width/2, 6)))
 
 	if len(bindings) == 0 {
 		msg := "No matching keybindings"
@@ -452,17 +479,17 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 
 	rowCount := 0
 	for i := m.HelpScrollOffset; i < end; i++ {
-		lines = append(lines, helpBindingRow(bindings[i], keyColW, showCategoryTag, pal))
+		lines = append(lines, helpBindingRow(bindings[i], keyColW, showCategoryTag, pal, width))
 		rowCount++
 	}
 	// Pad to a fixed number of rows so the panel height is stable.
-	for rowCount < helpVisibleRows {
+	for rowCount < visibleRows {
 		lines = append(lines, overlay.Style(bg).Render(" "))
 		rowCount++
 	}
 
 	// Scroll indicator.
-	if len(bindings) > helpVisibleRows {
+	if len(bindings) > visibleRows {
 		info := fmt.Sprintf("%d-%d of %d", m.HelpScrollOffset+1, end, len(bindings))
 		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+info))
 	} else {
@@ -474,9 +501,20 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 
 // helpBindingRow renders one keybinding row: key badges in a fixed-width gutter,
 // the description, and an optional right-aligned category tag (in search view).
-func helpBindingRow(b HelpBinding, keyColW int, showCategoryTag bool, pal overlay.Palette) string {
+func helpBindingRow(b HelpBinding, keyColW int, showCategoryTag bool, pal overlay.Palette, width int) string {
 	bg := pal.Surface
-	badges := overlay.KeyBadges(b.Keys, bg, pal)
+	// A binding with more key combos than the column can hold drops the extra
+	// combos, then shortens the last one, rather than pushing the description
+	// off the panel.
+	keys := b.Keys
+	badges := overlay.KeyBadges(keys, bg, pal)
+	for len(keys) > 1 && lipgloss.Width(badges) > keyColW {
+		keys = keys[:len(keys)-1]
+		badges = overlay.KeyBadges(keys, bg, pal)
+	}
+	if len(keys) == 1 && lipgloss.Width(badges) > keyColW {
+		badges = overlay.KeyBadge(overlay.Truncate(keys[0], max(keyColW-2, 1)), pal)
+	}
 	bw := lipgloss.Width(badges)
 	if bw < keyColW {
 		badges += overlay.Style(bg).Render(strings.Repeat(" ", keyColW-bw))
@@ -491,16 +529,16 @@ func helpBindingRow(b HelpBinding, keyColW int, showCategoryTag bool, pal overla
 		tagW = lipgloss.Width(label) + 2
 	}
 
-	descMax := helpPanelInnerWidth - keyColW - 2 - tagW
+	descMax := width - keyColW - 2 - tagW
 	desc := b.Description
-	if descMax > 1 && lipgloss.Width(desc) > descMax {
+	if lipgloss.Width(desc) > descMax {
 		desc = overlay.Truncate(desc, descMax)
 	}
 
 	line := badges + overlay.Style(bg).Render("  ") + overlay.Style(bg).Foreground(pal.Fg).Render(desc)
 	if tag != "" {
 		used := lipgloss.Width(line)
-		gap := helpPanelInnerWidth - used - lipgloss.Width(tag)
+		gap := width - used - lipgloss.Width(tag)
 		if gap > 0 {
 			line += overlay.Style(bg).Render(strings.Repeat(" ", gap)) + tag
 		}

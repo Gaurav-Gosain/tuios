@@ -3,6 +3,7 @@ package app
 import (
 	"image/color"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -44,14 +45,14 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 		Query:      m.SessionSwitcherQuery,
 		Count:      len(filtered),
 		Selected:   m.SessionSwitcherSelected,
-		Scroll:     m.SessionSwitcherScroll,
+		Scroll:     &m.SessionSwitcherScroll,
 		EmptyMsg:   empty,
 		Hints: []overlay.Hint{
 			{Key: "⏎", Label: "switch"},
 			{Key: "ctrl+d", Label: "delete"},
 			{Key: "esc", Label: "close"},
 		},
-		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette) string {
+		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 			item := filtered[i]
 			trailing, trailColor := "", pal.FgMute
 			if item.IsCurrent {
@@ -61,7 +62,8 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 			if selected {
 				labelColor = pal.Fg
 			}
-			return listRowLine(sessionSwitcherWidth, listRowMarker(selected), item.Name, trailing, labelColor, trailColor, selected, rowBg, pal)
+			name := overlay.Truncate(item.Name, max(width-lipgloss.Width(trailing)-4, 1))
+			return listRowLine(width, listRowMarker(selected), name, trailing, labelColor, trailColor, selected, rowBg, pal)
 		},
 	})
 }

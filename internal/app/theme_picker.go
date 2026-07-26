@@ -84,11 +84,12 @@ func (m *OS) ThemePickerMove(delta int) {
 		return
 	}
 	m.ThemePickerSelected = clampInt(m.ThemePickerSelected+delta, 0, len(items)-1)
+	_, visible := m.themePickerLayout()
 	if m.ThemePickerSelected < m.ThemePickerScroll {
 		m.ThemePickerScroll = m.ThemePickerSelected
 	}
-	if m.ThemePickerSelected >= m.ThemePickerScroll+themePickerVisibleRows {
-		m.ThemePickerScroll = m.ThemePickerSelected - themePickerVisibleRows + 1
+	if m.ThemePickerSelected >= m.ThemePickerScroll+visible {
+		m.ThemePickerScroll = m.ThemePickerSelected - visible + 1
 	}
 	// Live preview.
 	m.applyTheme(items[m.ThemePickerSelected])

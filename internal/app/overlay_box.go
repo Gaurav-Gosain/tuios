@@ -1,0 +1,67 @@
+package app
+
+import (
+	"strings"
+
+	"github.com/charmbracelet/x/ansi"
+)
+
+// The bordered dialogs (logs, cache stats, tape manager, tape review) predate
+// the panel grammar and size themselves from their own content. The helpers
+// here fit them to the screen the same way overlay_fit.go fits the panels.
+
+// dialogChrome is what a bordered dialog spends on its own frame: a border cell
+// and two padding cells on each side.
+const dialogChrome = 6
+
+// dialogWidth returns the total width to draw a centered bordered dialog at,
+// given the width it would prefer. Never wider than the screen.
+func (m *OS) dialogWidth(preferred int) int {
+	rw := m.GetRenderWidth()
+	if rw <= 0 {
+		return preferred // size not known yet; the caller's preference stands
+	}
+	return max(min(preferred, rw), dialogChrome+2)
+}
+
+// dialogRows returns how many scrolling content rows a centered dialog can show
+// given the rows it spends on everything else.
+func (m *OS) dialogRows(preferred, chrome int) int {
+	rh := m.GetRenderHeight()
+	if rh <= 0 {
+		return preferred
+	}
+	return max(min(preferred, rh-chrome), minPanelRows)
+}
+
+// dialogTextWidth is the widest a line of a content-sized dialog may be before
+// the box around it would reach past the edge of the screen.
+func (m *OS) dialogTextWidth() int {
+	rw := m.GetRenderWidth()
+	if rw <= 0 {
+		return 1 << 20 // size not known yet; do not clip anything
+	}
+	return max(rw-dialogChrome, 8)
+}
+
+// clipStyled cuts an already-styled line to at most width cells, keeping its
+// escape sequences intact. Used where the text being fitted has colors baked in
+// and cannot be re-measured as plain runes.
+func clipStyled(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if ansi.StringWidth(s) <= width {
+		return s
+	}
+	return ansi.Truncate(s, width, "")
+}
+
+// clipStyledLines applies clipStyled to every line of a multi-line block.
+func clipStyledLines(s string, width int) string {
+	lines := strings.Split(s, "\n")
+	for i, ln := range lines {
+		lines[i] = clipStyled(ln, width)
+	}
+	return strings.Join(lines, "\n")
+}
