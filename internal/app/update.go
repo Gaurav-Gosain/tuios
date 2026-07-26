@@ -470,7 +470,17 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 		}
 
-		// Update animations
+		// Update animations. Whether any were running is captured BEFORE the
+		// update, because the tick that finishes the last one is the tick that
+		// matters most: Animation.Update leaves the VT alone while a transition
+		// is in flight and only resizes it on the final tick, so that tick is
+		// where the panes first render at the size they actually settled at. Ask
+		// HasActiveAnimations afterwards and it answers "none", the frame-skip
+		// below decides nothing needs drawing, and View serves the previous
+		// frame: the last thing the user sees is the second-to-last animation
+		// step, with every pane still drawn to its pre-animation size. Nothing
+		// dirties the model after that, so the wrong frame is final.
+		hadAnimations := m.HasActiveAnimations()
 		m.UpdateAnimations()
 
 		// Update system info (only when explicitly enabled)
@@ -580,7 +590,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		hasBackgroundChanges := m.MarkTerminalsWithNewContent()
 
 		// Render on tick if something periodic needs visual updates OR background windows changed
-		needsRender := hasAnimations || m.InteractionMode || m.PrefixActive || needsDockTick || hasBackgroundChanges
+		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive || needsDockTick || hasBackgroundChanges
 		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {
