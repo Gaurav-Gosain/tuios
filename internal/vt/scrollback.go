@@ -75,6 +75,25 @@ func (sb *Scrollback) PushLineWithWrap(line uv.Line, isSoftWrapped bool) {
 	lineCopy := make(uv.Line, len(line))
 	copy(lineCopy, line)
 
+	sb.PushLineOwned(lineCopy, isSoftWrapped)
+}
+
+// PushLineOwned is PushLineWithWrap for a line the caller has just allocated
+// and will not touch again, so the ring takes it as is.
+//
+// The defensive copy in PushLineWithWrap exists because most callers hand over
+// a row of the live screen buffer, which keeps being written. The scroll path
+// does not: extractLine allocates a fresh line per scrolled row and drops its
+// only reference here, so copying it again doubled the cost of retaining a
+// line, and at 112 bytes per cell and terminal width per line that was the bulk
+// of everything the write path allocated.
+func (sb *Scrollback) PushLineOwned(line uv.Line, isSoftWrapped bool) {
+	if len(line) == 0 {
+		return
+	}
+
+	lineCopy := line
+
 	// Insert at tail position
 	sb.lines[sb.tail] = lineCopy
 	sb.softWrapped[sb.tail] = isSoftWrapped
