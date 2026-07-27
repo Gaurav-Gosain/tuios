@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
 	"regexp"
@@ -57,6 +58,8 @@ func (m *OS) exitScriptMode() {
 	m.ScriptFinishedTime = time.Time{}
 	m.ScriptWaitRegex = nil
 	m.ScriptWaitDeadline = time.Time{}
+	m.ScriptAwaitWindows = 0
+	m.ScriptAwaitDeadline = time.Time{}
 	m.RemoteScriptIndex = 0
 	m.RemoteScriptTotal = 0
 }
@@ -169,9 +172,55 @@ func (m *OS) SendToWindow(windowID string, data []byte) error {
 	return fmt.Errorf("window not found: %s", windowID)
 }
 
+// scriptWindowWait is how long tape playback will wait for a pane it asked for
+// to actually exist before giving up on it. It is generous because the pane is
+// created by the daemon on a loaded machine, and bounded because a tape that
+// stalls forever is worse than one that reports what went wrong.
+const scriptWindowWait = 5 * time.Second
+
+// awaitNewWindow arms the pane-readiness gate for a pane this command just
+// asked for. Playback holds the next command until the window set has grown or
+// the deadline passes; see the ScriptAwaitWindows field and its use in Update.
+//
+// It is armed after the request rather than inside AddWindow so it measures the
+// growth caused by this command only, and so the non-tape paths that create
+// windows never touch playback state.
+func (m *OS) awaitNewWindow(before int) {
+	m.ScriptAwaitWindows = before + 1
+	m.ScriptAwaitDeadline = time.Now().Add(scriptWindowWait)
+}
+
+// scriptPaneReady reports whether tape playback may dispatch its next command.
+// It is false only while a pane an earlier command asked for has not turned up
+// yet, and it stops being false either when the pane arrives or when the wait
+// runs out of time.
+//
+// The timeout is reported, not swallowed: a tape that carries on typing into
+// the pane it meant to split away from produces a layout that looks built and
+// is not, and the only way anyone finds out is if something says so.
+func (m *OS) scriptPaneReady() bool {
+	if m.ScriptAwaitWindows == 0 {
+		return true
+	}
+	if len(m.Windows) >= m.ScriptAwaitWindows {
+		m.ScriptAwaitWindows = 0
+		return true
+	}
+	if time.Now().Before(m.ScriptAwaitDeadline) {
+		return false
+	}
+	m.ScriptAwaitWindows = 0
+	m.ShowNotification(
+		"Tape: the new pane never appeared; the rest of the tape will run in the current pane",
+		"error", config.NotificationDuration*2)
+	return true
+}
+
 // CreateNewWindow creates a new window with an optional name.
 func (m *OS) CreateNewWindow() error {
+	before := len(m.Windows)
 	m.AddWindow("")
+	m.awaitNewWindow(before)
 	m.MarkAllDirty()
 	return nil
 }
@@ -183,7 +232,9 @@ func (m *OS) CreateNewWindow() error {
 // returns (the daemon creates it and pushes it back), so naming it by position
 // would name whatever happened to be last.
 func (m *OS) CreateNewWindowWithName(name string) error {
+	before := len(m.Windows)
 	m.AddWindow(name)
+	m.awaitNewWindow(before)
 	m.MarkAllDirty()
 	return nil
 }
@@ -415,15 +466,18 @@ func (m *OS) CloseWindowByName(name string) error {
 	return nil
 }
 
-// SwitchWorkspace switches to a workspace.
+// SwitchWorkspace switches to a workspace. An out-of-range workspace is an
+// error rather than a silent no-op, so a tape asking for workspace 12 in a
+// nine-workspace session says so instead of appearing to work.
 func (m *OS) SwitchWorkspace(workspace int) error {
-	if workspace >= 1 && workspace <= m.NumWorkspaces {
-		recorder := m.TapeRecorder
-		m.TapeRecorder = nil
-		m.SwitchToWorkspace(workspace)
-		m.TapeRecorder = recorder
-		m.MarkAllDirty()
+	if workspace < 1 || workspace > m.NumWorkspaces {
+		return fmt.Errorf("workspace %d is out of range (1-%d)", workspace, m.NumWorkspaces)
 	}
+	recorder := m.TapeRecorder
+	m.TapeRecorder = nil
+	m.SwitchToWorkspace(workspace)
+	m.TapeRecorder = recorder
+	m.MarkAllDirty()
 	return nil
 }
 
@@ -595,10 +649,12 @@ func (m *OS) SnapByDirection(direction string) error {
 	}
 
 	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
-		return nil
+		return errNoFocusedWindow
 	}
 
-	quarter := SnapTopLeft
+	// An unrecognized direction used to fall through to SnapTopLeft, so a typo
+	// snapped the window somewhere the tape never asked for.
+	var quarter SnapQuarter
 	switch direction {
 	case "left":
 		quarter = SnapLeft
@@ -608,6 +664,8 @@ func (m *OS) SnapByDirection(direction string) error {
 		m.Snap(m.FocusedWindow, SnapTopLeft)
 		m.MarkAllDirty()
 		return nil
+	default:
+		return fmt.Errorf("invalid snap direction: %s (use: left, right, fullscreen)", direction)
 	}
 
 	m.Snap(m.FocusedWindow, quarter)
@@ -647,12 +705,28 @@ func (m *OS) MoveAndFollowWorkspaceByID(windowID string, workspace int) error {
 	return fmt.Errorf("window not found: %s", windowID)
 }
 
+// errTilingOff is what the BSP commands report when tiling is off. They used to
+// return nil and do nothing, so a tape whose EnableTiling had not taken effect
+// silently skipped every Split and then typed the next command into whatever
+// pane happened to be focused. A tape command that quietly does nothing is the
+// worst kind of failure to debug, so it says so instead.
+var errTilingOff = errors.New("tiling is not enabled; run EnableTiling before this command")
+
+// errNoFocusedWindow is what the commands that act on the focused window report
+// when there is not one, rather than returning nil and doing nothing.
+var errNoFocusedWindow = errors.New("no focused window")
+
 // SplitHorizontal splits the focused window horizontally.
 func (m *OS) SplitHorizontal() error {
 	if !m.AutoTiling {
-		return nil
+		return errTilingOff
 	}
+	if m.GetFocusedWindow() == nil {
+		return errNoFocusedWindow
+	}
+	before := len(m.Windows)
 	m.SplitFocusedHorizontal()
+	m.awaitNewWindow(before)
 	m.MarkAllDirty()
 	return nil
 }
@@ -660,9 +734,14 @@ func (m *OS) SplitHorizontal() error {
 // SplitVertical splits the focused window vertically.
 func (m *OS) SplitVertical() error {
 	if !m.AutoTiling {
-		return nil
+		return errTilingOff
 	}
+	if m.GetFocusedWindow() == nil {
+		return errNoFocusedWindow
+	}
+	before := len(m.Windows)
 	m.SplitFocusedVertical()
+	m.awaitNewWindow(before)
 	m.MarkAllDirty()
 	return nil
 }
@@ -670,7 +749,7 @@ func (m *OS) SplitVertical() error {
 // RotateSplit rotates the split direction at the focused window.
 func (m *OS) RotateSplit() error {
 	if !m.AutoTiling {
-		return nil
+		return errTilingOff
 	}
 	m.RotateFocusedSplit()
 	m.MarkAllDirty()
@@ -680,7 +759,7 @@ func (m *OS) RotateSplit() error {
 // EqualizeSplitsExec equalizes all split ratios.
 func (m *OS) EqualizeSplitsExec() error {
 	if !m.AutoTiling {
-		return nil
+		return errTilingOff
 	}
 	m.EqualizeSplits()
 	m.MarkAllDirty()
@@ -690,7 +769,7 @@ func (m *OS) EqualizeSplitsExec() error {
 // Preselect sets the preselection direction for the next window.
 func (m *OS) Preselect(direction string) error {
 	if !m.AutoTiling {
-		return nil
+		return errTilingOff
 	}
 	switch direction {
 	case "left":
@@ -829,7 +908,7 @@ func (m *OS) ShowNotificationCmd(message, notificationType string) error {
 // FocusDirection focuses a window in a direction (for BSP tiling).
 func (m *OS) FocusDirection(direction string) error {
 	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
-		return nil
+		return errNoFocusedWindow
 	}
 
 	focusedWindow := m.Windows[m.FocusedWindow]
@@ -848,10 +927,11 @@ func (m *OS) FocusDirection(direction string) error {
 		return fmt.Errorf("invalid direction: %s (use: left, right, up, down)", direction)
 	}
 
-	if targetIndex >= 0 {
-		m.FocusWindow(targetIndex)
-		m.MarkAllDirty()
+	if targetIndex < 0 {
+		return fmt.Errorf("no window %s of the focused one", direction)
 	}
+	m.FocusWindow(targetIndex)
+	m.MarkAllDirty()
 
 	return nil
 }
@@ -864,7 +944,15 @@ func (m *OS) ToggleZoomExec() error {
 
 // SmartSplitFocusedExec performs a smart split on the focused window (tape executor interface).
 func (m *OS) SmartSplitFocusedExec() error {
+	if !m.AutoTiling {
+		return errTilingOff
+	}
+	if m.GetFocusedWindow() == nil {
+		return errNoFocusedWindow
+	}
+	before := len(m.Windows)
 	m.SmartSplitFocused()
+	m.awaitNewWindow(before)
 	return nil
 }
 

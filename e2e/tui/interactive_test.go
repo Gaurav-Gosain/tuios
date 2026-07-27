@@ -89,7 +89,7 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 		waitWindowCount(t, term, i, fmt.Sprintf("creating window %d", i))
 		enterTerminalMode(t, term)
 		marker := fmt.Sprintf("WINMARK-%d", i)
-		runInShell(t, term, fmt.Sprintf("echo WINMARK-$((%d))", i), marker, 20*time.Second)
+		runInShell(t, term, fmt.Sprintf("echo WINMARK-$((%d))", i), marker, shellTimeout)
 		markers = append(markers, marker)
 		leaveTerminalMode(t, term)
 	}
@@ -112,7 +112,7 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 		}
 	}
 	alive(t, term, "during rapid focus cycling")
-	waitForAll(t, term, 15*time.Second, "after 40 rapid focus changes", markers...)
+	waitForAll(t, term, shellTimeout, "after 40 rapid focus changes", markers...)
 
 	// Backwards too, since previous-window is a separate action.
 	for range 20 {
@@ -120,7 +120,7 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 			t.Fatalf("rapid prev: %v", err)
 		}
 	}
-	waitForAll(t, term, 15*time.Second, "after 20 rapid previous-window changes", markers...)
+	waitForAll(t, term, shellTimeout, "after 20 rapid previous-window changes", markers...)
 
 	// The UI must still take input after the storm.
 	leaveTerminalMode(t, term)
@@ -133,7 +133,7 @@ func TestWorkspaceSwitch(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo WS1MARK-$((1+0))", "WS1MARK-1", 20*time.Second)
+	runInShell(t, term, "echo WS1MARK-$((1+0))", "WS1MARK-1", shellTimeout)
 	leaveTerminalMode(t, term)
 
 	// Workspace 2 must be empty and must not show workspace 1's pane.
@@ -150,7 +150,7 @@ func TestWorkspaceSwitch(t *testing.T) {
 	// A window created here belongs to workspace 2.
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo WS2MARK-$((1+1))", "WS2MARK-2", 20*time.Second)
+	runInShell(t, term, "echo WS2MARK-$((1+1))", "WS2MARK-2", shellTimeout)
 	leaveTerminalMode(t, term)
 
 	// Back to workspace 1: its pane must return, and workspace 2's must not.
@@ -173,7 +173,7 @@ func TestMinimizeAndRestore(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo MINMARK-$((20+3))", "MINMARK-23", 20*time.Second)
+	runInShell(t, term, "echo MINMARK-$((20+3))", "MINMARK-23", shellTimeout)
 	leaveTerminalMode(t, term)
 
 	for i := range 3 {
@@ -206,7 +206,7 @@ func TestZoomToggle(t *testing.T) {
 
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo ZOOMMARK-$((50+5))", "ZOOMMARK-55", 20*time.Second)
+	runInShell(t, term, "echo ZOOMMARK-$((50+5))", "ZOOMMARK-55", shellTimeout)
 	leaveTerminalMode(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 2, "before zooming")
@@ -245,7 +245,7 @@ func TestResizeKeepsPaneContent(t *testing.T) {
 
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo RESIZEMARK-$((3*3))", "RESIZEMARK-9", 20*time.Second)
+	runInShell(t, term, "echo RESIZEMARK-$((3*3))", "RESIZEMARK-9", shellTimeout)
 	leaveTerminalMode(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 2, "before resizing")
@@ -256,7 +256,7 @@ func TestResizeKeepsPaneContent(t *testing.T) {
 			t.Fatalf("resize to %dx%d failed (tuios likely died): %v\n%s",
 				size[0], size[1], err, term.Snapshot())
 		}
-		if err := term.WaitForText("RESIZEMARK-9", 15*time.Second); err != nil {
+		if err := term.WaitForText("RESIZEMARK-9", shellTimeout); err != nil {
 			t.Fatalf("pane content lost at %dx%d: %v\n%s",
 				size[0], size[1], err, term.Snapshot())
 		}
@@ -301,7 +301,7 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 		t.Fatalf("c1 echo: %v", err)
 	}
 	for name, c := range map[string]*tuitest.Terminal{"client1": c1, "client2": c2} {
-		if err := c.WaitForText("SHAREDMARK-56", 20*time.Second); err != nil {
+		if err := c.WaitForText("SHAREDMARK-56", shellTimeout); err != nil {
 			t.Fatalf("%s never saw pane output produced through client1: %v\n%s",
 				name, err, c.Snapshot())
 		}
@@ -324,7 +324,7 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 	for name, c := range map[string]*tuitest.Terminal{"client1": c1, "client2": c2} {
 		if err := c.WaitFor(func(s tuitest.Screen) bool {
 			return countWindows(s) == 2
-		}, 20*time.Second); err != nil {
+		}, shellTimeout); err != nil {
 			t.Fatalf("%s never saw the window created on client1 (count %d): %v\n%s",
 				name, countWindows(c.Screen()), err, c.Snapshot())
 		}

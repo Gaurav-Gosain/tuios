@@ -73,7 +73,7 @@ func geomOverlap(a, b winRect) bool {
 func waitForSettledGeometry(t *testing.T, base string, n int) []winRect {
 	t.Helper()
 	var prev []winRect
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(shellTimeout)
 	stableSince := 0
 	for time.Now().Before(deadline) {
 		out, err := tuiosCLI(t, base, "list-windows", "--json")

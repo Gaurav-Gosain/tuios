@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -29,7 +28,7 @@ func TestScrolledOutputRendersCorrectly(t *testing.T) {
 	// the tail can be identified exactly rather than by counting.
 	const last = 400
 	runInShell(t, term, fmt.Sprintf("for i in $(seq 1 %d); do echo \"LINE-$i-END\"; done", last),
-		fmt.Sprintf("LINE-%d-END", last), 60*time.Second)
+		fmt.Sprintf("LINE-%d-END", last), bulkTimeout)
 
 	// The final lines must be the ones on screen: a pane that scrolled but
 	// rendered a stale cache would be showing earlier lines instead.
@@ -49,7 +48,7 @@ func TestScrolledOutputRendersCorrectly(t *testing.T) {
 	}
 
 	// The pane must still be live after the scroll, not frozen on a final frame.
-	runInShell(t, term, "echo POST-SCROLL-$((6*7))", "POST-SCROLL-42", 20*time.Second)
+	runInShell(t, term, "echo POST-SCROLL-$((6*7))", "POST-SCROLL-42", shellTimeout)
 
 	// And it must survive losing and regaining focus, which is when a stale or
 	// discarded cached layer would show itself.
@@ -77,7 +76,7 @@ func TestScrollbackModeShowsEarlierOutput(t *testing.T) {
 
 	const last = 300
 	runInShell(t, term, fmt.Sprintf("for i in $(seq 1 %d); do echo \"SB-$i-END\"; done", last),
-		fmt.Sprintf("SB-%d-END", last), 60*time.Second)
+		fmt.Sprintf("SB-%d-END", last), bulkTimeout)
 	leaveTerminalMode(t, term)
 
 	// Ctrl+B [ enters copy mode over the scrollback. Motions are vim's, so the

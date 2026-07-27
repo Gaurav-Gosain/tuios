@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -41,7 +40,7 @@ func TestSustainedOutputKeepsRendering(t *testing.T) {
 	// the PTY reader is taking the exclusive lock continuously while the UI
 	// goroutine renders.
 	runInShell(t, term, "mkdir -p /tmp/tuios-e2e-ls && (cd /tmp/tuios-e2e-ls && for i in $(seq 1 200); do : > f$i; done) && echo SETUP-DONE",
-		"SETUP-DONE", 30*time.Second)
+		"SETUP-DONE", soakTimeout)
 
 	const rounds = 6
 	for i := 1; i <= rounds; i++ {
@@ -53,7 +52,7 @@ func TestSustainedOutputKeepsRendering(t *testing.T) {
 		if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
 			t.Fatalf("round %d: send: %v", i, err)
 		}
-		if err := term.WaitForText(marker, 20*time.Second); err != nil {
+		if err := term.WaitForText(marker, shellTimeout); err != nil {
 			t.Fatalf("UI stopped rendering at round %d/%d: %q never appeared. "+
 				"This is the render/IO lock reentry freeze: the UI goroutine is parked "+
 				"on a second read lock behind the PTY writer.\nerr: %v\n%s",

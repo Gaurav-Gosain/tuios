@@ -90,6 +90,23 @@ const (
 	bootTimeout = 20 * time.Second
 	// uiTimeout covers an ordinary UI reaction to a keystroke.
 	uiTimeout = 10 * time.Second
+	// shellTimeout covers a whole shell command: typed in, forked, run, and its
+	// output back on screen through the daemon. That is why it is longer than an
+	// ordinary UI reaction, and it is the budget behind every `echo MARKER`
+	// assertion in the suite.
+	shellTimeout = 20 * time.Second
+	// soakTimeout is shellTimeout for the tests that keep the pane busy while
+	// the assertion waits (soak, freeze), where the output being waited for is
+	// queued behind everything else those tests are generating.
+	soakTimeout = 30 * time.Second
+	// bulkTimeout covers a pane producing thousands of lines of scrollback,
+	// which is bounded by how fast the emulator can consume them rather than by
+	// any UI reaction.
+	bulkTimeout = 60 * time.Second
+	// terminalModeProbe is the per-attempt budget in enterTerminalMode, which
+	// retries. It is deliberately short: a swallowed 'i' is worth retrying
+	// rather than waiting out.
+	terminalModeProbe = 3 * time.Second
 )
 
 // tuiosBin is the binary under test, resolved once by TestMain.
@@ -318,7 +335,7 @@ func enterTerminalMode(t *testing.T, term *tuitest.Terminal) {
 		if err := term.SendKeys("i"); err != nil {
 			t.Fatalf("send 'i': %v", err)
 		}
-		if err := term.WaitForText("Terminal Mode", 3*time.Second); err == nil {
+		if err := term.WaitForText("Terminal Mode", terminalModeProbe); err == nil {
 			time.Sleep(insertGuard + 150*time.Millisecond)
 			return
 		}

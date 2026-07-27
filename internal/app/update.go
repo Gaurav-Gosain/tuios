@@ -523,8 +523,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		// Leave script mode once a finished script's completion indicator has
 		// been shown. This re-arms Ctrl+P (the palette binding), which is
-		// intercepted for script pause/resume while ScriptMode is set.
-		m.maybeExitFinishedScript()
+		// intercepted for script pause/resume while ScriptMode is set. It also
+		// takes the indicator off screen, so the tick that does it has to draw:
+		// nothing else is guaranteed to follow it.
+		leftScriptMode := m.maybeExitFinishedScript()
 
 		// Handle script playback if in script mode
 		cmds := []tea.Cmd{TickCmd()}
@@ -534,6 +536,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// Wait for animations to complete before executing next command
 				// This ensures visual consistency during script playback
 				if m.HasActiveAnimations() {
+					return m, TickCmd()
+				}
+
+				// Hold the next command until a pane the previous one asked for
+				// actually exists. In a daemon session Split and NewWindow only
+				// send the request; the pane arrives later on a state push, and
+				// until it does GetFocusedWindowID still names the pane the tape
+				// was splitting away from, so the next Type would be typed into
+				// the wrong pane.
+				if !m.scriptPaneReady() {
 					return m, TickCmd()
 				}
 
@@ -598,6 +610,18 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		hasAnimations := m.HasActiveAnimations()
 		needsDockTick := config.NeedsDockTick()
 
+		// A notification on screen is a reason to keep drawing. Notifications
+		// expire on a wall-clock timer, but nothing retires them except
+		// CleanupNotifications, which only runs while a frame is being composed.
+		// With no other reason to draw, the toast that happened to be up when the
+		// session went quiet is served from the render cache forever, sitting on
+		// top of whatever is underneath it. That is how a tape that splits a pane
+		// and echoes into it could finish correctly and still show an empty pane:
+		// the last frame drawn was the one with the tape's own toasts covering
+		// the new pane, and no later frame ever replaced it.
+		hasNotifications := len(m.Notifications) > 0
+		needsScriptFrame := m.ScriptMode || leftScriptMode
+
 		// Determine next tick rate
 		var nextTick tea.Cmd
 		if m.InteractionMode {
@@ -607,7 +631,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// cost smoothness without limiting the motion flood, since motion
 			// events drove their own renders regardless of the tick rate.
 			nextTick = TickCmd()
-		} else if hasAnimations || m.PrefixActive || m.ScriptMode || needsDockTick {
+		} else if hasAnimations || m.PrefixActive || needsScriptFrame || needsDockTick || hasNotifications {
 			nextTick = TickCmd() // Normal FPS when things need periodic updates
 		} else {
 			nextTick = IdleTickCmd() // Slow idle tick (process cleanup, etc.)
@@ -620,7 +644,8 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		hasBackgroundChanges := m.MarkTerminalsWithNewContent()
 
 		// Render on tick if something periodic needs visual updates OR background windows changed
-		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive || needsDockTick || hasBackgroundChanges
+		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
+			needsDockTick || hasBackgroundChanges || hasNotifications || leftScriptMode
 		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {

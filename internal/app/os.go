@@ -285,6 +285,16 @@ type OS struct {
 	// passes, whichever comes first.
 	ScriptWaitRegex    *regexp.Regexp
 	ScriptWaitDeadline time.Time
+	// Pane-readiness gate. A tape command that creates a pane (Split, NewWindow,
+	// SmartSplit) does not create it here: in a daemon session it asks the daemon
+	// and the pane arrives later, on a state push. Until it does, the focused
+	// window is still the old one, so the next Type would be typed into the pane
+	// the tape just split away from. ScriptAwaitWindows is the window count
+	// playback must see before it dispatches anything else, and
+	// ScriptAwaitDeadline bounds the wait so a pane that never arrives stalls the
+	// tape for a few seconds rather than forever.
+	ScriptAwaitWindows  int
+	ScriptAwaitDeadline time.Time
 	// Tape manager UI
 	ShowTapeManager    bool              // True when showing tape manager overlay
 	TapeManager        *TapeManagerState // Tape manager state

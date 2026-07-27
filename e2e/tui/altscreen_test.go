@@ -25,7 +25,7 @@ func setupAltScreenLeftTile(t *testing.T, term *tuitest.Terminal) []string {
 	if err := term.SendKeys(altScreenCmd(markers...), tuitest.Enter); err != nil {
 		t.Fatalf("start alt-screen fixture: %v", err)
 	}
-	waitForAll(t, term, 15*time.Second, "alt-screen fixture never painted", markers...)
+	waitForAll(t, term, shellTimeout, "alt-screen fixture never painted", markers...)
 	leaveTerminalMode(t, term)
 
 	// A second window steals focus, so the alt-screen pane renders through the
