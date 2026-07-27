@@ -64,6 +64,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -186,6 +187,13 @@ var xdgKeys = []string{
 // share one daemon by sharing the root.
 func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	t.Helper()
+
+	// Registered before the child is spawned so cleanup order is: tear the
+	// client down first (tuitest's Close, registered inside StartT below), then
+	// kill whatever daemon it left behind. Registering it here rather than
+	// leaving it to each test means a test that starts creating a detached
+	// daemon later cannot forget.
+	killDaemon(t, base)
 
 	env := make([]string, 0, len(xdgKeys)+len(o.env)+2)
 	for _, key := range xdgKeys {
@@ -374,14 +382,67 @@ func leaveTerminalMode(t *testing.T, term *tuitest.Terminal) {
 // echo of the keystrokes.
 func runInShell(t *testing.T, term *tuitest.Terminal, cmd, want string, timeout time.Duration) {
 	t.Helper()
+	// An empty marker would make this a fire-and-forget helper that passes
+	// whatever the shell did, including nothing. It is a programming error
+	// rather than a test outcome, so it fails loudly instead of returning.
+	if want == "" {
+		t.Fatalf("runInShell(%q) was given no marker to wait for; "+
+			"a command with nothing to assert on cannot fail", cmd)
+	}
 	if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
 		t.Fatalf("type %q: %v", cmd, err)
 	}
-	if want == "" {
-		return
-	}
 	if err := term.WaitForText(want, timeout); err != nil {
 		t.Fatalf("command %q never produced %q: %v", cmd, want, err)
+	}
+}
+
+// renameWindow renames the focused window through the rename keybinding and
+// only returns once the name is committed.
+//
+// Two things here were previously guessed at.
+//
+// The editor was waited for by looking for an underscore anywhere on screen.
+// That is the cursor tuios draws after the rename buffer
+// (internal/app/render_helpers.getWindowTitle), but it is also an ordinary
+// character that shell output, a path or a window title puts on screen on its
+// own. Measured on a fresh window there happen to be none, so the wait was not
+// vacuous today; it was one line of output away from being satisfied before 'r'
+// was ever pressed, after which the name would be typed into whatever else had
+// the keyboard. It now waits for the count to go *up*, which only this
+// keystroke causes.
+//
+// The commit was asserted by waiting for the name to appear. The editor renders
+// the buffer as you type, so that assertion was satisfied by the harness's own
+// keystrokes and said nothing about enter. It now requires the editor to be
+// gone as well: "name_" on screen means the cursor is still there and the
+// rename has not been committed.
+func renameWindow(t *testing.T, term *tuitest.Terminal, name string) {
+	t.Helper()
+	underscores := func(s tuitest.Screen) int { return strings.Count(s.Text(), "_") }
+	before := underscores(term.Screen())
+
+	if err := term.SendKeys("r"); err != nil {
+		t.Fatalf("open rename editor: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return underscores(s) > before
+	}, uiTimeout); err != nil {
+		t.Fatalf("the rename editor never opened (no new cursor on screen): %v\n%s",
+			err, term.Snapshot())
+	}
+
+	if err := term.SendKeys(name, tuitest.Enter); err != nil {
+		t.Fatalf("type the new name %q: %v", name, err)
+	}
+	// The editor draws the buffer followed by its cursor, so "name_" on screen
+	// means the editor is still open. Requiring it gone AND the name present is
+	// what separates a committed rename from a half-typed one.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, name) && !strings.Contains(text, name+"_")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the window never committed the name %q: %v\n%s", name, err, term.Snapshot())
 	}
 }
 
@@ -459,20 +520,196 @@ func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
 	return string(out), err
 }
 
-// killDaemon shuts down the daemon rooted at base. Tests that create a daemon
-// register this so a failure cannot leave one running; the maintainer's machine
-// has been flooded by leaked test daemons before.
+// daemonKey identifies one (test, isolation root) pair so killDaemon registers
+// at most one cleanup per root even when a test and startIn both ask for it.
+type daemonKey struct {
+	t    *testing.T
+	base string
+}
+
+var registeredKills sync.Map
+
+// killDaemon shuts down the daemon rooted at base and then checks it is really
+// gone. Every start registers this, so a test that grows a detached daemon
+// later cannot silently leak one; the maintainer's machine has been flooded by
+// leaked test daemons before.
+//
+// kill-server's own error is still best effort, because it legitimately fails
+// when no daemon was ever started. What is not best effort is the state
+// afterwards: if `ls` still answers with sessions, the daemon outlived the test
+// and that is reported rather than swallowed. A swallowed teardown error is how
+// one test ends up running against another's daemon, and a suite where that can
+// happen cannot claim its tests are isolated.
 func killDaemon(t *testing.T, base string) {
 	t.Helper()
-	var once sync.Once
+	if _, already := registeredKills.LoadOrStore(daemonKey{t, base}, true); already {
+		return
+	}
 	t.Cleanup(func() {
-		once.Do(func() {
-			out, err := tuiosCLI(t, base, "kill-server")
-			if err != nil {
-				t.Logf("kill-server (best effort): %v: %s", err, strings.TrimSpace(out))
+		if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+			t.Logf("kill-server (best effort): %v: %s", err, strings.TrimSpace(out))
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			out, err := tuiosCLI(t, base, "ls", "--json")
+			var sessions []struct {
+				Name string `json:"name"`
 			}
-		})
+			if err != nil || json.Unmarshal([]byte(out), &sessions) != nil || len(sessions) == 0 {
+				return
+			}
+			if !time.Now().Before(deadline) {
+				names := make([]string, 0, len(sessions))
+				for _, s := range sessions {
+					names = append(names, s.Name)
+				}
+				t.Errorf("daemon under %s survived kill-server with sessions %v still listed; "+
+					"a leaked daemon can serve the next test", base, names)
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Mouse input
+//
+// A real terminal reports a pointer gesture as a strictly paired stream: one
+// press report per button-down, one motion report for each cell the pointer
+// crosses while a button is held, and one release report per button-up. A
+// helper that takes a shortcut here does not merely test less than it claims.
+// It puts tuios into a state no user can reach, and every assertion made after
+// that runs against that state.
+//
+// Two shortcuts this suite used to take, both fixed here:
+//
+//  1. clickAt sent n presses and one trailing release. tuios copies a selection
+//     on release, so a triple click produced a single clipboard write where a
+//     real mouse produces three releases and two writes. Anything that happens
+//     on an intermediate release was structurally unobservable, which is how a
+//     clipboard bug survived review of the assertions: no assertion could have
+//     caught it, because the harness could not generate the input.
+//
+//  2. leftClick and shiftRightClick sent a press and no release at all. A left
+//     press inside a pane sets OS.InteractionMode, and while that flag is set
+//     tuios deliberately stops polling pane content (internal/app/os_render.go
+//     returns early on it). A press with no release therefore freezes every
+//     pane for the remainder of the test, so any later wait for shell output is
+//     waiting on a program that has stopped reading its panes.
+//     TestClickInPaneDoesNotFreezeOutput is the standing guard on that.
+//
+// What this cannot simulate is documented in NEGATIVE_CONTROLS.md under
+// "What this harness structurally cannot observe"; the short version is that
+// cmd/tuios/run.go installs a whitelist filter that drops motion events unless
+// a drag, a resize, an overlay drag, the scrollback browser or a mouse-tracking
+// application is active, so motion sent outside those states is dropped before
+// the model sees it and asserting on its effect would assert on nothing.
+
+const (
+	// mouseGap is the pause after each mouse report. Real reports arrive one at
+	// a time with human-scale gaps between them, and tuios coalesces motion to
+	// a frame budget, so back-to-back writes are not the input a user produces.
+	mouseGap = 30 * time.Millisecond
+	// multiClickGap separates the clicks of one multi-click gesture. It has to
+	// stay well under internal/input.multiClickInterval (500ms) or the clicks
+	// stop counting as one gesture.
+	multiClickGap = 40 * time.Millisecond
+	// gestureGap is long enough to guarantee the next press starts a fresh
+	// gesture rather than continuing the previous one.
+	gestureGap = 800 * time.Millisecond
+)
+
+// sendMouse writes one SGR mouse report and then pauses, so tuios sees a
+// sequence of separate events rather than one burst.
+func sendMouse(t *testing.T, term *tuitest.Terminal, what string, ev tuitest.MouseEvent) {
+	t.Helper()
+	if err := term.SendMouse(ev); err != nil {
+		t.Fatalf("%s at (%d,%d): %v", what, ev.Col, ev.Row, err)
+	}
+	time.Sleep(mouseGap)
+}
+
+// mousePress sends a button-down. Every mousePress in a test must be matched by
+// a mouseRelease, exactly as a physical button is.
+func mousePress(t *testing.T, term *tuitest.Terminal, col, row int, button tuitest.MouseButton, mods tuitest.KeyMods) {
+	t.Helper()
+	sendMouse(t, term, "press", tuitest.MouseEvent{
+		Col: col, Row: row, Button: button, Action: tuitest.MousePress, Mods: mods,
+	})
+}
+
+// mouseRelease sends a button-up. SGR reports a release with the same button
+// and modifier bits as the press that opened the gesture and a lowercase final
+// byte, which is what tuitest encodes.
+func mouseRelease(t *testing.T, term *tuitest.Terminal, col, row int, button tuitest.MouseButton, mods tuitest.KeyMods) {
+	t.Helper()
+	sendMouse(t, term, "release", tuitest.MouseEvent{
+		Col: col, Row: row, Button: button, Action: tuitest.MouseRelease, Mods: mods,
+	})
+}
+
+// mouseMotion sends a drag report: the motion bit plus the held button's code,
+// which is what mode 1002 emits for each cell the pointer crosses with a button
+// down.
+func mouseMotion(t *testing.T, term *tuitest.Terminal, col, row int, button tuitest.MouseButton, mods tuitest.KeyMods) {
+	t.Helper()
+	sendMouse(t, term, "motion", tuitest.MouseEvent{
+		Col: col, Row: row, Button: button, Action: tuitest.MouseMove, Mods: mods,
+	})
+}
+
+// mouseClick is one complete click: press then release at the same cell.
+func mouseClick(t *testing.T, term *tuitest.Terminal, col, row int, button tuitest.MouseButton, mods tuitest.KeyMods) {
+	t.Helper()
+	mousePress(t, term, col, row, button, mods)
+	mouseRelease(t, term, col, row, button, mods)
+}
+
+// mouseDrag is one complete drag: press, a motion report for every cell between
+// the two points, then release at the far end.
+//
+// The intermediate reports are not decoration. tuios tracks a selection, a
+// window move and a resize from motion, and a press-then-release with nothing
+// in between is a click, not a drag: the drag-distance threshold in
+// handleMouseRelease treats it as one and snaps the window back.
+func mouseDrag(t *testing.T, term *tuitest.Terminal, fromCol, fromRow, toCol, toRow int, button tuitest.MouseButton, mods tuitest.KeyMods) {
+	t.Helper()
+	mousePress(t, term, fromCol, fromRow, button, mods)
+	steps := max(abs(toCol-fromCol), abs(toRow-fromRow))
+	for i := 1; i <= steps; i++ {
+		col := fromCol + (toCol-fromCol)*i/steps
+		row := fromRow + (toRow-fromRow)*i/steps
+		mouseMotion(t, term, col, row, button, mods)
+	}
+	mouseRelease(t, term, toCol, toRow, button, mods)
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// mouseHover sends a bare pointer motion with no button held: SGR button code
+// 35, which is the no-button value 3 plus the motion bit 32. tuitest's
+// MouseEvent cannot express it, because its MouseButton zero value is the left
+// button, so a MouseMove there always encodes a left drag. The report is
+// written by hand for that reason.
+//
+// Read the doc comment on the mouse section before using this. tuios's motion
+// filter drops bare motion in every state except an active drag, resize,
+// overlay drag, scrollback browser, or a pane running a mouse-tracking
+// application, so in every other state this is delivered to the program and
+// dropped before Update sees it. Hover-driven behaviour, including the context
+// menu's own hover highlight, cannot be observed from here at all.
+func mouseHover(t *testing.T, term *tuitest.Terminal, col, row int) {
+	t.Helper()
+	if err := term.SendKeys(tuitest.Key(fmt.Sprintf("\x1b[<35;%d;%dM", col+1, row+1))); err != nil {
+		t.Fatalf("hover at (%d,%d): %v", col, row, err)
+	}
+	time.Sleep(mouseGap)
 }
 
 // enableTiling toggles tiling on and waits for the layout to actually be tiled,
@@ -480,18 +717,35 @@ func killDaemon(t *testing.T, base string) {
 // same time. Floating windows overlap, so only the topmost one's content shows;
 // tiled windows all show at once.
 //
-// This deliberately does not wait for the "Tiling Mode Enabled" toast. Toasts
-// linger and stack, and with several windows open the one being waited for can
-// be pushed out of the visible toast area, so waiting on it is flaky in exactly
-// the situation the tiling tests care about.
+// When markers are given this deliberately does not wait for the "Tiling Mode
+// Enabled" message: with several windows open the relayout is the thing under
+// test, and the markers say the relayout happened.
+//
+// With no markers it waits for the message instead of sleeping, but only after
+// first waiting for any earlier tiling message to leave the dock. Without that
+// pre-wait the condition could be satisfied by a message an earlier step
+// produced, which is the stale-message trap that already cost this suite a
+// silently vacuous assertion in TestFocusCycleWithRapidKeyRepeat.
 func enableTiling(t *testing.T, term *tuitest.Terminal, markers ...string) {
 	t.Helper()
+	if len(markers) == 0 {
+		// notifications linger for config.NotificationDuration (6s), so this is
+		// the budget for an earlier one to expire. In practice it is already
+		// gone and this returns immediately.
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return !strings.Contains(s.Text(), "Tiling Mode")
+		}, 10*time.Second); err != nil {
+			t.Fatalf("a tiling message from an earlier step never cleared, so waiting "+
+				"for this one would prove nothing: %v\n%s", err, term.Snapshot())
+		}
+	}
 	if err := term.SendKeys("t"); err != nil {
 		t.Fatalf("toggle tiling: %v", err)
 	}
 	if len(markers) == 0 {
-		// Nothing to key off; give the relayout a beat.
-		time.Sleep(500 * time.Millisecond)
+		if err := term.WaitForText("Tiling Mode Enabled", uiTimeout); err != nil {
+			t.Fatalf("tiling was never enabled: %v\n%s", err, term.Snapshot())
+		}
 		return
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {

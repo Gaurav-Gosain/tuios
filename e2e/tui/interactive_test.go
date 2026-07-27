@@ -41,24 +41,8 @@ func TestRenameWindow(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 
-	if err := term.SendKeys("r"); err != nil {
-		t.Fatalf("open rename: %v", err)
-	}
-	// The rename editor replaces the title bar with a prompt; wait for the
-	// cursor to appear there rather than sleeping.
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "_")
-	}, uiTimeout); err != nil {
-		t.Fatalf("rename editor never opened: %v\n%s", err, term.Snapshot())
-	}
-
 	const name = "RENAMEDWIN"
-	if err := term.SendKeys(name, tuitest.Enter); err != nil {
-		t.Fatalf("type name: %v", err)
-	}
-	if err := term.WaitForText(name, uiTimeout); err != nil {
-		t.Fatalf("renamed title never rendered: %v\n%s", err, term.Snapshot())
-	}
+	renameWindow(t, term, name)
 
 	// Minimizing puts the window in the dock, where the custom name must also
 	// appear: that is a different render path from the title bar.
