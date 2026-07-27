@@ -563,3 +563,63 @@ func TestApplyStateSyncSkipsInvalidWindows(t *testing.T) {
 		t.Errorf("Windows count = %d, want 0", len(m.Windows))
 	}
 }
+
+// TestSplitWithoutTilingIsLoud pins that the BSP commands report tiling being
+// off instead of returning nil. They used to do nothing at all, so a tape whose
+// EnableTiling had not taken effect skipped every Split silently and then typed
+// the next command into whatever pane was still focused, producing a layout that
+// looked built and was not.
+func TestSplitWithoutTilingIsLoud(t *testing.T) {
+	m := focusedOS(t, "")
+	m.AutoTiling = false
+
+	for name, call := range map[string]func() error{
+		"SplitVertical":   m.SplitVertical,
+		"SplitHorizontal": m.SplitHorizontal,
+		"RotateSplit":     m.RotateSplit,
+		"EqualizeSplits":  m.EqualizeSplitsExec,
+		"SmartSplit":      m.SmartSplitFocusedExec,
+	} {
+		if err := call(); err == nil {
+			t.Errorf("%s with tiling off returned nil; it must say why it did nothing", name)
+		}
+	}
+}
+
+// TestScriptPaneReadyWaitsThenGivesUp covers the pane-readiness gate playback
+// holds the next command on. A pane a tape asked for arrives asynchronously in a
+// daemon session, and until it does the focused window is still the pane the
+// tape split away from.
+func TestScriptPaneReadyWaitsThenGivesUp(t *testing.T) {
+	m := focusedOS(t, "")
+
+	// Nothing pending: playback runs.
+	if !m.scriptPaneReady() {
+		t.Fatal("playback blocked with no pane pending")
+	}
+
+	// A pane was asked for and has not arrived: playback waits.
+	m.awaitNewWindow(len(m.Windows))
+	if m.scriptPaneReady() {
+		t.Fatal("playback ran on while the pane it asked for did not exist")
+	}
+
+	// The wait is bounded, and running out of it is reported, not swallowed.
+	m.ScriptAwaitDeadline = time.Now().Add(-time.Millisecond)
+	if !m.scriptPaneReady() {
+		t.Fatal("playback stayed blocked past the deadline")
+	}
+	if len(m.Notifications) != 1 {
+		t.Fatalf("a pane that never arrived produced %d notifications, want 1", len(m.Notifications))
+	}
+
+	// The pane arriving clears the gate without a complaint.
+	m.awaitNewWindow(len(m.Windows))
+	m.Windows = append(m.Windows, m.Windows[0])
+	if !m.scriptPaneReady() {
+		t.Fatal("playback stayed blocked after the pane arrived")
+	}
+	if m.ScriptAwaitWindows != 0 {
+		t.Error("the gate was not disarmed once the pane arrived")
+	}
+}
