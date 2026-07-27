@@ -144,7 +144,7 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **Showkeys Overlay** - Display pressed keys for presentations
 - **Customizable Keybindings** - TOML configuration with Kitty protocol support
 - **Hooks** - Run shell commands on window create, close and focus events ([docs](docs/HOOKS.md))
-- **Mouse Support** - Click, drag, resize, scrollbar interaction
+- **Mouse Support** - Wheel scrollback, drag-to-select with copy on release, double-click word and triple-click line, window drag, resize, scrollbar
 - **SSH Server Mode** - Remote terminal multiplexing
 - **Web Terminal Mode** - Browser-based access (separate `tuios-web` binary)
 - **Themes** - Bundled themes plus custom themes from JSON ([docs](docs/THEMES.md))
@@ -227,7 +227,7 @@ See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show
 - **Shared borders** (`--shared-borders`) - tmux-style thin separator lines between tiled panes.
 - **Smart auto-split** - Aspect-ratio-aware BSP splitting (opt-in via command palette).
 - **Interactive scrollbar** - Click/drag the right border to scroll, theme-aware colors.
-- **Mouse wheel scrollback** - Scroll wheel enters copy mode directly with full vim/selection support.
+- **Mouse wheel scrollback** - The wheel scrolls, with no mode entered and nothing announced. Typing or reaching the bottom returns to live output.
 - **Selection auto-scroll** - Drag selection above/below pane to scroll during visual mode.
 - **Dock stats opt-in** - Clock, CPU, RAM hidden by default (`--show-clock`, `--show-cpu`, `--show-ram`).
 
@@ -258,7 +258,7 @@ TUIOS follows the Model-View-Update pattern on Bubble Tea v2. For details, see [
 - **Event-driven rendering** - PTY reader goroutines signal bubbletea via a buffered channel. No fixed-rate ticking for terminal content.
 - **Kitty graphics passthrough** - Image IDs are reused across frames for flicker-free video. Output is batched with the render cycle and wrapped in mode 2026 sync.
 - **BSP tiling** - Binary space partitioning tree with configurable schemes (spiral, smart split). Shared borders mode overlaps window rects and draws separator lines as a separate layer.
-- **Copy mode** - Full vim navigation over scrollback with mouse wheel entry, scrollbar interaction, and selection auto-scroll (timer-based continuous drag scrolling).
+- **Copy mode** - Full vim navigation over scrollback. Wheel scrolling and mouse selection borrow the same machinery through an implicit session that presents as nothing at all, plus scrollbar interaction and selection auto-scroll (timer-based continuous drag scrolling).
 
 **Core Components:**
 - **Window Manager** ([`internal/app/os.go`](./internal/app/os.go)) - Central state, workspaces, overlays
