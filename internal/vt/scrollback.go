@@ -88,11 +88,33 @@ func (sb *Scrollback) PushLineWithWrap(line uv.Line, isSoftWrapped bool) {
 // line, and at 112 bytes per cell and terminal width per line that was the bulk
 // of everything the write path allocated.
 func (sb *Scrollback) PushLineOwned(line uv.Line, isSoftWrapped bool) {
+	sb.pushOwned(line, isSoftWrapped)
+}
+
+// PushLineOwnedRecycle is PushLineOwned that also hands back the line the ring
+// just evicted, so the caller can reuse its storage instead of allocating.
+//
+// It returns nil while the ring still has room, because nothing has been
+// evicted yet. The returned slice is unreachable through the scrollback once
+// this call returns: head has already moved past it. Callers must treat it as
+// uninitialised storage, since it still holds the evicted line's cells.
+func (sb *Scrollback) PushLineOwnedRecycle(line uv.Line, isSoftWrapped bool) uv.Line {
+	return sb.pushOwned(line, isSoftWrapped)
+}
+
+func (sb *Scrollback) pushOwned(line uv.Line, isSoftWrapped bool) uv.Line {
 	if len(line) == 0 {
-		return
+		return nil
 	}
 
 	lineCopy := line
+
+	// The slot about to be written holds the oldest line once the ring is full,
+	// and nothing can reach it after head advances below.
+	var evicted uv.Line
+	if sb.full {
+		evicted = sb.lines[sb.tail]
+	}
 
 	// Insert at tail position
 	sb.lines[sb.tail] = lineCopy
@@ -113,6 +135,8 @@ func (sb *Scrollback) PushLineOwned(line uv.Line, isSoftWrapped bool) {
 	if sb.tail == sb.head && len(lineCopy) > 0 {
 		sb.full = true
 	}
+
+	return evicted
 }
 
 // Len returns the number of lines currently in the scrollback buffer.
