@@ -122,8 +122,24 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 	}
 	waitForAll(t, term, shellTimeout, "after 20 rapid previous-window changes", markers...)
 
-	// The UI must still take input after the storm.
-	leaveTerminalMode(t, term)
+	// The UI must still take input after the storm, proven by an action that
+	// produces a fresh message of its own.
+	//
+	// This used to call leaveTerminalMode, which sends alt+esc and waits for the
+	// "Window Management Mode" message. The storm never entered terminal mode,
+	// so alt+esc had nothing to leave and pushed no message; the wait was
+	// satisfied by the message from the last leaveTerminalMode inside the window
+	// loop, which was still on screen because the old renderer stacked three
+	// toasts at once and a stale one stayed visible underneath a newer one.
+	// The dock's message block shows the newest message and counts the rest, so
+	// there is no longer a stale message to lean on, and the assertion has to
+	// name something this keystroke actually causes.
+	if err := term.SendKeys("t"); err != nil {
+		t.Fatalf("toggle tiling after the storm: %v", err)
+	}
+	if err := term.WaitForText("Tiling Mode Disabled", uiTimeout); err != nil {
+		t.Fatalf("the UI stopped taking input after the storm: %v\n%s", err, term.Snapshot())
+	}
 }
 
 // TestWorkspaceSwitch moves between workspaces and asserts windows follow the

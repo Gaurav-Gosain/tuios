@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
@@ -15,13 +16,35 @@ import (
 
 // UserConfig represents the user's custom configuration
 type UserConfig struct {
-	Appearance  AppearanceConfig  `toml:"appearance"`
-	Keybindings KeybindingsConfig `toml:"keybindings"`
-	Daemon      DaemonConfig      `toml:"daemon"`
-	Startup     StartupConfig     `toml:"startup"`
-	Tape        TapeConfig        `toml:"tape"`
-	Hooks       HooksConfig       `toml:"hooks"`
-	Debug       DebugConfig       `toml:"debug"`
+	Appearance    AppearanceConfig    `toml:"appearance"`
+	Notifications NotificationsConfig `toml:"notifications"`
+	Keybindings   KeybindingsConfig   `toml:"keybindings"`
+	Daemon        DaemonConfig        `toml:"daemon"`
+	Startup       StartupConfig       `toml:"startup"`
+	Tape          TapeConfig          `toml:"tape"`
+	Hooks         HooksConfig         `toml:"hooks"`
+	Debug         DebugConfig         `toml:"debug"`
+}
+
+// NotificationsConfig holds how long a dock message stays up.
+//
+// Durations are in seconds and are a floor, not a cap: a caller that asks for
+// longer than the severity's default still gets what it asked for. Zero or
+// absent means "use the built-in default", which is the value documented on the
+// corresponding package var in constants.go.
+type NotificationsConfig struct {
+	// Duration is how long an info or success message stays up, in seconds.
+	Duration int `toml:"duration"`
+
+	// WarningDuration is how long a warning stays up, in seconds.
+	WarningDuration int `toml:"warning_duration"`
+
+	// ErrorDuration is how long an error stays up, in seconds, when
+	// error_sticky is false.
+	ErrorDuration int `toml:"error_duration"`
+
+	// ErrorSticky makes errors wait for esc instead of expiring (default true).
+	ErrorSticky *bool `toml:"error_sticky"`
 }
 
 // DebugConfig holds diagnostic settings. These are off by default so a normal
@@ -680,6 +703,33 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// clear any override and restore theme colors. This runs after the theme
 	// switch above, which resets the derived colors.
 	theme.SetBorderOverrides(cfg.Appearance.BorderFocusedColor, cfg.Appearance.BorderUnfocusedColor)
+
+	// [notifications] rides along here rather than in its own funnel because
+	// this is the one function every path that loads a config file already
+	// calls: the tape runner, the SSH server, the command palette's save, and
+	// the live reload. A second entry point is a second thing to forget.
+	ApplyNotificationConfig(cfg)
+}
+
+// ApplyNotificationConfig applies the [notifications] section to the package
+// globals the renderer reads. Absent or non-positive values leave the built-in
+// default in place rather than collapsing a message to zero seconds, which is
+// the failure mode the old 1500ms default was already close enough to.
+func ApplyNotificationConfig(cfg *UserConfig) {
+	if cfg.Notifications.Duration > 0 {
+		NotificationDuration = time.Duration(cfg.Notifications.Duration) * time.Second
+	}
+	if cfg.Notifications.WarningDuration > 0 {
+		NotificationWarningDuration = time.Duration(cfg.Notifications.WarningDuration) * time.Second
+	}
+	if cfg.Notifications.ErrorDuration > 0 {
+		NotificationErrorDuration = time.Duration(cfg.Notifications.ErrorDuration) * time.Second
+	}
+	// ErrorSticky defaults to true, so nil means "keep the default" and only an
+	// explicit false turns it off.
+	if cfg.Notifications.ErrorSticky != nil {
+		NotificationErrorSticky = *cfg.Notifications.ErrorSticky
+	}
 }
 
 // fillMissingTape fills in any missing tape settings with defaults. An unset or

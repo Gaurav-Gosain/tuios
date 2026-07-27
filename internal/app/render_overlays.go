@@ -610,81 +610,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, whichKeyLayer)
 	}
 
-	if len(m.Notifications) > 0 {
-		m.CleanupNotifications()
-
-		notifY := 1
-		notifSpacing := 4
-		for i, notif := range m.Notifications {
-			if i >= 3 {
-				break
-			}
-
-			opacity := 1.0
-			if notif.Animation != nil {
-				elapsed := time.Since(notif.Animation.StartTime)
-				if elapsed < notif.Animation.Duration {
-					opacity = float64(elapsed) / float64(notif.Animation.Duration)
-				}
-			}
-
-			timeLeft := notif.Duration - time.Since(notif.StartTime)
-			if timeLeft < config.NotificationFadeOutDuration {
-				opacity *= float64(timeLeft) / float64(config.NotificationFadeOutDuration)
-			}
-
-			if opacity <= 0 {
-				continue
-			}
-
-			var bgColor, fgColor, icon string
-			switch notif.Type {
-			case "error":
-				bgColor = "#dc2626"
-				fgColor = "#ffffff"
-				icon = config.NotificationIconError
-			case "warning":
-				bgColor = "#d97706"
-				fgColor = "#ffffff"
-				icon = config.NotificationIconWarning
-			case "success":
-				bgColor = "#16a34a"
-				fgColor = "#ffffff"
-				icon = config.NotificationIconSuccess
-			default:
-				bgColor = "#2563eb"
-				fgColor = "#ffffff"
-				icon = config.NotificationIconInfo
-			}
-
-			maxNotifWidth := min(max(m.GetRenderWidth()-8, 20), 60)
-
-			message := notif.Message
-			maxMessageLen := maxNotifWidth - 10
-			if len(message) > maxMessageLen {
-				message = message[:maxMessageLen-3] + "..."
-			}
-
-			notifContent := fmt.Sprintf(" %s  %s ", icon, message)
-
-			notifBox := lipgloss.NewStyle().
-				Background(lipgloss.Color(bgColor)).
-				Foreground(lipgloss.Color(fgColor)).
-				Padding(1, 2).
-				Bold(true).
-				MaxWidth(maxNotifWidth).
-				Render(notifContent)
-
-			notifX := max(m.GetRenderWidth()-lipgloss.Width(notifBox)-2, 0)
-			currentY := notifY + (i * notifSpacing)
-
-			notifLayer := lipgloss.NewLayer(notifBox).
-				X(notifX).Y(currentY).Z(config.ZIndexNotifications).
-				ID(fmt.Sprintf("notif-%s", notif.ID))
-
-			layers = append(layers, notifLayer)
-		}
-	}
+	// Notifications are no longer drawn here. They live in the dock's right-hand
+	// block (see renderNotificationBlock), which is the placement decision: a
+	// message never covers a pane, and it is never retired by a frame being
+	// composed. Retiring one used to happen right here, inside render
+	// composition, which is why a toast could sit on screen for seventeen seconds
+	// after it expired whenever the session went quiet enough that no further
+	// frame was drawn. Expiry belongs to the tick now.
 
 	focusedWindow := m.GetFocusedWindow()
 	if focusedWindow != nil && focusedWindow.CopyMode != nil &&

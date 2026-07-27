@@ -39,12 +39,42 @@ const (
 
 	// FastAnimationDuration is the duration for snapping and window swapping animations
 	FastAnimationDuration = 200 * time.Millisecond
+)
 
-	// NotificationFadeOutDuration is the fade out duration for notifications
-	NotificationFadeOutDuration = 500 * time.Millisecond
+// =============================================================================
+// Notification Lifetimes
+// =============================================================================
 
-	// NotificationDuration is the default duration notifications remain visible
-	NotificationDuration = 1500 * time.Millisecond
+// How long a message stays on the dock is a WCAG 2.2.1 question, not a taste
+// question: a message that goes away on its own is a time limit on reading
+// content, and none of the six exemptions (real-time, essential, 20-hour, and
+// so on) apply to a status line. The old 1500ms failed that outright. These are
+// the shortest values the field supports: tmux-sensible overrides tmux's own
+// 750ms to 4s, VS Code purges info at 10s, warnings at 12s and errors at 15s,
+// and Nielsen's attention limit is 10s.
+//
+// They are vars, not consts, because [notifications] in the user config sets
+// them (see ApplyNotificationConfig). Errors do not expire at all by default:
+// nothing carrying a failure should vanish on a timer the user did not start.
+// Every one of them is dismissible with esc, which is what keeps the sticky
+// case from being a trap.
+var (
+	// NotificationDuration is how long an info or success message stays up. It
+	// is also the floor for any duration a caller asks for; a caller wanting
+	// longer still gets longer.
+	NotificationDuration = 6 * time.Second
+
+	// NotificationWarningDuration is how long a warning stays up.
+	NotificationWarningDuration = 8 * time.Second
+
+	// NotificationErrorDuration is how long an error stays up when
+	// NotificationErrorSticky is off.
+	NotificationErrorDuration = 15 * time.Second
+
+	// NotificationErrorSticky makes errors wait for a dismissal instead of
+	// expiring. The dock's rule stops burning down when this is what is on
+	// screen, which is the affordance that it is waiting for you.
+	NotificationErrorSticky = true
 )
 
 // =============================================================================
@@ -127,20 +157,20 @@ const (
 	// DockItemWidth is the base width of a dock item
 	DockItemWidth = 6
 
-	// MaxNotificationWidth is the maximum width of notification messages
-	MaxNotificationWidth = 60
+	// NotificationMaxWidth caps the dock's message block. Past about seventy
+	// columns a message that keeps growing stops being a status line and starts
+	// being a paragraph, so the rest is truncated instead.
+	NotificationMaxWidth = 72
 
-	// MinNotificationWidth is the minimum width of notification messages
-	MinNotificationWidth = 20
+	// NotificationDockReserve is what the message block leaves the rest of the
+	// dock: enough for the mode pill and the workspace counts, which are never
+	// given up for a message.
+	NotificationDockReserve = 18
 
-	// NotificationMargin is the margin from screen edge for notifications
-	NotificationMargin = 8
-
-	// NotificationSpacing is the vertical spacing between notifications
-	NotificationSpacing = 4
-
-	// MaxVisibleNotifications is the maximum number of notifications shown at once
-	MaxVisibleNotifications = 3
+	// NotificationMinWidth is the narrowest block worth reserving. Below it the
+	// dock is too tight to split, and the message takes what the screen has
+	// less a small margin instead.
+	NotificationMinWidth = 14
 
 	// AnimationMargin is the margin for culling animated windows
 	AnimationMargin = 20
@@ -203,6 +233,10 @@ func init() {
 	DockIconWorkspaceCount = fa.ThLarge.String()
 	WindowPillLeft = ple.LeftHalfCircleThick.String()
 	WindowPillRight = ple.RightHalfCircleThick.String()
+	NotificationGlyphError = fa.TimesCircle.String()
+	NotificationGlyphWarning = fa.ExclamationTriangle.String()
+	NotificationGlyphSuccess = fa.CheckCircle.String()
+	NotificationGlyphInfo = fa.InfoCircle.String()
 }
 
 // =============================================================================
@@ -272,6 +306,88 @@ const (
 	// NotificationIconInfo is the info notification icon
 	NotificationIconInfo = "[i]"
 )
+
+// Nerd Font severity marks, from the same FontAwesome block the dock already
+// draws its terminal and workspace counts from, so a terminal that renders the
+// dock at all renders these. They come from go-nf rather than being written out
+// as literals for the same reason the dock icons do: a private-use codepoint
+// pasted into source is invisible to review and is silently lost by any tool
+// that touches the file, which is exactly how the first version of this shipped
+// four empty strings and drew a message with no mark at all.
+var (
+	// NotificationGlyphError is the error mark (nf-fa-times_circle).
+	NotificationGlyphError string
+
+	// NotificationGlyphWarning is the warning mark (nf-fa-exclamation_triangle).
+	NotificationGlyphWarning string
+
+	// NotificationGlyphSuccess is the success mark (nf-fa-check_circle).
+	NotificationGlyphSuccess string
+
+	// NotificationGlyphInfo is the info mark (nf-fa-info_circle).
+	NotificationGlyphInfo string
+)
+
+// The message block's opening edge. It is the powerline cap and the severity
+// rail in one cell: a partial block drawn flush against the block's dark body,
+// opening it the way a cap does, inked two eighths for info and success, four
+// for a warning and six for an error.
+//
+// Two eighths apart rather than one because a single eighth is not a difference
+// you can see without the two of them side by side, and they never are. The
+// weight is what carries severity into a greyscale screenshot or a theme with
+// no contrast to spare.
+//
+// The body behind the cap is the dark surface, never a severity fill. A sliver
+// only reads as a weight against something that is not the same colour; against
+// a solid severity field all it changes is where the field starts, with nothing
+// to compare that against, and the severities become indistinguishable. That is
+// why this design carries less colour than a filled pill would.
+const (
+	// NotificationCapLight is the info and success cap (U+258E, two eighths).
+	NotificationCapLight = "▎"
+
+	// NotificationCapMedium is the warning cap (U+258C, four eighths).
+	NotificationCapMedium = "▌"
+
+	// NotificationCapHeavy is the error cap (U+258A, six eighths).
+	NotificationCapHeavy = "▊"
+
+	// NotificationCapASCII is the cap with Nerd Fonts off. Weight cannot be
+	// encoded in one ASCII cell, so severity falls back to the mark and the
+	// colour alone.
+	NotificationCapASCII = "|"
+)
+
+// The dock hairline's stroke while a message is burning down over it. A warning
+// or an error is drawn heavy, so an escalating message is a heavier line as
+// well as a different colour.
+const (
+	// NotificationRuleLight is the burn stroke for info and success (U+2500).
+	NotificationRuleLight = "─"
+
+	// NotificationRuleHeavy is the burn stroke for warnings and errors (U+2501).
+	NotificationRuleHeavy = "━"
+)
+
+// GetNotificationCap returns the weighted cap for a severity, or the ASCII
+// fallback when Nerd Fonts are off.
+func GetNotificationCap(cap string) string {
+	if UseASCIIOnly {
+		return NotificationCapASCII
+	}
+	return cap
+}
+
+// GetNotificationRule returns the burn stroke for the dock's hairline, matching
+// the separator character the rest of the row is drawn with when Nerd Fonts are
+// off so the lit run and the unlit run stay the same shape.
+func GetNotificationRule(stroke string) string {
+	if UseASCIIOnly {
+		return WindowSeparatorCharASCII
+	}
+	return stroke
+}
 
 // Dock Mode Colors
 const (

@@ -425,14 +425,24 @@ type OS struct {
 	pendingStartTerminalMode bool
 }
 
-// Notification represents a temporary notification message.
+// Notification represents a message shown in the dock's right-hand block.
+//
+// There is no Animation field any more. The old corner toast faded in and out,
+// which meant every notification's appearance depended on how recently a frame
+// had been composed; the message now occupies a block of the dock and its age
+// is carried by the dock's hairline burning down beneath it, which is a
+// function of wall-clock time alone.
 type Notification struct {
 	ID        string
 	Message   string
 	Type      string // "info", "success", "warning", "error"
 	StartTime time.Time
 	Duration  time.Duration
-	Animation *ui.Animation
+
+	// Sticky messages ignore Duration and wait to be dismissed with esc. An
+	// error is sticky by default: nothing carrying a failure should vanish on a
+	// timer the user did not start.
+	Sticky bool
 }
 
 // LogMessage represents a log entry with timestamp and level.

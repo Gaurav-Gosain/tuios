@@ -208,6 +208,20 @@ func copyModeHelpTexts(state terminal.CopyModeState) []string {
 
 // calculateDockRightWidth calculates the width of the right side of the dock
 func (m *OS) calculateDockRightWidth() int {
+	// A live message owns the right-hand block, ahead of the copy-mode help
+	// line and the system meters both. It is measured here rather than only at
+	// render time so the dock items are laid out against the room the message
+	// actually takes, and so mouse hit-testing (which shares this layout) agrees
+	// with what is drawn.
+	//
+	// This is also the fix for a message pushed while copy mode was active being
+	// silently dropped. The help line used to hold the block unconditionally, so
+	// the message was not crowded out, it was never rendered at all: a copy of
+	// something that failed, which is when a message matters most, went nowhere.
+	if block, ok := m.renderNotificationBlock(m.GetRenderWidth(), 0); ok {
+		return block.Width
+	}
+
 	focusedWindow := m.GetFocusedWindow()
 	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
 

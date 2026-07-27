@@ -154,6 +154,23 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CaptureKeyEvent(msg)
 	}
 
+	// esc takes a message off the dock, in every mode, without consuming the key.
+	//
+	// Not consuming it is the whole design. esc means something to the shell,
+	// to vim, to copy mode and to every overlay below, and a message is not
+	// worth stealing it from any of them; dismissing is non-destructive, so
+	// doing it as a side effect of an esc the user pressed for another reason
+	// costs them nothing. What it buys is an exit for a sticky error, which
+	// otherwise waits forever, and a way out of any message the user has read
+	// and does not want to sit through.
+	//
+	// It runs before the overlay routing below so it works while help, the
+	// palette or the quit dialog is up, since those are exactly the moments a
+	// message is in the way.
+	if msg.String() == "esc" {
+		o.DismissNotifications()
+	}
+
 	// Handle quit confirmation dialog (highest priority - works in any mode)
 	if o.ShowQuitConfirm {
 		key := msg.String()

@@ -187,8 +187,14 @@ func TestCopyModeEffectsPreserveHandlerBehaviour(t *testing.T) {
 		if win.CopyMode.PendingCount != 5 {
 			t.Fatalf("PendingCount = %d, want 5", win.CopyMode.PendingCount)
 		}
-		if !hasNotification(o, "5") {
-			t.Fatalf("expected the count notification, got %v", notificationMessages(o))
+		// The count indicator is pushed with a zero duration, which now means
+		// "not a notification" rather than "a notification that expires
+		// immediately". It never reached the screen either way: the old renderer
+		// computed a non-positive opacity for it and skipped it. What this
+		// subtest is really guarding is that the handler runs its effects after
+		// the I/O lock is dropped, and PendingCount is the trace of that.
+		if len(o.Notifications) != 0 {
+			t.Fatalf("a zero-duration count indicator should not become a dock message, got %v", notificationMessages(o))
 		}
 
 		HandleCopyModeKey(key("j"), o, win)
@@ -205,8 +211,10 @@ func TestCopyModeEffectsPreserveHandlerBehaviour(t *testing.T) {
 		if win.CopyMode.State != terminal.CopyModeSearch {
 			t.Fatal("/ did not enter search state")
 		}
-		if !hasNotification(o, "/") {
-			t.Fatalf("expected the search prompt notification, got %v", notificationMessages(o))
+		// As above: the search prompt is a zero-duration push and is not a dock
+		// message. The state transition is what the effects path has to deliver.
+		if len(o.Notifications) != 0 {
+			t.Fatalf("a zero-duration search prompt should not become a dock message, got %v", notificationMessages(o))
 		}
 	})
 }

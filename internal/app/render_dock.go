@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 func (m *OS) renderDock() *lipgloss.Layer {
@@ -161,17 +162,36 @@ func (m *OS) renderDockString() (string, int) {
 		styledWorkspaceText,
 	)
 
+	renderWidth := m.GetRenderWidth()
 	actualLeftWidth := lipgloss.Width(leftInfo)
 	centerWidth := lipgloss.Width(dockItemsStr.String())
 	// The right block never takes more room than the left block and the dock
 	// items leave, so the bar as a whole stays inside the screen.
-	rightWidth := max(min(layout.RightWidth, m.GetRenderWidth()-actualLeftWidth-centerWidth), 0)
+	rightWidth := max(min(layout.RightWidth, renderWidth-actualLeftWidth-centerWidth), 0)
 
 	var rightInfo string
+	// notifRule is the run of hairline the message burns down over, drawn into
+	// the right-hand end of the separator row below. Empty when nothing is live.
+	var notifRule string
 	focusedWindow := m.GetFocusedWindow()
 
+	// The message is built against the room the left block and the dock items
+	// have actually left, not against an estimate, so its width needs no
+	// correction afterwards. Correcting it afterwards is what the generic
+	// truncation below would do, and the first thing that would cut is the
+	// closing cap: the block would lose the shape that makes it part of the bar.
+	notif, hasNotif := m.renderNotificationBlock(renderWidth, max(renderWidth-actualLeftWidth-centerWidth, 0))
+
 	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
-	if inCopyMode {
+	switch {
+	case hasNotif:
+		// The message outranks the help line for its duration. Copy mode is a
+		// mode the user is holding and can read the keys for again in a moment;
+		// a message is a thing that just happened and will not be repeated.
+		rightInfo = notif.Text
+		notifRule = notif.Rule
+		rightWidth = notif.Width
+	case inCopyMode:
 		helpTexts := copyModeHelpTexts(focusedWindow.CopyMode.State)
 
 		helpStyle := lipgloss.NewStyle().
@@ -186,7 +206,7 @@ func (m *OS) renderDockString() (string, int) {
 				break
 			}
 		}
-	} else {
+	default:
 		var sysInfoParts []string
 		if config.ShowCPU {
 			sysInfoParts = append(sysInfoParts, m.GetCPUGraph())
@@ -232,7 +252,6 @@ func (m *OS) renderDockString() (string, int) {
 		paddedRightInfo,
 	)
 
-	renderWidth := m.GetRenderWidth()
 	// Backstop: whatever the parts add up to, the bar is one screen wide.
 	if lipgloss.Width(dockBar) > renderWidth {
 		dockBar = truncateToWidth(dockBar, renderWidth)
@@ -245,8 +264,18 @@ func (m *OS) renderDockString() (string, int) {
 
 	separator := lipgloss.NewStyle().
 		Width(renderWidth).
-		Foreground(lipgloss.Color("#303040")).
+		Foreground(theme.NotificationRule()).
 		Render(m.cachedSeparator)
+
+	// The message burns down over the hairline directly above it. The lit run
+	// replaces the right-hand end of the separator rather than being drawn on
+	// top of it, so the row is still exactly one screen wide and the burn is
+	// aligned with the block by construction: they are the same span.
+	if ruleWidth := lipgloss.Width(notifRule); ruleWidth > 0 && ruleWidth <= renderWidth {
+		separator = lipgloss.NewStyle().
+			Foreground(theme.NotificationRule()).
+			Render(strings.Repeat(config.GetWindowSeparatorChar(), renderWidth-ruleWidth)) + notifRule
+	}
 
 	dockbarYPos := m.GetRenderHeight() - config.DockHeight
 	dockbarParts := []string{separator, dockBar}

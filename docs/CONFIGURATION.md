@@ -8,6 +8,7 @@ TUIOS supports user-configurable keybindings through a TOML configuration file, 
 - [Configuration File Location](#configuration-file-location)
 - [Configuration Structure](#configuration-structure)
 - [Keybinding Sections](#keybinding-sections)
+- [Notification Settings](#notification-settings)
 - [Startup Settings](#startup-settings)
 - [Hooks](#hooks)
 - [Key Syntax](#key-syntax)
@@ -86,6 +87,11 @@ border_style = "rounded"
 dockbar_position = "bottom"
 hide_window_buttons = false
 scrollback_lines = 10000
+
+[notifications]
+duration = 6
+warning_duration = 8
+error_sticky = true
 
 [startup]
 open_default_window = false
@@ -433,6 +439,69 @@ unset to disable theming and use your terminal's own colors. See
 [THEMES.md](THEMES.md).
 
 **CLI override:** `--theme <id>`
+
+## Notification Settings
+
+The `[notifications]` section controls how long a message stays in the dock's
+right-hand block. All durations are in **seconds**.
+
+```toml
+[notifications]
+duration = 6           # info and success
+warning_duration = 8   # warnings
+error_duration = 15    # errors, only used when error_sticky = false
+error_sticky = true    # errors wait for esc instead of expiring
+```
+
+Every message is dismissible with `esc`, in any mode. `esc` is not consumed:
+it dismisses whatever is on the dock and still reaches the shell, copy mode or
+whatever overlay is open, so it never costs you the keypress you meant.
+
+### duration
+
+How long an info or success message stays up.
+
+A configured duration is a **floor**, not a cap. A message that a caller
+deliberately asked to show for longer still gets the longer time; this value is
+the minimum any message of that severity is given.
+
+**Default:** `6`
+
+**Note on short values:** durations under 4 seconds are applied as written but
+produce a config warning. A message that disappears before it can be read is a
+time limit on reading content with no way to extend it, which fails WCAG 2.2.1
+Level A. Four seconds is the shortest the evidence supports (tmux-sensible
+overrides tmux's own 750ms to 4s); VS Code purges at 10, 12 and 15 seconds by
+severity.
+
+### warning_duration
+
+How long a warning stays up. Warnings get longer than routine messages because
+they usually name something you have to decide about.
+
+**Default:** `8`
+
+### error_duration
+
+How long an error stays up, used **only** when `error_sticky = false`.
+
+**Default:** `15`
+
+### error_sticky
+
+When true, errors do not expire at all: they stay until dismissed with `esc`.
+The dock's hairline above a sticky error is lit end to end and stops moving,
+which is the affordance that it is waiting for you rather than counting down.
+
+Nothing carrying a failure should vanish on a timer the user did not start, so
+this is on by default. Set it to `false` if you would rather errors time out
+like everything else, in which case `error_duration` applies.
+
+**Valid values:**
+- `true` - Errors wait for `esc` (default)
+- `false` - Errors expire after `error_duration` seconds
+
+**Default:** `true`
 
 ## Startup Settings
 
