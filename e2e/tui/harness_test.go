@@ -611,10 +611,30 @@ const (
 	// a time with human-scale gaps between them, and tuios coalesces motion to
 	// a frame budget, so back-to-back writes are not the input a user produces.
 	mouseGap = 30 * time.Millisecond
-	// multiClickGap separates the clicks of one multi-click gesture. It has to
-	// stay well under internal/input.multiClickInterval (500ms) or the clicks
-	// stop counting as one gesture.
-	multiClickGap = 40 * time.Millisecond
+	// multiClickHold is how long a button of a multi-click gesture stays down,
+	// and multiClickGap is the pause before the next one goes down. Together
+	// they set the press-to-press interval, which is the figure that has to stay
+	// inside internal/input.multiClickInterval for tuios to read the clicks as
+	// one gesture: 40ms against a 300ms window.
+	//
+	// They are shorter than mouseGap, and deliberately so. mouseGap is spaced
+	// for motion, which tuios coalesces to a frame budget; presses and releases
+	// pass through untouched (cmd/tuios/run.go filters motion and nothing else),
+	// and the harness was measured sending all six reports of a triple click
+	// with no pause at all and having every one of them counted, 10 times out of
+	// 10. So the pause between the clicks of one gesture buys no fidelity, and
+	// what it costs is margin: tuios measures the interval when it processes the
+	// press, not when the byte arrives, so every millisecond of nominal spacing
+	// is a millisecond less stall it takes to push the third click outside the
+	// window and turn the gesture into a double click plus a single one.
+	//
+	// Measured on this machine: with the interval widened deliberately, the
+	// gesture was still read as three clicks at 295ms and never at 300ms, so
+	// there is no fixed overhead to leave room for, only the stall. What is left
+	// is a hold short enough to be cheap and long enough to be a real button
+	// press.
+	multiClickHold = 15 * time.Millisecond
+	multiClickGap  = 25 * time.Millisecond
 	// gestureGap is long enough to guarantee the next press starts a fresh
 	// gesture rather than continuing the previous one.
 	gestureGap = 800 * time.Millisecond
@@ -624,10 +644,17 @@ const (
 // sequence of separate events rather than one burst.
 func sendMouse(t *testing.T, term *tuitest.Terminal, what string, ev tuitest.MouseEvent) {
 	t.Helper()
+	sendMouseThenWait(t, term, what, ev, mouseGap)
+}
+
+// sendMouseThenWait is sendMouse with the pause named by the caller, for the
+// one gesture whose whole meaning is how fast its reports arrive.
+func sendMouseThenWait(t *testing.T, term *tuitest.Terminal, what string, ev tuitest.MouseEvent, pause time.Duration) {
+	t.Helper()
 	if err := term.SendMouse(ev); err != nil {
 		t.Fatalf("%s at (%d,%d): %v", what, ev.Col, ev.Row, err)
 	}
-	time.Sleep(mouseGap)
+	time.Sleep(pause)
 }
 
 // mousePress sends a button-down. Every mousePress in a test must be matched by

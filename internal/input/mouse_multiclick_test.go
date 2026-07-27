@@ -169,14 +169,20 @@ func TestDragFromTheSecondClickCopiesTheDraggedRange(t *testing.T) {
 // the line rather than copying the word because the timer expired mid-gesture.
 func TestASlowTripleClickStillResolvesToTheLine(t *testing.T) {
 	const line = "alpha bravo charlie"
-	o, _ := selectPane(t, line)
+	o, win := selectPane(t, line)
 
 	pressAt(o, 6, 0)
 	pressAt(o, 6, 0)
 	wordCopy := release(o, 6, 0)
 
-	// Late, but still inside the window.
-	time.Sleep(multiClickInterval * 2 / 3)
+	// Late, but still inside the window. The delay is put on the clock rather
+	// than slept through: sleeping two thirds of the window and then requiring
+	// the press to land inside the remaining third is a race against whatever
+	// else the machine is doing, and this test would lose it by reporting that
+	// tuios mishandled a slow triple-click when all that happened is that the
+	// test was descheduled. Backdating asserts the same thing, and the interval
+	// tuios reads is then the one the test asked for.
+	win.LastClickTime = time.Now().Add(-multiClickInterval * 2 / 3)
 
 	pressAt(o, 6, 0)
 	if got := o.PendingCopyText(); got != "" {

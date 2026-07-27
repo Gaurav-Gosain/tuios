@@ -52,13 +52,22 @@ func dragSelect(t *testing.T, term *tuitest.Terminal, fromCol, toCol, row int) {
 // could not be generated at all, so no assertion could have observed them.
 // TestDoubleClickCopiesAWordAndTripleClickTheLine now asserts on the whole
 // sequence of writes rather than on whether the wanted text is somewhere in it.
+//
+// The clicks are paced by multiClickHold and multiClickGap rather than by the
+// harness's ordinary mouseGap, because for this one gesture the spacing is not
+// presentation, it is the input: tuios decides how many clicks it received by
+// how far apart it processed them.
 func clickAt(t *testing.T, term *tuitest.Terminal, col, row, n int) {
 	t.Helper()
 	for i := range n {
 		if i > 0 {
 			time.Sleep(multiClickGap)
 		}
-		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+		ev := tuitest.MouseEvent{Col: col, Row: row, Button: tuitest.MouseLeft}
+		ev.Action = tuitest.MousePress
+		sendMouseThenWait(t, term, "press", ev, multiClickHold)
+		ev.Action = tuitest.MouseRelease
+		sendMouseThenWait(t, term, "release", ev, 0)
 	}
 }
 
@@ -449,6 +458,117 @@ func waitClipboardSequence(t *testing.T, term *tuitest.Terminal, out *lockedBuff
 	}
 }
 
+// selectionSpan reports which columns of a row tuios is painting as selected,
+// as a half-open [start, end), and (-1, -1) when it is painting none.
+//
+// The highlight is the only thing on a row of ordinary pane output that carries
+// a background colour: shell output is drawn on the terminal's default
+// background and internal/app.visualSelectionStyle sets one. So "this cell has
+// a background at all" identifies the selection without the test having to know
+// which colour the style resolved to on this terminal, which depends on the
+// colour profile the child detects.
+func selectionSpan(s tuitest.Screen, row int) (start, end int) {
+	cols, _ := s.Size()
+	start, end = -1, -1
+	for c := range cols {
+		if s.Cell(c, row).Bg.Kind == tuitest.ColorDefault {
+			continue
+		}
+		if start < 0 {
+			start = c
+		}
+		end = c + 1
+	}
+	return start, end
+}
+
+// describeSpan renders what selectionSpan returned for a failure message.
+func describeSpan(start, end int) string {
+	if start < 0 {
+		return "nothing"
+	}
+	return fmt.Sprintf("columns [%d,%d)", start, end)
+}
+
+// multiClickAttempts is how many times one multi-click gesture is re-sent when
+// tuios did not read it as a multi-click at all. Three is enough that losing
+// the race every time is not a plausible accident, and small enough that a
+// product that has genuinely stopped selecting still fails quickly.
+const multiClickAttempts = 3
+
+// selectByMultiClick clicks n times at one cell and returns once tuios has
+// highlighted exactly the columns that many clicks should select. It reports
+// how many clipboard writes had already been made when the gesture that
+// succeeded began, which is the baseline the caller's waitClipboardSequence
+// needs.
+//
+// This exists because a test that sends three clicks is not thereby a test of
+// what tuios does with a triple click. A click joins the gesture in progress
+// only if it arrives within internal/input.multiClickInterval of the last one,
+// measured in tuios at the moment it processes the press. The harness cannot
+// control that: it can only put the bytes in the pty and hope tuios is not
+// busy. When it is, the third press lands outside the window, tuios reads a
+// double click followed by a single one, and everything it does afterwards is
+// correct for the input it actually received. Asserting on the clipboard
+// without checking that first conflates "the product mishandled a triple
+// click", which must fail, with "the harness failed to deliver one", which
+// means nothing.
+//
+// The highlight is what makes the difference visible, and it is a sound witness
+// for the gesture because it is painted on the press: it is set before, and
+// independently of, the clipboard write being asserted on, so reading it does
+// not assume the answer. What it shows when a click falls outside the window is
+// a shorter gesture. Losing the third press leaves nothing highlighted, because
+// the stray single click starts a one-cell selection its own release finds
+// empty and drops the implicit copy-mode session with it. Losing the second
+// leaves the word highlighted, because the last two clicks are then a double
+// click of their own. Both of those were observed while measuring this.
+//
+// One outcome cannot be told from a lost race by looking at a single gesture: a
+// tuios that selected the word on three clicks would paint exactly what a lost
+// second press paints. Repetition separates them, and that is all the retry is
+// for. A lost race is a coin flip that comes up differently on the next throw;
+// a product that selects the wrong thing does it every time and fails on the
+// last attempt with the span it painted in the message. So the retry is driven
+// by a measured property of the gesture, never by a failed assertion, and it is
+// bounded.
+//
+// Measured on a 16-core machine oversubscribed with 256 busy loops, which is
+// the only way the race was made to happen at all: at the pacing this harness
+// sends, 4 to 9 of every 100 triple clicks came out short. Idle, and with the
+// machine merely busy rather than swamped, none of several hundred did.
+func selectByMultiClick(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, col, row, n, wantStart, wantEnd int) int {
+	t.Helper()
+	for attempt := 1; ; attempt++ {
+		from := len(clipboardWrites(out))
+		clickAt(t, term, col, row, n)
+
+		err := term.WaitFor(func(s tuitest.Screen) bool {
+			start, end := selectionSpan(s, row)
+			return start == wantStart && end == wantEnd
+		}, uiTimeout)
+		if err == nil {
+			return from
+		}
+
+		got := describeSpan(selectionSpan(term.Screen(), row))
+		want := describeSpan(wantStart, wantEnd)
+		if attempt == multiClickAttempts {
+			t.Fatalf("%d clicks at (%d,%d) selected %s on all %d attempts, and %d clicks select "+
+				"%s; a gesture that comes out short every time is not the machine losing a "+
+				"race, it is multi-click selection selecting the wrong thing\n%s",
+				n, col, row, got, attempt, n, want, term.Snapshot())
+		}
+		t.Logf("attempt %d: %d clicks at (%d,%d) selected %s rather than %s, so tuios read them "+
+			"as a shorter gesture; the harness lost the race against "+
+			"internal/input.multiClickInterval, re-sending", attempt, n, col, row, got, want)
+		// Long enough that the retry's first press cannot join the gesture that
+		// just ended, and that any deferred write the short gesture did produce
+		// has landed before the next baseline is taken.
+		time.Sleep(gestureGap)
+	}
+}
+
 // TestDragSelectionCopiesOnRelease drives a real click-drag across a line of
 // output and asserts the text left the process on the clipboard.
 //
@@ -489,6 +609,11 @@ func TestDragSelectionCopiesOnRelease(t *testing.T) {
 // through the word on its way to the line and each release is a real release.
 // Those counts are the contract: they are what a paste taken mid-gesture gets,
 // and they are what the old helper could not generate, let alone assert on.
+//
+// Each multi-click also asserts the highlight it painted, which is both a
+// stronger claim about the gesture and the thing that lets the test tell a
+// mishandled triple click apart from one the harness never managed to deliver;
+// see selectByMultiClick.
 func TestDoubleClickCopiesAWordAndTripleClickTheLine(t *testing.T) {
 	out := &lockedBuffer{}
 	term, _ := start(t, startOpts{out: out})
@@ -504,14 +629,28 @@ func TestDoubleClickCopiesAWordAndTripleClickTheLine(t *testing.T) {
 	runInShell(t, term, `P=/opt; echo "PREFIX $P/dblclick/word.txt SUFFIX"`, word, shellTimeout)
 	row, col := findText(t, term, word)
 
+	// Where each gesture's highlight has to land. A double click selects the
+	// word and nothing either side of it, which is the same claim about the
+	// word-character set that the clipboard assertion makes, in the other place
+	// the user can see it. A triple click selects the whole line: it starts
+	// seven columns earlier, at the P of PREFIX, and ends seven later, after the
+	// X of SUFFIX.
+	const affix = len("PREFIX ")
+	wordStart, wordEnd := col, col+len(word)
+	lineStart, lineEnd := col-affix, col+len(word)+affix
+
 	// One click is not a selection. It must leave the clipboard alone, or every
 	// stray click in a pane destroys whatever the user had copied.
 	clickAt(t, term, col+6, row, 1)
 	waitClipboardSequence(t, term, out, 0)
+	if start, end := selectionSpan(term.Screen(), row); start >= 0 {
+		t.Fatalf("a single click selected columns [%d,%d); it must select nothing\n%s",
+			start, end, term.Snapshot())
+	}
 	time.Sleep(gestureGap)
 
-	clickAt(t, term, col+6, row, 2)
-	waitClipboardSequence(t, term, out, 0, word)
+	from := selectByMultiClick(t, term, out, col+6, row, 2, wordStart, wordEnd)
+	waitClipboardSequence(t, term, out, from, word)
 
 	// Let the multi-click window lapse, or the first press of the triple
 	// continues the double and the counts come out shifted.
@@ -523,8 +662,8 @@ func TestDoubleClickCopiesAWordAndTripleClickTheLine(t *testing.T) {
 	// arrives (see internal/app/clipboard_copy.go). This is the whole point of
 	// the deferral, and asserting the count rather than the final contents is
 	// what makes it observable, since the final contents were always the line.
-	clickAt(t, term, col+6, row, 3)
-	waitClipboardSequence(t, term, out, 1, line)
+	from = selectByMultiClick(t, term, out, col+6, row, 3, lineStart, lineEnd)
+	waitClipboardSequence(t, term, out, from, line)
 	alive(t, term, "after multi-click selection")
 }
 
