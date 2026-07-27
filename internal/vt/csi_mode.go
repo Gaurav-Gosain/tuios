@@ -120,6 +120,19 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 			e.syncSetAtNanos.Store(time.Now().UnixNano())
 		}
 	}
+	if mode == ansi.ModeAutoWrap {
+		e.cachedAutoWrap.Store(setting.IsSet())
+	}
+}
+
+// autoWrapMode reports DECAWM (?7) without touching the modes map.
+//
+// It exists for the callers that ask once per printed character or per line
+// feed; everything colder should keep using isModeSet, which reads the map that
+// remains authoritative. cachedAutoWrap is kept in step by setMode and
+// RestoreModes, the only two writers of that entry.
+func (e *Emulator) autoWrapMode() bool {
+	return e.cachedAutoWrap.Load()
 }
 
 // isModeSet returns true if the mode is set.

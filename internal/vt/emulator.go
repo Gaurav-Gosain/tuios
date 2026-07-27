@@ -51,6 +51,15 @@ type Emulator struct {
 	cachedAllMotion atomic.Bool
 	// Thread-safe cached synchronized-output flag (DEC 2026, updated on set/reset)
 	cachedSyncOutput atomic.Bool
+	// Thread-safe cached auto-wrap flag (DECAWM ?7, updated on set/reset).
+	//
+	// handleGrapheme consults auto-wrap once per printed character, and reading
+	// it out of the modes map cost an RWMutex round trip plus a lookup keyed by
+	// an interface, which profiled at 8% of the whole process during a `cat` of
+	// a large file: more than the cell write it guards. The map stays
+	// authoritative; this is a read-side shortcut for the one mode the hot loop
+	// asks about every character.
+	cachedAutoWrap atomic.Bool
 	// Unix-nanos timestamp of the last sync begin, for the present-anyway timeout
 	syncSetAtNanos atomic.Int64
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
@@ -549,6 +558,11 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 			e.modes[mode] = ansi.ModeSet
 		} else {
 			e.modes[mode] = ansi.ModeReset
+		}
+		// This is the one write path that bypasses setMode, so the read-side
+		// caches it maintains have to be refreshed here or they go stale.
+		if mode == ansi.ModeAutoWrap {
+			e.cachedAutoWrap.Store(enabled)
 		}
 	}
 }

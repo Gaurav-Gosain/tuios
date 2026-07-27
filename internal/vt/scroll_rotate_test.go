@@ -219,12 +219,14 @@ func TestScrollUpFillsScrollback(t *testing.T) {
 // TestScrollUpAllocatesOnlyTheRetainedLine pins the allocation cost of a
 // whole-screen scroll at exactly the line being retained.
 //
-// A scroll allocates once, in extractLine, for the row moving into the
-// scrollback ring. It used to allocate twice, because the ring then made a
-// defensive copy of a line that had no other referent; at 112 bytes per cell
-// and one line per terminal width that second copy was half of everything the
-// write path allocated. The rotation itself must add nothing: it moves line
-// headers and reuses the slices that fall off the top as the new blank rows.
+// While the ring still has room a scroll allocates once, for the row that has
+// to exist because the one leaving the top is now owned by the scrollback. It
+// used to allocate twice, because the ring then made a defensive copy of a line
+// that had no other referent; at 112 bytes per cell and one line per terminal
+// width that second copy was half of everything the write path allocated. The
+// rotation itself must add nothing: it moves line headers rather than cells.
+// Once the ring is full even that one allocation goes away, which
+// TestScrollUpRecyclesEvictedScrollbackStorage pins.
 func TestScrollUpAllocatesOnlyTheRetainedLine(t *testing.T) {
 	e := NewEmulator(80, 24)
 	fillScreen(e, 80, 24)
@@ -277,5 +279,103 @@ func TestAltScreenRetainsNothing(t *testing.T) {
 	}
 	if got, want := strings.TrimRight(b.String(), " "), "main-00"; got != want {
 		t.Errorf("oldest scrollback line is %q after the excursion, want %q", got, want)
+	}
+}
+
+// scrollbackText reads a retained line back as plain text.
+func scrollbackText(e *Emulator, i int) string {
+	var b strings.Builder
+	for _, c := range e.ScrollbackLine(i) {
+		b.WriteString(c.Content)
+	}
+	return strings.TrimRight(b.String(), " ")
+}
+
+// TestScrollUpRecyclesEvictedScrollbackStorage pins the swap a full ring makes
+// possible: the row leaving the top of the screen becomes the newest scrollback
+// line, and the storage of the line the ring drops in exchange becomes the new
+// blank row at the bottom. Once the ring is full nothing is allocated at all.
+//
+// The correctness half matters more than the allocation half. The recycled
+// storage is handed to the screen, which immediately blanks it and then prints
+// into it, so if the ring could still reach it the oldest retained lines would
+// dissolve into whatever the pane printed next. Both directions are checked:
+// the retained lines still read back exactly, and a later screenful of output
+// does not disturb them.
+func TestScrollUpRecyclesEvictedScrollbackStorage(t *testing.T) {
+	const w, h, ring = 40, 8, 16
+
+	e := NewEmulator(w, h)
+	e.SetScrollbackMaxLines(ring)
+
+	// Enough lines that the ring wraps several times over.
+	const printed = 200
+	for i := range printed {
+		e.WriteString(fmt.Sprintf("line-%03d\r\n", i))
+	}
+
+	if got := e.ScrollbackLen(); got != ring {
+		t.Fatalf("scrollback holds %d lines, want the full ring of %d", got, ring)
+	}
+
+	// The oldest retained line is the one printed `ring` scrolls ago.
+	firstRetained := printed + 1 - h - ring
+	for i := range ring {
+		want := fmt.Sprintf("line-%03d", firstRetained+i)
+		if got := scrollbackText(e, i); got != want {
+			t.Errorf("scrollback line %d is %q, want %q", i, got, want)
+		}
+	}
+
+	// Repaint every row of the screen without scrolling, so nothing new is
+	// retained and the ring must read back exactly as it did. A recycled row
+	// the ring could still reach would take this text with it.
+	e.WriteString("\x1b[H\x1b[2J")
+	for y := range h {
+		e.WriteString(fmt.Sprintf("\x1b[%d;1H%s", y+1, strings.Repeat("Z", w)))
+	}
+	for i := range ring {
+		want := fmt.Sprintf("line-%03d", firstRetained+i)
+		if got := scrollbackText(e, i); got != want {
+			t.Fatalf("scrollback line %d is %q after a repaint, want %q: the ring still aliases screen storage", i, got, want)
+		}
+	}
+
+	// With the ring full, a scroll that retains a line allocates nothing: the
+	// line it evicts pays for the one it takes.
+	if got := testing.AllocsPerRun(200, func() {
+		e.WriteString("\x1b[S")
+	}); got > 0 {
+		t.Errorf("a whole-screen scroll into a full ring allocates %.1f times per call, want 0", got)
+	}
+}
+
+// TestScrollRegionStillRetainsLines pins the path the rotation does not take.
+// A DECSTBM region that starts at the top of the screen still feeds the
+// scrollback, and it does so through the copy that a non-rotating scroll needs,
+// because those rows stay on screen and keep being written.
+func TestScrollRegionStillRetainsLines(t *testing.T) {
+	const w, h = 40, 8
+
+	e := NewEmulator(w, h)
+	e.SetScrollbackMaxLines(4)
+
+	// A region covering all but the last row: top-anchored, so it retains, but
+	// not the whole buffer, so it cannot rotate.
+	e.WriteString(fmt.Sprintf("\x1b[1;%dr", h-1))
+	for i := range 12 {
+		e.WriteString(fmt.Sprintf("\x1b[%d;1Hkeep-%02d", min(i+1, h-1), i))
+		if i >= h-2 {
+			e.WriteString("\x1b[S")
+		}
+	}
+
+	if e.ScrollbackLen() == 0 {
+		t.Fatal("a top-anchored scroll region retained nothing")
+	}
+	for i := range e.ScrollbackLen() {
+		if got := scrollbackText(e, i); !strings.HasPrefix(got, "keep-") {
+			t.Errorf("scrollback line %d is %q, want a keep- line", i, got)
+		}
 	}
 }

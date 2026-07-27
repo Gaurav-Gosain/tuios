@@ -367,20 +367,19 @@ func (s *Screen) ScrollUp(n int) {
 
 	// Only save to scrollback if we're scrolling the main screen area
 	// (not a limited scroll region) and the scroll region starts at Y=0
-	if s.scrollback != nil && scroll.Min.Y == 0 && scroll.Min.X == 0 && scroll.Dx() == width {
-		// Save the top n lines to scrollback before they're deleted.
-		// extractLine allocates the line and hands over its only reference, so
-		// the ring takes it without a second copy.
-		for i := 0; i < n && i < scroll.Dy(); i++ {
-			y := scroll.Min.Y + i
-			line := extractLine(s.buf.Buffer, y, width)
-			s.scrollback.PushLineOwned(line, true)
-		}
-	}
+	save := s.scrollback != nil && scroll.Min.Y == 0 && scroll.Min.X == 0 && scroll.Dx() == width
 
 	x, y := s.CursorPosition()
 	s.setCursor(s.cur.X, 0, true)
-	if !s.rotateWholeScreenUp(n) {
+	if !s.rotateWholeScreenUp(n, save) {
+		// The rotation did not apply, so the departing rows stay where they are
+		// and have to be copied out before DeleteLine overwrites them.
+		if save {
+			for i := 0; i < n && i < scroll.Dy(); i++ {
+				line := extractLine(s.buf.Buffer, scroll.Min.Y+i, width)
+				s.scrollback.PushLineOwned(line, true)
+			}
+		}
 		s.DeleteLine(n)
 	}
 	s.setCursor(x, y, false)
@@ -401,9 +400,18 @@ func (s *Screen) ScrollUp(n int) {
 // slices that fall off the top as the new blank rows at the bottom, so nothing
 // is allocated and no cell moves.
 //
+// When save is set, the rows leaving the top go straight into the scrollback
+// instead of being copied there first, and the storage the ring evicts in
+// exchange becomes the new blank rows at the bottom. In the steady state of a
+// pane printing output that is a pure swap: no line is allocated and no cell is
+// copied for a scroll that also has to be retained. The ownership rule is the
+// one extractLine already established, that the ring holds a line nothing else
+// writes; the only new part is that the screen takes back storage the ring has
+// finished with.
+//
 // Every row is marked touched, because every row's index changed and the
 // renderer diffs by index.
-func (s *Screen) rotateWholeScreenUp(n int) bool {
+func (s *Screen) rotateWholeScreenUp(n int, save bool) bool {
 	lines := s.buf.Lines
 	height := len(lines)
 	area := s.scroll
@@ -431,6 +439,18 @@ func (s *Screen) rotateWholeScreenUp(n int) bool {
 	}
 	copy(recycled, lines[:n])
 	copy(lines, lines[n:])
+	if save {
+		for i, row := range recycled {
+			reuse := s.scrollback.PushLineOwnedRecycle(row, true)
+			if len(reuse) == len(row) {
+				recycled[i] = reuse
+			} else {
+				// Nothing evicted yet, or the ring is still holding lines from
+				// before a resize, so the row it gave back is the wrong width.
+				recycled[i] = make(uv.Line, len(row))
+			}
+		}
+	}
 	copy(lines[height-n:], recycled)
 
 	blank := uv.EmptyCell
