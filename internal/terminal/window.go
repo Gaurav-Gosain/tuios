@@ -386,6 +386,17 @@ type CopyMode struct {
 	// Count prefix (e.g., 10j means move down 10 times)
 	PendingCount   int       // Accumulated count (0 means no count)
 	CountStartTime time.Time // When count entry started (for timeout)
+
+	// Implicit marks a copy mode session that the user never asked for.
+	//
+	// Rendering scrollback is copy mode's job, so a mouse wheel or a drag
+	// inside a pane has to turn it on to show anything at all. That is a
+	// mechanism, not a mode the user chose: an implicit session announces
+	// nothing, keeps the dock showing terminal mode, draws no copy-mode
+	// cursor, and ends the moment the view is back at the bottom or a key is
+	// pressed. Copy mode entered on purpose (the prefix binding, the command
+	// palette) leaves this false and behaves exactly as it always has.
+	Implicit bool
 }
 
 // NewWindow creates a new terminal window with the specified properties.

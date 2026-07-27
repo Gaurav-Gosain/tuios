@@ -293,6 +293,30 @@ Controls how many lines a single mouse wheel notch scrolls in scrollback, copy m
 
 **Note:** Values outside the valid range are automatically clamped. Also settable from the in-app settings page (Advanced, "Scroll lines").
 
+### copy_on_select
+
+Controls whether releasing a mouse selection puts the text on the clipboard straight away, the way X11's primary selection and kitty's `copy_on_select` do. With it off, a selection stays highlighted and is copied only by pressing `y` in copy mode.
+
+A click that never moved is not a selection and never writes to the clipboard, whatever this is set to.
+
+**Valid values:** `true`, `false`
+
+**Default:** `true`
+
+**Note:** The clipboard is written with OSC 52, the same path copy mode's `y` uses, so it reaches whatever the host terminal supports (including over SSH). Also settable from the in-app settings page (Advanced, "Copy on select").
+
+### word_characters
+
+The punctuation that counts as part of a word when a double-click selects one. Letters and digits always count and do not need listing.
+
+The default is chosen for what terminal output looks like: a path, a query string, a version number or a flag such as `--no-vm` selects as one word instead of breaking at every punctuation mark. A colon is deliberately absent, so `host:port` and `file:line` select as their parts; add `:` if you would rather have them whole.
+
+**Valid values:** Any string of characters. An empty string means only letters and digits are word characters.
+
+**Default:** `"@-./_~?&=%+#"`
+
+**Note:** Triple-click selects the whole line and is not affected by this. Also settable from the in-app settings page (Advanced, "Word characters").
+
 ### window_title_position
 
 Controls where window titles are displayed. Titles show the custom name if set by the user, otherwise the terminal's title (e.g., from shell prompt).

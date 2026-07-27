@@ -183,22 +183,37 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Handle copy mode mouse clicks AFTER button checks
-	if clickedWindow.CopyMode != nil && clickedWindow.CopyMode.Active {
-		// In copy mode, handle mouse clicks for cursor movement and selection
-		if mouse.Button == tea.MouseLeft {
-			// Check if clicking in terminal content area (not on title bar or buttons)
-			_, _, inContent := clickedWindow.ScreenToTerminal(X, Y)
-			if inContent {
-				// Start drag for visual selection
-				HandleCopyModeMouseDrag(clickedWindow.CopyMode, clickedWindow, X, Y)
-				o.Dragging = true
-				o.DraggedWindowIndex = clickedWindowIndex
-				o.InteractionMode = true
-				return o, nil
+	// Text selection with the mouse, AFTER the button checks.
+	//
+	// A left press inside a pane's content selects text, in terminal mode as
+	// well as in copy mode. It used to only select in copy mode: in terminal
+	// mode the same press grabbed the window, dragged it, and dropped the user
+	// into window management mode, so click-dragging over output moved the pane
+	// instead of selecting the line. The title bar and the borders are still
+	// the window's drag handle, and window management mode still drags from
+	// anywhere, so nothing lost a way to move a window.
+	//
+	// Panes running an application with mouse tracking never reach here; their
+	// press was forwarded to the application further up, exactly as the wheel is.
+	if mouse.Button == tea.MouseLeft && (clickedWindow.InCopyMode() || o.Mode == app.TerminalMode) {
+		terminalX, terminalY, inContent := clickedWindow.ScreenToTerminal(X, Y)
+		if inContent {
+			o.FocusWindow(clickedWindowIndex)
+			if !clickedWindow.InCopyMode() {
+				// Selection reads through copy mode's machinery, so a
+				// selection in terminal mode has to turn it on. Implicitly:
+				// nothing is announced and the dock does not change.
+				clickedWindow.EnterCopyModeImplicit()
 			}
+			beginMouseSelection(clickedWindow.CopyMode, clickedWindow, X, Y,
+				registerClick(clickedWindow, terminalX, terminalY))
+			o.Dragging = true
+			o.DraggedWindowIndex = clickedWindowIndex
+			o.InteractionMode = true
+			return o, nil
 		}
-		// If click is outside content area, fall through to normal window interaction
+		// A press outside the content area falls through to normal window
+		// interaction: that is the title bar, and it should still drag.
 	}
 
 	// Focus the clicked window and bring to front Z-index

@@ -119,11 +119,47 @@ func (w *Window) EnterCopyMode() {
 	w.CopyMode.CurrentMatch = 0
 	w.CopyMode.CaseSensitive = false
 	w.CopyMode.PendingGCount = false
+	w.CopyMode.Implicit = false
 
 	// Sync with window scrollback
 	w.ScrollbackOffset = 0
 
 	w.InvalidateCache()
+}
+
+// EnterCopyModeImplicit turns copy mode on as a mechanism rather than as a
+// mode: it is how a mouse wheel, a scrollbar drag, or a drag-selection gets
+// scrollback on screen at all. Nothing about the session is announced and the
+// dock keeps showing terminal mode, so scrolling looks like scrolling.
+//
+// See CopyMode.Implicit for what the flag changes.
+func (w *Window) EnterCopyModeImplicit() {
+	w.EnterCopyMode()
+	if w.CopyMode != nil {
+		w.CopyMode.Implicit = true
+	}
+}
+
+// InCopyMode reports whether copy mode is active at all, implicit sessions
+// included. Use it for anything that reads or writes copy-mode state.
+//
+// This and the two predicates below tolerate a nil window: the render and dock
+// paths ask about the focused window, and there is not always one.
+func (w *Window) InCopyMode() bool {
+	return w != nil && w.CopyMode != nil && w.CopyMode.Active
+}
+
+// CopyModeVisible reports whether copy mode should present itself as a mode:
+// the dock's copy-mode pill and key hints, and the block cursor. An implicit
+// session is a scrolled view, so it reports false.
+func (w *Window) CopyModeVisible() bool {
+	return w.InCopyMode() && !w.CopyMode.Implicit
+}
+
+// InImplicitCopyMode reports whether copy mode is active only because a scroll
+// or drag gesture needed it.
+func (w *Window) InImplicitCopyMode() bool {
+	return w.InCopyMode() && w.CopyMode.Implicit
 }
 
 // ExitCopyMode exits copy mode and returns to normal terminal mode.
@@ -132,6 +168,7 @@ func (w *Window) ExitCopyMode() {
 		w.CopyMode.Active = false
 		w.CopyMode.State = CopyModeNormal
 		w.CopyMode.ScrollOffset = 0
+		w.CopyMode.Implicit = false
 		// Clear search state
 		w.CopyMode.SearchQuery = ""
 		w.CopyMode.SearchMatches = nil

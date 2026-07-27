@@ -27,8 +27,10 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	// IsCursorHidden and CursorPosition read emulator state that the PTY and
 	// daemon output goroutines mutate under the window's I/O lock, so both
 	// reads take the read side of it.
-	if (window.CopyMode != nil && window.CopyMode.Active) ||
-		window.ScrollbackOffset > 0 {
+	// An implicit copy-mode session that is sitting at the bottom (a
+	// drag-selection over live output) is not a reason to hide the shell's
+	// cursor; being scrolled back still is, and that is the second condition.
+	if window.CopyModeVisible() || window.ScrollbackOffset > 0 {
 		return nil
 	}
 

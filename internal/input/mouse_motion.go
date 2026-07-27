@@ -98,8 +98,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 				if mouse.Y < contentTop {
 					// Dragging above  - enter copy mode and scroll up
-					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
-						focusedWindow.EnterCopyMode()
+					if !focusedWindow.InCopyMode() {
+						focusedWindow.EnterCopyModeImplicit()
 					}
 					if focusedWindow.CopyMode != nil {
 						for range 3 {

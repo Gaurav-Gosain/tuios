@@ -11,8 +11,15 @@ import (
 func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	focusedWindow := o.GetFocusedWindow()
 
+	// A wheel scroll here leaves the pane in an implicit copy mode too, and a
+	// window-manager binding must not be swallowed by it. Any key ends the
+	// scrolled view and is then handled as the window-manager command it is.
+	if focusedWindow != nil && focusedWindow.InImplicitCopyMode() {
+		focusedWindow.ExitCopyMode()
+	}
+
 	// Handle copy mode (vim-style scrollback/selection) - takes priority
-	if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+	if focusedWindow.InCopyMode() {
 		return HandleCopyModeKey(msg, o, focusedWindow)
 	}
 

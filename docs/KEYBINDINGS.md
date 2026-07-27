@@ -316,17 +316,22 @@ Access debug and development tools:
 
 ## Mouse Controls
 
+- **Mouse Wheel**: Scroll the pane's scrollback (when no mouse tracking, not alt screen). No mode is entered and nothing is announced; scrolling back to the bottom returns to live output, and so does typing.
+- **Left Drag in a pane**: Select text. Releasing copies it (`copy_on_select`, on by default)
+- **Double Click**: Select the word under the pointer (`word_characters` decides what a word is)
+- **Triple Click**: Select the whole line
+- **Left Drag Above/Below a pane**: Continues the selection and scrolls
 - **Left Click**: Focus window
-- **Left Drag**: Move window (non-tiling) or swap windows (tiling)
+- **Left Drag on the title bar**: Move window (non-tiling) or swap windows (tiling). In window management mode the whole window is a drag handle
 - **Right Drag**: Resize window (non-tiling only)
 - **Title Bar Buttons**: Minimize, maximize, or close window
 - **Click Dock Item**: Restore minimized window
 - **Copy Mode Click**: Move cursor to position
-- **Copy Mode Drag**: Select text (enters visual mode)
-- **Mouse Wheel**: Enter copy mode and scroll (when no mouse tracking, not alt screen)
-- **Copy Mode Drag Auto-Scroll**: Dragging a selection above/below the pane continuously scrolls via a timer
 - **Right Border Click**: Scrollbar jump
 - **Right Border Drag**: Scrollbar scroll
+
+Panes running an application that asked for the mouse (vim, less, htop) receive
+every one of these events themselves; tuios does not interpret them.
 
 ## Customization
 

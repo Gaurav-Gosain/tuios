@@ -65,6 +65,7 @@ package tuie2e
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -155,6 +156,12 @@ type startOpts struct {
 	args []string
 	// env are extra KEY=VALUE entries layered over the isolated defaults.
 	env []string
+	// out receives a copy of the PTY traffic, so a test can assert on output
+	// that never reaches the grid. OSC 52 clipboard writes are the reason it
+	// exists: a copy is invisible on screen but unmistakable on the wire. The
+	// stream carries both directions, which is harmless for that purpose since
+	// nothing the tests send contains an OSC 52.
+	out io.Writer
 }
 
 // start spawns tuios in a hermetic environment and returns the terminal plus
@@ -218,13 +225,16 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	}
 	t.Cleanup(func() { _ = logFile.Close() })
 
-	term := tuitest.StartT(t, argv,
+	var mirror io.Writer = logFile
+	if o.out != nil {
+		mirror = io.MultiWriter(logFile, o.out)
+	}
+	return tuitest.StartT(t, argv,
 		tuitest.WithSize(cols, rows),
 		tuitest.WithTerm("xterm-256color"),
 		tuitest.WithEnv(env...),
-		tuitest.WithLog(logFile),
+		tuitest.WithLog(mirror),
 	)
-	return term
 }
 
 // waitBoot blocks until the welcome screen is up.

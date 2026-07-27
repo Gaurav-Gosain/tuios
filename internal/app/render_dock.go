@@ -182,7 +182,7 @@ func (m *OS) renderDockString() (string, int) {
 	// closing cap: the block would lose the shape that makes it part of the bar.
 	notif, hasNotif := m.renderNotificationBlock(renderWidth, max(renderWidth-actualLeftWidth-centerWidth, 0))
 
-	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
+	inCopyMode := focusedWindow.CopyModeVisible()
 	switch {
 	case hasNotif:
 		// The message outranks the help line for its duration. Copy mode is a
