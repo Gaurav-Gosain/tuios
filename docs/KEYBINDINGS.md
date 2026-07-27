@@ -35,6 +35,7 @@ TUIOS has two main modes:
 | `w` or `x` | Close focused window |
 | `r` | Rename focused window |
 | `m` | Minimize focused window |
+| `c` | Copy the focused pane's selection to the clipboard |
 | `Shift+M` | Restore all minimized windows |
 | `Tab` | Focus next window |
 | `Shift+Tab` | Focus previous window |
@@ -324,6 +325,7 @@ Access debug and development tools:
 - **Left Click**: Focus window
 - **Left Drag on the title bar**: Move window (non-tiling) or swap windows (tiling). In window management mode the whole window is a drag handle
 - **Right Drag**: Resize window (non-tiling only)
+- **Shift+Right Click**: Open the context menu for whatever is under the pointer
 - **Title Bar Buttons**: Minimize, maximize, or close window
 - **Click Dock Item**: Restore minimized window
 - **Copy Mode Click**: Move cursor to position
@@ -332,6 +334,30 @@ Access debug and development tools:
 
 Panes running an application that asked for the mouse (vim, less, htop) receive
 every one of these events themselves; tuios does not interpret them.
+
+### Context Menus
+
+Shift+right-click opens a short menu of the actions that make sense for what is
+under the pointer. Each row shows the key currently bound to the same action, so
+the menu doubles as a reminder of the keyboard; rebinding an action changes what
+the menu shows.
+
+| Target | Offers |
+|--------|--------|
+| Pane content | Copy selection, paste, split right, split down, zoom, close |
+| Pane title bar | Rename, zoom, minimize, close |
+| Dock entry | Restore that window, restore all |
+| Dock background | New window, toggle tiling, restore all |
+| Empty desktop | New window, toggle tiling, command palette, settings, help |
+
+Arrow keys or `j`/`k` move the selection, `Enter` runs it, `Esc` closes. Clicking
+away from the menu closes it without running anything. An action that has
+nothing to act on right now (copy with no selection, split with tiling off) is
+shown greyed out and is skipped by the arrow keys, so the menu keeps the same
+shape whether or not the action is available.
+
+Plain right-click still resizes a window; the menu is on the shift chord so it
+takes nothing away.
 
 ## Customization
 

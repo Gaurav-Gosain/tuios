@@ -1,0 +1,187 @@
+package app
+
+import (
+	"image/color"
+	"strings"
+
+	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
+)
+
+const (
+	// contextMenuMinWidth is the narrowest inner width worth laying a menu out
+	// at. Below this a row has nowhere to put a marker, an icon and a label.
+	contextMenuMinWidth = 16
+	// contextMenuMaxWidth caps the menu on a wide screen. A context menu is a
+	// short list of short labels; letting it grow to the width of the widest
+	// hint would make a floating panel out of what should read as a small popup.
+	contextMenuMaxWidth = 36
+	// contextMenuGap is the minimum run of spaces between a label and its hint.
+	contextMenuGap = 2
+)
+
+// contextMenuWidth returns the inner content width to lay the menu out at: wide
+// enough for its widest row, capped, and then fitted to the screen so the panel
+// never draws past the right-hand edge.
+func (m *OS) contextMenuWidth(cm *ContextMenu) int {
+	widest := lipgloss.Width(cm.Title) + 2 // the title chip is padded
+	for _, it := range cm.Items {
+		if it.Sep {
+			continue
+		}
+		w := lipgloss.Width(contextMenuRowLeft(it)) + lipgloss.Width(it.Hint)
+		if it.Hint != "" {
+			w += contextMenuGap
+		}
+		if w > widest {
+			widest = w
+		}
+	}
+	widest = max(min(widest, contextMenuMaxWidth), contextMenuMinWidth)
+	return m.panelWidth(widest)
+}
+
+// contextMenuRowLeft is the left-hand part of a row: the selection marker, the
+// icon, and the label, unstyled. It exists so the width measurement and the
+// renderer cannot disagree about how much room the left side takes.
+func contextMenuRowLeft(it ContextMenuItem) string {
+	icon := ""
+	if it.Icon != "" && !config.UseASCIIOnly {
+		icon = it.Icon + " "
+	}
+	return "  " + icon + it.Label
+}
+
+// renderContextMenu renders the open context menu and returns the panel and its
+// geometry. It returns an empty string when no menu is open.
+func (m *OS) renderContextMenu() (string, overlay.Geometry) {
+	cm := m.ContextMenu
+	if cm == nil {
+		return "", overlay.Geometry{}
+	}
+
+	pal := theme.UI()
+	bg := pal.Surface
+	width := m.contextMenuWidth(cm)
+
+	lines := make([]string, 0, len(cm.Items))
+	for i, it := range cm.Items {
+		if it.Sep {
+			lines = append(lines, overlay.Rule(width, bg, pal))
+			continue
+		}
+		lines = append(lines, m.contextMenuRow(it, i == cm.Selected, width, bg, pal))
+	}
+
+	panel := overlay.Panel{
+		Title: cm.Title,
+		Width: width,
+		Body:  strings.Join(lines, "\n"),
+	}
+	return panel.Render(pal)
+}
+
+// contextMenuRow renders one runnable row, filled to the panel width so the
+// selection highlight spans it.
+//
+// A dimmed row is drawn in the muted color and never takes the highlight, even
+// if the selection somehow points at it: the colors are the only thing telling
+// the user the action is unavailable, so they do not get overridden.
+func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg color.Color, pal overlay.Palette) string {
+	rowBg := bg
+	if selected && !it.Dim {
+		rowBg = pal.RowSel
+	}
+
+	labelColor := pal.Fg
+	iconColor := pal.AccentBright
+	hintColor := pal.FgDim
+	switch {
+	case it.Dim:
+		labelColor, iconColor, hintColor = pal.FgMute, pal.FgMute, pal.FgMute
+	case it.Warn:
+		labelColor, iconColor = pal.Warn, pal.Warn
+	}
+
+	marker := "  "
+	if selected && !it.Dim {
+		marker = "› "
+		if config.UseASCIIOnly {
+			marker = "> "
+		}
+	}
+
+	left := overlay.Style(rowBg).Foreground(pal.Accent).Bold(true).Render(marker)
+	if it.Icon != "" && !config.UseASCIIOnly {
+		left += overlay.Style(rowBg).Foreground(iconColor).Render(it.Icon + " ")
+	}
+
+	// The label gives up room before the hint does: the hint is what the user
+	// came for when they are learning the keyboard, and it is already short.
+	hintW := lipgloss.Width(it.Hint)
+	if hintW > 0 {
+		hintW += contextMenuGap
+	}
+	labelRoom := max(width-lipgloss.Width(left)-hintW, 1)
+	left += overlay.Style(rowBg).
+		Foreground(labelColor).
+		Bold(selected && !it.Dim).
+		Render(overlay.Truncate(it.Label, labelRoom))
+
+	if it.Hint == "" {
+		return overlay.Fill(left, width, rowBg)
+	}
+	hint := overlay.Style(rowBg).Foreground(hintColor).Render(it.Hint)
+	gap := max(width-lipgloss.Width(left)-lipgloss.Width(hint), 1)
+	return overlay.Fill(left+overlay.Style(rowBg).Render(strings.Repeat(" ", gap))+hint, width, rowBg)
+}
+
+// contextMenuOrigin places the menu against its anchor.
+//
+// The menu opens down and to the right of the pointer, which is where a user
+// expects it. When that would run past an edge it flips to the other side of
+// the anchor rather than being nudged along it, so the pointer stays on a
+// corner of the menu instead of landing in the middle of a row the user did not
+// aim at. The clamp afterwards is a backstop for a menu taller or wider than
+// the screen itself, where neither side fits and drawing off the edge is the
+// only other option.
+func (m *OS) contextMenuOrigin(cm *ContextMenu, geo overlay.Geometry) (int, int) {
+	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
+
+	x := cm.AnchorX
+	if x+geo.Width > rw {
+		x = cm.AnchorX - geo.Width + 1
+	}
+	y := cm.AnchorY
+	if y+geo.Height > rh {
+		y = cm.AnchorY - geo.Height + 1
+	}
+
+	x = max(min(x, rw-geo.Width), 0)
+	y = max(min(y, rh-geo.Height), 0)
+	return x, y
+}
+
+// placeContextMenu draws the menu as a layer and records where it landed, so
+// the mouse handlers can map a screen cell to a row without redoing the layout.
+func (m *OS) placeContextMenu(layers []*lipgloss.Layer) []*lipgloss.Layer {
+	cm := m.ContextMenu
+	if cm == nil {
+		return layers
+	}
+	content, geo := m.renderContextMenu()
+	if content == "" {
+		return layers
+	}
+	x, y := m.contextMenuOrigin(cm, geo)
+
+	cm.BoundsX, cm.BoundsY = x, y
+	cm.BoundsW, cm.BoundsH = geo.Width, geo.Height
+	cm.FirstRowY = y + geo.BodyY
+	cm.ItemH = 1
+
+	return append(layers, lipgloss.NewLayer(content).
+		X(x).Y(y).Z(config.ZIndexContextMenu).ID("context-menu"))
+}

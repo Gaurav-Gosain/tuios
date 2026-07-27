@@ -306,7 +306,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowLayoutPicker ||
 		m.ShowQuitConfirm || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker ||
-		m.PrefixActive {
+		m.PrefixActive || m.ContextMenu != nil {
 		return nil, false
 	}
 	if (config.ShowClock && !config.HideClock) || (m.TapeRecorder != nil && m.TapeRecorder.IsRecording()) {

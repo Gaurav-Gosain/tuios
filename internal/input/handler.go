@@ -217,6 +217,14 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// An open context menu owns the keyboard until it is dismissed. It is
+	// checked before the mode split so it is navigable from terminal mode too:
+	// the menu can be opened there, and arrow keys meant for it must not be
+	// forwarded to the shell underneath.
+	if o.ContextMenuActive() {
+		return handleContextMenuKey(msg, o)
+	}
+
 	// Terminal-mode keystrokes are recorded at the point they are actually
 	// forwarded to the PTY (see recordTerminalKey in HandleTerminalModeKey), not
 	// here: recording before prefix/overlay routing captured prefix chords,

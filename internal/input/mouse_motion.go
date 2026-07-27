@@ -18,6 +18,15 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 
+	// An open context menu tracks the pointer, so the row that would run on a
+	// click is the row the cursor is on. It also stops here rather than falling
+	// through: the pane underneath is behind a modal menu and has no business
+	// seeing motion over it.
+	if o.ContextMenuActive() {
+		o.ContextMenuHover(mouse.X, mouse.Y)
+		return o, nil
+	}
+
 	// Drag an overlay panel that was grabbed by its title bar / right-click.
 	if o.OverlayMouseMotion(mouse.X, mouse.Y) {
 		return o, nil
