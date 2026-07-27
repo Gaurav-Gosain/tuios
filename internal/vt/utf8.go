@@ -159,7 +159,7 @@ func (e *Emulator) extendOpenGrapheme() {
 		x = max(x, 0)
 		if w := e.scr.Width(); x >= w {
 			x = w - 1
-			e.atPhantom = e.isModeSet(ansi.ModeAutoWrap)
+			e.atPhantom = e.autoWrapMode()
 		}
 		e.scr.setCursor(x, y, false)
 		e.openGrapheme.width = width
@@ -168,7 +168,7 @@ func (e *Emulator) extendOpenGrapheme() {
 
 // handleGrapheme handles UTF-8 graphemes.
 func (e *Emulator) handleGrapheme(content string, width int) {
-	awm := e.isModeSet(ansi.ModeAutoWrap)
+	awm := e.autoWrapMode()
 	cell := uv.Cell{
 		Content: content,
 		Width:   width,
