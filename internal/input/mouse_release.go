@@ -54,14 +54,17 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Handle copy mode mouse release
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
-		if draggedWindow.CopyMode != nil && draggedWindow.CopyMode.Active {
-			// Selection is complete, clean up drag state and stop auto-scroll
+		if draggedWindow.InCopyMode() {
+			// Selection is complete: copy it if the user wants that, then clean
+			// up drag state and stop auto-scroll.
+			cmd := finishMouseSelection(o, draggedWindow)
+			draggedWindow.InvalidateCache()
 			o.Dragging = false
 			o.DraggedWindowIndex = -1
 			o.InteractionMode = false
 			o.AutoScrollActive = false
 			o.AutoScrollDir = 0
-			return o, nil
+			return o, cmd
 		}
 	}
 

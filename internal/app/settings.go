@@ -469,6 +469,18 @@ func (m *OS) settingsCategories() []settingsCategory {
 					config.ScrollLines = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.ScrollLines = v })
 				}),
+			boolItem("Copy on select", "Put a mouse selection on the clipboard as soon as it is released",
+				func() bool { return config.CopyOnSelect },
+				func(m *OS, v bool) {
+					config.CopyOnSelect = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.CopyOnSelect = &v })
+				}),
+			stringItem("Word characters", "Punctuation double-click keeps inside a word (letters and digits always count)", "@-./_~?&=%+#",
+				func(m *OS) string { return config.WordCharacters },
+				func(m *OS, v string) {
+					config.WordCharacters = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.WordCharacters = &v })
+				}),
 			intItem("Zoom width", "Max columns in zoom mode (0 = fullscreen)", 0, 400, 10,
 				func() int { return config.ZoomMaxWidth },
 				func(m *OS, v int) {

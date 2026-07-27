@@ -534,6 +534,23 @@ var ScrollbackLines = 10000
 // Set via appearance.scroll_lines config
 var ScrollLines = 3
 
+// CopyOnSelect puts the text on the clipboard as soon as a mouse selection is
+// released, the way X11's primary selection and kitty's copy_on_select do.
+// Turn it off to keep the clipboard until an explicit yank.
+// Set via appearance.copy_on_select config.
+var CopyOnSelect = true
+
+// WordCharacters lists the punctuation that counts as part of a word when a
+// double-click selects one, on top of letters and digits, which always do.
+//
+// The default is kitty's select_by_word_characters, and it is chosen for what
+// terminal content actually looks like: it takes a path, a URL, a version
+// number, or a flag such as --no-vm as a single word instead of stopping at
+// every punctuation mark. A colon is deliberately absent, so host:port and
+// file:line select as their parts.
+// Set via appearance.word_characters config.
+var WordCharacters = `@-./_~?&=%+#`
+
 // NiriReverseScroll reverses mouse scroll direction in niri scrolling mode.
 // When true, scroll-up moves viewport right and scroll-down moves left.
 // Set via appearance.niri_reverse_scroll config
