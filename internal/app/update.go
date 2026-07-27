@@ -539,6 +539,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					return m, TickCmd()
 				}
 
+				// Hold the next command until a pane the previous one asked for
+				// actually exists. In a daemon session Split and NewWindow only
+				// send the request; the pane arrives later on a state push, and
+				// until it does GetFocusedWindowID still names the pane the tape
+				// was splitting away from, so the next Type would be typed into
+				// the wrong pane.
+				if !m.scriptPaneReady() {
+					return m, TickCmd()
+				}
+
 				// Check if we're blocking on a WaitUntilRegex condition from a
 				// previously dispatched command.
 				if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {

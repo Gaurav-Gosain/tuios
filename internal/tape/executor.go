@@ -108,9 +108,10 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 
 	switch cmd.Type {
 	case CommandTypeType:
-		if len(cmd.Args) > 0 {
-			return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte(cmd.Args[0]))
+		if len(cmd.Args) == 0 {
+			return errMissingArg("Type", "the text to type")
 		}
+		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), []byte(cmd.Args[0]))
 
 	case CommandTypeEnter:
 		// Windows requires \r\n, Unix accepts \n
@@ -179,22 +180,26 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		return ce.executor.PrevWindow()
 
 	case CommandTypeFocusWindow:
-		if len(cmd.Args) > 0 && cmd.Args[0] != "" {
-			// Try as name first (more user-friendly), fall back to ID
-			if err := ce.executor.FocusWindowByName(cmd.Args[0]); err != nil {
-				// If name lookup fails, try as ID
-				return ce.executor.FocusWindowByID(cmd.Args[0])
-			}
-			return nil
+		if len(cmd.Args) == 0 || cmd.Args[0] == "" {
+			return errMissingArg("Focus", "a window name or id")
 		}
+		// Try as name first (more user-friendly), fall back to ID
+		if err := ce.executor.FocusWindowByName(cmd.Args[0]); err != nil {
+			// If name lookup fails, try as ID
+			return ce.executor.FocusWindowByID(cmd.Args[0])
+		}
+		return nil
 
 	case CommandTypeRenameWindow:
-		if len(cmd.Args) >= 2 {
-			// Two args: old name, new name
-			return ce.executor.RenameWindowByName(cmd.Args[0], cmd.Args[1])
-		} else if len(cmd.Args) == 1 {
+		switch len(cmd.Args) {
+		case 0:
+			return errMissingArg("RenameWindow", "a new name")
+		case 1:
 			// One arg: rename focused window
 			return ce.executor.RenameWindowByID(ce.executor.GetFocusedWindowID(), cmd.Args[0])
+		default:
+			// Two args: old name, new name
+			return ce.executor.RenameWindowByName(cmd.Args[0], cmd.Args[1])
 		}
 
 	case CommandTypeMinimizeWindow:
@@ -230,16 +235,17 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 
 	// BSP Tiling
 	case CommandTypeSplit:
-		if len(cmd.Args) > 0 {
-			direction := strings.ToLower(cmd.Args[0])
-			switch direction {
-			case "horizontal", "h":
-				return ce.executor.SplitHorizontal()
-			case "vertical", "v":
-				return ce.executor.SplitVertical()
-			}
+		if len(cmd.Args) == 0 {
+			return errMissingArg("Split", "horizontal or vertical")
 		}
-		return nil
+		switch strings.ToLower(cmd.Args[0]) {
+		case "horizontal", "h":
+			return ce.executor.SplitHorizontal()
+		case "vertical", "v":
+			return ce.executor.SplitVertical()
+		default:
+			return fmt.Errorf("unknown Split direction %q (use horizontal or vertical)", cmd.Args[0])
+		}
 
 	case CommandTypeRotateSplit:
 		return ce.executor.RotateSplit()
@@ -248,49 +254,48 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		return ce.executor.EqualizeSplitsExec()
 
 	case CommandTypePreselect:
-		if len(cmd.Args) > 0 {
-			return ce.executor.Preselect(strings.ToLower(cmd.Args[0]))
+		if len(cmd.Args) == 0 {
+			return errMissingArg("Preselect", "left, right, up or down")
 		}
-		return nil
+		return ce.executor.Preselect(strings.ToLower(cmd.Args[0]))
 
 	// Workspace
 	case CommandTypeSwitchWS:
-		if len(cmd.Args) > 0 {
-			ws := 0
-			_, _ = fmt.Sscanf(cmd.Args[0], "%d", &ws)
-			return ce.executor.SwitchWorkspace(ws)
+		ws, err := workspaceArg("Switch", cmd)
+		if err != nil {
+			return err
 		}
+		return ce.executor.SwitchWorkspace(ws)
 
 	case CommandTypeMoveToWS:
-		if len(cmd.Args) > 0 {
-			ws := 0
-			_, _ = fmt.Sscanf(cmd.Args[0], "%d", &ws)
-			return ce.executor.MoveWindowToWorkspaceByID(ce.executor.GetFocusedWindowID(), ws)
+		ws, err := workspaceArg("MoveToWorkspace", cmd)
+		if err != nil {
+			return err
 		}
+		return ce.executor.MoveWindowToWorkspaceByID(ce.executor.GetFocusedWindowID(), ws)
 
 	case CommandTypeMoveAndFollowWS:
-		if len(cmd.Args) > 0 {
-			ws := 0
-			_, _ = fmt.Sscanf(cmd.Args[0], "%d", &ws)
-			return ce.executor.MoveAndFollowWorkspaceByID(ce.executor.GetFocusedWindowID(), ws)
+		ws, err := workspaceArg("MoveAndFollow", cmd)
+		if err != nil {
+			return err
 		}
+		return ce.executor.MoveAndFollowWorkspaceByID(ce.executor.GetFocusedWindowID(), ws)
 
 	case CommandTypeKeyCombo:
-		if len(cmd.Args) > 0 {
-			comboStr := cmd.Args[0]
-			// Handle Alt+N / alt+N for workspace switching (case-insensitive)
-			lowerCombo := strings.ToLower(comboStr)
-			if len(lowerCombo) >= 5 && (lowerCombo[:4] == "alt+" || lowerCombo[:4] == "opt+") {
-				wsStr := comboStr[4:]
-				ws := 0
-				if _, err := fmt.Sscanf(wsStr, "%d", &ws); err == nil && ws >= 1 && ws <= 9 {
-					return ce.executor.SwitchWorkspace(ws)
-				}
-			}
-			// For other key combos, convert to proper bytes and send to the focused window
-			keyBytes := convertKeyComboToBytes(comboStr)
-			return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), keyBytes)
+		if len(cmd.Args) == 0 {
+			return errMissingArg("key combo", "a combination such as ctrl+b")
 		}
+		comboStr := cmd.Args[0]
+		// Handle Alt+N / alt+N for workspace switching (case-insensitive)
+		lowerCombo := strings.ToLower(comboStr)
+		if len(lowerCombo) >= 5 && (lowerCombo[:4] == "alt+" || lowerCombo[:4] == "opt+") {
+			ws := 0
+			if _, err := fmt.Sscanf(comboStr[4:], "%d", &ws); err == nil && ws >= 1 && ws <= 9 {
+				return ce.executor.SwitchWorkspace(ws)
+			}
+		}
+		// For other key combos, convert to proper bytes and send to the focused window
+		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), convertKeyComboToBytes(comboStr))
 
 	case CommandTypeWait, CommandTypeWaitUntilRegex:
 		// Wait (a Sleep alias) and WaitUntilRegex are handled by the interactive
@@ -320,64 +325,84 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		return ce.executor.ShowCommandPaletteExec()
 
 	case CommandTypeSaveLayout:
-		if len(cmd.Args) > 0 {
-			return ce.executor.SaveLayoutExec(cmd.Args[0])
+		if len(cmd.Args) == 0 {
+			return errMissingArg("SaveLayout", "a layout name")
 		}
-		return nil
+		return ce.executor.SaveLayoutExec(cmd.Args[0])
 
 	case CommandTypeLoadLayout:
-		if len(cmd.Args) > 0 {
-			return ce.executor.LoadLayoutExec(cmd.Args[0])
+		if len(cmd.Args) == 0 {
+			return errMissingArg("LoadLayout", "a layout name")
 		}
-		return nil
+		return ce.executor.LoadLayoutExec(cmd.Args[0])
 
 	// Config commands
 	case CommandTypeSetConfig:
-		if len(cmd.Args) >= 2 {
-			return ce.executor.SetConfig(cmd.Args[0], cmd.Args[1])
+		if len(cmd.Args) < 2 {
+			return errMissingArg("Set", "a config path and a value")
 		}
-		return nil
+		return ce.executor.SetConfig(cmd.Args[0], cmd.Args[1])
 
 	case CommandTypeSetTheme:
-		if len(cmd.Args) > 0 {
-			return ce.executor.SetTheme(cmd.Args[0])
+		if len(cmd.Args) == 0 {
+			return errMissingArg("SetTheme", "a theme name")
 		}
-		return nil
+		return ce.executor.SetTheme(cmd.Args[0])
 
 	case CommandTypeSetDockbarPosition:
-		if len(cmd.Args) > 0 {
-			return ce.executor.SetDockbarPosition(cmd.Args[0])
+		if len(cmd.Args) == 0 {
+			return errMissingArg("SetDockbarPosition", "top or bottom")
 		}
-		return nil
+		return ce.executor.SetDockbarPosition(cmd.Args[0])
 
 	case CommandTypeSetBorderStyle:
-		if len(cmd.Args) > 0 {
-			return ce.executor.SetBorderStyle(cmd.Args[0])
+		if len(cmd.Args) == 0 {
+			return errMissingArg("SetBorderStyle", "a border style name")
 		}
-		return nil
+		return ce.executor.SetBorderStyle(cmd.Args[0])
 
 	case CommandTypeShowNotification:
-		if len(cmd.Args) > 0 {
-			notifType := "info"
-			if len(cmd.Args) > 1 {
-				notifType = cmd.Args[1]
-			}
-			return ce.executor.ShowNotificationCmd(cmd.Args[0], notifType)
+		if len(cmd.Args) == 0 {
+			return errMissingArg("Notify", "a message")
 		}
-		return nil
+		notifType := "info"
+		if len(cmd.Args) > 1 {
+			notifType = cmd.Args[1]
+		}
+		return ce.executor.ShowNotificationCmd(cmd.Args[0], notifType)
 
 	case CommandTypeFocusDirection:
-		if len(cmd.Args) > 0 {
-			return ce.executor.FocusDirection(strings.ToLower(cmd.Args[0]))
+		if len(cmd.Args) == 0 {
+			return errMissingArg("FocusDirection", "left, right, up or down")
 		}
-		return nil
+		return ce.executor.FocusDirection(strings.ToLower(cmd.Args[0]))
 
 	// Other command types are handled elsewhere or ignored
 	default:
 		return nil
 	}
+}
 
-	return nil
+// errMissingArg reports a tape command that was given no argument to act on.
+// These used to fall through to a bare `return nil`, so a mistyped or truncated
+// command in a tape did nothing at all and reported nothing at all, which is
+// indistinguishable from the command having worked.
+func errMissingArg(command, want string) error {
+	return fmt.Errorf("%s needs %s", command, want)
+}
+
+// workspaceArg parses a workspace number argument. The parse error used to be
+// discarded, so a non-numeric argument became workspace 0 and the command was
+// dropped on the floor by the range check downstream.
+func workspaceArg(command string, cmd *Command) (int, error) {
+	if len(cmd.Args) == 0 {
+		return 0, errMissingArg(command, "a workspace number")
+	}
+	ws, err := strconv.Atoi(strings.TrimSpace(cmd.Args[0]))
+	if err != nil {
+		return 0, fmt.Errorf("%s: %q is not a workspace number", command, cmd.Args[0])
+	}
+	return ws, nil
 }
 
 // repeatCount returns the trailing repeat count of a basic key command, taken

@@ -178,6 +178,8 @@ func (m *OS) startTapePlayback(commands []tape.Command, workspace int) {
 	m.ScriptMode = true
 	m.ScriptPaused = false
 	m.ScriptFinishedTime = time.Time{}
+	m.ScriptAwaitWindows = 0
+	m.ScriptAwaitDeadline = time.Time{}
 	m.ScriptExecutor = tape.NewCommandExecutor(m)
 }
 

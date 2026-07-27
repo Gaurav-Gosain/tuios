@@ -386,6 +386,8 @@ func (m *OS) TapeManagerPlaySelected() {
 	m.ScriptMode = true
 	m.ScriptPaused = false
 	m.ScriptFinishedTime = time.Time{}
+	m.ScriptAwaitWindows = 0
+	m.ScriptAwaitDeadline = time.Time{}
 
 	// Create executor
 	m.ScriptExecutor = tape.NewCommandExecutor(m)
