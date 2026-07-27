@@ -300,10 +300,15 @@ func LogViewerBg() color.Color {
 }
 
 // NotificationError returns the color for error notifications.
+//
+// The no-theme fallbacks for the four severities are ink colors, not the raw
+// ANSI primaries they used to be: these are drawn as a one-cell mark and a
+// sliver of cap on a dark bar, and #0000ee blue on #1a1a2e was a smudge. A
+// theme, when one is active, still wins outright.
 func NotificationError() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#cd0000")
+		return lipgloss.Color("#dc2626")
 	}
 	return t.Red
 }
@@ -312,7 +317,7 @@ func NotificationError() color.Color {
 func NotificationWarning() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#cdcd00")
+		return lipgloss.Color("#d97706")
 	}
 	return t.Yellow
 }
@@ -321,7 +326,7 @@ func NotificationWarning() color.Color {
 func NotificationSuccess() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#00cd00")
+		return lipgloss.Color("#16a34a")
 	}
 	return t.Green
 }
@@ -330,27 +335,57 @@ func NotificationSuccess() color.Color {
 func NotificationInfo() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#0000ee")
+		return lipgloss.Color("#2563eb")
 	}
 	return t.Blue
 }
 
-// NotificationBg returns the background color for notifications.
+// NotificationBg returns the background color for the message block: the dark
+// body the weighted severity cap opens.
+//
+// With theming off this is the dock's own help background rather than black, so
+// a message sitting in the dock's right-hand block is made of the same material
+// as the copy-mode help line that shares the row. Black would read as a hole
+// punched in the bar.
 func NotificationBg() color.Color {
 	t := Current()
 	if t == nil {
-		return lipgloss.Color("#000000")
+		return lipgloss.Color("#1a1a2e")
 	}
 	return t.Bg
 }
 
-// NotificationFg returns the foreground color for notifications.
+// NotificationFg returns the foreground color for notification message text.
 func NotificationFg() color.Color {
 	t := Current()
 	if t == nil {
 		return lipgloss.Color("#e5e5e5")
 	}
 	return t.Fg
+}
+
+// NotificationRule returns the color of the dock hairline that a message has
+// not lit: the unburnt remainder of the rule, and the whole rule when nothing
+// is on screen. It matches the separator the dock already draws.
+func NotificationRule() color.Color {
+	return lipgloss.Color("#303040")
+}
+
+// NotificationSeverity maps a notification type string to its color. The type
+// strings are the ones every ShowNotification call site already passes, so this
+// is the single place the renderer turns one into a color and the only place
+// that has to know "warning" and "warn" are the same thing.
+func NotificationSeverity(notifType string) color.Color {
+	switch notifType {
+	case "error":
+		return NotificationError()
+	case "warning", "warn":
+		return NotificationWarning()
+	case "success":
+		return NotificationSuccess()
+	default:
+		return NotificationInfo()
+	}
 }
 
 // DockBg returns the background color for the dock.

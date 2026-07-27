@@ -610,15 +610,21 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		hasAnimations := m.HasActiveAnimations()
 		needsDockTick := config.NeedsDockTick()
 
-		// A notification on screen is a reason to keep drawing. Notifications
-		// expire on a wall-clock timer, but nothing retires them except
-		// CleanupNotifications, which only runs while a frame is being composed.
-		// With no other reason to draw, the toast that happened to be up when the
-		// session went quiet is served from the render cache forever, sitting on
-		// top of whatever is underneath it. That is how a tape that splits a pane
-		// and echoes into it could finish correctly and still show an empty pane:
-		// the last frame drawn was the one with the tape's own toasts covering
-		// the new pane, and no later frame ever replaced it.
+		// Messages expire here, on the tick, and not inside render composition.
+		//
+		// They used to be retired by the renderer, which meant expiry could only
+		// happen on a frame that was already being drawn for some other reason.
+		// Once a session went quiet the last frame was served from the render
+		// cache with the expired toast still painted on it, for as long as
+		// nothing else happened; seventeen seconds was the recorded case, and a
+		// project tape finishing correctly while its own banner covered the pane
+		// it had just built was the symptom that found it.
+		//
+		// The tick that retires something draws one more frame so the message
+		// actually leaves the screen, which is what notifExpired carries. A live
+		// message is a reason to keep drawing regardless, because the hairline
+		// under it is burning down and that is a per-frame change.
+		notifExpired := m.CleanupNotifications()
 		hasNotifications := len(m.Notifications) > 0
 		needsScriptFrame := m.ScriptMode || leftScriptMode
 
@@ -645,7 +651,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		// Render on tick if something periodic needs visual updates OR background windows changed
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
-			needsDockTick || hasBackgroundChanges || hasNotifications || leftScriptMode
+			needsDockTick || hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode
 		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {

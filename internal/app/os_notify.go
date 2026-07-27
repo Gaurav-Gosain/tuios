@@ -6,7 +6,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
-	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // Log adds a new log message to the log buffer.
@@ -102,47 +101,141 @@ func (m *OS) LogError(format string, args ...any) {
 	m.Log("ERROR", format, args...)
 }
 
-// ShowNotification displays a temporary notification with animation.
+// maxLiveNotifications bounds the queue. Everything past the newest message is
+// only ever reported as a count, so there is no reason to keep an unbounded
+// backlog of them alive; the log viewer holds the full history.
+const maxLiveNotifications = 16
+
+// notificationLifetime resolves how long a message of this severity stays up,
+// and whether it stays until dismissed.
+//
+// The caller's duration is a floor, not the answer. Every call site passes some
+// duration it picked without much thought (config.NotificationDuration, that
+// same value doubled, a literal two seconds), and the old default of 1500ms
+// meant most of them were unreadable. Severity now decides the minimum, and a
+// caller that deliberately asked for longer than the severity's default still
+// gets the longer one.
+//
+// A non-positive duration means "do not show this", but only for info and
+// success. Copy mode pushes its state indicators that way ("VISUAL", a bare
+// "f", the pending count), and they have never been visible; promoting them to
+// six-second dock messages is a copy-mode decision and not this change's to
+// make.
+//
+// A warning or an error is shown whatever duration it was handed. Passing zero
+// for one of those was never a considered choice, it was a caller reaching for
+// "no timeout" and getting "no notification": os_selection asks for a sticky
+// error when a capture fails and got silence, which is the worst possible
+// outcome for the one message class the user cannot afford to miss.
+func notificationLifetime(notifType string, requested time.Duration) (time.Duration, bool) {
+	switch notifType {
+	case "error":
+		if config.NotificationErrorSticky {
+			return 0, true
+		}
+		return max(requested, config.NotificationErrorDuration), false
+	case "warning", "warn":
+		return max(requested, config.NotificationWarningDuration), false
+	default:
+		if requested <= 0 {
+			return 0, false
+		}
+		return max(requested, config.NotificationDuration), false
+	}
+}
+
+// ShowNotification puts a message in the dock's right-hand block.
+//
+// The signature is unchanged, so no call site had to be touched: severity comes
+// from notifType exactly as it always did, and duration is now a floor rather
+// than the whole answer (see notificationLifetime).
 func (m *OS) ShowNotification(message, notifType string, duration time.Duration) {
-	notif := Notification{
-		ID:        createID(),
-		Message:   message,
-		Type:      notifType,
-		StartTime: time.Now(),
-		Duration:  duration,
-	}
-
-	// Create fade-in animation (uses getter so it's instant when animations disabled)
-	notif.Animation = &ui.Animation{
-		StartTime: time.Now(),
-		Duration:  config.GetAnimationDuration(),
-		Progress:  0.0,
-		Complete:  false,
-	}
-
-	m.Notifications = append(m.Notifications, notif)
-
-	// Also log the notification
+	// Always log, even for a message that will not be shown: the log viewer is
+	// where a message that was dropped or has already expired is read.
 	switch notifType {
 	case "error":
 		m.LogError("%s", message)
-	case "warning":
+	case "warning", "warn":
 		m.LogWarn("%s", message)
 	default:
 		m.LogInfo("%s", message)
 	}
+
+	// An empty message has nothing to draw. It reaches here from copy mode,
+	// whose handlers use it to mean "clear what I put up", and drawing an empty
+	// block for it would leave a bare cap sitting on the dock.
+	if message == "" {
+		return
+	}
+
+	effective, sticky := notificationLifetime(notifType, duration)
+	if effective <= 0 && !sticky {
+		return
+	}
+
+	m.Notifications = append(m.Notifications, Notification{
+		ID:        createID(),
+		Message:   message,
+		Type:      notifType,
+		StartTime: time.Now(),
+		Duration:  effective,
+		Sticky:    sticky,
+	})
+
+	if len(m.Notifications) > maxLiveNotifications {
+		m.Notifications = m.Notifications[len(m.Notifications)-maxLiveNotifications:]
+	}
 }
 
-// CleanupNotifications removes expired notifications.
-func (m *OS) CleanupNotifications() {
-	now := time.Now()
-	var active []Notification
+// NotificationExpired reports whether a message has outlived its duration. A
+// sticky one never has.
+func (n Notification) NotificationExpired(now time.Time) bool {
+	if n.Sticky {
+		return false
+	}
+	return now.Sub(n.StartTime) >= n.Duration
+}
 
+// CleanupNotifications retires expired messages and reports whether it removed
+// any.
+//
+// The return value is what decouples dismissal from drawing. This used to be
+// called from inside render composition, so a message could only expire on a
+// frame that was being drawn for some other reason; when the session went quiet
+// the last frame was served from the render cache with the toast still painted
+// on it, once for seventeen seconds. It is now called from the tick, and the
+// tick that retires something uses this result to draw one more frame so the
+// message actually leaves the screen.
+func (m *OS) CleanupNotifications() bool {
+	if len(m.Notifications) == 0 {
+		return false
+	}
+
+	now := time.Now()
+	active := m.Notifications[:0]
 	for _, notif := range m.Notifications {
-		if now.Sub(notif.StartTime) < notif.Duration {
+		if !notif.NotificationExpired(now) {
 			active = append(active, notif)
 		}
 	}
 
+	removed := len(active) != len(m.Notifications)
 	m.Notifications = active
+	return removed
+}
+
+// DismissNotifications takes the live messages off the dock and reports whether
+// there was anything to take off.
+//
+// This is what esc does. Without it a sticky error had no exit at all, and
+// every other message could only be waited out. It clears the whole queue
+// rather than one message: the queue is drawn as a single block with a count,
+// so dismissing one at a time would make the user press esc once per message
+// they had never been given the chance to read individually anyway.
+func (m *OS) DismissNotifications() bool {
+	if len(m.Notifications) == 0 {
+		return false
+	}
+	m.Notifications = nil
+	return true
 }

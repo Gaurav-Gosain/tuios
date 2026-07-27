@@ -101,6 +101,10 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	// Validate the tape section (warn on an unknown autorun mode)
 	validateTapeConfig(cfg, result)
 
+	// Validate the notifications section (warn on a duration that would put a
+	// message back under the accessibility floor)
+	validateNotificationsConfig(cfg, result)
+
 	// Check for keybinding conflicts (same key bound to multiple actions)
 	conflicts := findConflicts(cfg, normalizer)
 	for key, actions := range conflicts {
@@ -178,6 +182,34 @@ func validateTapeConfig(cfg *UserConfig, result *ValidationResult) {
 		Key:     "autorun",
 		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to default", value, strings.Join(TapeAutorunModes, ", ")),
 	})
+}
+
+// minReadableNotification is the shortest message lifetime this config will
+// accept without complaint. Below about four seconds a status line is a time
+// limit on reading content with no way to extend it, which is the WCAG 2.2.1
+// failure the old 1500ms default was. The value is not enforced, because a user
+// who has read the warning and wants a faster bar is entitled to one; it is
+// reported so the choice is a choice.
+const minReadableNotification = 4
+
+// validateNotificationsConfig warns when a configured message lifetime is short
+// enough to be unreadable. Negative and zero values are not warned about: they
+// mean "unset" and leave the default in place.
+func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
+	check := func(key string, seconds int) {
+		if seconds <= 0 || seconds >= minReadableNotification {
+			return
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "notifications",
+			Key:   key,
+			Message: fmt.Sprintf("%ds is shorter than the %ds needed to read a message; it is applied as written but is an accessibility (WCAG 2.2.1) failure",
+				seconds, minReadableNotification),
+		})
+	}
+	check("duration", cfg.Notifications.Duration)
+	check("warning_duration", cfg.Notifications.WarningDuration)
+	check("error_duration", cfg.Notifications.ErrorDuration)
 }
 
 // validateAppearanceEnums warns when an enum appearance option holds a value
