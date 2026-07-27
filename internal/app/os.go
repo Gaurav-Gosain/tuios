@@ -97,6 +97,7 @@ type OS struct {
 	DraggedWindowIndex       int // Index of window being dragged
 	AutoScrollDir            int // -1 = up, 0 = none, 1 = down (for drag auto-scroll)
 	AutoScrollActive         bool
+	SelectionDragged         bool // the pointer moved during the current selection gesture
 	ScrollbarDragging        bool
 	ScrollbarDragWindowIndex int // -1 when not dragging
 	Windows                  []*terminal.Window
@@ -181,6 +182,12 @@ type OS struct {
 	QuitConfirmSelection  int                     // 0 = Yes (left), 1 = No (right)
 	// Pending resize tracking for debouncing PTY resize during mouse drag
 	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
+	// pendingCopy is text a settled multi-click selection will put on the
+	// clipboard, and selectionSeq names the gesture it belongs to. See
+	// clipboard_copy.go for why the write waits.
+	pendingCopy  string
+	selectionSeq uint64
+
 	// Performance optimization caches
 	cachedSeparator      string // Cached dock separator string
 	cachedSeparatorWidth int    // Width of cached separator

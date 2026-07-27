@@ -1,7 +1,6 @@
 package input
 
 import (
-	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -14,10 +13,25 @@ import (
 )
 
 // multiClickInterval is how long after a click a second one still counts as
-// part of the same gesture. 500ms is the top of the usual 250-500ms range and
-// what Windows and macOS default to; it is generous on purpose, because the
-// cost of guessing low is a double-click that silently behaves as two singles.
-const multiClickInterval = 500 * time.Millisecond
+// part of the same gesture, and therefore how long a multi-click selection's
+// clipboard write waits before it can be trusted.
+//
+// It was 500ms, matching the Windows and macOS defaults, back when it only
+// decided how a click sequence was read. Now that it also gates the clipboard
+// it is a delay the user waits through, and half a second is past the point
+// where a response stops feeling immediate: the usual figure for that is
+// around 300ms, beyond which an interface reads as reacting rather than
+// responding.
+//
+// 300ms is chosen against both ends. Below it: measured inter-click intervals
+// for an unhurried double-click sit around 100-250ms, and xterm has shipped a
+// 250ms multiClickTime for decades without being thought broken, so 300ms
+// still admits a comfortably slow double-click. Above it: GTK and Qt both
+// default to 400ms, which would work but spends another tenth of a second on
+// every copy. The cost of being wrong is asymmetric but small either way, a
+// deliberate triple-click read as a double plus a single, and the user can see
+// what got selected before it lands.
+const multiClickInterval = 300 * time.Millisecond
 
 // multiClickSlop is how far the pointer may drift between clicks of one
 // gesture, in cells. Requiring the exact same cell reads as an intermittent
@@ -148,6 +162,11 @@ func copyModeLineCells(window *terminal.Window, absY int) []uv.Cell {
 // needs a separate keystroke to be useful. It is a setting because a stray drag
 // overwriting the clipboard is a real annoyance for some people.
 //
+// A drag writes at once: the button coming up ended the gesture and nothing can
+// reinterpret it. A multi-click waits out the rest of its window first, because
+// a double-click is also the first two thirds of a triple-click; see
+// app/clipboard_copy.go.
+//
 // Two things it deliberately does not do. It does not copy a selection that
 // never moved, so an ordinary click cannot clobber the clipboard. And it leaves
 // the highlight up rather than clearing it, so the user can see what they got;
@@ -193,8 +212,22 @@ func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 	// Deliberately not stored on window.SelectedText: that field drives the
 	// older, coordinate-based selection highlight, whose bounds this path never
 	// sets, so filling it would paint a stray highlight at the origin.
-	o.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", config.NotificationDuration)
-	return tea.SetClipboard(text)
+	if o.SelectionDragged || window.ClickCount < 2 {
+		return o.CopyToClipboard(text)
+	}
+	return o.DeferCopyToClipboard(text, remainingClickWindow(window))
+}
+
+// remainingClickWindow is how much of the multi-click window is left, measured
+// from the last press rather than from this release.
+//
+// Anchoring it to the press is what makes the wait exactly as long as the
+// period in which another click could still join the gesture, whatever the
+// button was held for. Anchoring it to the release would add the hold time on
+// top, so a deliberate press-and-hold would sit there with a stale clipboard
+// for as long as the user leaned on the button.
+func remainingClickWindow(window *terminal.Window) time.Duration {
+	return multiClickInterval - time.Since(window.LastClickTime)
 }
 
 // endImplicitSelection drops a copy-mode session that only existed to carry a

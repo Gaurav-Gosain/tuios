@@ -428,6 +428,9 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, ListenForPTYData(m.PTYDataChan)
 
+	case PendingCopyMsg:
+		return m, m.HandlePendingCopy(msg.Seq)
+
 	case AutoScrollTickMsg:
 		if !m.AutoScrollActive || m.AutoScrollDir == 0 {
 			return m, nil

@@ -75,6 +75,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
 		if draggedWindow.CopyMode != nil && draggedWindow.CopyMode.Active {
+			// The pointer moved with the button down, so this gesture is a
+			// drag. Its release is unambiguous and copies at once, rather than
+			// waiting out a multi-click window that no longer applies. Cell
+			// motion is only reported when the cell actually changes, so this
+			// cannot be set by a stationary press.
+			o.SelectionDragged = true
 			scrollDir := HandleCopyModeMouseMotion(draggedWindow.CopyMode, draggedWindow, mouse.X, mouse.Y)
 			o.AutoScrollDir = scrollDir
 			if scrollDir != 0 && !o.AutoScrollActive {

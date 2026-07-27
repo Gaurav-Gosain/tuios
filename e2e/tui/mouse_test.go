@@ -55,22 +55,35 @@ func dragSelect(t *testing.T, term *tuitest.Terminal, fromCol, toCol, row int) {
 	send(tuitest.MouseEvent{Col: toCol, Row: row, Button: tuitest.MouseLeft, Action: tuitest.MouseRelease})
 }
 
-// clickAt sends n presses and a release at one cell, fast enough to count as a
-// single multi-click gesture.
+// clickAt performs n clicks at one cell, fast enough to count as a single
+// multi-click gesture.
+//
+// Each click is a press and its own release, which is what a real triple-click
+// is and what makes the double-then-triple sequence observable at all. An
+// earlier version sent n presses and one trailing release; that produced a
+// single release for the whole gesture, so the intermediate interpretations
+// never reached the clipboard and the double-copy bug was invisible to this
+// suite.
 func clickAt(t *testing.T, term *tuitest.Terminal, col, row, n int) {
 	t.Helper()
-	for range n {
+	send := func(action tuitest.MouseAction) {
+		t.Helper()
 		if err := term.SendMouse(tuitest.MouseEvent{
-			Col: col, Row: row, Button: tuitest.MouseLeft, Action: tuitest.MousePress,
+			Col: col, Row: row, Button: tuitest.MouseLeft, Action: action,
 		}); err != nil {
 			t.Fatalf("click: %v", err)
 		}
-		time.Sleep(40 * time.Millisecond)
 	}
-	if err := term.SendMouse(tuitest.MouseEvent{
-		Col: col, Row: row, Button: tuitest.MouseLeft, Action: tuitest.MouseRelease,
-	}); err != nil {
-		t.Fatalf("release: %v", err)
+	for i := range n {
+		if i > 0 {
+			// Well inside the multi-click window, so the clicks are one
+			// gesture, and long enough apart that tuios sees them as separate
+			// events rather than one burst.
+			time.Sleep(50 * time.Millisecond)
+		}
+		send(tuitest.MousePress)
+		time.Sleep(25 * time.Millisecond)
+		send(tuitest.MouseRelease)
 	}
 }
 
@@ -401,35 +414,78 @@ func TestDragSelectionCopiesOnRelease(t *testing.T) {
 	alive(t, term, "after a drag selection")
 }
 
-// TestDoubleClickCopiesAWordAndTripleClickTheLine covers the two gestures every
-// terminal has had since the nineties and tuios had neither of.
+// clipboardSettleTime is how long to keep watching after the expected write
+// lands, so a second, wrong write arriving late is caught rather than missed.
+// It is several times the multi-click window that gates a deferred copy.
+const clipboardSettleTime = 1500 * time.Millisecond
+
+// TestDoubleClickCopiesTheWord covers one of the two gestures every terminal
+// has had since the nineties and tuios had neither of.
 //
 // The word is a path so the assertion also pins the word-character set: a
-// double-click that stopped at every punctuation mark would select "usr" and
+// double-click that stopped at every punctuation mark would select "opt" and
 // the test would say so.
-func TestDoubleClickCopiesAWordAndTripleClickTheLine(t *testing.T) {
+func TestDoubleClickCopiesTheWord(t *testing.T) {
 	out := &lockedBuffer{}
 	term, _ := start(t, startOpts{out: out})
-	waitBoot(t, term)
-	newWindow(t, term)
-	enterTerminalMode(t, term)
-
-	const word = "/opt/dblclick/word.txt"
-	const line = "PREFIX " + word + " SUFFIX"
-	// The word is assembled from a variable so the shell's echo of the command
-	// does not itself contain it: otherwise findText lands on the command line
-	// rather than on the output, and the test asserts about the wrong row.
-	runInShell(t, term, `P=/opt; echo "PREFIX $P/dblclick/word.txt SUFFIX"`, word, shellTimeout)
-	row, col := findText(t, term, word)
+	row, col, word, _ := setupClickTarget(t, term)
 
 	clickAt(t, term, col+6, row, 2)
 	waitForClipboard(t, term, out, word)
 
-	// Let the multi-click window lapse, or the first press of the triple
-	// continues the double and the counts come out shifted.
-	time.Sleep(800 * time.Millisecond)
+	time.Sleep(clipboardSettleTime)
+	if got := clipboardWrites(out); len(got) != 1 {
+		t.Errorf("a double-click produced %d clipboard writes, want exactly 1: %q", len(got), got)
+	}
+	alive(t, term, "after a double-click")
+}
+
+// TestTripleClickCopiesTheLineExactlyOnce is the regression test for a
+// triple-click copying twice.
+//
+// A triple-click reaches tuios as a double-click followed by a third press, and
+// copying on each release wrote the word first and the line second. The
+// clipboard ended up correct, so an assertion on the final contents passed
+// while the bug was live; what was wrong is that the word was ever written at
+// all, because a paste landing in the gap got it. Hence "exactly one write",
+// which is only assertable because the harness keeps them all.
+func TestTripleClickCopiesTheLineExactlyOnce(t *testing.T) {
+	out := &lockedBuffer{}
+	term, _ := start(t, startOpts{out: out})
+	row, col, word, line := setupClickTarget(t, term)
 
 	clickAt(t, term, col+6, row, 3)
 	waitForClipboard(t, term, out, line)
-	alive(t, term, "after multi-click selection")
+
+	time.Sleep(clipboardSettleTime)
+	got := clipboardWrites(out)
+	if len(got) != 1 {
+		t.Fatalf("a triple-click produced %d clipboard writes, want exactly 1: %q", len(got), got)
+	}
+	for _, w := range got {
+		if strings.TrimSpace(w) == word {
+			t.Errorf("the word %q reached the clipboard on the way to the line; a paste "+
+				"landing between the two writes would have got it", word)
+		}
+	}
+	alive(t, term, "after a triple-click")
+}
+
+// setupClickTarget boots a pane with one line of output and returns where it is
+// on screen along with the word and the whole line, which are what the two
+// multi-click gestures should each produce.
+func setupClickTarget(t *testing.T, term *tuitest.Terminal) (row, col int, word, line string) {
+	t.Helper()
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+
+	word = "/opt/dblclick/word.txt"
+	line = "PREFIX " + word + " SUFFIX"
+	// The word is assembled from a variable so the shell's echo of the command
+	// does not itself contain it: otherwise findText lands on the command line
+	// rather than on the output, and the test asserts about the wrong row.
+	runInShell(t, term, `P=/opt; echo "PREFIX $P/dblclick/word.txt SUFFIX"`, word, shellTimeout)
+	row, col = findText(t, term, word)
+	return row, col, word, line
 }

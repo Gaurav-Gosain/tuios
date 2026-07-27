@@ -229,6 +229,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				// nothing is announced and the dock does not change.
 				clickedWindow.EnterCopyModeImplicit()
 			}
+			// Any press retires a clipboard write that has not landed yet:
+			// this press may be the third of a triple-click, in which case
+			// the word the double-click was about to copy is not what the
+			// user is selecting.
+			o.CancelPendingCopy()
+			o.SelectionDragged = false
 			beginMouseSelection(clickedWindow.CopyMode, clickedWindow, X, Y,
 				registerClick(clickedWindow, terminalX, terminalY))
 			o.Dragging = true

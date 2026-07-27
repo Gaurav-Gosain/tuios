@@ -299,6 +299,8 @@ Controls whether releasing a mouse selection puts the text on the clipboard stra
 
 A click that never moved is not a selection and never writes to the clipboard, whatever this is set to.
 
+A drag copies the moment the button comes up. A double-click or triple-click waits about a third of a second first, because a double-click is also the beginning of a triple-click and only the finished gesture should reach the clipboard. The highlight is immediate either way; only the clipboard write waits.
+
 **Valid values:** `true`, `false`
 
 **Default:** `true`
