@@ -201,6 +201,10 @@ func DefaultConfig() *UserConfig {
 				"minimize_window": {"m"},
 				"restore_all":     {"M"},
 				"toggle_zoom":     {"z"},
+				// Finishing a mouse selection has always told the user to press
+				// 'c' to copy it. Until this binding existed, nothing was
+				// listening.
+				"copy_selection":  {"c"},
 				"next_window":     {"tab"},
 				"prev_window":     {"shift+tab"},
 				"select_window_1": {"1"},

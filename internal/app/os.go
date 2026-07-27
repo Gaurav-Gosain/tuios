@@ -407,6 +407,12 @@ type OS struct {
 	// overlays, bottom to top. Clicking a panel moves it to the end (top).
 	OverlayZOrder []string
 
+	// ContextMenu is the open shift+right-click menu, or nil. It is deliberately
+	// not one of the draggable overlay kinds: a context menu is anchored to the
+	// cell it was opened on and is dismissed by the next click, so it has no use
+	// for a drag offset or a place in the click-to-raise order.
+	ContextMenu *ContextMenu
+
 	// UserConfig is the loaded user configuration. The settings page mutates
 	// it in place and persists it so live changes survive a restart. May be
 	// nil if the config failed to load at startup.

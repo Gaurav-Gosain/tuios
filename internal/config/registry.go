@@ -318,6 +318,7 @@ var ActionDescriptions = map[string]string{
 	"quit":                "Quit",
 
 	// Clipboard
+	"copy_selection":  "Copy selection to clipboard",
 	"paste_clipboard": "Paste from clipboard",
 
 	// System

@@ -931,6 +931,12 @@ const (
 	// panel brings it above the others.
 	ZIndexOverlayBase = 1100
 
+	// ZIndexContextMenu is the z-index for the shift+right-click context menu. It
+	// sits above every floating panel because it is opened on top of whatever is
+	// already on screen and is dismissed by the next click either way, so nothing
+	// is served by letting another panel cover it.
+	ZIndexContextMenu = 1500
+
 	// ZIndexNotifications is the z-index for notifications
 	ZIndexNotifications = 2000
 )

@@ -18,6 +18,24 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	X := mouse.X
 	Y := mouse.Y
 
+	// An open context menu is modal to the mouse: it either runs the row that
+	// was clicked or, for a click anywhere else, closes without running
+	// anything. Either way the click stops here, so it cannot also focus a pane
+	// or start a drag underneath the menu.
+	if o.ContextMenuActive() {
+		if action, consumed := o.ContextMenuClick(X, Y); consumed {
+			return runContextMenuAction(action, o)
+		}
+	}
+
+	// Shift+right-click opens the context menu for whatever is under the
+	// pointer. Plain right-click is already a window resize, and shift is free
+	// on click, so the menu is added without taking anything away.
+	if msg.Button == tea.MouseRight && msg.Mod&tea.ModShift != 0 {
+		o.OpenContextMenu(X, Y)
+		return o, nil
+	}
+
 	// Floating overlay panels (help, settings, palette, theme picker) consume
 	// clicks before they can reach the window layer: select a tab/row/control,
 	// grab the title bar or right-drag to move, or click away to dismiss.

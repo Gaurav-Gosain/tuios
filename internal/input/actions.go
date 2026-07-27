@@ -1,6 +1,7 @@
 package input
 
 import (
+	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -103,6 +104,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("quit", handleQuit)
 
 	// Clipboard actions
+	d.Register("copy_selection", handleCopySelection)
 	d.Register("paste_clipboard", handlePasteClipboard)
 
 	// System actions
@@ -583,6 +585,26 @@ func handleToggleCacheStats(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.LogInfo("Cache statistics viewer opened")
 	}
 	return o, nil
+}
+
+// handleCopySelection copies the focused pane's mouse selection to the system
+// clipboard.
+//
+// The selection text is already extracted and stored on the window when the
+// selection is made, so this only has to hand it to the terminal; it does not
+// re-derive the region and cannot disagree with what is highlighted on screen.
+//
+// This closes a gap the release handler had been advertising: finishing a
+// selection tells the user to "Press 'c' to copy", and until now nothing was
+// listening for it.
+func handleCopySelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	focusedWindow := o.GetFocusedWindow()
+	if focusedWindow == nil || focusedWindow.SelectedText == "" {
+		return o, nil
+	}
+	text := focusedWindow.SelectedText
+	o.ShowNotification(fmt.Sprintf("Copied %d characters", len(text)), "success", config.NotificationDuration)
+	return o, tea.SetClipboard(text)
 }
 
 func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
