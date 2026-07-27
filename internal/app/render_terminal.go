@@ -205,9 +205,15 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	scrollbackLen := window.ScrollbackLen()
 	inScrollbackMode := window.ScrollbackOffset > 0
 
-	inCopyMode := window.CopyMode != nil && window.CopyMode.Active
-	var copyModeCursorX, copyModeCursorY int
-	if inCopyMode {
+	inCopyMode := window.InCopyMode()
+	// The block cursor is copy mode showing itself. A pane that is merely
+	// scrolled back under the wheel draws none: a cursor parked mid-pane over
+	// output the user is only reading is the clearest tell that they have been
+	// put in a mode. Selection highlights and search matches still render,
+	// because a drag-selection runs in an implicit session.
+	showCopyCursor := window.CopyModeVisible()
+	copyModeCursorX, copyModeCursorY := -1, -1
+	if showCopyCursor {
 		copyModeCursorX = window.CopyMode.CursorX
 		copyModeCursorY = window.CopyMode.CursorY
 	}
@@ -426,7 +432,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		for x := 0; x < maxX; {
 			var cell *uv.Cell
 
-			if inCopyMode && x == copyModeCursorX && y == copyModeCursorY {
+			if showCopyCursor && x == copyModeCursorX && y == copyModeCursorY {
 				char := " "
 				var cursorCell *uv.Cell
 				charWidth := 1

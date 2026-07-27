@@ -94,7 +94,7 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 	var modeLabel string
 
 	if m.Mode == TerminalMode {
-		if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+		if focusedWindow.CopyModeVisible() {
 			// Copy mode
 			modeInfo.Color = theme.ColorToString(theme.DockColorCopy())
 			modeInfo.CursorPos = fmt.Sprintf("%d:%d", focusedWindow.CopyMode.CursorY, focusedWindow.CopyMode.CursorX)
@@ -223,9 +223,8 @@ func (m *OS) calculateDockRightWidth() int {
 	}
 
 	focusedWindow := m.GetFocusedWindow()
-	inCopyMode := focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active
 
-	if inCopyMode {
+	if focusedWindow.CopyModeVisible() {
 		// In copy mode the help line is the right-hand block. Measure the
 		// longest variant rather than guessing at it, so a terminal with room
 		// for it reserves exactly enough and one without falls to a shorter
