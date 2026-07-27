@@ -22,9 +22,16 @@ func windowNeedsScrollbar(window *terminal.Window) bool {
 	if window.Terminal == nil || window.IsAltScreen() {
 		return false
 	}
-	// Tiled-borderless windows have no border column to host the thumb without
-	// covering content, and multi-pane shared-border layouts would clutter.
-	if window.Tiled && (!window.Zoomed || config.SharedBorders) {
+	// A borderless pane has no scrollbar. This is deliberate and it has no
+	// exceptions: the thumb is drawn on the pane's right border cell, and a
+	// borderless pane has none, so the only column available is the rightmost
+	// column of the guest's own output. Shared borders is therefore a
+	// scrollbar-free mode by choice, zoomed panes included - a zoomed pane is
+	// still full-rect and still borderless, so there is no more room for a thumb
+	// there than in a two-pane split. Putting one on the separator overlay was
+	// considered and rejected: that line lies between two rectangles and belongs
+	// to neither, and shared borders is a mode chosen for a quieter screen.
+	if rendersBorderless(window) {
 		return false
 	}
 	scrollbackLen := window.ScrollbackLenSync()
@@ -42,13 +49,22 @@ func windowNeedsScrollbar(window *terminal.Window) bool {
 
 // renderScrollbarLayer creates a 1-column layer overlaying the right border
 // with a scrollbar indicator. Hidden during window manipulation, when the
-// scrollbar is disabled via config, or when the border style is "hidden"
-// (no border to overlay the thumb on).
+// scrollbar is disabled via config, when the border style is "hidden", or when
+// the pane is borderless (no border cell to overlay the thumb on).
 func renderScrollbarLayer(window *terminal.Window, borderColor color.Color, zIndex int) *lipgloss.Layer {
 	if window.IsBeingManipulated {
 		return nil
 	}
 	if config.HideScrollbar || config.BorderStyle == "hidden" {
+		return nil
+	}
+
+	// Repeated from windowNeedsScrollbar rather than left to the callers. Every
+	// call site gates on windowNeedsScrollbar today, but this function is what
+	// actually writes the cells, and the cells it would write on a borderless
+	// pane are the guest's output. A guard that only lives in the caller is one
+	// forgotten call away from painting over a user's terminal.
+	if rendersBorderless(window) {
 		return nil
 	}
 

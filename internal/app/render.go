@@ -251,6 +251,30 @@ func fitToContentBox(content string, w, h int) string {
 	return lipgloss.NewStyle().MaxWidth(w).MaxHeight(h).Render(content)
 }
 
+// rendersBorderless reports whether window is drawn with no border box of its
+// own, so its rectangle is guest output from edge to edge and nothing may be
+// painted on its perimeter.
+//
+// It is bare window.Tiled because that is what the geometry already says:
+// ContentWidth, ContentHeight and BorderOffset (internal/terminal) reserve
+// border cells on !Tiled alone, and Resize sizes the emulator by the same rule.
+// A renderer predicate that disagreed with those would either overflow the
+// pane's rectangle or paint over the guest's own columns.
+//
+// Tiling assigns Tiled from config.SharedBorders, so in practice a borderless
+// pane is a tiled pane under shared borders. There the lines between panes are
+// a compositor overlay (renderSeparatorOverlay) sitting in the gaps between
+// rectangles rather than chrome belonging to either neighbour, which is exactly
+// why no pane has a spare column.
+//
+// Zoom does not change this. A zoomed pane under shared borders is still
+// borderless and full-rect; the separator overlay stands down because a zoomed
+// pane has no neighbours to be separated from, so it has no border cell either.
+// windowNeedsScrollbar reads the same predicate, so the two never disagree.
+func rendersBorderless(window *terminal.Window) bool {
+	return window.Tiled
+}
+
 // renderWindowBox renders a window's content, wrapped in its border unless the
 // window is borderless. Shared by the compositor path and the fullscreen fast
 // path so both produce identical output.
@@ -259,7 +283,7 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		m.renderTerminal(window, isFocused, m.Mode == TerminalMode),
 		window.ContentWidth(), window.ContentHeight(),
 	)
-	if window.Tiled && (!window.Zoomed || config.SharedBorders) {
+	if rendersBorderless(window) {
 		return content
 	}
 	box := lipgloss.NewStyle().
