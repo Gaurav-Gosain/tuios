@@ -141,7 +141,7 @@ func TestSoakMixedActivity(t *testing.T) {
 			t.Fatalf("cycle %d: send burst: %v", cycle, err)
 		}
 		// A frozen UI never shows this, so the hang check is per cycle.
-		if err := term.WaitForText(marker, 30*time.Second); err != nil {
+		if err := term.WaitForText(marker, soakTimeout); err != nil {
 			t.Fatalf("UI stopped rendering during soak cycle %d/%d: %q never appeared: %v\n%s",
 				cycle, cycles, marker, err, term.Snapshot())
 		}
@@ -219,7 +219,7 @@ func TestSoakMixedActivity(t *testing.T) {
 
 	// Finally, the UI must still work after the whole soak.
 	enterTerminalMode(t, term)
-	runInShell(t, term, "echo SOAK-FINAL-$((11*11))", "SOAK-FINAL-121", 30*time.Second)
+	runInShell(t, term, "echo SOAK-FINAL-$((11*11))", "SOAK-FINAL-121", soakTimeout)
 	alive(t, term, "at the end of the soak")
 }
 

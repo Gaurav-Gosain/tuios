@@ -188,7 +188,7 @@ func TestProjectTapeCurrentScopeRendersLayout(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		txt := s.Text()
 		return contains(txt, "editormark-6") && contains(txt, "servermark-56")
-	}, 20*time.Second); err != nil {
+	}, shellTimeout); err != nil {
 		t.Fatalf("both panes' command output did not render: %v\n%s", err, term.Snapshot())
 	}
 	waitWindowCount(t, term, 2, "after building the current-scope layout")

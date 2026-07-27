@@ -46,7 +46,7 @@ func TestShowKeysOverlayFullscreenWindow(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(showkeysRow(s), "Q")
-	}, 4*time.Second); err != nil {
+	}, uiTimeout); err != nil {
 		t.Fatalf("keycast never showed 'Q' typed into a fullscreen window: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after fullscreen keycast check")
