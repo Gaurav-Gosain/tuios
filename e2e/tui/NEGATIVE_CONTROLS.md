@@ -3,9 +3,9 @@
 A regression test that has never been observed to fail on broken code is not
 evidence. Every test in this package that claims to cover a specific bug was run
 against a binary built with that bug's fix removed, and the result is recorded
-below. Two of the four bugs are **not** caught here; that is written down rather
-than papered over, because a suite whose real coverage is unknown is worse than
-no suite.
+below. Two of them are **not** caught here; that is written down rather than
+papered over, because a suite whose real coverage is unknown is worse than no
+suite.
 
 ## How to rebuild a control
 
@@ -42,8 +42,28 @@ a working negative control look like a broken one for half an hour.
 | Blank pane: `clipWindowContent` measured width from `lines[0]` | `b9f770b` | revert `internal/app/render_helpers.go` hunk | `TestAltScreenPaneSurvivesFocusSwitch`, `TestLeftmostTileWithBlankFirstLineIsNotDiscarded` | **caught** |
 | Blank pane: a transient blank frame became the render cache | `11a0023` | neuter the `isBlankRender` guard in `cacheRender` | none | **not caught** |
 | Torn cell buffer: emulator resized without the window I/O lock | `fd1463e` | drop both `LockIO`/`UnlockIO` pairs around `Terminal.Resize` in `internal/app/session.go` | none (2 full runs) | **not caught** |
+| Mouse: the wheel announced a mode, stranded the user in it, and a drag moved the window instead of selecting | whole change | build the merge-base (`2005b01`) and point `TUIOS_E2E_BIN` at it | `TestWheelScrollShowsScrollbackWithoutAnnouncingAMode`, `TestWheelDownToBottomReturnsToLiveOutput`, `TestTypingWhileScrolledSnapsBackToLiveOutput`, `TestDragSelectionCopiesOnRelease`, `TestDoubleClickCopiesAWordAndTripleClickTheLine` | **caught** |
+| Mouse: the wheel over a pane that asked for the mouse | n/a, never broken | same binary | none, and that is correct: `TestMouseTrackingAppKeepsItsOwnWheel` passes on both, because it guards behaviour that already worked | **guard, not a control** |
 
-### Why the last two are not caught, and what does cover them
+### The mouse row is a whole-change control, not a single-hunk one
+
+The mouse tests were written against a change whose whole point is a different
+interaction, not against a bug with one faulty line, so the control is the
+merge-base binary rather than a hunk revert:
+
+```sh
+git worktree add --detach /tmp/negctl origin/main
+(cd /tmp/negctl && go build -o /tmp/tuios-main ./cmd/tuios)
+cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios-main go test -count=1 \
+  -run 'TestWheel|TestTypingWhileScrolled|TestMouseTracking|TestDragSelection|TestDoubleClick' -timeout 900s .
+```
+
+Each failure names the old behaviour: "COPY MODE" on the dock during a scroll,
+`echo` never producing its marker because the keystrokes were eaten as vim
+motions, and an empty list of clipboard writes because a drag moved the window
+instead of selecting.
+
+### Why the two blank-pane and torn-buffer entries are not caught, and what does cover them
 
 **The blank-frame cache (`11a0023`)** needs a render to land in the gap between
 a full-screen application clearing the alternate screen and painting it. Once
