@@ -170,36 +170,43 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Shift+Up/Shift+Down: enter copy mode (if not active) and scroll scrollback.
-	// Handled BEFORE the copy mode check so subsequent presses also scroll
-	// instead of being consumed by the copy mode key handler.
+	// Shift+Up/Shift+Down: scroll the scrollback, the keyboard spelling of the
+	// wheel. Handled BEFORE the copy mode check so subsequent presses also
+	// scroll instead of being consumed by the copy mode key handler, and it
+	// enters copy mode the same silent way the wheel does.
 	if focusedWindow != nil {
 		shiftScroll := msg.String()
 		if shiftScroll == "shift+up" || shiftScroll == "shift+down" {
-			if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
-				focusedWindow.EnterCopyMode()
-			}
-			if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-				cm := focusedWindow.CopyMode
-				if shiftScroll == "shift+up" {
-					if cm.ScrollOffset < focusedWindow.ScrollbackLen() {
-						cm.ScrollOffset++
-						focusedWindow.ScrollbackOffset = cm.ScrollOffset
-					}
-				} else {
-					if cm.ScrollOffset > 0 {
-						cm.ScrollOffset--
-						focusedWindow.ScrollbackOffset = cm.ScrollOffset
-					}
+			// One line per press, the way it has always been, but through the
+			// same viewport helpers the wheel uses.
+			if shiftScroll == "shift+up" {
+				if !focusedWindow.InCopyMode() && focusedWindow.ScrollbackLen() > 0 {
+					focusedWindow.EnterCopyModeImplicit()
 				}
-				focusedWindow.InvalidateCache()
+				scrollCopyModeUpBy(focusedWindow, 1)
+			} else if focusedWindow.InCopyMode() {
+				scrollCopyModeDownBy(focusedWindow, 1)
+				leaveCopyModeAtBottom(focusedWindow)
 			}
 			return o, nil
 		}
 	}
 
+	// A scroll gesture leaves the pane in an implicit copy mode, because that is
+	// the only thing that renders scrollback. Typing means the reading is over:
+	// snap back to live output and let the key through to the shell, which is
+	// what a terminal with no modes does. Esc is the one key not forwarded; it
+	// is the reflex for "get me out of this", and a bare Esc into a shell in vi
+	// mode or a readline meta prefix is not a no-op.
+	if focusedWindow != nil && focusedWindow.InImplicitCopyMode() {
+		focusedWindow.ExitCopyMode()
+		if msg.String() == "esc" {
+			return o, nil
+		}
+	}
+
 	// Handle copy mode (vim-style scrollback/selection)
-	if focusedWindow != nil && focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+	if focusedWindow.InCopyMode() {
 		return HandleCopyModeKey(msg, o, focusedWindow)
 	}
 

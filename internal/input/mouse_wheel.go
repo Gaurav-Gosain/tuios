@@ -101,25 +101,18 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 							focusedWindow.InvalidateCache()
 						}
 					}
-				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen() {
-					// No mouse tracking and not alt screen  - enter copy mode and scroll.
-					// Copy mode supports selection, search, and vim navigation.
-					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
-						focusedWindow.EnterCopyMode()
-						o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration)
-					}
-					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-						for range config.ScrollLines {
-							MoveUp(focusedWindow.CopyMode, focusedWindow)
-						}
-						focusedWindow.InvalidateCache()
-					}
-				} else if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+				} else if focusedWindow.InCopyMode() {
 					// Already in copy mode  - scroll up
-					for range config.ScrollLines {
-						MoveUp(focusedWindow.CopyMode, focusedWindow)
-					}
-					focusedWindow.InvalidateCache()
+					scrollCopyModeUp(focusedWindow)
+				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen() && focusedWindow.ScrollbackLen() > 0 {
+					// No mouse tracking, not alt screen, and there is history to
+					// show: turn the wheel and the view scrolls. Copy mode is the
+					// only thing that can render scrollback, so it is switched on
+					// implicitly, without a notification and without the dock
+					// changing mode. Panes with no scrollback are left alone
+					// rather than dropped into an empty scrolled state.
+					focusedWindow.EnterCopyModeImplicit()
+					scrollCopyModeUp(focusedWindow)
 				}
 				return o, nil
 			case tea.MouseWheelDown:
@@ -132,17 +125,10 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						}
 						focusedWindow.InvalidateCache()
 					}
-				} else if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
+				} else if focusedWindow.InCopyMode() {
 					// In copy mode, scroll down
-					for range config.ScrollLines {
-						MoveDown(focusedWindow.CopyMode, focusedWindow)
-					}
-					// Exit copy mode if at bottom
-					if focusedWindow.CopyMode.ScrollOffset == 0 && focusedWindow.CopyMode.CursorY >= focusedWindow.Height-3 {
-						focusedWindow.ExitCopyMode()
-						o.ShowNotification("Copy Mode Exited", "info", config.NotificationDuration)
-					}
-					focusedWindow.InvalidateCache()
+					scrollCopyModeDown(focusedWindow)
+					leaveCopyModeAtBottom(focusedWindow)
 				}
 				return o, nil
 			}
@@ -155,28 +141,18 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if focusedWindow != nil && focusedWindow.Terminal != nil && !focusedWindow.IsAltScreen() {
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				scrollbackLen := focusedWindow.ScrollbackLen()
-				if scrollbackLen > 0 {
-					if focusedWindow.CopyMode == nil || !focusedWindow.CopyMode.Active {
-						focusedWindow.EnterCopyMode()
-						o.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration)
-					}
-					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-						for range config.ScrollLines {
-							MoveUp(focusedWindow.CopyMode, focusedWindow)
-						}
-						focusedWindow.InvalidateCache()
-					}
+				if focusedWindow.InCopyMode() {
+					scrollCopyModeUp(focusedWindow)
+				} else if focusedWindow.ScrollbackLen() > 0 {
+					// Same silent entry as terminal mode: the wheel scrolls, it
+					// does not put the pane into a mode and teach keys for it.
+					focusedWindow.EnterCopyModeImplicit()
+					scrollCopyModeUp(focusedWindow)
 				}
 			case tea.MouseWheelDown:
-				if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-					for range config.ScrollLines {
-						MoveDown(focusedWindow.CopyMode, focusedWindow)
-					}
-					if focusedWindow.CopyMode.ScrollOffset == 0 && focusedWindow.CopyMode.CursorY >= focusedWindow.ContentHeight()-1 {
-						focusedWindow.ExitCopyMode()
-					}
-					focusedWindow.InvalidateCache()
+				if focusedWindow.InCopyMode() {
+					scrollCopyModeDown(focusedWindow)
+					leaveCopyModeAtBottom(focusedWindow)
 				}
 			}
 		}

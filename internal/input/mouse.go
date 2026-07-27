@@ -129,9 +129,11 @@ func scrollToPosition(win *terminal.Window, mouseY int) {
 		return
 	}
 
-	// Enter copy mode if not already
-	if win.CopyMode == nil || !win.CopyMode.Active {
-		win.EnterCopyMode()
+	// Dragging the scrollbar is a scroll gesture like the wheel, so it enters
+	// copy mode the same silent way: the scrollback has to be rendered by
+	// something, but the user did not ask to be put in a mode.
+	if !win.InCopyMode() {
+		win.EnterCopyModeImplicit()
 	}
 	if win.CopyMode == nil {
 		return
@@ -149,4 +151,8 @@ func scrollToPosition(win *terminal.Window, mouseY int) {
 	win.CopyMode.ScrollOffset = scrollOffset
 	win.ScrollbackOffset = scrollOffset // Sync for rendering
 	win.InvalidateCache()
+
+	// Dragged all the way to the bottom is the same as scrolling there with the
+	// wheel: back to live output, with nothing left over.
+	leaveCopyModeAtBottom(win)
 }
