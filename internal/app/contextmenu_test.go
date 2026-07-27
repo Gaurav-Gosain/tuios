@@ -33,8 +33,8 @@ func ctxAnchors(m *OS, w, h int) []struct {
 		name string
 		x, y int
 	}{
-		{"pane-title", 2, 0},
-		{"pane-content", 2, 2},
+		{"pane-top-row", 2, 0},
+		{"pane-inside", 2, 2},
 		{"desktop", w - 2, h / 2},
 		{"dock", 1, h - 1},
 		{"top-left", 0, 0},
@@ -429,8 +429,10 @@ func TestContextMenuTargetResolution(t *testing.T) {
 		x, y int
 		want ContextMenuTarget
 	}{
-		{"inside the pane", win.X + 2, win.Y + 3, CtxTargetPaneContent},
-		{"the pane's title row", win.X + 2, win.Y, CtxTargetPaneTitle},
+		{"inside the pane", win.X + 2, win.Y + 3, CtxTargetPane},
+		// The pane's border rows are part of the pane, not targets of their own.
+		{"the pane's top row", win.X + 2, win.Y, CtxTargetPane},
+		{"the pane's bottom row", win.X + 2, win.Y + win.Height - 1, CtxTargetPane},
 		{"empty space right of the pane", win.X + win.Width + 5, 10, CtxTargetDesktop},
 		{"the dock band", 1, 39, CtxTargetDock},
 	}
@@ -439,6 +441,44 @@ func TestContextMenuTargetResolution(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s: (%d,%d) resolved to target %d, want %d", tc.name, tc.x, tc.y, got, tc.want)
 		}
+	}
+}
+
+// TestContextMenuDockBandExcludesTopWindowRow is the regression test for the
+// defect that made a pane unreachable at the top of the screen.
+//
+// A dock of DockHeight rows at the top of the screen occupies rows 0 to
+// DockHeight-1. The band test used to be inclusive, so it also claimed row
+// DockHeight, which is exactly where the topmost window starts when the dock
+// pushes the layout down. Every shift+right-click on that row opened the dock's
+// menu, and the window under the pointer was never consulted.
+func TestContextMenuDockBandExcludesTopWindowRow(t *testing.T) {
+	oldPos := config.DockbarPosition
+	defer func() { config.DockbarPosition = oldPos }()
+	config.DockbarPosition = "top"
+
+	m := newNarrowOS(t, 120, 40)
+	// With the dock at the top the layout starts below it, so the window's first
+	// row is row DockHeight.
+	top := config.DockHeight
+	m.Windows = []*terminal.Window{
+		{ID: "a", CustomName: "editor", X: 0, Y: top, Width: 60, Height: 20, Workspace: 1},
+	}
+	m.CurrentWorkspace, m.FocusedWindow = 1, 0
+
+	for y := range config.DockHeight {
+		if !m.inDockBand(y) {
+			t.Errorf("row %d is drawn on by a %d-row top dock but is not in the dock band",
+				y, config.DockHeight)
+		}
+	}
+	if m.inDockBand(top) {
+		t.Errorf("row %d is the first row of the topmost window, but the dock band claims it; "+
+			"the pane is unreachable there", top)
+	}
+	if got, idx := m.contextMenuTargetAt(2, top); got != CtxTargetPane || idx != 0 {
+		t.Errorf("the topmost window's first row resolved to target %d (window %d), want the pane (%d, window 0)",
+			got, idx, CtxTargetPane)
 	}
 }
 
@@ -497,6 +537,71 @@ func TestContextMenuDimsUnavailableActions(t *testing.T) {
 		}
 		if it.Action == "split_vertical" && it.Dim {
 			t.Error("split is dimmed even though tiling is on")
+		}
+	}
+}
+
+// TestContextMenuHitTestWhileScrolled checks a click resolves to the row the
+// user can see when the menu is taller than the screen and has scrolled.
+//
+// The rows drawn at the top of a scrolled menu are not items 0, 1, 2, so a hit
+// test that maps screen position straight to item index runs the wrong action.
+// That is a click running something the user did not point at, which is the
+// worst failure this menu has available to it.
+func TestContextMenuHitTestWhileScrolled(t *testing.T) {
+	// A screen short enough that the pane menu cannot show all its rows.
+	m := ctxMenuOS(t, 120, 12)
+	m.OpenContextMenu(2, 2) // the pane
+	cm := m.ContextMenu
+
+	if len(cm.Items) <= max(12-panelChromeRows, 1) {
+		t.Skip("the pane menu fits this screen; nothing scrolls")
+	}
+
+	// Put the selection on the last row so the view has to scroll to it. Arrow
+	// navigation wraps, so stepping a fixed number of times lands wherever the
+	// runnable rows happen to fall; this test is about the scrolled hit test,
+	// not about navigation.
+	cm.Selected = len(cm.Items) - 1
+	m.renderOverlays()
+
+	if cm.ScrollFrom == 0 {
+		t.Fatalf("the menu never scrolled: %d items on a %d-row screen", len(cm.Items), 12)
+	}
+
+	// Every visible row must hit test to the item actually drawn on it.
+	_, visible := m.contextMenuRows(cm)
+	for row := range visible {
+		want := cm.ScrollFrom + row
+		got := cm.HitTest(cm.BoundsX+3, cm.FirstRowY+row)
+		if cm.Items[want].Sep || cm.Items[want].Dim {
+			if got != -1 {
+				t.Errorf("visible row %d holds a separator or dimmed item, hit test returned %d", row, got)
+			}
+			continue
+		}
+		if got != want {
+			t.Errorf("visible row %d shows item %d (%q) but hit test returned %d",
+				row, want, cm.Items[want].Label, got)
+		}
+	}
+}
+
+// TestContextMenuScrollKeepsSelectionVisible checks arrow navigation through a
+// menu taller than the screen keeps the highlighted row on screen. A selection
+// that scrolls out of view leaves the user pressing enter on something they
+// cannot see.
+func TestContextMenuScrollKeepsSelectionVisible(t *testing.T) {
+	m := ctxMenuOS(t, 120, 12)
+	m.OpenContextMenu(2, 2)
+	cm := m.ContextMenu
+
+	for step := range len(cm.Items) * 2 {
+		m.ContextMenuMove(1)
+		start, visible := m.contextMenuRows(cm)
+		if cm.Selected < start || cm.Selected >= start+visible {
+			t.Fatalf("step %d: selection %d is outside the drawn window [%d,%d)",
+				step, cm.Selected, start, start+visible)
 		}
 	}
 }

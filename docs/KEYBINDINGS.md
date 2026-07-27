@@ -344,17 +344,21 @@ the menu shows.
 
 | Target | Offers |
 |--------|--------|
-| Pane content | Copy selection, paste, split right, split down, zoom, close |
-| Pane title bar | Rename, zoom, minimize, close |
+| A pane, anywhere on it | Copy selection, paste, split right, split down, rename, zoom, minimize, close |
 | Dock entry | Restore that window, restore all |
 | Dock background | New window, toggle tiling, restore all |
 | Empty desktop | New window, toggle tiling, command palette, settings, help |
 
-Arrow keys or `j`/`k` move the selection, `Enter` runs it, `Esc` closes. Clicking
-away from the menu closes it without running anything. An action that has
-nothing to act on right now (copy with no selection, split with tiling off) is
-shown greyed out and is skipped by the arrow keys, so the menu keeps the same
-shape whether or not the action is available.
+A pane is one target. Its border rows are part of it, so the whole surface of a
+pane opens the same menu and there is nothing to aim at.
+
+Arrow keys or `j`/`k` move the selection, `Enter` runs it, `Esc` closes. Moving
+the pointer over the menu highlights the row under it. Clicking away from the
+menu closes it without running anything. An action that has nothing to act on
+right now (copy with no selection, split with tiling off) is shown greyed out
+and is skipped by the arrow keys, so the menu keeps the same shape whether or
+not the action is available. On a screen too short to show every row, the menu
+scrolls with the selection rather than drawing past the bottom edge.
 
 Plain right-click still resizes a window; the menu is on the shift chord so it
 takes nothing away.

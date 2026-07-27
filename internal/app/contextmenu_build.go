@@ -36,7 +36,7 @@ const (
 func (m *OS) OpenContextMenu(x, y int) {
 	target, windowIndex := m.contextMenuTargetAt(x, y)
 
-	if target == CtxTargetPaneContent || target == CtxTargetPaneTitle {
+	if target == CtxTargetPane {
 		m.FocusWindow(windowIndex)
 	}
 
@@ -50,10 +50,8 @@ func (m *OS) OpenContextMenu(x, y int) {
 	}
 
 	switch target {
-	case CtxTargetPaneContent:
-		cm.Title, cm.Items = m.paneContentMenu(windowIndex)
-	case CtxTargetPaneTitle:
-		cm.Title, cm.Items = m.paneTitleMenu(windowIndex)
+	case CtxTargetPane:
+		cm.Title, cm.Items = m.paneMenu(windowIndex)
 	case CtxTargetDockItem:
 		cm.Title, cm.Items = m.dockItemMenu(windowIndex)
 	case CtxTargetDock:
@@ -84,31 +82,28 @@ func (m *OS) contextMenuTargetAt(x, y int) (ContextMenuTarget, int) {
 		return CtxTargetDock, -1
 	}
 
-	idx := m.WindowAt(x, y)
-	if idx < 0 {
-		return CtxTargetDesktop, -1
+	// Anywhere on a pane, border rows included, opens that pane's menu. The
+	// title row is not a target of its own; see the note on the target
+	// constants.
+	if idx := m.WindowAt(x, y); idx >= 0 {
+		return CtxTargetPane, idx
 	}
-
-	// The window's first row is its title bar: it carries the name and the
-	// close/minimize buttons, and it is the row the existing click handling
-	// treats as chrome. A pane drawn without a border has no such row, and all
-	// of it is content.
-	win := m.Windows[idx]
-	if win.BorderOffset() > 0 && y == win.Y {
-		return CtxTargetPaneTitle, idx
-	}
-	return CtxTargetPaneContent, idx
+	return CtxTargetDesktop, -1
 }
 
-// inDockBand reports whether a screen row falls in the reserved dock band. It
-// mirrors the test the click handler uses so the two cannot disagree about
-// where the dock starts.
+// inDockBand reports whether a screen row falls in the reserved dock band.
+//
+// A dock of DockHeight rows at the top of the screen occupies rows 0 to
+// DockHeight-1, so the test is exclusive. Writing it inclusive, as the click
+// handler in internal/input still does, claims one row more than the dock draws
+// on: with the dock at the top that extra row is the first row of the topmost
+// window, which is how the pane menu came to be unreachable there.
 func (m *OS) inDockBand(y int) bool {
 	switch config.DockbarPosition {
 	case "hidden":
 		return false
 	case "top":
-		return y <= config.DockHeight
+		return y < config.DockHeight
 	default:
 		return y >= m.Height-config.DockHeight
 	}
@@ -203,9 +198,14 @@ func (m *OS) item(icon, label, action string, dim bool) ContextMenuItem {
 // separator is a divider row.
 func separator() ContextMenuItem { return ContextMenuItem{Sep: true} }
 
-// paneContentMenu is the menu for the inside of a pane: what you can do with
-// what is in it, and how to divide it.
-func (m *OS) paneContentMenu(windowIndex int) (string, []ContextMenuItem) {
+// paneMenu is the menu for a pane, opened from anywhere on it, border rows
+// included: what you can do with what is inside it, how to divide it, and what
+// to do with the pane itself.
+//
+// This is deliberately one menu rather than a content menu and a title-bar
+// menu. See the note on the target constants for why the title row stopped
+// being a target of its own.
+func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 	win := m.GetFocusedWindow()
 
 	hasSelection := win != nil && win.SelectedText != ""
@@ -214,6 +214,9 @@ func (m *OS) paneContentMenu(windowIndex int) (string, []ContextMenuItem) {
 	// look live and do nothing.
 	canPaste := m.Mode == TerminalMode
 	canSplit := m.AutoTiling
+	// Renaming is refused outright when titles are hidden, since there would be
+	// nowhere for the new name to show up.
+	canRename := config.WindowTitlePosition != "hidden"
 
 	closeItem := m.item(glyphClose, "Close pane", "close_window", false)
 	closeItem.Warn = true
@@ -225,24 +228,9 @@ func (m *OS) paneContentMenu(windowIndex int) (string, []ContextMenuItem) {
 		m.item(glyphSplitV, "Split right", "split_vertical", !canSplit),
 		m.item(glyphSplitH, "Split down", "split_horizontal", !canSplit),
 		separator(),
-		m.item(glyphZoom, "Zoom", "toggle_zoom", false),
-		closeItem,
-	}
-}
-
-// paneTitleMenu is the menu for a pane's title bar: the pane as an object,
-// rather than what is running inside it.
-func (m *OS) paneTitleMenu(windowIndex int) (string, []ContextMenuItem) {
-	title := contextMenuWindowName(m, windowIndex, "Pane")
-
-	closeItem := m.item(glyphClose, "Close pane", "close_window", false)
-	closeItem.Warn = true
-
-	return title, []ContextMenuItem{
-		m.item(glyphRename, "Rename", "rename_window", config.WindowTitlePosition == "hidden"),
+		m.item(glyphRename, "Rename", "rename_window", !canRename),
 		m.item(glyphZoom, "Zoom", "toggle_zoom", false),
 		m.item(glyphMinimize, "Minimize", "minimize_window", false),
-		separator(),
 		closeItem,
 	}
 }

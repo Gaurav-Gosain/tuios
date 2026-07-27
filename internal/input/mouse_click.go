@@ -74,8 +74,14 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Check if click is in the dock area (always reserved)
-	if ((config.DockbarPosition == "bottom") && (Y >= o.Height-config.DockHeight)) || ((config.DockbarPosition == "top") && (Y <= config.DockHeight)) {
+	// Check if click is in the dock area (always reserved).
+	//
+	// The top test is exclusive for the same reason the bottom one is: a dock of
+	// DockHeight rows at the top occupies rows 0 to DockHeight-1, so an inclusive
+	// test claims one row too many, and that row is the first row of the topmost
+	// window. With a top dock and any minimized window, an ordinary click on that
+	// row was being swallowed as a dock click.
+	if ((config.DockbarPosition == "bottom") && (Y >= o.Height-config.DockHeight)) || ((config.DockbarPosition == "top") && (Y < config.DockHeight)) {
 		// Handle dock click only if there are minimized windows
 		if o.HasMinimizedWindows() {
 			dockIndex := findDockItemClicked(X, Y, o)

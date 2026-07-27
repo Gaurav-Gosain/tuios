@@ -33,8 +33,8 @@ var ctxMenuAnchors = []struct {
 	name string
 	x, y int
 }{
-	{"pane content", 5, 5},
-	{"pane title", 5, 0},
+	{"pane inside", 5, 5},
+	{"pane top row", 5, 0},
 	{"desktop", 100, 20},
 	{"dock", 1, 39},
 }

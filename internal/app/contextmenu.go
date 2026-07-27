@@ -11,13 +11,23 @@ import (
 // the menu opens and the item list is built from it.
 type ContextMenuTarget int
 
+// A pane is one target, not two.
+//
+// There was briefly a separate target for a pane's title row. It was a bad
+// target twice over. It was one row tall, and it was the top border, which is
+// not the row a user reads as the title bar: appearance.window_title_position
+// defaults to "bottom", so the window's name is drawn on the opposite edge from
+// the row that opened the menu. Aiming at the name got the content menu and
+// aiming at the name's opposite edge got the title menu.
+//
+// Every action it offered now lives on the pane menu, which the whole surface
+// of a pane opens, title row included. A second target that is hard to hit and
+// offers nothing unique is worse than not having one.
 const (
 	// CtxTargetDesktop is empty space with no pane under it.
 	CtxTargetDesktop ContextMenuTarget = iota
-	// CtxTargetPaneContent is the inside of a pane, below its title row.
-	CtxTargetPaneContent
-	// CtxTargetPaneTitle is a pane's title row.
-	CtxTargetPaneTitle
+	// CtxTargetPane is anywhere on a pane, its border rows included.
+	CtxTargetPane
 	// CtxTargetDock is the dock bar away from any of its entries.
 	CtxTargetDock
 	// CtxTargetDockItem is one minimized-window entry in the dock.
@@ -76,6 +86,13 @@ type ContextMenu struct {
 	BoundsH   int
 	FirstRowY int
 	ItemH     int
+
+	// Scroll is the first item shown when the menu has more rows than the screen
+	// has room for. ScrollFrom is what the last frame actually drew from, and is
+	// what hit-testing maps against: a click has to resolve against the rows the
+	// user can see, not against a scroll offset that may have moved since.
+	Scroll     int
+	ScrollFrom int
 }
 
 // selectable reports whether row i can be highlighted and run.
@@ -115,7 +132,9 @@ func (cm *ContextMenu) HitTest(x, y int) int {
 	if cm.ItemH <= 0 {
 		return -1
 	}
-	idx := (y - cm.FirstRowY) / cm.ItemH
+	// The first drawn row is item ScrollFrom, not item zero, whenever the menu
+	// is taller than the screen and has scrolled.
+	idx := cm.ScrollFrom + (y-cm.FirstRowY)/cm.ItemH
 	if y < cm.FirstRowY || idx < 0 || idx >= len(cm.Items) {
 		return -1
 	}
