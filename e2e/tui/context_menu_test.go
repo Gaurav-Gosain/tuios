@@ -9,31 +9,24 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// shiftRightClick sends the SGR mouse report for a shift+right-click at a cell.
-// That chord is what opens a context menu; plain right-click is a window resize
-// and must keep being one.
+// shiftRightClick performs a shift+right-click at a cell: press and release,
+// both carrying the shift bit, as a terminal reports them. That chord is what
+// opens a context menu; plain right-click is a window resize and must keep
+// being one.
+//
+// The release is not optional. A right press starts a resize and sets
+// OS.Resizing and OS.InteractionMode; while either is set tuios stops polling
+// pane content on purpose. Both helpers here used to send a press and no
+// release, which left the program in that state for the rest of the test.
 func shiftRightClick(t *testing.T, term *tuitest.Terminal, x, y int) {
 	t.Helper()
-	if err := term.SendMouse(tuitest.MouseEvent{
-		Col: x, Row: y,
-		Button: tuitest.MouseRight,
-		Action: tuitest.MousePress,
-		Mods:   tuitest.ModShift,
-	}); err != nil {
-		t.Fatalf("shift+right-click at (%d,%d): %v", x, y, err)
-	}
+	mouseClick(t, term, x, y, tuitest.MouseRight, tuitest.ModShift)
 }
 
-// leftClick sends a plain left button press at a cell.
+// leftClick performs a plain left click at a cell: press then release.
 func leftClick(t *testing.T, term *tuitest.Terminal, x, y int) {
 	t.Helper()
-	if err := term.SendMouse(tuitest.MouseEvent{
-		Col: x, Row: y,
-		Button: tuitest.MouseLeft,
-		Action: tuitest.MousePress,
-	}); err != nil {
-		t.Fatalf("left click at (%d,%d): %v", x, y, err)
-	}
+	mouseClick(t, term, x, y, tuitest.MouseLeft, 0)
 }
 
 // waitMenu fails unless every marker is on screen together within uiTimeout.
@@ -267,13 +260,7 @@ func TestPlainRightClickStillResizes(t *testing.T) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "after first window")
 
-	if err := term.SendMouse(tuitest.MouseEvent{
-		Col: 20, Row: 10,
-		Button: tuitest.MouseRight,
-		Action: tuitest.MousePress,
-	}); err != nil {
-		t.Fatalf("plain right-click: %v", err)
-	}
+	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
 	// Give the frame a beat to show a menu if it were going to.
 	time.Sleep(500 * time.Millisecond)
 
@@ -282,13 +269,7 @@ func TestPlainRightClickStillResizes(t *testing.T) {
 		t.Fatalf("a plain right-click opened a context menu; it must still start a resize\n%s",
 			term.Snapshot())
 	}
-	if err := term.SendMouse(tuitest.MouseEvent{
-		Col: 20, Row: 10,
-		Button: tuitest.MouseRight,
-		Action: tuitest.MouseRelease,
-	}); err != nil {
-		t.Fatalf("right-click release: %v", err)
-	}
+	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
 	alive(t, term, "after a plain right-click")
 }
 
@@ -365,18 +346,12 @@ func TestContextMenuDrawsOverZoomedPane(t *testing.T) {
 }
 
 // renameFocused gives the focused window a name through the rename keybinding.
+// It used to sleep for the editor to open and then treat the editor's own echo
+// of the typed name as proof the rename committed; renameWindow waits on
+// something each step actually causes instead.
 func renameFocused(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
-	if err := term.SendKeys("r"); err != nil {
-		t.Fatalf("start rename: %v", err)
-	}
-	time.Sleep(300 * time.Millisecond)
-	if err := term.SendKeys(name, tuitest.Enter); err != nil {
-		t.Fatalf("type name: %v", err)
-	}
-	if err := term.WaitForText(name, uiTimeout); err != nil {
-		t.Fatalf("window never took the name %q: %v\n%s", name, err, term.Snapshot())
-	}
+	renameWindow(t, term, name)
 }
 
 // moveMouse sends a bare pointer motion: the mouse moving with no button held,

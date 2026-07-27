@@ -42,9 +42,10 @@ a working negative control look like a broken one for half an hour.
 | Blank pane: `clipWindowContent` measured width from `lines[0]` | `b9f770b` | revert `internal/app/render_helpers.go` hunk | `TestAltScreenPaneSurvivesFocusSwitch`, `TestLeftmostTileWithBlankFirstLineIsNotDiscarded` | **caught** |
 | Blank pane: a transient blank frame became the render cache | `11a0023` | neuter the `isBlankRender` guard in `cacheRender` | none | **not caught** |
 | Torn cell buffer: emulator resized without the window I/O lock | `fd1463e` | drop both `LockIO`/`UnlockIO` pairs around `Terminal.Resize` in `internal/app/session.go` | none (2 full runs) | **not caught** |
-| Mouse: the wheel announced a mode, stranded the user in it, and a drag moved the window instead of selecting | whole change | build the merge-base (`2005b01`) and point `TUIOS_E2E_BIN` at it | `TestWheelScrollShowsScrollbackWithoutAnnouncingAMode`, `TestWheelDownToBottomReturnsToLiveOutput`, `TestTypingWhileScrolledSnapsBackToLiveOutput`, `TestDragSelectionCopiesOnRelease`, `TestDoubleClickCopiesTheWord` | **caught** |
+| Mouse: the wheel announced a mode, stranded the user in it, and a drag moved the window instead of selecting | whole change | build the merge-base (`2005b01`) and point `TUIOS_E2E_BIN` at it | `TestWheelScrollShowsScrollbackWithoutAnnouncingAMode`, `TestWheelDownToBottomReturnsToLiveOutput`, `TestTypingWhileScrolledSnapsBackToLiveOutput`, `TestDragSelectionCopiesOnRelease`, `TestDoubleClickCopiesAWordAndTripleClickTheLine` | **caught** |
 | Mouse: the wheel over a pane that asked for the mouse | n/a, never broken | same binary | none, and that is correct: `TestMouseTrackingAppKeepsItsOwnWheel` passes on both, because it guards behaviour that already worked | **guard, not a control** |
-| Mouse: a triple-click wrote the word to the clipboard before the line | whole change | build `f5a6f17` (the merge of #106 and #107) and point `TUIOS_E2E_BIN` at it | `TestTripleClickCopiesTheLineExactlyOnce`, reporting `2 clipboard writes: ["/opt/dblclick/word.txt" "PREFIX /opt/dblclick/word.txt SUFFIX"]` | **caught** |
+| Clipboard: every mouse release copies, so a bare single click clobbers the clipboard | n/a, injected | `deliberate := moved \|\| window.ClickCount >= 2` → `deliberate := true` in `internal/input/mouse_select.go` | `TestDoubleClickCopiesAWordAndTripleClickTheLine` ("the gesture wrote the clipboard more times than it should: got [\"b\"], want []") | **caught, and invisible before this change** |
+| Drag state never cleared on release, so one click freezes every pane forever | n/a, injected | drop `o.Dragging = false` from the copy-mode branch of `handleMouseRelease` | `TestClickInPaneDoesNotFreezeOutput` | **caught, and invisible before this change** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 
@@ -63,13 +64,6 @@ Each failure names the old behaviour: "COPY MODE" on the dock during a scroll,
 `echo` never producing its marker because the keystrokes were eaten as vim
 motions, and an empty list of clipboard writes because a drag moved the window
 instead of selecting.
-
-The triple-click control is run the same way against `f5a6f17`. It is worth
-noting why it needed the suite's own `clickAt` helper fixed first: the helper
-used to send three presses and one trailing release, so the whole gesture
-produced a single release and the intermediate word copy never happened. The
-bug was real and the harness could not see it. `clickAt` now sends a release
-per press, which is what a mouse does.
 
 ### Why the two blank-pane and torn-buffer entries are not caught, and what does cover them
 
@@ -95,6 +89,86 @@ Both of those are genuine gaps in *this* suite, not in the project's coverage.
 The general lesson is that end-to-end screen assertions are the right tool for
 bugs whose symptom is a wrong screen that persists, and the wrong tool for bugs
 whose symptom is a narrow timing window or a memory race.
+
+## The two mouse controls that were invisible until the helpers were fixed
+
+Both rows marked "invisible before this change" were measured, not reasoned
+about. The procedure for each: build a binary with the fault, run the **old**
+helpers against it (the `origin/main` copy of `e2e/tui`), then the **new** ones.
+
+```sh
+git worktree add --detach /tmp/negctl origin/main
+# inject one fault in /tmp/negctl, then
+(cd /tmp/negctl && go build -o /tmp/tuios-fault ./cmd/tuios)
+
+# old helpers
+cd /tmp/negctl/e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios-fault go test -count=1 -run '<tests>' .
+# new helpers
+cd e2e/tui           && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios-fault go test -count=1 -run '<tests>' .
+```
+
+**Eager clipboard copy.** Old helpers: `TestDoubleClickCopiesAWordAndTripleClickTheLine`
+and `TestDragSelectionCopiesOnRelease` both PASS. New helpers: the multi-click
+test FAILS on the stray write. `clickAt` used to send n presses and one trailing
+release, so the release that follows the first click of a gesture was never
+generated and nothing that happens on it could be observed; and
+`waitForClipboard` asked only whether the wanted text was somewhere in the list
+of writes, which cannot see a write that should not be there. The gesture now
+asserts its whole sequence of writes: none for a single click, one for a double,
+two for a triple, because a triple passes through the word on its way to the
+line and each release is a real release.
+
+**A click that freezes every pane.** Old helpers: all thirteen mouse and
+context-menu tests PASS. New helpers: `TestClickInPaneDoesNotFreezeOutput`
+FAILS, waiting the full 20s for output that never arrives. `leftClick` and
+`shiftRightClick` sent a press and no release at all, and a left press inside a
+pane sets `OS.Dragging`, which makes `app.updateTerminals` return early: while
+it is set tuios stops polling every pane. Sending this test's click press-only
+against a *correct* binary reproduces the same 20s timeout, which is the
+measurement that the old shape was not a smaller version of a real gesture but a
+state no user can reach.
+
+## What this harness structurally cannot observe
+
+Some things cannot be simulated from here at all. They are listed so that nobody
+writes a helper for them, watches it pass, and believes it.
+
+**Pointer motion outside a drag.** `cmd/tuios/run.go` installs
+`tea.WithFilter(filterMouseMotion)`, a whitelist that discards every
+`tea.MouseMotionMsg` unless a window drag, a window resize, an overlay drag, the
+scrollback browser, or a pane running a mouse-tracking application is active. In
+any other state the model never receives motion, so hover behaviour is not
+merely untested here, it is unobservable: a helper that sends motion and an
+assertion on its effect would be asserting on an event the shipping binary
+throws away. This is why `mouseHover` carries a warning and is used by exactly
+one test, `TestBareMotionReachesAnEventTrackingApp`, which drives the one state
+where bare motion does get through. Note in particular that as of this commit
+`app.ContextMenuHover` is unreachable in the shipping binary for this reason: an
+open context menu is not one of the whitelisted states, so moving the pointer
+over a menu row cannot highlight it. If the whitelist gains that state, this
+paragraph needs revisiting and hover over a menu becomes testable from here.
+Motion *is* delivered during `mouseDrag`, because
+the press that opens the drag sets `OS.Dragging` before the first motion report
+arrives, so the selection, window-move and resize paths are genuinely covered.
+
+**Chords the user's terminal eats first.** The harness writes bytes into a PTY,
+so it can only send what a terminal would send. Anything a real terminal
+intercepts before the application sees it, shift+click bindings in kitty being
+the usual example, cannot be reproduced here, and neither can the *absence* of
+those bytes be distinguished from tuios ignoring them. `TestContextMenuTargets`
+asserts that tuios acts on a shift+right-click it receives; whether the user's
+terminal will deliver one is outside this suite entirely.
+
+**Typing speed.** `SendKeys` writes a whole string in one `write(2)`, so a
+command and its Enter arrive as a single burst that bubbletea parses into
+back-to-back key events. That is closer to a paste than to typing. Timing-
+sensitive input handling, key repeat coalescing and the insert guard's exact
+window are covered by unit tests in `internal/input`, not here.
+
+**Races and narrow timing windows.** See the two rows above about the blank
+alt-screen cache and the unlocked emulator resize: the program under test is a
+separate process, so `-race` on this package instruments the harness and not
+tuios.
 
 ## Tests without a specific negative control
 

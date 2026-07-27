@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,70 +21,44 @@ import (
 // reports.
 
 // wheelAt turns the wheel n notches over a screen cell.
+//
+// A wheel notch is a press and nothing else: SGR reports buttons 64 and 65 with
+// the press final byte and never emits a matching release, because there is no
+// button to let go of. That asymmetry is real, not a shortcut, so this is the
+// one gesture in the suite with unpaired events.
 func wheelAt(t *testing.T, term *tuitest.Terminal, col, row int, button tuitest.MouseButton, n int) {
 	t.Helper()
 	for range n {
-		if err := term.SendMouse(tuitest.MouseEvent{
-			Col: col, Row: row, Button: button, Action: tuitest.MousePress,
-		}); err != nil {
-			t.Fatalf("wheel: %v", err)
-		}
-		time.Sleep(30 * time.Millisecond)
+		mousePress(t, term, col, row, button, 0)
 	}
 }
 
-// dragSelect presses at one cell, drags across the row, and releases.
+// dragSelect presses at one cell, drags across the row, and releases at the far
+// end, emitting a motion report for every cell in between as a real drag does.
 func dragSelect(t *testing.T, term *tuitest.Terminal, fromCol, toCol, row int) {
 	t.Helper()
-	send := func(ev tuitest.MouseEvent) {
-		t.Helper()
-		if err := term.SendMouse(ev); err != nil {
-			t.Fatalf("mouse %+v: %v", ev, err)
-		}
-		time.Sleep(30 * time.Millisecond)
-	}
-	send(tuitest.MouseEvent{Col: fromCol, Row: row, Button: tuitest.MouseLeft, Action: tuitest.MousePress})
-	// MouseMove with a button set is a drag on the wire: the motion bit plus
-	// the button code, which is what SGR mode 1002 reports while dragging.
-	step := 1
-	if toCol < fromCol {
-		step = -1
-	}
-	for c := fromCol + step; c != toCol+step; c += step {
-		send(tuitest.MouseEvent{Col: c, Row: row, Button: tuitest.MouseLeft, Action: tuitest.MouseMove})
-	}
-	send(tuitest.MouseEvent{Col: toCol, Row: row, Button: tuitest.MouseLeft, Action: tuitest.MouseRelease})
+	mouseDrag(t, term, fromCol, row, toCol, row, tuitest.MouseLeft, 0)
 }
 
-// clickAt performs n clicks at one cell, fast enough to count as a single
+// clickAt clicks n times at one cell, fast enough to count as a single
 // multi-click gesture.
 //
-// Each click is a press and its own release, which is what a real triple-click
-// is and what makes the double-then-triple sequence observable at all. An
-// earlier version sent n presses and one trailing release; that produced a
-// single release for the whole gesture, so the intermediate interpretations
-// never reached the clipboard and the double-copy bug was invisible to this
-// suite.
+// Each click is a press AND a release, which is what a physical mouse does and
+// what this helper used to get wrong: it sent n presses and one trailing
+// release outside the loop. tuios finishes a selection and writes the clipboard
+// on release (internal/input.finishMouseSelection), so under the old shape a
+// triple click generated exactly one clipboard write. The two intermediate
+// releases a real triple click produces, and everything tuios does on them,
+// could not be generated at all, so no assertion could have observed them.
+// TestDoubleClickCopiesAWordAndTripleClickTheLine now asserts on the whole
+// sequence of writes rather than on whether the wanted text is somewhere in it.
 func clickAt(t *testing.T, term *tuitest.Terminal, col, row, n int) {
 	t.Helper()
-	send := func(action tuitest.MouseAction) {
-		t.Helper()
-		if err := term.SendMouse(tuitest.MouseEvent{
-			Col: col, Row: row, Button: tuitest.MouseLeft, Action: action,
-		}); err != nil {
-			t.Fatalf("click: %v", err)
-		}
-	}
 	for i := range n {
 		if i > 0 {
-			// Well inside the multi-click window, so the clicks are one
-			// gesture, and long enough apart that tuios sees them as separate
-			// events rather than one burst.
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(multiClickGap)
 		}
-		send(tuitest.MousePress)
-		time.Sleep(25 * time.Millisecond)
-		send(tuitest.MouseRelease)
+		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	}
 }
 
@@ -337,6 +312,51 @@ func TestMouseTrackingAppKeepsItsOwnWheel(t *testing.T) {
 // the pane's own tty echo: button 64, a column, a row, and the press marker.
 var sgrWheelReport = regexp.MustCompile(`64;\d+;\d+M`)
 
+// sgrBareMotionReport matches a forwarded pointer motion with no button held,
+// echoed back by the pane's tty: button code 35, which is the no-button value 3
+// plus the motion bit 32.
+var sgrBareMotionReport = regexp.MustCompile(`35;\d+;\d+M`)
+
+// TestBareMotionReachesAnEventTrackingApp is the only place in this suite where
+// a pointer motion with no button held can be observed at all, and it exists as
+// much to pin that fact as to test the forwarding.
+//
+// cmd/tuios/run.go installs tea.WithFilter(filterMouseMotion), a whitelist that
+// drops every motion event unless a drag, a resize, an overlay drag, the
+// scrollback browser or a mouse-tracking pane is active. In every other state
+// the model never sees motion, so hover behaviour is not merely untested here,
+// it is unobservable: a helper that sends motion and an assertion on its effect
+// would be asserting on an event the shipping binary discards. That includes
+// the context menu's own hover highlight, which handleMouseMotion implements
+// and the filter never lets it reach.
+//
+// A pane that has asked for any-event tracking (DECSET 1003) is the exception,
+// and with the tty's echo on, the report it receives comes straight back as
+// text. See NEGATIVE_CONTROLS.md for the full list of blind spots.
+func TestBareMotionReachesAnEventTrackingApp(t *testing.T) {
+	term, _ := start(t, startOpts{})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+
+	// 1003 is any-event tracking: motion is reported whether or not a button is
+	// down. 1006 asks for the SGR encoding.
+	runInShell(t, term, `printf '\033[?1003h\033[?1006h'; echo MOTIONON`, "MOTIONON", shellTimeout)
+
+	col, row := paneCell(t, term)
+	for i := range 4 {
+		mouseHover(t, term, col+i, row)
+	}
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return sgrBareMotionReport.MatchString(s.Text())
+	}, uiTimeout); err != nil {
+		t.Fatalf("a bare pointer motion was not forwarded to the pane that asked for "+
+			"any-event tracking: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after moving the pointer over an any-event tracking pane")
+}
+
 // osc52 matches a clipboard write on the wire. tuios's copy path is
 // tea.SetClipboard, which is OSC 52, so this is what a copy looks like to the
 // terminal the user is actually sitting in front of.
@@ -371,21 +391,62 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-// waitForClipboard blocks until tuios has written the wanted text to the
-// clipboard, and reports what it did write if it never does.
-func waitForClipboard(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, want string) {
+// clipboardSince returns the clipboard writes made after the first n, with
+// surrounding whitespace trimmed the way the assertions compare them.
+func clipboardSince(out *lockedBuffer, n int) []string {
+	all := clipboardWrites(out)
+	if len(all) <= n {
+		return nil
+	}
+	got := make([]string, 0, len(all)-n)
+	for _, s := range all[n:] {
+		got = append(got, strings.TrimSpace(s))
+	}
+	return got
+}
+
+// clipboardSettle is how long waitClipboardSequence waits after the wanted
+// sequence arrives to be sure nothing else follows it.
+const clipboardSettle = 700 * time.Millisecond
+
+// waitClipboardSequence blocks until the clipboard writes made after the first
+// `from` are exactly `want`, in order, and then holds still to confirm nothing
+// further arrives.
+//
+// This exists because "the wanted text is somewhere in the list of writes" is
+// the wrong assertion for a gesture whose whole risk is how many times it
+// writes. A triple click passes through a word selection on its way to a line
+// selection and copies both, in that order; a paste taken between the two gets
+// the word. Asking only whether the line was written at some point cannot see
+// that, cannot see a stray write before it, and cannot see a duplicate after
+// it. The count and the order are the property, so they are what is asserted.
+//
+// The settle window is not decoration either. Without it a gesture that writes
+// one time too many satisfies the condition on its correct prefix and the extra
+// write lands after the test has moved on.
+func waitClipboardSequence(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, from int, want ...string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
-	for time.Now().Before(deadline) {
-		for _, got := range clipboardWrites(out) {
-			if strings.TrimSpace(got) == want {
-				return
-			}
+	for {
+		got := clipboardSince(out, from)
+		if slices.Equal(got, want) {
+			break
+		}
+		if len(got) > len(want) {
+			t.Fatalf("the gesture wrote the clipboard more times than it should: got %q, want %q\n%s",
+				got, want, term.Snapshot())
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("the gesture never produced the clipboard writes %q; it wrote %q\n%s",
+				want, got, term.Snapshot())
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("no clipboard write of %q. tuios wrote %q\n%s",
-		want, clipboardWrites(out), term.Snapshot())
+	time.Sleep(clipboardSettle)
+	if got := clipboardSince(out, from); !slices.Equal(got, want) {
+		t.Fatalf("the gesture kept writing the clipboard after it was done: got %q, want %q\n%s",
+			got, want, term.Snapshot())
+	}
 }
 
 // TestDragSelectionCopiesOnRelease drives a real click-drag across a line of
@@ -407,85 +468,96 @@ func TestDragSelectionCopiesOnRelease(t *testing.T) {
 
 	dragSelect(t, term, col, col+len(marker)-1, row)
 
-	waitForClipboard(t, term, out, marker)
+	// Exactly one write: a drag is one gesture and copies once at the end of it.
+	waitClipboardSequence(t, term, out, 0, marker)
 	if err := term.WaitForText("Copied", uiTimeout); err != nil {
 		t.Errorf("no copy confirmation in the dock: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after a drag selection")
 }
 
-// clipboardSettleTime is how long to keep watching after the expected write
-// lands, so a second, wrong write arriving late is caught rather than missed.
-// It is several times the multi-click window that gates a deferred copy.
-const clipboardSettleTime = 1500 * time.Millisecond
-
-// TestDoubleClickCopiesTheWord covers one of the two gestures every terminal
-// has had since the nineties and tuios had neither of.
+// TestDoubleClickCopiesAWordAndTripleClickTheLine covers the two gestures every
+// terminal has had since the nineties and tuios had neither of.
 //
 // The word is a path so the assertion also pins the word-character set: a
-// double-click that stopped at every punctuation mark would select "opt" and
+// double-click that stopped at every punctuation mark would select "usr" and
 // the test would say so.
-func TestDoubleClickCopiesTheWord(t *testing.T) {
-	out := &lockedBuffer{}
-	term, _ := start(t, startOpts{out: out})
-	row, col, word, _ := setupClickTarget(t, term)
-
-	clickAt(t, term, col+6, row, 2)
-	waitForClipboard(t, term, out, word)
-
-	time.Sleep(clipboardSettleTime)
-	if got := clipboardWrites(out); len(got) != 1 {
-		t.Errorf("a double-click produced %d clipboard writes, want exactly 1: %q", len(got), got)
-	}
-	alive(t, term, "after a double-click")
-}
-
-// TestTripleClickCopiesTheLineExactlyOnce is the regression test for a
-// triple-click copying twice.
 //
-// A triple-click reaches tuios as a double-click followed by a third press, and
-// copying on each release wrote the word first and the line second. The
-// clipboard ended up correct, so an assertion on the final contents passed
-// while the bug was live; what was wrong is that the word was ever written at
-// all, because a paste landing in the gap got it. Hence "exactly one write",
-// which is only assertable because the harness keeps them all.
-func TestTripleClickCopiesTheLineExactlyOnce(t *testing.T) {
+// Every gesture asserts the whole sequence of clipboard writes it produced, not
+// just that the wanted text turns up in it. A single click copies nothing, a
+// double click copies once, and a triple click copies twice because it passes
+// through the word on its way to the line and each release is a real release.
+// Those counts are the contract: they are what a paste taken mid-gesture gets,
+// and they are what the old helper could not generate, let alone assert on.
+func TestDoubleClickCopiesAWordAndTripleClickTheLine(t *testing.T) {
 	out := &lockedBuffer{}
 	term, _ := start(t, startOpts{out: out})
-	row, col, word, line := setupClickTarget(t, term)
-
-	clickAt(t, term, col+6, row, 3)
-	waitForClipboard(t, term, out, line)
-
-	time.Sleep(clipboardSettleTime)
-	got := clipboardWrites(out)
-	if len(got) != 1 {
-		t.Fatalf("a triple-click produced %d clipboard writes, want exactly 1: %q", len(got), got)
-	}
-	for _, w := range got {
-		if strings.TrimSpace(w) == word {
-			t.Errorf("the word %q reached the clipboard on the way to the line; a paste "+
-				"landing between the two writes would have got it", word)
-		}
-	}
-	alive(t, term, "after a triple-click")
-}
-
-// setupClickTarget boots a pane with one line of output and returns where it is
-// on screen along with the word and the whole line, which are what the two
-// multi-click gestures should each produce.
-func setupClickTarget(t *testing.T, term *tuitest.Terminal) (row, col int, word, line string) {
-	t.Helper()
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	word = "/opt/dblclick/word.txt"
-	line = "PREFIX " + word + " SUFFIX"
+	const word = "/opt/dblclick/word.txt"
+	const line = "PREFIX " + word + " SUFFIX"
 	// The word is assembled from a variable so the shell's echo of the command
 	// does not itself contain it: otherwise findText lands on the command line
 	// rather than on the output, and the test asserts about the wrong row.
 	runInShell(t, term, `P=/opt; echo "PREFIX $P/dblclick/word.txt SUFFIX"`, word, shellTimeout)
-	row, col = findText(t, term, word)
-	return row, col, word, line
+	row, col := findText(t, term, word)
+
+	// One click is not a selection. It must leave the clipboard alone, or every
+	// stray click in a pane destroys whatever the user had copied.
+	clickAt(t, term, col+6, row, 1)
+	waitClipboardSequence(t, term, out, 0)
+	time.Sleep(gestureGap)
+
+	clickAt(t, term, col+6, row, 2)
+	waitClipboardSequence(t, term, out, 0, word)
+
+	// Let the multi-click window lapse, or the first press of the triple
+	// continues the double and the counts come out shifted.
+	time.Sleep(gestureGap)
+
+	// A triple click writes the line exactly once. The clipboard is not touched
+	// on the intermediate word: the write is deferred until the multi-click
+	// window closes, and the second click's word is retired when the third
+	// arrives (see internal/app/clipboard_copy.go). This is the whole point of
+	// the deferral, and asserting the count rather than the final contents is
+	// what makes it observable, since the final contents were always the line.
+	clickAt(t, term, col+6, row, 3)
+	waitClipboardSequence(t, term, out, 1, line)
+	alive(t, term, "after multi-click selection")
+}
+
+// TestClickInPaneDoesNotFreezeOutput is the standing guard on the press/release
+// pairing this harness now enforces, and on the product behaviour that pairing
+// depends on.
+//
+// A left press inside a pane sets OS.Dragging, and app.updateTerminals returns
+// early while it is set: tuios stops polling every pane's output for the
+// duration of the gesture, deliberately, so content cannot shift under the
+// pointer. The release is what clears it.
+//
+// So a helper that presses without releasing does not leave a harmless bit set.
+// It stops the whole program reading its panes, permanently, and every later
+// assertion in that test is made against a frozen screen. Measured: sending
+// this click press-only against a correct binary leaves FREEZE-AFTER-9 off the
+// screen for the full 20s budget. Guarded: a binary that fails to clear
+// OS.Dragging on release fails here, and passes every other mouse and context
+// menu test in this package.
+func TestClickInPaneDoesNotFreezeOutput(t *testing.T) {
+	term, _ := start(t, startOpts{})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+
+	runInShell(t, term, "echo FREEZE-BEFORE-$((1+1))", "FREEZE-BEFORE-2", shellTimeout)
+	col, row := paneCell(t, term)
+
+	// A plain click in the middle of the pane: press and release, as a mouse does.
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+
+	// The shell must still be able to put something new on screen. On a program
+	// left in interaction mode it never will, however long the timeout.
+	runInShell(t, term, "echo FREEZE-AFTER-$((3*3))", "FREEZE-AFTER-9", shellTimeout)
+	alive(t, term, "after clicking inside a pane")
 }
