@@ -320,7 +320,7 @@ Access debug and development tools:
 - **Mouse Wheel**: Scroll the pane's scrollback (when no mouse tracking, not alt screen). No mode is entered and nothing is announced; scrolling back to the bottom returns to live output, and so does typing.
 - **Left Drag in a pane**: Select text. Releasing copies it (`copy_on_select`, on by default)
 - **Double Click**: Select the word under the pointer (`word_characters` decides what a word is)
-- **Triple Click**: Select the whole line
+- **Triple Click**: Select the whole line. The highlight is immediate, but a multi-click copies about a third of a second after the last click, so a triple-click never puts the word on the clipboard on its way to the line
 - **Left Drag Above/Below a pane**: Continues the selection and scrolls
 - **Left Click**: Focus window
 - **Left Drag on the title bar**: Move window (non-tiling) or swap windows (tiling). In window management mode the whole window is a drag handle

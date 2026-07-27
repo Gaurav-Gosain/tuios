@@ -42,8 +42,9 @@ a working negative control look like a broken one for half an hour.
 | Blank pane: `clipWindowContent` measured width from `lines[0]` | `b9f770b` | revert `internal/app/render_helpers.go` hunk | `TestAltScreenPaneSurvivesFocusSwitch`, `TestLeftmostTileWithBlankFirstLineIsNotDiscarded` | **caught** |
 | Blank pane: a transient blank frame became the render cache | `11a0023` | neuter the `isBlankRender` guard in `cacheRender` | none | **not caught** |
 | Torn cell buffer: emulator resized without the window I/O lock | `fd1463e` | drop both `LockIO`/`UnlockIO` pairs around `Terminal.Resize` in `internal/app/session.go` | none (2 full runs) | **not caught** |
-| Mouse: the wheel announced a mode, stranded the user in it, and a drag moved the window instead of selecting | whole change | build the merge-base (`2005b01`) and point `TUIOS_E2E_BIN` at it | `TestWheelScrollShowsScrollbackWithoutAnnouncingAMode`, `TestWheelDownToBottomReturnsToLiveOutput`, `TestTypingWhileScrolledSnapsBackToLiveOutput`, `TestDragSelectionCopiesOnRelease`, `TestDoubleClickCopiesAWordAndTripleClickTheLine` | **caught** |
+| Mouse: the wheel announced a mode, stranded the user in it, and a drag moved the window instead of selecting | whole change | build the merge-base (`2005b01`) and point `TUIOS_E2E_BIN` at it | `TestWheelScrollShowsScrollbackWithoutAnnouncingAMode`, `TestWheelDownToBottomReturnsToLiveOutput`, `TestTypingWhileScrolledSnapsBackToLiveOutput`, `TestDragSelectionCopiesOnRelease`, `TestDoubleClickCopiesTheWord` | **caught** |
 | Mouse: the wheel over a pane that asked for the mouse | n/a, never broken | same binary | none, and that is correct: `TestMouseTrackingAppKeepsItsOwnWheel` passes on both, because it guards behaviour that already worked | **guard, not a control** |
+| Mouse: a triple-click wrote the word to the clipboard before the line | whole change | build `f5a6f17` (the merge of #106 and #107) and point `TUIOS_E2E_BIN` at it | `TestTripleClickCopiesTheLineExactlyOnce`, reporting `2 clipboard writes: ["/opt/dblclick/word.txt" "PREFIX /opt/dblclick/word.txt SUFFIX"]` | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 
@@ -62,6 +63,13 @@ Each failure names the old behaviour: "COPY MODE" on the dock during a scroll,
 `echo` never producing its marker because the keystrokes were eaten as vim
 motions, and an empty list of clipboard writes because a drag moved the window
 instead of selecting.
+
+The triple-click control is run the same way against `f5a6f17`. It is worth
+noting why it needed the suite's own `clickAt` helper fixed first: the helper
+used to send three presses and one trailing release, so the whole gesture
+produced a single release and the intermediate word copy never happened. The
+bug was real and the harness could not see it. `clickAt` now sends a release
+per press, which is what a mouse does.
 
 ### Why the two blank-pane and torn-buffer entries are not caught, and what does cover them
 
