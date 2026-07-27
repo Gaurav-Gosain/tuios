@@ -112,6 +112,14 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// An open context menu highlights the row under the pointer, which it can
+	// only do if it is told the pointer moved. This filter is a whitelist that
+	// drops every motion event it does not recognise, so a hover handler added
+	// anywhere downstream is dead until the event is allowed through here.
+	if os.ContextMenuActive() {
+		return msg
+	}
+
 	// Allow motion events while a floating overlay panel is being dragged.
 	// Overlay drags don't set os.Dragging, so without this the motion events
 	// that move the panel are filtered out and the drag never tracks.

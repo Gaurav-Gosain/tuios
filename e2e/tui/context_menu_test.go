@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -84,27 +85,27 @@ func TestContextMenuTargets(t *testing.T) {
 	waitWindowCount(t, term, 1, "after first window")
 	// A new window floats at a size the layout picks, so tile it: a single tiled
 	// window fills the usable area, which makes "inside the pane" and "on its
-	// title bar" fixed coordinates rather than a guess.
+	// top border row" fixed coordinates rather than a guess.
 	enableTiling(t, term)
 
-	// The pane's first row is its title bar; a row well inside it is content.
 	shiftRightClick(t, term, 20, 10)
-	waitMenu(t, term, "pane content", "Split right", "Copy selection")
+	waitMenu(t, term, "pane", "Split right", "Copy selection", "Rename")
 	if strings.Contains(term.Screen().Text(), "Command palette") {
-		t.Fatalf("the pane content menu is showing desktop rows\n%s", term.Snapshot())
+		t.Fatalf("the pane menu is showing desktop rows\n%s", term.Snapshot())
 	}
 	leftClick(t, term, 70, 30) // click away
-	waitMenuGone(t, term, "Split right", "after click-away on content menu")
+	waitMenuGone(t, term, "Split right", "after click-away on the pane menu")
 
+	// The pane's top border row is part of the pane and opens the same menu.
+	// There is no separate title-bar target: it was one row tall and sat on the
+	// opposite edge from the window's name, so it was a target users could not
+	// reliably hit.
 	shiftRightClick(t, term, 20, 0)
-	waitMenu(t, term, "pane title", "Rename", "Minimize")
-	if strings.Contains(term.Screen().Text(), "Split right") {
-		t.Fatalf("the title bar menu is showing content rows\n%s", term.Snapshot())
-	}
+	waitMenu(t, term, "pane top row", "Split right", "Rename", "Minimize")
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("esc: %v", err)
 	}
-	waitMenuGone(t, term, "Minimize", "after esc on title menu")
+	waitMenuGone(t, term, "Minimize", "after esc on the pane menu")
 
 	// The dock band is the last row.
 	_, rows := term.Screen().Size()
@@ -163,10 +164,13 @@ func TestContextMenuArrowsSkipDimmedRows(t *testing.T) {
 	enableTiling(t, term)
 
 	shiftRightClick(t, term, 20, 10)
-	waitMenu(t, term, "pane content", "Copy selection", "Split right", "Zoom")
+	waitMenu(t, term, "pane", "Copy selection", "Split right", "Zoom")
 
 	// One full lap of the runnable rows, ending back where it started.
-	lap := []string{"Split right", "Split down", "Zoom", "Close pane", "Split right"}
+	lap := []string{
+		"Split right", "Split down", "Rename", "Zoom", "Minimize", "Close pane",
+		"Split right",
+	}
 	for i, want := range lap {
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
 			return strings.Contains(markedRow(s), want)
@@ -373,4 +377,141 @@ func renameFocused(t *testing.T, term *tuitest.Terminal, name string) {
 	if err := term.WaitForText(name, uiTimeout); err != nil {
 		t.Fatalf("window never took the name %q: %v\n%s", name, err, term.Snapshot())
 	}
+}
+
+// moveMouse sends a bare pointer motion: the mouse moving with no button held,
+// which is what hovering a menu actually produces.
+//
+// The report is written out rather than built with tuitest.MouseEvent because
+// the pinned harness has no "no button" constant, and its zero value encodes
+// button one, which is a drag. SGR button code 35 is the low two bits set to 3
+// ("no button") plus the motion bit (32), and the trailing M is a press-or-motion
+// report. Sending a drag here would still reach the handler, but it would not be
+// the event a hovering user generates.
+func moveMouse(t *testing.T, term *tuitest.Terminal, x, y int) {
+	t.Helper()
+	if err := term.SendKeys(fmt.Sprintf("\x1b[<35;%d;%dM", x+1, y+1)); err != nil {
+		t.Fatalf("mouse move to (%d,%d): %v", x, y, err)
+	}
+}
+
+// TestContextMenuHoverFollowsPointer drives hover through the real binary.
+//
+// This has to be an end-to-end test. The program installs a mouse-motion filter
+// (filterMouseMotion in cmd/tuios/run.go) as a bubbletea option, and that filter
+// is a whitelist: it drops every motion event that does not match one of a
+// handful of conditions. The filter exists only in the assembled program, so a
+// unit test of the motion handler passes whether or not the event can ever reach
+// it. The context menu's hover shipped broken for exactly that reason.
+//
+// The assertion is on the selection marker, which is the only thing on screen
+// that says which row enter would run.
+func TestContextMenuHoverFollowsPointer(t *testing.T) {
+	term, _ := start(t, startOpts{})
+	waitBoot(t, term)
+
+	shiftRightClick(t, term, 40, 15)
+	waitMenu(t, term, "desktop", "New window", "Command palette")
+
+	// The menu opens with its first runnable row selected.
+	if got := markedRow(term.Screen()); !strings.Contains(got, "New window") {
+		t.Fatalf("menu opened with the marker on %q, want New window\n%s", got, term.Snapshot())
+	}
+
+	// Find the screen row holding a row further down the menu, then move the
+	// pointer onto it. Reading the row off the screen keeps the test honest
+	// about where the menu actually landed.
+	target := "Command palette"
+	row := rowContaining(term.Screen(), target)
+	if row < 0 {
+		t.Fatalf("%q is not on screen\n%s", target, term.Snapshot())
+	}
+
+	moveMouse(t, term, 42, row)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(markedRow(s), target)
+	}, uiTimeout); err != nil {
+		t.Fatalf("hovering row %d (%q) never moved the selection marker, which is still on %q. "+
+			"The motion event is most likely being dropped by filterMouseMotion in "+
+			"cmd/tuios/run.go before it reaches the handler: %v\n%s",
+			row, target, markedRow(term.Screen()), err, term.Snapshot())
+	}
+
+	// Moving back up tracks too, so this is following the pointer rather than
+	// latching onto the last row it saw.
+	back := rowContaining(term.Screen(), "Toggle tiling")
+	if back < 0 {
+		t.Fatalf("Toggle tiling is not on screen\n%s", term.Snapshot())
+	}
+	moveMouse(t, term, 42, back)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(markedRow(s), "Toggle tiling")
+	}, uiTimeout); err != nil {
+		t.Fatalf("hovering back up the menu did not move the marker (still on %q): %v\n%s",
+			markedRow(term.Screen()), err, term.Snapshot())
+	}
+
+	alive(t, term, "after hovering the context menu")
+}
+
+// rowContaining returns the screen row holding the given text, or -1.
+func rowContaining(s tuitest.Screen, text string) int {
+	_, rows := s.Size()
+	for r := range rows {
+		if strings.Contains(s.Line(r), text) {
+			return r
+		}
+	}
+	return -1
+}
+
+// TestContextMenuReachesTopWindowRowWithTopDock is the regression test for the
+// defect that made a pane unreachable at the top of the screen.
+//
+// With the dock at the top, the layout starts below it, so the topmost window's
+// first row is the row immediately after the dock. The dock band test used to be
+// inclusive of that row, so every shift+right-click on it opened the dock's menu
+// and the window under the pointer was never consulted.
+//
+// This test does not use the shared window-count helpers: they read the dock's
+// status field off the bottom rows, which is not where the dock is here.
+func TestContextMenuReachesTopWindowRowWithTopDock(t *testing.T) {
+	term, _ := start(t, startOpts{args: []string{"--dockbar-position", "top"}})
+	waitBoot(t, term)
+
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatalf("new window: %v", err)
+	}
+	if err := term.SendKeys("t"); err != nil {
+		t.Fatalf("tile: %v", err)
+	}
+	// Wait for the tiled window's own frame rather than for a window count.
+	if err := term.WaitForText("Tiling Mode Enabled", uiTimeout); err != nil {
+		t.Fatalf("tiling never turned on: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	// Find the window's top border: the first row below the dock's separator
+	// rule that carries a box-drawing corner.
+	top := -1
+	_, rows := term.Screen().Size()
+	for r := range rows {
+		if strings.Contains(term.Screen().Line(r), "╭") {
+			top = r
+			break
+		}
+	}
+	if top < 0 {
+		t.Fatalf("could not find the tiled window's top border\n%s", term.Snapshot())
+	}
+
+	shiftRightClick(t, term, 30, top)
+	waitMenu(t, term, "top window row under a top dock", "Split right", "Rename")
+
+	if strings.Contains(term.Screen().Text(), "Toggle tiling") {
+		t.Fatalf("row %d is the top window's first row but it opened the dock's menu; "+
+			"the dock band is claiming a row the dock does not draw on\n%s",
+			top, term.Snapshot())
+	}
+	alive(t, term, "after opening the pane menu on the top window row")
 }

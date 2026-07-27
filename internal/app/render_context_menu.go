@@ -66,8 +66,16 @@ func (m *OS) renderContextMenu() (string, overlay.Geometry) {
 	bg := pal.Surface
 	width := m.contextMenuWidth(cm)
 
-	lines := make([]string, 0, len(cm.Items))
-	for i, it := range cm.Items {
+	// A menu with more rows than the screen is tall scrolls rather than drawing
+	// past the bottom edge. Rows are dropped from the view, never from the menu,
+	// so no action becomes unreachable: arrow navigation walks the whole list
+	// and the window follows the selection.
+	start, visible := m.contextMenuRows(cm)
+	cm.ScrollFrom = start
+
+	lines := make([]string, 0, visible)
+	for i := start; i < start+visible; i++ {
+		it := cm.Items[i]
 		if it.Sep {
 			lines = append(lines, overlay.Rule(width, bg, pal))
 			continue
@@ -81,6 +89,23 @@ func (m *OS) renderContextMenu() (string, overlay.Geometry) {
 		Body:  strings.Join(lines, "\n"),
 	}
 	return panel.Render(pal)
+}
+
+// contextMenuRows returns the first item to draw and how many fit, clamping the
+// menu's scroll offset so the selected row stays in view.
+//
+// The row budget is the screen height less the panel's own chrome. Overlays
+// that ignore this draw their lower rows past the bottom of the screen, where
+// the terminal discards them.
+func (m *OS) contextMenuRows(cm *ContextMenu) (start, visible int) {
+	count := len(cm.Items)
+	rh := m.GetRenderHeight()
+	if rh <= 0 {
+		return 0, count // size not known yet; draw the lot
+	}
+	visible = min(count, max(rh-panelChromeRows, 1))
+	cm.Scroll = scrollWindow(cm.Scroll, cm.Selected, count, visible)
+	return cm.Scroll, visible
 }
 
 // contextMenuRow renders one runnable row, filled to the panel width so the
