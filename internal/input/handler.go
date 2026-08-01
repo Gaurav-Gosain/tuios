@@ -54,11 +54,13 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			result, cmd = handleMouseWheel(msg, o)
 		}
 	case tea.PasteMsg:
-		// Handle bracketed paste from terminal (when pasting via Cmd+V in Ghostty, etc.)
-		// Only handle paste in terminal mode
+		// Incoming bracketed paste from the outer terminal (ESC[200~ ... ESC[201~).
+		// This is passthrough input, not a clipboard operation: the outer terminal
+		// pasted on the user's behalf, or an IME such as fcitx5 wrapped a commit in
+		// paste markers. Forward it to the focused window's PTY without touching the
+		// stored clipboard and without a "Pasted" notification (matching tmux/VTM).
 		if o.Mode == app.TerminalMode {
-			o.ClipboardContent = msg.Content
-			handleClipboardPaste(o)
+			forwardPasteToFocused(o, msg.Content)
 		}
 		return o, nil
 	case tea.ClipboardMsg:

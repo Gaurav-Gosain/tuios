@@ -146,14 +146,39 @@ func extractSelectedText(window *terminal.Window, _ *app.OS) string {
 	return strings.TrimSpace(selectedText.String())
 }
 
-// handleClipboardPaste processes clipboard content and sends it to the focused terminal
-func handleClipboardPaste(o *app.OS) {
-	if o.FocusedWindow < 0 || o.FocusedWindow >= len(o.Windows) {
-		return
-	}
-
+// forwardPasteToFocused sends paste text to the focused window's PTY, wrapping it in
+// bracketed-paste markers when the inner app has that mode enabled and sending it raw
+// otherwise. It never touches o.ClipboardContent and never shows a notification.
+//
+// It is used both by TUIOS's own clipboard paste (which layers notifications on top)
+// and by the incoming-terminal-paste path, where a tea.PasteMsg is passthrough input
+// (for example an fcitx5 IME commit) and must be delivered silently.
+//
+// SendInput() is used instead of Terminal.Paste() because in daemon mode
+// Terminal.Paste() writes to an internal pipe that gets drained by
+// StartDaemonResponseReader(), so the data never reaches the PTY. SendInput()
+// properly routes through DaemonWriteFunc in daemon mode. Returns false when there
+// is no focused window or the write fails.
+func forwardPasteToFocused(o *app.OS, text string) bool {
 	focusedWindow := o.GetFocusedWindow()
 	if focusedWindow == nil {
+		return false
+	}
+
+	pasteContent := text
+	if focusedWindow.Terminal != nil && focusedWindow.Terminal.BracketedPasteEnabled() {
+		pasteContent = "\x1b[200~" + pasteContent + "\x1b[201~"
+	}
+
+	return focusedWindow.SendInput([]byte(pasteContent)) == nil
+}
+
+// handleClipboardPaste processes stored clipboard content and sends it to the focused
+// terminal, notifying the user of the result. This is the path for TUIOS's own paste
+// actions (Cmd/Ctrl+V and the OSC 52 clipboard read response), not for incoming
+// terminal paste.
+func handleClipboardPaste(o *app.OS) {
+	if o.GetFocusedWindow() == nil {
 		return
 	}
 
@@ -162,17 +187,7 @@ func handleClipboardPaste(o *app.OS) {
 		return
 	}
 
-	// Build paste content with bracketed paste sequences if the app has enabled it.
-	// We use SendInput() instead of Terminal.Paste() because in daemon mode,
-	// Terminal.Paste() writes to an internal pipe that gets drained by
-	// StartDaemonResponseReader() - the data never reaches the PTY.
-	// SendInput() properly routes through DaemonWriteFunc in daemon mode.
-	pasteContent := o.ClipboardContent
-	if focusedWindow.Terminal != nil && focusedWindow.Terminal.BracketedPasteEnabled() {
-		pasteContent = "\x1b[200~" + pasteContent + "\x1b[201~"
-	}
-
-	if err := focusedWindow.SendInput([]byte(pasteContent)); err != nil {
+	if !forwardPasteToFocused(o, o.ClipboardContent) {
 		o.ShowNotification("Paste failed", "error", config.NotificationDuration)
 		return
 	}
