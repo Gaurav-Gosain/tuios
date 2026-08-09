@@ -381,6 +381,17 @@ func (m *OS) SplitFocusedHorizontal() {
 		return
 	}
 
+	// In a daemon session the new pane is created daemon-side and arrives through
+	// a later state sync, so the preselection set here would never be consumed
+	// (AddWindow only asks the daemon and returns). Record the forced direction so
+	// the sync path applies it; see adoptSyncedWindows.
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		m.pendingSplitDir = layout.PreselectionDown
+		m.pendingSplitTarget = focusedWin.ID
+		m.AddWindow("")
+		return
+	}
+
 	// Store the target window ID BEFORE creating new window (which will change focus)
 	m.SplitTargetWindowID = focusedWin.ID
 
@@ -402,6 +413,15 @@ func (m *OS) SplitFocusedVertical() {
 
 	focusedWin := m.GetFocusedWindow()
 	if focusedWin == nil {
+		return
+	}
+
+	// See SplitFocusedHorizontal: on the daemon path the forced direction has to
+	// outlive the round trip that creates the pane.
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		m.pendingSplitDir = layout.PreselectionRight
+		m.pendingSplitTarget = focusedWin.ID
+		m.AddWindow("")
 		return
 	}
 

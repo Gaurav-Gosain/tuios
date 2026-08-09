@@ -55,6 +55,15 @@ func (m *OS) TileAllWindows() {
 	}
 
 	if len(visibleWindows) == 0 {
+		// No visible windows means no tiling structure, so a tree left behind here
+		// still feeds CollectSplits and paints stale separators over the splash
+		// after the last pane closes. The local close path nils the tree when it
+		// empties (DeleteWindow); the daemon close path arrives through here
+		// instead, where the early return used to skip the cleanup, so clear the
+		// current workspace's tree to keep the two paths in step.
+		if m.WorkspaceTrees != nil {
+			m.WorkspaceTrees[m.CurrentWorkspace] = nil
+		}
 		return
 	}
 

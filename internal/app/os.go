@@ -146,40 +146,47 @@ type OS struct {
 	AutoTiling         bool                       // Automatic tiling mode enabled
 	MasterRatio        float64                    // Master window width ratio for tiling (0.3-0.7)
 	// BSP tiling state
-	WorkspaceTrees        map[int]*layout.BSPTree // BSP tree per workspace
-	PreselectionDir       layout.PreselectionDir  // Pending preselection direction (0 = none)
-	TilingScheme          layout.AutoScheme       // Default auto-insertion scheme
-	SplitTargetWindowID   string                  // Window ID to split (set before AddWindow for splits)
-	WindowToBSPID         map[string]int          // Maps window UUID to stable BSP integer ID
-	BSPIDToWindowID       map[int]string          // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for getWindowByIntID)
-	NextBSPWindowID       int                     // Next BSP window ID to assign (starts at 1)
-	RenamingWindow        bool                    // True when renaming a window
-	RenameBuffer          string                  // Buffer for new window name
-	PrefixActive          bool                    // True when prefix key was pressed (tmux-style)
-	WorkspacePrefixActive bool                    // True when Ctrl+B, w was pressed (workspace sub-prefix)
-	MinimizePrefixActive  bool                    // True when Ctrl+B, m was pressed (minimize sub-prefix)
-	TilingPrefixActive    bool                    // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
-	DebugPrefixActive     bool                    // True when Ctrl+B, D was pressed (debug sub-prefix)
-	LastPrefixTime        time.Time               // Time when prefix was activated
-	HelpScrollOffset      int                     // Scroll offset for help menu
-	HelpCategory          int                     // Current help category index (for left/right navigation)
-	HelpSearchMode        bool                    // True when help search is active
-	HelpSearchQuery       string                  // Current search query in help menu
-	CurrentWorkspace      int                     // Current active workspace (1-9)
-	NumWorkspaces         int                     // Total number of workspaces
-	WorkspaceFocus        map[int]int             // Remembers focused window per workspace
-	WorkspaceLayouts      map[int][]WindowLayout  // Stores custom layouts per workspace
-	WorkspaceHasCustom    map[int]bool            // Tracks if workspace has custom layout
-	WorkspaceMasterRatio  map[int]float64         // Stores master ratio per workspace
-	ShowLogs              bool                    // True when showing log overlay
-	LogMessages           []LogMessage            // Store log messages
-	LogScrollOffset       int                     // Scroll offset for log viewer
-	Notifications         []Notification          // Active notifications
-	SelectionMode         bool                    // True when in text selection mode
-	ClipboardContent      string                  // Store clipboard content from tea.ClipboardMsg
-	ShowCacheStats        bool                    // True when showing style cache statistics overlay
-	ShowQuitConfirm       bool                    // True when showing quit confirmation dialog
-	QuitConfirmSelection  int                     // 0 = Yes (left), 1 = No (right)
+	WorkspaceTrees      map[int]*layout.BSPTree // BSP tree per workspace
+	PreselectionDir     layout.PreselectionDir  // Pending preselection direction (0 = none)
+	TilingScheme        layout.AutoScheme       // Default auto-insertion scheme
+	SplitTargetWindowID string                  // Window ID to split (set before AddWindow for splits)
+	// pendingSplitDir/pendingSplitTarget carry a forced-direction split (ctrl+b |
+	// / -) across the daemon round trip. The daemon owns window creation, so the
+	// new pane is not built locally; it arrives later through a state sync. These
+	// remember which side of which pane the split was meant for so the sync path
+	// can honor the direction instead of falling back to the spiral scheme.
+	pendingSplitDir       layout.PreselectionDir
+	pendingSplitTarget    string
+	WindowToBSPID         map[string]int         // Maps window UUID to stable BSP integer ID
+	BSPIDToWindowID       map[int]string         // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for getWindowByIntID)
+	NextBSPWindowID       int                    // Next BSP window ID to assign (starts at 1)
+	RenamingWindow        bool                   // True when renaming a window
+	RenameBuffer          string                 // Buffer for new window name
+	PrefixActive          bool                   // True when prefix key was pressed (tmux-style)
+	WorkspacePrefixActive bool                   // True when Ctrl+B, w was pressed (workspace sub-prefix)
+	MinimizePrefixActive  bool                   // True when Ctrl+B, m was pressed (minimize sub-prefix)
+	TilingPrefixActive    bool                   // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
+	DebugPrefixActive     bool                   // True when Ctrl+B, D was pressed (debug sub-prefix)
+	LastPrefixTime        time.Time              // Time when prefix was activated
+	HelpScrollOffset      int                    // Scroll offset for help menu
+	HelpCategory          int                    // Current help category index (for left/right navigation)
+	HelpSearchMode        bool                   // True when help search is active
+	HelpSearchQuery       string                 // Current search query in help menu
+	CurrentWorkspace      int                    // Current active workspace (1-9)
+	NumWorkspaces         int                    // Total number of workspaces
+	WorkspaceFocus        map[int]int            // Remembers focused window per workspace
+	WorkspaceLayouts      map[int][]WindowLayout // Stores custom layouts per workspace
+	WorkspaceHasCustom    map[int]bool           // Tracks if workspace has custom layout
+	WorkspaceMasterRatio  map[int]float64        // Stores master ratio per workspace
+	ShowLogs              bool                   // True when showing log overlay
+	LogMessages           []LogMessage           // Store log messages
+	LogScrollOffset       int                    // Scroll offset for log viewer
+	Notifications         []Notification         // Active notifications
+	SelectionMode         bool                   // True when in text selection mode
+	ClipboardContent      string                 // Store clipboard content from tea.ClipboardMsg
+	ShowCacheStats        bool                   // True when showing style cache statistics overlay
+	ShowQuitConfirm       bool                   // True when showing quit confirmation dialog
+	QuitConfirmSelection  int                    // 0 = Yes (left), 1 = No (right)
 	// Pending resize tracking for debouncing PTY resize during mouse drag
 	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
 	// pendingCopy is text a settled multi-click selection will put on the
