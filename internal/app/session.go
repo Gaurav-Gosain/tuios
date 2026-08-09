@@ -440,6 +440,18 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 		}
 	}
 
+	// The BSP tree, the window->int-ID map and the split scheme are computed by
+	// clients, never by the daemon's own mutations (AddDaemonWindow and friends do
+	// not touch them). The daemon only stores what a client last synced and echoes
+	// it back, so a sync that is not strictly newer than the one this client
+	// already applied carries this client's own tiling state, often lagging a
+	// mutation this client has since made. Adopting that echo wipes the fresh tree
+	// and reassigns int IDs, which rebuilds the whole layout from scratch and drops
+	// a forced split direction (ctrl+b | / -). Version counts daemon-side
+	// mutations only, so it is exactly the right gate: adopt tiling topology only
+	// when the daemon has advanced past what this client last saw.
+	newerState := state.Version > m.DaemonStateVersion
+
 	// Update global state
 	m.SessionName = state.Name
 	m.DaemonStateVersion = state.Version
@@ -477,10 +489,28 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 		}
 	}
 
-	// Update BSP state
-	if state.WindowToBSPID != nil {
-		m.WindowToBSPID = make(map[string]int)
-		maps.Copy(m.WindowToBSPID, state.WindowToBSPID)
+	// Update BSP state. Adopt the daemon's window->int-ID map only from a strictly
+	// newer sync, and even then merge rather than replace: a window this client has
+	// already mapped keeps its int ID, so a stale echo that omits it (or an already
+	// applied one) cannot strip the mapping and force getWindowIntID to hand out a
+	// fresh number. A churned int ID orphans the window's node in the tree, which
+	// TileAllWindows then rebuilds from scratch with the spiral scheme, discarding
+	// any forced split direction.
+	if newerState && state.WindowToBSPID != nil {
+		if m.WindowToBSPID == nil {
+			m.WindowToBSPID = make(map[string]int, len(state.WindowToBSPID))
+		}
+		for id, intID := range state.WindowToBSPID {
+			if _, ok := m.WindowToBSPID[id]; !ok {
+				m.WindowToBSPID[id] = intID
+			}
+		}
+		// Keep the reverse map consistent with the merge; getWindowByIntID trusts
+		// it as a fast path before falling back to a linear scan.
+		m.BSPIDToWindowID = make(map[int]string, len(m.WindowToBSPID))
+		for id, intID := range m.WindowToBSPID {
+			m.BSPIDToWindowID[intID] = id
+		}
 	}
 	// Never rewind the BSP ID allocator. The counter only has to be unique
 	// locally, and taking a lower value from a sync hands the next window an int
@@ -491,8 +521,9 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	m.TilingScheme = layout.AutoScheme(state.TilingScheme)
 	m.ApplyLayoutModeName(state.LayoutMode)
 
-	// Update BSP trees
-	if state.WorkspaceTrees != nil && state.AutoTiling {
+	// Update BSP trees, again only from a strictly newer sync so a lagging echo
+	// cannot clobber the tree this client just computed (see newerState above).
+	if newerState && state.WorkspaceTrees != nil && state.AutoTiling {
 		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 		for ws, serialized := range state.WorkspaceTrees {
 			if serialized != nil {
@@ -860,10 +891,46 @@ func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, place
 				m.ScrollingOnWindowAdded(w)
 			}
 		}
+	} else if m.pendingSplitDir != layout.PreselectionNone {
+		// A forced-direction split (ctrl+b | / -) asked the daemon for this pane
+		// and stashed the direction for exactly this moment. Insert it on the
+		// chosen side of its target before TileAllWindows runs, otherwise the
+		// spiral scheme places it and the direction is lost. Only the single-window
+		// case is a split; anything else clears the request and falls back.
+		if len(created) == 1 {
+			m.applyPendingForcedSplit(created[0])
+		} else if len(created) > 1 {
+			m.pendingSplitDir = layout.PreselectionNone
+			m.pendingSplitTarget = ""
+		}
 	}
 
 	m.TileAllWindows()
 	m.SyncStateToDaemon()
+}
+
+// applyPendingForcedSplit inserts a daemon-created pane into the BSP tree on the
+// side recorded by a forced-direction split, so ctrl+b | / - keep their meaning
+// across the round trip that created the window. The pending request is cleared
+// whether or not it applies. TileAllWindows runs afterwards and, finding every
+// window already in the tree, only re-applies the layout.
+func (m *OS) applyPendingForcedSplit(win *terminal.Window) {
+	dir := m.pendingSplitDir
+	targetID := m.pendingSplitTarget
+	m.pendingSplitDir = layout.PreselectionNone
+	m.pendingSplitTarget = ""
+
+	if dir == layout.PreselectionNone || win == nil {
+		return
+	}
+
+	tree := m.GetOrCreateBSPTree()
+	windowIntID := m.getWindowIntID(win.ID)
+	if tree.HasWindow(windowIntID) {
+		return // already in the tree; nothing to force
+	}
+	targetIntID := m.getWindowIntID(targetID)
+	tree.InsertWindowWithPreselection(windowIntID, targetIntID, dir, m.GetBSPBounds())
 }
 
 // convertSessionBSPNode converts session.SerializedBSPNode to layout.SerializedNode
