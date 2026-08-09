@@ -3,6 +3,7 @@ package app
 import (
 	"image/color"
 	"os"
+	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -482,35 +483,58 @@ func (m *OS) View() tea.View {
 	// text first, then we write graphics. This keeps them in the same frame
 	// and prevents tearing between text and graphics updates.
 	if !m.renderSkipped {
-		// Hide images ONLY during full-screen overlays (help, palette, etc.).
-		// Copy-mode scroll is NOT a reason to hide  - RefreshAllPlacements uses
-		// the window's scrollback offset to reposition images so they scroll
-		// naturally with the terminal content.
-		hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
-			m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
-			m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
-			m.ShowSettings || m.ShowThemePicker || m.ShowTapeManager || m.ShowTapeReview
-		if hasOverlay {
-			if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
-				m.KittyPassthrough.HideAllPlacements()
-			}
-			if m.SixelPassthrough != nil && m.SixelPassthrough.PlacementCount() > 0 {
-				m.SixelPassthrough.HideAllPlacements()
-				// Flush the clear commands
-				data := m.SixelPassthrough.FlushPending()
-				if len(data) > 0 {
-					_, _ = os.Stdout.Write(data)
-				}
-			}
-		} else {
-			m.GetKittyGraphicsCmd()
-			m.GetSixelGraphicsCmd()
-			m.RefreshTextSizing()
-			m.FlushTextSizing()
-		}
+		m.flushGraphicsForView()
 	}
 
 	return view
+}
+
+// flushGraphicsForView performs View()'s graphics side effects (kitty/sixel
+// placement refresh, pending flush, host writes, and text sizing).
+//
+// It runs inside its own panic barrier. View() is called from bubbletea's
+// render goroutine, which recovers panics only at the top of Program.Run: a
+// panic escaping here returns from Run, and over SSH that ends the wish session
+// and tears down the daemon client (the "use of closed network connection"
+// teardown). The graphics path re-encodes guest-controlled, high-rate image
+// frames (kitty shm/file transports over SSH), so a single malformed or
+// unhandled frame must degrade to a dropped frame, never a dead session.
+// Update() has an equivalent per-event barrier; this is its render-side twin.
+func (m *OS) flushGraphicsForView() {
+	defer func() {
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			path := WriteCrashLog(r, stack)
+			m.LogError("recovered panic in graphics flush: %v (crash log: %s)\n%s", r, path, stack)
+		}
+	}()
+
+	// Hide images ONLY during full-screen overlays (help, palette, etc.).
+	// Copy-mode scroll is NOT a reason to hide  - RefreshAllPlacements uses
+	// the window's scrollback offset to reposition images so they scroll
+	// naturally with the terminal content.
+	hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
+		m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
+		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
+		m.ShowSettings || m.ShowThemePicker || m.ShowTapeManager || m.ShowTapeReview
+	if hasOverlay {
+		if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
+			m.KittyPassthrough.HideAllPlacements()
+		}
+		if m.SixelPassthrough != nil && m.SixelPassthrough.PlacementCount() > 0 {
+			m.SixelPassthrough.HideAllPlacements()
+			// Flush the clear commands
+			data := m.SixelPassthrough.FlushPending()
+			if len(data) > 0 {
+				_, _ = os.Stdout.Write(data)
+			}
+		}
+	} else {
+		m.GetKittyGraphicsCmd()
+		m.GetSixelGraphicsCmd()
+		m.RefreshTextSizing()
+		m.FlushTextSizing()
+	}
 }
 
 // snapshotPlacementScrollbackLens records every window's scrollback length

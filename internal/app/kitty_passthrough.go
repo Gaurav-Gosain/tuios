@@ -295,8 +295,24 @@ func (kp *KittyPassthrough) asyncFrameWriter() {
 		if kp.hostOut == nil || len(data) == 0 {
 			continue
 		}
-		kp.writeHostSequence(syncBegin, data, syncEnd)
+		// Contain a panic from the host write to this one frame. This goroutine
+		// is spawned by us, not by bubbletea, so a panic here is recovered by
+		// nothing: it would crash the entire process (every SSH session on the
+		// server), not just the pane. A dropped video frame is the correct
+		// degradation; the drain loop keeps running for the next one.
+		kp.writeFrameSafely(data)
 	}
+}
+
+// writeFrameSafely writes one async video frame, recovering from any panic so a
+// single bad frame degrades to a drop instead of taking the process down.
+func (kp *KittyPassthrough) writeFrameSafely(data []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			kittyPassthroughLog("asyncFrameWriter: recovered panic writing frame: %v", r)
+		}
+	}()
+	kp.writeHostSequence(syncBegin, data, syncEnd)
 }
 
 func (kp *KittyPassthrough) WriteToHost(data []byte) {

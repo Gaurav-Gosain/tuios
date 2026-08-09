@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/wish/v2"
@@ -77,6 +78,11 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 			bubbletea.Middleware(teaHandler),
 			// Logging middleware for connection tracking
 			logging.Middleware(),
+			// Outermost backstop: contain any panic in a single session's
+			// handler chain so it can never take down the whole SSH server (and
+			// with it every other connected user). wish runs the last-listed
+			// middleware outermost, so this wraps everything above.
+			recoverMiddleware(),
 		),
 	)
 	if err != nil {
@@ -110,6 +116,25 @@ func shortID(id string) string {
 		return id
 	}
 	return id[:8]
+}
+
+// recoverMiddleware wraps a session handler so a panic in it (or any inner
+// middleware) is recovered, logged, and confined to that one session. Bubble
+// Tea already recovers panics inside its own program loop and returns from
+// Run; this is the backstop for everything outside that loop - session setup,
+// capability detection, the daemon connect/restore path - so a single bad
+// session can never crash the long-lived server process.
+func recoverMiddleware() wish.Middleware {
+	return func(next ssh.Handler) ssh.Handler {
+		return func(sess ssh.Session) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("recovered panic in SSH session handler: %v\n%s", r, debug.Stack())
+				}
+			}()
+			next(sess)
+		}
+	}
 }
 
 // teaHandler creates a TUIOS instance for each SSH session
