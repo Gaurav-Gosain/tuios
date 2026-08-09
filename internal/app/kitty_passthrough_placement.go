@@ -75,10 +75,39 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 			delete(kp.placements, windowID)
+			delete(kp.resizeFreezeSize, windowID)
 			continue
 		}
 
 		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, IsAltScreen=%v, visible=%v", windowID[:min(8, len(windowID))], info.IsAltScreen, info.Visible)
+
+		// Coalesce an interactive resize.
+		//
+		// A drag-resize changes the window size every render tick, and the guest
+		// has not redrawn at the new size yet (the PTY resize is deferred until
+		// the gesture settles, see resize_deferral.go). Re-clipping and re-placing
+		// the same stale image against each intermediate viewport size makes it
+		// visibly crop and jitter many times a second: the flicker. So while a
+		// window is being manipulated AND its size differs from the size the
+		// placement was last laid out at, the existing placement is left exactly
+		// where it is - kitty keeps the last a=p on screen - and no delete or
+		// re-place is emitted for it.
+		//
+		// resizeFreezeSize records that last laid-out size. It is refreshed on
+		// every pass that is NOT frozen, so a plain window move (manipulated but
+		// unchanged size) still re-places and follows the pointer, and the instant
+		// the gesture ends the settled size is recorded and the image re-places
+		// once at the final geometry. The deferred PTY resize then delivers a
+		// fresh frame; nothing is left stale.
+		if prev, seen := kp.resizeFreezeSize[windowID]; info.IsBeingManipulated && seen &&
+			(prev[0] != info.Width || prev[1] != info.Height) {
+			// Frozen: hold this window's placement untouched for this tick.
+			// resizeFreezeSize is deliberately not updated, so every later tick of
+			// the same gesture keeps differing from it and stays frozen until the
+			// size settles.
+			continue
+		}
+		kp.resizeFreezeSize[windowID] = [2]int{info.Width, info.Height}
 
 		// During window manipulation (drag/resize), let images reposition
 		// with the window. The change detection below (posChanged check)
