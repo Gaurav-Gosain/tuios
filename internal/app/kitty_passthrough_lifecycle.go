@@ -1,6 +1,9 @@
 package app
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -59,6 +62,24 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 	}
 	delete(kp.placements, windowID)
 	delete(kp.imageIDMap, windowID)
+	kp.deleteRemoteVideoImages(windowID)
+}
+
+// deleteRemoteVideoImages deletes the host images backing this window's
+// self-placed remote-terminal video streams (they are not in `placements`, so
+// the placement teardown above misses them) and forgets them.
+func (kp *KittyPassthrough) deleteRemoteVideoImages(windowID string) {
+	ids := kp.remoteVideo[windowID]
+	if len(ids) == 0 {
+		delete(kp.remoteVideo, windowID)
+		return
+	}
+	var buf bytes.Buffer
+	for hostID := range ids {
+		fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
+	}
+	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+	delete(kp.remoteVideo, windowID)
 }
 
 func (kp *KittyPassthrough) ClearWindow(windowID string) {
@@ -77,6 +98,7 @@ func (kp *KittyPassthrough) ClearWindow(windowID string) {
 		kp.deleteOnePlacement(p)
 	}
 	kp.placements[windowID] = nil
+	kp.deleteRemoteVideoImages(windowID)
 }
 
 func (m *OS) setupKittyPassthrough(window *terminal.Window) {

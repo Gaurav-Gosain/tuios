@@ -786,6 +786,38 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
 
+	// Real remote terminal (ssh) video: the host does not repaint an existing
+	// placement when its bitmap is re-transmitted, and letting RefreshAllPlacements
+	// place this image races the async re-transmit (its delete + re-place against
+	// the new bitmap) and blanks the pane. Make each frame self-contained -
+	// transmit AND place in one a=T at the tracked position - and keep the image
+	// out of `placements` so the render loop never touches it. The overlay
+	// (inlineGraphics) keeps its transmit-only path: it re-renders live placements
+	// on re-transmit itself.
+	if reusingID && kp.remoteClient {
+		if kp.remoteVideo[windowID] == nil {
+			kp.remoteVideo[windowID] = make(map[uint32]bool)
+		}
+		// First reused frame: hand the image off from RefreshAllPlacements to the
+		// self-placing path, keeping the position it was first placed at.
+		if p := kp.placements[windowID][hostID]; p != nil {
+			if p.HostX != 0 || p.HostY != 0 {
+				hostX, hostY = p.HostX, p.HostY
+			}
+			delete(kp.placements[windowID], hostID)
+		}
+		kp.remoteVideo[windowID][hostID] = true
+
+		frame := kp.buildInlinePlacedChunks(hostID, cmd.Format, cmd.Compression,
+			cmd.Width, cmd.Height, displayCols, displayRows, hostX, hostY, data)
+		select {
+		case kp.asyncFrameCh <- frame:
+		default:
+			kittyPassthroughLog("forwardFileTransmitInline: dropped frame (async channel full)")
+		}
+		return
+	}
+
 	// Build the image as 4096-byte kitty chunks (t=d). Pass through
 	// format / compression / size so the overlay knows how to decode.
 	frameData := kp.buildInlineChunks(hostID, cmd.Format, cmd.Compression, cmd.Width, cmd.Height, data)
@@ -884,6 +916,50 @@ func (kp *KittyPassthrough) buildInlineChunks(hostID uint32, format vt.KittyGrap
 		out.WriteString(chunk)
 		out.WriteString("\x1b\\")
 	}
+	return out.Bytes()
+}
+
+// buildInlinePlacedChunks encodes raw image bytes as a kitty transmit-AND-place
+// (a=T) sequence at a fixed host position, split into 4096-byte base64 chunks.
+// This is the remote-terminal video path: unlike buildInlineChunks (a=t,
+// transmit only), the host displays the image at the saved cursor position when
+// the final chunk lands, so a re-transmitted frame is actually repainted without
+// a separate a=p that would race the render loop. The cursor is saved and
+// restored around the sequence so the guest's own cursor is unaffected.
+func (kp *KittyPassthrough) buildInlinePlacedChunks(hostID uint32, format vt.KittyGraphicsFormat, compression vt.KittyGraphicsCompression, width, height, cols, rows, hostX, hostY int, raw []byte) []byte {
+	encoded := base64.StdEncoding.EncodeToString(raw)
+	const chunkSize = 4096
+	var out bytes.Buffer
+	out.WriteString("\x1b7")                           // save cursor
+	fmt.Fprintf(&out, "\x1b[%d;%dH", hostY+1, hostX+1) // position (1-based)
+	for i := 0; i < len(encoded); i += chunkSize {
+		end := min(i+chunkSize, len(encoded))
+		chunk := encoded[i:end]
+		more := end < len(encoded)
+
+		out.WriteString("\x1b_G")
+		if i == 0 {
+			fmt.Fprintf(&out, "a=T,i=%d,f=%d,s=%d,v=%d,q=2", hostID, format, width, height)
+			if cols > 0 {
+				fmt.Fprintf(&out, ",c=%d", cols)
+			}
+			if rows > 0 {
+				fmt.Fprintf(&out, ",r=%d", rows)
+			}
+			if compression == vt.KittyCompressionZlib {
+				out.WriteString(",o=z")
+			}
+		} else {
+			fmt.Fprintf(&out, "i=%d,q=2", hostID)
+		}
+		if more {
+			out.WriteString(",m=1")
+		}
+		out.WriteByte(';')
+		out.WriteString(chunk)
+		out.WriteString("\x1b\\")
+	}
+	out.WriteString("\x1b8") // restore cursor
 	return out.Bytes()
 }
 

@@ -82,6 +82,14 @@ type KittyPassthrough struct {
 	nextHostID    uint32
 	pendingOutput []byte
 
+	// remoteVideo tracks (windowID -> set of hostImageID) for video streams the
+	// remote-client path self-places with a=T. These images are deliberately NOT
+	// in `placements`, so RefreshAllPlacements never touches them: on a real
+	// remote terminal, letting the render loop delete-and-replace an image while
+	// the async writer re-transmits its bitmap races to blank the pane. The set
+	// exists only so window close can delete the host images.
+	remoteVideo map[string]map[uint32]bool
+
 	// Async video frame writer. Video apps (mpv, youterm) send 30+ fps of
 	// large image data. Processing synchronously inside the VT callback
 	// blocks the bubbletea render loop and makes the entire UI unresponsive.
@@ -251,6 +259,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		hostOut:           hostOut,
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
+		remoteVideo:       make(map[string]map[uint32]bool),
 		nextHostID:        1,
 		pendingDirectData: make(map[string]*pendingDirectTransmit),
 		asyncFrameCh:      make(chan []byte, 1),
