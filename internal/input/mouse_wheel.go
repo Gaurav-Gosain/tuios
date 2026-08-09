@@ -77,7 +77,15 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					Button: uv.MouseButton(mouse.Button),
 					Mod:    uv.KeyMod(mouse.Mod),
 				}
-				sendMouseToWindow(focusedWindow, adjustedMouse)
+				// One physical notch scrolls one step in the guest, which feels
+				// sluggish in apps that scroll a small amount per wheel event
+				// (browsers especially). Send config.ScrollLines events per notch
+				// so a notch covers the same distance as scrollback scrolling,
+				// tunable through the existing scroll-speed setting.
+				reps := max(config.ScrollLines, 1)
+				for range reps {
+					sendMouseToWindow(focusedWindow, adjustedMouse)
+				}
 				return o, nil
 			}
 		}

@@ -1,11 +1,13 @@
 package input
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -34,6 +36,10 @@ func mouseModeGraphicsWindow(t *testing.T) (*app.OS, *vt.Emulator) {
 // tuios scrollback / copy mode (the natural-scroll routing is only for panes
 // WITHOUT mouse mode). With 1016 on it must carry pixel coordinates.
 func TestWheelForwardedToMouseModeGraphicsPane(t *testing.T) {
+	// Pin one report per notch so this asserts the coordinate encoding, not the
+	// amplification (covered by TestWheelAmplifiedByScrollLines).
+	defer withScrollLines(1)()
+
 	o, em := mouseModeGraphicsWindow(t)
 
 	got := make(chan string, 1)
@@ -59,6 +65,52 @@ func TestWheelForwardedToMouseModeGraphicsPane(t *testing.T) {
 	// The wheel must not have entered copy mode on a mouse-mode pane.
 	if o.Windows[0].InCopyMode() {
 		t.Fatal("wheel over a mouse-mode pane wrongly entered copy mode")
+	}
+}
+
+// withScrollLines sets config.ScrollLines and returns a restore func.
+func withScrollLines(n int) func() {
+	prev := config.ScrollLines
+	config.ScrollLines = n
+	return func() { config.ScrollLines = prev }
+}
+
+// TestWheelAmplifiedByScrollLines proves one physical notch over a mouse-mode
+// pane forwards config.ScrollLines wheel reports, so browsers and other
+// mouse-reporting apps scroll a comfortable distance per notch instead of one
+// tiny step.
+func TestWheelAmplifiedByScrollLines(t *testing.T) {
+	defer withScrollLines(3)()
+
+	o, em := mouseModeGraphicsWindow(t)
+
+	const want = "\x1b[<64;46;51M"
+	got := make(chan string, 1)
+	go func() {
+		var b strings.Builder
+		buf := make([]byte, 256)
+		// Read until the three reports have arrived (or the reader is drained).
+		for b.Len() < len(want)*3 {
+			n, err := em.Read(buf)
+			if n > 0 {
+				b.Write(buf[:n])
+			}
+			if err != nil {
+				break
+			}
+		}
+		got <- b.String()
+	}()
+
+	handleMouseWheel(tea.MouseWheelMsg(tea.Mouse{X: 5, Y: 3, Button: tea.MouseWheelUp}), o)
+
+	select {
+	case s := <-got:
+		if s != strings.Repeat(want, 3) {
+			t.Fatalf("wheel reports = %q, want three copies of %q", s, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("wheel was not amplified to config.ScrollLines reports")
 	}
 }
 
