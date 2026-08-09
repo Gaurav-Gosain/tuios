@@ -157,6 +157,17 @@ func runLocal() error {
 		fmt.Println("Debug mode enabled")
 	}
 
+	// The interactive TUI draws to this terminal. Go's standard log writes to
+	// stderr, so the client/daemon [DEBUG] lines would share the screen with the
+	// rendered UI and corrupt it. When internal debugging is on, divert the log
+	// stream to a file so the screen stays clean; the external daemon subprocess
+	// already discards its own output, so this covers the in-process client.
+	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+		if lf, lerr := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); lerr == nil {
+			log.SetOutput(lf)
+		}
+	}
+
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
