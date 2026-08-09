@@ -46,6 +46,7 @@ a working negative control look like a broken one for half an hour.
 | Mouse: the wheel over a pane that asked for the mouse | n/a, never broken | same binary | none, and that is correct: `TestMouseTrackingAppKeepsItsOwnWheel` passes on both, because it guards behaviour that already worked | **guard, not a control** |
 | Clipboard: every mouse release copies, so a bare single click clobbers the clipboard | n/a, injected | `deliberate := moved \|\| window.ClickCount >= 2` → `deliberate := true` in `internal/input/mouse_select.go` | `TestDoubleClickCopiesAWordAndTripleClickTheLine` ("the gesture wrote the clipboard more times than it should: got [\"b\"], want []") | **caught, and invisible before this change** |
 | Drag state never cleared on release, so one click freezes every pane forever | n/a, injected | drop `o.Dragging = false` from the copy-mode branch of `handleMouseRelease` | `TestClickInPaneDoesNotFreezeOutput` | **caught, and invisible before this change** |
+| Agent-state feature absent (no verb, no indicator) | whole feature | build `origin/main` and point `TUIOS_E2E_BIN` at it | `TestAgentStateIndicatorRenders` (fails at the set step: `Unknown command "set-agent-state"`) | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 

@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -49,7 +50,20 @@ type Daemon struct {
 	// sessions on daemon start. Sessions can still be brought back on demand
 	// with the resurrect verb.
 	disableAutoRestore bool
+
+	// agentStallTimeout is how long a pane may report working while producing no
+	// output before the stall heuristic demotes it to idle. Zero disables the
+	// heuristic. It is resolved once in NewDaemon from config or the
+	// TUIOS_AGENT_STALL_SECONDS environment override.
+	agentStallTimeout time.Duration
 }
+
+// defaultAgentStallTimeout is the conservative default silence window before a
+// pane that reported working but never reported anything after is assumed idle.
+// It is long on purpose: the heuristic is a fallback for agents that do not
+// report, and demoting a genuinely-busy-but-quiet pane too eagerly is worse than
+// leaving it looking busy a little longer.
+const defaultAgentStallTimeout = 30 * time.Second
 
 // pendingRequest tracks a routed command awaiting its result, with the time it
 // was created so cleanupLoop can expire stale entries.
@@ -123,6 +137,11 @@ type DaemonConfig struct {
 	LogFile    string
 	// DisableAutoRestore skips restoring saved sessions on daemon start.
 	DisableAutoRestore bool
+	// AgentStallTimeout overrides how long a pane may report working with no
+	// output before the stall heuristic demotes it to idle. Zero falls back to
+	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
+	// negative value disables the heuristic.
+	AgentStallTimeout time.Duration
 }
 
 // NewDaemon creates a new daemon instance.
@@ -138,6 +157,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		events:             newEventHub(),
 		version:            cfg.Version,
 		disableAutoRestore: cfg.DisableAutoRestore,
+		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
 	}
 
 	if cfg.SocketPath != "" {
@@ -237,6 +257,7 @@ func (d *Daemon) Start() error {
 	go d.handleSignals()
 	go d.acceptLoop()
 	go d.cleanupLoop()
+	go d.stallMonitor()
 
 	return nil
 }
@@ -574,6 +595,69 @@ func (d *Daemon) cleanupLoop() {
 				}
 			}
 			d.pendingRequestsMu.Unlock()
+		}
+	}
+}
+
+// resolveAgentStallTimeout picks the stall heuristic's silence window: an
+// explicit positive config wins, a negative config disables the heuristic, and a
+// zero config falls back to the TUIOS_AGENT_STALL_SECONDS environment override
+// (0 or less there disables it) and finally to the default.
+func resolveAgentStallTimeout(cfg time.Duration) time.Duration {
+	if cfg > 0 {
+		return cfg
+	}
+	if cfg < 0 {
+		return 0
+	}
+	if s := os.Getenv("TUIOS_AGENT_STALL_SECONDS"); s != "" {
+		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+			if n <= 0 {
+				return 0
+			}
+			return time.Duration(n) * time.Second
+		}
+	}
+	return defaultAgentStallTimeout
+}
+
+// stallMonitor periodically applies the agent-state output-stall heuristic to
+// every live session, demoting panes that reported working but have gone quiet
+// to idle. It is the fallback for agents that never report their own state and is
+// strictly secondary to explicit reports (see Session.applyStallHeuristic). It
+// exits when the daemon context is cancelled, and does nothing at all when the
+// heuristic is disabled.
+func (d *Daemon) stallMonitor() {
+	if d.agentStallTimeout <= 0 {
+		return
+	}
+	// Tick often enough to demote within a fraction of the timeout, but never
+	// spin: at least once a second, at most once every ten.
+	interval := d.agentStallTimeout / 4
+	if interval < time.Second {
+		interval = time.Second
+	}
+	if interval > 10*time.Second {
+		interval = 10 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-ticker.C:
+			now := time.Now()
+			for _, sess := range d.manager.AllSessions() {
+				sess := sess
+				sess.applyStallHeuristic(now, d.agentStallTimeout, func(ptyID string) int64 {
+					if pty := sess.GetPTY(ptyID); pty != nil {
+						return pty.LastOutput()
+					}
+					return 0
+				})
+			}
 		}
 	}
 }

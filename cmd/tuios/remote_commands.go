@@ -294,6 +294,56 @@ func runGetConfig(sessionName, path string) error {
 	return nil
 }
 
+// runSetAgentState reports a pane's agent state to the daemon over the verb
+// protocol. It is what the reference shim calls, and what a user runs to mark a
+// pane by hand.
+func runSetAgentState(sessionName, windowTarget, state, message string) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := client.Call("set-agent-state", map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+		"state":   state,
+		"message": message,
+	}); err != nil {
+		return explainVerbError("set-agent-state", err)
+	}
+	return nil
+}
+
+// runGetAgentState reads a pane's reported agent state and prints it. With
+// jsonOutput it prints the full result; otherwise it prints the state name.
+func runGetAgentState(sessionName, windowTarget string, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("get-agent-state", map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("get-agent-state", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Println(res.State)
+	return nil
+}
+
 // runTapeExec executes a tape file in a running TUIOS session.
 func runTapeExec(sessionName, filePath string) error {
 	if err := requireDaemon(); err != nil {

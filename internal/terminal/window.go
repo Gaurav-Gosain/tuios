@@ -311,6 +311,14 @@ type Window struct {
 
 	Tiled bool // True when window is in shared-border tiling mode (no individual borders)
 
+	// AgentState is the semantic agent state the daemon reports for this pane
+	// (working, needs_input, idle, done, errored, or empty for none). It is set
+	// from the daemon state sync and read by the renderer to draw the per-window
+	// state indicator; it is written and read on the UI goroutine, like CustomName.
+	AgentState string
+	// AgentMessage is the optional short note reported with AgentState.
+	AgentMessage string
+
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)
 

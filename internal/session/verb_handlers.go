@@ -468,6 +468,81 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 	return map[string]any{"type": "option", "key": p.Key, "value": value}, nil
 }
 
+func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session string `json:"session"`
+		Window  string `json:"window"`
+		State   string `json:"state"`
+		Message string `json:"message"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.State == "" {
+		return nil, invalidParam("state", "state is required, one of: "+strings.Join(AgentStateNames, ", "))
+	}
+	state, ok := ParseAgentState(p.State)
+	if !ok {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "unknown agent state "+echoName(p.State), &VerbHint{
+			Param:      "state",
+			DidYouMean: closestMatch(p.State, AgentStateNames),
+			Available:  AgentStateNames,
+			Detail:     "state names the pane's semantic agent state; use none to clear it.",
+		})
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+
+	target := p.Window
+	if target == "" {
+		id, err := focusedWindowID(sess.GetState())
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		target = id
+	}
+
+	if err := sess.SetDaemonWindowAgentState(target, state, p.Message); err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	return map[string]any{"type": "agent_state_set", "state": state.Name(), "message": p.Message}, nil
+}
+
+func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p commonParams
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+
+	state := sess.GetState()
+	target := p.Window
+	if target == "" {
+		id, err := focusedWindowID(state)
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		target = id
+	}
+	idx, err := findWindowStateIndex(state.Windows, target)
+	if err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	w := state.Windows[idx]
+	return map[string]any{
+		"type":           "agent_state",
+		"window_id":      w.ID,
+		"state":          w.AgentState.Name(),
+		"message":        w.AgentMessage,
+		"agent_state_at": w.AgentStateAt,
+	}, nil
+}
+
 // sliceCaptureLines applies the optional region/lines selection to captured
 // content. start/end are 1-based inclusive line numbers; when both are zero the
 // region is ignored. lines, when > 0 and no region is given, keeps only the last

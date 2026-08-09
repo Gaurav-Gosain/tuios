@@ -728,6 +728,57 @@ whether or not a TUI client is attached.`,
 			return runGetConfig(getConfigSession, args[0])
 		},
 	}
+	var setAgentStateSession string
+	var setAgentStateWindow string
+	var setAgentStateMessage string
+	setAgentStateCmd := &cobra.Command{
+		Use:   "set-agent-state <state>",
+		Short: "Report a pane's agent state to the running TUIOS session",
+		Long: `Report the semantic state of an agent running in a pane so the daemon can
+surface which panes need attention. State is one of: none, working, needs_input,
+idle, done, errored. A pane reports its own state by running this against the
+daemon socket; the reference Claude Code shim does exactly that.`,
+		Example: `  # Mark the focused pane as working
+  tuios set-agent-state working
+
+  # Mark a specific pane as needing input, with a note
+  tuios set-agent-state needs_input -w build -m "awaiting approval"
+
+  # Clear a pane's agent state
+  tuios set-agent-state none`,
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: session.AgentStateNames,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runSetAgentState(setAgentStateSession, setAgentStateWindow, args[0], setAgentStateMessage)
+		},
+	}
+	setAgentStateCmd.Flags().StringVarP(&setAgentStateSession, "session", "s", "", "Target session (default: most recently active)")
+	setAgentStateCmd.Flags().StringVarP(&setAgentStateWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	setAgentStateCmd.Flags().StringVarP(&setAgentStateMessage, "message", "m", "", "Optional short note reported with the state")
+	_ = setAgentStateCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var getAgentStateSession string
+	var getAgentStateWindow string
+	var getAgentStateJSON bool
+	getAgentStateCmd := &cobra.Command{
+		Use:   "get-agent-state",
+		Short: "Read a pane's reported agent state",
+		Long:  `Read the agent state a pane last reported. Prints the state name, or the full result with --json.`,
+		Example: `  # Read the focused pane's state
+  tuios get-agent-state
+
+  # Read a specific pane as JSON
+  tuios get-agent-state -w build --json`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runGetAgentState(getAgentStateSession, getAgentStateWindow, getAgentStateJSON)
+		},
+	}
+	getAgentStateCmd.Flags().StringVarP(&getAgentStateSession, "session", "s", "", "Target session (default: most recently active)")
+	getAgentStateCmd.Flags().StringVarP(&getAgentStateWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	getAgentStateCmd.Flags().BoolVar(&getAgentStateJSON, "json", false, "Output result as JSON")
+	_ = getAgentStateCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	getConfigCmd.Flags().StringVarP(&getConfigSession, "session", "s", "", "Target session (default: most recently active)")
 	_ = getConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	getConfigCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -998,6 +1049,7 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd)
+	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd)
 
 	// Command failures are printed here rather than by fang, which would query
