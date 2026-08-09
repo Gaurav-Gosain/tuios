@@ -13,3 +13,12 @@ result
 *.prof
 cpu.prof
 mem.prof
+
+# Packaged demo output from web/package.sh: a copy of tracked files plus the built guest, regenerable.
+/artifacts/
+
+# Netlify CLI local link state, per-machine.
+.netlify/
+
+# The WebAssembly demo lives on feat/wasm-demo; its working copy (source plus a 125MB built guest) is stray on main. Ignore it here so status stays clean; tracked files still merge normally if the branch lands.
+/web/
