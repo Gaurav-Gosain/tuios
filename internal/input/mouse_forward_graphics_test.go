@@ -114,6 +114,51 @@ func TestWheelAmplifiedByScrollLines(t *testing.T) {
 	}
 }
 
+// TestWheelForwardedAfterDaemonModeRestore is the routing half of the daemon
+// reattach fix: the same wheel forwarding must hold when the emulator learned
+// its mouse modes from the daemon's snapshot (RestoreModes, as every attach
+// and session switch applies it) rather than by parsing the guest's DECSET
+// sequences, which have scrolled out of the daemon's bounded output buffer by
+// the time a client reattaches.
+func TestWheelForwardedAfterDaemonModeRestore(t *testing.T) {
+	// Pin one report per notch so this asserts routing after mode restore, not
+	// the scroll-speed amplification (covered by TestWheelAmplifiedByScrollLines).
+	defer withScrollLines(1)()
+
+	em := vt.NewEmulator(80, 24)
+	t.Cleanup(func() { _ = em.Close() })
+	em.RestoreModes(map[int]bool{1003: true, 1006: true, 1016: true})
+	em.SetCellSize(10, 20)
+
+	win := &terminal.Window{Terminal: em, X: 0, Y: 0, Width: 82, Height: 26}
+	o := &app.OS{
+		Mode:          app.TerminalMode,
+		FocusedWindow: 0,
+		Windows:       []*terminal.Window{win},
+	}
+
+	got := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 128)
+		n, _ := em.Read(buf)
+		got <- string(buf[:n])
+	}()
+
+	handleMouseWheel(tea.MouseWheelMsg(tea.Mouse{X: 5, Y: 3, Button: tea.MouseWheelUp}), o)
+
+	select {
+	case s := <-got:
+		if s != "\x1b[<64;46;51M" {
+			t.Fatalf("wheel report = %q, want %q (pixel coords for restored mouse-mode pane)", s, "\x1b[<64;46;51M")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("wheel was not forwarded to the pane after mode restore (HasMouseMode cache stale?)")
+	}
+	if o.Windows[0].InCopyMode() {
+		t.Fatal("wheel over a restored mouse-mode pane wrongly entered copy mode")
+	}
+}
+
 // TestMotionForwardedToMouseModeGraphicsPane proves hover (motion) reaches a
 // mouse-mode pane with pixel coordinates when 1016 is on.
 func TestMotionForwardedToMouseModeGraphicsPane(t *testing.T) {

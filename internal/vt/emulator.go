@@ -502,38 +502,39 @@ func (e *Emulator) RestoreAltScreenMode(enabled bool) {
 	// The modes will be updated naturally when PTY output is processed.
 }
 
-// GetModes returns a copy of the current terminal modes.
+// GetModes returns a copy of the current terminal DEC private modes.
 // This is used for session state serialization to preserve terminal modes
 // across reconnections (mouse tracking, bracketed paste, etc.).
+//
+// It captures every DEC mode the emulator tracks rather than a hand-picked
+// list: a guest sets a sticky mode once at startup (a browser enables
+// 1003/1006/1016 and never repeats them), and any mode missing here is
+// silently lost on reattach once the enable sequence has scrolled out of the
+// daemon's bounded output buffer.
 func (e *Emulator) GetModes() map[int]bool {
 	modes := make(map[int]bool)
 
-	// Important modes to preserve for session restoration:
-	modesToCapture := []ansi.Mode{
-		// Mouse tracking modes
-		ansi.ModeMouseX10,         // ?9
-		ansi.ModeMouseNormal,      // ?1000
-		ansi.ModeMouseHighlight,   // ?1001
-		ansi.ModeMouseButtonEvent, // ?1002
-		ansi.ModeMouseAnyEvent,    // ?1003
-		ansi.ModeMouseExtSgr,      // ?1006 - SGR mouse encoding
-
-		// Screen and cursor modes
-		ansi.ModeAltScreen,           // ?1047
-		ansi.ModeAltScreenSaveCursor, // ?1049
-
-		// Other important modes
-		ansi.ModeBracketedPaste, // ?2004
-		ansi.ModeFocusEvent,     // ?1004
-		ansi.ModeAutoWrap,       // ?7
-	}
-
-	for _, mode := range modesToCapture {
-		if e.isModeSet(mode) {
-			// Store mode number as int for JSON serialization
-			modes[int(mode.Mode())] = true
+	e.modesMu.RLock()
+	for mode, setting := range e.modes {
+		dec, ok := mode.(ansi.DECMode)
+		if !ok {
+			// ANSI modes share the int keyspace with DEC modes in this
+			// serialization, so they cannot be restored unambiguously.
+			continue
+		}
+		if dec == ansi.ModeSynchronizedOutput {
+			// Transient frame gate: restoring it would hold the first frame
+			// after attach until the sync timeout expires.
+			continue
+		}
+		switch {
+		case setting.IsSet():
+			modes[int(dec)] = true
+		case setting.IsReset():
+			modes[int(dec)] = false
 		}
 	}
+	e.modesMu.RUnlock()
 
 	return modes
 }
@@ -549,7 +550,6 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 	// Restore each mode by directly updating the modes map
 	// This avoids triggering side effects like screen clearing
 	e.modesMu.Lock()
-	defer e.modesMu.Unlock()
 	for modeNum, enabled := range modes {
 		// Convert int back to Mode
 		mode := ansi.DECMode(modeNum)
@@ -564,6 +564,21 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 		if mode == ansi.ModeAutoWrap {
 			e.cachedAutoWrap.Store(enabled)
 		}
+	}
+	e.modesMu.Unlock()
+
+	// Refresh the atomic mouse-mode caches that HasMouseMode and
+	// HasAllMotionMode read. Leaving them stale broke mouse routing on every
+	// daemon reattach: the modes map said 1003 was set, but the input layer
+	// consults the cache, saw false, and sent wheel/motion/click to
+	// scrollback and copy mode instead of the pane. Must run after the map
+	// lock is released; it re-reads the map through isModeSet.
+	e.updateMouseModeCache()
+
+	// setMode's cursor-visibility side effect, for the same reason: a guest
+	// that hid its cursor (DECTCEM reset) must not get it back on reattach.
+	if enabled, ok := modes[int(ansi.ModeTextCursorEnable)]; ok {
+		e.scr.setCursorHidden(!enabled)
 	}
 }
 

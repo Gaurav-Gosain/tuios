@@ -1070,6 +1070,13 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 			restoredModes = len(state.Modes)
 		}
 
+		// Kitty keyboard flags travel outside the DEC mode map and are set
+		// once by the guest (CSI > u / CSI = u), so like the modes above they
+		// cannot be recovered from the bounded output buffer. Without this a
+		// reattached client encodes keys in legacy form for a pane that
+		// negotiated the protocol.
+		t.RestoreKittyKeyboardState(state.KittyKbdStack)
+
 		// For alt screen apps (vim, htop, etc.), DON'T restore cell content manually.
 		// Instead, rely on SIGWINCH (triggered by resize in RestoreTerminalStates) to make
 		// the app redraw itself. This is cleaner and avoids ANSI leakage issues.

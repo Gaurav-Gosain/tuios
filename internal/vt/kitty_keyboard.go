@@ -3,6 +3,7 @@ package vt
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -156,6 +157,31 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 // Thread-safe: reads from an atomic cache updated on push/pop/set/reset.
 func (e *Emulator) KittyKeyboardFlags() int {
 	return int(e.cachedKittyFlags.Load())
+}
+
+// KittyKeyboardStack returns a copy of the kitty keyboard flag stack, base
+// entry first. It exists for daemon state sync: a guest negotiates the
+// protocol once (CSI > u push or CSI = u set) and never repeats it, so a
+// reattaching client must be handed the stack rather than rediscover it from
+// the output buffer. Call from the goroutine that feeds the emulator, or with
+// the same lock that serializes writes to it.
+func (e *Emulator) KittyKeyboardStack() []int {
+	if e.kittyKbd == nil {
+		return nil
+	}
+	return slices.Clone(e.kittyKbd.stack)
+}
+
+// RestoreKittyKeyboardState replaces the kitty keyboard flag stack from a
+// saved state and refreshes the cache KittyKeyboardFlags reads. Used when
+// reconnecting to a daemon session; a nil or empty stack is a no-op so state
+// from an older daemon leaves the default (empty) state untouched.
+func (e *Emulator) RestoreKittyKeyboardState(stack []int) {
+	if e.kittyKbd == nil || len(stack) == 0 {
+		return
+	}
+	e.kittyKbd.stack = slices.Clone(stack)
+	e.updateKittyKeyboardCache()
 }
 
 // updateKittyKeyboardCache updates the thread-safe cached flags.

@@ -1038,8 +1038,9 @@ func (p *PTY) GetTerminalState() *TerminalState {
 		CursorX:       p.terminal.CursorPosition().X,
 		CursorY:       p.terminal.CursorPosition().Y,
 		ScrollbackLen: p.terminal.ScrollbackLen(),
-		IsAltScreen:   p.terminal.IsAltScreen(), // Capture alt screen state for mouse event forwarding
-		Modes:         p.terminal.GetModes(),    // Capture terminal modes (mouse tracking, bracketed paste, etc.)
+		IsAltScreen:   p.terminal.IsAltScreen(),        // Capture alt screen state for mouse event forwarding
+		Modes:         p.terminal.GetModes(),           // Capture terminal modes (mouse tracking, bracketed paste, etc.)
+		KittyKbdStack: p.terminal.KittyKeyboardStack(), // Capture kitty keyboard protocol flag stack
 		Screen:        make([][]CellState, p.height),
 		Scrollback:    make([][]CellState, 0),
 	}
@@ -1129,8 +1130,9 @@ type TerminalState struct {
 	CursorX       int           `json:"cursor_x"`
 	CursorY       int           `json:"cursor_y"`
 	ScrollbackLen int           `json:"scrollback_len"`
-	IsAltScreen   bool          `json:"is_alt_screen,omitempty"` // Alternate screen buffer active (for mouse event forwarding)
-	Modes         map[int]bool  `json:"modes,omitempty"`         // Terminal modes (mouse tracking, bracketed paste, etc.)
+	IsAltScreen   bool          `json:"is_alt_screen,omitempty"`   // Alternate screen buffer active (for mouse event forwarding)
+	Modes         map[int]bool  `json:"modes,omitempty"`           // Terminal modes (mouse tracking, bracketed paste, etc.)
+	KittyKbdStack []int         `json:"kitty_kbd_stack,omitempty"` // Kitty keyboard protocol flag stack, base entry first
 	Screen        [][]CellState `json:"screen"`
 	Scrollback    [][]CellState `json:"scrollback,omitempty"`
 }
