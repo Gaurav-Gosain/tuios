@@ -670,13 +670,7 @@ func (e *Emulator) EncodeMouseEvent(m Mouse) string {
 		mouse.Mod.Contains(ModAlt),
 		mouse.Mod.Contains(ModCtrl))
 
-	switch enc {
-	case nil: // X10 mouse encoding
-		return ansi.MouseX10(b, mouse.X, mouse.Y)
-	case ansi.ModeMouseExtSgr: // SGR mouse encoding
-		return ansi.MouseSgr(b, mouse.X, mouse.Y, isRelease)
-	}
-	return ""
+	return e.encodeMouseReport(enc, b, mouse.X, mouse.Y, isRelease)
 }
 
 // Resize resizes the terminal.

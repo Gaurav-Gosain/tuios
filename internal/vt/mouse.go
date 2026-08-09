@@ -105,7 +105,6 @@ func (e *Emulator) SendMouse(m Mouse) {
 		// ansi.Utf8ExtMouseMode,
 		ansi.ModeMouseExtSgr,
 		// ansi.UrxvtExtMouseMode,
-		// ansi.SgrPixelExtMouseMode,
 	} {
 		if e.isModeSet(mm) {
 			enc = mm
@@ -121,13 +120,44 @@ func (e *Emulator) SendMouse(m Mouse) {
 		mouse.Mod.Contains(ModAlt),
 		mouse.Mod.Contains(ModCtrl))
 
-	switch enc {
-	// XXX: Support [ansi.HighlightMouseMode].
-	// XXX: Support [ansi.Utf8ExtMouseMode], [ansi.UrxvtExtMouseMode], and
-	// [ansi.SgrPixelExtMouseMode].
-	case nil: // X10 mouse encoding
-		_, _ = io.WriteString(e.pipe, ansi.MouseX10(b, mouse.X, mouse.Y))
-	case ansi.ModeMouseExtSgr: // SGR mouse encoding
-		_, _ = io.WriteString(e.pipe, ansi.MouseSgr(b, mouse.X, mouse.Y, isRelease))
+	_, _ = io.WriteString(e.pipe, e.encodeMouseReport(enc, b, mouse.X, mouse.Y, isRelease))
+}
+
+// encodeMouseReport turns a pane-relative cell position into the wire form the
+// guest asked for.
+//
+// SGR-pixel (DEC mode 1016) takes precedence over every other encoding when the
+// guest enabled it: a web page rendered by a kitty-graphics app (terminal-browser,
+// awrit) probes 1016 and, once it sees it enabled, reads every mouse report as
+// pixels. Reporting cell indices at that point places the pointer a cell-count of
+// pixels from the origin, which is why hover and clicks land in the top-left. So
+// when 1016 is set the cell position is scaled to host pixels; otherwise the
+// existing SGR-cell (1006) or X10 encoding is used unchanged.
+//
+// The pixel is the cell centre, matching the cell->pixel convention a terminal
+// app uses itself when it has only a cell report to work from. Sub-cell
+// precision is not available: the mouse position tuios receives from its own host
+// is already quantised to cells, so a cell centre is the most accurate pixel it
+// can report.
+func (e *Emulator) encodeMouseReport(enc ansi.Mode, b byte, cellX, cellY int, isRelease bool) string {
+	if e.isModeSet(ansi.ModeMouseExtSgrPixel) {
+		px, py := e.cellToPixel(cellX, cellY)
+		return ansi.MouseSgr(b, px, py, isRelease)
 	}
+	switch enc {
+	// XXX: Support [ansi.HighlightMouseMode] and [ansi.Utf8ExtMouseMode],
+	// [ansi.UrxvtExtMouseMode].
+	case ansi.ModeMouseExtSgr: // SGR mouse encoding
+		return ansi.MouseSgr(b, cellX, cellY, isRelease)
+	default: // X10 mouse encoding
+		return ansi.MouseX10(b, cellX, cellY)
+	}
+}
+
+// cellToPixel maps a pane-relative cell position to the host pixel position at
+// that cell's centre, for SGR-pixel (mode 1016) reporting. The cell dimensions
+// are the host terminal's, set via SetCellSize from the detected capabilities.
+func (e *Emulator) cellToPixel(cellX, cellY int) (int, int) {
+	cw, ch := e.CellSize()
+	return cellX*cw + cw/2, cellY*ch + ch/2
 }
