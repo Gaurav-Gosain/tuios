@@ -1,7 +1,7 @@
 package app
 
 import (
-	"os"
+	"io"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -58,9 +58,16 @@ type OSOptions struct {
 
 	// GraphicsOutput is the writer that kitty/sixel APC sequences are written
 	// to. If nil, the passthroughs fall back to /dev/tty / os.Stdout (the
-	// native TTY path). Web mode must supply the sip session's PTY slave so
-	// graphics bytes flow through the same pipe as bubbletea's text output.
-	GraphicsOutput *os.File
+	// native TTY path). Web mode supplies the sip session's PTY slave and SSH
+	// mode supplies the ssh.Session so graphics bytes flow through the same
+	// pipe as bubbletea's text output and reach the client's terminal.
+	GraphicsOutput io.Writer
+
+	// GraphicsRemoteClient marks the graphics host as a network client (SSH)
+	// that does not share the server's filesystem, so file-medium kitty
+	// transmissions are re-encoded as direct data. See
+	// KittyPassthroughOptions.RemoteClient.
+	GraphicsRemoteClient bool
 }
 
 // NewOS creates a new OS instance with the given options.
@@ -115,8 +122,9 @@ func NewOS(opts OSOptions) *OS {
 	// Initialize graphics passthrough if enabled
 	if opts.EnableGraphicsPassthrough {
 		os.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{
-			ForceEnable: opts.ForceGraphicsEnabled,
-			Output:      opts.GraphicsOutput,
+			ForceEnable:  opts.ForceGraphicsEnabled,
+			Output:       opts.GraphicsOutput,
+			RemoteClient: opts.GraphicsRemoteClient,
 		})
 		os.SixelPassthrough = NewSixelPassthroughWithOptions(SixelPassthroughOptions{
 			ForceEnable: opts.ForceGraphicsEnabled,

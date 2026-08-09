@@ -54,6 +54,21 @@ func GetHostCapabilities() *HostCapabilities {
 	return cachedCapabilities
 }
 
+// SetClientCapabilities installs capabilities detected from a remote client so
+// GetHostCapabilities reports the client's terminal rather than the server's
+// local one. The SSH and web servers use this: the terminal that must render
+// graphics is the one the user connected from, reached over the session, not
+// the (often headless) machine running the server.
+//
+// This is a process-global. A server handling several simultaneous clients with
+// different terminals shares the last-installed value for the live consumers
+// (image cell math, cell size); the per-connection graphics-enable decision is
+// snapshotted at construction and is not affected. Single-client connections,
+// the common case, are fully correct.
+func SetClientCapabilities(caps *HostCapabilities) {
+	clientCapabilities = caps
+}
+
 func DetectHostCapabilities() *HostCapabilities {
 	caps := &HostCapabilities{}
 

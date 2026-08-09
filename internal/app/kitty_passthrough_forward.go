@@ -209,7 +209,7 @@ func isFileMedium(medium vt.KittyGraphicsMedium) bool {
 // will actually resolve there. False for a browser client, whose only view of
 // an image is the bytes we send it.
 func (kp *KittyPassthrough) hostReadsFiles() bool {
-	if kp.inlineGraphics {
+	if kp.inlineGraphics || kp.remoteClient {
 		return false
 	}
 	return GetHostCapabilities().KittyFileTransfer

@@ -587,5 +587,16 @@ func (m *OS) SwitchToSession(targetSession string) error {
 func (m *OS) Cleanup() {
 	if m.DaemonClient != nil {
 		_ = m.DaemonClient.Close()
+		return
+	}
+
+	// Ephemeral mode: the windows own local PTYs (child shells). When the whole
+	// process is exiting these would be reaped anyway, but an ephemeral SSH
+	// session is a goroutine inside a long-lived server: without closing them
+	// here every disconnect would leak a shell process, its PTY, and the
+	// window's I/O goroutines. Window.Close is idempotent, so this is safe even
+	// when the local binary also calls Cleanup after the program exits.
+	for _, w := range m.Windows {
+		w.Close()
 	}
 }

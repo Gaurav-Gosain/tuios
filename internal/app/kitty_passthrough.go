@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -69,8 +70,12 @@ type KittyPassthrough struct {
 	// transmissions (t=f, t=s) are read server-side and re-encoded as
 	// direct (t=d) chunks because the browser cannot read local files.
 	inlineGraphics bool
-	hostOut        *os.File
-	hostMu         sync.Mutex // serializes writes to hostOut across render + async paths
+	// remoteClient is set when the host terminal is reached over the network
+	// (SSH) and does not share the server's filesystem. See
+	// KittyPassthroughOptions.RemoteClient.
+	remoteClient bool
+	hostOut      io.Writer
+	hostMu       sync.Mutex // serializes writes to hostOut across render + async paths
 
 	placements    map[string]map[uint32]*PassthroughPlacement
 	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
@@ -213,8 +218,16 @@ type KittyPassthroughOptions struct {
 	// Output is the writer for kitty graphics APC sequences. If nil, the
 	// passthrough opens /dev/tty (or falls back to os.Stdout). Web mode
 	// should pass the sip session's PtySlave so graphics bytes flow through
-	// the same PTY as bubbletea's text output to the browser.
-	Output *os.File
+	// the same PTY as bubbletea's text output to the browser. SSH mode passes
+	// the ssh.Session so APC sequences reach the client's terminal.
+	Output io.Writer
+	// RemoteClient marks the host terminal as one reached over a network
+	// (SSH), so it does not share the server's filesystem. File-medium kitty
+	// transmissions (t=f/t=t/t=s) name a server-local path the client cannot
+	// read, so they are re-encoded as direct (t=d) data. Unlike the browser's
+	// inline-graphics mode this keeps native placement, clipping, and delete
+	// behavior, which a real remote terminal still needs.
+	RemoteClient bool
 }
 
 // NewKittyPassthroughWithOptions creates a passthrough with custom options.
@@ -234,6 +247,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 	kp := &KittyPassthrough{
 		enabled:           enabled,
 		inlineGraphics:    opts.ForceEnable,
+		remoteClient:      opts.RemoteClient,
 		hostOut:           hostOut,
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
