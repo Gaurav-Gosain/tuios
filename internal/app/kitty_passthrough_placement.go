@@ -185,14 +185,41 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			if anyPartVisible && (info.WindowX < 0 || info.WindowY < 0) {
 				anyPartVisible = false
 			}
-			// In native mode, hide if image extends past the host terminal edge
-			// to prevent the terminal from scrolling to make room (feedback loop).
-			// In inline-graphics mode (web), the browser overlay clips via CSS
-			// overflow:hidden, so this check is unnecessary and causes images to
-			// disappear at certain terminal sizes.
-			if !kp.inlineGraphics && anyPartVisible && info.ScreenWidth > 0 && info.ScreenHeight > 0 {
-				if newHostX+imageCellWidth > info.ScreenWidth || newHostY+imageCellHeight >= info.ScreenHeight-1 {
-					anyPartVisible = false
+			// In native mode, an image whose bottom reaches the last screen row
+			// makes the host terminal scroll to make room, and the next frame
+			// then places at the same (now scrolled) Y, cascading into duplicate
+			// frames (see 2e288e6). The original guard hid any such image, but
+			// that blanks a pane whose content legitimately fills to the screen
+			// edge  - exactly what a full-window app like terminal-browser or
+			// awrit draws every frame. Instead of hiding, clamp the visible
+			// rows/cols so the image stops one row short of the bottom edge
+			// (keeping the final row free avoids the scroll) and one column short
+			// of the right edge. Hide only when nothing fits at all.
+			//
+			// Inline-graphics mode (web) skips this: the browser overlay clips
+			// via CSS overflow:hidden, and clamping there drops rows unnecessarily.
+			if !kp.inlineGraphics && anyPartVisible && info.ScreenHeight > 0 {
+				maxBottom := info.ScreenHeight - 1 // leave the final row free
+				if newHostY+imageCellHeight > maxBottom {
+					fit := maxBottom - newHostY
+					if fit <= 0 {
+						anyPartVisible = false
+					} else {
+						clipBottom += imageCellHeight - fit
+						imageCellHeight = fit
+						maxShowableRows = fit
+					}
+				}
+			}
+			if !kp.inlineGraphics && anyPartVisible && info.ScreenWidth > 0 {
+				if newHostX+imageCellWidth > info.ScreenWidth {
+					fit := info.ScreenWidth - newHostX
+					if fit <= 0 {
+						anyPartVisible = false
+					} else {
+						imageCellWidth = fit
+						maxShowableCols = fit
+					}
 				}
 			}
 
