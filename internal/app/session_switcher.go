@@ -1,19 +1,19 @@
 package app
 
-import "strings"
+import (
+	"strings"
 
-// SessionSwitcherItem represents a single session entry in the session switcher overlay.
-type SessionSwitcherItem struct {
-	Name      string
-	Windows   int
-	Clients   int
-	IsCurrent bool
-}
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+)
 
 // RefreshSessionList populates the session switcher items from the daemon client.
 // Queries the daemon for an up-to-date list (so newly created sessions appear).
 // If not in daemon mode, returns nil.
-func (m *OS) RefreshSessionList() []SessionSwitcherItem {
+//
+// Each entry is a coarse sessiontree.Node (KindSession, no Children): the same
+// type the command palette's session entries and BuildSessionTree use, so a
+// session name and its "current" flag are read from one shape everywhere.
+func (m *OS) RefreshSessionList() []sessiontree.Node {
 	if m.DaemonClient == nil {
 		return nil
 	}
@@ -26,37 +26,37 @@ func (m *OS) RefreshSessionList() []SessionSwitcherItem {
 		// Fall back to cached names on error
 		m.LogWarn("Failed to refresh session list from daemon: %v", err)
 		names := m.DaemonClient.AvailableSessionNames()
-		items := make([]SessionSwitcherItem, 0, len(names))
+		items := make([]sessiontree.Node, 0, len(names))
 		for _, name := range names {
-			items = append(items, SessionSwitcherItem{
+			items = append(items, sessiontree.BuildSession(sessiontree.SessionInput{
 				Name:      name,
 				IsCurrent: name == currentSession,
-			})
+			}))
 		}
 		return items
 	}
 
-	items := make([]SessionSwitcherItem, 0, len(sessions))
+	items := make([]sessiontree.Node, 0, len(sessions))
 	for _, s := range sessions {
-		items = append(items, SessionSwitcherItem{
-			Name:      s.Name,
-			Windows:   s.WindowCount,
-			IsCurrent: s.Name == currentSession,
-		})
+		items = append(items, sessiontree.BuildSession(sessiontree.SessionInput{
+			Name:        s.Name,
+			IsCurrent:   s.Name == currentSession,
+			WindowCount: s.WindowCount,
+		}))
 	}
 	return items
 }
 
 // FilterSessionItems filters session switcher items by a query string.
-// It performs case-insensitive substring matching on Name.
-func FilterSessionItems(items []SessionSwitcherItem, query string) []SessionSwitcherItem {
+// It performs case-insensitive substring matching on Title.
+func FilterSessionItems(items []sessiontree.Node, query string) []sessiontree.Node {
 	if query == "" {
 		return items
 	}
 	q := strings.ToLower(query)
-	var filtered []SessionSwitcherItem
+	var filtered []sessiontree.Node
 	for _, item := range items {
-		if strings.Contains(strings.ToLower(item.Name), q) {
+		if strings.Contains(strings.ToLower(item.Title), q) {
 			filtered = append(filtered, item)
 		}
 	}

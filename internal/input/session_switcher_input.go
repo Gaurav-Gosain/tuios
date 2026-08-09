@@ -53,7 +53,7 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			if selected.IsCurrent {
 				o.ShowNotification("Already on this session", "info", config.NotificationDuration)
 			} else {
-				if err := o.SwitchToSession(selected.Name); err != nil {
+				if err := o.SwitchToSession(selected.Title); err != nil {
 					o.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
 				}
 			}
@@ -110,7 +110,7 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			if selected.IsCurrent {
 				o.ShowNotification("Cannot delete the current session", "warning", config.NotificationDuration)
 			} else {
-				o.SessionSwitcherConfirmDelete = selected.Name
+				o.SessionSwitcherConfirmDelete = selected.Title
 			}
 		}
 		return o, nil

@@ -299,10 +299,7 @@ func handlePrefixHelp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.ShowCommandPalette = true
-	o.CommandPaletteQuery = ""
-	o.CommandPaletteSelected = 0
-	o.CommandPaletteScroll = 0
+	o.OpenCommandPalette()
 	return o, nil
 }
 

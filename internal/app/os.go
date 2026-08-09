@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -365,12 +366,17 @@ type OS struct {
 	CommandPaletteQuery    string
 	CommandPaletteSelected int
 	CommandPaletteScroll   int
+	// PaletteSessionItems holds the session/window entries built from the
+	// session tree when the palette opens. Built once per open, not per frame:
+	// BuildSessionTree does a blocking daemon round trip in daemon mode, and the
+	// palette renders every frame it is on screen.
+	PaletteSessionItems []CommandPaletteItem
 	// Session switcher overlay
 	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string
 	SessionSwitcherSelected      int
 	SessionSwitcherScroll        int
-	SessionSwitcherItems         []SessionSwitcherItem
+	SessionSwitcherItems         []sessiontree.Node
 	SessionSwitcherError         string
 	SessionSwitcherConfirmDelete string // non-empty = confirming deletion of this session name
 	// Aggregate view overlay (all windows across workspaces)

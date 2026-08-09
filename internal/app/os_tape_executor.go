@@ -958,7 +958,7 @@ func (m *OS) SmartSplitFocusedExec() error {
 
 // ShowCommandPaletteExec opens the command palette (tape executor interface).
 func (m *OS) ShowCommandPaletteExec() error {
-	m.ShowCommandPalette = true
+	m.OpenCommandPalette()
 	return nil
 }
 

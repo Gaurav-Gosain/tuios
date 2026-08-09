@@ -2,10 +2,29 @@ package app
 
 import tea "charm.land/bubbletea/v2"
 
+// allPaletteItems returns the static commands plus the dynamic session/window
+// entries built when the palette was opened (see OpenCommandPalette).
+func (m *OS) allPaletteItems() []CommandPaletteItem {
+	items := GetCommandPaletteItems()
+	return append(items, m.PaletteSessionItems...)
+}
+
 // filteredPaletteItems returns the command palette entries matching the current
 // query.
 func (m *OS) filteredPaletteItems() []CommandPaletteItem {
-	return FilterCommandPalette(GetCommandPaletteItems(), m.CommandPaletteQuery)
+	return FilterCommandPalette(m.allPaletteItems(), m.CommandPaletteQuery)
+}
+
+// OpenCommandPalette opens the palette and rebuilds its session/window
+// entries from the current session tree. This is the one place that does the
+// tree build (and, in daemon mode, the daemon round trip inside it) so it
+// happens once per open rather than once per frame.
+func (m *OS) OpenCommandPalette() {
+	m.ShowCommandPalette = true
+	m.CommandPaletteQuery = ""
+	m.CommandPaletteSelected = 0
+	m.CommandPaletteScroll = 0
+	m.PaletteSessionItems = getSessionPaletteItems(m)
 }
 
 // PaletteMove moves the command-palette selection by delta and keeps the scroll

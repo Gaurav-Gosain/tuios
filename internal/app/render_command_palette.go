@@ -44,7 +44,7 @@ func (m *OS) paletteLayout() (width, rows int, hints []overlay.Hint) {
 // search input, a scrolling list of matching commands with category tags and
 // shortcuts, and a highlight bar on the selection.
 func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) {
-	items := GetCommandPaletteItems()
+	items := m.allPaletteItems()
 	filtered := FilterCommandPalette(items, m.CommandPaletteQuery)
 
 	pal := theme.UI()

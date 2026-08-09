@@ -198,7 +198,7 @@ func seedCommands(dir string) []tape.Command {
 // sessionExists reports whether a daemon session with the given name is present.
 func (m *OS) sessionExists(name string) bool {
 	for _, s := range m.RefreshSessionList() {
-		if s.Name == name {
+		if s.Title == name {
 			return true
 		}
 	}

@@ -1,6 +1,8 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -88,4 +90,69 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 		sessions = append([]sessiontree.SessionInput{current}, sessions...)
 	}
 	return sessiontree.Build(sessions)
+}
+
+// sessionPaletteLabel formats a "Session: " or "Window: " palette row, folding
+// in the agent-state glyph the same way the window title bar does, so the
+// palette and the title bar never disagree about what a glyph means.
+func sessionPaletteLabel(prefix, name, agentState string) string {
+	if glyph := agentStateIndicator(agentState); glyph != "" {
+		return prefix + glyph + " " + name
+	}
+	return prefix + name
+}
+
+// getSessionPaletteItems walks the unified session tree and returns one
+// palette entry per session plus, for the attached session, one entry per its
+// windows. This is what lets the palette jump straight to a session or a
+// window by name instead of going through the session switcher first; the
+// sidebar, the switcher, and this list all read the same tree so they can
+// never disagree about what exists or which one is current.
+//
+// Built once when the palette opens (see OpenCommandPalette), not on every
+// render: BuildSessionTree performs a blocking daemon round trip in daemon
+// mode.
+func getSessionPaletteItems(m *OS) []CommandPaletteItem {
+	tree := m.BuildSessionTree()
+
+	items := make([]CommandPaletteItem, 0, len(tree.Sessions))
+	for _, s := range tree.Sessions {
+		sessionName := s.ID
+		isCurrent := s.IsCurrent
+		items = append(items, CommandPaletteItem{
+			Name:     sessionPaletteLabel("Session: ", sessionName, s.AgentState),
+			Category: "Sessions",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if isCurrent {
+					m.ShowNotification("Already on this session", "info", config.NotificationDuration)
+					return m, nil
+				}
+				if err := m.SwitchToSession(sessionName); err != nil {
+					m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+				}
+				return m, nil
+			},
+		})
+
+		if !s.IsCurrent {
+			continue
+		}
+		for _, w := range s.Children {
+			windowID := w.ID
+			items = append(items, CommandPaletteItem{
+				Name:     sessionPaletteLabel("Window: ", w.Title, w.AgentState),
+				Category: "Sessions",
+				Action: func(m *OS) (*OS, tea.Cmd) {
+					for i, win := range m.Windows {
+						if win != nil && win.ID == windowID {
+							m.FocusWindow(i)
+							break
+						}
+					}
+					return m, nil
+				},
+			})
+		}
+	}
+	return items
 }
