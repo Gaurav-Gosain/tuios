@@ -61,6 +61,30 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		}
 	}
 
+	// Delete self-placed remote video images whose window has left the screen
+	// they were shown on. A browser quitting back to the shell restores the main
+	// screen, and these images are not in `placements`, so the loop below never
+	// sees them; without this the last frame lingers over the shell prompt.
+	for windowID, ids := range kp.remoteVideo {
+		info := allWindows[windowID]
+		var buf bytes.Buffer
+		for hostID, placedOnAlt := range ids {
+			if info != nil && info.IsAltScreen == placedOnAlt {
+				continue // still on the screen it was placed on
+			}
+			fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
+			delete(ids, hostID)
+		}
+		if buf.Len() > 0 {
+			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+			kittyPassthroughLog("RefreshAllPlacements: cleared %d self-placed video image(s) after screen change for win=%s",
+				buf.Len(), windowID[:min(8, len(windowID))])
+		}
+		if len(ids) == 0 {
+			delete(kp.remoteVideo, windowID)
+		}
+	}
+
 	for windowID, placements := range kp.placements {
 		if len(placements) == 0 {
 			continue

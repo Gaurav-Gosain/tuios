@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"compress/zlib"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -10,6 +11,21 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
+
+// zlibCompress returns the zlib-compressed form of data, or nil on error. Used
+// to shrink remote-terminal image frames before base64; kitty decodes o=z.
+func zlibCompress(data []byte) []byte {
+	var buf bytes.Buffer
+	zw := zlib.NewWriter(&buf)
+	if _, err := zw.Write(data); err != nil {
+		_ = zw.Close()
+		return nil
+	}
+	if err := zw.Close(); err != nil {
+		return nil
+	}
+	return buf.Bytes()
+}
 
 // PlacementResult contains info about an image placement for cursor positioning
 type PlacementResult struct {
@@ -720,6 +736,18 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	scrollbackLen int,
 	isAltScreen bool,
 ) {
+	// Cheap early drop: a reused remote-video frame whose async writer is still
+	// busy would be dropped after we spent a file read, a zlib pass and a base64
+	// encode on it. Skip all of that here. This is the main lever against the
+	// input lag under a video flood: the VT callback returns immediately instead
+	// of burning CPU on a frame that never ships.
+	if kp.remoteClient && cmd.ImageID != 0 && len(kp.asyncFrameCh) > 0 {
+		if _, reusing := kp.imageIDMap[windowID][cmd.ImageID]; reusing {
+			kittyPassthroughLog("forwardFileTransmitInline: early-drop reused frame (async busy)")
+			return
+		}
+	}
+
 	// filePath is guest-controlled (kitty APC t=f/t=t base64 path, or t=s
 	// /dev/shm name). Stat first and reject anything that is not a regular
 	// file: /dev/zero would read unboundedly and OOM the server, a FIFO would
@@ -754,6 +782,20 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		return
 	}
 	kittyPassthroughLog("forwardFileTransmitInline: read %d bytes from %s", len(data), filePath)
+
+	// Compress the bitmap for a real remote terminal. Raw RGBA is width*height*4
+	// bytes and dominates the ssh channel; kitty decompresses o=z itself, and UI
+	// frames (large flat regions) shrink a lot. The overlay decodes bytes
+	// directly and cannot decompress, so it is left uncompressed. Only compress
+	// what the guest sent uncompressed.
+	format := cmd.Format
+	compression := cmd.Compression
+	if kp.remoteClient && compression == vt.KittyCompressionNone {
+		if z := zlibCompress(data); z != nil && len(z) < len(data) {
+			data = z
+			compression = vt.KittyCompressionZlib
+		}
+	}
 
 	// Get or allocate a host id. Video frames reuse the same guest id per
 	// stream, so the second frame onward finds an existing placement and
@@ -806,9 +848,13 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 			}
 			delete(kp.placements[windowID], hostID)
 		}
-		kp.remoteVideo[windowID][hostID] = true
+		// Record the screen the video is on. When the guest leaves it (a browser
+		// quitting back to the shell restores the main screen), the render loop
+		// deletes the image so the last frame does not linger. The value is the
+		// alt-screen state at placement time.
+		kp.remoteVideo[windowID][hostID] = isAltScreen
 
-		frame := kp.buildInlinePlacedChunks(hostID, cmd.Format, cmd.Compression,
+		frame := kp.buildInlinePlacedChunks(hostID, format, compression,
 			cmd.Width, cmd.Height, displayCols, displayRows, hostX, hostY, data)
 		select {
 		case kp.asyncFrameCh <- frame:
@@ -820,7 +866,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 
 	// Build the image as 4096-byte kitty chunks (t=d). Pass through
 	// format / compression / size so the overlay knows how to decode.
-	frameData := kp.buildInlineChunks(hostID, cmd.Format, cmd.Compression, cmd.Width, cmd.Height, data)
+	frameData := kp.buildInlineChunks(hostID, format, compression, cmd.Width, cmd.Height, data)
 
 	kittyPassthroughLog("forwardFileTransmitInline: built %d bytes, hostID=%d, imgSize=(%d,%d), reusingID=%v",
 		len(frameData), hostID, imgCols, imgRows, reusingID)
