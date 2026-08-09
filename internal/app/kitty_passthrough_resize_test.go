@@ -16,11 +16,11 @@ import (
 // host on that refresh.
 func placementHarness(t *testing.T, screenW, screenH, border int) (*KittyPassthrough, *vt.Emulator, *WindowPositionInfo, func() string) {
 	t.Helper()
-	clientCapabilities = &HostCapabilities{
+	clientCapabilities.Store(&HostCapabilities{
 		TerminalName: "kitty", KittyGraphics: true, KittyFileTransfer: true,
 		TrueColor: true, CellWidth: 10, CellHeight: 20,
-	}
-	t.Cleanup(func() { clientCapabilities = nil })
+	})
+	t.Cleanup(func() { clientCapabilities.Store(nil) })
 
 	hostFile, err := os.CreateTemp(t.TempDir(), "hostout")
 	if err != nil {

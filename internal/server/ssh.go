@@ -4,11 +4,14 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/wish/v2"
@@ -35,18 +38,27 @@ type SSHServerConfig struct {
 // sshServerContext holds the server-wide context for daemon mode
 var sshServerConfig *SSHServerConfig
 
+// applyAppearanceOnce guards the process-wide appearance-config application.
+// Once per process, not per server start: the appearance globals are read by
+// every session's render loop, so a second StartSSHServer in the same process
+// (the test binary does this; a deployment does not) must not rewrite them
+// while sessions from an earlier server are still draining.
+var applyAppearanceOnce sync.Once
+
 // StartSSHServer initializes and runs the SSH server
 func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	sshServerConfig = cfg
 
-	// Apply the user config's appearance globals once, at server startup and
-	// single-threaded, so every per-connection session shares a consistent view
-	// of them. LoadUserConfig is pure and NewOS no longer re-applies per
+	// Apply the user config's appearance globals once, at first server startup
+	// and single-threaded, so every per-connection session shares a consistent
+	// view of them. LoadUserConfig is pure and NewOS no longer re-applies per
 	// connection, so this replaces the old per-connection global writes that
 	// raced other sessions' render loops.
-	if userConfig, err := config.LoadUserConfig(); err == nil {
-		config.ApplyAppearanceConfig(userConfig)
-	}
+	applyAppearanceOnce.Do(func() {
+		if userConfig, err := config.LoadUserConfig(); err == nil {
+			config.ApplyAppearanceConfig(userConfig)
+		}
+	})
 
 	// Determine host key path
 	var hostKeyPath string
@@ -75,7 +87,7 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		wish.WithHostKeyPath(hostKeyPath),
 		wish.WithMiddleware(
 			// Bubble Tea middleware for interactive sessions
-			bubbletea.Middleware(teaHandler),
+			tuiosSessionMiddleware(),
 			// Logging middleware for connection tracking
 			logging.Middleware(),
 			// Outermost backstop: contain any panic in a single session's
@@ -104,9 +116,15 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	// Wait for context cancellation
 	<-ctx.Done()
 
-	// Shutdown server gracefully
+	// Shutdown server gracefully. The caller's context is already canceled at
+	// this point, so passing it would make Shutdown return immediately without
+	// waiting for the per-session handlers to finish; use a fresh bounded
+	// context so live sessions get to wind down before the process (or the
+	// next test's server) moves on.
 	log.Println("Shutting down SSH server...")
-	return server.Shutdown(ctx)
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelShutdown()
+	return server.Shutdown(shutdownCtx)
 }
 
 // shortID returns the first 8 characters of an id for logging, or the whole id
@@ -137,14 +155,106 @@ func recoverMiddleware() wish.Middleware {
 	}
 }
 
-// teaHandler creates a TUIOS instance for each SSH session
-func teaHandler(sshSession ssh.Session) (tea.Model, []tea.ProgramOption) {
-	// Get PTY info from session
-	pty, _, active := sshSession.Pty()
-	if !active {
-		// No PTY requested, this shouldn't happen for TUIOS
-		return nil, nil
+// serialWriter serializes Write calls to an underlying writer. Both the
+// bubbletea renderer (text frames) and the kitty/sixel graphics passthrough
+// write to the same SSH session from different goroutines. x/crypto's
+// channel.WriteExtended is NOT safe for concurrent use: concurrent writers
+// share one packet buffer (packetPool), so overlapping writes corrupt the
+// channel-data header inside an otherwise valid transport packet. The client
+// then fails the stream with "ssh: wrong packet length" and drops the whole
+// connection, which is exactly how a kitty graphics flood used to kill the
+// session. Every writer to the session must go through one shared
+// serialWriter.
+type serialWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (s *serialWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
+}
+
+// tuiosSessionMiddleware runs the TUIOS bubbletea program for each SSH
+// session. It replaces wish's stock bubbletea.Middleware for two reasons:
+//
+//  1. The program's text output and the graphics passthrough output must be
+//     the SAME serialized writer around the session (see serialWriter). The
+//     stock middleware appends MakeOptions last, so its WithOutput(session)
+//     would override ours; here MakeOptions is applied first and the
+//     serialized writer wins.
+//  2. Cleanup must run after Program.Run returns, not concurrently on
+//     Context().Done(), otherwise closing the windows races the final render
+//     frames.
+func tuiosSessionMiddleware() wish.Middleware {
+	return func(next ssh.Handler) ssh.Handler {
+		return func(sess ssh.Session) {
+			_, windowChanges, active := sess.Pty()
+			if !active {
+				// No PTY requested, this shouldn't happen for TUIOS
+				wish.Fatalln(sess, "no active terminal, skipping")
+				return
+			}
+
+			out := &serialWriter{w: sess}
+			model, opts := buildSessionModel(sess, out)
+			if model == nil {
+				next(sess)
+				return
+			}
+
+			// MakeOptions wires input/output/env for the session; WithOutput
+			// afterwards replaces the raw session writer with the serialized
+			// one shared with the graphics path. This server never allocates a
+			// server-side PTY (no ssh.AllocatePty), so the session itself is
+			// always the right output to wrap.
+			opts = append(opts, bubbletea.MakeOptions(sess)...)
+			opts = append(opts, tea.WithOutput(out))
+			program := tea.NewProgram(model, opts...)
+
+			ctx, cancel := context.WithCancel(sess.Context())
+			go func() {
+				for {
+					select {
+					case <-ctx.Done():
+						program.Quit()
+						return
+					case w := <-windowChanges:
+						program.Send(tea.WindowSizeMsg{Width: w.Width, Height: w.Height})
+					}
+				}
+			}()
+
+			if _, err := program.Run(); err != nil {
+				log.Printf("SSH session program exited with error: %v", err)
+			}
+			// Kill force-stops the program if Quit was not enough and restores
+			// the terminal state.
+			program.Kill()
+			cancel()
+
+			// Tear down after the program has fully stopped. In daemon mode
+			// this closes the daemon client, otherwise its read loop, socket,
+			// and the daemon-side connState leak per connection. In ephemeral
+			// mode it closes the local windows, otherwise each disconnect leaks
+			// a shell process and its PTY inside this long-lived server.
+			// Cleanup is idempotent. Running it here (not on Context().Done())
+			// keeps it off the renderer's back while frames are still going
+			// out.
+			if o, ok := model.(*app.OS); ok {
+				o.Cleanup()
+			}
+			next(sess)
+		}
 	}
+}
+
+// buildSessionModel creates a TUIOS instance for an SSH session. graphicsOut
+// is the serialized session writer that kitty/sixel APC sequences are routed
+// through; it must be the same writer the bubbletea program renders to.
+func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (tea.Model, []tea.ProgramOption) {
+	pty, _, _ := sshSession.Pty()
 
 	cfg := sshServerConfig
 	if cfg == nil {
@@ -162,34 +272,17 @@ func teaHandler(sshSession ssh.Session) (tea.Model, []tea.ProgramOption) {
 	// Determine session name from SSH context
 	sessionName := determineSessionName(sshSession, cfg)
 
-	var model tea.Model
-	var opts []tea.ProgramOption
-
 	// If ephemeral mode or daemon not available, use old behavior
 	if cfg.Ephemeral {
-		model, opts = createEphemeralTUIOSInstance(sshSession, pty.Window.Width, pty.Window.Height)
-	} else {
-		// Try to connect to daemon
-		var err error
-		model, opts, err = createDaemonTUIOSInstance(sshSession, sessionName, pty.Window.Width, pty.Window.Height, cfg, clientCaps)
-		if err != nil {
-			log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-			model, opts = createEphemeralTUIOSInstance(sshSession, pty.Window.Width, pty.Window.Height)
-		}
+		return createEphemeralTUIOSInstance(sshSession, graphicsOut, pty.Window.Width, pty.Window.Height)
 	}
 
-	// Tear down when the SSH session ends. In daemon mode this closes the daemon
-	// client, otherwise its read loop, socket, and the daemon-side connState leak
-	// per connection. In ephemeral mode it closes the local windows, otherwise
-	// each disconnect leaks a shell process and its PTY inside this long-lived
-	// server. Cleanup is idempotent.
-	if o, ok := model.(*app.OS); ok {
-		go func() {
-			<-sshSession.Context().Done()
-			o.Cleanup()
-		}()
+	// Try to connect to daemon
+	model, opts, err := createDaemonTUIOSInstance(sshSession, graphicsOut, sessionName, pty.Window.Width, pty.Window.Height, cfg, clientCaps)
+	if err != nil {
+		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
+		return createEphemeralTUIOSInstance(sshSession, graphicsOut, pty.Window.Width, pty.Window.Height)
 	}
-
 	return model, opts
 }
 
@@ -217,7 +310,7 @@ func determineSessionName(sshSession ssh.Session, cfg *SSHServerConfig) string {
 }
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (tea.Model, []tea.ProgramOption) {
+func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, width, height int) (tea.Model, []tea.ProgramOption) {
 	// Load user configuration and create keybind registry
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -237,13 +330,15 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 		IsSSHMode:       true,
 		SSHSession:      sshSession,
 		// Route kitty/sixel APC sequences to the SSH session so they reach the
-		// client's terminal. The passthrough enables itself only when the
+		// client's terminal, via the serialized writer shared with the
+		// bubbletea renderer so graphics and text writes never interleave on
+		// the SSH channel. The passthrough enables itself only when the
 		// client's detected capabilities (installed via SetClientCapabilities)
 		// say the terminal can render them, so this is a no-op for a plain
 		// client. RemoteClient forces file-medium transmissions to be
 		// re-encoded as direct data, since the client cannot read server paths.
 		EnableGraphicsPassthrough: true,
-		GraphicsOutput:            sshSession,
+		GraphicsOutput:            graphicsOut,
 		GraphicsRemoteClient:      true,
 	})
 
@@ -253,7 +348,7 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 }
 
 // createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
-func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width, height int, cfg *SSHServerConfig, clientCaps *session.ClientCapabilities) (tea.Model, []tea.ProgramOption, error) {
+func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, sessionName string, width, height int, cfg *SSHServerConfig, clientCaps *session.ClientCapabilities) (tea.Model, []tea.ProgramOption, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	version := cfg.Version
@@ -319,10 +414,11 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 		DaemonClient:              client,
 		SessionName:               sessionName,
 		EnableGraphicsPassthrough: true,
-		// Route graphics to the SSH session so kitty/sixel APCs reach the
-		// client's terminal, and re-encode file-medium transmissions as direct
-		// data since the client cannot read server-local paths.
-		GraphicsOutput:       sshSession,
+		// Route graphics to the SSH session (through the serialized writer
+		// shared with the renderer) so kitty/sixel APCs reach the client's
+		// terminal, and re-encode file-medium transmissions as direct data
+		// since the client cannot read server-local paths.
+		GraphicsOutput:       graphicsOut,
 		GraphicsRemoteClient: true,
 	})
 

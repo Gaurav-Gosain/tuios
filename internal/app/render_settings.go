@@ -190,7 +190,7 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 	text = overlay.Truncate(text, min(30, max(width/2, 6)))
 	if editing {
 		cursor := "▏"
-		if overlay.ASCII {
+		if overlay.UseASCII() {
 			cursor = "_"
 		}
 		text += cursor

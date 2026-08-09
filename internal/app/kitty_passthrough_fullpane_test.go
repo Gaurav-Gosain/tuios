@@ -24,15 +24,15 @@ func feedTBFrame(t *testing.T, stream []byte, screenW, screenH int) []byte {
 func feedTBFrameBorder(t *testing.T, stream []byte, screenW, screenH, border int) []byte {
 	t.Helper()
 
-	clientCapabilities = &HostCapabilities{
+	clientCapabilities.Store(&HostCapabilities{
 		TerminalName:      "kitty",
 		KittyGraphics:     true,
 		KittyFileTransfer: true,
 		TrueColor:         true,
 		CellWidth:         10,
 		CellHeight:        20,
-	}
-	t.Cleanup(func() { clientCapabilities = nil })
+	})
+	t.Cleanup(func() { clientCapabilities.Store(nil) })
 
 	hostFile, err := os.CreateTemp(t.TempDir(), "hostout")
 	if err != nil {

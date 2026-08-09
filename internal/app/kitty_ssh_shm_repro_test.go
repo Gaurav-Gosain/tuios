@@ -24,6 +24,14 @@ func (w *countingWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Total returns the bytes written so far. It takes the same lock as Write, so
+// it is safe to call while the async frame writer goroutine is still active.
+func (w *countingWriter) Total() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.total
+}
+
 // makeShmFrame writes a real /dev/shm object with RGBA bytes and returns its
 // name (without the /dev/shm/ prefix, as a guest transmits it).
 func makeShmFrame(t *testing.T, w, h int) string {
@@ -136,8 +144,8 @@ func TestSSHShmFrameSurvives(t *testing.T) {
 		}
 	}
 
-	t.Logf("host received %d bytes over %d frames", host.total, 10)
-	if host.total == 0 {
+	t.Logf("host received %d bytes over %d frames", host.Total(), 10)
+	if host.Total() == 0 {
 		t.Fatal("no graphics bytes reached the host writer")
 	}
 }

@@ -168,5 +168,5 @@ func (m *OS) centeredBoxLayer(box string, z int, id string) *lipgloss.Layer {
 // syncOverlayASCII mirrors the ASCII-only setting into the overlay package,
 // which has no dependency on tuios config.
 func syncOverlayASCII() {
-	overlay.ASCII = config.UseASCIIOnly
+	overlay.SetASCII(config.UseASCIIOnly)
 }

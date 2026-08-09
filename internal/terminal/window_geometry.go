@@ -25,6 +25,42 @@ func (w *Window) BorderOffset() int {
 	return 1
 }
 
+// GeometrySnapshot is a self-consistent copy of the window's on-screen
+// geometry, published by the goroutine that owns window layout (the update
+// loop) and read by PTY-reader callbacks (the kitty/sixel passthroughs) that
+// must not touch the live fields while the update loop mutates them.
+type GeometrySnapshot struct {
+	X, Y, Width, Height, BorderOffset int
+}
+
+// PublishGeometry records the current geometry for cross-goroutine readers.
+// It must be called from the goroutine that mutates geometry (the update
+// loop); the render path republishes every frame, so a snapshot is never more
+// than a frame stale, and every placement is re-laid out per frame anyway.
+func (w *Window) PublishGeometry() {
+	cur := w.geomSnap.Load()
+	if cur != nil && cur.X == w.X && cur.Y == w.Y &&
+		cur.Width == w.Width && cur.Height == w.Height &&
+		cur.BorderOffset == w.BorderOffset() {
+		return
+	}
+	w.geomSnap.Store(&GeometrySnapshot{
+		X: w.X, Y: w.Y, Width: w.Width, Height: w.Height,
+		BorderOffset: w.BorderOffset(),
+	})
+}
+
+// LastGeometry returns the most recently published geometry snapshot. The
+// zero snapshot is returned if none has been published yet; NewWindow
+// publishes before the PTY reader starts, so callbacks always see real
+// geometry.
+func (w *Window) LastGeometry() GeometrySnapshot {
+	if g := w.geomSnap.Load(); g != nil {
+		return *g
+	}
+	return GeometrySnapshot{}
+}
+
 // ScreenToTerminal converts screen coordinates (X, Y) to terminal-relative coordinates.
 // Returns the terminal X, Y and whether the coordinates are within the content area.
 func (w *Window) ScreenToTerminal(screenX, screenY int) (termX, termY int, ok bool) {

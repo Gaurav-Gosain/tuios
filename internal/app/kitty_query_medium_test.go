@@ -19,14 +19,14 @@ func newQueryTestPassthrough(t *testing.T, hostReadsFiles bool) *KittyPassthroug
 
 	// clientCapabilities takes precedence in GetHostCapabilities, so setting
 	// it keeps the test off the real terminal's detection path entirely.
-	previous := clientCapabilities
-	clientCapabilities = &HostCapabilities{
+	previous := clientCapabilities.Load()
+	clientCapabilities.Store(&HostCapabilities{
 		KittyGraphics:     true,
 		KittyFileTransfer: hostReadsFiles,
 		CellWidth:         9,
 		CellHeight:        20,
-	}
-	t.Cleanup(func() { clientCapabilities = previous })
+	})
+	t.Cleanup(func() { clientCapabilities.Store(previous) })
 
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: devnull})
 	kp.enabled = true

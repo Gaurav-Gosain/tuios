@@ -11,9 +11,9 @@ import (
 // window bottom and the bottom-edge guards hid the image. The image must stay
 // visible at its true on-screen row, matching the kitty convention.
 func TestSixelVisibleWhenScrollbackExceedsHeight(t *testing.T) {
-	prevCaps := cachedCapabilities
-	cachedCapabilities = &HostCapabilities{CellWidth: 9, CellHeight: 20, Cols: 80, Rows: 40}
-	t.Cleanup(func() { cachedCapabilities = prevCaps })
+	prevCaps := cachedCapabilities.Load()
+	cachedCapabilities.Store(&HostCapabilities{CellWidth: 9, CellHeight: 20, Cols: 80, Rows: 40})
+	t.Cleanup(func() { cachedCapabilities.Store(prevCaps) })
 
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err != nil {

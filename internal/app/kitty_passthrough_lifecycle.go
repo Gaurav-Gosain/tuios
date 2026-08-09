@@ -110,12 +110,16 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 
 		cursorPos := win.Terminal.CursorPosition()
 		scrollbackLen := win.Terminal.ScrollbackLen()
-		borderOff := win.BorderOffset()
+		// This callback runs on the PTY-reader goroutine while the update loop
+		// may be mutating the live geometry fields; read the published
+		// snapshot instead. It is at most a frame stale, and the placement is
+		// re-laid out against fresh geometry every frame anyway.
+		geo := win.LastGeometry()
 		result := kp.ForwardCommand(
 			cmd, rawData, win.ID,
-			win.X, win.Y,
-			win.Width, win.Height,
-			borderOff, borderOff,
+			geo.X, geo.Y,
+			geo.Width, geo.Height,
+			geo.BorderOffset, geo.BorderOffset,
 			cursorPos.X, cursorPos.Y,
 			scrollbackLen,
 			win.IsAltScreen(),

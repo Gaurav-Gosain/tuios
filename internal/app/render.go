@@ -493,13 +493,16 @@ func (m *OS) View() tea.View {
 // placement refresh, pending flush, host writes, and text sizing).
 //
 // It runs inside its own panic barrier. View() is called from bubbletea's
-// render goroutine, which recovers panics only at the top of Program.Run: a
-// panic escaping here returns from Run, and over SSH that ends the wish session
-// and tears down the daemon client (the "use of closed network connection"
-// teardown). The graphics path re-encodes guest-controlled, high-rate image
-// frames (kitty shm/file transports over SSH), so a single malformed or
-// unhandled frame must degrade to a dropped frame, never a dead session.
-// Update() has an equivalent per-event barrier; this is its render-side twin.
+// event loop, which recovers panics only at the top of Program.Run: a panic
+// escaping here returns from Run, and over SSH that ends the wish session.
+// The graphics path re-encodes guest-controlled, high-rate image frames
+// (kitty shm/file transports over SSH), so a single malformed or unhandled
+// frame must degrade to a dropped frame, never a dead session. Update() has
+// an equivalent per-event barrier; this is its render-side twin. (The
+// teardown seen under a kitty shm flood over SSH was not a panic on this
+// path; it was unserialized concurrent writes to the SSH channel, fixed by
+// serialWriter in the server package. This barrier stays as containment for
+// real panics.)
 func (m *OS) flushGraphicsForView() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -508,6 +511,16 @@ func (m *OS) flushGraphicsForView() {
 			m.LogError("recovered panic in graphics flush: %v (crash log: %s)\n%s", r, path, stack)
 		}
 	}()
+
+	// Republish every window's geometry snapshot for the PTY-reader
+	// passthrough callbacks. This runs on the goroutine that owns the layout
+	// fields, so the reads are safe, and it keeps the snapshots at most one
+	// frame stale.
+	for _, w := range m.Windows {
+		if w != nil {
+			w.PublishGeometry()
+		}
+	}
 
 	// Hide images ONLY during full-screen overlays (help, palette, etc.).
 	// Copy-mode scroll is NOT a reason to hide  - RefreshAllPlacements uses

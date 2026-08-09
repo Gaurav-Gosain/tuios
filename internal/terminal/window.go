@@ -169,8 +169,9 @@ var (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
-	title              atomic.Pointer[string] // Written on PTY/monitor goroutine, read on UI goroutine
-	CustomName         string                 // User-defined window name
+	title              atomic.Pointer[string]           // Written on PTY/monitor goroutine, read on UI goroutine
+	geomSnap           atomic.Pointer[GeometrySnapshot] // See PublishGeometry
+	CustomName         string                           // User-defined window name
 	Width              int
 	Height             int
 	X                  int
@@ -573,6 +574,11 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 			window.ShellPgid = pgid
 		}
 	}
+
+	// Publish the initial geometry before the PTY reader starts, so the
+	// passthrough callbacks running on that goroutine always have a snapshot
+	// to read instead of the live fields the update loop mutates.
+	window.PublishGeometry()
 
 	// Start I/O handling
 	window.handleIOOperations()

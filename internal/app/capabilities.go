@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -37,21 +38,32 @@ type HostCapabilities struct {
 	Rows              int
 }
 
-var cachedCapabilities *HostCapabilities
+// cachedCapabilities and clientCapabilities are process-globals read from
+// every render and session goroutine and written by per-connection SSH
+// handlers, so they are atomic pointers: the store/load pair gives readers a
+// happens-before edge with the writer's struct initialization. A plain
+// pointer let the race detector flag every multi-session server, and a reader
+// could observe a half-initialized HostCapabilities.
+var cachedCapabilities atomicHostCaps
 
 // clientCapabilities holds capabilities received from the daemon client.
 // These override detected capabilities when running in daemon mode.
-var clientCapabilities *HostCapabilities
+var clientCapabilities atomicHostCaps
+
+// atomicHostCaps is a typed atomic pointer to HostCapabilities.
+type atomicHostCaps = atomic.Pointer[HostCapabilities]
 
 func GetHostCapabilities() *HostCapabilities {
 	// Prefer client-provided capabilities (for daemon mode)
-	if clientCapabilities != nil {
-		return clientCapabilities
+	if caps := clientCapabilities.Load(); caps != nil {
+		return caps
 	}
-	if cachedCapabilities == nil {
-		cachedCapabilities = DetectHostCapabilities()
+	if caps := cachedCapabilities.Load(); caps != nil {
+		return caps
 	}
-	return cachedCapabilities
+	caps := DetectHostCapabilities()
+	cachedCapabilities.Store(caps)
+	return caps
 }
 
 // SetClientCapabilities installs capabilities detected from a remote client so
@@ -66,7 +78,7 @@ func GetHostCapabilities() *HostCapabilities {
 // snapshotted at construction and is not affected. Single-client connections,
 // the common case, are fully correct.
 func SetClientCapabilities(caps *HostCapabilities) {
-	clientCapabilities = caps
+	clientCapabilities.Store(caps)
 }
 
 func DetectHostCapabilities() *HostCapabilities {

@@ -115,7 +115,7 @@ func tabWrapWidth(width int) int {
 
 // glyphPrefix returns the glyph plus a trailing space, honoring ASCII mode.
 func glyphPrefix(glyph string) string {
-	if ASCII || glyph == "" {
+	if UseASCII() || glyph == "" {
 		return ""
 	}
 	return glyph + " "

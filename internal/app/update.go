@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -185,12 +186,22 @@ type InputHandler func(msg tea.Msg, o *OS) (tea.Model, tea.Cmd)
 
 // inputHandler is the registered input handler function.
 // This will be set by the main package to break the circular dependency.
-var inputHandler InputHandler
+// Atomic because every SSH connection handler registers it (with the same
+// function) while other sessions' update loops are reading it.
+var inputHandler atomic.Pointer[InputHandler]
 
 // SetInputHandler registers the input handler function.
 // This must be called during initialization before the Update loop runs.
 func SetInputHandler(handler InputHandler) {
-	inputHandler = handler
+	inputHandler.Store(&handler)
+}
+
+// getInputHandler returns the registered input handler, or nil if none is set.
+func getInputHandler() InputHandler {
+	if h := inputHandler.Load(); h != nil {
+		return *h
+	}
+	return nil
 }
 
 // Init initializes the TUIOS application and returns initial commands to run.
@@ -786,10 +797,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// would not be drawn until some other redraw happened.
 		m.renderSkipped = false
 		// Delegate to the registered input handler
-		if inputHandler == nil {
+		handler := getInputHandler()
+		if handler == nil {
 			return m, nil
 		}
-		newModel, cmd := inputHandler(msg, m)
+		newModel, cmd := handler(msg, m)
 
 		// Motion events during a drag or resize arrive far faster than a frame
 		// can be composed: the pointer emits one per cell it crosses, while a
@@ -1228,8 +1240,8 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		var cmd tea.Cmd
 
 		// Process this key through the input handler
-		if inputHandler != nil {
-			newModel, keyCmd := inputHandler(msg.Key, m)
+		if handler := getInputHandler(); handler != nil {
+			newModel, keyCmd := handler(msg.Key, m)
 			if newOS, ok := newModel.(*OS); ok {
 				m = newOS
 			}

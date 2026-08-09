@@ -10,9 +10,9 @@ import (
 // restores whatever was there before. GetHostCapabilities prefers these.
 func withClientCaps(t *testing.T, caps *HostCapabilities) {
 	t.Helper()
-	prev := clientCapabilities
-	clientCapabilities = caps
-	t.Cleanup(func() { clientCapabilities = prev })
+	prev := clientCapabilities.Load()
+	clientCapabilities.Store(caps)
+	t.Cleanup(func() { clientCapabilities.Store(prev) })
 }
 
 // TestKittyPassthrough_EnabledForKittyClient mirrors the SSH daemon/ephemeral

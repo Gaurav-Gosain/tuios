@@ -526,8 +526,11 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 			ch = 20
 		}
 
+		// Log via the published snapshot: this callback runs on the PTY-reader
+		// goroutine, and the live geometry fields belong to the update loop.
+		geo := win.LastGeometry()
 		sixelPassthroughLog("CALLBACK: rawLen=%d cursorX=%d cursorY=%d absLine=%d winX=%d winY=%d winW=%d winH=%d cell=%dx%d",
-			len(cmd.RawSequence), cursorX, cursorY, absLine, win.X, win.Y, win.Width, win.Height, cw, ch)
+			len(cmd.RawSequence), cursorX, cursorY, absLine, geo.X, geo.Y, geo.Width, geo.Height, cw, ch)
 
 		// Route through the placement system for proper position tracking and clipping
 		m.SixelPassthrough.ForwardCommand(

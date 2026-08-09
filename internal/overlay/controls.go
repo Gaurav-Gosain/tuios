@@ -3,14 +3,27 @@ package overlay
 import (
 	"image/color"
 	"strings"
+	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
 )
 
-// ASCII, when true, makes the controls avoid non-ASCII glyphs (arrows,
+// ascii, when true, makes the controls avoid non-ASCII glyphs (arrows,
 // ellipsis) for terminals without a capable font. It is a package-level toggle
 // because it is a rendering-environment property, not a per-call concern.
-var ASCII bool
+// Atomic because every session's render loop mirrors the config value into it
+// (see the app package) while other sessions' renders read it.
+var ascii atomic.Bool
+
+// SetASCII records whether rendering must avoid non-ASCII glyphs.
+func SetASCII(v bool) {
+	ascii.Store(v)
+}
+
+// UseASCII reports whether rendering must avoid non-ASCII glyphs.
+func UseASCII() bool {
+	return ascii.Load()
+}
 
 // Style returns a fresh lipgloss style already backgrounded with bg. Every
 // fragment on a panel row must carry that row's background, otherwise a bare
@@ -73,7 +86,7 @@ func Cycler(value string, selected bool, bg color.Color, pal Palette) string {
 		valColor = pal.Fg
 	}
 	left, right := "‹", "›"
-	if ASCII {
+	if UseASCII() {
 		left, right = "<", ">"
 	}
 	arrow := Style(bg).Foreground(arrowColor)
@@ -108,7 +121,7 @@ func Rule(width int, bg color.Color, pal Palette) string {
 
 // Ellipsis returns the truncation marker for the current ASCII setting.
 func Ellipsis() string {
-	if ASCII {
+	if UseASCII() {
 		return "..."
 	}
 	return "…"
