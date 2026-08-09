@@ -3,6 +3,9 @@ package vt
 import (
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -247,12 +250,49 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 		return encodeTildeKeyCSIu(24, key.Mod, flags)
 	}
 
-	// For regular keys, encode as CSI code ; modifiers u
+	// For regular keys, encode as CSI code ; modifiers u.
+	//
+	// When the pane requested the associated-text flag, a key that produces
+	// text must carry that text as the third CSI-u field so the app inserts the
+	// character the user actually typed. Without it, an app that honours the
+	// flag it asked for (terminal-browser escalates to CSI >27u on text focus,
+	// awrit pushes CSI >31u) has only the base key code to work with: it inserts
+	// the unshifted character, so Shift+A types "a", ":" types ";", and any
+	// non-ASCII text is dropped. The field is a colon-separated list of the
+	// produced text's Unicode code points; see the kitty keyboard protocol.
 	modParam := kittyModParam(key.Mod)
+	if flags&ansi.KittyReportAssociatedKeys != 0 {
+		if text := kittyAssociatedText(key.Text); text != "" {
+			return fmt.Sprintf("\x1b[%d;%d;%su", code, modParam, text)
+		}
+	}
 	if modParam > 1 {
 		return fmt.Sprintf("\x1b[%d;%du", code, modParam)
 	}
 	return fmt.Sprintf("\x1b[%du", code)
+}
+
+// kittyAssociatedText renders a key's produced text as the colon-separated
+// decimal code-point list the kitty keyboard protocol uses for its associated
+// text field. It returns "" when there is no text to report: an empty string,
+// or text that is a lone control character (Enter, Tab, Backspace and Escape
+// carry their semantics in the key code, not as insertable text, and a kitty
+// app expects no text field for them).
+func kittyAssociatedText(text string) string {
+	if text == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range text {
+		if unicode.IsControl(r) {
+			return ""
+		}
+		if b.Len() > 0 {
+			b.WriteByte(':')
+		}
+		b.WriteString(strconv.Itoa(int(r)))
+	}
+	return b.String()
 }
 
 // encodeSpecialKeyCSIu encodes a special key (arrow, home, end, F1-F4) in CSI u format.

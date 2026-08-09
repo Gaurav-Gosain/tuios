@@ -268,6 +268,118 @@ func TestEncodeKeyCSIu(t *testing.T) {
 	}
 }
 
+// TestEncodeKeyCSIuAssociatedText pins the associated-text field the kitty
+// keyboard protocol requires once a pane sets the report-associated-keys flag.
+// Without the third CSI-u field, an app that asked for it (terminal-browser
+// escalates to CSI >27u on text focus, awrit pushes CSI >31u) inserts the base
+// key code, so Shift+A types "a" and shifted symbols come out wrong. These are
+// the exact bytes those parsers turn back into the typed character.
+func TestEncodeKeyCSIuAssociatedText(t *testing.T) {
+	const all = ansi.KittyAllFlags                    // 31: disambiguate|events|alternate|all-keys|assoc
+	const focus = ansi.KittyDisambiguateEscapeCodes | // 27: what terminal-browser pushes on text focus
+		ansi.KittyReportEventTypes |
+		ansi.KittyReportAllKeysAsEscapeCodes |
+		ansi.KittyReportAssociatedKeys
+
+	tests := []struct {
+		name     string
+		key      KeyPressEvent
+		flags    int
+		expected string
+	}{
+		{
+			name:     "plain letter carries its text (flags 31)",
+			key:      KeyPressEvent{Code: 'a', Text: "a"},
+			flags:    all,
+			expected: "\x1b[97;1;97u",
+		},
+		{
+			name:     "plain letter carries its text (flags 27)",
+			key:      KeyPressEvent{Code: 'a', Text: "a"},
+			flags:    focus,
+			expected: "\x1b[97;1;97u",
+		},
+		{
+			name:     "shifted letter reports the shifted text, base code",
+			key:      KeyPressEvent{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: ModShift},
+			flags:    all,
+			expected: "\x1b[120;2;88u",
+		},
+		{
+			name:     "shifted symbol reports the shifted text",
+			key:      KeyPressEvent{Code: ';', ShiftedCode: ':', Text: ":", Mod: ModShift},
+			flags:    all,
+			expected: "\x1b[59;2;58u",
+		},
+		{
+			name:     "space reports its text",
+			key:      KeyPressEvent{Code: KeySpace, Text: " "},
+			flags:    all,
+			expected: "\x1b[32;1;32u",
+		},
+		{
+			name:     "non-ascii text is reported by code point",
+			key:      KeyPressEvent{Code: 'e', Text: "é"},
+			flags:    all,
+			expected: "\x1b[101;1;233u",
+		},
+		{
+			name:     "enter has no associated text",
+			key:      KeyPressEvent{Code: KeyEnter},
+			flags:    all,
+			expected: "\x1b[13u",
+		},
+		{
+			name:     "backspace has no associated text",
+			key:      KeyPressEvent{Code: KeyBackspace},
+			flags:    all,
+			expected: "\x1b[127u",
+		},
+		{
+			name:     "escape has no associated text",
+			key:      KeyPressEvent{Code: KeyEscape},
+			flags:    all,
+			expected: "\x1b[27u",
+		},
+		{
+			name:     "ctrl+letter has no associated text",
+			key:      KeyPressEvent{Code: 'a', Mod: ModCtrl},
+			flags:    all,
+			expected: "\x1b[97;5u",
+		},
+		{
+			name:     "up arrow is unchanged under all flags",
+			key:      KeyPressEvent{Code: KeyUp},
+			flags:    all,
+			expected: "\x1b[A",
+		},
+		{
+			// A control character delivered as Text (never a real keypress, but
+			// worth pinning) must not become a text field.
+			name:     "control text is dropped",
+			key:      KeyPressEvent{Code: 'm', Text: "\r"},
+			flags:    all,
+			expected: "\x1b[109u",
+		},
+		{
+			// disambiguate-only: the pane never asked for associated text, so a
+			// plain letter still goes as legacy text (empty CSI-u result).
+			name:     "no associated text without the flag",
+			key:      KeyPressEvent{Code: 'a', Text: "a"},
+			flags:    ansi.KittyDisambiguateEscapeCodes,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := EncodeKeyCSIu(tt.key, tt.flags); got != tt.expected {
+				t.Errorf("EncodeKeyCSIu(%+v, %d) = %q, want %q", tt.key, tt.flags, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestKittyModParam(t *testing.T) {
 	tests := []struct {
 		mod      KeyMod
