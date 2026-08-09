@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -28,7 +29,7 @@ func sixelPassthroughLog(format string, args ...any) {
 type SixelPassthrough struct {
 	mu      sync.Mutex
 	enabled bool
-	hostOut *os.File
+	hostOut io.Writer
 
 	// Placements per window
 	placements map[string][]*SixelPassthroughPlacement
@@ -83,8 +84,9 @@ type SixelPassthroughPlacement struct {
 type SixelPassthroughOptions struct {
 	// ForceEnable skips capability detection (for web mode).
 	ForceEnable bool
-	// Output is the writer for sixel output. If nil, uses os.Stdout.
-	Output *os.File
+	// Output is the writer for sixel output. If nil, uses os.Stdout. Web mode
+	// passes the sip PtySlave; SSH mode passes the ssh.Session.
+	Output io.Writer
 }
 
 // NewSixelPassthroughWithOptions creates a new SixelPassthrough with custom

@@ -126,23 +126,38 @@ func teaHandler(sshSession ssh.Session) (tea.Model, []tea.ProgramOption) {
 		cfg = &SSHServerConfig{Ephemeral: true}
 	}
 
+	// Detect the CLIENT terminal's graphics capabilities. The terminal that
+	// must render forwarded images is the one the user connected from, reached
+	// over this session, not the (often headless) server. Install them as the
+	// process host capabilities so the image cell math and cell-size lookups
+	// that read GetHostCapabilities report the client, not the server.
+	clientCaps := detectClientGraphics(sshSession)
+	app.SetClientCapabilities(clientToHostCapabilities(clientCaps))
+
 	// Determine session name from SSH context
 	sessionName := determineSessionName(sshSession, cfg)
 
+	var model tea.Model
+	var opts []tea.ProgramOption
+
 	// If ephemeral mode or daemon not available, use old behavior
 	if cfg.Ephemeral {
-		return createEphemeralTUIOSInstance(sshSession, pty.Window.Width, pty.Window.Height)
+		model, opts = createEphemeralTUIOSInstance(sshSession, pty.Window.Width, pty.Window.Height)
+	} else {
+		// Try to connect to daemon
+		var err error
+		model, opts, err = createDaemonTUIOSInstance(sshSession, sessionName, pty.Window.Width, pty.Window.Height, cfg, clientCaps)
+		if err != nil {
+			log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
+			model, opts = createEphemeralTUIOSInstance(sshSession, pty.Window.Width, pty.Window.Height)
+		}
 	}
 
-	// Try to connect to daemon
-	model, opts, err := createDaemonTUIOSInstance(sshSession, sessionName, pty.Window.Width, pty.Window.Height, cfg)
-	if err != nil {
-		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-		return createEphemeralTUIOSInstance(sshSession, pty.Window.Width, pty.Window.Height)
-	}
-
-	// Close the daemon client when the SSH session ends, otherwise the client
-	// read loop, its socket, and the daemon-side connState leak per connection.
+	// Tear down when the SSH session ends. In daemon mode this closes the daemon
+	// client, otherwise its read loop, socket, and the daemon-side connState leak
+	// per connection. In ephemeral mode it closes the local windows, otherwise
+	// each disconnect leaks a shell process and its PTY inside this long-lived
+	// server. Cleanup is idempotent.
 	if o, ok := model.(*app.OS); ok {
 		go func() {
 			<-sshSession.Context().Done()
@@ -196,6 +211,15 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 		Height:          height,
 		IsSSHMode:       true,
 		SSHSession:      sshSession,
+		// Route kitty/sixel APC sequences to the SSH session so they reach the
+		// client's terminal. The passthrough enables itself only when the
+		// client's detected capabilities (installed via SetClientCapabilities)
+		// say the terminal can render them, so this is a no-op for a plain
+		// client. RemoteClient forces file-medium transmissions to be
+		// re-encoded as direct data, since the client cannot read server paths.
+		EnableGraphicsPassthrough: true,
+		GraphicsOutput:            sshSession,
+		GraphicsRemoteClient:      true,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -204,7 +228,7 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, width, height int) (te
 }
 
 // createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
-func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width, height int, cfg *SSHServerConfig) (tea.Model, []tea.ProgramOption, error) {
+func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width, height int, cfg *SSHServerConfig, clientCaps *session.ClientCapabilities) (tea.Model, []tea.ProgramOption, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	version := cfg.Version
@@ -212,20 +236,10 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 		version = "ssh-client"
 	}
 
-	// Try to detect host capabilities for SSH sessions
-	// Note: SSH doesn't forward terminal pixel queries, so this may return defaults
-	// For better graphics support, use a local session instead of SSH
-	hostCaps := app.GetHostCapabilities()
-	clientCaps := &session.ClientCapabilities{
-		PixelWidth:    hostCaps.PixelWidth,
-		PixelHeight:   hostCaps.PixelHeight,
-		CellWidth:     hostCaps.CellWidth,
-		CellHeight:    hostCaps.CellHeight,
-		KittyGraphics: hostCaps.KittyGraphics,
-		SixelGraphics: hostCaps.SixelGraphics,
-		TerminalName:  hostCaps.TerminalName,
-	}
-
+	// Forward the CLIENT's capabilities to the daemon. The daemon uses the cell
+	// pixel size to set each PTY's winsize pixel fields, which drive SGR-pixel
+	// mouse reporting (DEC 1016) and kitty geometry. These must describe the
+	// terminal the user connected from, not the server.
 	if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
@@ -280,6 +294,11 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, sessionName string, width
 		DaemonClient:              client,
 		SessionName:               sessionName,
 		EnableGraphicsPassthrough: true,
+		// Route graphics to the SSH session so kitty/sixel APCs reach the
+		// client's terminal, and re-encode file-medium transmissions as direct
+		// data since the client cannot read server-local paths.
+		GraphicsOutput:       sshSession,
+		GraphicsRemoteClient: true,
 	})
 
 	// Restore state from daemon if available
