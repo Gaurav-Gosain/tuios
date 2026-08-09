@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -66,6 +67,20 @@ type WindowState struct {
 	// resurrection state written before this existed) reads as placed, which is
 	// exactly the pre-existing behavior of trusting the geometry as sent.
 	Unplaced bool `json:"unplaced,omitempty"`
+	// AgentState is the semantic state of an agent running in this pane
+	// (working, needs_input, idle, done, errored). It is daemon-owned: a pane
+	// reports it through the set-agent-state verb and clients never set it, so it
+	// is retained across a client sync the same way Cwd and Options are. The zero
+	// value (empty) is AgentStateNone and is omitted from serialized state, so
+	// older state and older clients read back as "no agent", the pre-existing
+	// behavior.
+	AgentState AgentState `json:"agent_state,omitempty"`
+	// AgentMessage is an optional short note the pane reported alongside its
+	// state, e.g. what it is waiting for. Daemon-owned, like AgentState.
+	AgentMessage string `json:"agent_message,omitempty"`
+	// AgentStateAt is the unix-nano time AgentState was last set. It is stamped
+	// daemon-side and drives the output-stall heuristic (see applyStallHeuristic).
+	AgentStateAt int64 `json:"agent_state_at,omitempty"`
 }
 
 // SerializedBSPNode represents a BSP tree node for serialization
@@ -203,6 +218,18 @@ type PTY struct {
 	// change, process exit) already tagged with this PTY's window and PTY ID. It
 	// is a no-op when the session has no event sink installed.
 	emit func(SessionEvent)
+
+	// lastOutput is the unix-nano time this PTY most recently produced output. It
+	// is written on the PTY read goroutine and read by the daemon's output-stall
+	// heuristic, so it is an atomic rather than guarded by a lock.
+	lastOutput atomic.Int64
+}
+
+// LastOutput returns the unix-nano time this PTY most recently produced output,
+// or 0 if it has produced none. It backs the daemon's agent-state stall
+// heuristic, which demotes a pane that reported working but has gone quiet.
+func (p *PTY) LastOutput() int64 {
+	return p.lastOutput.Load()
 }
 
 // Session represents a persistent TUIOS session.
@@ -286,6 +313,10 @@ type SessionConfig struct {
 	Term      string
 	ColorTerm string
 	Shell     string
+	// SocketPath is the daemon socket a shell spawned in this session reports to.
+	// The manager stamps it from the daemon's own socket when a session is
+	// created, so it is exported into every pane's environment as TUIOS_SOCKET.
+	SocketPath string
 }
 
 // NewSession creates a new persistent session.
@@ -854,6 +885,17 @@ func (s *Session) buildEnv(windowID string, restored bool) []string {
 	env = append(env, "TUIOS_SESSION="+s.Name)
 	if windowID != "" {
 		env = append(env, "TUIOS_WINDOW_ID="+windowID)
+		// TUIOS_PANE_ID is an alias a state-reporting shim guards on, mirroring
+		// the pane-id contract other multiplexers' agent integrations use.
+		env = append(env, "TUIOS_PANE_ID="+windowID)
+	}
+	// TUIOS_ENV marks a process as running under tuios, and TUIOS_SOCKET tells a
+	// shim which daemon socket to report to. Together with the pane id above they
+	// are the whole contract the agent-state shim needs; a shim finds nothing to
+	// report to when they are unset and no-ops.
+	env = append(env, "TUIOS_ENV=1")
+	if s.config != nil && s.config.SocketPath != "" {
+		env = append(env, "TUIOS_SOCKET="+s.config.SocketPath)
 	}
 	// Mark restored shells so the user's shell rc (and scripts) can react, and
 	// so the restore is observable without relying on the visual banner.
@@ -1272,6 +1314,11 @@ func (p *PTY) readOutput() {
 
 			// Broadcast to subscribers
 			p.broadcast(data)
+
+			// Record the activity time for the agent-state stall heuristic before
+			// anything that can block, so a demotion decision is made against when
+			// output actually arrived.
+			p.lastOutput.Store(time.Now().UnixNano())
 
 			// Raise a control-plane output-activity event. This is a lightweight
 			// signal (byte count only, no content) that drives wait-for-output and

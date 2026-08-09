@@ -620,6 +620,8 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.PreMinimizeWidth = ws.PreMinimizeW
 	w.PreMinimizeHeight = ws.PreMinimizeH
 	w.SetAltScreen(ws.IsAltScreen)
+	w.AgentState = string(ws.AgentState)
+	w.AgentMessage = ws.AgentMessage
 
 	if renderTraceEnabled && !sizeChanged {
 		traceSync(w, ws.IsAltScreen, false, w.Width, w.Height, "SetAltScreen; no resize")
@@ -717,6 +719,8 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	window.PreMinimizeWidth = ws.PreMinimizeW
 	window.PreMinimizeHeight = ws.PreMinimizeH
 	window.SetAltScreen(ws.IsAltScreen)
+	window.AgentState = string(ws.AgentState)
+	window.AgentMessage = ws.AgentMessage
 
 	m.setupKittyPassthrough(window)
 	m.setupSixelPassthrough(window)

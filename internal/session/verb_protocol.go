@@ -292,6 +292,25 @@ func init() {
 			examples:    []string{`{"id":1,"verb":"unsubscribe"}`},
 			handler:     (*Daemon).verbUnsubscribe,
 		},
+		"set-agent-state": {
+			description: "Set the agent state a window's pane reports (working, needs_input, idle, done, errored, or none to clear). A pane reports its own state by calling this against the daemon socket.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "state", Type: "string", Required: true, Description: "The agent state to record.", Accepted: AgentStateNames},
+				{Name: "message", Type: "string", Description: "Optional short note reported with the state, e.g. what the agent is waiting for."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"needs_input","message":"awaiting approval"}}`,
+			},
+			handler: (*Daemon).verbSetAgentState,
+		},
+		"get-agent-state": {
+			description: "Read the agent state a window's pane last reported, with its optional message and the time it was set.",
+			params:      []verbParam{sessionParam, windowParam},
+			examples:    []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
+			handler:     (*Daemon).verbGetAgentState,
+		},
 		"wait-for": {
 			description: "Block until a condition matches, or fail with the timeout code.",
 			params: []verbParam{

@@ -8,10 +8,34 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
+
+// agentStateIndicator returns the one-cell glyph that marks a pane's agent state
+// in its window title, or the empty string for none/unset. The glyphs are
+// deliberately distinct shapes rather than the same shape in different colors, so
+// the state reads at a glance and survives a monochrome capture: a filled circle
+// working, a triangle needs-input, a hollow circle idle, a filled square done,
+// and a cross errored.
+func agentStateIndicator(state string) string {
+	switch session.AgentState(state) {
+	case session.AgentStateWorking:
+		return "●"
+	case session.AgentStateNeedsInput:
+		return "▲"
+	case session.AgentStateIdle:
+		return "○"
+	case session.AgentStateDone:
+		return "■"
+	case session.AgentStateErrored:
+		return "×"
+	default:
+		return ""
+	}
+}
 
 var (
 	baseButtonStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000"))
@@ -80,8 +104,21 @@ func getWindowTitle(window *terminal.Window, position int, isRenaming bool, rena
 		windowName = config.FormatWindowTitle(windowName, position, window.CWD())
 	}
 
+	// The agent-state indicator shows even for a window with no name, so a pane
+	// running an agent is always marked. It is not shown while renaming, so it
+	// never sits in front of the text the user is typing.
+	indicator := ""
+	if !isRenaming {
+		indicator = agentStateIndicator(window.AgentState)
+	}
+
 	if windowName == "" {
-		return ""
+		return indicator
+	}
+
+	// Reserve room for the indicator and its trailing space before truncating.
+	if indicator != "" {
+		maxWidth = max(maxWidth-2, 0)
 	}
 
 	maxNameLen := max(maxWidth-6, 0)
@@ -97,8 +134,11 @@ func getWindowTitle(window *terminal.Window, position int, isRenaming bool, rena
 			}
 			windowName = truncated + "..."
 		} else {
-			return ""
+			return indicator
 		}
+	}
+	if indicator != "" {
+		return indicator + " " + windowName
 	}
 	return windowName
 }

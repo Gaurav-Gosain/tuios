@@ -30,14 +30,33 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	}
 
 	cwds := make(map[string]string, len(canonical.Windows))
+	// Agent state is daemon-owned and clients never set it, so it is carried over
+	// by window id exactly as Cwd is; without this a client sync (which omits it)
+	// would wipe every pane's reported state.
+	type agent struct {
+		state   AgentState
+		message string
+		at      int64
+	}
+	agents := make(map[string]agent, len(canonical.Windows))
 	for i := range canonical.Windows {
-		if cwd := canonical.Windows[i].Cwd; cwd != "" {
-			cwds[canonical.Windows[i].ID] = cwd
+		w := &canonical.Windows[i]
+		if cwd := w.Cwd; cwd != "" {
+			cwds[w.ID] = cwd
+		}
+		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentStateAt != 0 {
+			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentStateAt}
 		}
 	}
 	for i := range incoming.Windows {
-		if incoming.Windows[i].Cwd == "" {
-			incoming.Windows[i].Cwd = cwds[incoming.Windows[i].ID]
+		w := &incoming.Windows[i]
+		if w.Cwd == "" {
+			w.Cwd = cwds[w.ID]
+		}
+		if a, ok := agents[w.ID]; ok && w.AgentState == AgentStateNone && w.AgentMessage == "" && w.AgentStateAt == 0 {
+			w.AgentState = a.state
+			w.AgentMessage = a.message
+			w.AgentStateAt = a.at
 		}
 	}
 }

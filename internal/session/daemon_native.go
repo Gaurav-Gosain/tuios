@@ -398,6 +398,15 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.CustomName != "" {
 		info["custom_name"] = w.CustomName
 	}
+	// Always report the agent state (as "none" when unset) so a consumer building
+	// an attention view can read every pane's state in one list-windows call.
+	info["agent_state"] = w.AgentState.Name()
+	if w.AgentMessage != "" {
+		info["agent_message"] = w.AgentMessage
+	}
+	if w.AgentStateAt != 0 {
+		info["agent_state_at"] = w.AgentStateAt
+	}
 	return info
 }
 

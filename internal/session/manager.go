@@ -71,6 +71,15 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 		}
 	}
 
+	// Stamp the daemon socket path so shells spawned in this session can find the
+	// daemon (exported as TUIOS_SOCKET) without every caller having to know it.
+	if cfg == nil {
+		cfg = &SessionConfig{}
+	}
+	if cfg.SocketPath == "" {
+		cfg.SocketPath = m.SocketPath()
+	}
+
 	// Create the session
 	session, err := NewSession(name, cfg, width, height)
 	if err != nil {
@@ -171,6 +180,19 @@ func (m *Manager) ListSessions() []SessionInfo {
 	})
 
 	return infos
+}
+
+// AllSessions returns every live session. It backs the daemon's agent-state
+// stall monitor, which needs the session objects themselves rather than the
+// SessionInfo summaries ListSessions returns.
+func (m *Manager) AllSessions() []*Session {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]*Session, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		out = append(out, s)
+	}
+	return out
 }
 
 // SessionCount returns the number of active sessions.
