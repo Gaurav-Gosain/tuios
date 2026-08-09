@@ -91,6 +91,12 @@ type KittyPassthrough struct {
 	// Screen dimensions (updated by RefreshAllPlacements)
 	screenWidth  int
 	screenHeight int
+
+	// resizeFreezeSize records, per window, the size a placement was last laid
+	// out at while that window is being manipulated. It exists to suppress the
+	// per-tick re-placement churn during an interactive resize; see
+	// RefreshAllPlacements.
+	resizeFreezeSize map[string][2]int
 }
 
 // pendingDirectTransmit holds accumulated data for chunked direct transmissions
@@ -234,6 +240,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		nextHostID:        1,
 		pendingDirectData: make(map[string]*pendingDirectTransmit),
 		asyncFrameCh:      make(chan []byte, 1),
+		resizeFreezeSize:  make(map[string][2]int),
 	}
 	go kp.asyncFrameWriter()
 	return kp
