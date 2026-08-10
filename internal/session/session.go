@@ -848,16 +848,48 @@ func (s *Session) Info() SessionInfo {
 	width, height := s.width, s.height
 	s.sizeMu.RUnlock()
 
+	windows := s.windowSummaries()
+
 	return SessionInfo{
 		Name:        s.Name,
 		ID:          s.ID,
 		Created:     s.Created.Unix(),
 		LastActive:  s.LastActive.Unix(),
-		WindowCount: s.WindowCount(),
+		WindowCount: len(windows),
 		Attached:    false, // Will be set by manager
 		Width:       width,
 		Height:      height,
+		Windows:     windows,
 	}
+}
+
+// windowSummaries builds the lightweight per-window listing for Info() from the
+// cached window states. It does no PTY work, so it stays cheap enough to run on
+// every session list.
+func (s *Session) windowSummaries() []WindowSummary {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+
+	if len(s.state.Windows) == 0 {
+		return nil
+	}
+	out := make([]WindowSummary, 0, len(s.state.Windows))
+	for i := range s.state.Windows {
+		w := &s.state.Windows[i]
+		title := w.CustomName
+		if title == "" {
+			title = w.Title
+		}
+		if title == "" {
+			title = "shell"
+		}
+		out = append(out, WindowSummary{
+			ID:         w.ID,
+			Title:      title,
+			AgentState: string(w.AgentState),
+		})
+	}
+	return out
 }
 
 func (s *Session) getShell() string {

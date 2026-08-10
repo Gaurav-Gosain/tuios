@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -48,8 +49,14 @@ type TUIClient struct {
 	sessionID   string
 	sessionName string
 
-	// Available session names from daemon
-	availableSessionNames []string
+	// Cached session listing from the daemon, including each session's window
+	// summaries once fetched. Seeded name-only from the welcome message and kept
+	// current by RefreshSessionList. Guarded by mu.
+	availableSessions []SessionInfo
+
+	// refreshInFlight drops overlapping background refreshes so a periodic
+	// sidebar refresh cannot pile up requests on a busy daemon.
+	refreshInFlight atomic.Bool
 
 	// Codec negotiated with daemon (gob by default)
 	codec Codec
@@ -187,8 +194,12 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	// Update codec based on what server negotiated
 	c.codec = NegotiateCodec(welcome.Codec)
 
-	// Store available session names
-	c.availableSessionNames = welcome.SessionNames
+	// Seed the cache name-only; window summaries fill in on the first refresh.
+	infos := make([]SessionInfo, 0, len(welcome.SessionNames))
+	for _, name := range welcome.SessionNames {
+		infos = append(infos, SessionInfo{Name: name})
+	}
+	c.availableSessions = infos
 
 	return nil
 }
@@ -649,7 +660,7 @@ func (c *TUIClient) KillSessionByName(name string) error {
 	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
 		return err
 	}
-	c.setSessionNames(payload.Sessions)
+	c.UpdateSessionCache(payload.Sessions)
 	return nil
 }
 
@@ -998,7 +1009,39 @@ func (c *TUIClient) SessionName() string {
 func (c *TUIClient) AvailableSessionNames() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return append([]string{}, c.availableSessionNames...) // Return a copy
+	names := make([]string, 0, len(c.availableSessions))
+	for _, s := range c.availableSessions {
+		names = append(names, s.Name)
+	}
+	return names
+}
+
+// SessionWindows returns the cached per-window summaries for the named session,
+// or nil if the session is unknown or its windows have not been fetched yet. The
+// sidebar reads this to expand a non-attached session's tree without a blocking
+// round trip.
+func (c *TUIClient) SessionWindows(name string) []WindowSummary {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return append([]WindowSummary(nil), s.Windows...)
+		}
+	}
+	return nil
+}
+
+// TryRefreshSessionList refreshes the cache on the caller's goroutine unless a
+// refresh is already running, in which case it returns immediately. It is the
+// entry point for the periodic background refresh; call it from a tea.Cmd so it
+// never runs on the UI goroutine. Errors are swallowed: a failed refresh leaves
+// the last good cache in place.
+func (c *TUIClient) TryRefreshSessionList() {
+	if !c.refreshInFlight.CompareAndSwap(false, true) {
+		return
+	}
+	defer c.refreshInFlight.Store(false)
+	_, _ = c.RefreshSessionList()
 }
 
 // RefreshSessionList queries the daemon for an up-to-date session list and
@@ -1022,19 +1065,16 @@ func (c *TUIClient) RefreshSessionList() ([]SessionInfo, error) {
 	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
 		return nil, err
 	}
-	c.setSessionNames(payload.Sessions)
+	c.UpdateSessionCache(payload.Sessions)
 	return payload.Sessions, nil
 }
 
-// setSessionNames replaces the cached session names the UI reads (the session
-// switcher and sidebar) with the names from a daemon session list.
-func (c *TUIClient) setSessionNames(sessions []SessionInfo) {
-	names := make([]string, 0, len(sessions))
-	for _, s := range sessions {
-		names = append(names, s.Name)
-	}
+// UpdateSessionCache replaces the cached session listing, including each
+// session's window summaries. RefreshSessionList calls it after a fetch; it is
+// also the seam that seeds the cache without a live daemon.
+func (c *TUIClient) UpdateSessionCache(sessions []SessionInfo) {
 	c.mu.Lock()
-	c.availableSessionNames = names
+	c.availableSessions = sessions
 	c.mu.Unlock()
 }
 

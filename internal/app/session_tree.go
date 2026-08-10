@@ -3,6 +3,7 @@ package app
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -50,6 +51,24 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 	}
 }
 
+// foreignSessionInput builds the SessionInput for a session this client is not
+// attached to, filling its windows from the client's cached listing so the
+// sidebar can expand it. The cache is refreshed off the UI goroutine, so this
+// stays a pure read with no round trip. Windows are nil until the first refresh
+// lands, which leaves the row coarse (name only) exactly as before.
+func foreignSessionInput(client *session.TUIClient, name string) sessiontree.SessionInput {
+	summaries := client.SessionWindows(name)
+	windows := make([]sessiontree.WindowInput, 0, len(summaries))
+	for _, w := range summaries {
+		windows = append(windows, sessiontree.WindowInput{
+			ID:         w.ID,
+			Title:      w.Title,
+			AgentState: w.AgentState,
+		})
+	}
+	return sessiontree.SessionInput{Name: name, Windows: windows}
+}
+
 // BuildSessionTree builds the unified tree for the session-management surfaces.
 // The attached session is built rich from live state; other sessions are added
 // coarse (name only) from the client's CACHED session-name list.
@@ -64,9 +83,9 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 // It performs no daemon round trip. This is deliberate: the palette opens on the
 // UI goroutine, and a blocking RefreshSessionList there froze the client and
 // dropped the daemon connection while the daemon was busy (a browser flooding
-// graphics over ssh). The cache is seeded on connect and refreshed whenever the
-// session switcher is opened, so it is fresh enough to list sessions by name;
-// per-window detail for a non-attached session fills in once it is switched to.
+// graphics over ssh). The cache is seeded on connect and refreshed off the UI
+// goroutine (see the foreign-session refresh in Update), so non-attached
+// sessions carry their window summaries and expand from the cache alone.
 func (m *OS) BuildSessionTree() sessiontree.Tree {
 	current := m.currentSessionInput()
 
@@ -83,7 +102,7 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 			seen = true
 			continue
 		}
-		sessions = append(sessions, sessiontree.SessionInput{Name: name})
+		sessions = append(sessions, foreignSessionInput(m.DaemonClient, name))
 	}
 	if !seen {
 		// The cache has not caught up with a just-created session yet; it goes

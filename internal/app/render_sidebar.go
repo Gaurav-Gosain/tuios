@@ -343,9 +343,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs, s.ID)
 	}
 
-	// Flatten the panes running agents, in display order. Only sessions with
-	// known windows contribute (the attached one; others are coarse until
-	// visited), so the section can never show a stale guess.
+	// Flatten the panes running agents, in display order. Sessions with known
+	// windows contribute: the attached one from live state, others from the
+	// cached listing, so agents on other sessions surface here marked Foreign.
 	var agents []sidebarAgentEntry
 	if variant != sidebarVariantGlyph {
 		for _, s := range sessions {

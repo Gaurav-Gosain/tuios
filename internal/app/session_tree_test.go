@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -94,6 +95,58 @@ func TestBuildSessionTreeStandaloneSessionName(t *testing.T) {
 	tree2 := m2.BuildSessionTree()
 	if got := tree2.Sessions[0].ID; got != "named" {
 		t.Errorf("session name with SessionName set = %q, want %q", got, "named")
+	}
+}
+
+// TestBuildSessionTreeForeignSessionExpands checks that a non-attached session
+// whose window summaries are in the client cache produces expandable Children,
+// rolls up their agent state, and is not marked current. This is what lets the
+// sidebar expand any session, not just the attached one.
+func TestBuildSessionTreeForeignSessionExpands(t *testing.T) {
+	client := session.NewTUIClient()
+	client.UpdateSessionCache([]session.SessionInfo{
+		{Name: "attached"},
+		{Name: "other", Windows: []session.WindowSummary{
+			{ID: "ow1", Title: "vim", AgentState: "working"},
+			{ID: "ow2", Title: "shell"},
+		}},
+	})
+
+	m := &OS{
+		Windows:       []*terminal.Window{{ID: "aw1"}},
+		FocusedWindow: 0,
+		SessionName:   "attached",
+		DaemonClient:  client,
+	}
+
+	tree := m.BuildSessionTree()
+
+	var other *sessiontree.Node
+	for i := range tree.Sessions {
+		if tree.Sessions[i].ID == "other" {
+			other = &tree.Sessions[i]
+		}
+	}
+	if other == nil {
+		t.Fatalf("session %q missing from tree %+v", "other", tree.Sessions)
+	}
+	if other.IsCurrent {
+		t.Errorf("foreign session must not be marked current")
+	}
+	if len(other.Children) != 2 {
+		t.Fatalf("foreign session Children = %d, want 2 (expandable)", len(other.Children))
+	}
+	wantTitles := map[string]string{"ow1": "vim", "ow2": "shell"}
+	for _, c := range other.Children {
+		if c.Kind != sessiontree.KindWindow {
+			t.Errorf("child %q Kind = %v, want KindWindow", c.ID, c.Kind)
+		}
+		if want := wantTitles[c.ID]; c.Title != want {
+			t.Errorf("window %s Title = %q, want %q", c.ID, c.Title, want)
+		}
+	}
+	if want := sessiontree.RollUpState([]string{"working", ""}); other.AgentState != want {
+		t.Errorf("foreign session AgentState = %q, want %q", other.AgentState, want)
 	}
 }
 

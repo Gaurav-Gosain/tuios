@@ -257,6 +257,12 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, TriggerAltScreenRedrawCmd())
 	}
 
+	// Keep the foreign-session window cache warm so the sidebar can expand other
+	// sessions. Kick once on attach, then repeat on an interval.
+	if m.DaemonClient != nil {
+		cmds = append(cmds, refreshForeignSessionsCmd(m.DaemonClient), foreignSessionRefreshTick())
+	}
+
 	return tea.Batch(cmds...)
 }
 
@@ -403,6 +409,38 @@ type TriggerAltScreenRedrawMsg struct{}
 func TriggerAltScreenRedrawCmd() tea.Cmd {
 	return func() tea.Msg {
 		return TriggerAltScreenRedrawMsg{}
+	}
+}
+
+// foreignSessionRefreshInterval is how often the client re-fetches the daemon's
+// session list so a non-attached session's window tree stays current in the
+// sidebar. The sidebar reads BuildSessionTree every frame but triggers no
+// refresh itself, so without this the foreign-window cache would stay empty
+// until the switcher is opened.
+const foreignSessionRefreshInterval = 3 * time.Second
+
+// ForeignSessionRefreshTickMsg fires on foreignSessionRefreshInterval to kick a
+// background session-list refresh.
+type ForeignSessionRefreshTickMsg struct{}
+
+func foreignSessionRefreshTick() tea.Cmd {
+	return tea.Tick(foreignSessionRefreshInterval, func(time.Time) tea.Msg {
+		return ForeignSessionRefreshTickMsg{}
+	})
+}
+
+// refreshForeignSessionsCmd refreshes the cached session list off the UI
+// goroutine so BuildSessionTree, which must never block, can read foreign
+// sessions' windows from the cache. A blocking refresh on the UI goroutine once
+// froze the client while the daemon was busy; a Cmd runs in its own goroutine,
+// and TryRefreshSessionList drops the request if one is already in flight.
+func refreshForeignSessionsCmd(client *session.TUIClient) tea.Cmd {
+	if client == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		client.TryRefreshSessionList()
+		return nil
 	}
 }
 
@@ -739,6 +777,9 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case ForeignSessionRefreshTickMsg:
+		return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), foreignSessionRefreshTick())
 
 	case TriggerAltScreenRedrawMsg:
 		// Force alt screen apps to redraw by sending resize (fake then real)

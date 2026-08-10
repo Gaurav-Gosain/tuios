@@ -144,6 +144,15 @@ type NewPayload struct {
 	Detach bool `json:"detach,omitempty"`
 }
 
+// WindowSummary is a lightweight per-window entry in a session listing: enough
+// for a session-management surface to draw and expand a non-attached session's
+// window tree without querying that session's PTYs.
+type WindowSummary struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	AgentState string `json:"agent_state,omitempty"`
+}
+
 // SessionInfo describes a single session for listing.
 type SessionInfo struct {
 	Name        string `json:"name"`         // Session name
@@ -154,6 +163,10 @@ type SessionInfo struct {
 	Attached    bool   `json:"attached"`     // Whether a client is attached
 	Width       int    `json:"width"`        // Session width
 	Height      int    `json:"height"`       // Session height
+	// Windows lists per-window summaries so a client can expand a non-attached
+	// session's tree from the listing alone. Omitted by older daemons, which
+	// older and newer clients both read back as "windows not known yet".
+	Windows []WindowSummary `json:"windows,omitempty"`
 }
 
 // SessionListPayload contains list of available sessions.
