@@ -444,6 +444,16 @@ type OS struct {
 	SidebarHits      []sidebarRowHit
 	SidebarScroll    int
 	SidebarCollapsed map[string]bool
+	// SidebarOrder is the user's drag-defined session order, applied over the
+	// daemon's creation-order list (sessions not named here keep their natural
+	// order after the named ones). Persisted in the sidebar state file together
+	// with SidebarCollapsed. SidebarSessionIDs is the session order actually
+	// displayed last frame (the draft order while a drag is in progress), which
+	// is what a starting drag snapshots. SidebarDrag carries the press-or-drag
+	// gesture on a session row between mouse events.
+	SidebarOrder      []string
+	SidebarSessionIDs []string
+	SidebarDrag       sidebarDragState
 	// Sidebar hover: the last mouse position seen inside the band, so the row
 	// under the cursor is highlighted the way overlay rows are. HoverActive is
 	// cleared as soon as motion leaves the band.

@@ -164,3 +164,74 @@ func TestSidebarClickSwitchesSession(t *testing.T) {
 
 	alive(t, term, "after switching sessions from the sidebar")
 }
+
+// screenRowOf returns the topmost row containing needle, or -1. The sidebar
+// sits at the top of the screen, so the topmost occurrence is the sidebar row
+// even when the dock repeats the name further down.
+func screenRowOf(s tuitest.Screen, needle string) int {
+	_, rows := s.Size()
+	for r := 0; r < rows; r++ {
+		if strings.Contains(s.Line(r), needle) {
+			return r
+		}
+	}
+	return -1
+}
+
+// TestSidebarDragReordersSessions drags a session row above another and
+// asserts the sidebar's session list follows: bravo, created second and listed
+// second, ends up above alpha after the drag.
+func TestSidebarDragReordersSessions(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+
+	if out, err := tuiosCLI(t, base, "new", "alpha", "--detach"); err != nil {
+		t.Fatalf("create alpha: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new", "bravo", "--detach"); err != nil {
+		t.Fatalf("create bravo: %v: %s", err, out)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "alpha"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatalf("normalise to window mode: %v", err)
+	}
+	if err := term.WaitForText("Window Management Mode", uiTimeout); err != nil {
+		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(insertGuard)
+
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
+
+	// Creation order puts alpha above bravo.
+	s := term.Screen()
+	alphaRow, bravoRow := screenRowOf(s, "alpha"), screenRowOf(s, "bravo")
+	if alphaRow < 0 || bravoRow < 0 || alphaRow >= bravoRow {
+		t.Fatalf("expected alpha above bravo before the drag (alpha=%d bravo=%d)\n%s",
+			alphaRow, bravoRow, term.Snapshot())
+	}
+
+	// Drag bravo up onto alpha's row; the rows swap and the release commits.
+	col, _ := findOnScreen(t, term, "bravo")
+	mouseDrag(t, term, col, bravoRow, col, alphaRow, tuitest.MouseLeft, 0)
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		a, b := screenRowOf(s, "alpha"), screenRowOf(s, "bravo")
+		return a >= 0 && b >= 0 && b < a
+	}, uiTimeout); err != nil {
+		t.Fatalf("drag did not reorder bravo above alpha: %v\n%s", err, term.Snapshot())
+	}
+
+	// The drag must not have switched sessions: releasing a drag is not a click.
+	if strings.Contains(term.Screen().Text(), "Session: bravo") {
+		t.Fatalf("drag release switched sessions\n%s", term.Snapshot())
+	}
+
+	alive(t, term, "after dragging a session row")
+}

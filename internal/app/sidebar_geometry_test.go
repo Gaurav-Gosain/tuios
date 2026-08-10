@@ -9,15 +9,21 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// withSidebar sets the sidebar globals for a test and restores them after.
+// withSidebar sets the sidebar globals for a test and restores them after. It
+// also points the sidebar state file at a scratch directory so a test that
+// toggles or reorders never touches the developer's real state.
 func withSidebar(t *testing.T, enabled bool, pos string, width int) {
 	t.Helper()
 	pe, pp, pw := config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth
 	config.SidebarEnabled = enabled
 	config.SidebarPosition = pos
 	config.SidebarWidth = width
+	dir := t.TempDir()
+	prevDir := sidebarStateDir
+	sidebarStateDir = func() string { return dir }
 	t.Cleanup(func() {
 		config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = pe, pp, pw
+		sidebarStateDir = prevDir
 	})
 }
 

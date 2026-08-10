@@ -119,6 +119,10 @@ func NewOS(opts OSOptions) *OS {
 		SessionName:  opts.SessionName,
 	}
 
+	// Sidebar order and expand/collapse state survive restarts; a load failure
+	// just means the defaults (creation order, current session expanded).
+	os.loadSidebarState()
+
 	// Initialize graphics passthrough if enabled
 	if opts.EnableGraphicsPassthrough {
 		os.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{

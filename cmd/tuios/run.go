@@ -127,6 +127,22 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A sidebar session drag rides motion the same way an overlay drag does,
+	// and hover in the sidebar band needs motion to track the row under the
+	// pointer. HoverActive keeps one more event flowing after the pointer
+	// leaves the band, which is the event that clears the stale highlight.
+	if os.SidebarDragActive() {
+		return msg
+	}
+	if os.SidebarActive() {
+		if mm, ok := msg.(tea.MouseMotionMsg); ok {
+			mouse := mm.Mouse()
+			if os.SidebarHoverActive || os.SidebarBandContains(mouse.X, mouse.Y) {
+				return msg
+			}
+		}
+	}
+
 	// Allow motion events for scrollback browser drag-to-select
 	if os.ShowScrollbackBrowser {
 		return msg

@@ -54,6 +54,13 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 // The attached session is built rich from live state; other sessions are added
 // coarse (name only) from the client's CACHED session-name list.
 //
+// Ordering is a promise: sessions keep the daemon's creation order, with the
+// attached session marked current IN PLACE rather than hoisted to the front.
+// Hoisting looked helpful but meant every session switch reshuffled the list,
+// so a row was never where the eye left it. The user's drag-defined order
+// (SidebarOrder) overlays that base order; sessions it does not name keep
+// their creation-order slots after the named ones, so a new session appends.
+//
 // It performs no daemon round trip. This is deliberate: the palette opens on the
 // UI goroutine, and a blocking RefreshSessionList there froze the client and
 // dropped the daemon connection while the daemon was busy (a browser flooding
@@ -67,13 +74,23 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 		return sessiontree.Build([]sessiontree.SessionInput{current})
 	}
 
-	sessions := []sessiontree.SessionInput{current}
-	for _, name := range m.DaemonClient.AvailableSessionNames() {
-		if name == m.SessionName {
+	names := m.DaemonClient.AvailableSessionNames()
+	sessions := make([]sessiontree.SessionInput, 0, len(names)+1)
+	seen := false
+	for _, name := range names {
+		if name == current.Name {
+			sessions = append(sessions, current)
+			seen = true
 			continue
 		}
 		sessions = append(sessions, sessiontree.SessionInput{Name: name})
 	}
+	if !seen {
+		// The cache has not caught up with a just-created session yet; it goes
+		// last, which is where the creation order will put it anyway.
+		sessions = append(sessions, current)
+	}
+	sessions = orderByKey(sessions, func(s sessiontree.SessionInput) string { return s.Name }, m.SidebarOrder)
 	return sessiontree.Build(sessions)
 }
 

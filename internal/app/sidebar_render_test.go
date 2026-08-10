@@ -23,6 +23,9 @@ func sidebarTestOS(t *testing.T, w, h int, pos string) *OS {
 	}
 	m.FocusedWindow = 0
 	withSidebar(t, true, pos, config.SidebarDefaultWidth)
+	// NewOS ran before withSidebar redirected the state dir, so drop anything
+	// it may have loaded from the developer's real state file.
+	m.SidebarOrder, m.SidebarCollapsed = nil, nil
 	return m
 }
 

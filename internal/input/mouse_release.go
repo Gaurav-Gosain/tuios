@@ -21,6 +21,14 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Reset pointer shape on release
 	app.ResetPointerShape()
 
+	// A sidebar session gesture resolves on release: commit a reorder drag, or
+	// deliver the plain click (switch / toggle) the press deferred.
+	if o.SidebarDragActive() {
+		mouse := msg.Mouse()
+		o.SidebarRelease(mouse.X, mouse.Y)
+		return o, nil
+	}
+
 	// A plain right press on a pane arms a resize. Below the drag threshold it
 	// was a stray click, cancel the resize (restoring the few cells of jitter it
 	// may have applied) and do nothing else. The context menu is deliberately

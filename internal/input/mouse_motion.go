@@ -27,6 +27,14 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A pressed or dragged sidebar session row owns the pointer until release:
+	// the motion either commits the press to a reorder drag or advances the
+	// drag, and nothing underneath may see it either way.
+	if o.SidebarDragActive() {
+		o.SidebarDragMotion(mouse.X, mouse.Y)
+		return o, nil
+	}
+
 	// Overlay panels: keep dragging a grabbed panel, or highlight the row under
 	// the cursor so hover tracks the pointer in every overlay. Either way the
 	// motion is consumed; a pane behind an overlay panel never sees it. The
