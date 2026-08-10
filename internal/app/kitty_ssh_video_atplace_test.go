@@ -259,3 +259,70 @@ func TestRemoteVideoSkipsUnchangedFrames(t *testing.T) {
 		t.Fatal("changed frame was not sent (skip is too aggressive)")
 	}
 }
+
+// TestRemoteVideoCountsInHasPlacements proves a self-placed video image makes
+// HasPlacements report true, so the render loop keeps running its passes
+// (RefreshAllPlacements, which clears the image when the browser quits, and the
+// overlay hide) even though the image is not in `placements`.
+func TestRemoteVideoCountsInHasPlacements(t *testing.T) {
+	withClientCaps(t, &HostCapabilities{
+		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
+	})
+	shmName := makeShmFrame(t, 400, 300)
+	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
+	host := &recWriter{}
+	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	const winID = "window-0000-0000-0000-000000000000"
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
+		t.Fatal("video never placed")
+	}
+	if !kp.HasPlacements() {
+		t.Fatal("HasPlacements is false with a live self-placed video image; the render loop would stop refreshing it")
+	}
+}
+
+// TestOverlayHidesAndRestoresRemoteVideo proves an overlay deletes the video
+// image and drops incoming frames, then the stream re-places it when the overlay
+// closes.
+func TestOverlayHidesAndRestoresRemoteVideo(t *testing.T) {
+	withClientCaps(t, &HostCapabilities{
+		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
+	})
+	shmName := makeShmFrame(t, 400, 300)
+	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
+	host := &recWriter{}
+	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	const winID = "window-0000-0000-0000-000000000000"
+	send := func() {
+		kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	}
+
+	send() // establish
+	send() // self-place
+	if !waitUntil(func() bool { return host.count("a=T,i=") >= 1 }, 2*time.Second) {
+		t.Fatal("video never placed")
+	}
+
+	// Overlay opens: the image is deleted and further frames are dropped.
+	kp.SetOverlayActive(true)
+	if !host.has("a=d,d=i,i=") {
+		t.Fatal("opening an overlay did not delete the video image; the overlay draws behind it")
+	}
+	placed := host.count("a=T,i=")
+	rewriteShm(t, shmName, 400, 300, 55)
+	send() // must be dropped while the overlay is up
+	time.Sleep(150 * time.Millisecond)
+	if host.count("a=T,i=") != placed {
+		t.Fatal("a frame drew over the overlay while it was open")
+	}
+
+	// Overlay closes: the next frame re-places the image.
+	kp.SetOverlayActive(false)
+	rewriteShm(t, shmName, 400, 300, 200)
+	send()
+	if !waitUntil(func() bool { return host.count("a=T,i=") > placed }, 2*time.Second) {
+		t.Fatal("video did not re-place after the overlay closed")
+	}
+}

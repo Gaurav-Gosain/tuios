@@ -530,6 +530,11 @@ func (m *OS) flushGraphicsForView() {
 		m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
 		m.ShowSettings || m.ShowThemePicker || m.ShowTapeManager || m.ShowTapeReview
+	if m.KittyPassthrough != nil {
+		// Self-placed remote video images are hidden/dropped here, not by
+		// HideAllPlacements (they are not in `placements`).
+		m.KittyPassthrough.SetOverlayActive(hasOverlay)
+	}
 	if hasOverlay {
 		if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 			m.KittyPassthrough.HideAllPlacements()

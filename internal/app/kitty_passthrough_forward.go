@@ -737,6 +737,15 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	scrollbackLen int,
 	isAltScreen bool,
 ) {
+	// While a full-screen overlay is up, drop remote video frames so a new frame
+	// cannot redraw over it. SetOverlayActive already deleted the on-screen image
+	// and cleared the frame hashes, so the stream re-places once the overlay
+	// closes. The overlay path is only for a real remote terminal; the inline
+	// overlay (tuios-web) manages its own visibility.
+	if kp.overlayActive && kp.remoteClient {
+		return
+	}
+
 	// Cheap early drop: a reused remote-video frame whose async writer is still
 	// busy would be dropped after we spent a file read, a zlib pass and a base64
 	// encode on it. Skip all of that here. This is the main lever against the

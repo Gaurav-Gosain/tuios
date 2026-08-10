@@ -324,7 +324,44 @@ func (kp *KittyPassthrough) HasPlacements() bool {
 			return true
 		}
 	}
+	// Self-placed remote video images are not in `placements` but still need the
+	// render loop to run its passes: RefreshAllPlacements clears them when a pane
+	// leaves its screen (browser quit), and the overlay path hides them.
+	for _, ids := range kp.remoteVideo {
+		if len(ids) > 0 {
+			return true
+		}
+	}
 	return false
+}
+
+// SetOverlayActive is called every frame with whether a full-screen overlay
+// (help, command palette, etc.) is showing. On the transition into an overlay it
+// deletes the self-placed remote video images so the overlay is not drawn behind
+// a live browser frame, and forgets their frame hashes so the stream re-places
+// them once the overlay closes. While active, forwardFileTransmitInline drops
+// incoming remote frames so a new one cannot redraw over the overlay.
+func (kp *KittyPassthrough) SetOverlayActive(active bool) {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	if active == kp.overlayActive {
+		return
+	}
+	kp.overlayActive = active
+	if !active {
+		return // stream re-places on its next frame (hashes were cleared)
+	}
+	var buf bytes.Buffer
+	for windowID, ids := range kp.remoteVideo {
+		for hostID := range ids {
+			fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
+		}
+		delete(kp.lastFrameHash, windowID)
+	}
+	if buf.Len() > 0 {
+		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+		kp.flushToHost()
+	}
 }
 
 // deleteOnePlacement removes the image and all its placements from graphics memory.

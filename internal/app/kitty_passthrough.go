@@ -90,6 +90,11 @@ type KittyPassthrough struct {
 	// differing one, which for a video stream is a few milliseconds.
 	lastFrameHash map[string]map[uint32]uint32
 
+	// overlayActive is true while a full-screen overlay (help, palette, etc.) is
+	// showing. While set, self-placed remote video frames are dropped so a new
+	// frame cannot redraw over the overlay; see SetOverlayActive.
+	overlayActive bool
+
 	// remoteVideo tracks (windowID -> set of hostImageID) for video streams the
 	// remote-client path self-places with a=T. These images are deliberately NOT
 	// in `placements`, so RefreshAllPlacements never touches them: on a real
