@@ -49,6 +49,22 @@ func (m *OS) ToggleFloating() {
 }
 
 // setupClipboardPassthrough wires a window's OSC 52 clipboard to bubbletea.
+// installPassthroughs registers every emulator callback for a window, under
+// the window's IO lock. The PTY reader is already pumping the emulator by the
+// time these run, and it drives the callbacks from under the same lock
+// (window_io.go), so installing them under it is what publishes the
+// registration to the reader without a data race. None of the setup functions
+// take the lock themselves; they only assign callback fields.
+func (m *OS) installPassthroughs(window *terminal.Window) {
+	window.LockIO()
+	m.setupKittyPassthrough(window)
+	m.setupSixelPassthrough(window)
+	m.setupTextSizingPassthrough(window)
+	m.setupClipboardPassthrough(window)
+	m.setupNotificationPassthrough(window)
+	window.UnlockIO()
+}
+
 func (m *OS) setupClipboardPassthrough(window *terminal.Window) {
 	if window == nil {
 		return
@@ -365,11 +381,7 @@ func (m *OS) AddWindow(name string) *OS {
 	window.Workspace = m.CurrentWorkspace
 	window.CustomName = name
 
-	m.setupKittyPassthrough(window)
-	m.setupSixelPassthrough(window)
-	m.setupTextSizingPassthrough(window)
-	m.setupClipboardPassthrough(window)
-	m.setupNotificationPassthrough(window)
+	m.installPassthroughs(window)
 	m.setupCwdWatch(window)
 
 	m.Windows = append(m.Windows, window)

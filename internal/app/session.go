@@ -261,11 +261,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		// Callbacks will be re-enabled in restoreTerminalContent() after state is fully restored
 		window.DisableCallbacks()
 
-		m.setupKittyPassthrough(window)
-		m.setupSixelPassthrough(window)
-		m.setupTextSizingPassthrough(window)
-		m.setupClipboardPassthrough(window)
-		m.setupNotificationPassthrough(window)
+		m.installPassthroughs(window)
 		m.setupCwdWatch(window)
 
 		m.Windows = append(m.Windows, window)
@@ -722,11 +718,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	window.AgentState = string(ws.AgentState)
 	window.AgentMessage = ws.AgentMessage
 
-	m.setupKittyPassthrough(window)
-	m.setupSixelPassthrough(window)
-	m.setupTextSizingPassthrough(window)
-	m.setupClipboardPassthrough(window)
-	m.setupNotificationPassthrough(window)
+	m.installPassthroughs(window)
 	m.setupCwdWatch(window)
 
 	// Set up PTY handlers if we have a daemon client
