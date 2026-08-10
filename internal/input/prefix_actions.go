@@ -46,6 +46,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_scrollback", handlePrefixScrollback)
 	d.Register("prefix_help", handlePrefixHelp)
 	d.Register("prefix_command_palette", handlePrefixCommandPalette)
+	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
 	d.Register("prefix_detach", handlePrefixDetach)
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
@@ -300,6 +301,16 @@ func handlePrefixHelp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handlePrefixCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenCommandPalette()
+	return o, nil
+}
+
+func handlePrefixToggleSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.ToggleSidebar()
+	state := "Disabled"
+	if config.SidebarEnabled {
+		state = "Enabled"
+	}
+	o.ShowNotification("Sidebar "+state, "success", config.NotificationDuration)
 	return o, nil
 }
 

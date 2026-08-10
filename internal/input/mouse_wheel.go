@@ -18,6 +18,15 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// Wheel over the sidebar band scrolls the sidebar list, never the pane the
+	// sidebar sits in front of.
+	if o.SidebarActive() {
+		wm := msg.Mouse()
+		if o.SidebarWheel(wm.X, wm.Y, msg.Button == tea.MouseWheelUp) {
+			return o, nil
+		}
+	}
+
 	if o.ShowLogs {
 		_, maxScroll := logScrollBounds(o.Height, len(o.LogMessages))
 

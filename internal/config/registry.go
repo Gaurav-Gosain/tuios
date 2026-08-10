@@ -362,6 +362,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_equalize_splits":  "Equalize all splits",
 	"prefix_scrollback":       "Open the scrollback browser",
 	"prefix_command_palette":  "Open the command palette",
+	"prefix_toggle_sidebar":   "Toggle the session sidebar",
 	"prefix_session_switcher": "Open the session switcher",
 	"prefix_layout":           "Enter layout prefix",
 

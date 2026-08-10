@@ -506,6 +506,20 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Toggle Sidebar",
+			Shortcut: "prefix+b",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ToggleSidebar()
+				state := "Disabled"
+				if config.SidebarEnabled {
+					state = "Enabled"
+				}
+				m.ShowNotification("Sidebar "+state, "success", config.NotificationDuration)
+				return m, nil
+			},
+		},
+		{
 			Name:     "Switch Session",
 			Shortcut: "prefix+S",
 			Category: "Session",

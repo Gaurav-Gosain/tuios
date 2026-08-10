@@ -32,8 +32,14 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	defer pool.PutLayerSlice(layersPtr)
 
 	topMargin := m.GetTopMargin()
-	viewportWidth := m.GetRenderWidth()
 	viewportHeight := m.GetUsableHeight()
+	// The sidebar reserves a horizontal band, so the content region a pane may
+	// occupy runs from leftMargin to rightClip rather than 0 to the full render
+	// width. leftClip/rightClip are the absolute screen columns the content is
+	// clipped to; the sidebar layer (composed below at a high Z) paints over the
+	// reserved band, so a pane that overruns into it is covered.
+	leftMargin := m.GetLeftMargin()
+	rightClip := leftMargin + m.GetContentWidth()
 
 	// Hoist loop-invariants out of the per-window loop below.
 	// The focused window and its zoom state are the same for every iteration.
@@ -76,8 +82,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			margin = 20
 		}
 
-		isVisible := window.X+window.Width >= -margin &&
-			window.X <= viewportWidth+margin &&
+		isVisible := window.X+window.Width >= leftMargin-margin &&
+			window.X <= rightClip+margin &&
 			window.Y+window.Height >= -margin &&
 			window.Y <= viewportHeight+topMargin+margin
 
@@ -85,8 +91,8 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			continue
 		}
 
-		isFullyVisible := window.X >= 0 && window.Y >= topMargin &&
-			window.X+window.Width <= viewportWidth &&
+		isFullyVisible := window.X >= leftMargin && window.Y >= topMargin &&
+			window.X+window.Width <= rightClip &&
 			window.Y+window.Height <= viewportHeight+topMargin
 
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
@@ -179,12 +185,12 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		clippedContent, finalX, finalY := clipWindowContent(
 			boxContent,
 			window.X, window.Y,
-			viewportWidth, viewportHeight+topMargin,
+			rightClip, viewportHeight+topMargin,
 		)
 
 		if renderTraceEnabled {
 			traceLayerBuild(window, isFocused, boxContent, clippedContent,
-				window.X, window.Y, finalX, finalY, zIndex, viewportWidth, viewportHeight+topMargin)
+				window.X, window.Y, finalX, finalY, zIndex, rightClip, viewportHeight+topMargin)
 		}
 
 		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
@@ -208,6 +214,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	}
 
 	if render {
+		// The sidebar sits below the floating overlays but, like the dock, is a
+		// reserved-region layer rather than an overlay panel. Compose it before
+		// the overlays so a palette or settings panel still draws on top of it.
+		if sidebarLayer := m.renderSidebar(); sidebarLayer != nil {
+			layers = append(layers, sidebarLayer)
+		}
+
 		overlays := m.renderOverlays()
 		layers = append(layers, overlays...)
 
@@ -215,6 +228,10 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			dockLayer := m.renderDock()
 			layers = append(layers, dockLayer)
 		}
+	} else {
+		// Off the render path (e.g. state snapshots) nothing draws the sidebar,
+		// so last frame's hit geometry must not linger and mis-route a click.
+		m.SidebarHits = m.SidebarHits[:0]
 	}
 
 	canvas.Compose(lipgloss.NewCompositor(layers...))
@@ -347,6 +364,13 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 		return nil, false
 	}
 	if config.SharedBorders && m.AutoTiling && !m.UseScrollingLayout {
+		return nil, false
+	}
+	// The sidebar is a reserved-region layer the fast path does not compose. When
+	// it reserves any columns a lone window no longer fills the screen, so fall
+	// back to the compositor (which draws the sidebar and clips the pane to the
+	// content region). Cheapest correct v1; can be optimised later.
+	if m.GetSidebarWidth() > 0 {
 		return nil, false
 	}
 	if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {

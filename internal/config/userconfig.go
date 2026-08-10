@@ -125,6 +125,12 @@ type AppearanceConfig struct {
 	CopyOnSelect        *bool   `toml:"copy_on_select"`        // Copy a mouse selection to the clipboard on release (default: true)
 	WordCharacters      *string `toml:"word_characters"`       // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
 	DockbarPosition     string  `toml:"dockbar_position"`      // Dockbar position: bottom, top, hidden
+	SidebarEnabled      *bool   `toml:"sidebar_enabled"`       // Show the vertical session sidebar (default: false)
+	SidebarPosition     string  `toml:"sidebar_position"`      // Sidebar edge: left, right, hidden (default: left)
+	SidebarWidth        int     `toml:"sidebar_width"`         // Preferred sidebar width in columns (default: 28)
+	SidebarShowWindows  *bool   `toml:"sidebar_show_windows"`  // List window rows under the current session (default: true)
+	SidebarShowGlyphs   *bool   `toml:"sidebar_show_glyphs"`   // Draw agent-state glyphs on sidebar rows (default: true)
+	SidebarShowCounts   *bool   `toml:"sidebar_show_counts"`   // Draw window counts on sidebar session rows (default: true)
 	PreferredShell      string  `toml:"preferred_shell"`       // Preferred shell: if empty, auto-detect based on platform.
 	AnimationsEnabled   *bool   `toml:"animations_enabled"`    // Enable UI animations (default: true). Set to false for instant transitions.
 	ConfirmQuit         *bool   `toml:"confirm_quit"`          // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
@@ -187,6 +193,8 @@ func DefaultConfig() *UserConfig {
 			ScrollbackLines:   10000,
 			ScrollLines:       3,
 			DockbarPosition:   "bottom",
+			SidebarPosition:   "left",
+			SidebarWidth:      SidebarDefaultWidth,
 			PreferredShell:    "",
 		},
 		Daemon: DaemonConfig{
@@ -296,6 +304,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_equalize_splits":  {"="},
 				"prefix_scrollback":       {"s"},
 				"prefix_command_palette":  {"P"},
+				"prefix_toggle_sidebar":   {"b"},
 				"prefix_session_switcher": {"S"},
 				"prefix_layout":           {"L"},
 			},
@@ -578,6 +587,13 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
 	}
 
+	if cfg.Appearance.SidebarPosition == "" {
+		cfg.Appearance.SidebarPosition = defaultCfg.Appearance.SidebarPosition
+	}
+	if cfg.Appearance.SidebarWidth <= 0 {
+		cfg.Appearance.SidebarWidth = defaultCfg.Appearance.SidebarWidth
+	}
+
 	// Note: HideWindowButtons defaults to false (zero value)
 	// In borderless mode, buttons are hidden automatically regardless of this setting
 
@@ -624,6 +640,28 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// DockbarPosition defaults to bottom.
 	if cfg.Appearance.DockbarPosition != "" {
 		DockbarPosition = cfg.Appearance.DockbarPosition
+	}
+
+	// Sidebar. Position and width fall back to their defaults when unset; the
+	// three show-flags and the enable flag are pointer bools so turning one off
+	// in the settings page survives a reload just as turning it on does.
+	if cfg.Appearance.SidebarEnabled != nil {
+		SidebarEnabled = *cfg.Appearance.SidebarEnabled
+	}
+	if cfg.Appearance.SidebarPosition != "" {
+		SidebarPosition = cfg.Appearance.SidebarPosition
+	}
+	if cfg.Appearance.SidebarWidth > 0 {
+		SidebarWidth = cfg.Appearance.SidebarWidth
+	}
+	if cfg.Appearance.SidebarShowWindows != nil {
+		SidebarShowWindows = *cfg.Appearance.SidebarShowWindows
+	}
+	if cfg.Appearance.SidebarShowGlyphs != nil {
+		SidebarShowGlyphs = *cfg.Appearance.SidebarShowGlyphs
+	}
+	if cfg.Appearance.SidebarShowCounts != nil {
+		SidebarShowCounts = *cfg.Appearance.SidebarShowCounts
 	}
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are

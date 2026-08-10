@@ -178,10 +178,11 @@ func (m *OS) tapeAutorunConfigValue() string {
 const themeNone = "none"
 
 var (
-	borderStyleOptions = []string{"rounded", "normal", "thick", "double", "block", "outer-half-block", "inner-half-block", "ascii", "hidden"}
-	positionOptions    = []string{"bottom", "top", "hidden"}
-	whichKeyPosOptions = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
-	fpsOptions         = []string{"30", "60", "90", "120", "144", "unlimited"}
+	borderStyleOptions     = []string{"rounded", "normal", "thick", "double", "block", "outer-half-block", "inner-half-block", "ascii", "hidden"}
+	positionOptions        = []string{"bottom", "top", "hidden"}
+	whichKeyPosOptions     = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
+	fpsOptions             = []string{"30", "60", "90", "120", "144", "unlimited"}
+	sidebarPositionOptions = []string{"left", "right", "hidden"}
 )
 
 // boolPtr returns a pointer to b, for the *bool config fields.
@@ -371,6 +372,56 @@ func (m *OS) settingsCategories() []settingsCategory {
 				}),
 		},
 	}
+
+	// The sidebar rows live under Appearance rather than in a tab of their own: an
+	// eighth settings tab wraps the tab strip onto a second row on a short screen,
+	// which pushes the panel past the viewport. Appended here they ride the
+	// category's scrolling body instead, which is already height-bounded.
+	sidebarItems := []settingItem{
+		boolItem("Sidebar", "Show the vertical session sidebar",
+			func() bool { return config.SidebarEnabled },
+			func(m *OS, v bool) {
+				config.SidebarEnabled = v
+				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarEnabled = boolPtr(v) })
+				m.applyAppearanceLive(true)
+			}),
+		enumItem("Position", "Which edge the sidebar reserves", sidebarPositionOptions,
+			func() string { return config.SidebarPosition },
+			func(m *OS, v string) {
+				config.SidebarPosition = v
+				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarPosition = v })
+				m.applyAppearanceLive(true)
+			}),
+		intItem("Width", "Preferred sidebar width in columns", 10, 60, 2,
+			func() int { return config.SidebarWidth },
+			func(m *OS, v int) {
+				config.SidebarWidth = v
+				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarWidth = v })
+				m.applyAppearanceLive(true)
+			}),
+		boolItem("Show windows", "List window rows under the current session",
+			func() bool { return config.SidebarShowWindows },
+			func(m *OS, v bool) {
+				config.SidebarShowWindows = v
+				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarShowWindows = boolPtr(v) })
+				m.applyAppearanceLive(false)
+			}),
+		boolItem("Show glyphs", "Draw agent-state glyphs on sidebar rows",
+			func() bool { return config.SidebarShowGlyphs },
+			func(m *OS, v bool) {
+				config.SidebarShowGlyphs = v
+				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarShowGlyphs = boolPtr(v) })
+				m.applyAppearanceLive(false)
+			}),
+		boolItem("Show counts", "Draw window counts on sidebar session rows",
+			func() bool { return config.SidebarShowCounts },
+			func(m *OS, v bool) {
+				config.SidebarShowCounts = v
+				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarShowCounts = boolPtr(v) })
+				m.applyAppearanceLive(false)
+			}),
+	}
+	appearance.Items = append(appearance.Items, sidebarItems...)
 
 	behavior := settingsCategory{
 		Name: "Behavior",

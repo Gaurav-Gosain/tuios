@@ -143,6 +143,13 @@ func (m *OS) ClampWindowsToView() {
 
 	usableHeight := m.GetUsableHeight()
 	renderWidth := m.GetRenderWidth()
+	// The sidebar reserves a horizontal band the same way the dock reserves a
+	// vertical one, so a floating pane is clamped against the content region
+	// [leftMargin, leftMargin+contentWidth), not the full screen. Without this a
+	// pane could be shoved wholly under the sidebar and become unreachable.
+	leftMargin := m.GetLeftMargin()
+	contentWidth := m.GetContentWidth()
+	rightEdge := leftMargin + contentWidth
 	topMargin := m.GetTopMargin()
 	minVisibleX := 20 // Minimum visible horizontal pixels (matches mouse.go)
 	minVisibleY := 3  // Minimum visible vertical rows (matches mouse.go)
@@ -156,9 +163,9 @@ func (m *OS) ClampWindowsToView() {
 		originalX, originalY := win.X, win.Y
 		needsResize := false
 
-		// Clamp window size to fit within terminal if larger
-		if win.Width > renderWidth {
-			win.Width = renderWidth
+		// Clamp window size to fit within the content region if larger
+		if win.Width > contentWidth {
+			win.Width = contentWidth
 			needsResize = true
 		}
 		if win.Height > usableHeight {
@@ -176,12 +183,13 @@ func (m *OS) ClampWindowsToView() {
 			needsResize = true
 		}
 
-		// Clamp X position: ensure at least minVisibleX pixels are visible
-		if win.X+win.Width < minVisibleX {
-			win.X = minVisibleX - win.Width
+		// Clamp X position: ensure at least minVisibleX pixels are visible within
+		// the content region, so a pane can never hide fully behind the sidebar.
+		if win.X+win.Width < leftMargin+minVisibleX {
+			win.X = leftMargin + minVisibleX - win.Width
 		}
-		if win.X > renderWidth-minVisibleX {
-			win.X = renderWidth - minVisibleX
+		if win.X > rightEdge-minVisibleX {
+			win.X = rightEdge - minVisibleX
 		}
 
 		// Clamp Y position: ensure at least minVisibleY rows visible, and can't go behind dock
@@ -264,6 +272,84 @@ func (m *OS) GetRenderWidth() int {
 		return m.EffectiveWidth
 	}
 	return m.Width
+}
+
+// GetSidebarWidth is the single function that folds the configured sidebar
+// width together with the narrow-screen breakpoints, exactly as overlay.FitWidth
+// folds a panel's preferred width with the screen width. It returns the number
+// of columns the sidebar actually reserves, or 0 when the sidebar is off, hidden,
+// or the screen is too narrow to carry it.
+//
+// Breakpoints, measured against the render width:
+//
+//	>= 90 cols: full sidebar at config.SidebarWidth
+//	60-89 cols: narrow rail (glyph + short name)
+//	40-59 cols: glyph-only rail
+//	< 40 cols:  auto-hidden regardless of config
+//
+// After picking a variant it enforces a pane floor: the content area never drops
+// below SidebarMinPaneFloor columns, so the sidebar can never squeeze the panes
+// to nothing. If the floor would be violated it steps down to a narrower variant
+// first, then hides.
+func (m *OS) GetSidebarWidth() int {
+	if !config.SidebarEnabled || config.SidebarPosition == "hidden" {
+		return 0
+	}
+	rw := m.GetRenderWidth()
+	if rw <= 0 {
+		return 0
+	}
+
+	var w int
+	switch {
+	case rw < config.SidebarBreakpointGlyph:
+		return 0
+	case rw < config.SidebarBreakpointNarrow:
+		w = config.SidebarGlyphWidth
+	case rw < config.SidebarBreakpointFull:
+		w = config.SidebarNarrowWidth
+	default:
+		w = max(config.SidebarWidth, config.SidebarGlyphWidth)
+	}
+
+	// Enforce the pane floor by stepping down to a narrower variant rather than
+	// starving the content area.
+	if rw-w < config.SidebarMinPaneFloor {
+		switch {
+		case rw-config.SidebarNarrowWidth >= config.SidebarMinPaneFloor:
+			w = config.SidebarNarrowWidth
+		case rw-config.SidebarGlyphWidth >= config.SidebarMinPaneFloor:
+			w = config.SidebarGlyphWidth
+		default:
+			return 0
+		}
+	}
+	return w
+}
+
+// GetLeftMargin returns the reserved columns on the left: the sidebar width when
+// it is enabled and positioned on the left, else 0.
+func (m *OS) GetLeftMargin() int {
+	if config.SidebarPosition == "left" {
+		return m.GetSidebarWidth()
+	}
+	return 0
+}
+
+// GetRightMargin returns the reserved columns on the right: the sidebar width
+// when it is enabled and positioned on the right, else 0.
+func (m *OS) GetRightMargin() int {
+	if config.SidebarPosition == "right" {
+		return m.GetSidebarWidth()
+	}
+	return 0
+}
+
+// GetContentWidth returns the width available to panes: the render width less the
+// left and right reserved margins. This is what tiling partitions and what the
+// pane floor is enforced against.
+func (m *OS) GetContentWidth() int {
+	return m.GetRenderWidth() - m.GetLeftMargin() - m.GetRightMargin()
 }
 
 // GetRenderHeight returns the height to use for rendering.

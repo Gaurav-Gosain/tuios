@@ -427,6 +427,16 @@ type OS struct {
 	// overlays, bottom to top. Clicking a panel moves it to the end (top).
 	OverlayZOrder []string
 
+	// Sidebar mouse hit-testing and view state. SidebarHits records the on-screen
+	// rectangle of every sidebar row rendered in the current frame, so the mouse
+	// handlers can route clicks, wheels, and right-clicks without re-deriving the
+	// layout. SidebarScroll is the row the list is scrolled to. SidebarCollapsed
+	// records sessions the user has explicitly collapsed (the current session is
+	// expanded by default, others collapsed).
+	SidebarHits      []sidebarRowHit
+	SidebarScroll    int
+	SidebarCollapsed map[string]bool
+
 	// ContextMenu is the open shift+right-click menu, or nil. It is deliberately
 	// not one of the draggable overlay kinds: a context menu is anchored to the
 	// cell it was opened on and is dismissed by the next click, so it has no use

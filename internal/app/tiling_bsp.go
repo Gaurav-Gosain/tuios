@@ -37,10 +37,13 @@ func (m *OS) GetOrCreateBSPTree() *layout.BSPTree {
 
 // GetBSPBounds returns the bounds for BSP layout calculation
 func (m *OS) GetBSPBounds() layout.Rect {
+	// Tiling fills the content region, which starts after the left reserved
+	// margin (the sidebar, when on the left) and is narrowed by both margins.
+	// This alone re-tiles every pane into the reduced box.
 	return layout.Rect{
-		X: 0,
+		X: m.GetLeftMargin(),
 		Y: m.GetTopMargin(),
-		W: m.GetRenderWidth(),
+		W: m.GetContentWidth(),
 		H: m.GetUsableHeight(),
 	}
 }

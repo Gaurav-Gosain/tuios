@@ -234,6 +234,8 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 		[]string{"rounded", "normal", "thick", "double", "hidden", "block", "ascii", "outer-half-block", "inner-half-block"})
 	checkEnum("dockbar_position", cfg.Appearance.DockbarPosition,
 		[]string{"bottom", "top", "hidden"})
+	checkEnum("sidebar_position", cfg.Appearance.SidebarPosition,
+		[]string{"left", "right", "hidden"})
 	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition,
 		[]string{"bottom-right", "bottom-left", "top-right", "top-left", "center"})
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition,

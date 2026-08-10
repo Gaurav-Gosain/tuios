@@ -133,6 +133,28 @@ const (
 	// DockHeight is the height of the dock area at the bottom
 	DockHeight = 2
 
+	// SidebarDefaultWidth is the preferred sidebar width on a wide screen.
+	SidebarDefaultWidth = 28
+
+	// SidebarNarrowWidth is the width of the narrow rail (glyph + short name)
+	// used on mid-width screens.
+	SidebarNarrowWidth = 16
+
+	// SidebarGlyphWidth is the width of the glyph-only rail used on small
+	// screens: one glyph column plus a separator column.
+	SidebarGlyphWidth = 3
+
+	// SidebarMinPaneFloor is the fewest columns the content area is allowed to
+	// keep for panes. The sidebar drops to a narrower variant before it would
+	// squeeze panes below this.
+	SidebarMinPaneFloor = 30
+
+	// Sidebar breakpoints, measured against the render width. See
+	// (*OS).GetSidebarWidth.
+	SidebarBreakpointFull   = 90 // >= this: full sidebar at SidebarWidth
+	SidebarBreakpointNarrow = 60 // >= this: narrow rail
+	SidebarBreakpointGlyph  = 40 // >= this: glyph rail; below: auto-hidden
+
 	// StatusBarLeftWidth is the width of the left section of status bar
 	StatusBarLeftWidth = 30
 
@@ -462,6 +484,33 @@ var BorderStyle = "rounded"
 // DockbarPosition controls the position of the dockbar
 // Set via --dockbar-position flag or appearance.dockbar_position config
 var DockbarPosition = "bottom"
+
+// Sidebar globals. The sidebar is a vertical session/window panel that reserves
+// a horizontal margin the way the dock reserves a vertical one. It is opt-in.
+// These mirror the dock globals: the render path and the geometry getters read
+// them live, and they are set from UserConfig by ApplyAppearanceConfig.
+var (
+	// SidebarEnabled turns the sidebar on. Default off (opt-in).
+	SidebarEnabled = false
+
+	// SidebarPosition is which edge the sidebar reserves: "left", "right", or
+	// "hidden" (reserves nothing even when enabled).
+	SidebarPosition = "left"
+
+	// SidebarWidth is the preferred sidebar width in columns for a wide screen.
+	// GetSidebarWidth folds this together with the narrow-screen breakpoints.
+	SidebarWidth = SidebarDefaultWidth
+
+	// SidebarShowWindows draws the window rows under the current session. When
+	// false the sidebar lists sessions only.
+	SidebarShowWindows = true
+
+	// SidebarShowGlyphs draws the agent-state glyph on each row.
+	SidebarShowGlyphs = true
+
+	// SidebarShowCounts draws the window count on each session row.
+	SidebarShowCounts = true
+)
 
 // HideWindowButtons controls whether to hide window control buttons
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config

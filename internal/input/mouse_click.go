@@ -74,6 +74,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// The sidebar is a reserved-region panel like the dock: a click anywhere in
+	// its band is the sidebar's (focus a window, switch or expand a session, or,
+	// on right-click, open the context menu), never the pane it sits in front of.
+	if o.SidebarActive() && o.SidebarClick(X, Y, msg.Button == tea.MouseRight) {
+		return o, nil
+	}
+
 	// Check if click is in the dock area (always reserved).
 	//
 	// The top test is exclusive for the same reason the bottom one is: a dock of
