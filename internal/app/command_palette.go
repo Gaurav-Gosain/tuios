@@ -21,7 +21,11 @@ type CommandPaletteItem struct {
 	Name     string // Display name: "Split Horizontal"
 	Shortcut string // Key hint: "prefix+v"
 	Category string // "Window", "Layout", "Session", "Navigation"
-	Action   func(m *OS) (*OS, tea.Cmd)
+	// AgentState marks a session/window entry whose Name carries an agent-state
+	// glyph (sessionPaletteLabel), so the renderer can color the glyph without
+	// putting ANSI into Name, which the fuzzy filter matches raw.
+	AgentState string
+	Action     func(m *OS) (*OS, tea.Cmd)
 }
 
 // GetCommandPaletteItems returns all available commands for the command palette.

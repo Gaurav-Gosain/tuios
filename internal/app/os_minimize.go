@@ -50,7 +50,7 @@ func (m *OS) MinimizeWindow(i int) {
 				intID := m.getWindowIntID(window.ID)
 				sl := m.GetOrCreateScrollingLayout()
 				sl.RemoveWindow(intID)
-				sl.EnsureFocusedVisible(m.GetRenderWidth())
+				sl.EnsureFocusedVisible(m.ScrollingViewWidth())
 				m.scrollingSetPositions()
 			} else if m.UseBSPLayout {
 				// Remove from the BSP tree and reflow the remaining panes,
@@ -167,13 +167,17 @@ func (m *OS) ToggleZoom() {
 		if config.DockbarPosition == "bottom" {
 			bottomMargin = config.DockHeight
 		}
-		screenWidth := m.GetRenderWidth()
-		zoomWidth := screenWidth
+		// Zoom fills the content region beside a reserved sidebar band: the
+		// sidebar layer composes above the windows, so a zoom into the full
+		// screen width would simply lose its left or right columns under it.
+		leftMargin := m.GetLeftMargin()
+		contentWidth := m.GetContentWidth()
+		zoomWidth := contentWidth
 		// If ZoomMaxWidth is set, cap width and center horizontally
-		if config.ZoomMaxWidth > 0 && config.ZoomMaxWidth < screenWidth {
+		if config.ZoomMaxWidth > 0 && config.ZoomMaxWidth < contentWidth {
 			zoomWidth = config.ZoomMaxWidth
 		}
-		fw.X = (screenWidth - zoomWidth) / 2
+		fw.X = leftMargin + (contentWidth-zoomWidth)/2
 		fw.Y = topMargin
 		fw.Width = zoomWidth
 		fw.Height = m.GetRenderHeight() - topMargin - bottomMargin

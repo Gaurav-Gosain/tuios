@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
 // PointerShape represents a CSS cursor shape name for OSC 22.
@@ -60,7 +59,9 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 	if m.AutoTiling && config.SharedBorders && !m.UseScrollingLayout {
 		tree := m.GetOrCreateBSPTree()
 		if tree != nil {
-			bounds := layout.Rect{X: 0, Y: topMargin, W: m.GetRenderWidth(), H: m.GetUsableHeight()}
+			// The same content-region box ApplyBSPLayout tiles into, so the
+			// separator positions the pointer test sees match the ones drawn.
+			bounds := m.GetBSPBounds()
 			for _, s := range tree.CollectSplits(bounds) {
 				if s.Vertical && x == s.Pos && y >= s.From && y <= s.To {
 					SetPointerShape(PointerEWResize)

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -141,8 +142,26 @@ func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, wid
 	}
 	name := overlay.Truncate(item.Name, max(width-2-tagW-shortcutW-1, 1))
 	left := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker) +
-		tag + overlay.Style(bg).Foreground(nameColor).Bold(selected).Render(name)
+		tag + paletteRowName(name, item.AgentState, bg, nameColor, selected, pal)
 
 	gap := max(width-lipgloss.Width(left)-shortcutW, 1)
 	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + shortcut
+}
+
+// paletteRowName renders a row's name, coloring the agent-state glyph inside a
+// session/window entry with the state's palette color. The name text is plain
+// (the fuzzy filter matches it raw), so the glyph is found by its shape and
+// re-rendered as its own styled segment; every other row renders unchanged.
+func paletteRowName(name, agentState string, bg, nameColor color.Color, selected bool, pal overlay.Palette) string {
+	nameStyle := overlay.Style(bg).Foreground(nameColor).Bold(selected)
+	glyph := agentStateIndicator(agentState)
+	if glyph == "" {
+		return nameStyle.Render(name)
+	}
+	idx := strings.Index(name, glyph)
+	if idx < 0 {
+		return nameStyle.Render(name)
+	}
+	glyphStyled := overlay.Style(bg).Foreground(agentGlyphColor(agentState, pal)).Bold(true).Render(glyph)
+	return nameStyle.Render(name[:idx]) + glyphStyled + nameStyle.Render(name[idx+len(glyph):])
 }

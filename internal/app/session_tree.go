@@ -105,8 +105,9 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		sessionName := s.ID
 		isCurrent := s.IsCurrent
 		items = append(items, CommandPaletteItem{
-			Name:     sessionPaletteLabel("Session: ", sessionName, s.AgentState),
-			Category: "Sessions",
+			Name:       sessionPaletteLabel("Session: ", sessionName, s.AgentState),
+			Category:   "Sessions",
+			AgentState: s.AgentState,
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if isCurrent {
 					m.ShowNotification("Already on this session", "info", config.NotificationDuration)
@@ -125,8 +126,9 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		for _, w := range s.Children {
 			windowID := w.ID
 			items = append(items, CommandPaletteItem{
-				Name:     sessionPaletteLabel("Window: ", w.Title, w.AgentState),
-				Category: "Sessions",
+				Name:       sessionPaletteLabel("Window: ", w.Title, w.AgentState),
+				Category:   "Sessions",
+				AgentState: w.AgentState,
 				Action: func(m *OS) (*OS, tea.Cmd) {
 					for i, win := range m.Windows {
 						if win != nil && win.ID == windowID {

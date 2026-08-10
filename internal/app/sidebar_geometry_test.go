@@ -101,6 +101,14 @@ func TestMarginsFollowPosition(t *testing.T) {
 // set before calling.
 func tileDaemonWindows(t *testing.T, width, height, count int) *OS {
 	t.Helper()
+	return tileDaemonWindowsMode(t, width, height, count, LayoutModeBSP)
+}
+
+// tileDaemonWindowsMode is tileDaemonWindows for an explicit layout mode
+// ("bsp", "master-stack", or "scrolling"), so the content-box assertions can
+// run against every tiling path, not only the BSP one.
+func tileDaemonWindowsMode(t *testing.T, width, height, count int, layoutMode string) *OS {
+	t.Helper()
 	prevAnim := config.AnimationsEnabled
 	config.AnimationsEnabled = false
 	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
@@ -112,13 +120,14 @@ func tileDaemonWindows(t *testing.T, width, height, count int) *OS {
 		Width:            width,
 		Height:           height,
 		AutoTiling:       true,
-		UseBSPLayout:     true,
 	}
+	m.ApplyLayoutModeName(layoutMode)
 
 	daemonState := &session.SessionState{
 		Name:             "tiling",
 		CurrentWorkspace: 1,
 		AutoTiling:       true,
+		LayoutMode:       layoutMode,
 		WorkspaceFocus:   map[int]string{},
 		Version:          1,
 	}
@@ -148,57 +157,61 @@ func tileDaemonWindows(t *testing.T, width, height, count int) *OS {
 
 // TestSidebarTilingPartitionsContentWidth asserts panes tile into the reduced
 // content box beside the sidebar with no overlap and no large gap, mirroring
-// daemon_tiling_test's assertions but against GetContentWidth.
+// daemon_tiling_test's assertions but against GetContentWidth, in BOTH
+// non-scrolling tiling modes: the BSP tree and the master-stack tiler each have
+// their own geometry path, and only the BSP one honored the margin at first.
 func TestSidebarTilingPartitionsContentWidth(t *testing.T) {
-	for _, pos := range []string{"left", "right"} {
-		t.Run(pos, func(t *testing.T) {
-			const width, height = 120, 40
-			withSidebar(t, true, pos, config.SidebarDefaultWidth)
+	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack} {
+		for _, pos := range []string{"left", "right"} {
+			t.Run(mode+"/"+pos, func(t *testing.T) {
+				const width, height = 120, 40
+				withSidebar(t, true, pos, config.SidebarDefaultWidth)
 
-			m := tileDaemonWindows(t, width, height, 6)
-			if len(m.Windows) != 6 {
-				t.Fatalf("client holds %d windows, want 6", len(m.Windows))
-			}
-
-			leftMargin := m.GetLeftMargin()
-			contentW := m.GetContentWidth()
-			rightEdge := leftMargin + contentW
-			top := m.GetTopMargin()
-
-			type rect struct{ x, y, w, h int }
-			rects := make([]rect, 0, 6)
-			for _, w := range m.Windows {
-				rects = append(rects, rect{w.X, w.Y, w.Width, w.Height})
-				// Every pane sits inside the content region, never under the sidebar.
-				if w.X < leftMargin {
-					t.Errorf("window at x=%d starts before content left margin %d", w.X, leftMargin)
+				m := tileDaemonWindowsMode(t, width, height, 6, mode)
+				if len(m.Windows) != 6 {
+					t.Fatalf("client holds %d windows, want 6", len(m.Windows))
 				}
-				if w.X+w.Width > rightEdge {
-					t.Errorf("window right edge %d exceeds content right edge %d", w.X+w.Width, rightEdge)
-				}
-				if w.Width >= contentW && contentW < width {
-					t.Errorf("window spans the full content width %d: it was never tiled beside the sidebar", w.Width)
-				}
-			}
 
-			for a := 0; a < len(rects); a++ {
-				for b := a + 1; b < len(rects); b++ {
-					if rectsOverlap(rects[a].x, rects[a].y, rects[a].w, rects[a].h,
-						rects[b].x, rects[b].y, rects[b].w, rects[b].h) {
-						t.Errorf("windows overlap: %+v and %+v", rects[a], rects[b])
+				leftMargin := m.GetLeftMargin()
+				contentW := m.GetContentWidth()
+				rightEdge := leftMargin + contentW
+				top := m.GetTopMargin()
+
+				type rect struct{ x, y, w, h int }
+				rects := make([]rect, 0, 6)
+				for _, w := range m.Windows {
+					rects = append(rects, rect{w.X, w.Y, w.Width, w.Height})
+					// Every pane sits inside the content region, never under the sidebar.
+					if w.X < leftMargin {
+						t.Errorf("window at x=%d starts before content left margin %d", w.X, leftMargin)
+					}
+					if w.X+w.Width > rightEdge {
+						t.Errorf("window right edge %d exceeds content right edge %d", w.X+w.Width, rightEdge)
+					}
+					if w.Width >= contentW && contentW < width {
+						t.Errorf("window spans the full content width %d: it was never tiled beside the sidebar", w.Width)
 					}
 				}
-			}
 
-			area := 0
-			for _, r := range rects {
-				area += r.w * r.h
-			}
-			want := contentW * (height - top)
-			if area < want*9/10 {
-				t.Errorf("tiled area = %d, want about %d (panes leave a large gap in the content box)", area, want)
-			}
-		})
+				for a := 0; a < len(rects); a++ {
+					for b := a + 1; b < len(rects); b++ {
+						if rectsOverlap(rects[a].x, rects[a].y, rects[a].w, rects[a].h,
+							rects[b].x, rects[b].y, rects[b].w, rects[b].h) {
+							t.Errorf("windows overlap: %+v and %+v", rects[a], rects[b])
+						}
+					}
+				}
+
+				area := 0
+				for _, r := range rects {
+					area += r.w * r.h
+				}
+				want := contentW * (height - top)
+				if area < want*9/10 {
+					t.Errorf("tiled area = %d, want about %d (panes leave a large gap in the content box)", area, want)
+				}
+			})
+		}
 	}
 }
 
@@ -232,5 +245,132 @@ func TestSidebarFloatingClampRespectsReservedRegion(t *testing.T) {
 	if win.X+win.Width > leftMargin+m.GetContentWidth() {
 		t.Errorf("floating window right edge %d exceeds content region %d",
 			win.X+win.Width, leftMargin+m.GetContentWidth())
+	}
+}
+
+// TestSidebarScrollingStripStartsAtLeftMargin checks the scrolling (niri-style)
+// layout lays its strip out inside the content box: with the viewport at the
+// strip's origin, the first column starts at the left margin rather than at
+// screen column zero underneath the sidebar, and every column is sized against
+// the content width.
+func TestSidebarScrollingStripStartsAtLeftMargin(t *testing.T) {
+	const width, height = 120, 40
+	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+
+	m := tileDaemonWindowsMode(t, width, height, 2, LayoutModeScrolling)
+	if len(m.Windows) != 2 {
+		t.Fatalf("client holds %d windows, want 2", len(m.Windows))
+	}
+
+	// Settle the slide animations from the create loop first, then reposition
+	// from the strip origin and settle again, so the assertion reads final
+	// geometry rather than a mid-slide frame.
+	m.CompleteAllAnimations()
+	sl := m.GetOrCreateScrollingLayout()
+	sl.ViewportX = 0
+	m.ScrollingSetPositions()
+	m.CompleteAllAnimations()
+
+	leftMargin := m.GetLeftMargin()
+	contentW := m.GetContentWidth()
+
+	minX := m.Windows[0].X
+	for _, w := range m.Windows {
+		if w.X < minX {
+			minX = w.X
+		}
+		if w.Width > contentW*9/10 {
+			t.Errorf("column width %d exceeds 90%% of the content width %d", w.Width, contentW)
+		}
+	}
+	if minX != leftMargin {
+		t.Errorf("scrolling strip starts at x=%d, want the left margin %d", minX, leftMargin)
+	}
+}
+
+// TestSidebarResizeCannotEnterReservedBand checks a keyboard tiling resize is
+// blocked at the content-region edges: the left edge cannot be pushed under a
+// left sidebar, and the right edge cannot be pushed under a right sidebar.
+func TestSidebarResizeCannotEnterReservedBand(t *testing.T) {
+	t.Run("left-edge", func(t *testing.T) {
+		const width, height = 120, 40
+		withSidebar(t, true, "left", config.SidebarDefaultWidth)
+
+		m := tileDaemonWindowsMode(t, width, height, 2, LayoutModeMasterStack)
+		// Focus the window sitting against the left margin.
+		leftMargin := m.GetLeftMargin()
+		for i, w := range m.Windows {
+			if w.X == leftMargin {
+				m.FocusedWindow = i
+			}
+		}
+		win := m.Windows[m.FocusedWindow]
+		beforeX, beforeW := win.X, win.Width
+
+		// Grow from the left edge: would move X to leftMargin-2, under the band.
+		m.ResizeFocusedWindowWidthLeft(-2)
+
+		if win.X != beforeX || win.Width != beforeW {
+			t.Errorf("left-edge resize entered the reserved band: x=%d w=%d (was x=%d w=%d, margin=%d)",
+				win.X, win.Width, beforeX, beforeW, leftMargin)
+		}
+		if win.X < leftMargin {
+			t.Errorf("window x=%d is under the sidebar (margin=%d)", win.X, leftMargin)
+		}
+	})
+
+	t.Run("right-edge", func(t *testing.T) {
+		const width, height = 120, 40
+		withSidebar(t, true, "right", config.SidebarDefaultWidth)
+
+		m := tileDaemonWindowsMode(t, width, height, 2, LayoutModeMasterStack)
+		contentRight := m.GetLeftMargin() + m.GetContentWidth()
+		for i, w := range m.Windows {
+			if w.X+w.Width == contentRight {
+				m.FocusedWindow = i
+			}
+		}
+		win := m.Windows[m.FocusedWindow]
+		beforeX, beforeW := win.X, win.Width
+
+		// Grow from the right edge: would push the edge under the band.
+		m.ResizeFocusedWindowWidth(2)
+
+		if win.X != beforeX || win.Width != beforeW {
+			t.Errorf("right-edge resize entered the reserved band: x=%d w=%d (was x=%d w=%d, contentRight=%d)",
+				win.X, win.Width, beforeX, beforeW, contentRight)
+		}
+		if win.X+win.Width > contentRight {
+			t.Errorf("window right edge %d is under the sidebar (contentRight=%d)", win.X+win.Width, contentRight)
+		}
+	})
+}
+
+// TestSidebarSnapBoundsUseContentRegion checks floating snap targets are the
+// content region beside the sidebar, not the raw screen.
+func TestSidebarSnapBoundsUseContentRegion(t *testing.T) {
+	const width, height = 120, 40
+	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+
+	m := &OS{Width: width, Height: height}
+	leftMargin := m.GetLeftMargin()
+	contentW := m.GetContentWidth()
+
+	x, _, w, _ := m.calculateSnapBounds(SnapLeft)
+	if x != leftMargin {
+		t.Errorf("SnapLeft x = %d, want left margin %d", x, leftMargin)
+	}
+	if w != contentW/2 {
+		t.Errorf("SnapLeft width = %d, want half the content width %d", w, contentW/2)
+	}
+
+	x, _, w, _ = m.calculateSnapBounds(SnapFullScreen)
+	if x != leftMargin || w != contentW {
+		t.Errorf("SnapFullScreen = x %d w %d, want x %d w %d", x, w, leftMargin, contentW)
+	}
+
+	x, _, w, _ = m.calculateSnapBounds(SnapRight)
+	if x != leftMargin+contentW/2 || x+w != leftMargin+contentW {
+		t.Errorf("SnapRight = x %d w %d, want the right half of [%d,%d)", x, w, leftMargin, leftMargin+contentW)
 	}
 }

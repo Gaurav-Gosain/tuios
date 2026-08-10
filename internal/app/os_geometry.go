@@ -32,31 +32,36 @@ func (m *OS) Snap(i int, quarter SnapQuarter) *OS {
 	return m
 }
 func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) {
+	// Snapping partitions the content region, not the raw screen: a sidebar
+	// reserves columns the same way the dock reserves rows, so a left-snapped
+	// pane starts at the left margin and a fullscreen snap fills the content box.
 	usableHeight := m.GetUsableHeight()
-	renderWidth := m.GetRenderWidth()
-	halfWidth := renderWidth / 2
+	left := m.GetLeftMargin()
+	contentWidth := m.GetContentWidth()
+	halfWidth := contentWidth / 2
+	midX := left + halfWidth
 	halfHeight := usableHeight / 2
 	topMargin := m.GetTopMargin()
 
 	switch quarter {
 	case SnapLeft:
-		return 0, topMargin, halfWidth, usableHeight
+		return left, topMargin, halfWidth, usableHeight
 	case SnapRight:
-		return halfWidth, topMargin, renderWidth - halfWidth, usableHeight
+		return midX, topMargin, contentWidth - halfWidth, usableHeight
 	case SnapTopLeft:
-		return 0, topMargin, halfWidth, halfHeight
+		return left, topMargin, halfWidth, halfHeight
 	case SnapTopRight:
-		return halfWidth, topMargin, halfWidth, halfHeight
+		return midX, topMargin, halfWidth, halfHeight
 	case SnapBottomLeft:
-		return 0, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
+		return left, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
 	case SnapBottomRight:
-		return halfWidth, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
+		return midX, halfHeight + topMargin, halfWidth, usableHeight - halfHeight
 	case SnapFullScreen:
-		return 0, topMargin, renderWidth, usableHeight
+		return left, topMargin, contentWidth, usableHeight
 	case Unsnap:
-		return renderWidth / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
+		return left + contentWidth/4, usableHeight/4 + topMargin, halfWidth, halfHeight
 	default:
-		return renderWidth / 4, usableHeight/4 + topMargin, halfWidth, halfHeight
+		return left + contentWidth/4, usableHeight/4 + topMargin, halfWidth, halfHeight
 	}
 }
 
@@ -105,23 +110,26 @@ func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int
 			win.Height = config.DefaultWindowHeight
 		}
 
-		// Ensure windows don't exceed terminal bounds
-		if win.Width > newRenderWidth {
-			win.Width = newRenderWidth
+		// Ensure windows don't exceed the content region beside a reserved
+		// sidebar band, matching ClampWindowsToView.
+		leftMargin := m.GetLeftMargin()
+		contentRight := leftMargin + m.GetContentWidth()
+		if win.Width > contentRight-leftMargin {
+			win.Width = contentRight - leftMargin
 		}
 		if win.Height > newUsableHeight {
 			win.Height = newUsableHeight
 		}
 
-		// Ensure position keeps window on screen
-		if win.X < 0 {
-			win.X = 0
+		// Ensure position keeps window inside the content region
+		if win.X < leftMargin {
+			win.X = leftMargin
 		}
 		if win.Y < 0 {
 			win.Y = 0
 		}
-		if win.X+win.Width > newRenderWidth {
-			win.X = newRenderWidth - win.Width
+		if win.X+win.Width > contentRight {
+			win.X = contentRight - win.Width
 		}
 		if win.Y+win.Height > newUsableHeight {
 			win.Y = newUsableHeight - win.Height

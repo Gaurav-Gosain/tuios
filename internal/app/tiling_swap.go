@@ -2,7 +2,6 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
@@ -128,8 +127,9 @@ func (m *OS) TileRemainingWindows(excludeIndex int) {
 		return
 	}
 
-	// Calculate tiling layout based on number of remaining windows
-	layouts := layout.CalculateTilingLayout(len(visibleWindows), m.GetRenderWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
+	// Calculate tiling layout based on number of remaining windows, inside the
+	// content region beside any reserved sidebar band.
+	layouts := m.contentTileLayouts(len(visibleWindows))
 
 	// Apply layout with animations
 	for i, idx := range visibleIndices {

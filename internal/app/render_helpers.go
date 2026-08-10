@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -40,6 +41,26 @@ func agentStateIndicator(state string) string {
 var (
 	baseButtonStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000"))
 )
+
+// titleBadgeText renders the text segment of a window title badge, coloring a
+// leading agent-state glyph with the state's palette color while keeping the
+// badge background intact. Each segment carries the full style, so the glyph's
+// color can never bleed into the name or reset the badge behind it. The shape
+// stays the state carrier (agentStateIndicator); the color is reinforcement,
+// exactly as in the sidebar and the palette rows.
+func titleBadgeText(windowName, agentState string, badgeBg color.Color) string {
+	nameStyle := baseButtonStyle.Background(badgeBg)
+	glyph := agentStateIndicator(agentState)
+	if glyph == "" || !strings.HasPrefix(windowName, glyph) {
+		return nameStyle.Render(" " + windowName + " ")
+	}
+	rest := strings.TrimPrefix(windowName, glyph)
+	glyphStyle := lipgloss.NewStyle().
+		Background(badgeBg).
+		Foreground(agentGlyphColor(agentState, theme.UI())).
+		Bold(true)
+	return nameStyle.Render(" ") + glyphStyle.Render(glyph) + nameStyle.Render(rest+" ")
+}
 
 func getBorder() lipgloss.Border {
 	return config.GetBorderForStyle()
@@ -190,7 +211,7 @@ func addToBorder(content string, color color.Color, window *terminal.Window, pos
 	var topBorder string
 	if titlePos == "top" && windowName != "" {
 		// Title on top with buttons on the right
-		topBorder = renderTitleWithButtons(windowName, buttons, width, color, true)
+		topBorder = renderTitleWithButtons(windowName, window.AgentState, buttons, width, color, true)
 	} else {
 		// Normal top border with buttons on right
 		topBorder = RightString(buttons, width, color)
@@ -211,7 +232,7 @@ func addToBorder(content string, color color.Color, window *terminal.Window, pos
 	}
 
 	if titlePos == "bottom" && windowName != "" {
-		bottomBorder = renderTitleBadge(windowName, width, color, false)
+		bottomBorder = renderTitleBadge(windowName, window.AgentState, width, color, false)
 	} else if scrollIndicator != "" {
 		// Bottom border with scrollback position indicator on the right
 		indicatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24")).Bold(true)
@@ -232,11 +253,10 @@ func addToBorder(content string, color color.Color, window *terminal.Window, pos
 }
 
 // renderTitleWithButtons renders a top/bottom border with a title badge and buttons.
-func renderTitleWithButtons(windowName string, buttons string, width int, color color.Color, isTop bool) string {
+func renderTitleWithButtons(windowName, agentState string, buttons string, width int, color color.Color, isTop bool) string {
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
 	borderStyle := style.Foreground(color)
-	nameStyle := baseButtonStyle.Background(color)
 
 	var borderChar, cornerLeft, cornerRight string
 	if isTop {
@@ -251,7 +271,7 @@ func renderTitleWithButtons(windowName string, buttons string, width int, color 
 
 	// Build name badge
 	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
-	nameText := nameStyle.Render(" " + windowName + " ")
+	nameText := titleBadgeText(windowName, agentState, color)
 	rightCircle := borderStyle.Render(config.GetWindowPillRight())
 	nameBadge := leftCircle + nameText + rightCircle
 
@@ -273,11 +293,10 @@ func renderTitleWithButtons(windowName string, buttons string, width int, color 
 }
 
 // renderTitleBadge renders a border with a centered title badge.
-func renderTitleBadge(windowName string, width int, color color.Color, isTop bool) string {
+func renderTitleBadge(windowName, agentState string, width int, color color.Color, isTop bool) string {
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
 	borderStyle := style.Foreground(color)
-	nameStyle := baseButtonStyle.Background(color)
 
 	var borderChar, cornerLeft, cornerRight string
 	if isTop {
@@ -295,7 +314,7 @@ func renderTitleBadge(windowName string, width int, color color.Color, isTop boo
 	}
 
 	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
-	nameText := nameStyle.Render(" " + windowName + " ")
+	nameText := titleBadgeText(windowName, agentState, color)
 	rightCircle := borderStyle.Render(config.GetWindowPillRight())
 	nameBadge := leftCircle + nameText + rightCircle
 

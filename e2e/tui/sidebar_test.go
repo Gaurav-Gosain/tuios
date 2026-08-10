@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -92,4 +93,74 @@ func TestSidebarRendersAndPanesTileBesideIt(t *testing.T) {
 	}
 
 	alive(t, term, "after toggling the sidebar off")
+}
+
+// findOnScreen returns the leftmost cell of the first row containing needle.
+func findOnScreen(t *testing.T, term *tuitest.Terminal, needle string) (col, row int) {
+	t.Helper()
+	s := term.Screen()
+	_, rows := s.Size()
+	for r := 0; r < rows; r++ {
+		if c := strings.Index(s.Line(r), needle); c >= 0 {
+			return c, r
+		}
+	}
+	t.Fatalf("%q not found on screen\n%s", needle, term.Snapshot())
+	return 0, 0
+}
+
+// TestSidebarClickSwitchesSession covers the sidebar's core mouse promise
+// against a real daemon: a single left click on a non-current session row
+// switches the client to that session, in window-management mode and again in
+// terminal mode (the mode the owner lives in).
+func TestSidebarClickSwitchesSession(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+
+	if out, err := tuiosCLI(t, base, "new", "alpha", "--detach"); err != nil {
+		t.Fatalf("create alpha: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new", "bravo", "--detach"); err != nil {
+		t.Fatalf("create bravo: %v: %s", err, out)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "alpha"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatalf("normalise to window mode: %v", err)
+	}
+	if err := term.WaitForText("Window Management Mode", uiTimeout); err != nil {
+		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(insertGuard)
+
+	toggleSidebarViaPalette(t, term)
+	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
+
+	// Terminal mode is where the owner lives, and the sidebar band must own
+	// clicks there too, ahead of any forwarding to the pane underneath.
+	enterTerminalMode(t, term)
+
+	// Click the bravo row and land on bravo.
+	col, row := findOnScreen(t, term, "bravo")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Session: bravo", uiTimeout); err != nil {
+		t.Fatalf("click on the bravo row did not switch: %v\n%s", err, term.Snapshot())
+	}
+
+	// And back: from bravo, a click on the alpha row returns to alpha.
+	if err := term.WaitForText("alpha", uiTimeout); err != nil {
+		t.Fatalf("alpha row not visible after switching: %v\n%s", err, term.Snapshot())
+	}
+	col, row = findOnScreen(t, term, "alpha")
+	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	if err := term.WaitForText("Session: alpha", uiTimeout); err != nil {
+		t.Fatalf("click on the alpha row did not switch back: %v\n%s", err, term.Snapshot())
+	}
+
+	alive(t, term, "after switching sessions from the sidebar")
 }

@@ -167,14 +167,19 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		minVisibleX := 20 // Keep at least 20px visible on the right
 		minVisibleY := 3  // Keep at least title bar visible at bottom
 
+		// The visible sliver must stay inside the content region, so a drag can
+		// never park a pane wholly under a reserved sidebar band.
+		leftMargin := o.GetLeftMargin()
+		contentRight := leftMargin + o.GetContentWidth()
+
 		// Prevent window from going too far left (causes ANSI rendering issues)
-		if newX < -(focusedWindow.Width - minVisibleX) {
-			newX = -(focusedWindow.Width - minVisibleX)
+		if newX < leftMargin-(focusedWindow.Width-minVisibleX) {
+			newX = leftMargin - (focusedWindow.Width - minVisibleX)
 		}
 
 		// Prevent window from going too far right
-		if newX > o.Width-minVisibleX {
-			newX = o.Width - minVisibleX
+		if newX > contentRight-minVisibleX {
+			newX = contentRight - minVisibleX
 		}
 
 		// Prevent window from going too far up
@@ -243,15 +248,18 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 
 		// Apply viewport bounds checking to prevent windows from going off-screen
-		// This is consistent with drag bounds checking and prevents layout issues
+		// or under a reserved sidebar band. This is consistent with drag bounds
+		// checking and prevents layout issues.
+		leftMargin := o.GetLeftMargin()
+		contentRight := leftMargin + o.GetContentWidth()
 
-		// Left edge: prevent negative X
-		if newX < 0 {
+		// Left edge: prevent X before the content region
+		if newX < leftMargin {
 			// If resizing from left, adjust width to compensate
 			if o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft {
-				newWidth += newX // Add the negative offset back to width
+				newWidth += newX - leftMargin // Give the overshoot back to width
 			}
-			newX = 0
+			newX = leftMargin
 		}
 
 		// Top edge: prevent window from moving into dock area or above screen
@@ -264,14 +272,14 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			newY = topMargin
 		}
 
-		// Right edge: prevent window from exceeding viewport width
-		if newX+newWidth > o.Width {
+		// Right edge: prevent window from exceeding the content region
+		if newX+newWidth > contentRight {
 			if o.ResizeCorner == app.TopRight || o.ResizeCorner == app.BottomRight {
 				// Resizing from right edge - constrain width
-				newWidth = o.Width - newX
+				newWidth = contentRight - newX
 			} else {
 				// Resizing from left edge - constrain X position
-				newX = o.Width - newWidth
+				newX = contentRight - newWidth
 			}
 		}
 
@@ -291,16 +299,17 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Final safety check: ensure dimensions stay within bounds after all adjustments
 		newWidth = max(newWidth, config.DefaultWindowWidth)
 		newHeight = max(newHeight, config.DefaultWindowHeight)
-		newWidth = min(newWidth, o.Width-newX)
+		newWidth = min(newWidth, contentRight-newX)
 		newHeight = min(newHeight, maxY-newY)
 
-		// In tiling mode (except scrolling), block resizing edges at screen boundaries
+		// In tiling mode (except scrolling), block resizing edges at the
+		// content-region boundaries
 		if o.AutoTiling && !o.UseScrollingLayout {
 			const edgeTolerance = 2 // Small tolerance for detecting screen edges
 
-			// Check which edges are at screen boundaries
-			atLeftEdge := focusedWindow.X <= edgeTolerance
-			atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (o.Width - edgeTolerance)
+			// Check which edges are at content-region boundaries
+			atLeftEdge := focusedWindow.X <= leftMargin+edgeTolerance
+			atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (contentRight - edgeTolerance)
 			atTopEdge := focusedWindow.Y <= edgeTolerance
 			atBottomEdge := (focusedWindow.Y + focusedWindow.Height) >= (maxY - edgeTolerance)
 
@@ -353,14 +362,17 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				o.MarkBSPSyncPending()
 			}
 		} else if o.UseScrollingLayout {
-			// Scrolling mode: compute width from horizontal drag delta.
+			// Scrolling mode: compute width from horizontal drag delta. All
+			// strip math runs against the content width beside the sidebar band,
+			// matching scrollingSetPositions.
+			viewW := o.ScrollingViewWidth()
 			switch o.ResizeCorner {
 			case app.TopLeft, app.BottomLeft:
 				newWidth = o.PreResizeState.Width - xOffset
 			case app.TopRight, app.BottomRight:
 				newWidth = o.PreResizeState.Width + xOffset
 			}
-			maxWidth := o.Width * 9 / 10
+			maxWidth := viewW * 9 / 10
 			newWidth = max(min(newWidth, maxWidth), config.DefaultWindowWidth)
 
 			// Update column width and reposition all windows visually.
@@ -370,7 +382,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			for ci := range sl.Columns {
 				for _, wid := range sl.Columns[ci].WindowIDs {
 					if wid == intID {
-						oldWidth = sl.ResolveColumnWidth(ci, o.GetRenderWidth())
+						oldWidth = sl.ResolveColumnWidth(ci, viewW)
 						sl.Columns[ci].FixedWidth = newWidth
 						sl.Columns[ci].Proportion = 0
 					}
@@ -380,14 +392,15 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			if (o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft) && oldWidth > 0 {
 				sl.ViewportX += newWidth - oldWidth
 			}
-			sl.ClampViewport(o.GetRenderWidth())
-			layouts := sl.ComputePositions(o.GetRenderWidth(), o.GetUsableHeight(), o.GetTopMargin())
+			sl.ClampViewport(viewW)
+			layouts := sl.ComputePositions(viewW, o.GetUsableHeight(), o.GetTopMargin())
+			stripLeft := o.GetLeftMargin()
 			for winID, rect := range layouts {
 				win := o.GetWindowByIntID(winID)
 				if win == nil {
 					continue
 				}
-				win.X = rect.X
+				win.X = stripLeft + rect.X
 				win.Y = rect.Y
 				win.Width = rect.W
 				// Don't call ResizeVisual or Resize  - just set visual width.

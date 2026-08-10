@@ -280,24 +280,28 @@ func (m *OS) RecalcZOrder() {
 // why a window the daemon created arrives marked Unplaced for a client to run
 // this on.
 func (m *OS) NewWindowPlacement() (x, y, width, height int) {
-	screenWidth := m.GetRenderWidth()
+	// A new floating window spawns inside the content region beside any
+	// reserved sidebar band, so it is never born half-hidden under the sidebar.
+	leftMargin := m.GetLeftMargin()
+	contentWidth := m.GetContentWidth()
 	screenHeight := m.GetUsableHeight()
-	if screenWidth == 0 || screenHeight == 0 {
+	if contentWidth <= 0 || screenHeight <= 0 {
 		// Sensible defaults when the screen size is not known yet.
-		screenWidth = 80
+		leftMargin = 0
+		contentWidth = 80
 		screenHeight = 24
 	}
 
-	width = screenWidth / 2
+	width = contentWidth / 2
 	height = screenHeight / 2
 
 	if !m.AutoTiling && m.LastMouseX > 0 && m.LastMouseY > 0 {
-		// Spawn at the cursor, kept on screen.
-		x = min(m.LastMouseX, screenWidth-width)
+		// Spawn at the cursor, kept inside the content region.
+		x = min(m.LastMouseX, leftMargin+contentWidth-width)
 		y = min(m.LastMouseY, screenHeight-height)
-		return max(x, 0), max(y, 0), width, height
+		return max(x, leftMargin), max(y, 0), width, height
 	}
-	return screenWidth / 4, screenHeight / 4, width, height
+	return leftMargin + contentWidth/4, screenHeight / 4, width, height
 }
 
 // QuitSession performs a deliberate, user-initiated quit. In a daemon session

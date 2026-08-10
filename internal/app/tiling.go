@@ -29,9 +29,23 @@ type tileLayout struct {
 	x, y, width, height int
 }
 
-// calculateTilingLayout is a wrapper around layout.CalculateTilingLayout for internal use
+// contentTileLayouts runs the master-stack tiler inside the content region:
+// computed against the content width and shifted right by the left margin, the
+// same box GetBSPBounds hands the BSP tree, so panes never tile under a
+// reserved sidebar band on either side.
+func (m *OS) contentTileLayouts(n int) []layout.TileLayout {
+	layouts := layout.CalculateTilingLayout(n, m.GetContentWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
+	if lm := m.GetLeftMargin(); lm != 0 {
+		for i := range layouts {
+			layouts[i].X += lm
+		}
+	}
+	return layouts
+}
+
+// calculateTilingLayout is a wrapper around contentTileLayouts for internal use
 func (m *OS) calculateTilingLayout(n int) []tileLayout {
-	layouts := layout.CalculateTilingLayout(n, m.GetRenderWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
+	layouts := m.contentTileLayouts(n)
 	result := make([]tileLayout, len(layouts))
 	for i, l := range layouts {
 		result[i] = tileLayout{
@@ -77,14 +91,14 @@ func (m *OS) TileAllWindows() {
 	if m.UseScrollingLayout {
 		sl := m.GetOrCreateScrollingLayout()
 		m.LogInfo("[SCROLL-TILE] TileAllWindows scrolling path, %d visible windows", len(visibleWindows))
-		sl.EnsureFocusedVisible(m.GetRenderWidth())
+		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
 		m.scrollingSetPositions()
 		return
 	}
 
 	// Use master-stack layout if BSP is disabled
 	if !m.UseBSPLayout {
-		layouts := layout.CalculateTilingLayout(len(visibleWindows), m.GetRenderWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
+		layouts := m.contentTileLayouts(len(visibleWindows))
 		for i, l := range layouts {
 			if i < len(visibleWindows) {
 				visibleWindows[i].X = l.X
@@ -211,7 +225,7 @@ func (m *OS) ToggleAutoTiling() {
 			// Clear old scrolling layout to rebuild from current windows
 			delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
 			sl := m.GetOrCreateScrollingLayout()
-			sl.EnsureFocusedVisible(m.GetRenderWidth())
+			sl.EnsureFocusedVisible(m.ScrollingViewWidth())
 			m.scrollingSetPositions()
 			for _, w := range m.Windows {
 				if w.Workspace == m.CurrentWorkspace {

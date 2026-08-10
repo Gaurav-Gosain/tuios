@@ -1,6 +1,9 @@
 package app
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
 
 // OverlayActive reports whether any hit-testable floating overlay panel is on
 // screen. Used by the mouse handlers to consume events before the window layer.
@@ -206,11 +209,46 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		m.ThemePickerSelected = row.Idx
 		m.ThemePickerApplySelection()
 	case "session":
+		// A click activates, exactly like Enter on the selected row. Selecting
+		// only, as this used to, made the switcher the one list where a click
+		// did nothing visible, and it is why "clicking a session does not
+		// switch" was reportable at all.
 		m.SessionSwitcherSelected = row.Idx
+		m.sessionSwitcherActivate(row.Idx)
 	case "layout":
 		m.LayoutPickerSelected = row.Idx
+		m.layoutPickerActivate(row.Idx)
 	}
 	return nil
+}
+
+// sessionSwitcherActivate switches to the session at the given index of the
+// filtered switcher list and closes the switcher, mirroring its Enter binding.
+func (m *OS) sessionSwitcherActivate(idx int) {
+	filtered := FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery)
+	if idx < 0 || idx >= len(filtered) {
+		return
+	}
+	selected := filtered[idx]
+	if selected.IsCurrent {
+		m.ShowNotification("Already on this session", "info", config.NotificationDuration)
+	} else if err := m.SwitchToSession(selected.Title); err != nil {
+		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+	}
+	m.closeOverlay("session")
+}
+
+// layoutPickerActivate applies the layout at the given index of the filtered
+// picker list and closes the picker, mirroring its Enter binding.
+func (m *OS) layoutPickerActivate(idx int) {
+	filtered := FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery)
+	if idx < 0 || idx >= len(filtered) {
+		return
+	}
+	selected := filtered[idx]
+	ApplyLayoutTemplate(selected, m)
+	m.ShowNotification("Layout applied: "+selected.Name, "success", config.NotificationDuration)
+	m.closeOverlay("layout")
 }
 
 // closeOverlay dismisses a specific floating overlay by kind.

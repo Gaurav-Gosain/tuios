@@ -40,6 +40,15 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 	return sl
 }
 
+// ScrollingViewWidth is the horizontal space the scrolling strip works in: the
+// content width beside any reserved sidebar band. Every viewport computation
+// (clamping, centering, resolving column widths) runs against this width, and
+// the computed strip positions are then shifted right by GetLeftMargin, so the
+// strip scrolls within the content box instead of underneath the sidebar.
+func (m *OS) ScrollingViewWidth() int {
+	return m.GetContentWidth()
+}
+
 // scrollingSetPositions applies the scrolling layout positions and dimensions.
 // When animate is true, windows slide to their new positions.
 func (m *OS) scrollingSetPositions() {
@@ -52,11 +61,12 @@ func (m *OS) scrollingSetPositionsInstant() {
 }
 func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	sl := m.GetOrCreateScrollingLayout()
-	screenW := m.GetRenderWidth()
+	viewW := m.ScrollingViewWidth()
+	leftMargin := m.GetLeftMargin()
 
-	sl.ClampViewport(screenW)
+	sl.ClampViewport(viewW)
 
-	layouts := sl.ComputePositions(screenW, m.GetUsableHeight(), m.GetTopMargin())
+	layouts := sl.ComputePositions(viewW, m.GetUsableHeight(), m.GetTopMargin())
 
 	// Scrolling layout transitions always animate (even with --no-animations)
 	// because the viewport shift is disorienting without the slide.
@@ -66,6 +76,9 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	}
 
 	for windowIntID, rect := range layouts {
+		// ComputePositions works in strip coordinates; place the strip inside
+		// the content region.
+		rect.X += leftMargin
 		win := m.getWindowByIntID(windowIntID)
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
@@ -125,7 +138,7 @@ func (m *OS) windowHasAnimationTo(win *terminal.Window, x, y, w, h int) bool {
 func (m *OS) ScrollingFocusLeft() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.FocusLeft()
-	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSyncFocusToOS()
 	m.scrollingSetPositions()
 }
@@ -134,7 +147,7 @@ func (m *OS) ScrollingFocusLeft() {
 func (m *OS) ScrollingFocusRight() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.FocusRight()
-	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSyncFocusToOS()
 	m.scrollingSetPositions()
 }
@@ -143,7 +156,7 @@ func (m *OS) ScrollingFocusRight() {
 func (m *OS) ScrollingMoveColumnLeft() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.MoveColumnLeft()
-	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSetPositions()
 }
 
@@ -151,7 +164,7 @@ func (m *OS) ScrollingMoveColumnLeft() {
 func (m *OS) ScrollingMoveColumnRight() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.MoveColumnRight()
-	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSetPositions()
 }
 
@@ -159,7 +172,7 @@ func (m *OS) ScrollingMoveColumnRight() {
 func (m *OS) ScrollingCycleWidth() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.CycleWidth()
-	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSetPositions()
 }
 
@@ -181,11 +194,11 @@ func (m *OS) ScrollingExpelWindow() {
 // Uses instant positioning so scrolling feels direct and responsive.
 func (m *OS) ScrollingScrollViewport(delta int) {
 	sl := m.GetOrCreateScrollingLayout()
-	screenW := m.GetRenderWidth()
+	viewW := m.ScrollingViewWidth()
 	// Cancel any in-flight slide animations so the wheel feels direct
 	m.CompleteAllAnimations()
-	sl.ViewportX += delta * (screenW / 5)
-	sl.ClampViewport(screenW)
+	sl.ViewportX += delta * (viewW / 5)
+	sl.ClampViewport(viewW)
 	m.scrollingSetPositionsInstant()
 }
 
@@ -204,7 +217,7 @@ func (m *OS) ScrollingOnFocusChange() {
 		sl.FocusColumnContaining(intID)
 	}
 
-	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSetPositions()
 }
 
@@ -229,7 +242,7 @@ func (m *OS) ScrollingOnWindowRemoved(windowIntID int) {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.RemoveWindow(windowIntID)
 	if sl.WindowCount() > 0 {
-		sl.EnsureFocusedVisible(m.GetRenderWidth())
+		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
 		m.scrollingSyncFocusToOS()
 		m.scrollingSetPositions()
 	}
@@ -258,14 +271,14 @@ func (m *OS) scrollingResizeColumn(delta int) {
 		return
 	}
 	col := &sl.Columns[sl.FocusedCol]
-	// Get current width and apply delta, capped at 90% of screen
-	screenW := m.GetRenderWidth()
-	maxWidth := screenW * 9 / 10
-	currentWidth := sl.ResolveColumnWidth(sl.FocusedCol, screenW)
+	// Get current width and apply delta, capped at 90% of the content width
+	viewW := m.ScrollingViewWidth()
+	maxWidth := viewW * 9 / 10
+	currentWidth := sl.ResolveColumnWidth(sl.FocusedCol, viewW)
 	newWidth := max(min(currentWidth+delta, maxWidth), 20)
 	col.FixedWidth = newWidth
 	col.Proportion = 0 // FixedWidth takes priority
-	sl.ScrollToFocusedColumn(m.GetRenderWidth())
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSetPositionsInstant() // resize must be instant, not animated
 }
 func (m *OS) scrollingSyncFocusToOS() {

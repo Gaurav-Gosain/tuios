@@ -136,6 +136,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 	}
 
 	pal := theme.UI()
+	bg := pal.Panel
 	variant := sidebarVariant(w)
 
 	tree := m.BuildSessionTree()
@@ -155,12 +156,13 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 
 	rows := make([]logicalRow, 0, 16)
 
-	// Header. The glyph rail is too narrow for a label, so it gets a blank cap.
+	// Header. A quiet section label rather than an accent chip: the sidebar is
+	// chrome that is on screen all the time, so it identifies itself the way a
+	// section heading does, not the way a floating panel announces itself. The
+	// session count sits right-aligned as the one piece of summary data.
 	if variant != sidebarVariantGlyph {
-		title := "Sessions"
-		chip := overlay.Chip(overlay.Truncate(title, max(w-2, 1)), pal.Accent, pal.PillFg)
-		rows = append(rows, logicalRow{text: sidebarFit(chip, w, pal.Surface)})
-		rows = append(rows, logicalRow{text: sidebarBlank(w, pal.Surface)})
+		rows = append(rows, logicalRow{text: m.sidebarHeaderRow(len(tree.Sessions), w, pal)})
+		rows = append(rows, logicalRow{text: sidebarBlank(w, bg)})
 	}
 
 	for _, session := range tree.Sessions {
@@ -218,7 +220,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 	}
 	// Pad the column to the full height so the sidebar is a solid surface.
 	for len(lines) < height {
-		lines = append(lines, sidebarBlank(w, pal.Surface))
+		lines = append(lines, sidebarBlank(w, bg))
 	}
 
 	return lines, w
@@ -263,13 +265,55 @@ func sidebarGlyph(state string, bg color.Color, pal overlay.Palette) string {
 	return overlay.Style(bg).Foreground(agentGlyphColor(state, pal)).Render(g)
 }
 
-// sidebarSessionRow renders one session row for the given variant.
-func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool, w int, pal overlay.Palette) string {
-	bg := pal.Surface
+// sidebarHeaderRow renders the quiet section header: the label on the left and
+// the session count right-aligned, both muted so the header frames the list
+// without competing with it.
+func (m *OS) sidebarHeaderRow(sessionCount, w int, pal overlay.Palette) string {
+	bg := pal.Panel
+	count := strconv.Itoa(sessionCount)
+	countW := lipgloss.Width(count)
+	label := overlay.Truncate("Sessions", max(w-countW-3, 1))
+	left := overlay.Style(bg).Render(" ") +
+		overlay.Style(bg).Foreground(pal.FgDim).Bold(true).Render(label)
+	gap := max(w-lipgloss.Width(left)-countW-1, 0)
+	row := left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) +
+		overlay.Style(bg).Foreground(pal.FgMute).Render(count) +
+		overlay.Style(bg).Render(" ")
+	return sidebarFit(row, w, bg)
+}
 
+// sidebarCurrentMarker is the one-cell edge bar that marks the current session,
+// drawn in the success color at the very edge of the rail so it aligns down the
+// column and reads without a legend.
+func sidebarCurrentMarker(current bool, bg color.Color, pal overlay.Palette) string {
+	if !current {
+		return overlay.Style(bg).Render(" ")
+	}
+	mark := "▎"
+	if overlay.UseASCII() {
+		mark = "|"
+	}
+	return overlay.Style(bg).Foreground(pal.Success).Render(mark)
+}
+
+// sidebarSessionRow renders one session row for the given variant.
+//
+// Full variant anatomy, kept to fixed columns so the rows scan vertically:
+//
+//	▎ ▾ ● name          3
+//	^ ^ ^ ^             ^ window count, right-aligned, muted
+//	| | | name: bold on the current session, dim on the others
+//	| | agent glyph, state-colored
+//	| expand chevron, muted
+//	current-session edge bar
+//
+// The current session's row is additionally raised one luminance step (Surface
+// on the Panel rail), so "where am I" reads even in a monochrome capture.
+func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool, w int, pal overlay.Palette) string {
 	if variant == sidebarVariantGlyph {
-		// One centered rolled-up glyph per session; the current session gets a
-		// highlight so it is findable without a name.
+		// One centered rolled-up glyph per session; the current session gets the
+		// focus pill so it is findable without a name.
+		bg := color.Color(pal.Panel)
 		if node.IsCurrent {
 			bg = lipgloss.Color(sidebarFocusColor)
 		}
@@ -277,85 +321,98 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 		return sidebarFit(overlay.Style(bg).Render(" ")+g, w, bg)
 	}
 
-	// Expand/collapse chevron for the current or explicitly-toggled session.
-	chevron := "  "
-	if config.SidebarShowWindows && len(node.Children) > 0 {
-		mark := "▸"
-		if expanded {
-			mark = "▾"
-		}
-		if overlay.UseASCII() {
-			mark = ">"
-			if expanded {
-				mark = "v"
-			}
-		}
-		chevron = overlay.Style(bg).Foreground(pal.FgDim).Render(mark) + overlay.Style(bg).Render(" ")
+	bg := color.Color(pal.Panel)
+	if node.IsCurrent {
+		bg = pal.Surface
 	}
 
-	glyph := sidebarGlyph(node.AgentState, bg, pal) + overlay.Style(bg).Render(" ")
+	left := sidebarCurrentMarker(node.IsCurrent, bg, pal)
 
-	// Right side: window count and the current-session marker.
+	// Expand/collapse chevron for sessions with known windows; a blank cell
+	// otherwise so the glyph and name columns stay aligned.
+	if variant == sidebarVariantFull {
+		chevron := " "
+		if config.SidebarShowWindows && len(node.Children) > 0 {
+			chevron = "▸"
+			if expanded {
+				chevron = "▾"
+			}
+			if overlay.UseASCII() {
+				chevron = ">"
+				if expanded {
+					chevron = "v"
+				}
+			}
+		}
+		left += overlay.Style(bg).Render(" ") +
+			overlay.Style(bg).Foreground(pal.FgMute).Render(chevron) +
+			overlay.Style(bg).Render(" ")
+	}
+
+	left += sidebarGlyph(node.AgentState, bg, pal) + overlay.Style(bg).Render(" ")
+
+	// Right side: window count, muted, with a trailing pad off the edge.
 	right := ""
 	rightW := 0
 	if config.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
 		countStr := strconv.Itoa(node.WindowCount)
-		right += overlay.Style(bg).Foreground(pal.FgMute).Render(countStr)
-		rightW += lipgloss.Width(countStr)
-	}
-	if node.IsCurrent {
-		marker := "●"
-		if overlay.UseASCII() {
-			marker = "*"
-		}
-		if rightW > 0 {
-			right += overlay.Style(bg).Render(" ")
-			rightW++
-		}
-		right += overlay.Style(bg).Foreground(pal.Success).Render(marker)
-		rightW++
-	}
-	if rightW > 0 {
-		right = overlay.Style(bg).Render(" ") + right
-		rightW++
+		right = overlay.Style(bg).Foreground(pal.FgMute).Render(countStr) +
+			overlay.Style(bg).Render(" ")
+		rightW = lipgloss.Width(countStr) + 1
 	}
 
-	leftFixed := lipgloss.Width(chevron) + lipgloss.Width(glyph)
-	nameW := max(w-leftFixed-rightW-1, 1) // -1 leading pad
-	nameStyle := overlay.Style(bg).Foreground(pal.Fg)
+	nameW := max(w-lipgloss.Width(left)-rightW-1, 1)
+	nameStyle := overlay.Style(bg).Foreground(pal.FgDim)
 	if node.IsCurrent {
-		nameStyle = nameStyle.Bold(true)
+		nameStyle = overlay.Style(bg).Foreground(pal.Fg).Bold(true)
 	}
 	name := nameStyle.Render(overlay.Truncate(node.Title, nameW))
 
-	left := overlay.Style(bg).Render(" ") + chevron + glyph + name
-	// Pad the middle so the right block sits at the far edge.
-	gap := max(w-lipgloss.Width(left)-rightW, 0)
-	row := left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + right
+	row := left + name
+	gap := max(w-lipgloss.Width(row)-rightW, 0)
+	row += overlay.Style(bg).Render(strings.Repeat(" ", gap)) + right
 	return sidebarFit(row, w, bg)
 }
 
-// sidebarWindowRow renders one window row under an expanded session.
+// sidebarWindowRow renders one window row under an expanded session, indented
+// one level past the session name. The focused window carries the dock's focus
+// pill across the full row; the rest stay dim so the list reads as detail under
+// its session, not as a second list of equals.
 func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, w int, pal overlay.Palette) string {
-	bg := pal.Surface
+	bg := color.Color(pal.Panel)
 	fg := pal.FgDim
 	bold := false
-	if node.IsCurrent {
+	focused := node.IsCurrent
+	if focused {
 		bg = lipgloss.Color(sidebarFocusColor)
 		fg = lipgloss.Color("#ffffff")
 		bold = true
 	}
 
-	indent := "   " // deeper than the session row so the hierarchy reads
+	indent := "      " // glyph lands two cells past the session glyph column
 	if variant == sidebarVariantNarrow {
-		indent = " "
+		indent = "  "
 	}
-	glyph := sidebarGlyph(node.AgentState, bg, pal) + overlay.Style(bg).Render(" ")
 
-	leftFixed := lipgloss.Width(indent) + lipgloss.Width(glyph)
-	titleW := max(w-leftFixed, 1)
+	// On the focus pill the glyph goes white with the title: state colors were
+	// tuned against the dark rail and some vanish on saturated blue. The shape
+	// still carries the state, as everywhere else.
+	var glyph string
+	if focused {
+		g := agentStateIndicator(node.AgentState)
+		if g == "" || !config.SidebarShowGlyphs {
+			glyph = overlay.Style(bg).Render(" ")
+		} else {
+			glyph = overlay.Style(bg).Foreground(fg).Render(g)
+		}
+	} else {
+		glyph = sidebarGlyph(node.AgentState, bg, pal)
+	}
+
+	leftFixed := lipgloss.Width(indent) + 2
+	titleW := max(w-leftFixed-1, 1)
 	title := overlay.Style(bg).Foreground(fg).Bold(bold).Render(overlay.Truncate(node.Title, titleW))
 
-	row := overlay.Style(bg).Render(indent) + glyph + title
+	row := overlay.Style(bg).Render(indent) + glyph + overlay.Style(bg).Render(" ") + title
 	return sidebarFit(row, w, bg)
 }

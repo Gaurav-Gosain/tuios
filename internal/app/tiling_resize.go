@@ -73,8 +73,10 @@ func (m *OS) ResizeFocusedWindowWidth(deltaPixels int) {
 		return
 	}
 
-	// Block resizing if right edge is at screen boundary
-	atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (m.GetRenderWidth() - edgeTolerance)
+	// Block resizing if right edge is at the content-region boundary (the
+	// screen edge, or the sidebar band when it reserves the right margin)
+	contentRight := m.GetLeftMargin() + m.GetContentWidth()
+	atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (contentRight - edgeTolerance)
 	if atRightEdge {
 		return
 	}
@@ -107,8 +109,9 @@ func (m *OS) ResizeFocusedWindowWidthLeft(deltaPixels int) {
 		return
 	}
 
-	// Block resizing if left edge is at screen boundary
-	atLeftEdge := focusedWindow.X <= edgeTolerance
+	// Block resizing if left edge is at the content-region boundary (the screen
+	// edge, or the sidebar band when it reserves the left margin)
+	atLeftEdge := focusedWindow.X <= m.GetLeftMargin()+edgeTolerance
 	if atLeftEdge {
 		return
 	}
@@ -181,7 +184,12 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 	const minHeight = config.DefaultWindowHeight
 	minY := m.GetTopMargin()
 	maxY := minY + m.GetUsableHeight()
-	renderWidth := m.GetRenderWidth()
+	// Vertical split lines live inside the content region: they can be dragged
+	// no further left than the reserved left margin and no further right than
+	// the content's right edge, so a resize can never push a pane under the
+	// sidebar band.
+	minX := m.GetLeftMargin()
+	maxX := minX + m.GetContentWidth()
 
 	// Handle right edge movement (vertical split line)
 	if newRight != oldRight {
@@ -189,7 +197,7 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 		leftWindows = removeWindowFromList(leftWindows, resized)
 		rightWindows = removeWindowFromList(rightWindows, resized)
 
-		constrainedRight := m.constrainVerticalSplit(newRight, leftWindows, rightWindows, minWidth, renderWidth)
+		constrainedRight := m.constrainVerticalSplit(newRight, leftWindows, rightWindows, minWidth, minX, maxX)
 
 		for _, win := range leftWindows {
 			resize(m, win, constrainedRight-win.X, win.Height)
@@ -211,7 +219,7 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 		leftWindows = removeWindowFromList(leftWindows, resized)
 		rightWindows = removeWindowFromList(rightWindows, resized)
 
-		constrainedX := m.constrainVerticalSplit(newX, leftWindows, rightWindows, minWidth, renderWidth)
+		constrainedX := m.constrainVerticalSplit(newX, leftWindows, rightWindows, minWidth, minX, maxX)
 
 		for _, win := range leftWindows {
 			resize(m, win, constrainedX-win.X, win.Height)
@@ -353,9 +361,10 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 	return true
 }
 
-// constrainVerticalSplit calculates the valid position for a vertical split line
-func (m *OS) constrainVerticalSplit(requested int, leftWindows, rightWindows []*terminal.Window, minWidth, maxX int) int {
-	minValidX := 0
+// constrainVerticalSplit calculates the valid position for a vertical split
+// line, kept within [minX, maxX]: the content region's own edges.
+func (m *OS) constrainVerticalSplit(requested int, leftWindows, rightWindows []*terminal.Window, minWidth, minX, maxX int) int {
+	minValidX := minX
 	for _, win := range leftWindows {
 		minRequired := win.X + minWidth
 		if minRequired > minValidX {
@@ -402,20 +411,23 @@ func (m *OS) applyTilingResult(resized *terminal.Window, finalX, finalY, finalRi
 	const minHeight = config.DefaultWindowHeight
 	minY := m.GetTopMargin()
 	maxY := minY + m.GetUsableHeight()
-	renderWidth := m.GetRenderWidth()
+	minX := m.GetLeftMargin()
+	maxX := minX + m.GetContentWidth()
 
 	resized.X = finalX
 	resized.Y = finalY
 	resized.Width = finalRight - finalX
 	resized.Height = finalBottom - finalY
 
-	// Fallback clamp if constraint calculation produced invalid values
+	// Fallback clamp if constraint calculation produced invalid values; the
+	// clamp box is the content region, so a pane can never be pushed under a
+	// reserved sidebar band.
 	if resized.Width < minWidth || resized.Height < minHeight ||
-		resized.X < 0 || resized.Y < 0 ||
-		resized.X+resized.Width > renderWidth || resized.Y+resized.Height > maxY {
-		resized.Width = max(minWidth, min(resized.Width, renderWidth-resized.X))
+		resized.X < minX || resized.Y < 0 ||
+		resized.X+resized.Width > maxX || resized.Y+resized.Height > maxY {
+		resized.Width = max(minWidth, min(resized.Width, maxX-resized.X))
 		resized.Height = max(minHeight, min(resized.Height, maxY-resized.Y))
-		resized.X = max(0, min(resized.X, renderWidth-minWidth))
+		resized.X = max(minX, min(resized.X, maxX-minWidth))
 		resized.Y = max(minY, min(resized.Y, maxY-minHeight))
 	}
 }
