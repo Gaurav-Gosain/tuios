@@ -161,35 +161,46 @@ func TestContextMenuArrowKeysMoveSelection(t *testing.T) {
 	}
 }
 
-// TestRightClickGesture pins the click-vs-drag split on the right button. A
-// plain right press still arms a resize (so a drag resizes exactly as it
-// always has), but a release without movement is a click, and a click opens
-// the context menu the way every GUI's right button does. Shift+right-click
-// keeps opening the menu on the press.
+// TestRightClickGesture pins the click-vs-drag split on the right button over a
+// pane. A plain right press arms a resize (so a drag resizes exactly as it
+// always has), and a release without movement is a stray click that does
+// nothing: the pane menu is deliberately NOT on a plain right-click, which was
+// too easy to trigger mid-resize. The menu is ctrl or shift + right-click.
 func TestRightClickGesture(t *testing.T) {
 	t.Run("press arms a resize, not a menu", func(t *testing.T) {
 		o := ctxOS(t)
 		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
 		if o.ContextMenuActive() {
-			t.Error("the press alone opened a context menu; the menu belongs to the release")
+			t.Error("the press alone opened a context menu; a plain right press is a resize")
 		}
 		if !o.Resizing {
 			t.Error("a plain right press on a pane no longer arms a resize")
 		}
 	})
 
-	t.Run("release without movement opens the pane menu", func(t *testing.T) {
+	t.Run("release without movement opens no menu (resize-only)", func(t *testing.T) {
 		o := ctxOS(t)
 		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
 		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		if o.ContextMenuActive() {
+			t.Fatal("a plain right-click on a pane opened the menu; it must be resize-only")
+		}
+		if o.Resizing || o.Dragging {
+			t.Error("the cancelled resize left gesture state behind")
+		}
+	})
+
+	t.Run("ctrl+right-click opens the pane menu immediately", func(t *testing.T) {
+		o := ctxOS(t)
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight, Mod: tea.ModCtrl}, o)
 		if !o.ContextMenuActive() {
-			t.Fatal("right click (press+release, no movement) did not open the context menu")
+			t.Fatal("ctrl+right-click did not open the pane menu")
 		}
 		if o.ContextMenu.Target != app.CtxTargetPane {
 			t.Errorf("menu target = %v, want the pane menu", o.ContextMenu.Target)
 		}
-		if o.Resizing || o.Dragging {
-			t.Error("the cancelled resize left gesture state behind")
+		if o.Resizing {
+			t.Error("ctrl+right-click started a resize as well as opening the menu")
 		}
 	})
 
@@ -217,13 +228,12 @@ func TestRightClickGesture(t *testing.T) {
 		}
 	})
 
-	t.Run("zoomed pane still gets its menu on the click", func(t *testing.T) {
+	t.Run("zoomed pane gets its menu on ctrl+right-click", func(t *testing.T) {
 		o := ctxOS(t)
 		o.Windows[0].Zoomed = true
-		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
-		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight, Mod: tea.ModCtrl}, o)
 		if !o.ContextMenuActive() {
-			t.Fatal("right click on a zoomed pane did not open the context menu")
+			t.Fatal("ctrl+right-click on a zoomed pane did not open the context menu")
 		}
 	})
 

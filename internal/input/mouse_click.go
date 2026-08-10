@@ -28,11 +28,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Shift+right-click opens the context menu immediately, kept for muscle
-	// memory from when the plain right button was only a resize. A plain
-	// right-click opens the same menu now, but on release, so a right-drag can
-	// still resize; shift skips the click-vs-drag wait.
-	if msg.Button == tea.MouseRight && msg.Mod&tea.ModShift != 0 {
+	// Ctrl or shift + right-click opens the context menu on a pane. A plain
+	// right-click/drag on a pane is reserved for resize (it was too easy to open
+	// the menu by accident mid-resize), so the menu needs a modifier there.
+	// Empty desktop and the dock have no right-drag, so they still open the menu
+	// on a plain right-click (handled below).
+	if msg.Button == tea.MouseRight && msg.Mod&(tea.ModShift|tea.ModCtrl) != 0 {
 		o.OpenContextMenu(X, Y)
 		return o, nil
 	}

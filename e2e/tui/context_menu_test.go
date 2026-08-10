@@ -249,9 +249,9 @@ func assertNoLineOverflow(t *testing.T, s tuitest.Screen, cols int, what string)
 }
 
 // TestPlainRightClickOpensMenuAndRightDragResizes pins the right button's
-// click-vs-drag split. A plain right-click (press and release without
-// movement) opens the pane menu the way every GUI's right button does; a
-// right-DRAG keeps its old meaning and resizes without ever showing a menu.
+// click-vs-drag split over a pane. A plain right-click/drag is resize-only (the
+// menu was too easy to trigger by accident mid-resize); ctrl+right-click opens
+// the pane menu. A right-DRAG resizes without ever showing a menu.
 func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	term, _ := start(t, startOpts{})
 	waitBoot(t, term)
@@ -261,17 +261,19 @@ func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	// inside it, the same trick TestContextMenuTargets uses.
 	enableTiling(t, term)
 
-	// Press alone: no menu yet (the menu belongs to the release).
+	// A plain right-click (press + release in place) is a stray resize click and
+	// must NOT open the menu.
 	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
+	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
 	time.Sleep(300 * time.Millisecond)
 	if text := term.Screen().Text(); strings.Contains(text, "Close pane") {
-		t.Fatalf("the right press alone opened a context menu\n%s", term.Snapshot())
+		t.Fatalf("a plain right-click opened a context menu; it must be resize-only\n%s", term.Snapshot())
 	}
 
-	// Release in place: the click opens the pane menu.
-	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
+	// Ctrl+right-click opens the pane menu.
+	mouseClick(t, term, 20, 10, tuitest.MouseRight, tuitest.ModCtrl)
 	if err := term.WaitForText("Close pane", uiTimeout); err != nil {
-		t.Fatalf("a plain right-click did not open the pane menu: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ctrl+right-click did not open the pane menu: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("esc: %v", err)

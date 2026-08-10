@@ -21,17 +21,17 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Reset pointer shape on release
 	app.ResetPointerShape()
 
-	// A plain right press on a pane armed both a resize and a context menu; the
-	// release decides which one it was. Below the drag threshold it was a
-	// click: cancel the resize (restoring the few cells of jitter it may have
-	// applied) and open the menu where the press landed. At or past it, the
-	// gesture was a drag and the resize completes below as always.
+	// A plain right press on a pane arms a resize. Below the drag threshold it
+	// was a stray click, cancel the resize (restoring the few cells of jitter it
+	// may have applied) and do nothing else. The context menu is deliberately
+	// NOT opened here: a plain right-click was too easy to trigger by accident
+	// while resizing. The menu is ctrl/shift+right-click instead (see
+	// handleMouseClick). At or past the threshold the resize completes below.
 	if o.RightClickPending {
 		o.RightClickPending = false
 		mouse := msg.Mouse()
 		if abs(mouse.X-o.RightPressX)+abs(mouse.Y-o.RightPressY) < rightClickDragThreshold {
 			cancelRightClickResize(o)
-			o.OpenContextMenu(o.RightPressX, o.RightPressY)
 			return o, nil
 		}
 	}
