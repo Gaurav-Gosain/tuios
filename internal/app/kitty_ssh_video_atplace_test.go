@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"io"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -204,5 +205,57 @@ func TestRemoteVideoClearedOnLeavingAltScreen(t *testing.T) {
 	kp.mu.Unlock()
 	if leftover != 0 {
 		t.Fatalf("remoteVideo still tracks %d image(s) after cleanup", leftover)
+	}
+}
+
+func (w *recWriter) count(sub string) int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return bytes.Count(w.buf.Bytes(), []byte(sub))
+}
+
+func rewriteShm(t *testing.T, name string, w, h int, seed byte) {
+	t.Helper()
+	data := make([]byte, w*h*4)
+	for i := range data {
+		data[i] = seed + byte(i)
+	}
+	if err := os.WriteFile("/dev/shm/"+name, data, 0o600); err != nil {
+		t.Fatalf("rewrite shm: %v", err)
+	}
+}
+
+// TestRemoteVideoSkipsUnchangedFrames proves the idle-frame skip: an identical
+// re-sent bitmap is not re-transmitted (the biggest idle-load/lag win), while a
+// changed bitmap still goes out.
+func TestRemoteVideoSkipsUnchangedFrames(t *testing.T) {
+	withClientCaps(t, &HostCapabilities{
+		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
+	})
+	shmName := makeShmFrame(t, 400, 300)
+	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
+	host := &recWriter{}
+	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	const winID = "window-0000-0000-0000-000000000000"
+	send := func() {
+		kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, false, func([]byte) {})
+	}
+
+	send() // frame 1: establishes the id
+	send() // frame 2: first reused -> self-places, records the hash
+	if !waitUntil(func() bool { return host.count("a=T,i=") >= 1 }, 2*time.Second) {
+		t.Fatal("first self-placed frame never sent")
+	}
+
+	send() // frame 3: identical content -> must be skipped
+	time.Sleep(200 * time.Millisecond)
+	if n := host.count("a=T,i="); n != 1 {
+		t.Fatalf("identical frame not skipped: a=T count = %d, want 1", n)
+	}
+
+	rewriteShm(t, shmName, 400, 300, 99) // change the pixels
+	send()                               // frame 4: changed content -> must send
+	if !waitUntil(func() bool { return host.count("a=T,i=") >= 2 }, 2*time.Second) {
+		t.Fatal("changed frame was not sent (skip is too aggressive)")
 	}
 }

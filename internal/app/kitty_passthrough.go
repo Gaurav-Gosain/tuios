@@ -82,6 +82,14 @@ type KittyPassthrough struct {
 	nextHostID    uint32
 	pendingOutput []byte
 
+	// lastFrameHash is the CRC32 of the last bitmap sent per (windowID,
+	// hostImageID) remote video stream. A browser re-sends identical frames
+	// while idle (only a cursor blink changes), so skipping an unchanged one
+	// avoids a compress + base64 + ssh write for nothing - the biggest idle-load
+	// and lag win. A CRC collision at worst holds one stale frame until the next
+	// differing one, which for a video stream is a few milliseconds.
+	lastFrameHash map[string]map[uint32]uint32
+
 	// remoteVideo tracks (windowID -> set of hostImageID) for video streams the
 	// remote-client path self-places with a=T. These images are deliberately NOT
 	// in `placements`, so RefreshAllPlacements never touches them: on a real
@@ -260,6 +268,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
 		remoteVideo:       make(map[string]map[uint32]bool),
+		lastFrameHash:     make(map[string]map[uint32]uint32),
 		nextHostID:        1,
 		pendingDirectData: make(map[string]*pendingDirectTransmit),
 		asyncFrameCh:      make(chan []byte, 1),

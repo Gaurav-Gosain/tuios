@@ -52,11 +52,14 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 
 // BuildSessionTree builds the unified tree for the session-management surfaces.
 // The attached session is built rich from live state; other sessions are added
-// coarse (name, window count, attached flag) from the daemon's session list.
+// coarse (name only) from the client's CACHED session-name list.
 //
-// It performs one daemon round trip (RefreshSessionList) when attached, so it
-// belongs on a surface-open or a throttled refresh, not in the per-frame render
-// path; the sidebar's per-frame build uses currentSessionInput directly.
+// It performs no daemon round trip. This is deliberate: the palette opens on the
+// UI goroutine, and a blocking RefreshSessionList there froze the client and
+// dropped the daemon connection while the daemon was busy (a browser flooding
+// graphics over ssh). The cache is seeded on connect and refreshed whenever the
+// session switcher is opened, so it is fresh enough to list sessions by name;
+// per-window detail for a non-attached session fills in once it is switched to.
 func (m *OS) BuildSessionTree() sessiontree.Tree {
 	current := m.currentSessionInput()
 
@@ -64,30 +67,12 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 		return sessiontree.Build([]sessiontree.SessionInput{current})
 	}
 
-	infos, err := m.DaemonClient.RefreshSessionList()
-	if err != nil {
-		return sessiontree.Build([]sessiontree.SessionInput{current})
-	}
-
-	sessions := make([]sessiontree.SessionInput, 0, len(infos)+1)
-	sawCurrent := false
-	for _, info := range infos {
-		if info.Name == m.SessionName && m.SessionName != "" {
-			// Keep the rich current session but trust the daemon's attached flag.
-			current.Attached = info.Attached
-			sessions = append(sessions, current)
-			sawCurrent = true
+	sessions := []sessiontree.SessionInput{current}
+	for _, name := range m.DaemonClient.AvailableSessionNames() {
+		if name == m.SessionName {
 			continue
 		}
-		sessions = append(sessions, sessiontree.SessionInput{
-			Name:        info.Name,
-			Attached:    info.Attached,
-			WindowCount: info.WindowCount,
-		})
-	}
-	if !sawCurrent {
-		// The attached session was not in the list (transient); show it anyway.
-		sessions = append([]sessiontree.SessionInput{current}, sessions...)
+		sessions = append(sessions, sessiontree.SessionInput{Name: name})
 	}
 	return sessiontree.Build(sessions)
 }
@@ -110,8 +95,8 @@ func sessionPaletteLabel(prefix, name, agentState string) string {
 // never disagree about what exists or which one is current.
 //
 // Built once when the palette opens (see OpenCommandPalette), not on every
-// render: BuildSessionTree performs a blocking daemon round trip in daemon
-// mode.
+// render. BuildSessionTree is non-blocking (live state plus cached session
+// names), so this is safe to call on the UI goroutine.
 func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 	tree := m.BuildSessionTree()
 

@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"encoding/base64"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"log"
 	"os"
@@ -782,6 +783,25 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		return
 	}
 	kittyPassthroughLog("forwardFileTransmitInline: read %d bytes from %s", len(data), filePath)
+
+	// Skip an unchanged frame before any compress/encode/send. A browser
+	// re-sends the same bitmap while idle (only a blinking cursor differs);
+	// re-transmitting identical pixels is pure waste and adds to the lag. Only
+	// for a reused stream on a remote terminal - the first frame of an id always
+	// sends. Hash the raw bytes (before compression) so the comparison is stable.
+	if kp.remoteClient && cmd.ImageID != 0 {
+		if existingID, reusing := kp.imageIDMap[windowID][cmd.ImageID]; reusing {
+			h := crc32.ChecksumIEEE(data)
+			if kp.lastFrameHash[windowID][existingID] == h {
+				kittyPassthroughLog("forwardFileTransmitInline: skip unchanged frame (hostID=%d)", existingID)
+				return
+			}
+			if kp.lastFrameHash[windowID] == nil {
+				kp.lastFrameHash[windowID] = make(map[uint32]uint32)
+			}
+			kp.lastFrameHash[windowID][existingID] = h
+		}
+	}
 
 	// Compress the bitmap for a real remote terminal. Raw RGBA is width*height*4
 	// bytes and dominates the ssh channel; kitty decompresses o=z itself, and UI

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -73,26 +74,35 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 	tempDir := t.TempDir()
 	floodScripts := make([]string, len(shapes))
 	for si, shape := range shapes {
-		shmName := fmt.Sprintf("tuios-crash-%d-%d", os.Getpid(), si)
-		shmPath := "/dev/shm/" + shmName
-		shmData := make([]byte, shape.pxW*shape.pxH*4)
-		for i := range shmData {
-			shmData[i] = byte(i)
+		// Several shm objects with distinct content, cycled one per frame. A real
+		// browser rotates a handful of frame buffers (terminal-browser cycles
+		// *-0-0-0.rgba .. *-0-0-7.rgba), so consecutive frames differ. The client
+		// skips a re-sent IDENTICAL bitmap (an idle optimisation), so the flood
+		// has to vary to stay a flood - which is exactly what a live stream does.
+		const buffers = 4
+		names := make([]string, buffers)
+		for b := 0; b < buffers; b++ {
+			shmName := fmt.Sprintf("tuios-crash-%d-%d-%d", os.Getpid(), si, b)
+			shmPath := "/dev/shm/" + shmName
+			shmData := make([]byte, shape.pxW*shape.pxH*4)
+			for i := range shmData {
+				shmData[i] = byte(i + b*37) // distinct content per buffer
+			}
+			if err := os.WriteFile(shmPath, shmData, 0o600); err != nil {
+				t.Skipf("cannot write /dev/shm object: %v", err)
+			}
+			t.Cleanup(func() { _ = os.Remove(shmPath) })
+			names[b] = shmName
 		}
-		if err := os.WriteFile(shmPath, shmData, 0o600); err != nil {
-			t.Skipf("cannot write /dev/shm object: %v", err)
-		}
-		t.Cleanup(func() { _ = os.Remove(shmPath) })
 
-		// A file of raw kitty a=T shm frames, each the captured control
-		// command: transmit+place, shared-memory medium, image id 1, no
-		// inline data, carrying only the base64 shm name. Enough frames that
-		// the flood outlasts the watch window.
-		nameB64 := base64.StdEncoding.EncodeToString([]byte(shmName))
-		frame := fmt.Sprintf("\x1b_Ga=T,t=s,i=1,f=32,s=%d,v=%d;%s\x1b\\", shape.pxW, shape.pxH, nameB64)
+		// A file of raw kitty a=T shm frames (transmit+place, shared-memory
+		// medium, image id 1), cycling the buffers so adjacent frames differ.
+		// Enough frames that the flood outlasts the watch window.
 		framesPath := filepath.Join(tempDir, fmt.Sprintf("frames-%d.bin", si))
 		var framesBuf []byte
 		for i := 0; i < shape.frames; i++ {
+			nameB64 := base64.StdEncoding.EncodeToString([]byte(names[i%buffers]))
+			frame := fmt.Sprintf("\x1b_Ga=T,t=s,i=1,f=32,s=%d,v=%d;%s\x1b\\", shape.pxW, shape.pxH, nameB64)
 			framesBuf = append(framesBuf, frame...)
 		}
 		if err := os.WriteFile(framesPath, framesBuf, 0o600); err != nil {
@@ -213,14 +223,19 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 	// running flood repaints it endlessly).
 	var totalRead atomic.Int64
 	var markerCount atomic.Int64
+	var graphicsAPC atomic.Bool
 	streamClosed := make(chan struct{})
 	go func() {
 		marker := []byte(textMarker)
+		gmark := []byte("\x1b_G") // kitty graphics APC introducer
 		matched := 0
 		buf := make([]byte, 64*1024)
 		for {
 			n, rerr := stdout.Read(buf)
 			totalRead.Add(int64(n))
+			if !graphicsAPC.Load() && bytes.Contains(buf[:n], gmark) {
+				graphicsAPC.Store(true)
+			}
 			for _, b := range buf[:n] {
 				if b == marker[matched] {
 					matched++
@@ -291,13 +306,15 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 	command := fmt.Sprintf("\x15sh %s\r", floodScript)
 	graphicsSeen, textSeen := false, false
 	for attempt := 0; attempt < 20 && !(graphicsSeen && textSeen); attempt++ {
-		base := totalRead.Load()
 		if _, err := fmt.Fprint(stdin, command); err != nil {
 			return fmt.Errorf("write command: %w", err)
 		}
 		waitUntil := time.Now().Add(1 * time.Second)
 		for time.Now().Before(waitUntil) {
-			if totalRead.Load() > base+2<<20 {
+			// Detect graphics by the kitty APC introducer, not byte volume:
+			// compressed frames (o=z) are a fraction of the raw RGBA, so a volume
+			// threshold calibrated for uncompressed frames never trips.
+			if graphicsAPC.Load() {
 				graphicsSeen = true
 			}
 			if markerCount.Load() > 20 {
@@ -357,12 +374,11 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 			teardownReason(), totalRead.Load())
 	case <-time.After(6 * time.Second):
 		// Survived the watch window. Require that the graphics flood really
-		// traversed the session, so the test cannot pass vacuously if the
-		// pane never ran cat: each re-encoded frame is ~7.7MB of inline
-		// data, far above this floor even with several sessions sharing the
-		// machine and the race detector slowing the encode down.
-		if got := totalRead.Load(); got < 10<<20 {
-			return fmt.Errorf("only %d bytes reached the client; graphics flood did not run", got)
+		// traversed the session, so the test cannot pass vacuously if the pane
+		// never ran cat. Gate on the kitty APC actually reaching the client, not
+		// on byte volume: compressed frames make a raw-byte floor meaningless.
+		if !graphicsAPC.Load() {
+			return fmt.Errorf("no kitty graphics reached the client (read %d bytes); flood did not run", totalRead.Load())
 		}
 		return nil
 	}

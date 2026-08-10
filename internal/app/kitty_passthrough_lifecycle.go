@@ -70,6 +70,7 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 // the placement teardown above misses them) and forgets them.
 func (kp *KittyPassthrough) deleteRemoteVideoImages(windowID string) {
 	ids := kp.remoteVideo[windowID]
+	delete(kp.lastFrameHash, windowID)
 	if len(ids) == 0 {
 		delete(kp.remoteVideo, windowID)
 		return
