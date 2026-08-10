@@ -248,29 +248,49 @@ func assertNoLineOverflow(t *testing.T, s tuitest.Screen, cols int, what string)
 	}
 }
 
-// TestPlainRightClickStillResizes is the regression guard for the behaviour the
-// context menu was added alongside.
-//
-// Right-click on a pane has always started a corner resize. Adding a menu on
-// shift+right-click must not take that away, so this checks that a plain
-// right-click puts up no menu at all.
-func TestPlainRightClickStillResizes(t *testing.T) {
+// TestPlainRightClickOpensMenuAndRightDragResizes pins the right button's
+// click-vs-drag split. A plain right-click (press and release without
+// movement) opens the pane menu the way every GUI's right button does; a
+// right-DRAG keeps its old meaning and resizes without ever showing a menu.
+func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	term, _ := start(t, startOpts{})
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "after first window")
+	// Tile so the single pane fills the usable area and (20,10) is reliably
+	// inside it, the same trick TestContextMenuTargets uses.
+	enableTiling(t, term)
 
+	// Press alone: no menu yet (the menu belongs to the release).
 	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
-	// Give the frame a beat to show a menu if it were going to.
-	time.Sleep(500 * time.Millisecond)
-
-	if text := term.Screen().Text(); strings.Contains(text, "Split right") ||
-		strings.Contains(text, "Close pane") {
-		t.Fatalf("a plain right-click opened a context menu; it must still start a resize\n%s",
-			term.Snapshot())
+	time.Sleep(300 * time.Millisecond)
+	if text := term.Screen().Text(); strings.Contains(text, "Close pane") {
+		t.Fatalf("the right press alone opened a context menu\n%s", term.Snapshot())
 	}
+
+	// Release in place: the click opens the pane menu.
 	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
-	alive(t, term, "after a plain right-click")
+	if err := term.WaitForText("Close pane", uiTimeout); err != nil {
+		t.Fatalf("a plain right-click did not open the pane menu: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("esc: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Close pane")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the menu never closed: %v\n%s", err, term.Snapshot())
+	}
+
+	// A right-drag past the threshold resizes and must show no menu at all.
+	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
+	mouseMotion(t, term, 30, 16, tuitest.MouseRight, 0)
+	mouseRelease(t, term, 30, 16, tuitest.MouseRight, 0)
+	time.Sleep(500 * time.Millisecond)
+	if text := term.Screen().Text(); strings.Contains(text, "Close pane") {
+		t.Fatalf("a right-drag opened a context menu; a drag is a resize\n%s", term.Snapshot())
+	}
+	alive(t, term, "after a right-drag resize")
 }
 
 // TestContextMenuOnDockEntry checks the dock's own entries get a menu about

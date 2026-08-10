@@ -184,13 +184,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 	}
 
-	if m.ShowQuitConfirm {
-		quitContent, width, height := m.renderQuitConfirmDialog()
-		x := (m.GetRenderWidth() - width) / 2
-		y := (m.GetRenderHeight() - height) / 2
-		quitLayer := lipgloss.NewLayer(quitContent).
-			X(x).Y(y).Z(config.ZIndexHelp + 1).ID("quit-confirm")
-		layers = append(layers, quitLayer)
+	if m.ShowQuitMenu {
+		content, geo, rows := m.renderQuitMenu()
+		layers = m.placeOverlayPanel(layers, "quit", content, geo, rows)
 	}
 
 	if m.ShowHelp {

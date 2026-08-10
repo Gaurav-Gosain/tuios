@@ -155,8 +155,10 @@ func TestOverlayPanelsFitNarrowScreens(t *testing.T) {
 			assertFitsScreen(t, "aggregate", out, sc.w, sc.h)
 			m.Windows = nil
 
-			quit, _, _ := m.renderQuitConfirmDialog()
+			m.OpenQuitMenu()
+			quit, _, _ := m.renderQuitMenu()
 			assertFitsScreen(t, "quit", quit, sc.w, sc.h)
+			m.CloseQuitMenu()
 		})
 	}
 }
@@ -173,7 +175,7 @@ func TestOverlayLayersFitNarrowScreens(t *testing.T) {
 			m.ShowSettings = true
 			m.ShowSessionSwitcher = true
 			m.ShowLayoutPicker = true
-			m.ShowQuitConfirm = true
+			m.OpenQuitMenu()
 			m.ShowLogs = true
 			m.ShowCacheStats = true
 			m.ShowTapeManager = true

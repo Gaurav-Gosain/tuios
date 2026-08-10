@@ -161,30 +161,84 @@ func TestContextMenuArrowKeysMoveSelection(t *testing.T) {
 	}
 }
 
-// TestShiftRightClickOpensMenuAndPlainRightClickDoesNot pins the chord. Plain
-// right-click has always started a window resize, and the menu must not take
-// that away.
-func TestShiftRightClickOpensMenuAndPlainRightClickDoesNot(t *testing.T) {
-	o := ctxOS(t)
+// TestRightClickGesture pins the click-vs-drag split on the right button. A
+// plain right press still arms a resize (so a drag resizes exactly as it
+// always has), but a release without movement is a click, and a click opens
+// the context menu the way every GUI's right button does. Shift+right-click
+// keeps opening the menu on the press.
+func TestRightClickGesture(t *testing.T) {
+	t.Run("press arms a resize, not a menu", func(t *testing.T) {
+		o := ctxOS(t)
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		if o.ContextMenuActive() {
+			t.Error("the press alone opened a context menu; the menu belongs to the release")
+		}
+		if !o.Resizing {
+			t.Error("a plain right press on a pane no longer arms a resize")
+		}
+	})
 
-	o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
-	if o.ContextMenuActive() {
-		t.Error("a plain right-click opened a context menu; it must still start a resize")
-	}
-	if !o.Resizing {
-		t.Error("a plain right-click on a pane no longer starts a resize")
-	}
+	t.Run("release without movement opens the pane menu", func(t *testing.T) {
+		o := ctxOS(t)
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		if !o.ContextMenuActive() {
+			t.Fatal("right click (press+release, no movement) did not open the context menu")
+		}
+		if o.ContextMenu.Target != app.CtxTargetPane {
+			t.Errorf("menu target = %v, want the pane menu", o.ContextMenu.Target)
+		}
+		if o.Resizing || o.Dragging {
+			t.Error("the cancelled resize left gesture state behind")
+		}
+	})
 
-	o = ctxOS(t)
-	o, _ = handleMouseClick(tea.MouseClickMsg{
-		X: 5, Y: 5, Button: tea.MouseRight, Mod: tea.ModShift,
-	}, o)
-	if !o.ContextMenuActive() {
-		t.Fatal("shift+right-click did not open a context menu")
-	}
-	if o.Resizing {
-		t.Error("shift+right-click started a resize as well as opening the menu")
-	}
+	t.Run("release after a drag keeps the resize and opens nothing", func(t *testing.T) {
+		o := ctxOS(t)
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 15, Y: 12, Button: tea.MouseRight}, o)
+		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 15, Y: 12, Button: tea.MouseRight}, o)
+		if o.ContextMenuActive() {
+			t.Error("a right-drag opened a context menu; a drag is a resize")
+		}
+		if o.Resizing {
+			t.Error("the release did not finish the resize")
+		}
+	})
+
+	t.Run("desktop right click opens the desktop menu on the press", func(t *testing.T) {
+		o := ctxOS(t)
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 100, Y: 20, Button: tea.MouseRight}, o)
+		if !o.ContextMenuActive() {
+			t.Fatal("right-click on empty desktop did not open the desktop menu")
+		}
+		if o.ContextMenu.Target != app.CtxTargetDesktop {
+			t.Errorf("menu target = %v, want the desktop menu", o.ContextMenu.Target)
+		}
+	})
+
+	t.Run("zoomed pane still gets its menu on the click", func(t *testing.T) {
+		o := ctxOS(t)
+		o.Windows[0].Zoomed = true
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		if !o.ContextMenuActive() {
+			t.Fatal("right click on a zoomed pane did not open the context menu")
+		}
+	})
+
+	t.Run("shift+right-click still opens the menu immediately", func(t *testing.T) {
+		o := ctxOS(t)
+		o, _ = handleMouseClick(tea.MouseClickMsg{
+			X: 5, Y: 5, Button: tea.MouseRight, Mod: tea.ModShift,
+		}, o)
+		if !o.ContextMenuActive() {
+			t.Fatal("shift+right-click did not open a context menu")
+		}
+		if o.Resizing {
+			t.Error("shift+right-click started a resize as well as opening the menu")
+		}
+	})
 }
 
 // TestContextMenuClickOutsideFiresNothing checks the mouse path: a click away

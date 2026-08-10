@@ -123,6 +123,7 @@ type AppearanceConfig struct {
 	ScrollbackLines     int     `toml:"scrollback_lines"`      // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 	ScrollLines         int     `toml:"scroll_lines"`          // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
 	CopyOnSelect        *bool   `toml:"copy_on_select"`        // Copy a mouse selection to the clipboard on release (default: true)
+	FocusFollowsMouse   *bool   `toml:"focus_follows_mouse"`   // Focus the pane under the cursor as the mouse moves (default: false)
 	WordCharacters      *string `toml:"word_characters"`       // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
 	DockbarPosition     string  `toml:"dockbar_position"`      // Dockbar position: bottom, top, hidden
 	SidebarEnabled      *bool   `toml:"sidebar_enabled"`       // Show the vertical session sidebar (default: false)
@@ -742,6 +743,12 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// CopyOnSelect defaults to true (nil means use default)
 	if cfg.Appearance.CopyOnSelect != nil {
 		CopyOnSelect = *cfg.Appearance.CopyOnSelect
+	}
+
+	// FocusFollowsMouse defaults to false; a pointer so turning it off in the
+	// settings page survives a reload just as turning it on does.
+	if cfg.Appearance.FocusFollowsMouse != nil {
+		FocusFollowsMouse = *cfg.Appearance.FocusFollowsMouse
 	}
 
 	// WordCharacters is a pointer so an explicitly empty string can mean "no

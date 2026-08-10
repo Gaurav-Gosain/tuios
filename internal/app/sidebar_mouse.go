@@ -96,6 +96,21 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	return true
 }
 
+// SidebarMotion tracks the pointer over the sidebar band so the row under the
+// cursor is highlighted, the way overlay rows track hover. It returns whether
+// the motion was consumed (any motion inside the band is, so it never reaches
+// the pane the sidebar sits in front of). Motion outside the band clears the
+// hover so no stale highlight lingers.
+func (m *OS) SidebarMotion(x, y int) bool {
+	if !m.SidebarBandContains(x, y) {
+		m.SidebarHoverActive = false
+		return false
+	}
+	m.SidebarHoverActive = true
+	m.SidebarHoverX, m.SidebarHoverY = x, y
+	return true
+}
+
 // SidebarWheel scrolls the sidebar list when the cursor is over the band, and
 // reports whether it consumed the event. The list scrolls, never the pane under
 // it.
@@ -184,7 +199,13 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	default:
 		cm.Target = CtxTargetDesktop
 		cm.WindowIndex = -1
-		cm.Title, cm.Items = m.desktopMenu()
+		if m.IsDaemonSession {
+			// A session row gets the session lifecycle menu: the same rows the
+			// quit menu offers, anchored where the user right-clicked.
+			cm.Title, cm.Items = m.sessionMenu()
+		} else {
+			cm.Title, cm.Items = m.desktopMenu()
+		}
 	}
 
 	cm.Selected = cm.Next(1)

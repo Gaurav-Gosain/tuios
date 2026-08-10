@@ -28,9 +28,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Shift+right-click opens the context menu for whatever is under the
-	// pointer. Plain right-click is already a window resize, and shift is free
-	// on click, so the menu is added without taking anything away.
+	// Shift+right-click opens the context menu immediately, kept for muscle
+	// memory from when the plain right button was only a resize. A plain
+	// right-click opens the same menu now, but on release, so a right-drag can
+	// still resize; shift skips the click-vs-drag wait.
 	if msg.Button == tea.MouseRight && msg.Mod&tea.ModShift != 0 {
 		o.OpenContextMenu(X, Y)
 		return o, nil
@@ -43,35 +44,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if handled, cmd := o.OverlayMouseClick(X, Y, msg.Button == tea.MouseRight); handled {
 			return o, cmd
 		}
-	}
-
-	// Handle quit confirmation dialog clicks
-	if o.ShowQuitConfirm {
-		// Dialog is centered on screen
-		dialogW, dialogH := 26, 7 // approximate dialog dimensions
-		dialogX := (o.GetRenderWidth() - dialogW) / 2
-		dialogY := (o.GetRenderHeight() - dialogH) / 2
-
-		// Check if click is inside the dialog
-		if X >= dialogX && X < dialogX+dialogW && Y >= dialogY && Y < dialogY+dialogH {
-			// Button row is near the bottom of the dialog
-			buttonY := dialogY + dialogH - 3
-			if Y >= buttonY && Y < buttonY+2 {
-				midX := dialogX + dialogW/2
-				if X < midX {
-					// Clicked "Yes" (left side)
-					return quitSession(o)
-				} else {
-					// Clicked "No" (right side)
-					o.ShowQuitConfirm = false
-					return o, nil
-				}
-			}
-		} else {
-			// Clicked outside dialog - dismiss it
-			o.ShowQuitConfirm = false
-		}
-		return o, nil
 	}
 
 	// The sidebar is a reserved-region panel like the dock: a click anywhere in
@@ -89,6 +61,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// window. With a top dock and any minimized window, an ordinary click on that
 	// row was being swallowed as a dock click.
 	if ((config.DockbarPosition == "bottom") && (Y >= o.Height-config.DockHeight)) || ((config.DockbarPosition == "top") && (Y < config.DockHeight)) {
+		// A plain right-click on the dock opens its menu (the dock item's menu
+		// when one is under the pointer). The dock has no drag gesture on the
+		// right button, so the menu can open on the press itself.
+		if msg.Button == tea.MouseRight {
+			o.OpenContextMenu(X, Y)
+			return o, nil
+		}
 		// Handle dock click only if there are minimized windows
 		if o.HasMinimizedWindows() {
 			dockIndex := findDockItemClicked(X, Y, o)
@@ -131,6 +110,19 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// Terminal mode, plain right-click: a context menu only when there is an
+	// active text selection to act on (copy, paste, clear). Without one the
+	// click belongs to the pane, so it falls through to the forwarding below
+	// and mouse-mode apps still get it.
+	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode &&
+		msg.Button == tea.MouseRight && msg.Mod == 0 {
+		win := o.Windows[clickedWindowIndex]
+		if win.SelectedText != "" || win.IsSelecting {
+			o.OpenSelectionMenu(X, Y, clickedWindowIndex)
+			return o, nil
+		}
+	}
+
 	// Forward mouse events to terminal if in terminal mode and window has mouse tracking
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode {
 		clickedWindow := o.Windows[clickedWindowIndex]
@@ -156,7 +148,20 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 	}
+	// Terminal mode, plain right-click that was neither a selection menu nor
+	// forwarded to a mouse-mode app: consumed, so it cannot fall through and
+	// start a window resize underneath the user's shell.
+	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode &&
+		msg.Button == tea.MouseRight && msg.Mod == 0 {
+		return o, nil
+	}
+
 	if clickedWindowIndex == -1 {
+		// A plain right-click on empty desktop opens the desktop menu; there is
+		// no desktop drag on the right button, so it opens on the press itself.
+		if msg.Button == tea.MouseRight && msg.Mod == 0 && o.Mode == app.WindowManagementMode {
+			o.OpenContextMenu(X, Y)
+		}
 		// Consume the event even if no window is hit to prevent leaking
 		return o, nil
 	}
@@ -258,6 +263,30 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.FocusWindow(clickedWindowIndex)
 	if o.Mode == app.TerminalMode {
 		o.Mode = app.WindowManagementMode
+	}
+
+	// A left press on the content area in window-management mode arms
+	// click-to-type: released without a drag it enters terminal mode
+	// (handleMouseRelease), so clicking a pane is enough to start typing.
+	// Title bar and border presses never arm it, so they stay pure drag
+	// handles, and the press itself still sets up the drag below.
+	if mouse.Button == tea.MouseLeft && o.Mode == app.WindowManagementMode && !o.SelectionMode {
+		if _, _, inContent := clickedWindow.ScreenToTerminal(X, Y); inContent {
+			o.ClickToTypePending = true
+			o.DragStartX = mouse.X
+			o.DragStartY = mouse.Y
+		}
+	}
+
+	// A plain right press arms the click-vs-drag decision: the resize state set
+	// up below makes a drag resize, and the release opens the context menu
+	// instead when the pointer never moved past the threshold
+	// (handleMouseRelease). Armed before the zoom check so a zoomed pane,
+	// which cannot be resized, still gets its menu on the click. Modified
+	// right presses stay pure resizes.
+	if mouse.Button == tea.MouseRight && msg.Mod == 0 {
+		o.RightClickPending = true
+		o.RightPressX, o.RightPressY = X, Y
 	}
 
 	// Zoomed windows are immune to drag/resize  - skip interaction state setup.

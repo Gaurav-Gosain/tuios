@@ -589,6 +589,12 @@ var ScrollLines = 3
 // Set via appearance.copy_on_select config.
 var CopyOnSelect = true
 
+// FocusFollowsMouse focuses the pane under the cursor as the mouse moves over
+// it, without a click and without entering terminal mode. It is a divisive
+// window-manager habit, so it defaults off and users opt in.
+// Set via appearance.focus_follows_mouse config.
+var FocusFollowsMouse = false
+
 // WordCharacters lists the punctuation that counts as part of a word when a
 // double-click selects one, on top of letters and digits, which always do.
 //

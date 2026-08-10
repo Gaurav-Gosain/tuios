@@ -346,7 +346,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 		return nil, false
 	}
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowLayoutPicker ||
-		m.ShowQuitConfirm || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
+		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker ||
 		m.PrefixActive || m.ContextMenu != nil {
 		return nil, false
@@ -551,7 +551,7 @@ func (m *OS) flushGraphicsForView() {
 	// the window's scrollback offset to reposition images so they scroll
 	// naturally with the terminal content.
 	hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
-		m.ShowLayoutPicker || m.ShowQuitConfirm || m.ShowScrollbackBrowser ||
+		m.ShowLayoutPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
 		m.ShowSettings || m.ShowThemePicker || m.ShowTapeManager || m.ShowTapeReview
 	if m.KittyPassthrough != nil {

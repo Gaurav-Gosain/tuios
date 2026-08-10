@@ -22,6 +22,9 @@ const (
 	glyphSettings = ""
 	glyphHelp     = ""
 	glyphRestore  = ""
+	glyphDetach   = ""
+	glyphSwitch   = ""
+	glyphClear    = ""
 )
 
 // OpenContextMenu opens the context menu for whatever is under the screen cell
@@ -89,6 +92,13 @@ func (m *OS) contextMenuTargetAt(x, y int) (ContextMenuTarget, int) {
 		return CtxTargetPane, idx
 	}
 	return CtxTargetDesktop, -1
+}
+
+// InDockBand reports whether a screen row falls in the reserved dock band.
+// Exported for the input layer's hover routing (focus-follows-mouse must never
+// treat the dock band as a pane).
+func (m *OS) InDockBand(y int) bool {
+	return m.inDockBand(y)
 }
 
 // inDockBand reports whether a screen row falls in the reserved dock band.
@@ -274,4 +284,52 @@ func (m *OS) desktopMenu() (string, []ContextMenuItem) {
 		m.item(glyphSettings, "Settings", "prefix_settings", false),
 		m.item(glyphHelp, "Help", "toggle_help", false),
 	}
+}
+
+// sessionMenu mirrors the quit menu's rows for a sidebar session row: the
+// session lifecycle actions, dispatched through the same registry actions the
+// keybindings use, so the menu and the quit menu cannot drift apart.
+func (m *OS) sessionMenu() (string, []ContextMenuItem) {
+	hasOthers := len(m.otherSessionNames()) > 0
+
+	killNext := m.item(glyphClose, "Kill session, go to next", "kill_session_next", !hasOthers)
+	killNext.Warn = true
+	killQuit := m.item(glyphClose, "Kill session and quit", "kill_session_quit", false)
+	killQuit.Warn = true
+
+	title := m.SessionName
+	if title == "" {
+		title = "Session"
+	}
+	return title, []ContextMenuItem{
+		m.item(glyphDetach, "Detach", "prefix_detach", false),
+		m.item(glyphSwitch, "Switch session...", "prefix_session_switcher", false),
+		separator(),
+		killNext,
+		killQuit,
+	}
+}
+
+// OpenSelectionMenu opens the small terminal-mode selection menu: what you can
+// do with an active text selection, and nothing else. It exists because a
+// plain right-click in terminal mode only means anything when there is a
+// selection; without one the click belongs to the application in the pane.
+func (m *OS) OpenSelectionMenu(x, y, windowIndex int) {
+	m.FocusWindow(windowIndex)
+	cm := &ContextMenu{
+		Target:      CtxTargetPane,
+		WindowIndex: windowIndex,
+		AnchorX:     x,
+		AnchorY:     y,
+		Selected:    -1,
+		ItemH:       1,
+	}
+	cm.Title = "Selection"
+	cm.Items = []ContextMenuItem{
+		m.item(glyphCopy, "Copy selection", "copy_selection", false),
+		m.item(glyphPaste, "Paste", "paste_clipboard", false),
+		m.item(glyphClear, "Clear selection", "clear_selection", false),
+	}
+	cm.Selected = cm.Next(1)
+	m.ContextMenu = cm
 }

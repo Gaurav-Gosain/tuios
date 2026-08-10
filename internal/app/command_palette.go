@@ -524,16 +524,24 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Toggle Focus Follows Mouse",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.ToggleFocusFollowsMouse()
+				state := "Disabled"
+				if config.FocusFollowsMouse {
+					state = "Enabled"
+				}
+				m.ShowNotification("Focus Follows Mouse "+state, "success", config.NotificationDuration)
+				return m, nil
+			},
+		},
+		{
 			Name:     "Switch Session",
 			Shortcut: "prefix+S",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ShowSessionSwitcher = true
-				m.SessionSwitcherQuery = ""
-				m.SessionSwitcherSelected = 0
-				m.SessionSwitcherScroll = 0
-				m.SessionSwitcherError = ""
-				m.SessionSwitcherItems = m.RefreshSessionList()
+				m.OpenSessionSwitcher()
 				return m, nil
 			},
 		},

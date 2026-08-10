@@ -204,16 +204,10 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	// Only Ctrl+C is kept as emergency quit
 	switch key {
 	case "ctrl+c":
-		// Emergency quit - show confirmation dialog (only if there are terminals)
-		if shouldShowQuitDialog(o) {
-			o.ShowQuitConfirm = true
-			o.QuitConfirmSelection = 0 // Default to Yes
-		} else {
-			// No terminals - just quit
-			o.Cleanup()
-			return o, tea.Quit
-		}
-		return o, nil
+		// Emergency quit: same routing as the quit keybinding, so in a daemon
+		// session it opens the quit menu (detach is the default) rather than
+		// silently killing anything.
+		return requestQuit(o)
 
 	default:
 		// All other keybindings are handled by the config system above

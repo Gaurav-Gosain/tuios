@@ -82,8 +82,9 @@ func sessionListed(t *testing.T, base, name string) bool {
 	return false
 }
 
-// TestLeaderQuitKillsSession: leader q in a daemon-attached session should KILL
-// the session (label says "Quit and kill session").
+// TestLeaderQuitKillsSession: leader q in a daemon-attached session opens the
+// quit menu (detach is the default; killing must be asked for), and the kill
+// row (accelerator x) kills the session.
 func TestLeaderQuitKillsSession(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -100,11 +101,18 @@ func TestLeaderQuitKillsSession(t *testing.T) {
 	}
 	time.Sleep(insertGuard + 150*time.Millisecond)
 
-	// leader q
+	// leader q opens the quit menu; x runs the kill row (the only session, so
+	// the row is "Kill and quit").
 	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
 		t.Fatalf("send leader q: %v", err)
 	}
-	waitExit(t, term, "after leader q")
+	if err := term.WaitForText("Kill and quit", uiTimeout); err != nil {
+		t.Fatalf("quit menu never appeared: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("x"); err != nil {
+		t.Fatalf("send x: %v", err)
+	}
+	waitExit(t, term, "after leader q, x")
 
 	// Give the daemon a moment to process the kill.
 	time.Sleep(300 * time.Millisecond)
@@ -113,9 +121,9 @@ func TestLeaderQuitKillsSession(t *testing.T) {
 		t.Fatalf("BUG1: session 'repro-kill' still exists after leader q (q did not kill)\nls:\n%s", out)
 	}
 
-	// The exit message must say the session was killed, not detached: the label
-	// is "Quit and kill session", and reporting a detach after a kill is what
-	// made leader q look like it only detached.
+	// The exit message must say the session was killed, not detached: the row
+	// run was "Kill and quit", and reporting a detach after a kill is what
+	// made the old kill path look like it only detached.
 	logBytes, _ := os.ReadFile(logPath)
 	msg := exitLine(string(logBytes))
 	t.Logf("leader q killed the session (repro-kill gone); exit line: %q", msg)
@@ -125,9 +133,10 @@ func TestLeaderQuitKillsSession(t *testing.T) {
 	}
 }
 
-// TestLeaderQuitConfirm exercises the confirm_quit path: leader q raises the
-// dialog; cancelling leaves the session alive; confirming kills it and reports a
-// kill.
+// TestLeaderQuitConfirm exercises the quit menu: leader q raises it;
+// cancelling leaves the session alive; the kill row kills it and reports a
+// kill. (In a daemon session the menu always opens; confirm_quit is set so
+// the standalone path would behave the same.)
 func TestLeaderQuitConfirm(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -154,12 +163,12 @@ func TestLeaderQuitConfirm(t *testing.T) {
 	}
 	time.Sleep(insertGuard + 150*time.Millisecond)
 
-	// leader q raises the confirmation dialog.
+	// leader q raises the quit menu, with detach first as the safe default.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
 		t.Fatalf("send leader q: %v", err)
 	}
-	if err := term.WaitForText("Close all windows and quit?", uiTimeout); err != nil {
-		t.Fatalf("confirm dialog never appeared: %v\n%s", err, term.Snapshot())
+	if err := term.WaitForText("Detach", uiTimeout); err != nil {
+		t.Fatalf("quit menu never appeared: %v\n%s", err, term.Snapshot())
 	}
 
 	// Cancel: the client keeps running and the session survives.
@@ -172,15 +181,15 @@ func TestLeaderQuitConfirm(t *testing.T) {
 		t.Fatalf("session was killed after cancelling the quit dialog")
 	}
 
-	// Now confirm: leader q, then 'y' kills the session.
+	// Now kill: leader q, then the kill row's accelerator.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
 		t.Fatalf("send leader q (second time): %v", err)
 	}
-	if err := term.WaitForText("Close all windows and quit?", uiTimeout); err != nil {
-		t.Fatalf("confirm dialog never reappeared: %v\n%s", err, term.Snapshot())
+	if err := term.WaitForText("Kill and quit", uiTimeout); err != nil {
+		t.Fatalf("quit menu never reappeared: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys("y"); err != nil {
-		t.Fatalf("send y: %v", err)
+	if err := term.SendKeys("x"); err != nil {
+		t.Fatalf("send x: %v", err)
 	}
 	waitExit(t, term, "after confirming quit")
 	time.Sleep(300 * time.Millisecond)

@@ -22,12 +22,12 @@ func TestRequestQuitConfirmsOnlyWhenThereIsSomethingToLose(t *testing.T) {
 		if cmd == nil {
 			t.Fatal("expected a quit command, got none")
 		}
-		if m.ShowQuitConfirm {
-			t.Fatal("put up the confirmation dialog with nothing to confirm")
+		if m.ShowQuitMenu {
+			t.Fatal("put up the quit menu with nothing to confirm")
 		}
 	})
 
-	t.Run("confirm-always puts the dialog up", func(t *testing.T) {
+	t.Run("confirm-always puts the menu up", func(t *testing.T) {
 		config.AlwaysConfirmQuit = true
 		o := app.NewOS(app.OSOptions{})
 
@@ -35,11 +35,27 @@ func TestRequestQuitConfirmsOnlyWhenThereIsSomethingToLose(t *testing.T) {
 		if cmd != nil {
 			t.Fatal("quit outright despite confirm-quit being set")
 		}
-		if !m.ShowQuitConfirm {
-			t.Fatal("confirmation dialog not shown")
+		if !m.ShowQuitMenu {
+			t.Fatal("quit menu not shown")
 		}
-		if m.QuitConfirmSelection != 0 {
-			t.Fatalf("dialog selection = %d, want 0 (Yes)", m.QuitConfirmSelection)
+		if m.QuitMenuSelected != 0 {
+			t.Fatalf("menu selection = %d, want 0 (the default row)", m.QuitMenuSelected)
+		}
+	})
+
+	t.Run("daemon session always gets the menu", func(t *testing.T) {
+		config.AlwaysConfirmQuit = false
+		o := app.NewOS(app.OSOptions{IsDaemonSession: true})
+
+		m, cmd := requestQuit(o)
+		if cmd != nil {
+			t.Fatal("a daemon-session quit ran a command instead of opening the menu")
+		}
+		if !m.ShowQuitMenu {
+			t.Fatal("quit menu not shown in a daemon session")
+		}
+		if len(m.QuitMenuItems) == 0 || m.QuitMenuItems[0].Kind != app.QuitDetach {
+			t.Fatalf("daemon quit menu default row = %+v, want Detach first", m.QuitMenuItems)
 		}
 	})
 }

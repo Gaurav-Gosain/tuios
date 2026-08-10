@@ -315,12 +315,7 @@ func handlePrefixToggleSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 }
 
 func handlePrefixSessionSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.ShowSessionSwitcher = true
-	o.SessionSwitcherQuery = ""
-	o.SessionSwitcherSelected = 0
-	o.SessionSwitcherScroll = 0
-	o.SessionSwitcherError = ""
-	o.SessionSwitcherItems = o.RefreshSessionList()
+	o.OpenSessionSwitcher()
 	return o, nil
 }
 

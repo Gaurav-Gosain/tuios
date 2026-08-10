@@ -120,30 +120,29 @@ func quitSession(o *app.OS) (*app.OS, tea.Cmd) {
 	return o, tea.Quit
 }
 
-// requestQuit is what a quit keybinding does: put up the confirmation dialog
-// when a window is running something the user would lose, and quit outright when
-// nothing is. The dialog's own buttons call quitSession directly.
+// requestQuit is what a quit keybinding does. In a daemon session it always
+// opens the quit menu: quitting there used to silently and permanently kill
+// the session, and detach was never surfaced, so the menu is what makes the
+// safe option the default. Standalone it keeps the old shape: menu only when a
+// window is running something the user would lose, instant quit otherwise.
 func requestQuit(o *app.OS) (*app.OS, tea.Cmd) {
-	if shouldShowQuitDialog(o) {
-		o.ShowQuitConfirm = true
-		o.QuitConfirmSelection = 0 // Default to Yes
+	if o.IsDaemonSession || shouldShowQuitDialog(o) {
+		o.OpenQuitMenu()
 		return o, nil
 	}
 	return quitSession(o)
 }
 
-// detachSession leaves the session running and quits this client. It pushes
-// state first so the session the user comes back to is the one they left.
-// Outside a daemon session there is nothing to detach from, and the caller
-// decides what that means instead.
+// detachSession leaves the session running and quits this client (see
+// OS.DetachClient, the one detach implementation). Outside a daemon session
+// there is nothing to detach from, and the caller decides what that means
+// instead.
 func detachSession(o *app.OS) (*app.OS, tea.Cmd, bool) {
-	if !o.IsDaemonSession {
+	cmd := o.DetachClient()
+	if cmd == nil {
 		return o, nil, false
 	}
-	o.SyncStateToDaemon()
-	o.FireDetached()
-	// Deliberately no Cleanup: the session outlives this client.
-	return o, tea.Quit, true
+	return o, cmd, true
 }
 
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers
@@ -173,50 +172,9 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.DismissNotifications()
 	}
 
-	// Handle quit confirmation dialog (highest priority - works in any mode)
-	if o.ShowQuitConfirm {
-		key := msg.String()
-
-		// Close dialog with escape
-		if key == "esc" {
-			o.ShowQuitConfirm = false
-			o.QuitConfirmSelection = 0
-			return o, nil
-		}
-
-		// Navigate with arrow keys or vim keys
-		if key == "left" || key == "h" {
-			o.QuitConfirmSelection = 0 // Yes (left)
-			return o, nil
-		}
-		if key == "right" || key == "l" {
-			o.QuitConfirmSelection = 1 // No (right)
-			return o, nil
-		}
-
-		// Quick selection with y/n keys
-		if key == "y" {
-			o.QuitConfirmSelection = 0 // Yes
-			return quitSession(o)
-		}
-		if key == "n" {
-			o.QuitConfirmSelection = 1 // No
-			o.ShowQuitConfirm = false
-			return o, nil
-		}
-
-		// Confirm selection with enter
-		if key == "enter" {
-			if o.QuitConfirmSelection == 0 {
-				return quitSession(o)
-			}
-			// No selected - close dialog
-			o.ShowQuitConfirm = false
-			return o, nil
-		}
-
-		// Quit dialog is showing but key wasn't handled - ignore it
-		return o, nil
+	// Handle the quit menu (highest priority - works in any mode)
+	if o.ShowQuitMenu {
+		return handleQuitMenuKey(msg, o)
 	}
 
 	// An open context menu owns the keyboard until it is dismissed. It is

@@ -106,6 +106,12 @@ func (d *ActionDispatcher) registerHandlers() {
 	// Clipboard actions
 	d.Register("copy_selection", handleCopySelection)
 	d.Register("paste_clipboard", handlePasteClipboard)
+	d.Register("clear_selection", handleClearSelection)
+
+	// Session lifecycle actions (context menu rows; the quit menu's kill rows
+	// route through the same OS methods, so the two cannot drift apart)
+	d.Register("kill_session_next", handleKillSessionNext)
+	d.Register("kill_session_quit", handleKillSessionQuit)
 
 	// System actions
 	d.Register("toggle_logs", handleToggleLogs)
@@ -616,6 +622,35 @@ func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 	return o, nil
+}
+
+// handleClearSelection drops the focused window's text selection without
+// copying it. Offered on the terminal-mode selection menu, where the selection
+// is the only reason the menu opened at all.
+func handleClearSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	w := o.GetFocusedWindow()
+	if w == nil {
+		return o, nil
+	}
+	w.SelectedText = ""
+	w.IsSelecting = false
+	if w.InCopyMode() {
+		w.ExitCopyMode()
+	}
+	w.InvalidateCache()
+	return o, nil
+}
+
+// handleKillSessionNext kills the current session after switching this client
+// to the next one, in that order (see OS.KillSessionGoNext for why).
+func handleKillSessionNext(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.KillSessionGoNext(o.NextSessionName())
+}
+
+// handleKillSessionQuit kills the current session and quits this client, the
+// same call the quit menu's kill-and-quit row makes.
+func handleKillSessionQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return quitSession(o)
 }
 
 // ============================================================================

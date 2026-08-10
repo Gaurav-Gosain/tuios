@@ -47,6 +47,18 @@ func (m *OS) RefreshSessionList() []sessiontree.Node {
 	return items
 }
 
+// OpenSessionSwitcher shows the session switcher with a fresh session list.
+// Shared by the keybinding, the palette entry, and the quit menu, so all of
+// them reset the same state and pay the daemon round trip in the same place.
+func (m *OS) OpenSessionSwitcher() {
+	m.ShowSessionSwitcher = true
+	m.SessionSwitcherQuery = ""
+	m.SessionSwitcherSelected = 0
+	m.SessionSwitcherScroll = 0
+	m.SessionSwitcherError = ""
+	m.SessionSwitcherItems = m.RefreshSessionList()
+}
+
 // FilterSessionItems filters session switcher items by a query string.
 // It performs case-insensitive substring matching on Title.
 func FilterSessionItems(items []sessiontree.Node, query string) []sessiontree.Node {

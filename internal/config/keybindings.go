@@ -111,7 +111,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 
 		// Quit description differs based on mode
 		if daemonMode {
-			bindings = append(bindings, Keybinding{"q", "Quit and kill session"})
+			bindings = append(bindings, Keybinding{"q", "Quit menu (detach, switch, kill)"})
 		} else {
 			bindings = append(bindings, Keybinding{"q", "Quit application"})
 		}

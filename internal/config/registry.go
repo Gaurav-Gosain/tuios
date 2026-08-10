@@ -320,6 +320,11 @@ var ActionDescriptions = map[string]string{
 	// Clipboard
 	"copy_selection":  "Copy selection to clipboard",
 	"paste_clipboard": "Paste from clipboard",
+	"clear_selection": "Clear the text selection",
+
+	// Session lifecycle (context menu rows; no default keybinding)
+	"kill_session_next": "Kill session, go to next",
+	"kill_session_quit": "Kill session and quit",
 
 	// System
 	"toggle_logs":        "Toggle log viewer",

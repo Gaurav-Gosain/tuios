@@ -103,21 +103,62 @@ func (m *OS) startOverlayDrag(kind string, lx, ly int) {
 	m.OverlayDrag = overlayDragState{Active: true, Kind: kind, OffsetX: lx, OffsetY: ly}
 }
 
-// OverlayMouseMotion moves the dragged panel so the grabbed point stays under
-// the cursor. Returns true when a drag is in progress (event consumed).
+// OverlayMouseMotion routes mouse motion to the overlay layer. A panel grabbed
+// by its chrome keeps dragging; otherwise the panel under the cursor
+// highlights the row the pointer is on, so the row a click would run is always
+// the row under the cursor, exactly as the keyboard selection would be.
+// Returns true when the motion was consumed (a drag is in progress or the
+// cursor is over a panel), so the pane underneath never sees it.
 func (m *OS) OverlayMouseMotion(x, y int) bool {
-	if !m.OverlayDrag.Active {
+	if m.OverlayDrag.Active {
+		h, ok := m.overlayHitByKind(m.OverlayDrag.Kind)
+		if !ok {
+			return true // still dragging; geometry will be back next frame
+		}
+		rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
+		centerX := (rw - h.Geo.Width) / 2
+		centerY := (rh - h.Geo.Height) / 2
+		m.setOverlayOffset(m.OverlayDrag.Kind, x-m.OverlayDrag.OffsetX-centerX, y-m.OverlayDrag.OffsetY-centerY)
+		return true
+	}
+
+	if len(m.OverlayHits) == 0 {
 		return false
 	}
-	h, ok := m.overlayHitByKind(m.OverlayDrag.Kind)
+	h, ok := m.overlayHitAt(x, y)
 	if !ok {
-		return true // still dragging; geometry will be back next frame
+		return false
 	}
-	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
-	centerX := (rw - h.Geo.Width) / 2
-	centerY := (rh - h.Geo.Height) / 2
-	m.setOverlayOffset(m.OverlayDrag.Kind, x-m.OverlayDrag.OffsetX-centerX, y-m.OverlayDrag.OffsetY-centerY)
+	lx, ly := x-h.OriginX, y-h.OriginY
+	for _, row := range h.Rows {
+		if row.Rect.Contains(lx, ly) {
+			m.overlayRowHover(h.Kind, row.Idx)
+			break
+		}
+	}
 	return true
+}
+
+// overlayRowHover moves an overlay's selection to the hovered row. It selects
+// only, never activates: the theme picker's live preview counts as selection
+// because that is what its keyboard selection does too.
+func (m *OS) overlayRowHover(kind string, idx int) {
+	switch kind {
+	case "settings":
+		m.SettingsSelected = idx
+	case "palette":
+		m.CommandPaletteSelected = idx
+	case "themepicker":
+		if idx != m.ThemePickerSelected {
+			m.ThemePickerMove(idx - m.ThemePickerSelected)
+		}
+	case "session":
+		m.SessionSwitcherSelected = idx
+	case "layout":
+		m.LayoutPickerSelected = idx
+	case "quit":
+		m.QuitMenuSelected = idx
+	}
 }
 
 // OverlayMouseRelease ends any in-progress overlay drag.
@@ -158,6 +199,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "layout":
 		n := len(FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery))
 		moveListSelection(&m.LayoutPickerSelected, &m.LayoutPickerScroll, n, 10, wheelDelta(up))
+	case "quit":
+		moveListSelection(&m.QuitMenuSelected, &m.QuitMenuScroll, len(m.QuitMenuItems), 10, wheelDelta(up))
 	default:
 		return false
 	}
@@ -201,6 +244,11 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 			m.SettingsAdjust(-1)
 		case !row.Inc.Empty() && row.Inc.Contains(lx, ly):
 			m.SettingsAdjust(1)
+		case settingsControlSpanContains(row, lx, ly):
+			// A click on the value itself, between the stepper arrows, does what
+			// Enter does: toggles a bool, cycles an enum, or runs the row's
+			// activate hook (the Theme row opens the picker).
+			m.SettingsActivate()
 		}
 	case "palette":
 		m.CommandPaletteSelected = row.Idx
@@ -218,8 +266,25 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "layout":
 		m.LayoutPickerSelected = row.Idx
 		m.layoutPickerActivate(row.Idx)
+	case "quit":
+		m.QuitMenuSelected = row.Idx
+		return m.QuitMenuActivate(row.Idx)
 	}
 	return nil
+}
+
+// settingsControlSpanContains reports whether panel-relative (lx, ly) falls on
+// a settings row's control area: the whole span from the left stepper arrow to
+// the right one, so the value between them is clickable, not only the arrows.
+func settingsControlSpanContains(row overlayRowHit, lx, ly int) bool {
+	left := row.Inc
+	if !row.Dec.Empty() {
+		left = row.Dec
+	}
+	if left.Empty() || row.Inc.Empty() {
+		return false
+	}
+	return ly >= left.Y0 && ly < left.Y1 && lx >= left.X0 && lx < row.Inc.X1
 }
 
 // sessionSwitcherActivate switches to the session at the given index of the
@@ -276,6 +341,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.ShowLayoutPicker = false
 	case "aggregate":
 		m.ShowAggregateView = false
+	case "quit":
+		m.CloseQuitMenu()
 	}
 	if m.OverlayDrag.Kind == kind {
 		m.OverlayDrag.Active = false

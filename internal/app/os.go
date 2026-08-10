@@ -186,8 +186,16 @@ type OS struct {
 	SelectionMode         bool                   // True when in text selection mode
 	ClipboardContent      string                 // Store clipboard content from tea.ClipboardMsg
 	ShowCacheStats        bool                   // True when showing style cache statistics overlay
-	ShowQuitConfirm       bool                   // True when showing quit confirmation dialog
-	QuitConfirmSelection  int                    // 0 = Yes (left), 1 = No (right)
+	// Quit menu state. The menu replaces the old yes/no quit dialog: a small
+	// list overlay on the shared list-overlay grammar, registered in OverlayHits
+	// as kind "quit" so hover, click and click-away routing come from the same
+	// machinery as every other overlay. Items are built once per open (see
+	// OpenQuitMenu) so the rows reflect the session state at that moment.
+	ShowQuitMenu          bool
+	QuitMenuSelected      int
+	QuitMenuScroll        int
+	QuitMenuItems         []QuitMenuItem
+	QuitMenuOtherSessions []string // non-current sessions at open time; [0] is the kill-and-go-next target
 	// Pending resize tracking for debouncing PTY resize during mouse drag
 	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
 	// pendingCopy is text a settled multi-click selection will put on the
@@ -436,6 +444,26 @@ type OS struct {
 	SidebarHits      []sidebarRowHit
 	SidebarScroll    int
 	SidebarCollapsed map[string]bool
+	// Sidebar hover: the last mouse position seen inside the band, so the row
+	// under the cursor is highlighted the way overlay rows are. HoverActive is
+	// cleared as soon as motion leaves the band.
+	SidebarHoverActive bool
+	SidebarHoverX      int
+	SidebarHoverY      int
+
+	// Right-click gesture disambiguation. A plain right press on a pane arms
+	// both a corner resize and a pending context menu; the release decides.
+	// Movement past the drag threshold keeps the resize, a release without it
+	// cancels the resize and opens the menu at the press cell.
+	RightClickPending bool
+	RightPressX       int
+	RightPressY       int
+
+	// ClickToTypePending is armed by a left press on a pane's content area in
+	// window-management mode. A release without a drag focuses the pane and
+	// enters terminal mode, so clicking a pane is enough to start typing. The
+	// title bar and borders never arm it, so dragging is unaffected.
+	ClickToTypePending bool
 
 	// ContextMenu is the open shift+right-click menu, or nil. It is deliberately
 	// not one of the draggable overlay kinds: a context menu is anchored to the

@@ -166,6 +166,15 @@ func (m *OS) ToggleShowKeys() {
 	m.persistSettings()
 }
 
+// ToggleFocusFollowsMouse flips focus-follows-mouse, mirrors the new state into
+// the persisted appearance config, and saves it. Shared by the settings row and
+// the command-palette entry so both stay in sync and survive a restart.
+func (m *OS) ToggleFocusFollowsMouse() {
+	config.FocusFollowsMouse = !config.FocusFollowsMouse
+	m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = boolPtr(config.FocusFollowsMouse) })
+	m.persistSettings()
+}
+
 // tapeAutorunConfigValue returns the configured [tape] autorun mode (not the
 // TUIOS_TAPE_AUTORUN env override), for the settings row.
 func (m *OS) tapeAutorunConfigValue() string {
@@ -450,6 +459,12 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v string) {
 					config.WhichKeyPosition = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.WhichKeyPosition = v })
+				}),
+			boolItem("Focus follows mouse", "Focus the pane under the cursor without clicking",
+				func() bool { return config.FocusFollowsMouse },
+				func(m *OS, v bool) {
+					config.FocusFollowsMouse = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = boolPtr(v) })
 				}),
 			boolItem("Reverse scroll", "Reverse scroll in the scrolling layout",
 				func() bool { return config.NiriReverseScroll },

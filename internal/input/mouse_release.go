@@ -20,6 +20,35 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Reset pointer shape on release
 	app.ResetPointerShape()
+
+	// A plain right press on a pane armed both a resize and a context menu; the
+	// release decides which one it was. Below the drag threshold it was a
+	// click: cancel the resize (restoring the few cells of jitter it may have
+	// applied) and open the menu where the press landed. At or past it, the
+	// gesture was a drag and the resize completes below as always.
+	if o.RightClickPending {
+		o.RightClickPending = false
+		mouse := msg.Mouse()
+		if abs(mouse.X-o.RightPressX)+abs(mouse.Y-o.RightPressY) < rightClickDragThreshold {
+			cancelRightClickResize(o)
+			o.OpenContextMenu(o.RightPressX, o.RightPressY)
+			return o, nil
+		}
+	}
+
+	// A left press on a pane's content in window-management mode armed
+	// click-to-type. Decide now, while the press coordinates are still intact;
+	// the drag-completion branches below zero them. The mode switch itself
+	// happens at the end so a sub-threshold tiling drag still snaps back first.
+	enterTerminalOnRelease := false
+	if o.ClickToTypePending {
+		o.ClickToTypePending = false
+		mouse := msg.Mouse()
+		if mouse.Button == tea.MouseLeft && o.Mode == app.WindowManagementMode &&
+			abs(mouse.X-o.DragStartX)+abs(mouse.Y-o.DragStartY) < clickToTypeDragThreshold {
+			enterTerminalOnRelease = true
+		}
+	}
 	// Forward mouse release to terminal if in terminal mode and window has mouse tracking
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
@@ -337,5 +366,52 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Mouse edge snapping disabled - use keyboard shortcuts for snapping
 
+	// Click-to-type: the press was on a pane's content and never became a drag,
+	// so finish what a newcomer expects a click to do. The dispatcher runs the
+	// same handler the Enter keybinding runs, notification included.
+	if enterTerminalOnRelease {
+		return GetDispatcher().Dispatch("enter_terminal_mode", tea.KeyPressMsg{}, o)
+	}
+
 	return o, nil
+}
+
+// rightClickDragThreshold and clickToTypeDragThreshold separate a click from a
+// drag, in summed cell movement, matching the drag threshold the left-button
+// window drag already uses.
+const (
+	rightClickDragThreshold  = 5
+	clickToTypeDragThreshold = 5
+)
+
+// cancelRightClickResize unwinds the resize a plain right press set up, so the
+// release can open the context menu instead. The press may have applied a few
+// cells of visual resize (motion events resize immediately); geometry is
+// restored from the state saved at press time, and in tiling mode the layout
+// is retiled only when something actually moved.
+func cancelRightClickResize(o *app.OS) {
+	idx := o.DraggedWindowIndex
+	o.Resizing = false
+	o.Dragging = false
+	o.InteractionMode = false
+	o.PendingResizes = make(map[string][2]int)
+	if idx >= 0 && idx < len(o.Windows) {
+		win := o.Windows[idx]
+		win.IsBeingManipulated = false
+		moved := win.X != o.PreResizeState.X || win.Y != o.PreResizeState.Y ||
+			win.Width != o.PreResizeState.Width || win.Height != o.PreResizeState.Height
+		if moved {
+			win.X, win.Y = o.PreResizeState.X, o.PreResizeState.Y
+			win.ResizeVisual(o.PreResizeState.Width, o.PreResizeState.Height)
+			win.MarkPositionDirty()
+			win.InvalidateCache()
+			if o.AutoTiling && !o.UseScrollingLayout {
+				// Neighbors may have been nudged by the shared-border resize;
+				// retiling snaps every pane back to the tree's layout.
+				o.TileAllWindows()
+			}
+		}
+	}
+	o.DraggedWindowIndex = -1
+	o.ResizeStartX, o.ResizeStartY = 0, 0
 }

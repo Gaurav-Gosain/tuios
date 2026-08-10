@@ -30,7 +30,7 @@ type overlayPanelHit struct {
 
 // overlayKindOrder is the deterministic order newly-opened overlays are added to
 // the stack (used only to break ties when several open in the same frame).
-var overlayKindOrder = []string{"help", "palette", "session", "layout", "aggregate", "settings", "themepicker"}
+var overlayKindOrder = []string{"help", "palette", "session", "layout", "aggregate", "settings", "themepicker", "quit"}
 
 // openOverlayKinds returns the set of draggable overlay kinds currently shown.
 func (m *OS) openOverlayKinds() map[string]bool {
@@ -56,7 +56,17 @@ func (m *OS) openOverlayKinds() map[string]bool {
 	if m.ShowThemePicker {
 		open["themepicker"] = true
 	}
+	if m.ShowQuitMenu {
+		open["quit"] = true
+	}
 	return open
+}
+
+// AnyOverlayOpen reports whether any overlay is logically open, independent of
+// whether its hit geometry has been recorded yet this frame. The hover and
+// focus-follows-mouse routing use it so an overlay guards its first frame too.
+func (m *OS) AnyOverlayOpen() bool {
+	return len(m.openOverlayKinds()) > 0
 }
 
 // reconcileOverlayZOrder drops closed overlays from the stacking order and

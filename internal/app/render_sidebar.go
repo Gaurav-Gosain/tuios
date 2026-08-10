@@ -156,6 +156,16 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 
 	rows := make([]logicalRow, 0, 16)
 
+	// The hovered logical row, derived from the last motion seen inside the
+	// band: rows are drawn one per screen line, so the hovered row is the scroll
+	// offset plus the cursor's distance from the top of the band. Computed
+	// against the previous frame's scroll clamp, which only differs while the
+	// row count itself is changing.
+	hoverIdx := -1
+	if m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
+		hoverIdx = m.SidebarScroll + (m.SidebarHoverY - topMargin)
+	}
+
 	// Header. A quiet section label rather than an accent chip: the sidebar is
 	// chrome that is on screen all the time, so it identifies itself the way a
 	// section heading does, not the way a floating panel announces itself. The
@@ -168,7 +178,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 	for _, session := range tree.Sessions {
 		expanded := m.sidebarSessionExpanded(session)
 		rows = append(rows, logicalRow{
-			text:        m.sidebarSessionRow(session, variant, expanded, w, pal),
+			text:        m.sidebarSessionRow(session, variant, expanded, w, pal, len(rows) == hoverIdx),
 			hit:         &sidebarRowHit{},
 			sessionID:   session.ID,
 			windowIndex: -1,
@@ -184,7 +194,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 				idx = m.windowIndexByID(win.ID)
 			}
 			rows = append(rows, logicalRow{
-				text:        m.sidebarWindowRow(win, variant, w, pal),
+				text:        m.sidebarWindowRow(win, variant, w, pal, len(rows) == hoverIdx),
 				hit:         &sidebarRowHit{},
 				sessionID:   session.ID,
 				windowID:    win.ID,
@@ -309,21 +319,28 @@ func sidebarCurrentMarker(current bool, bg color.Color, pal overlay.Palette) str
 //
 // The current session's row is additionally raised one luminance step (Surface
 // on the Panel rail), so "where am I" reads even in a monochrome capture.
-func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool, w int, pal overlay.Palette) string {
+func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool, w int, pal overlay.Palette, hovered bool) string {
 	if variant == sidebarVariantGlyph {
 		// One centered rolled-up glyph per session; the current session gets the
 		// focus pill so it is findable without a name.
 		bg := color.Color(pal.Panel)
 		if node.IsCurrent {
 			bg = lipgloss.Color(sidebarFocusColor)
+		} else if hovered {
+			bg = pal.RowSel
 		}
 		g := sidebarGlyph(node.AgentState, bg, pal)
 		return sidebarFit(overlay.Style(bg).Render(" ")+g, w, bg)
 	}
 
 	bg := color.Color(pal.Panel)
-	if node.IsCurrent {
+	switch {
+	case node.IsCurrent:
 		bg = pal.Surface
+	case hovered:
+		// The hovered row takes the overlay row-selection background, so the row
+		// a click would act on reads the same way it does in every list overlay.
+		bg = pal.RowSel
 	}
 
 	left := sidebarCurrentMarker(node.IsCurrent, bg, pal)
@@ -378,7 +395,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 // one level past the session name. The focused window carries the dock's focus
 // pill across the full row; the rest stay dim so the list reads as detail under
 // its session, not as a second list of equals.
-func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, w int, pal overlay.Palette) string {
+func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, w int, pal overlay.Palette, hovered bool) string {
 	bg := color.Color(pal.Panel)
 	fg := pal.FgDim
 	bold := false
@@ -387,6 +404,9 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, w int, pal ove
 		bg = lipgloss.Color(sidebarFocusColor)
 		fg = lipgloss.Color("#ffffff")
 		bold = true
+	} else if hovered {
+		bg = pal.RowSel
+		fg = pal.Fg
 	}
 
 	indent := "      " // glyph lands two cells past the session glyph column

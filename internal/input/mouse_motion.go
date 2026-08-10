@@ -27,13 +27,45 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Drag an overlay panel that was grabbed by its title bar / right-click.
-	if o.OverlayMouseMotion(mouse.X, mouse.Y) {
+	// Overlay panels: keep dragging a grabbed panel, or highlight the row under
+	// the cursor so hover tracks the pointer in every overlay. Either way the
+	// motion is consumed; a pane behind an overlay panel never sees it. The
+	// hover paths (overlays and the sidebar band) yield while a window gesture
+	// is in progress, so a drag or resize that crosses them never stalls.
+	if o.OverlayDragActive() {
+		o.OverlayMouseMotion(mouse.X, mouse.Y)
 		return o, nil
+	}
+	if !o.Dragging && !o.Resizing && !o.ScrollbarDragging {
+		if o.OverlayMouseMotion(mouse.X, mouse.Y) {
+			return o, nil
+		}
+		// The sidebar band tracks hover the same way the overlays do, and
+		// consumes motion over it so the pane it sits in front of never sees it.
+		if o.SidebarActive() && o.SidebarMotion(mouse.X, mouse.Y) {
+			return o, nil
+		}
 	}
 
 	// Update pointer shape based on what we're hovering over (OSC 22)
 	o.UpdatePointerForPosition(mouse.X, mouse.Y)
+
+	// Focus follows the mouse when the user opted in: the pane under the cursor
+	// takes focus without a click and without entering terminal mode (clicking
+	// is what starts typing). Gestures in progress keep their window, chrome
+	// (overlays, menus, the sidebar band, the dock) never steals pane focus,
+	// and nothing happens unless the pane under the cursor actually differs
+	// from the focused one.
+	if config.FocusFollowsMouse && !o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
+		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
+		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {
+		fw := o.GetFocusedWindow()
+		if fw == nil || !fw.IsSelecting {
+			if idx := findClickedWindow(mouse.X, mouse.Y, o); idx >= 0 && idx != o.FocusedWindow {
+				o.FocusWindow(idx)
+			}
+		}
+	}
 
 	// Forward mouse motion to terminal if in terminal mode and window supports motion events.
 	// Only modes 1002 (button-event) and 1003 (any-event) support motion forwarding.
