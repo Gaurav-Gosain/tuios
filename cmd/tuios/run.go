@@ -164,6 +164,15 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		}
 	}
 
+	// Focus-follows-mouse moves pane focus from bare motion over a pane, and
+	// every overlay menu highlights the row under the pointer as it moves. Both
+	// live downstream of this whitelist, so both are dead unless their motion is
+	// let through here. Without this, the opted-in focus-follows setting simply
+	// does nothing and non-context menus never track the cursor.
+	if config.FocusFollowsMouse || os.AnyOverlayOpen() {
+		return msg
+	}
+
 	return nil
 }
 
