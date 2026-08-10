@@ -61,14 +61,82 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		}
 	}
 
+	// Decide, once per window, whether this pass holds the window's placements
+	// untouched because an interactive resize is mid-gesture (see the comment
+	// on the freeze below). Computed up front and shared by both the regular
+	// placement loop and the remote-video loop so that a window carrying both
+	// kinds of image freezes them together, and so a window whose only image is
+	// a self-placed video (removed from `placements` at handoff) still gets a
+	// freeze record at all.
+	if kp.frozenThisPass == nil {
+		kp.frozenThisPass = make(map[string]bool)
+	} else {
+		clear(kp.frozenThisPass)
+	}
+	frozen := kp.frozenThisPass
+	markFreeze := func(windowID string) {
+		if _, done := frozen[windowID]; done {
+			return
+		}
+		info := allWindows[windowID]
+		if info == nil {
+			return
+		}
+		// Coalesce an interactive resize.
+		//
+		// A drag-resize changes the window size every render tick, and the guest
+		// has not redrawn at the new size yet (the PTY resize is deferred until
+		// the gesture settles, see resize_deferral.go). Re-clipping and re-placing
+		// the same stale image against each intermediate viewport size makes it
+		// visibly crop and jitter many times a second: the flicker. So while a
+		// window is being manipulated AND its size differs from the size the
+		// placement was last laid out at, the existing placement is left exactly
+		// where it is - kitty keeps the last a=p on screen - and no delete or
+		// re-place is emitted for it.
+		//
+		// resizeFreezeSize records that last laid-out size. It is refreshed on
+		// every pass that is NOT frozen, so a plain window move (manipulated but
+		// unchanged size) still re-places and follows the pointer, and the instant
+		// the gesture ends the settled size is recorded and the image re-places
+		// once at the final geometry. The deferred PTY resize then delivers a
+		// fresh frame; nothing is left stale.
+		if prev, seen := kp.resizeFreezeSize[windowID]; info.IsBeingManipulated && seen &&
+			(prev[0] != info.Width || prev[1] != info.Height) {
+			// resizeFreezeSize is deliberately not updated, so every later tick of
+			// the same gesture keeps differing from it and stays frozen until the
+			// size settles.
+			frozen[windowID] = true
+			return
+		}
+		kp.resizeFreezeSize[windowID] = [2]int{info.Width, info.Height}
+		frozen[windowID] = false
+	}
+	for windowID, placements := range kp.placements {
+		if len(placements) > 0 {
+			markFreeze(windowID)
+		}
+	}
+	for windowID := range kp.remoteVideo {
+		markFreeze(windowID)
+	}
+
 	// Keep self-placed remote video images in step with their window. These are
 	// not in `placements`, so the loop below never sees them; here we (1) delete
 	// one whose pane left the screen it was shown on (a browser quitting back to
-	// the shell restores the main screen), and (2) re-place one with a=p when its
-	// window moved/resized, from the resident image data with no re-transmit, so
-	// the frame follows a drag/resize even while the browser sends no new frame.
+	// the shell restores the main screen), (2) hide one that went offscreen or
+	// under a higher window and re-show it when it returns, and (3) re-place one
+	// with a=p when its window moved/resized, from the resident image data with
+	// no re-transmit, so the frame follows a drag/resize even while the browser
+	// sends no new frame. The desired geometry written here is what the async
+	// frame writer reads at write time; this loop is its only writer after the
+	// handoff.
 	for windowID, ids := range kp.remoteVideo {
 		info := allWindows[windowID]
+		if info != nil && frozen[windowID] {
+			// Mid drag-resize: hold the image exactly where it is, like the
+			// regular placement path. The settled geometry re-places it once.
+			continue
+		}
 		var buf bytes.Buffer
 		for hostID, st := range ids {
 			if info == nil || info.IsAltScreen != st.altScreen {
@@ -78,9 +146,49 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			}
 			newHostX := info.WindowX + info.ContentOffsetX + st.guestX
 			newHostY := info.WindowY + info.ContentOffsetY + st.guestY
-			if newHostX != st.hostX || newHostY != st.hostY {
-				buf.Write(kp.buildVideoReplace(hostID, newHostX, newHostY, st.cols, st.rows))
-				st.hostX, st.hostY = newHostX, newHostY
+
+			// Clamp the visible cell area to the screen. Like the regular path,
+			// keep the final screen row free: an image reaching the last row
+			// makes the host terminal scroll and cascades into duplicate frames.
+			showCols, showRows := st.cols, st.rows
+			visible := info.Visible && newHostX >= 0 && newHostY >= 0 &&
+				info.WindowX >= 0 && info.WindowY >= 0
+			if visible && info.ScreenWidth > 0 && newHostX+showCols > info.ScreenWidth {
+				showCols = info.ScreenWidth - newHostX
+			}
+			if visible && info.ScreenHeight > 0 && newHostY+showRows > info.ScreenHeight-1 {
+				showRows = info.ScreenHeight - 1 - newHostY
+			}
+			if showCols <= 0 || showRows <= 0 {
+				visible = false
+			}
+			if visible && kp.isOccludedByHigherWindow(
+				newHostX, newHostY, showCols, showRows,
+				info.WindowZ, allWindows, windowID,
+			) {
+				visible = false
+			}
+
+			// Record the desired geometry BEFORE emitting, so the async frame
+			// writer's write-time read and its post-write convergence check
+			// always see the same target this pass decided on.
+			changed := st.hidden || newHostX != st.hostX || newHostY != st.hostY ||
+				showCols != st.showCols || showRows != st.showRows
+			st.hostX, st.hostY = newHostX, newHostY
+			st.showCols, st.showRows = showCols, showRows
+
+			if !visible {
+				if !st.hidden {
+					// d=i keeps the image bytes resident so re-showing is a
+					// plain a=p, no re-transmit.
+					fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
+					st.hidden = true
+				}
+				continue
+			}
+			st.hidden = false
+			if changed {
+				buf.Write(buildVideoReplace(hostID, st))
 			}
 		}
 		if buf.Len() > 0 {
@@ -88,6 +196,9 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		}
 		if len(ids) == 0 {
 			delete(kp.remoteVideo, windowID)
+			if len(kp.placements[windowID]) == 0 {
+				delete(kp.resizeFreezeSize, windowID)
+			}
 		}
 	}
 
@@ -111,33 +222,11 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 
 		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, IsAltScreen=%v, visible=%v", windowID[:min(8, len(windowID))], info.IsAltScreen, info.Visible)
 
-		// Coalesce an interactive resize.
-		//
-		// A drag-resize changes the window size every render tick, and the guest
-		// has not redrawn at the new size yet (the PTY resize is deferred until
-		// the gesture settles, see resize_deferral.go). Re-clipping and re-placing
-		// the same stale image against each intermediate viewport size makes it
-		// visibly crop and jitter many times a second: the flicker. So while a
-		// window is being manipulated AND its size differs from the size the
-		// placement was last laid out at, the existing placement is left exactly
-		// where it is - kitty keeps the last a=p on screen - and no delete or
-		// re-place is emitted for it.
-		//
-		// resizeFreezeSize records that last laid-out size. It is refreshed on
-		// every pass that is NOT frozen, so a plain window move (manipulated but
-		// unchanged size) still re-places and follows the pointer, and the instant
-		// the gesture ends the settled size is recorded and the image re-places
-		// once at the final geometry. The deferred PTY resize then delivers a
-		// fresh frame; nothing is left stale.
-		if prev, seen := kp.resizeFreezeSize[windowID]; info.IsBeingManipulated && seen &&
-			(prev[0] != info.Width || prev[1] != info.Height) {
-			// Frozen: hold this window's placement untouched for this tick.
-			// resizeFreezeSize is deliberately not updated, so every later tick of
-			// the same gesture keeps differing from it and stays frozen until the
-			// size settles.
+		// Frozen mid drag-resize (see markFreeze above): hold this window's
+		// placement untouched for this tick.
+		if frozen[windowID] {
 			continue
 		}
-		kp.resizeFreezeSize[windowID] = [2]int{info.Width, info.Height}
 
 		// During window manipulation (drag/resize), let images reposition
 		// with the window. The change detection below (posChanged check)
@@ -360,11 +449,17 @@ func (kp *KittyPassthrough) SetOverlayActive(active bool) {
 	var buf bytes.Buffer
 	for _, ids := range kp.remoteVideo {
 		for hostID, st := range ids {
+			// Images already hidden for geometry reasons (offscreen/occluded)
+			// have no on-screen placement to hide, and must not be re-shown
+			// when the overlay closes.
+			if st.hidden {
+				continue
+			}
 			if active {
 				// Hide but keep the image data so a=p can re-show it.
 				fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
 			} else {
-				buf.Write(kp.buildVideoReplace(hostID, st.hostX, st.hostY, st.cols, st.rows))
+				buf.Write(buildVideoReplace(hostID, st))
 			}
 		}
 	}

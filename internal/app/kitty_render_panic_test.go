@@ -82,5 +82,5 @@ func TestAsyncFrameWriterSurvivesPanic(t *testing.T) {
 			t.Fatalf("async frame write propagated a panic (would crash the server process): %v", r)
 		}
 	}()
-	kp.writeFrameSafely([]byte("frame-bytes"))
+	kp.writeFrameSafely(asyncFrame{data: []byte("frame-bytes")})
 }

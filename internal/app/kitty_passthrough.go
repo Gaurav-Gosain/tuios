@@ -109,7 +109,13 @@ type KittyPassthrough struct {
 	// Instead we enqueue frames to this channel; a background goroutine
 	// drains it and writes to hostOut. Channel capacity 1 means we always
 	// keep at most one pending frame; newer frames replace older ones.
-	asyncFrameCh chan []byte
+	asyncFrameCh chan asyncFrame
+
+	// frozenThisPass is scratch space for RefreshAllPlacements: the set of
+	// windows whose placements are held untouched this pass because an
+	// interactive resize is in progress. Reused across frames to avoid a
+	// per-frame map allocation.
+	frozenThisPass map[string]bool
 
 	// Pending direct transmission data (for chunked transfers)
 	pendingDirectData map[string]*pendingDirectTransmit // key: windowID
@@ -214,11 +220,65 @@ type PassthroughPlacement struct {
 
 // remoteVideoState is the geometry needed to re-place a self-placed video image
 // with a=p (no re-transmit) when its window moves/resizes or an overlay closes.
+//
+// The desired on-screen geometry (hostX/hostY/showCols/showRows/hidden) is
+// OWNED by RefreshAllPlacements: after the initial handoff it is the only
+// writer, recomputing it from the live window layout every render pass. The
+// async frame writer only reads it, at write time, so a queued frame always
+// paints at the freshest position rather than the one current when it was
+// enqueued (which trails the pointer during a drag).
 type remoteVideoState struct {
 	guestX, guestY int  // cursor position within the window at transmit time
-	cols, rows     int  // display size in cells
+	cols, rows     int  // full display size in cells (capped to the pane content)
 	altScreen      bool // the screen the image was placed on
-	hostX, hostY   int  // last host position emitted (for change detection)
+	// Native pixel dimensions of the transmitted bitmap (s/v params), for
+	// source-rect cropping when the visible cell area is clamped.
+	pxWidth, pxHeight int
+	// Desired host geometry, owned by RefreshAllPlacements (see above).
+	hostX, hostY       int
+	showCols, showRows int  // cell area clamped to the screen; 0 = full cols/rows
+	hidden             bool // offscreen/occluded; frames are dropped while set
+}
+
+// showGeometry returns the desired placement rectangle for a self-placed video
+// image: display cols/rows (clamped to the screen) and the source-rect crop in
+// pixels (0,0 when no crop is needed). Callers must hold kp.mu.
+func (st *remoteVideoState) showGeometry() (cols, rows, srcW, srcH int) {
+	cols, rows = st.cols, st.rows
+	if st.showCols > 0 && st.showCols < cols {
+		cols = st.showCols
+	}
+	if st.showRows > 0 && st.showRows < rows {
+		rows = st.showRows
+	}
+	if (cols < st.cols || rows < st.rows) && st.pxWidth > 0 && st.pxHeight > 0 &&
+		st.cols > 0 && st.rows > 0 {
+		srcW = st.pxWidth * cols / st.cols
+		srcH = st.pxHeight * rows / st.rows
+	}
+	return cols, rows, srcW, srcH
+}
+
+// asyncFrame is one unit of work for the async frame writer: either a fully
+// pre-built byte sequence (the browser-overlay path, position-independent) or a
+// self-placed remote video job whose placement geometry is resolved at write
+// time so a queued frame cannot paint at a position the window has left.
+type asyncFrame struct {
+	data []byte
+	job  *remoteVideoJob
+}
+
+// remoteVideoJob carries a remote-terminal video frame's payload and transmit
+// metadata. Placement geometry deliberately lives in remoteVideoState, not
+// here: it is read under kp.mu when the frame is written.
+type remoteVideoJob struct {
+	windowID    string
+	hostID      uint32
+	format      vt.KittyGraphicsFormat
+	compression vt.KittyGraphicsCompression
+	width       int    // pixel width (s param)
+	height      int    // pixel height (v param)
+	encoded     string // base64 payload, encoded at enqueue time
 }
 
 type WindowPositionInfo struct {
@@ -285,7 +345,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		lastFrameHash:     make(map[string]map[uint32]uint32),
 		nextHostID:        1,
 		pendingDirectData: make(map[string]*pendingDirectTransmit),
-		asyncFrameCh:      make(chan []byte, 1),
+		asyncFrameCh:      make(chan asyncFrame, 1),
 		resizeFreezeSize:  make(map[string][2]int),
 	}
 	go kp.asyncFrameWriter()
@@ -323,8 +383,8 @@ func (kp *KittyPassthrough) writeHostSequence(parts ...[]byte) {
 // in a background goroutine so the VT callback and render loop stay
 // responsive during high-fps video playback.
 func (kp *KittyPassthrough) asyncFrameWriter() {
-	for data := range kp.asyncFrameCh {
-		if kp.hostOut == nil || len(data) == 0 {
+	for frame := range kp.asyncFrameCh {
+		if kp.hostOut == nil {
 			continue
 		}
 		// Contain a panic from the host write to this one frame. This goroutine
@@ -332,19 +392,71 @@ func (kp *KittyPassthrough) asyncFrameWriter() {
 		// nothing: it would crash the entire process (every SSH session on the
 		// server), not just the pane. A dropped video frame is the correct
 		// degradation; the drain loop keeps running for the next one.
-		kp.writeFrameSafely(data)
+		kp.writeFrameSafely(frame)
 	}
 }
 
 // writeFrameSafely writes one async video frame, recovering from any panic so a
 // single bad frame degrades to a drop instead of taking the process down.
-func (kp *KittyPassthrough) writeFrameSafely(data []byte) {
+func (kp *KittyPassthrough) writeFrameSafely(frame asyncFrame) {
 	defer func() {
 		if r := recover(); r != nil {
 			kittyPassthroughLog("asyncFrameWriter: recovered panic writing frame: %v", r)
 		}
 	}()
-	kp.writeHostSequence(syncBegin, data, syncEnd)
+	if frame.job != nil {
+		kp.writeRemoteVideoFrame(frame.job)
+		return
+	}
+	if len(frame.data) == 0 {
+		return
+	}
+	kp.writeHostSequence(syncBegin, frame.data, syncEnd)
+}
+
+// writeRemoteVideoFrame writes one self-placed remote video frame. The
+// placement geometry is read from remoteVideoState under kp.mu at WRITE time,
+// not enqueue time, so a frame that sat in the channel while the window was
+// dragged still paints on the pane's current content rectangle.
+//
+// After the write it re-reads the desired geometry: if RefreshAllPlacements
+// moved the window while this frame was in flight, the render loop's a=p may
+// have reached the host BEFORE this a=T (host writes are serialized but not
+// ordered against the render flush), leaving the image at the stale position
+// with no later correction. Emitting a follow-up a=p at the new geometry makes
+// the two writers converge instead of fight.
+func (kp *KittyPassthrough) writeRemoteVideoFrame(job *remoteVideoJob) {
+	kp.mu.Lock()
+	st := kp.remoteVideo[job.windowID][job.hostID]
+	if st == nil || st.hidden || (kp.overlayActive && kp.remoteClient) {
+		// The image is hidden (offscreen/occluded/overlay): drop the frame.
+		// RefreshAllPlacements re-shows the resident image when it becomes
+		// visible again, and the next frame after that paints fresh pixels.
+		kp.mu.Unlock()
+		return
+	}
+	x, y := st.hostX, st.hostY
+	cols, rows, srcW, srcH := st.showGeometry()
+	kp.mu.Unlock()
+
+	frame := buildPlacedFrame(job, x, y, cols, rows, srcW, srcH)
+	kp.writeHostSequence(syncBegin, frame, syncEnd)
+
+	kp.mu.Lock()
+	st = kp.remoteVideo[job.windowID][job.hostID]
+	if st == nil || st.hidden || (kp.overlayActive && kp.remoteClient) {
+		kp.mu.Unlock()
+		return
+	}
+	nx, ny := st.hostX, st.hostY
+	ncols, nrows, nsrcW, nsrcH := st.showGeometry()
+	if nx == x && ny == y && ncols == cols && nrows == rows && nsrcW == srcW && nsrcH == srcH {
+		kp.mu.Unlock()
+		return
+	}
+	fix := buildVideoReplace(job.hostID, st)
+	kp.mu.Unlock()
+	kp.writeHostSequence(syncBegin, fix, syncEnd)
 }
 
 func (kp *KittyPassthrough) WriteToHost(data []byte) {

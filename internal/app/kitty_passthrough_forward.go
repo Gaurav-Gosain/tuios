@@ -871,30 +871,39 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		}
 		// First reused frame: hand the image off from RefreshAllPlacements to the
 		// self-placing path, keeping the position it was first placed at.
-		if p := kp.placements[windowID][hostID]; p != nil {
-			if p.HostX != 0 || p.HostY != 0 {
-				hostX, hostY = p.HostX, p.HostY
-			}
-			delete(kp.placements[windowID], hostID)
-		}
-		// Record the geometry so the render loop can re-place this image with a=p
-		// (no re-transmit) when the window moves/resizes or an overlay closes, and
-		// clear it when the pane leaves the screen it was shown on (a browser
-		// quitting back to the shell).
 		st := kp.remoteVideo[windowID][hostID]
 		if st == nil {
-			st = &remoteVideoState{}
+			st = &remoteVideoState{hostX: hostX, hostY: hostY}
+			if p := kp.placements[windowID][hostID]; p != nil && (p.HostX != 0 || p.HostY != 0) {
+				st.hostX, st.hostY = p.HostX, p.HostY
+			}
 			kp.remoteVideo[windowID][hostID] = st
 		}
+		delete(kp.placements[windowID], hostID)
+		// Record what the frame itself defines: content-relative position and
+		// intrinsic size. The HOST geometry (st.hostX/hostY/showCols/showRows)
+		// is owned by RefreshAllPlacements, which recomputes it from the live
+		// window layout every render pass; overwriting it here with the (up to
+		// a frame stale) snapshot geometry made the image trail and fight the
+		// render loop during a drag.
 		st.guestX, st.guestY = cursorX, cursorY
 		st.cols, st.rows = displayCols, displayRows
 		st.altScreen = isAltScreen
-		st.hostX, st.hostY = hostX, hostY
+		st.pxWidth, st.pxHeight = cmd.Width, cmd.Height
 
-		frame := kp.buildInlinePlacedChunks(hostID, format, compression,
-			cmd.Width, cmd.Height, displayCols, displayRows, hostX, hostY, data)
+		// Enqueue the payload only; the writer resolves the placement geometry
+		// under kp.mu when the frame is actually written.
+		job := &remoteVideoJob{
+			windowID:    windowID,
+			hostID:      hostID,
+			format:      format,
+			compression: compression,
+			width:       cmd.Width,
+			height:      cmd.Height,
+			encoded:     base64.StdEncoding.EncodeToString(data),
+		}
 		select {
-		case kp.asyncFrameCh <- frame:
+		case kp.asyncFrameCh <- asyncFrame{job: job}:
 		default:
 			kittyPassthroughLog("forwardFileTransmitInline: dropped frame (async channel full)")
 		}
@@ -913,7 +922,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		// loop stay responsive. Drop frames if the writer is backed up
 		// (channel full) to prevent unbounded lag.
 		select {
-		case kp.asyncFrameCh <- frameData:
+		case kp.asyncFrameCh <- asyncFrame{data: frameData}:
 		default:
 			// Previous frame still in flight, drop this one.
 			kittyPassthroughLog("forwardFileTransmitInline: dropped frame (async channel full)")
@@ -1002,40 +1011,46 @@ func (kp *KittyPassthrough) buildInlineChunks(hostID uint32, format vt.KittyGrap
 	return out.Bytes()
 }
 
-// buildInlinePlacedChunks encodes raw image bytes as a kitty transmit-AND-place
+// buildPlacedFrame encodes a remote video frame as a kitty transmit-AND-place
 // (a=T) sequence at a fixed host position, split into 4096-byte base64 chunks.
 // This is the remote-terminal video path: unlike buildInlineChunks (a=t,
 // transmit only), the host displays the image at the saved cursor position when
 // the final chunk lands, so a re-transmitted frame is actually repainted without
 // a separate a=p that would race the render loop. The cursor is saved and
 // restored around the sequence so the guest's own cursor is unaffected.
-func (kp *KittyPassthrough) buildInlinePlacedChunks(hostID uint32, format vt.KittyGraphicsFormat, compression vt.KittyGraphicsCompression, width, height, cols, rows, hostX, hostY int, raw []byte) []byte {
-	encoded := base64.StdEncoding.EncodeToString(raw)
+//
+// cols/rows are the visible cell area and srcW/srcH the matching source-rect
+// crop in pixels (0 = no crop), both resolved from remoteVideoState at write
+// time so the frame lands on the pane's current content rectangle.
+func buildPlacedFrame(job *remoteVideoJob, hostX, hostY, cols, rows, srcW, srcH int) []byte {
 	const chunkSize = 4096
 	var out bytes.Buffer
 	out.WriteString("\x1b7")                           // save cursor
 	fmt.Fprintf(&out, "\x1b[%d;%dH", hostY+1, hostX+1) // position (1-based)
-	for i := 0; i < len(encoded); i += chunkSize {
-		end := min(i+chunkSize, len(encoded))
-		chunk := encoded[i:end]
-		more := end < len(encoded)
+	for i := 0; i < len(job.encoded); i += chunkSize {
+		end := min(i+chunkSize, len(job.encoded))
+		chunk := job.encoded[i:end]
+		more := end < len(job.encoded)
 
 		out.WriteString("\x1b_G")
 		if i == 0 {
 			// p=1 gives the placement a stable id so buildVideoReplace can move or
 			// re-show it later with a=p (no re-transmit).
-			fmt.Fprintf(&out, "a=T,i=%d,p=1,f=%d,s=%d,v=%d,q=2", hostID, format, width, height)
+			fmt.Fprintf(&out, "a=T,i=%d,p=1,f=%d,s=%d,v=%d,q=2", job.hostID, job.format, job.width, job.height)
 			if cols > 0 {
 				fmt.Fprintf(&out, ",c=%d", cols)
 			}
 			if rows > 0 {
 				fmt.Fprintf(&out, ",r=%d", rows)
 			}
-			if compression == vt.KittyCompressionZlib {
+			if srcW > 0 && srcH > 0 {
+				fmt.Fprintf(&out, ",x=0,y=0,w=%d,h=%d", srcW, srcH)
+			}
+			if job.compression == vt.KittyCompressionZlib {
 				out.WriteString(",o=z")
 			}
 		} else {
-			fmt.Fprintf(&out, "i=%d,q=2", hostID)
+			fmt.Fprintf(&out, "i=%d,q=2", job.hostID)
 		}
 		if more {
 			out.WriteString(",m=1")
@@ -1049,19 +1064,24 @@ func (kp *KittyPassthrough) buildInlinePlacedChunks(hostID uint32, format vt.Kit
 }
 
 // buildVideoReplace re-places an already-transmitted self-placed video image at
-// a host position using a=p, with no data re-transmit. Used to follow a window
-// drag/resize and to re-show the image after an overlay closes, from the image
-// data still resident on the host (the a=T carried p=1).
-func (kp *KittyPassthrough) buildVideoReplace(hostID uint32, hostX, hostY, cols, rows int) []byte {
+// its desired host geometry using a=p, with no data re-transmit. Used to follow
+// a window drag/resize and to re-show the image after an overlay closes, from
+// the image data still resident on the host (the a=T carried p=1). Callers must
+// hold kp.mu (st is shared state).
+func buildVideoReplace(hostID uint32, st *remoteVideoState) []byte {
+	cols, rows, srcW, srcH := st.showGeometry()
 	var out bytes.Buffer
 	out.WriteString("\x1b7")
-	fmt.Fprintf(&out, "\x1b[%d;%dH", hostY+1, hostX+1)
+	fmt.Fprintf(&out, "\x1b[%d;%dH", st.hostY+1, st.hostX+1)
 	fmt.Fprintf(&out, "\x1b_Ga=p,i=%d,p=1,q=2", hostID)
 	if cols > 0 {
 		fmt.Fprintf(&out, ",c=%d", cols)
 	}
 	if rows > 0 {
 		fmt.Fprintf(&out, ",r=%d", rows)
+	}
+	if srcW > 0 && srcH > 0 {
+		fmt.Fprintf(&out, ",x=0,y=0,w=%d,h=%d", srcW, srcH)
 	}
 	out.WriteString("\x1b\\\x1b8")
 	return out.Bytes()
