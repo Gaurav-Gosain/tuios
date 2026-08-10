@@ -620,7 +620,12 @@ func (c *TUIClient) KillSession() error {
 	return c.KillSessionByName(c.sessionName)
 }
 
-// KillSessionByName terminates a session by name (can be any session, not just current).
+// KillSessionByName terminates a session by name (can be any session, not just
+// current). It waits for the daemon's post-kill session list and refreshes the
+// cached names the UI reads, so a killed session leaves the switcher and sidebar
+// at once instead of lingering until the next unrelated refresh. Waiting for the
+// real reply also surfaces a daemon rejection (an unknown name) as an error
+// rather than the phantom success the old fire-and-forget send always reported.
 func (c *TUIClient) KillSessionByName(name string) error {
 	if name == "" {
 		return fmt.Errorf("session name cannot be empty")
@@ -631,11 +636,20 @@ func (c *TUIClient) KillSessionByName(name string) error {
 	if err != nil {
 		return err
 	}
-	if err := c.send(msg); err != nil {
+	resp, err := c.sendAndWaitResponse(msg, MsgSessionList, MsgError)
+	if err != nil {
 		return err
 	}
-	// Wait briefly to ensure the daemon processes the kill message
-	time.Sleep(100 * time.Millisecond)
+	if resp.Type == MsgError {
+		var errPayload ErrorPayload
+		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		return fmt.Errorf("kill session: %s", errPayload.Message)
+	}
+	var payload SessionListPayload
+	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		return err
+	}
+	c.setSessionNames(payload.Sessions)
 	return nil
 }
 
@@ -1008,15 +1022,20 @@ func (c *TUIClient) RefreshSessionList() ([]SessionInfo, error) {
 	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
 		return nil, err
 	}
-	// Update cache
-	names := make([]string, 0, len(payload.Sessions))
-	for _, s := range payload.Sessions {
+	c.setSessionNames(payload.Sessions)
+	return payload.Sessions, nil
+}
+
+// setSessionNames replaces the cached session names the UI reads (the session
+// switcher and sidebar) with the names from a daemon session list.
+func (c *TUIClient) setSessionNames(sessions []SessionInfo) {
+	names := make([]string, 0, len(sessions))
+	for _, s := range sessions {
 		names = append(names, s.Name)
 	}
 	c.mu.Lock()
 	c.availableSessionNames = names
 	c.mu.Unlock()
-	return payload.Sessions, nil
 }
 
 func (c *TUIClient) send(msg *Message) error {
