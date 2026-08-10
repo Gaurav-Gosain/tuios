@@ -582,7 +582,13 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 		if hovered || dragged {
 			fg = pal.Fg
 		}
-		nameSeg = sidebarStyle(rowBg, fg).Bold(dragged).Render(overlay.Truncate(name, avail))
+		// Match the current session's pill inset (a cap plus its inner space, two
+		// cells each side) so a plain row's name lands in the same column as the
+		// pilled row's. Without it the name jumps two cells left row to row as the
+		// eye moves off the current session.
+		name = overlay.Truncate(name, max(avail-4, 1))
+		pad := sidebarStyle(rowBg, nil).Render("  ")
+		nameSeg = pad + sidebarStyle(rowBg, fg).Bold(dragged).Render(name) + pad
 	}
 
 	row := left + nameSeg
@@ -611,13 +617,17 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		// title share the pill foreground; the shape still carries the state.
 		// Fixed pill overhead: caps and inner padding (3), plus glyph and its
 		// gap (2) when one is shown.
-		inner := overlay.Truncate(title, max(cw-indent-3, 1))
+		inner := overlay.Truncate(title, max(cw-indent-4, 1))
 		if config.SidebarShowGlyphs {
 			if g := agentStateIndicator(node.AgentState); g != "" {
-				inner = g + " " + overlay.Truncate(title, max(cw-indent-5, 1))
+				inner = g + " " + overlay.Truncate(title, max(cw-indent-6, 1))
 			}
 		}
-		row := strings.Repeat(" ", indent-1) +
+		// The pill's cap sits on the glyph column (indent), so its inner text
+		// lands on the same spine as the session name and the non-focused
+		// siblings, both at indent+2. Starting a cell earlier made the focused
+		// pill jog left of everything else.
+		row := strings.Repeat(" ", indent) +
 			sidebarPill(" "+inner+" ", lipgloss.Color(sidebarFocusColor), lipgloss.Color("#ffffff"), nil)
 		return sidebarFit(row, cw, nil)
 	}
