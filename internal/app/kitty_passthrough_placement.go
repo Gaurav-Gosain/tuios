@@ -61,24 +61,30 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		}
 	}
 
-	// Delete self-placed remote video images whose window has left the screen
-	// they were shown on. A browser quitting back to the shell restores the main
-	// screen, and these images are not in `placements`, so the loop below never
-	// sees them; without this the last frame lingers over the shell prompt.
+	// Keep self-placed remote video images in step with their window. These are
+	// not in `placements`, so the loop below never sees them; here we (1) delete
+	// one whose pane left the screen it was shown on (a browser quitting back to
+	// the shell restores the main screen), and (2) re-place one with a=p when its
+	// window moved/resized, from the resident image data with no re-transmit, so
+	// the frame follows a drag/resize even while the browser sends no new frame.
 	for windowID, ids := range kp.remoteVideo {
 		info := allWindows[windowID]
 		var buf bytes.Buffer
-		for hostID, placedOnAlt := range ids {
-			if info != nil && info.IsAltScreen == placedOnAlt {
-				continue // still on the screen it was placed on
+		for hostID, st := range ids {
+			if info == nil || info.IsAltScreen != st.altScreen {
+				fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
+				delete(ids, hostID)
+				continue
 			}
-			fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
-			delete(ids, hostID)
+			newHostX := info.WindowX + info.ContentOffsetX + st.guestX
+			newHostY := info.WindowY + info.ContentOffsetY + st.guestY
+			if newHostX != st.hostX || newHostY != st.hostY {
+				buf.Write(kp.buildVideoReplace(hostID, newHostX, newHostY, st.cols, st.rows))
+				st.hostX, st.hostY = newHostX, newHostY
+			}
 		}
 		if buf.Len() > 0 {
 			kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
-			kittyPassthroughLog("RefreshAllPlacements: cleared %d self-placed video image(s) after screen change for win=%s",
-				buf.Len(), windowID[:min(8, len(windowID))])
 		}
 		if len(ids) == 0 {
 			delete(kp.remoteVideo, windowID)
@@ -336,11 +342,13 @@ func (kp *KittyPassthrough) HasPlacements() bool {
 }
 
 // SetOverlayActive is called every frame with whether a full-screen overlay
-// (help, command palette, etc.) is showing. On the transition into an overlay it
-// deletes the self-placed remote video images so the overlay is not drawn behind
-// a live browser frame, and forgets their frame hashes so the stream re-places
-// them once the overlay closes. While active, forwardFileTransmitInline drops
-// incoming remote frames so a new one cannot redraw over the overlay.
+// (help, command palette, etc.) is showing. Entering an overlay hides the
+// self-placed video images (a=d with d=i, which drops the placement but keeps
+// the image data resident) so the overlay is not drawn behind a live frame;
+// while active, forwardFileTransmitInline drops incoming remote frames. Leaving
+// the overlay re-shows each image with a=p from the resident data, so it comes
+// back immediately without waiting for the browser to send another frame (a
+// static page sends none).
 func (kp *KittyPassthrough) SetOverlayActive(active bool) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
@@ -348,15 +356,17 @@ func (kp *KittyPassthrough) SetOverlayActive(active bool) {
 		return
 	}
 	kp.overlayActive = active
-	if !active {
-		return // stream re-places on its next frame (hashes were cleared)
-	}
+
 	var buf bytes.Buffer
-	for windowID, ids := range kp.remoteVideo {
-		for hostID := range ids {
-			fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
+	for _, ids := range kp.remoteVideo {
+		for hostID, st := range ids {
+			if active {
+				// Hide but keep the image data so a=p can re-show it.
+				fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
+			} else {
+				buf.Write(kp.buildVideoReplace(hostID, st.hostX, st.hostY, st.cols, st.rows))
+			}
 		}
-		delete(kp.lastFrameHash, windowID)
 	}
 	if buf.Len() > 0 {
 		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)

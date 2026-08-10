@@ -95,13 +95,13 @@ type KittyPassthrough struct {
 	// frame cannot redraw over the overlay; see SetOverlayActive.
 	overlayActive bool
 
-	// remoteVideo tracks (windowID -> set of hostImageID) for video streams the
-	// remote-client path self-places with a=T. These images are deliberately NOT
-	// in `placements`, so RefreshAllPlacements never touches them: on a real
-	// remote terminal, letting the render loop delete-and-replace an image while
-	// the async writer re-transmits its bitmap races to blank the pane. The set
-	// exists only so window close can delete the host images.
-	remoteVideo map[string]map[uint32]bool
+	// remoteVideo tracks self-placed remote video streams by (windowID ->
+	// hostImageID -> state). These images are placed by the frame stream (a=T),
+	// not by the normal placements map, but RefreshAllPlacements still needs
+	// their geometry to follow a window drag/resize (re-emitting a=p from the
+	// resident image, no re-transmit), to clear them when the pane leaves the
+	// screen, and to re-show them after an overlay closes.
+	remoteVideo map[string]map[uint32]*remoteVideoState
 
 	// Async video frame writer. Video apps (mpv, youterm) send 30+ fps of
 	// large image data. Processing synchronously inside the VT callback
@@ -212,6 +212,15 @@ type PassthroughPlacement struct {
 	MaxShowableCols int // Max cols that can be shown in current viewport
 }
 
+// remoteVideoState is the geometry needed to re-place a self-placed video image
+// with a=p (no re-transmit) when its window moves/resizes or an overlay closes.
+type remoteVideoState struct {
+	guestX, guestY int  // cursor position within the window at transmit time
+	cols, rows     int  // display size in cells
+	altScreen      bool // the screen the image was placed on
+	hostX, hostY   int  // last host position emitted (for change detection)
+}
+
 type WindowPositionInfo struct {
 	WindowX            int
 	WindowY            int
@@ -272,7 +281,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		hostOut:           hostOut,
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
-		remoteVideo:       make(map[string]map[uint32]bool),
+		remoteVideo:       make(map[string]map[uint32]*remoteVideoState),
 		lastFrameHash:     make(map[string]map[uint32]uint32),
 		nextHostID:        1,
 		pendingDirectData: make(map[string]*pendingDirectTransmit),

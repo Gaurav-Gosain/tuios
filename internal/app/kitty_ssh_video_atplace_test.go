@@ -326,3 +326,66 @@ func TestOverlayHidesAndRestoresRemoteVideo(t *testing.T) {
 		t.Fatal("video did not re-place after the overlay closed")
 	}
 }
+
+// TestOverlayCloseReshowsWithoutNewFrame proves the image comes back the instant
+// the overlay closes, via a=p from the resident data, without the browser
+// sending another frame. The bug was that a static page sends no new frame, so
+// the image only returned when the user scrolled.
+func TestOverlayCloseReshowsWithoutNewFrame(t *testing.T) {
+	withClientCaps(t, &HostCapabilities{
+		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
+	})
+	shmName := makeShmFrame(t, 400, 300)
+	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
+	host := &recWriter{}
+	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	const winID = "window-0000-0000-0000-000000000000"
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
+		t.Fatal("video never placed")
+	}
+
+	kp.SetOverlayActive(true) // hide
+	base := host.count("a=p,i=")
+	kp.SetOverlayActive(false) // must re-show via a=p, no frame sent
+	if host.count("a=p,i=") <= base {
+		t.Fatal("overlay close did not re-show the image with a=p; it would stay gone until the browser sends a frame")
+	}
+}
+
+// TestVideoFollowsWindowMove proves a self-placed image is re-placed (a=p) at the
+// new position when its window moves, so it tracks a drag even without a new
+// browser frame.
+func TestVideoFollowsWindowMove(t *testing.T) {
+	withClientCaps(t, &HostCapabilities{
+		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
+	})
+	shmName := makeShmFrame(t, 400, 300)
+	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
+	host := &recWriter{}
+	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	const winID = "window-0000-0000-0000-000000000000"
+	// Placed with the window at X=0.
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
+		t.Fatal("video never placed")
+	}
+
+	// The window moves; RefreshAllPlacements must re-place the image with a=p.
+	before := host.count("a=p,i=")
+	moved := func() map[string]*WindowPositionInfo {
+		return map[string]*WindowPositionInfo{
+			winID: {WindowX: 20, WindowY: 5, ContentOffsetX: 1, ContentOffsetY: 1,
+				Width: 183, Height: 42, Visible: true, ScreenWidth: 183, ScreenHeight: 42, IsAltScreen: true},
+		}
+	}
+	kp.RefreshAllPlacements(moved)
+	if data := kp.FlushPending(); len(data) > 0 {
+		kp.WriteToHost(data)
+	}
+	if host.count("a=p,i=") <= before {
+		t.Fatal("video did not re-place after the window moved; it stays behind on a drag")
+	}
+}

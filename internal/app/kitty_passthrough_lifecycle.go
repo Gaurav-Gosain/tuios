@@ -77,7 +77,8 @@ func (kp *KittyPassthrough) deleteRemoteVideoImages(windowID string) {
 	}
 	var buf bytes.Buffer
 	for hostID := range ids {
-		fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
+		// d=I frees the image data too: the window is gone, nothing will re-show it.
+		fmt.Fprintf(&buf, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)
 	}
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 	delete(kp.remoteVideo, windowID)

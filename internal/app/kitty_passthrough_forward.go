@@ -867,7 +867,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	// on re-transmit itself.
 	if reusingID && kp.remoteClient {
 		if kp.remoteVideo[windowID] == nil {
-			kp.remoteVideo[windowID] = make(map[uint32]bool)
+			kp.remoteVideo[windowID] = make(map[uint32]*remoteVideoState)
 		}
 		// First reused frame: hand the image off from RefreshAllPlacements to the
 		// self-placing path, keeping the position it was first placed at.
@@ -877,11 +877,19 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 			}
 			delete(kp.placements[windowID], hostID)
 		}
-		// Record the screen the video is on. When the guest leaves it (a browser
-		// quitting back to the shell restores the main screen), the render loop
-		// deletes the image so the last frame does not linger. The value is the
-		// alt-screen state at placement time.
-		kp.remoteVideo[windowID][hostID] = isAltScreen
+		// Record the geometry so the render loop can re-place this image with a=p
+		// (no re-transmit) when the window moves/resizes or an overlay closes, and
+		// clear it when the pane leaves the screen it was shown on (a browser
+		// quitting back to the shell).
+		st := kp.remoteVideo[windowID][hostID]
+		if st == nil {
+			st = &remoteVideoState{}
+			kp.remoteVideo[windowID][hostID] = st
+		}
+		st.guestX, st.guestY = cursorX, cursorY
+		st.cols, st.rows = displayCols, displayRows
+		st.altScreen = isAltScreen
+		st.hostX, st.hostY = hostX, hostY
 
 		frame := kp.buildInlinePlacedChunks(hostID, format, compression,
 			cmd.Width, cmd.Height, displayCols, displayRows, hostX, hostY, data)
@@ -1014,7 +1022,9 @@ func (kp *KittyPassthrough) buildInlinePlacedChunks(hostID uint32, format vt.Kit
 
 		out.WriteString("\x1b_G")
 		if i == 0 {
-			fmt.Fprintf(&out, "a=T,i=%d,f=%d,s=%d,v=%d,q=2", hostID, format, width, height)
+			// p=1 gives the placement a stable id so buildVideoReplace can move or
+			// re-show it later with a=p (no re-transmit).
+			fmt.Fprintf(&out, "a=T,i=%d,p=1,f=%d,s=%d,v=%d,q=2", hostID, format, width, height)
 			if cols > 0 {
 				fmt.Fprintf(&out, ",c=%d", cols)
 			}
@@ -1035,6 +1045,25 @@ func (kp *KittyPassthrough) buildInlinePlacedChunks(hostID uint32, format vt.Kit
 		out.WriteString("\x1b\\")
 	}
 	out.WriteString("\x1b8") // restore cursor
+	return out.Bytes()
+}
+
+// buildVideoReplace re-places an already-transmitted self-placed video image at
+// a host position using a=p, with no data re-transmit. Used to follow a window
+// drag/resize and to re-show the image after an overlay closes, from the image
+// data still resident on the host (the a=T carried p=1).
+func (kp *KittyPassthrough) buildVideoReplace(hostID uint32, hostX, hostY, cols, rows int) []byte {
+	var out bytes.Buffer
+	out.WriteString("\x1b7")
+	fmt.Fprintf(&out, "\x1b[%d;%dH", hostY+1, hostX+1)
+	fmt.Fprintf(&out, "\x1b_Ga=p,i=%d,p=1,q=2", hostID)
+	if cols > 0 {
+		fmt.Fprintf(&out, ",c=%d", cols)
+	}
+	if rows > 0 {
+		fmt.Fprintf(&out, ",r=%d", rows)
+	}
+	out.WriteString("\x1b\\\x1b8")
 	return out.Bytes()
 }
 
