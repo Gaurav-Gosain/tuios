@@ -849,17 +849,21 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 		return startDaemonBackground()
 	}
 
-	if session.GetDebugLevel() == session.DebugOff {
-		userConfig, err := config.LoadUserConfig()
-		if err == nil && userConfig.Daemon.LogLevel != "" {
-			session.SetDebugLevel(session.ParseDebugLevel(userConfig.Daemon.LogLevel))
-		}
-	}
-
-	daemon := session.NewDaemon(&session.DaemonConfig{
+	daemonCfg := &session.DaemonConfig{
 		Version:            version,
 		DisableAutoRestore: disableAutoRestore,
-	})
+	}
+
+	if userConfig, err := config.LoadUserConfig(); err == nil {
+		if session.GetDebugLevel() == session.DebugOff && userConfig.Daemon.LogLevel != "" {
+			session.SetDebugLevel(session.ParseDebugLevel(userConfig.Daemon.LogLevel))
+		}
+		daemonCfg.AgentAutoDetect = userConfig.Daemon.AgentAutoDetect
+		daemonCfg.AgentDetectInterval = time.Duration(userConfig.Daemon.AgentDetectSeconds) * time.Second
+		daemonCfg.AgentBinaries = userConfig.Daemon.AgentBinaries
+	}
+
+	daemon := session.NewDaemon(daemonCfg)
 
 	return daemon.Run()
 }

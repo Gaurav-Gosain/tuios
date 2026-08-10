@@ -102,6 +102,17 @@ type DaemonConfig struct {
 	LogLevel     string `toml:"log_level"`     // Debug log level: off, errors, basic, messages, verbose, trace (default: off)
 	DefaultCodec string `toml:"default_codec"` // Default protocol codec: gob, json (default: gob)
 	SocketPath   string `toml:"socket_path"`   // Custom socket path (default: $XDG_RUNTIME_DIR/tuios/daemon.sock)
+	// AgentAutoDetect toggles automatic detection of a pane's foreground AI-agent
+	// CLI (claude, codex, aider, ...), which sets the pane's agent-state glyph
+	// without set-agent-state. Nil means enabled (the default); set to false to
+	// turn it off.
+	AgentAutoDetect *bool `toml:"agent_autodetect"`
+	// AgentDetectSeconds overrides how often the auto-detector polls each pane, in
+	// seconds. Zero uses the default (2s); a negative value disables detection.
+	AgentDetectSeconds int `toml:"agent_detect_seconds"`
+	// AgentBinaries lists extra binary names to treat as agents, merged with the
+	// built-in defaults (not replacing them).
+	AgentBinaries []string `toml:"agent_binaries"`
 }
 
 // AppearanceConfig holds appearance-related settings

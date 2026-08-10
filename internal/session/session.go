@@ -282,6 +282,14 @@ type Session struct {
 	// Configuration
 	config *SessionConfig
 
+	// autoAgentOwned records, by window ID, the windows whose agent state was set
+	// by the foreground-process auto-detector (applyAgentDetection) and not since
+	// relinquished. It is the detector's precedence marker: it only manages windows
+	// it owns and never touches a state a user set manually. It is read and written
+	// solely from applyAgentDetection, which runs under stateMu, so it needs no lock
+	// of its own.
+	autoAgentOwned map[string]bool
+
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
 	// terminal identity the guest's image tools recognise.
@@ -1265,6 +1273,16 @@ func (p *PTY) ProcessCwd() (string, bool) {
 		return "", false
 	}
 	return processCwd(p.cmd.Process.Pid)
+}
+
+// ShellPID returns the process id of the PTY's shell child, or 0 when the process
+// is not running. It is the anchor the agent auto-detector uses to resolve the
+// pane's foreground process group.
+func (p *PTY) ShellPID() int {
+	if p.cmd == nil || p.cmd.Process == nil {
+		return 0
+	}
+	return p.cmd.Process.Pid
 }
 
 // IsExited returns true if the shell process has exited.

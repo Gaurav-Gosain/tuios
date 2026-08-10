@@ -56,6 +56,16 @@ type Daemon struct {
 	// heuristic. It is resolved once in NewDaemon from config or the
 	// TUIOS_AGENT_STALL_SECONDS environment override.
 	agentStallTimeout time.Duration
+
+	// agentDetectInterval is how often the foreground-process auto-detector polls
+	// each pane to mark or clear a running agent. Zero disables auto-detection. It
+	// is resolved once in NewDaemon from config or the TUIOS_AGENT_DETECT_SECONDS
+	// environment override.
+	agentDetectInterval time.Duration
+
+	// agentMatcher decides whether a pane's foreground process is a known agent
+	// CLI. It merges the built-in agent binary names with any the user added.
+	agentMatcher agentMatcher
 }
 
 // defaultAgentStallTimeout is the conservative default silence window before a
@@ -64,6 +74,11 @@ type Daemon struct {
 // report, and demoting a genuinely-busy-but-quiet pane too eagerly is worse than
 // leaving it looking busy a little longer.
 const defaultAgentStallTimeout = 30 * time.Second
+
+// defaultAgentDetectInterval is how often the foreground-process auto-detector
+// polls each pane. It is modest on purpose: agent presence changes on a human
+// timescale, and a per-pane /proc read every couple of seconds is cheap.
+const defaultAgentDetectInterval = 2 * time.Second
 
 // pendingRequest tracks a routed command awaiting its result, with the time it
 // was created so cleanupLoop can expire stale entries.
@@ -142,6 +157,18 @@ type DaemonConfig struct {
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
 	// negative value disables the heuristic.
 	AgentStallTimeout time.Duration
+	// AgentAutoDetect toggles the foreground-process agent auto-detector. Nil
+	// falls back to the TUIOS_AGENT_AUTODETECT environment override, then to
+	// enabled. A non-nil false disables it.
+	AgentAutoDetect *bool
+	// AgentDetectInterval overrides the auto-detector's poll interval. Zero falls
+	// back to the TUIOS_AGENT_DETECT_SECONDS environment override, then to the
+	// default; a negative value disables auto-detection.
+	AgentDetectInterval time.Duration
+	// AgentBinaries are extra binary names to treat as agents, merged with the
+	// built-in defaults. It also picks up the TUIOS_AGENT_BINARIES environment
+	// override (comma-separated).
+	AgentBinaries []string
 }
 
 // NewDaemon creates a new daemon instance.
@@ -158,7 +185,9 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		version:            cfg.Version,
 		disableAutoRestore: cfg.DisableAutoRestore,
 		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
+		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
 	}
+	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 
 	if cfg.SocketPath != "" {
 		d.manager.SetSocketPath(cfg.SocketPath)
@@ -258,6 +287,7 @@ func (d *Daemon) Start() error {
 	go d.acceptLoop()
 	go d.cleanupLoop()
 	go d.stallMonitor()
+	go d.agentMonitor()
 
 	return nil
 }
@@ -619,6 +649,87 @@ func resolveAgentStallTimeout(cfg time.Duration) time.Duration {
 		}
 	}
 	return defaultAgentStallTimeout
+}
+
+// resolveAgentBinaries returns the extra agent binary names to merge with the
+// built-in defaults: the config list, plus the comma-separated
+// TUIOS_AGENT_BINARIES environment override.
+func resolveAgentBinaries(cfg []string) []string {
+	extra := append([]string(nil), cfg...)
+	if s := os.Getenv("TUIOS_AGENT_BINARIES"); s != "" {
+		for _, name := range strings.Split(s, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				extra = append(extra, name)
+			}
+		}
+	}
+	return extra
+}
+
+// resolveAgentDetectInterval picks the auto-detector's poll interval and, with
+// it, whether auto-detection runs at all. An explicit enable/disable from config
+// wins; then an explicit positive interval wins; a negative interval disables it;
+// a zero interval falls back to the TUIOS_AGENT_DETECT_SECONDS environment
+// override (0 or less there disables it), and finally to the default. A returned
+// zero means auto-detection is off.
+func resolveAgentDetectInterval(enabled *bool, cfg time.Duration) time.Duration {
+	if enabled != nil && !*enabled {
+		return 0
+	}
+	if enabled == nil {
+		if v := strings.TrimSpace(os.Getenv("TUIOS_AGENT_AUTODETECT")); v != "" {
+			switch strings.ToLower(v) {
+			case "0", "false", "no", "off":
+				return 0
+			}
+		}
+	}
+	if cfg > 0 {
+		return cfg
+	}
+	if cfg < 0 {
+		return 0
+	}
+	if s := os.Getenv("TUIOS_AGENT_DETECT_SECONDS"); s != "" {
+		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+			if n <= 0 {
+				return 0
+			}
+			return time.Duration(n) * time.Second
+		}
+	}
+	return defaultAgentDetectInterval
+}
+
+// agentMonitor periodically resolves the foreground process of every pane and
+// marks or clears a running agent, so the status glyph appears without the user
+// running set-agent-state. It is strictly subordinate to explicit reports and to
+// the stall heuristic (see Session.applyAgentDetection). It exits when the daemon
+// context is cancelled, and does nothing at all when auto-detection is disabled.
+func (d *Daemon) agentMonitor() {
+	if d.agentDetectInterval <= 0 {
+		return
+	}
+	ticker := time.NewTicker(d.agentDetectInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-ticker.C:
+			for _, sess := range d.manager.AllSessions() {
+				sess := sess
+				sess.applyAgentDetection(func(ptyID string) (string, []string, bool) {
+					pty := sess.GetPTY(ptyID)
+					if pty == nil || pty.IsExited() {
+						return "", nil, false
+					}
+					return foregroundProcess(pty.ShellPID())
+				}, d.agentMatcher.isAgent)
+			}
+		}
+	}
 }
 
 // stallMonitor periodically applies the agent-state output-stall heuristic to
