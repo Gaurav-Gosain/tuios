@@ -93,7 +93,13 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 	var modeText string
 	var modeLabel string
 
-	if m.Mode == TerminalMode {
+	switch {
+	case m.SidebarFocused:
+		// The rail owns the keyboard: the mode pill is the authoritative "who has
+		// input" indicator, so it says so in accent, outranking the pane mode.
+		modeInfo.Color = theme.ColorToString(theme.UI().Accent)
+		modeLabel = "SIDEBAR"
+	case m.Mode == TerminalMode:
 		if focusedWindow.CopyModeVisible() {
 			// Copy mode
 			modeInfo.Color = theme.ColorToString(theme.DockColorCopy())
@@ -109,7 +115,7 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 				modeLabel = config.GetDockModeIconTerminal()
 			}
 		}
-	} else {
+	default:
 		// Window mode
 		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
 		// Add tiling indicator for window mode (with split direction)
@@ -121,7 +127,7 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 	}
 
 	// Add zoom indicator
-	if focusedWindow != nil && focusedWindow.Zoomed {
+	if focusedWindow != nil && focusedWindow.Zoomed && !m.SidebarFocused {
 		modeLabel += " Z"
 	}
 

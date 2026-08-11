@@ -134,6 +134,12 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		return true
 	}
 
+	// A click inside the rail while it holds keyboard focus keeps the focus and
+	// moves the cursor to the clicked row: mouse and keyboard share one cursor.
+	if m.SidebarFocused {
+		m.sidebarSetCursorToHit(hit)
+	}
+
 	switch hit.Kind {
 	case sidebarRowWindow, sidebarRowAgent:
 		m.sidebarFocusWindow(hit)

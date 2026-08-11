@@ -335,6 +335,33 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	variant := sidebarVariant(w)
 	cw := w - 1 // content columns beside the edge rule
 	edge := sidebarEdgeRule()
+	// While the rail owns the keyboard its edge rule burns accent instead of the
+	// dock's muted hairline, so the focus is legible at the frame, not only on a
+	// single highlighted row.
+	if m.SidebarFocused {
+		edge = lipgloss.NewStyle().Foreground(pal.Accent).Render(config.GetWindowBorderLeft())
+	}
+
+	// The keyboard cursor tracks a row by identity, not by index, so it survives a
+	// relayout: the target is the session the last action asked to follow, else
+	// the nav row the cursor was on last frame. Rows matching it draw the same
+	// RowSel bar hover uses; the two share one cursor.
+	var cursorTarget sidebarNavRow
+	haveCursorTarget := false
+	switch {
+	case m.sidebarFollowSession != "":
+		cursorTarget = sidebarNavRow{Kind: sidebarRowSession, SessionID: m.sidebarFollowSession}
+		haveCursorTarget = true
+	case m.SidebarCursor >= 0 && m.SidebarCursor < len(m.SidebarNav):
+		cursorTarget = m.SidebarNav[m.SidebarCursor]
+		haveCursorTarget = true
+	}
+	isCursor := func(kind sidebarRowKind, sessionID, windowID string) bool {
+		return m.SidebarFocused && haveCursorTarget &&
+			cursorTarget.Kind == kind && cursorTarget.SessionID == sessionID && cursorTarget.WindowID == windowID
+	}
+	nav := make([]sidebarNavRow, 0, 16)
+	cursorLogical := -1
 
 	// compose attaches the edge rule on the pane-facing side.
 	compose := func(content string) string {
@@ -425,13 +452,17 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	for _, session := range sessions {
 		expanded := m.sidebarSessionExpanded(session)
 		dragged := m.SidebarDrag.Dragging && session.ID == m.SidebarDrag.SessionID
+		if isCursor(sidebarRowSession, session.ID, "") {
+			cursorLogical = len(rows)
+		}
 		rows = append(rows, logicalRow{
-			text:        m.sidebarSessionRow(session, variant, expanded, cw, pal, len(rows) == treeHover, dragged),
+			text:        m.sidebarSessionRow(session, variant, expanded, cw, pal, len(rows) == treeHover || isCursor(sidebarRowSession, session.ID, ""), dragged),
 			interactive: true,
 			sessionID:   session.ID,
 			windowIndex: -1,
 			kind:        sidebarRowSession,
 		})
+		nav = append(nav, sidebarNavRow{Kind: sidebarRowSession, SessionID: session.ID, WindowIndex: -1})
 
 		if variant == sidebarVariantGlyph || !config.SidebarShowWindows || !expanded {
 			continue
@@ -441,14 +472,28 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			if session.IsCurrent {
 				idx = m.windowIndexByID(win.ID)
 			}
+			if isCursor(sidebarRowWindow, session.ID, win.ID) {
+				cursorLogical = len(rows)
+			}
 			rows = append(rows, logicalRow{
-				text:        m.sidebarWindowRow(win, variant, cw, pal, len(rows) == treeHover),
+				text:        m.sidebarWindowRow(win, variant, cw, pal, len(rows) == treeHover || isCursor(sidebarRowWindow, session.ID, win.ID)),
 				interactive: true,
 				sessionID:   session.ID,
 				windowID:    win.ID,
 				windowIndex: idx,
 				kind:        sidebarRowWindow,
 			})
+			nav = append(nav, sidebarNavRow{Kind: sidebarRowWindow, SessionID: session.ID, WindowID: win.ID, WindowIndex: idx})
+		}
+	}
+
+	// Keyboard cursor auto-scroll: a cursor in the tree region is kept on screen,
+	// so j/k past the fold scrolls the list the way a wheel would.
+	if m.SidebarFocused && cursorLogical >= 0 && treeH > 0 {
+		if cursorLogical < m.SidebarScroll {
+			m.SidebarScroll = cursorLogical
+		} else if cursorLogical >= m.SidebarScroll+treeH {
+			m.SidebarScroll = cursorLogical - treeH + 1
 		}
 	}
 
@@ -495,8 +540,28 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			}
 			e := agents[i]
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex)
-			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, i == agentHover)))
+			nav = append(nav, sidebarNavRow{Kind: sidebarRowAgent, SessionID: e.SessionID, WindowID: e.WindowID, WindowIndex: e.WindowIndex})
+			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, i == agentHover || isCursor(sidebarRowAgent, e.SessionID, e.WindowID))))
 		}
+	}
+
+	// Publish the frame's navigable rows for the keyboard, then re-anchor the
+	// cursor onto the row it was tracking so its index stays valid across a
+	// relayout (reorder, switch, expand/collapse). A follow request is consumed
+	// here, once the row it named exists in the new layout.
+	m.SidebarNav = nav
+	m.sidebarFollowSession = ""
+	if haveCursorTarget {
+		m.SidebarCursor = 0
+		for i, r := range nav {
+			if sidebarNavRowsEqual(r, cursorTarget) {
+				m.SidebarCursor = i
+				break
+			}
+		}
+	}
+	if m.SidebarCursor >= len(nav) {
+		m.SidebarCursor = max(len(nav)-1, 0)
 	}
 
 	return lines, w

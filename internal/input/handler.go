@@ -185,6 +185,14 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleContextMenuKey(msg, o)
 	}
 
+	// The sidebar rail owns the keyboard while focused, in both terminal and
+	// window mode (it is reachable from either via ctrl+b o), so pane and window
+	// bindings never fire underneath it. Checked after the modal overlays above,
+	// which outrank it, and before the mode split, which it supersedes.
+	if o.SidebarFocused {
+		return HandleSidebarKey(msg, o)
+	}
+
 	// Terminal-mode keystrokes are recorded at the point they are actually
 	// forwarded to the PTY (see recordTerminalKey in HandleTerminalModeKey), not
 	// here: recording before prefix/overlay routing captured prefix chords,

@@ -595,6 +595,12 @@ var CopyOnSelect = true
 // Set via appearance.focus_follows_mouse config.
 var FocusFollowsMouse = false
 
+// FocusFollowsMouseInTerminal extends focus-follows-mouse into terminal mode,
+// where it is off by default: while typing, the pointer sits over a pane for
+// reasons other than a focus request, so hover-focus there is a separate opt-in.
+// Set via appearance.focus_follows_mouse_in_terminal config.
+var FocusFollowsMouseInTerminal = false
+
 // WordCharacters lists the punctuation that counts as part of a word when a
 // double-click selects one, on top of letters and digits, which always do.
 //

@@ -14,6 +14,32 @@ import (
 // ActionHandler is a function that handles a specific action
 type ActionHandler func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 
+// Rail (sidebar keyboard scope) action names. These are the actions in the
+// [keybindings] sidebar config section, dispatched by HandleSidebarKey while the
+// rail owns the keyboard. Constants keep the routing switch and any future
+// callers typo-proof now that there are ~14 of them.
+const (
+	sidebarActCursorDown  = "cursor_down"
+	sidebarActCursorUp    = "cursor_up"
+	sidebarActFirst       = "first"
+	sidebarActLast        = "last"
+	sidebarActExpand      = "expand"
+	sidebarActCollapse    = "collapse"
+	sidebarActActivate    = "activate"
+	sidebarActReorderDown = "reorder_down"
+	sidebarActReorderUp   = "reorder_up"
+	sidebarActSection     = "section"
+	sidebarActNewSession  = "new_session"
+	sidebarActNewWindow   = "new_window"
+	sidebarActRename      = "rename"
+	sidebarActAccent      = "accent"
+	sidebarActKill        = "kill"
+	sidebarActMenu        = "menu"
+	sidebarActExit        = "exit"
+	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
+	sidebarActJumpPrefix = "jump_"
+)
+
 // ActionDispatcher maps action names to handler functions
 type ActionDispatcher struct {
 	handlers map[string]ActionHandler
@@ -102,6 +128,11 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("enter_window_mode", handleEnterWindowMode)
 	d.Register("toggle_help", handleToggleHelp)
 	d.Register("quit", handleQuit)
+
+	// Enter the sidebar rail's keyboard scope (window mode "s"). The exit and the
+	// per-row keys are not dispatcher actions: they route through HandleSidebarKey
+	// only while SidebarFocused, so they cannot fire on a pane.
+	d.Register("focus_sidebar", handleFocusSidebar)
 
 	// Clipboard actions
 	d.Register("copy_selection", handleCopySelection)

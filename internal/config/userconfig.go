@@ -117,33 +117,34 @@ type DaemonConfig struct {
 
 // AppearanceConfig holds appearance-related settings
 type AppearanceConfig struct {
-	BorderStyle         string  `toml:"border_style"`          // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
-	HideWindowButtons   bool    `toml:"hide_window_buttons"`   // Hide window control buttons (minimize, maximize, close)
-	HideScrollbar       bool    `toml:"hide_scrollbar"`        // Hide the window scrollbar thumb on the border
-	ScrollbackLines     int     `toml:"scrollback_lines"`      // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
-	ScrollLines         int     `toml:"scroll_lines"`          // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
-	CopyOnSelect        *bool   `toml:"copy_on_select"`        // Copy a mouse selection to the clipboard on release (default: true)
-	FocusFollowsMouse   *bool   `toml:"focus_follows_mouse"`   // Focus the pane under the cursor as the mouse moves (default: false)
-	WordCharacters      *string `toml:"word_characters"`       // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
-	DockbarPosition     string  `toml:"dockbar_position"`      // Dockbar position: bottom, top, hidden
-	SidebarEnabled      *bool   `toml:"sidebar_enabled"`       // Show the vertical session sidebar (default: false)
-	SidebarPosition     string  `toml:"sidebar_position"`      // Sidebar edge: left, right, hidden (default: left)
-	SidebarWidth        int     `toml:"sidebar_width"`         // Preferred sidebar width in columns (default: 28)
-	SidebarShowWindows  *bool   `toml:"sidebar_show_windows"`  // List window rows under the current session (default: true)
-	SidebarShowGlyphs   *bool   `toml:"sidebar_show_glyphs"`   // Draw agent-state glyphs on sidebar rows (default: true)
-	SidebarShowCounts   *bool   `toml:"sidebar_show_counts"`   // Draw window counts on sidebar session rows (default: true)
-	PreferredShell      string  `toml:"preferred_shell"`       // Preferred shell: if empty, auto-detect based on platform.
-	AnimationsEnabled   *bool   `toml:"animations_enabled"`    // Enable UI animations (default: true). Set to false for instant transitions.
-	ConfirmQuit         *bool   `toml:"confirm_quit"`          // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
-	WhichKeyEnabled     *bool   `toml:"whichkey_enabled"`      // Show which-key popup after pressing leader key (default: true)
-	WhichKeyPosition    string  `toml:"whichkey_position"`     // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
-	WindowTitlePosition string  `toml:"window_title_position"` // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
-	HideClock           bool    `toml:"hide_clock"`            // Hide the clock overlay (deprecated, use show_clock)
-	ShowClock           bool    `toml:"show_clock"`            // Show the clock overlay (default: false)
-	ShowCPU             bool    `toml:"show_cpu"`              // Show CPU graph in dock (default: false)
-	ShowRAM             bool    `toml:"show_ram"`              // Show RAM usage in dock (default: false)
-	Theme               string  `toml:"theme"`                 // Color theme name (e.g., dracula, nord, my-custom-theme)
-	SharedBorders       *bool   `toml:"shared_borders"`        // Share borders between adjacent tiled windows (default: false)
+	BorderStyle                 string  `toml:"border_style"`                    // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
+	HideWindowButtons           bool    `toml:"hide_window_buttons"`             // Hide window control buttons (minimize, maximize, close)
+	HideScrollbar               bool    `toml:"hide_scrollbar"`                  // Hide the window scrollbar thumb on the border
+	ScrollbackLines             int     `toml:"scrollback_lines"`                // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
+	ScrollLines                 int     `toml:"scroll_lines"`                    // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
+	CopyOnSelect                *bool   `toml:"copy_on_select"`                  // Copy a mouse selection to the clipboard on release (default: true)
+	FocusFollowsMouse           *bool   `toml:"focus_follows_mouse"`             // Focus the pane under the cursor as the mouse moves (default: false)
+	FocusFollowsMouseInTerminal *bool   `toml:"focus_follows_mouse_in_terminal"` // Also hover-focus while in terminal mode (default: false)
+	WordCharacters              *string `toml:"word_characters"`                 // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
+	DockbarPosition             string  `toml:"dockbar_position"`                // Dockbar position: bottom, top, hidden
+	SidebarEnabled              *bool   `toml:"sidebar_enabled"`                 // Show the vertical session sidebar (default: false)
+	SidebarPosition             string  `toml:"sidebar_position"`                // Sidebar edge: left, right, hidden (default: left)
+	SidebarWidth                int     `toml:"sidebar_width"`                   // Preferred sidebar width in columns (default: 28)
+	SidebarShowWindows          *bool   `toml:"sidebar_show_windows"`            // List window rows under the current session (default: true)
+	SidebarShowGlyphs           *bool   `toml:"sidebar_show_glyphs"`             // Draw agent-state glyphs on sidebar rows (default: true)
+	SidebarShowCounts           *bool   `toml:"sidebar_show_counts"`             // Draw window counts on sidebar session rows (default: true)
+	PreferredShell              string  `toml:"preferred_shell"`                 // Preferred shell: if empty, auto-detect based on platform.
+	AnimationsEnabled           *bool   `toml:"animations_enabled"`              // Enable UI animations (default: true). Set to false for instant transitions.
+	ConfirmQuit                 *bool   `toml:"confirm_quit"`                    // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
+	WhichKeyEnabled             *bool   `toml:"whichkey_enabled"`                // Show which-key popup after pressing leader key (default: true)
+	WhichKeyPosition            string  `toml:"whichkey_position"`               // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
+	WindowTitlePosition         string  `toml:"window_title_position"`           // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
+	HideClock                   bool    `toml:"hide_clock"`                      // Hide the clock overlay (deprecated, use show_clock)
+	ShowClock                   bool    `toml:"show_clock"`                      // Show the clock overlay (default: false)
+	ShowCPU                     bool    `toml:"show_cpu"`                        // Show CPU graph in dock (default: false)
+	ShowRAM                     bool    `toml:"show_ram"`                        // Show RAM usage in dock (default: false)
+	Theme                       string  `toml:"theme"`                           // Color theme name (e.g., dracula, nord, my-custom-theme)
+	SharedBorders               *bool   `toml:"shared_borders"`                  // Share borders between adjacent tiled windows (default: false)
 	// Customization
 	BorderFocusedColor   string `toml:"border_focused_color"`   // Hex color for focused pane border (e.g., "#89b4fa")
 	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
@@ -183,6 +184,11 @@ type KeybindingsConfig struct {
 	DebugPrefix      map[string][]string `toml:"debug_prefix"`
 	TapePrefix       map[string][]string `toml:"tape_prefix"`
 	TerminalMode     map[string][]string `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
+	// Sidebar binds are looked up only while the rail owns the keyboard
+	// (SidebarFocused), through GetSidebarAction. They are deliberately kept out
+	// of buildMappings: that flattens sections into the global keymap, which would
+	// leak rail keys (j/k/h/l/enter) onto panes.
+	Sidebar map[string][]string `toml:"sidebar"`
 }
 
 // DefaultConfig returns the default configuration
@@ -236,6 +242,8 @@ func DefaultConfig() *UserConfig {
 				"select_window_7": {"7"},
 				"select_window_8": {"8"},
 				"select_window_9": {"9"},
+				// Enter the sidebar rail's keyboard scope; s is free in window mode.
+				"focus_sidebar": {"s"},
 			},
 			Workspaces: getDefaultWorkspaceKeybinds(),
 			Layout:     getDefaultLayoutKeybinds(),
@@ -308,6 +316,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_toggle_sidebar":   {"b"},
 				"prefix_session_switcher": {"S"},
 				"prefix_layout":           {"L"},
+				"prefix_focus_sidebar":    {"o"}, // tmux's "other pane" mnemonic
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -368,9 +377,45 @@ func DefaultConfig() *UserConfig {
 				"tape_prefix_cancel":  {"esc"},
 			},
 			TerminalMode: getDefaultTerminalModeKeybinds(),
+			Sidebar:      getDefaultSidebarKeybinds(),
 		},
 	}
 	return cfg
+}
+
+// getDefaultSidebarKeybinds returns the rail's scope-local keybindings, active
+// only while the rail owns the keyboard (SidebarFocused). Each mirrors a mouse
+// affordance so the two devices reach the same OS mutation. Case matters: J/K
+// reorder, j/k move the cursor.
+func getDefaultSidebarKeybinds() map[string][]string {
+	return map[string][]string{
+		"cursor_down":  {"j", "down"},
+		"cursor_up":    {"k", "up"},
+		"first":        {"g", "home"},
+		"last":         {"G", "end"},
+		"expand":       {"l", "right"},
+		"collapse":     {"h", "left"},
+		"activate":     {"enter"},
+		"reorder_down": {"J", "shift+down"},
+		"reorder_up":   {"K", "shift+up"},
+		"section":      {"tab", "shift+tab"},
+		"jump_1":       {"1"},
+		"jump_2":       {"2"},
+		"jump_3":       {"3"},
+		"jump_4":       {"4"},
+		"jump_5":       {"5"},
+		"jump_6":       {"6"},
+		"jump_7":       {"7"},
+		"jump_8":       {"8"},
+		"jump_9":       {"9"},
+		"new_session":  {"n"},
+		"new_window":   {"t"},
+		"rename":       {"r"},
+		"accent":       {"c"},
+		"kill":         {"x"},
+		"menu":         {"m"},
+		"exit":         {"esc", "s"},
+	}
 }
 
 // getDefaultTerminalModeKeybinds returns platform-specific terminal mode keybindings
@@ -749,6 +794,12 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// settings page survives a reload just as turning it on does.
 	if cfg.Appearance.FocusFollowsMouse != nil {
 		FocusFollowsMouse = *cfg.Appearance.FocusFollowsMouse
+	}
+
+	// FocusFollowsMouseInTerminal gates hover-focus in terminal mode; a pointer so
+	// an explicit false in the settings page survives a reload.
+	if cfg.Appearance.FocusFollowsMouseInTerminal != nil {
+		FocusFollowsMouseInTerminal = *cfg.Appearance.FocusFollowsMouseInTerminal
 	}
 
 	// WordCharacters is a pointer so an explicitly empty string can mean "no

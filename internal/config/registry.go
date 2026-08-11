@@ -99,6 +99,14 @@ func (r *KeybindRegistry) GetTerminalModeAction(key string) string {
 	return r.lookupKeyInSection(key, r.config.Keybindings.TerminalMode)
 }
 
+// GetSidebarAction returns the action name for a given key in the rail's
+// keyboard scope. Looked up in its own section rather than through the global
+// keymap so rail keys (j/k/h/l/enter) never fire on a pane; only consulted while
+// SidebarFocused.
+func (r *KeybindRegistry) GetSidebarAction(key string) string {
+	return r.lookupKeyInSection(key, r.config.Keybindings.Sidebar)
+}
+
 // lookupKeyInSection looks up a key in a specific config section
 func (r *KeybindRegistry) lookupKeyInSection(key string, section map[string][]string) string {
 	// Build a temporary map for this section
@@ -316,6 +324,7 @@ var ActionDescriptions = map[string]string{
 	"enter_window_mode":   "Enter window management mode",
 	"toggle_help":         "Toggle help",
 	"quit":                "Quit",
+	"focus_sidebar":       "Focus the sidebar rail",
 
 	// Clipboard
 	"copy_selection":  "Copy selection to clipboard",
@@ -368,6 +377,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_scrollback":       "Open the scrollback browser",
 	"prefix_command_palette":  "Open the command palette",
 	"prefix_toggle_sidebar":   "Toggle the session sidebar",
+	"prefix_focus_sidebar":    "Focus the sidebar rail",
 	"prefix_session_switcher": "Open the session switcher",
 	"prefix_layout":           "Enter layout prefix",
 

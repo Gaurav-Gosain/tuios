@@ -758,3 +758,29 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		t.Error("clearing hide_window_buttons/show_clock did not reach the globals")
 	}
 }
+
+// TestSidebarKeybindsDoNotLeakToPanes checks the rail scope is exclusive by
+// construction: its keys resolve through GetSidebarAction but never through the
+// global keymap, so j/k/h/l/enter cannot fire on a pane.
+func TestSidebarKeybindsDoNotLeakToPanes(t *testing.T) {
+	r := config.NewKeybindRegistry(config.DefaultConfig())
+
+	if got := r.GetSidebarAction("j"); got != "cursor_down" {
+		t.Fatalf("GetSidebarAction(j) = %q, want cursor_down", got)
+	}
+	if got := r.GetSidebarAction("J"); got != "reorder_down" {
+		t.Fatalf("GetSidebarAction(J) = %q, want reorder_down (case matters)", got)
+	}
+	// The rail's cursor keys must not resolve to a rail action through the global
+	// keymap; if they did, pressing j on a pane would run a rail action.
+	probes := map[string]string{"j": "cursor_down", "k": "cursor_up", "h": "collapse", "l": "expand", "enter": "activate"}
+	for key, railAction := range probes {
+		if a := r.GetAction(key); a == railAction {
+			t.Fatalf("global keymap leaked rail action %q via key %q", railAction, key)
+		}
+	}
+	// focus_sidebar, by contrast, IS a global window-mode action (the entry key).
+	if got := r.GetAction("s"); got != "focus_sidebar" {
+		t.Fatalf("GetAction(s) = %q, want focus_sidebar", got)
+	}
+}

@@ -92,7 +92,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// (overlays, menus, the sidebar band, the dock) never steals pane focus,
 	// and nothing happens unless the pane under the cursor actually differs
 	// from the focused one.
-	if config.FocusFollowsMouse && !o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
+	// In terminal mode hover-focus is off unless opted in separately: typing is
+	// the reason the pointer is over a pane there, and stealing focus mid-keystroke
+	// is worse than a click. Rail keyboard focus suppresses it outright, since the
+	// rail is overlay-like and owns the keyboard; a click is the way back to a pane.
+	ffmModeOK := o.Mode != app.TerminalMode || config.FocusFollowsMouseInTerminal
+	if config.FocusFollowsMouse && ffmModeOK && !o.SidebarFocused &&
+		!o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
 		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {
 		fw := o.GetFocusedWindow()

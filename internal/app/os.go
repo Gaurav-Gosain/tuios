@@ -493,6 +493,22 @@ type OS struct {
 	SidebarMarqueeKey   string
 	SidebarMarqueeStart time.Time
 	sidebarMarqueeSeen  bool
+	// Sidebar keyboard focus scope (the rail). While SidebarFocused the rail owns
+	// the keyboard: pane and window bindings do not fire, and the cursor row is
+	// SidebarNav[SidebarCursor]. SidebarNav is the ordered list of interactive
+	// rows the last frame rendered (sessions, their windows, then agents), the
+	// keyboard equivalent of SidebarHits, so keyboard navigation lands on exactly
+	// the rows a click would. SidebarRevealedForFocus records that entering the
+	// scope had to turn the sidebar on, so exiting turns it back off.
+	SidebarFocused          bool
+	SidebarCursor           int
+	SidebarNav              []sidebarNavRow
+	SidebarRevealedForFocus bool
+	// sidebarFollowSession, when set, tells the next nav build to place the
+	// cursor on that session's row after it rebuilds. It is how a reorder or a
+	// switch keeps the cursor on the session it moved once the tree relaid out,
+	// without the handler guessing the post-relayout index.
+	sidebarFollowSession string
 	// sidebarCache holds the last styled rail keyed by a cheap signature of every
 	// input that changes the rows, so a frame drawn for an unrelated reason (a
 	// pane printing output) does not rebuild and restyle the whole rail.

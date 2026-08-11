@@ -15,6 +15,7 @@ type sidebarRenderCache struct {
 	w          int
 	hits       []sidebarRowHit
 	sessionIDs []string
+	nav        []sidebarNavRow
 }
 
 // invalidate drops the cached rail, forcing the next frame to rebuild. Called
@@ -32,6 +33,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		// truncates and refills these buffers on a real rebuild, so hand back copies.
 		m.SidebarHits = append(m.SidebarHits[:0], m.sidebarCache.hits...)
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs[:0], m.sidebarCache.sessionIDs...)
+		m.SidebarNav = append(m.SidebarNav[:0], m.sidebarCache.nav...)
 		return m.sidebarCache.lines, m.sidebarCache.w
 	}
 
@@ -44,6 +46,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		w:          w,
 		hits:       append([]sidebarRowHit(nil), m.SidebarHits...),
 		sessionIDs: append([]string(nil), m.SidebarSessionIDs...),
+		nav:        append([]sidebarNavRow(nil), m.SidebarNav...),
 	}
 	return lines, w
 }
@@ -96,6 +99,11 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(m.SidebarHoverActive)
 	mixI(m.SidebarHoverX)
 	mixI(m.SidebarHoverY)
+
+	// Rail keyboard focus: the accent edge and the cursor-row highlight both
+	// depend on it, so a focus change or a cursor move must rebuild.
+	mixB(m.SidebarFocused)
+	mixI(m.SidebarCursor)
 
 	// Session identity and the user's drag-defined order.
 	mixS(m.SessionName)
