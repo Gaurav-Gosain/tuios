@@ -62,6 +62,28 @@ func TestRailTitleDebounce(t *testing.T) {
 	}
 }
 
+// TestTickNeedsWorkWakesOnTitleDrift pins the idle-gate fix: a title that has
+// drifted from what the rail shows must wake a maintenance tick on its own, so
+// the debounce can adopt it. Before the fix the wake keyed on HasNewOutput,
+// which the render consumes first for a focused pane, so an isolated title-only
+// change left the rail stale until the next output.
+func TestTickNeedsWorkWakesOnTitleDrift(t *testing.T) {
+	win := &terminal.Window{ID: "w1"}
+	win.SetTitle("cmd-a")
+	m := &OS{Windows: []*terminal.Window{win}}
+	m.updateRailTitles() // seed shown = cmd-a
+
+	if m.tickNeedsWork() {
+		t.Fatal("a synced rail with nothing else live must let the tick sleep")
+	}
+
+	// No output flag is set, mirroring an isolated OSC title change.
+	win.SetTitle("cmd-b")
+	if !m.tickNeedsWork() {
+		t.Fatal("a drifted title must wake the maintenance tick")
+	}
+}
+
 // TestRailTitleDebounceDropsClosedWindows guards the map against unbounded
 // growth as windows come and go.
 func TestRailTitleDebounceDropsClosedWindows(t *testing.T) {

@@ -367,6 +367,14 @@ func (m *OS) tickNeedsWork() bool {
 		if w.ProcessExited() || w.HasNewOutput.Load() || w.IsBeingManipulated {
 			return true
 		}
+		// A title that has drifted from what the rail shows needs a work tick to
+		// adopt it. Keying the wake on HasNewOutput misses an isolated title-only
+		// change on the focused pane: the render consumes that flag before any
+		// tick observes it, so the rail would hold the stale title until the next
+		// output. The compare is a cheap string check per window.
+		if windowRowTitle(w) != m.railTitleShown(w) {
+			return true
+		}
 	}
 	return false
 }
