@@ -59,6 +59,30 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// Ctrl-drag: an armed grab commits to a move once the pointer passes the
+	// drag threshold, then rides the same path as a title-bar drag (the block
+	// below moves the now-focused window). Ctrl let go before the grab commits
+	// is the ctrl+click the press deferred.
+	if o.CtrlDragPending {
+		if mouse.Mod&tea.ModCtrl == 0 {
+			o.CtrlDragPending = false
+			if o.CtrlDragIndex >= 0 && o.CtrlDragIndex < len(o.Windows) {
+				o.ToggleMultifocus(o.CtrlDragIndex)
+			}
+			return o, nil
+		}
+		if abs(mouse.X-o.DragStartX)+abs(mouse.Y-o.DragStartY) >= ctrlDragThreshold {
+			o.CtrlDragPending = false
+			o.CtrlDragging = true
+			beginWindowDrag(o, o.CtrlDragIndex, o.DragStartX, o.DragStartY)
+		}
+	}
+	// A committed ctrl-drag drops the instant ctrl is no longer held, matching
+	// "on leaving ctrl it lets go".
+	if o.CtrlDragging && mouse.Mod&tea.ModCtrl == 0 {
+		return finalizeCtrlDrag(o, mouse.X, mouse.Y)
+	}
+
 	// Update pointer shape based on what we're hovering over (OSC 22)
 	o.UpdatePointerForPosition(mouse.X, mouse.Y)
 

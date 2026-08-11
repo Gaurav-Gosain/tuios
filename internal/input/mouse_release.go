@@ -34,6 +34,18 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A ctrl+left press that never passed the drag threshold is the ctrl+click
+	// the press deferred: toggle multi-select and stop. A committed ctrl-drag
+	// instead falls through to the normal window-drop path below.
+	if o.CtrlDragPending {
+		o.CtrlDragPending = false
+		if o.CtrlDragIndex >= 0 && o.CtrlDragIndex < len(o.Windows) {
+			o.ToggleMultifocus(o.CtrlDragIndex)
+		}
+		return o, nil
+	}
+	o.CtrlDragging = false
+
 	// A plain right press on a pane arms a resize. Below the drag threshold it
 	// was a stray click, cancel the resize (restoring the few cells of jitter it
 	// may have applied) and do nothing else. The context menu is deliberately
@@ -398,6 +410,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 const (
 	rightClickDragThreshold  = 5
 	clickToTypeDragThreshold = 5
+	ctrlDragThreshold        = 5
 )
 
 // cancelRightClickResize unwinds the resize a plain right press set up, so the

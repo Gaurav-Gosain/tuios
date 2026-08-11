@@ -517,6 +517,18 @@ type OS struct {
 	// title bar and borders never arm it, so dragging is unaffected.
 	ClickToTypePending bool
 
+	// Ctrl-drag gesture: a ctrl + left press on a pane's content is a
+	// newcomer-friendly way to grab a window for moving without aiming at the
+	// title bar. CtrlDragPending arms the click-vs-drag decision; it commits to
+	// a move (CtrlDragging, routed through the same drag machinery as a
+	// title-bar drag) only once the pointer passes the drag threshold, and a
+	// sub-threshold release falls through to the ctrl+click multi-select.
+	// CtrlDragIndex is the grabbed window. A committed drag drops on release or
+	// as soon as a mouse event arrives without ctrl held.
+	CtrlDragPending bool
+	CtrlDragging    bool
+	CtrlDragIndex   int
+
 	// ContextMenu is the open shift+right-click menu, or nil. It is deliberately
 	// not one of the draggable overlay kinds: a context menu is anchored to the
 	// cell it was opened on and is dismissed by the next click, so it has no use

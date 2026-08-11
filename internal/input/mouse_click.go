@@ -83,11 +83,28 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A committed ctrl-drag ends on the next mouse event without ctrl held, so a
+	// click arriving mid-drag drops the window where it sits.
+	if o.CtrlDragging && msg.Mod&tea.ModCtrl == 0 {
+		return finalizeCtrlDrag(o, X, Y)
+	}
+
 	// Fast hit testing - find which window was clicked without expensive canvas generation
 	clickedWindowIndex := findClickedWindow(X, Y, o)
 
-	// Ctrl+Click: toggle multifocus on the clicked window
+	// Ctrl + left press on a window: multi-select on a click, or grab the pane
+	// for moving on a drag. On the content it arms the click-vs-drag decision
+	// (committed past the threshold in handleMouseMotion, then moved through the
+	// same path as a title-bar drag); a sub-threshold release falls through to
+	// the ctrl+click multi-select. On the border or title bar, where a drag
+	// already means resize or a title-bar move, it stays the immediate toggle.
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft && msg.Mod&tea.ModCtrl != 0 {
+		if _, _, inContent := o.Windows[clickedWindowIndex].ScreenToTerminal(X, Y); inContent {
+			o.CtrlDragPending = true
+			o.CtrlDragIndex = clickedWindowIndex
+			o.DragStartX, o.DragStartY = X, Y
+			return o, nil
+		}
 		o.ToggleMultifocus(clickedWindowIndex)
 		return o, nil
 	}
@@ -404,34 +421,55 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
-		// Set grabbing pointer during drag
-		app.SetPointerShape(app.PointerGrabbing)
-		// Already in interaction mode, now set drag-specific flags
-		o.Dragging = true
-		o.DragStartX = mouse.X
-		o.DragStartY = mouse.Y
-		o.Windows[clickedWindowIndex].IsBeingManipulated = true
-		// Temporarily untile for border rendering during drag
-		if o.Windows[clickedWindowIndex].Tiled {
-			o.Windows[clickedWindowIndex].Tiled = false
-			o.Windows[clickedWindowIndex].Resize(o.Windows[clickedWindowIndex].Width, o.Windows[clickedWindowIndex].Height)
-		}
-		o.DraggedWindowIndex = clickedWindowIndex
-
-		// In tiling mode (non-scrolling), complete pending animations to avoid
-		// state conflicts when starting a drag. Scrolling mode doesn't drag
-		// windows, so let its slide animations play.
-		if o.AutoTiling && !o.UseScrollingLayout {
-			o.CompleteAllAnimations()
-
-			// Store current position (after completing all animations) for tiling mode swaps
-			o.TiledX = clickedWindow.X
-			o.TiledY = clickedWindow.Y
-			o.TiledWidth = clickedWindow.Width
-			o.TiledHeight = clickedWindow.Height
-		}
+		beginWindowDrag(o, clickedWindowIndex, mouse.X, mouse.Y)
 	}
 	return o, nil
+}
+
+// beginWindowDrag puts a window into the move gesture the title-bar drag uses:
+// it focuses and grabs the pane at (x, y), untiles it for free rendering, and
+// in tiling mode records the slot to swap back into. The title-bar press and a
+// committed ctrl-drag both route through here, so the two share one movement
+// path (motion in handleMouseMotion, drop in handleMouseRelease). Motion moves
+// the focused window, so the grab focuses it; the mode switch keeps a drag from
+// forwarding motion to a mouse-mode app underneath.
+func beginWindowDrag(o *app.OS, idx, x, y int) {
+	win := o.Windows[idx]
+	o.FocusWindow(idx)
+	if o.Mode == app.TerminalMode {
+		o.Mode = app.WindowManagementMode
+	}
+	app.SetPointerShape(app.PointerGrabbing)
+	o.InteractionMode = true
+	o.Dragging = true
+	o.DraggedWindowIndex = idx
+	o.DragStartX, o.DragStartY = x, y
+	o.DragOffsetX = x - win.X
+	o.DragOffsetY = y - win.Y
+	win.IsBeingManipulated = true
+	// Temporarily untile for border rendering during drag.
+	if win.Tiled {
+		win.Tiled = false
+		win.Resize(win.Width, win.Height)
+	}
+	// In tiling mode (non-scrolling), complete pending animations to avoid state
+	// conflicts, then record the slot for the swap-on-release. Scrolling mode
+	// doesn't drag windows, so let its slide animations play.
+	if o.AutoTiling && !o.UseScrollingLayout {
+		o.CompleteAllAnimations()
+		o.TiledX = win.X
+		o.TiledY = win.Y
+		o.TiledWidth = win.Width
+		o.TiledHeight = win.Height
+	}
+}
+
+// finalizeCtrlDrag drops a committed ctrl-drag at (x, y) by running the normal
+// left-button release path, so the tiling swap and floating snap behave exactly
+// as a title-bar drag's release does.
+func finalizeCtrlDrag(o *app.OS, x, y int) (*app.OS, tea.Cmd) {
+	o.CtrlDragging = false
+	return handleMouseRelease(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
 }
 
 // selectWord selects the word at the given position
