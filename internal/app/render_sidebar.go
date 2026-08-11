@@ -219,6 +219,14 @@ func sidebarFit(s string, cw int, bg color.Color) string {
 	return s
 }
 
+// chromeGlyphs are the symbol codepoints we draw ourselves: the agent-state
+// indicators and the session chevron. They sit inside the decorative blocks
+// printableTitle strips, so they are named rather than kept by range.
+var chromeGlyphs = map[rune]bool{
+	'●': true, '▲': true, '○': true, '■': true, // agentStateIndicator
+	'▾': true, '▸': true, // sidebarChevron
+}
+
 // printableTitle strips what a terminal cannot be trusted to render out of a
 // title before it is shown as chrome (sidebar rows, the window title badge, the
 // command palette, the dock): control characters and private-use codepoints
@@ -226,8 +234,8 @@ func sidebarFit(s string, cw int, bg color.Color) string {
 // without the right font), decorative symbol and emoji codepoints (an agent
 // setting a dingbat or emoji in its title otherwise tofus wherever we echo it),
 // plus everything non-ASCII when ASCII-only rendering is on. Titles are foreign
-// data; our own status glyphs are audited and all sit below U+2600, so they
-// survive. Titles have to be laundered.
+// data; our own chrome glyphs are audited, so they are kept by codepoint.
+// Titles have to be laundered.
 func printableTitle(s string) string {
 	ascii := overlay.UseASCII()
 	var b strings.Builder
@@ -240,8 +248,12 @@ func printableTitle(s string) string {
 			// BMP private use area.
 		case r >= 0xf0000:
 			// Plane 15/16 private use.
-		case r >= 0x2600 && r <= 0x27bf:
-			// Miscellaneous Symbols and Dingbats.
+		case r >= 0x25a0 && r <= 0x2bff && !chromeGlyphs[r]:
+			// Geometric Shapes through Miscellaneous Symbols and Arrows. Agents
+			// park spinners and status ornaments in here (Claude Code alone uses
+			// U+2733 idle and a U+2802/U+2810 Braille spinner) and they tofu in
+			// any font that stops at Latin. Box Drawing and Block Elements end at
+			// U+259F, so a title may still draw with them.
 		case r >= 0xfe00 && r <= 0xfe0f:
 			// Variation Selectors (VS1-16), including the emoji VS16.
 		case r >= 0x1f000 && r <= 0x1faff:
