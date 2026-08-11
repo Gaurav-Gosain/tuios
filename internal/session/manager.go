@@ -169,16 +169,26 @@ func (m *Manager) ListSessions() []SessionInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	infos := make([]SessionInfo, 0, len(m.sessions))
+	// Order the sessions themselves, not their Info snapshots: Info truncates
+	// Created to whole seconds, so two sessions made in the same second tied and
+	// took the map's random iteration order. Sort on the full-precision timestamp,
+	// with the name as a final tiebreak, so the list is stable everywhere it is
+	// read (sidebar, switcher, palette).
+	ordered := make([]*Session, 0, len(m.sessions))
 	for _, session := range m.sessions {
-		infos = append(infos, session.Info())
+		ordered = append(ordered, session)
 	}
-
-	// Sort by creation time (oldest first)
-	sort.Slice(infos, func(i, j int) bool {
-		return infos[i].Created < infos[j].Created
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Created.Equal(ordered[j].Created) {
+			return ordered[i].Name < ordered[j].Name
+		}
+		return ordered[i].Created.Before(ordered[j].Created)
 	})
 
+	infos := make([]SessionInfo, 0, len(ordered))
+	for _, session := range ordered {
+		infos = append(infos, session.Info())
+	}
 	return infos
 }
 
