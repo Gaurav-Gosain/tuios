@@ -282,13 +282,6 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID("sidebar")
 }
 
-// sidebarPanelLines builds the sidebar's rows from the live session tree. Split
-// from sidebarPanelLinesForTree so tests can feed a synthetic multi-session
-// tree without a daemon connection.
-func (m *OS) sidebarPanelLines() ([]string, int) {
-	return m.sidebarPanelLinesForTree(m.BuildSessionTree())
-}
-
 // sidebarPanelLinesForTree lays the rail out for a given tree and records the
 // on-screen hit geometry of every row into m.SidebarHits, returning the rows
 // and the reserved width. It returns nil rows when the sidebar reserves

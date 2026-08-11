@@ -493,6 +493,10 @@ type OS struct {
 	SidebarMarqueeKey   string
 	SidebarMarqueeStart time.Time
 	sidebarMarqueeSeen  bool
+	// sidebarCache holds the last styled rail keyed by a cheap signature of every
+	// input that changes the rows, so a frame drawn for an unrelated reason (a
+	// pane printing output) does not rebuild and restyle the whole rail.
+	sidebarCache sidebarRenderCache
 
 	// Right-click gesture disambiguation. A plain right press on a pane arms
 	// both a corner resize and a pending context menu; the release decides.

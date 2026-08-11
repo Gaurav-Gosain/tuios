@@ -13,6 +13,7 @@ func (m *OS) MarkAllDirty() {
 		}
 	}
 	m.cachedViewContent = "" // Invalidate view cache
+	m.sidebarCache.invalidate()
 }
 
 // MarkTerminalsWithNewContent marks terminals that have new content as dirty.

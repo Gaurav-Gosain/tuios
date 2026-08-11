@@ -54,6 +54,10 @@ type TUIClient struct {
 	// current by RefreshSessionList. Guarded by mu.
 	availableSessions []SessionInfo
 
+	// cacheGen bumps every time availableSessions changes, so the sidebar can
+	// tell whether foreign-session data moved without locking mu per frame.
+	cacheGen atomic.Uint64
+
 	// refreshInFlight drops overlapping background refreshes so a periodic
 	// sidebar refresh cannot pile up requests on a busy daemon.
 	refreshInFlight atomic.Bool
@@ -210,6 +214,7 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		infos = append(infos, SessionInfo{Name: name})
 	}
 	c.availableSessions = infos
+	c.cacheGen.Add(1)
 
 	return nil
 }
@@ -1095,6 +1100,14 @@ func (c *TUIClient) UpdateSessionCache(sessions []SessionInfo) {
 	c.mu.Lock()
 	c.availableSessions = sessions
 	c.mu.Unlock()
+	c.cacheGen.Add(1)
+}
+
+// CacheGen returns a counter that changes whenever the cached session listing
+// changes. The sidebar folds it into its render-cache key so foreign-session
+// updates rebuild the rail without locking the client mutex every frame.
+func (c *TUIClient) CacheGen() uint64 {
+	return c.cacheGen.Load()
 }
 
 func (c *TUIClient) send(msg *Message) error {
