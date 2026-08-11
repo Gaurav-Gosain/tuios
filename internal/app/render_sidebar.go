@@ -17,17 +17,24 @@ import (
 // The sidebar is drawn as chrome in tuios's own visual language rather than as
 // a filled panel: rows sit directly on the terminal background (like the dock),
 // a single muted rule in the window-border character separates the rail from
-// the panes, and emphasis is carried by the same pills the dock uses. The
-// focused window gets the dock's blue focus pill, the current session a quiet
-// Surface-colored pill, everything else stays dim text. Two sections share the
-// rail: the panes currently running an agent at the top, priority-ordered, and
-// the session tree below them. Attention leads because the first question a
-// rail full of agents has to answer is "which one needs me", not "what exists";
-// the tree keeps every behaviour it had, one section lower.
+// the panes, and emphasis is carried by the same pills the dock uses. Two
+// sections share the rail: the panes currently running an agent at the top,
+// priority-ordered, and the session tree below them. Attention leads because
+// the first question a rail full of agents has to answer is "which one needs
+// me", not "what exists"; the tree keeps every behaviour it had, one section
+// lower.
+//
+// Emphasis is spent on two things and no more. "This is the current one" (the
+// attached session, the focused pane) is a quiet Surface chip, the same chip in
+// both places. "This is where the cursor or the pointer is" is the RowSel bar
+// across the row. That leaves the loudest marks in the rail, the attention tint
+// and the bold that comes with it, to the rows that want a human. A saturated
+// focus pill used to outshout them, which had the rail insisting on where you
+// already were over a pane waiting on an answer.
 
-// sidebarFocusColor is the focused-row pill fill, matching the dock's focused
-// pill (render_dock.go) so the two chrome surfaces never disagree about what
-// "focused" looks like.
+// sidebarFocusColor is the workspace chip's active fill, shared with the dock
+// strip (render_dock.go) so the two never disagree about which workspace you
+// are on.
 const sidebarFocusColor = "#4865f2"
 
 // sidebarRowKind distinguishes what a sidebar row points at for mouse routing.
@@ -327,10 +334,14 @@ func sidebarGlyph(state string, doneSeen bool, bg color.Color, pal overlay.Palet
 // what sits behind the caps (nil for the bare terminal background), so a pill
 // on a hovered row does not punch holes in the hover bar.
 func sidebarPill(text string, fill, fg, rowBg color.Color) string {
+	return sidebarPillBody(lipgloss.NewStyle().Background(fill).Foreground(fg).Bold(true).Render(text), fill, rowBg)
+}
+
+// sidebarPillBody is sidebarPill for a body that carries its own colors, so a
+// pill can hold a state-colored glyph beside plain text.
+func sidebarPillBody(body string, fill, rowBg color.Color) string {
 	caps := sidebarStyle(rowBg, fill)
-	return caps.Render(config.GetDockPillLeftChar()) +
-		lipgloss.NewStyle().Background(fill).Foreground(fg).Bold(true).Render(text) +
-		caps.Render(config.GetDockPillRightChar())
+	return caps.Render(config.GetDockPillLeftChar()) + body + caps.Render(config.GetDockPillRightChar())
 }
 
 // sidebarEdgeRule is the one-cell vertical rule separating the rail from the
@@ -863,7 +874,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 			// whole job of a three-column rail is saying which session wants you.
 			bg, fg = agentGlyphColor(node.AgentState, pal), pal.Canvas
 		case node.IsCurrent:
-			bg = lipgloss.Color(sidebarFocusColor)
+			bg = pal.Surface
 		case hovered || dragged:
 			bg = pal.RowSel
 		}
@@ -961,20 +972,28 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 	}
 
 	if node.IsCurrent {
-		// The pointer lights this row like any other; the pill sits on the hover
-		// bar rather than cancelling it, the way the current session's row does.
+		// The focused pane wears the same quiet chip the attached session does:
+		// one mark for "this is the current one" wherever it appears. The
+		// pointer lights the row like any other and the pill sits on that bar
+		// rather than cancelling it; an attention tint shows through too,
+		// because being focused is not an answer to a pane asking for one.
 		var pillBg color.Color
 		if hovered {
 			pillBg = pal.RowSel
+		} else {
+			pillBg = sidebarAttentionTint(node.AgentState, pal)
 		}
-		// On the saturated focus fill the state colors vanish, so glyph and
-		// title share the pill foreground; the shape still carries the state.
+		fill := pal.Surface
 		// Fixed pill overhead: caps and inner padding (3), plus glyph and its
 		// gap (2) when one is shown.
-		inner := overlay.Truncate(title, max(cw-indent-4, 1))
+		inner := sidebarStyle(fill, pal.Fg).Bold(true).Render(overlay.Truncate(title, max(cw-indent-4, 1)))
 		if config.SidebarShowGlyphs {
 			if g := agentStateIndicator(node.AgentState); g != "" {
-				inner = g + " " + overlay.Truncate(title, max(cw-indent-6, 1))
+				// A quiet fill leaves the state colors readable, so the glyph
+				// says the same thing here as it does on every other row.
+				inner = sidebarStyle(fill, sidebarStateColor(node.AgentState, node.DoneSeen, pal)).Render(g) +
+					sidebarStyle(fill, nil).Render(" ") +
+					sidebarStyle(fill, pal.Fg).Bold(true).Render(overlay.Truncate(title, max(cw-indent-6, 1)))
 			}
 		}
 		// The pill's cap sits on the glyph column (indent), so its inner text
@@ -982,18 +1001,18 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		// siblings, both at indent+2. Starting a cell earlier made the focused
 		// pill jog left of everything else.
 		lead := sidebarStyle(pillBg, nil).Render(strings.Repeat(" ", indent))
-		// An accent is the pane's identity and has to outlive focus. The pill's
-		// saturated fill swallows a colored mark, so the accent takes the gutter
-		// cell just before the cap, where it still reads. Agent state still wins
-		// the glyph inside the pill, matching the unfocused precedence.
+		// An accent is the pane's identity and has to outlive focus. It takes the
+		// gutter cell just before the cap so the pill's own columns are unchanged
+		// whether or not a pane is accented. Agent state still wins the glyph
+		// inside the pill, matching the unfocused precedence.
 		if node.AgentState == "" && config.SidebarShowGlyphs {
 			if idx, ok := m.WindowAccent(node.ID); ok {
 				lead = sidebarStyle(pillBg, nil).Render(strings.Repeat(" ", indent-1)) +
 					sidebarStyle(pillBg, accentColor(idx)).Render(accentMark())
 			}
 		}
-		row := lead + sidebarPill(" "+inner+" ", lipgloss.Color(sidebarFocusColor), lipgloss.Color("#ffffff"), pillBg)
-		return sidebarFit(row, cw, pillBg)
+		body := sidebarStyle(fill, nil).Render(" ") + inner + sidebarStyle(fill, nil).Render(" ")
+		return sidebarFit(lead+sidebarPillBody(body, fill, pillBg), cw, pillBg)
 	}
 
 	rowBg := sidebarAttentionTint(node.AgentState, pal)
