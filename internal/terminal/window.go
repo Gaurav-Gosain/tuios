@@ -319,6 +319,10 @@ type Window struct {
 	AgentState string
 	// AgentMessage is the optional short note reported with AgentState.
 	AgentMessage string
+	// AgentStateAt is when the pane entered AgentState (Unix nanoseconds), as
+	// the daemon stamped it. The rail shows the elapsed time so a pane waiting
+	// on input reads differently from one that just started working.
+	AgentStateAt int64
 
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)

@@ -619,6 +619,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	m.noteAgentState(w, string(ws.AgentState))
 	w.AgentState = string(ws.AgentState)
 	w.AgentMessage = ws.AgentMessage
+	w.AgentStateAt = ws.AgentStateAt
 
 	if renderTraceEnabled && !sizeChanged {
 		traceSync(w, ws.IsAltScreen, false, w.Width, w.Height, "SetAltScreen; no resize")
@@ -718,6 +719,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	window.SetAltScreen(ws.IsAltScreen)
 	window.AgentState = string(ws.AgentState)
 	window.AgentMessage = ws.AgentMessage
+	window.AgentStateAt = ws.AgentStateAt
 
 	m.installPassthroughs(window)
 	m.setupCwdWatch(window)

@@ -150,6 +150,11 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(w.ID)
 		mixS(m.railTitleShown(w))
 		mixS(w.AgentState)
+		// The agents section prints the age of the state, so the row changes on a
+		// minute boundary with no other input moving. Folding the whole timestamp
+		// would rebuild the rail on every frame; the minute bucket rebuilds it at
+		// most once a minute per pane, on a frame that was happening anyway.
+		mixI(int(agentElapsedBucket(w.AgentStateAt)))
 		mixI(w.Workspace)
 		accent, ok := m.WindowAccent(w.ID)
 		if !ok {

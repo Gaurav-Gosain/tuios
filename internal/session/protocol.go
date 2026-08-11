@@ -151,6 +151,9 @@ type WindowSummary struct {
 	ID         string `json:"id"`
 	Title      string `json:"title"`
 	AgentState string `json:"agent_state,omitempty"`
+	// AgentStateAt is when the pane entered AgentState (Unix nanoseconds).
+	// Additive and omitted when zero, so an older peer just reads no elapsed time.
+	AgentStateAt int64 `json:"agent_state_at,omitempty"`
 }
 
 // SessionInfo describes a single session for listing.

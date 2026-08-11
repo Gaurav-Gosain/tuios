@@ -37,6 +37,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			Title:      m.railTitleShown(w),
 			AgentState: w.AgentState,
 			DoneSeen:   m.agentSeen(w.ID),
+			StateAt:    w.AgentStateAt,
 			Focused:    i == m.FocusedWindow,
 		})
 	}
@@ -68,6 +69,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 			Title:      w.Title,
 			AgentState: w.AgentState,
 			DoneSeen:   m.agentSeen(w.ID),
+			StateAt:    w.AgentStateAt,
 		})
 	}
 	return sessiontree.SessionInput{Name: name, Windows: windows}

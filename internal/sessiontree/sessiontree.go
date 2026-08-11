@@ -34,6 +34,10 @@ type Node struct {
 	// not looked at the finished pane yet. Meaningless for other states. On a
 	// session node it belongs to the window that won the roll-up.
 	DoneSeen bool
+	// StateAt is when the pane entered AgentState, as a Unix nanosecond stamp,
+	// or 0 when unknown. The rail reads it to show how long a pane has been in
+	// its state, which is what tells a waiting agent from a busy one.
+	StateAt int64
 	// Attached is true for a session that has any client attached. Always false
 	// for window nodes.
 	Attached bool
@@ -62,6 +66,8 @@ type WindowInput struct {
 	AgentState string
 	// DoneSeen marks a finished pane the user has already looked at.
 	DoneSeen bool
+	// StateAt is when the pane entered AgentState (Unix nanoseconds), 0 if unknown.
+	StateAt int64
 	// Focused marks the currently focused window in its session.
 	Focused bool
 }
@@ -147,6 +153,7 @@ func BuildSession(s SessionInput) Node {
 			Title:      w.Title,
 			AgentState: w.AgentState,
 			DoneSeen:   w.DoneSeen,
+			StateAt:    w.StateAt,
 			IsCurrent:  w.Focused,
 		})
 		if r := AgentRank(w.AgentState, w.DoneSeen); r > bestRank {

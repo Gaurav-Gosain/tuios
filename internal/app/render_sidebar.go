@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -159,23 +160,39 @@ func sidebarAttentionTint(state string, pal overlay.Palette) color.Color {
 	return color.RGBA{R: c(br, sr), G: c(bgc, sg), B: c(bb, sb), A: 0xff}
 }
 
-// agentStateLabel is the short word the agents section shows beside a pane
-// name. Shapes and colors already carry the state; the word is confirmation,
-// so it stays terse enough to leave the name room.
-func agentStateLabel(state string) string {
-	switch state {
-	case "working":
-		return "working"
-	case "needs_input":
-		return "input"
-	case "idle":
-		return "idle"
-	case "done":
-		return "done"
-	case "errored":
-		return "error"
-	default:
+// agentElapsed is how long a pane has been in its state, in at most three
+// cells: "<1m", "7m", "3h", "2d". It replaces a state word, which only repeated
+// what the glyph and the sort order already said. Blank for the resting states,
+// where the age is trivia, and blank without a stamp.
+//
+// Minute granularity is deliberate: the rail is cached behind a signature that
+// folds this value, so a seconds readout would rebuild the whole rail once a
+// second forever. Minutes cost at most one rebuild per agent per minute, on a
+// frame that was already happening.
+// agentElapsedBucket is the minute the stamp currently reads as, for the render
+// cache to key on. Zero for an unstamped pane, so a rail with no agents folds a
+// constant and never rebuilds on time alone.
+func agentElapsedBucket(stateAt int64) int64 {
+	if stateAt <= 0 {
+		return 0
+	}
+	return int64(time.Since(time.Unix(0, stateAt)) / time.Minute)
+}
+
+func agentElapsed(state string, stateAt int64, now time.Time) string {
+	if stateAt <= 0 || state == "idle" || state == "" {
 		return ""
+	}
+	d := now.Sub(time.Unix(0, stateAt))
+	switch {
+	case d < time.Minute: // covers clock skew, which would otherwise read negative
+		return "<1m"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + "m"
+	case d < 24*time.Hour:
+		return strconv.Itoa(int(d.Hours())) + "h"
+	default:
+		return strconv.Itoa(int(d.Hours())/24) + "d"
 	}
 }
 
@@ -187,6 +204,7 @@ type sidebarAgentEntry struct {
 	Title       string
 	State       string
 	DoneSeen    bool
+	StateAt     int64
 	WindowIndex int
 	// Foreign marks a pane of a session other than the attached one, whose row
 	// carries the session name for context.
@@ -537,6 +555,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 					Title:       win.Title,
 					State:       win.AgentState,
 					DoneSeen:    win.DoneSeen,
+					StateAt:     win.StateAt,
 					WindowIndex: idx,
 					Foreign:     !s.IsCurrent,
 				})
@@ -1070,25 +1089,39 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 		name = printableTitle(e.SessionID) + "/" + name
 	}
 
+	// How long the pane has been in this state, in place of a state word: the
+	// glyph, colour and sort position already say which state it is, while the
+	// duration is the part nothing else carries. A pane waiting twenty minutes
+	// on input reads very differently from one that just asked.
 	label := ""
 	labelW := 0
 	if variant == sidebarVariantFull {
-		label = agentStateLabel(e.State)
-		labelW = lipgloss.Width(label) + 1
+		label = agentElapsed(e.State, e.StateAt, time.Now())
+		if label != "" {
+			labelW = lipgloss.Width(label) + 1
+		}
 	}
 
 	// An agent row points at a pane, so it takes a window row's columns: same
 	// glyph column, same name spine, read straight down the rail.
 	indent := sidebarPaneIndent(variant)
 	avail := max(cw-indent-2-labelW-1, 1)
+	nameStyle := sidebarStyle(rowBg, fg)
+	timeFg := pal.FgMute
+	if sidebarAttention(e.State) {
+		// The only bold text in the section, so the rows that want a human still
+		// win on a monochrome capture where the tint and glyph colour are gone.
+		nameStyle = nameStyle.Bold(true)
+		timeFg = sidebarStateColor(e.State, e.DoneSeen, pal)
+	}
 	row := sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent)) +
 		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarStyle(rowBg, fg).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, avail, hovered))
+		nameStyle.Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, avail, hovered))
 	if label != "" {
 		gap := max(cw-lipgloss.Width(row)-labelW, 0)
 		row += sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", gap)) +
-			sidebarStyle(rowBg, pal.FgMute).Render(label) +
+			sidebarStyle(rowBg, timeFg).Render(label) +
 			sidebarStyle(rowBg, nil).Render(" ")
 	}
 	return sidebarFit(row, cw, rowBg)

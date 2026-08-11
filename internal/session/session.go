@@ -957,9 +957,10 @@ func (s *Session) windowSummaries() []WindowSummary {
 			title = "shell"
 		}
 		out = append(out, WindowSummary{
-			ID:         w.ID,
-			Title:      title,
-			AgentState: string(w.AgentState),
+			ID:           w.ID,
+			Title:        title,
+			AgentState:   string(w.AgentState),
+			AgentStateAt: w.AgentStateAt,
 		})
 	}
 	return out
