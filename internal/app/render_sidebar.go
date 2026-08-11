@@ -281,6 +281,17 @@ func sidebarChevron(expanded bool) string {
 	return "▸"
 }
 
+// sidebarPaneIndent is the gutter a pane row spends before its state glyph: one
+// level in from the session row that owns it. Window rows, the workspace band
+// and the agents section all measure from it, so the rail keeps one glyph column
+// and one name spine (indent+2) whatever kind of row you are looking at.
+func sidebarPaneIndent(variant int) int {
+	if variant == sidebarVariantNarrow {
+		return 2
+	}
+	return 3
+}
+
 // sidebarGlyph returns the styled agent-state glyph for a row, or a single
 // space on the row background when there is no state or glyphs are disabled,
 // so rows stay aligned. It always occupies exactly one cell.
@@ -362,11 +373,7 @@ func (m *OS) sidebarWorkspaceBand(variant, cw int, pal overlay.Palette, cursorWS
 		return "", nil
 	}
 
-	indent := 3
-	if variant == sidebarVariantNarrow {
-		indent = 2
-	}
-
+	indent := sidebarPaneIndent(variant)
 	row := strings.Repeat(" ", indent)
 	x := indent
 	spans := make([]sidebarChipSpan, 0, len(occupied))
@@ -715,9 +722,11 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		lines = append(lines, compose(sidebarHeaderRow("Agents", len(agents), cw, pal)))
 		for i := range agentShown {
 			if i >= agentRows {
+				// Stands in for the rows it hides, so it starts on their name spine.
 				more := overlay.Ellipsis() + " +" + strconv.Itoa(overflow+1)
-				lines = append(lines, compose(sidebarFit(" "+
-					sidebarStyle(nil, pal.FgMute).Render(more), cw, nil)))
+				lines = append(lines, compose(sidebarFit(
+					strings.Repeat(" ", sidebarPaneIndent(variant)+2)+
+						sidebarStyle(nil, pal.FgMute).Render(more), cw, nil)))
 				continue
 			}
 			e := agents[i]
@@ -777,12 +786,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 // sidebarNewSessionRow renders the "+ new session" affordance: dim, the whole
 // row a click target, lit like any other row under the pointer or the cursor.
 func sidebarNewSessionRow(variant, cw int, pal overlay.Palette, hovered bool) string {
-	label := "+ new session"
-	switch variant {
-	case sidebarVariantGlyph:
-		label = "+"
-	case sidebarVariantNarrow:
-		label = "+ new"
+	label := "new session"
+	if variant == sidebarVariantNarrow {
+		label = "new"
 	}
 
 	var rowBg color.Color
@@ -790,8 +796,16 @@ func sidebarNewSessionRow(variant, cw int, pal overlay.Palette, hovered bool) st
 	if hovered {
 		rowBg, fg = pal.RowSel, pal.Fg
 	}
-	row := sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarStyle(rowBg, fg).Render(overlay.Truncate(label, max(cw-2, 1)))
+	if variant == sidebarVariantGlyph {
+		row := sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, fg).Render("+")
+		return sidebarFit(row, cw, rowBg)
+	}
+	// The + takes the session rows' glyph column and the label their name spine,
+	// so the row that makes a session scans as one of them.
+	row := sidebarStyle(rowBg, nil).Render("  ") +
+		sidebarStyle(rowBg, fg).Render("+") +
+		sidebarStyle(rowBg, nil).Render("  ") +
+		sidebarStyle(rowBg, fg).Render(overlay.Truncate(label, max(cw-6, 1)))
 	return sidebarFit(row, cw, rowBg)
 }
 
@@ -924,21 +938,26 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 
 	// One level past the session's glyph column, so a window title lands on the
 	// same spine as its session name.
-	indent := 3
-	if variant == sidebarVariantNarrow {
-		indent = 2
-	}
+	indent := sidebarPaneIndent(variant)
 
 	// A rename in flight owns the row it targets, focused pane or not: the
 	// buffer is what the user is editing and it has to be where they are looking.
 	if m.RenamingWindow && node.ID == m.RenameTargetID {
-		text := overlay.Truncate(printableTitle(m.RenameBuffer), max(cw-indent-1, 1)) + "_"
-		row := sidebarStyle(pal.Card, nil).Render(strings.Repeat(" ", indent)) +
+		// The buffer draws on the title's own spine, so the text does not jump
+		// sideways the moment a rename starts.
+		text := overlay.Truncate(printableTitle(m.RenameBuffer), max(cw-indent-4, 1)) + "_"
+		row := sidebarStyle(pal.Card, nil).Render(strings.Repeat(" ", indent+2)) +
 			sidebarStyle(pal.Card, pal.Fg).Render(text)
 		return sidebarFit(row, cw, pal.Card)
 	}
 
 	if node.IsCurrent {
+		// The pointer lights this row like any other; the pill sits on the hover
+		// bar rather than cancelling it, the way the current session's row does.
+		var pillBg color.Color
+		if hovered {
+			pillBg = pal.RowSel
+		}
 		// On the saturated focus fill the state colors vanish, so glyph and
 		// title share the pill foreground; the shape still carries the state.
 		// Fixed pill overhead: caps and inner padding (3), plus glyph and its
@@ -953,19 +972,19 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		// lands on the same spine as the session name and the non-focused
 		// siblings, both at indent+2. Starting a cell earlier made the focused
 		// pill jog left of everything else.
-		lead := strings.Repeat(" ", indent)
+		lead := sidebarStyle(pillBg, nil).Render(strings.Repeat(" ", indent))
 		// An accent is the pane's identity and has to outlive focus. The pill's
 		// saturated fill swallows a colored mark, so the accent takes the gutter
 		// cell just before the cap, where it still reads. Agent state still wins
 		// the glyph inside the pill, matching the unfocused precedence.
 		if node.AgentState == "" && config.SidebarShowGlyphs {
 			if idx, ok := m.WindowAccent(node.ID); ok {
-				lead = strings.Repeat(" ", indent-1) +
-					sidebarStyle(nil, accentColor(idx)).Render(accentMark())
+				lead = sidebarStyle(pillBg, nil).Render(strings.Repeat(" ", indent-1)) +
+					sidebarStyle(pillBg, accentColor(idx)).Render(accentMark())
 			}
 		}
-		row := lead + sidebarPill(" "+inner+" ", lipgloss.Color(sidebarFocusColor), lipgloss.Color("#ffffff"), nil)
-		return sidebarFit(row, cw, nil)
+		row := lead + sidebarPill(" "+inner+" ", lipgloss.Color(sidebarFocusColor), lipgloss.Color("#ffffff"), pillBg)
+		return sidebarFit(row, cw, pillBg)
 	}
 
 	rowBg := sidebarAttentionTint(node.AgentState, pal)
@@ -1058,8 +1077,11 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 		labelW = lipgloss.Width(label) + 1
 	}
 
-	avail := max(cw-3-labelW-1, 1)
-	row := sidebarStyle(rowBg, nil).Render(" ") +
+	// An agent row points at a pane, so it takes a window row's columns: same
+	// glyph column, same name spine, read straight down the rail.
+	indent := sidebarPaneIndent(variant)
+	avail := max(cw-indent-2-labelW-1, 1)
+	row := sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent)) +
 		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
 		sidebarStyle(rowBg, fg).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, avail, hovered))

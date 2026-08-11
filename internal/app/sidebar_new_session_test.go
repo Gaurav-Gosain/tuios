@@ -49,8 +49,10 @@ func TestNewSessionPillSitsAfterTheSessions(t *testing.T) {
 		w, h  int
 		label string
 	}{
-		{"full", 120, 40, "+ new session"},
-		{"narrow", 80, 24, "+ new"},
+		// The + sits on the session rows' glyph column and the label on their
+		// name spine, so the two are two cells apart rather than adjacent.
+		{"full", 120, 40, "+  new session"},
+		{"narrow", 80, 24, "+  new"},
 		{"glyph", 51, 37, "+"},
 	} {
 		t.Run(size.name, func(t *testing.T) {
