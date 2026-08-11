@@ -43,6 +43,11 @@ func (m *OS) EnterSidebarFocus() {
 		m.SidebarRevealedForFocus = true
 	}
 	m.SidebarFocused = true
+	// Revealing a hidden rail builds its nav rows only on the next render, so
+	// sidebarCurrentSessionNavIndex has nothing to match yet and would land the
+	// cursor on row 0. Follow the current session by identity so the next render
+	// anchors the cursor on it once the rows exist.
+	m.sidebarFollowSession = m.sidebarCurrentSessionID()
 	m.SidebarCursor = m.sidebarCurrentSessionNavIndex()
 }
 
