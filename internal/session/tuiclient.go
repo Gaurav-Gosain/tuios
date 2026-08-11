@@ -94,6 +94,16 @@ type TUIClient struct {
 	pendingResponses   map[MessageType]chan *Message
 	pendingResponsesMu sync.Mutex
 
+	// roundTripMu keeps at most one sendAndWaitResponse outstanding at a time.
+	// The read loop demuxes replies by MessageType alone, so two overlapping
+	// round-trips awaiting a shared type (MsgError, which every request can
+	// return, or the MsgSessionList shared by list/kill/refresh) would overwrite
+	// each other's pendingResponses slot and misroute a reply. The background
+	// session poll runs on its own goroutine, so it is the one caller that can
+	// overlap a UI-goroutine round-trip; serializing here removes the collision
+	// without threading a correlation id through the protocol.
+	roundTripMu sync.Mutex
+
 	// State
 	readLoopRunning bool
 	done            chan struct{}
@@ -1098,6 +1108,13 @@ func (c *TUIClient) recv() (*Message, error) {
 // sendAndWaitResponse sends a message and waits for a response of the expected type.
 // This works even after readLoop has started by registering a pending response channel.
 func (c *TUIClient) sendAndWaitResponse(msg *Message, expectedTypes ...MessageType) (*Message, error) {
+	// Serialize round-trips so no two overlap on a shared response type. The read
+	// loop never takes this lock and delivers replies before dispatching handlers,
+	// and no handler issues a round-trip, so holding it across the wait cannot
+	// deadlock the reader.
+	c.roundTripMu.Lock()
+	defer c.roundTripMu.Unlock()
+
 	// If readLoop isn't running, use simple recv
 	if !c.readLoopRunning {
 		if err := c.send(msg); err != nil {
