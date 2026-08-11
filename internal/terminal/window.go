@@ -198,6 +198,16 @@ type Window struct {
 	// Height for the live preview, so by the time the deferred half runs they
 	// already match, Resize concludes nothing changed, and nothing downstream is
 	// told - the guest keeps drawing to the size it had before the drag.
+	//
+	// INVARIANT: this is the size the real PTY has, and Resize skips announcing
+	// on the strength of it. So the two must move together. Resize and
+	// SeedAnnouncedSize are the only things allowed to write these fields, and
+	// nothing outside this file may call Pty.Resize or DaemonResizeFunc without
+	// recording the result: a caller that announces a size behind Resize's back
+	// leaves the record naming a size the shell no longer has, and the next
+	// Resize back to that size is skipped as redundant when it is the only thing
+	// that would have corrected the shell. That is exactly how a full-screen
+	// pane ended up running an 80x24 shell.
 	announcedW, announcedH int
 	UpdateCounter          int                // Counter for throttling background updates
 	cancelFunc             context.CancelFunc // For graceful goroutine cleanup

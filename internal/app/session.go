@@ -627,36 +627,30 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	}
 
 	if sizeChanged {
-		// Resize terminal emulator.
+		// Resize the emulator and tell the daemon, through the one function that
+		// does both and records what the PTY was told.
 		//
-		// This must hold the window's I/O lock, exactly as Window.Resize does.
-		// Terminal has no lock of its own: the daemon outputWriter goroutine
-		// writes the cell buffer under ioMu and the renderer reads it under
-		// RLockIO, while Resize reallocates every line in that buffer. An
-		// unlocked resize here tears the buffer out from under a concurrent
-		// write or render, and the pane composites as empty cells. Because
-		// renderTerminal caches whatever it produced and an idle shell emits
-		// nothing to re-dirty it, the pane then stays blank.
+		// Doing the two halves by hand here is what broke a new pane's size: this
+		// path resized the real PTY without touching the announcement record, so
+		// the record still named the size the pane had before. The retile that
+		// followed asked for that same size again, Window.Resize saw its own
+		// record already matching and announced nothing, and the emulator went to
+		// the pane's size while the shell stayed at the size this line had just
+		// given it. A whole-screen pane then ran an 80x24 shell.
+		//
+		// Window.Resize also holds the window's I/O lock across the emulator
+		// resize, which this path needs and which is easy to drop when the call
+		// is spelled out by hand: Terminal has no lock of its own, the daemon
+		// outputWriter goroutine writes the cell buffer under ioMu and the
+		// renderer reads it under RLockIO, and resizing reallocates every line in
+		// that buffer. An unlocked resize tears the buffer out from under a
+		// concurrent write or render and the pane composites as empty cells,
+		// which renderTerminal then caches; an idle shell emits nothing to
+		// re-dirty it, so the pane stays blank.
 		//
 		// This path is reached on every daemon state sync, and any input in a
 		// daemon session syncs state, so a focus change is the common trigger.
-		if w.Terminal != nil {
-			termWidth := w.ContentWidth()
-			termHeight := w.ContentHeight()
-			w.LockIO()
-			// Re-check under the lock; Close() nils Terminal while holding it.
-			if w.Terminal != nil {
-				w.Terminal.Resize(termWidth, termHeight)
-			}
-			w.UnlockIO()
-		}
-
-		// Resize PTY in daemon
-		if w.DaemonResizeFunc != nil {
-			termWidth := w.ContentWidth()
-			termHeight := w.ContentHeight()
-			_ = w.DaemonResizeFunc(termWidth, termHeight)
-		}
+		w.Resize(ws.Width, ws.Height)
 
 		// While a tape is building a layout, re-fetch the pane's content from the
 		// daemon after the resize. Resizing the local emulator reflows whatever
@@ -828,32 +822,30 @@ func (m *OS) placeUnplacedWindows(state *session.SessionState) bool {
 		if w == nil {
 			continue
 		}
-		w.X, w.Y, w.Width, w.Height = m.NewWindowPlacement()
-		// Same rule as updateWindowFromState and SyncDaemonPTYDimensions: the
-		// emulator has no lock of its own, the daemon outputWriter goroutine
-		// writes its cell buffer under ioMu and the renderer reads it under
-		// RLockIO, and Resize reallocates every line in that buffer. Resizing
-		// here unlocked tore the buffer out from under an in-flight write and
-		// the pane composited as empty cells, which renderTerminal then cached;
-		// an idle shell emits nothing to re-dirty it, so the pane stayed blank.
+		x, y, width, height := m.NewWindowPlacement()
+		w.X, w.Y = x, y
+		// Resize rather than assigning the size and telling the daemon by hand:
+		// it resizes the emulator and announces the same number downstream, and
+		// it records that number as the size the PTY now has. Announcing without
+		// recording is what left a new pane's shell at the placement box: this
+		// loop runs again on a repeat of the creating sync, shrinking the real
+		// PTY back down, and the retile that follows asked for a size the stale
+		// record already claimed to have sent, so nothing reached the shell.
+		//
+		// Resize also holds the window's I/O lock across the emulator resize,
+		// which this path needs: the emulator has no lock of its own, the daemon
+		// outputWriter goroutine writes its cell buffer under ioMu and the
+		// renderer reads it under RLockIO, and resizing reallocates every line in
+		// that buffer. Resizing unlocked tore the buffer out from under an
+		// in-flight write and the pane composited as empty cells, which
+		// renderTerminal then cached; an idle shell emits nothing to re-dirty it,
+		// so the pane stayed blank.
 		//
 		// Every window this loop touches is newly created by the daemon and is
 		// already subscribed by the time the placing sync arrives, so a pane
 		// that has printed anything at all (a shell prompt is enough) has output
 		// in flight here.
-		if w.Terminal != nil {
-			termWidth := w.ContentWidth()
-			termHeight := w.ContentHeight()
-			w.LockIO()
-			// Re-check under the lock; Close() nils Terminal while holding it.
-			if w.Terminal != nil {
-				w.Terminal.Resize(termWidth, termHeight)
-			}
-			w.UnlockIO()
-		}
-		if w.DaemonResizeFunc != nil {
-			_ = w.DaemonResizeFunc(w.ContentWidth(), w.ContentHeight())
-		}
+		w.Resize(width, height)
 		w.InvalidateCache()
 		placed = true
 	}

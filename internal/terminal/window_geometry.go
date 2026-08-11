@@ -75,6 +75,11 @@ func (w *Window) ScreenToTerminal(screenX, screenY int) (termX, termY int, ok bo
 // so a later Resize to that same size does not re-announce it. On reattach the
 // daemon PTY is already at this size; re-announcing it SIGWINCHes the shell and
 // makes it repaint its prompt over the restored screen.
+//
+// Only call this when the real PTY is known to already carry the size being
+// recorded. Seeding a size the PTY does not have is indistinguishable from
+// having announced it, and Resize will skip the announcement that would have
+// made it true.
 func (w *Window) SeedAnnouncedSize(width, height int) {
 	w.announcedW, w.announcedH = width, height
 }

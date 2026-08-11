@@ -931,6 +931,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 				_ = w.DaemonResizeFunc(fakeWidth, fakeHeight)
 				_ = w.DaemonResizeFunc(termWidth, termHeight)
+				// The PTY now carries this size, whatever the announcement
+				// record said before. Record it: a record naming a size the PTY
+				// does not have is what makes Resize skip the one announcement
+				// that would have corrected the shell.
+				w.SeedAnnouncedSize(termWidth, termHeight)
 
 				w.InvalidateCache()
 				w.MarkContentDirty()
