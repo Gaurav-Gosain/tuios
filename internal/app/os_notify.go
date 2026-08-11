@@ -150,6 +150,17 @@ func notificationLifetime(notifType string, requested time.Duration) (time.Durat
 // from notifType exactly as it always did, and duration is now a floor rather
 // than the whole answer (see notificationLifetime).
 func (m *OS) ShowNotification(message, notifType string, duration time.Duration) {
+	m.showNotification(message, notifType, duration, nil)
+}
+
+// ShowNotificationFrom is ShowNotification for a message that came from a pane.
+// The message becomes clickable and gains a keyboard jump; everything else about
+// it is identical.
+func (m *OS) ShowNotificationFrom(message, notifType string, duration time.Duration, target NotifTarget) {
+	m.showNotification(message, notifType, duration, &target)
+}
+
+func (m *OS) showNotification(message, notifType string, duration time.Duration, target *NotifTarget) {
 	// Always log, even for a message that will not be shown: the log viewer is
 	// where a message that was dropped or has already expired is read.
 	switch notifType {
@@ -180,6 +191,7 @@ func (m *OS) ShowNotification(message, notifType string, duration time.Duration)
 		StartTime: time.Now(),
 		Duration:  effective,
 		Sticky:    sticky,
+		Target:    target,
 	})
 
 	if len(m.Notifications) > maxLiveNotifications {
@@ -237,5 +249,17 @@ func (m *OS) DismissNotifications() bool {
 		return false
 	}
 	m.Notifications = nil
+	return true
+}
+
+// dismissVisibleNotification pops the message the block is currently drawing,
+// revealing whatever was queued behind it. This is the granularity esc never
+// had: the mouse addresses one message at a time, so the +N counter doubles as
+// the way to read the queue.
+func (m *OS) dismissVisibleNotification() bool {
+	if len(m.Notifications) == 0 {
+		return false
+	}
+	m.Notifications = m.Notifications[:len(m.Notifications)-1]
 	return true
 }

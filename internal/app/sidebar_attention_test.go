@@ -67,7 +67,7 @@ func TestAgentsSectionPriorityOrder(t *testing.T) {
 	}
 
 	// Leaving done re-arms the bit, so the next finish is unread again.
-	m.noteAgentState("w-done", "done", "working", false)
+	m.noteAgentState(m.Windows[2], "working")
 	if m.agentSeen("w-done") {
 		t.Fatal("leaving done kept the seen bit, so the next finish would be silent")
 	}

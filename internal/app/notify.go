@@ -27,6 +27,11 @@ type NotificationMsg struct {
 	Message  string
 	Type     string
 	Duration time.Duration
+	// WindowID is the pane that raised it, which makes the message clickable.
+	// The session is resolved on delivery instead of being captured here: this
+	// runs on a PTY goroutine, and reading m.SessionName from it would race the
+	// Update loop that rewrites it on a session switch.
+	WindowID string
 }
 
 // ListenForNotification creates a command that waits for the next guest
@@ -66,6 +71,7 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 	}
 
 	ch := m.ensureNotificationChan()
+	windowID := window.ID
 
 	// Per-window rate-limit state, kept in the closure so each window is
 	// independent and no shared OS map is touched from the PTY goroutine.
@@ -96,7 +102,7 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		}
 
 		select {
-		case ch <- NotificationMsg{Message: message, Type: "info", Duration: config.NotificationDuration}:
+		case ch <- NotificationMsg{Message: message, Type: "info", Duration: config.NotificationDuration, WindowID: windowID}:
 		default:
 			// Channel full, drop (non-blocking).
 		}
@@ -122,7 +128,7 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		mu.Unlock()
 
 		select {
-		case ch <- NotificationMsg{Message: "bell", Type: "info", Duration: config.NotificationDuration}:
+		case ch <- NotificationMsg{Message: "bell", Type: "info", Duration: config.NotificationDuration, WindowID: windowID}:
 		default:
 			// Channel full, drop (non-blocking).
 		}

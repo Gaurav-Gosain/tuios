@@ -819,8 +819,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case NotificationMsg:
 		// Guest desktop notification or bell delivered off the PTY goroutine;
-		// apply it here on the Bubble Tea goroutine where notification state is owned.
-		m.ShowNotification(msg.Message, msg.Type, msg.Duration)
+		// apply it here on the Bubble Tea goroutine where notification state is
+		// owned, and where the pane it came from can be named safely.
+		if msg.WindowID != "" {
+			m.ShowNotificationFrom(msg.Message, msg.Type, msg.Duration,
+				NotifTarget{SessionID: m.sidebarCurrentSessionID(), WindowID: msg.WindowID})
+		} else {
+			m.ShowNotification(msg.Message, msg.Type, msg.Duration)
+		}
 		return m, ListenForNotification(m.PendingNotification)
 
 	case CwdChangedMsg:

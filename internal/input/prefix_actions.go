@@ -49,6 +49,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
 	d.Register("prefix_focus_sidebar", handlePrefixFocusSidebar)
+	d.Register("prefix_jump_notif", handlePrefixJumpNotif)
 	d.Register("prefix_detach", handlePrefixDetach)
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
 	d.Register("prefix_quit", handlePrefixQuit)
@@ -310,6 +311,13 @@ func handlePrefixToggleSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		state = "Enabled"
 	}
 	o.ShowNotification("Sidebar "+state, "success", config.NotificationDuration)
+	return o, nil
+}
+
+func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if !o.JumpToNotification() {
+		o.ShowNotification("No message to jump to", "info", config.NotificationDuration)
+	}
 	return o, nil
 }
 

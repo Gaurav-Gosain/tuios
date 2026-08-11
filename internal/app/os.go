@@ -204,6 +204,7 @@ type OS struct {
 	LogMessages           []LogMessage           // Store log messages
 	LogScrollOffset       int                    // Scroll offset for log viewer
 	Notifications         []Notification         // Active notifications
+	notifHit              notifHitZones          // where the message block was drawn last frame
 	SelectionMode         bool                   // True when in text selection mode
 	ClipboardContent      string                 // Store clipboard content from tea.ClipboardMsg
 	ShowCacheStats        bool                   // True when showing style cache statistics overlay
@@ -605,10 +606,24 @@ type Notification struct {
 	StartTime time.Time
 	Duration  time.Duration
 
+	// Target is the pane the message came from, when it came from one. A
+	// targeted message is clickable: its body jumps there and dismisses it,
+	// which is why it draws underlined. Nil for the messages with no source to
+	// go to (copy confirmations, config warnings, switch failures).
+	Target *NotifTarget
+
 	// Sticky messages ignore Duration and wait to be dismissed with esc. An
 	// error is sticky by default: nothing carrying a failure should vanish on a
 	// timer the user did not start.
 	Sticky bool
+}
+
+// NotifTarget names the pane a message came from. The workspace is deliberately
+// absent: it is resolved from live state at jump time, because a stored index
+// goes stale the moment the window is moved.
+type NotifTarget struct {
+	SessionID string
+	WindowID  string
 }
 
 // LogMessage represents a log entry with timestamp and level.

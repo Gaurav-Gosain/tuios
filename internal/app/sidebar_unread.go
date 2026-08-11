@@ -1,5 +1,10 @@
 package app
 
+import (
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+)
+
 // The unread bit on a finished pane, herdr's best idea: "done" means the agent
 // stopped AND you have not looked yet. Without it a done row is permanent green
 // noise, identical whether it was reviewed an hour ago or never seen at all.
@@ -28,21 +33,53 @@ func (m *OS) markAgentSeen(windowID string) {
 	m.saveSidebarState()
 }
 
-// noteAgentState folds one window's agent-state transition into the unread bit.
-// Leaving done clears it; finishing under the user's own eyes counts as seen,
-// since a pane you are already looking at has nothing left to announce.
-func (m *OS) noteAgentState(windowID, from, to string, focused bool) {
-	if from == to {
+// agentTransitionNotice is the word and severity a state change earns on the
+// dock, or "" for the transitions that are not news. working is deliberately
+// silent: an agent starting is not worth interrupting for, and a message per
+// start would train the user to ignore the block that also carries the errors.
+func agentTransitionNotice(to string) (string, string) {
+	switch to {
+	case "needs_input":
+		return "needs input", "warning"
+	case "errored":
+		return "errored", "error"
+	case "done":
+		return "finished", "success"
+	}
+	return "", ""
+}
+
+// noteAgentState folds one window's agent-state transition into the unread bit
+// and, when it wants a human, onto the dock as a message that jumps back here.
+// Leaving done clears the bit; finishing under the user's own eyes counts as
+// seen and says nothing, since a pane you are already looking at has nothing
+// left to announce.
+func (m *OS) noteAgentState(w *terminal.Window, to string) {
+	if w == nil || w.AgentState == to {
 		return
 	}
+	focused := m.GetFocusedWindow() == w
+
 	switch {
 	case to != "done":
-		if m.SidebarAgentSeen[windowID] {
-			delete(m.SidebarAgentSeen, windowID)
+		if m.SidebarAgentSeen[w.ID] {
+			delete(m.SidebarAgentSeen, w.ID)
 			m.saveSidebarState()
 		}
 	case focused:
-		m.markAgentSeen(windowID)
+		m.markAgentSeen(w.ID)
+	}
+
+	if focused {
+		return
+	}
+	if word, sev := agentTransitionNotice(to); word != "" {
+		name := printableTitle(m.railTitleShown(w))
+		if name == "" {
+			name = "pane"
+		}
+		m.ShowNotificationFrom(name+" "+word, sev, config.NotificationDuration,
+			NotifTarget{SessionID: m.sidebarCurrentSessionID(), WindowID: w.ID})
 	}
 }
 

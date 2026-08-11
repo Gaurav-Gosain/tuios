@@ -182,6 +182,15 @@ func (m *OS) renderDockString() (string, int) {
 	// closing cap: the block would lose the shape that makes it part of the bar.
 	notif, hasNotif := m.renderNotificationBlock(renderWidth, max(renderWidth-actualLeftWidth-centerWidth, 0))
 
+	// Recorded here rather than in the builder because this is the pass that
+	// places the block; the layout pass measures it against a different budget.
+	m.notifHit = notifHitZones{
+		Active:    hasNotif,
+		X0:        renderWidth - notif.Width,
+		DismissX0: renderWidth - notif.DismissW,
+		Y:         m.GetDockbarContentYPosition(),
+	}
+
 	inCopyMode := focusedWindow.CopyModeVisible()
 	switch {
 	case hasNotif:

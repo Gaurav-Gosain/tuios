@@ -317,6 +317,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_session_switcher": {"S"},
 				"prefix_layout":           {"L"},
 				"prefix_focus_sidebar":    {"o"}, // tmux's "other pane" mnemonic
+				"prefix_jump_notif":       {"j"}, // the keyboard twin of clicking a message
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},

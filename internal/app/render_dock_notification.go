@@ -50,6 +50,11 @@ type notifBlock struct {
 	Text  string // styled, drawn as the dock bar's right-hand block
 	Rule  string // styled, replaces the right-hand end of the dock's hairline
 	Width int    // display width of both
+	// DismissW is how many of the trailing columns dismiss instead of
+	// activating: the meta (the esc affordance and the queue counter), the
+	// closing cap, and the column of bar past it. Everything to its left is the
+	// message itself, which is what a click follows.
+	DismissW int
 }
 
 // notifStatus is the reading of the live queue that the block is drawn from:
@@ -268,14 +273,26 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 
 	room := budget - notifChromeWidth - lipgloss.Width(meta)
 	text := notifFit(s.msg.Message, room)
-	body := surface.Foreground(theme.NotificationFg()).Render("  " + text)
+	bodyStyle := surface.Foreground(theme.NotificationFg())
+	if s.msg.Target != nil {
+		// Underline is the one link mark everyone reads without being taught,
+		// costs no columns, and never appears on a message with nowhere to go,
+		// so its absence says something too.
+		bodyStyle = bodyStyle.Underline(true)
+	}
+	body := surface.Render("  ") + bodyStyle.Render(text)
 
 	// The final column is bare bar, not surface: it is the gap between the
 	// closing cap and the edge of the screen.
 	block := lead + mark + body + meta + surface.Render(" ") + tail + " "
 	width := lipgloss.Width(block)
 
-	return notifBlock{Text: block, Rule: notifBurnRule(s, width), Width: width}, true
+	return notifBlock{
+		Text:     block,
+		Rule:     notifBurnRule(s, width),
+		Width:    width,
+		DismissW: lipgloss.Width(meta) + 3, // meta, the closing cap and its space, the bar column
+	}, true
 }
 
 // notifFit truncates the message, and only the message. The severity mark, the
