@@ -10,8 +10,17 @@ import (
 
 // Workspace management methods
 
-// SwitchToWorkspace switches to the specified workspace.
+// SwitchToWorkspace switches to the specified workspace, picking a default focus
+// (the workspace's saved window, else its first visible one).
 func (m *OS) SwitchToWorkspace(workspace int) {
+	m.switchToWorkspace(workspace, -1)
+}
+
+// switchToWorkspace switches to the workspace and resolves focus. A focusTarget
+// of -1 keeps the default pick; a valid index focuses that window and skips the
+// default, so a cross-workspace FocusWindow lands its target without first
+// firing the focus hooks for an intermediate window.
+func (m *OS) switchToWorkspace(workspace, focusTarget int) {
 	if workspace < 1 || workspace > m.NumWorkspaces {
 		m.LogWarn("Cannot switch to workspace %d: out of range (1-%d)", workspace, m.NumWorkspaces)
 		return
@@ -81,15 +90,24 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	m.CurrentWorkspace = workspace
 	m.RestoreWorkspaceLayout(workspace) // Restore layout after switching
 
-	// Try to restore previous focus for this workspace
+	// A caller-supplied target wins: focus exactly it, so the switch does not fire
+	// the focus hooks for a default window the caller is about to override.
 	focusedSet := false
-	if savedFocus, exists := m.WorkspaceFocus[workspace]; exists {
-		// Check if the saved focus is still valid
-		if savedFocus >= 0 && savedFocus < len(m.Windows) {
-			if m.Windows[savedFocus].Workspace == workspace && !m.Windows[savedFocus].Minimized {
-				m.FocusWindow(savedFocus)
-				m.LogInfo("Restored focus to saved window (index: %d)", savedFocus)
-				focusedSet = true
+	if focusTarget >= 0 && focusTarget < len(m.Windows) && m.Windows[focusTarget].Workspace == workspace {
+		m.FocusWindow(focusTarget)
+		focusedSet = true
+	}
+
+	// Try to restore previous focus for this workspace
+	if !focusedSet {
+		if savedFocus, exists := m.WorkspaceFocus[workspace]; exists {
+			// Check if the saved focus is still valid
+			if savedFocus >= 0 && savedFocus < len(m.Windows) {
+				if m.Windows[savedFocus].Workspace == workspace && !m.Windows[savedFocus].Minimized {
+					m.FocusWindow(savedFocus)
+					m.LogInfo("Restored focus to saved window (index: %d)", savedFocus)
+					focusedSet = true
+				}
 			}
 		}
 	}

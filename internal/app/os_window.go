@@ -218,12 +218,13 @@ func (m *OS) FocusWindow(i int) *OS {
 	}
 
 	// A jump from the sidebar or palette can target a window on another
-	// workspace, which is invisible until we go there. Switch first.
-	// SwitchToWorkspace focuses a window on the workspace it enters, but that
-	// window is already on the current workspace by then, so this recurses at
-	// most one level; whichever window it picked is corrected below by focusing i.
+	// workspace, which is invisible until we go there. Switch first, handing the
+	// switch our target so it focuses i directly instead of firing the focus hooks
+	// for a default window we would immediately override. The switch focuses i on
+	// the workspace it enters, so by the time it returns i is already focused and
+	// the rest of this function is a no-op.
 	if m.Windows[i].Workspace != m.CurrentWorkspace {
-		m.SwitchToWorkspace(m.Windows[i].Workspace)
+		m.switchToWorkspace(m.Windows[i].Workspace, i)
 	}
 
 	// Don't do anything if already focused
