@@ -160,18 +160,12 @@ func sidebarAttentionTint(state string, pal overlay.Palette) color.Color {
 	return color.RGBA{R: c(br, sr), G: c(bgc, sg), B: c(bb, sb), A: 0xff}
 }
 
-// agentElapsed is how long a pane has been in its state, in at most three
-// cells: "<1m", "7m", "3h", "2d". It replaces a state word, which only repeated
-// what the glyph and the sort order already said. Blank for the resting states,
-// where the age is trivia, and blank without a stamp.
-//
-// Minute granularity is deliberate: the rail is cached behind a signature that
-// folds this value, so a seconds readout would rebuild the whole rail once a
-// second forever. Minutes cost at most one rebuild per agent per minute, on a
-// frame that was already happening.
 // agentElapsedBucket is the minute the stamp currently reads as, for the render
-// cache to key on. Zero for an unstamped pane, so a rail with no agents folds a
-// constant and never rebuilds on time alone.
+// cache to key on. Minute granularity is deliberate: a seconds readout would
+// rebuild the whole rail once a second forever, while minutes cost at most one
+// rebuild per pane per minute, on a frame that was happening anyway. Zero for an
+// unstamped pane, so a rail with no agents folds a constant and never rebuilds
+// on time alone.
 func agentElapsedBucket(stateAt int64) int64 {
 	if stateAt <= 0 {
 		return 0
@@ -179,6 +173,10 @@ func agentElapsedBucket(stateAt int64) int64 {
 	return int64(time.Since(time.Unix(0, stateAt)) / time.Minute)
 }
 
+// agentElapsed is how long a pane has been in its state, in at most three cells:
+// "<1m", "7m", "3h", "2d". It replaces a state word, which only repeated what the
+// glyph and the sort order already said. Blank for the resting states, where the
+// age is trivia, and blank without a stamp.
 func agentElapsed(state string, stateAt int64, now time.Time) string {
 	if stateAt <= 0 || state == "idle" || state == "" {
 		return ""
@@ -348,24 +346,13 @@ func sidebarRuleRow(cw int) string {
 		Render(strings.Repeat(config.GetWindowSeparatorChar(), cw))
 }
 
-// sidebarHeaderRow renders a quiet section header: the label on the left, a
-// count right-aligned, both muted so the header frames its section without
-// competing with it. A negative count omits the number.
-func sidebarHeaderRow(label string, count, cw int, pal overlay.Palette) string {
-	countStr := ""
-	rightW := 0
-	if count >= 0 {
-		countStr = strconv.Itoa(count)
-		rightW = lipgloss.Width(countStr) + 1
-	}
-	text := overlay.Truncate(label, max(cw-rightW-2, 1))
+// sidebarHeaderRow renders a quiet section header: just the label, muted, so it
+// frames its section without competing with it. It carries no count on purpose,
+// because the number only restated the rows printed directly underneath it, and
+// the agents section already owns up to what it hides with its own "+N" line.
+func sidebarHeaderRow(label string, cw int, pal overlay.Palette) string {
 	row := sidebarStyle(nil, nil).Render(" ") +
-		sidebarStyle(nil, pal.FgDim).Bold(true).Render(text)
-	if countStr != "" {
-		gap := max(cw-lipgloss.Width(row)-rightW, 0)
-		row += strings.Repeat(" ", gap) +
-			sidebarStyle(nil, pal.FgMute).Render(countStr) + " "
-	}
+		sidebarStyle(nil, pal.FgDim).Bold(true).Render(overlay.Truncate(label, max(cw-2, 1)))
 	return sidebarFit(row, cw, nil)
 }
 
@@ -626,8 +613,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	rows := make([]logicalRow, 0, 16)
 
 	if variant != sidebarVariantGlyph {
-		rows = append(rows, logicalRow{text: sidebarHeaderRow("Sessions", len(sessions), cw, pal)})
-		rows = append(rows, logicalRow{text: strings.Repeat(" ", cw)})
+		rows = append(rows, logicalRow{text: sidebarHeaderRow("Sessions", cw, pal)})
 	}
 
 	for _, session := range sessions {
@@ -738,7 +724,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		})
 	}
 	if agentSection > 0 {
-		lines = append(lines, compose(sidebarHeaderRow("Agents", len(agents), cw, pal)))
+		lines = append(lines, compose(sidebarHeaderRow("Agents", cw, pal)))
 		for i := range agentShown {
 			if i >= agentRows {
 				// Stands in for the rows it hides, so it starts on their name spine.
