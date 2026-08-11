@@ -226,6 +226,11 @@ type borderPerimeter struct {
 	ok                                       bool
 	left, right, top, bottom                 int
 	clipLeft, clipRight, clipTop, clipBottom int
+	// suppressLeft/suppressRight drop the boundary cap on a side where the
+	// sidebar already draws its own edge rule. Without this the focused pane's
+	// outer corner lands in the last content column, one cell from the sidebar
+	// edge, and the two read as a doubled border.
+	suppressLeft, suppressRight bool
 }
 
 // contains reports whether the cell lies on the focused window's perimeter.
@@ -247,8 +252,8 @@ func (p borderPerimeter) corner(x, y int, border lipgloss.Border) (rune, bool) {
 	if !p.ok {
 		return 0, false
 	}
-	atLeft := x == p.left || (p.left < p.clipLeft && x == p.clipLeft)
-	atRight := x == p.right || (p.right > p.clipRight && x == p.clipRight)
+	atLeft := x == p.left || (!p.suppressLeft && p.left < p.clipLeft && x == p.clipLeft)
+	atRight := x == p.right || (!p.suppressRight && p.right > p.clipRight && x == p.clipRight)
 	atTop := y == p.top || (p.top < p.clipTop && y == p.clipTop)
 	atBottom := y == p.bottom || (p.bottom > p.clipBottom && y == p.clipBottom)
 
@@ -284,6 +289,9 @@ func (m *OS) focusPerimeter(bounds layout.Rect) borderPerimeter {
 		clipRight:  min(win.X+win.Width, bounds.X+bounds.W-1),
 		clipTop:    max(win.Y-1, bounds.Y),
 		clipBottom: min(win.Y+win.Height, bounds.Y+bounds.H-1),
+
+		suppressLeft:  m.GetLeftMargin() > 0,
+		suppressRight: m.GetRightMargin() > 0,
 	}
 }
 
