@@ -176,32 +176,20 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	return nil
 }
 
-func runLocal() error {
-	if debugMode {
-		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
-		fmt.Println("Debug mode enabled")
-	}
-
-	// The interactive TUI draws to this terminal. Go's standard log writes to
-	// stderr, so the client/daemon [DEBUG] lines would share the screen with the
-	// rendered UI and corrupt it. When internal debugging is on, divert the log
-	// stream to a file so the screen stays clean; the external daemon subprocess
-	// already discards its own output, so this covers the in-process client.
-	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		if lf, lerr := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); lerr == nil {
-			log.SetOutput(lf)
-		}
-	}
-
+// loadAndApplyConfig loads the user config (falling back to defaults on error),
+// applies the appearance globals as the baseline, then applies the CLI-flag
+// overrides on top. Every run path bootstraps through here, so standalone,
+// daemon (tuios new), and ssh all honor the same overrides instead of each
+// wiring its own set and drifting apart.
+func loadAndApplyConfig() *config.UserConfig {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
 		userConfig = config.DefaultConfig()
 	}
 
-	// Apply the config appearance globals as the baseline, then let CLI flags
-	// win. LoadUserConfig no longer applies globals itself, so this must run
-	// before ApplyOverrides (which only overrides the fields its flags cover).
+	// Appearance globals are the baseline; CLI flags win. LoadUserConfig no longer
+	// applies globals itself, so this must run before ApplyOverrides.
 	config.ApplyAppearanceConfig(userConfig)
 
 	config.ApplyOverrides(config.Overrides{
@@ -222,6 +210,28 @@ func runLocal() error {
 		ConfirmQuit:         confirmQuit,
 		ThemeName:           themeName,
 	}, userConfig)
+
+	return userConfig
+}
+
+func runLocal() error {
+	if debugMode {
+		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
+		fmt.Println("Debug mode enabled")
+	}
+
+	// The interactive TUI draws to this terminal. Go's standard log writes to
+	// stderr, so the client/daemon [DEBUG] lines would share the screen with the
+	// rendered UI and corrupt it. When internal debugging is on, divert the log
+	// stream to a file so the screen stays clean; the external daemon subprocess
+	// already discards its own output, so this covers the in-process client.
+	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+		if lf, lerr := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); lerr == nil {
+			log.SetOutput(lf)
+		}
+	}
+
+	userConfig := loadAndApplyConfig()
 
 	if cpuProfile != "" {
 		f, err := os.Create(cpuProfile)

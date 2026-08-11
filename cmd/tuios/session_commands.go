@@ -230,33 +230,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		fmt.Println("Debug mode enabled")
 	}
 
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		log.Printf("Warning: Failed to load config, using defaults: %v", err)
-		userConfig = config.DefaultConfig()
-	}
-
-	// Apply the config appearance globals as the baseline before CLI flags win.
-	// LoadUserConfig no longer applies globals itself.
-	config.ApplyAppearanceConfig(userConfig)
-
-	config.ApplyOverrides(config.Overrides{
-		ASCIIOnly:           asciiOnly,
-		BorderStyle:         borderStyle,
-		DockbarPosition:     dockbarPosition,
-		HideWindowButtons:   hideWindowButtons,
-		HideScrollbar:       hideScrollbar,
-		WindowTitlePosition: windowTitlePosition,
-		HideClock:           hideClock,
-		ShowClock:           showClock,
-		ShowCPU:             showCPU,
-		ShowRAM:             showRAM,
-		SharedBorders:       sharedBorders,
-		ZoomMaxWidth:        zoomMaxWidth,
-		ScrollbackLines:     scrollbackLines,
-		NoAnimations:        noAnimations,
-		ThemeName:           themeName,
-	}, userConfig)
+	userConfig := loadAndApplyConfig()
 
 	app.SetInputHandler(input.HandleInput)
 
