@@ -28,11 +28,11 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Ctrl or shift + right-click opens the context menu on a pane. A plain
-	// right-click/drag on a pane is reserved for resize (it was too easy to open
-	// the menu by accident mid-resize), so the menu needs a modifier there.
-	// Empty desktop and the dock have no right-drag, so they still open the menu
-	// on a plain right-click (handled below).
+	// Ctrl or shift + right-click opens the context menu on a pane, on the press
+	// itself. This is the only way in over a pane whose app requested mouse
+	// tracking, where the right button belongs to that app; elsewhere a plain
+	// right-click reaches the menu too, decided on release once it is clear the
+	// gesture was not a resize drag (handleMouseRelease).
 	if msg.Button == tea.MouseRight && msg.Mod&(tea.ModShift|tea.ModCtrl) != 0 {
 		o.OpenContextMenu(X, Y)
 		return o, nil
@@ -325,8 +325,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// up below makes a drag resize, and the release opens the context menu
 	// instead when the pointer never moved past the threshold
 	// (handleMouseRelease). Armed before the zoom check so a zoomed pane,
-	// which cannot be resized, still gets its menu on the click. Modified
-	// right presses stay pure resizes.
+	// which cannot be resized, still gets its menu on the click.
 	if mouse.Button == tea.MouseRight && msg.Mod == 0 {
 		o.RightClickPending = true
 		o.RightPressX, o.RightPressY = X, Y

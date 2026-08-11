@@ -7,6 +7,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // ctxOS builds an OS with a registry, a visible pane and a minimized one, which
@@ -163,9 +164,9 @@ func TestContextMenuArrowKeysMoveSelection(t *testing.T) {
 
 // TestRightClickGesture pins the click-vs-drag split on the right button over a
 // pane. A plain right press arms a resize (so a drag resizes exactly as it
-// always has), and a release without movement is a stray click that does
-// nothing: the pane menu is deliberately NOT on a plain right-click, which was
-// too easy to trigger mid-resize. The menu is ctrl or shift + right-click.
+// always has), and a release without movement is a click that opens the pane
+// menu. Over a pane whose app requested mouse tracking the right button belongs
+// to that app, so there the menu still needs ctrl or shift.
 func TestRightClickGesture(t *testing.T) {
 	t.Run("press arms a resize, not a menu", func(t *testing.T) {
 		o := ctxOS(t)
@@ -178,15 +179,39 @@ func TestRightClickGesture(t *testing.T) {
 		}
 	})
 
-	t.Run("release without movement opens no menu (resize-only)", func(t *testing.T) {
+	t.Run("release without movement opens the pane menu", func(t *testing.T) {
 		o := ctxOS(t)
 		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
 		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
-		if o.ContextMenuActive() {
-			t.Fatal("a plain right-click on a pane opened the menu; it must be resize-only")
+		if !o.ContextMenuActive() {
+			t.Fatal("a plain right-click on a shell pane did not open the pane menu")
+		}
+		if o.ContextMenu.Target != app.CtxTargetPane {
+			t.Errorf("menu target = %v, want the pane menu", o.ContextMenu.Target)
 		}
 		if o.Resizing || o.Dragging {
 			t.Error("the cancelled resize left gesture state behind")
+		}
+	})
+
+	t.Run("mouse-mode pane keeps the modifier requirement", func(t *testing.T) {
+		o := ctxOS(t)
+		em := vt.NewEmulator(58, 28)
+		t.Cleanup(func() { _ = em.Close() })
+		if _, err := em.Write([]byte("\x1b[?1000h")); err != nil {
+			t.Fatalf("enable mouse tracking: %v", err)
+		}
+		o.Windows[0].Terminal = em
+
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		o, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		if o.ContextMenuActive() {
+			t.Fatal("a plain right-click over a mouse-tracking app opened the menu; the app owns that button")
+		}
+
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight, Mod: tea.ModCtrl}, o)
+		if !o.ContextMenuActive() {
+			t.Fatal("ctrl+right-click over a mouse-tracking app did not open the pane menu")
 		}
 	})
 

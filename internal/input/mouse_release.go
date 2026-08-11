@@ -44,16 +44,25 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CtrlDragging = false
 
 	// A plain right press on a pane arms a resize. Below the drag threshold it
-	// was a stray click, cancel the resize (restoring the few cells of jitter it
-	// may have applied) and do nothing else. The context menu is deliberately
-	// NOT opened here: a plain right-click was too easy to trigger by accident
-	// while resizing. The menu is ctrl/shift+right-click instead (see
-	// handleMouseClick). At or past the threshold the resize completes below.
+	// was a click: cancel the resize (restoring the few cells of jitter it may
+	// have applied) and open the pane menu at the press position. A pane whose
+	// app requested mouse tracking keeps the old contract, no menu without
+	// ctrl/shift, because the right button belongs to that app. At or past the
+	// threshold the resize completes below.
 	if o.RightClickPending {
 		o.RightClickPending = false
 		mouse := msg.Mouse()
 		if abs(mouse.X-o.RightPressX)+abs(mouse.Y-o.RightPressY) < rightClickDragThreshold {
+			pressX, pressY := o.RightPressX, o.RightPressY
+			appOwnsMouse := false
+			if idx := findClickedWindow(pressX, pressY, o); idx != -1 {
+				win := o.Windows[idx]
+				appOwnsMouse = win.Terminal != nil && win.Terminal.HasMouseMode()
+			}
 			cancelRightClickResize(o)
+			if !appOwnsMouse {
+				o.OpenContextMenu(pressX, pressY)
+			}
 			return o, nil
 		}
 	}
