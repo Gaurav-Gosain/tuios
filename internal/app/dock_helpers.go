@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"sort"
+	"strconv"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -27,6 +28,81 @@ type DockLayout struct {
 	TruncatedCount int            // Number of items that don't fit
 	VisibleItems   []DockItem     // Items that fit and should be displayed
 	ModeInfo       ModeInfo       // Mode display information for styling
+	WorkspaceTabs  []dockWorkspaceTab
+}
+
+// dockWorkspaceTab is one workspace digit in the dock's clickable strip.
+type dockWorkspaceTab struct {
+	Workspace int
+	Active    bool
+	Width     int
+}
+
+// dockWorkspaceHit is where a tab was drawn on the last frame. Recorded by the
+// renderer rather than recomputed by the mouse handler so the two dock paths
+// (compositor layer and fullscreen fast path) can never disagree about it.
+type dockWorkspaceHit struct {
+	X0, X1, Y, Workspace int
+}
+
+// dockTabCaps are the characters bracketing the active tab. The configurable
+// pill glyphs when they exist, else spaces, so every tab is the same width and
+// the strip does not jitter as the current workspace moves along it.
+func dockTabCaps() (string, string) {
+	lc, rc := config.GetDockPillLeftChar(), config.GetDockPillRightChar()
+	if lc == "" || rc == "" {
+		return " ", " "
+	}
+	return lc, rc
+}
+
+// buildDockWorkspaceTabs returns the dock's workspace strip: every occupied
+// workspace plus the current one, in order. Fewer than two means there is
+// nowhere a click could take you, so the strip stays off and the idle dock is
+// exactly what it was.
+func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
+	lc, rc := dockTabCaps()
+	capsW := lipgloss.Width(lc) + lipgloss.Width(rc)
+
+	tabs := make([]dockWorkspaceTab, 0, m.NumWorkspaces)
+	for i := 1; i <= m.NumWorkspaces; i++ {
+		if i != m.CurrentWorkspace && m.GetWorkspaceWindowCount(i) == 0 {
+			continue
+		}
+		tabs = append(tabs, dockWorkspaceTab{
+			Workspace: i,
+			Active:    i == m.CurrentWorkspace,
+			Width:     capsW + lipgloss.Width(strconv.Itoa(i)),
+		})
+	}
+	if len(tabs) < 2 {
+		return nil
+	}
+	return tabs
+}
+
+// dockWorkspaceTabsWidth is the strip's total width including the space that
+// separates it from the mode pill. Zero when the strip is off.
+func dockWorkspaceTabsWidth(tabs []dockWorkspaceTab) int {
+	if len(tabs) == 0 {
+		return 0
+	}
+	w := 1
+	for _, t := range tabs {
+		w += t.Width
+	}
+	return w
+}
+
+// DockWorkspaceAt returns the workspace whose dock tab covers the absolute cell
+// (x, y), or 0 when none does.
+func (m *OS) DockWorkspaceAt(x, y int) int {
+	for _, h := range m.dockWorkspaceHits {
+		if y == h.Y && x >= h.X0 && x < h.X1 {
+			return h.Workspace
+		}
+	}
+	return 0
 }
 
 // ItemPosition holds the position and size of a dock item
@@ -44,6 +120,11 @@ func (m *OS) CalculateDockLayout() DockLayout {
 
 	// Build left side text (compact format)
 	layout.LeftText, layout.LeftWidth, layout.ModeInfo = m.buildDockLeftText()
+
+	// The workspace strip rides in the left region, so the dock items are laid
+	// out against the room it leaves.
+	layout.WorkspaceTabs = m.buildDockWorkspaceTabs()
+	layout.LeftWidth += dockWorkspaceTabsWidth(layout.WorkspaceTabs)
 
 	// Calculate right side width. The estimate below is what the right block
 	// would like; on a narrow screen it is capped at what the left block leaves,

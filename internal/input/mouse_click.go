@@ -82,6 +82,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.NotificationClick(X, Y) {
 			return o, nil
 		}
+		// The workspace strip owns its columns in the left region, ahead of the
+		// dock items: the two never overlap, but the strip is tested first so a
+		// tab stays a tab whatever the item layout does.
+		if ws := o.DockWorkspaceAt(X, Y); ws > 0 {
+			o.SwitchToWorkspace(ws)
+			return o, nil
+		}
 		// Handle dock click only if there are minimized windows
 		if o.HasMinimizedWindows() {
 			dockIndex := findDockItemClicked(X, Y, o)

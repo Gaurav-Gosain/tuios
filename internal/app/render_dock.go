@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -8,6 +9,46 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
+
+// renderDockWorkspaceTabs styles the workspace strip starting at column startX
+// and records each tab's screen span into m.dockWorkspaceHits.
+func (m *OS) renderDockWorkspaceTabs(tabs []dockWorkspaceTab, startX int) string {
+	m.dockWorkspaceHits = m.dockWorkspaceHits[:0]
+	if len(tabs) == 0 {
+		return ""
+	}
+
+	lc, rc := dockTabCaps()
+	fill := lipgloss.Color(sidebarFocusColor)
+	pal := theme.UI()
+	y := m.GetDockbarContentYPosition()
+
+	var b strings.Builder
+	b.WriteString(" ")
+	x := startX + 1
+	for _, t := range tabs {
+		digit := strconv.Itoa(t.Workspace)
+		if t.Active {
+			// Caps carry the fill as foreground, the way every other pill in the
+			// chrome is built, so the semicircles round off instead of boxing in.
+			caps := lipgloss.NewStyle().Foreground(fill)
+			b.WriteString(caps.Render(lc) +
+				lipgloss.NewStyle().Background(fill).Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(digit) +
+				caps.Render(rc))
+		} else {
+			// Padded with the caps' own widths so an inactive tab occupies exactly
+			// what the active one does and the strip never reflows on a switch.
+			pad := strings.Repeat(" ", lipgloss.Width(lc))
+			b.WriteString(lipgloss.NewStyle().Foreground(pal.FgMute).
+				Render(pad + digit + strings.Repeat(" ", lipgloss.Width(rc))))
+		}
+		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
+			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
+		})
+		x += t.Width
+	}
+	return b.String()
+}
 
 func (m *OS) renderDock() *lipgloss.Layer {
 	fullDock, dockbarYPos := m.renderDockString()
@@ -27,14 +68,6 @@ func (m *OS) renderDockString() (string, int) {
 		Foreground(lipgloss.Color("#a0a0b0")).
 		Bold(true).
 		MarginRight(2)
-
-	if m.workspaceActiveStyle == nil {
-		activeStyle := lipgloss.NewStyle().
-			Background(lipgloss.Color("#4865f2")).
-			Foreground(lipgloss.Color("#ffffff")).
-			Bold(true)
-		m.workspaceActiveStyle = &activeStyle
-	}
 
 	leftText := layout.LeftText
 
@@ -157,8 +190,14 @@ func (m *OS) renderDockString() (string, int) {
 		dockItemsStr.WriteString(truncStyle.Render(" ..."))
 	}
 
+	// The strip sits between the mode pill and the stats, and records where each
+	// tab landed as it goes: both dock paths render through here, so the hit
+	// rects are the drawn geometry rather than a second guess at it.
+	styledTabs := m.renderDockWorkspaceTabs(layout.WorkspaceTabs, lipgloss.Width(styledModeText))
+
 	leftInfo := lipgloss.JoinHorizontal(lipgloss.Top,
 		styledModeText,
+		styledTabs,
 		styledWorkspaceText,
 	)
 

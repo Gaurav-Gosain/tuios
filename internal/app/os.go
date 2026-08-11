@@ -205,6 +205,7 @@ type OS struct {
 	LogScrollOffset       int                    // Scroll offset for log viewer
 	Notifications         []Notification         // Active notifications
 	notifHit              notifHitZones          // where the message block was drawn last frame
+	dockWorkspaceHits     []dockWorkspaceHit     // where the dock's workspace tabs were drawn last frame
 	SelectionMode         bool                   // True when in text selection mode
 	ClipboardContent      string                 // Store clipboard content from tea.ClipboardMsg
 	ShowCacheStats        bool                   // True when showing style cache statistics overlay
@@ -229,7 +230,6 @@ type OS struct {
 	// Performance optimization caches
 	cachedSeparator      string // Cached dock separator string
 	cachedSeparatorWidth int    // Width of cached separator
-	workspaceActiveStyle *lipgloss.Style
 	cachedViewContent    string // Cached full View() output to skip rendering on idle ticks
 	renderSkipped        bool   // True when frame-skip fired; View() returns cached content
 	// tickStats records how the maintenance tick spent itself so the idle
