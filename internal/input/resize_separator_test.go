@@ -32,7 +32,7 @@ func rgbOf(c color.Color) rgb {
 // tracked, which is all the separator check needs.
 func frameFG(frame string) []map[int]rgb {
 	var rows []map[int]rgb
-	for _, line := range strings.Split(frame, "\n") {
+	for line := range strings.SplitSeq(frame, "\n") {
 		cells := map[int]rgb{}
 		var fg rgb
 		col := 0

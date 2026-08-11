@@ -385,12 +385,10 @@ func TestVerbConcurrentClients(t *testing.T) {
 	const iters = 20
 	var wg sync.WaitGroup
 	errs := make(chan error, clients)
-	for i := 0; i < clients; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range clients {
+		wg.Go(func() {
 			c := dialVerb(t, sp)
-			for j := 0; j < iters; j++ {
+			for range iters {
 				resp := c.call(t, `{"verb":"list-windows","params":{"session":"shared"}}`)
 				res, ok := resp["result"].(map[string]any)
 				if !ok || res["type"] != "window_list" {
@@ -398,7 +396,7 @@ func TestVerbConcurrentClients(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)

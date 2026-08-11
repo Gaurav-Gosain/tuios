@@ -63,10 +63,9 @@ func TabRowCount(tabs []string, width int) int {
 	curW := 0
 	wrapW := tabWrapWidth(width)
 	for _, name := range tabs {
-		w := lipgloss.Width(name) + 2 // Padding(0, 1)
-		if w > wrapW {
-			w = wrapW
-		}
+		w := min(
+			// Padding(0, 1)
+			lipgloss.Width(name)+2, wrapW)
 		if curW > 0 && curW+w > wrapW {
 			rows++
 			curW = 0

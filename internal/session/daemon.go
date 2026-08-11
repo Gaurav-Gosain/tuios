@@ -666,7 +666,7 @@ func resolveAgentStallTimeout(cfg time.Duration) time.Duration {
 func resolveAgentBinaries(cfg []string) []string {
 	extra := append([]string(nil), cfg...)
 	if s := os.Getenv("TUIOS_AGENT_BINARIES"); s != "" {
-		for _, name := range strings.Split(s, ",") {
+		for name := range strings.SplitSeq(s, ",") {
 			if name = strings.TrimSpace(name); name != "" {
 				extra = append(extra, name)
 			}
@@ -728,7 +728,6 @@ func (d *Daemon) agentMonitor() {
 			return
 		case <-ticker.C:
 			for _, sess := range d.manager.AllSessions() {
-				sess := sess
 				sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.isAgent)
 			}
 		}
@@ -760,13 +759,7 @@ func (d *Daemon) stallMonitor() {
 	}
 	// Tick often enough to demote within a fraction of the timeout, but never
 	// spin: at least once a second, at most once every ten.
-	interval := d.agentStallTimeout / 4
-	if interval < time.Second {
-		interval = time.Second
-	}
-	if interval > 10*time.Second {
-		interval = 10 * time.Second
-	}
+	interval := min(max(d.agentStallTimeout/4, time.Second), 10*time.Second)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -777,7 +770,6 @@ func (d *Daemon) stallMonitor() {
 		case <-ticker.C:
 			now := time.Now()
 			for _, sess := range d.manager.AllSessions() {
-				sess := sess
 				sess.applyStallHeuristic(now, d.agentStallTimeout, func(ptyID string) int64 {
 					if pty := sess.GetPTY(ptyID); pty != nil {
 						return pty.LastOutput()

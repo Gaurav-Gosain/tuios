@@ -53,8 +53,8 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Workspace/session jumps share a numeric suffix.
-	if strings.HasPrefix(action, sidebarActJumpPrefix) {
-		if n, err := strconv.Atoi(strings.TrimPrefix(action, sidebarActJumpPrefix)); err == nil {
+	if after, ok := strings.CutPrefix(action, sidebarActJumpPrefix); ok {
+		if n, err := strconv.Atoi(after); err == nil {
 			o.SidebarJumpToSession(n)
 		}
 		return o, nil

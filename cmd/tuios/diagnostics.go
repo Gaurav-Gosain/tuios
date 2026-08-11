@@ -78,7 +78,7 @@ func diagnosticErrorHandler(w io.Writer, styles fang.Styles, err error) {
 	}
 
 	_, _ = fmt.Fprintln(w, styles.ErrorHeader.String())
-	for _, line := range strings.Split(err.Error(), "\n") {
+	for line := range strings.SplitSeq(err.Error(), "\n") {
 		_, _ = fmt.Fprintln(w, styles.ErrorText.UnsetTransform().Render(line))
 	}
 	_, _ = fmt.Fprintln(w)

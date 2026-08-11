@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -93,12 +94,7 @@ func (m agentMatcher) isAgent(comm string, argv []string) bool {
 	// ".../node_modules/@anthropic-ai/claude-code/cli.js", or "/usr/bin/claude").
 	// Scan each argument's path components, not just its base name, so the script
 	// file being cli.js does not hide the agent named by its directory.
-	for _, arg := range argv {
-		if m.argNamesAgent(arg) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(argv, m.argNamesAgent)
 }
 
 // argNamesAgent reports whether any path component of a single argv token, once
@@ -110,7 +106,7 @@ func (m agentMatcher) argNamesAgent(arg string) bool {
 	if arg == "" {
 		return false
 	}
-	for _, comp := range strings.Split(arg, "/") {
+	for comp := range strings.SplitSeq(arg, "/") {
 		if comp == "" {
 			continue
 		}
@@ -134,8 +130,8 @@ func agentBaseName(s string) string {
 	s = strings.TrimPrefix(s, "-")
 	lower := strings.ToLower(s)
 	for _, ext := range scriptExtensions {
-		if strings.HasSuffix(lower, ext) {
-			return strings.TrimSuffix(lower, ext)
+		if before, ok := strings.CutSuffix(lower, ext); ok {
+			return before
 		}
 	}
 	return lower

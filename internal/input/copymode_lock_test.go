@@ -97,13 +97,11 @@ func TestCopyModeKeyAgainstConcurrentPTYWriter(t *testing.T) {
 	// so an unbounded flood makes this quadratic and turns a lock test into a
 	// multi-minute benchmark. What matters is that the two lock users
 	// interleave, not how much data moves.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for range 50 {
 			win.WriteOutputAsync([]byte("output from the shell\r\n"))
 		}
-	}()
+	})
 
 	keys := []string{"j", "k", "h", "l", "w", "b", "e", "0", "$"}
 	for i := range 200 {

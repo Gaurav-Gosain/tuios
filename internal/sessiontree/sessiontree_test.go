@@ -1,5 +1,7 @@
 package sessiontree
 
+import "strings"
+
 import "testing"
 
 func TestRollUpStatePriority(t *testing.T) {
@@ -94,11 +96,11 @@ func TestBuildPreservesOrder(t *testing.T) {
 		{Name: "b", WindowCount: 2},
 		{Name: "c", WindowCount: 3},
 	})
-	got := ""
+	var got strings.Builder
 	for _, s := range tree.Sessions {
-		got += s.ID
+		got.WriteString(s.ID)
 	}
-	if got != "abc" {
-		t.Fatalf("session order = %q, want abc", got)
+	if got.String() != "abc" {
+		t.Fatalf("session order = %q, want abc", got.String())
 	}
 }

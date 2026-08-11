@@ -81,7 +81,7 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 		// has to vary to stay a flood - which is exactly what a live stream does.
 		const buffers = 4
 		names := make([]string, buffers)
-		for b := 0; b < buffers; b++ {
+		for b := range buffers {
 			shmName := fmt.Sprintf("tuios-crash-%d-%d-%d", os.Getpid(), si, b)
 			shmPath := "/dev/shm/" + shmName
 			shmData := make([]byte, shape.pxW*shape.pxH*4)
@@ -146,7 +146,7 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 	const numSessions = 8
 	var wg sync.WaitGroup
 	errs := make([]error, numSessions)
-	for i := 0; i < numSessions; i++ {
+	for i := range numSessions {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()

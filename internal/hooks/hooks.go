@@ -177,11 +177,9 @@ func (m *Manager) Fire(event Event, ctx Context) {
 	ctx.EventType = event
 
 	for _, cmdStr := range commands {
-		m.inFlight.Add(1)
-		go func() {
-			defer m.inFlight.Done()
+		m.inFlight.Go(func() {
 			run(cmdStr, ctx)
-		}()
+		})
 	}
 }
 

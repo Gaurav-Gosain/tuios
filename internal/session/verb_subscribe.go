@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"maps"
 	"regexp"
 	"time"
 )
@@ -100,11 +101,9 @@ func (d *Daemon) startPendingStream(cs *connState) {
 	if sub == nil {
 		return
 	}
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
+	d.wg.Go(func() {
 		d.streamEvents(cs, sub)
-	}()
+	})
 }
 
 // streamEvents pushes events from a subscription to the connection until the
@@ -210,9 +209,7 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 // waitMatched builds a successful wait_result for the given condition.
 func waitMatched(condition string, extra map[string]any) map[string]any {
 	res := map[string]any{"type": "wait_result", "condition": condition, "matched": true}
-	for k, v := range extra {
-		res[k] = v
-	}
+	maps.Copy(res, extra)
 	return res
 }
 

@@ -42,14 +42,12 @@ func TestDaemonWindowCloseUnderOutputFlood(t *testing.T) {
 	// Flood output from several goroutines, as the daemon readLoop does.
 	const floodGoroutines = 8
 	payload := []byte("hello world \x1b[31mcolored\x1b[0m output line\r\n")
-	for i := 0; i < floodGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 2000; j++ {
+	for range floodGoroutines {
+		wg.Go(func() {
+			for range 2000 {
 				w.WriteOutputAsync(payload)
 			}
-		}()
+		})
 	}
 
 	// Close concurrently with the flood, from two goroutines to also exercise

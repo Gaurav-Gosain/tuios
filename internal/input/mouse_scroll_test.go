@@ -20,7 +20,7 @@ func scrollPane(t *testing.T) (*app.OS, *terminal.Window) {
 	em := vt.NewEmulator(40, 20)
 	t.Cleanup(func() { _ = em.Close() })
 	for i := range 200 {
-		_, _ = em.Write([]byte(fmt.Sprintf("line %d\r\n", i)))
+		_, _ = em.Write(fmt.Appendf(nil, "line %d\r\n", i))
 	}
 	if em.ScrollbackLen() < 50 {
 		t.Fatalf("emulator produced %d scrollback lines; the test needs more", em.ScrollbackLen())

@@ -69,17 +69,15 @@ func TestSessionOptionsConcurrent(t *testing.T) {
 	defer sess.Stop()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 100; j++ {
+	for range 8 {
+		wg.Go(func() {
+			for range 100 {
 				sess.SetOption("k", "v")
 				_, _ = sess.GetOption("k")
 				_ = sess.AllOptions()
 				_ = sess.GetState()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

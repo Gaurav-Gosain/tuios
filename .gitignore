@@ -22,3 +22,6 @@ mem.prof
 
 # The WebAssembly demo lives on feat/wasm-demo; its working copy (source plus a 125MB built guest) is stray on main. Ignore it here so status stays clean; tracked files still merge normally if the branch lands.
 /web/
+
+# Agent worktrees: transient checkouts, never part of the tree.
+.claude/worktrees/

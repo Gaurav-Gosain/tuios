@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"strings"
 	"time"
 
@@ -192,9 +193,7 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		return nil, mapResolveErr(err, sess)
 	}
 	out := map[string]any{"type": "window_created"}
-	for k, v := range data {
-		out[k] = v
-	}
+	maps.Copy(out, data)
 	return out, nil
 }
 

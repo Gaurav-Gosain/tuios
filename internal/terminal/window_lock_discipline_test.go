@@ -145,18 +145,14 @@ func TestSendInputSnapshotsPtyUnderTeardown(t *testing.T) {
 	// writes are UI-goroutine-owned window model fields, so a multi-sender
 	// test would flag those instead of the field read under test.
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for range 4000 {
 			_ = w.SendInput([]byte("x"))
 		}
-	}()
+	})
 
 	// Teardown lands in the middle of the flood, exactly as Close() does.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for range 200 {
 			w.ioMu.Lock()
 			w.Pty = nil
@@ -165,7 +161,7 @@ func TestSendInputSnapshotsPtyUnderTeardown(t *testing.T) {
 			w.Pty = &nopPty{}
 			w.ioMu.Unlock()
 		}
-	}()
+	})
 
 	wg.Wait()
 }

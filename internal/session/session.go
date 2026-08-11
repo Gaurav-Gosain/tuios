@@ -1219,7 +1219,7 @@ func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 		scrollbackLen := p.terminal.ScrollbackLen()
 		if scrollbackLen > 0 {
 			var sb strings.Builder
-			for i := 0; i < scrollbackLen; i++ {
+			for i := range scrollbackLen {
 				line := p.terminal.ScrollbackLine(i)
 				if ansi {
 					sb.WriteString(line.Render())

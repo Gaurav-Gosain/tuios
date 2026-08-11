@@ -22,7 +22,7 @@ func whichKeyRowKeys(key string) []string {
 		return []string{"shift+tab"}
 	}
 	var keys []string
-	for _, k := range strings.Split(key, "/") {
+	for k := range strings.SplitSeq(key, "/") {
 		keys = append(keys, normalizeWhichKey(k))
 	}
 	return keys

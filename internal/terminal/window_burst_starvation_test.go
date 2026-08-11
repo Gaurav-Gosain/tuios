@@ -2,7 +2,7 @@ package terminal
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,7 +17,7 @@ import (
 // margin how long a real burst holds the I/O lock.
 func burstPayload() []byte {
 	var b []byte
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		b = append(b, fmt.Sprintf("/usr/share/doc/package-%04d/README.md %d\r\n", i, i*7919)...)
 	}
 	return b
@@ -103,7 +103,7 @@ func TestBackgroundBurstDoesNotStarveCompositor(t *testing.T) {
 
 	const frames = 120
 	waits := make([]time.Duration, 0, frames)
-	for i := 0; i < frames; i++ {
+	for range frames {
 		start := time.Now()
 		w.RLockIO()
 		// The real render path reads the cell buffer here. Touching the
@@ -127,7 +127,7 @@ func TestBackgroundBurstDoesNotStarveCompositor(t *testing.T) {
 		total += d
 	}
 	mean := total / time.Duration(len(waits))
-	sort.Slice(waits, func(i, j int) bool { return waits[i] < waits[j] })
+	slices.Sort(waits)
 	p95 := waits[len(waits)*95/100]
 
 	t.Logf("compositor wait on a bursting pane: mean %v, p50 %v, p95 %v, worst %v over %d frames",
@@ -161,7 +161,7 @@ func TestChunkedVTWriteMatchesSingleWrite(t *testing.T) {
 	// Escapes, wide runes, combining marks and wrapping, so the split lands
 	// mid-sequence and mid-cluster many times over.
 	var stream []byte
-	for i := 0; i < 400; i++ {
+	for i := range 400 {
 		stream = append(stream, fmt.Sprintf(
 			"\x1b[3%dm line %04d é́ 你好 \U0001f600 padding-to-force-wrap-%d\x1b[0m\r\n",
 			i%8, i, i)...)
@@ -214,7 +214,7 @@ func TestBackgroundBurstDoesNotDropInput(t *testing.T) {
 	const keystrokes = 60
 	var sent []byte
 	var slowest time.Duration
-	for i := 0; i < keystrokes; i++ {
+	for i := range keystrokes {
 		key := []byte{byte('a' + i%26)}
 		start := time.Now()
 		if err := inputWin.SendInput(key); err != nil {

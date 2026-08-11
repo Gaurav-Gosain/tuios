@@ -19,7 +19,7 @@ func windowWithScrollback(t *testing.T) *terminal.Window {
 	em := vt.NewEmulator(20, 5)
 	t.Cleanup(func() { _ = em.Close() })
 	for i := range 40 {
-		_, _ = em.Write([]byte(fmt.Sprintf("line %d\r\n", i)))
+		_, _ = em.Write(fmt.Appendf(nil, "line %d\r\n", i))
 	}
 	if em.ScrollbackLen() == 0 {
 		t.Fatal("emulator produced no scrollback; the test cannot exercise scrolling")

@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -107,9 +108,7 @@ func dragEdge(geo map[int]Rect, target int, e edge, delta int) (map[int]Rect, bo
 	}
 
 	out := make(map[int]Rect, len(geo))
-	for id, g := range geo {
-		out[id] = g
-	}
+	maps.Copy(out, geo)
 
 	if e.horizontal() {
 		old := r.X
@@ -249,7 +248,7 @@ func TestRepeatedResizeDoesNotDrift(t *testing.T) {
 				geo := start
 
 				const steps = 8
-				for i := 0; i < steps; i++ {
+				for range steps {
 					dragged, ok := dragEdge(geo, 1, edgeRight, 2)
 					if !ok {
 						break
@@ -305,7 +304,7 @@ func TestHorizontalResizeKeepsRightColumnHeights(t *testing.T) {
 		before := tree.ApplyLayout(bounds)
 
 		geo := before
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			dragged, ok := dragEdge(geo, 1, edgeRight, 4)
 			if !ok {
 				t.Fatalf("drag %d hit the minimum size", i)

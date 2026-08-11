@@ -16,11 +16,11 @@ func TestEventHubTwoSubscribersSameSequence(t *testing.T) {
 	b := h.subscribe(eventFilter{}, 64)
 
 	const n = 10
-	for i := 0; i < n; i++ {
+	for range n {
 		h.publish(streamEvent{Type: EventOutput})
 	}
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ea := <-a.ch
 		eb := <-b.ch
 		if ea.Seq != eb.Seq {
@@ -39,7 +39,7 @@ func TestEventHubDropsWhenQueueFull(t *testing.T) {
 	h := newEventHub()
 	sub := h.subscribe(eventFilter{}, 4)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		h.publish(streamEvent{Type: EventOutput})
 	}
 
@@ -97,7 +97,7 @@ func TestStreamEventsEmitsGapMarker(t *testing.T) {
 
 	sub := d.events.subscribe(eventFilter{}, 2)
 	// Burst 5 events with no streamer draining: seq 1,2 buffer; 3,4,5 drop.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		d.events.publish(streamEvent{Type: EventOutput})
 	}
 	if got := sub.dropped.Load(); got != 3 {
