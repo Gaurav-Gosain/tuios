@@ -260,7 +260,11 @@ func (m *OS) Init() tea.Cmd {
 	// Keep the foreign-session window cache warm so the sidebar can expand other
 	// sessions. Kick once on attach, then repeat on an interval.
 	if m.DaemonClient != nil {
-		cmds = append(cmds, refreshForeignSessionsCmd(m.DaemonClient), foreignSessionRefreshTick())
+		after, refresh := m.foreignSessionRefreshPlan()
+		if refresh {
+			cmds = append(cmds, refreshForeignSessionsCmd(m.DaemonClient))
+		}
+		cmds = append(cmds, foreignSessionRefreshTick(after))
 	}
 
 	return tea.Batch(cmds...)
@@ -412,21 +416,40 @@ func TriggerAltScreenRedrawCmd() tea.Cmd {
 	}
 }
 
-// foreignSessionRefreshInterval is how often the client re-fetches the daemon's
-// session list so a non-attached session's window tree stays current in the
-// sidebar. The sidebar reads BuildSessionTree every frame but triggers no
-// refresh itself, so without this the foreign-window cache would stay empty
-// until the switcher is opened.
-const foreignSessionRefreshInterval = 3 * time.Second
+// Foreign-session poll cadences. The client re-fetches the daemon's session
+// list so a non-attached session's window tree stays current in the sidebar.
+// The fast cadence runs only while a consumer (sidebar or switcher) can show
+// the result and more than one session exists; otherwise the slow cadence is a
+// fallback that keeps the cache from going stale without costing anything at
+// true idle, where a lone-session client refreshes nothing at all.
+const (
+	foreignSessionRefreshActive = 3 * time.Second
+	foreignSessionRefreshIdle   = 30 * time.Second
+)
 
-// ForeignSessionRefreshTickMsg fires on foreignSessionRefreshInterval to kick a
-// background session-list refresh.
+// ForeignSessionRefreshTickMsg fires to kick a background session-list refresh.
 type ForeignSessionRefreshTickMsg struct{}
 
-func foreignSessionRefreshTick() tea.Cmd {
-	return tea.Tick(foreignSessionRefreshInterval, func(time.Time) tea.Msg {
+func foreignSessionRefreshTick(after time.Duration) tea.Cmd {
+	return tea.Tick(after, func(time.Time) tea.Msg {
 		return ForeignSessionRefreshTickMsg{}
 	})
+}
+
+// foreignSessionRefreshPlan decides whether the next poll should hit the daemon
+// and how long to wait before re-arming. There are foreign sessions to show
+// only when more than one session exists; a consumer is on screen when the
+// sidebar reserves columns or the session switcher is open. Poll fast when both
+// hold, fall back to a slow cache-warming poll when there are foreign sessions
+// but nothing is displaying them, and do nothing at all for a lone session.
+func (m *OS) foreignSessionRefreshPlan() (after time.Duration, refresh bool) {
+	if m.DaemonClient == nil || m.DaemonClient.SessionCount() <= 1 {
+		return foreignSessionRefreshIdle, false
+	}
+	if m.SidebarActive() || m.ShowSessionSwitcher {
+		return foreignSessionRefreshActive, true
+	}
+	return foreignSessionRefreshIdle, true
 }
 
 // refreshForeignSessionsCmd refreshes the cached session list off the UI
@@ -783,7 +806,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case ForeignSessionRefreshTickMsg:
-		return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), foreignSessionRefreshTick())
+		after, refresh := m.foreignSessionRefreshPlan()
+		if !refresh {
+			return m, foreignSessionRefreshTick(after)
+		}
+		return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), foreignSessionRefreshTick(after))
 
 	case TriggerAltScreenRedrawMsg:
 		// Force alt screen apps to redraw by sending resize (fake then real)

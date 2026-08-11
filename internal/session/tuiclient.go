@@ -1026,6 +1026,15 @@ func (c *TUIClient) AvailableSessionNames() []string {
 	return names
 }
 
+// SessionCount returns how many sessions the cache currently knows about. The
+// client gates its foreign-session poll on this so a lone-session client makes
+// no network round trips at idle.
+func (c *TUIClient) SessionCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.availableSessions)
+}
+
 // SessionWindows returns the cached per-window summaries for the named session,
 // or nil if the session is unknown or its windows have not been fetched yet. The
 // sidebar reads this to expand a non-attached session's tree without a blocking
