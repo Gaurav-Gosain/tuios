@@ -12,10 +12,11 @@ import (
 )
 
 // workspaceChip renders one workspace digit for the dock strip or the rail
-// band. The active one sits on the focus fill inside the chrome's pill caps;
-// the rest are the digit padded to the caps' own widths, so every chip is
-// exactly workspaceChipWidth wide whatever its state. rowBg is what sits behind
-// the caps (nil for the bare terminal background), fg the resting digit color.
+// band. Inactive is a bare dim digit; active is a flat filled cell, where the
+// background is the tab and there is no cap glyph to read as one. Both pad to
+// the caps' widths, so every chip is exactly workspaceChipWidth wide whatever
+// its state. rowBg is what sits behind the chip (nil for the bare terminal
+// background), fg the resting digit color.
 func workspaceChip(n int, active bool, fg, rowBg color.Color) string {
 	lc, rc := workspaceChipCaps()
 	digit := strconv.Itoa(n)
@@ -24,10 +25,13 @@ func workspaceChip(n int, active bool, fg, rowBg color.Color) string {
 			strings.Repeat(" ", lipgloss.Width(lc)) + digit + strings.Repeat(" ", lipgloss.Width(rc)))
 	}
 	fill := lipgloss.Color(sidebarFocusColor)
+	body := lipgloss.NewStyle().Background(fill).Foreground(lipgloss.Color("#ffffff"))
+	if !config.DockPillCaps {
+		return body.Render(
+			strings.Repeat(" ", lipgloss.Width(lc)) + digit + strings.Repeat(" ", lipgloss.Width(rc)))
+	}
 	caps := sidebarStyle(rowBg, fill)
-	return caps.Render(lc) +
-		lipgloss.NewStyle().Background(fill).Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(digit) +
-		caps.Render(rc)
+	return caps.Render(lc) + body.Bold(true).Render(digit) + caps.Render(rc)
 }
 
 // renderDockWorkspaceTabs styles the workspace strip starting at column startX
@@ -80,81 +84,17 @@ func (m *OS) renderDockString() (string, int) {
 		Foreground(lipgloss.Color("#808090")).
 		MarginRight(2)
 
-	modeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#a0a0b0")).
-		Bold(true).
-		MarginRight(2)
-
-	leftText := layout.LeftText
-
-	leftCircle := config.GetDockPillLeftChar()
-	rightCircle := config.GetDockPillRightChar()
-
-	var styledModeText, styledWorkspaceText string
-
-	if leftCircle != "" && rightCircle != "" {
-		startIdx := strings.Index(leftText, leftCircle)
-		endIdx := strings.Index(leftText, rightCircle)
-
-		if startIdx != -1 && endIdx > startIdx {
-			workspacePart := leftText[endIdx+len(rightCircle):]
-
-			modeColor := layout.ModeInfo.Color
-			modeLabel := leftText[startIdx+len(leftCircle) : endIdx]
-
-			styledLeftCircle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(modeColor)).
-				Render(leftCircle)
-
-			styledLabel := lipgloss.NewStyle().
-				Background(lipgloss.Color(modeColor)).
-				Foreground(lipgloss.Color("#ffffff")).
-				Bold(true).
-				Render(modeLabel)
-
-			styledRightCircle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(modeColor)).
-				Render(rightCircle)
-
-			styledModeText = styledLeftCircle + styledLabel + styledRightCircle
-
-			styledWorkspaceText = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#b0b0c0")).
-				Bold(true).
-				Render(workspacePart)
-		} else {
-			styledModeText = modeStyle.Render(leftText)
-			styledWorkspaceText = ""
-		}
-	} else {
-		modeColor := layout.ModeInfo.Color
-
-		var modeLabel, workspacePart string
-		if strings.Contains(leftText, " ") {
-			for i := 1; i < len(leftText); i++ {
-				if leftText[i] >= '0' && leftText[i] <= '9' {
-					modeLabel = leftText[:i]
-					workspacePart = leftText[i:]
-					break
-				}
-			}
-		}
-
-		if modeLabel == "" {
-			modeLabel = leftText
-		}
-
-		styledModeText = lipgloss.NewStyle().
-			Background(lipgloss.Color(modeColor)).
-			Foreground(lipgloss.Color("#ffffff")).
-			Bold(true).
-			Render(modeLabel)
-
-		styledWorkspaceText = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#b0b0c0")).
-			Bold(true).
-			Render(workspacePart)
+	// The mode label arrives without its caps, so the pill is assembled here
+	// rather than found again by searching the string for the cap glyphs.
+	modeColor := lipgloss.Color(layout.ModeInfo.Color)
+	fill := lipgloss.NewStyle().Background(modeColor).Foreground(lipgloss.Color("#ffffff"))
+	styledModeText := fill.Render(layout.ModeLabel)
+	if lc, rc := config.GetDockPillLeftChar(), config.GetDockPillRightChar(); lc != "" && rc != "" {
+		caps := lipgloss.NewStyle().Foreground(modeColor)
+		styledModeText = caps.Render(lc) + fill.Bold(true).Render(layout.ModeLabel) + caps.Render(rc)
 	}
+
+	styledTrailText := lipgloss.NewStyle().Foreground(theme.UI().FgDim).Render(layout.TrailText)
 
 	var dockItemsStr strings.Builder
 	itemNumber := 1
@@ -176,26 +116,21 @@ func (m *OS) renderDockString() (string, int) {
 			fgColor = "#ffffff"
 		}
 
-		labelText := dockItem.Label
-
-		leftCircle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(bgColor)).
-			Render(config.GetDockPillLeftChar())
-
+		// Flat by default: the caps repeated on every minimized window turned
+		// the row into beads. getDockItems pads the label, so the fill alone
+		// still reads as a cell.
+		caps := lipgloss.NewStyle().Foreground(lipgloss.Color(bgColor))
 		nameLabel := lipgloss.NewStyle().
 			Background(lipgloss.Color(bgColor)).
 			Foreground(lipgloss.Color(fgColor)).
-			Bold(isHighlighted || windowIndex == m.FocusedWindow).
-			Render(labelText)
-
-		rightCircle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(bgColor)).
-			Render(config.GetDockPillRightChar())
+			Bold(config.DockPillCaps && (isHighlighted || windowIndex == m.FocusedWindow)).
+			Render(dockItem.Label)
 
 		if itemNumber > 1 {
 			dockItemsStr.WriteString(" ")
 		}
-		dockItemsStr.WriteString(leftCircle + nameLabel + rightCircle)
+		dockItemsStr.WriteString(caps.Render(config.GetDockPillLeftChar()) +
+			nameLabel + caps.Render(config.GetDockPillRightChar()))
 
 		itemNumber++
 	}
@@ -214,7 +149,7 @@ func (m *OS) renderDockString() (string, int) {
 	leftInfo := lipgloss.JoinHorizontal(lipgloss.Top,
 		styledModeText,
 		styledTabs,
-		styledWorkspaceText,
+		styledTrailText,
 	)
 
 	renderWidth := m.GetRenderWidth()

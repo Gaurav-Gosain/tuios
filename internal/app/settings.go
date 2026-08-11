@@ -396,6 +396,13 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.DockWorkspaceTabs = boolPtr(v) })
 					m.applyAppearanceLive(false)
 				}),
+			boolItem("Pill caps", "Powerline caps on the dock's pills instead of flat cells",
+				func() bool { return config.DockPillCaps },
+				func(m *OS, v bool) {
+					config.DockPillCaps = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.DockPillCaps = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
 		},
 	}
 

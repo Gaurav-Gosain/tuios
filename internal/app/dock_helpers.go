@@ -20,7 +20,11 @@ type DockItem struct {
 
 // DockLayout contains calculated layout information for the dock
 type DockLayout struct {
-	LeftText       string
+	// ModeLabel is the mode pill's text without its caps; the renderer decides
+	// whether it wears any. TrailText is what rides after the strip (the
+	// project-tape badge), styled as passive information.
+	ModeLabel      string
+	TrailText      string
 	LeftWidth      int
 	RightWidth     int
 	CenterStartX   int
@@ -169,7 +173,7 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	layout := DockLayout{}
 
 	// Build left side text (compact format)
-	layout.LeftText, layout.LeftWidth, layout.ModeInfo = m.buildDockLeftText()
+	layout.ModeLabel, layout.TrailText, layout.LeftWidth, layout.ModeInfo = m.buildDockLeftText()
 
 	// The workspace strip rides in the left region, so the dock items are laid
 	// out against the room it leaves.
@@ -200,13 +204,14 @@ type ModeInfo struct {
 	NextSplit string // Next split direction when tiling ("V" or "H")
 }
 
-// buildDockLeftText builds the left side of the dock (mode + workspace info)
-// Returns the text, width, and mode info for styling
-func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
+// buildDockLeftText builds the dock's left region: the mode pill's label, the
+// passive badges trailing it, the width the two claim, and the mode info the
+// renderer styles them with.
+func (m *OS) buildDockLeftText() (modeLabel, trail string, width int, modeInfo ModeInfo) {
 	focusedWindow := m.GetFocusedWindow()
 
 	// Build mode info (will be styled with colors in render.go)
-	modeInfo := ModeInfo{
+	modeInfo = ModeInfo{
 		Block:    "█",
 		IsTiling: m.AutoTiling,
 	}
@@ -220,9 +225,6 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 			modeInfo.NextSplit = "V" // Default to vertical
 		}
 	}
-
-	var modeText string
-	var modeLabel string
 
 	switch {
 	case m.SidebarFocused:
@@ -262,55 +264,33 @@ func (m *OS) buildDockLeftText() (string, int, ModeInfo) {
 		modeLabel += " Z"
 	}
 
-	// Build pill-style mode indicator with configurable semicircles
-	// This will be styled in render.go with the mode color
-	modeText = config.GetDockPillLeftChar() + modeLabel + config.GetDockPillRightChar()
-
-	// Count terminals (all windows across all workspaces)
-	totalTerminals := 0
-	for i := 1; i <= m.NumWorkspaces; i++ {
-		totalTerminals += m.GetWorkspaceWindowCount(i)
-	}
-
-	// Count workspaces being used (workspaces with at least 1 window)
-	workspacesUsed := 0
-	for i := 1; i <= m.NumWorkspaces; i++ {
-		if m.GetWorkspaceWindowCount(i) > 0 {
-			workspacesUsed++
-		}
-	}
-
-	// Build workspace text with stats using configurable icons
-	// Format: "2:3 • 5  3 " where:
-	// - 2:3 = workspace 2, 3 windows in current
-	// - 5  = 5 terminals total (space before icon)
-	// - 3  = 3 workspaces in use (space before icon)
-	windowsInCurrent := m.GetWorkspaceWindowCount(m.CurrentWorkspace)
-	workspaceText := fmt.Sprintf(" %d:%d%s%d %s %d %s ",
-		m.CurrentWorkspace,
-		windowsInCurrent,
-		config.GetDockSeparator(),
-		totalTerminals,
-		config.GetDockIconTerminalCount(),
-		workspacesUsed,
-		config.GetDockIconWorkspaceCount())
+	// What is left of the "2:3 • 5  3 " stats blob. The totals went: the strip
+	// two cells to the right names every occupied workspace and marks the
+	// current one, so "5 terminals across 3 workspaces" drove no decision and
+	// cost two icons and a separator to say.
+	//
+	// The "<workspace>:<windows here>" readout stays, quiet and unbolded. It is
+	// the one number the strip does not carry, and it is the dock's live count
+	// of the current workspace, which the e2e harness reads as its source of
+	// truth for how many panes exist. Cutting it too is a separate change that
+	// needs that harness to grow another way to ask.
+	trail = fmt.Sprintf(" %d:%d ", m.CurrentWorkspace, m.GetWorkspaceWindowCount(m.CurrentWorkspace))
 
 	// Passive project-tape badge: when the focused window is inside a directory
 	// carrying a .tuios.tape, a small status marker rides in the dock. It is
 	// informational only; it opens no dialog and runs nothing.
-	tapeBadge := ""
 	if badge := m.tapeDockBadge(); badge != "" {
-		tapeBadge = " " + badge + " "
+		trail += badge + " "
 	}
 
-	// Combine mode and workspace
-	leftText := modeText + workspaceText + tapeBadge
+	// Rendered width, not byte length: Nerd Font glyphs and the caps are wider
+	// than their bytes. +4 for margins/padding.
+	width = lipgloss.Width(config.GetDockPillLeftChar()) +
+		lipgloss.Width(modeLabel) +
+		lipgloss.Width(config.GetDockPillRightChar()) +
+		lipgloss.Width(trail) + 4
 
-	// Calculate actual rendered width (handles Unicode, Nerd Fonts, etc.)
-	// Use lipgloss.Width instead of len() to get proper display width
-	width := lipgloss.Width(modeText) + lipgloss.Width(workspaceText) + lipgloss.Width(tapeBadge) + 4 // +4 for margins/padding
-
-	return leftText, width, modeInfo
+	return modeLabel, trail, width, modeInfo
 }
 
 // copyModeHelpTexts returns the dock's copy-mode help line for a sub-state,

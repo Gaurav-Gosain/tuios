@@ -147,6 +147,7 @@ type AppearanceConfig struct {
 	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
 	MaxFPS               int    `toml:"max_fps"`                // Maximum render FPS (default: 60, max: 120)
 	DockWorkspaceTabs    *bool  `toml:"dock_workspace_tabs"`    // Clickable workspace strip in the dock (default: true)
+	DockPillCaps         *bool  `toml:"dock_pill_caps"`         // Powerline caps on the dock's pills (default: false, flat)
 
 	// Legacy flat sidebar keys, superseded by the [appearance.sidebar] table.
 	// migrateLegacySidebar folds them into it and clears them, so they are read
@@ -798,6 +799,9 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 	if cfg.Appearance.DockWorkspaceTabs != nil {
 		DockWorkspaceTabs = *cfg.Appearance.DockWorkspaceTabs
+	}
+	if cfg.Appearance.DockPillCaps != nil {
+		DockPillCaps = *cfg.Appearance.DockPillCaps
 	}
 	if cfg.Appearance.Scrollbar.Style != "" {
 		ScrollbarStyle = cfg.Appearance.Scrollbar.Style

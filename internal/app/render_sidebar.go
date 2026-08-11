@@ -341,7 +341,9 @@ func sidebarPill(text string, fill, fg, rowBg color.Color) string {
 // pill can hold a state-colored glyph beside plain text.
 func sidebarPillBody(body string, fill, rowBg color.Color) string {
 	caps := sidebarStyle(rowBg, fill)
-	return caps.Render(config.GetDockPillLeftChar()) + body + caps.Render(config.GetDockPillRightChar())
+	// The rail's caps are its own. They used to come from the dock's, which made
+	// flattening the dock silently reshape every rail row with it.
+	return caps.Render(config.GetSidebarPillLeftChar()) + body + caps.Render(config.GetSidebarPillRightChar())
 }
 
 // sidebarEdgeRule is the one-cell vertical rule separating the rail from the

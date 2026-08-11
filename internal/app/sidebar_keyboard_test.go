@@ -174,12 +174,12 @@ func TestRailJumpSelectsNthSession(t *testing.T) {
 func TestRailDockPillReadsSidebar(t *testing.T) {
 	m, tree := railOS(t)
 	_ = tree
-	text, _, _ := m.buildDockLeftText()
+	text, _, _, _ := m.buildDockLeftText()
 	if !strings.Contains(text, "SIDEBAR") {
 		t.Fatalf("dock left text = %q, want it to contain SIDEBAR while the rail is focused", text)
 	}
 	m.SidebarFocused = false
-	text, _, _ = m.buildDockLeftText()
+	text, _, _, _ = m.buildDockLeftText()
 	if strings.Contains(text, "SIDEBAR") {
 		t.Fatalf("dock still reads SIDEBAR after leaving the rail: %q", text)
 	}

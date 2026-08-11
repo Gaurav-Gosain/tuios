@@ -1,10 +1,12 @@
 package app
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -104,8 +106,13 @@ func TestDockWorkspaceAddTabHidesWhenFull(t *testing.T) {
 
 // TestDockLeftRegionSurvivesTheStrip is the regression test for the reverted
 // first attempt, which replaced the left region with the workspace number alone:
-// the mode pill and the window-count stats vanished and the app booted broken.
-// The strip is additive, so both must still be there with it on.
+// the mode pill vanished and the app booted broken. The strip is additive, so
+// the pill must still be there, coloured, and on screen with it on.
+//
+// The "<workspace>:<count>" readout is asserted against the drawn row as well
+// as the format string. It is the dock's live pane count and the e2e harness
+// reads it as its source of truth, so a restyle that stops drawing it takes the
+// whole suite down with it, which is the failure this test is named for.
 func TestDockLeftRegionSurvivesTheStrip(t *testing.T) {
 	for _, name := range []string{"one workspace", "three workspaces"} {
 		m := dockTabTestOS(t, 1, 1, 1)
@@ -113,21 +120,88 @@ func TestDockLeftRegionSurvivesTheStrip(t *testing.T) {
 			m = dockTabTestOS(t, 2, 1, 2, 5)
 		}
 		t.Run(name, func(t *testing.T) {
-			leftText, _, mode := m.buildDockLeftText()
+			modeLabel, trail, width, mode := m.buildDockLeftText()
 			if mode.Color == "" {
 				t.Error("the mode pill lost its color")
 			}
+			if strings.TrimSpace(modeLabel) == "" {
+				t.Error("the mode pill lost its label")
+			}
+			if width <= 0 {
+				t.Errorf("the left region claims %d columns, so the dock items would run over it", width)
+			}
 			// "current:count" is the window count the dock has always shown.
-			want := " " + string(rune('0'+m.CurrentWorkspace)) + ":"
-			if !strings.Contains(leftText, want) {
-				t.Errorf("left text %q lost its %q window count", leftText, want)
+			want := " " + strconv.Itoa(m.CurrentWorkspace) + ":"
+			if !strings.Contains(trail, want) {
+				t.Errorf("left text %q lost its %q window count", trail, want)
 			}
 
 			dock, _ := m.renderDockString()
+			plain := stripANSIForTrace(dock)
 			if lipgloss.Width(strings.Split(dock, "\n")[0]) != m.GetRenderWidth() {
 				t.Error("the dock stopped being exactly one screen wide")
 			}
+			if !strings.Contains(plain, strings.TrimSpace(modeLabel)) {
+				t.Errorf("the drawn dock does not show the mode label %q", modeLabel)
+			}
+			if !strings.Contains(plain, want) {
+				t.Errorf("the drawn dock does not show the %q window count", want)
+			}
 		})
+	}
+}
+
+// The dock's pills are flat by default: the caps repeated on the mode pill,
+// every workspace tab and every minimized window read as a row of beads rather
+// than a status line. The capped look stays one config key away.
+func TestDockPillsAreFlatByDefault(t *testing.T) {
+	m := dockTabTestOS(t, 1, 1, 2, 3)
+
+	prev := config.DockPillCaps
+	t.Cleanup(func() { config.DockPillCaps = prev })
+
+	config.DockPillCaps = false
+	if lc := config.GetDockPillLeftChar(); lc != "" {
+		t.Errorf("flat pills still report a left cap %q", lc)
+	}
+	flat, _ := m.renderDockString()
+	for _, cap := range []string{config.DockPillLeftChar, config.DockPillRightChar} {
+		if strings.Contains(flat, cap) {
+			t.Errorf("flat dock still draws the cap glyph %q", cap)
+		}
+	}
+
+	// The active tab is a filled cell rather than a cap pair, so the strip must
+	// keep its width and its hit rects across the two styles.
+	flatHits := append([]dockWorkspaceHit(nil), m.dockWorkspaceHits...)
+
+	config.DockPillCaps = true
+	capped, _ := m.renderDockString()
+	if !strings.Contains(capped, config.DockPillLeftChar) {
+		t.Error("turning pill caps on did not bring the caps back")
+	}
+	if lipgloss.Width(strings.Split(capped, "\n")[0]) != m.GetRenderWidth() {
+		t.Error("the capped dock stopped being exactly one screen wide")
+	}
+	if len(m.dockWorkspaceHits) != len(flatHits) {
+		t.Fatalf("the strip has %d tabs capped and %d flat", len(m.dockWorkspaceHits), len(flatHits))
+	}
+}
+
+// The totals are gone on purpose: the strip beside them already names every
+// occupied workspace, so "5 terminals across 3 workspaces" drove no decision
+// and cost two icons and a separator to say.
+func TestDockDropsTheStatsTotals(t *testing.T) {
+	m := dockTabTestOS(t, 2, 1, 2, 5)
+	dock, _ := m.renderDockString()
+	plain := stripANSIForTrace(dock)
+	for _, icon := range []string{config.GetDockIconWorkspaceCount(), config.GetDockIconTerminalCount()} {
+		if strings.Contains(plain, icon) {
+			t.Errorf("the dock still shows the stats icon %q: %q", icon, plain)
+		}
+	}
+	if strings.Contains(plain, config.GetDockSeparator()+"3") {
+		t.Errorf("the dock still shows the totals after their separator: %q", plain)
 	}
 }
 

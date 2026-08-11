@@ -532,6 +532,12 @@ var (
 // dock exactly as it was before the strip existed.
 var DockWorkspaceTabs = true
 
+// DockPillCaps puts powerline half-circle caps back on the dock's mode pill,
+// workspace tabs and minimized-window pills. Off, each is a flat filled cell:
+// the caps repeated on every one of them, so a status line read as a row of
+// beads. The capped look is one key away for anyone who wants it.
+var DockPillCaps = false
+
 // HideWindowButtons controls whether to hide window control buttons
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config
 var HideWindowButtons = false
@@ -650,16 +656,39 @@ var LeaderKey = "ctrl+b"
 // window is centered horizontally and capped at this width.
 var ZoomMaxWidth = 0
 
-// GetDockPillLeftChar returns the appropriate pill left character based on UseASCIIOnly
-func GetDockPillLeftChar() string {
+// GetSidebarPillLeftChar returns the rail's left pill cap. The rail keeps its
+// own accessor so the dock's flat/capped setting cannot reshape its rows.
+func GetSidebarPillLeftChar() string {
 	if UseASCIIOnly {
 		return DockPillLeftCharASCII
 	}
 	return DockPillLeftChar
 }
 
-// GetDockPillRightChar returns the appropriate pill right character based on UseASCIIOnly
+// GetSidebarPillRightChar returns the rail's right pill cap.
+func GetSidebarPillRightChar() string {
+	if UseASCIIOnly {
+		return DockPillRightCharASCII
+	}
+	return DockPillRightChar
+}
+
+// GetDockPillLeftChar returns the pill's left cap, empty when pills are flat.
+func GetDockPillLeftChar() string {
+	if !DockPillCaps {
+		return ""
+	}
+	if UseASCIIOnly {
+		return DockPillLeftCharASCII
+	}
+	return DockPillLeftChar
+}
+
+// GetDockPillRightChar returns the pill's right cap, empty when pills are flat.
 func GetDockPillRightChar() string {
+	if !DockPillCaps {
+		return ""
+	}
 	if UseASCIIOnly {
 		return DockPillRightCharASCII
 	}
