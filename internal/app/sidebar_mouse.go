@@ -108,6 +108,7 @@ func (m *OS) sidebarChevronZone(hit sidebarRowHit, x int) bool {
 //   - Session row, left press elsewhere: arm the click-or-drag gesture; the
 //     release switches (or toggles the current session), a vertical drag
 //     reorders the session list.
+//   - Footer control, left press: make a session, or step the rail's width.
 //   - Right press on any row: open the context menu (pane menu for a window or
 //     agent row, the session/desktop menu for a session row).
 func (m *OS) SidebarClick(x, y int, right bool) bool {
@@ -149,6 +150,8 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		m.SwitchToWorkspace(hit.Workspace)
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
+	case sidebarRowCollapse:
+		m.SidebarStepWidth(0) // whichever step the footer is offering
 	case sidebarRowSession:
 		if m.sidebarChevronZone(hit, x) {
 			m.sidebarToggleCollapse(hit.SessionID)

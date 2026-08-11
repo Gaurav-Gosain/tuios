@@ -208,3 +208,31 @@ func TestSidebarSignatureCoversTheWidthStep(t *testing.T) {
 		t.Error("narrowing the rail did not change its signature; the cache would serve the old width")
 	}
 }
+
+// A click on the stepper has to step the rail. A hit rect that resolves to the
+// control is not the control doing anything, which is how the footer shipped a
+// stepper only the keyboard could move.
+func TestRailStepperClickNarrowsTheRail(t *testing.T) {
+	m := bandTestOS(t, 120, 14, "left")
+	prev := config.SidebarWidth
+	config.SidebarWidth = config.SidebarDefaultWidth
+	t.Cleanup(func() { config.SidebarWidth = prev })
+
+	railFrame(t, m)
+	var step sidebarRowHit
+	for _, h := range m.SidebarHits {
+		if h.Kind == sidebarRowCollapse {
+			step = h
+		}
+	}
+	if step.X1 == 0 {
+		t.Fatal("the footer drew no stepper to click")
+	}
+
+	if !m.SidebarClick(step.X0, step.Y0, false) {
+		t.Fatal("the stepper did not consume its own click")
+	}
+	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantNarrow {
+		t.Errorf("a click on the stepper landed on variant %d, want narrow", got)
+	}
+}
