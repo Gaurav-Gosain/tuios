@@ -687,6 +687,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		hasAnimations := m.HasActiveAnimations()
 		needsDockTick := config.NeedsDockTick()
 
+		// Debounce rail titles: a burst of title changes adopts at most one per
+		// interval. railTitleChanged means the rail must redraw; sidebarTitlePending
+		// keeps the tick running until the final title settles.
+		railTitleChanged := m.updateRailTitles()
+
 		// Messages expire here, on the tick, and not inside render composition.
 		//
 		// They used to be retired by the renderer, which meant expiry could only
@@ -714,7 +719,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// cost smoothness without limiting the motion flood, since motion
 			// events drove their own renders regardless of the tick rate.
 			nextTick = TickCmd()
-		} else if hasAnimations || m.PrefixActive || needsScriptFrame || needsDockTick || hasNotifications || m.SidebarMarqueeActive() {
+		} else if hasAnimations || m.PrefixActive || needsScriptFrame || needsDockTick || hasNotifications || m.SidebarMarqueeActive() || m.sidebarTitlePending {
 			nextTick = TickCmd() // Normal FPS when things need periodic updates
 		} else {
 			nextTick = IdleTickCmd() // Slow idle tick (process cleanup, etc.)
@@ -729,7 +734,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Render on tick if something periodic needs visual updates OR background windows changed
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
 			needsDockTick || hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode ||
-			m.SidebarMarqueeActive()
+			m.SidebarMarqueeActive() || railTitleChanged
 		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {

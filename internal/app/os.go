@@ -497,6 +497,11 @@ type OS struct {
 	// input that changes the rows, so a frame drawn for an unrelated reason (a
 	// pane printing output) does not rebuild and restyle the whole rail.
 	sidebarCache sidebarRenderCache
+	// sidebarTitles debounces window titles for the rail so bursty title churn
+	// does not thrash the rows; sidebarTitlePending is set while an adopted title
+	// is still catching up, keeping the tick alive until it settles.
+	sidebarTitles       map[string]railTitleEntry
+	sidebarTitlePending bool
 
 	// Right-click gesture disambiguation. A plain right press on a pane arms
 	// both a corner resize and a pending context menu; the release decides.

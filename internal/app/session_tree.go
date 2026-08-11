@@ -32,7 +32,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		}
 		windows = append(windows, sessiontree.WindowInput{
 			ID:         w.ID,
-			Title:      windowRowTitle(w),
+			Title:      m.railTitleShown(w),
 			AgentState: w.AgentState,
 			Focused:    i == m.FocusedWindow,
 		})

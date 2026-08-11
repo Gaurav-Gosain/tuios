@@ -129,7 +129,7 @@ func (m *OS) sidebarSignature() uint64 {
 			continue
 		}
 		mixS(w.ID)
-		mixS(windowRowTitle(w))
+		mixS(m.railTitleShown(w))
 		mixS(w.AgentState)
 	}
 
