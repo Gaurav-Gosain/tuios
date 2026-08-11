@@ -135,6 +135,45 @@ func TestStartupPreferences_TiledOnly(t *testing.T) {
 	}
 }
 
+// TestStartupTilingRetilesASessionWithAWindow pins the rule the rail's new
+// session needs and applyStartupPreferences cannot give it: a session that
+// already has a window still gets the user's tiling mode. The daemon builds
+// every session with AutoTiling false, so without this the first pane keeps the
+// half-size floating box NewWindowPlacement handed it.
+func TestStartupTilingRetilesASessionWithAWindow(t *testing.T) {
+	m := newStartupOS(t, false, true)
+	defer closeWindows(m)
+
+	m.AddWindow("")
+	if len(m.Windows) != 1 {
+		t.Fatalf("setup: expected 1 window, got %d", len(m.Windows))
+	}
+	floating := m.Windows[0].Width
+
+	m.applyStartupTiling()
+
+	if !m.AutoTiling {
+		t.Fatal("a created session did not take the configured tiling mode")
+	}
+	if got := m.Windows[0].Width; got <= floating {
+		t.Errorf("the pane is still %d wide (was %d floating): it was never tiled", got, floating)
+	}
+}
+
+// TestStartupTilingLeavesTilingOffWhenUnconfigured is the other half: a user who
+// never asked to start tiled gets a floating session, however it was made.
+func TestStartupTilingLeavesTilingOffWhenUnconfigured(t *testing.T) {
+	m := newStartupOS(t, false, false)
+	defer closeWindows(m)
+
+	m.AddWindow("")
+	m.applyStartupTiling()
+
+	if m.AutoTiling {
+		t.Error("tiling was forced on with [startup] tiled off")
+	}
+}
+
 // TestStartupPreferences_SkipsNonEmptySession confirms that a session which
 // already has windows (an attach that restored them) is left alone: no extra
 // window is opened and its tiling state is not overridden.

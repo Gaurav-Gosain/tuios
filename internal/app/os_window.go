@@ -428,6 +428,23 @@ func (m *OS) AddWindow(name string) *OS {
 	return m
 }
 
+// applyStartupTiling puts the session into the tiling mode the user's [startup]
+// tiled asks for. The daemon builds every session with AutoTiling false and has
+// no access to the config, so the client is the only thing that can answer this,
+// and it has to answer it for every session it lands on rather than only the one
+// it booted into.
+//
+// Going through ToggleAutoTiling is deliberate: it builds the BSP tree, applies
+// the layout (so a window already placed at its floating box is retiled through
+// Window.Resize), and syncs the flag to the daemon rather than only flipping a
+// local field.
+func (m *OS) applyStartupTiling() {
+	if m.UserConfig == nil || !m.UserConfig.Startup.Tiled || m.AutoTiling {
+		return
+	}
+	m.ToggleAutoTiling()
+}
+
 // applyStartupPreferences runs the one-shot [startup] settings once the real
 // terminal size is known (on the first WindowSizeMsg). It opens a default
 // terminal window and/or enables tiling, but only for a fresh, empty session:
@@ -444,16 +461,11 @@ func (m *OS) applyStartupPreferences() {
 
 	s := m.UserConfig.Startup
 
-	// Enable tiling first, through the manual toggle path (the `t` key). Going
-	// through ToggleAutoTiling is deliberate: it builds the BSP tree, applies the
-	// layout, and syncs the tiling state to the daemon rather than only flipping a
-	// local flag. Doing it before the window is opened matters in a daemon
-	// session: the daemon owns window creation and only tiles the window it
-	// creates when the session's AutoTiling is already on, so the flag has to
+	// Enable tiling first. Doing it before the window is opened matters in a
+	// daemon session: the daemon owns window creation and only tiles the window
+	// it creates when the session's AutoTiling is already on, so the flag has to
 	// reach the daemon before the NewWindow request does.
-	if s.Tiled && !m.AutoTiling {
-		m.ToggleAutoTiling()
-	}
+	m.applyStartupTiling()
 
 	// Open the first window through the same path the `n` key uses, so it is
 	// created, focused and (with tiling now on) tiled exactly like a manual one.

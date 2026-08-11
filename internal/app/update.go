@@ -843,6 +843,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
 			return m, cmd
 		}
+		// A session the daemon just built carries AutoTiling false, and the switch
+		// has already stamped that onto the client. Only a session created here is
+		// tiled from the config: switching to one that already existed must keep
+		// whatever layout the user left it in.
+		m.applyStartupTiling()
 		// The rail relays out around a session that did not exist last frame;
 		// follow it by name so the cursor lands on it rather than on whatever
 		// took its index.

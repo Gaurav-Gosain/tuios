@@ -72,11 +72,23 @@ func geomOverlap(a, b winRect) bool {
 // placed layout rather than a mid-flight frame.
 func waitForSettledGeometry(t *testing.T, base string, n int) []winRect {
 	t.Helper()
+	return waitForSettledGeometryIn(t, base, "", n)
+}
+
+// waitForSettledGeometryIn is waitForSettledGeometry against a named session,
+// which is what a test with more than one session in the daemon has to ask for:
+// the default target is whichever session was active last.
+func waitForSettledGeometryIn(t *testing.T, base, session string, n int) []winRect {
+	t.Helper()
+	args := []string{"list-windows", "--json"}
+	if session != "" {
+		args = append(args, "--session", session)
+	}
 	var prev []winRect
 	deadline := time.Now().Add(shellTimeout)
 	stableSince := 0
 	for time.Now().Before(deadline) {
-		out, err := tuiosCLI(t, base, "list-windows", "--json")
+		out, err := tuiosCLI(t, base, args...)
 		if err != nil {
 			time.Sleep(200 * time.Millisecond)
 			continue
