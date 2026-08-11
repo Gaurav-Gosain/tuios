@@ -844,8 +844,8 @@ func (m *OS) windowIndexByID(id string) int {
 //
 // Full variant anatomy, kept to fixed columns so the rows scan vertically:
 //
-//	▾ ● name           3
-//	^ ^ ^              ^ window count, right-aligned, muted
+//	▸ ● name           3
+//	^ ^ ^              ^ window count, right-aligned, muted, collapsed only
 //	| | name: the current session's name sits in a quiet Surface pill,
 //	| |       the others are dim text
 //	| rolled-up agent glyph, state-colored
@@ -911,7 +911,10 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 
 	right := ""
 	rightW := 0
-	if config.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
+	// Only a collapsed session counts its windows. Expanded, the rows are printed
+	// directly underneath and the eye can count them, while the digit sat in the
+	// same column as the window rows' own digits and meant something else.
+	if config.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull && !expanded {
 		countStr := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(rowBg, pal.FgMute).Render(countStr) +
 			sidebarStyle(rowBg, nil).Render(" ")
@@ -1023,7 +1026,7 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 	}
 
 	// A pane on another workspace is here for orientation, not for reading: it
-	// goes a step further down and names the workspace it is on, so the digit
+	// goes a step further down and names the workspace it is on, so the row
 	// answers "where did it go" without a switch to find out.
 	elsewhere := 0
 	if ws := m.windowWorkspace(node.ID); ws > 0 && ws != m.CurrentWorkspace {
@@ -1038,9 +1041,11 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 
 	right, rightW := "", 0
 	if elsewhere > 0 {
-		digit := strconv.Itoa(elsewhere)
-		right = sidebarStyle(rowBg, pal.FgMute).Render(digit) + sidebarStyle(rowBg, nil).Render(" ")
-		rightW = lipgloss.Width(digit) + 1
+		// "w4" rather than a bare "4": a plain digit in this column is a session
+		// row's window count, so on adjacent lines the same mark meant two things.
+		tag := "w" + strconv.Itoa(elsewhere)
+		right = sidebarStyle(rowBg, pal.FgMute).Render(tag) + sidebarStyle(rowBg, nil).Render(" ")
+		rightW = lipgloss.Width(tag) + 1
 	}
 
 	row := sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent)) +
