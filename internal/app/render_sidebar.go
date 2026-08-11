@@ -38,6 +38,10 @@ const (
 	// sidebarRowAgent is a row in the running-agents section; it targets a
 	// window exactly like sidebarRowWindow, it just lives in the other section.
 	sidebarRowAgent
+	// sidebarRowWorkspace is one chip of the workspace band under the current
+	// session. Unlike every other kind it is narrower than its line: several
+	// chips share one row, each with its own columns.
+	sidebarRowWorkspace
 )
 
 // sidebarRowHit is the on-screen rectangle of one sidebar row, in absolute
@@ -52,6 +56,8 @@ type sidebarRowHit struct {
 	// attached session, or -1 for a window row of another session (not directly
 	// focusable without switching first) and for session rows.
 	WindowIndex int
+	// Workspace is the target of a band chip, 0 on every other kind.
+	Workspace int
 }
 
 // Contains reports whether the absolute cell (x, y) falls on this row.
@@ -319,6 +325,56 @@ func sidebarHeaderRow(label string, count, cw int, pal overlay.Palette) string {
 	return sidebarFit(row, cw, nil)
 }
 
+// sidebarChipSpan is one band chip's columns, measured from the rail's content
+// start. Several of these share a single drawn row, which is why the band is the
+// one place a row maps to more than one hit rectangle.
+type sidebarChipSpan struct {
+	Workspace int
+	X0, X1    int
+}
+
+// sidebarWorkspaceBand renders the current session's workspaces as one row of
+// chips: the same set the dock strip names, re-rendered in the rail. It returns
+// the row and where each chip landed, or nothing when there is nowhere a click
+// could take you (one workspace) or no room to say so.
+//
+// cursorWS is the workspace the keyboard cursor sits on and hoverX the pointer's
+// column within the content, both 0 and -1 when absent. A chip that would not
+// fit is dropped rather than clipped: half a chip is half a click target.
+func (m *OS) sidebarWorkspaceBand(variant, cw int, pal overlay.Palette, cursorWS, hoverX int) (string, []sidebarChipSpan) {
+	occupied := m.occupiedWorkspaces()
+	if len(occupied) < 2 {
+		return "", nil
+	}
+
+	indent := 3
+	if variant == sidebarVariantNarrow {
+		indent = 2
+	}
+
+	row := strings.Repeat(" ", indent)
+	x := indent
+	spans := make([]sidebarChipSpan, 0, len(occupied))
+	for _, n := range occupied {
+		w := workspaceChipWidth(n)
+		if x+w > cw {
+			break
+		}
+		active := n == m.CurrentWorkspace
+		fg, rowBg := pal.FgMute, color.Color(nil)
+		if !active && (n == cursorWS || (hoverX >= x && hoverX < x+w)) {
+			fg, rowBg = pal.Fg, pal.RowSel
+		}
+		row += workspaceChip(n, active, fg, rowBg)
+		spans = append(spans, sidebarChipSpan{Workspace: n, X0: x, X1: x + w})
+		x += w
+	}
+	if len(spans) < 2 {
+		return "", nil
+	}
+	return sidebarFit(row, cw, nil), spans
+}
+
 // renderSidebar composes the vertical session sidebar as a single layer, the way
 // renderDock composes the dock. It returns nil when the sidebar reserves no
 // columns (off, hidden, or the screen too narrow). It also records the on-screen
@@ -375,6 +431,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if !edgeLeft {
 		sidebarX = m.GetRenderWidth() - w
 	}
+	// First content column: a right-hand rail spends its first band column on
+	// the edge rule, so the content starts one cell in.
+	contentX0 := sidebarX
+	if !edgeLeft {
+		contentX0++
+	}
 
 	pal := theme.UI()
 	variant := sidebarVariant(w)
@@ -404,6 +466,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	isCursor := func(kind sidebarRowKind, sessionID, windowID string) bool {
 		return m.SidebarFocused && haveCursorTarget &&
 			cursorTarget.Kind == kind && cursorTarget.SessionID == sessionID && cursorTarget.WindowID == windowID
+	}
+	// The band's cursor is a chip rather than a row, so it is addressed by
+	// workspace; 0 means the cursor is elsewhere.
+	cursorWS := 0
+	if m.SidebarFocused && haveCursorTarget && cursorTarget.Kind == sidebarRowWorkspace {
+		cursorWS = cursorTarget.Workspace
 	}
 	nav := make([]sidebarNavRow, 0, 16)
 	cursorLogical := -1
@@ -510,6 +578,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		windowID    string
 		windowIndex int
 		kind        sidebarRowKind
+		// chips is set on the band row only: it hit-tests per chip instead of
+		// claiming the whole line.
+		chips []sidebarChipSpan
 	}
 	rows := make([]logicalRow, 0, 16)
 
@@ -533,7 +604,30 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		})
 		nav = append(nav, sidebarNavRow{Kind: sidebarRowSession, SessionID: session.ID, WindowIndex: -1})
 
-		if variant == sidebarVariantGlyph || !config.SidebarShowWindows || !expanded {
+		if variant == sidebarVariantGlyph || !expanded {
+			continue
+		}
+
+		// The band rides directly under the session it belongs to. Only the
+		// attached session has workspace data at all (a foreign session's
+		// workspaces are not on the wire), so only it gets one.
+		if session.IsCurrent {
+			hoverX := -1
+			if len(rows) == treeHover && m.SidebarHoverActive {
+				hoverX = m.SidebarHoverX - contentX0
+			}
+			if band, chips := m.sidebarWorkspaceBand(variant, cw, pal, cursorWS, hoverX); len(chips) > 0 {
+				rows = append(rows, logicalRow{text: band, interactive: true, sessionID: session.ID, kind: sidebarRowWorkspace, windowIndex: -1, chips: chips})
+				for _, c := range chips {
+					if cursorWS == c.Workspace {
+						cursorLogical = len(rows) - 1
+					}
+					nav = append(nav, sidebarNavRow{Kind: sidebarRowWorkspace, SessionID: session.ID, WindowIndex: -1, Workspace: c.Workspace})
+				}
+			}
+		}
+
+		if !config.SidebarShowWindows {
 			continue
 		}
 		for _, win := range session.Children {
@@ -601,7 +695,22 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 
 	for _, r := range rows[m.SidebarScroll:end] {
-		if r.interactive {
+		switch {
+		case len(r.chips) > 0:
+			// One rectangle per chip, published in drawn order so the hits stay
+			// aligned with the nav rows the band added.
+			y := topMargin + len(lines)
+			for _, c := range r.chips {
+				m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
+					X0: contentX0 + c.X0, X1: contentX0 + c.X1,
+					Y0: y, Y1: y + 1,
+					Kind:        r.kind,
+					SessionID:   r.sessionID,
+					WindowIndex: -1,
+					Workspace:   c.Workspace,
+				})
+			}
+		case r.interactive:
 			recordHit(r.kind, r.sessionID, r.windowID, r.windowIndex)
 		}
 		lines = append(lines, compose(r.text))

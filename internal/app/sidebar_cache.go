@@ -105,6 +105,15 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(m.SidebarFocused)
 	mixI(m.SidebarCursor)
 
+	// The workspace band: which chips exist and which one is lit. Occupancy has
+	// to be folded in separately because moving a window between workspaces
+	// changes no window's id, title, or state, so the loop below cannot see it.
+	mixI(m.CurrentWorkspace)
+	mixI(m.NumWorkspaces)
+	for i := 1; i <= m.NumWorkspaces; i++ {
+		mixB(m.GetWorkspaceWindowCount(i) > 0)
+	}
+
 	// Session identity and the user's drag-defined order.
 	mixS(m.SessionName)
 	for _, o := range m.SidebarOrder {

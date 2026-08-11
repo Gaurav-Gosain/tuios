@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +11,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
+// workspaceChip renders one workspace digit for the dock strip or the rail
+// band. The active one sits on the focus fill inside the chrome's pill caps;
+// the rest are the digit padded to the caps' own widths, so every chip is
+// exactly workspaceChipWidth wide whatever its state. rowBg is what sits behind
+// the caps (nil for the bare terminal background), fg the resting digit color.
+func workspaceChip(n int, active bool, fg, rowBg color.Color) string {
+	lc, rc := workspaceChipCaps()
+	digit := strconv.Itoa(n)
+	if !active {
+		return sidebarStyle(rowBg, fg).Render(
+			strings.Repeat(" ", lipgloss.Width(lc)) + digit + strings.Repeat(" ", lipgloss.Width(rc)))
+	}
+	fill := lipgloss.Color(sidebarFocusColor)
+	caps := sidebarStyle(rowBg, fill)
+	return caps.Render(lc) +
+		lipgloss.NewStyle().Background(fill).Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(digit) +
+		caps.Render(rc)
+}
+
 // renderDockWorkspaceTabs styles the workspace strip starting at column startX
 // and records each tab's screen span into m.dockWorkspaceHits.
 func (m *OS) renderDockWorkspaceTabs(tabs []dockWorkspaceTab, startX int) string {
@@ -18,8 +38,6 @@ func (m *OS) renderDockWorkspaceTabs(tabs []dockWorkspaceTab, startX int) string
 		return ""
 	}
 
-	lc, rc := dockTabCaps()
-	fill := lipgloss.Color(sidebarFocusColor)
 	pal := theme.UI()
 	y := m.GetDockbarContentYPosition()
 
@@ -27,21 +45,7 @@ func (m *OS) renderDockWorkspaceTabs(tabs []dockWorkspaceTab, startX int) string
 	b.WriteString(" ")
 	x := startX + 1
 	for _, t := range tabs {
-		digit := strconv.Itoa(t.Workspace)
-		if t.Active {
-			// Caps carry the fill as foreground, the way every other pill in the
-			// chrome is built, so the semicircles round off instead of boxing in.
-			caps := lipgloss.NewStyle().Foreground(fill)
-			b.WriteString(caps.Render(lc) +
-				lipgloss.NewStyle().Background(fill).Foreground(lipgloss.Color("#ffffff")).Bold(true).Render(digit) +
-				caps.Render(rc))
-		} else {
-			// Padded with the caps' own widths so an inactive tab occupies exactly
-			// what the active one does and the strip never reflows on a switch.
-			pad := strings.Repeat(" ", lipgloss.Width(lc))
-			b.WriteString(lipgloss.NewStyle().Foreground(pal.FgMute).
-				Render(pad + digit + strings.Repeat(" ", lipgloss.Width(rc))))
-		}
+		b.WriteString(workspaceChip(t.Workspace, t.Active, pal.FgMute, nil))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
 		})

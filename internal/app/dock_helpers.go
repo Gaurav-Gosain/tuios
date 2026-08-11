@@ -45,10 +45,11 @@ type dockWorkspaceHit struct {
 	X0, X1, Y, Workspace int
 }
 
-// dockTabCaps are the characters bracketing the active tab. The configurable
-// pill glyphs when they exist, else spaces, so every tab is the same width and
-// the strip does not jitter as the current workspace moves along it.
-func dockTabCaps() (string, string) {
+// workspaceChipCaps are the characters bracketing an active workspace chip: the
+// configurable pill glyphs when they exist, else spaces. Falling back to spaces
+// rather than to nothing is what keeps every chip the same width, so a strip of
+// them does not reflow as the current workspace moves along it.
+func workspaceChipCaps() (string, string) {
 	lc, rc := config.GetDockPillLeftChar(), config.GetDockPillRightChar()
 	if lc == "" || rc == "" {
 		return " ", " "
@@ -56,23 +57,37 @@ func dockTabCaps() (string, string) {
 	return lc, rc
 }
 
+// workspaceChipWidth is the column span of one chip, the same for every chip
+// whatever its state.
+func workspaceChipWidth(n int) int {
+	lc, rc := workspaceChipCaps()
+	return lipgloss.Width(lc) + lipgloss.Width(rc) + lipgloss.Width(strconv.Itoa(n))
+}
+
+// occupiedWorkspaces lists the workspaces worth showing, in order: those
+// holding a window, plus the current one even when it is empty. Shared by the
+// dock strip and the rail band so the two name the same set.
+func (m *OS) occupiedWorkspaces() []int {
+	ws := make([]int, 0, m.NumWorkspaces)
+	for i := 1; i <= m.NumWorkspaces; i++ {
+		if i == m.CurrentWorkspace || m.GetWorkspaceWindowCount(i) > 0 {
+			ws = append(ws, i)
+		}
+	}
+	return ws
+}
+
 // buildDockWorkspaceTabs returns the dock's workspace strip: every occupied
 // workspace plus the current one, in order. Fewer than two means there is
 // nowhere a click could take you, so the strip stays off and the idle dock is
 // exactly what it was.
 func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
-	lc, rc := dockTabCaps()
-	capsW := lipgloss.Width(lc) + lipgloss.Width(rc)
-
 	tabs := make([]dockWorkspaceTab, 0, m.NumWorkspaces)
-	for i := 1; i <= m.NumWorkspaces; i++ {
-		if i != m.CurrentWorkspace && m.GetWorkspaceWindowCount(i) == 0 {
-			continue
-		}
+	for _, n := range m.occupiedWorkspaces() {
 		tabs = append(tabs, dockWorkspaceTab{
-			Workspace: i,
-			Active:    i == m.CurrentWorkspace,
-			Width:     capsW + lipgloss.Width(strconv.Itoa(i)),
+			Workspace: n,
+			Active:    n == m.CurrentWorkspace,
+			Width:     workspaceChipWidth(n),
 		})
 	}
 	if len(tabs) < 2 {

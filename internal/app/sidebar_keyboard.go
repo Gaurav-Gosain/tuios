@@ -15,13 +15,17 @@ type sidebarNavRow struct {
 	SessionID   string
 	WindowID    string
 	WindowIndex int
+	// Workspace identifies a band chip, whose siblings share one drawn row and
+	// so cannot be told apart by session and window alone. 0 on other kinds.
+	Workspace int
 }
 
 // sidebarNavRowsEqual reports whether two nav rows point at the same target, so
 // the render can mark the cursor row by identity instead of by a fragile index
 // shared across the render and the keyboard handler.
 func sidebarNavRowsEqual(a, b sidebarNavRow) bool {
-	return a.Kind == b.Kind && a.SessionID == b.SessionID && a.WindowID == b.WindowID
+	return a.Kind == b.Kind && a.SessionID == b.SessionID &&
+		a.WindowID == b.WindowID && a.Workspace == b.Workspace
 }
 
 // sidebarCursorRow is the nav row the cursor is on, and whether the cursor is
@@ -170,6 +174,10 @@ func (m *OS) SidebarActivateCursor() bool {
 			WindowIndex: row.WindowIndex,
 		})
 		return true
+	case sidebarRowWorkspace:
+		// Switching workspace is navigation, not a request for a pane, so the
+		// rail keeps the keyboard and the cursor stays on the band.
+		m.SwitchToWorkspace(row.Workspace)
 	case sidebarRowSession:
 		if row.SessionID == m.sidebarCurrentSessionID() {
 			m.sidebarToggleCollapse(row.SessionID)
@@ -276,7 +284,7 @@ func (m *OS) SidebarOpenCursorMenu(sessionOnly bool) {
 // view), else the rail's top corner.
 func (m *OS) sidebarCursorAnchor(row sidebarNavRow) (int, int) {
 	for _, h := range m.SidebarHits {
-		if h.Kind == row.Kind && h.SessionID == row.SessionID && h.WindowID == row.WindowID {
+		if sidebarNavRowsEqual(navRowOf(h), row) {
 			return h.X0, h.Y0
 		}
 	}
@@ -291,11 +299,25 @@ func (m *OS) sidebarCursorAnchor(row sidebarNavRow) (int, int) {
 // inside the rail while it holds keyboard focus keeps the cursor where the eye
 // went (the mouse and keyboard share one cursor).
 func (m *OS) sidebarSetCursorToHit(hit sidebarRowHit) {
+	target := navRowOf(hit)
 	for i, r := range m.SidebarNav {
-		if r.Kind == hit.Kind && r.SessionID == hit.SessionID && r.WindowID == hit.WindowID {
+		if sidebarNavRowsEqual(r, target) {
 			m.SidebarCursor = i
 			return
 		}
+	}
+}
+
+// navRowOf is the nav row a hit rectangle points at: the same identity, minus
+// the geometry. It is what keeps the drawn rows, the hit rects, and the cursor
+// addressing one target set rather than three hand-matched copies.
+func navRowOf(h sidebarRowHit) sidebarNavRow {
+	return sidebarNavRow{
+		Kind:        h.Kind,
+		SessionID:   h.SessionID,
+		WindowID:    h.WindowID,
+		WindowIndex: h.WindowIndex,
+		Workspace:   h.Workspace,
 	}
 }
 
