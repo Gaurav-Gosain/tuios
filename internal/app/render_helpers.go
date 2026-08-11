@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -21,7 +22,27 @@ import (
 // the state reads at a glance and survives a monochrome capture: a filled circle
 // working, a triangle needs-input, a hollow circle idle, a filled square done,
 // and a cross errored.
+//
+// ASCII-only terminals get a parallel set that keeps the same five states
+// apart in one cell. Every surface that shows agent state goes through this
+// function, so the rail, the title bars and the palette can never disagree.
 func agentStateIndicator(state string) string {
+	if overlay.UseASCII() {
+		switch session.AgentState(state) {
+		case session.AgentStateWorking:
+			return "*"
+		case session.AgentStateNeedsInput:
+			return "!"
+		case session.AgentStateIdle:
+			return "o"
+		case session.AgentStateDone:
+			return "#"
+		case session.AgentStateErrored:
+			return "x"
+		default:
+			return ""
+		}
+	}
 	switch session.AgentState(state) {
 	case session.AgentStateWorking:
 		return "●"
