@@ -71,6 +71,19 @@ func (w *Window) ScreenToTerminal(screenX, screenY int) (termX, termY int, ok bo
 	return
 }
 
+// SeedAnnouncedSize records the emulator size the guest already believes it has,
+// so a later Resize to that same size does not re-announce it. On reattach the
+// daemon PTY is already at this size; re-announcing it SIGWINCHes the shell and
+// makes it repaint its prompt over the restored screen.
+func (w *Window) SeedAnnouncedSize(width, height int) {
+	w.announcedW, w.announcedH = width, height
+}
+
+// AnnouncedSize returns the emulator size last handed downstream.
+func (w *Window) AnnouncedSize() (int, int) {
+	return w.announcedW, w.announcedH
+}
+
 func (w *Window) Resize(width, height int) {
 	if w.Terminal == nil {
 		return
@@ -100,19 +113,25 @@ func (w *Window) Resize(width, height int) {
 		w.Terminal.Resize(termWidth, termHeight)
 	}
 	w.ioMu.Unlock()
-	if w.Pty != nil {
-		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
-			_ = err
-		}
-		if w.CellPixelWidth > 0 && w.CellPixelHeight > 0 {
-			xpixel := termWidth * w.CellPixelWidth
-			ypixel := termHeight * w.CellPixelHeight
-			_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
-		}
-	} else if w.DaemonMode && w.DaemonResizeFunc != nil {
-		// In daemon mode, use the resize callback to notify the daemon
-		if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
-			_ = err // Acknowledge error but don't break functionality
+	// Announce downstream only when the emulator size actually changed. Both the
+	// local PTY and the daemon turn a resize into a SIGWINCH, so re-sending an
+	// unchanged size makes the shell repaint its prompt for nothing - which is
+	// what stacked prompts on a same-size session switch were.
+	if sizeChanged {
+		if w.Pty != nil {
+			if err := w.Pty.Resize(termWidth, termHeight); err != nil {
+				_ = err
+			}
+			if w.CellPixelWidth > 0 && w.CellPixelHeight > 0 {
+				xpixel := termWidth * w.CellPixelWidth
+				ypixel := termHeight * w.CellPixelHeight
+				_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
+			}
+		} else if w.DaemonMode && w.DaemonResizeFunc != nil {
+			// In daemon mode, use the resize callback to notify the daemon
+			if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
+				_ = err // Acknowledge error but don't break functionality
+			}
 		}
 	}
 	w.Width = width

@@ -964,6 +964,11 @@ func (m *OS) RestoreTerminalStates() error {
 				m.LogInfo("Restored terminal state for window %s (%dx%d, %d scrollback lines)",
 					w.ID[:8], state.Width, state.Height, state.ScrollbackLen)
 
+				// The daemon PTY is already this size. Seed it as announced so a
+				// same-size retile does not re-announce and SIGWINCH the shell,
+				// which would repaint its prompt over the screen just restored.
+				w.SeedAnnouncedSize(state.Width, state.Height)
+
 				// Note: Resize to trigger redraw is done in TriggerAltScreenRedraws()
 				// which is called AFTER SetupPTYOutputHandlers sets up DaemonResizeFunc
 			}
@@ -982,10 +987,19 @@ func (m *OS) SyncDaemonPTYDimensions() {
 			termWidth := w.ContentWidth()
 			termHeight := w.ContentHeight()
 
+			// The daemon PTY already carries the announced size (seeded on restore,
+			// updated by any retile above). Re-sending it resizes the real PTY,
+			// which SIGWINCHes the shell into repainting its prompt. A switch that
+			// does not change a pane's size must send zero of those.
+			if aw, ah := w.AnnouncedSize(); termWidth == aw && termHeight == ah {
+				continue
+			}
+
 			// Resize daemon PTY to match window dimensions
 			if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
 				m.LogWarn("Failed to sync PTY dimensions for window %s: %v", w.ID[:8], err)
 			} else {
+				w.SeedAnnouncedSize(termWidth, termHeight)
 				m.LogInfo("Synced daemon PTY dimensions for window %s (%dx%d)",
 					w.ID[:8], termWidth, termHeight)
 			}
