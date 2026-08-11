@@ -535,8 +535,11 @@ func (m *OS) DeleteWindow(i int) *OS {
 		}
 	}
 
-	// Get the window int ID BEFORE deleting (for BSP tree removal)
+	// Get the window int ID BEFORE deleting (for BSP tree removal), and the
+	// workspace it lived on: the pointer is cleared below, and the tree that has
+	// to lose its leaf is the window's own, not whichever one is on screen.
 	windowIntID := m.getWindowIntID(deletedWindow.ID)
+	deletedWorkspace := deletedWindow.Workspace
 
 	// Clean up the BSP ID mapping
 	if m.WindowToBSPID != nil {
@@ -616,18 +619,24 @@ func (m *OS) DeleteWindow(i int) *OS {
 				m.ScrollingOnWindowRemoved(windowIntID)
 			}
 		} else {
-			// BSP/master-stack mode
-			tree := m.WorkspaceTrees[m.CurrentWorkspace]
-			if tree != nil && windowIntID > 0 {
-				tree.RemoveWindow(windowIntID)
-				m.LogInfo("BSP: Removed window from tree, tree now has %d windows", tree.WindowCount())
-
-				if tree.IsEmpty() {
+			// BSP/master-stack mode. A pane whose shell exits is swept up wherever
+			// it lives, so this is not always the workspace on screen; removing
+			// from the visible tree left the other workspace holding a tile for a
+			// window that was gone, and its next retile, finding an id it cannot
+			// place, discarded that whole layout and rebuilt a default one.
+			if owner := m.WorkspaceTrees[deletedWorkspace]; owner != nil && windowIntID > 0 {
+				owner.RemoveWindow(windowIntID)
+				m.LogInfo("BSP: Removed window from the workspace %d tree, which now has %d windows",
+					deletedWorkspace, owner.WindowCount())
+				if owner.IsEmpty() {
 					m.LogInfo("BSP: Tree is now empty, clearing workspace tree")
-					m.WorkspaceTrees[m.CurrentWorkspace] = nil
-				} else if len(m.Windows) > 0 {
-					m.ApplyBSPLayout()
+					m.WorkspaceTrees[deletedWorkspace] = nil
 				}
+			}
+
+			tree := m.WorkspaceTrees[m.CurrentWorkspace]
+			if tree != nil && !tree.IsEmpty() && len(m.Windows) > 0 {
+				m.ApplyBSPLayout()
 			}
 
 			// If there are still visible windows in this workspace, retile them

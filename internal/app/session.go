@@ -888,17 +888,42 @@ func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, place
 				m.ScrollingOnWindowAdded(w)
 			}
 		}
-	} else if m.pendingSplitDir != layout.PreselectionNone {
-		// A forced-direction split (ctrl+b | / -) asked the daemon for this pane
-		// and stashed the direction for exactly this moment. Insert it on the
-		// chosen side of its target before TileAllWindows runs, otherwise the
-		// spiral scheme places it and the direction is lost. Only the single-window
-		// case is a split; anything else clears the request and falls back.
-		if len(created) == 1 {
-			m.applyPendingForcedSplit(created[0])
-		} else if len(created) > 1 {
-			m.pendingSplitDir = layout.PreselectionNone
-			m.pendingSplitTarget = ""
+	} else {
+		// A pane closed on the daemon has to leave the tree here, the way the
+		// scrolling layout above is told. Leaving it in meant the tree held a leaf
+		// for a window that no longer existed, and TileAllWindows, finding an id it
+		// cannot place, throws the entire tree away and chain-inserts every window
+		// at 0.5 under the spiral scheme: closing one pane reshuffled every other
+		// pane on the workspace and lost every ratio the user had dragged. Which
+		// tree holds the leaf is the closed window's own workspace, not
+		// necessarily the current one, and RemoveWindow ignores an id it does not
+		// have, so this asks all of them.
+		for _, tree := range m.WorkspaceTrees {
+			if tree == nil {
+				continue
+			}
+			for _, intID := range removed {
+				tree.RemoveWindow(intID)
+			}
+		}
+		for ws, tree := range m.WorkspaceTrees {
+			if tree != nil && tree.IsEmpty() {
+				m.WorkspaceTrees[ws] = nil
+			}
+		}
+
+		if m.pendingSplitDir != layout.PreselectionNone {
+			// A forced-direction split (ctrl+b | / -) asked the daemon for this pane
+			// and stashed the direction for exactly this moment. Insert it on the
+			// chosen side of its target before TileAllWindows runs, otherwise the
+			// spiral scheme places it and the direction is lost. Only the single-window
+			// case is a split; anything else clears the request and falls back.
+			if len(created) == 1 {
+				m.applyPendingForcedSplit(created[0])
+			} else if len(created) > 1 {
+				m.pendingSplitDir = layout.PreselectionNone
+				m.pendingSplitTarget = ""
+			}
 		}
 	}
 
