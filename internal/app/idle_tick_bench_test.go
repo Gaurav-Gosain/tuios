@@ -47,6 +47,32 @@ func BenchmarkIdleTick(b *testing.B) {
 	b.ReportMetric(float64(render)/float64(b.N), "render/tick")
 }
 
+// TestIdleTickSkipsScans is the idle diet's precise guard: once the model is
+// idle, a run of maintenance ticks must take the fast path and do no scan work,
+// so the Work counter stays flat while Ticks climbs. A regression that puts a
+// full-window scan back on the idle path trips this.
+func TestIdleTickSkipsScans(t *testing.T) {
+	m := idleOS(t, 3)
+	// Settle any first-frame output so the model reaches true idle.
+	for range 5 {
+		m.Update(TickerMsg(time.Now()))
+	}
+	_, work0, _ := m.TickStats()
+
+	const ticks = 100
+	for range ticks {
+		m.Update(TickerMsg(time.Now()))
+	}
+
+	gotTicks, work, _ := m.TickStats()
+	if work != work0 {
+		t.Fatalf("idle ticks did %d units of scan work; the diet must skip them", work-work0)
+	}
+	if gotTicks < ticks {
+		t.Fatalf("Ticks did not advance past %d", ticks)
+	}
+}
+
 // TestIdleTickAccounting checks the counter mechanism the idle guards read: a
 // run of ticks with nothing happening advances Ticks and never draws a frame,
 // so the render count stays flat regardless of how the per-tick work is gated.

@@ -347,6 +347,30 @@ func TickCmd() tea.Cmd {
 	})
 }
 
+// tickNeedsWork reports whether this maintenance tick has anything to do. It is
+// the idle gate: false means no animation, interaction, script, notification,
+// dock stat, marquee, or settling title is live, and one cheap atomic pass over
+// the windows found no exited process, no unflushed output, and no stranded
+// manipulation. Everything it checks is an O(1) flag or an atomic load, so the
+// gate stays bounded no matter how many idle shells are open.
+func (m *OS) tickNeedsWork() bool {
+	if len(m.Animations) > 0 || m.InteractionMode || m.Dragging || m.Resizing ||
+		m.PrefixActive || m.ScriptMode || len(m.Notifications) > 0 ||
+		config.NeedsDockTick() || config.ShowCPU || config.ShowRAM ||
+		m.SidebarMarqueeActive() || m.sidebarTitlePending {
+		return true
+	}
+	for _, w := range m.Windows {
+		if w == nil {
+			continue
+		}
+		if w.ProcessExited() || w.HasNewOutput.Load() || w.IsBeingManipulated {
+			return true
+		}
+	}
+	return false
+}
+
 // IdleTickCmd creates a command that generates tick messages at 10 FPS.
 // Used when the terminal has been idle for a sustained period to reduce CPU.
 func IdleTickCmd() tea.Cmd {
@@ -562,7 +586,18 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Maintenance tick: animations, dock stats, script playback, process cleanup.
 		// Does NOT trigger rendering unless animations/interactions are active.
 		m.tickStats.Ticks++
+
+		// Idle diet: when nothing periodic needs attention the per-tick scans have
+		// no work, so skip them, hold the frame, and re-arm the slow tick. Process
+		// exits and PTY output wake the loop through their own channels; the gate
+		// itself does one cheap atomic pass to catch a pending exit, unflushed
+		// output, or a stranded manipulation before deciding to sleep.
+		if !m.tickNeedsWork() {
+			m.renderSkipped = true
+			return m, IdleTickCmd()
+		}
 		m.tickStats.Work++
+
 		// This ensures windows close even if the exit channel message was missed
 		for i := len(m.Windows) - 1; i >= 0; i-- {
 			if m.Windows[i].ProcessExited() {

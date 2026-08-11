@@ -70,6 +70,11 @@ func TestIdleCostStaysLow(t *testing.T) {
 	if ticks == 0 {
 		t.Fatalf("stats file recorded zero ticks; the counter pipeline is broken")
 	}
+	// The 10s idle window is ~100 ticks that the diet must skip, so scan work
+	// stays far below the tick count. Without the diet work == ticks.
+	if work >= ticks {
+		t.Fatalf("tick work %d did not fall below tick count %d; the idle diet is not skipping scans", work, ticks)
+	}
 }
 
 // readTickStats parses the "ticks=N work=N render=N" line DumpTickStats writes.
