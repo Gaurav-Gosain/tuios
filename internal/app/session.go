@@ -247,14 +247,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 		}
 
-		window.CustomName = ws.CustomName
-		window.Workspace = ws.Workspace
-		window.Minimized = ws.Minimized
-		window.PreMinimizeX = ws.PreMinimizeX
-		window.PreMinimizeY = ws.PreMinimizeY
-		window.PreMinimizeWidth = ws.PreMinimizeW
-		window.PreMinimizeHeight = ws.PreMinimizeH
-		window.SetAltScreen(ws.IsAltScreen) // Restore alt screen state for mouse event forwarding
+		adoptWindowState(window, ws)
 
 		// CRITICAL: Suppress callbacks during restoration to prevent race condition
 		// where buffered PTY output overwrites the restored IsAltScreen state
@@ -679,6 +672,27 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	}
 }
 
+// adoptWindowState copies the daemon's view of a window onto a freshly built
+// live one. Restoring a session and adopting a window the daemon pushed are the
+// same copy, and it lives here so the two cannot drift: the agents section went
+// empty for the session you were attached to because the restore path knew
+// about the layout fields and not the agent ones, which are the only way agent
+// state reaches the session this client owns.
+func adoptWindowState(window *terminal.Window, ws session.WindowState) {
+	window.CustomName = ws.CustomName
+	window.Workspace = ws.Workspace
+	window.Minimized = ws.Minimized
+	window.PreMinimizeX = ws.PreMinimizeX
+	window.PreMinimizeY = ws.PreMinimizeY
+	window.PreMinimizeWidth = ws.PreMinimizeW
+	window.PreMinimizeHeight = ws.PreMinimizeH
+	window.SetAltScreen(ws.IsAltScreen) // also drives mouse event forwarding
+	window.AgentState = string(ws.AgentState)
+	window.AgentMessage = ws.AgentMessage
+	window.AgentStateAt = ws.AgentStateAt
+	window.ForegroundCmd = ws.ForegroundCmd
+}
+
 // createWindowFromSync creates a new window from sync state
 func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	// Safety check for empty IDs
@@ -704,18 +718,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 	}
 
-	window.CustomName = ws.CustomName
-	window.Workspace = ws.Workspace
-	window.Minimized = ws.Minimized
-	window.PreMinimizeX = ws.PreMinimizeX
-	window.PreMinimizeY = ws.PreMinimizeY
-	window.PreMinimizeWidth = ws.PreMinimizeW
-	window.PreMinimizeHeight = ws.PreMinimizeH
-	window.SetAltScreen(ws.IsAltScreen)
-	window.AgentState = string(ws.AgentState)
-	window.AgentMessage = ws.AgentMessage
-	window.AgentStateAt = ws.AgentStateAt
-	window.ForegroundCmd = ws.ForegroundCmd
+	adoptWindowState(window, *ws)
 
 	m.installPassthroughs(window)
 	m.setupCwdWatch(window)
