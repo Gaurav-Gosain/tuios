@@ -4,7 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -253,6 +256,114 @@ func TestScrollbarHitTracksTheDrawnColumn(t *testing.T) {
 	}
 	if _, drawn := ScrollbarHit(nil); drawn {
 		t.Error("a nil window offered a scrollbar grab")
+	}
+}
+
+// withScrollbarStyle sets config.ScrollbarStyle for the duration of fn.
+func withScrollbarStyle(t *testing.T, style string, fn func()) {
+	t.Helper()
+	prev := config.ScrollbarStyle
+	config.ScrollbarStyle = style
+	defer func() { config.ScrollbarStyle = prev }()
+	fn()
+}
+
+// The track style is the one that has to look different: a full-height column
+// rather than a few cells of thumb. Both styles still obey the rules that make
+// the bar composable - same column, same visibility, same clip.
+func TestScrollbarTrackStyleFillsTheColumn(t *testing.T) {
+	win := newTestWindow(t, "sbtrack-0001", 60, 20)
+	win.X, win.Y = 4, 2
+	fillScrollback(t, win, 400)
+	scrollBack(t, win, 100)
+
+	var thin, track *lipgloss.Layer
+	withScrollbarStyle(t, config.ScrollbarStyleThin, func() {
+		thin = renderScrollbarLayer(win, 1000, 1)
+	})
+	withScrollbarStyle(t, config.ScrollbarStyleTrack, func() {
+		track = renderScrollbarLayer(win, 1000, 1)
+	})
+	if thin == nil || track == nil {
+		t.Fatal("a scrolled-back pane produced no thumb in one of the styles")
+	}
+
+	if thin.GetX() != track.GetX() {
+		t.Errorf("the styles disagree about the column: thin %d, track %d", thin.GetX(), track.GetX())
+	}
+	if want := win.Y + win.BorderOffset(); track.GetY() != want {
+		t.Errorf("the track starts at y=%d, want the top of the content box %d", track.GetY(), want)
+	}
+	if h := lipgloss.Height(track.GetContent()); h != win.ContentHeight() {
+		t.Errorf("the track is %d rows tall, want the viewport's %d", h, win.ContentHeight())
+	}
+	if w := lipgloss.Width(track.GetContent()); w != 1 {
+		t.Errorf("the track is %d columns wide, want 1", w)
+	}
+	// The thin bar is only as tall as its thumb, so the two are not two names
+	// for one look.
+	if lipgloss.Height(thin.GetContent()) >= win.ContentHeight() {
+		t.Error("the thin bar fills the viewport, which is the track style's job")
+	}
+}
+
+// opentui's half-cell track is what the track style borrows: the bar is
+// measured in half rows, so the thumb's ends can land mid-cell as ▀ or ▄ and it
+// carries twice the resolution of a whole-cell bar.
+func TestScrollbarTrackResolvesToHalfCells(t *testing.T) {
+	const contentH, scrollbackLen = 20, 400
+
+	seenHalf := false
+	for offset := 1; offset <= scrollbackLen; offset++ {
+		rows := scrollbarTrackRows(contentH, scrollbackLen, offset)
+		if len(rows) != contentH {
+			t.Fatalf("offset %d produced %d rows, want %d", offset, len(rows), contentH)
+		}
+		thumb := 0
+		for _, r := range rows {
+			switch r {
+			case "▀", "▄":
+				seenHalf = true
+				thumb++
+			case "█":
+				thumb++
+			case " ":
+			default:
+				t.Fatalf("offset %d drew an unexpected glyph %q", offset, r)
+			}
+		}
+		if thumb == 0 {
+			t.Fatalf("offset %d drew no thumb at all", offset)
+		}
+	}
+	if !seenHalf {
+		t.Error("no offset put a thumb end on a half cell; the track is whole-cell after all")
+	}
+
+	// Ends of travel, where an off-by-one would show first.
+	if got := scrollbarTrackRows(contentH, scrollbackLen, scrollbackLen)[0]; got == " " {
+		t.Error("scrolled to the oldest line, the top cell of the track is empty")
+	}
+	if got := scrollbarTrackRows(contentH, scrollbackLen, 1)[contentH-1]; got == " " {
+		t.Error("one line back from the tail, the bottom cell of the track is empty")
+	}
+}
+
+// Half blocks are the one glyph the track style adds, so ASCII mode has to have
+// an answer for them.
+func TestScrollbarTrackDegradesToASCII(t *testing.T) {
+	prev := config.UseASCIIOnly
+	config.UseASCIIOnly = true
+	overlay.SetASCII(true)
+	t.Cleanup(func() {
+		config.UseASCIIOnly = prev
+		overlay.SetASCII(prev)
+	})
+
+	for _, row := range scrollbarTrackRows(20, 400, 137) {
+		if row != " " && row != config.GetScrollbarThumbChar() {
+			t.Errorf("ASCII track drew %q, which is neither blank nor the ASCII thumb", row)
+		}
 	}
 }
 

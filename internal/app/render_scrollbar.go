@@ -5,6 +5,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -90,19 +91,68 @@ func renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int) *lipgl
 
 	scrollbackLen := window.ScrollbackLenSync()
 	contentH := window.ContentHeight()
-	thumbHeight := scrollbarThumbHeight(contentH, scrollbackLen)
-
-	// Offset 0 pins the thumb to the bottom, a full offset to the top.
-	scrollRange := contentH - thumbHeight
-	thumbPos := scrollRange - (scrollbarViewOffset(window) * scrollRange / scrollbackLen)
-	thumbPos = max(min(thumbPos, scrollRange), 0)
-
-	thumb := strings.TrimSuffix(strings.Repeat(config.GetScrollbarThumbChar()+"\n", thumbHeight), "\n")
+	offset := scrollbarViewOffset(window)
+	top := window.Y + window.BorderOffset()
 
 	// The quiet grey the unfocused frames already use, for every pane. The bar
 	// reports scroll position, not focus, so deriving it from the live border
 	// colour made the frame itself mutate as panes gained focus.
-	return lipgloss.NewLayer(lipgloss.NewStyle().Foreground(theme.BorderUnfocused()).Render(thumb)).
-		X(x).Y(window.Y + window.BorderOffset() + thumbPos).Z(zIndex).
-		ID(window.ID + "-sb")
+	ink := lipgloss.NewStyle().Foreground(theme.BorderUnfocused())
+
+	var body string
+	if config.ScrollbarStyle == config.ScrollbarStyleTrack {
+		body = ink.Background(theme.UI().Surface).
+			Render(strings.Join(scrollbarTrackRows(contentH, scrollbackLen, offset), "\n"))
+	} else {
+		thumbHeight := scrollbarThumbHeight(contentH, scrollbackLen)
+		// Offset 0 pins the thumb to the bottom, a full offset to the top.
+		scrollRange := contentH - thumbHeight
+		thumbPos := max(min(scrollRange-(offset*scrollRange/scrollbackLen), scrollRange), 0)
+		top += thumbPos
+		body = ink.Render(strings.TrimSuffix(
+			strings.Repeat(config.GetScrollbarThumbChar()+"\n", thumbHeight), "\n"))
+	}
+
+	return lipgloss.NewLayer(body).X(x).Y(top).Z(zIndex).ID(window.ID + "-sb")
+}
+
+// scrollbarTrackRows renders the whole column: a track the height of the
+// viewport with a block thumb on it, after opentui's ScrollBar (sst/opentui,
+// packages/core/src/renderables/Slider.ts). Its one idea worth taking is the
+// half-cell track: the bar is measured in half rows, so a cell covered on one
+// side only draws ▀ or ▄ and the thumb gains twice the size and position
+// resolution a one-column bar would otherwise have. Its reserved-column layout
+// is not taken - reserving would resize the PTY on every scroll in and out.
+//
+// ASCII mode has no half blocks, so a half-covered cell rounds up to a full
+// one; the thumb is then a row longer than exact but still reads as a position.
+func scrollbarTrackRows(contentH, scrollbackLen, offset int) []string {
+	const halves = 2
+	trackH := contentH * halves
+	total := scrollbackLen + contentH
+	thumbH := max(min((trackH*contentH+total-1)/total, trackH-1), 1)
+	travel := trackH - thumbH
+	start := max(min(travel-(offset*travel/scrollbackLen), travel), 0)
+	end := start + thumbH
+
+	full, upper, lower := "█", "▀", "▄"
+	if overlay.UseASCII() {
+		full = config.GetScrollbarThumbChar()
+		upper, lower = full, full
+	}
+
+	rows := make([]string, contentH)
+	for i := range rows {
+		switch covered := min(end, (i+1)*halves) - max(start, i*halves); {
+		case covered >= halves:
+			rows[i] = full
+		case covered <= 0:
+			rows[i] = " "
+		case start <= i*halves:
+			rows[i] = upper
+		default:
+			rows[i] = lower
+		}
+	}
+	return rows
 }

@@ -237,6 +237,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("sidebar.position", cfg.Appearance.Sidebar.Position,
 		[]string{"left", "right", "hidden"})
 	checkEnum("sidebar.workspaces", cfg.Appearance.Sidebar.Workspaces, SidebarWorkspacesModes)
+	checkEnum("scrollbar.style", cfg.Appearance.Scrollbar.Style, ScrollbarStyles)
 	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition,
 		[]string{"bottom-right", "bottom-left", "top-right", "top-left", "center"})
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition,

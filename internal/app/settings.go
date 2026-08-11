@@ -193,6 +193,7 @@ var (
 	fpsOptions              = []string{"30", "60", "90", "120", "144", "unlimited"}
 	sidebarPositionOptions  = []string{"left", "right", "hidden"}
 	sidebarWorkspaceOptions = config.SidebarWorkspacesModes
+	scrollbarStyleOptions   = config.ScrollbarStyles
 )
 
 // boolPtr returns a pointer to b, for the *bool config fields.
@@ -316,11 +317,19 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.HideWindowButtons = !v })
 					m.applyAppearanceLive(false)
 				}),
-			boolItem("Scrollbar", "Show the scrollbar thumb on the border",
+			boolItem("Scrollbar", "Show where a scrolled-back pane is in its history",
 				func() bool { return !config.HideScrollbar },
 				func(m *OS, v bool) {
 					config.HideScrollbar = !v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.HideScrollbar = !v })
+					m.applyAppearanceLive(false)
+				}),
+			enumItem("Scrollbar style", "thin: a hairline thumb. track: a full-height track behind it",
+				scrollbarStyleOptions,
+				func() string { return config.ScrollbarStyle },
+				func(m *OS, v string) {
+					config.ScrollbarStyle = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Scrollbar.Style = v })
 					m.applyAppearanceLive(false)
 				}),
 			stringItem("Focused border color", "Hex color for the focused pane border (empty = theme)", "#89b4fa",

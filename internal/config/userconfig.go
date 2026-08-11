@@ -158,10 +158,30 @@ type AppearanceConfig struct {
 	SidebarShowGlyphs  *bool  `toml:"sidebar_show_glyphs,omitempty"`
 	SidebarShowCounts  *bool  `toml:"sidebar_show_counts,omitempty"`
 
-	// Sidebar is last so the TOML encoder emits [appearance.sidebar] after every
-	// scalar key of [appearance]; a table written mid-section would swallow the
-	// keys that follow it.
-	Sidebar SidebarConfig `toml:"sidebar"`
+	// The tables are last so the TOML encoder emits them after every scalar key
+	// of [appearance]; a table written mid-section would swallow the keys that
+	// follow it.
+	Scrollbar ScrollbarConfig `toml:"scrollbar"`
+	Sidebar   SidebarConfig   `toml:"sidebar"`
+}
+
+// Scrollbar styles. See ScrollbarConfig.Style.
+const (
+	// ScrollbarStyleThin floats a hairline thumb over the pane's last content
+	// column and draws nothing else.
+	ScrollbarStyleThin = "thin"
+	// ScrollbarStyleTrack draws a full-height track behind a block thumb
+	// positioned to the half cell, after opentui's ScrollBar.
+	ScrollbarStyleTrack = "track"
+)
+
+// ScrollbarStyles lists the valid values for appearance.scrollbar.style.
+var ScrollbarStyles = []string{ScrollbarStyleThin, ScrollbarStyleTrack}
+
+// ScrollbarConfig is the pane scrollbar's own table. hide_scrollbar predates it
+// and stays where it is, so existing files keep working.
+type ScrollbarConfig struct {
+	Style string `toml:"style"` // thin, track (default: thin)
 }
 
 // Sidebar workspace-band modes. See SidebarConfig.Workspaces.
@@ -235,6 +255,7 @@ func DefaultConfig() *UserConfig {
 			ScrollLines:       3,
 			DockbarPosition:   "bottom",
 			PreferredShell:    "",
+			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin},
 			Sidebar: SidebarConfig{
 				Position:   "left",
 				Width:      SidebarDefaultWidth,
@@ -687,6 +708,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.Sidebar.Workspaces == "" {
 		cfg.Appearance.Sidebar.Workspaces = defaultCfg.Appearance.Sidebar.Workspaces
 	}
+	if cfg.Appearance.Scrollbar.Style == "" {
+		cfg.Appearance.Scrollbar.Style = defaultCfg.Appearance.Scrollbar.Style
+	}
 
 	// Note: HideWindowButtons defaults to false (zero value)
 	// In borderless mode, buttons are hidden automatically regardless of this setting
@@ -774,6 +798,9 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 	if cfg.Appearance.DockWorkspaceTabs != nil {
 		DockWorkspaceTabs = *cfg.Appearance.DockWorkspaceTabs
+	}
+	if cfg.Appearance.Scrollbar.Style != "" {
+		ScrollbarStyle = cfg.Appearance.Scrollbar.Style
 	}
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are

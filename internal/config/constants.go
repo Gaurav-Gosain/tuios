@@ -536,6 +536,10 @@ var DockWorkspaceTabs = true
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config
 var HideWindowButtons = false
 
+// ScrollbarStyle selects how a scrolled-back pane draws its position. See
+// appearance.scrollbar.style.
+var ScrollbarStyle = ScrollbarStyleThin
+
 // HideScrollbar controls whether the window scrollbar is hidden.
 // Automatically treated as true when BorderStyle == "hidden" since there is
 // no border to draw the thumb on in that mode.
