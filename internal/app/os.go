@@ -366,6 +366,11 @@ type OS struct {
 	// PendingClipboardSet receives clipboard content from guest apps via OSC 52.
 	// The bubbletea Update loop reads this and calls tea.SetClipboard().
 	PendingClipboardSet chan string
+	// PendingSessionCreate receives the outcome of a detached-session creation,
+	// which is a daemon round trip and must not run on the Update goroutine: it
+	// contends with the background session poll for the client's round-trip lock,
+	// and blocking here stops input, rendering and socket draining.
+	PendingSessionCreate chan SessionCreatedMsg
 	// PendingNotification receives guest desktop notifications and bells (OSC 9/777/99, BEL).
 	// The notification callbacks fire on a window's PTY writer goroutine, so they cannot
 	// touch OS notification state directly (the render goroutine reads m.Notifications).

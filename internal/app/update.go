@@ -36,6 +36,28 @@ type ClipboardSetMsg struct {
 	Text string
 }
 
+// SessionCreatedMsg carries the result of creating a detached session off the
+// Update goroutine. Name is the session that was asked for; Err is why it did
+// not happen.
+type SessionCreatedMsg struct {
+	Name string
+	Err  error
+}
+
+// ListenForSessionCreate waits for a detached-session creation to finish.
+func ListenForSessionCreate(ch chan SessionCreatedMsg) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		res, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return res
+	}
+}
+
 // ListenForClipboardSet creates a command that listens for OSC 52 clipboard set events.
 func ListenForClipboardSet(ch chan string) tea.Cmd {
 	if ch == nil {
@@ -235,6 +257,7 @@ func (m *OS) Init() tea.Cmd {
 		ListenForWindowExits(m.WindowExitChan),
 		ListenForPTYData(m.PTYDataChan),
 		ListenForClipboardSet(m.PendingClipboardSet),
+		ListenForSessionCreate(m.sessionCreateChan()),
 		ListenForNotification(m.ensureNotificationChan()),
 		ListenForCwdChange(m.ensureCwdChangeChan()),
 	}
@@ -809,6 +832,22 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		return m, nextTick
+
+	case SessionCreatedMsg:
+		cmd := ListenForSessionCreate(m.sessionCreateChan())
+		if msg.Err != nil {
+			m.ShowNotification("Create failed: "+msg.Err.Error(), "error", config.NotificationDuration*2)
+			return m, cmd
+		}
+		if err := m.SwitchToSession(msg.Name); err != nil {
+			m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+			return m, cmd
+		}
+		// The rail relays out around a session that did not exist last frame;
+		// follow it by name so the cursor lands on it rather than on whatever
+		// took its index.
+		m.sidebarFollowSession = msg.Name
+		return m, cmd
 
 	case ClipboardSetMsg:
 		// Propagate clipboard from guest app to host terminal

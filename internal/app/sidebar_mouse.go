@@ -399,7 +399,18 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 // sidebarFocusWindow focuses the window a window row points at, switching session
 // first when it lives in another session.
 func (m *OS) sidebarFocusWindow(hit sidebarRowHit) {
-	if hit.WindowIndex >= 0 && hit.WindowIndex < len(m.Windows) {
+	// Resolve by ID, never by the index the row was drawn with. A pane closing
+	// between that render and this click shifts every later index, so the index
+	// alone could focus a different pane than the row names, and the context menu
+	// built on top of it would then offer to close that one instead.
+	if hit.WindowID != "" {
+		if idx := m.windowIndexByID(hit.WindowID); idx >= 0 {
+			m.FocusWindow(idx)
+			return
+		}
+	}
+	// WindowIndex still answers for a row with no ID to match on.
+	if hit.WindowID == "" && hit.WindowIndex >= 0 && hit.WindowIndex < len(m.Windows) {
 		m.FocusWindow(hit.WindowIndex)
 		return
 	}

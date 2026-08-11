@@ -365,18 +365,28 @@ func (m *OS) SidebarNewSession() {
 		m.ShowNotification("Sessions need the daemon", "info", config.NotificationDuration)
 		return
 	}
+	// Creating a session is a daemon round trip, and this runs on the Update
+	// goroutine. Doing it inline parked input, rendering and socket draining for
+	// as long as the daemon took, made worse by the background session poll
+	// holding the client's round-trip lock. Hand it to a goroutine and let the
+	// SessionCreatedMsg handler do the switching, which is the part that has to
+	// touch OS state.
 	name := m.nextSessionName()
-	if err := m.DaemonClient.CreateDetachedSession(name, m.GetContentWidth(), m.GetUsableHeight()); err != nil {
-		m.ShowNotification("Create failed: "+err.Error(), "error", config.NotificationDuration*2)
-		return
+	client, ch := m.DaemonClient, m.sessionCreateChan()
+	w, h := m.GetContentWidth(), m.GetUsableHeight()
+	go func() {
+		ch <- SessionCreatedMsg{Name: name, Err: client.CreateDetachedSession(name, w, h)}
+	}()
+}
+
+// sessionCreateChan is the buffered channel carrying creation results back to
+// Update, made on first use so a client that never creates a session pays
+// nothing.
+func (m *OS) sessionCreateChan() chan SessionCreatedMsg {
+	if m.PendingSessionCreate == nil {
+		m.PendingSessionCreate = make(chan SessionCreatedMsg, 4)
 	}
-	if err := m.SwitchToSession(name); err != nil {
-		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
-		return
-	}
-	// The rail relays out around a session that did not exist last frame; follow
-	// it by name so the cursor lands on it instead of on whatever took its index.
-	m.sidebarFollowSession = name
+	return m.PendingSessionCreate
 }
 
 // nextSessionName is the first free "session-N", the same scheme the CLI's
