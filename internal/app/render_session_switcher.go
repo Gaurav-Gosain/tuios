@@ -62,7 +62,9 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 			if selected {
 				labelColor = pal.Fg
 			}
-			name := overlay.Truncate(item.Title, max(width-lipgloss.Width(trailing)-4, 1))
+			// Laundered on the way to the screen only: item.Title is also the name
+			// the switch is made by, so the model keeps it verbatim.
+			name := overlay.Truncate(printableTitle(item.Title), max(width-lipgloss.Width(trailing)-4, 1))
 			return listRowLine(width, listRowMarker(selected), name, trailing, labelColor, trailColor, selected, rowBg, pal)
 		},
 	})

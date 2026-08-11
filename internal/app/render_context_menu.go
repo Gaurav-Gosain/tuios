@@ -22,11 +22,17 @@ const (
 	contextMenuGap = 2
 )
 
+// menuTitle is the header a context menu draws. Menu titles are window and
+// session names, which are foreign data, so the sanitizer sits here rather than
+// in each builder: measuring and drawing then agree, and a new menu cannot ship
+// an unlaundered header.
+func (cm *ContextMenu) menuTitle() string { return printableTitle(cm.Title) }
+
 // contextMenuWidth returns the inner content width to lay the menu out at: wide
 // enough for its widest row, capped, and then fitted to the screen so the panel
 // never draws past the right-hand edge.
 func (m *OS) contextMenuWidth(cm *ContextMenu) int {
-	widest := lipgloss.Width(cm.Title) + 2 // the title chip is padded
+	widest := lipgloss.Width(cm.menuTitle()) + 2 // the title chip is padded
 	for _, it := range cm.Items {
 		if it.Sep {
 			continue
@@ -84,7 +90,7 @@ func (m *OS) renderContextMenu() (string, overlay.Geometry) {
 	}
 
 	panel := overlay.Panel{
-		Title: cm.Title,
+		Title: cm.menuTitle(),
 		Width: width,
 		Body:  strings.Join(lines, "\n"),
 	}

@@ -17,7 +17,7 @@ func (m *OS) renderQuitMenu() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.QuitMenuItems
 	title := "Quit TUIOS"
 	if m.IsDaemonSession && m.SessionName != "" {
-		title = "Session: " + m.SessionName
+		title = "Session: " + printableTitle(m.SessionName)
 	}
 	return m.renderListOverlay(listOverlay{
 		Glyph:      "", // warning

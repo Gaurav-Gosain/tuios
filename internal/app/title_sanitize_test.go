@@ -85,6 +85,68 @@ func TestPaletteRowStripsDecorative(t *testing.T) {
 	}
 }
 
+// spinnerTitle is the title Claude Code actually sets while it works: a Braille
+// spinner frame in front of its name, which tofus in any font that stops at
+// Latin.
+const spinnerTitle = "⠂ Claude Code"
+
+// TestContextMenuTitleStripsDecorative checks the pane menu's header launders
+// the window title. Every other surface was routed through the sanitizer and
+// this one was missed, so the tofu box came back the moment a pane was
+// right-clicked.
+func TestContextMenuTitleStripsDecorative(t *testing.T) {
+	m := ctxMenuOS(t, 80, 24)
+	m.Windows[0].CustomName = spinnerTitle
+
+	title, _ := m.paneMenu(0)
+	m.ContextMenu = &ContextMenu{Title: title, Items: []ContextMenuItem{{Label: "Close pane"}}}
+	out, _ := m.renderContextMenu()
+	if strings.ContainsRune(out, '⠂') {
+		t.Errorf("the pane menu drew the spinner frame: %q", out)
+	}
+	if !strings.Contains(out, "Claude Code") {
+		t.Errorf("the pane menu dropped the real name: %q", out)
+	}
+}
+
+// TestOverlayTitlesStripDecorative walks the remaining surfaces that echo a
+// window title or session name, so a sanitizer gap cannot come back one overlay
+// at a time.
+func TestOverlayTitlesStripDecorative(t *testing.T) {
+	// Checking for the real name too: a surface that drew nothing at all would
+	// otherwise pass for having drawn nothing dirty.
+	laundered := func(t *testing.T, what, out string) {
+		t.Helper()
+		if strings.ContainsAny(out, "✳♦️⠂") || strings.ContainsRune(out, '\U0001f680') {
+			t.Errorf("%s drew decorative junk:\n%s", what, out)
+		}
+		if !strings.Contains(out, "claude") {
+			t.Errorf("%s dropped the real name:\n%s", what, out)
+		}
+	}
+
+	t.Run("session switcher", func(t *testing.T) {
+		m := daemonRailOS(t, 80, 24)
+		m.SessionSwitcherItems = []sessiontree.Node{{ID: "s1", Title: decorativeTitle}}
+		out, _, _ := m.renderSessionSwitcher()
+		laundered(t, "the session switcher", out)
+	})
+
+	t.Run("quit menu", func(t *testing.T) {
+		m := ctxMenuOS(t, 80, 24)
+		m.IsDaemonSession, m.SessionName = true, decorativeTitle
+		out, _, _ := m.renderQuitMenu()
+		laundered(t, "the quit menu", out)
+	})
+
+	t.Run("aggregate view", func(t *testing.T) {
+		m := ctxMenuOS(t, 80, 24)
+		m.Windows[0].CustomName = decorativeTitle
+		out, _, _ := m.renderAggregateView()
+		laundered(t, "the aggregate view", out)
+	})
+}
+
 // TestSidebarStripsDecorative checks decorative junk in a session or window
 // title never reaches a rendered rail row.
 func TestSidebarStripsDecorative(t *testing.T) {

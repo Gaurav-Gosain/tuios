@@ -35,9 +35,11 @@ func (m *OS) GetAggregateViewItems() []AggregateViewItem {
 	var items []AggregateViewItem
 
 	for i, w := range m.Windows {
-		title := w.Title()
+		// Laundered here rather than at the three places that draw it: the field
+		// is only ever shown or searched, never used to find the window again.
+		title := printableTitle(w.Title())
 		if w.CustomName != "" {
-			title = w.CustomName
+			title = printableTitle(w.CustomName)
 		}
 		if title == "" {
 			title = fmt.Sprintf("Window %s", shortID(w.ID))
