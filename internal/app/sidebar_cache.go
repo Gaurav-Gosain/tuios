@@ -131,7 +131,12 @@ func (m *OS) sidebarSignature() uint64 {
 		mixU(m.DaemonClient.CacheGen())
 	}
 
-	// Live windows in row order: id, label, agent state.
+	// A rename in flight replaces its row with the buffer being typed.
+	mixB(m.RenamingWindow)
+	mixS(m.RenameTargetID)
+	mixS(m.RenameBuffer)
+
+	// Live windows in row order: id, label, agent state, accent.
 	for _, w := range m.Windows {
 		if w == nil {
 			continue
@@ -139,6 +144,11 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(w.ID)
 		mixS(m.railTitleShown(w))
 		mixS(w.AgentState)
+		accent, ok := m.WindowAccent(w.ID)
+		if !ok {
+			accent = -1
+		}
+		mixI(accent)
 	}
 
 	return h

@@ -156,6 +156,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.SessionSwitcherSelected = idx
 	case "layout":
 		m.LayoutPickerSelected = idx
+	case "accent":
+		m.AccentPickerSelected = idx
 	case "quit":
 		m.QuitMenuSelected = idx
 	}
@@ -199,6 +201,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "layout":
 		n := len(FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery))
 		moveListSelection(&m.LayoutPickerSelected, &m.LayoutPickerScroll, n, 10, wheelDelta(up))
+	case "accent":
+		m.AccentPickerMove(wheelDelta(up))
 	case "quit":
 		moveListSelection(&m.QuitMenuSelected, &m.QuitMenuScroll, len(m.QuitMenuItems), 10, wheelDelta(up))
 	default:
@@ -266,6 +270,8 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "layout":
 		m.LayoutPickerSelected = row.Idx
 		m.layoutPickerActivate(row.Idx)
+	case "accent":
+		m.AccentPickerApply(row.Idx)
 	case "quit":
 		m.QuitMenuSelected = row.Idx
 		return m.QuitMenuActivate(row.Idx)
@@ -339,6 +345,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.SessionSwitcherScroll = 0
 	case "layout":
 		m.ShowLayoutPicker = false
+	case "accent":
+		m.CloseAccentPicker()
 	case "aggregate":
 		m.ShowAggregateView = false
 	case "quit":

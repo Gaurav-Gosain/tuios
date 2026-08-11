@@ -309,7 +309,10 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		AlignVertical(lipgloss.Top).
 		Border(getBorder()).
 		BorderTop(false)
-	isRenaming := m.RenamingWindow && index == m.FocusedWindow
+	// The title bar shows the editor for the window the rename actually targets,
+	// which is the focused one when the rename started from a pane and can be any
+	// row when it started from the rail.
+	isRenaming := m.RenamingWindow && window.ID == m.RenameTargetID
 	return addToBorder(
 		box.Width(window.Width).
 			Height(window.Height-1).
@@ -348,7 +351,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowLayoutPicker ||
 		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker ||
-		m.PrefixActive || m.ContextMenu != nil {
+		m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil {
 		return nil, false
 	}
 	if (config.ShowClock && !config.HideClock) || (m.TapeRecorder != nil && m.TapeRecorder.IsRecording()) {
@@ -553,7 +556,7 @@ func (m *OS) flushGraphicsForView() {
 	hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
 		m.ShowLayoutPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
-		m.ShowSettings || m.ShowThemePicker || m.ShowTapeManager || m.ShowTapeReview
+		m.ShowSettings || m.ShowThemePicker || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview
 	if m.KittyPassthrough != nil {
 		// Self-placed remote video images are hidden/dropped here, not by
 		// HideAllPlacements (they are not in `placements`).

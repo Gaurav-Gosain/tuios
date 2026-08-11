@@ -123,6 +123,11 @@ func TestOverlayPanelsFitNarrowScreens(t *testing.T) {
 			assertFitsScreen(t, "themepicker", out, sc.w, sc.h)
 			m.CancelThemePicker()
 
+			m.OpenAccentPicker("w1")
+			out, _, _ = m.renderAccentPicker()
+			assertFitsScreen(t, "accent picker", out, sc.w, sc.h)
+			m.CloseAccentPicker()
+
 			// Session switcher outside daemon mode is the informational panel.
 			out, _, _ = m.renderSessionSwitcher()
 			assertFitsScreen(t, "session (no daemon)", out, sc.w, sc.h)

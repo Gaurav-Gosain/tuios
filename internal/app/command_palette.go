@@ -57,12 +57,10 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Shortcut: "prefix+r",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				if config.WindowTitlePosition != "hidden" && len(m.Windows) > 0 && m.FocusedWindow >= 0 {
-					focusedWindow := m.GetFocusedWindow()
-					if focusedWindow != nil {
+				if config.WindowTitlePosition != "hidden" {
+					if focused := m.GetFocusedWindow(); focused != nil {
 						m.Mode = WindowManagementMode
-						m.RenamingWindow = true
-						m.RenameBuffer = focusedWindow.CustomName
+						m.BeginRenameWindow(focused)
 					}
 				}
 				return m, nil

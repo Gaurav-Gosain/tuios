@@ -56,6 +56,9 @@ func (m *OS) openOverlayKinds() map[string]bool {
 	if m.ShowThemePicker {
 		open["themepicker"] = true
 	}
+	if m.ShowAccentPicker {
+		open["accent"] = true
+	}
 	if m.ShowQuitMenu {
 		open["quit"] = true
 	}

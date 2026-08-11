@@ -60,6 +60,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("new_window", handleNewWindow)
 	d.Register("close_window", handleCloseWindow)
 	d.Register("rename_window", handleRenameWindow)
+	d.Register("set_accent", handleSetAccent)
 	d.Register("minimize_window", handleMinimizeWindow)
 	d.Register("restore_all", handleRestoreAll)
 	d.Register("next_window", handleNextWindow)
@@ -230,21 +231,23 @@ func handleRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Don't allow rename if window titles are hidden
-	if config.WindowTitlePosition == "hidden" {
+	// Renaming needs somewhere to show the editor: the title bar, or the rail,
+	// which draws it on the window's own row.
+	if config.WindowTitlePosition == "hidden" && !o.SidebarActive() {
 		return o, nil
 	}
 
 	// Otherwise, rename window
-	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.RenamingWindow = true
-			if fw := o.GetFocusedWindow(); fw != nil {
-				fw.InvalidateCache()
-			}
-			o.RenameBuffer = focusedWindow.CustomName
-		}
+	o.BeginRenameWindow(o.GetFocusedWindow())
+	return o, nil
+}
+
+// handleSetAccent opens the accent swatches for the focused window. It backs the
+// context menu's "Accent color" row; the rail's own key targets the cursor row
+// instead, which need not be the focused pane.
+func handleSetAccent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if w := o.GetFocusedWindow(); w != nil {
+		o.OpenAccentPicker(w.ID)
 	}
 	return o, nil
 }

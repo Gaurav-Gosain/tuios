@@ -166,9 +166,7 @@ func startRename(o *app.OS) {
 		return
 	}
 	o.Mode = app.WindowManagementMode
-	o.RenamingWindow = true
-	o.RenameBuffer = focused.CustomName
-	focused.InvalidateCache()
+	o.BeginRenameWindow(focused)
 }
 
 func handlePrefixRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

@@ -33,6 +33,9 @@ type sidebarStateFile struct {
 	// Width is the user's drag-defined full-rail width, overriding the config
 	// default at runtime. Zero means never dragged, so the config width stands.
 	Width int `json:"width,omitempty"`
+	// Accents is the per-window accent index, by window ID. Window IDs outlive a
+	// detach, so an accent set today is still on the row tomorrow.
+	Accents map[string]int `json:"accents,omitempty"`
 }
 
 // loadSidebarState reads the persisted sidebar order and collapse toggles.
@@ -52,6 +55,9 @@ func (m *OS) loadSidebarState() {
 	}
 	if len(st.Collapsed) > 0 {
 		m.SidebarCollapsed = st.Collapsed
+	}
+	if len(st.Accents) > 0 {
+		m.SidebarAccents = st.Accents
 	}
 	// A stored drag width wins over the config default; GetSidebarWidth still
 	// folds it against the breakpoints and pane floor, so an out-of-range value
@@ -73,6 +79,7 @@ func (m *OS) saveSidebarState() {
 		Order:     m.SidebarOrder,
 		Collapsed: m.SidebarCollapsed,
 		Width:     config.SidebarWidth,
+		Accents:   m.SidebarAccents,
 	})
 	if err != nil {
 		return

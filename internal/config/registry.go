@@ -251,6 +251,7 @@ var ActionDescriptions = map[string]string{
 	"new_window":      "New window",
 	"close_window":    "Close window",
 	"rename_window":   "Rename window",
+	"set_accent":      "Accent color",
 	"minimize_window": "Minimize window",
 	"restore_all":     "Restore all minimized",
 	"toggle_zoom":     "Toggle zoom (fullscreen)",

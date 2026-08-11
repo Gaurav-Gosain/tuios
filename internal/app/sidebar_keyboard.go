@@ -1,6 +1,9 @@
 package app
 
-import "github.com/Gaurav-Gosain/tuios/internal/config"
+import (
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+)
 
 // sidebarNavRow is one keyboard-navigable rail row: what the cursor can land on
 // and what activating it targets. It mirrors sidebarRowHit without the screen
@@ -294,4 +297,39 @@ func (m *OS) sidebarSetCursorToHit(hit sidebarRowHit) {
 			return
 		}
 	}
+}
+
+// sidebarCursorWindow returns the live window the cursor row names, or nil when
+// the cursor is on a session row or on a window of a session this client is not
+// attached to (whose windows it does not hold).
+func (m *OS) sidebarCursorWindow() *terminal.Window {
+	row, ok := m.sidebarCursorRow()
+	if !ok || row.WindowID == "" {
+		return nil
+	}
+	if i := m.windowIndexByID(row.WindowID); i >= 0 {
+		return m.Windows[i]
+	}
+	return nil
+}
+
+// SidebarRenameCursor starts an inline rename on the cursor row. Sessions are
+// the daemon's to name, so the rail renames windows only.
+func (m *OS) SidebarRenameCursor() {
+	w := m.sidebarCursorWindow()
+	if w == nil {
+		m.ShowNotification("Rename works on a window of this session", "info", config.NotificationDuration)
+		return
+	}
+	m.BeginRenameWindow(w)
+}
+
+// SidebarAccentCursor opens the accent swatches for the cursor row's window.
+func (m *OS) SidebarAccentCursor() {
+	w := m.sidebarCursorWindow()
+	if w == nil {
+		m.ShowNotification("Accents work on a window of this session", "info", config.NotificationDuration)
+		return
+	}
+	m.OpenAccentPicker(w.ID)
 }

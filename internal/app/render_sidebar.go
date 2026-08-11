@@ -688,6 +688,15 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		indent = 2
 	}
 
+	// A rename in flight owns the row it targets, focused pane or not: the
+	// buffer is what the user is editing and it has to be where they are looking.
+	if m.RenamingWindow && node.ID == m.RenameTargetID {
+		text := overlay.Truncate(printableTitle(m.RenameBuffer), max(cw-indent-1, 1)) + "_"
+		row := sidebarStyle(pal.Card, nil).Render(strings.Repeat(" ", indent)) +
+			sidebarStyle(pal.Card, pal.Fg).Render(text)
+		return sidebarFit(row, cw, pal.Card)
+	}
+
 	if node.IsCurrent {
 		// On the saturated focus fill the state colors vanish, so glyph and
 		// title share the pill foreground; the shape still carries the state.
@@ -715,10 +724,22 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		fg = pal.Fg
 	}
 	row := sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent)) +
-		sidebarGlyph(node.AgentState, rowBg, pal) +
+		m.sidebarWindowGlyph(node, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
 		sidebarStyle(rowBg, fg).Render(m.sidebarMarquee("w:"+node.ID, title, max(cw-indent-3, 1), hovered))
 	return sidebarFit(row, cw, rowBg)
+}
+
+// sidebarWindowGlyph is the one cell in front of a window's name: its agent
+// state when it has one, else the accent the user gave it. State outranks
+// identity, so a working pane keeps its state dot and the accent waits.
+func (m *OS) sidebarWindowGlyph(node sessiontree.Node, rowBg color.Color, pal overlay.Palette) string {
+	if node.AgentState == "" && config.SidebarShowGlyphs {
+		if idx, ok := m.WindowAccent(node.ID); ok {
+			return sidebarStyle(rowBg, accentColor(idx)).Render(accentMark())
+		}
+	}
+	return sidebarGlyph(node.AgentState, rowBg, pal)
 }
 
 // sidebarAgentRow renders one row of the running-agents section: state glyph,

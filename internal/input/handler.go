@@ -185,6 +185,17 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleContextMenuKey(msg, o)
 	}
 
+	// The accent picker and an in-flight rename are both opened from the rail,
+	// which owns the keyboard while focused, so they are checked ahead of it: an
+	// editor and a picker own every key while they are up, wherever they came
+	// from.
+	if o.ShowAccentPicker {
+		return handleAccentPickerInput(msg, o)
+	}
+	if o.RenamingWindow {
+		return handleRenameMode(msg, o)
+	}
+
 	// The sidebar rail owns the keyboard while focused, in both terminal and
 	// window mode (it is reachable from either via ctrl+b o), so pane and window
 	// bindings never fire underneath it. Checked after the modal overlays above,
@@ -224,11 +235,6 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ScriptMode && isCtrlP(msg) {
 		o.ScriptPaused = !o.ScriptPaused
 		return o, nil
-	}
-
-	// Handle rename mode
-	if o.RenamingWindow {
-		return handleRenameMode(msg, o)
 	}
 
 	// Terminal mode handling
@@ -289,28 +295,27 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // handleRenameMode handles keyboard input during window renaming
 func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	target := o.RenameTarget()
 	switch msg.String() {
 	case "enter":
 		// Apply the new name. RenameWindowByID is the one rename: in a daemon
 		// session it asks the daemon, which owns the name, and the change comes
 		// back as a state push.
-		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-			_ = o.RenameWindowByID(focusedWindow.ID, o.RenameBuffer)
-			focusedWindow.InvalidateCache()
+		if target != nil {
+			_ = o.RenameWindowByID(target.ID, o.RenameBuffer)
+			target.InvalidateCache()
 		}
-		o.RenamingWindow = false
-		o.RenameBuffer = ""
+		o.EndRenameWindow()
 		return o, nil
 	case "esc":
 		// Cancel renaming
-		o.RenamingWindow = false
-		o.RenameBuffer = ""
+		o.EndRenameWindow()
 		return o, nil
 	case "backspace":
 		if len(o.RenameBuffer) > 0 {
 			o.RenameBuffer = o.RenameBuffer[:len(o.RenameBuffer)-1]
-			if fw := o.GetFocusedWindow(); fw != nil {
-				fw.InvalidateCache()
+			if target != nil {
+				target.InvalidateCache()
 			}
 		}
 		return o, nil
@@ -319,8 +324,8 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if len(msg.String()) == 1 && msg.String()[0] >= 32 && msg.String()[0] < 127 {
 			o.RenameBuffer += msg.String()
 			// Invalidate cache so the rename input is visible immediately
-			if fw := o.GetFocusedWindow(); fw != nil {
-				fw.InvalidateCache()
+			if target != nil {
+				target.InvalidateCache()
 			}
 		}
 		return o, nil

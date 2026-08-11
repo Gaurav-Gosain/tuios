@@ -183,6 +183,7 @@ type OS struct {
 	NextBSPWindowID       int                    // Next BSP window ID to assign (starts at 1)
 	RenamingWindow        bool                   // True when renaming a window
 	RenameBuffer          string                 // Buffer for new window name
+	RenameTargetID        string                 // Window the rename in flight applies to
 	PrefixActive          bool                   // True when prefix key was pressed (tmux-style)
 	WorkspacePrefixActive bool                   // True when Ctrl+B, w was pressed (workspace sub-prefix)
 	MinimizePrefixActive  bool                   // True when Ctrl+B, m was pressed (minimize sub-prefix)
@@ -477,6 +478,17 @@ type OS struct {
 	SidebarOrder      []string
 	SidebarSessionIDs []string
 	SidebarDrag       sidebarDragState
+	// SidebarAccents is the accent the user gave a window, by window ID, as an
+	// index into the theme's bright ANSI colors. Persisted alongside the order
+	// and the collapse state; the daemon does not own it, so it is this client's
+	// view of its own windows.
+	SidebarAccents map[string]int
+	// Accent picker state: the window being accented, the selected swatch, and
+	// the list scroll the shared list overlay clamps.
+	ShowAccentPicker     bool
+	AccentPickerWindowID string
+	AccentPickerSelected int
+	AccentPickerScroll   int
 	// Sidebar hover: the last mouse position seen inside the band, so the row
 	// under the cursor is highlighted the way overlay rows are. HoverActive is
 	// cleared as soon as motion leaves the band.

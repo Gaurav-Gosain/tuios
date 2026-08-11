@@ -170,6 +170,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "themepicker", content, geo, rows)
 	}
 
+	if m.ShowAccentPicker {
+		content, geo, rows := m.renderAccentPicker()
+		layers = m.placeOverlayPanel(layers, "accent", content, geo, rows)
+	}
+
 	if m.ShowAggregateView {
 		content, geo, rows := m.renderAggregateView()
 		layers = m.placeOverlayPanel(layers, "aggregate", content, geo, rows)
