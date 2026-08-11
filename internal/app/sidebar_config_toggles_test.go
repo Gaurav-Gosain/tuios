@@ -56,7 +56,7 @@ func TestSidebarWorkspacesOffDropsBand(t *testing.T) {
 	config.SidebarWorkspaces = config.SidebarWorkspacesOff
 	t.Cleanup(func() { config.SidebarWorkspaces = old })
 
-	m = bandTestOS(t, 120, 40, "left")
+	m = spreadTestOS(t, 120, 40, "left")
 	sidebarText(t, m)
 	if got := len(bandHits(m)); got != 0 {
 		t.Errorf("workspaces = off still drew %d chips", got)

@@ -184,7 +184,7 @@ type SidebarConfig struct {
 	ShowGlyphs  *bool  `toml:"show_glyphs"`  // Agent-state glyph on each row (default: true)
 	ShowCounts  *bool  `toml:"show_counts"`  // Window count on each session row (default: true)
 	ShowAgents  *bool  `toml:"show_agents"`  // Running-agents section at the top (default: true)
-	Workspaces  string `toml:"workspaces"`   // Workspace chip band: band, off (default: band)
+	Workspaces  string `toml:"workspaces"`   // Workspace chip band: band, off (default: off)
 	Marquee     *bool  `toml:"marquee"`      // Scroll a hovered row's overflowing title (default: true)
 }
 
@@ -238,7 +238,7 @@ func DefaultConfig() *UserConfig {
 			Sidebar: SidebarConfig{
 				Position:   "left",
 				Width:      SidebarDefaultWidth,
-				Workspaces: SidebarWorkspacesBand,
+				Workspaces: SidebarWorkspacesOff,
 			},
 		},
 		Daemon: DaemonConfig{

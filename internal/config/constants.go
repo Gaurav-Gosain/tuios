@@ -519,8 +519,10 @@ var (
 	SidebarShowAgents = true
 
 	// SidebarWorkspaces is how the current session's workspaces appear in the
-	// rail: "band" (a row of chips) or "off".
-	SidebarWorkspaces = SidebarWorkspacesBand
+	// rail: "band" (a row of chips) or "off". Off by default because the dock
+	// draws the same strip and is always present; "band" is for people who hide
+	// the dock.
+	SidebarWorkspaces = SidebarWorkspacesOff
 
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
 	SidebarMarquee = true

@@ -6,14 +6,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// bandTestOS is sidebarTestOS with its windows spread over workspaces 1, 2 and
-// 4, which is what gives the band something to draw.
-func bandTestOS(t *testing.T, w, h int, pos string) *OS {
+// spreadTestOS is sidebarTestOS with its windows spread over workspaces 1, 2
+// and 4, which is what gives the band something to draw. It leaves the band
+// mode alone, so a caller can render the same spread under either setting.
+func spreadTestOS(t *testing.T, w, h int, pos string) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, w, h, pos)
 	m.Windows[1].Workspace = 2
 	m.Windows[2].Workspace = 4
 	return m
+}
+
+// bandTestOS is spreadTestOS with the band switched on. The band ships off (the
+// dock already draws the same strip), so every band test asks for it.
+func bandTestOS(t *testing.T, w, h int, pos string) *OS {
+	t.Helper()
+	prev := config.SidebarWorkspaces
+	config.SidebarWorkspaces = config.SidebarWorkspacesBand
+	t.Cleanup(func() { config.SidebarWorkspaces = prev })
+	return spreadTestOS(t, w, h, pos)
 }
 
 // bandHits returns the recorded chip rectangles, in drawn order.
@@ -25,6 +36,27 @@ func bandHits(m *OS) []sidebarRowHit {
 		}
 	}
 	return out
+}
+
+// TestSidebarBandIsOffByDefault pins the default: the dock draws a workspace
+// strip on the same screen, so the rail spends no row repeating it. Setting the
+// knob to "band" brings the chips back for people who hide the dock.
+func TestSidebarBandIsOffByDefault(t *testing.T) {
+	if config.SidebarWorkspaces != config.SidebarWorkspacesOff {
+		t.Fatalf("built-in default = %q, want off", config.SidebarWorkspaces)
+	}
+
+	m := spreadTestOS(t, 120, 40, "left")
+	sidebarText(t, m)
+	if got := len(bandHits(m)); got != 0 {
+		t.Errorf("the default rail drew %d workspace chips", got)
+	}
+
+	on := bandTestOS(t, 120, 40, "left") // same spread, band switched on
+	sidebarText(t, on)
+	if got := len(bandHits(on)); got != 3 {
+		t.Errorf(`workspaces = "band" drew %d chips, want 3`, got)
+	}
 }
 
 // TestSidebarBandChipClickSwitchesWorkspace is the band's mouse contract: every

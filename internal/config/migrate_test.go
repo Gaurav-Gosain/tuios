@@ -59,7 +59,7 @@ sidebar_show_counts = false
 			SidebarShowWindows, SidebarShowGlyphs, SidebarShowCounts)
 	}
 	// Knobs the old file never mentioned keep their defaults.
-	if !SidebarShowAgents || SidebarWorkspaces != SidebarWorkspacesBand || !SidebarMarquee || !DockWorkspaceTabs {
+	if !SidebarShowAgents || SidebarWorkspaces != SidebarWorkspacesOff || !SidebarMarquee || !DockWorkspaceTabs {
 		t.Errorf("unmentioned knobs drifted: agents=%v workspaces=%q marquee=%v docktabs=%v",
 			SidebarShowAgents, SidebarWorkspaces, SidebarMarquee, DockWorkspaceTabs)
 	}
