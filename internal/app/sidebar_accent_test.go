@@ -56,6 +56,39 @@ func TestRailDrawsTheAccentChip(t *testing.T) {
 	}
 }
 
+// TestAccentSurvivesFocus pins that an accent stays visible on the focused
+// window. The focus pill's saturated fill swallows a colored mark, so the
+// focused row used to drop the accent entirely: setting a colour and then
+// selecting the pane made the colour disappear.
+func TestAccentSurvivesFocus(t *testing.T) {
+	m := sidebarTestOS(t, 120, 40, "left")
+	mark := accentMark()
+
+	// "logs" carries no agent state, so its accent is the glyph. Focus it, which
+	// renders the row as the focus pill.
+	idx := m.windowIndexByID("cccccccc3333")
+	if idx < 0 {
+		t.Fatal("fixture window missing")
+	}
+	m.FocusWindow(idx)
+	focused := m.Windows[idx]
+	m.SetWindowAccent(focused.ID, 3)
+
+	var row string
+	for _, r := range railText(t, m) {
+		if strings.Contains(r, printableTitle(windowRowTitle(focused))) {
+			row = r
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("focused window row missing from the rail:\n%s", strings.Join(railText(t, m), "\n"))
+	}
+	if !strings.Contains(row, mark) {
+		t.Errorf("focused row lost its accent: %q", row)
+	}
+}
+
 // TestRailDrawsTheRenameEditor proves an inline rename shows up on the row it
 // targets, which is the whole point of renaming from the rail.
 func TestRailDrawsTheRenameEditor(t *testing.T) {

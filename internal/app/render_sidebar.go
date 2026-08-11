@@ -941,8 +941,18 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		// lands on the same spine as the session name and the non-focused
 		// siblings, both at indent+2. Starting a cell earlier made the focused
 		// pill jog left of everything else.
-		row := strings.Repeat(" ", indent) +
-			sidebarPill(" "+inner+" ", lipgloss.Color(sidebarFocusColor), lipgloss.Color("#ffffff"), nil)
+		lead := strings.Repeat(" ", indent)
+		// An accent is the pane's identity and has to outlive focus. The pill's
+		// saturated fill swallows a colored mark, so the accent takes the gutter
+		// cell just before the cap, where it still reads. Agent state still wins
+		// the glyph inside the pill, matching the unfocused precedence.
+		if node.AgentState == "" && config.SidebarShowGlyphs {
+			if idx, ok := m.WindowAccent(node.ID); ok {
+				lead = strings.Repeat(" ", indent-1) +
+					sidebarStyle(nil, accentColor(idx)).Render(accentMark())
+			}
+		}
+		row := lead + sidebarPill(" "+inner+" ", lipgloss.Color(sidebarFocusColor), lipgloss.Color("#ffffff"), nil)
 		return sidebarFit(row, cw, nil)
 	}
 
