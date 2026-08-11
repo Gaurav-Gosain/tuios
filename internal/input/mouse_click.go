@@ -105,14 +105,24 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// same path as a title-bar drag); a sub-threshold release falls through to
 	// the ctrl+click multi-select. On the border or title bar, where a drag
 	// already means resize or a title-bar move, it stays the immediate toggle.
-	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft && msg.Mod&tea.ModCtrl != 0 {
+	// ctrl+shift+left-click toggles multi-select. Plain ctrl+left instead grabs the
+	// window: on content it arms a move-drag (committed past the threshold in
+	// handleMouseMotion), off the content it just focuses. Keeping multi-select on
+	// its own chord stops a ctrl-click from selecting when the intent was to grab.
+	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft &&
+		msg.Mod&(tea.ModCtrl|tea.ModShift) == tea.ModCtrl|tea.ModShift {
+		o.ToggleMultifocus(clickedWindowIndex)
+		return o, nil
+	}
+	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft &&
+		msg.Mod&tea.ModCtrl != 0 && msg.Mod&tea.ModShift == 0 {
 		if _, _, inContent := o.Windows[clickedWindowIndex].ScreenToTerminal(X, Y); inContent {
 			o.CtrlDragPending = true
 			o.CtrlDragIndex = clickedWindowIndex
 			o.DragStartX, o.DragStartY = X, Y
 			return o, nil
 		}
-		o.ToggleMultifocus(clickedWindowIndex)
+		o.FocusWindow(clickedWindowIndex)
 		return o, nil
 	}
 

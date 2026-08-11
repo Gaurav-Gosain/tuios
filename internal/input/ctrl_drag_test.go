@@ -16,6 +16,9 @@ func ctrlMotionMsg(x, y int) tea.MouseMotionMsg {
 func ctrlReleaseMsg(x, y int) tea.MouseReleaseMsg {
 	return tea.MouseReleaseMsg{Button: tea.MouseLeft, X: x, Y: y, Mod: tea.ModCtrl}
 }
+func ctrlShiftClickMsg(x, y int) tea.MouseClickMsg {
+	return tea.MouseClickMsg{Button: tea.MouseLeft, X: x, Y: y, Mod: tea.ModCtrl | tea.ModShift}
+}
 
 func indexOf(o *OS2, w *terminal.Window) int {
 	for i := range o.Windows {
@@ -60,9 +63,10 @@ func TestCtrlDragArmsThenMoves(t *testing.T) {
 	}
 }
 
-// TestCtrlClickNoDragFallsThrough proves a ctrl+press released below the drag
-// threshold never moves and delivers the existing ctrl+click multi-select.
-func TestCtrlClickNoDragFallsThrough(t *testing.T) {
+// TestCtrlClickNoDragDoesNotMultifocus proves a plain ctrl+press released below
+// the threshold neither moves nor multi-selects: multi-select is now
+// ctrl+shift+click, so a bare ctrl-click can no longer select by accident.
+func TestCtrlClickNoDragDoesNotMultifocus(t *testing.T) {
 	o, wa, wb := twoPaneBSP(t)
 	left, _ := leftPaneOf(wa, wb)
 	cx, cy := contentCell(left)
@@ -73,8 +77,25 @@ func TestCtrlClickNoDragFallsThrough(t *testing.T) {
 	if o.Dragging || o.CtrlDragPending || o.CtrlDragging {
 		t.Fatalf("sub-threshold ctrl press left a drag armed (dragging=%v pending=%v ctrlDragging=%v)", o.Dragging, o.CtrlDragPending, o.CtrlDragging)
 	}
+	if o.MultifocusSet[left.ID] {
+		t.Fatal("a plain ctrl+click must not multi-select; that moved to ctrl+shift+click")
+	}
+}
+
+// TestCtrlShiftClickMultifocus proves multi-select now lives on ctrl+shift+click
+// and never arms a move.
+func TestCtrlShiftClickMultifocus(t *testing.T) {
+	o, wa, wb := twoPaneBSP(t)
+	left, _ := leftPaneOf(wa, wb)
+	cx, cy := contentCell(left)
+
+	handleMouseClick(ctrlShiftClickMsg(cx, cy), o)
+
+	if o.CtrlDragPending || o.Dragging {
+		t.Fatal("ctrl+shift+click must not arm a move")
+	}
 	if !o.MultifocusSet[left.ID] {
-		t.Fatal("sub-threshold ctrl press did not fall through to ctrl+click multi-select")
+		t.Fatal("ctrl+shift+click did not toggle multi-select")
 	}
 }
 
