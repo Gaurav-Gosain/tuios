@@ -1079,17 +1079,6 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 	// same spine as its session name.
 	indent := sidebarPaneIndent(variant)
 
-	// A rename in flight owns the row it targets, focused pane or not: the
-	// buffer is what the user is editing and it has to be where they are looking.
-	if m.RenamingWindow && node.ID == m.RenameTargetID {
-		// The buffer draws on the title's own spine, so the text does not jump
-		// sideways the moment a rename starts.
-		text := overlay.Truncate(printableTitle(m.RenameBuffer), max(cw-indent-4, 1)) + "_"
-		row := sidebarStyle(pal.Card, nil).Render(strings.Repeat(" ", indent+2)) +
-			sidebarStyle(pal.Card, pal.Fg).Render(text)
-		return sidebarFit(row, cw, pal.Card)
-	}
-
 	// Same as a session row: the only band is the transient one under the
 	// pointer or the keyboard cursor. Focus and attention are gutter marks.
 	var rowBg color.Color

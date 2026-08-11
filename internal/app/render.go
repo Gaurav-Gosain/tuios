@@ -310,10 +310,9 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		AlignVertical(lipgloss.Top).
 		Border(getBorder()).
 		BorderTop(false)
-	// The title bar shows the editor for the window the rename actually targets,
-	// which is the focused one when the rename started from a pane and can be any
-	// row when it started from the rail.
-	isRenaming := m.RenamingWindow && window.ID == m.RenameTargetID
+	// The title bar keeps showing the name the window still has while a rename
+	// is in flight: the dialog owns the new one, so the two together are the
+	// old-vs-new comparison.
 	return addToBorder(
 		box.Width(window.Width).
 			Height(window.Height-1).
@@ -322,8 +321,6 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		borderColorObj,
 		window,
 		m.workspacePosition(window),
-		isRenaming,
-		m.RenameBuffer,
 		m.AutoTiling,
 	)
 }

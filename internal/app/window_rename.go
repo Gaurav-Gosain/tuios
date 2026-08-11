@@ -1,6 +1,9 @@
 package app
 
-import "github.com/Gaurav-Gosain/tuios/internal/terminal"
+import (
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+)
 
 // BeginRenameWindow starts an inline rename of a window, seeded with the name it
 // already carries. There is one rename in flight at a time and it names the
@@ -13,6 +16,9 @@ func (m *OS) BeginRenameWindow(w *terminal.Window) {
 	m.RenamingWindow = true
 	m.RenameTargetID = w.ID
 	m.RenameBuffer = w.CustomName
+	// Where the dialog anchors. A rename started while the rail owns the
+	// keyboard came from a rail row; anything else came from the pane.
+	m.RenameFromRail = m.SidebarFocused
 	w.InvalidateCache()
 }
 
@@ -33,4 +39,21 @@ func (m *OS) EndRenameWindow() {
 	m.RenamingWindow = false
 	m.RenameTargetID = ""
 	m.RenameBuffer = ""
+	m.RenameFromRail = false
+	m.renameHit = overlay.Rect{}
+}
+
+// RenameMouseClick routes a click while the rename dialog is up: inside is a
+// no-op (the field has no clickable parts), outside cancels. The dialog is
+// modal to the mouse either way, so a stray click can never leave an editor
+// open over a pane the user has moved on to. The mouse is never required: the
+// same keys that opened it commit or cancel it.
+func (m *OS) RenameMouseClick(x, y int) bool {
+	if !m.RenamingWindow {
+		return false
+	}
+	if !m.renameHit.Contains(x, y) {
+		m.EndRenameWindow()
+	}
+	return true
 }

@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -192,6 +193,15 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ShowAccentPicker {
 		content, geo, rows := m.renderAccentPicker()
 		layers = m.placeOverlayPanel(layers, "accent", content, geo, rows)
+	}
+
+	// The rename dialog is anchored to the row or pane it names rather than
+	// centred, so it is placed directly instead of going through the draggable
+	// panel stack.
+	if content, geo, x, y, ok := m.renderRenameDialog(); ok {
+		m.renameHit = overlay.Rect{X0: x, Y0: y, X1: x + geo.Width, Y1: y + geo.Height}
+		layers = append(layers, lipgloss.NewLayer(content).
+			X(x).Y(y).Z(config.ZIndexOverlayBase).ID("rename"))
 	}
 
 	if m.ShowAggregateView {

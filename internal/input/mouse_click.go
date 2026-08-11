@@ -38,6 +38,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A rename in flight is modal to the mouse: a click on the dialog does
+	// nothing, a click anywhere else cancels. Ahead of the overlays because the
+	// dialog is anchored to its target rather than stacked with them.
+	if o.RenameMouseClick(X, Y) {
+		return o, nil
+	}
+
 	// Floating overlay panels (help, settings, palette, theme picker) consume
 	// clicks before they can reach the window layer: select a tab/row/control,
 	// grab the title bar or right-drag to move, or click away to dismiss.

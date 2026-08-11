@@ -402,45 +402,35 @@ func runInShell(t *testing.T, term *tuitest.Terminal, cmd, want string, timeout 
 //
 // Two things here were previously guessed at.
 //
-// The editor was waited for by looking for an underscore anywhere on screen.
-// That is the cursor tuios draws after the rename buffer
-// (internal/app/render_helpers.getWindowTitle), but it is also an ordinary
-// character that shell output, a path or a window title puts on screen on its
-// own. Measured on a fresh window there happen to be none, so the wait was not
-// vacuous today; it was one line of output away from being satisfied before 'r'
-// was ever pressed, after which the name would be typed into whatever else had
-// the keyboard. It now waits for the count to go *up*, which only this
-// keystroke causes.
+// The editor is the rename micro-dialog, which names itself in its own top
+// border and carries its keys in its bottom one. Waiting for that frame is a
+// wait on the dialog and nothing else; the previous wait counted underscores,
+// and an underscore is an ordinary character any shell output can put on
+// screen.
 //
-// The commit was asserted by waiting for the name to appear. The editor renders
-// the buffer as you type, so that assertion was satisfied by the harness's own
-// keystrokes and said nothing about enter. It now requires the editor to be
-// gone as well: "name_" on screen means the cursor is still there and the
-// rename has not been committed.
+// The commit still requires the dialog gone as well as the name present: the
+// dialog renders the buffer as you type, so the name alone was satisfied by the
+// harness's own keystrokes and said nothing about enter.
+func renameDialogUp(s tuitest.Screen) bool {
+	text := s.Text()
+	return strings.Contains(text, "rename") && strings.Contains(text, "esc cancel")
+}
+
 func renameWindow(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
-	underscores := func(s tuitest.Screen) int { return strings.Count(s.Text(), "_") }
-	before := underscores(term.Screen())
 
 	if err := term.SendKeys("r"); err != nil {
 		t.Fatalf("open rename editor: %v", err)
 	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return underscores(s) > before
-	}, uiTimeout); err != nil {
-		t.Fatalf("the rename editor never opened (no new cursor on screen): %v\n%s",
-			err, term.Snapshot())
+	if err := term.WaitFor(renameDialogUp, uiTimeout); err != nil {
+		t.Fatalf("the rename dialog never opened: %v\n%s", err, term.Snapshot())
 	}
 
 	if err := term.SendKeys(name, tuitest.Enter); err != nil {
 		t.Fatalf("type the new name %q: %v", name, err)
 	}
-	// The editor draws the buffer followed by its cursor, so "name_" on screen
-	// means the editor is still open. Requiring it gone AND the name present is
-	// what separates a committed rename from a half-typed one.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		text := s.Text()
-		return strings.Contains(text, name) && !strings.Contains(text, name+"_")
+		return strings.Contains(s.Text(), name) && !renameDialogUp(s)
 	}, uiTimeout); err != nil {
 		t.Fatalf("the window never committed the name %q: %v\n%s", name, err, term.Snapshot())
 	}

@@ -46,14 +46,16 @@ func TestRailRenamesAndAccentsAWindow(t *testing.T) {
 	if err := term.SendKeys("RAILNAME"); err != nil {
 		t.Fatalf("type the new name: %v", err)
 	}
-	if err := term.WaitForText("RAILNAME_", uiTimeout); err != nil {
-		t.Fatalf("the rename editor never showed on the row: %v\n%s", err, term.Snapshot())
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return renameDialogUp(s) && strings.Contains(s.Text(), "RAILNAME")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the rename dialog never carried the typed name: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("commit the rename: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "RAILNAME") && !strings.Contains(s.Text(), "RAILNAME_")
+		return strings.Contains(s.Text(), "RAILNAME") && !renameDialogUp(s)
 	}, uiTimeout); err != nil {
 		t.Fatalf("the rename did not commit to the row: %v\n%s", err, term.Snapshot())
 	}

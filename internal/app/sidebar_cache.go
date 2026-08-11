@@ -137,10 +137,9 @@ func (m *OS) sidebarSignature() uint64 {
 		mixU(m.DaemonClient.CacheGen())
 	}
 
-	// A rename in flight replaces its row with the buffer being typed.
-	mixB(m.RenamingWindow)
-	mixS(m.RenameTargetID)
-	mixS(m.RenameBuffer)
+	// A rename in flight is not folded in: the buffer lives in its own dialog
+	// and the rail keeps drawing the old name, so typing no longer rebuilds the
+	// whole rail once per keystroke.
 
 	// Live windows in row order: id, label, agent state, workspace, accent.
 	for _, w := range m.Windows {

@@ -127,7 +127,7 @@ func isDefaultTitle(title, windowID string) bool {
 // Returns empty string if title should be hidden or doesn't fit.
 // position is the window's 1-based place in its workspace, used by the {index}
 // placeholder of appearance.window_title_format.
-func getWindowTitle(window *terminal.Window, position int, isRenaming bool, renameBuffer string, maxWidth int) string {
+func getWindowTitle(window *terminal.Window, position int, maxWidth int) string {
 	// Titles reach the badge as chrome, so launder the same decorative junk the
 	// sidebar and palette drop; our own state glyph is added below, untouched.
 	windowName := ""
@@ -138,23 +138,15 @@ func getWindowTitle(window *terminal.Window, position int, isRenaming bool, rena
 		windowName = printableTitle(t)
 	}
 
-	if isRenaming {
-		// While renaming, the buffer is the title: running it through the format
-		// would show the user something other than what they are typing.
-		windowName = renameBuffer + "_"
-	} else if windowName != "" || config.WindowTitleFormat != "" {
+	if windowName != "" || config.WindowTitleFormat != "" {
 		// A format that mentions only {index} or {cwd} still has something to
 		// say about a window whose title is empty.
 		windowName = config.FormatWindowTitle(windowName, position, window.CWD())
 	}
 
 	// The agent-state indicator shows even for a window with no name, so a pane
-	// running an agent is always marked. It is not shown while renaming, so it
-	// never sits in front of the text the user is typing.
-	indicator := ""
-	if !isRenaming {
-		indicator = agentStateIndicator(window.AgentState)
-	}
+	// running an agent is always marked.
+	indicator := agentStateIndicator(window.AgentState)
 
 	if windowName == "" {
 		return indicator
@@ -187,7 +179,7 @@ func getWindowTitle(window *terminal.Window, position int, isRenaming bool, rena
 	return windowName
 }
 
-func addToBorder(content string, color color.Color, window *terminal.Window, position int, isRenaming bool, renameBuffer string, isTiling bool) string {
+func addToBorder(content string, color color.Color, window *terminal.Window, position int, isTiling bool) string {
 	width := max(lipgloss.Width(content)-2, 0)
 	titlePos := config.WindowTitlePosition
 
@@ -225,7 +217,7 @@ func addToBorder(content string, color color.Color, window *terminal.Window, pos
 
 	windowName := ""
 	if titlePos != "hidden" {
-		windowName = getWindowTitle(window, position, isRenaming, renameBuffer, titleMaxWidth)
+		windowName = getWindowTitle(window, position, titleMaxWidth)
 	}
 
 	borderStyle := style.Foreground(color)

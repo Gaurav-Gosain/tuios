@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -184,6 +185,8 @@ type OS struct {
 	RenamingWindow        bool                   // True when renaming a window
 	RenameBuffer          string                 // Buffer for new window name
 	RenameTargetID        string                 // Window the rename in flight applies to
+	RenameFromRail        bool                   // Rename started on a rail row, so the dialog anchors there
+	renameHit             overlay.Rect           // Where the dialog was drawn, in screen cells
 	PrefixActive          bool                   // True when prefix key was pressed (tmux-style)
 	WorkspacePrefixActive bool                   // True when Ctrl+B, w was pressed (workspace sub-prefix)
 	MinimizePrefixActive  bool                   // True when Ctrl+B, m was pressed (minimize sub-prefix)

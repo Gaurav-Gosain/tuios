@@ -89,24 +89,46 @@ func TestAccentSurvivesFocus(t *testing.T) {
 	}
 }
 
-// TestRailDrawsTheRenameEditor proves an inline rename shows up on the row it
-// targets, which is the whole point of renaming from the rail.
-func TestRailDrawsTheRenameEditor(t *testing.T) {
+// TestRailKeepsTheOldNameWhileRenaming: there is one rename surface, the
+// dialog. The rail keeps drawing the name the window still has, so the two
+// together are the old-vs-new comparison rather than two editors on one buffer.
+func TestRailKeepsTheOldNameWhileRenaming(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
+	m.SidebarFocused = true // renaming from the rail, so the dialog anchors there
 
 	m.BeginRenameWindow(m.Windows[2]) // "logs", not the focused window
 	m.RenameBuffer = "audit"
 
 	rows := strings.Join(railText(t, m), "\n")
-	if !strings.Contains(rows, "audit_") {
-		t.Errorf("the rename editor is not on the rail:\n%s", rows)
+	if strings.Contains(rows, "audit") {
+		t.Errorf("the rail is still editing the buffer:\n%s", rows)
+	}
+	if !strings.Contains(rows, "logs") {
+		t.Errorf("the rail dropped the name the window still has:\n%s", rows)
+	}
+
+	// The dialog anchors to that row and carries the buffer.
+	dialog, _, _, y, ok := m.renderRenameDialog()
+	if !ok {
+		t.Fatal("no rename dialog while a rename is in flight")
+	}
+	if !strings.Contains(stripANSIForTrace(dialog), "audit") {
+		t.Errorf("the dialog is not showing the buffer: %q", dialog)
+	}
+	row, found := m.sidebarRowFor("cccccccc3333")
+	if !found {
+		t.Fatal("the rail drew no row for the rename target")
+	}
+	if y+1 != row.Y0 {
+		t.Errorf("the dialog's field row is at y=%d, the row it names is at y=%d", y+1, row.Y0)
 	}
 }
 
-// TestSidebarSignatureFoldsAccentAndRename is the render-cache guard: the rail
-// is served from a cache keyed by this signature, so any input the rows draw
-// from has to move it or the row goes stale on screen.
-func TestSidebarSignatureFoldsAccentAndRename(t *testing.T) {
+// TestSidebarSignatureFoldsWhatTheRailDraws is the render-cache guard: the
+// rail is served from a cache keyed by this signature, so any input the rows
+// draw from has to move it or the row goes stale on screen - and anything the
+// rows do not draw has to stay out, or it rebuilds them for nothing.
+func TestSidebarSignatureFoldsWhatTheRailDraws(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	base := m.sidebarSignature()
 
@@ -116,15 +138,17 @@ func TestSidebarSignatureFoldsAccentAndRename(t *testing.T) {
 		t.Error("setting an accent left the signature unchanged, so the rail would keep the old row")
 	}
 
+	// A rename is deliberately absent from the signature: the buffer lives in
+	// its own dialog and the rail draws the old name throughout, so typing must
+	// not rebuild the rail once per keystroke.
 	m.BeginRenameWindow(m.Windows[2])
 	m.RenameBuffer = "a"
-	renaming := m.sidebarSignature()
-	if renaming == withAccent {
-		t.Error("starting a rename left the signature unchanged")
+	if m.sidebarSignature() != withAccent {
+		t.Error("starting a rename moved the signature, so typing rebuilds the whole rail")
 	}
 	m.RenameBuffer = "ab"
-	if m.sidebarSignature() == renaming {
-		t.Error("typing into the rename buffer left the signature unchanged")
+	if m.sidebarSignature() != withAccent {
+		t.Error("typing into the rename buffer moved the signature")
 	}
 }
 
