@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -756,6 +758,37 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 	config.ApplyAppearanceConfig(cfg)
 	if config.HideWindowButtons || config.ShowClock {
 		t.Error("clearing hide_window_buttons/show_clock did not reach the globals")
+	}
+}
+
+// TestSidebarKeybindsFilledForOlderConfig pins the trap that shipped with the
+// rail scope: a config written before the sidebar section existed loaded with an
+// empty rail keymap, so every rail key resolved to nothing. Because the scope
+// swallows unbound keys, the keyboard was stuck in the rail with no way out.
+func TestSidebarKeybindsFilledForOlderConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "tuios"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A pre-rail config: it has a keybindings table, but no [keybindings.sidebar].
+	older := "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.window_management]\nclose_window = [\"x\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "tuios", "config.toml"), []byte(older), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadUserConfig()
+	if err != nil {
+		t.Fatalf("LoadUserConfig: %v", err)
+	}
+	if len(cfg.Keybindings.Sidebar) == 0 {
+		t.Fatal("an older config loaded with an empty rail keymap; every rail key would be swallowed")
+	}
+	r := config.NewKeybindRegistry(cfg)
+	for key, want := range map[string]string{"j": "cursor_down", "enter": "activate", "esc": "exit"} {
+		if got := r.GetSidebarAction(key); got != want {
+			t.Fatalf("GetSidebarAction(%q) = %q, want %q", key, got, want)
+		}
 	}
 }
 

@@ -22,10 +22,20 @@ func handleFocusSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // Keys with no rail binding are swallowed, not passed to the pane underneath:
 // the whole point of the scope is that pane bindings do not fire here.
 func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.KeybindRegistry == nil {
+	key := msg.String()
+	// esc always leaves the rail, whatever the config says. The scope swallows
+	// unbound keys, so a config that resolves no rail action (one written before
+	// this section existed, or a rebound exit) would otherwise trap the keyboard
+	// here with no way back to the panes.
+	if key == "esc" {
+		o.ExitSidebarFocus()
 		return o, nil
 	}
-	action := o.KeybindRegistry.GetSidebarAction(msg.String())
+	if o.KeybindRegistry == nil {
+		o.ExitSidebarFocus()
+		return o, nil
+	}
+	action := o.KeybindRegistry.GetSidebarAction(key)
 	if action == "" {
 		return o, nil // consumed: the rail owns the keyboard
 	}

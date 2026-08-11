@@ -947,6 +947,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.TerminalMode == nil {
 		cfg.Keybindings.TerminalMode = make(map[string][]string)
 	}
+	if cfg.Keybindings.Sidebar == nil {
+		cfg.Keybindings.Sidebar = make(map[string][]string)
+	}
 
 	migrateLegacyKeybinds(cfg)
 
@@ -970,6 +973,10 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.DebugPrefix, defaultCfg.Keybindings.DebugPrefix)
 	fillMapDefaults(cfg.Keybindings.TapePrefix, defaultCfg.Keybindings.TapePrefix)
 	fillMapDefaults(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode)
+	// A config written before the rail scope existed has no sidebar section. Left
+	// unfilled it resolves every rail key to nothing, and since the scope swallows
+	// unbound keys that traps the keyboard in the rail with no way out.
+	fillMapDefaults(cfg.Keybindings.Sidebar, defaultCfg.Keybindings.Sidebar)
 }
 
 func fillMapDefaults(target, defaults map[string][]string) {
