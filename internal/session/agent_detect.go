@@ -327,6 +327,15 @@ func (s *Session) clearExitedAgent(
 	resolve func(ptyID string) (comm string, argv []string, running bool),
 	isAgent func(comm string, argv []string) bool,
 ) bool {
+	// Almost every output event is from a pane the auto-detector never promoted.
+	// Rule those out under the read lock so a busy non-agent pane does not take the
+	// state write lock (and push to clients) on every throttled event. mutateState
+	// re-checks ownership under the write lock, so a race that clears ownership
+	// between here and there only makes the mutation a no-op.
+	if !s.ownsAutoAgent(ptyID) {
+		return false
+	}
+
 	changed := false
 	_ = s.mutateState(func(st *SessionState) error {
 		for i := range st.Windows {
@@ -350,6 +359,20 @@ func (s *Session) clearExitedAgent(
 		return errNoAgentDetectChange
 	})
 	return changed
+}
+
+// ownsAutoAgent reports whether the auto-detector currently owns the window
+// backed by ptyID. It reads under the state read lock, the fast-path gate that
+// keeps clearExitedAgent off the write lock for panes it would never touch.
+func (s *Session) ownsAutoAgent(ptyID string) bool {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	for i := range s.state.Windows {
+		if s.state.Windows[i].PTYID == ptyID {
+			return s.autoAgentOwned[s.state.Windows[i].ID]
+		}
+	}
+	return false
 }
 
 // errNoAgentDetectChange tells mutateState an agent-detection tick changed no
