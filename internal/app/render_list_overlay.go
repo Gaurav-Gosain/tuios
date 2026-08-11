@@ -66,9 +66,9 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	var lines []string
 	rowYOffset := 0
 	if cfg.Search {
-		cursor := overlay.Style(bg).Foreground(pal.Accent).Render("█")
 		search := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("› ") +
-			overlay.Style(bg).Foreground(pal.Fg).Render(cfg.Query) + cursor
+			overlay.Style(bg).Foreground(pal.Fg).Render(cfg.Query) +
+			overlay.Cursor(" ", bg, pal.Fg)
 		lines = append(lines, search, overlay.Rule(cfg.Width, bg, pal))
 		rowYOffset = 2
 	}
