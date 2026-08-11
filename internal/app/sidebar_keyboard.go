@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -178,6 +180,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		// Switching workspace is navigation, not a request for a pane, so the
 		// rail keeps the keyboard and the cursor stays on the band.
 		m.SwitchToWorkspace(row.Workspace)
+	case sidebarRowNewSession:
+		m.SidebarNewSession()
 	case sidebarRowSession:
 		if row.SessionID == m.sidebarCurrentSessionID() {
 			m.sidebarToggleCollapse(row.SessionID)
@@ -344,6 +348,52 @@ func (m *OS) SidebarRenameCursor() {
 		return
 	}
 	m.BeginRenameWindow(w)
+}
+
+// SidebarCanCreateSession reports whether this client can make a session at
+// all. Standalone has no daemon and so no session list, which is why the rail's
+// new-session row and its key are absent there rather than dimmed.
+func (m *OS) SidebarCanCreateSession() bool {
+	return m.DaemonClient != nil
+}
+
+// SidebarNewSession creates a detached session and switches to it: create and
+// go, no prompt. The name matches what `tuios new` would have picked, so the
+// two ways in never invent different conventions.
+func (m *OS) SidebarNewSession() {
+	if !m.SidebarCanCreateSession() {
+		m.ShowNotification("Sessions need the daemon", "info", config.NotificationDuration)
+		return
+	}
+	name := m.nextSessionName()
+	if err := m.DaemonClient.CreateDetachedSession(name, m.GetContentWidth(), m.GetUsableHeight()); err != nil {
+		m.ShowNotification("Create failed: "+err.Error(), "error", config.NotificationDuration*2)
+		return
+	}
+	if err := m.SwitchToSession(name); err != nil {
+		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+		return
+	}
+	// The rail relays out around a session that did not exist last frame; follow
+	// it by name so the cursor lands on it instead of on whatever took its index.
+	m.sidebarFollowSession = name
+}
+
+// nextSessionName is the first free "session-N", the same scheme the CLI's
+// `tuios new` uses.
+func (m *OS) nextSessionName() string {
+	taken := make(map[string]bool)
+	if m.DaemonClient != nil {
+		for _, n := range m.DaemonClient.AvailableSessionNames() {
+			taken[n] = true
+		}
+	}
+	for i := 0; ; i++ {
+		name := fmt.Sprintf("session-%d", i)
+		if !taken[name] {
+			return name
+		}
+	}
 }
 
 // SidebarAccentCursor opens the accent swatches for the cursor row's window.

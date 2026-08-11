@@ -1,6 +1,7 @@
 package input
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,11 +26,18 @@ func TestRailScopeRoutesKeys(t *testing.T) {
 		t.Fatal("s did not enter the rail scope")
 	}
 
-	// n is new_window on a pane; while the rail owns the keyboard it must not
-	// create a window (it is the rail's new_session, a no-op-with-hint for now).
+	// n is new_window on a pane; while the rail owns the keyboard it is the
+	// rail's new_session, so it must not create a window. Standalone has no
+	// daemon to create a session on either, which it says rather than doing.
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'n', Text: "n"}, o)
 	if len(o.Windows) != before {
 		t.Fatalf("n created a window while the rail was focused (windows %d -> %d)", before, len(o.Windows))
+	}
+	if len(o.Notifications) == 0 {
+		t.Fatal("n in the rail did not reach new_session")
+	}
+	if msg := o.Notifications[len(o.Notifications)-1].Message; !strings.Contains(msg, "daemon") {
+		t.Errorf("n in the rail said %q, not that sessions need the daemon", msg)
 	}
 
 	// esc leaves the rail rather than switching pane modes.

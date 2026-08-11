@@ -42,6 +42,9 @@ const (
 	// session. Unlike every other kind it is narrower than its line: several
 	// chips share one row, each with its own columns.
 	sidebarRowWorkspace
+	// sidebarRowNewSession is the "+ new session" affordance at the foot of the
+	// sessions list. It targets nothing that exists yet.
+	sidebarRowNewSession
 )
 
 // sidebarRowHit is the on-screen rectangle of one sidebar row, in absolute
@@ -650,6 +653,24 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		}
 	}
 
+	// The pill sits after the last session, which is exactly where the session it
+	// creates will land: orderByKey appends. Standalone has no session list to
+	// add to, so the row is absent rather than dimmed; a permanently dead control
+	// is noise.
+	if m.SidebarCanCreateSession() {
+		hovered := len(rows) == treeHover || isCursor(sidebarRowNewSession, "", "")
+		if isCursor(sidebarRowNewSession, "", "") {
+			cursorLogical = len(rows)
+		}
+		rows = append(rows, logicalRow{
+			text:        sidebarNewSessionRow(variant, cw, pal, hovered),
+			interactive: true,
+			windowIndex: -1,
+			kind:        sidebarRowNewSession,
+		})
+		nav = append(nav, sidebarNavRow{Kind: sidebarRowNewSession, WindowIndex: -1})
+	}
+
 	// Keyboard cursor auto-scroll: a cursor in the tree region is kept on screen,
 	// so j/k past the fold scrolls the list the way a wheel would.
 	if m.SidebarFocused && cursorLogical >= 0 && treeH > 0 {
@@ -739,6 +760,27 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 
 	return lines, w
+}
+
+// sidebarNewSessionRow renders the "+ new session" affordance: dim, the whole
+// row a click target, lit like any other row under the pointer or the cursor.
+func sidebarNewSessionRow(variant, cw int, pal overlay.Palette, hovered bool) string {
+	label := "+ new session"
+	switch variant {
+	case sidebarVariantGlyph:
+		label = "+"
+	case sidebarVariantNarrow:
+		label = "+ new"
+	}
+
+	var rowBg color.Color
+	fg := pal.FgMute
+	if hovered {
+		rowBg, fg = pal.RowSel, pal.Fg
+	}
+	row := sidebarStyle(rowBg, nil).Render(" ") +
+		sidebarStyle(rowBg, fg).Render(overlay.Truncate(label, max(cw-2, 1)))
+	return sidebarFit(row, cw, rowBg)
 }
 
 // windowIndexByID returns the index of the window with the given ID in m.Windows,

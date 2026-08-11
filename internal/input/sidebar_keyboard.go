@@ -79,9 +79,11 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarRenameCursor()
 	case sidebarActAccent:
 		o.SidebarAccentCursor()
-	case sidebarActNewSession, sidebarActNewWindow:
-		// Registered now, real behavior arrives in M4/M6. A hint keeps the key
-		// from feeling dead without pretending it did something.
+	case sidebarActNewSession:
+		o.SidebarNewSession()
+	case sidebarActNewWindow:
+		// Registered now, real behavior arrives in M6. A hint keeps the key from
+		// feeling dead without pretending it did something.
 		o.ShowNotification("Not available yet", "info", config.NotificationDuration)
 	case sidebarActExit:
 		o.ExitSidebarFocus()

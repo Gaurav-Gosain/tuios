@@ -144,6 +144,8 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		m.sidebarFocusWindow(hit)
 	case sidebarRowWorkspace:
 		m.SwitchToWorkspace(hit.Workspace)
+	case sidebarRowNewSession:
+		m.SidebarNewSession()
 	case sidebarRowSession:
 		if m.sidebarChevronZone(hit, x) {
 			m.sidebarToggleCollapse(hit.SessionID)

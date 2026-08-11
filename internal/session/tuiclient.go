@@ -1078,6 +1078,38 @@ func (c *TUIClient) TryRefreshSessionList() {
 	_, _ = c.RefreshSessionList()
 }
 
+// CreateDetachedSession asks the daemon for a headless session with an initial
+// window, the same request `tuios new` makes over a control connection. The
+// daemon answers with the refreshed listing, which is applied to the cache so
+// the new session is in the rail before the next poll rather than after it.
+func (c *TUIClient) CreateDetachedSession(name string, width, height int) error {
+	msg, err := NewMessageWithCodec(MsgNew, &NewPayload{
+		SessionName: name,
+		Width:       width,
+		Height:      height,
+		Detach:      true,
+	}, c.codec)
+	if err != nil {
+		return err
+	}
+	stamp := c.listingStamp()
+	resp, err := c.sendAndWaitResponse(msg, MsgSessionList, MsgError)
+	if err != nil {
+		return err
+	}
+	if resp.Type == MsgError {
+		var errPayload ErrorPayload
+		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		return fmt.Errorf("create session: %s", errPayload.Message)
+	}
+	var payload SessionListPayload
+	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		return err
+	}
+	c.applySessionListing(payload.Sessions, stamp)
+	return nil
+}
+
 // RefreshSessionList queries the daemon for an up-to-date session list and
 // updates the cached availableSessionNames. Blocks until response arrives.
 // Safe to call while the read loop is running.
