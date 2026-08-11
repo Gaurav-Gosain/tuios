@@ -2,9 +2,6 @@
 package input
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -71,36 +68,8 @@ func findDockItemClicked(x, y int, o *app.OS) int {
 	// Use shared layout calculation to ensure positions match rendering exactly
 	layout := o.CalculateDockLayout()
 
-	// DEBUG: Log dock click attempts
-	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-			_, _ = fmt.Fprintf(f, "[DOCK CLICK] X=%d Y=%d, Height=%d, CenterStartX=%d, numItems=%d, numVisible=%d\n",
-				x, y, o.Height, layout.CenterStartX, len(layout.ItemPositions), len(layout.VisibleItems))
-			_ = f.Close()
-		}
-	}
-
-	// Check which item was clicked using the calculated positions
-	for i, itemPos := range layout.ItemPositions {
-		// DEBUG: Log each item bounds
-		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-			if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-				_, _ = fmt.Fprintf(f, "[DOCK ITEM %d] windowIndex=%d, Clickable [%d,%d), Y=%d (checking Y==%d)\n",
-					i, itemPos.WindowIndex, itemPos.StartX, itemPos.EndX, o.Height-1, y)
-				_ = f.Close()
-			}
-		}
-
-		// Check if click is within this dock item
+	for _, itemPos := range layout.ItemPositions {
 		if x >= itemPos.StartX && x < itemPos.EndX && y == o.GetDockbarContentYPosition() {
-			// DEBUG: Log successful match
-			if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-				if f, err := os.OpenFile("/tmp/tuios-dock-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-					_, _ = fmt.Fprintf(f, "[DOCK MATCH] Item %d (windowIndex=%d) matched! Click X=%d in range [%d,%d)\n",
-						i, itemPos.WindowIndex, x, itemPos.StartX, itemPos.EndX)
-					_ = f.Close()
-				}
-			}
 			return itemPos.WindowIndex
 		}
 	}
