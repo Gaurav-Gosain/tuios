@@ -374,6 +374,9 @@ type sidebarChipSpan struct {
 // column within the content, both 0 and -1 when absent. A chip that would not
 // fit is dropped rather than clipped: half a chip is half a click target.
 func (m *OS) sidebarWorkspaceBand(variant, cw int, pal overlay.Palette, cursorWS, hoverX int) (string, []sidebarChipSpan) {
+	if config.SidebarWorkspaces == config.SidebarWorkspacesOff {
+		return "", nil
+	}
 	occupied := m.occupiedWorkspaces()
 	if len(occupied) < 2 {
 		return "", nil
@@ -527,7 +530,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// the attached one from live state, others from the cached listing, so
 	// agents on other sessions surface here marked Foreign.
 	var agents []sidebarAgentEntry
-	if variant != sidebarVariantGlyph {
+	if variant != sidebarVariantGlyph && config.SidebarShowAgents {
 		for _, s := range sessions {
 			for _, win := range s.Children {
 				if win.AgentState == "" {

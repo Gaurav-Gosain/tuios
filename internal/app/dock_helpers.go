@@ -82,6 +82,9 @@ func (m *OS) occupiedWorkspaces() []int {
 // nowhere a click could take you, so the strip stays off and the idle dock is
 // exactly what it was.
 func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
+	if !config.DockWorkspaceTabs {
+		return nil
+	}
 	tabs := make([]dockWorkspaceTab, 0, m.NumWorkspaces)
 	for _, n := range m.occupiedWorkspaces() {
 		tabs = append(tabs, dockWorkspaceTab{

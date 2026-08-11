@@ -510,7 +510,21 @@ var (
 
 	// SidebarShowCounts draws the window count on each session row.
 	SidebarShowCounts = true
+
+	// SidebarShowAgents draws the running-agents section above the session tree.
+	SidebarShowAgents = true
+
+	// SidebarWorkspaces is how the current session's workspaces appear in the
+	// rail: "band" (a row of chips) or "off".
+	SidebarWorkspaces = SidebarWorkspacesBand
+
+	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
+	SidebarMarquee = true
 )
+
+// DockWorkspaceTabs draws the dock's clickable workspace strip. Off leaves the
+// dock exactly as it was before the strip existed.
+var DockWorkspaceTabs = true
 
 // HideWindowButtons controls whether to hide window control buttons
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config

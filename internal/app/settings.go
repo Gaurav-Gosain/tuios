@@ -391,42 +391,42 @@ func (m *OS) settingsCategories() []settingsCategory {
 			func() bool { return config.SidebarEnabled },
 			func(m *OS, v bool) {
 				config.SidebarEnabled = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarEnabled = boolPtr(v) })
+				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Enabled = boolPtr(v) })
 				m.applyAppearanceLive(true)
 			}),
 		enumItem("Position", "Which edge the sidebar reserves", sidebarPositionOptions,
 			func() string { return config.SidebarPosition },
 			func(m *OS, v string) {
 				config.SidebarPosition = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarPosition = v })
+				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Position = v })
 				m.applyAppearanceLive(true)
 			}),
 		intItem("Width", "Preferred sidebar width in columns", 10, 60, 2,
 			func() int { return config.SidebarWidth },
 			func(m *OS, v int) {
 				config.SidebarWidth = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarWidth = v })
+				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Width = v })
 				m.applyAppearanceLive(true)
 			}),
 		boolItem("Show windows", "List window rows under the current session",
 			func() bool { return config.SidebarShowWindows },
 			func(m *OS, v bool) {
 				config.SidebarShowWindows = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarShowWindows = boolPtr(v) })
+				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowWindows = boolPtr(v) })
 				m.applyAppearanceLive(false)
 			}),
 		boolItem("Show glyphs", "Draw agent-state glyphs on sidebar rows",
 			func() bool { return config.SidebarShowGlyphs },
 			func(m *OS, v bool) {
 				config.SidebarShowGlyphs = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarShowGlyphs = boolPtr(v) })
+				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowGlyphs = boolPtr(v) })
 				m.applyAppearanceLive(false)
 			}),
 		boolItem("Show counts", "Draw window counts on sidebar session rows",
 			func() bool { return config.SidebarShowCounts },
 			func(m *OS, v bool) {
 				config.SidebarShowCounts = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.SidebarShowCounts = boolPtr(v) })
+				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowCounts = boolPtr(v) })
 				m.applyAppearanceLive(false)
 			}),
 	}

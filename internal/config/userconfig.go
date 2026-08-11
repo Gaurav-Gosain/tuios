@@ -127,12 +127,6 @@ type AppearanceConfig struct {
 	FocusFollowsMouseInTerminal *bool   `toml:"focus_follows_mouse_in_terminal"` // Also hover-focus while in terminal mode (default: false)
 	WordCharacters              *string `toml:"word_characters"`                 // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
 	DockbarPosition             string  `toml:"dockbar_position"`                // Dockbar position: bottom, top, hidden
-	SidebarEnabled              *bool   `toml:"sidebar_enabled"`                 // Show the vertical session sidebar (default: false)
-	SidebarPosition             string  `toml:"sidebar_position"`                // Sidebar edge: left, right, hidden (default: left)
-	SidebarWidth                int     `toml:"sidebar_width"`                   // Preferred sidebar width in columns (default: 28)
-	SidebarShowWindows          *bool   `toml:"sidebar_show_windows"`            // List window rows under the current session (default: true)
-	SidebarShowGlyphs           *bool   `toml:"sidebar_show_glyphs"`             // Draw agent-state glyphs on sidebar rows (default: true)
-	SidebarShowCounts           *bool   `toml:"sidebar_show_counts"`             // Draw window counts on sidebar session rows (default: true)
 	PreferredShell              string  `toml:"preferred_shell"`                 // Preferred shell: if empty, auto-detect based on platform.
 	AnimationsEnabled           *bool   `toml:"animations_enabled"`              // Enable UI animations (default: true). Set to false for instant transitions.
 	ConfirmQuit                 *bool   `toml:"confirm_quit"`                    // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
@@ -152,6 +146,46 @@ type AppearanceConfig struct {
 	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
 	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
 	MaxFPS               int    `toml:"max_fps"`                // Maximum render FPS (default: 60, max: 120)
+	DockWorkspaceTabs    *bool  `toml:"dock_workspace_tabs"`    // Clickable workspace strip in the dock (default: true)
+
+	// Legacy flat sidebar keys, superseded by the [appearance.sidebar] table.
+	// migrateLegacySidebar folds them into it and clears them, so they are read
+	// from an old file but never written back to a new one.
+	SidebarEnabled     *bool  `toml:"sidebar_enabled,omitempty"`
+	SidebarPosition    string `toml:"sidebar_position,omitempty"`
+	SidebarWidth       int    `toml:"sidebar_width,omitempty"`
+	SidebarShowWindows *bool  `toml:"sidebar_show_windows,omitempty"`
+	SidebarShowGlyphs  *bool  `toml:"sidebar_show_glyphs,omitempty"`
+	SidebarShowCounts  *bool  `toml:"sidebar_show_counts,omitempty"`
+
+	// Sidebar is last so the TOML encoder emits [appearance.sidebar] after every
+	// scalar key of [appearance]; a table written mid-section would swallow the
+	// keys that follow it.
+	Sidebar SidebarConfig `toml:"sidebar"`
+}
+
+// Sidebar workspace-band modes. See SidebarConfig.Workspaces.
+const (
+	SidebarWorkspacesBand = "band"
+	SidebarWorkspacesOff  = "off"
+)
+
+// SidebarWorkspacesModes lists the valid values for appearance.sidebar.workspaces.
+var SidebarWorkspacesModes = []string{SidebarWorkspacesBand, SidebarWorkspacesOff}
+
+// SidebarConfig holds the [appearance.sidebar] table: everything about the
+// vertical session rail. Each toggle is a pointer so nil can mean "unset, use
+// the default" and an explicit false survives a reload.
+type SidebarConfig struct {
+	Enabled     *bool  `toml:"enabled"`      // Show the rail (default: false)
+	Position    string `toml:"position"`     // Edge: left, right, hidden (default: left)
+	Width       int    `toml:"width"`        // Preferred width in columns for a wide screen (default: 28)
+	ShowWindows *bool  `toml:"show_windows"` // Window rows under the current session (default: true)
+	ShowGlyphs  *bool  `toml:"show_glyphs"`  // Agent-state glyph on each row (default: true)
+	ShowCounts  *bool  `toml:"show_counts"`  // Window count on each session row (default: true)
+	ShowAgents  *bool  `toml:"show_agents"`  // Running-agents section at the top (default: true)
+	Workspaces  string `toml:"workspaces"`   // Workspace chip band: band, off (default: band)
+	Marquee     *bool  `toml:"marquee"`      // Scroll a hovered row's overflowing title (default: true)
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
@@ -200,9 +234,12 @@ func DefaultConfig() *UserConfig {
 			ScrollbackLines:   10000,
 			ScrollLines:       3,
 			DockbarPosition:   "bottom",
-			SidebarPosition:   "left",
-			SidebarWidth:      SidebarDefaultWidth,
 			PreferredShell:    "",
+			Sidebar: SidebarConfig{
+				Position:   "left",
+				Width:      SidebarDefaultWidth,
+				Workspaces: SidebarWorkspacesBand,
+			},
 		},
 		Daemon: DaemonConfig{
 			LogLevel:     "off",
@@ -632,6 +669,8 @@ func createDefaultConfig() (*UserConfig, error) {
 // Applying the parsed values to package globals is done separately by
 // ApplyAppearanceConfig, which must run on the Bubble Tea goroutine.
 func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
+	migrateLegacySidebar(cfg)
+
 	if cfg.Appearance.BorderStyle == "" {
 		cfg.Appearance.BorderStyle = defaultCfg.Appearance.BorderStyle
 	}
@@ -640,11 +679,14 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
 	}
 
-	if cfg.Appearance.SidebarPosition == "" {
-		cfg.Appearance.SidebarPosition = defaultCfg.Appearance.SidebarPosition
+	if cfg.Appearance.Sidebar.Position == "" {
+		cfg.Appearance.Sidebar.Position = defaultCfg.Appearance.Sidebar.Position
 	}
-	if cfg.Appearance.SidebarWidth <= 0 {
-		cfg.Appearance.SidebarWidth = defaultCfg.Appearance.SidebarWidth
+	if cfg.Appearance.Sidebar.Width <= 0 {
+		cfg.Appearance.Sidebar.Width = defaultCfg.Appearance.Sidebar.Width
+	}
+	if cfg.Appearance.Sidebar.Workspaces == "" {
+		cfg.Appearance.Sidebar.Workspaces = defaultCfg.Appearance.Sidebar.Workspaces
 	}
 
 	// Note: HideWindowButtons defaults to false (zero value)
@@ -695,26 +737,44 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 		DockbarPosition = cfg.Appearance.DockbarPosition
 	}
 
-	// Sidebar. Position and width fall back to their defaults when unset; the
-	// three show-flags and the enable flag are pointer bools so turning one off
-	// in the settings page survives a reload just as turning it on does.
-	if cfg.Appearance.SidebarEnabled != nil {
-		SidebarEnabled = *cfg.Appearance.SidebarEnabled
+	// Sidebar. Also runs for a config that never went through LoadUserConfig (the
+	// settings page builds one in memory), so an old flat key reaches the globals
+	// whichever way the config got here.
+	migrateLegacySidebar(cfg)
+
+	// Position, width and the band mode fall back to their defaults when unset;
+	// the toggles are pointer bools so turning one off in the settings page
+	// survives a reload just as turning it on does.
+	sb := cfg.Appearance.Sidebar
+	if sb.Enabled != nil {
+		SidebarEnabled = *sb.Enabled
 	}
-	if cfg.Appearance.SidebarPosition != "" {
-		SidebarPosition = cfg.Appearance.SidebarPosition
+	if sb.Position != "" {
+		SidebarPosition = sb.Position
 	}
-	if cfg.Appearance.SidebarWidth > 0 {
-		SidebarWidth = cfg.Appearance.SidebarWidth
+	if sb.Width > 0 {
+		SidebarWidth = sb.Width
 	}
-	if cfg.Appearance.SidebarShowWindows != nil {
-		SidebarShowWindows = *cfg.Appearance.SidebarShowWindows
+	if sb.ShowWindows != nil {
+		SidebarShowWindows = *sb.ShowWindows
 	}
-	if cfg.Appearance.SidebarShowGlyphs != nil {
-		SidebarShowGlyphs = *cfg.Appearance.SidebarShowGlyphs
+	if sb.ShowGlyphs != nil {
+		SidebarShowGlyphs = *sb.ShowGlyphs
 	}
-	if cfg.Appearance.SidebarShowCounts != nil {
-		SidebarShowCounts = *cfg.Appearance.SidebarShowCounts
+	if sb.ShowCounts != nil {
+		SidebarShowCounts = *sb.ShowCounts
+	}
+	if sb.ShowAgents != nil {
+		SidebarShowAgents = *sb.ShowAgents
+	}
+	if sb.Workspaces != "" {
+		SidebarWorkspaces = sb.Workspaces
+	}
+	if sb.Marquee != nil {
+		SidebarMarquee = *sb.Marquee
+	}
+	if cfg.Appearance.DockWorkspaceTabs != nil {
+		DockWorkspaceTabs = *cfg.Appearance.DockWorkspaceTabs
 	}
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are
@@ -881,6 +941,36 @@ func fillMissingDaemon(cfg, defaultCfg *UserConfig) {
 		cfg.Daemon.DefaultCodec = defaultCfg.Daemon.DefaultCodec
 	}
 	// SocketPath defaults to empty (use XDG default), so we don't override it
+}
+
+// migrateLegacySidebar folds the flat appearance.sidebar_* keys into the
+// [appearance.sidebar] table, so a config written before the table existed keeps
+// behaving identically. The table wins where both are present, and each legacy
+// field is cleared once read: that makes the migration idempotent and keeps the
+// next save from writing the old spelling back out.
+func migrateLegacySidebar(cfg *UserConfig) {
+	a := &cfg.Appearance
+	s := &a.Sidebar
+	if s.Enabled == nil {
+		s.Enabled = a.SidebarEnabled
+	}
+	if s.Position == "" {
+		s.Position = a.SidebarPosition
+	}
+	if s.Width <= 0 {
+		s.Width = a.SidebarWidth
+	}
+	if s.ShowWindows == nil {
+		s.ShowWindows = a.SidebarShowWindows
+	}
+	if s.ShowGlyphs == nil {
+		s.ShowGlyphs = a.SidebarShowGlyphs
+	}
+	if s.ShowCounts == nil {
+		s.ShowCounts = a.SidebarShowCounts
+	}
+	a.SidebarEnabled, a.SidebarPosition, a.SidebarWidth = nil, "", 0
+	a.SidebarShowWindows, a.SidebarShowGlyphs, a.SidebarShowCounts = nil, nil, nil
 }
 
 // migrateLegacyKeybinds rewrites bindings whose meaning changed, so a config
