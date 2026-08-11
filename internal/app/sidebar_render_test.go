@@ -81,8 +81,19 @@ func TestSidebarFitsNarrowScreens(t *testing.T) {
 					sidebarX = m.GetRenderWidth() - w
 				}
 				for _, hit := range m.SidebarHits {
-					if hit.X0 != sidebarX || hit.X1 != sidebarX+w {
-						t.Errorf("hit X range [%d,%d) not the sidebar band [%d,%d)", hit.X0, hit.X1, sidebarX, sidebarX+w)
+					// A row hit claims the whole band. A band chip and a footer
+					// control share their line with a sibling, so each claims its
+					// own columns and only has to stay inside it.
+					switch hit.Kind {
+					case sidebarRowWorkspace, sidebarRowNewSession, sidebarRowCollapse:
+						if hit.X0 < sidebarX || hit.X1 > sidebarX+w || hit.X0 >= hit.X1 {
+							t.Errorf("zone hit X range [%d,%d) outside the sidebar band [%d,%d)",
+								hit.X0, hit.X1, sidebarX, sidebarX+w)
+						}
+					default:
+						if hit.X0 != sidebarX || hit.X1 != sidebarX+w {
+							t.Errorf("hit X range [%d,%d) not the sidebar band [%d,%d)", hit.X0, hit.X1, sidebarX, sidebarX+w)
+						}
 					}
 					if hit.Y0 < topMargin || hit.Y0 >= topMargin+m.GetUsableHeight() {
 						t.Errorf("hit Y %d outside the sidebar band", hit.Y0)

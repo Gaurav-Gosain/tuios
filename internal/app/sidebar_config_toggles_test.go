@@ -23,17 +23,17 @@ func swapBool(t *testing.T, p *bool, v bool) {
 // default and gone when the knob is off, leaving the session tree intact.
 func TestSidebarShowAgentsTogglesSection(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
-	if !strings.Contains(sidebarText(t, m), "Agents") {
+	if !strings.Contains(sidebarText(t, m), "agents") {
 		t.Fatal("agents section missing with the default config; the test premise is wrong")
 	}
 
 	swapBool(t, &config.SidebarShowAgents, false)
 	m = sidebarTestOS(t, 120, 40, "left")
 	out := sidebarText(t, m)
-	if strings.Contains(out, "Agents") {
+	if strings.Contains(out, "agents") {
 		t.Error("show_agents = false still drew the agents section")
 	}
-	if !strings.Contains(out, "Sessions") {
+	if !strings.Contains(out, "sessions") {
 		t.Error("show_agents = false took the session tree with it")
 	}
 	for _, h := range m.SidebarHits {

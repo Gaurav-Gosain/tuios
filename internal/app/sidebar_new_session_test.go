@@ -41,18 +41,16 @@ func TestNewSessionPillIsHiddenInStandalone(t *testing.T) {
 	}
 }
 
-// TestNewSessionPillSitsAfterTheSessions puts the pill where its result will
-// appear: new sessions append, so the row that makes one goes last.
-func TestNewSessionPillSitsAfterTheSessions(t *testing.T) {
+// TestNewSessionSitsInThePinnedFooter puts the control where controls live: the
+// rail's last lines, below everything it is not a member of, at every width.
+func TestNewSessionSitsInThePinnedFooter(t *testing.T) {
 	for _, size := range []struct {
 		name  string
 		w, h  int
 		label string
 	}{
-		// The + sits on the session rows' glyph column and the label on their
-		// name spine, so the two are two cells apart rather than adjacent.
-		{"full", 120, 40, "+  new session"},
-		{"narrow", 80, 24, "+  new"},
+		{"full", 120, 40, "+ new"},
+		{"narrow", 80, 24, "+ new"},
 		{"glyph", 51, 37, "+"},
 	} {
 		t.Run(size.name, func(t *testing.T) {
@@ -61,23 +59,35 @@ func TestNewSessionPillSitsAfterTheSessions(t *testing.T) {
 
 			hit, ok := newSessionHit(m)
 			if !ok {
-				t.Fatal("no new-session row with a daemon attached")
+				t.Fatal("no new-session control with a daemon attached")
 			}
-			if got := ansi.Strip(lines[hit.Y0-m.GetTopMargin()]); !strings.Contains(got, size.label) {
+			row := hit.Y0 - m.GetTopMargin()
+			if got := ansi.Strip(lines[row]); !strings.Contains(got, size.label) {
 				t.Errorf("row reads %q, want it to carry %q", got, size.label)
 			}
-
-			// Nothing from the sessions tree may be drawn below it.
+			// Pinned: nothing but the rest of the footer is drawn below it.
+			if row < len(lines)-2 {
+				t.Errorf("the control is on row %d of %d, want the footer at the bottom", row, len(lines))
+			}
 			for _, h := range m.SidebarHits {
-				if h.Kind == sidebarRowSession && h.Y0 > hit.Y0 {
-					t.Errorf("session row at y=%d sits below the pill at y=%d", h.Y0, hit.Y0)
+				if h.Kind != sidebarRowNewSession && h.Kind != sidebarRowCollapse && h.Y0 >= hit.Y0 {
+					t.Errorf("a %v row at y=%d sits at or below the footer at y=%d", h.Kind, h.Y0, hit.Y0)
 				}
 			}
 
-			// And the cursor can reach it: the last nav row is the pill.
-			last := m.SidebarNav[len(m.SidebarNav)-1]
-			if last.Kind != sidebarRowNewSession {
-				t.Errorf("last nav row is kind %v, want the new-session pill", last.Kind)
+			// And the cursor can reach it: the footer's rows close the nav list.
+			var kinds []sidebarRowKind
+			for _, n := range m.SidebarNav[max(len(m.SidebarNav)-2, 0):] {
+				kinds = append(kinds, n.Kind)
+			}
+			found := false
+			for _, k := range kinds {
+				if k == sidebarRowNewSession {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("the nav list ends with %v, want the new-session control among them", kinds)
 			}
 		})
 	}

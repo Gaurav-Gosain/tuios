@@ -464,6 +464,8 @@ func getDefaultSidebarKeybinds() map[string][]string {
 		"reorder_down": {"J", "shift+down"},
 		"reorder_up":   {"K", "shift+up"},
 		"section":      {"tab", "shift+tab"},
+		"narrow":       {"<"},
+		"widen":        {">"},
 		"jump_1":       {"1"},
 		"jump_2":       {"2"},
 		"jump_3":       {"3"},

@@ -83,6 +83,10 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarReorderCursor(-1)
 	case sidebarActSection:
 		o.SidebarCycleSection()
+	case sidebarActNarrow:
+		o.SidebarStepWidth(-1)
+	case sidebarActWiden:
+		o.SidebarStepWidth(1)
 	case sidebarActKill:
 		o.SidebarOpenCursorMenu(true) // session menu, Kill among its rows
 	case sidebarActMenu:

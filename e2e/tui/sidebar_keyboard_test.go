@@ -54,14 +54,16 @@ func TestSidebarKeyboardSwitchAndExit(t *testing.T) {
 		t.Fatalf("s did not give the keyboard to the rail: %v\n%s", err, term.Snapshot())
 	}
 
-	// G jumps to the last row, which is the "+ new session" pill at the foot of
-	// the sessions list, and k steps up onto the row above it: the other
-	// (collapsed) session bravo.
+	// G jumps to the last row. The rail's last two rows are its footer controls
+	// (the width stepper, then "+ new"), so two k steps land on the row above
+	// them: the other (collapsed) session bravo.
 	if err := term.SendKeys("G"); err != nil {
 		t.Fatalf("jump to last row: %v", err)
 	}
-	if err := term.SendKeys("k"); err != nil {
-		t.Fatalf("move cursor: %v", err)
+	for range 2 {
+		if err := term.SendKeys("k"); err != nil {
+			t.Fatalf("move cursor: %v", err)
+		}
 	}
 
 	// enter activates the cursor row and switches to bravo.

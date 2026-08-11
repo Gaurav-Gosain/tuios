@@ -84,9 +84,10 @@ func TestSidebarExpandCollapsePersists(t *testing.T) {
 	if len(hits) != 3 {
 		t.Fatalf("session rows = %d, want 3", len(hits))
 	}
-	// The current session starts expanded: its window rows are on screen.
-	if got := len(m.SidebarHits) - len(hits); got != 3+2 { // 3 windows + 2 agent rows
-		t.Fatalf("non-session rows = %d, want 5 (3 windows + 2 agents)", got)
+	// The current session starts expanded: its window rows are on screen. The
+	// footer's width stepper is a hit too, pinned below them.
+	if got := len(m.SidebarHits) - len(hits); got != 3+2+1 {
+		t.Fatalf("non-session rows = %d, want 6 (3 windows + 2 agents + the footer stepper)", got)
 	}
 
 	// A press on the name area of the current session row plus a release on it
@@ -208,7 +209,7 @@ func TestSidebarAgentsSectionListsAgentPanes(t *testing.T) {
 		}
 	}
 	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "Agents") {
+	if !strings.Contains(joined, "agents") {
 		t.Errorf("agents section header missing")
 	}
 
@@ -228,7 +229,7 @@ func TestSidebarAgentsSectionListsAgentPanes(t *testing.T) {
 		}},
 	})
 	lines, _ = m.sidebarPanelLinesForTree(bare)
-	if strings.Contains(strings.Join(lines, "\n"), "Agents") {
+	if strings.Contains(strings.Join(lines, "\n"), "agents") {
 		t.Errorf("agents section rendered with no agents running")
 	}
 	for _, h := range m.SidebarHits {

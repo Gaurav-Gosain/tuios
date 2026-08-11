@@ -73,19 +73,21 @@ func TestAgentsSectionPriorityOrder(t *testing.T) {
 	}
 }
 
-// TestRailDrawsAgentsAboveTree checks the inverted layout on screen: the Agents
-// header is the rail's first row, the hairline fences the section, and the
-// Sessions header follows it.
+// TestRailDrawsAgentsAboveTree checks the inverted layout on screen: the agents
+// header is the rail's first row, a blank row closes the section, and the
+// sessions header follows it. Blank rather than a hairline: that rule was the
+// third on one screen beside the rail edge and the dock separator, and empty
+// space separates as well while saying nothing.
 func TestRailDrawsAgentsAboveTree(t *testing.T) {
 	m, tree := attentionOS(t, 120, 40)
 	lines, _ := m.sidebarPanelLinesForTree(tree)
 
-	if !strings.Contains(lines[0], "Agents") {
+	if !strings.Contains(lines[0], "agents") {
 		t.Fatalf("row 0 = %q, want the Agents header first", lines[0])
 	}
 	sessionsRow := -1
 	for i, ln := range lines {
-		if strings.Contains(ln, "Sessions") {
+		if strings.Contains(ln, "sessions") {
 			sessionsRow = i
 			break
 		}
@@ -93,8 +95,11 @@ func TestRailDrawsAgentsAboveTree(t *testing.T) {
 	if sessionsRow <= 0 {
 		t.Fatalf("Sessions header at row %d, want it below the agents section", sessionsRow)
 	}
-	if rule := config.GetWindowSeparatorChar(); !strings.Contains(lines[sessionsRow-1], rule) {
-		t.Fatalf("row %d = %q, want the hairline fencing the agents section", sessionsRow-1, lines[sessionsRow-1])
+	if got := strings.TrimSpace(stripANSIForTrace(lines[sessionsRow-1])); got != "│" && got != "" {
+		t.Fatalf("row %d = %q, want a blank row closing the agents section", sessionsRow-1, lines[sessionsRow-1])
+	}
+	if rule := config.GetWindowSeparatorChar(); strings.Contains(lines[sessionsRow-1], strings.Repeat(rule, 4)) {
+		t.Fatalf("row %d still draws the hairline: %q", sessionsRow-1, lines[sessionsRow-1])
 	}
 }
 
@@ -150,8 +155,11 @@ func TestGlyphRailInksAttention(t *testing.T) {
 
 // ansiBackgroundCount counts background-set sequences in a styled row, which is
 // how "is this cell inked" is asked of a lipgloss string.
+// ansiBackgroundCount counts the cells carrying a truecolor background. The
+// background parameters may be merged into one SGR with a foreground, so it
+// matches the parameter run rather than a sequence that starts with it.
 func ansiBackgroundCount(s string) int {
-	return strings.Count(s, "\x1b[48;")
+	return strings.Count(s, "48;2;")
 }
 
 // TestSidebarCacheInvalidatesOnAttention checks the signature covers both new

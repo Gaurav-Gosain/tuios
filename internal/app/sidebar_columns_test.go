@@ -67,15 +67,25 @@ func TestSidebarRowsShareOneNameSpine(t *testing.T) {
 	}
 }
 
-// TestSidebarNewSessionRowSharesSessionColumns keeps the affordance that makes a
-// session in the same columns as the sessions it joins: the + on their glyph
-// column, the label on their name spine.
-func TestSidebarNewSessionRowSharesSessionColumns(t *testing.T) {
-	row := ansi.Strip(sidebarNewSessionRow(sidebarVariantFull, 30, theme.UI(), false))
-	if got := rowColumn(row, "+"); got != 2 {
-		t.Errorf("+ sits at column %d, want the session glyph column 2: %q", got, row)
+// The new-session control moved to the rail's footer, where it reads as a
+// control rather than as a row dressed like the sessions it is not one of. What
+// it must keep is agreement between the columns it is drawn on and the columns
+// its hit zone claims.
+func TestSidebarFooterZonesMatchWhatIsDrawn(t *testing.T) {
+	m := daemonRailOS(t, 120, 40)
+	lines, zones := m.sidebarFooter(sidebarVariantFull, 30, theme.UI(), true, -1, -1,
+		func(sidebarRowKind) bool { return false })
+	if len(lines) != 1 {
+		t.Fatalf("the full-width footer took %d lines, want both controls on one", len(lines))
 	}
-	if got := rowColumn(row, "new session"); got != 5 {
-		t.Errorf("label sits at column %d, want the session name spine 5: %q", got, row)
+	row := ansi.Strip(lines[0])
+	for _, z := range zones {
+		want := "+ new"
+		if z.Kind == sidebarRowCollapse {
+			want = "«"
+		}
+		if got := rowColumn(row, want); got != z.X0 {
+			t.Errorf("%q is drawn at column %d but its hit zone starts at %d: %q", want, got, z.X0, row)
+		}
 	}
 }

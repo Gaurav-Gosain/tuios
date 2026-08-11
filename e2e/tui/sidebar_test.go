@@ -8,10 +8,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// sidebarHeader is the chip the sidebar renders at the top of its column.
+// sidebarHeader is the label the sidebar renders above its session list.
 // Asserting on it proves the sidebar panel is actually on screen rather than
-// that a config flag was flipped.
-const sidebarHeader = "Sessions"
+// that a config flag was flipped. Lowercase: the rail's headers are furniture
+// and are drawn as such.
+const sidebarHeader = "sessions"
 
 // toggleSidebarViaPalette opens the command palette, runs the "Toggle Sidebar"
 // entry, and waits for the palette to close.

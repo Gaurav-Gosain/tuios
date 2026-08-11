@@ -251,6 +251,8 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		row("reorder_down", "Move the session down the rail"),
 		row("reorder_up", "Move the session up the rail"),
 		row("section", "Cycle between agents and the session tree"),
+		row("narrow", "Narrow the rail a step: full, narrow, glyphs"),
+		row("widen", "Widen the rail back to its configured width"),
 		row("menu", "Open the menu for the row under the cursor"),
 		row("kill", "Open the session menu, which is where Kill lives"),
 		row("rename", "Rename the window under the cursor"),

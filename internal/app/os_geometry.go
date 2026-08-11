@@ -300,6 +300,13 @@ func (m *OS) GetRenderWidth() int {
 // to nothing. If the floor would be violated it steps down to a narrower variant
 // first, then hides.
 func (m *OS) GetSidebarWidth() int {
+	return m.sidebarWidthFor(config.SidebarWidth)
+}
+
+// sidebarWidthFor is GetSidebarWidth against a hypothetical preferred width, so
+// the footer stepper can ask what a width would actually get it before offering
+// the step. GetSidebarWidth is this with the configured preference.
+func (m *OS) sidebarWidthFor(prefer int) int {
 	if !config.SidebarEnabled || config.SidebarPosition == "hidden" {
 		return 0
 	}
@@ -315,9 +322,9 @@ func (m *OS) GetSidebarWidth() int {
 	case rw < config.SidebarBreakpointNarrow:
 		w = config.SidebarGlyphWidth
 	case rw < config.SidebarBreakpointFull:
-		w = config.SidebarNarrowWidth
+		w = min(max(prefer, config.SidebarGlyphWidth), config.SidebarNarrowWidth)
 	default:
-		w = max(config.SidebarWidth, config.SidebarGlyphWidth)
+		w = max(prefer, config.SidebarGlyphWidth)
 	}
 
 	// Enforce the pane floor by stepping down to a narrower variant rather than

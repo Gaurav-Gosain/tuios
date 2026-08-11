@@ -182,6 +182,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.SwitchToWorkspace(row.Workspace)
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
+	case sidebarRowCollapse:
+		m.SidebarStepWidth(0) // whichever step the footer is offering
 	case sidebarRowSession:
 		if row.SessionID == m.sidebarCurrentSessionID() {
 			m.sidebarToggleCollapse(row.SessionID)
@@ -355,6 +357,45 @@ func (m *OS) SidebarRenameCursor() {
 // new-session row and its key are absent there rather than dimmed.
 func (m *OS) SidebarCanCreateSession() bool {
 	return m.DaemonClient != nil
+}
+
+// SidebarStepWidth moves the rail one variant narrower (dir < 0) or back to the
+// configured width (dir > 0), the keyboard's half of the footer stepper. dir 0
+// takes whichever step the footer is currently offering, so the key and a click
+// on the glyph do exactly the same thing.
+//
+// It writes the preferred width, not the drawn one: the screen still has the
+// last word through GetSidebarWidth, so a step that the render width cannot
+// honour is simply not offered.
+func (m *OS) SidebarStepWidth(dir int) {
+	variant := sidebarVariant(m.GetSidebarWidth())
+	switch {
+	case dir < 0 && variant == sidebarVariantFull:
+		config.SidebarWidth = config.SidebarNarrowWidth
+	case dir < 0 && variant == sidebarVariantNarrow:
+		config.SidebarWidth = config.SidebarGlyphWidth
+	case dir < 0:
+		return // already the narrowest
+	case dir > 0 && variant == sidebarVariantGlyph:
+		config.SidebarWidth = max(config.SidebarDefaultWidth, config.SidebarNarrowWidth)
+	case dir > 0 && variant == sidebarVariantNarrow:
+		config.SidebarWidth = config.SidebarDefaultWidth
+	case dir > 0:
+		return // already the widest
+	default:
+		_, target, ok := m.sidebarCollapseGlyph(variant)
+		if !ok {
+			return
+		}
+		config.SidebarWidth = target
+	}
+	if m.AutoTiling {
+		m.TileAllWindows()
+	} else {
+		m.ClampWindowsToView()
+	}
+	m.saveSidebarState()
+	m.MarkAllDirty()
 }
 
 // SidebarNewSession creates a detached session and switches to it: create and
