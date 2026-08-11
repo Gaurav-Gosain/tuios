@@ -302,9 +302,10 @@ func sidebarChevron(expanded bool) string {
 // and the agents section all measure from it, so the rail keeps one glyph column
 // and one name spine (indent+2) whatever kind of row you are looking at.
 func sidebarPaneIndent(variant int) int {
-	if variant == sidebarVariantNarrow {
-		return 2
-	}
+	// One indent at every width. A session row is chevron, space, glyph at every
+	// variant, so its name always starts three cells in; narrowing panes to two
+	// in the narrow rail put their titles a column left of the names above them,
+	// which is the ragged edge you see before you can name it.
 	return 3
 }
 
@@ -1071,8 +1072,14 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 	if name == "" {
 		name = "shell"
 	}
+	// A pane in another session carries that session as a prefix. It is context,
+	// not the answer, so it renders muted against the full-strength pane name and
+	// gives its cells up first when the row runs out of room.
+	prefix := ""
 	if e.Foreign {
-		name = printableTitle(e.SessionID) + "/" + name
+		if s := printableTitle(e.SessionID); s != "" {
+			prefix = s + "/"
+		}
 	}
 
 	// How long the pane has been in this state, in place of a state word: the
@@ -1100,10 +1107,17 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 		nameStyle = nameStyle.Bold(true)
 		timeFg = sidebarStateColor(e.State, e.DoneSeen, pal)
 	}
+	// The prefix yields before the name does: with room for both it is drawn in
+	// full, and it is dropped entirely before a single cell of the pane name goes.
+	shown := prefix
+	if lipgloss.Width(shown)+2 > avail {
+		shown = ""
+	}
 	row := sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent)) +
 		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
-		nameStyle.Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, avail, hovered))
+		sidebarStyle(rowBg, pal.FgMute).Render(shown) +
+		nameStyle.Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, max(avail-lipgloss.Width(shown), 1), hovered))
 	if label != "" {
 		gap := max(cw-lipgloss.Width(row)-labelW, 0)
 		row += sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", gap)) +
