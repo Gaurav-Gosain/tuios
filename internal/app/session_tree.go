@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -113,6 +115,35 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 	}
 	sessions = orderByKey(sessions, func(s sessiontree.SessionInput) string { return s.Name }, m.SidebarOrder)
 	return sessiontree.Build(sessions)
+}
+
+// railNeighbourSession returns the session delta places from the current one in
+// the rail's own order, wrapping at both ends, or "" when there is nowhere to go.
+// Reading the order from BuildSessionTree rather than the raw daemon listing is
+// what makes "next" mean the row below the current one even after the user has
+// dragged the rail into a different order.
+func (m *OS) railNeighbourSession(delta int) string {
+	sessions := m.BuildSessionTree().Sessions
+	current := slices.IndexFunc(sessions, func(s sessiontree.Node) bool { return s.IsCurrent })
+	if len(sessions) < 2 || current < 0 {
+		return ""
+	}
+	n := len(sessions)
+	return sessions[((current+delta)%n+n)%n].ID
+}
+
+// CycleSession switches to the next (delta 1) or previous (delta -1) session.
+// Standalone has one synthetic session, so it says there is nowhere to go rather
+// than failing inside SwitchToSession.
+func (m *OS) CycleSession(delta int) {
+	target := m.railNeighbourSession(delta)
+	if target == "" {
+		m.ShowNotification("No other sessions", "info", config.NotificationDuration)
+		return
+	}
+	if err := m.SwitchToSession(target); err != nil {
+		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+	}
 }
 
 // sessionPaletteLabel formats a "Session: " or "Window: " palette row, folding

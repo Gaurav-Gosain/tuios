@@ -90,6 +90,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"L", "Layout commands..."},
 			{"b", "Toggle the sidebar rail"},
 			{"o", "Focus the sidebar rail"},
+			{"e", "Focus the sidebar rail, or leave it"},
 			{"j", "Jump to the pane the newest message came from"},
 		}
 

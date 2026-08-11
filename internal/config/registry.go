@@ -333,6 +333,8 @@ var ActionDescriptions = map[string]string{
 	"toggle_help":         "Toggle help",
 	"quit":                "Quit",
 	"focus_sidebar":       "Focus the sidebar rail",
+	"next_session":        "Next session",
+	"prev_session":        "Previous session",
 
 	// Clipboard
 	"copy_selection":  "Copy selection to clipboard",
@@ -386,6 +388,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_command_palette":  "Open the command palette",
 	"prefix_toggle_sidebar":   "Toggle the session sidebar",
 	"prefix_focus_sidebar":    "Focus the sidebar rail",
+	"prefix_explore":          "Focus the sidebar rail, or leave it",
 	"prefix_jump_notif":       "Jump to the pane the newest message came from",
 	"prefix_session_switcher": "Open the session switcher",
 	"prefix_layout":           "Enter layout prefix",

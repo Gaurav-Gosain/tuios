@@ -16,6 +16,18 @@ func handleFocusSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// handleToggleFocusSidebar sends the keyboard to the rail, or back to the panes
+// if the rail already has it. One key that goes both ways, so exploring costs
+// the same chord twice rather than a chord and an esc.
+func handleToggleFocusSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarFocused {
+		o.ExitSidebarFocus()
+		return o, nil
+	}
+	o.EnterSidebarFocus()
+	return o, nil
+}
+
 // HandleSidebarKey routes a keypress while the rail owns the keyboard. It looks
 // the key up in the [keybindings] sidebar section and mutates the OS through the
 // same methods the mouse handlers call, so keyboard and mouse can never diverge.

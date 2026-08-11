@@ -135,6 +135,11 @@ func (d *ActionDispatcher) registerHandlers() {
 	// only while SidebarFocused, so they cannot fire on a pane.
 	d.Register("focus_sidebar", handleFocusSidebar)
 
+	// Session navigation. Bound to chords, and allowed from terminal mode by
+	// isTerminalSafeAction, so walking sessions does not first cost an Esc.
+	d.Register("next_session", handleNextSession)
+	d.Register("prev_session", handlePrevSession)
+
 	// Clipboard actions
 	d.Register("copy_selection", handleCopySelection)
 	d.Register("paste_clipboard", handlePasteClipboard)
@@ -672,6 +677,17 @@ func handleClearSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		w.ExitCopyMode()
 	}
 	w.InvalidateCache()
+	return o, nil
+}
+
+// handleNextSession and handlePrevSession walk the sessions in the rail's order.
+func handleNextSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.CycleSession(1)
+	return o, nil
+}
+
+func handlePrevSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.CycleSession(-1)
 	return o, nil
 }
 

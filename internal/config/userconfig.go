@@ -244,6 +244,11 @@ func DefaultConfig() *UserConfig {
 				"select_window_9": {"9"},
 				// Enter the sidebar rail's keyboard scope; s is free in window mode.
 				"focus_sidebar": {"s"},
+				// Walking sessions is a chord, not a letter, so it also works while
+				// typing in a shell (see isTerminalSafeAction). Spell the shift out:
+				// "alt+N" normalizes to alt+n, which is already next-window.
+				"next_session": {"alt+shift+n"},
+				"prev_session": {"alt+shift+p"},
 			},
 			Workspaces: getDefaultWorkspaceKeybinds(),
 			Layout:     getDefaultLayoutKeybinds(),
@@ -317,6 +322,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_session_switcher": {"S"},
 				"prefix_layout":           {"L"},
 				"prefix_focus_sidebar":    {"o"}, // tmux's "other pane" mnemonic
+				"prefix_explore":          {"e"}, // the same key goes to the rail and comes back
 				"prefix_jump_notif":       {"j"}, // the keyboard twin of clicking a message
 			},
 			WindowPrefix: map[string][]string{

@@ -49,6 +49,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
 	d.Register("prefix_focus_sidebar", handlePrefixFocusSidebar)
+	d.Register("prefix_explore", handleToggleFocusSidebar)
 	d.Register("prefix_jump_notif", handlePrefixJumpNotif)
 	d.Register("prefix_detach", handlePrefixDetach)
 	d.Register("prefix_exit_mode", handlePrefixExitMode)

@@ -1,12 +1,10 @@
 package input
 
 import (
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -216,9 +214,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check for prefix key in terminal mode
-	msgStr := strings.ToLower(msg.String())
-	leaderKey := strings.ToLower(config.LeaderKey)
-	if msgStr == leaderKey {
+	if isLeaderKey(msg) {
 		// If prefix is already active, send the leader key to terminal
 		if o.PrefixActive {
 			o.PrefixActive = false

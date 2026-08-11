@@ -186,11 +186,13 @@ func isReservedTerminalChord(msg tea.KeyPressMsg) bool {
 }
 
 // isTerminalSafeAction reports whether a main-section action may be triggered
-// from terminal mode. Only workspace movement qualifies: everything else in
-// that section is a window-management verb whose keys must reach the shell.
+// from terminal mode. Only navigation between workspaces and sessions qualifies:
+// everything else in that section is a window-management verb whose keys must
+// reach the shell.
 func isTerminalSafeAction(action string) bool {
 	return strings.HasPrefix(action, "switch_workspace_") ||
-		strings.HasPrefix(action, "move_and_follow_")
+		strings.HasPrefix(action, "move_and_follow_") ||
+		action == "next_session" || action == "prev_session"
 }
 
 // forwardKeyToFocusedWindow sends a key to the focused window's PTY, using CSI u

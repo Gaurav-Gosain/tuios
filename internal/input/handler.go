@@ -200,7 +200,14 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// window mode (it is reachable from either via ctrl+b o), so pane and window
 	// bindings never fire underneath it. Checked after the modal overlays above,
 	// which outrank it, and before the mode split, which it supersedes.
-	if o.SidebarFocused {
+	//
+	// The leader is the one exception, and a pending chord with it. The rail
+	// swallows what it does not bind, so holding the leader here would strand
+	// every prefix command behind an esc, and ctrl+b e (which toggles the rail's
+	// focus) could never toggle it back off. Both are left to fall through to the
+	// mode handlers below, which already route the whole chord; PrefixActive
+	// stays set for sub-prefixes too, so ctrl+b w 2 works from the rail as well.
+	if o.SidebarFocused && !o.PrefixActive && !isLeaderKey(msg) {
 		return HandleSidebarKey(msg, o)
 	}
 
@@ -243,9 +250,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check for prefix key activation in window management mode
-	msgStr := strings.ToLower(msg.String())
-	leaderKey := strings.ToLower(config.LeaderKey)
-	if msgStr == leaderKey {
+	if isLeaderKey(msg) {
 		return handlePrefixKey(msg, o)
 	}
 
@@ -330,6 +335,11 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
+}
+
+// isLeaderKey reports whether a key press is the configured leader.
+func isLeaderKey(msg tea.KeyPressMsg) bool {
+	return strings.EqualFold(msg.String(), config.LeaderKey)
 }
 
 // handlePrefixKey handles Ctrl+B prefix key activation
