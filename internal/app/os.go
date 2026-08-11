@@ -45,6 +45,24 @@ const (
 	BottomRight
 )
 
+// BorderResizeEdge names which single edge a pane-border drag moves. Unlike a
+// corner resize, a border drag moves exactly one edge: a tiled pane's shared
+// divider, or one side of a floating pane.
+type BorderResizeEdge int
+
+const (
+	// BorderEdgeNone means no border-resize gesture is active.
+	BorderEdgeNone BorderResizeEdge = iota
+	// BorderEdgeLeft moves the window's left edge.
+	BorderEdgeLeft
+	// BorderEdgeRight moves the window's right edge.
+	BorderEdgeRight
+	// BorderEdgeTop moves the window's top edge.
+	BorderEdgeTop
+	// BorderEdgeBottom moves the window's bottom edge.
+	BorderEdgeBottom
+)
+
 // SnapQuarter represents window snapping positions.
 type SnapQuarter int
 
@@ -83,6 +101,8 @@ type WindowLayout struct {
 type OS struct {
 	Dragging                 bool
 	Resizing                 bool
+	BorderResizing           bool // a pane-border drag is moving one edge
+	BorderResizeEdge         BorderResizeEdge
 	ResizeCorner             ResizeCorner
 	PreResizeState           terminal.Window
 	ResizeStartX             int

@@ -120,12 +120,15 @@ func tileDaemonWindowsMode(t *testing.T, width, height, count int, layoutMode st
 	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
 
 	m := &OS{
-		NumWorkspaces:    9,
-		CurrentWorkspace: 1,
-		WorkspaceFocus:   make(map[int]int),
-		Width:            width,
-		Height:           height,
-		AutoTiling:       true,
+		NumWorkspaces:        9,
+		CurrentWorkspace:     1,
+		WorkspaceFocus:       make(map[int]int),
+		WorkspaceHasCustom:   make(map[int]bool),
+		WorkspaceLayouts:     make(map[int][]WindowLayout),
+		WorkspaceMasterRatio: make(map[int]float64),
+		Width:                width,
+		Height:               height,
+		AutoTiling:           true,
 	}
 	m.ApplyLayoutModeName(layoutMode)
 
@@ -337,17 +340,21 @@ func TestSidebarResizeCannotEnterReservedBand(t *testing.T) {
 			}
 		}
 		win := m.Windows[m.FocusedWindow]
-		beforeX, beforeW := win.X, win.Width
+		beforeRight := win.X + win.Width
 
-		// Grow from the right edge: would push the edge under the band.
+		// The right edge is the sidebar band, not a divider, so > grows the pane
+		// from its left edge instead. The right edge must stay put and never cross
+		// into the reserved band.
 		m.ResizeFocusedWindowWidth(2)
 
-		if win.X != beforeX || win.Width != beforeW {
-			t.Errorf("right-edge resize entered the reserved band: x=%d w=%d (was x=%d w=%d, contentRight=%d)",
-				win.X, win.Width, beforeX, beforeW, contentRight)
-		}
 		if win.X+win.Width > contentRight {
 			t.Errorf("window right edge %d is under the sidebar (contentRight=%d)", win.X+win.Width, contentRight)
+		}
+		if win.X+win.Width != beforeRight {
+			t.Errorf("right edge moved (%d -> %d); the grow should have used the left edge", beforeRight, win.X+win.Width)
+		}
+		if win.Width <= 0 {
+			t.Fatalf("window collapsed: w=%d", win.Width)
 		}
 	})
 }

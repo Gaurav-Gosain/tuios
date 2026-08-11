@@ -111,6 +111,14 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// Left press on a pane border starts an additive resize: a tiled pane's
+	// shared divider or a floating pane's own edge. It never grabs content, the
+	// sidebar band, or the dock, and leaves the ctrl/shift+right menu and the
+	// plain-right-press resize untouched.
+	if msg.Button == tea.MouseLeft && msg.Mod == 0 && armBorderResize(X, Y, o) {
+		return o, nil
+	}
+
 	// Terminal mode, plain right-click: a context menu only when there is an
 	// active text selection to act on (copy, paste, clear). Without one the
 	// click belongs to the pane, so it falls through to the forwarding below

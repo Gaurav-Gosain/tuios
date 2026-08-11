@@ -38,11 +38,18 @@ func (m *OS) ResizeFocusedWindowHeight(deltaPixels int) {
 		return
 	}
 
-	// Block resizing if bottom edge is at screen boundary
+	// The bottom edge is the screen boundary, not a divider, so move the TOP
+	// edge instead: the primary height keys resize the bottommost pane too, and
+	// grow still grows. If the top edge is also the boundary the pane fills the
+	// column and there is nothing to move.
 	maxY := m.GetUsableHeight()
 	atBottomEdge := (focusedWindow.Y + focusedWindow.Height) >= (maxY - edgeTolerance)
 	if atBottomEdge {
-		return // Can't resize bottom edge when it's at the screen edge
+		if focusedWindow.Y <= edgeTolerance {
+			return
+		}
+		m.AdjustTilingNeighbors(focusedWindow, focusedWindow.X, focusedWindow.Y-deltaPixels, focusedWindow.Width, focusedWindow.Height+deltaPixels)
+		return
 	}
 
 	// Calculate new dimensions (bottom edge moves)
@@ -73,11 +80,18 @@ func (m *OS) ResizeFocusedWindowWidth(deltaPixels int) {
 		return
 	}
 
-	// Block resizing if right edge is at the content-region boundary (the
-	// screen edge, or the sidebar band when it reserves the right margin)
+	// The right edge is the content-region boundary (the screen edge, or the
+	// sidebar band when it reserves the right margin), not a divider, so move the
+	// LEFT edge instead: the primary width keys resize the rightmost pane too, and
+	// grow still grows. If the left edge is also the boundary the pane fills the
+	// row and there is nothing to move.
 	contentRight := m.GetLeftMargin() + m.GetContentWidth()
 	atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (contentRight - edgeTolerance)
 	if atRightEdge {
+		if focusedWindow.X <= m.GetLeftMargin()+edgeTolerance {
+			return
+		}
+		m.AdjustTilingNeighbors(focusedWindow, focusedWindow.X-deltaPixels, focusedWindow.Y, focusedWindow.Width+deltaPixels, focusedWindow.Height)
 		return
 	}
 

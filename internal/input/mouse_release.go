@@ -279,6 +279,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		resizedWindowIndex := o.DraggedWindowIndex
 		o.Dragging = false
 		o.Resizing = false
+		// A finished pane-border drag joins the same flush/sync cleanup below.
+		o.BorderResizing = false
+		o.BorderResizeEdge = app.BorderEdgeNone
 
 		// Apply all pending PTY resizes that were deferred during drag/resize
 		if wasResizing && len(o.PendingResizes) > 0 {

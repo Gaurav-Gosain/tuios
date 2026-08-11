@@ -245,6 +245,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Resizing && o.InteractionMode {
+		// A pane-border drag moves a single edge to the pointer, not a corner.
+		if o.BorderResizing {
+			applyBorderResize(o, mouse.X, mouse.Y)
+			return o, nil
+		}
+
 		xOffset := mouse.X - o.ResizeStartX
 		yOffset := mouse.Y - o.ResizeStartY
 

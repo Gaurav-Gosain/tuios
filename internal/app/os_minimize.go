@@ -131,20 +131,11 @@ func (m *OS) ToggleZoom() {
 		fw.Width = fw.PreZoomWidth
 		fw.Height = fw.PreZoomHeight
 		fw.InvalidateCache()
-		// Resize terminal to match restored dimensions
-		termW := fw.ContentWidth()
-		termH := fw.ContentHeight()
-		if fw.Terminal != nil {
-			fw.LockIO()
-			// Re-check under the lock; Close() nils Terminal while holding it.
-			if fw.Terminal != nil {
-				fw.Terminal.Resize(termW, termH)
-			}
-			fw.UnlockIO()
-		}
-		if fw.Pty != nil {
-			_ = fw.Pty.Resize(termW, termH)
-		}
+		// Route the resize through the shared path so a daemon-hosted pane is told
+		// its new size too; resizing the local emulator alone leaves the app
+		// unreflowed at the old size.
+		fw.Resize(fw.Width, fw.Height)
+		m.FlushPTYBuffersAfterResize()
 		// If tiling, retile all
 		if m.AutoTiling {
 			m.TileAllWindows()
@@ -182,20 +173,11 @@ func (m *OS) ToggleZoom() {
 		fw.Width = zoomWidth
 		fw.Height = m.GetRenderHeight() - topMargin - bottomMargin
 		fw.InvalidateCache()
-		// Resize terminal to match zoomed dimensions
-		termW := fw.ContentWidth()
-		termH := fw.ContentHeight()
-		if fw.Terminal != nil {
-			fw.LockIO()
-			// Re-check under the lock; Close() nils Terminal while holding it.
-			if fw.Terminal != nil {
-				fw.Terminal.Resize(termW, termH)
-			}
-			fw.UnlockIO()
-		}
-		if fw.Pty != nil {
-			_ = fw.Pty.Resize(termW, termH)
-		}
+		// Route the resize through the shared path so a daemon-hosted pane is told
+		// its new size too; resizing the local emulator alone leaves the app
+		// unreflowed at the old size.
+		fw.Resize(fw.Width, fw.Height)
+		m.FlushPTYBuffersAfterResize()
 		m.MarkAllDirty()
 	}
 }
