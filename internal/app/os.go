@@ -230,6 +230,9 @@ type OS struct {
 	workspaceActiveStyle *lipgloss.Style
 	cachedViewContent    string // Cached full View() output to skip rendering on idle ticks
 	renderSkipped        bool   // True when frame-skip fired; View() returns cached content
+	// tickStats records how the maintenance tick spent itself so the idle
+	// benchmark and idle e2e can prove ticks stay cheap when nothing moves.
+	tickStats tickStats
 	// lastInteractionRender is when a drag/resize motion event last produced a
 	// frame. Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.

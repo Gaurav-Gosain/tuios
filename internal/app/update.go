@@ -538,6 +538,8 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case TickerMsg:
 		// Maintenance tick: animations, dock stats, script playback, process cleanup.
 		// Does NOT trigger rendering unless animations/interactions are active.
+		m.tickStats.Ticks++
+		m.tickStats.Work++
 		// This ensures windows close even if the exit channel message was missed
 		for i := len(m.Windows) - 1; i >= 0; i-- {
 			if m.Windows[i].ProcessExited() {
@@ -713,6 +715,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, nextTick
 		}
 		m.renderSkipped = false
+		m.tickStats.Render++
 		// This tick is about to draw, so it counts against the interaction frame
 		// budget too. Without this a motion event landing just after a tick
 		// would draw again immediately and the budget would not hold.

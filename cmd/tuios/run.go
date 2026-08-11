@@ -308,6 +308,7 @@ func runLocal() error {
 	finalModel, err := p.Run()
 
 	if finalOS, ok := finalModel.(*app.OS); ok {
+		finalOS.DumpTickStats()
 		finalOS.Cleanup()
 	}
 
