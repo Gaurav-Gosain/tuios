@@ -28,6 +28,11 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarRelease(mouse.X, mouse.Y)
 		return o, nil
 	}
+	if o.SidebarEdgeActive() {
+		mouse := msg.Mouse()
+		o.SidebarEdgeRelease(mouse.X, mouse.Y)
+		return o, nil
+	}
 
 	// A plain right press on a pane arms a resize. Below the drag threshold it
 	// was a stray click, cancel the resize (restoring the few cells of jitter it

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/adrg/xdg"
 )
 
@@ -29,6 +30,9 @@ const sidebarStateFileName = "sidebar.json"
 type sidebarStateFile struct {
 	Order     []string        `json:"order,omitempty"`
 	Collapsed map[string]bool `json:"collapsed,omitempty"`
+	// Width is the user's drag-defined full-rail width, overriding the config
+	// default at runtime. Zero means never dragged, so the config width stands.
+	Width int `json:"width,omitempty"`
 }
 
 // loadSidebarState reads the persisted sidebar order and collapse toggles.
@@ -49,6 +53,12 @@ func (m *OS) loadSidebarState() {
 	if len(st.Collapsed) > 0 {
 		m.SidebarCollapsed = st.Collapsed
 	}
+	// A stored drag width wins over the config default; GetSidebarWidth still
+	// folds it against the breakpoints and pane floor, so an out-of-range value
+	// cannot starve the panes.
+	if st.Width >= config.SidebarGlyphWidth {
+		config.SidebarWidth = st.Width
+	}
 }
 
 // saveSidebarState writes the sidebar order and collapse toggles. Best effort:
@@ -62,6 +72,7 @@ func (m *OS) saveSidebarState() {
 	data, err := json.Marshal(sidebarStateFile{
 		Order:     m.SidebarOrder,
 		Collapsed: m.SidebarCollapsed,
+		Width:     config.SidebarWidth,
 	})
 	if err != nil {
 		return

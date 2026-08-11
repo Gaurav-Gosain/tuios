@@ -303,6 +303,15 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
 
+	// Re-armed each frame: a marquee row sets it, so a key left standing after
+	// the row stops drawing hovered means the scroll is over and the tick idles.
+	m.sidebarMarqueeSeen = false
+	defer func() {
+		if !m.sidebarMarqueeSeen {
+			m.SidebarMarqueeKey = ""
+		}
+	}()
+
 	w := m.GetSidebarWidth()
 	if w <= 0 {
 		return nil, 0
@@ -586,7 +595,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 		// cells each side) so a plain row's name lands in the same column as the
 		// pilled row's. Without it the name jumps two cells left row to row as the
 		// eye moves off the current session.
-		name = overlay.Truncate(name, max(avail-4, 1))
+		name = m.sidebarMarquee("s:"+node.ID, name, max(avail-4, 1), hovered)
 		pad := sidebarStyle(rowBg, nil).Render("  ")
 		nameSeg = pad + sidebarStyle(rowBg, fg).Bold(dragged).Render(name) + pad
 	}
@@ -641,7 +650,7 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 	row := sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent)) +
 		sidebarGlyph(node.AgentState, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarStyle(rowBg, fg).Render(overlay.Truncate(title, max(cw-indent-3, 1)))
+		sidebarStyle(rowBg, fg).Render(m.sidebarMarquee("w:"+node.ID, title, max(cw-indent-3, 1), hovered))
 	return sidebarFit(row, cw, rowBg)
 }
 
@@ -675,7 +684,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 	row := sidebarStyle(rowBg, nil).Render(" ") +
 		sidebarGlyph(e.State, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarStyle(rowBg, fg).Render(overlay.Truncate(name, avail))
+		sidebarStyle(rowBg, fg).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, avail, hovered))
 	if label != "" {
 		gap := max(cw-lipgloss.Width(row)-labelW, 0)
 		row += sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", gap)) +

@@ -34,6 +34,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarDragMotion(mouse.X, mouse.Y)
 		return o, nil
 	}
+	if o.SidebarEdgeActive() {
+		o.SidebarEdgeMotion(mouse.X, mouse.Y)
+		return o, nil
+	}
 
 	// Overlay panels: keep dragging a grabbed panel, or highlight the row under
 	// the cursor so hover tracks the pointer in every overlay. Either way the

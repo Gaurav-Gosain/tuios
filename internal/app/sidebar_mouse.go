@@ -18,6 +18,14 @@ type sidebarDragState struct {
 	Order       []string
 }
 
+// sidebarEdgeState is the width-resize gesture on the rail's edge rule. A left
+// press on that one-cell column arms it; motion sets the width to the pointer
+// column; release persists. It is disjoint from the session reorder drag: the
+// edge column belongs to the rail's frame, not to any row.
+type sidebarEdgeState struct {
+	Active bool
+}
+
 // ToggleSidebar flips the sidebar on or off live, re-tiles or re-clamps the
 // windows into the changed content region, and records the new state on the
 // loaded config so a later save keeps it. This is what the palette entry and the
@@ -108,6 +116,14 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		return false
 	}
 
+	// The edge rule is the rail's frame, so a left press on it arms the width
+	// resize before any row routing: the column belongs to the sidebar, not to
+	// the session row whose hit rectangle spans it.
+	if !right && m.sidebarOnEdge(x) {
+		m.SidebarEdge = sidebarEdgeState{Active: true}
+		return true
+	}
+
 	hit, ok := m.sidebarRowAt(x, y)
 	if !ok {
 		return true // consumed a click on a blank sidebar row
@@ -140,6 +156,74 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 // progress, so the motion and release handlers route to the sidebar first.
 func (m *OS) SidebarDragActive() bool {
 	return m.SidebarDrag.PressActive || m.SidebarDrag.Dragging
+}
+
+// sidebarOnEdge reports whether column x is the rail's edge rule, the one-cell
+// hairline facing the panes: the last band column for a left rail, the first
+// for a right one.
+func (m *OS) sidebarOnEdge(x int) bool {
+	w := m.GetSidebarWidth()
+	if w <= 0 {
+		return false
+	}
+	if config.SidebarPosition == "right" {
+		return x == m.GetRenderWidth()-w
+	}
+	return x == w-1
+}
+
+// SidebarEdgeActive reports whether a width-resize gesture is in progress, so
+// the motion and release handlers route to the sidebar first.
+func (m *OS) SidebarEdgeActive() bool {
+	return m.SidebarEdge.Active
+}
+
+// sidebarWidthBounds returns the clamp range for the rail's full width: no
+// narrower than the glyph rail, no wider than about two fifths of the screen so
+// the panes always keep the larger share.
+func (m *OS) sidebarWidthBounds() (int, int) {
+	lo := config.SidebarGlyphWidth
+	hi := max(m.GetRenderWidth()*2/5, lo)
+	return lo, hi
+}
+
+// SidebarEdgeMotion sets the rail width to the pointer column and re-lays the
+// panes into the changed content region, exactly as ToggleSidebar does. The
+// width comes from the pointer's distance from the far edge, so the hairline
+// tracks the cursor.
+func (m *OS) SidebarEdgeMotion(x, y int) bool {
+	if !m.SidebarEdge.Active {
+		return false
+	}
+	var w int
+	if config.SidebarPosition == "right" {
+		w = m.GetRenderWidth() - x
+	} else {
+		w = x + 1
+	}
+	lo, hi := m.sidebarWidthBounds()
+	w = max(min(w, hi), lo)
+	if w == config.SidebarWidth {
+		return true
+	}
+	config.SidebarWidth = w
+	if m.AutoTiling {
+		m.TileAllWindows()
+	} else {
+		m.ClampWindowsToView()
+	}
+	return true
+}
+
+// SidebarEdgeRelease ends the resize and persists the new width beside the
+// order and collapse state.
+func (m *OS) SidebarEdgeRelease(x, y int) bool {
+	if !m.SidebarEdge.Active {
+		return false
+	}
+	m.SidebarEdge = sidebarEdgeState{}
+	m.saveSidebarState()
+	return true
 }
 
 // SidebarDragMotion advances the click-or-drag gesture. The first vertical

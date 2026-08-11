@@ -460,6 +460,16 @@ type OS struct {
 	SidebarHoverActive bool
 	SidebarHoverX      int
 	SidebarHoverY      int
+	// SidebarEdge carries the width-resize gesture on the rail's edge rule
+	// between mouse events; while Active the pointer column sets the rail width.
+	SidebarEdge sidebarEdgeState
+	// Sidebar marquee: the identity of the hovered row whose overflowing title is
+	// scrolling and when that scroll began. An empty key means nothing scrolls,
+	// so the render tick idles; sidebarMarqueeSeen is the per-frame mark that
+	// keeps the key alive only while its row still renders as hovered.
+	SidebarMarqueeKey   string
+	SidebarMarqueeStart time.Time
+	sidebarMarqueeSeen  bool
 
 	// Right-click gesture disambiguation. A plain right press on a pane arms
 	// both a corner resize and a pending context menu; the release decides.
