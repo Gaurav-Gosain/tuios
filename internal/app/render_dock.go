@@ -79,22 +79,26 @@ func (m *OS) renderDock() *lipgloss.Layer {
 // layer path and the fullscreen fast path.
 func (m *OS) renderDockString() (string, int) {
 	layout := m.CalculateDockLayout()
+	pal := theme.UI()
 
 	sysInfoStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#808090")).
+		Foreground(pal.FgMute).
 		MarginRight(2)
 
 	// The mode label arrives without its caps, so the pill is assembled here
-	// rather than found again by searching the string for the cap glyphs.
+	// rather than found again by searching the string for the cap glyphs. It is
+	// the dock's only filled element, so it is the only one that has to earn its
+	// contrast: the foreground is picked against whatever colour the mode is,
+	// and bold buys the last of the legibility a saturated fill costs.
 	modeColor := lipgloss.Color(layout.ModeInfo.Color)
-	fill := lipgloss.NewStyle().Background(modeColor).Foreground(lipgloss.Color("#ffffff"))
+	fill := lipgloss.NewStyle().Background(modeColor).Foreground(theme.ContrastText(modeColor)).Bold(true)
 	styledModeText := fill.Render(layout.ModeLabel)
 	if lc, rc := config.GetDockPillLeftChar(), config.GetDockPillRightChar(); lc != "" && rc != "" {
 		caps := lipgloss.NewStyle().Foreground(modeColor)
-		styledModeText = caps.Render(lc) + fill.Bold(true).Render(layout.ModeLabel) + caps.Render(rc)
+		styledModeText = caps.Render(lc) + fill.Render(layout.ModeLabel) + caps.Render(rc)
 	}
 
-	styledTrailText := lipgloss.NewStyle().Foreground(theme.UI().FgDim).Render(layout.TrailText)
+	styledTrailText := lipgloss.NewStyle().Foreground(pal.FgMute).Render(layout.TrailText)
 
 	var dockItemsStr strings.Builder
 	itemNumber := 1
@@ -112,27 +116,31 @@ func (m *OS) renderDockString() (string, int) {
 		windowIndex := dockItem.WindowIndex
 		window := m.Windows[windowIndex]
 
-		bgColor := "#2a2a3e"
-		fgColor := "#a0a0a8"
+		// A minimized entry rests on the same Panel step the rest of the chrome
+		// uses; only the two states worth a saturated fill get one.
+		bgColor, fgColor := color.Color(pal.Panel), color.Color(pal.FgDim)
+		emphasis := false
 
 		isHighlighted := time.Now().Before(window.MinimizeHighlightUntil)
 
-		if isHighlighted {
-			bgColor = "#66ff66"
-			fgColor = "#000000"
-		} else if windowIndex == m.FocusedWindow && !window.Minimizing {
-			bgColor = "#4865f2"
-			fgColor = "#ffffff"
+		switch {
+		case isHighlighted:
+			bgColor, emphasis = pal.Success, true
+		case windowIndex == m.FocusedWindow && !window.Minimizing:
+			bgColor, emphasis = pal.Accent, true
+		}
+		if emphasis {
+			fgColor = theme.ContrastText(bgColor)
 		}
 
 		// Flat by default: the caps repeated on every minimized window turned
 		// the row into beads. getDockItems pads the label, so the fill alone
 		// still reads as a cell.
-		caps := lipgloss.NewStyle().Foreground(lipgloss.Color(bgColor))
+		caps := lipgloss.NewStyle().Foreground(bgColor)
 		nameLabel := lipgloss.NewStyle().
-			Background(lipgloss.Color(bgColor)).
-			Foreground(lipgloss.Color(fgColor)).
-			Bold(config.DockPillCaps && (isHighlighted || windowIndex == m.FocusedWindow)).
+			Background(bgColor).
+			Foreground(fgColor).
+			Bold(emphasis).
 			Render(dockItem.Label)
 
 		if itemNumber > 1 {
@@ -151,8 +159,7 @@ func (m *OS) renderDockString() (string, int) {
 	}
 
 	if layout.TruncatedCount > 0 {
-		truncStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#808090"))
+		truncStyle := lipgloss.NewStyle().Foreground(pal.FgMute)
 		dockItemsStr.WriteString(truncStyle.Render(" ..."))
 	}
 
@@ -209,8 +216,8 @@ func (m *OS) renderDockString() (string, int) {
 		helpTexts := copyModeHelpTexts(focusedWindow.CopyMode.State)
 
 		helpStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#a0a0b0")).
-			Background(lipgloss.Color("#1a1a2e")).
+			Foreground(pal.FgDim).
+			Background(pal.Panel).
 			Padding(0, 1)
 		// Take the longest help line that fits; the copy-mode keys are worth a
 		// dock's width but not worth spilling off the end of it.

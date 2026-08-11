@@ -13,10 +13,10 @@ func perceivedLuminance(c color.Color) float64 {
 	return (0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) / 65535.0
 }
 
-// contrastText picks a foreground that reads on the given (usually saturated)
+// ContrastText picks a foreground that reads on the given (usually saturated)
 // background: near-white on a dark/mid accent, near-black on a light one. This
 // keeps title chips and active tabs legible regardless of the theme's accent.
-func contrastText(bg color.Color) color.Color {
+func ContrastText(bg color.Color) color.Color {
 	if perceivedLuminance(bg) < 0.6 {
 		return charmtone.Butter
 	}
@@ -70,7 +70,7 @@ func UI() overlay.Palette {
 	}
 
 	// Pick the pill foreground for contrast against whichever accent is active.
-	p.PillFg = contrastText(p.Accent)
+	p.PillFg = ContrastText(p.Accent)
 
 	return p
 }
