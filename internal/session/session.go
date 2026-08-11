@@ -223,13 +223,35 @@ type PTY struct {
 	// is written on the PTY read goroutine and read by the daemon's output-stall
 	// heuristic, so it is an atomic rather than guarded by a lock.
 	lastOutput atomic.Int64
+
+	// lastAgentProbe is the unix-nano time of the last output-driven agent-exit
+	// probe. It throttles the /proc read the probe does so a busy pane does not
+	// re-check its foreground on every output chunk.
+	lastAgentProbe atomic.Int64
 }
+
+// agentExitProbeInterval bounds how often output drives an agent-exit probe, so a
+// pane streaming heavy output probes /proc at most a few times a second while a
+// quit agent still clears well inside one detection poll.
+const agentExitProbeInterval = 250 * time.Millisecond
 
 // LastOutput returns the unix-nano time this PTY most recently produced output,
 // or 0 if it has produced none. It backs the daemon's agent-state stall
 // heuristic, which demotes a pane that reported working but has gone quiet.
 func (p *PTY) LastOutput() int64 {
 	return p.lastOutput.Load()
+}
+
+// probeAgentExitDue reports whether enough time has passed since the last
+// output-driven agent-exit probe to run another, and claims the slot if so. It is
+// only ever called from the single PTY read goroutine, so a plain load/store is
+// race-free.
+func (p *PTY) probeAgentExitDue(now int64) bool {
+	if now-p.lastAgentProbe.Load() < int64(agentExitProbeInterval) {
+		return false
+	}
+	p.lastAgentProbe.Store(now)
+	return true
 }
 
 // Session represents a persistent TUIOS session.

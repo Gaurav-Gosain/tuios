@@ -222,6 +222,63 @@ func TestAgentDetectionYieldsToExplicitWhileOwned(t *testing.T) {
 	}
 }
 
+// TestClearExitedAgent proves the output-driven clear removes an auto-detected
+// glyph the moment the foreground returns to the shell, with no poll in between,
+// while leaving an unowned window, a still-running agent, and a manual state
+// untouched.
+func TestClearExitedAgent(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
+	shell := fakeResolver(map[string]fakeProc{ptyID: {"bash", []string{"-bash"}, true}})
+
+	// Unowned: an output probe must not touch a window the detector never claimed.
+	if sess.clearExitedAgent(ptyID, shell, agent.isAgent) {
+		t.Fatal("clearExitedAgent changed an unowned window")
+	}
+
+	// Detector takes ownership of the pane.
+	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
+		t.Fatalf("promotion changed %d windows, want 1", n)
+	}
+
+	// Agent still in the foreground: a probe on output leaves it working.
+	if sess.clearExitedAgent(ptyID, running, agent.isAgent) {
+		t.Fatal("clearExitedAgent cleared a window whose agent is still running")
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Fatalf("state while agent runs = %q, want working", got)
+	}
+
+	// Agent quits: the very next output probe clears it, no detection poll needed.
+	if !sess.clearExitedAgent(ptyID, shell, agent.isAgent) {
+		t.Fatal("clearExitedAgent did not clear after the agent left the foreground")
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateNone {
+		t.Fatalf("state after agent exit = %q, want none", got)
+	}
+}
+
+// TestClearExitedAgentRespectsManual proves the output-driven clear never touches
+// a state a user set through set-agent-state, since the detector does not own it.
+func TestClearExitedAgentRespectsManual(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+	shell := fakeResolver(map[string]fakeProc{ptyID: {"bash", []string{"-bash"}, true}})
+
+	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "waiting"); err != nil {
+		t.Fatalf("SetDaemonWindowAgentState: %v", err)
+	}
+	if sess.clearExitedAgent(ptyID, shell, agent.isAgent) {
+		t.Fatal("clearExitedAgent cleared a manual state")
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
+		t.Fatalf("manual state after probe = %q, want needs_input", got)
+	}
+}
+
 // TestResolveAgentDetectInterval checks the config/env/default precedence and the
 // disable paths for the auto-detector's poll interval.
 func TestResolveAgentDetectInterval(t *testing.T) {

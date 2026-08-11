@@ -312,6 +312,46 @@ func (s *Session) applyAgentDetection(
 	return changed
 }
 
+// clearExitedAgent clears the auto-detected agent state of the window backed by
+// ptyID the moment its foreground process is no longer an agent, so the sidebar
+// glyph disappears when the agent quits instead of lingering until the next
+// detection poll. It is driven by the pane's own output (the shell prompt
+// returning), not a timer, so it adds no idle cost.
+//
+// It obeys the same precedence as applyAgentDetection: it only ever touches a
+// window the auto-detector owns and only ever clears it, so a manual
+// set-agent-state and a still-running agent are both left alone. It reports
+// whether it changed state.
+func (s *Session) clearExitedAgent(
+	ptyID string,
+	resolve func(ptyID string) (comm string, argv []string, running bool),
+	isAgent func(comm string, argv []string) bool,
+) bool {
+	changed := false
+	_ = s.mutateState(func(st *SessionState) error {
+		for i := range st.Windows {
+			w := &st.Windows[i]
+			if w.PTYID != ptyID {
+				continue
+			}
+			if !s.autoAgentOwned[w.ID] {
+				return errNoAgentDetectChange
+			}
+			if comm, argv, running := resolve(ptyID); running && isAgent(comm, argv) {
+				return errNoAgentDetectChange
+			}
+			delete(s.autoAgentOwned, w.ID)
+			w.AgentState = AgentStateNone
+			w.AgentMessage = ""
+			w.AgentStateAt = time.Now().UnixNano()
+			changed = true
+			return nil
+		}
+		return errNoAgentDetectChange
+	})
+	return changed
+}
+
 // errNoAgentDetectChange tells mutateState an agent-detection tick changed no
 // state, so it neither bumps the version nor pushes to clients. It never leaves
 // the package.

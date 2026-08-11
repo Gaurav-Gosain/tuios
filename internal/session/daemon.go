@@ -214,6 +214,15 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		d.broadcastStateSync(sessionID, state, "update", "")
 	})
 	s.SetEventSink(func(ev SessionEvent) {
+		// A pane's own output is the signal that its agent quit: when the agent
+		// leaves the foreground the shell prompt returns as output, so probe that
+		// pane and clear an auto-detected glyph at once rather than waiting for the
+		// next detection poll. Throttled per PTY so a busy pane pays no cost.
+		if ev.Type == EventOutput && d.agentDetectInterval > 0 {
+			if pty := s.GetPTY(ev.PTYID); pty != nil && pty.probeAgentExitDue(time.Now().UnixNano()) {
+				s.clearExitedAgent(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.isAgent)
+			}
+		}
 		d.events.publish(streamEvent{
 			Type:      ev.Type,
 			Session:   name,
@@ -720,15 +729,22 @@ func (d *Daemon) agentMonitor() {
 		case <-ticker.C:
 			for _, sess := range d.manager.AllSessions() {
 				sess := sess
-				sess.applyAgentDetection(func(ptyID string) (string, []string, bool) {
-					pty := sess.GetPTY(ptyID)
-					if pty == nil || pty.IsExited() {
-						return "", nil, false
-					}
-					return foregroundProcess(pty.ShellPID())
-				}, d.agentMatcher.isAgent)
+				sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.isAgent)
 			}
 		}
+	}
+}
+
+// foregroundResolver returns the resolve function the agent detector and the
+// output-driven exit probe share: the foreground process of a pane's controlling
+// terminal, or not-running when the PTY is gone or has exited.
+func (d *Daemon) foregroundResolver(sess *Session) func(ptyID string) (string, []string, bool) {
+	return func(ptyID string) (string, []string, bool) {
+		pty := sess.GetPTY(ptyID)
+		if pty == nil || pty.IsExited() {
+			return "", nil, false
+		}
+		return foregroundProcess(pty.ShellPID())
 	}
 }
 
