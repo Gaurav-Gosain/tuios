@@ -48,7 +48,6 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_command_palette", handlePrefixCommandPalette)
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
-	d.Register("prefix_focus_sidebar", handlePrefixFocusSidebar)
 	d.Register("prefix_explore", handleToggleFocusSidebar)
 	d.Register("prefix_jump_notif", handlePrefixJumpNotif)
 	d.Register("prefix_detach", handlePrefixDetach)
@@ -324,13 +323,6 @@ func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handlePrefixSessionSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenSessionSwitcher()
-	return o, nil
-}
-
-// handlePrefixFocusSidebar enters the rail's keyboard scope from the prefix, so
-// it is reachable from terminal mode too (ctrl+b o, tmux's "other pane").
-func handlePrefixFocusSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.EnterSidebarFocus()
 	return o, nil
 }
 

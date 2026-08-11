@@ -32,12 +32,16 @@ func TestDockWorkspaceTabsAreClickable(t *testing.T) {
 	m := dockTabTestOS(t, 1, 1, 3, 3, 7)
 	m.renderDockString()
 
-	if len(m.dockWorkspaceHits) != 3 {
-		t.Fatalf("occupied workspaces 1, 3, 7 should draw 3 tabs, got %d", len(m.dockWorkspaceHits))
+	// Three occupied workspaces plus the trailing "+".
+	if len(m.dockWorkspaceHits) != 4 {
+		t.Fatalf("occupied workspaces 1, 3, 7 plus the add tab should draw 4 tabs, got %d", len(m.dockWorkspaceHits))
 	}
 
 	y := m.GetDockbarContentYPosition()
 	for _, h := range m.dockWorkspaceHits {
+		if h.Workspace == 0 {
+			continue // the add tab resolves at click time, covered separately
+		}
 		for x := h.X0; x < h.X1; x++ {
 			if got := m.DockWorkspaceAt(x, y); got != h.Workspace {
 				t.Errorf("column %d of the workspace-%d tab routed to %d", x, h.Workspace, got)
@@ -58,19 +62,43 @@ func TestDockWorkspaceTabsAreClickable(t *testing.T) {
 		t.Errorf("the row above the dock routed to workspace %d", got)
 	}
 
-	m.SwitchToWorkspace(m.DockWorkspaceAt(last.X0, y))
+	// The last workspace tab, which now sits before the trailing "+".
+	lastWS := m.dockWorkspaceHits[len(m.dockWorkspaceHits)-2]
+	m.SwitchToWorkspace(m.DockWorkspaceAt(lastWS.X0, y))
 	if m.CurrentWorkspace != 7 {
-		t.Errorf("clicking the last tab should switch to workspace 7, on %d", m.CurrentWorkspace)
+		t.Errorf("clicking the last workspace tab should switch to workspace 7, on %d", m.CurrentWorkspace)
 	}
 }
 
-// TestDockWorkspaceTabsStayOffWithNowhereToGo keeps the idle dock exactly what
-// it was: one workspace is not a strip, it is a digit the stats already show.
-func TestDockWorkspaceTabsStayOffWithNowhereToGo(t *testing.T) {
+// TestDockWorkspaceAddTabOpensTheNextFreeOne pins the "+" affordance: making a
+// workspace should be a click, not a remembered keybind. It also means a single
+// occupied workspace still draws a strip, because "1 +" is worth showing.
+func TestDockWorkspaceAddTabOpensTheNextFreeOne(t *testing.T) {
 	m := dockTabTestOS(t, 1, 1, 1)
 	m.renderDockString()
-	if len(m.dockWorkspaceHits) != 0 {
-		t.Fatalf("a single occupied workspace should draw no tabs, got %d", len(m.dockWorkspaceHits))
+	if len(m.dockWorkspaceHits) != 2 {
+		t.Fatalf("one workspace plus the add tab should draw 2 tabs, got %d", len(m.dockWorkspaceHits))
+	}
+	add := m.dockWorkspaceHits[len(m.dockWorkspaceHits)-1]
+	if add.Workspace != 0 {
+		t.Fatalf("the trailing tab should be the add tab (workspace 0), got %d", add.Workspace)
+	}
+	// Clicking it resolves to a real, empty workspace.
+	if got := m.DockWorkspaceAt(add.X0, add.Y); got != 2 {
+		t.Fatalf("the add tab resolved to workspace %d, want the next free one (2)", got)
+	}
+}
+
+// TestDockWorkspaceAddTabHidesWhenFull keeps the strip honest: with every
+// workspace in use there is nothing to add.
+func TestDockWorkspaceAddTabHidesWhenFull(t *testing.T) {
+	m := dockTabTestOS(t, 1, 1, 1)
+	m.NumWorkspaces = 1
+	m.renderDockString()
+	for _, h := range m.dockWorkspaceHits {
+		if h.Workspace == 0 {
+			t.Fatal("the add tab is drawn with no free workspace to open")
+		}
 	}
 }
 

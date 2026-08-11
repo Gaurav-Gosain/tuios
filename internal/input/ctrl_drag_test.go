@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -119,5 +120,31 @@ func TestCtrlDragDropsWhenCtrlReleased(t *testing.T) {
 	}
 	if o.DraggedWindowIndex != -1 {
 		t.Fatalf("drop did not clear the dragged index: %d", o.DraggedWindowIndex)
+	}
+}
+
+// TestCtrlDragFromTerminalModeGivesTypingBack pins that moving a window is not a
+// request to stop typing: a ctrl-drag started in terminal mode has to leave the
+// user in terminal mode once the pane lands.
+func TestCtrlDragFromTerminalModeGivesTypingBack(t *testing.T) {
+	o, wa, wb := twoPaneBSP(t)
+	left, _ := leftPaneOf(wa, wb)
+	cx, cy := contentCell(left)
+	o.Mode = app.TerminalMode
+
+	handleMouseClick(ctrlClickMsg(cx, cy), o)
+	handleMouseMotion(ctrlMotionMsg(cx+10, cy), o)
+	if !o.CtrlDragging {
+		t.Fatal("the drag did not commit")
+	}
+	// Window management is correct while the pane is in hand.
+	if o.Mode != app.WindowManagementMode {
+		t.Fatalf("mid-drag mode = %v, want window management", o.Mode)
+	}
+
+	handleMouseRelease(ctrlReleaseMsg(cx+10, cy), o)
+
+	if o.Mode != app.TerminalMode {
+		t.Fatalf("after the drop mode = %v, want terminal mode back", o.Mode)
 	}
 }

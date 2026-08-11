@@ -388,7 +388,6 @@ var ActionDescriptions = map[string]string{
 	"prefix_scrollback":       "Open the scrollback browser",
 	"prefix_command_palette":  "Open the command palette",
 	"prefix_toggle_sidebar":   "Toggle the session sidebar",
-	"prefix_focus_sidebar":    "Focus the sidebar rail",
 	"prefix_explore":          "Focus the sidebar rail, or leave it",
 	"prefix_jump_notif":       "Jump to the pane the newest message came from",
 	"prefix_session_switcher": "Open the session switcher",

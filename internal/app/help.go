@@ -213,7 +213,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 	}
 
 	bindings := generateCategoryBindings(registry, cat, []string{"focus_sidebar"})
-	for _, action := range []string{"prefix_focus_sidebar", "prefix_explore", "prefix_toggle_sidebar"} {
+	for _, action := range []string{"prefix_explore", "prefix_toggle_sidebar"} {
 		for _, key := range registry.GetKeys(action) {
 			desc := config.ActionDescriptions[action]
 			if desc == "" {
@@ -347,7 +347,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split",
 		"prefix_equalize_splits", "prefix_layout",
 		"prefix_scrollback", "prefix_command_palette", "prefix_session_switcher",
-		"prefix_toggle_sidebar", "prefix_focus_sidebar", "prefix_explore",
+		"prefix_toggle_sidebar", "prefix_explore",
 		"prefix_jump_notif",
 	}
 

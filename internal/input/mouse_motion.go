@@ -74,6 +74,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if abs(mouse.X-o.DragStartX)+abs(mouse.Y-o.DragStartY) >= ctrlDragThreshold {
 			o.CtrlDragPending = false
 			o.CtrlDragging = true
+			// beginWindowDrag leaves window management on, which is right for a
+			// title-bar grab but not here: a ctrl-drag from a pane the user is
+			// typing in should hand typing back when the pane lands.
+			o.CtrlDragWasTerminal = o.Mode == app.TerminalMode
 			beginWindowDrag(o, o.CtrlDragIndex, o.DragStartX, o.DragStartY)
 		}
 	}
@@ -92,12 +96,11 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// (overlays, menus, the sidebar band, the dock) never steals pane focus,
 	// and nothing happens unless the pane under the cursor actually differs
 	// from the focused one.
-	// In terminal mode hover-focus is off unless opted in separately: typing is
-	// the reason the pointer is over a pane there, and stealing focus mid-keystroke
-	// is worse than a click. Rail keyboard focus suppresses it outright, since the
-	// rail is overlay-like and owns the keyboard; a click is the way back to a pane.
-	ffmModeOK := o.Mode != app.TerminalMode || config.FocusFollowsMouseInTerminal
-	if config.FocusFollowsMouse && ffmModeOK && !o.SidebarFocused &&
+	// It follows the mouse in terminal mode too: a setting called
+	// focus-follows-mouse that stops working wherever the user actually spends
+	// their time just reads as broken. Rail keyboard focus still suppresses it,
+	// since the rail owns the keyboard and a click is the way back to a pane.
+	if config.FocusFollowsMouse && !o.SidebarFocused &&
 		!o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
 		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {

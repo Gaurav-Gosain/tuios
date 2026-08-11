@@ -59,12 +59,12 @@ func TestHelpDocumentsTheRailScope(t *testing.T) {
 	}
 }
 
-// TestHelpDocumentsTheEntryPointsToTheRail checks the three ways into the rail
-// are all findable from the Sidebar section, since a scope you cannot reach is
-// worse than one you cannot read.
+// TestHelpDocumentsTheEntryPointsToTheRail checks the ways into the rail are
+// findable from the Sidebar section, since a scope you cannot reach is worse
+// than one you cannot read.
 func TestHelpDocumentsTheEntryPointsToTheRail(t *testing.T) {
 	cat := helpSection(t, "Sidebar")
-	want := []string{"s", config.LeaderKey + ", o", config.LeaderKey + ", b"}
+	want := []string{"s", config.LeaderKey + ", e", config.LeaderKey + ", b"}
 
 	for _, key := range want {
 		found := false

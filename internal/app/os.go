@@ -572,6 +572,10 @@ type OS struct {
 	CtrlDragPending bool
 	CtrlDragging    bool
 	CtrlDragIndex   int
+	// CtrlDragWasTerminal remembers that the grab started in terminal mode, so
+	// dropping the window puts the user back where they were instead of leaving
+	// them in window management. Moving a pane is not a request to stop typing.
+	CtrlDragWasTerminal bool
 
 	// ContextMenu is the open shift+right-click menu, or nil. It is deliberately
 	// not one of the draggable overlay kinds: a context menu is anchored to the

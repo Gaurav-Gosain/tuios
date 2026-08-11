@@ -42,6 +42,13 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	o.CtrlDragging = false
+	// A ctrl-drag that started in terminal mode gives typing back when the pane
+	// lands: moving a window is not a request to stop typing. Deferred because
+	// the drop leaves through several returns, all of which retile first.
+	if o.CtrlDragWasTerminal {
+		o.CtrlDragWasTerminal = false
+		defer func() { o.Mode = app.TerminalMode }()
+	}
 
 	// A plain right press on a pane arms a resize. Below the drag threshold it
 	// was a click: cancel the resize (restoring the few cells of jitter it may

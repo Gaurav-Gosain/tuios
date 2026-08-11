@@ -36,6 +36,9 @@ type dockWorkspaceTab struct {
 	Workspace int
 	Active    bool
 	Width     int
+	// Add marks the trailing "+" tab, which opens the next free workspace rather
+	// than switching to an existing one.
+	Add bool
 }
 
 // dockWorkspaceHit is where a tab was drawn on the last frame. Recorded by the
@@ -93,10 +96,34 @@ func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
 			Width:     workspaceChipWidth(n),
 		})
 	}
+	// A trailing "+" opens the next empty workspace, so making one is a click
+	// rather than a remembered keybind. With it appended even a single-workspace
+	// session has two tabs, which is what makes the strip worth showing at all.
+	if next := m.nextFreeWorkspace(); next > 0 {
+		tabs = append(tabs, dockWorkspaceTab{Add: true, Width: workspaceAddChipWidth()})
+	}
 	if len(tabs) < 2 {
 		return nil
 	}
 	return tabs
+}
+
+// nextFreeWorkspace is the lowest-numbered workspace holding no windows, or 0
+// when every one is in use.
+func (m *OS) nextFreeWorkspace() int {
+	for i := 1; i <= m.NumWorkspaces; i++ {
+		if i != m.CurrentWorkspace && m.GetWorkspaceWindowCount(i) == 0 {
+			return i
+		}
+	}
+	return 0
+}
+
+// workspaceAddChipWidth is the "+" tab's span, matching a digit chip so the
+// strip stays evenly spaced.
+func workspaceAddChipWidth() int {
+	lc, rc := workspaceChipCaps()
+	return lipgloss.Width(lc) + lipgloss.Width(rc) + 1
 }
 
 // dockWorkspaceTabsWidth is the strip's total width including the space that
@@ -117,6 +144,11 @@ func dockWorkspaceTabsWidth(tabs []dockWorkspaceTab) int {
 func (m *OS) DockWorkspaceAt(x, y int) int {
 	for _, h := range m.dockWorkspaceHits {
 		if y == h.Y && x >= h.X0 && x < h.X1 {
+			if h.Workspace == 0 {
+				// The "+" tab: resolve it now so a click lands on a real
+				// workspace even if the strip was drawn a frame ago.
+				return m.nextFreeWorkspace()
+			}
 			return h.Workspace
 		}
 	}

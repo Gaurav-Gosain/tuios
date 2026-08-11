@@ -358,7 +358,6 @@ func DefaultConfig() *UserConfig {
 				"prefix_toggle_sidebar":   {"b"},
 				"prefix_session_switcher": {"S"},
 				"prefix_layout":           {"L"},
-				"prefix_focus_sidebar":    {"o"}, // tmux's "other pane" mnemonic
 				"prefix_explore":          {"e"}, // the same key goes to the rail and comes back
 				"prefix_jump_notif":       {"j"}, // the keyboard twin of clicking a message
 			},

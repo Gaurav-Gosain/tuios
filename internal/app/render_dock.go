@@ -45,13 +45,25 @@ func (m *OS) renderDockWorkspaceTabs(tabs []dockWorkspaceTab, startX int) string
 	b.WriteString(" ")
 	x := startX + 1
 	for _, t := range tabs {
-		b.WriteString(workspaceChip(t.Workspace, t.Active, pal.FgMute, nil))
+		if t.Add {
+			b.WriteString(workspaceAddChip(pal.FgMute, nil))
+		} else {
+			b.WriteString(workspaceChip(t.Workspace, t.Active, pal.FgMute, nil))
+		}
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
 		})
 		x += t.Width
 	}
 	return b.String()
+}
+
+// workspaceAddChip renders the strip's trailing "+", padded to the same caps as
+// a digit chip so the row stays evenly spaced.
+func workspaceAddChip(fg, rowBg color.Color) string {
+	lc, rc := workspaceChipCaps()
+	return sidebarStyle(rowBg, fg).Render(
+		strings.Repeat(" ", lipgloss.Width(lc)) + "+" + strings.Repeat(" ", lipgloss.Width(rc)))
 }
 
 func (m *OS) renderDock() *lipgloss.Layer {

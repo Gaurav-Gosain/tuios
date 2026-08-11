@@ -161,14 +161,15 @@ func TestFocusFollowsMouse(t *testing.T) {
 		}
 	})
 
-	t.Run("on: terminal mode does not glide without the terminal toggle", func(t *testing.T) {
+	// A setting called focus-follows-mouse that stops working in the mode the
+	// user spends their time in reads as broken, so it glides there too.
+	t.Run("on: terminal mode glides too", func(t *testing.T) {
 		setFFM(t, true)
-		setFFMTerminal(t, false)
 		o := twoPaneOS(t)
 		o.Mode = app.TerminalMode
 		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 60, Y: 10}, o)
-		if o.FocusedWindow != 0 {
-			t.Errorf("focus = %d, want unchanged (0): terminal-mode FFM is opt-in", o.FocusedWindow)
+		if o.FocusedWindow != 1 {
+			t.Errorf("focus = %d, want the hovered pane (1)", o.FocusedWindow)
 		}
 	})
 
