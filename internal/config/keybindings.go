@@ -88,6 +88,8 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"P", "Command palette"},
 			{"S", "Session switcher"},
 			{"L", "Layout commands..."},
+			{"b", "Toggle the sidebar rail"},
+			{"o", "Focus the sidebar rail"},
 		}
 
 		// In daemon mode, d and Esc have different behaviors

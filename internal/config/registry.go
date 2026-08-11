@@ -107,6 +107,13 @@ func (r *KeybindRegistry) GetSidebarAction(key string) string {
 	return r.lookupKeyInSection(key, r.config.Keybindings.Sidebar)
 }
 
+// GetSidebarKeys is GetKeys for the rail's scope. GetKeys deliberately does not
+// search the sidebar section (its action names collide with the global ones),
+// so the help overlay needs its own way to read what the rail is bound to.
+func (r *KeybindRegistry) GetSidebarKeys(action string) []string {
+	return r.config.Keybindings.Sidebar[action]
+}
+
 // lookupKeyInSection looks up a key in a specific config section
 func (r *KeybindRegistry) lookupKeyInSection(key string, section map[string][]string) string {
 	// Build a temporary map for this section

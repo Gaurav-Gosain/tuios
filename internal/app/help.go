@@ -31,9 +31,10 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 			Name: "Window Management",
 			Bindings: generateCategoryBindings(registry, "Window Management", []string{
 				"new_window", "close_window", "rename_window",
-				"minimize_window", "restore_all",
+				"minimize_window", "restore_all", "toggle_zoom",
 				"next_window", "prev_window",
 				"terminal_next_window", "terminal_prev_window",
+				"copy_selection", "focus_sidebar",
 			}),
 		},
 		{
@@ -58,8 +59,17 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 		{
 			Name: "BSP",
 			Bindings: generateCategoryBindings(registry, "BSP", []string{
-				"split_horizontal", "split_vertical", "rotate_split",
+				"split_horizontal", "split_vertical", "rotate_split", "equalize_splits",
+				"preselect_left", "preselect_right", "preselect_up", "preselect_down",
 			}),
+		},
+		{
+			Name:     "Mouse",
+			Bindings: generateMouseBindings(),
+		},
+		{
+			Name:     "Sidebar",
+			Bindings: generateSidebarBindings(registry),
 		},
 		{
 			Name:     "Copy Mode",
@@ -157,6 +167,115 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry) []HelpBinding {
 	return bindings
 }
 
+// generateMouseBindings lists the pointer gestures. They are written out rather
+// than derived because there is no registry for them: the gestures are decided
+// by internal/input's press/motion/release handlers, and this list is the only
+// place a user can read what those handlers do. Rail gestures live in the
+// Sidebar section, next to the rail's keys.
+func generateMouseBindings() []HelpBinding {
+	const cat = "Mouse"
+	return []HelpBinding{
+		{Keys: []string{"click"}, Description: "Focus a pane and start typing in it", Category: cat},
+		{Keys: []string{"double / triple click"}, Description: "Select the word / line under the pointer", Category: cat},
+		{Keys: []string{"drag title bar"}, Description: "Move a pane", Category: cat},
+		{Keys: []string{"ctrl+drag"}, Description: "Move a pane; drops when ctrl is let go", Category: cat},
+		{Keys: []string{"ctrl+shift+click"}, Description: "Add or remove a pane from multi-select", Category: cat},
+		{Keys: []string{"drag pane border"}, Description: "Resize one edge: divider or floating side", Category: cat},
+		{Keys: []string{"right-drag"}, Description: "Resize a pane from the nearest corner", Category: cat},
+		{Keys: []string{"right-click"}, Description: "Pane menu, unless the app tracks the mouse", Category: cat},
+		// One badge rather than two: the key column drops the second when a row
+		// carries more than it can hold, and losing the shift half would read as
+		// if ctrl were the only way in.
+		{Keys: []string{"ctrl/shift + right-click"}, Description: "Pane menu, even over a mouse-aware app", Category: cat},
+		{Keys: []string{"wheel"}, Description: "Scroll the scrollback, or the app itself", Category: cat},
+		{Keys: []string{"drag right edge"}, Description: "Drag the scrollbar, where there is one", Category: cat},
+		{Keys: []string{"right-click desktop"}, Description: "Desktop menu", Category: cat},
+		{Keys: []string{"click dock entry"}, Description: "Restore that minimized window", Category: cat},
+		{Keys: []string{"right-click dock"}, Description: "Dock menu, or the entry's own menu", Category: cat},
+		{Keys: []string{"drag a panel"}, Description: "Move an overlay; click outside to close", Category: cat},
+	}
+}
+
+// generateSidebarBindings lists the rail: how to reach its keyboard scope, the
+// keys inside it, and the gestures that do the same jobs with the pointer. The
+// keys come from the [keybindings.sidebar] section, which the global keymap
+// deliberately does not carry, so they are read through GetSidebarKeys.
+func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
+	const cat = "Sidebar"
+	row := func(action, desc string) HelpBinding {
+		return HelpBinding{
+			Action:      action,
+			Keys:        registry.GetSidebarKeys(action),
+			Description: desc,
+			Category:    cat,
+		}
+	}
+
+	bindings := generateCategoryBindings(registry, cat, []string{"focus_sidebar"})
+	for _, action := range []string{"prefix_focus_sidebar", "prefix_toggle_sidebar"} {
+		for _, key := range registry.GetKeys(action) {
+			desc := config.ActionDescriptions[action]
+			if desc == "" {
+				desc = formatActionName(action)
+			}
+			bindings = append(bindings, HelpBinding{
+				Action:      action,
+				Keys:        []string{config.LeaderKey + ", " + key},
+				Description: desc,
+				Category:    cat,
+			})
+		}
+	}
+
+	// new_session and new_window are bound in the rail's scope but only notify
+	// that they are not available yet, so listing them would be a lie.
+	bindings = append(bindings,
+		row("exit", "Leave the rail, back to the panes"),
+		row("cursor_down", "Move the cursor down a row"),
+		row("cursor_up", "Move the cursor up a row"),
+		row("first", "Jump to the first row"),
+		row("last", "Jump to the last row"),
+		row("collapse", "Collapse a session"),
+		row("expand", "Expand a session"),
+		row("activate", "Activate the row: switch session, focus window"),
+	)
+	if first, last := registry.GetSidebarKeys("jump_1"), registry.GetSidebarKeys("jump_9"); len(first) > 0 && len(last) > 0 {
+		bindings = append(bindings, HelpBinding{
+			Keys:        []string{first[0] + "-" + last[0]},
+			Description: "Jump to a session by its position in the rail",
+			Category:    cat,
+		})
+	}
+	bindings = append(bindings,
+		row("reorder_down", "Move the session down the rail"),
+		row("reorder_up", "Move the session up the rail"),
+		row("section", "Cycle between agents and the session tree"),
+		row("menu", "Open the menu for the row under the cursor"),
+		row("kill", "Open the session menu, which is where Kill lives"),
+		row("rename", "Rename the window under the cursor"),
+		row("accent", "Recolor the window under the cursor"),
+	)
+
+	// Drop rows whose action is unbound, exactly as generateCategoryBindings does.
+	bound := bindings[:0]
+	for _, b := range bindings {
+		if len(b.Keys) > 0 {
+			bound = append(bound, b)
+		}
+	}
+	bindings = bound
+
+	return append(bindings,
+		HelpBinding{Keys: []string{"click a row"}, Description: "Switch to that session, or focus that window", Category: cat},
+		HelpBinding{Keys: []string{"click the chevron"}, Description: "Expand or collapse a session", Category: cat},
+		HelpBinding{Keys: []string{"drag a session"}, Description: "Reorder the sessions", Category: cat},
+		HelpBinding{Keys: []string{"right-click a row"}, Description: "Open that row's menu", Category: cat},
+		HelpBinding{Keys: []string{"drag the rail edge"}, Description: "Resize the rail", Category: cat},
+		HelpBinding{Keys: []string{"hover a clipped row"}, Description: "Scroll its text past the edge to read the rest", Category: cat},
+		HelpBinding{Keys: []string{"wheel"}, Description: "Scroll the rail", Category: cat},
+	)
+}
+
 // generateCopyModeBindings generates copy mode keybindings
 func generateCopyModeBindings() []HelpBinding {
 	return []HelpBinding{
@@ -224,6 +343,10 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		"prefix_toggle_tiling", "prefix_workspace", "prefix_minimize",
 		"prefix_window", "prefix_detach", "prefix_selection",
 		"prefix_help", "prefix_quit", "prefix_fullscreen", "prefix_settings",
+		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split",
+		"prefix_equalize_splits", "prefix_layout",
+		"prefix_scrollback", "prefix_command_palette", "prefix_session_switcher",
+		"prefix_toggle_sidebar", "prefix_focus_sidebar",
 	}
 
 	// Debug commands are deliberately not listed here. They used to be, built
@@ -344,12 +467,18 @@ const (
 )
 
 // helpTabNames maps full category names to short tab labels.
+// The strip is one row at the panel's preferred width and has to stay that way,
+// so a label is only as long as it needs to be to pick its section out from the
+// neighbours: "Snap" says which of the three layout sections it is, and "Rail"
+// is what the sidebar is called everywhere else.
 var helpTabNames = map[string]string{
 	"Window Management": "Windows",
-	"Workspaces":        "Workspaces",
-	"Layout":            "Layout",
+	"Workspaces":        "Spaces",
+	"Layout":            "Snap",
 	"Tiling":            "Tiling",
 	"BSP":               "BSP",
+	"Mouse":             "Mouse",
+	"Sidebar":           "Rail",
 	"Copy Mode":         "Copy",
 	"Modes":             "Modes",
 	"Debug":             "Debug",
