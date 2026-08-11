@@ -231,6 +231,7 @@ type OS struct {
 	// Performance optimization caches
 	cachedSeparator      string // Cached dock separator string
 	cachedSeparatorWidth int    // Width of cached separator
+	cachedSeparatorChar  string // Glyph the cached separator was built from
 	cachedViewContent    string // Cached full View() output to skip rendering on idle ticks
 	renderSkipped        bool   // True when frame-skip fired; View() returns cached content
 	// tickStats records how the maintenance tick spent itself so the idle

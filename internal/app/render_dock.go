@@ -290,9 +290,13 @@ func (m *OS) renderDockString() (string, int) {
 		dockBar = truncateToWidth(dockBar, renderWidth)
 	}
 
-	if m.cachedSeparatorWidth != renderWidth {
-		m.cachedSeparator = strings.Repeat(config.GetWindowSeparatorChar(), renderWidth)
+	// Keyed on the glyph as well as the width: the separator character follows
+	// the border style, which is switchable from the settings menu, and a
+	// width-only key served the old hairline until the next resize.
+	if sepChar := config.GetWindowSeparatorChar(); m.cachedSeparatorWidth != renderWidth || m.cachedSeparatorChar != sepChar {
+		m.cachedSeparator = strings.Repeat(sepChar, renderWidth)
 		m.cachedSeparatorWidth = renderWidth
+		m.cachedSeparatorChar = sepChar
 	}
 
 	separator := lipgloss.NewStyle().
