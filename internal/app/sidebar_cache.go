@@ -151,5 +151,22 @@ func (m *OS) sidebarSignature() uint64 {
 		mixI(accent)
 	}
 
+	// Unread bits, order-independent and over every window rather than only the
+	// live ones: a foreign session's done pane is ranked and coloured by this
+	// too, and the daemon's cache generation cannot see a purely local look.
+	var seenFold uint64
+	for id, seen := range m.SidebarAgentSeen {
+		if !seen {
+			continue
+		}
+		e := uint64(1469598103934665603)
+		for i := range len(id) {
+			e ^= uint64(id[i])
+			e *= prime
+		}
+		seenFold ^= e
+	}
+	mixU(seenFold)
+
 	return h
 }

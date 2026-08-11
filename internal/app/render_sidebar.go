@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -18,8 +19,10 @@ import (
 // the panes, and emphasis is carried by the same pills the dock uses. The
 // focused window gets the dock's blue focus pill, the current session a quiet
 // Surface-colored pill, everything else stays dim text. Two sections share the
-// rail: the session tree on top and, pinned to the bottom, the panes currently
-// running an agent.
+// rail: the panes currently running an agent at the top, priority-ordered, and
+// the session tree below them. Attention leads because the first question a
+// rail full of agents has to answer is "which one needs me", not "what exists";
+// the tree keeps every behaviour it had, one section lower.
 
 // sidebarFocusColor is the focused-row pill fill, matching the dock's focused
 // pill (render_dock.go) so the two chrome surfaces never disagree about what
@@ -107,6 +110,46 @@ func agentGlyphColor(state string, pal overlay.Palette) color.Color {
 	}
 }
 
+// sidebarStateColor is agentGlyphColor with the unread bit folded in: a
+// finished pane that has been looked at goes muted, so colour on a done row
+// means "not yet seen" rather than "finished at some point".
+func sidebarStateColor(state string, doneSeen bool, pal overlay.Palette) color.Color {
+	if state == "done" && doneSeen {
+		return pal.FgMute
+	}
+	return agentGlyphColor(state, pal)
+}
+
+// sidebarAttention reports the states that mean a human is required. They are
+// the only ones allowed to ink a whole cell or tint a whole row: reserving fill
+// for those two is what keeps the fill legible as an alarm.
+func sidebarAttention(state string) bool {
+	return state == "needs_input" || state == "errored"
+}
+
+// sidebarAttentionTint is the resting row background for an attention state:
+// the severity colour mixed a fifth of the way into the canvas, so the row
+// reads as lit without becoming a coloured slab its own text has to fight.
+func sidebarAttentionTint(state string, pal overlay.Palette) color.Color {
+	var sev color.Color
+	switch state {
+	case "needs_input":
+		sev = pal.Warning
+	case "errored":
+		sev = pal.Warn
+	default:
+		return nil
+	}
+	if sev == nil || pal.Canvas == nil {
+		return nil
+	}
+	const mix = 22 // percent severity in the mix
+	br, bgc, bb, _ := pal.Canvas.RGBA()
+	sr, sg, sb, _ := sev.RGBA()
+	c := func(base, s uint32) uint8 { return uint8((base*(100-mix) + s*mix) / 100 >> 8) }
+	return color.RGBA{R: c(br, sr), G: c(bgc, sg), B: c(bb, sb), A: 0xff}
+}
+
 // agentStateLabel is the short word the agents section shows beside a pane
 // name. Shapes and colors already carry the state; the word is confirmation,
 // so it stays terse enough to leave the name room.
@@ -134,6 +177,7 @@ type sidebarAgentEntry struct {
 	WindowID    string
 	Title       string
 	State       string
+	DoneSeen    bool
 	WindowIndex int
 	// Foreign marks a pane of a session other than the attached one, whose row
 	// carries the session name for context.
@@ -219,7 +263,7 @@ func sidebarChevron(expanded bool) string {
 // sidebarGlyph returns the styled agent-state glyph for a row, or a single
 // space on the row background when there is no state or glyphs are disabled,
 // so rows stay aligned. It always occupies exactly one cell.
-func sidebarGlyph(state string, bg color.Color, pal overlay.Palette) string {
+func sidebarGlyph(state string, doneSeen bool, bg color.Color, pal overlay.Palette) string {
 	if !config.SidebarShowGlyphs {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
@@ -227,7 +271,7 @@ func sidebarGlyph(state string, bg color.Color, pal overlay.Palette) string {
 	if g == "" {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
-	return sidebarStyle(bg, agentGlyphColor(state, pal)).Render(g)
+	return sidebarStyle(bg, sidebarStateColor(state, doneSeen, pal)).Render(g)
 }
 
 // sidebarPill wraps text in the dock's pill caps on the given fill. rowBg is
@@ -297,11 +341,12 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 // and the reserved width. It returns nil rows when the sidebar reserves
 // nothing.
 //
-// The rail is two sections: the session tree on top, scrolled by
-// m.SidebarScroll, and the running-agents section pinned to the bottom (hidden
-// entirely when no pane is running an agent, or when the rail is too small to
-// carry it). Every emitted line is exactly the reserved width: the content
-// columns plus the one-cell edge rule on the side facing the panes.
+// The rail is two sections: the running-agents section at the top, ordered by
+// how much it wants a human (hidden entirely when no pane is running an agent,
+// or when the rail is too small to carry it), and the session tree below a
+// hairline, scrolled by m.SidebarScroll. Every emitted line is exactly the
+// reserved width: the content columns plus the one-cell edge rule on the side
+// facing the panes.
 func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
@@ -382,9 +427,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs, s.ID)
 	}
 
-	// Flatten the panes running agents, in display order. Sessions with known
-	// windows contribute: the attached one from live state, others from the
-	// cached listing, so agents on other sessions surface here marked Foreign.
+	// Flatten the panes running agents. Sessions with known windows contribute:
+	// the attached one from live state, others from the cached listing, so
+	// agents on other sessions surface here marked Foreign.
 	var agents []sidebarAgentEntry
 	if variant != sidebarVariantGlyph {
 		for _, s := range sessions {
@@ -401,35 +446,59 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 					WindowID:    win.ID,
 					Title:       win.Title,
 					State:       win.AgentState,
+					DoneSeen:    win.DoneSeen,
 					WindowIndex: idx,
 					Foreign:     !s.IsCurrent,
 				})
 			}
 		}
+		// Ordered by need, stable within a rank so panes keep their tree order.
+		// This is what makes the cap below safe: what it hides is provably the
+		// calm end of the list, never the pane waiting on an answer.
+		sort.SliceStable(agents, func(a, b int) bool {
+			return sessiontree.AgentRank(agents[a].State, agents[a].DoneSeen) >
+				sessiontree.AgentRank(agents[b].State, agents[b].DoneSeen)
+		})
 	}
 
 	// Section geometry: the agents section takes at most a third of the rail
 	// and only exists when there is something to show and room to show it.
-	agentShown := 0
-	agentSection := 0
+	// agentRows is how many of those lines are real rows; a capped section
+	// spends its last line owning up to what it hides.
+	agentShown, agentSection := 0, 0
 	if len(agents) > 0 && height >= 8 {
 		agentShown = min(len(agents), max(height/3, 1))
-		agentSection = agentShown + 2 // hairline + header
+		agentSection = agentShown + 2 // header + hairline
+	}
+	overflow := len(agents) - agentShown
+	agentRows := agentShown
+	if overflow > 0 {
+		agentRows--
 	}
 	treeH := height - agentSection
 
 	// Hover, derived from the last motion seen inside the band. Rows are one
-	// screen line each, so the hovered tree row is the scroll offset plus the
-	// cursor's distance from the top; the agents section maps past the tree
-	// region and its two chrome rows. Hover yields entirely to a drag.
+	// screen line each, so the hovered agent row is the pointer's distance from
+	// the top less the section header, and the hovered tree row is the scroll
+	// offset plus its distance past the whole agents block. Hover yields
+	// entirely to a drag.
 	treeHover, agentHover := -1, -1
 	if !m.SidebarDrag.Dragging && m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
 		delta := m.SidebarHoverY - topMargin
-		if delta < treeH {
-			treeHover = m.SidebarScroll + delta
-		} else if d := delta - treeH - 2; d >= 0 && d < agentShown {
-			agentHover = d
+		if delta < agentSection {
+			if d := delta - 1; d >= 0 && d < agentRows {
+				agentHover = d
+			}
+		} else {
+			treeHover = m.SidebarScroll + delta - agentSection
 		}
+	}
+
+	// Nav rows are published in drawn order, so the agents lead here exactly as
+	// they lead on screen and j/k walks what the eye reads.
+	for i := 0; i < agentRows; i++ {
+		e := agents[i]
+		nav = append(nav, sidebarNavRow{Kind: sidebarRowAgent, SessionID: e.SessionID, WindowID: e.WindowID, WindowIndex: e.WindowIndex})
 	}
 
 	// Build the logical tree rows (header + sessions + expanded windows), each
@@ -515,24 +584,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			WindowIndex: windowIndex,
 		})
 	}
-	for _, r := range rows[m.SidebarScroll:end] {
-		if r.interactive {
-			recordHit(r.kind, r.sessionID, r.windowID, r.windowIndex)
-		}
-		lines = append(lines, compose(r.text))
-	}
-	for len(lines) < treeH {
-		lines = append(lines, blank)
-	}
-
 	if agentSection > 0 {
-		lines = append(lines, compose(sidebarRuleRow(cw)))
 		lines = append(lines, compose(sidebarHeaderRow("Agents", len(agents), cw, pal)))
-		overflow := len(agents) - agentShown
-		for i := 0; i < agentShown; i++ {
-			if overflow > 0 && i == agentShown-1 {
-				// The section is capped; the last line owns up to what it hides
-				// rather than silently dropping panes.
+		for i := range agentShown {
+			if i >= agentRows {
 				more := overlay.Ellipsis() + " +" + strconv.Itoa(overflow+1)
 				lines = append(lines, compose(sidebarFit(" "+
 					sidebarStyle(nil, pal.FgMute).Render(more), cw, nil)))
@@ -540,9 +595,19 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			}
 			e := agents[i]
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex)
-			nav = append(nav, sidebarNavRow{Kind: sidebarRowAgent, SessionID: e.SessionID, WindowID: e.WindowID, WindowIndex: e.WindowIndex})
 			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, i == agentHover || isCursor(sidebarRowAgent, e.SessionID, e.WindowID))))
 		}
+		lines = append(lines, compose(sidebarRuleRow(cw)))
+	}
+
+	for _, r := range rows[m.SidebarScroll:end] {
+		if r.interactive {
+			recordHit(r.kind, r.sessionID, r.windowID, r.windowIndex)
+		}
+		lines = append(lines, compose(r.text))
+	}
+	for len(lines) < height {
+		lines = append(lines, blank)
 	}
 
 	// Publish the frame's navigable rows for the keyboard, then re-anchor the
@@ -593,32 +658,45 @@ func (m *OS) windowIndexByID(id string) int {
 // keeps that bar on the dragged row while it rides the pointer.
 func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool, cw int, pal overlay.Palette, hovered, dragged bool) string {
 	if variant == sidebarVariantGlyph {
-		// One rolled-up glyph per session; the current session gets the focus
-		// fill so it is findable without a name. A session with no agent state
-		// still marks its slot with a dim dot, otherwise its row would be an
-		// invisible strip of nothing to aim a click at.
-		var bg color.Color
+		// One rolled-up glyph per session. A session with no agent state still
+		// marks its slot with a dim dot, otherwise its row would be an invisible
+		// strip of nothing to aim a click at.
+		mark := agentStateIndicator(node.AgentState)
+		if mark == "" || !config.SidebarShowGlyphs {
+			mark = "·"
+			if overlay.UseASCII() {
+				mark = "."
+			}
+		}
+		var bg, fg color.Color
 		switch {
+		case sidebarAttention(node.AgentState) && config.SidebarShowGlyphs:
+			// Two cells is too little room for a coloured glyph to carry an
+			// alarm, so at this width the cell itself is inked and the glyph is
+			// knocked out of it. This outranks the current-session fill: the
+			// whole job of a three-column rail is saying which session wants you.
+			bg, fg = agentGlyphColor(node.AgentState, pal), pal.Canvas
 		case node.IsCurrent:
 			bg = lipgloss.Color(sidebarFocusColor)
 		case hovered || dragged:
 			bg = pal.RowSel
 		}
-		g := sidebarGlyph(node.AgentState, bg, pal)
-		if agentStateIndicator(node.AgentState) == "" || !config.SidebarShowGlyphs {
-			dot := "·"
-			if overlay.UseASCII() {
-				dot = "."
+		if fg == nil {
+			fg = pal.FgMute
+			if config.SidebarShowGlyphs && agentStateIndicator(node.AgentState) != "" {
+				fg = sidebarStateColor(node.AgentState, node.DoneSeen, pal)
 			}
-			g = sidebarStyle(bg, pal.FgMute).Render(dot)
 		}
-		row := sidebarStyle(bg, nil).Render(" ") + g
+		row := sidebarStyle(bg, nil).Render(" ") + sidebarStyle(bg, fg).Render(mark)
 		return sidebarFit(row, cw, bg)
 	}
 
 	var rowBg color.Color
-	if hovered || dragged {
+	switch {
+	case hovered || dragged:
 		rowBg = pal.RowSel
+	default:
+		rowBg = sidebarAttentionTint(node.AgentState, pal)
 	}
 
 	chevron := " "
@@ -632,7 +710,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 	// wide empty gutter.
 	left := sidebarStyle(rowBg, pal.FgMute).Render(chevron) +
 		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarGlyph(node.AgentState, rowBg, pal)
+		sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal)
 
 	right := ""
 	rightW := 0
@@ -717,8 +795,12 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		return sidebarFit(row, cw, nil)
 	}
 
-	var rowBg color.Color
+	rowBg := sidebarAttentionTint(node.AgentState, pal)
 	fg := pal.FgDim
+	if node.AgentState == "done" && !node.DoneSeen {
+		// Unseen work reads at full strength; seeing it is what dims it.
+		fg = pal.Fg
+	}
 	if hovered {
 		rowBg = pal.RowSel
 		fg = pal.Fg
@@ -739,15 +821,18 @@ func (m *OS) sidebarWindowGlyph(node sessiontree.Node, rowBg color.Color, pal ov
 			return sidebarStyle(rowBg, accentColor(idx)).Render(accentMark())
 		}
 	}
-	return sidebarGlyph(node.AgentState, rowBg, pal)
+	return sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal)
 }
 
 // sidebarAgentRow renders one row of the running-agents section: state glyph,
 // pane name (session-qualified when the pane lives in another session), and,
 // in the full variant, the state word right-aligned and muted.
 func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overlay.Palette, hovered bool) string {
-	var rowBg color.Color
+	rowBg := sidebarAttentionTint(e.State, pal)
 	fg := pal.FgDim
+	if e.State == "done" && !e.DoneSeen {
+		fg = pal.Fg
+	}
 	if hovered {
 		rowBg = pal.RowSel
 		fg = pal.Fg
@@ -770,7 +855,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 
 	avail := max(cw-3-labelW-1, 1)
 	row := sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarGlyph(e.State, rowBg, pal) +
+		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
 		sidebarStyle(rowBg, fg).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, avail, hovered))
 	if label != "" {

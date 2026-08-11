@@ -60,12 +60,13 @@ func TestRailEnterExitTogglesFocus(t *testing.T) {
 func TestRailCursorNavigatesRows(t *testing.T) {
 	m, tree := railOS(t)
 	_ = tree
-	if m.SidebarCursor != 0 {
-		t.Fatalf("cursor started at %d, want the current session (0)", m.SidebarCursor)
+	start := navIndexOfSession(m, "main")
+	if m.SidebarCursor != start {
+		t.Fatalf("cursor started at %d, want the current session (%d)", m.SidebarCursor, start)
 	}
 	m.SidebarCursorMove(1)
-	if m.SidebarCursor != 1 {
-		t.Fatalf("j moved cursor to %d, want 1", m.SidebarCursor)
+	if m.SidebarCursor != start+1 {
+		t.Fatalf("j moved cursor to %d, want %d", m.SidebarCursor, start+1)
 	}
 	m.SidebarCursorLast()
 	last := len(m.SidebarNav) - 1
@@ -116,10 +117,10 @@ func TestRailActivateEqualsClick(t *testing.T) {
 	m.sidebarPanelLinesForTree(tree)
 
 	// Window row: enter focuses the pane and asks to exit, exactly as a click.
-	m.SidebarCursor = 1 // first window under main (claude)
-	row := m.SidebarNav[1]
+	m.SidebarCursor = navIndexOfSession(m, "main") + 1 // first window under main
+	row := m.SidebarNav[m.SidebarCursor]
 	if row.Kind != sidebarRowWindow {
-		t.Fatalf("nav[1] is %v, want a window row", row.Kind)
+		t.Fatalf("nav[%d] is %v, want a window row", m.SidebarCursor, row.Kind)
 	}
 	m.FocusedWindow = 2
 	exit := m.SidebarActivateCursor()

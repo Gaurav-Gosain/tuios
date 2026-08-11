@@ -483,6 +483,11 @@ type OS struct {
 	// and the collapse state; the daemon does not own it, so it is this client's
 	// view of its own windows.
 	SidebarAccents map[string]int
+	// SidebarAgentSeen is the unread bit of finished panes, by window ID: an
+	// entry means "this done pane has been looked at". Whether a client has
+	// looked at a pane is that client's business, not the daemon's, so it lives
+	// beside the accents rather than in session state.
+	SidebarAgentSeen map[string]bool
 	// Accent picker state: the window being accented, the selected swatch, and
 	// the list scroll the shared list overlay clamps.
 	ShowAccentPicker     bool

@@ -36,6 +36,9 @@ type sidebarStateFile struct {
 	// Accents is the per-window accent index, by window ID. Window IDs outlive a
 	// detach, so an accent set today is still on the row tomorrow.
 	Accents map[string]int `json:"accents,omitempty"`
+	// AgentSeen holds the window IDs of finished panes already looked at, so a
+	// pane reviewed before a detach does not come back demanding attention.
+	AgentSeen map[string]bool `json:"agent_seen,omitempty"`
 }
 
 // loadSidebarState reads the persisted sidebar order and collapse toggles.
@@ -59,6 +62,9 @@ func (m *OS) loadSidebarState() {
 	if len(st.Accents) > 0 {
 		m.SidebarAccents = st.Accents
 	}
+	if len(st.AgentSeen) > 0 {
+		m.SidebarAgentSeen = st.AgentSeen
+	}
 	// A stored drag width wins over the config default; GetSidebarWidth still
 	// folds it against the breakpoints and pane floor, so an out-of-range value
 	// cannot starve the panes.
@@ -80,6 +86,7 @@ func (m *OS) saveSidebarState() {
 		Collapsed: m.SidebarCollapsed,
 		Width:     config.SidebarWidth,
 		Accents:   m.SidebarAccents,
+		AgentSeen: m.SidebarAgentSeen,
 	})
 	if err != nil {
 		return

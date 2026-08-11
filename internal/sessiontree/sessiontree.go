@@ -30,6 +30,10 @@ type Node struct {
 	// "", "working", "needs_input", "idle", "done", "errored"). For a session
 	// node it is the rolled-up state of its windows.
 	AgentState string
+	// DoneSeen is the unread bit of a "done" state: false while the user has
+	// not looked at the finished pane yet. Meaningless for other states. On a
+	// session node it belongs to the window that won the roll-up.
+	DoneSeen bool
 	// Attached is true for a session that has any client attached. Always false
 	// for window nodes.
 	Attached bool
@@ -56,6 +60,8 @@ type WindowInput struct {
 	ID         string
 	Title      string
 	AgentState string
+	// DoneSeen marks a finished pane the user has already looked at.
+	DoneSeen bool
 	// Focused marks the currently focused window in its session.
 	Focused bool
 }
@@ -71,19 +77,29 @@ type SessionInput struct {
 	Windows     []WindowInput
 }
 
-// agentStatePriority ranks agent states for roll-up. A higher number wins, so a
-// session showing any errored or blocked window surfaces that over calmer
-// states. Order: errored > needs_input > working > done > idle > none.
-func agentStatePriority(s string) int {
-	switch s {
+// AgentRank ranks agent states for both the session roll-up and the sidebar's
+// priority-ordered agents section. A higher number wins, so a session holding
+// any errored or blocked window surfaces that over calmer states.
+//
+// done splits on the unread bit: a pane that finished and has not been looked
+// at is the second most urgent thing on screen, and drops below working the
+// moment it is seen. That decay is what stops a finished agent from sitting in
+// the rail as permanent green noise.
+//
+// Order: errored > needs_input > done-unseen > working > done-seen > idle > none.
+func AgentRank(state string, doneSeen bool) int {
+	switch state {
 	case "errored":
-		return 5
+		return 6
 	case "needs_input":
+		return 5
+	case "done":
+		if doneSeen {
+			return 2
+		}
 		return 4
 	case "working":
 		return 3
-	case "done":
-		return 2
 	case "idle":
 		return 1
 	default: // "none" and any unknown value
@@ -91,19 +107,16 @@ func agentStatePriority(s string) int {
 	}
 }
 
-// RollUpState returns the highest-priority state among the given states, which
-// is what a collapsed session row shows for its windows. An empty input rolls
-// up to "" (none). This is the single definition of the roll-up ordering.
+// RollUpState returns the highest-priority state among the given raw states,
+// treating every done as unseen. Callers that track the unread bit roll up
+// through BuildSession instead.
 func RollUpState(states []string) string {
 	best := ""
-	bestPri := -1
+	bestRank := 0
 	for _, s := range states {
-		if p := agentStatePriority(s); p > bestPri {
-			best, bestPri = s, p
+		if r := AgentRank(s, false); r > bestRank {
+			best, bestRank = s, r
 		}
-	}
-	if bestPri <= 0 {
-		return ""
 	}
 	return best
 }
@@ -126,20 +139,22 @@ func BuildSession(s SessionInput) Node {
 	}
 
 	children := make([]Node, 0, len(s.Windows))
-	states := make([]string, 0, len(s.Windows))
+	bestRank := 0
 	for _, w := range s.Windows {
 		children = append(children, Node{
 			Kind:       KindWindow,
 			ID:         w.ID,
 			Title:      w.Title,
 			AgentState: w.AgentState,
+			DoneSeen:   w.DoneSeen,
 			IsCurrent:  w.Focused,
 		})
-		states = append(states, w.AgentState)
+		if r := AgentRank(w.AgentState, w.DoneSeen); r > bestRank {
+			node.AgentState, node.DoneSeen, bestRank = w.AgentState, w.DoneSeen, r
+		}
 	}
 	node.Children = children
 	node.WindowCount = len(children)
-	node.AgentState = RollUpState(states)
 	return node
 }
 

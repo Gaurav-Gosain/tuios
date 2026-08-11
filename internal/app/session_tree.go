@@ -34,6 +34,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			ID:         w.ID,
 			Title:      m.railTitleShown(w),
 			AgentState: w.AgentState,
+			DoneSeen:   m.agentSeen(w.ID),
 			Focused:    i == m.FocusedWindow,
 		})
 	}
@@ -56,7 +57,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 // sidebar can expand it. The cache is refreshed off the UI goroutine, so this
 // stays a pure read with no round trip. Windows are nil until the first refresh
 // lands, which leaves the row coarse (name only) exactly as before.
-func foreignSessionInput(client *session.TUIClient, name string) sessiontree.SessionInput {
+func (m *OS) foreignSessionInput(client *session.TUIClient, name string) sessiontree.SessionInput {
 	summaries := client.SessionWindows(name)
 	windows := make([]sessiontree.WindowInput, 0, len(summaries))
 	for _, w := range summaries {
@@ -64,6 +65,7 @@ func foreignSessionInput(client *session.TUIClient, name string) sessiontree.Ses
 			ID:         w.ID,
 			Title:      w.Title,
 			AgentState: w.AgentState,
+			DoneSeen:   m.agentSeen(w.ID),
 		})
 	}
 	return sessiontree.SessionInput{Name: name, Windows: windows}
@@ -102,7 +104,7 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 			seen = true
 			continue
 		}
-		sessions = append(sessions, foreignSessionInput(m.DaemonClient, name))
+		sessions = append(sessions, m.foreignSessionInput(m.DaemonClient, name))
 	}
 	if !seen {
 		// The cache has not caught up with a just-created session yet; it goes

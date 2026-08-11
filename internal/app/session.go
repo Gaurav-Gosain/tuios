@@ -616,6 +616,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.PreMinimizeWidth = ws.PreMinimizeW
 	w.PreMinimizeHeight = ws.PreMinimizeH
 	w.SetAltScreen(ws.IsAltScreen)
+	m.noteAgentState(w.ID, w.AgentState, string(ws.AgentState), m.GetFocusedWindow() == w)
 	w.AgentState = string(ws.AgentState)
 	w.AgentMessage = ws.AgentMessage
 
