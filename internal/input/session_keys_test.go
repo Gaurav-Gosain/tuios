@@ -49,6 +49,43 @@ func TestAltShiftKeysSpellWhatTheTerminalSends(t *testing.T) {
 	}
 }
 
+// A digit has no case to fold, so alt+shift+<digit> reaches the registry in
+// three different spellings depending on what the host terminal speaks, and all
+// three have to find the same action.
+func TestAltShiftDigitsResolveInEverySpellingATerminalSends(t *testing.T) {
+	registry := config.NewKeybindRegistry(config.DefaultConfig())
+
+	for _, tc := range []struct {
+		what string
+		msg  tea.KeyPressMsg
+		key  string
+		want string
+	}{
+		{"kitty", tea.KeyPressMsg{Code: '1', ShiftedCode: '!', Mod: tea.ModAlt | tea.ModShift}, "alt+shift+1", "move_and_follow_1"},
+		{"legacy", tea.KeyPressMsg{Code: '!', Mod: tea.ModAlt}, "alt+!", "move_and_follow_1"},
+		{"modifyOtherKeys", tea.KeyPressMsg{Code: '!', Mod: tea.ModAlt | tea.ModShift}, "alt+shift+!", "move_and_follow_1"},
+		{"kitty", tea.KeyPressMsg{Code: '9', ShiftedCode: '(', Mod: tea.ModAlt | tea.ModShift}, "alt+shift+9", "move_and_follow_9"},
+		{"legacy", tea.KeyPressMsg{Code: '(', Mod: tea.ModAlt}, "alt+(", "move_and_follow_9"},
+	} {
+		if got := tc.msg.String(); got != tc.key {
+			t.Fatalf("%s terminal spells the chord %q, want %q", tc.what, got, tc.key)
+		}
+		if got := registry.GetAction(tc.key); got != tc.want {
+			t.Errorf("%s spelling %q resolved to %q, want %q", tc.what, tc.key, got, tc.want)
+		}
+		if !GetDispatcher().HasAction(tc.want) {
+			t.Errorf("%s has no registered handler", tc.want)
+		}
+	}
+
+	// Aliasing the shifted chords must leave the unshifted digits alone.
+	for key, want := range map[string]string{"alt+1": "switch_workspace_1", "alt+9": "switch_workspace_9"} {
+		if got := registry.GetAction(key); got != want {
+			t.Errorf("%s resolved to %q, want %q", key, got, want)
+		}
+	}
+}
+
 // TestSessionKeysReachTheActionFromBothModes checks the routing, not the switch:
 // standalone has no other session to go to, so the proof that the key arrived is
 // the hint it leaves behind. Terminal mode is the case that needs the check,

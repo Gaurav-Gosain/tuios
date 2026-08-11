@@ -132,6 +132,35 @@ func shiftAliases(key, keyLower string) []string {
 	if isSingleRuneLetter(key) && key != keyLower {
 		return []string{"shift+" + keyLower}
 	}
+	return modifiedShiftAliases(keyLower)
+}
+
+// modifiedShiftAliases does for a chord carrying other modifiers what
+// shiftAliases does for a bare one: "alt+shift+1" also answers to "alt+!"
+// (what a terminal without the Kitty protocol sends) and to "alt+shift+!"
+// (what xterm's modifyOtherKeys sends).
+//
+// Only digits are aliased. A shifted letter needs no help, since lookup
+// case-folds compound keys, and aliasing "alt+shift+n" to "alt+n" would
+// silently steal an unrelated binding. An unshifted "alt+1" is a different
+// physical chord and gets no aliases, so it keeps its own action.
+func modifiedShiftAliases(keyLower string) []string {
+	i := strings.LastIndex(keyLower, "+")
+	if i <= 0 {
+		return nil
+	}
+	mods, base := keyLower[:i+1], keyLower[i+1:]
+	shifted := strings.HasSuffix(mods, "shift+")
+	mods = strings.TrimSuffix(mods, "shift+")
+	if mods == "" {
+		return nil
+	}
+	if digit, ok := shiftedDigitsReverse[base]; ok {
+		return []string{mods + base, mods + "shift+" + base, mods + "shift+" + digit}
+	}
+	if symbol, ok := shiftedDigits[base]; ok && shifted {
+		return []string{mods + symbol, mods + "shift+" + symbol}
+	}
 	return nil
 }
 
