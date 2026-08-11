@@ -66,7 +66,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, timeLayer)
 	}
 
-	if len(m.GetVisibleWindows()) == 0 {
+	if len(m.GetVisibleWindows()) == 0 && m.GetContentWidth() > 0 && m.GetUsableHeight() > 0 {
 		asciiArt := `████████╗██╗   ██╗██╗ ██████╗ ███████╗
 ╚══██╔══╝██║   ██║██║██╔═══██╗██╔════╝
    ██║   ██║   ██║██║██║   ██║███████╗
@@ -84,12 +84,19 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			artCols      = 38
 			subtitleCols = 28
 			hintCols     = 68
+			boxCols      = 6 // both borders, both paddings
+			boxRows      = 4 // border and padding, top and bottom
 		)
-		avail := m.GetRenderWidth() - 6 // both borders, both paddings
+		// The splash belongs to the content region: the sidebar's reserved
+		// columns and the dock's rows are drawn by someone else, and centering
+		// on the whole screen both overdrew the rail and put the box off-centre
+		// in the part of the screen the user can actually see.
+		contentW, contentH := m.GetContentWidth(), m.GetUsableHeight()
+		avail := contentW - boxCols
 		// The same argument applies to the height: the block letters are six
 		// rows of a box that also carries a border, padding, a subtitle and up
 		// to three stacked hints, which is more than a short terminal has.
-		availRows := m.dialogContentRows()
+		availRows := max(contentH-boxRows, 1)
 
 		ui := theme.UI()
 		titleText := asciiArt
@@ -131,16 +138,28 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			Border(getNormalBorder()).
 			BorderForeground(ui.Accent).
 			Padding(1, 2).
-			MaxWidth(m.GetRenderWidth())
+			MaxWidth(contentW)
+
+		box := boxStyle.Render(content)
+		if lipgloss.Width(box) > contentW || lipgloss.Height(box) > contentH {
+			// A wide enough rail, or a short enough screen, leaves no room for
+			// the box even after squeezing. One clipped hint line still says
+			// what to press, which beats drawing a border over the rail or the
+			// dock.
+			box = lipgloss.NewStyle().
+				Foreground(ui.FgDim).
+				MaxWidth(contentW).
+				Render("n: new window")
+		}
 
 		centeredContent := lipgloss.Place(
-			m.GetRenderWidth(), m.GetRenderHeight(),
+			contentW, contentH,
 			lipgloss.Center, lipgloss.Center,
-			boxStyle.Render(content),
+			box,
 		)
 
 		welcomeLayer := lipgloss.NewLayer(centeredContent).
-			X(0).Y(0).Z(1).ID("welcome")
+			X(m.GetLeftMargin()).Y(m.GetTopMargin()).Z(1).ID("welcome")
 
 		layers = append(layers, welcomeLayer)
 	}
