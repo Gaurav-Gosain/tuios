@@ -7,21 +7,38 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// An accent is stored as an index into the theme's eight bright ANSI colors,
-// never as a hex value, so a row keeps its identity across a theme switch and
-// stays legible on whatever the new theme paints behind it.
-const accentSwatchCount = 8
+// An accent is stored as an index into the theme's own ANSI slots, never as a
+// hex value, so a row keeps its identity across a theme switch and stays
+// legible on whatever the new theme paints behind it. Fifteen of the sixteen
+// slots are offered, the eight bright ones first so an index stored before the
+// set grew still means what it meant, then the seven normal ones. Black is
+// skipped: an accent nobody can see is not a choice.
+//
+// A hex entry would nearly double the options and cost the model everything a
+// stored hex cannot do: re-resolve against a new theme, or promise legibility
+// on two grounds in two theme polarities.
+const accentSwatchCount = 15
+
+// accentBrightCount is how many of the slots are the bright half.
+const accentBrightCount = 8
 
 // accentNames label the swatches. They name the ANSI slot, not the pixels: what
-// "red" looks like is the theme's business.
+// "red" looks like is the theme's business. Lowercase, like the rest of the
+// dialog's furniture.
 var accentNames = [accentSwatchCount]string{
-	"Gray", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White",
+	"gray", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+	"dark red", "dark green", "dark yellow", "dark blue", "dark magenta", "dark cyan", "dark white",
 }
 
-// accentColor resolves an accent index against the live theme.
+// accentColor resolves an accent index against the live theme: the first eight
+// are ANSI 8-15, the rest ANSI 1-7.
 func accentColor(idx int) color.Color {
 	pal := theme.GetANSIPalette()
-	return pal[8+clampInt(idx, 0, accentSwatchCount-1)]
+	idx = clampInt(idx, 0, accentSwatchCount-1)
+	if idx < accentBrightCount {
+		return pal[accentBrightCount+idx]
+	}
+	return pal[idx-accentBrightCount+1]
 }
 
 // accentMark is the one-cell chip an accented row wears in its glyph column.
@@ -77,6 +94,22 @@ func (m *OS) OpenAccentPicker(windowID string) {
 // AccentPickerMove moves the picker's selection, clear row included.
 func (m *OS) AccentPickerMove(delta int) {
 	m.AccentPickerSelected = clampInt(m.AccentPickerSelected+delta, 0, accentSwatchCount)
+}
+
+// accentPreview is the slot the rail draws the picker's target in while the
+// picker is open, so the mark on the row shows the choice under the cursor
+// before it is applied. Derived from the picker's own state rather than stored
+// beside it: one fewer thing that can disagree with what is on screen, and the
+// three fields it reads are in the rail's signature, so the preview repaints on
+// the keystrokes that change it and on nothing else.
+func (m *OS) accentPreview(windowID string) (int, bool) {
+	if !m.ShowAccentPicker || windowID == "" || windowID != m.AccentPickerWindowID {
+		return 0, false
+	}
+	if m.AccentPickerSelected < 0 || m.AccentPickerSelected >= accentSwatchCount {
+		return 0, false // the clear row previews no mark at all
+	}
+	return m.AccentPickerSelected, true
 }
 
 // AccentPickerApply commits the row at idx and closes the picker. The row past

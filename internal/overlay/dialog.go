@@ -60,6 +60,28 @@ func DashRule(width int, bg color.Color, pal Palette) string {
 	return Style(bg).Foreground(pal.FgMute).Render(strings.Repeat(ch, max(width, 0)))
 }
 
+// EnterKey names the return key for a hint strip: the glyph where it renders,
+// the word where it does not. Three cells either way, like "esc" beside it.
+func EnterKey() string {
+	if UseASCII() {
+		return "ret"
+	}
+	return "↵"
+}
+
+// SigilMark is the one-cell marker fronting an input field or the row a cursor
+// is on. Sigil is the same mark plus its trailing space, which is the two-cell
+// form list rows and search lines use.
+func SigilMark() string {
+	if UseASCII() {
+		return ">"
+	}
+	return "›"
+}
+
+// Sigil is SigilMark plus a space.
+func Sigil() string { return SigilMark() + " " }
+
 // Cursor renders one cell as the text cursor: reverse video over the colours
 // the row already carries, rather than a painted background. A bg-painted
 // cursor vanishes on a monochrome terminal, which is the one place a cursor

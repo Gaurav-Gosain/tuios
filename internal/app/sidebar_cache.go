@@ -141,6 +141,21 @@ func (m *OS) sidebarSignature() uint64 {
 	// and the rail keeps drawing the old name, so typing no longer rebuilds the
 	// whole rail once per keystroke.
 
+	// An open accent picker previews its cursor slot on the row it targets, so
+	// the rail rebuilds exactly on picker navigation, which is already a frame,
+	// and never otherwise. No tick. Only what the preview actually draws is
+	// folded, so a closed picker's leftover selection cannot hold the rail on a
+	// signature it no longer renders.
+	mixB(m.ShowAccentPicker)
+	if m.ShowAccentPicker {
+		mixS(m.AccentPickerWindowID)
+		slot, ok := m.accentPreview(m.AccentPickerWindowID)
+		if !ok {
+			slot = -1
+		}
+		mixI(slot)
+	}
+
 	// Live windows in row order: id, label, agent state, workspace, accent.
 	for _, w := range m.Windows {
 		if w == nil {

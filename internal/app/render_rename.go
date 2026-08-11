@@ -11,9 +11,12 @@ import (
 // cursor, and nothing that would make it a panel.
 const renameDialogWidth = 28
 
-var renameHints = []overlay.Hint{
-	{Key: "↵", Label: "save"},
-	{Key: "esc", Label: "cancel"},
+// renameHints are built per render because the key glyph follows ASCII mode.
+func renameHints() []overlay.Hint {
+	return []overlay.Hint{
+		{Key: overlay.EnterKey(), Label: "save"},
+		{Key: "esc", Label: "cancel"},
+	}
 }
 
 // renameFieldText windows the buffer so the tail is always visible: what you
@@ -49,7 +52,7 @@ func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
 	// sits against the frame.
 	field := renameFieldText(printableTitle(m.RenameBuffer), max(inner-4, 1))
 	body := overlay.Style(pal.Canvas).Render(" ") +
-		overlay.Style(pal.Canvas).Foreground(pal.AccentBright).Bold(true).Render("› ") +
+		overlay.Style(pal.Canvas).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil()) +
 		overlay.Style(pal.Canvas).Foreground(pal.Fg).Render(field) +
 		overlay.Cursor(" ", pal.Canvas, pal.Fg)
 
@@ -57,7 +60,7 @@ func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
 		Title: "rename",
 		Width: inner,
 		Body:  body,
-		Hints: renameHints,
+		Hints: renameHints(),
 	}.Render(pal)
 
 	x, y := m.renameDialogOrigin(geo)

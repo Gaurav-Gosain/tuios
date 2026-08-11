@@ -1145,7 +1145,13 @@ func (m *OS) windowWorkspace(id string) int {
 // identity, so a working pane keeps its state dot and the accent waits.
 func (m *OS) sidebarWindowGlyph(node sessiontree.Node, rowBg color.Color, pal overlay.Palette) string {
 	if node.AgentState == "" && config.SidebarShowGlyphs {
-		if idx, ok := m.WindowAccent(node.ID); ok {
+		idx, ok := m.WindowAccent(node.ID)
+		if m.ShowAccentPicker && node.ID == m.AccentPickerWindowID {
+			// The open picker previews its cursor slot on the row it targets, so
+			// the choice reads on the thing being accented, not in the dialog.
+			idx, ok = m.accentPreview(node.ID)
+		}
+		if ok {
 			return sidebarStyle(rowBg, accentColor(idx)).Render(accentMark())
 		}
 	}

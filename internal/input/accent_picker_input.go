@@ -22,7 +22,9 @@ func handleAccentPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	case "0", "x":
 		o.AccentPickerClear()
 	default:
-		if len(key) == 1 && key[0] >= '1' && key[0] <= '8' {
+		// The first nine slots are addressable outright; past that the list is
+		// short enough to walk, and a two-digit entry would be a mode.
+		if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 			o.AccentPickerApply(int(key[0] - '1'))
 		}
 	}

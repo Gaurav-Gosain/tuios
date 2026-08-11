@@ -66,7 +66,7 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	var lines []string
 	rowYOffset := 0
 	if cfg.Search {
-		search := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("› ") +
+		search := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil()) +
 			overlay.Style(bg).Foreground(pal.Fg).Render(cfg.Query) +
 			overlay.Cursor(" ", bg, pal.Fg)
 		lines = append(lines, search, overlay.Rule(cfg.Width, bg, pal))
@@ -217,7 +217,7 @@ func moveListSelection(selected, scroll *int, count, maxVisible, delta int) {
 // listRowMarker returns the two-cell leading marker for a list row.
 func listRowMarker(selected bool) string {
 	if selected {
-		return "› "
+		return overlay.Sigil()
 	}
 	return "  "
 }

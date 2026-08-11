@@ -64,14 +64,14 @@ func TestRailRenamesAndAccentsAWindow(t *testing.T) {
 	if err := term.SendKeys("c"); err != nil {
 		t.Fatalf("open the accent picker: %v", err)
 	}
-	if err := term.WaitForText("Magenta", uiTimeout); err != nil {
+	if err := term.WaitForText("magenta", uiTimeout); err != nil {
 		t.Fatalf("the accent picker did not open: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("2"); err != nil {
 		t.Fatalf("pick a swatch: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "Magenta") && strings.Contains(s.Text(), "RAILNAME")
+		return !strings.Contains(s.Text(), "magenta") && strings.Contains(s.Text(), "RAILNAME")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the picker did not close back onto the rail: %v\n%s", err, term.Snapshot())
 	}
