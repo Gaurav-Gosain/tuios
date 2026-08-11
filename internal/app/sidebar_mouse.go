@@ -88,11 +88,10 @@ func (m *OS) sidebarChevronZone(hit sidebarRowHit, x int) bool {
 	if w <= config.SidebarGlyphWidth {
 		return false
 	}
+	// The chevron sits on the first content column in both variants, so the zone
+	// is that cell plus the space after it.
 	contentX0 := hit.X0
-	span := 2 // narrow: chevron at content column 0
-	if sidebarVariant(w) == sidebarVariantFull {
-		span = 3 // full: a lead space then the chevron
-	}
+	span := 2
 	if config.SidebarPosition == "right" {
 		contentX0++ // the edge rule owns the first band column
 	}

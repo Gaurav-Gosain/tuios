@@ -621,21 +621,18 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 		rowBg = pal.RowSel
 	}
 
-	lead := " "
-	if variant == sidebarVariantNarrow {
-		lead = ""
-	}
-
 	chevron := " "
 	if config.SidebarShowWindows && len(node.Children) > 0 {
 		chevron = sidebarChevron(expanded)
 	}
 
-	left := sidebarStyle(rowBg, nil).Render(lead) +
-		sidebarStyle(rowBg, pal.FgMute).Render(chevron) +
+	// Chevron on the first column, one space, then the state glyph. The name
+	// follows immediately: the pill's cap and inner space already separate it, and
+	// plain rows pad by the same two cells, so both sit on one spine without a
+	// wide empty gutter.
+	left := sidebarStyle(rowBg, pal.FgMute).Render(chevron) +
 		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarGlyph(node.AgentState, rowBg, pal) +
-		sidebarStyle(rowBg, nil).Render(" ")
+		sidebarGlyph(node.AgentState, rowBg, pal)
 
 	right := ""
 	rightW := 0
@@ -684,9 +681,11 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		title = "shell"
 	}
 
-	indent := 5
+	// One level past the session's glyph column, so a window title lands on the
+	// same spine as its session name.
+	indent := 3
 	if variant == sidebarVariantNarrow {
-		indent = 3
+		indent = 2
 	}
 
 	if node.IsCurrent {
