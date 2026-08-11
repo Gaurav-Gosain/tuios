@@ -910,15 +910,47 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		// Unseen work reads at full strength; seeing it is what dims it.
 		fg = pal.Fg
 	}
+
+	// A pane on another workspace is here for orientation, not for reading: it
+	// goes a step further down and names the workspace it is on, so the digit
+	// answers "where did it go" without a switch to find out.
+	elsewhere := 0
+	if ws := m.windowWorkspace(node.ID); ws > 0 && ws != m.CurrentWorkspace {
+		elsewhere = ws
+		fg = pal.FgMute
+	}
+
 	if hovered {
 		rowBg = pal.RowSel
 		fg = pal.Fg
 	}
+
+	right, rightW := "", 0
+	if elsewhere > 0 {
+		digit := strconv.Itoa(elsewhere)
+		right = sidebarStyle(rowBg, pal.FgMute).Render(digit) + sidebarStyle(rowBg, nil).Render(" ")
+		rightW = lipgloss.Width(digit) + 1
+	}
+
 	row := sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent)) +
 		m.sidebarWindowGlyph(node, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarStyle(rowBg, fg).Render(m.sidebarMarquee("w:"+node.ID, title, max(cw-indent-3, 1), hovered))
+		sidebarStyle(rowBg, fg).Render(m.sidebarMarquee("w:"+node.ID, title, max(cw-indent-3-rightW, 1), hovered))
+	if rightW > 0 {
+		gap := max(cw-lipgloss.Width(row)-rightW, 0)
+		row += sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", gap)) + right
+	}
 	return sidebarFit(row, cw, rowBg)
+}
+
+// windowWorkspace is the workspace a rail row's window sits on, or 0 when this
+// client does not hold it (a pane of a session it is not attached to, whose
+// workspace is not on the wire).
+func (m *OS) windowWorkspace(id string) int {
+	if i := m.windowIndexByID(id); i >= 0 {
+		return m.Windows[i].Workspace
+	}
+	return 0
 }
 
 // sidebarWindowGlyph is the one cell in front of a window's name: its agent

@@ -105,14 +105,11 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(m.SidebarFocused)
 	mixI(m.SidebarCursor)
 
-	// The workspace band: which chips exist and which one is lit. Occupancy has
-	// to be folded in separately because moving a window between workspaces
-	// changes no window's id, title, or state, so the loop below cannot see it.
+	// The workspace band and the other-workspace digits both turn on which
+	// workspace is current; which chips exist follows from the per-window
+	// workspaces folded in below.
 	mixI(m.CurrentWorkspace)
 	mixI(m.NumWorkspaces)
-	for i := 1; i <= m.NumWorkspaces; i++ {
-		mixB(m.GetWorkspaceWindowCount(i) > 0)
-	}
 
 	// Session identity and the user's drag-defined order.
 	mixS(m.SessionName)
@@ -145,7 +142,7 @@ func (m *OS) sidebarSignature() uint64 {
 	mixS(m.RenameTargetID)
 	mixS(m.RenameBuffer)
 
-	// Live windows in row order: id, label, agent state, accent.
+	// Live windows in row order: id, label, agent state, workspace, accent.
 	for _, w := range m.Windows {
 		if w == nil {
 			continue
@@ -153,6 +150,7 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(w.ID)
 		mixS(m.railTitleShown(w))
 		mixS(w.AgentState)
+		mixI(w.Workspace)
 		accent, ok := m.WindowAccent(w.ID)
 		if !ok {
 			accent = -1
