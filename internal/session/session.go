@@ -81,6 +81,13 @@ type WindowState struct {
 	// AgentStateAt is the unix-nano time AgentState was last set. It is stamped
 	// daemon-side and drives the output-stall heuristic (see applyStallHeuristic).
 	AgentStateAt int64 `json:"agent_state_at,omitempty"`
+	// ForegroundCmd is the base name of the program running in the pane's
+	// foreground, empty while the pane sits at its login shell. It is what lets a
+	// row say "nvim" instead of repeating a title every pane in one directory
+	// shares. Daemon-owned and refreshed by the agent detector's existing poll,
+	// so it costs no extra process reads and may be one poll out of date, which
+	// is fine for a label.
+	ForegroundCmd string `json:"foreground_cmd,omitempty"`
 }
 
 // SerializedBSPNode represents a BSP tree node for serialization
@@ -956,11 +963,18 @@ func (s *Session) windowSummaries() []WindowSummary {
 		if title == "" {
 			title = "shell"
 		}
+		// A named pane has nothing to gain from a command name, and offering one
+		// would let it outrank the name the user chose.
+		fg := w.ForegroundCmd
+		if w.CustomName != "" {
+			fg = ""
+		}
 		out = append(out, WindowSummary{
-			ID:           w.ID,
-			Title:        title,
-			AgentState:   string(w.AgentState),
-			AgentStateAt: w.AgentStateAt,
+			ID:            w.ID,
+			Title:         title,
+			AgentState:    string(w.AgentState),
+			AgentStateAt:  w.AgentStateAt,
+			ForegroundCmd: fg,
 		})
 	}
 	return out

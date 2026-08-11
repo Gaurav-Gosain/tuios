@@ -30,6 +30,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	}
 
 	cwds := make(map[string]string, len(canonical.Windows))
+	// The foreground command is read daemon-side on the detector's poll and no
+	// client ever sends it, so canonical is always the truth: carrying it over by
+	// id both preserves a live command and lets one that exited clear.
+	fgCmds := make(map[string]string, len(canonical.Windows))
 	// Agent state is daemon-owned and clients never set it, so it is carried over
 	// by window id exactly as Cwd is; without this a client sync (which omits it)
 	// would wipe every pane's reported state.
@@ -44,6 +48,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if cwd := w.Cwd; cwd != "" {
 			cwds[w.ID] = cwd
 		}
+		if cmd := w.ForegroundCmd; cmd != "" {
+			fgCmds[w.ID] = cmd
+		}
 		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentStateAt != 0 {
 			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentStateAt}
 		}
@@ -52,6 +59,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w := &incoming.Windows[i]
 		if w.Cwd == "" {
 			w.Cwd = cwds[w.ID]
+		}
+		if w.ForegroundCmd == "" {
+			w.ForegroundCmd = fgCmds[w.ID]
 		}
 		if a, ok := agents[w.ID]; ok && w.AgentState == AgentStateNone && w.AgentMessage == "" && w.AgentStateAt == 0 {
 			w.AgentState = a.state

@@ -1,7 +1,9 @@
 package app
 
 import (
+	"path"
 	"slices"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -10,17 +12,50 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// windowRowTitle is the label a session-management surface shows for a window:
-// the user's custom name if set, else the live terminal title, else a short
-// fallback so a freshly spawned pane is never blank.
+// windowRowTitle is the label a session-management surface shows for a window.
 func windowRowTitle(w *terminal.Window) string {
-	if w.CustomName != "" {
-		return w.CustomName
+	return railWindowLabel(w.CustomName, w.ForegroundCmd, w.Title())
+}
+
+// railWindowLabel is that label built from the pieces every surface has, live
+// window or wire summary. The user's name wins; then what the pane is running,
+// which is the one part that differs between siblings; then the shell's own
+// title, shortened, because in full it is "<cwd> - <shell>" and reads the same
+// on every pane in one directory. Never blank, so a fresh pane still has a row.
+func railWindowLabel(customName, foregroundCmd, title string) string {
+	if customName != "" {
+		return customName
 	}
-	if t := w.Title(); t != "" {
-		return t
+	if foregroundCmd != "" {
+		return foregroundCmd
+	}
+	if s := shellTitleLabel(title); s != "" {
+		return s
 	}
 	return "shell"
+}
+
+// shellTitleLabel keeps the part of a shell's title that carries information:
+// the last element of the directory it names. "~/dev/tuios - fish" says the
+// same thing in every pane of one repo, where "tuios" at least says which repo,
+// in a quarter of the columns.
+func shellTitleLabel(title string) string {
+	head, _, _ := strings.Cut(title, " - ")
+	head = strings.TrimSpace(head)
+	if head == "" {
+		return strings.TrimSpace(title)
+	}
+	// bash writes "user@host:~/path"; the path is the half worth keeping.
+	if _, after, ok := strings.Cut(head, ":"); ok && after != "" {
+		head = after
+	}
+	if !strings.Contains(head, "/") {
+		return head
+	}
+	if base := path.Base(head); base != "" && base != "/" && base != "." {
+		return base
+	}
+	return head
 }
 
 // currentSessionInput builds the rich SessionInput for the session this client
@@ -65,8 +100,10 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 	windows := make([]sessiontree.WindowInput, 0, len(summaries))
 	for _, w := range summaries {
 		windows = append(windows, sessiontree.WindowInput{
-			ID:         w.ID,
-			Title:      w.Title,
+			ID: w.ID,
+			// The daemon folds a custom name into Title and withholds a command
+			// for a named pane, so passing no name here still lets one win.
+			Title:      railWindowLabel("", w.ForegroundCmd, w.Title),
 			AgentState: w.AgentState,
 			DoneSeen:   m.agentSeen(w.ID),
 			StateAt:    w.AgentStateAt,

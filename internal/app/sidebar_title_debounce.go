@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -111,17 +112,20 @@ func (m *OS) unwatchedTitles() map[string]string {
 	if len(summaries) == 0 {
 		return nil
 	}
-	byID := make(map[string]string, len(summaries))
+	byID := make(map[string]session.WindowSummary, len(summaries))
 	for _, s := range summaries {
-		byID[s.ID] = s.Title
+		byID[s.ID] = s
 	}
 	titles := make(map[string]string, len(summaries))
 	for _, w := range m.Windows {
 		if !unwatched(w) {
 			continue
 		}
-		if t := byID[w.ID]; t != "" {
-			titles[w.ID] = t
+		// Labelled the same way a watched pane is, so leaving a workspace does
+		// not change what a row says. These windows have no custom name by the
+		// unwatched test above.
+		if s, ok := byID[w.ID]; ok && s.Title != "" {
+			titles[w.ID] = railWindowLabel("", s.ForegroundCmd, s.Title)
 		}
 	}
 	return titles

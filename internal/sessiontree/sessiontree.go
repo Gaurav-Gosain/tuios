@@ -10,6 +10,8 @@
 // package only decides the rolled-up state string, in one place.
 package sessiontree
 
+import "strconv"
+
 // NodeKind distinguishes a session row from a window row in the tree.
 type NodeKind int
 
@@ -160,9 +162,28 @@ func BuildSession(s SessionInput) Node {
 			node.AgentState, node.DoneSeen, bestRank = w.AgentState, w.DoneSeen, r
 		}
 	}
-	node.Children = children
+	node.Children = disambiguate(children)
 	node.WindowCount = len(children)
 	return node
+}
+
+// disambiguate makes every window row in a session self-identifying. Naming and
+// command detection answer "which pane is this" for most panes, but a session of
+// bare shells in one directory still resolves to one label repeated, and a list
+// of identical rows cannot do the only job it has. Rows that still collide get
+// their 1-based position appended, which is stable for a given window order and
+// so does not move under the eye between frames.
+func disambiguate(children []Node) []Node {
+	counts := make(map[string]int, len(children))
+	for _, c := range children {
+		counts[c.Title]++
+	}
+	for i := range children {
+		if counts[children[i].Title] > 1 {
+			children[i].Title += " " + strconv.Itoa(i+1)
+		}
+	}
+	return children
 }
 
 // Build assembles the full tree, preserving the order the sessions are given.

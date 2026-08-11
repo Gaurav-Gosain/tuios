@@ -104,3 +104,44 @@ func TestBuildPreservesOrder(t *testing.T) {
 		t.Fatalf("session order = %q, want abc", got.String())
 	}
 }
+
+// TestBuildSessionDisambiguatesRows is the tree's half of the promise that no
+// two rows in one session ever read the same: five bare shells in one directory
+// resolve to one label, and a list of identical rows names nothing.
+func TestBuildSessionDisambiguatesRows(t *testing.T) {
+	windows := make([]WindowInput, 0, 5)
+	for i := range 5 {
+		windows = append(windows, WindowInput{ID: string(rune('a' + i)), Title: "tuios"})
+	}
+	node := BuildSession(SessionInput{Name: "s", Windows: windows})
+
+	seen := make(map[string]bool, len(node.Children))
+	for _, c := range node.Children {
+		if seen[c.Title] {
+			t.Fatalf("two rows read %q", c.Title)
+		}
+		seen[c.Title] = true
+	}
+	if got := node.Children[0].Title; got != "tuios 1" {
+		t.Errorf("first row = %q, want %q", got, "tuios 1")
+	}
+	if got := node.Children[4].Title; got != "tuios 5" {
+		t.Errorf("last row = %q, want %q", got, "tuios 5")
+	}
+}
+
+// TestBuildSessionLeavesDistinctRowsAlone: an ordinal is a cost, paid only by
+// the rows that need it.
+func TestBuildSessionLeavesDistinctRowsAlone(t *testing.T) {
+	node := BuildSession(SessionInput{Name: "s", Windows: []WindowInput{
+		{ID: "a", Title: "nvim"},
+		{ID: "b", Title: "tuios"},
+		{ID: "c", Title: "tuios"},
+	}})
+	if got := node.Children[0].Title; got != "nvim" {
+		t.Errorf("a unique row was renamed to %q", got)
+	}
+	if node.Children[1].Title == node.Children[2].Title {
+		t.Errorf("the colliding rows still read %q", node.Children[1].Title)
+	}
+}

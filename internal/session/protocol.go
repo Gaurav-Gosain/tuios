@@ -154,6 +154,11 @@ type WindowSummary struct {
 	// AgentStateAt is when the pane entered AgentState (Unix nanoseconds).
 	// Additive and omitted when zero, so an older peer just reads no elapsed time.
 	AgentStateAt int64 `json:"agent_state_at,omitempty"`
+	// ForegroundCmd is what the pane is running, for a row that would otherwise
+	// repeat the title its siblings carry. Empty for a shell and for a pane the
+	// user has named, whose name is already the answer. Additive and omitted
+	// when empty, so an older peer just reads the title as before.
+	ForegroundCmd string `json:"foreground_cmd,omitempty"`
 }
 
 // SessionInfo describes a single session for listing.

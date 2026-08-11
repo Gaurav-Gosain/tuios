@@ -137,6 +137,37 @@ func agentBaseName(s string) string {
 	return lower
 }
 
+// loginShells are the shells a pane sits at when it is running nothing. Their
+// names are noise in a row label: every idle pane in a session reports the same
+// one. The session's own configured shell is checked too, but only that one
+// name is known, and a user whose login shell differs from the daemon's $SHELL
+// would otherwise get every row labelled with it.
+var loginShells = map[string]bool{
+	"sh": true, "bash": true, "zsh": true, "fish": true, "dash": true,
+	"ksh": true, "csh": true, "tcsh": true, "nu": true, "xonsh": true,
+	"elvish": true, "pwsh": true, "powershell": true, "cmd": true,
+}
+
+// foregroundCommand is the label a pane earns from what it is running: the base
+// name of the foreground process, or empty when that is just a shell. argv[0]
+// is preferred over comm because the kernel truncates comm at 15 characters.
+func foregroundCommand(comm string, argv []string, running bool, shell string) string {
+	if !running {
+		return ""
+	}
+	name := ""
+	if len(argv) > 0 {
+		name = agentBaseName(argv[0])
+	}
+	if name == "" {
+		name = agentBaseName(comm)
+	}
+	if name == "" || name == shell || loginShells[name] {
+		return ""
+	}
+	return name
+}
+
 // foregroundProcess resolves the foreground process group leader of the
 // controlling terminal of the shell with the given pid, returning its comm and
 // full argv. It is the honest signal for "what is this pane actually running":
@@ -255,7 +286,11 @@ func (s *Session) applyAgentDetection(
 	isAgent func(comm string, argv []string) bool,
 ) int {
 	changed := 0
+	shell := agentBaseName(s.getShell())
 	_ = s.mutateState(func(st *SessionState) error {
+		// Counted apart from the agent states this returns: a pane starting or
+		// leaving a command has to reach the clients, but it is not a state change.
+		labels := 0
 		live := make(map[string]struct{}, len(st.Windows))
 		now := time.Now().UnixNano()
 		for i := range st.Windows {
@@ -265,6 +300,12 @@ func (s *Session) applyAgentDetection(
 			}
 			live[w.ID] = struct{}{}
 			comm, argv, running := resolve(w.PTYID)
+			// The row label rides this poll rather than one of its own: the
+			// process was read for the agent check either way.
+			if cmd := foregroundCommand(comm, argv, running, shell); cmd != w.ForegroundCmd {
+				w.ForegroundCmd = cmd
+				labels++
+			}
 			detected := running && isAgent(comm, argv)
 			owned := s.autoAgentOwned[w.ID]
 			switch {
@@ -299,8 +340,8 @@ func (s *Session) applyAgentDetection(
 				delete(s.autoAgentOwned, id)
 			}
 		}
-		if changed == 0 {
-			// No state change: skip the version bump and client push.
+		if changed == 0 && labels == 0 {
+			// Nothing moved: skip the version bump and client push.
 			return errNoAgentDetectChange
 		}
 		return nil
