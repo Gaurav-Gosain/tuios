@@ -25,3 +25,6 @@ mem.prof
 
 # Agent worktrees: transient checkouts, never part of the tree.
 .claude/worktrees/
+
+# Agent scratch capture files, never part of the tree.
+zz_*_test.go

@@ -76,9 +76,9 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"0-9", "Jump to window"},
 			{"z", "Toggle zoom"},
 			{"space", "Toggle tiling"},
-			{"-", "Split horizontal (top/bottom)"},
-			{"|/\\", "Split vertical (left/right)"},
-			{"R", "Rotate split direction"},
+			{"-", "Split horizontal"},
+			{"|/\\", "Split vertical"},
+			{"R", "Rotate split"},
 			{"=", "Equalize splits"},
 			{"w", "Workspace commands..."},
 			{"m", "Minimize commands..."},
@@ -88,21 +88,21 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"P", "Command palette"},
 			{"S", "Session switcher"},
 			{"L", "Layout commands..."},
-			{"b", "Toggle the sidebar rail"},
-			{"e", "Focus the sidebar rail, or leave it"},
-			{"j", "Jump to the pane the newest message came from"},
+			{"b", "Toggle sidebar"},
+			{"e", "Focus/leave sidebar"},
+			{"j", "Jump to newest message"},
 		}
 
 		// In daemon mode, d and Esc have different behaviors
 		if daemonMode {
 			bindings = append(bindings,
-				Keybinding{"d", "Detach (session keeps running)"},
-				Keybinding{"Esc", "Window management mode"},
+				Keybinding{"d", "Detach session"},
+				Keybinding{"Esc", "Window mode"},
 			)
 		} else {
 			// In local mode, both d and Esc do the same thing
 			bindings = append(bindings,
-				Keybinding{"d/Esc", "Window management mode"},
+				Keybinding{"d/Esc", "Window mode"},
 			)
 		}
 
@@ -114,7 +114,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 
 		// Quit description differs based on mode
 		if daemonMode {
-			bindings = append(bindings, Keybinding{"q", "Quit menu (detach, switch, kill)"})
+			bindings = append(bindings, Keybinding{"q", "Quit menu"})
 		} else {
 			bindings = append(bindings, Keybinding{"q", "Quit application"})
 		}
@@ -314,7 +314,7 @@ func getStaticHelpSections() []KeybindingSection {
 				{"D", "Debug commands"},
 				{"T", "Tape manager"},
 				{"d", "Detach (daemon) / Window mode (local)"},
-				{"Esc", "Window management mode"},
+				{"Esc", "Window mode"},
 				{"[", "Enter scrollback mode"},
 				{"s", "Scrollback browser"},
 				{"?", "Toggle help"},
