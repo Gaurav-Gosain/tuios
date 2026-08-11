@@ -187,11 +187,12 @@ func (m *OS) tapeAutorunConfigValue() string {
 const themeNone = "none"
 
 var (
-	borderStyleOptions     = []string{"rounded", "normal", "thick", "double", "block", "outer-half-block", "inner-half-block", "ascii", "hidden"}
-	positionOptions        = []string{"bottom", "top", "hidden"}
-	whichKeyPosOptions     = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
-	fpsOptions             = []string{"30", "60", "90", "120", "144", "unlimited"}
-	sidebarPositionOptions = []string{"left", "right", "hidden"}
+	borderStyleOptions      = []string{"rounded", "normal", "thick", "double", "block", "outer-half-block", "inner-half-block", "ascii", "hidden"}
+	positionOptions         = []string{"bottom", "top", "hidden"}
+	whichKeyPosOptions      = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
+	fpsOptions              = []string{"30", "60", "90", "120", "144", "unlimited"}
+	sidebarPositionOptions  = []string{"left", "right", "hidden"}
+	sidebarWorkspaceOptions = config.SidebarWorkspacesModes
 )
 
 // boolPtr returns a pointer to b, for the *bool config fields.
@@ -379,58 +380,89 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.ShowRAM = v })
 					m.applyAppearanceLive(false)
 				}),
+			boolItem("Workspace tabs", "Show the clickable workspace strip in the dock",
+				func() bool { return config.DockWorkspaceTabs },
+				func(m *OS, v bool) {
+					config.DockWorkspaceTabs = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.DockWorkspaceTabs = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
 		},
 	}
 
-	// The sidebar rows live under Appearance rather than in a tab of their own: an
-	// eighth settings tab wraps the tab strip onto a second row on a short screen,
-	// which pushes the panel past the viewport. Appended here they ride the
-	// category's scrolling body instead, which is already height-bounded.
-	sidebarItems := []settingItem{
-		boolItem("Sidebar", "Show the vertical session sidebar",
-			func() bool { return config.SidebarEnabled },
-			func(m *OS, v bool) {
-				config.SidebarEnabled = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Enabled = boolPtr(v) })
-				m.applyAppearanceLive(true)
-			}),
-		enumItem("Position", "Which edge the sidebar reserves", sidebarPositionOptions,
-			func() string { return config.SidebarPosition },
-			func(m *OS, v string) {
-				config.SidebarPosition = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Position = v })
-				m.applyAppearanceLive(true)
-			}),
-		intItem("Width", "Preferred sidebar width in columns", 10, 60, 2,
-			func() int { return config.SidebarWidth },
-			func(m *OS, v int) {
-				config.SidebarWidth = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Width = v })
-				m.applyAppearanceLive(true)
-			}),
-		boolItem("Show windows", "List window rows under the current session",
-			func() bool { return config.SidebarShowWindows },
-			func(m *OS, v bool) {
-				config.SidebarShowWindows = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowWindows = boolPtr(v) })
-				m.applyAppearanceLive(false)
-			}),
-		boolItem("Show glyphs", "Draw agent-state glyphs on sidebar rows",
-			func() bool { return config.SidebarShowGlyphs },
-			func(m *OS, v bool) {
-				config.SidebarShowGlyphs = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowGlyphs = boolPtr(v) })
-				m.applyAppearanceLive(false)
-			}),
-		boolItem("Show counts", "Draw window counts on sidebar session rows",
-			func() bool { return config.SidebarShowCounts },
-			func(m *OS, v bool) {
-				config.SidebarShowCounts = v
-				m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowCounts = boolPtr(v) })
-				m.applyAppearanceLive(false)
-			}),
+	// The sidebar rows were appended to Appearance while there were six of them,
+	// to keep the tab strip on one row. There are ten now, which buried the rest
+	// of Appearance under a scroll; a tab of their own costs the strip a second
+	// row, and panelBody already budgets the body against TabRowCount, so that
+	// row comes out of the scrolling list rather than out of the viewport.
+	sidebar := settingsCategory{
+		Name: "Sidebar",
+		Items: []settingItem{
+			boolItem("Sidebar", "Show the vertical session sidebar",
+				func() bool { return config.SidebarEnabled },
+				func(m *OS, v bool) {
+					config.SidebarEnabled = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Enabled = boolPtr(v) })
+					m.applyAppearanceLive(true)
+				}),
+			enumItem("Position", "Which edge the sidebar reserves", sidebarPositionOptions,
+				func() string { return config.SidebarPosition },
+				func(m *OS, v string) {
+					config.SidebarPosition = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Position = v })
+					m.applyAppearanceLive(true)
+				}),
+			intItem("Width", "Preferred sidebar width in columns", 10, 60, 2,
+				func() int { return config.SidebarWidth },
+				func(m *OS, v int) {
+					config.SidebarWidth = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Width = v })
+					m.applyAppearanceLive(true)
+				}),
+			boolItem("Show windows", "List window rows under the current session",
+				func() bool { return config.SidebarShowWindows },
+				func(m *OS, v bool) {
+					config.SidebarShowWindows = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowWindows = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
+			boolItem("Show glyphs", "Draw agent-state glyphs on sidebar rows",
+				func() bool { return config.SidebarShowGlyphs },
+				func(m *OS, v bool) {
+					config.SidebarShowGlyphs = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowGlyphs = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
+			boolItem("Show counts", "Draw window counts on sidebar session rows",
+				func() bool { return config.SidebarShowCounts },
+				func(m *OS, v bool) {
+					config.SidebarShowCounts = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowCounts = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
+			boolItem("Agents section", "List the panes running an agent above the session tree",
+				func() bool { return config.SidebarShowAgents },
+				func(m *OS, v bool) {
+					config.SidebarShowAgents = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowAgents = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
+			enumItem("Workspaces", "Show the workspace chips under the current session", sidebarWorkspaceOptions,
+				func() string { return config.SidebarWorkspaces },
+				func(m *OS, v string) {
+					config.SidebarWorkspaces = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Workspaces = v })
+					m.applyAppearanceLive(false)
+				}),
+			boolItem("Marquee", "Scroll a hovered row's title when it does not fit",
+				func() bool { return config.SidebarMarquee },
+				func(m *OS, v bool) {
+					config.SidebarMarquee = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Marquee = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
+		},
 	}
-	appearance.Items = append(appearance.Items, sidebarItems...)
 
 	behavior := settingsCategory{
 		Name: "Behavior",
@@ -608,7 +640,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		},
 	}
 
-	return []settingsCategory{appearance, dock, behavior, startup, advanced, daemon, tape}
+	return []settingsCategory{appearance, sidebar, dock, behavior, startup, advanced, daemon, tape}
 }
 
 // daemonLogLevel returns the configured daemon log level, defaulting to "off"
@@ -630,6 +662,20 @@ func (m *OS) OpenSettings() {
 	m.SettingsScroll = 0
 	m.SettingsEditing = false
 	m.SettingsEditBuffer = ""
+}
+
+// OpenSettingsAt opens the settings overlay on the named category, for the
+// entry points that already know which part of the app the user is pointing at.
+// The name is resolved against the live category list rather than an index: the
+// list is built per call, so a hardcoded index would rot the moment a tab moves.
+func (m *OS) OpenSettingsAt(category string) {
+	m.OpenSettings()
+	for i, c := range m.settingsCategories() {
+		if c.Name == category {
+			m.SettingsCategory = i
+			return
+		}
+	}
 }
 
 // CloseSettings hides the settings overlay.

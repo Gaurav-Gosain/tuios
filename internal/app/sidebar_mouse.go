@@ -125,6 +125,9 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 
 	hit, ok := m.sidebarRowAt(x, y)
 	if !ok {
+		if right {
+			m.openRailSettingsMenu(x, y)
+		}
 		return true // consumed a click on a blank sidebar row
 	}
 
@@ -455,6 +458,31 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		}
 	}
 
+	// The rail's own settings ride under whatever the row offers, so the tab is
+	// reachable from the thing it configures without a gear of its own.
+	cm.Items = append(cm.Items, separator(), m.railSettingsItem())
+
 	cm.Selected = cm.Next(1)
 	m.ContextMenu = cm
+}
+
+// openRailSettingsMenu is the menu for a right-click on blank rail: there is no
+// row to act on, so the only thing the click can mean is the rail itself.
+func (m *OS) openRailSettingsMenu(x, y int) {
+	m.ContextMenu = &ContextMenu{
+		AnchorX:     x,
+		AnchorY:     y,
+		Selected:    0,
+		ItemH:       1,
+		Target:      CtxTargetDesktop,
+		WindowIndex: -1,
+		Title:       "Sidebar",
+		Items:       []ContextMenuItem{m.railSettingsItem()},
+	}
+}
+
+// railSettingsItem is the row that deep-links to the settings overlay's Sidebar
+// tab, shared by both rail menus.
+func (m *OS) railSettingsItem() ContextMenuItem {
+	return m.item(glyphSettings, "Sidebar settings", "settings_sidebar", false)
 }

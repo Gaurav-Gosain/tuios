@@ -147,6 +147,7 @@ func (d *ActionDispatcher) registerHandlers() {
 
 	// Session lifecycle actions (context menu rows; the quit menu's kill rows
 	// route through the same OS methods, so the two cannot drift apart)
+	d.Register("settings_sidebar", handleSettingsSidebar)
 	d.Register("kill_session_next", handleKillSessionNext)
 	d.Register("kill_session_quit", handleKillSessionQuit)
 
@@ -693,6 +694,13 @@ func handlePrevSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // handleKillSessionNext kills the current session after switching this client
 // to the next one, in that order (see OS.KillSessionGoNext for why).
+// handleSettingsSidebar opens the settings overlay on its Sidebar tab, so the
+// rail's context menu lands on the rows it is about.
+func handleSettingsSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenSettingsAt("Sidebar")
+	return o, nil
+}
+
 func handleKillSessionNext(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.KillSessionGoNext(o.NextSessionName())
 }

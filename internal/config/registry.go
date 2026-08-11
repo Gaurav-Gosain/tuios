@@ -342,6 +342,7 @@ var ActionDescriptions = map[string]string{
 	"clear_selection": "Clear the text selection",
 
 	// Session lifecycle (context menu rows; no default keybinding)
+	"settings_sidebar":  "Sidebar settings",
 	"kill_session_next": "Kill session, go to next",
 	"kill_session_quit": "Kill session and quit",
 

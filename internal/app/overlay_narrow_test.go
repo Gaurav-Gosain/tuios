@@ -240,7 +240,7 @@ func TestOverlayDesktopSizesUnchanged(t *testing.T) {
 	cats := m.settingsCategories()
 	for i, cat := range cats {
 		m.SettingsCategory = i
-		w, rows, _ := m.settingsLayout([]string{"Appearance", "Dock", "Behavior"}, len(cat.Items))
+		w, rows, _, _ := m.settingsLayout([]string{"Appearance", "Dock", "Behavior"}, len(cat.Items))
 		if w != settingsInnerWidth {
 			t.Errorf("settings[%s] width = %d, want %d", cat.Name, w, settingsInnerWidth)
 		}

@@ -25,13 +25,27 @@ var settingsHints = []overlay.Hint{
 	{Key: "esc", Label: "close"},
 }
 
-// settingsLayout returns the fitted inner width and the number of setting rows
-// that fit, given the category tabs (which may wrap onto several rows).
-func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int, hints []overlay.Hint) {
+// settingsLayout returns the fitted inner width, the number of setting rows that
+// fit, the footer, and whether there is room for the description line, given the
+// category tabs (which may wrap onto several rows).
+//
+// On a screen too short to hold the minimum body, the footer goes first
+// (panelBody), then the description: it restates the selected row, whereas a
+// body below three rows stops being a list. Without this a second tab row would
+// push the panel one line past a 12-row screen.
+func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int, hints []overlay.Hint, desc bool) {
 	width = m.panelWidth(settingsInnerWidth)
+	preferred := max(itemCount, settingsVisibleRows)
 	// Body lines that are not setting rows: a blank and the description.
-	rows, hints = m.panelBody(max(itemCount, settingsVisibleRows), 2, width, tabs, settingsHints)
-	return width, rows, hints
+	const descRows = 2
+	rows, hints = m.panelBody(preferred, descRows, width, tabs, settingsHints)
+
+	rh := m.GetRenderHeight()
+	if rh <= 0 || rows+descRows+panelChrome(0, width, tabs, hints) <= rh {
+		return width, rows, hints, true
+	}
+	rows, hints = m.panelBody(preferred, 0, width, tabs, settingsHints)
+	return width, rows, hints, false
 }
 
 // renderSettings draws the settings overlay and returns the rendered panel, its
@@ -57,7 +71,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		tabs[i] = c.Name
 	}
 
-	width, visible, hints := m.settingsLayout(tabs, len(cat.Items))
+	width, visible, hints, showDesc := m.settingsLayout(tabs, len(cat.Items))
 	// A category with more settings than fit scrolls; the selection stays in
 	// view so the arrow keys can always reach every setting.
 	m.SettingsScroll = scrollWindow(m.SettingsScroll, m.SettingsSelected, len(cat.Items), visible)
@@ -82,23 +96,25 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		lines = append(lines, overlay.Style(bg).Render(" "))
 	}
 
-	desc := ""
-	if len(cat.Items) > 0 {
-		desc = cat.Items[m.SettingsSelected].Desc
+	if showDesc {
+		desc := ""
+		if len(cat.Items) > 0 {
+			desc = cat.Items[m.SettingsSelected].Desc
+		}
+		if len(cat.Items) > visible {
+			// Say where in the category the selection is, so a scrolled-off setting
+			// is discoverable rather than simply missing.
+			desc = lipgloss.Sprintf("(%d/%d) ", m.SettingsSelected+1, len(cat.Items)) + desc
+		}
+		// "  " prefix counts against the inner width budget, same as the row
+		// marker does for setting rows, so the truncation target leaves room
+		// for it.
+		desc = overlay.Truncate(desc, width-2)
+		lines = append(lines,
+			overlay.Style(bg).Render(" "),
+			overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+desc),
+		)
 	}
-	if len(cat.Items) > visible {
-		// Say where in the category the selection is, so a scrolled-off setting
-		// is discoverable rather than simply missing.
-		desc = lipgloss.Sprintf("(%d/%d) ", m.SettingsSelected+1, len(cat.Items)) + desc
-	}
-	// "  " prefix counts against the inner width budget, same as the row
-	// marker does for setting rows, so the truncation target leaves room
-	// for it.
-	desc = overlay.Truncate(desc, width-2)
-	lines = append(lines,
-		overlay.Style(bg).Render(" "),
-		overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+desc),
-	)
 
 	panel := overlay.Panel{
 		Glyph:     "", // gear
