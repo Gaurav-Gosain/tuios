@@ -91,7 +91,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		// Handle dock click only if there are minimized windows
 		if o.HasMinimizedWindows() {
-			dockIndex := findDockItemClicked(X, Y, o)
+			dockIndex := o.DockItemAt(X, Y)
 			if dockIndex != -1 {
 				o.RestoreWindow(dockIndex)
 				// Retile if in tiling mode

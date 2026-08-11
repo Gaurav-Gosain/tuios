@@ -137,16 +137,14 @@ func (m *OS) WindowAt(x, y int) int {
 	return top
 }
 
-// DockItemAt returns the window index of the dock entry at (x, y), or -1. It
-// reads the same layout the dock renders from, so the entry the user clicks is
-// the one they see.
+// DockItemAt returns the window index of the dock entry covering the absolute
+// cell (x, y), or -1. It hit-tests the rectangles the renderer recorded while
+// drawing, the same way the workspace strip and the message block do, so the
+// entry the user clicks is the one they see.
 func (m *OS) DockItemAt(x, y int) int {
-	if y != m.GetDockbarContentYPosition() {
-		return -1
-	}
-	for _, pos := range m.CalculateDockLayout().ItemPositions {
-		if x >= pos.StartX && x < pos.EndX {
-			return pos.WindowIndex
+	for _, h := range m.dockItemHits {
+		if y == h.Y && x >= h.X0 && x < h.X1 {
+			return h.WindowIndex
 		}
 	}
 	return -1

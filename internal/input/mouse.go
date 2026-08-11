@@ -63,20 +63,6 @@ func findClickedWindow(x, y int, o *app.OS) int {
 	return topWindow
 }
 
-// findDockItemClicked finds which dock item was clicked
-func findDockItemClicked(x, y int, o *app.OS) int {
-	// Use shared layout calculation to ensure positions match rendering exactly
-	layout := o.CalculateDockLayout()
-
-	for _, itemPos := range layout.ItemPositions {
-		if x >= itemPos.StartX && x < itemPos.EndX && y == o.GetDockbarContentYPosition() {
-			return itemPos.WindowIndex
-		}
-	}
-
-	return -1
-}
-
 // abs returns the absolute value of an integer
 func abs(x int) int {
 	if x < 0 {

@@ -27,11 +27,9 @@ type DockLayout struct {
 	TrailText      string
 	LeftWidth      int
 	RightWidth     int
-	CenterStartX   int
-	ItemPositions  []ItemPosition // Position of each dock item
-	TruncatedCount int            // Number of items that don't fit
-	VisibleItems   []DockItem     // Items that fit and should be displayed
-	ModeInfo       ModeInfo       // Mode display information for styling
+	TruncatedCount int        // Number of items that don't fit
+	VisibleItems   []DockItem // Items that fit and should be displayed
+	ModeInfo       ModeInfo   // Mode display information for styling
 	WorkspaceTabs  []dockWorkspaceTab
 }
 
@@ -50,6 +48,17 @@ type dockWorkspaceTab struct {
 // (compositor layer and fullscreen fast path) can never disagree about it.
 type dockWorkspaceHit struct {
 	X0, X1, Y, Workspace int
+}
+
+// dockItemHit is where a minimized entry was drawn on the last frame, recorded
+// for the same reason its neighbouring workspace tab is. The entries are
+// centred against the room the left and right regions leave, so recomputing
+// their columns means recomputing the whole bar and getting the same answer
+// from state that has moved on since the frame was painted. The mode pill and
+// the stats readout both change width on their own, which walked the clickable
+// region off the entry the user could see.
+type dockItemHit struct {
+	X0, X1, Y, WindowIndex int
 }
 
 // workspaceChipCaps are the characters bracketing an active workspace chip: the
@@ -157,13 +166,6 @@ func (m *OS) DockWorkspaceAt(x, y int) int {
 		}
 	}
 	return 0
-}
-
-// ItemPosition holds the position and size of a dock item
-type ItemPosition struct {
-	StartX      int
-	EndX        int
-	WindowIndex int
 }
 
 // CalculateDockLayout calculates the layout for the dock including positions of all items.
@@ -431,31 +433,9 @@ func (layout *DockLayout) calculateItemPositions(screenWidth int, allItems []Doc
 		return
 	}
 
-	// All items fit - calculate center positioning
-	leftSpacer := max(availableSpace/2, 0)
-
-	layout.CenterStartX = layout.LeftWidth + leftSpacer
+	// All items fit.
 	layout.VisibleItems = allItems
 	layout.TruncatedCount = 0
-
-	// Calculate position of each item
-	currentX := layout.CenterStartX
-	layout.ItemPositions = make([]ItemPosition, 0, len(allItems))
-
-	for i, item := range allItems {
-		// Add space before item (except first)
-		if i > 0 {
-			currentX++
-		}
-
-		layout.ItemPositions = append(layout.ItemPositions, ItemPosition{
-			StartX:      currentX,
-			EndX:        currentX + item.Width,
-			WindowIndex: item.WindowIndex,
-		})
-
-		currentX += item.Width
-	}
 }
 
 // truncateItems calculates which items fit when space is limited
@@ -490,35 +470,4 @@ func (layout *DockLayout) truncateItems(screenWidth int, allItems []DockItem) {
 		layout.VisibleItems = []DockItem{}
 	}
 	layout.TruncatedCount = len(allItems) - visibleCount
-
-	// Recalculate total width including truncation indicator
-	totalWidth := currentWidth
-	if layout.TruncatedCount > 0 {
-		totalWidth += 1 + truncationIndicatorWidth // space + "..."
-	}
-
-	// Calculate center positioning
-	availableSpace := screenWidth - layout.LeftWidth - layout.RightWidth - totalWidth
-	leftSpacer := max(availableSpace/2, 0)
-
-	layout.CenterStartX = layout.LeftWidth + leftSpacer
-
-	// Calculate positions
-	currentX := layout.CenterStartX
-	layout.ItemPositions = make([]ItemPosition, 0, len(layout.VisibleItems))
-
-	for i, item := range layout.VisibleItems {
-		// Add space before item (except first)
-		if i > 0 {
-			currentX++
-		}
-
-		layout.ItemPositions = append(layout.ItemPositions, ItemPosition{
-			StartX:      currentX,
-			EndX:        currentX + item.Width,
-			WindowIndex: item.WindowIndex,
-		})
-
-		currentX += item.Width
-	}
 }

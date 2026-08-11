@@ -99,6 +99,15 @@ func (m *OS) renderDockString() (string, int) {
 	var dockItemsStr strings.Builder
 	itemNumber := 1
 
+	// Where each entry lands inside the items block, measured off the styled
+	// string as it is built. Turned into screen columns below, once the centring
+	// spacer this block is placed against is known.
+	type itemSpan struct {
+		windowIndex, x0, x1 int
+	}
+	var itemSpans []itemSpan
+	relX := 0
+
 	for _, dockItem := range layout.VisibleItems {
 		windowIndex := dockItem.WindowIndex
 		window := m.Windows[windowIndex]
@@ -128,9 +137,15 @@ func (m *OS) renderDockString() (string, int) {
 
 		if itemNumber > 1 {
 			dockItemsStr.WriteString(" ")
+			relX++
 		}
-		dockItemsStr.WriteString(caps.Render(config.GetDockPillLeftChar()) +
-			nameLabel + caps.Render(config.GetDockPillRightChar()))
+		chunk := caps.Render(config.GetDockPillLeftChar()) +
+			nameLabel + caps.Render(config.GetDockPillRightChar())
+		dockItemsStr.WriteString(chunk)
+
+		w := lipgloss.Width(chunk)
+		itemSpans = append(itemSpans, itemSpan{windowIndex, relX, relX + w})
+		relX += w
 
 		itemNumber++
 	}
@@ -238,6 +253,17 @@ func (m *OS) renderDockString() (string, int) {
 	}
 	if rightSpacer < 0 {
 		rightSpacer = 0
+	}
+
+	// The entries' screen columns, now that the spacer in front of them is known.
+	// Recorded from the geometry this pass drew, so a click hit-tests the bar the
+	// user is looking at rather than the one a later state would produce.
+	m.dockItemHits = m.dockItemHits[:0]
+	itemsX, itemY := actualLeftWidth+leftSpacer, m.GetDockbarContentYPosition()
+	for _, s := range itemSpans {
+		m.dockItemHits = append(m.dockItemHits, dockItemHit{
+			X0: itemsX + s.x0, X1: itemsX + s.x1, Y: itemY, WindowIndex: s.windowIndex,
+		})
 	}
 
 	paddedRightInfo := lipgloss.NewStyle().Width(rightWidth).Align(lipgloss.Right).Render(rightInfo)

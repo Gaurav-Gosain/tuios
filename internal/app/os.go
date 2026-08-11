@@ -206,6 +206,7 @@ type OS struct {
 	Notifications         []Notification         // Active notifications
 	notifHit              notifHitZones          // where the message block was drawn last frame
 	dockWorkspaceHits     []dockWorkspaceHit     // where the dock's workspace tabs were drawn last frame
+	dockItemHits          []dockItemHit          // where the dock's minimized entries were drawn last frame
 	SelectionMode         bool                   // True when in text selection mode
 	ClipboardContent      string                 // Store clipboard content from tea.ClipboardMsg
 	ShowCacheStats        bool                   // True when showing style cache statistics overlay
