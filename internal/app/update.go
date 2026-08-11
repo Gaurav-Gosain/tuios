@@ -659,6 +659,8 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		hadAnimations := m.HasActiveAnimations()
 		m.UpdateAnimations()
 
+		m.endGestureWithoutButton()
+
 		// Retire interaction state no gesture is holding any more. A mouse
 		// release is the only thing that clears IsBeingManipulated, and it is
 		// lost whenever the pointer leaves the surface the events come from
@@ -960,10 +962,20 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// release is lost, without a timeout that would cut short a slow drag:
 		// any further motion refreshes it.
 		switch mm := msg.(type) {
-		case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg:
+		case tea.MouseWheelMsg:
 			m.notePointerEvent(time.Now())
+		case tea.MouseClickMsg:
+			m.notePointerEvent(time.Now())
+			m.pointerDown = true
+		case tea.MouseReleaseMsg:
+			m.notePointerEvent(time.Now())
+			m.pointerDown = false
 		case tea.MouseMotionMsg:
 			m.notePointerEvent(time.Now())
+			// Motion names the buttons still held, so it is the most current
+			// answer to whether one is, and it corrects a press whose own event
+			// never arrived.
+			m.pointerDown = mm.Button != tea.MouseNone
 			// Motion with no button held while a drag is supposedly in
 			// progress means the release happened somewhere we never heard
 			// about, which is what a pointer leaving the surface the events

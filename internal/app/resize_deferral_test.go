@@ -259,3 +259,42 @@ func TestWindowSizeMsgAlwaysArmsAndTimestampsTheDeferral(t *testing.T) {
 		t.Fatal("the deferral should be live right after a resize")
 	}
 }
+
+// TestGestureCannotSurviveAFrameWithNoButtonHeld pins the backstop for the
+// resize that got stuck: however the release goes missing, the next frame with
+// no button held ends the gesture and clears every flag it set.
+func TestGestureCannotSurviveAFrameWithNoButtonHeld(t *testing.T) {
+	m := newDeferralOS(t, 120, 40, 2)
+
+	// A press starts the gesture, and the button is now held.
+	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 10, Y: 10})
+	m.Resizing = true
+	m.BorderResizing = true
+	m.BorderResizeEdge = BorderEdgeRight
+	m.InteractionMode = true
+	m.Windows[0].IsBeingManipulated = true
+
+	// Frames drawn while the button is down leave the gesture alone.
+	m.endGestureWithoutButton()
+	if !m.Resizing {
+		t.Fatal("a frame during the drag ended the resize while the button was still held")
+	}
+
+	// The release is delivered but claimed elsewhere, or never arrives at all.
+	// Either way the button is up by the next frame.
+	m.pointerDown = false
+	m.endGestureWithoutButton()
+
+	if m.Resizing || m.BorderResizing {
+		t.Errorf("resize survived a frame with no button held (resizing=%v border=%v)", m.Resizing, m.BorderResizing)
+	}
+	if m.BorderResizeEdge != BorderEdgeNone {
+		t.Errorf("BorderResizeEdge = %v, want BorderEdgeNone", m.BorderResizeEdge)
+	}
+	if m.InteractionMode {
+		t.Error("InteractionMode survived a frame with no button held")
+	}
+	if m.Windows[0].IsBeingManipulated {
+		t.Error("the pane is still frozen at its cached frame")
+	}
+}

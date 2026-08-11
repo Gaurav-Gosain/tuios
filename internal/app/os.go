@@ -264,6 +264,9 @@ type OS struct {
 	// pointer leaves the surface the events come from.
 	viewportResizeAt time.Time
 	lastPointerAt    time.Time
+	// pointerDown tracks whether a mouse button is held, so a gesture cannot
+	// outlive the button that started it even when no further event arrives.
+	pointerDown bool
 	// pendingBSPSync is set when a resize motion changed window geometry and the
 	// BSP tree's ratios have not been re-derived from it yet. The sync exists so
 	// the shared-borders separator overlay follows the drag, so it only has to

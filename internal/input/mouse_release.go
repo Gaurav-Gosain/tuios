@@ -12,6 +12,13 @@ import (
 
 // handleMouseRelease handles mouse release events
 func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// A button coming up ends any gesture it started, whoever else claims the
+	// event. Every branch below can return early, and each one that fired while
+	// a resize was live left it running. Deferred so it covers all of them, and
+	// idempotent so the cleanup at the bottom stays the normal way a gesture
+	// ends. See OS.EndStrayGesture.
+	defer o.EndStrayGesture()
+
 	// End an in-progress overlay drag before anything else.
 	if o.OverlayDragActive() {
 		o.OverlayMouseRelease()

@@ -115,6 +115,9 @@ func (m *OS) endLostGesture() {
 	wasResizing := m.Resizing
 	m.Dragging = false
 	m.Resizing = false
+	m.BorderResizing = false
+	m.BorderResizeEdge = BorderEdgeNone
+	m.RightClickPending = false
 	m.InteractionMode = false
 	m.DraggedWindowIndex = -1
 
@@ -127,6 +130,36 @@ func (m *OS) endLostGesture() {
 		m.SyncBSPTreeFromGeometry()
 	}
 	m.renderSkipped = false
+}
+
+// endGestureWithoutButton is the per-frame backstop: a gesture cannot outlive
+// the button that started it.
+//
+// Every release path ends the gesture, but a release can go missing entirely -
+// the pointer leaves the surface the events come from, a recovered panic in
+// Update drops the event - and then nothing at all has to arrive for the resize
+// to be over. Run once per maintenance tick, so no frame is drawn with the size
+// readout up and no button pressed.
+func (m *OS) endGestureWithoutButton() {
+	if (m.Dragging || m.Resizing) && !m.pointerDown {
+		m.endLostGesture()
+	}
+}
+
+// EndStrayGesture ends a drag or resize that something other than the window
+// layer claimed the release for.
+//
+// Mouse release can leave down a dozen paths - an overlay, the sidebar band, a
+// guest that asked for mouse tracking, the scrollbar, a copy-mode selection -
+// and each one used to return before the cleanup at the bottom of the handler.
+// A resize that survived one of them kept the size readout on screen and every
+// pane in resize borders with nothing pressed. It is idempotent so the normal
+// path, which has already finished the gesture properly, finds nothing to do.
+func (m *OS) EndStrayGesture() {
+	if !m.Dragging && !m.Resizing && !m.BorderResizing {
+		return
+	}
+	m.endLostGesture()
 }
 
 // clearStaleManipulation drops IsBeingManipulated from any window still
