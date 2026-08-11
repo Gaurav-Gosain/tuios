@@ -4,11 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
-
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // fillScrollback pushes enough lines through the emulator that the pane has a
@@ -27,6 +24,18 @@ func fillScrollback(t *testing.T, win *terminal.Window, lines int) {
 	}
 }
 
+// scrollBack puts the pane into the state the scrollbar exists to report: a
+// view some way up its own history.
+func scrollBack(t *testing.T, win *terminal.Window, offset int) {
+	t.Helper()
+	win.EnterCopyModeImplicit()
+	if win.CopyMode == nil {
+		t.Fatal("copy mode did not start; the pane cannot be scrolled back")
+	}
+	win.CopyMode.ScrollOffset = offset
+	win.ScrollbackOffset = offset
+}
+
 // withSharedBorders sets config.SharedBorders for the duration of fn.
 func withSharedBorders(t *testing.T, shared bool, fn func()) {
 	t.Helper()
@@ -36,94 +45,133 @@ func withSharedBorders(t *testing.T, shared bool, fn func()) {
 	fn()
 }
 
-// The scrollbar's whole truth table, recorded rather than inferred.
-//
-// The thumb is drawn on the pane's right border cell. Whether a pane has one is
-// decided by terminal.Window.ContentWidth/BorderOffset, which reserve border
-// cells on !Tiled alone - so a Tiled pane's rectangle is guest output from edge
-// to edge and there is no cell a thumb could take that is not the user's own
-// terminal content. Tiling assigns Tiled from config.SharedBorders, which makes
-// shared borders a deliberately scrollbar-free mode.
-//
-// Zoom is the case this pins hardest, because it is the one that reads like an
-// exception and is not: a zoomed pane under shared borders is still borderless
-// and still full-rect (renderSeparatorOverlay stands down for a zoomed pane
-// rather than drawing it a frame), so it gets no thumb either. Without shared
-// borders a tiled pane is Tiled=false and carries its own border box, zoomed or
-// not, so the thumb has a real cell to sit on.
-func TestWindowNeedsScrollbarTruthTable(t *testing.T) {
+// The thumb is a position readout, so it exists exactly while there is a
+// position to read. A bar pinned to the bottom of every pane with history is
+// permanent chrome that says nothing, and it was the only reason a lone pane at
+// the live tail fell off the fullscreen fast path.
+func TestScrollbarAppearsOnlyWhileScrolledBack(t *testing.T) {
+	win := newTestWindow(t, "sbvis-0001", 60, 20)
+	fillScrollback(t, win, 200)
+
+	if windowNeedsScrollbar(win) {
+		t.Error("thumb at the live tail: the pane has history but is not looking at it")
+	}
+
+	scrollBack(t, win, 50)
+	if !windowNeedsScrollbar(win) {
+		t.Fatal("no thumb while scrolled back: the pane gives no sign of where it is")
+	}
+
+	// Back to the tail, by the route the wheel and the drag both take.
+	win.CopyMode.ScrollOffset = 0
+	if windowNeedsScrollbar(win) {
+		t.Error("thumb persists after returning to the live tail")
+	}
+}
+
+// The column is the whole point of the redesign: one formula, every mode. A
+// bordered pane puts the thumb one in from its right border; a borderless pane
+// under shared borders puts it on its own rightmost cell, one in from the
+// separator overlay that lives in the gap between rectangles. Neither ever
+// paints a border cell, which is why the two now coexist.
+func TestScrollbarSitsInTheLastContentColumn(t *testing.T) {
 	cases := []struct {
-		name   string
-		tiled  bool
-		zoomed bool
-		shared bool
-		want   bool
+		name        string
+		tiled       bool
+		shared      bool
+		borderStyle string
 	}{
-		{"floating pane", false, false, false, true},
-		{"floating pane, shared borders on", false, false, true, true},
-		{"bordered tiled pane", false, false, false, true},
-		{"bordered tiled pane zoomed", false, true, false, true},
-		{"borderless pane", true, false, true, false},
-		// The reported case: zoom under shared borders stays borderless, so it
-		// stays scrollbar-free. Not an oversight, and not a special case either.
-		{"borderless pane zoomed", true, true, true, false},
-		// Only reachable transiently, while a shared-borders toggle has landed
-		// but the retile that resets Tiled has not. Borderless is borderless:
-		// what decides is the flag the geometry uses, not the config setting.
-		{"borderless pane zoomed, shared borders off", true, true, false, false},
-		{"borderless pane, shared borders off", true, false, false, false},
+		{name: "bordered pane"},
+		{name: "borderless pane, shared borders", tiled: true, shared: true},
+		{name: "borderless pane zoomed, shared borders", tiled: true, shared: true},
+		{name: "borders hidden", borderStyle: "hidden"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			win := newTestWindow(t, "sbtt-"+strings.ReplaceAll(tc.name, " ", "-"), 60, 20)
+			win := newTestWindow(t, "sbcol-"+strings.ReplaceAll(tc.name, " ", "-"), 60, 20)
+			win.X, win.Y = 7, 3
+			win.SetTiled(tc.tiled)
+			win.Zoomed = strings.Contains(tc.name, "zoomed")
 			fillScrollback(t, win, 200)
-			win.Tiled = tc.tiled
-			win.Zoomed = tc.zoomed
+			scrollBack(t, win, 100)
+
+			if tc.borderStyle != "" {
+				prev := config.BorderStyle
+				config.BorderStyle = tc.borderStyle
+				t.Cleanup(func() { config.BorderStyle = prev })
+			}
 
 			withSharedBorders(t, tc.shared, func() {
-				if got := windowNeedsScrollbar(win); got != tc.want {
-					t.Errorf("windowNeedsScrollbar = %v, want %v (tiled=%v zoomed=%v shared=%v)",
-						got, tc.want, tc.tiled, tc.zoomed, tc.shared)
+				layer := renderScrollbarLayer(win, 1000, 1)
+				if layer == nil {
+					t.Fatal("no thumb layer for a scrolled-back pane")
+				}
+				wantX := win.X + win.Width - 1 - win.BorderOffset()
+				if layer.GetX() != wantX {
+					t.Errorf("thumb at column %d, want the last content column %d", layer.GetX(), wantX)
+				}
+				// Never the border cell, and never outside the rectangle.
+				if layer.GetX() >= win.X+win.Width-win.BorderOffset() {
+					t.Errorf("thumb at %d overlaps the pane's right border cell", layer.GetX())
 				}
 			})
 		})
 	}
 }
 
+// A pane mid-drag may straddle the sidebar band. The band composes above the
+// pane's own layer, but the thumb is composed above the band, so it has to be
+// clipped by hand or it pokes through.
+func TestScrollbarIsClippedToTheContentRegion(t *testing.T) {
+	win := newTestWindow(t, "sbclip-0001", 60, 20)
+	win.X = 30
+	fillScrollback(t, win, 200)
+	scrollBack(t, win, 100)
+
+	thumbX := win.X + win.Width - 1 - win.BorderOffset()
+	if layer := renderScrollbarLayer(win, thumbX, 1); layer != nil {
+		t.Errorf("thumb drawn at %d with the band starting at %d: it would land in the rail",
+			layer.GetX(), thumbX)
+	}
+	if layer := renderScrollbarLayer(win, thumbX+1, 1); layer == nil {
+		t.Error("thumb withheld when its column is the last one inside the content region")
+	}
+}
+
 // windowNeedsScrollbar is consulted by four render paths (compositor cached,
 // sync-hold, redraw, fullscreen fast path) to decide whether a thumb exists,
-// while renderScrollbarLayer is what actually draws it. If the two ever
-// disagree, the layout believes something the screen does not show, or the
-// layer paints where the layout left no room. Pin that they agree on every row
-// of the table above, plus the config gates.
+// while renderScrollbarLayer is what actually draws it. If the two disagree,
+// the layout believes something the screen does not show.
 func TestScrollbarLayerAgreesWithWindowNeedsScrollbar(t *testing.T) {
 	type variant struct {
-		name           string
-		tiled, zoomed  bool
-		shared, hide   bool
-		borderStyle    string
-		altScreen      bool
-		emptyScrollbck bool
+		name          string
+		tiled, shared bool
+		hide          bool
+		borderStyle   string
+		scrolled      int
+		noScrollback  bool
 	}
 	variants := []variant{
-		{name: "bordered pane"},
-		{name: "borderless pane", tiled: true, shared: true},
-		{name: "borderless pane zoomed", tiled: true, zoomed: true, shared: true},
-		{name: "bordered pane zoomed", zoomed: true},
-		{name: "scrollbar disabled", hide: true},
-		{name: "borders hidden", borderStyle: "hidden"},
-		{name: "no scrollback", emptyScrollbck: true},
+		{name: "bordered pane scrolled", scrolled: 100},
+		{name: "bordered pane at tail"},
+		{name: "borderless pane scrolled", tiled: true, shared: true, scrolled: 100},
+		{name: "borderless pane at tail", tiled: true, shared: true},
+		{name: "borders hidden, scrolled", borderStyle: "hidden", scrolled: 100},
+		{name: "scrollbar disabled", hide: true, scrolled: 100},
+		{name: "no scrollback", noScrollback: true},
 	}
 
 	for _, v := range variants {
 		t.Run(v.name, func(t *testing.T) {
 			win := newTestWindow(t, "sbagree-"+strings.ReplaceAll(v.name, " ", "-"), 60, 20)
-			if !v.emptyScrollbck {
+			if !v.noScrollback {
 				fillScrollback(t, win, 200)
 			}
-			win.Tiled = v.tiled
-			win.Zoomed = v.zoomed
+			win.SetTiled(v.tiled)
+			if v.scrolled > 0 {
+				scrollBack(t, win, v.scrolled)
+			}
 
 			prevHide, prevStyle := config.HideScrollbar, config.BorderStyle
 			config.HideScrollbar = v.hide
@@ -136,7 +184,7 @@ func TestScrollbarLayerAgreesWithWindowNeedsScrollbar(t *testing.T) {
 
 			withSharedBorders(t, v.shared, func() {
 				need := windowNeedsScrollbar(win)
-				layer := renderScrollbarLayer(win, theme.BorderUnfocused(), 1)
+				layer := renderScrollbarLayer(win, 1000, 1)
 				if need != (layer != nil) {
 					t.Fatalf("windowNeedsScrollbar = %v but renderScrollbarLayer returned %v: "+
 						"the layout and the layer disagree about whether a thumb is present",
@@ -147,77 +195,80 @@ func TestScrollbarLayerAgreesWithWindowNeedsScrollbar(t *testing.T) {
 	}
 }
 
-// The layer renderer must refuse a borderless pane on its own, not only because
-// its callers happen to check first. It is the code that writes the cells, and
-// on a borderless pane those cells are the guest's output.
-func TestScrollbarLayerRefusesBorderlessPaneDirectly(t *testing.T) {
-	win := newTestWindow(t, "sbdirect-0001", 60, 20)
-	fillScrollback(t, win, 200)
-	win.Tiled = true
+// The thumb reports the viewport's share of the buffer and its place in it:
+// short for deep history, pinned to the bottom near the tail and to the top at
+// the oldest line.
+func TestScrollbarThumbSizeAndTravel(t *testing.T) {
+	win := newTestWindow(t, "sbgeom-0001", 60, 20)
+	win.Y = 4
+	fillScrollback(t, win, 400)
+	contentH := win.ContentHeight()
+	sbLen := win.ScrollbackLenSync()
 
-	withSharedBorders(t, true, func() {
-		for _, zoomed := range []bool{false, true} {
-			win.Zoomed = zoomed
-			if layer := renderScrollbarLayer(win, theme.BorderUnfocused(), 1); layer != nil {
-				t.Errorf("renderScrollbarLayer drew a thumb on a borderless pane (zoomed=%v); "+
-					"it would land on the rightmost column of terminal output", zoomed)
-			}
-		}
-	})
+	thumbH := scrollbarThumbHeight(contentH, sbLen)
+	if thumbH < 1 || thumbH >= contentH {
+		t.Fatalf("thumb height %d out of range for a %d-row viewport", thumbH, contentH)
+	}
+
+	scrollBack(t, win, 1)
+	nearTail := renderScrollbarLayer(win, 1000, 1)
+	scrollBack(t, win, sbLen)
+	atTop := renderScrollbarLayer(win, 1000, 1)
+	if nearTail == nil || atTop == nil {
+		t.Fatal("a scrolled-back pane produced no thumb")
+	}
+
+	wantBottom := win.Y + win.BorderOffset() + contentH - thumbH
+	if nearTail.GetY() != wantBottom {
+		t.Errorf("thumb one line back sits at y=%d, want the bottom of the track %d", nearTail.GetY(), wantBottom)
+	}
+	if want := win.Y + win.BorderOffset(); atTop.GetY() != want {
+		t.Errorf("thumb at the oldest line sits at y=%d, want the top of the track %d", atTop.GetY(), want)
+	}
 }
 
-// The pairing that matters on screen: a pane gets a thumb exactly when it gets
-// a border box to hang it on. renderWindowBox and windowNeedsScrollbar read the
-// same predicate, and this asserts against the rendered box rather than against
-// the predicate, so a future divergence between them is caught by what the user
-// would see.
-func TestThumbAppearsExactlyWhenTheBoxHasABorder(t *testing.T) {
-	cases := []struct {
-		name          string
-		tiled, zoomed bool
-		shared        bool
-	}{
-		{"bordered pane", false, false, false},
-		{"bordered pane zoomed", false, true, false},
-		{"borderless pane", true, false, true},
-		{"borderless pane zoomed", true, true, true},
+// The grab column input uses must be the column the renderer paints, and it
+// must be closed at the live tail: there the cell is ordinary content and a
+// press on it belongs to the guest, not to a jump-scroll.
+func TestScrollbarHitTracksTheDrawnColumn(t *testing.T) {
+	for _, tiled := range []bool{false, true} {
+		win := newTestWindow(t, "sbhit-"+itoa(boolToInt(tiled)), 60, 20)
+		win.X = 5
+		win.SetTiled(tiled)
+		fillScrollback(t, win, 200)
+
+		if _, drawn := ScrollbarHit(win); drawn {
+			t.Errorf("tiled=%v: a grab is offered at the live tail, where no thumb is drawn", tiled)
+		}
+
+		scrollBack(t, win, 100)
+		x, drawn := ScrollbarHit(win)
+		if !drawn {
+			t.Fatalf("tiled=%v: no grab offered while the thumb is on screen", tiled)
+		}
+		layer := renderScrollbarLayer(win, 1000, 1)
+		if layer == nil || layer.GetX() != x {
+			t.Errorf("tiled=%v: grab column %d does not match the drawn column", tiled, x)
+		}
 	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			win := newTestWindow(t, "sbbox-"+strings.ReplaceAll(tc.name, " ", "-"), 60, 20)
-			fillScrollback(t, win, 200)
-			// SetTiled rather than the bare flag: it re-syncs the emulator to
-			// the borderless size, which is what makes the rendered box the
-			// pane's full rectangle. Setting the flag alone leaves the emulator
-			// two cells short in each axis and the box would not be what the
-			// compositor actually composites.
-			win.SetTiled(tc.tiled)
-			win.Zoomed = tc.zoomed
-			m := newTestOS(win)
-
-			withSharedBorders(t, tc.shared, func() {
-				box := m.renderWindowBox(win, 0, true, theme.BorderUnfocused())
-				lines := strings.Split(box, "\n")
-				hasBorder := strings.Contains(lines[len(lines)-1], config.GetWindowBorderBottomLeft())
-
-				if got := windowNeedsScrollbar(win); got != hasBorder {
-					t.Fatalf("box has a border = %v but windowNeedsScrollbar = %v: "+
-						"a thumb without a border cell lands on terminal content, and a border "+
-						"with no thumb loses the scroll position the pane could show",
-						hasBorder, got)
-				}
-
-				// A borderless pane must also be exactly its rectangle, which is
-				// what leaves no cell to spare in the first place.
-				if !hasBorder {
-					w, h := lipgloss.Size(box)
-					if w != win.ContentWidth() || h != win.ContentHeight() {
-						t.Errorf("borderless box is %dx%d, want the pane's full rect %dx%d",
-							w, h, win.ContentWidth(), win.ContentHeight())
-					}
-				}
-			})
-		})
+	if _, drawn := ScrollbarHit(nil); drawn {
+		t.Error("a nil window offered a scrollbar grab")
 	}
+}
+
+// Every new glyph needs a fallback, and the thumb is a glyph.
+func TestScrollbarThumbCharDegradesToASCII(t *testing.T) {
+	prev := config.UseASCIIOnly
+	config.UseASCIIOnly = true
+	t.Cleanup(func() { config.UseASCIIOnly = prev })
+	if got := config.GetScrollbarThumbChar(); got != "|" {
+		t.Errorf("ASCII thumb char = %q, want %q", got, "|")
+	}
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

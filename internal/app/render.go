@@ -132,7 +132,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			// vim) have no scrollback, so drawing a scrollback thumb over them
 			// only flickers as their content redraws.
 			if windowNeedsScrollbar(window) {
-				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
+				if sbLayer := renderScrollbarLayer(window, rightClip, zIndex+1); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
 			}
@@ -155,7 +155,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			}
 			layers = append(layers, window.CachedLayer)
 			if windowNeedsScrollbar(window) {
-				if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
+				if sbLayer := renderScrollbarLayer(window, rightClip, zIndex+1); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
 			}
@@ -198,7 +198,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		// Scrollbar layer (always fresh, not cached). See the alt-screen note above.
 		if windowNeedsScrollbar(window) {
-			if sbLayer := renderScrollbarLayer(window, borderColorObj, zIndex+1); sbLayer != nil {
+			if sbLayer := renderScrollbarLayer(window, rightClip, zIndex+1); sbLayer != nil {
 				layers = append(layers, sbLayer)
 			}
 		}
@@ -288,7 +288,8 @@ func fitToContentBox(content string, w, h int) string {
 // Zoom does not change this. A zoomed pane under shared borders is still
 // borderless and full-rect; the separator overlay stands down because a zoomed
 // pane has no neighbours to be separated from, so it has no border cell either.
-// windowNeedsScrollbar reads the same predicate, so the two never disagree.
+// The scrollbar no longer consults this: it draws inside the rectangle, so it
+// needs no border cell to exist.
 func rendersBorderless(window *terminal.Window) bool {
 	return window.Tiled
 }
@@ -398,9 +399,10 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if window.Terminal != nil && window.Terminal.IsSyncActive() {
 		return nil, false
 	}
-	// A window with visible scrollback needs a scrollbar thumb, which only the
-	// compositor draws as a separate layer. Fall back so a lone tiled/fullscreen
-	// window does not silently lose its scrollbar.
+	// A scrolled-back pane shows a scrollbar thumb, which only the compositor
+	// draws as a separate layer. Fall back so a lone tiled/fullscreen window
+	// does not silently lose it. At the live tail there is no thumb, so a deep
+	// scrollback no longer costs the fast path.
 	if windowNeedsScrollbar(window) {
 		return nil, false
 	}

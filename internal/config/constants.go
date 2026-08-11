@@ -797,13 +797,15 @@ func GetBorderForStyle() lipgloss.Border {
 	}
 }
 
-// GetScrollbarThumbChar returns the scrollbar thumb character. Uses a full
-// block by default for prominence, falling back to '#' for ASCII-only mode.
+// GetScrollbarThumbChar returns the scrollbar thumb character. A right
+// one-eighth block hugs the border side of its cell, so the thumb floats over
+// content as a hairline instead of blanking a column of it. ASCII-only mode
+// falls back to '|'.
 func GetScrollbarThumbChar() string {
 	if UseASCIIOnly || BorderStyle == "ascii" {
-		return "#"
+		return "|"
 	}
-	return "█"
+	return "▕"
 }
 
 // Window decoration getter functions
