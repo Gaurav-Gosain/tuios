@@ -32,11 +32,6 @@ import (
 // focus pill used to outshout them, which had the rail insisting on where you
 // already were over a pane waiting on an answer.
 
-// sidebarFocusColor is the workspace chip's active fill, shared with the dock
-// strip (render_dock.go) so the two never disagree about which workspace you
-// are on.
-const sidebarFocusColor = "#4865f2"
-
 // sidebarRowKind distinguishes what a sidebar row points at for mouse routing.
 type sidebarRowKind int
 

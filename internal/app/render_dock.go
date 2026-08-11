@@ -12,26 +12,27 @@ import (
 )
 
 // workspaceChip renders one workspace digit for the dock strip or the rail
-// band. Inactive is a bare dim digit; active is a flat filled cell, where the
-// background is the tab and there is no cap glyph to read as one. Both pad to
-// the caps' widths, so every chip is exactly workspaceChipWidth wide whatever
-// its state. rowBg is what sits behind the chip (nil for the bare terminal
-// background), fg the resting digit color.
+// band. Inactive is a bare dim digit; active is an accent digit, bold and
+// underlined, on no fill of its own. An inverse fill is the loudest mark the
+// grammar has and it was being spent on the thing the user already knows; the
+// underline says the same in one attribute, survives ASCII mode and monochrome
+// (both are attributes, not glyphs), and leaves the mode chip as the bar's only
+// filled element. Both states pad to the caps' widths, so every chip is exactly
+// workspaceChipWidth wide whatever its state. rowBg is what sits behind the
+// chip (nil for the bare terminal background), fg the resting digit color.
 func workspaceChip(n int, active bool, fg, rowBg color.Color) string {
 	lc, rc := workspaceChipCaps()
 	digit := strconv.Itoa(n)
+	pad := func(s string) string { return sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", lipgloss.Width(s))) }
 	if !active {
 		return sidebarStyle(rowBg, fg).Render(
 			strings.Repeat(" ", lipgloss.Width(lc)) + digit + strings.Repeat(" ", lipgloss.Width(rc)))
 	}
-	fill := lipgloss.Color(sidebarFocusColor)
-	body := lipgloss.NewStyle().Background(fill).Foreground(lipgloss.Color("#ffffff"))
-	if !config.DockPillCaps {
-		return body.Render(
-			strings.Repeat(" ", lipgloss.Width(lc)) + digit + strings.Repeat(" ", lipgloss.Width(rc)))
-	}
-	caps := sidebarStyle(rowBg, fill)
-	return caps.Render(lc) + body.Bold(true).Render(digit) + caps.Render(rc)
+	// The pill caps go with the fill they capped: a half-circle around bare
+	// canvas is a glyph with nothing behind it. They keep their columns so the
+	// strip does not reflow when the current workspace moves along it.
+	body := sidebarStyle(rowBg, theme.UI().Accent).Bold(true).Underline(true)
+	return pad(lc) + body.Render(digit) + pad(rc)
 }
 
 // renderDockWorkspaceTabs styles the workspace strip starting at column startX
