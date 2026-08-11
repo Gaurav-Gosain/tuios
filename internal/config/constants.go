@@ -113,6 +113,10 @@ var (
 	// this value) can take effect without a restart.
 	MaxFPSCap = 240
 
+	// MinConfiguredFPS is the floor a configured max_fps is clamped to. Below it
+	// the UI stops feeling like it is responding to the keyboard at all.
+	MinConfiguredFPS = 10
+
 	// IdleFPS is the refresh rate when the terminal is idle (no output for ~500ms).
 	// Reduces CPU usage from ~10% to near-zero on idle.
 	IdleFPS = 10

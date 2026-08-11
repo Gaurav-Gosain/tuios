@@ -791,11 +791,8 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 		ScrollbackLines = cfg.Appearance.ScrollbackLines
 	}
 
-	// Clamped exactly as ApplyOverrides clamps it, because this is now the
-	// other place a saved max_fps reaches the tick loop from and the two must
-	// not disagree about what the file is allowed to ask for.
 	if cfg.Appearance.MaxFPS > 0 {
-		NormalFPS = max(min(cfg.Appearance.MaxFPS, MaxFPSCap), 10)
+		NormalFPS = clampMaxFPS(cfg.Appearance.MaxFPS)
 	}
 
 	// LeaderKey lives in [keybindings] rather than [appearance], but it is a
@@ -900,6 +897,15 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// calls: the tape runner, the SSH server, the command palette's save, and
 	// the live reload. A second entry point is a second thing to forget.
 	ApplyNotificationConfig(cfg)
+}
+
+// clampMaxFPS folds a configured max_fps into the range the tick loop can
+// actually drive. Both apply passes call it, so a config file cannot mean two
+// different frame rates depending on which one ran: ApplyOverrides runs alone
+// for the entrypoints that have no ApplyAppearanceConfig, and both run (in that
+// order) for cmd/tuios.
+func clampMaxFPS(fps int) int {
+	return max(min(fps, MaxFPSCap), MinConfiguredFPS)
 }
 
 // ApplyNotificationConfig applies the [notifications] section to the package

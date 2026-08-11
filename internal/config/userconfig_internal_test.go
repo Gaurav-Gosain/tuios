@@ -2,6 +2,51 @@ package config
 
 import "testing"
 
+// TestMaxFPSClampAgreesOnBothPaths pins the behaviour the two apply passes used
+// to spell out separately: whichever one runs, and in whichever order, a given
+// max_fps reaches the tick loop as the same number.
+func TestMaxFPSClampAgreesOnBothPaths(t *testing.T) {
+	tests := []struct {
+		in   int
+		want int
+	}{
+		{in: 1, want: MinConfiguredFPS},
+		{in: 10, want: 10},
+		{in: 60, want: 60},
+		{in: 240, want: MaxFPSCap},
+		{in: 10000, want: MaxFPSCap},
+	}
+
+	orig := NormalFPS
+	t.Cleanup(func() { NormalFPS = orig })
+
+	for _, tc := range tests {
+		cfg := &UserConfig{}
+		cfg.Appearance.MaxFPS = tc.in
+
+		NormalFPS = orig
+		ApplyAppearanceConfig(cfg)
+		viaApply := NormalFPS
+
+		NormalFPS = orig
+		ApplyOverrides(Overrides{}, cfg)
+		viaOverrides := NormalFPS
+
+		if viaApply != tc.want || viaOverrides != tc.want {
+			t.Errorf("max_fps %d: apply gave %d, overrides gave %d, want %d",
+				tc.in, viaApply, viaOverrides, tc.want)
+		}
+	}
+
+	// Unset means "leave the current rate alone" on both paths.
+	NormalFPS = 45
+	ApplyAppearanceConfig(&UserConfig{})
+	ApplyOverrides(Overrides{}, &UserConfig{})
+	if NormalFPS != 45 {
+		t.Errorf("an unset max_fps moved the rate to %d, want it left at 45", NormalFPS)
+	}
+}
+
 // fillMissingAppearance is where hand-written configs get sanitised. It is
 // exercised directly here because the only exported entry point (LoadUserConfig)
 // reads the real XDG config directory.

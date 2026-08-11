@@ -195,6 +195,6 @@ func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 	}
 
 	if userConfig != nil && userConfig.Appearance.MaxFPS > 0 {
-		NormalFPS = max(min(userConfig.Appearance.MaxFPS, MaxFPSCap), 10)
+		NormalFPS = clampMaxFPS(userConfig.Appearance.MaxFPS)
 	}
 }
