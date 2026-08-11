@@ -18,9 +18,10 @@ func multiSessionClient() *session.TUIClient {
 	return c
 }
 
-// TestForeignSessionRefreshPlan pins the poll gate: fast only when a consumer is
-// on screen and foreign sessions exist, a slow fallback when foreign sessions
-// exist unseen, and nothing at all for a lone session or no daemon.
+// TestForeignSessionRefreshPlan pins the poll gate: fast whenever a consumer is
+// on screen, since the rail titles windows this client unsubscribed from out of
+// that listing, a slow fallback when foreign sessions exist unseen, and nothing
+// at all for an off-screen lone session or no daemon.
 func TestForeignSessionRefreshPlan(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -31,7 +32,8 @@ func TestForeignSessionRefreshPlan(t *testing.T) {
 		wantActive  bool // true => fast cadence, false => slow
 	}{
 		{"no daemon", nil, true, false, false, false},
-		{"lone session, sidebar on", session.NewTUIClient(), true, false, false, false},
+		{"lone session, sidebar on", session.NewTUIClient(), true, false, true, true},
+		{"lone session, nothing visible", session.NewTUIClient(), false, false, false, false},
 		{"multi, sidebar on", multiSessionClient(), true, false, true, true},
 		{"multi, switcher open", multiSessionClient(), false, true, true, true},
 		{"multi, nothing visible", multiSessionClient(), false, false, true, false},

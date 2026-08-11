@@ -518,6 +518,11 @@ type OS struct {
 	// is still catching up, keeping the tick alive until it settles.
 	sidebarTitles       map[string]railTitleEntry
 	sidebarTitlePending bool
+	// sidebarTitleGen is the daemon listing generation the rail titles were last
+	// brought up to date with. A window this client dropped its subscription to
+	// only ever retitles through that listing, so the generation is the tick's
+	// only signal that such a title moved.
+	sidebarTitleGen uint64
 
 	// Right-click gesture disambiguation. A plain right press on a pane arms
 	// both a corner resize and a pending context menu; the release decides.

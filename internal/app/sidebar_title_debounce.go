@@ -40,6 +40,10 @@ func (m *OS) updateRailTitles() (changed bool) {
 	if m.sidebarTitles == nil {
 		m.sidebarTitles = make(map[string]railTitleEntry, len(m.Windows))
 	}
+	daemonTitles := m.unwatchedTitles()
+	if m.DaemonClient != nil {
+		m.sidebarTitleGen = m.DaemonClient.CacheGen()
+	}
 	now := time.Now()
 	pending := false
 	for _, w := range m.Windows {
@@ -47,6 +51,9 @@ func (m *OS) updateRailTitles() (changed bool) {
 			continue
 		}
 		live := windowRowTitle(w)
+		if t, ok := daemonTitles[w.ID]; ok {
+			live = t
+		}
 		e, ok := m.sidebarTitles[w.ID]
 		switch {
 		case !ok:
@@ -70,4 +77,52 @@ func (m *OS) updateRailTitles() (changed bool) {
 	}
 	m.sidebarTitlePending = pending
 	return changed
+}
+
+// unwatchedTitles maps window ID to the title the daemon reports, for the
+// windows of this session whose PTY this client is not subscribed to. Leaving a
+// workspace drops those subscriptions, so their output (and the title in it)
+// stops at the daemon and the local emulator holds whatever it last saw, while
+// the rail keeps listing them. The daemon reads every byte of every window, so
+// its listing is the only source that stays current for them.
+//
+// Nil whenever every window is watched, which is the single-workspace case.
+func (m *OS) unwatchedTitles() map[string]string {
+	if m.DaemonClient == nil {
+		return nil
+	}
+	unwatched := func(w *terminal.Window) bool {
+		// A custom name is the user's, set here and never stale.
+		return w != nil && w.DaemonMode && w.CustomName == "" &&
+			w.PTYID != "" && !m.SubscribedPTYs[w.PTYID]
+	}
+	any := false
+	for _, w := range m.Windows {
+		if unwatched(w) {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return nil
+	}
+
+	summaries := m.DaemonClient.SessionWindows(m.SessionName)
+	if len(summaries) == 0 {
+		return nil
+	}
+	byID := make(map[string]string, len(summaries))
+	for _, s := range summaries {
+		byID[s.ID] = s.Title
+	}
+	titles := make(map[string]string, len(summaries))
+	for _, w := range m.Windows {
+		if !unwatched(w) {
+			continue
+		}
+		if t := byID[w.ID]; t != "" {
+			titles[w.ID] = t
+		}
+	}
+	return titles
 }

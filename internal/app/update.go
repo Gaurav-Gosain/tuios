@@ -360,6 +360,12 @@ func (m *OS) tickNeedsWork() bool {
 		m.SidebarMarqueeActive() || m.sidebarTitlePending {
 		return true
 	}
+	// A moved daemon listing can carry a new title for a window this client
+	// stopped watching. The per-window drift check below cannot see that, because
+	// the local title it compares against is the one that froze. One atomic load.
+	if m.DaemonClient != nil && m.DaemonClient.CacheGen() != m.sidebarTitleGen {
+		return true
+	}
 	for _, w := range m.Windows {
 		if w == nil {
 			continue
@@ -448,12 +454,12 @@ func TriggerAltScreenRedrawCmd() tea.Cmd {
 	}
 }
 
-// Foreign-session poll cadences. The client re-fetches the daemon's session
-// list so a non-attached session's window tree stays current in the sidebar.
-// The fast cadence runs only while a consumer (sidebar or switcher) can show
-// the result and more than one session exists; otherwise the slow cadence is a
-// fallback that keeps the cache from going stale without costing anything at
-// true idle, where a lone-session client refreshes nothing at all.
+// Session poll cadences. The client re-fetches the daemon's session list so a
+// non-attached session's window tree, and the titles of its own windows it no
+// longer subscribes to, stay current in the sidebar. The fast cadence runs while
+// a consumer (sidebar or switcher) can show the result; otherwise the slow
+// cadence is a fallback that keeps the cache from going stale without costing
+// anything at true idle, where a lone-session client refreshes nothing at all.
 const (
 	foreignSessionRefreshActive = 3 * time.Second
 	foreignSessionRefreshIdle   = 30 * time.Second
@@ -469,17 +475,21 @@ func foreignSessionRefreshTick(after time.Duration) tea.Cmd {
 }
 
 // foreignSessionRefreshPlan decides whether the next poll should hit the daemon
-// and how long to wait before re-arming. There are foreign sessions to show
-// only when more than one session exists; a consumer is on screen when the
-// sidebar reserves columns or the session switcher is open. Poll fast when both
-// hold, fall back to a slow cache-warming poll when there are foreign sessions
-// but nothing is displaying them, and do nothing at all for a lone session.
+// and how long to wait before re-arming. A consumer is on screen when the
+// sidebar reserves columns or the session switcher is open; poll fast then, even
+// for a lone session, because the listing is where the rail reads the titles of
+// windows this client has unsubscribed from. Off screen, fall back to a slow
+// cache-warming poll while foreign sessions exist, and do nothing at all for a
+// lone session, which is what keeps a hidden sidebar free at idle.
 func (m *OS) foreignSessionRefreshPlan() (after time.Duration, refresh bool) {
-	if m.DaemonClient == nil || m.DaemonClient.SessionCount() <= 1 {
+	if m.DaemonClient == nil {
 		return foreignSessionRefreshIdle, false
 	}
 	if m.SidebarActive() || m.ShowSessionSwitcher {
 		return foreignSessionRefreshActive, true
+	}
+	if m.DaemonClient.SessionCount() <= 1 {
+		return foreignSessionRefreshIdle, false
 	}
 	return foreignSessionRefreshIdle, true
 }

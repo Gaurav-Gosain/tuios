@@ -228,6 +228,21 @@ type PTY struct {
 	// probe. It throttles the /proc read the probe does so a busy pane does not
 	// re-check its foreground on every output chunk.
 	lastAgentProbe atomic.Int64
+
+	// title is the last title this PTY's application set. The daemon reads every
+	// byte of every window, so this is the freshest title anyone holds: a client
+	// only sees the windows it is subscribed to, and its copy of the title stops
+	// where its subscription did.
+	title atomic.Pointer[string]
+}
+
+// Title returns the last title this PTY's application set, or "" if it has set
+// none.
+func (p *PTY) Title() string {
+	if t := p.title.Load(); t != nil {
+		return *t
+	}
+	return ""
 }
 
 // agentExitProbeInterval bounds how often output drives an agent-exit probe, so a
@@ -542,8 +557,11 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 	// single vtWriter goroutine; the emitter only does a non-blocking hub publish,
 	// so it never re-enters the terminal lock held during Write.
 	terminal.SetCallbacks(vt.Callbacks{
-		Bell:  func() { pty.emit(SessionEvent{Type: EventBell}) },
-		Title: func(title string) { pty.emit(SessionEvent{Type: EventWindowRetitled, Title: title}) },
+		Bell: func() { pty.emit(SessionEvent{Type: EventBell}) },
+		Title: func(title string) {
+			pty.title.Store(&title)
+			pty.emit(SessionEvent{Type: EventWindowRetitled, Title: title})
+		},
 		AltScreen: func(on bool) {
 			pty.emit(SessionEvent{Type: EventModeChanged, Mode: "alt-screen", Enabled: on})
 		},
@@ -631,8 +649,36 @@ func (s *Session) PTYCount() int {
 // GetState returns the current session state.
 func (s *Session) GetState() *SessionState {
 	s.stateMu.RLock()
-	defer s.stateMu.RUnlock()
-	return s.snapshotStateLocked()
+	state := s.snapshotStateLocked()
+	s.stateMu.RUnlock()
+
+	// Retitle from the live emulators. The stored title is only as fresh as the
+	// last sync from a client, which knows the title of the windows it is
+	// subscribed to and nothing about the rest, so a reattach or a resurrection
+	// snapshot built from the stored value alone brings back a title the window
+	// stopped having. Taken outside stateMu: the PTY map is a different lock.
+	live := s.liveTitles()
+	for i := range state.Windows {
+		if t := live[state.Windows[i].PTYID]; t != "" {
+			state.Windows[i].Title = t
+		}
+	}
+	return state
+}
+
+// liveTitles maps PTY ID to the title that PTY's application last set, for every
+// PTY that has set one.
+func (s *Session) liveTitles() map[string]string {
+	s.ptysMu.RLock()
+	defer s.ptysMu.RUnlock()
+
+	titles := make(map[string]string, len(s.ptys))
+	for id, pty := range s.ptys {
+		if t := pty.Title(); t != "" {
+			titles[id] = t
+		}
+	}
+	return titles
 }
 
 // snapshotStateLocked returns a copy of the canonical state. The caller must
@@ -886,9 +932,11 @@ func (s *Session) Info() SessionInfo {
 }
 
 // windowSummaries builds the lightweight per-window listing for Info() from the
-// cached window states. It does no PTY work, so it stays cheap enough to run on
-// every session list.
+// cached window states, titled from the live emulators. It does no PTY work, so
+// it stays cheap enough to run on every session list.
 func (s *Session) windowSummaries() []WindowSummary {
+	live := s.liveTitles()
+
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 
@@ -899,6 +947,9 @@ func (s *Session) windowSummaries() []WindowSummary {
 	for i := range s.state.Windows {
 		w := &s.state.Windows[i]
 		title := w.CustomName
+		if title == "" {
+			title = live[w.PTYID]
+		}
 		if title == "" {
 			title = w.Title
 		}
