@@ -107,12 +107,14 @@ func isDefaultTitle(title, windowID string) bool {
 // position is the window's 1-based place in its workspace, used by the {index}
 // placeholder of appearance.window_title_format.
 func getWindowTitle(window *terminal.Window, position int, isRenaming bool, renameBuffer string, maxWidth int) string {
+	// Titles reach the badge as chrome, so launder the same decorative junk the
+	// sidebar and palette drop; our own state glyph is added below, untouched.
 	windowName := ""
 	if window.CustomName != "" {
-		windowName = window.CustomName
-	} else if window.Title() != "" && !isDefaultTitle(window.Title(), window.ID) {
+		windowName = printableTitle(window.CustomName)
+	} else if t := window.Title(); t != "" && !isDefaultTitle(t, window.ID) {
 		// Only show terminal-set title if it's not the default "Terminal <id>" format
-		windowName = window.Title()
+		windowName = printableTitle(t)
 	}
 
 	if isRenaming {

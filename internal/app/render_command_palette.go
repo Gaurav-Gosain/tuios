@@ -140,7 +140,7 @@ func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, wid
 	if selected {
 		marker = "› "
 	}
-	name := overlay.Truncate(item.Name, max(width-2-tagW-shortcutW-1, 1))
+	name := overlay.Truncate(printableTitle(item.Name), max(width-2-tagW-shortcutW-1, 1))
 	left := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker) +
 		tag + paletteRowName(name, item.AgentState, bg, nameColor, selected, pal)
 

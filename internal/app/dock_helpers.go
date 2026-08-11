@@ -261,8 +261,8 @@ func (m *OS) getDockItems() []DockItem {
 	for _, windowIndex := range dockWindows {
 		window := m.Windows[windowIndex]
 
-		// Get window name (only custom names)
-		windowName := window.CustomName
+		// Get window name (only custom names), laundered for the dock as chrome.
+		windowName := printableTitle(window.CustomName)
 
 		// Format label based on whether we have a custom name
 		var labelText string

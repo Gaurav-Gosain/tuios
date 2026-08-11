@@ -166,13 +166,16 @@ func sidebarFit(s string, cw int, bg color.Color) string {
 	return s
 }
 
-// sidebarPrintable strips what a terminal cannot be trusted to render out of a
-// title before it goes on a rail row: control characters and private-use
-// codepoints (nerd-font icons shells love to put in titles, which show as tofu
-// boxes without the right font), plus everything non-ASCII when ASCII-only
-// rendering is on. Titles are foreign data; the rail's own glyphs are audited,
-// but a title has to be laundered.
-func sidebarPrintable(s string) string {
+// printableTitle strips what a terminal cannot be trusted to render out of a
+// title before it is shown as chrome (sidebar rows, the window title badge, the
+// command palette, the dock): control characters and private-use codepoints
+// (nerd-font icons shells love to put in titles, which show as tofu boxes
+// without the right font), decorative symbol and emoji codepoints (an agent
+// setting a dingbat or emoji in its title otherwise tofus wherever we echo it),
+// plus everything non-ASCII when ASCII-only rendering is on. Titles are foreign
+// data; our own status glyphs are audited and all sit below U+2600, so they
+// survive. Titles have to be laundered.
+func printableTitle(s string) string {
 	ascii := overlay.UseASCII()
 	var b strings.Builder
 	b.Grow(len(s))
@@ -184,6 +187,13 @@ func sidebarPrintable(s string) string {
 			// BMP private use area.
 		case r >= 0xf0000:
 			// Plane 15/16 private use.
+		case r >= 0x2600 && r <= 0x27bf:
+			// Miscellaneous Symbols and Dingbats.
+		case r >= 0xfe00 && r <= 0xfe0f:
+			// Variation Selectors (VS1-16), including the emoji VS16.
+		case r >= 0x1f000 && r <= 0x1faff:
+			// Emoji and pictographic planes (Regional Indicator flag halves
+			// U+1F1E6-1F1FF sit inside this span).
 		case ascii && r > 0x7e:
 		default:
 			b.WriteRune(r)
@@ -572,7 +582,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 	}
 
 	avail := max(cw-lipgloss.Width(left)-rightW-1, 1)
-	name := sidebarPrintable(node.Title)
+	name := printableTitle(node.Title)
 	var nameSeg string
 	if node.IsCurrent {
 		// The attached session is a quiet raised chip, one luminance step up,
@@ -604,7 +614,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 // focus pill; the rest stay dim so the list reads as detail under its session,
 // not as a second list of equals.
 func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal overlay.Palette, hovered bool) string {
-	title := sidebarPrintable(node.Title)
+	title := printableTitle(node.Title)
 	if title == "" {
 		title = "shell"
 	}
@@ -658,12 +668,12 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 		fg = pal.Fg
 	}
 
-	name := sidebarPrintable(e.Title)
+	name := printableTitle(e.Title)
 	if name == "" {
 		name = "shell"
 	}
 	if e.Foreign {
-		name = sidebarPrintable(e.SessionID) + "/" + name
+		name = printableTitle(e.SessionID) + "/" + name
 	}
 
 	label := ""
