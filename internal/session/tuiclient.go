@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,6 +58,13 @@ type TUIClient struct {
 	// cacheGen bumps every time availableSessions changes, so the sidebar can
 	// tell whether foreign-session data moved without locking mu per frame.
 	cacheGen atomic.Uint64
+
+	// Sessions this client learned by attaching to (creating) them, kept until a
+	// daemon listing that could have seen them arrives. localGen counts those
+	// additions so a listing already in flight is recognisable as a picture older
+	// than what the cache knows. Guarded by mu.
+	localSessions []string
+	localGen      uint64
 
 	// refreshInFlight drops overlapping background refreshes so a periodic
 	// sidebar refresh cannot pile up requests on a busy daemon.
@@ -213,8 +221,7 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	for _, name := range welcome.SessionNames {
 		infos = append(infos, SessionInfo{Name: name})
 	}
-	c.availableSessions = infos
-	c.cacheGen.Add(1)
+	c.UpdateSessionCache(infos)
 
 	return nil
 }
@@ -249,6 +256,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		}
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
+		c.NoteSession(payload.SessionName)
 		return payload.State, nil
 
 	case MsgError:
@@ -336,6 +344,7 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		}
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
+		c.NoteSession(payload.SessionName)
 		windowCount := 0
 		if payload.State != nil {
 			windowCount = len(payload.State.Windows)
@@ -662,6 +671,7 @@ func (c *TUIClient) KillSessionByName(name string) error {
 	if err != nil {
 		return err
 	}
+	stamp := c.listingStamp()
 	resp, err := c.sendAndWaitResponse(msg, MsgSessionList, MsgError)
 	if err != nil {
 		return err
@@ -675,7 +685,7 @@ func (c *TUIClient) KillSessionByName(name string) error {
 	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
 		return err
 	}
-	c.UpdateSessionCache(payload.Sessions)
+	c.applySessionListing(payload.Sessions, stamp)
 	return nil
 }
 
@@ -1076,6 +1086,7 @@ func (c *TUIClient) RefreshSessionList() ([]SessionInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	stamp := c.listingStamp()
 	resp, err := c.sendAndWaitResponse(listMsg, MsgSessionList, MsgError)
 	if err != nil {
 		return nil, err
@@ -1089,16 +1100,100 @@ func (c *TUIClient) RefreshSessionList() ([]SessionInfo, error) {
 	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
 		return nil, err
 	}
-	c.UpdateSessionCache(payload.Sessions)
+	c.applySessionListing(payload.Sessions, stamp)
 	return payload.Sessions, nil
 }
 
 // UpdateSessionCache replaces the cached session listing, including each
-// session's window summaries. RefreshSessionList calls it after a fetch; it is
-// also the seam that seeds the cache without a live daemon.
+// session's window summaries. It is the seam that seeds the cache without a live
+// daemon; a listing handed in here is treated as current.
 func (c *TUIClient) UpdateSessionCache(sessions []SessionInfo) {
+	c.applySessionListing(sessions, c.listingStamp())
+}
+
+// listingStamp reads the local-addition counter a listing request is answered
+// against. Take it before sending the request, hand it back to
+// applySessionListing with the reply.
+func (c *TUIClient) listingStamp() uint64 {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.localGen
+}
+
+// applySessionListing installs a daemon listing over the cache. When sinceGen
+// still matches, the listing is newer than everything this client knows and
+// replaces the cache outright, which is what lets a killed session leave. When
+// it does not, a session was created while the request was in flight and the
+// reply is an older picture, so the sessions it could not have seen are kept:
+// the cache must never regress below what the sidebar is already showing.
+func (c *TUIClient) applySessionListing(sessions []SessionInfo, sinceGen uint64) {
+	c.mu.Lock()
+	if sinceGen == c.localGen {
+		c.localSessions = nil
+	} else {
+		sessions = appendUnlisted(sessions, c.availableSessions, c.localSessions)
+	}
+	changed := !listingsAgree(c.availableSessions, sessions)
 	c.availableSessions = sessions
+	c.mu.Unlock()
+	if changed {
+		c.cacheGen.Add(1)
+	}
+}
+
+// appendUnlisted appends the cached entry for every locally-known session the
+// listing omits, so a reply that predates a just-created session does not drop
+// it. Order is preserved: the local session stays last, where creation order
+// put it.
+func appendUnlisted(listing, cached []SessionInfo, local []string) []SessionInfo {
+	for _, name := range local {
+		if slices.ContainsFunc(listing, func(s SessionInfo) bool { return s.Name == name }) {
+			continue
+		}
+		info := SessionInfo{Name: name}
+		if i := slices.IndexFunc(cached, func(s SessionInfo) bool { return s.Name == name }); i >= 0 {
+			info = cached[i]
+		}
+		listing = append(listing, info)
+	}
+	return listing
+}
+
+// listingsAgree reports whether two listings draw the same thing. Only the
+// fields the session surfaces read are compared, so a listing that moves
+// nothing on screen does not bump cacheGen and force a rail rebuild.
+func listingsAgree(a, b []SessionInfo) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || a[i].WindowCount != b[i].WindowCount {
+			return false
+		}
+		if !slices.Equal(a[i].Windows, b[i].Windows) {
+			return false
+		}
+	}
+	return true
+}
+
+// NoteSession records a session this client just attached to. Attaching with
+// CreateNew is how a session is born, and until the daemon is listed again
+// nothing else knows it exists: the sidebar builds foreign rows from this cache,
+// so without the note the new session survives only while it is the attached one
+// and vanishes the moment the client switches away.
+func (c *TUIClient) NoteSession(name string) {
+	if name == "" {
+		return
+	}
+	c.mu.Lock()
+	if slices.ContainsFunc(c.availableSessions, func(s SessionInfo) bool { return s.Name == name }) {
+		c.mu.Unlock()
+		return
+	}
+	c.availableSessions = append(c.availableSessions, SessionInfo{Name: name})
+	c.localSessions = append(c.localSessions, name)
+	c.localGen++
 	c.mu.Unlock()
 	c.cacheGen.Add(1)
 }
