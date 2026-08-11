@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -94,7 +95,7 @@ func TestAccentSurvivesFocus(t *testing.T) {
 // together are the old-vs-new comparison rather than two editors on one buffer.
 func TestRailKeepsTheOldNameWhileRenaming(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
-	m.SidebarFocused = true // renaming from the rail, so the dialog anchors there
+	m.SidebarFocused = true // started from the rail
 
 	m.BeginRenameWindow(m.Windows[2]) // "logs", not the focused window
 	m.RenameBuffer = "audit"
@@ -107,20 +108,43 @@ func TestRailKeepsTheOldNameWhileRenaming(t *testing.T) {
 		t.Errorf("the rail dropped the name the window still has:\n%s", rows)
 	}
 
-	// The dialog anchors to that row and carries the buffer.
-	dialog, _, _, y, ok := m.renderRenameDialog()
+	// The dialog carries the buffer.
+	dialog, _, _, _, ok := m.renderRenameDialog()
 	if !ok {
 		t.Fatal("no rename dialog while a rename is in flight")
 	}
 	if !strings.Contains(stripANSIForTrace(dialog), "audit") {
 		t.Errorf("the dialog is not showing the buffer: %q", dialog)
 	}
-	row, found := m.sidebarRowFor("cccccccc3333")
-	if !found {
-		t.Fatal("the rail drew no row for the rename target")
-	}
-	if y+1 != row.Y0 {
-		t.Errorf("the dialog's field row is at y=%d, the row it names is at y=%d", y+1, row.Y0)
+}
+
+// TestRenameDialogIsCentred pins the placement complaint: the dialog used to
+// anchor to the rail row it renamed, which put it in the top-left corner. It
+// belongs in the middle of the screen at every size, measured off the frame it
+// actually draws rather than off the layout math that placed it.
+func TestRenameDialogIsCentred(t *testing.T) {
+	for _, size := range [][2]int{{120, 40}, {80, 24}, {60, 20}, {34, 12}} {
+		w, h := size[0], size[1]
+		m := sidebarTestOS(t, w, h, "left")
+		m.SidebarFocused = true
+		m.BeginRenameWindow(m.Windows[2])
+
+		content, geo, x, y, ok := m.renderRenameDialog()
+		if !ok {
+			t.Fatalf("%dx%d: no rename dialog while a rename is in flight", w, h)
+		}
+		drawnW := lipgloss.Width(content)
+		drawnH := lipgloss.Height(content)
+		if drawnW != geo.Width || drawnH != geo.Height {
+			t.Fatalf("%dx%d: the dialog draws %dx%d but reports %dx%d", w, h, drawnW, drawnH, geo.Width, geo.Height)
+		}
+		// Centred to within the odd-leftover cell on each axis.
+		if slack := (w - drawnW) - 2*x; slack < 0 || slack > 1 {
+			t.Errorf("%dx%d: dialog at x=%d is %d cells wide, off horizontal centre by %d", w, h, x, drawnW, slack)
+		}
+		if slack := (h - drawnH) - 2*y; slack < 0 || slack > 1 {
+			t.Errorf("%dx%d: dialog at y=%d is %d rows tall, off vertical centre by %d", w, h, y, drawnH, slack)
+		}
 	}
 }
 

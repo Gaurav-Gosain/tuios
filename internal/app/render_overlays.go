@@ -195,9 +195,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "accent", content, geo, rows)
 	}
 
-	// The rename dialog is anchored to the row or pane it names rather than
-	// centred, so it is placed directly instead of going through the draggable
-	// panel stack.
+	// The rename dialog is modal and not draggable, so it is placed directly
+	// rather than through the overlay panel stack. It is centred like the rest.
 	if content, geo, x, y, ok := m.renderRenameDialog(); ok {
 		m.renameHit = overlay.Rect{X0: x, Y0: y, X1: x + geo.Width, Y1: y + geo.Height}
 		layers = append(layers, lipgloss.NewLayer(content).

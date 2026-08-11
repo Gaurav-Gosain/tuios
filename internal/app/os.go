@@ -185,7 +185,6 @@ type OS struct {
 	RenamingWindow        bool                   // True when renaming a window
 	RenameBuffer          string                 // Buffer for new window name
 	RenameTargetID        string                 // Window the rename in flight applies to
-	RenameFromRail        bool                   // Rename started on a rail row, so the dialog anchors there
 	renameHit             overlay.Rect           // Where the dialog was drawn, in screen cells
 	PrefixActive          bool                   // True when prefix key was pressed (tmux-style)
 	WorkspacePrefixActive bool                   // True when Ctrl+B, w was pressed (workspace sub-prefix)
