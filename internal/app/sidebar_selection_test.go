@@ -41,29 +41,43 @@ func treeRow(t *testing.T, m *OS, want string) string {
 	return found
 }
 
-// TestRailMarksCurrentWithOneBand is the rail's emphasis budget: the attached
-// session and the focused pane are the same "this is the current one" mark, a
-// full-width Surface band and nothing else. No caps, no inverse pill: caps
-// spent two cells and a second colour on every emphasized row, and an inverse
-// fill is the loudest mark in TUI grammar to spend on where the user already
-// is. The saturated focus fill is gone from the rail entirely.
-func TestRailMarksCurrentWithOneBand(t *testing.T) {
+// gutterCell is the first content column of a styled rail row, which is the
+// gutter mark, stripped of styling.
+func gutterCell(row string) string {
+	plain := []rune(stripANSIForTrace(row))
+	if len(plain) == 0 {
+		return ""
+	}
+	return string(plain[0])
+}
+
+// TestRailMarksCurrentWithAGutterMark is the rail's emphasis budget: the
+// attached session and the focused pane are the same "this is the current one"
+// mark, one accent cell in column 0, and nothing painted behind the row. Three
+// stacked full-width bands read as zebra striping rather than emphasis, and the
+// loudest of them marked the thing the user already knows.
+func TestRailMarksCurrentWithAGutterMark(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	pal := theme.UI()
-	surface := bgParams(pal.Surface)
 
-	// "logs" is the calm session's pane: an attention tint outranks the current
-	// band, so a row carrying one is not the case under test here.
 	focused := treeRow(t, m, "editor")
-	if !strings.Contains(focused, surface) {
-		t.Errorf("the focused pane row is not on the Surface band: %q", focused)
+	if got := gutterCell(focused); got != "▎" {
+		t.Errorf("the focused pane row has no gutter mark, column 0 is %q: %q", got, focused)
+	}
+	if !strings.Contains(focused, fgParams(pal.Accent)) {
+		t.Errorf("the focused pane's gutter mark is not accent: %q", focused)
 	}
 
 	lines, _ := m.sidebarPanelLines()
+	// Nothing on a resting rail paints a row: no Surface band, no severity tint,
+	// no saturated focus fill.
 	loud := bgParams(color.RGBA{R: 0x48, G: 0x65, B: 0xf2, A: 0xff})
 	for _, l := range lines {
 		if strings.Contains(l, loud) {
 			t.Fatalf("the saturated focus fill is still on the rail: %q", l)
+		}
+		if strings.Contains(l, bgParams(pal.Surface)) {
+			t.Fatalf("a standing Surface band is still on the rail: %q", l)
 		}
 	}
 	for _, cap := range []string{config.DockPillLeftChar, config.DockPillRightChar} {
@@ -75,47 +89,62 @@ func TestRailMarksCurrentWithOneBand(t *testing.T) {
 	}
 }
 
-// The attached session's band is one luminance step and yields to both louder
-// bands: the pointer's, and a state that wants a human.
-func TestRailCurrentSessionBandYieldsToAttention(t *testing.T) {
+// The current session rolls up a pane that wants a human. Identity and
+// attention no longer fight for the row background: the gutter says which
+// session you are attached to, while the state keeps the coloured glyph and the
+// rail's one bold.
+func TestRailCurrentSessionKeepsIdentityUnderAttention(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	pal := theme.UI()
 
-	// The fixture's session rolls up a needs_input pane, so its row carries the
-	// severity tint rather than the current-session step.
 	session := treeRow(t, m, "local")
-	if tint := sidebarAttentionTint("needs_input", pal); tint == nil {
-		t.Fatal("the palette defines no attention tint")
-	} else if !strings.Contains(session, bgParams(tint)) {
-		t.Errorf("the attention tint lost to the current-session band: %q", session)
+	if got := gutterCell(session); got != "▎" {
+		t.Errorf("the attached session row has no gutter mark, column 0 is %q: %q", got, session)
 	}
-	if strings.Contains(session, bgParams(pal.Surface)) {
-		t.Errorf("the current-session band is still painted under the tint: %q", session)
+	if !strings.Contains(session, fgParams(pal.Accent)) {
+		t.Errorf("the attached session's gutter mark is not accent: %q", session)
+	}
+	if !strings.Contains(session, fgParams(agentGlyphColor("needs_input", pal))) {
+		t.Errorf("the rolled-up attention glyph lost its severity colour: %q", session)
+	}
+	if !strings.Contains(session, "\x1b[1m") && !strings.Contains(session, ";1m") &&
+		!strings.Contains(session, "[1;") {
+		t.Errorf("the attention row is not bold: %q", session)
 	}
 }
 
-// TestRailAttentionOutranksFocus is the ranking the old pill had backwards: a
-// pane asking for a human has to stay the loudest row even when it is the pane
-// you are sitting on.
-func TestRailAttentionOutranksFocus(t *testing.T) {
+// TestRailAttentionMarksAnUnfocusedPane: a pane asking for a human that you are
+// not sitting on wears the severity gutter mark, its coloured glyph, and bold.
+// A pane you are already on marks identity instead, because being there is the
+// answer to what the alarm was asking.
+func TestRailAttentionMarksAnUnfocusedPane(t *testing.T) {
 	m, _ := attentionOS(t, 120, 40)
-	m.FocusedWindow = 4 // "server", needs_input
+	m.FocusedWindow = 0
 	pal := theme.UI()
 
 	row := treeRow(t, m, "server")
-	tint := sidebarAttentionTint("needs_input", pal)
-	if tint == nil {
-		t.Fatal("needs_input has no attention tint")
+	if got := gutterCell(row); got != "▎" {
+		t.Errorf("the attention row has no gutter mark, column 0 is %q: %q", got, row)
 	}
-	if !strings.Contains(row, bgParams(tint)) {
-		t.Errorf("the focused pane lost its attention tint: %q", row)
+	if !strings.Contains(row, fgParams(pal.Warning)) {
+		t.Errorf("the attention row's gutter mark is not severity-coloured: %q", row)
 	}
-	// The state still reads as itself inside the chip, which the saturated fill
-	// used to swallow.
+	if strings.Contains(row, bgParams(pal.Surface)) {
+		t.Errorf("the attention row is painted rather than marked: %q", row)
+	}
 	if glyph := agentStateIndicator("needs_input"); !strings.Contains(row, glyph) {
-		t.Errorf("the focused row dropped its state glyph: %q", row)
+		t.Errorf("the attention row dropped its state glyph: %q", row)
+	}
+
+	// Focused, the same pane keeps the alarm in its glyph and its bold while the
+	// gutter switches to identity.
+	m.FocusedWindow = 4 // "server", needs_input
+	m.sidebarCache.invalidate()
+	row = treeRow(t, m, "server")
+	if !strings.Contains(row, fgParams(pal.Accent)) {
+		t.Errorf("the focused attention row lost its identity mark: %q", row)
 	}
 	if !strings.Contains(row, fgParams(agentGlyphColor("needs_input", pal))) {
-		t.Errorf("the state glyph is not state-colored inside the chip: %q", row)
+		t.Errorf("the focused attention row lost its state colour: %q", row)
 	}
 }

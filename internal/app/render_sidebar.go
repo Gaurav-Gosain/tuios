@@ -24,13 +24,13 @@ import (
 // me", not "what exists"; the tree keeps every behaviour it had, one section
 // lower.
 //
-// Emphasis is spent on two things and no more. "This is the current one" (the
-// attached session, the focused pane) is a quiet Surface chip, the same chip in
-// both places. "This is where the cursor or the pointer is" is the RowSel bar
-// across the row. That leaves the loudest marks in the rail, the attention tint
-// and the bold that comes with it, to the rows that want a human. A saturated
-// focus pill used to outshout them, which had the rail insisting on where you
-// already were over a pane waiting on an answer.
+// Emphasis is spent on two things and no more, and neither of them paints a
+// standing row. "This is the current one" (the attached session, the focused
+// pane) is an accent mark in the rail's one-cell gutter, the same mark in both
+// places; a state wanting a human takes the same cell in its severity colour,
+// plus the rail's one bold. That leaves the only full-width band on the rail to
+// "this is where the cursor or the pointer is", which is the thing the user is
+// steering and was previously the least visible mark on screen.
 
 // sidebarRowKind distinguishes what a sidebar row points at for mouse routing.
 type sidebarRowKind int
@@ -136,33 +136,51 @@ func sidebarStateColor(state string, doneSeen bool, pal overlay.Palette) color.C
 }
 
 // sidebarAttention reports the states that mean a human is required. They are
-// the only ones allowed to ink a whole cell or tint a whole row: reserving fill
-// for those two is what keeps the fill legible as an alarm.
+// the only ones allowed a severity gutter mark, the rail's one bold, or an
+// inked cell on the glyph rail: reserving those for the two states is what
+// keeps them legible as an alarm.
 func sidebarAttention(state string) bool {
 	return state == "needs_input" || state == "errored"
 }
 
-// sidebarAttentionTint is the resting row background for an attention state:
-// the severity colour mixed a fifth of the way into the canvas, so the row
-// reads as lit without becoming a coloured slab its own text has to fight.
-func sidebarAttentionTint(state string, pal overlay.Palette) color.Color {
-	var sev color.Color
+// sidebarSeverityColor is the colour a state that wants a human is marked in.
+func sidebarSeverityColor(state string, pal overlay.Palette) color.Color {
 	switch state {
 	case "needs_input":
-		sev = pal.Warning
+		return pal.Warning
 	case "errored":
-		sev = pal.Warn
+		return pal.Warn
 	default:
 		return nil
 	}
-	if sev == nil || pal.Canvas == nil {
-		return nil
+}
+
+// sidebarGutter is column 0 of every rail row above the glyph width: one cell
+// saying either "this is where you are" (accent) or "this one wants a human"
+// (severity), and nothing at all otherwise.
+//
+// It replaces the full-width bands those two states used to stand on. Three
+// stacked tinted rows before the user has touched anything read as zebra
+// striping rather than emphasis, because they ran to the rail edge over
+// trailing whitespace; and the cursor, the one thing being steered, was the
+// quietest mark on the rail. A margin strip scans without painting, which frees
+// the only band on a resting screen for the pointer and the keyboard cursor.
+func sidebarGutter(current bool, state string, bg color.Color, pal overlay.Palette) string {
+	mark, ascii := "▎", overlay.UseASCII()
+	switch {
+	case current:
+		if ascii {
+			mark = ">"
+		}
+		return sidebarStyle(bg, pal.Accent).Render(mark)
+	case sidebarAttention(state):
+		if ascii {
+			mark = "!"
+		}
+		return sidebarStyle(bg, sidebarSeverityColor(state, pal)).Render(mark)
+	default:
+		return sidebarStyle(bg, nil).Render(" ")
 	}
-	const mix = 22 // percent severity in the mix
-	br, bgc, bb, _ := pal.Canvas.RGBA()
-	sr, sg, sb, _ := sev.RGBA()
-	c := func(base, s uint32) uint8 { return uint8((base*(100-mix) + s*mix) / 100 >> 8) }
-	return color.RGBA{R: c(br, sr), G: c(bgc, sg), B: c(bb, sb), A: 0xff}
 }
 
 // agentElapsedBucket is the minute the stamp currently reads as, for the render
@@ -385,7 +403,7 @@ func (m *OS) sidebarWorkspaceBand(variant, cw int, pal overlay.Palette, cursorWS
 		active := n == m.CurrentWorkspace
 		fg, rowBg := pal.FgMute, color.Color(nil)
 		if !active && (n == cursorWS || (hoverX >= x && hoverX < x+w)) {
-			fg, rowBg = pal.Fg, pal.RowSel
+			fg, rowBg = pal.Fg, pal.Surface
 		}
 		row += workspaceChip(n, active, fg, rowBg)
 		spans = append(spans, sidebarChipSpan{Workspace: n, X0: x, X1: x + w})
@@ -931,20 +949,20 @@ func (m *OS) windowIndexByID(id string) int {
 //
 // Full variant anatomy, kept to fixed columns so the rows scan vertically:
 //
-//	▸ ● name           3
-//	^ ^ ^              ^ window count, right-aligned, muted, collapsed only
-//	| | name: full strength on the attached session, dim on the rest
-//	| rolled-up agent glyph, state-colored
-//	expand chevron, muted; blank when there is nothing to expand
+//	▎▸ ● name           3
+//	^^ ^ ^              ^ window count, right-aligned, muted, collapsed only
+//	|| | name: full strength on the attached session, dim on the rest
+//	|| rolled-up agent glyph, state-colored
+//	|expand chevron, muted; blank when there is nothing to expand
+//	gutter: accent when attached, severity when a pane wants a human
 //
-// Emphasis is the row's own background and nothing else. The attached session
-// gets one luminance step (Surface); pointer and cursor get the RowSel step;
-// a state wanting a human gets its severity tint, which outranks both because
-// it is the only thing on the rail allowed to shout. There is no pill: caps
-// spent two cells and a second colour on every emphasized row, and an inverse
-// fill is the loudest mark in TUI grammar to spend on where the user already is.
+// Emphasis ladder, quietest to loudest: other rows dim; attached session an
+// accent gutter mark and a full-strength name; pointer or keyboard cursor a
+// Surface band; a state wanting a human a severity gutter mark, a coloured
+// glyph and the rail's one bold. No standing fill, so the only band on a
+// resting rail is the one under the pointer.
 //
-// A drag in progress keeps the RowSel bar on the dragged row while it rides the
+// A drag in progress keeps the band on the dragged row while it rides the
 // pointer.
 func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool, cw int, pal overlay.Palette, hovered, dragged bool) string {
 	if variant == sidebarVariantGlyph {
@@ -996,16 +1014,12 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 		return sidebarFit(row, cw, bg)
 	}
 
-	// The band ladder: pointer and cursor first, then a state wanting a human,
-	// then the attached session. Being where you already are is the quietest
-	// claim on the rail, so it yields to both of the others.
+	// The only band left on the rail is the transient one: pointer or keyboard
+	// cursor. It sits on Surface rather than RowSel, which was one luminance
+	// step off the canvas and left the cursor all but invisible. Identity and
+	// attention moved to the gutter.
 	var rowBg color.Color
-	switch {
-	case hovered || dragged:
-		rowBg = pal.RowSel
-	case sidebarAttentionTint(node.AgentState, pal) != nil:
-		rowBg = sidebarAttentionTint(node.AgentState, pal)
-	case node.IsCurrent:
+	if hovered || dragged {
 		rowBg = pal.Surface
 	}
 
@@ -1014,9 +1028,11 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 		chevron = sidebarChevron(expanded)
 	}
 
-	// Chevron on the first column, one space, then the state glyph, then two
-	// cells of inset before the name so every row lands on one spine.
-	left := sidebarStyle(rowBg, pal.FgMute).Render(chevron) +
+	// Gutter, chevron, a space, the state glyph, then one cell of inset: the
+	// name lands on column 5, the spine the pane rows below it use, and the
+	// glyph on column 3 with theirs.
+	left := sidebarGutter(node.IsCurrent, node.AgentState, rowBg, pal) +
+		sidebarStyle(rowBg, pal.FgMute).Render(chevron) +
 		sidebarStyle(rowBg, nil).Render(" ") +
 		sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal)
 
@@ -1032,26 +1048,27 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 		rightW = lipgloss.Width(countStr) + 1
 	}
 
-	// The attached session's name reads at full strength; the rest are dim. That
-	// is the whole difference, because the band behind it already said which one
-	// it is.
+	// The attached session's name reads at full strength; the rest are dim. A
+	// state wanting a human takes the rail's one bold voice, so it still leads
+	// on a monochrome capture where the gutter colour is gone.
 	fg := pal.FgDim
 	if node.IsCurrent || hovered || dragged {
 		fg = pal.Fg
 	}
+	nameStyle := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState))
 	name := m.sidebarMarquee("s:"+node.ID, printableTitle(node.Title),
-		max(max(cw-lipgloss.Width(left)-rightW-1, 1)-4, 1), hovered)
-	pad := sidebarStyle(rowBg, nil).Render("  ")
-	row := left + pad + sidebarStyle(rowBg, fg).Render(name) + pad
+		max(cw-rightW-8, 1), hovered)
+	row := left + sidebarStyle(rowBg, nil).Render(" ") +
+		nameStyle.Render(name) + sidebarStyle(rowBg, nil).Render("  ")
 	gap := max(cw-lipgloss.Width(row)-rightW, 0)
 	row += sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", gap)) + right
 	return sidebarFit(row, cw, rowBg)
 }
 
 // sidebarWindowRow renders one window row under an expanded session, indented
-// one level past the session name. The focused window sits on a Surface band
-// and reads at full strength; the rest stay dim so the list reads as detail
-// under its session, not as a second list of equals.
+// one level past the session name. The focused window wears the accent gutter
+// mark and reads at full strength; the rest stay dim so the list reads as
+// detail under its session, not as a second list of equals.
 func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal overlay.Palette, hovered bool) string {
 	title := printableTitle(node.Title)
 	if title == "" {
@@ -1073,14 +1090,10 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		return sidebarFit(row, cw, pal.Card)
 	}
 
-	// The band ladder, same order as a session row: pointer and cursor, then a
-	// state wanting a human, then the focused pane. The pane border already
-	// shouts focus, so the rail only confirms it with one luminance step.
-	rowBg := sidebarAttentionTint(node.AgentState, pal)
-	switch {
-	case hovered:
-		rowBg = pal.RowSel
-	case rowBg == nil && node.IsCurrent:
+	// Same as a session row: the only band is the transient one under the
+	// pointer or the keyboard cursor. Focus and attention are gutter marks.
+	var rowBg color.Color
+	if hovered {
 		rowBg = pal.Surface
 	}
 
@@ -1115,10 +1128,12 @@ func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal ov
 		rightW = lipgloss.Width(tag) + 1
 	}
 
-	row := sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent)) +
+	row := sidebarGutter(node.IsCurrent, node.AgentState, rowBg, pal) +
+		sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent-1)) +
 		m.sidebarWindowGlyph(node, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarStyle(rowBg, fg).Render(m.sidebarMarquee("w:"+node.ID, title, max(cw-indent-3-rightW, 1), hovered))
+		sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
+			Render(m.sidebarMarquee("w:"+node.ID, title, max(cw-indent-3-rightW, 1), hovered))
 	if rightW > 0 {
 		gap := max(cw-lipgloss.Width(row)-rightW, 0)
 		row += sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", gap)) + right
@@ -1152,13 +1167,13 @@ func (m *OS) sidebarWindowGlyph(node sessiontree.Node, rowBg color.Color, pal ov
 // pane name (session-qualified when the pane lives in another session), and,
 // in the full variant, the state word right-aligned and muted.
 func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overlay.Palette, hovered bool) string {
-	rowBg := sidebarAttentionTint(e.State, pal)
+	var rowBg color.Color
 	fg := pal.FgDim
 	if e.State == "done" && !e.DoneSeen {
 		fg = pal.Fg
 	}
 	if hovered {
-		rowBg = pal.RowSel
+		rowBg = pal.Surface
 		fg = pal.Fg
 	}
 
@@ -1207,7 +1222,10 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 	if lipgloss.Width(shown)+2 > avail {
 		shown = ""
 	}
-	row := sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent)) +
+	// An agent row is only ever "current" through the pane it points at, which
+	// the tree section below already marks, so its gutter carries severity only.
+	row := sidebarGutter(false, e.State, rowBg, pal) +
+		sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent-1)) +
 		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal) +
 		sidebarStyle(rowBg, nil).Render(" ") +
 		sidebarStyle(rowBg, pal.FgMute).Render(shown) +
