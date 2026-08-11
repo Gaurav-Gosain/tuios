@@ -249,7 +249,7 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 	windowIntID := m.getWindowIntID(window.ID)
 
 	if verboseLog {
-		m.LogInfo("BSP: AddWindowToBSPTree for window %s (int ID %d)", window.ID[:8], windowIntID)
+		m.LogInfo("BSP: AddWindowToBSPTree for window %s (int ID %d)", shortID(window.ID), windowIntID)
 	}
 
 	// Determine the target window for splitting

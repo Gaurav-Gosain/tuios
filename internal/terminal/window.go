@@ -408,12 +408,22 @@ type CopyMode struct {
 	Implicit bool
 }
 
+// shortID trims an ID for a title or a log line. IDs reach this package from
+// restored session state and from the daemon wire, where nothing guarantees
+// they are UUID-length, so a plain id[:8] slice would panic.
+func shortID(id string) string {
+	if len(id) < 8 {
+		return id
+	}
+	return id[:8]
+}
+
 // NewWindow creates a new terminal window with the specified properties.
 // It spawns a shell process, sets up PTY communication, and initializes the virtual terminal.
 // Returns nil if window creation fails.
 func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}) *Window {
 	if title == "" {
-		title = "Terminal " + id[:8]
+		title = "Terminal " + shortID(id)
 	}
 
 	// Create VT terminal with inner dimensions (accounting for borders)
@@ -625,7 +635,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 // The caller is responsible for subscribing to PTY output and handling I/O.
 func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string, ptyDataChan chan struct{}) *Window {
 	if title == "" {
-		title = "Terminal " + id[:8]
+		title = "Terminal " + shortID(id)
 	}
 
 	// Create VT terminal with inner dimensions (accounting for borders)

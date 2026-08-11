@@ -518,14 +518,14 @@ func (m *OS) DeleteWindow(i int) *OS {
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		windowID := m.Windows[i].ID
 		if err := m.DaemonClient.SendIntent("CloseWindow", windowID); err != nil {
-			m.LogError("Failed to ask the daemon to close window %s: %v", windowID[:8], err)
+			m.LogError("Failed to ask the daemon to close window %s: %v", shortID(windowID), err)
 		}
 		return m
 	}
 
 	// Clean up window resources
 	deletedWindow := m.Windows[i]
-	m.LogInfo("Deleting window: %s (index: %d, ID: %s)", deletedWindow.Title(), i, deletedWindow.ID[:8])
+	m.LogInfo("Deleting window: %s (index: %d, ID: %s)", deletedWindow.Title(), i, shortID(deletedWindow.ID))
 
 	// In daemon mode, clean up daemon-managed PTY
 	if deletedWindow.DaemonMode && deletedWindow.PTYID != "" && m.DaemonClient != nil {
@@ -547,7 +547,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 		if m.BSPIDToWindowID != nil {
 			delete(m.BSPIDToWindowID, windowIntID)
 		}
-		m.LogInfo("BSP: Removed ID mapping for window %s (int ID %d)", deletedWindow.ID[:8], windowIntID)
+		m.LogInfo("BSP: Removed ID mapping for window %s (int ID %d)", shortID(deletedWindow.ID), windowIntID)
 	}
 
 	if m.KittyPassthrough != nil {

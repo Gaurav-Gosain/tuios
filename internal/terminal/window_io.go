@@ -401,7 +401,7 @@ func (w *Window) handleIOOperations() {
 					// Debug: Log ALL data from terminal response pipe when debug mode is enabled
 					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 						debugMsg := fmt.Sprintf("[%s] Terminal->PTY [%s] ALL data (%d bytes): %q (hex: % x)\n",
-							time.Now().Format("15:04:05.000"), w.ID[:8], len(data), string(data), data)
+							time.Now().Format("15:04:05.000"), shortID(w.ID), len(data), string(data), data)
 						if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 							_, _ = f.WriteString(debugMsg)
 							_ = f.Close()
@@ -489,7 +489,7 @@ func (w *Window) SendInput(input []byte) error {
 	// Debug: Log all SendInput calls when debug mode is enabled
 	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 		debugMsg := fmt.Sprintf("[%s] SendInput [%s] (%d bytes): %q (hex: % x)\n",
-			time.Now().Format("15:04:05.000"), w.ID[:8], len(input), string(input), input)
+			time.Now().Format("15:04:05.000"), shortID(w.ID), len(input), string(input), input)
 		if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 			_, _ = f.WriteString(debugMsg)
 			_ = f.Close()

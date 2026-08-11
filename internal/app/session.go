@@ -227,7 +227,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 
 	// Create windows from state
 	for i, ws := range state.Windows {
-		m.LogInfo("[RESTORE] Creating window %d: ID=%s, PTYID=%s", i, ws.ID[:8], ws.PTYID[:8])
+		m.LogInfo("[RESTORE] Creating window %d: ID=%s, PTYID=%s", i, shortID(ws.ID), shortID(ws.PTYID))
 		window := terminal.NewDaemonWindow(
 			ws.ID,
 			ws.Title,
@@ -238,7 +238,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			m.PTYDataChan,
 		)
 		if window == nil {
-			m.LogError("Failed to create daemon window for %s", ws.ID[:8])
+			m.LogError("Failed to create daemon window for %s", shortID(ws.ID))
 			continue
 		}
 
@@ -265,7 +265,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		m.setupCwdWatch(window)
 
 		m.Windows = append(m.Windows, window)
-		m.LogInfo("[RESTORE] Window %d created: DaemonMode=%v, PTYID=%s", i, window.DaemonMode, window.PTYID[:8])
+		m.LogInfo("[RESTORE] Window %d created: DaemonMode=%v, PTYID=%s", i, window.DaemonMode, shortID(window.PTYID))
 	}
 
 	// Restore focused window
@@ -311,7 +311,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		m.WindowToBSPID = make(map[string]int)
 		for k, v := range state.WindowToBSPID {
 			m.WindowToBSPID[k] = v
-			m.LogInfo("[RESTORE] WindowToBSPID: %s -> %d", k[:8], v)
+			m.LogInfo("[RESTORE] WindowToBSPID: %s -> %d", shortID(k), v)
 		}
 	}
 	m.NextBSPWindowID = state.NextBSPWindowID
@@ -980,7 +980,7 @@ func (m *OS) RestoreTerminalStates() error {
 		if w.DaemonMode && w.PTYID != "" {
 			state, err := m.DaemonClient.GetTerminalState(w.PTYID, true)
 			if err != nil {
-				m.LogError("Failed to get terminal state for PTY %s: %v", w.PTYID[:8], err)
+				m.LogError("Failed to get terminal state for PTY %s: %v", shortID(w.PTYID), err)
 				continue
 			}
 
@@ -988,7 +988,7 @@ func (m *OS) RestoreTerminalStates() error {
 				// Restore IsAltScreen flag and emulator state
 				m.restoreTerminalContent(w, state)
 				m.LogInfo("Restored terminal state for window %s (%dx%d, %d scrollback lines)",
-					w.ID[:8], state.Width, state.Height, state.ScrollbackLen)
+					shortID(w.ID), state.Width, state.Height, state.ScrollbackLen)
 
 				// The daemon PTY is already this size. Seed it as announced so a
 				// same-size retile does not re-announce and SIGWINCH the shell,
@@ -1023,11 +1023,11 @@ func (m *OS) SyncDaemonPTYDimensions() {
 
 			// Resize daemon PTY to match window dimensions
 			if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
-				m.LogWarn("Failed to sync PTY dimensions for window %s: %v", w.ID[:8], err)
+				m.LogWarn("Failed to sync PTY dimensions for window %s: %v", shortID(w.ID), err)
 			} else {
 				w.SeedAnnouncedSize(termWidth, termHeight)
 				m.LogInfo("Synced daemon PTY dimensions for window %s (%dx%d)",
-					w.ID[:8], termWidth, termHeight)
+					shortID(w.ID), termWidth, termHeight)
 			}
 
 			// Ensure local VT emulator dimensions also match. Same rule as
@@ -1055,7 +1055,7 @@ func (m *OS) TriggerAltScreenRedraws() {
 			w.InvalidateCache()
 			w.MarkContentDirty()
 
-			m.LogInfo("Invalidated caches for alt screen window %s", w.ID[:8])
+			m.LogInfo("Invalidated caches for alt screen window %s", shortID(w.ID))
 		}
 	}
 
@@ -1135,15 +1135,15 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	w.UnlockIO()
 
 	if state.IsAltScreen {
-		m.LogInfo("Restored alt screen mode for window %s", w.ID[:8])
+		m.LogInfo("Restored alt screen mode for window %s", shortID(w.ID))
 	}
 	if restoredModes > 0 {
-		m.LogInfo("Restored %d terminal modes for window %s", restoredModes, w.ID[:8])
+		m.LogInfo("Restored %d terminal modes for window %s", restoredModes, shortID(w.ID))
 	}
 
 	// Set the window's IsAltScreen flag for mouse event forwarding
 	w.SetAltScreen(state.IsAltScreen)
-	m.LogInfo("Set window IsAltScreen=%v for window %s", state.IsAltScreen, w.ID[:8])
+	m.LogInfo("Set window IsAltScreen=%v for window %s", state.IsAltScreen, shortID(w.ID))
 
 	if renderTraceEnabled {
 		note := "restore: SetAltScreen only"
@@ -1154,7 +1154,7 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	}
 
 	if cellsRestored > 0 {
-		m.LogInfo("Restored %d cells for window %s", cellsRestored, w.ID[:8])
+		m.LogInfo("Restored %d cells for window %s", cellsRestored, shortID(w.ID))
 	}
 
 	// Mark content as dirty to trigger rendering
@@ -1254,16 +1254,16 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 		return
 	}
 
-	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", ptyID[:8], window.ID[:8])
+	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", shortID(ptyID), shortID(window.ID))
 	err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
 		passThroughCursorStyle(data)
 		window.WriteOutputAsync(data)
 	})
 	if err != nil {
-		m.LogError("Failed to subscribe to PTY %s: %v", ptyID[:8], err)
+		m.LogError("Failed to subscribe to PTY %s: %v", shortID(ptyID), err)
 	} else {
 		m.SubscribedPTYs[ptyID] = true
-		m.LogInfo("[SUBSCRIBE] Successfully subscribed to PTY %s", ptyID[:8])
+		m.LogInfo("[SUBSCRIBE] Successfully subscribed to PTY %s", shortID(ptyID))
 	}
 
 }
@@ -1281,7 +1281,7 @@ func (m *OS) unsubscribeFromPTY(window *terminal.Window) {
 		return
 	}
 
-	m.LogInfo("[UNSUBSCRIBE] Unsubscribing from PTY %s for window %s", ptyID[:8], window.ID[:8])
+	m.LogInfo("[UNSUBSCRIBE] Unsubscribing from PTY %s for window %s", shortID(ptyID), shortID(window.ID))
 	m.DaemonClient.UnsubscribePTY(ptyID)
 	delete(m.SubscribedPTYs, ptyID)
 }

@@ -230,10 +230,10 @@ func (m *OS) ScrollingOnWindowAdded(w *terminal.Window) {
 	// If the window was already appended to m.Windows before this call,
 	// the layout already has it. Don't add a duplicate.
 	if sl.HasWindow(intID) {
-		m.LogInfo("[SCROLL-ADD] ScrollingOnWindowAdded: window=%s intID=%d already in layout, skipping", w.ID[:8], intID)
+		m.LogInfo("[SCROLL-ADD] ScrollingOnWindowAdded: window=%s intID=%d already in layout, skipping", shortID(w.ID), intID)
 		return
 	}
-	m.LogInfo("[SCROLL-ADD] ScrollingOnWindowAdded: window=%s intID=%d", w.ID[:8], intID)
+	m.LogInfo("[SCROLL-ADD] ScrollingOnWindowAdded: window=%s intID=%d", shortID(w.ID), intID)
 	sl.AddColumn(intID)
 }
 

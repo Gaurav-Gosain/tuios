@@ -864,7 +864,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		for _, w := range m.Windows {
 			if w.DaemonMode {
 				w.EnableCallbacks()
-				m.LogInfo("[CALLBACKS] Enabled for window %s (IsAltScreen=%v)", w.ID[:8], w.IsAltScreen())
+				m.LogInfo("[CALLBACKS] Enabled for window %s (IsAltScreen=%v)", shortID(w.ID), w.IsAltScreen())
 			}
 		}
 		return m, nil
@@ -895,7 +895,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 				w.InvalidateCache()
 				w.MarkContentDirty()
-				m.LogInfo("[REDRAW] Sent resize to window %s (%dx%d)", w.ID[:8], termWidth, termHeight)
+				m.LogInfo("[REDRAW] Sent resize to window %s (%dx%d)", shortID(w.ID), termWidth, termHeight)
 			}
 		}
 		m.MarkAllDirty()

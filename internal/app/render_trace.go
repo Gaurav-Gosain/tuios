@@ -85,7 +85,9 @@ func traceWrite(line string) {
 	fmt.Fprintf(renderTraceFH, "%8.3f %s\n", time.Since(renderTraceT0).Seconds(), line)
 }
 
-// shortID trims a window ID to something readable in a log line.
+// shortID trims a window or PTY ID to something readable in a log line. IDs
+// restored from session state are not guaranteed UUID-length (a non-daemon
+// window carries an empty PTYID), so a plain id[:8] slice would panic.
 func shortID(id string) string {
 	if len(id) > 8 {
 		return id[:8]

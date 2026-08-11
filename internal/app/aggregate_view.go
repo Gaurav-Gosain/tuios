@@ -40,7 +40,7 @@ func (m *OS) GetAggregateViewItems() []AggregateViewItem {
 			title = w.CustomName
 		}
 		if title == "" {
-			title = fmt.Sprintf("Window %s", w.ID[:8])
+			title = fmt.Sprintf("Window %s", shortID(w.ID))
 		}
 
 		// Cached per window and refreshed at most once a second, so building
