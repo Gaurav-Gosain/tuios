@@ -741,6 +741,27 @@ func GetDockPillRightChar() string {
 	return DockPillRightChar
 }
 
+// GetDockModeCapLeft returns the mode chip's left cap.
+//
+// The chip sits at the head of a row of capped workspace pills, so a square
+// chip beside them reads as an unfinished pill rather than a different kind of
+// thing. It caps regardless of DockPillCaps, which is really about the
+// minimized run, where a cap on every entry turned the row into beads.
+func GetDockModeCapLeft() string {
+	if UseASCIIOnly {
+		return DockPillLeftCharASCII
+	}
+	return DockPillLeftChar
+}
+
+// GetDockModeCapRight returns the mode chip's right cap.
+func GetDockModeCapRight() string {
+	if UseASCIIOnly {
+		return DockPillRightCharASCII
+	}
+	return DockPillRightChar
+}
+
 // GetDockWorkspaceCapLeft returns the workspace pill's left cap.
 //
 // The strip keeps its own accessor for the reason the rail does: DockPillCaps

@@ -535,9 +535,9 @@ func (m *OS) buildDockLeftText() (modeLabel, trail string, width int, modeInfo M
 
 	// Rendered width, not byte length: Nerd Font glyphs and the caps are wider
 	// than their bytes. +4 for margins/padding.
-	width = lipgloss.Width(config.GetDockPillLeftChar()) +
+	width = lipgloss.Width(config.GetDockModeCapLeft()) +
 		lipgloss.Width(modeLabel) +
-		lipgloss.Width(config.GetDockPillRightChar()) +
+		lipgloss.Width(config.GetDockModeCapRight()) +
 		lipgloss.Width(trail) + 4
 
 	return modeLabel, trail, width, modeInfo

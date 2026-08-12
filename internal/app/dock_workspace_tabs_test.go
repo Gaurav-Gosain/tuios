@@ -171,9 +171,13 @@ func TestDockPillsAreFlatByDefault(t *testing.T) {
 	}
 	config.DockWorkspaceTabs = false
 	flat, _ := m.renderDockString()
+	// The mode chip is outside this rule too. It heads a row of capped tabs, so
+	// a square chip beside them reads as an unfinished pill. It wears exactly
+	// one of each cap, and anything beyond that is the minimized run, which is
+	// what the setting governs.
 	for _, cap := range []string{config.DockPillLeftChar, config.DockPillRightChar} {
-		if strings.Contains(flat, cap) {
-			t.Errorf("flat dock still draws the cap glyph %q", cap)
+		if n := strings.Count(flat, cap); n != 1 {
+			t.Errorf("flat dock draws the cap glyph %q %d times, want 1 for the mode chip alone", cap, n)
 		}
 	}
 	config.DockWorkspaceTabs = prevTabs

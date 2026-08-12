@@ -166,7 +166,7 @@ func (m *OS) renderDockString() (string, int) {
 	modeColor := lipgloss.Color(layout.ModeInfo.Color)
 	fill := lipgloss.NewStyle().Background(modeColor).Foreground(theme.ContrastText(modeColor)).Bold(true)
 	styledModeText := fill.Render(layout.ModeLabel)
-	if lc, rc := config.GetDockPillLeftChar(), config.GetDockPillRightChar(); lc != "" && rc != "" {
+	if lc, rc := config.GetDockModeCapLeft(), config.GetDockModeCapRight(); lc != "" && rc != "" {
 		caps := lipgloss.NewStyle().Foreground(modeColor)
 		styledModeText = caps.Render(lc) + fill.Render(layout.ModeLabel) + caps.Render(rc)
 	}
