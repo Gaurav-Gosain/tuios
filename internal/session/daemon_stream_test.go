@@ -49,17 +49,18 @@ func TestStreamPTYOutputDropsOnWriteError(t *testing.T) {
 
 	pty := &PTY{
 		ID:          "ptytest-00000001",
-		subscribers: make(map[string]chan []byte),
+		subscribers: make(map[string]*ptySubscriber),
 		// Pre-seed buffered output so Subscribe immediately delivers a chunk that
 		// streamPTYOutput will try (and fail) to write.
 		outputBuffer: []byte("hello world"),
 		outputPos:    len("hello world"),
+		outputSeq:    int64(len("hello world")),
 	}
 
 	cs := newFailingConnState(t)
 	cs.ptySubscriptions[pty.ID] = struct{}{}
 
-	go d.streamPTYOutput(cs, pty)
+	go d.streamPTYOutput(cs, pty, 0)
 
 	select {
 	case <-cs.done:

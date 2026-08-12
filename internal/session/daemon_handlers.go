@@ -550,10 +550,11 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 		return nil
 	}
 	cs.ptySubscriptions[payload.PTYID] = struct{}{}
+	resume := cs.ptyResume[payload.PTYID]
 	cs.mu.Unlock()
 
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
-	go d.streamPTYOutput(cs, pty)
+	go d.streamPTYOutput(cs, pty, resume)
 
 	return nil
 }
@@ -582,11 +583,16 @@ func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
 	delete(cs.ptySubscriptions, payload.PTYID)
 	cs.mu.Unlock()
 
-	// Unsubscribe from the PTY output channel
+	// Unsubscribe from the PTY output channel, keeping where the stream had got
+	// to: this is a pane going out of view, not a client leaving, and it will be
+	// back the moment its workspace is current again.
 	pty := session.GetPTY(payload.PTYID)
 	if pty != nil {
-		pty.Unsubscribe(cs.clientID)
-		debugLog("[DEBUG] Successfully unsubscribed client %s from PTY %s", cs.clientID, shortID(payload.PTYID))
+		resume := pty.Unsubscribe(cs.clientID)
+		cs.mu.Lock()
+		cs.ptyResume[payload.PTYID] = resume
+		cs.mu.Unlock()
+		debugLog("[DEBUG] Successfully unsubscribed client %s from PTY %s at %d", cs.clientID, shortID(payload.PTYID), resume)
 	}
 
 	return nil

@@ -83,8 +83,8 @@ func TestReattachRestoresModesScrolledOutOfBuffer(t *testing.T) {
 	// Reattach: a fresh subscriber gets the bounded replay, and the client
 	// rebuilds its per-window emulator from the daemon snapshot, in the same
 	// order restoreTerminalContent uses (restore, then replay).
-	ch := pty.Subscribe("reattach-client")
-	defer pty.Unsubscribe("reattach-client")
+	ch := pty.Subscribe("reattach-client", 0)
+	defer func() { _ = pty.Unsubscribe("reattach-client") }()
 
 	var replay []byte
 	select {

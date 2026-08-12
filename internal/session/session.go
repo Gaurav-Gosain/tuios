@@ -224,13 +224,18 @@ type PTY struct {
 	width      int
 	height     int
 
-	// Output buffer for reconnection (ring buffer) - legacy, kept for raw output
+	// Output buffer for reconnection (ring buffer) - legacy, kept for raw output.
+	// outputSeq is the total number of bytes this PTY has ever produced, so the
+	// buffer holds the stream's last outputPos bytes ending at outputSeq. It is
+	// what lets a resubscribing client be resumed where it left off instead of
+	// being handed the buffer from the top.
 	outputMu     sync.RWMutex
 	outputBuffer []byte
 	outputPos    int
+	outputSeq    int64
 
 	// Subscribers for raw output streaming.
-	subscribers   map[string]chan []byte
+	subscribers   map[string]*ptySubscriber
 	subscribersMu sync.RWMutex
 
 	exited   bool
@@ -571,7 +576,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 		width:        width,
 		height:       height,
 		outputBuffer: make([]byte, 64*1024), // 64KB ring buffer
-		subscribers:  make(map[string]chan []byte),
+		subscribers:  make(map[string]*ptySubscriber),
 		vtWriteChan:  make(chan []byte, 256),
 		onExit:       onExit,
 	}
@@ -1109,29 +1114,52 @@ func restoredBanner(cwd string) string {
 
 // PTY methods
 
-// Subscribe adds a subscriber to receive PTY output.
-func (p *PTY) Subscribe(clientID string) <-chan []byte {
+// ptySubscriber is one client's output stream. sent is the stream position of
+// the last chunk this subscriber was handed, which is where the client is
+// resumed if it comes back.
+type ptySubscriber struct {
+	ch   chan []byte
+	sent atomic.Int64
+}
+
+// Subscribe adds a subscriber to receive PTY output, resuming it at fromSeq: the
+// stream position a previous subscription for this client reached, as returned
+// by Unsubscribe. Zero means the client has seen nothing of this PTY and gets
+// the whole catch-up buffer.
+//
+// Resuming is what makes hiding and showing a pane free. A client subscribes
+// again every time the pane's workspace becomes current, and it already holds
+// the pane's screen; replaying the buffer from the top painted the pane's whole
+// history a second time below the paint already there, which is the stacked
+// prompts a workspace switch used to leave behind.
+func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan []byte {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
 
 	// Return existing channel if already subscribed
 	if existing, ok := p.subscribers[clientID]; ok {
 		debugLog("[DEBUG] PTY %s: client %s already subscribed", p.ID[:8], clientID)
-		return existing
+		return existing.ch
 	}
 
-	ch := make(chan []byte, 16384) // Large buffer matching client-side outputChan capacity
-	p.subscribers[clientID] = ch
+	sub := &ptySubscriber{ch: make(chan []byte, 16384)} // Large buffer matching client-side outputChan capacity
+	p.subscribers[clientID] = sub
 	debugLog("[DEBUG] PTY %s: added subscriber %s (total: %d)", p.ID[:8], clientID, len(p.subscribers))
 
-	// Send buffered output to catch up
+	// Send whatever the client has not seen to catch it up.
 	p.outputMu.RLock()
-	if p.outputPos > 0 {
-		debugLog("[DEBUG] PTY %s: sending %d buffered bytes to new subscriber", p.ID[:8], p.outputPos)
-		bufCopy := make([]byte, p.outputPos)
-		copy(bufCopy, p.outputBuffer[:p.outputPos])
+	// A client that fell further behind than the buffer reaches cannot be
+	// resumed exactly, so it gets everything still held rather than a gap.
+	start := 0
+	if bufStart := p.outputSeq - int64(p.outputPos); fromSeq > bufStart {
+		start = min(int(fromSeq-bufStart), p.outputPos)
+	}
+	if n := p.outputPos - start; n > 0 {
+		debugLog("[DEBUG] PTY %s: sending %d buffered bytes to new subscriber", p.ID[:8], n)
+		bufCopy := make([]byte, n)
+		copy(bufCopy, p.outputBuffer[start:p.outputPos])
 		select {
-		case ch <- bufCopy:
+		case sub.ch <- bufCopy:
 			debugLog("[DEBUG] PTY %s: buffered output sent", p.ID[:8])
 		default:
 			debugLog("[DEBUG] PTY %s: failed to send buffered output (channel full)", p.ID[:8])
@@ -1139,20 +1167,27 @@ func (p *PTY) Subscribe(clientID string) <-chan []byte {
 	} else {
 		debugLog("[DEBUG] PTY %s: no buffered output to send", p.ID[:8])
 	}
+	sub.sent.Store(p.outputSeq)
 	p.outputMu.RUnlock()
 
-	return ch
+	return sub.ch
 }
 
-// Unsubscribe removes a subscriber.
-func (p *PTY) Unsubscribe(clientID string) {
+// Unsubscribe removes a subscriber and returns the stream position it reached,
+// to hand back to Subscribe when the client returns.
+func (p *PTY) Unsubscribe(clientID string) int64 {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
 
-	if ch, ok := p.subscribers[clientID]; ok {
-		close(ch)
-		delete(p.subscribers, clientID)
+	sub, ok := p.subscribers[clientID]
+	if !ok {
+		return 0
 	}
+	// Closing lets the streaming goroutine drain what is still queued, so every
+	// chunk broadcast up to here does reach the client.
+	close(sub.ch)
+	delete(p.subscribers, clientID)
+	return sub.sent.Load()
 }
 
 // Write sends input to the PTY.
@@ -1420,8 +1455,8 @@ func (p *PTY) Close() error {
 
 	// Close all subscriber channels
 	p.subscribersMu.Lock()
-	for id, ch := range p.subscribers {
-		close(ch)
+	for id, sub := range p.subscribers {
+		close(sub.ch)
 		delete(p.subscribers, id)
 	}
 	p.subscribersMu.Unlock()
@@ -1510,11 +1545,11 @@ func (p *PTY) readOutput() {
 
 			// Store in ring buffer for reconnection
 			p.outputMu.Lock()
-			p.appendToBuffer(data)
+			seq := p.appendToBuffer(data)
 			p.outputMu.Unlock()
 
 			// Broadcast to subscribers
-			p.broadcast(data)
+			p.broadcast(data, seq)
 
 			// Record the activity time for the agent-state stall heuristic before
 			// anything that can block, so a demotion decision is made against when
@@ -1545,13 +1580,16 @@ func (p *PTY) vtWriter() {
 	}
 }
 
-func (p *PTY) appendToBuffer(data []byte) {
+// appendToBuffer records a chunk in the catch-up buffer and returns the stream
+// position it ends at.
+func (p *PTY) appendToBuffer(data []byte) int64 {
+	p.outputSeq += int64(len(data))
 	bufLen := len(p.outputBuffer)
 	// If data is bigger than the buffer, keep only the tail
 	if len(data) >= bufLen {
 		copy(p.outputBuffer, data[len(data)-bufLen:])
 		p.outputPos = bufLen
-		return
+		return p.outputSeq
 	}
 	// Shift in half-buffer steps until there is room. A single half-shift is
 	// not always enough when len(data) exceeds bufLen/2, so loop until the
@@ -1564,16 +1602,21 @@ func (p *PTY) appendToBuffer(data []byte) {
 	// Advance by bytes actually copied so outputPos can never exceed bufLen.
 	n := copy(p.outputBuffer[p.outputPos:], data)
 	p.outputPos += n
+	return p.outputSeq
 }
 
-func (p *PTY) broadcast(data []byte) {
+// broadcast hands a chunk ending at stream position seq to every subscriber.
+func (p *PTY) broadcast(data []byte, seq int64) {
 	p.subscribersMu.RLock()
 	defer p.subscribersMu.RUnlock()
 
 	debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(data), len(p.subscribers))
-	for clientID, ch := range p.subscribers {
+	for clientID, sub := range p.subscribers {
 		select {
-		case ch <- data:
+		case sub.ch <- data:
+			// Only a chunk that was taken counts as reached: a client dropped
+			// here resumes from the gap rather than past it.
+			sub.sent.Store(seq)
 			debugLog("[DEBUG] PTY %s: sent to %s", p.ID[:8], clientID)
 		default:
 			debugLog("[DEBUG] PTY %s: channel full for %s, dropped", p.ID[:8], clientID)
