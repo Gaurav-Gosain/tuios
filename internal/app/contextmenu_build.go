@@ -297,13 +297,16 @@ func (m *OS) sessionMenu() (string, []ContextMenuItem) {
 	killQuit := m.item(glyphClose, "Kill session and quit", "kill_session_quit", false)
 	killQuit.Warn = true
 
-	title := m.SessionName
+	// The menu heads with what the session is called, which is its display name
+	// once it has one.
+	title := m.SessionLabel(m.SessionName)
 	if title == "" {
 		title = "Session"
 	}
 	return title, []ContextMenuItem{
 		m.item(glyphDetach, "Detach", "prefix_detach", false),
 		m.item(glyphSwitch, "Switch session...", "prefix_session_switcher", false),
+		m.item(glyphSwitch, "Switch workspace...", "prefix_workspace_switcher", false),
 		separator(),
 		killNext,
 		killQuit,

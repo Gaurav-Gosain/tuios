@@ -168,6 +168,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		}
 	case "session":
 		m.SessionSwitcherSelected = idx
+	case "workspace":
+		m.WorkspaceSwitcherSelected = idx
 	case "layout":
 		m.LayoutPickerSelected = idx
 	case "quit":
@@ -214,6 +216,9 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "session":
 		n := len(FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery))
 		moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, 10, wheelDelta(up))
+	case "workspace":
+		n := len(FilterWorkspaceItems(m.WorkspaceSwitcherItems, m.WorkspaceSwitcherQuery))
+		moveListSelection(&m.WorkspaceSwitcherSelected, &m.WorkspaceSwitcherScroll, n, workspaceSwitcherRows, wheelDelta(up))
 	case "layout":
 		n := len(FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery))
 		moveListSelection(&m.LayoutPickerSelected, &m.LayoutPickerScroll, n, 10, wheelDelta(up))
@@ -290,6 +295,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		// switch" was reportable at all.
 		m.SessionSwitcherSelected = row.Idx
 		m.sessionSwitcherActivate(row.Idx)
+	case "workspace":
+		m.WorkspaceSwitcherSelected = row.Idx
+		m.workspaceSwitcherActivate(row.Idx)
 	case "layout":
 		m.LayoutPickerSelected = row.Idx
 		m.layoutPickerActivate(row.Idx)
@@ -366,6 +374,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.SessionSwitcherQuery = ""
 		m.SessionSwitcherSelected = 0
 		m.SessionSwitcherScroll = 0
+	case "workspace":
+		m.CloseWorkspaceSwitcher()
 	case "layout":
 		m.ShowLayoutPicker = false
 	case "accent":

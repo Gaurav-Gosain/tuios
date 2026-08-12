@@ -53,6 +53,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleSessionSwitcherInput(msg, o)
 	}
 
+	// Handle workspace switcher overlay
+	if o.ShowWorkspaceSwitcher {
+		return handleWorkspaceSwitcherInput(msg, o)
+	}
+
 	// Handle aggregate view overlay
 	if o.ShowAggregateView {
 		return handleAggregateViewInput(msg, o)

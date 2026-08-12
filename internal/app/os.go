@@ -441,6 +441,12 @@ type OS struct {
 	SessionSwitcherItems         []sessiontree.Node
 	SessionSwitcherError         string
 	SessionSwitcherConfirmDelete string // non-empty = confirming deletion of this session name
+	// Workspace switcher overlay, scoped to the attached session
+	ShowWorkspaceSwitcher     bool
+	WorkspaceSwitcherQuery    string
+	WorkspaceSwitcherSelected int
+	WorkspaceSwitcherScroll   int
+	WorkspaceSwitcherItems    []WorkspaceItem
 	// Aggregate view overlay (all windows across workspaces)
 	ShowAggregateView     bool
 	AggregateViewQuery    string
