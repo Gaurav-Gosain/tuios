@@ -425,8 +425,13 @@ func buildSessionInfoData(sess *Session, state *SessionState, hasClient bool) ma
 		layoutMode = "unknown"
 	}
 	return map[string]any{
-		"session_name":      state.Name,
-		"session_id":        sess.ID,
+		"session_name": state.Name,
+		"session_id":   sess.ID,
+		// display_name and accent are the session's label, empty when it was never
+		// set. A reader that wants one string falls back to session_name, which is
+		// what it read before these existed.
+		"display_name":      state.DisplayName,
+		"accent":            state.Accent,
 		"mode":              "unknown",
 		"current_workspace": state.CurrentWorkspace,
 		"num_workspaces":    state.workspaceBound(),

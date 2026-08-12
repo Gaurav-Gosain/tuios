@@ -108,7 +108,22 @@ type SerializedBSPTree struct {
 
 // SessionState represents the complete serializable state of a session.
 type SessionState struct {
-	Name             string         `json:"name"`
+	Name string `json:"name"`
+	// DisplayName is an optional user-facing label. Name stays the identity: it
+	// keys the session map, names the resurrection file, is exported as
+	// TUIOS_SESSION into every pane, and is what every verb's session parameter
+	// resolves against. Renaming for display must not disturb any of that, which
+	// is why the label is a field of its own rather than a write to Name.
+	//
+	// Empty means unnamed, and every reader falls back to Name, so a session that
+	// was never renamed reads exactly as it did before this field existed.
+	DisplayName string `json:"display_name,omitempty"`
+	// Accent is an optional accent slot for the session, recorded verbatim the
+	// way Options are: the daemon has no palette and does not interpret it. Empty
+	// means the client's default. It lives here rather than in a client-side file
+	// because it has to survive a reattach and be the same for every client
+	// attached to this session.
+	Accent           string         `json:"accent,omitempty"`
 	Windows          []WindowState  `json:"windows"`
 	FocusedWindowID  string         `json:"focused_window_id,omitempty"`
 	CurrentWorkspace int            `json:"current_workspace"`
@@ -704,6 +719,28 @@ func (s *Session) snapshotStateLocked() *SessionState {
 		maps.Copy(stateCopy.Options, s.state.Options)
 	}
 	return &stateCopy
+}
+
+// SetDisplayName records the session's optional display label. It runs through
+// mutateState, so the new label reaches every attached client on the same push
+// every other daemon-side mutation uses, and the periodic resurrection save
+// picks it up with the rest of the state. An empty name clears the label; the
+// session's identity (Name) is untouched either way.
+func (s *Session) SetDisplayName(name string) error {
+	return s.mutateState(func(st *SessionState) error {
+		st.DisplayName = name
+		return nil
+	})
+}
+
+// SetAccent records the session's optional accent slot, propagated and persisted
+// exactly as SetDisplayName is. The value is opaque to the daemon: it is the
+// client's palette that knows what a slot name means.
+func (s *Session) SetAccent(accent string) error {
+	return s.mutateState(func(st *SessionState) error {
+		st.Accent = accent
+		return nil
+	})
 }
 
 // SetOption records a daemon-owned session option under stateMu. It is the write

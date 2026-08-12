@@ -25,6 +25,16 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.Options == nil {
 		incoming.Options = canonical.Options
 	}
+	// The session label and accent are set only through their verbs, so a sync
+	// that omits them (every client sync today) must not clear them. Clearing
+	// stays the verb's job, which is why an empty incoming value is treated as
+	// "not sent" rather than "set to empty".
+	if incoming.DisplayName == "" {
+		incoming.DisplayName = canonical.DisplayName
+	}
+	if incoming.Accent == "" {
+		incoming.Accent = canonical.Accent
+	}
 	if incoming.ResurrectionVersion == 0 {
 		incoming.ResurrectionVersion = canonical.ResurrectionVersion
 	}

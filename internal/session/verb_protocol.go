@@ -292,6 +292,24 @@ func init() {
 			examples:    []string{`{"id":1,"verb":"unsubscribe"}`},
 			handler:     (*Daemon).verbUnsubscribe,
 		},
+		"set-session-name": {
+			description: "Set a session's display name. The session's identity is unchanged: it keeps the same name for addressing, persistence and TUIOS_SESSION.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "name", Type: "string", Description: "Display label for the session. Omit or pass an empty string to clear it and fall back to the session name."},
+			},
+			examples: []string{`{"id":1,"verb":"set-session-name","params":{"session":"work","name":"Payments API"}}`},
+			handler:  (*Daemon).verbSetSessionName,
+		},
+		"set-session-accent": {
+			description: "Set a session's accent, shared by every client attached to it and kept across a reattach.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "accent", Type: "string", Description: "Accent slot name, recorded verbatim. Omit or pass an empty string to clear it."},
+			},
+			examples: []string{`{"id":1,"verb":"set-session-accent","params":{"session":"work","accent":"cyan"}}`},
+			handler:  (*Daemon).verbSetSessionAccent,
+		},
 		"set-agent-state": {
 			description: "Set the agent state a window's pane reports (working, needs_input, idle, done, errored, or none to clear). A pane reports its own state by calling this against the daemon socket.",
 			params: []verbParam{

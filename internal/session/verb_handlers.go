@@ -467,6 +467,46 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 	return map[string]any{"type": "option", "key": p.Key, "value": value}, nil
 }
 
+func (d *Daemon) verbSetSessionName(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session string `json:"session"`
+		Name    string `json:"name"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	name := strings.TrimSpace(p.Name)
+	if err := sess.SetDisplayName(name); err != nil {
+		return nil, newVerbError(ErrVerbInternal, "could not set session name: "+err.Error())
+	}
+	// session is the identity the caller addressed and keeps addressing; the
+	// rename only changed display_name.
+	return map[string]any{"type": "session_name_set", "session": sess.Name, "display_name": name}, nil
+}
+
+func (d *Daemon) verbSetSessionAccent(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session string `json:"session"`
+		Accent  string `json:"accent"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	accent := strings.TrimSpace(p.Accent)
+	if err := sess.SetAccent(accent); err != nil {
+		return nil, newVerbError(ErrVerbInternal, "could not set session accent: "+err.Error())
+	}
+	return map[string]any{"type": "session_accent_set", "session": sess.Name, "accent": accent}, nil
+}
+
 func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
