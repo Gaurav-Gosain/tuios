@@ -225,18 +225,20 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		if sidebarLayer := m.renderSidebar(); sidebarLayer != nil {
 			layers = append(layers, sidebarLayer)
 		}
-		// The collapsed strip's hover label rides above the panes and the dock,
-		// composed after the rail that anchors it.
-		if tip := m.renderSidebarTooltip(); tip != nil {
-			layers = append(layers, tip)
-		}
-
 		overlays := m.renderOverlays()
 		layers = append(layers, overlays...)
 
 		if config.DockbarPosition != "hidden" {
 			dockLayer := m.renderDock()
 			layers = append(layers, dockLayer)
+		}
+
+		// The hover label rides above the panes and the dock both. It is composed
+		// last so it reads the rectangles this pass recorded rather than the
+		// previous frame's: the rail anchors it by row and the dock's session
+		// controls anchor it by column, and both are drawn above.
+		if tip := m.renderTooltip(); tip != nil {
+			layers = append(layers, tip)
 		}
 	} else {
 		// Off the render path (e.g. state snapshots) nothing draws the sidebar,

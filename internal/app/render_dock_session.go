@@ -25,17 +25,16 @@ type dockSessionCell struct {
 // right edge stops on a cell that does nothing, rather than on the one button
 // here that cannot be undone.
 func (m *OS) buildDockSessionStrip() (string, []dockSessionCell) {
-	tier := dockSessionTierFor(m.GetRenderWidth())
-	if tier == dockSessionTierOff {
+	if !dockSessionControlsFit(m.GetRenderWidth()) {
 		return "", nil
 	}
 
 	pal := theme.UI()
 	cells := make([]dockSessionCell, 0, 2)
 	if m.CanLeaveRunning() {
-		cells = append(cells, m.dockSessionCell(DockSessionLeave, tier, pal))
+		cells = append(cells, m.dockSessionCell(DockSessionLeave, pal))
 	}
-	cells = append(cells, m.dockSessionCell(DockSessionClose, tier, pal))
+	cells = append(cells, m.dockSessionCell(DockSessionClose, pal))
 
 	var b strings.Builder
 	b.WriteString(" ")
@@ -58,28 +57,31 @@ func (m *OS) dockSessionStripWidth() int {
 // dockSessionCell styles one control.
 //
 // The weight split is the whole design: leaving is normal dock text and bold,
-// closing is muted until the pointer arrives and then goes destructive. Neither
-// wears a fill, which is still spent entirely on the mode pill.
-func (m *OS) dockSessionCell(a DockSessionAction, tier dockSessionTier, pal overlay.Palette) dockSessionCell {
-	body := dockSessionIcon(a)
-	if tier == dockSessionTierLabel {
-		body += " " + dockSessionLabel(a)
-	}
+// closing is quieter until the pointer arrives and then goes destructive.
+// Neither wears a fill, which is still spent entirely on the mode pill.
+//
+// Every state goes through theme.Readable against the bare canvas the bar sits
+// on. The recessed one has to be recessed and still legible, and it was neither
+// once the word beside it went: FgMute measured 2.60:1, which was a hint next to
+// a label and is the whole control without one. Warn and AccentBright follow the
+// terminal theme, so they are measured for the same reason the workspace pills'
+// accent is.
+func (m *OS) dockSessionCell(a DockSessionAction, pal overlay.Palette) dockSessionCell {
 	// A column of padding either side, so the target is a button and not a
 	// glyph, and so the two controls do not touch.
-	body = " " + body + " "
+	body := " " + dockSessionIcon(a) + " "
 
 	st := lipgloss.NewStyle()
 	hovered := m.dockSessionHover == a
 	switch {
 	case a == DockSessionLeave && hovered:
-		st = st.Foreground(pal.AccentBright).Bold(true)
+		st = st.Foreground(theme.Readable(pal.AccentBright, pal.Canvas)).Bold(true)
 	case a == DockSessionLeave:
 		st = st.Foreground(pal.Fg).Bold(true)
 	case hovered:
-		st = st.Foreground(pal.Warn).Bold(true)
+		st = st.Foreground(theme.Readable(pal.Warn, pal.Canvas)).Bold(true)
 	default:
-		st = st.Foreground(pal.FgMute)
+		st = st.Foreground(theme.Readable(pal.FgMute, pal.Canvas))
 	}
 
 	return dockSessionCell{Text: st.Render(body), Width: lipgloss.Width(body), Action: a}

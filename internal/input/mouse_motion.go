@@ -77,9 +77,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// The dock's session controls track the pointer so the recessed one is only
-	// loud where a click would land. The motion is not consumed: nothing else in
-	// the dock band reacts to it, and clearing the highlight on the way out is
-	// the same call.
+	// loud where a click would land, and so the glyph under it says what it does.
+	// The motion is not consumed: nothing else in the dock band reacts to it, and
+	// clearing the highlight and the label on the way out is the same call.
+	//
+	// This is also what times the label. There is no tick standing by to notice
+	// the pointer has rested; arriving motion is the clock, and the maintenance
+	// tick is held only across the delay window of a live gesture.
 	o.DockSessionHoverAt(mouse.X, mouse.Y)
 
 	// Ctrl-drag: an armed grab commits to a move once the pointer passes the

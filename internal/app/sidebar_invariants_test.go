@@ -140,7 +140,7 @@ func TestRailSignatureMovesForDrawnStateAndNotForTheRest(t *testing.T) {
 		// State the rail carries but never draws. Folding any of it in would
 		// rebuild the rail on a mouse move that changed nothing on screen.
 		{"the pair rule's arm", func() { m.SidebarPeekArm = "docs" }, false},
-		{"the tooltip's latch", func() { m.SidebarTooltip = sidebarTooltipState{Active: true, Y: 4} }, false},
+		{"the tooltip's latch", func() { m.Tooltip = tooltipState{Source: tooltipRailStrip, Key: 4} }, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := m.sidebarSignature()

@@ -824,7 +824,7 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 		SidebarMarquee = *sb.Marquee
 	}
 	if sb.Tooltips != nil {
-		SidebarTooltips = *sb.Tooltips
+		Tooltips = *sb.Tooltips
 	}
 	if cfg.Appearance.DockWorkspaceTabs != nil {
 		DockWorkspaceTabs = *cfg.Appearance.DockWorkspaceTabs

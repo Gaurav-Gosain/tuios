@@ -523,10 +523,11 @@ type OS struct {
 	// what is under the pointer, including the badge, which is a readout rather
 	// than a control and so has no hit rectangle of its own.
 	sidebarStripRows []sidebarStripRow
-	// SidebarTooltip is the collapsed strip's hover label state: which row the
-	// pointer is on, when it landed, and whether the label has been drawn.
-	// Gesture-scoped runtime state; the Shown latch is also the tick gate.
-	SidebarTooltip sidebarTooltipState
+	// Tooltip is the hover label state shared by the collapsed rail and the
+	// dock's session controls: which control the pointer is on, when it landed,
+	// and whether the label has been drawn. Gesture-scoped runtime state; the
+	// Shown latch is also the tick gate.
+	Tooltip tooltipState
 	// SidebarPeek is the session the terminals section is previewing while the
 	// pointer or the rail cursor rests on its row, and SidebarPeekArm is the
 	// session row the previous motion event resolved to (empty when it resolved

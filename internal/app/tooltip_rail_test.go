@@ -33,14 +33,14 @@ func tooltipOS(t *testing.T, pos string, kind sidebarStripRowKind) (*OS, int) {
 func TestTooltipPendsOnlyDuringALiveHover(t *testing.T) {
 	m, y := tooltipOS(t, "left", sidebarStripSession)
 
-	if m.SidebarTooltipPending() {
+	if m.TooltipPending() {
 		t.Fatal("a rail nobody is pointing at is pending a tooltip")
 	}
 	m.SidebarMotion(1, y)
-	if !m.SidebarTooltipPending() {
+	if !m.TooltipPending() {
 		t.Fatal("landing on a strip row did not arm the tooltip")
 	}
-	if m.sidebarTooltipVisible() {
+	if m.tooltipVisible(tooltipRailStrip) {
 		t.Error("the tooltip appeared before its delay elapsed")
 	}
 	if !m.tickNeedsWork() {
@@ -48,20 +48,20 @@ func TestTooltipPendsOnlyDuringALiveHover(t *testing.T) {
 	}
 
 	// The delay elapses and the frame that draws it closes the gate.
-	m.SidebarTooltip.At = time.Now().Add(-2 * sidebarTooltipDelay)
-	if !m.sidebarTooltipVisible() {
+	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+	if !m.tooltipVisible(tooltipRailStrip) {
 		t.Fatal("the tooltip never became visible")
 	}
-	if m.renderSidebarTooltip() == nil {
+	if m.renderRailTooltip() == nil {
 		t.Fatal("a visible tooltip composed no layer")
 	}
-	if m.SidebarTooltipPending() {
+	if m.TooltipPending() {
 		t.Error("a shown tooltip is still pending; the tick would never idle")
 	}
 
 	// And leaving the band takes it down entirely.
 	m.SidebarMotion(m.GetRenderWidth()-2, y)
-	if m.SidebarTooltipPending() || m.sidebarTooltipVisible() {
+	if m.TooltipPending() || m.tooltipVisible(tooltipRailStrip) {
 		t.Error("leaving the band left the tooltip behind")
 	}
 }
@@ -76,12 +76,12 @@ func TestTooltipPendingClosesOnASilentRow(t *testing.T) {
 	for i := range m.sidebarStripRows {
 		m.sidebarStripRows[i].Label = ""
 	}
-	m.SidebarTooltip.At = time.Now().Add(-2 * sidebarTooltipDelay)
+	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
 
-	if m.renderSidebarTooltip() != nil {
+	if m.renderRailTooltip() != nil {
 		t.Fatal("a row with no label drew one anyway")
 	}
-	if m.SidebarTooltipPending() {
+	if m.TooltipPending() {
 		t.Error("a row with nothing to say left the tooltip pending forever")
 	}
 }
@@ -101,15 +101,15 @@ func TestTooltipSwapsInstantlyOnceWarm(t *testing.T) {
 	}
 
 	m.SidebarMotion(1, rows[0])
-	m.SidebarTooltip.At = time.Now().Add(-2 * sidebarTooltipDelay)
-	m.renderSidebarTooltip()
+	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+	m.renderRailTooltip()
 
 	m.SidebarMotion(1, rows[1])
-	if !m.sidebarTooltipVisible() {
+	if !m.tooltipVisible(tooltipRailStrip) {
 		t.Error("moving along a strip that already has a label waited the delay out again")
 	}
-	if m.SidebarTooltip.Y != rows[1] {
-		t.Errorf("the label stayed on row %d after the pointer moved to %d", m.SidebarTooltip.Y, rows[1])
+	if m.Tooltip.Key != rows[1] {
+		t.Errorf("the label stayed on row %d after the pointer moved to %d", m.Tooltip.Key, rows[1])
 	}
 }
 
@@ -150,8 +150,8 @@ func TestTooltipAnchorFlipsWithThePosition(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, y := tooltipOS(t, pos, sidebarStripSession)
 		m.SidebarMotion(m.GetSidebarWidth()/2+railOriginX(m), y)
-		m.SidebarTooltip.At = time.Now().Add(-2 * sidebarTooltipDelay)
-		layer := m.renderSidebarTooltip()
+		m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+		layer := m.renderRailTooltip()
 		if layer == nil {
 			t.Fatalf("%s: no tooltip layer", pos)
 		}
@@ -194,9 +194,9 @@ func TestTooltipClampsToThePaneArea(t *testing.T) {
 		t.Fatal("the strip drew no session row")
 	}
 	m.SidebarMotion(1, y)
-	m.SidebarTooltip.At = time.Now().Add(-2 * sidebarTooltipDelay)
+	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
 
-	layer := m.renderSidebarTooltip()
+	layer := m.renderRailTooltip()
 	if layer == nil {
 		t.Fatal("no tooltip layer")
 	}
@@ -208,17 +208,17 @@ func TestTooltipClampsToThePaneArea(t *testing.T) {
 // TestTooltipsCanBeTurnedOff: the config key has to reach the render, not just
 // the struct.
 func TestTooltipsCanBeTurnedOff(t *testing.T) {
-	prev := config.SidebarTooltips
-	config.SidebarTooltips = false
-	t.Cleanup(func() { config.SidebarTooltips = prev })
+	prev := config.Tooltips
+	config.Tooltips = false
+	t.Cleanup(func() { config.Tooltips = prev })
 
 	m, y := tooltipOS(t, "left", sidebarStripSession)
 	m.SidebarMotion(1, y)
-	if m.SidebarTooltipPending() {
+	if m.TooltipPending() {
 		t.Error("tooltips are off and one is pending anyway")
 	}
-	m.SidebarTooltip.At = time.Now().Add(-2 * sidebarTooltipDelay)
-	if m.renderSidebarTooltip() != nil {
+	m.Tooltip.At = time.Now().Add(-2 * tooltipDelay)
+	if m.renderRailTooltip() != nil {
 		t.Error("tooltips are off and one drew anyway")
 	}
 }
@@ -229,7 +229,7 @@ func TestTooltipIsStripOnly(t *testing.T) {
 	m, tree := sectionsTestOS(t, 120, 30)
 	m.sidebarPanelLinesForTree(tree)
 	m.SidebarMotion(1, m.GetTopMargin()+1)
-	if m.SidebarTooltipPending() || m.renderSidebarTooltip() != nil {
+	if m.TooltipPending() || m.renderRailTooltip() != nil {
 		t.Error("the expanded rail popped a tooltip")
 	}
 }

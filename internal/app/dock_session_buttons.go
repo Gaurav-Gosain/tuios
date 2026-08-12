@@ -46,34 +46,26 @@ type dockSessionHit struct {
 	Action    DockSessionAction
 }
 
-// dockSessionTier is how much of a control the dock has room to draw.
-type dockSessionTier int
+// dockSessionIconMinWidth is the narrowest dock that carries the controls at
+// all. Below it the bar has nothing left to give and they go.
+const dockSessionIconMinWidth = 34
 
-const (
-	// dockSessionTierOff draws no controls at all.
-	dockSessionTierOff dockSessionTier = iota
-	// dockSessionTierIcon draws the glyphs alone.
-	dockSessionTierIcon
-	// dockSessionTierLabel draws the glyphs with their words.
-	dockSessionTierLabel
-)
+// dockSessionControlsFit reports whether the dock is wide enough to carry the
+// controls. Taken from the width alone, so the layout pass and the render pass
+// cannot land on different answers.
+func dockSessionControlsFit(renderWidth int) bool {
+	return renderWidth >= dockSessionIconMinWidth
+}
 
-const (
-	// dockSessionLabelMinWidth is the narrowest dock that still spells the
-	// controls out. The labels are the dock's first concession on a narrowing
-	// screen: the mode pill, the workspace strip and the meters each carry a
-	// number or a state you cannot get anywhere else, where these two words only
-	// name a glyph that stays put.
-	dockSessionLabelMinWidth = 110
-
-	// dockSessionIconMinWidth is the narrowest dock that carries the controls at
-	// all. Below it the bar has nothing left to give and they go.
-	dockSessionIconMinWidth = 34
-)
-
-// dockSessionLabels are the words on the controls. Plain on purpose: "logout"
-// and "shutdown" are what the two actions are, not what they do, and the desktop
-// metaphor is already carried by the glyphs beside them.
+// The words the controls mean. Plain on purpose: "logout" and "shutdown" are
+// what the two actions are, not what they do, and the desktop metaphor is
+// already carried by the glyphs.
+//
+// They are the hover label now rather than print beside the glyphs. Twenty-eight
+// columns of the bar were being spent restating two icons that never move, on
+// the one row where every other element carries a number or a state you cannot
+// read anywhere else. The words are still reachable without a pointer: the help
+// menu and the which-key sheet name both actions.
 const (
 	dockSessionLeaveLabel = "Leave running"
 	dockSessionCloseLabel = "Close session"
@@ -87,24 +79,12 @@ func dockSessionIcon(a DockSessionAction) string {
 	return config.GetDockIconCloseSession()
 }
 
-// dockSessionLabel is a control's word.
+// dockSessionLabel is a control's word, which is what its tooltip says.
 func dockSessionLabel(a DockSessionAction) string {
 	if a == DockSessionLeave {
 		return dockSessionLeaveLabel
 	}
 	return dockSessionCloseLabel
-}
-
-// dockSessionTierFor picks the tier from the dock's width alone, so the layout
-// pass and the render pass cannot land on different ones.
-func dockSessionTierFor(renderWidth int) dockSessionTier {
-	switch {
-	case renderWidth >= dockSessionLabelMinWidth:
-		return dockSessionTierLabel
-	case renderWidth >= dockSessionIconMinWidth:
-		return dockSessionTierIcon
-	}
-	return dockSessionTierOff
 }
 
 // CanLeaveRunning reports whether there is a session to leave running, which is
@@ -131,8 +111,9 @@ func (m *OS) DockSessionActionAt(x, y int) DockSessionAction {
 }
 
 // DockSessionHoverAt points the hover highlight at whatever control is under
-// (x, y), clearing it when the pointer is on neither. It reports whether the
-// pointer is on a control, so a caller can consume the motion.
+// (x, y), clearing it when the pointer is on neither, and arms the tooltip that
+// says what the glyph means. It reports whether the pointer is on a control, so
+// a caller can consume the motion.
 //
 // The recessed control brightens here and nowhere else: it is muted at rest so
 // it does not compete with the one beside it, and loud under the pointer so the
@@ -140,5 +121,6 @@ func (m *OS) DockSessionActionAt(x, y int) DockSessionAction {
 func (m *OS) DockSessionHoverAt(x, y int) bool {
 	a := m.DockSessionActionAt(x, y)
 	m.dockSessionHover = a
+	m.dockSessionTooltipTrack(a)
 	return a != DockSessionNone
 }
