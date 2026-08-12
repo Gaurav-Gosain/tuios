@@ -33,6 +33,8 @@ func configFileHeader(configPath string) string {
 	sb.WriteString("# dockbar_position: bottom, top, hidden\n")
 	sb.WriteString("# window_title_position: bottom, top, hidden\n")
 	sb.WriteString("# theme: color theme name (e.g. dracula, nord); empty for terminal colors\n")
+	sb.WriteString("# [appearance.scrollbar]: style = thin, track; thumb/track = a one-cell glyph\n")
+	sb.WriteString("#               (track also takes \"none\"); tint = border, muted, #RRGGBB\n")
 	sb.WriteString("# ============================================================================\n\n")
 	return sb.String()
 }

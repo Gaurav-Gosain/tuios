@@ -179,10 +179,32 @@ const (
 // ScrollbarStyles lists the valid values for appearance.scrollbar.style.
 var ScrollbarStyles = []string{ScrollbarStyleThin, ScrollbarStyleTrack}
 
+// Scrollbar tints. See ScrollbarConfig.Tint.
+const (
+	// ScrollbarTintBorder draws the focused pane's bar in the colour its border
+	// is drawn in, or in its accent when it has one.
+	ScrollbarTintBorder = "border"
+	// ScrollbarTintMuted draws every bar in the unfocused border grey.
+	ScrollbarTintMuted = "muted"
+)
+
+// ScrollbarTints lists the keyword values for appearance.scrollbar.tint; a
+// #RRGGBB literal is also accepted.
+var ScrollbarTints = []string{ScrollbarTintBorder, ScrollbarTintMuted}
+
+// ScrollbarTrackNone is the track value that draws no track at all, which is
+// what the thin style looked like before it grew one.
+const ScrollbarTrackNone = "none"
+
 // ScrollbarConfig is the pane scrollbar's own table. hide_scrollbar predates it
-// and stays where it is, so existing files keep working.
+// and stays where it is, so existing files keep working. Every key here is
+// optional and an absent one takes the style's own default, so a file written
+// before the table grew renders exactly what the release documents.
 type ScrollbarConfig struct {
 	Style string `toml:"style"` // thin, track (default: thin)
+	Thumb string `toml:"thumb"` // one-cell glyph (default: thin ▐, track █, ASCII |)
+	Track string `toml:"track"` // one-cell glyph or none (default: thin ▕, track the surface fill, ASCII none)
+	Tint  string `toml:"tint"`  // border, muted, #RRGGBB (default: border)
 }
 
 // Sidebar workspace-band modes. See SidebarConfig.Workspaces.
@@ -256,7 +278,7 @@ func DefaultConfig() *UserConfig {
 			ScrollLines:       3,
 			DockbarPosition:   "bottom",
 			PreferredShell:    "",
-			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin},
+			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintBorder},
 			Sidebar: SidebarConfig{
 				Position:   "left",
 				Width:      SidebarDefaultWidth,
@@ -718,6 +740,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.Scrollbar.Style == "" {
 		cfg.Appearance.Scrollbar.Style = defaultCfg.Appearance.Scrollbar.Style
 	}
+	if cfg.Appearance.Scrollbar.Tint == "" {
+		cfg.Appearance.Scrollbar.Tint = defaultCfg.Appearance.Scrollbar.Tint
+	}
 
 	// Note: HideWindowButtons defaults to false (zero value)
 	// In borderless mode, buttons are hidden automatically regardless of this setting
@@ -812,6 +837,13 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	if cfg.Appearance.Scrollbar.Style != "" {
 		ScrollbarStyle = cfg.Appearance.Scrollbar.Style
 	}
+	// The glyph and tint keys are assigned as written, empty included: empty is
+	// the "use the style's default" state, and the getters below resolve it. A
+	// value that does not measure one cell is rejected there too, so an edit
+	// made live in the settings page cannot slip past the file's validation.
+	ScrollbarThumb = cfg.Appearance.Scrollbar.Thumb
+	ScrollbarTrack = cfg.Appearance.Scrollbar.Track
+	ScrollbarTint = cfg.Appearance.Scrollbar.Tint
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are
 	// assigned unconditionally: turning one off in the settings page has to

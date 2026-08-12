@@ -122,13 +122,17 @@ type OS struct {
 	SelectionDragged         bool // the pointer moved during the current selection gesture
 	ScrollbarDragging        bool
 	ScrollbarDragWindowIndex int // -1 when not dragging
-	Windows                  []*terminal.Window
-	FocusedWindow            int
-	Width                    int
-	Height                   int
-	X                        int
-	Y                        int
-	Mode                     Mode
+	// ScrollbarGrabOffset is the rows between the pointer and the thumb's first
+	// row, fixed when the bar is grabbed so the thumb rides under the pointer
+	// instead of jumping to it on every motion event.
+	ScrollbarGrabOffset int
+	Windows             []*terminal.Window
+	FocusedWindow       int
+	Width               int
+	Height              int
+	X                   int
+	Y                   int
+	Mode                Mode
 	// terminalMu guards the m.Windows slice and the per-window dirty flags and
 	// render caches against the UI goroutine's render pass. It does NOT guard
 	// emulator cell data; that is Window.ioMu.
@@ -283,6 +287,9 @@ type OS struct {
 	// reused so a mouse drag does not allocate a map per motion event.
 	bspResizeScratch map[int]layout.Rect
 	renderCanvas     *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
+	// scrollbarRects is where each pane's scrollbar was drawn on the last frame,
+	// keyed by window ID. Recorded by the renderer, read by input.
+	scrollbarRects map[string]ScrollbarRect
 	// Reused per-frame scratch for graphics placement refresh (avoids per-frame allocs)
 	kittyPosMap     map[string]*WindowPositionInfo // Reused map for kitty placement refresh
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values

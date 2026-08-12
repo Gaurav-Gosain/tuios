@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"charm.land/lipgloss/v2"
 )
 
 // ValidationError represents a validation error or warning
@@ -243,6 +245,43 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition,
 		[]string{"bottom", "top", "hidden"})
 	validateTitleFormat(cfg.Appearance.WindowTitleFormat, result)
+	validateScrollbar(cfg, result)
+}
+
+// hexColorPattern matches the one colour literal the config accepts.
+var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// validateScrollbar warns about the scrollbar's free-form keys, which no enum
+// covers: the two glyphs have to measure exactly one cell or they would shift
+// the content column they float over, and the tint is either a keyword or a hex
+// literal. Each falls back to the style's default, so the frame stays drawable.
+func validateScrollbar(cfg *UserConfig, result *ValidationResult) {
+	sb := cfg.Appearance.Scrollbar
+
+	checkGlyph := func(key, value string) {
+		if value == "" || lipgloss.Width(value) == 1 {
+			return
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance",
+			Key:     "scrollbar." + key,
+			Message: fmt.Sprintf("'%s' is %d cells wide; the scrollbar is one column, so the default glyph is used instead", value, lipgloss.Width(value)),
+		})
+	}
+	checkGlyph("thumb", sb.Thumb)
+	if sb.Track != ScrollbarTrackNone {
+		checkGlyph("track", sb.Track)
+	}
+
+	if sb.Tint == "" || slices.Contains(ScrollbarTints, sb.Tint) || hexColorPattern.MatchString(sb.Tint) {
+		return
+	}
+	result.Warnings = append(result.Warnings, ValidationError{
+		Field: "appearance",
+		Key:   "scrollbar.tint",
+		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s, or #RRGGBB); falling back to default",
+			sb.Tint, strings.Join(ScrollbarTints, ", ")),
+	})
 }
 
 // knownTitlePlaceholders are the placeholders FormatWindowTitle expands.

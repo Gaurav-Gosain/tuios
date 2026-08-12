@@ -159,16 +159,16 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Scrollbar click: left press on the column the thumb is drawn in. The
-	// thumb now floats in the pane's last content column and only while the
-	// pane is scrolled back, so the grab is gated on it being on screen -
-	// otherwise every click on the rightmost content cell of a pane with
-	// history would jump-scroll instead of reaching the guest.
+	// Scrollbar click: left press on cells the bar was drawn on. The bar floats
+	// in the pane's last content column and only while the pane is scrolled
+	// back, so the grab is gated on the rect the renderer recorded - otherwise a
+	// click on the rightmost content cell of a pane with history would
+	// jump-scroll instead of reaching the guest.
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft {
 		win := o.Windows[clickedWindowIndex]
-		if thumbX, drawn := app.ScrollbarHit(win); drawn && X == thumbX {
+		if rect, drawn := o.ScrollbarHit(win); drawn && rect.Contains(X, Y) {
 			o.FocusWindow(clickedWindowIndex)
-			scrollToPosition(win, Y)
+			o.ScrollbarGrabOffset = scrollbarGrab(win, rect, Y)
 			o.ScrollbarDragging = true
 			o.ScrollbarDragWindowIndex = clickedWindowIndex
 			o.InteractionMode = true
