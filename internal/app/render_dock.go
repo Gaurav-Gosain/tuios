@@ -2,7 +2,6 @@ package app
 
 import (
 	"image/color"
-	"strconv"
 	"strings"
 	"time"
 
@@ -11,28 +10,31 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// workspaceChip renders one workspace digit for the dock strip or the rail
-// band. Inactive is a bare dim digit; active is an accent digit, bold and
-// underlined, on no fill of its own. An inverse fill is the loudest mark the
-// grammar has and it was being spent on the thing the user already knows; the
-// underline says the same in one attribute, survives ASCII mode and monochrome
-// (both are attributes, not glyphs), and leaves the mode chip as the bar's only
-// filled element. Both states pad to the caps' widths, so every chip is exactly
-// workspaceChipWidth wide whatever its state. rowBg is what sits behind the
-// chip (nil for the bare terminal background), fg the resting digit color.
-func workspaceChip(n int, active bool, fg, rowBg color.Color) string {
+// workspaceChip renders one workspace chip for the dock strip. Inactive is the
+// bare dim label; active is the accent label, bold and underlined, on no fill of
+// its own. An inverse fill is the loudest mark the grammar has and it was being
+// spent on the thing the user already knows; the underline says the same in one
+// attribute, survives ASCII mode and monochrome (both are attributes, not
+// glyphs), and leaves the mode chip as the bar's only filled element. Both
+// states pad to the caps' widths, so a chip is exactly workspaceChipWidth(label)
+// wide whatever its state. rowBg is what sits behind the chip (nil for the bare
+// terminal background), fg the resting label color.
+//
+// The label is passed in rather than derived: the tab that carries it also
+// carries the width the hit rectangle was cut to, and the two must be the same
+// string.
+func workspaceChip(label string, active bool, fg, rowBg color.Color) string {
 	lc, rc := workspaceChipCaps()
-	digit := strconv.Itoa(n)
 	pad := func(s string) string { return sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", lipgloss.Width(s))) }
 	if !active {
 		return sidebarStyle(rowBg, fg).Render(
-			strings.Repeat(" ", lipgloss.Width(lc)) + digit + strings.Repeat(" ", lipgloss.Width(rc)))
+			strings.Repeat(" ", lipgloss.Width(lc)) + label + strings.Repeat(" ", lipgloss.Width(rc)))
 	}
 	// The pill caps go with the fill they capped: a half-circle around bare
 	// canvas is a glyph with nothing behind it. They keep their columns so the
 	// strip does not reflow when the current workspace moves along it.
 	body := sidebarStyle(rowBg, theme.UI().Accent).Bold(true).Underline(true)
-	return pad(lc) + body.Render(digit) + pad(rc)
+	return pad(lc) + body.Render(label) + pad(rc)
 }
 
 // renderDockWorkspaceTabs styles the workspace strip starting at column startX
@@ -50,25 +52,13 @@ func (m *OS) renderDockWorkspaceTabs(tabs []dockWorkspaceTab, startX int) string
 	b.WriteString(" ")
 	x := startX + 1
 	for _, t := range tabs {
-		if t.Add {
-			b.WriteString(workspaceAddChip(pal.FgMute, nil))
-		} else {
-			b.WriteString(workspaceChip(t.Workspace, t.Active, pal.FgMute, nil))
-		}
+		b.WriteString(workspaceChip(t.Label, t.Active, pal.FgMute, nil))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
 		})
 		x += t.Width
 	}
 	return b.String()
-}
-
-// workspaceAddChip renders the strip's trailing "+", padded to the same caps as
-// a digit chip so the row stays evenly spaced.
-func workspaceAddChip(fg, rowBg color.Color) string {
-	lc, rc := workspaceChipCaps()
-	return sidebarStyle(rowBg, fg).Render(
-		strings.Repeat(" ", lipgloss.Width(lc)) + "+" + strings.Repeat(" ", lipgloss.Width(rc)))
 }
 
 func (m *OS) renderDock() *lipgloss.Layer {

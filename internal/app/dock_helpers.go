@@ -8,6 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -34,9 +35,17 @@ type DockLayout struct {
 	WorkspaceTabs  []dockWorkspaceTab
 }
 
-// dockWorkspaceTab is one workspace digit in the dock's clickable strip.
+// dockWorkspaceTab is one workspace chip in the dock's clickable strip.
+//
+// Label and Width travel together on purpose. A chip used to be a digit, so its
+// width was a function of its number and the renderer and the hit-testing could
+// each derive it. A named workspace makes the width a function of the label, and
+// two places deriving the same width from state that has since moved is exactly
+// how a minimized dock entry came to be unclickable while the cell to its right
+// worked. Both are computed once, here, and everything downstream reads them.
 type dockWorkspaceTab struct {
 	Workspace int
+	Label     string
 	Active    bool
 	Width     int
 	// Add marks the trailing "+" tab, which opens the next free workspace rather
@@ -74,11 +83,27 @@ func workspaceChipCaps() (string, string) {
 	return lc, rc
 }
 
-// workspaceChipWidth is the column span of one chip, the same for every chip
-// whatever its state.
-func workspaceChipWidth(n int) int {
+// workspaceChipWidth is the column span of a chip carrying the given label. The
+// span follows the label and nothing else, so a named workspace and a numbered
+// one are measured by the same rule.
+func workspaceChipWidth(label string) int {
 	lc, rc := workspaceChipCaps()
-	return lipgloss.Width(lc) + lipgloss.Width(rc) + lipgloss.Width(strconv.Itoa(n))
+	return lipgloss.Width(lc) + lipgloss.Width(rc) + lipgloss.Width(label)
+}
+
+// workspaceChipLabelMax caps a name on a chip. The dock strip sits beside the
+// mode pill and the minimized entries, and a workspace called after a branch
+// would otherwise push both off the bar.
+const workspaceChipLabelMax = 12
+
+// workspaceChipLabel is what a chip prints: the workspace's name when it has
+// one, else its number, laundered as chrome and capped.
+func (m *OS) workspaceChipLabel(n int) string {
+	label := printableTitle(m.WorkspaceLabel(n))
+	if label == "" {
+		label = strconv.Itoa(n)
+	}
+	return overlay.Truncate(label, workspaceChipLabelMax)
 }
 
 // occupiedWorkspaces lists the workspaces worth showing, in order: those
@@ -104,17 +129,19 @@ func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
 	}
 	tabs := make([]dockWorkspaceTab, 0, m.NumWorkspaces)
 	for _, n := range m.occupiedWorkspaces() {
+		label := m.workspaceChipLabel(n)
 		tabs = append(tabs, dockWorkspaceTab{
 			Workspace: n,
+			Label:     label,
 			Active:    n == m.CurrentWorkspace,
-			Width:     workspaceChipWidth(n),
+			Width:     workspaceChipWidth(label),
 		})
 	}
 	// A trailing "+" opens the next empty workspace, so making one is a click
 	// rather than a remembered keybind. With it appended even a single-workspace
 	// session has two tabs, which is what makes the strip worth showing at all.
 	if next := m.nextFreeWorkspace(); next > 0 {
-		tabs = append(tabs, dockWorkspaceTab{Add: true, Width: workspaceAddChipWidth()})
+		tabs = append(tabs, dockWorkspaceTab{Add: true, Label: "+", Width: workspaceChipWidth("+")})
 	}
 	if len(tabs) < 2 {
 		return nil
@@ -131,13 +158,6 @@ func (m *OS) nextFreeWorkspace() int {
 		}
 	}
 	return 0
-}
-
-// workspaceAddChipWidth is the "+" tab's span, matching a digit chip so the
-// strip stays evenly spaced.
-func workspaceAddChipWidth() int {
-	lc, rc := workspaceChipCaps()
-	return lipgloss.Width(lc) + lipgloss.Width(rc) + 1
 }
 
 // dockWorkspaceTabsWidth is the strip's total width including the space that
