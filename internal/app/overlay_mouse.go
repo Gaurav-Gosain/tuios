@@ -84,6 +84,13 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 		}
 	}
 
+	// The accent picker is a field of cells rather than a list of rows, so it
+	// routes off its own recorded geometry. Ahead of the row loop because it
+	// registers no rows for the generic path to find.
+	if h.Kind == "accent" && m.accentPickerPress(lx, ly) {
+		return true, nil
+	}
+
 	// Left-click on a body row selects/activates it.
 	for _, row := range h.Rows {
 		if row.Rect.Contains(lx, ly) {
@@ -130,6 +137,13 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 		return false
 	}
 	lx, ly := x-h.OriginX, y-h.OriginY
+	if h.Kind == "accent" {
+		// Only a held button paints in the picker. Bare hover must not, or the
+		// colour under the pointer would keep overwriting the one the user
+		// chose just by crossing the dialog on the way somewhere else.
+		m.accentPickerDragTo(lx, ly)
+		return true
+	}
 	for _, row := range h.Rows {
 		if row.Rect.Contains(lx, ly) {
 			m.overlayRowHover(h.Kind, row.Idx)
@@ -156,8 +170,6 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.SessionSwitcherSelected = idx
 	case "layout":
 		m.LayoutPickerSelected = idx
-	case "accent":
-		m.AccentPickerSelected = idx
 	case "quit":
 		m.QuitMenuSelected = idx
 	}
@@ -166,6 +178,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 // OverlayMouseRelease ends any in-progress overlay drag.
 func (m *OS) OverlayMouseRelease() {
 	m.OverlayDrag.Active = false
+	m.accentDragging = false
+	m.accentDrag = accentHitNone
 }
 
 // OverlayMouseWheel scrolls the overlay panel under the cursor (falling back to
@@ -202,7 +216,14 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		n := len(FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery))
 		moveListSelection(&m.LayoutPickerSelected, &m.LayoutPickerScroll, n, 10, wheelDelta(up))
 	case "accent":
-		m.AccentPickerMove(wheelDelta(up))
+		// The wheel drives whatever is under it: the strip turns the hue, the
+		// grid steps through lightness.
+		lx, ly := x-h.OriginX, y-h.OriginY
+		if hit, ok := m.accentHitAt(lx, ly); ok && hit.Kind == accentHitHue {
+			m.AccentPickerMoveHue(wheelDelta(up))
+		} else {
+			m.AccentPickerMoveCell(0, wheelDelta(up))
+		}
 	case "quit":
 		moveListSelection(&m.QuitMenuSelected, &m.QuitMenuScroll, len(m.QuitMenuItems), 10, wheelDelta(up))
 	default:
@@ -270,8 +291,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "layout":
 		m.LayoutPickerSelected = row.Idx
 		m.layoutPickerActivate(row.Idx)
-	case "accent":
-		m.AccentPickerApply(row.Idx)
 	case "quit":
 		m.QuitMenuSelected = row.Idx
 		return m.QuitMenuActivate(row.Idx)

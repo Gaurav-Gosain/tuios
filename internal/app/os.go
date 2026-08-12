@@ -488,22 +488,25 @@ type OS struct {
 	SidebarOrder      []string
 	SidebarSessionIDs []string
 	SidebarDrag       sidebarDragState
-	// SidebarAccents is the accent the user gave a window, by window ID, as an
-	// index into the theme's bright ANSI colors. Persisted alongside the order
-	// and the collapse state; the daemon does not own it, so it is this client's
-	// view of its own windows.
-	SidebarAccents map[string]int
+	// SidebarAccents is the accent the user gave a window, by window ID: either
+	// a theme ANSI slot or a picked colour (see Accent). Persisted alongside the
+	// order and the collapse state; the daemon does not own it, so it is this
+	// client's view of its own windows.
+	SidebarAccents map[string]Accent
 	// SidebarAgentSeen is the unread bit of finished panes, by window ID: an
 	// entry means "this done pane has been looked at". Whether a client has
 	// looked at a pane is that client's business, not the daemon's, so it lives
 	// beside the accents rather than in session state.
 	SidebarAgentSeen map[string]bool
-	// Accent picker state: the window being accented, the selected swatch, and
-	// the list scroll the shared list overlay clamps.
+	// Accent picker state: the window being accented, the colour under the
+	// cursor and where that cursor is, and the hit geometry the renderer records
+	// as it draws the grid, the hue strip and the chips.
 	ShowAccentPicker     bool
 	AccentPickerWindowID string
-	AccentPickerSelected int
-	AccentPickerScroll   int
+	AccentPicker         accentPickerState
+	accentHits           []accentHit
+	accentDrag           accentHitKind
+	accentDragging       bool
 	// Sidebar hover: the last mouse position seen inside the band, so the row
 	// under the cursor is highlighted the way overlay rows are. HoverActive is
 	// cleared as soon as motion leaves the band.

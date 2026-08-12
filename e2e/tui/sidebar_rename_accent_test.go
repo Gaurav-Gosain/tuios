@@ -60,18 +60,29 @@ func TestRailRenamesAndAccentsAWindow(t *testing.T) {
 		t.Fatalf("the rename did not commit to the row: %v\n%s", err, term.Snapshot())
 	}
 
-	// The accent picker opens on the same row and takes a swatch.
+	// The colour picker opens on the same row and takes a colour. The hex field
+	// is the part a keyboard-driven test can steer without guessing at cells.
 	if err := term.SendKeys("c"); err != nil {
 		t.Fatalf("open the accent picker: %v", err)
 	}
-	if err := term.WaitForText("magenta", uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "accent") && strings.Contains(text, "hex")
+	}, uiTimeout); err != nil {
 		t.Fatalf("the accent picker did not open: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys("2"); err != nil {
-		t.Fatalf("pick a swatch: %v", err)
+	if err := term.SendKeys("3b82f6"); err != nil {
+		t.Fatalf("type a colour: %v", err)
+	}
+	if err := term.WaitForText("#3b82f6", uiTimeout); err != nil {
+		t.Fatalf("the hex field did not take the typed colour: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("apply the colour: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "magenta") && strings.Contains(s.Text(), "RAILNAME")
+		text := s.Text()
+		return !strings.Contains(text, "hex") && strings.Contains(text, "RAILNAME")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the picker did not close back onto the rail: %v\n%s", err, term.Snapshot())
 	}

@@ -7,31 +7,18 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// An accent is stored as an index into the theme's own ANSI slots, never as a
-// hex value, so a row keeps its identity across a theme switch and stays
-// legible on whatever the new theme paints behind it. Fifteen of the sixteen
-// slots are offered, the eight bright ones first so an index stored before the
-// set grew still means what it meant, then the seven normal ones. Black is
-// skipped: an accent nobody can see is not a choice.
-//
-// A hex entry would nearly double the options and cost the model everything a
-// stored hex cannot do: re-resolve against a new theme, or promise legibility
-// on two grounds in two theme polarities.
+// The fifteen ANSI slots the picker used to offer. They are no longer a way in:
+// the picker reaches the whole colour space now. They stay because a stored
+// accent index means one of them, and an accents file written before the picker
+// grew must keep meaning what it meant. Eight bright slots first, then seven
+// normal ones; black is skipped, since an accent nobody can see is not a choice.
 const accentSwatchCount = 15
 
 // accentBrightCount is how many of the slots are the bright half.
 const accentBrightCount = 8
 
-// accentNames label the swatches. They name the ANSI slot, not the pixels: what
-// "red" looks like is the theme's business. Lowercase, like the rest of the
-// dialog's furniture.
-var accentNames = [accentSwatchCount]string{
-	"gray", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-	"dark red", "dark green", "dark yellow", "dark blue", "dark magenta", "dark cyan", "dark white",
-}
-
-// accentColor resolves an accent index against the live theme: the first eight
-// are ANSI 8-15, the rest ANSI 1-7.
+// accentColor resolves a legacy accent index against the live theme: the first
+// eight are ANSI 8-15, the rest ANSI 1-7.
 func accentColor(idx int) color.Color {
 	pal := theme.GetANSIPalette()
 	idx = clampInt(idx, 0, accentSwatchCount-1)
@@ -49,88 +36,400 @@ func accentMark() string {
 	return "▌"
 }
 
-// WindowAccent returns the accent index a window carries, and whether it has
-// one at all.
-func (m *OS) WindowAccent(windowID string) (int, bool) {
-	idx, ok := m.SidebarAccents[windowID]
-	if !ok || idx < 0 || idx >= accentSwatchCount {
-		return 0, false
-	}
-	return idx, true
+// WindowAccent returns the accent a window carries, and whether it has one.
+func (m *OS) WindowAccent(windowID string) (Accent, bool) {
+	a, ok := m.SidebarAccents[windowID]
+	return a, ok
 }
 
-// SetWindowAccent gives a window an accent, or takes it away with a negative
-// index, and persists the change with the rest of the sidebar's state.
-func (m *OS) SetWindowAccent(windowID string, idx int) {
+// SetWindowAccent gives a window an accent and persists it with the rest of the
+// sidebar's state.
+func (m *OS) SetWindowAccent(windowID string, a Accent) {
 	if windowID == "" {
 		return
 	}
-	if idx < 0 || idx >= accentSwatchCount {
-		delete(m.SidebarAccents, windowID)
-	} else {
-		if m.SidebarAccents == nil {
-			m.SidebarAccents = make(map[string]int, 1)
-		}
-		m.SidebarAccents[windowID] = idx
+	if m.SidebarAccents == nil {
+		m.SidebarAccents = make(map[string]Accent, 1)
 	}
+	m.SidebarAccents[windowID] = a
 	m.saveSidebarState()
 }
 
-// OpenAccentPicker opens the swatch picker for a window, landing on the accent
-// it already has so the picker opens showing the truth.
+// ClearWindowAccent takes a window's accent away.
+func (m *OS) ClearWindowAccent(windowID string) {
+	if windowID == "" {
+		return
+	}
+	delete(m.SidebarAccents, windowID)
+	m.saveSidebarState()
+}
+
+// accentFocus names the part of the picker the keyboard is driving. Tab walks
+// them in this order, which is the order they are drawn in.
+type accentFocus uint8
+
+const (
+	accentFocusHue accentFocus = iota
+	accentFocusGrid
+	accentFocusHex
+	accentFocusHarmony
+	accentFocusCount
+)
+
+// accentGridMaxRows caps the shades grid so the dialog stays a dialog on a tall
+// screen. Lightness is the axis with the least to say per row.
+const accentGridMaxRows = 8
+
+// accentPickerState is the picker's whole model.
+//
+// Cur is what would be applied and what the rail previews. Base is what the
+// harmony chips are computed from, and only the grid, the strip and the hex
+// field move it: walking the chips has to leave the chips where they are, or
+// the row slides out from under the cursor.
+type accentPickerState struct {
+	Hue      float64 // 0..360, the hue the shades grid holds
+	Col, Row int     // cursor in the grid: saturation across, lightness down
+	Cur      color.RGBA
+	Base     color.RGBA
+	Hex      string // the hex field's buffer
+	Harmony  int    // which chip the harmony cursor is on
+	Focus    accentFocus
+	Prev     Accent // what the target wore when the picker opened
+	HadPrev  bool
+}
+
+// accentGridSize is the shades grid's dimensions for the current screen. One
+// function, read by the renderer as it draws and by the keyboard as it moves,
+// so a cursor position always names a cell that exists.
+func (m *OS) accentGridSize() (cols, rows int) {
+	inner := overlay.DialogFitWidth(accentPickerInnerWidth, m.GetRenderWidth())
+	// Body furniture around the grid: the hue strip, a rule, the now line, the
+	// hex line and the harmony line, plus the dialog's two border rows.
+	const furniture = 7
+	return max(inner-2, 1), clampInt(m.GetRenderHeight()-furniture, 1, accentGridMaxRows)
+}
+
+// accentGridLightRange is the lightness the grid's top and bottom rows carry.
+// It stops short of white and black: those are one colour each at every
+// saturation, so a row of either would be a row that says nothing.
+const (
+	accentLightTop    = 0.95
+	accentLightBottom = 0.10
+)
+
+// accentCellColor is the colour of shades-grid cell (col, row) at the held hue:
+// saturation runs left to right, lightness top to bottom.
+func accentCellColor(hue float64, col, row, cols, rows int) color.RGBA {
+	s := 1.0
+	if cols > 1 {
+		s = float64(col) / float64(cols-1)
+	}
+	l := accentLightTop
+	if rows > 1 {
+		l = accentLightTop - float64(row)*(accentLightTop-accentLightBottom)/float64(rows-1)
+	}
+	return hslToRGB(hue, s, l)
+}
+
+// accentCellFor is the grid cell nearest to a colour, which is how a hex the
+// user typed puts the cursor somewhere sensible. A grey carries no hue, so the
+// hue the picker is already holding stands.
+func accentCellFor(c color.RGBA, held float64, cols, rows int) (hue float64, col, row int) {
+	h, s, l := rgbToHSL(c)
+	hue = h
+	if s == 0 {
+		hue = held
+	}
+	if cols > 1 {
+		col = clampInt(int(s*float64(cols-1)+0.5), 0, cols-1)
+	}
+	if rows > 1 {
+		step := (accentLightTop - accentLightBottom) / float64(rows-1)
+		row = clampInt(int((accentLightTop-l)/step+0.5), 0, rows-1)
+	}
+	return hue, col, row
+}
+
+// accentHueAt is the hue the hue strip's cell i stands for.
+func accentHueAt(i, cols int) float64 {
+	if cols <= 1 {
+		return 0
+	}
+	return float64(i) * 360 / float64(cols)
+}
+
+// accentHueCell is the strip cell holding a hue, the inverse of accentHueAt.
+func accentHueCell(hue float64, cols int) int {
+	if cols <= 1 {
+		return 0
+	}
+	return clampInt(int(hue*float64(cols)/360+0.5)%cols, 0, cols-1)
+}
+
+// accentHarmonyCount is how many chips the harmony row carries: the complement,
+// then the two analogous neighbours.
+const accentHarmonyCount = 3
+
+// accentHarmonyRotations are the hue turns the chips apply to the base colour.
+var accentHarmonyRotations = [accentHarmonyCount]float64{180, -30, 30}
+
+// accentHarmonyColor is the harmony chip at index i for the picker's base
+// colour.
+func (s *accentPickerState) harmonyColor(i int) color.RGBA {
+	return rotateHue(s.Base, accentHarmonyRotations[clampInt(i, 0, accentHarmonyCount-1)])
+}
+
+// setCur moves the colour the picker would apply, and with it the base the
+// harmony chips hang off and the text in the hex field.
+func (s *accentPickerState) setCur(c color.RGBA) {
+	s.Cur, s.Base = c, c
+	s.Hex = hexString(c)
+}
+
+// OpenAccentPicker opens the colour picker for a window, landing on the colour
+// it already wears so the picker opens showing the truth.
 func (m *OS) OpenAccentPicker(windowID string) {
 	if windowID == "" {
 		return
 	}
 	m.ShowAccentPicker = true
 	m.AccentPickerWindowID = windowID
-	m.AccentPickerScroll = 0
-	m.AccentPickerSelected = accentSwatchCount // the clear row
-	if idx, ok := m.WindowAccent(windowID); ok {
-		m.AccentPickerSelected = idx
+
+	prev, hadPrev := m.WindowAccent(windowID)
+	start := toRGBA(theme.UI().Accent)
+	if hadPrev {
+		start = prev.RGB()
 	}
+	cols, rows := m.accentGridSize()
+	hue, col, row := accentCellFor(start, 0, cols, rows)
+
+	m.AccentPicker = accentPickerState{
+		Hue: hue, Col: col, Row: row,
+		Focus: accentFocusGrid, Prev: prev, HadPrev: hadPrev,
+	}
+	m.AccentPicker.setCur(start)
 }
 
-// AccentPickerMove moves the picker's selection, clear row included.
-func (m *OS) AccentPickerMove(delta int) {
-	m.AccentPickerSelected = clampInt(m.AccentPickerSelected+delta, 0, accentSwatchCount)
-}
-
-// accentPreview is the slot the rail draws the picker's target in while the
-// picker is open, so the mark on the row shows the choice under the cursor
-// before it is applied. Derived from the picker's own state rather than stored
-// beside it: one fewer thing that can disagree with what is on screen, and the
-// three fields it reads are in the rail's signature, so the preview repaints on
-// the keystrokes that change it and on nothing else.
-func (m *OS) accentPreview(windowID string) (int, bool) {
-	if !m.ShowAccentPicker || windowID == "" || windowID != m.AccentPickerWindowID {
-		return 0, false
-	}
-	if m.AccentPickerSelected < 0 || m.AccentPickerSelected >= accentSwatchCount {
-		return 0, false // the clear row previews no mark at all
-	}
-	return m.AccentPickerSelected, true
-}
-
-// AccentPickerApply commits the row at idx and closes the picker. The row past
-// the swatches is the one that clears.
-func (m *OS) AccentPickerApply(idx int) {
-	if idx < 0 || idx > accentSwatchCount {
-		return
-	}
-	if idx == accentSwatchCount {
-		idx = -1
-	}
-	m.SetWindowAccent(m.AccentPickerWindowID, idx)
-	m.CloseAccentPicker()
-}
-
-// AccentPickerClear drops the target's accent without moving the selection
-// there first, which is what the picker's clear key does.
-func (m *OS) AccentPickerClear() { m.AccentPickerApply(accentSwatchCount) }
-
-// CloseAccentPicker dismisses the picker, changing nothing.
+// CloseAccentPicker dismisses the picker, changing nothing. Cancelling needs no
+// restore step: nothing is written until the picker is applied, and the rail's
+// preview is derived from this state, so dropping the state is the revert.
 func (m *OS) CloseAccentPicker() {
 	m.ShowAccentPicker = false
 	m.AccentPickerWindowID = ""
+	m.AccentPicker = accentPickerState{}
+	m.accentHits = m.accentHits[:0]
+}
+
+// accentPreview is the accent the rail draws the picker's target in while the
+// picker is open, so the colour under the cursor shows on the thing being
+// accented before it is applied. Derived from the picker's own state rather
+// than stored beside it: one fewer thing that can disagree with what is on
+// screen, and the fields it reads are in the rail's signature, so the preview
+// repaints on the keystrokes that change it and on nothing else.
+func (m *OS) accentPreview(windowID string) (Accent, bool) {
+	if !m.ShowAccentPicker || windowID == "" || windowID != m.AccentPickerWindowID {
+		return Accent{}, false
+	}
+	return RGBAccent(m.AccentPicker.Cur), true
+}
+
+// AccentPickerApply commits the colour under the cursor and closes the picker.
+func (m *OS) AccentPickerApply() {
+	if !m.ShowAccentPicker {
+		return
+	}
+	m.SetWindowAccent(m.AccentPickerWindowID, RGBAccent(m.AccentPicker.Cur))
+	m.CloseAccentPicker()
+}
+
+// AccentPickerClear drops the target's accent and closes the picker.
+func (m *OS) AccentPickerClear() {
+	if !m.ShowAccentPicker {
+		return
+	}
+	m.ClearWindowAccent(m.AccentPickerWindowID)
+	m.CloseAccentPicker()
+}
+
+// AccentPickerFocus moves the keyboard between the picker's four controls,
+// wrapping in both directions. Landing on the harmony row takes its chip as the
+// current colour; leaving it hands the colour back to the grid cursor, so the
+// preview always shows the thing the focused control is pointing at.
+func (m *OS) AccentPickerFocus(delta int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	s := &m.AccentPicker
+	n := int(accentFocusCount)
+	s.Focus = accentFocus(((int(s.Focus)+delta)%n + n) % n)
+	switch s.Focus {
+	case accentFocusHarmony:
+		s.Cur = s.harmonyColor(s.Harmony)
+		s.Hex = hexString(s.Cur)
+	case accentFocusGrid, accentFocusHue:
+		cols, rows := m.accentGridSize()
+		s.setCur(accentCellColor(s.Hue, s.Col, s.Row, cols, rows))
+	}
+}
+
+// AccentPickerMove takes one step in the focused control. The keyboard sends a
+// direction and the picker decides what it means: along the hue circle, across
+// the shades grid, or between the harmony chips. The hex field has no caret to
+// move (typing appends, backspace deletes), so a step there drives the grid and
+// rewrites the field from the cell it lands on.
+func (m *OS) AccentPickerMove(dx, dy int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	switch m.AccentPicker.Focus {
+	case accentFocusHue:
+		m.AccentPickerMoveHue(dx + dy)
+	case accentFocusHarmony:
+		m.AccentPickerMoveHarmony(dx + dy)
+	default:
+		m.AccentPickerMoveCell(dx, dy)
+	}
+}
+
+// AccentPickerClearKey is the clear key. It does nothing while the hex field
+// has the keyboard, where the same keystroke was meant for the buffer.
+func (m *OS) AccentPickerClearKey() {
+	if m.ShowAccentPicker && m.AccentPicker.Focus != accentFocusHex {
+		m.AccentPickerClear()
+	}
+}
+
+// AccentPickerMoveCell moves the shades-grid cursor. The grid is clamped rather
+// than wrapped: the corners are meaningful colours, and a cursor that jumped
+// from the palest to the darkest row would lose the user's place.
+func (m *OS) AccentPickerMoveCell(dx, dy int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	cols, rows := m.accentGridSize()
+	s := &m.AccentPicker
+	m.AccentPickerCell(clampInt(s.Col+dx, 0, cols-1), clampInt(s.Row+dy, 0, rows-1))
+}
+
+// AccentPickerCell puts the shades-grid cursor on a cell and takes its colour.
+func (m *OS) AccentPickerCell(col, row int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	cols, rows := m.accentGridSize()
+	s := &m.AccentPicker
+	s.Focus = accentFocusGrid
+	s.Col, s.Row = clampInt(col, 0, cols-1), clampInt(row, 0, rows-1)
+	s.setCur(accentCellColor(s.Hue, s.Col, s.Row, cols, rows))
+}
+
+// AccentPickerMoveHue turns the held hue by whole strip cells, wrapping: the
+// strip is a circle, so running off one end and coming back on the other is
+// what the colour actually does.
+func (m *OS) AccentPickerMoveHue(delta int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	cols, _ := m.accentGridSize()
+	at := (accentHueCell(m.AccentPicker.Hue, cols) + delta%cols + cols) % cols
+	m.AccentPickerHueCell(at)
+}
+
+// AccentPickerHueCell holds a new hue, keeping the grid cursor where it is so
+// the same saturation and lightness carry across the change.
+func (m *OS) AccentPickerHueCell(i int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	cols, rows := m.accentGridSize()
+	s := &m.AccentPicker
+	s.Focus = accentFocusHue
+	s.Hue = accentHueAt(clampInt(i, 0, cols-1), cols)
+	s.setCur(accentCellColor(s.Hue, s.Col, s.Row, cols, rows))
+}
+
+// AccentPickerHarmonyAt puts the harmony cursor on a chip and takes its colour.
+func (m *OS) AccentPickerHarmonyAt(i int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	s := &m.AccentPicker
+	s.Focus = accentFocusHarmony
+	s.Harmony = clampInt(i, 0, accentHarmonyCount-1)
+	s.Cur = s.harmonyColor(s.Harmony)
+	s.Hex = hexString(s.Cur)
+}
+
+// AccentPickerMoveHarmony walks the harmony chips.
+func (m *OS) AccentPickerMoveHarmony(delta int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	m.AccentPickerHarmonyAt(m.AccentPicker.Harmony + delta)
+}
+
+// AccentPickerFocusHex puts the keyboard in the hex field.
+func (m *OS) AccentPickerFocusHex() {
+	if m.ShowAccentPicker {
+		m.AccentPicker.Focus = accentFocusHex
+	}
+}
+
+// AccentPickerHexKey appends a character to the hex field and reports whether
+// the field took it. A buffer that parses is adopted at once, which is what
+// makes typing a hex converge on the same colour walking the grid reaches: the
+// grid cursor and the held hue both move to the cell nearest what was typed.
+func (m *OS) AccentPickerHexKey(r rune) bool {
+	if !m.ShowAccentPicker {
+		return false
+	}
+	if r == '#' {
+		m.accentPickerSetHex("#")
+		return true
+	}
+	if !isHexDigit(r) {
+		return false
+	}
+	digits := hexDigitsOf(m.AccentPicker.Hex)
+	if len(digits) >= 6 {
+		digits = "" // a seventh digit starts the next colour rather than being dropped
+	}
+	m.accentPickerSetHex("#" + digits + string(r))
+	return true
+}
+
+// AccentPickerHexBackspace deletes the last hex digit.
+func (m *OS) AccentPickerHexBackspace() {
+	if !m.ShowAccentPicker {
+		return
+	}
+	digits := hexDigitsOf(m.AccentPicker.Hex)
+	if digits == "" {
+		return
+	}
+	m.accentPickerSetHex("#" + digits[:len(digits)-1])
+}
+
+// accentPickerSetHex installs a hex buffer and, when it names a colour, takes
+// it: the grid cursor and the held hue move to the nearest cell so every part
+// of the dialog agrees on what is selected.
+func (m *OS) accentPickerSetHex(buf string) {
+	s := &m.AccentPicker
+	s.Focus = accentFocusHex
+	s.Hex = buf
+	c, ok := parseHexColor(buf)
+	if !ok {
+		return
+	}
+	cols, rows := m.accentGridSize()
+	s.Cur, s.Base = c, c
+	s.Hue, s.Col, s.Row = accentCellFor(c, s.Hue, cols, rows)
+}
+
+// hexDigitsOf strips the leading hash from a hex buffer.
+func hexDigitsOf(buf string) string {
+	if len(buf) > 0 && buf[0] == '#' {
+		return buf[1:]
+	}
+	return buf
 }

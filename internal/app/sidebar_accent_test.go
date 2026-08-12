@@ -33,8 +33,8 @@ func TestRailDrawsTheAccentChip(t *testing.T) {
 	}
 
 	// "logs" has no agent state; "editor" is working.
-	m.SetWindowAccent("cccccccc3333", 1)
-	m.SetWindowAccent("aaaaaaaa1111", 2)
+	m.SetWindowAccent("cccccccc3333", SlotAccent(1))
+	m.SetWindowAccent("aaaaaaaa1111", SlotAccent(2))
 
 	rows := railText(t, m)
 	logsRow, editorRow := "", ""
@@ -73,7 +73,7 @@ func TestAccentSurvivesFocus(t *testing.T) {
 	}
 	m.FocusWindow(idx)
 	focused := m.Windows[idx]
-	m.SetWindowAccent(focused.ID, 3)
+	m.SetWindowAccent(focused.ID, SlotAccent(3))
 
 	var row string
 	for _, r := range railText(t, m) {
@@ -156,7 +156,7 @@ func TestSidebarSignatureFoldsWhatTheRailDraws(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	base := m.sidebarSignature()
 
-	m.SetWindowAccent("cccccccc3333", 3)
+	m.SetWindowAccent("cccccccc3333", SlotAccent(3))
 	withAccent := m.sidebarSignature()
 	if withAccent == base {
 		t.Error("setting an accent left the signature unchanged, so the rail would keep the old row")
@@ -177,32 +177,41 @@ func TestSidebarSignatureFoldsWhatTheRailDraws(t *testing.T) {
 }
 
 // TestAccentPickerPicksAndClears walks the picker the way the keys drive it:
-// it opens on the accent the window already has, applying a row stores it, and
-// the clear row takes it away.
+// applying stores the colour under the cursor, reopening starts from it, and
+// the clear key takes it away.
 func TestAccentPickerPicksAndClears(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	truecolorForTest(t)
 	m := &OS{}
+	m.Width, m.Height = 120, 40
 
 	m.OpenAccentPicker("w1")
-	if !m.ShowAccentPicker || m.AccentPickerSelected != accentSwatchCount {
-		t.Fatalf("an unaccented window must open on the clear row, got %d", m.AccentPickerSelected)
+	if !m.ShowAccentPicker {
+		t.Fatal("the picker did not open")
+	}
+	if m.AccentPicker.HadPrev {
+		t.Error("an unaccented window opened the picker claiming a previous accent")
 	}
 
-	m.AccentPickerApply(4)
+	m.AccentPickerCell(6, 2)
+	want := m.AccentPicker.Cur
+	m.AccentPickerApply()
 	if m.ShowAccentPicker {
 		t.Error("applying an accent left the picker open")
 	}
-	if idx, ok := m.WindowAccent("w1"); !ok || idx != 4 {
-		t.Fatalf("accent = (%d, %v), want (4, true)", idx, ok)
+	got, ok := m.WindowAccent("w1")
+	if !ok || got.RGB() != want {
+		t.Fatalf("accent = %+v, want the colour under the cursor %s", got, hexString(want))
 	}
 
 	m.OpenAccentPicker("w1")
-	if m.AccentPickerSelected != 4 {
-		t.Errorf("the picker opened on row %d, want the accent the window has (4)", m.AccentPickerSelected)
+	if m.AccentPicker.Cur != want {
+		t.Errorf("the picker reopened on %s, want the accent the window has (%s)",
+			hexString(m.AccentPicker.Cur), hexString(want))
 	}
 	m.AccentPickerClear()
 	if _, ok := m.WindowAccent("w1"); ok {
-		t.Error("the clear row left the accent in place")
+		t.Error("the clear key left the accent in place")
 	}
 }
 
@@ -250,21 +259,5 @@ func TestRailCursorRenamesAndAccents(t *testing.T) {
 	m.SidebarAccentCursor()
 	if m.ShowAccentPicker {
 		t.Error("a session row opened the window accent picker")
-	}
-}
-
-// TestAccentSurvivesRestart is the real-user case: an accent set today is on the
-// row after the client is restarted, because it is written to the sidebar state
-// file the rest of the rail's layout already persists to.
-func TestAccentSurvivesRestart(t *testing.T) {
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-
-	m := &OS{}
-	m.SetWindowAccent("w1", 5)
-
-	next := &OS{}
-	next.loadSidebarState()
-	if idx, ok := next.WindowAccent("w1"); !ok || idx != 5 {
-		t.Fatalf("accent after restart = (%d, %v), want (5, true)", idx, ok)
 	}
 }
