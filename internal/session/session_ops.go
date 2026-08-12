@@ -302,6 +302,27 @@ func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 	})
 }
 
+// SetDaemonWorkspaceName sets workspace ws's optional label, or clears it when
+// name is empty. Clearing deletes the entry rather than storing an empty string,
+// so an unnamed workspace leaves no trace in serialized state and reads back the
+// way it did before workspaces could be named.
+func (s *Session) SetDaemonWorkspaceName(ws int, name string) error {
+	return s.mutateState(func(state *SessionState) error {
+		if ws < 1 || ws > state.workspaceBound() {
+			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+		}
+		if name == "" {
+			delete(state.WorkspaceNames, ws)
+			return nil
+		}
+		if state.WorkspaceNames == nil {
+			state.WorkspaceNames = make(map[int]string)
+		}
+		state.WorkspaceNames[ws] = name
+		return nil
+	})
+}
+
 // SwitchDaemonWorkspace sets the current workspace, restoring that workspace's
 // last-focused window when one is recorded.
 func (s *Session) SwitchDaemonWorkspace(ws int) error {

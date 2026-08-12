@@ -507,6 +507,29 @@ func (d *Daemon) verbSetSessionAccent(_ *connState, params json.RawMessage) (any
 	return map[string]any{"type": "session_accent_set", "session": sess.Name, "accent": accent}, nil
 }
 
+func (d *Daemon) verbSetWorkspaceName(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session   string `json:"session"`
+		Workspace int    `json:"workspace"`
+		Name      string `json:"name"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Workspace == 0 {
+		return nil, invalidParam("workspace", "workspace is required and is the workspace number, e.g. 1")
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	name := strings.TrimSpace(p.Name)
+	if err := sess.SetDaemonWorkspaceName(p.Workspace, name); err != nil {
+		return nil, invalidParam("workspace", err.Error())
+	}
+	return map[string]any{"type": "workspace_name_set", "workspace": p.Workspace, "name": name}, nil
+}
+
 func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`

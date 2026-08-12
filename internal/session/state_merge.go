@@ -35,6 +35,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.Accent == "" {
 		incoming.Accent = canonical.Accent
 	}
+	if incoming.WorkspaceNames == nil {
+		incoming.WorkspaceNames = canonical.WorkspaceNames
+	}
 	if incoming.ResurrectionVersion == 0 {
 		incoming.ResurrectionVersion = canonical.ResurrectionVersion
 	}

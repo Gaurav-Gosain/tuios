@@ -310,6 +310,16 @@ func init() {
 			examples: []string{`{"id":1,"verb":"set-session-accent","params":{"session":"work","accent":"cyan"}}`},
 			handler:  (*Daemon).verbSetSessionAccent,
 		},
+		"set-workspace-name": {
+			description: "Name a workspace. The number stays the workspace's identity and is the label an unnamed workspace shows.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Required: true, Description: "Workspace number to name."},
+				{Name: "name", Type: "string", Description: "Label for the workspace. Omit or pass an empty string to clear it and fall back to the number."},
+			},
+			examples: []string{`{"id":1,"verb":"set-workspace-name","params":{"session":"work","workspace":2,"name":"review"}}`},
+			handler:  (*Daemon).verbSetWorkspaceName,
+		},
 		"set-agent-state": {
 			description: "Set the agent state a window's pane reports (working, needs_input, idle, done, errored, or none to clear). A pane reports its own state by calling this against the daemon socket.",
 			params: []verbParam{

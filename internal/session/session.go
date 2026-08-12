@@ -139,6 +139,14 @@ type SessionState struct {
 	//
 	// BSP tiling state
 
+	// WorkspaceNames maps a workspace number to its optional label. The number
+	// stays the workspace's identity and its fallback label: everything that
+	// addresses a workspace (the window's Workspace field, WorkspaceFocus,
+	// WorkspaceTrees, the verbs, TUIOS_WORKSPACE) keeps using the number, and a
+	// workspace with no entry here is unnamed and renders as its number, exactly
+	// as every workspace did before this existed. Naming one is a daemon-owned
+	// change so it survives a reattach and every attached client sees it.
+	WorkspaceNames  map[int]string             `json:"workspace_names,omitempty"`
 	WorkspaceTrees  map[int]*SerializedBSPTree `json:"workspace_trees,omitempty"`  // BSP tree per workspace
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`
@@ -717,6 +725,10 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	if s.state.Options != nil {
 		stateCopy.Options = make(map[string]string, len(s.state.Options))
 		maps.Copy(stateCopy.Options, s.state.Options)
+	}
+	if s.state.WorkspaceNames != nil {
+		stateCopy.WorkspaceNames = make(map[int]string, len(s.state.WorkspaceNames))
+		maps.Copy(stateCopy.WorkspaceNames, s.state.WorkspaceNames)
 	}
 	return &stateCopy
 }
