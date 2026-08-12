@@ -223,6 +223,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "quit", content, geo, rows)
 	}
 
+	if m.ShowSessionClose {
+		content, geo, rows := m.renderSessionClose()
+		layers = m.placeOverlayPanel(layers, "sessionclose", content, geo, rows)
+	}
+
 	if m.ShowHelp {
 		content, geo := m.RenderHelpMenu()
 		layers = m.placeOverlayPanel(layers, "help", content, geo, nil)

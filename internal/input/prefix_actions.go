@@ -51,6 +51,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_explore", handleToggleFocusSidebar)
 	d.Register("prefix_jump_notif", handlePrefixJumpNotif)
 	d.Register("prefix_detach", handlePrefixDetach)
+	d.Register("prefix_close_session", handlePrefixCloseSession)
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
 	d.Register("prefix_quit", handlePrefixQuit)
 
@@ -344,6 +345,14 @@ func handlePrefixDetach(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Outside a daemon session there is nothing to detach from, so the closest
 	// useful thing is to step back out to window-management mode.
 	leaveTerminalMode(o)
+	return o, nil
+}
+
+// handlePrefixCloseSession is the keyboard twin of the dock's recessed control.
+// It raises the same confirmation rather than closing outright, so the two
+// devices cannot disagree about how much warning the action carries.
+func handlePrefixCloseSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenSessionClose()
 	return o, nil
 }
 

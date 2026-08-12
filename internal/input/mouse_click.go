@@ -83,6 +83,19 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.OpenContextMenu(X, Y)
 			return o, nil
 		}
+		// The session controls are the bar's outermost block and are tested
+		// first. Leaving happens on the click; closing only ever raises its
+		// confirmation, whatever the session is holding.
+		switch o.DockSessionActionAt(X, Y) {
+		case app.DockSessionLeave:
+			if m, cmd, detached := detachSession(o); detached {
+				return m, cmd
+			}
+			return o, nil
+		case app.DockSessionClose:
+			o.OpenSessionClose()
+			return o, nil
+		}
 		// The message block owns its own columns at the bar's right-hand end,
 		// ahead of the dock items: its body jumps to the pane the message came
 		// from, its right-hand end dismisses.

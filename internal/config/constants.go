@@ -240,6 +240,15 @@ var (
 	// DockIconWorkspaceCount is the icon for workspace count (Nerd Font: nf-fa-th_large - 2x2 grid)
 	DockIconWorkspaceCount string
 
+	// DockIconLeaveRunning is the icon for the control that quits this client and
+	// leaves the session up (Nerd Font: nf-fa-sign_out). The desktop metaphor is
+	// carried by the glyph so the label next to it can stay plain.
+	DockIconLeaveRunning string
+
+	// DockIconCloseSession is the icon for the control that ends the session and
+	// everything in it (Nerd Font: nf-fa-power_off).
+	DockIconCloseSession string
+
 	// DockSeparator is the separator between dock sections
 	DockSeparator = "  " // Two spaces for breathing room
 
@@ -257,6 +266,8 @@ func init() {
 	DockModeIconTiling = " " + fa.Th.String() + " "
 	DockIconTerminalCount = fa.Terminal.String()
 	DockIconWorkspaceCount = fa.ThLarge.String()
+	DockIconLeaveRunning = fa.SignOut.String()
+	DockIconCloseSession = fa.PowerOff.String()
 	WindowPillLeft = ple.LeftHalfCircleThick.String()
 	WindowPillRight = ple.RightHalfCircleThick.String()
 	NotificationGlyphError = fa.TimesCircle.String()
@@ -292,6 +303,15 @@ const (
 
 	// DockIconWorkspaceCountASCII is the ASCII fallback for workspace count
 	DockIconWorkspaceCountASCII = "ws"
+
+	// DockIconLeaveRunningASCII is the ASCII fallback for the leave-running
+	// control. One cell, like the glyph it stands in for, so the strip's columns
+	// do not move with the font.
+	DockIconLeaveRunningASCII = "<"
+
+	// DockIconCloseSessionASCII is the ASCII fallback for the close-session
+	// control.
+	DockIconCloseSessionASCII = "X"
 
 	// DockSeparatorASCII is the ASCII fallback separator
 	DockSeparatorASCII = " | "
@@ -733,6 +753,22 @@ func GetDockIconWorkspaceCount() string {
 		return DockIconWorkspaceCountASCII
 	}
 	return DockIconWorkspaceCount
+}
+
+// GetDockIconLeaveRunning returns the leave-running icon for the current glyph set.
+func GetDockIconLeaveRunning() string {
+	if UseASCIIOnly {
+		return DockIconLeaveRunningASCII
+	}
+	return DockIconLeaveRunning
+}
+
+// GetDockIconCloseSession returns the close-session icon for the current glyph set.
+func GetDockIconCloseSession() string {
+	if UseASCIIOnly {
+		return DockIconCloseSessionASCII
+	}
+	return DockIconCloseSession
 }
 
 // GetDockSeparator returns the appropriate separator based on UseASCIIOnly

@@ -344,7 +344,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		"prefix_select_3", "prefix_select_4", "prefix_select_5",
 		"prefix_select_6", "prefix_select_7", "prefix_select_8", "prefix_select_9",
 		"prefix_toggle_tiling", "prefix_workspace", "prefix_minimize",
-		"prefix_window", "prefix_detach", "prefix_selection",
+		"prefix_window", "prefix_detach", "prefix_close_session", "prefix_selection",
 		"prefix_help", "prefix_quit", "prefix_fullscreen", "prefix_settings",
 		"prefix_split_horizontal", "prefix_split_vertical", "prefix_rotate_split",
 		"prefix_equalize_splits", "prefix_layout",

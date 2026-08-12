@@ -91,6 +91,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"b", "Toggle sidebar"},
 			{"e", "Focus/leave sidebar"},
 			{"j", "Jump to newest message"},
+			{"X", "Close session"},
 		}
 
 		// In daemon mode, d and Esc have different behaviors

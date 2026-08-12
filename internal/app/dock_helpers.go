@@ -182,17 +182,22 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	layout.WorkspaceTabs = m.buildDockWorkspaceTabs()
 	layout.LeftWidth += dockWorkspaceTabsWidth(layout.WorkspaceTabs)
 
+	// The session controls hold the bar's right-hand end and never give any of it
+	// up, so everything else is laid out against what they leave rather than
+	// against the screen.
+	barWidth := max(m.GetRenderWidth()-m.dockSessionStripWidth(), 0)
+
 	// Calculate right side width. The estimate below is what the right block
 	// would like; on a narrow screen it is capped at what the left block leaves,
 	// otherwise the two together are wider than the dock and the right-hand end
 	// (the system stats, or the copy-mode help) is drawn off the screen.
-	layout.RightWidth = min(m.calculateDockRightWidth(), max(m.GetRenderWidth()-layout.LeftWidth, 0))
+	layout.RightWidth = min(m.calculateDockRightWidth(), max(barWidth-layout.LeftWidth, 0))
 
 	// Get all dock items
 	allItems := m.getDockItems()
 
 	// Calculate how many items fit and their positions
-	layout.calculateItemPositions(m.GetRenderWidth(), allItems)
+	layout.calculateItemPositions(barWidth, allItems)
 
 	return layout
 }

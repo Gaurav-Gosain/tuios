@@ -172,6 +172,13 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.DismissNotifications()
 	}
 
+	// The close confirmation outranks even the quit menu: it is the last thing
+	// between a keystroke and a session that cannot be brought back, so nothing
+	// underneath may answer for it.
+	if o.ShowSessionClose {
+		return handleSessionCloseInput(msg, o)
+	}
+
 	// Handle the quit menu (highest priority - works in any mode)
 	if o.ShowQuitMenu {
 		return handleQuitMenuKey(msg, o)

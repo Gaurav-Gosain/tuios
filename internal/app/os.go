@@ -210,6 +210,8 @@ type OS struct {
 	notifHit              notifHitZones          // where the message block was drawn last frame
 	dockWorkspaceHits     []dockWorkspaceHit     // where the dock's workspace tabs were drawn last frame
 	dockItemHits          []dockItemHit          // where the dock's minimized entries were drawn last frame
+	dockSessionHits       []dockSessionHit       // where the dock's session controls were drawn last frame
+	dockSessionHover      DockSessionAction      // which session control the pointer is on, DockSessionNone for neither
 	SelectionMode         bool                   // True when in text selection mode
 	ClipboardContent      string                 // Store clipboard content from tea.ClipboardMsg
 	ShowCacheStats        bool                   // True when showing style cache statistics overlay
@@ -223,6 +225,11 @@ type OS struct {
 	QuitMenuScroll        int
 	QuitMenuItems         []QuitMenuItem
 	QuitMenuOtherSessions []string // non-current sessions at open time; [0] is the kill-and-go-next target
+	// Close-session confirmation, the micro-dialog the dock's recessed control
+	// and ctrl+b X both raise. Its rows are fixed, so only the selection is
+	// state; what it says about the session is counted as it draws.
+	ShowSessionClose     bool
+	SessionCloseSelected int
 	// Pending resize tracking for debouncing PTY resize during mouse drag
 	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
 	// pendingCopy is text a settled multi-click selection will put on the
