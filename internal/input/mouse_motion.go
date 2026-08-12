@@ -144,7 +144,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Handle scrollbar drag
 	if o.ScrollbarDragging && o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
 		win := o.Windows[o.ScrollbarDragWindowIndex]
-		scrollToPosition(win, mouse.Y)
+		scrollToThumbRow(win, mouse.Y-o.ScrollbarGrabOffset)
 		return o, nil
 	}
 

@@ -1,14 +1,17 @@
 package app
 
 import (
+	"image/color"
+	"math"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // fillScrollback pushes enough lines through the emulator that the pane has a
@@ -39,6 +42,22 @@ func scrollBack(t *testing.T, win *terminal.Window, offset int) {
 	win.ScrollbackOffset = offset
 }
 
+// scrollbarDefaults pins the globals the bar reads to a fresh install's for the
+// duration of a test. They are process-wide, and the package's other tests move
+// several of them (ASCII, border style) on their way past.
+func scrollbarDefaults(t *testing.T) {
+	t.Helper()
+	ascii, border, hide := config.UseASCIIOnly, config.BorderStyle, config.HideScrollbar
+	style, thumb, track, tint := config.ScrollbarStyle, config.ScrollbarThumb, config.ScrollbarTrack, config.ScrollbarTint
+	t.Cleanup(func() {
+		config.UseASCIIOnly, config.BorderStyle, config.HideScrollbar = ascii, border, hide
+		config.ScrollbarStyle, config.ScrollbarThumb, config.ScrollbarTrack, config.ScrollbarTint = style, thumb, track, tint
+	})
+	config.UseASCIIOnly, config.BorderStyle, config.HideScrollbar = false, "rounded", false
+	config.ScrollbarStyle, config.ScrollbarThumb, config.ScrollbarTrack = config.ScrollbarStyleThin, "", ""
+	config.ScrollbarTint = config.ScrollbarTintBorder
+}
+
 // withSharedBorders sets config.SharedBorders for the duration of fn.
 func withSharedBorders(t *testing.T, shared bool, fn func()) {
 	t.Helper()
@@ -48,11 +67,92 @@ func withSharedBorders(t *testing.T, shared bool, fn func()) {
 	fn()
 }
 
+// withScrollbarStyle sets config.ScrollbarStyle for the duration of fn.
+func withScrollbarStyle(t *testing.T, style string, fn func()) {
+	t.Helper()
+	prev := config.ScrollbarStyle
+	config.ScrollbarStyle = style
+	defer func() { config.ScrollbarStyle = prev }()
+	fn()
+}
+
+// withScrollbarTint sets config.ScrollbarTint for the duration of fn.
+func withScrollbarTint(t *testing.T, tint string, fn func()) {
+	t.Helper()
+	prev := config.ScrollbarTint
+	config.ScrollbarTint = tint
+	defer func() { config.ScrollbarTint = prev }()
+	fn()
+}
+
+// barFrame composes the bar the way the compositor does and returns the frame's
+// rows. Every visual claim below is read off this rather than off the
+// arithmetic that produced it: the bar is one column of glyphs on a frame, and
+// that is where a bug in it shows.
+func barFrame(t *testing.T, m *OS, win *terminal.Window, focused bool) []string {
+	t.Helper()
+	layer := m.renderScrollbarLayer(win, 1000, 1, focused)
+	if layer == nil {
+		t.Fatal("a scrolled-back pane produced no bar")
+	}
+	canvas := lipgloss.NewCanvas(win.X+win.Width+1, win.Y+win.Height+1)
+	canvas.Compose(lipgloss.NewCompositor(layer))
+	return strings.Split(canvas.Render(), "\n")
+}
+
+// barGlyphs returns what the frame shows in the bar's column, one entry per
+// viewport row, styling stripped.
+func barGlyphs(t *testing.T, frame []string, win *terminal.Window) []string {
+	t.Helper()
+	x := scrollbarColumn(win)
+	top := win.Y + win.BorderOffset()
+	glyphs := make([]string, win.ContentHeight())
+	for i := range glyphs {
+		row := []rune(ansi.Strip(frame[top+i]))
+		glyphs[i] = " " // a row the bar left untouched shows the guest's own cell
+		if x < len(row) {
+			glyphs[i] = string(row[x])
+		}
+	}
+	return glyphs
+}
+
+// sgrOf returns the SGR parameters lipgloss writes for a colour, foreground or
+// background. A composed frame folds several attributes into one escape, so the
+// parameters are what a cell can be searched for, not the whole sequence.
+func sgrOf(c color.Color, background bool) string {
+	style := lipgloss.NewStyle().Foreground(c)
+	if background {
+		style = lipgloss.NewStyle().Background(c)
+	}
+	rendered := style.Render("X")
+	return strings.TrimSuffix(strings.TrimPrefix(rendered[:strings.Index(rendered, "X")], "\x1b["), "m")
+}
+
+// drawnIn reports whether a rendered cell carries a colour, matching only on a
+// parameter boundary so one colour cannot be read as the prefix of another.
+func drawnIn(cell string, c color.Color, background bool) bool {
+	sgr := sgrOf(c, background)
+	return strings.Contains(cell, sgr+"m") || strings.Contains(cell, sgr+";")
+}
+
+// barInk reports whether the frame draws the thumb in a colour, on the row the
+// renderer recorded it on.
+func barInk(t *testing.T, m *OS, win *terminal.Window, frame []string, c color.Color) bool {
+	t.Helper()
+	rect, ok := m.ScrollbarHit(win)
+	if !ok {
+		t.Fatal("the drawn bar recorded no rect to read the thumb's row from")
+	}
+	return drawnIn(frame[rect.ThumbY], c, false)
+}
+
 // The thumb is a position readout, so it exists exactly while there is a
 // position to read. A bar pinned to the bottom of every pane with history is
 // permanent chrome that says nothing, and it was the only reason a lone pane at
 // the live tail fell off the fullscreen fast path.
 func TestScrollbarAppearsOnlyWhileScrolledBack(t *testing.T) {
+	scrollbarDefaults(t)
 	win := newTestWindow(t, "sbvis-0001", 60, 20)
 	fillScrollback(t, win, 200)
 
@@ -73,11 +173,12 @@ func TestScrollbarAppearsOnlyWhileScrolledBack(t *testing.T) {
 }
 
 // The column is the whole point of the redesign: one formula, every mode. A
-// bordered pane puts the thumb one in from its right border; a borderless pane
+// bordered pane puts the bar one in from its right border; a borderless pane
 // under shared borders puts it on its own rightmost cell, one in from the
 // separator overlay that lives in the gap between rectangles. Neither ever
 // paints a border cell, which is why the two now coexist.
 func TestScrollbarSitsInTheLastContentColumn(t *testing.T) {
+	scrollbarDefaults(t)
 	cases := []struct {
 		name        string
 		tiled       bool
@@ -98,6 +199,7 @@ func TestScrollbarSitsInTheLastContentColumn(t *testing.T) {
 			win.Zoomed = strings.Contains(tc.name, "zoomed")
 			fillScrollback(t, win, 200)
 			scrollBack(t, win, 100)
+			m := newTestOS(win)
 
 			if tc.borderStyle != "" {
 				prev := config.BorderStyle
@@ -106,17 +208,17 @@ func TestScrollbarSitsInTheLastContentColumn(t *testing.T) {
 			}
 
 			withSharedBorders(t, tc.shared, func() {
-				layer := renderScrollbarLayer(win, 1000, 1)
+				layer := m.renderScrollbarLayer(win, 1000, 1, true)
 				if layer == nil {
-					t.Fatal("no thumb layer for a scrolled-back pane")
+					t.Fatal("no bar layer for a scrolled-back pane")
 				}
 				wantX := win.X + win.Width - 1 - win.BorderOffset()
 				if layer.GetX() != wantX {
-					t.Errorf("thumb at column %d, want the last content column %d", layer.GetX(), wantX)
+					t.Errorf("bar at column %d, want the last content column %d", layer.GetX(), wantX)
 				}
 				// Never the border cell, and never outside the rectangle.
 				if layer.GetX() >= win.X+win.Width-win.BorderOffset() {
-					t.Errorf("thumb at %d overlaps the pane's right border cell", layer.GetX())
+					t.Errorf("bar at %d overlaps the pane's right border cell", layer.GetX())
 				}
 			})
 		})
@@ -124,29 +226,32 @@ func TestScrollbarSitsInTheLastContentColumn(t *testing.T) {
 }
 
 // A pane mid-drag may straddle the sidebar band. The band composes above the
-// pane's own layer, but the thumb is composed above the band, so it has to be
+// pane's own layer, but the bar is composed above the band, so it has to be
 // clipped by hand or it pokes through.
 func TestScrollbarIsClippedToTheContentRegion(t *testing.T) {
+	scrollbarDefaults(t)
 	win := newTestWindow(t, "sbclip-0001", 60, 20)
 	win.X = 30
 	fillScrollback(t, win, 200)
 	scrollBack(t, win, 100)
+	m := newTestOS(win)
 
-	thumbX := win.X + win.Width - 1 - win.BorderOffset()
-	if layer := renderScrollbarLayer(win, thumbX, 1); layer != nil {
-		t.Errorf("thumb drawn at %d with the band starting at %d: it would land in the rail",
-			layer.GetX(), thumbX)
+	barX := win.X + win.Width - 1 - win.BorderOffset()
+	if layer := m.renderScrollbarLayer(win, barX, 1, true); layer != nil {
+		t.Errorf("bar drawn at %d with the band starting at %d: it would land in the rail",
+			layer.GetX(), barX)
 	}
-	if layer := renderScrollbarLayer(win, thumbX+1, 1); layer == nil {
-		t.Error("thumb withheld when its column is the last one inside the content region")
+	if layer := m.renderScrollbarLayer(win, barX+1, 1, true); layer == nil {
+		t.Error("bar withheld when its column is the last one inside the content region")
 	}
 }
 
 // windowNeedsScrollbar is consulted by four render paths (compositor cached,
-// sync-hold, redraw, fullscreen fast path) to decide whether a thumb exists,
+// sync-hold, redraw, fullscreen fast path) to decide whether a bar exists,
 // while renderScrollbarLayer is what actually draws it. If the two disagree,
 // the layout believes something the screen does not show.
 func TestScrollbarLayerAgreesWithWindowNeedsScrollbar(t *testing.T) {
+	scrollbarDefaults(t)
 	type variant struct {
 		name          string
 		tiled, shared bool
@@ -175,6 +280,7 @@ func TestScrollbarLayerAgreesWithWindowNeedsScrollbar(t *testing.T) {
 			if v.scrolled > 0 {
 				scrollBack(t, win, v.scrolled)
 			}
+			m := newTestOS(win)
 
 			prevHide, prevStyle := config.HideScrollbar, config.BorderStyle
 			config.HideScrollbar = v.hide
@@ -187,10 +293,10 @@ func TestScrollbarLayerAgreesWithWindowNeedsScrollbar(t *testing.T) {
 
 			withSharedBorders(t, v.shared, func() {
 				need := windowNeedsScrollbar(win)
-				layer := renderScrollbarLayer(win, 1000, 1)
+				layer := m.renderScrollbarLayer(win, 1000, 1, true)
 				if need != (layer != nil) {
 					t.Fatalf("windowNeedsScrollbar = %v but renderScrollbarLayer returned %v: "+
-						"the layout and the layer disagree about whether a thumb is present",
+						"the layout and the layer disagree about whether a bar is present",
 						need, layer != nil)
 				}
 			})
@@ -199,12 +305,14 @@ func TestScrollbarLayerAgreesWithWindowNeedsScrollbar(t *testing.T) {
 }
 
 // The thumb reports the viewport's share of the buffer and its place in it:
-// short for deep history, pinned to the bottom near the tail and to the top at
-// the oldest line.
+// short for deep history, at the bottom of the track near the tail and at the
+// top at the oldest line.
 func TestScrollbarThumbSizeAndTravel(t *testing.T) {
+	scrollbarDefaults(t)
 	win := newTestWindow(t, "sbgeom-0001", 60, 20)
 	win.Y = 4
 	fillScrollback(t, win, 400)
+	m := newTestOS(win)
 	contentH := win.ContentHeight()
 	sbLen := win.ScrollbackLenSync()
 
@@ -214,78 +322,114 @@ func TestScrollbarThumbSizeAndTravel(t *testing.T) {
 	}
 
 	scrollBack(t, win, 1)
-	nearTail := renderScrollbarLayer(win, 1000, 1)
+	nearTail := barGlyphs(t, barFrame(t, m, win, true), win)
 	scrollBack(t, win, sbLen)
-	atTop := renderScrollbarLayer(win, 1000, 1)
-	if nearTail == nil || atTop == nil {
-		t.Fatal("a scrolled-back pane produced no thumb")
-	}
+	atTop := barGlyphs(t, barFrame(t, m, win, true), win)
 
-	wantBottom := win.Y + win.BorderOffset() + contentH - thumbH
-	if nearTail.GetY() != wantBottom {
-		t.Errorf("thumb one line back sits at y=%d, want the bottom of the track %d", nearTail.GetY(), wantBottom)
+	thumb := config.GetScrollbarThumbChar()
+	if nearTail[contentH-1] != thumb {
+		t.Errorf("one line back from the tail the last row shows %q, want the thumb at the bottom of the track",
+			nearTail[contentH-1])
 	}
-	if want := win.Y + win.BorderOffset(); atTop.GetY() != want {
-		t.Errorf("thumb at the oldest line sits at y=%d, want the top of the track %d", atTop.GetY(), want)
+	if nearTail[0] == thumb {
+		t.Error("one line back from the tail the thumb reaches the top of the track")
 	}
-}
-
-// The grab column input uses must be the column the renderer paints, and it
-// must be closed at the live tail: there the cell is ordinary content and a
-// press on it belongs to the guest, not to a jump-scroll.
-func TestScrollbarHitTracksTheDrawnColumn(t *testing.T) {
-	for _, tiled := range []bool{false, true} {
-		win := newTestWindow(t, "sbhit-"+itoa(boolToInt(tiled)), 60, 20)
-		win.X = 5
-		win.SetTiled(tiled)
-		fillScrollback(t, win, 200)
-
-		if _, drawn := ScrollbarHit(win); drawn {
-			t.Errorf("tiled=%v: a grab is offered at the live tail, where no thumb is drawn", tiled)
-		}
-
-		scrollBack(t, win, 100)
-		x, drawn := ScrollbarHit(win)
-		if !drawn {
-			t.Fatalf("tiled=%v: no grab offered while the thumb is on screen", tiled)
-		}
-		layer := renderScrollbarLayer(win, 1000, 1)
-		if layer == nil || layer.GetX() != x {
-			t.Errorf("tiled=%v: grab column %d does not match the drawn column", tiled, x)
-		}
-	}
-	if _, drawn := ScrollbarHit(nil); drawn {
-		t.Error("a nil window offered a scrollbar grab")
+	if atTop[0] != thumb {
+		t.Errorf("at the oldest line the first row shows %q, want the thumb at the top of the track", atTop[0])
 	}
 }
 
-// withScrollbarStyle sets config.ScrollbarStyle for the duration of fn.
-func withScrollbarStyle(t *testing.T, style string, fn func()) {
-	t.Helper()
-	prev := config.ScrollbarStyle
-	config.ScrollbarStyle = style
-	defer func() { config.ScrollbarStyle = prev }()
-	fn()
+// opentui's Slider rounds the thumb over the remaining travel; tuios truncated,
+// which biases every position toward the live tail. A pane one line off its
+// oldest is scrolled back as far as the eye can tell, and it drew the thumb a
+// whole row shy of the top of the track. Both ends are asserted on the frame,
+// because "the thumb is at the top" is a claim about pixels.
+func TestScrollbarPinsToTheEndsOfItsTravel(t *testing.T) {
+	scrollbarDefaults(t)
+	for _, style := range []string{config.ScrollbarStyleThin, config.ScrollbarStyleTrack} {
+		t.Run(style, func(t *testing.T) {
+			win := newTestWindow(t, "sbpin-"+style, 60, 20)
+			win.Y = 2
+			fillScrollback(t, win, 400)
+			m := newTestOS(win)
+			sbLen := win.ScrollbackLenSync()
+			contentH := win.ContentHeight()
+
+			withScrollbarStyle(t, style, func() {
+				for _, tc := range []struct {
+					name   string
+					offset int
+				}{
+					{"at the oldest line", sbLen},
+					{"one line off the oldest", sbLen - 1},
+				} {
+					scrollBack(t, win, tc.offset)
+					glyphs := barGlyphs(t, barFrame(t, m, win, true), win)
+					if glyphs[0] == " " || glyphs[0] == config.GetScrollbarTrackChar() {
+						t.Errorf("%s: the top track cell shows %q, so the thumb is short of the end of its travel",
+							tc.name, glyphs[0])
+					}
+				}
+
+				scrollBack(t, win, 1)
+				glyphs := barGlyphs(t, barFrame(t, m, win, true), win)
+				if last := glyphs[contentH-1]; last == " " || last == config.GetScrollbarTrackChar() {
+					t.Errorf("one line back from the tail: the bottom track cell shows %q, so the thumb is short of the other end", last)
+				}
+			})
+		})
+	}
 }
 
-// The track style is the one that has to look different: a full-height column
-// rather than a few cells of thumb. Both styles still obey the rules that make
-// the bar composable - same column, same visibility, same clip.
+// The thin style's new look: a half block hanging on a hairline track, both
+// hugging the right edge of the cells they float over.
+func TestScrollbarThinStyleIsAHalfBlockOnAHairline(t *testing.T) {
+	scrollbarDefaults(t)
+	win := newTestWindow(t, "sbthin-0001", 60, 20)
+	win.X, win.Y = 3, 1
+	fillScrollback(t, win, 400)
+	scrollBack(t, win, 200)
+	m := newTestOS(win)
+
+	withScrollbarStyle(t, config.ScrollbarStyleThin, func() {
+		glyphs := barGlyphs(t, barFrame(t, m, win, true), win)
+		thumbRows := 0
+		for i, glyph := range glyphs {
+			switch glyph {
+			case "▐":
+				thumbRows++
+			case "▕":
+			default:
+				t.Fatalf("row %d of the thin bar drew %q, want the ▐ thumb or the ▕ track", i, glyph)
+			}
+		}
+		if thumbRows == 0 || thumbRows >= len(glyphs) {
+			t.Errorf("the thumb covers %d of %d rows; it reports a position, so it can be neither absent nor the whole track",
+				thumbRows, len(glyphs))
+		}
+	})
+}
+
+// The track style is the one that fills its column with a surface: a block
+// thumb on a fill rather than two hairlines. Both styles still obey the rules
+// that make the bar composable - same column, same visibility, same clip.
 func TestScrollbarTrackStyleFillsTheColumn(t *testing.T) {
+	scrollbarDefaults(t)
 	win := newTestWindow(t, "sbtrack-0001", 60, 20)
 	win.X, win.Y = 4, 2
 	fillScrollback(t, win, 400)
 	scrollBack(t, win, 100)
+	m := newTestOS(win)
 
 	var thin, track *lipgloss.Layer
 	withScrollbarStyle(t, config.ScrollbarStyleThin, func() {
-		thin = renderScrollbarLayer(win, 1000, 1)
+		thin = m.renderScrollbarLayer(win, 1000, 1, true)
 	})
 	withScrollbarStyle(t, config.ScrollbarStyleTrack, func() {
-		track = renderScrollbarLayer(win, 1000, 1)
+		track = m.renderScrollbarLayer(win, 1000, 1, true)
 	})
 	if thin == nil || track == nil {
-		t.Fatal("a scrolled-back pane produced no thumb in one of the styles")
+		t.Fatal("a scrolled-back pane produced no bar in one of the styles")
 	}
 
 	if thin.GetX() != track.GetX() {
@@ -294,86 +438,303 @@ func TestScrollbarTrackStyleFillsTheColumn(t *testing.T) {
 	if want := win.Y + win.BorderOffset(); track.GetY() != want {
 		t.Errorf("the track starts at y=%d, want the top of the content box %d", track.GetY(), want)
 	}
-	if h := lipgloss.Height(track.GetContent()); h != win.ContentHeight() {
-		t.Errorf("the track is %d rows tall, want the viewport's %d", h, win.ContentHeight())
+	for name, layer := range map[string]*lipgloss.Layer{"thin": thin, "track": track} {
+		if h := lipgloss.Height(layer.GetContent()); h != win.ContentHeight() {
+			t.Errorf("the %s bar is %d rows tall, want the viewport's %d", name, h, win.ContentHeight())
+		}
+		if w := lipgloss.Width(layer.GetContent()); w != 1 {
+			t.Errorf("the %s bar is %d columns wide, want 1", name, w)
+		}
 	}
-	if w := lipgloss.Width(track.GetContent()); w != 1 {
-		t.Errorf("the track is %d columns wide, want 1", w)
+	// The surface fill is what makes the track style a track rather than a
+	// second hairline, and the thumb on it is a block, whole or halved.
+	if !drawnIn(track.GetContent(), theme.UI().Surface, true) {
+		t.Error("the track style drew no surface behind its thumb")
 	}
-	// The thin bar is only as tall as its thumb, so the two are not two names
-	// for one look.
-	if lipgloss.Height(thin.GetContent()) >= win.ContentHeight() {
-		t.Error("the thin bar fills the viewport, which is the track style's job")
-	}
+	withScrollbarStyle(t, config.ScrollbarStyleTrack, func() {
+		glyphs := strings.Join(barGlyphs(t, barFrame(t, m, win, true), win), "")
+		if !strings.ContainsAny(glyphs, "█▀▄") {
+			t.Errorf("the track style drew %q, want a block thumb", glyphs)
+		}
+	})
 }
 
 // opentui's half-cell track is what the track style borrows: the bar is
 // measured in half rows, so the thumb's ends can land mid-cell as ▀ or ▄ and it
 // carries twice the resolution of a whole-cell bar.
 func TestScrollbarTrackResolvesToHalfCells(t *testing.T) {
+	scrollbarDefaults(t)
 	const contentH, scrollbackLen = 20, 400
 
-	seenHalf := false
-	for offset := 1; offset <= scrollbackLen; offset++ {
-		rows := scrollbarTrackRows(contentH, scrollbackLen, offset)
-		if len(rows) != contentH {
-			t.Fatalf("offset %d produced %d rows, want %d", offset, len(rows), contentH)
-		}
-		thumb := 0
-		for _, r := range rows {
-			switch r {
-			case "▀", "▄":
-				seenHalf = true
-				thumb++
-			case "█":
-				thumb++
-			case " ":
-			default:
-				t.Fatalf("offset %d drew an unexpected glyph %q", offset, r)
+	withScrollbarStyle(t, config.ScrollbarStyleTrack, func() {
+		seenHalf := false
+		for offset := 1; offset <= scrollbackLen; offset++ {
+			rows, thumbTop, thumbRows := scrollbarRows(contentH, scrollbackLen, offset)
+			if len(rows) != contentH {
+				t.Fatalf("offset %d produced %d rows, want %d", offset, len(rows), contentH)
+			}
+			thumb := 0
+			for _, r := range rows {
+				switch r {
+				case "▀", "▄":
+					seenHalf = true
+					thumb++
+				case "█":
+					thumb++
+				case " ":
+				default:
+					t.Fatalf("offset %d drew an unexpected glyph %q", offset, r)
+				}
+			}
+			if thumb == 0 {
+				t.Fatalf("offset %d drew no thumb at all", offset)
+			}
+			if thumb != thumbRows || rows[thumbTop] == " " {
+				t.Fatalf("offset %d drew %d thumb rows but reported %d starting at %d",
+					offset, thumb, thumbRows, thumbTop)
 			}
 		}
-		if thumb == 0 {
-			t.Fatalf("offset %d drew no thumb at all", offset)
+		if !seenHalf {
+			t.Error("no offset put a thumb end on a half cell; the track is whole-cell after all")
 		}
-	}
-	if !seenHalf {
-		t.Error("no offset put a thumb end on a half cell; the track is whole-cell after all")
-	}
-
-	// Ends of travel, where an off-by-one would show first.
-	if got := scrollbarTrackRows(contentH, scrollbackLen, scrollbackLen)[0]; got == " " {
-		t.Error("scrolled to the oldest line, the top cell of the track is empty")
-	}
-	if got := scrollbarTrackRows(contentH, scrollbackLen, 1)[contentH-1]; got == " " {
-		t.Error("one line back from the tail, the bottom cell of the track is empty")
-	}
-}
-
-// Half blocks are the one glyph the track style adds, so ASCII mode has to have
-// an answer for them.
-func TestScrollbarTrackDegradesToASCII(t *testing.T) {
-	prev := config.UseASCIIOnly
-	config.UseASCIIOnly = true
-	overlay.SetASCII(true)
-	t.Cleanup(func() {
-		config.UseASCIIOnly = prev
-		overlay.SetASCII(prev)
 	})
-
-	for _, row := range scrollbarTrackRows(20, 400, 137) {
-		if row != " " && row != config.GetScrollbarThumbChar() {
-			t.Errorf("ASCII track drew %q, which is neither blank nor the ASCII thumb", row)
-		}
-	}
 }
 
-// Every new glyph needs a fallback, and the thumb is a glyph.
-func TestScrollbarThumbCharDegradesToASCII(t *testing.T) {
+// Half blocks are glyphs ASCII does not have, and neither is the hairline, so
+// ASCII keeps the bar it always had: a pipe on the pane's own content, no track.
+func TestScrollbarDegradesToASCII(t *testing.T) {
+	scrollbarDefaults(t)
 	prev := config.UseASCIIOnly
 	config.UseASCIIOnly = true
 	t.Cleanup(func() { config.UseASCIIOnly = prev })
+
 	if got := config.GetScrollbarThumbChar(); got != "|" {
 		t.Errorf("ASCII thumb char = %q, want %q", got, "|")
+	}
+	withScrollbarStyle(t, config.ScrollbarStyleTrack, func() {
+		for _, row := range must(scrollbarRows(20, 400, 137)) {
+			if row != " " && row != "|" {
+				t.Errorf("ASCII track drew %q, which is neither blank nor the ASCII thumb", row)
+			}
+		}
+	})
+
+	win := newTestWindow(t, "sbascii-0001", 60, 20)
+	win.Y = 3
+	fillScrollback(t, win, 400)
+	scrollBack(t, win, 200)
+	m := newTestOS(win)
+	withScrollbarStyle(t, config.ScrollbarStyleThin, func() {
+		layer := m.renderScrollbarLayer(win, 1000, 1, true)
+		if layer == nil {
+			t.Fatal("no bar for a scrolled-back pane in ASCII")
+		}
+		// Without a track glyph the bar covers its thumb and nothing else: a
+		// blank row would paint over a column of the guest's content.
+		if h := lipgloss.Height(layer.GetContent()); h != scrollbarThumbHeight(win.ContentHeight(), win.ScrollbackLenSync()) {
+			t.Errorf("the ASCII bar is %d rows tall, want just its thumb", h)
+		}
+		if got := ansi.Strip(layer.GetContent()); strings.Trim(got, "|\n") != "" {
+			t.Errorf("the ASCII bar drew %q, want pipes only", got)
+		}
+	})
+}
+
+// must unwraps scrollbarRows for the assertions that only care about the rows.
+func must(rows []string, _, _ int) []string { return rows }
+
+// The owner's rule: the bar matches the highlighted terminal. The focused
+// pane's thumb takes its accent, every other pane keeps the quiet grey - and
+// both still draw, because the bar reports a scroll position and hiding it on
+// an unfocused pane would hide that position.
+func TestScrollbarTintFollowsTheFocusedPane(t *testing.T) {
+	scrollbarDefaults(t)
+	const greenAccent = 2 // accentNames: gray, red, green, ...
+	win := newTestWindow(t, "sbtint-0001", 60, 20)
+	win.Y = 1
+	fillScrollback(t, win, 400)
+	scrollBack(t, win, 200)
+	m := newTestOS(win)
+	m.SidebarAccents = map[string]int{win.ID: greenAccent}
+	m.Mode = TerminalMode
+
+	accent := accentColor(greenAccent)
+	if got := contrastRatio(accent, theme.UI().Canvas); got < scrollbarMinContrast {
+		t.Fatalf("the readable accent chosen for this test measures %.2f:1; pick another", got)
+	}
+
+	focused := barFrame(t, m, win, true)
+	if !barInk(t, m, win, focused, accent) {
+		t.Error("the focused pane's thumb is not drawn in its accent")
+	}
+	unfocused := barFrame(t, m, win, false)
+	if barInk(t, m, win, unfocused, accent) {
+		t.Error("an unfocused pane's thumb took the accent; only the highlighted terminal is tinted")
+	}
+	if !barInk(t, m, win, unfocused, theme.BorderUnfocused()) {
+		t.Error("an unfocused pane's thumb is not the quiet grey the unfocused frames use")
+	}
+	for name, frame := range map[string][]string{"focused": focused, "unfocused": unfocused} {
+		glyphs := barGlyphs(t, frame, win)
+		if !strings.Contains(strings.Join(glyphs, ""), config.GetScrollbarThumbChar()) {
+			t.Errorf("the %s pane drew no bar at all; tint is a colour rule, not a visibility one", name)
+		}
+	}
+
+	// Without an accent the focused pane's bar is the colour its border is, so
+	// bar and border match by construction.
+	m.SidebarAccents = nil
+	if !barInk(t, m, win, barFrame(t, m, win, true), theme.BorderFocusedTerminal()) {
+		t.Error("an accentless focused pane's thumb does not match its terminal-mode border")
+	}
+	m.Mode = WindowManagementMode
+	if !barInk(t, m, win, barFrame(t, m, win, true), theme.BorderFocusedWindow()) {
+		t.Error("an accentless focused pane's thumb does not match its window-mode border")
+	}
+}
+
+// A derived tint has to be legible on the ground it lands on. Dark blue is the
+// measured failure: 1.74:1 on the canvas the thin bar floats over and 1.21:1 on
+// the track style's surface, which is a bar that is present and invisible.
+func TestScrollbarTintFloorRejectsAnUnreadableAccent(t *testing.T) {
+	scrollbarDefaults(t)
+	const darkBlueAccent = 11 // accentNames: ..., blue(4), magenta, cyan, white, dark red, dark green, dark yellow, dark blue
+	accent := accentColor(darkBlueAccent)
+	pal := theme.UI()
+
+	if got := contrastRatio(accent, pal.Canvas); math.Abs(got-1.74) > 0.05 {
+		t.Errorf("dark blue on the canvas measures %.2f:1, want the documented 1.74:1", got)
+	}
+	if got := contrastRatio(accent, pal.Surface); math.Abs(got-1.21) > 0.05 {
+		t.Errorf("dark blue on the surface measures %.2f:1, want the documented 1.21:1", got)
+	}
+
+	win := newTestWindow(t, "sbfloor-0001", 60, 20)
+	win.Y = 1
+	fillScrollback(t, win, 400)
+	scrollBack(t, win, 200)
+	m := newTestOS(win)
+	m.SidebarAccents = map[string]int{win.ID: darkBlueAccent}
+	m.Mode = TerminalMode
+
+	for _, style := range []string{config.ScrollbarStyleThin, config.ScrollbarStyleTrack} {
+		withScrollbarStyle(t, style, func() {
+			frame := barFrame(t, m, win, true)
+			if barInk(t, m, win, frame, accent) {
+				t.Errorf("%s style: the thumb kept an accent that measures below %.1f:1", style, scrollbarMinContrast)
+			}
+			if !barInk(t, m, win, frame, theme.BorderFocusedTerminal()) {
+				t.Errorf("%s style: the rejected accent did not fall back to the mode's focus colour", style)
+			}
+		})
+	}
+}
+
+// A hex in the config is a deliberate override of the measurement, so it is
+// used as given - including the very colour the floor rejects when it is
+// derived. muted is the look every bar had before the rule.
+func TestScrollbarTintKeywordsAndHex(t *testing.T) {
+	scrollbarDefaults(t)
+	const darkBlue = "#0000EE"
+	win := newTestWindow(t, "sbhex-0001", 60, 20)
+	win.Y = 1
+	fillScrollback(t, win, 400)
+	scrollBack(t, win, 200)
+	m := newTestOS(win)
+	m.SidebarAccents = map[string]int{win.ID: 2}
+	m.Mode = TerminalMode
+
+	withScrollbarTint(t, darkBlue, func() {
+		if got := contrastRatio(lipgloss.Color(darkBlue), theme.UI().Canvas); got >= scrollbarMinContrast {
+			t.Fatalf("the hex chosen for this test measures %.2f:1, so it never meets the floor", got)
+		}
+		if !barInk(t, m, win, barFrame(t, m, win, true), lipgloss.Color(darkBlue)) {
+			t.Error("a configured hex was not used as given; the floor is for derived tints only")
+		}
+	})
+
+	withScrollbarTint(t, config.ScrollbarTintMuted, func() {
+		for _, focused := range []bool{true, false} {
+			if !barInk(t, m, win, barFrame(t, m, win, focused), theme.BorderUnfocused()) {
+				t.Errorf("tint = muted, focused = %v: the bar is not the unfocused grey", focused)
+			}
+		}
+	})
+}
+
+// The grab rect input reads is recorded by the renderer as it draws, so a press
+// can only land on cells that took ink. At the live tail the column is ordinary
+// content and the press belongs to the guest.
+func TestScrollbarHitIsRecordedAsItIsDrawn(t *testing.T) {
+	scrollbarDefaults(t)
+	for _, tiled := range []bool{false, true} {
+		win := newTestWindow(t, "sbhit-"+itoa(boolToInt(tiled)), 60, 20)
+		win.X, win.Y = 5, 2
+		win.SetTiled(tiled)
+		fillScrollback(t, win, 200)
+		m := newTestOS(win)
+
+		m.resetScrollbarRects()
+		if _, ok := m.ScrollbarHit(win); ok {
+			t.Errorf("tiled=%v: a grab is offered before anything was drawn", tiled)
+		}
+
+		scrollBack(t, win, 100)
+		layer := m.renderScrollbarLayer(win, 1000, 1, true)
+		rect, ok := m.ScrollbarHit(win)
+		if layer == nil || !ok {
+			t.Fatalf("tiled=%v: the drawn bar recorded no grab", tiled)
+		}
+		if rect.X != layer.GetX() {
+			t.Errorf("tiled=%v: grab column %d does not match the drawn column %d", tiled, rect.X, layer.GetX())
+		}
+		if rect.TrackY != layer.GetY() || rect.TrackH != lipgloss.Height(layer.GetContent()) {
+			t.Errorf("tiled=%v: grab rows %d+%d do not match the drawn rows %d+%d",
+				tiled, rect.TrackY, rect.TrackH, layer.GetY(), lipgloss.Height(layer.GetContent()))
+		}
+		if !rect.Contains(rect.X, rect.ThumbY) || rect.Contains(rect.X+1, rect.ThumbY) {
+			t.Errorf("tiled=%v: the rect does not contain its own thumb, or spills into the next column", tiled)
+		}
+		if !rect.OnThumb(rect.ThumbY) || rect.OnThumb(rect.ThumbY+rect.ThumbH) {
+			t.Errorf("tiled=%v: the thumb rows are misreported", tiled)
+		}
+
+		// The frame that stops drawing the bar takes the grab with it.
+		m.resetScrollbarRects()
+		if _, ok := m.ScrollbarHit(win); ok {
+			t.Errorf("tiled=%v: last frame's grab survived into a frame without a bar", tiled)
+		}
+	}
+	m := newTestOS(nil)
+	if _, ok := m.ScrollbarHit(nil); ok {
+		t.Error("a nil window offered a scrollbar grab")
+	}
+}
+
+// The drag inverts the renderer's own arithmetic, so a thumb dropped on a row
+// is drawn back on that row rather than a rounding error away from it.
+func TestScrollbarDragRoundTripsThroughTheRenderer(t *testing.T) {
+	scrollbarDefaults(t)
+	for _, style := range []string{config.ScrollbarStyleThin, config.ScrollbarStyleTrack} {
+		t.Run(style, func(t *testing.T) {
+			win := newTestWindow(t, "sbdrag-"+style, 60, 20)
+			win.Y = 3
+			fillScrollback(t, win, 400)
+			scrollBack(t, win, 200)
+
+			withScrollbarStyle(t, style, func() {
+				top := win.Y + win.BorderOffset()
+				_, thumbUnits, travel := scrollbarTravel(win.ContentHeight(), win.ScrollbackLenSync())
+				perRow, _, _ := scrollbarTravel(win.ContentHeight(), win.ScrollbackLenSync())
+				lastRow := top + (travel+thumbUnits)/perRow - (thumbUnits+perRow-1)/perRow
+				for row := top; row <= lastRow; row++ {
+					win.CopyMode.ScrollOffset = ScrollbarOffsetForThumbRow(win, row)
+					if got := ScrollbarThumbRow(win); got != row {
+						t.Errorf("thumb dropped on row %d is drawn on row %d", row, got)
+					}
+				}
+			})
+		})
 	}
 }
 

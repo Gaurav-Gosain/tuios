@@ -112,6 +112,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ScrollbarDragging {
 		o.ScrollbarDragging = false
 		o.ScrollbarDragWindowIndex = -1
+		o.ScrollbarGrabOffset = 0
 		o.Dragging = false
 		o.InteractionMode = false
 		o.DraggedWindowIndex = -1

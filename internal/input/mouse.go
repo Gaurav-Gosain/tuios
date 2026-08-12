@@ -71,9 +71,22 @@ func abs(x int) int {
 	return x
 }
 
-// scrollToPosition scrolls a window's copy mode to the position indicated
-// by the mouse Y coordinate on the scrollbar (right border).
-func scrollToPosition(win *terminal.Window, mouseY int) {
+// scrollbarGrab answers a press on the bar and returns the offset the drag that
+// follows holds: the rows between the pointer and the thumb's first row. A press
+// on the bare track jumps the thumb under the pointer first and takes its offset
+// from where the thumb landed, after opentui's Slider - taking it before the
+// jump makes the thumb leap a second time on the first pixel of the drag.
+func scrollbarGrab(win *terminal.Window, rect app.ScrollbarRect, mouseY int) int {
+	if rect.OnThumb(mouseY) {
+		return mouseY - rect.ThumbY
+	}
+	scrollToThumbRow(win, mouseY-rect.ThumbH/2)
+	return mouseY - app.ScrollbarThumbRow(win)
+}
+
+// scrollToThumbRow scrolls a window's copy mode so the scrollbar thumb's first
+// row lands on the given screen row.
+func scrollToThumbRow(win *terminal.Window, row int) {
 	if win.Terminal == nil {
 		return
 	}
@@ -94,14 +107,9 @@ func scrollToPosition(win *terminal.Window, mouseY int) {
 		return
 	}
 
-	borderOff := win.BorderOffset()
-	contentH := win.ContentHeight()
-	relY := mouseY - win.Y - borderOff
-	relY = max(min(relY, contentH-1), 0)
-
-	// relY=0 → top (max scroll), relY=contentH-1 → bottom (0 scroll)
-	scrollOffset := scrollbackLen - (relY * scrollbackLen / max(contentH-1, 1))
-	scrollOffset = max(min(scrollOffset, scrollbackLen), 0)
+	// The renderer owns the thumb's travel, so the drag inverts its arithmetic
+	// rather than keeping a second copy of it.
+	scrollOffset := app.ScrollbarOffsetForThumbRow(win, row)
 
 	win.CopyMode.ScrollOffset = scrollOffset
 	win.ScrollbackOffset = scrollOffset // Sync for rendering

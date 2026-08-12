@@ -31,6 +31,11 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	layers := (*layersPtr)[:0]
 	defer pool.PutLayerSlice(layersPtr)
 
+	// Scrollbar hit rects are recorded as the bars are drawn below, so the
+	// previous frame's go first: a bar that has returned to the live tail or
+	// slid under the rail must stop being grabbable with it.
+	m.resetScrollbarRects()
+
 	topMargin := m.GetTopMargin()
 	viewportHeight := m.GetUsableHeight()
 	// The sidebar reserves a horizontal band, so the content region a pane may
@@ -132,7 +137,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			// vim) have no scrollback, so drawing a scrollback thumb over them
 			// only flickers as their content redraws.
 			if windowNeedsScrollbar(window) {
-				if sbLayer := renderScrollbarLayer(window, rightClip, zIndex+1); sbLayer != nil {
+				if sbLayer := m.renderScrollbarLayer(window, rightClip, zIndex+1, isFocused); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
 			}
@@ -155,7 +160,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			}
 			layers = append(layers, window.CachedLayer)
 			if windowNeedsScrollbar(window) {
-				if sbLayer := renderScrollbarLayer(window, rightClip, zIndex+1); sbLayer != nil {
+				if sbLayer := m.renderScrollbarLayer(window, rightClip, zIndex+1, isFocused); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
 			}
@@ -198,7 +203,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 
 		// Scrollbar layer (always fresh, not cached). See the alt-screen note above.
 		if windowNeedsScrollbar(window) {
-			if sbLayer := renderScrollbarLayer(window, rightClip, zIndex+1); sbLayer != nil {
+			if sbLayer := m.renderScrollbarLayer(window, rightClip, zIndex+1, isFocused); sbLayer != nil {
 				layers = append(layers, sbLayer)
 			}
 		}
@@ -414,6 +419,10 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 // skipping the compositor. Mutates render state (renders the window, clears its
 // dirty flags), so it must only be called after eligibility is confirmed.
 func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
+	// This path is only taken when no pane wants a bar, so nothing on the frame
+	// it builds is grabbable.
+	m.resetScrollbarRects()
+
 	isFocused := m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == window
 	var borderColorObj color.Color
 	switch {
