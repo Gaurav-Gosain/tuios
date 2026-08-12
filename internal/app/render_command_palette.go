@@ -63,7 +63,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	lines = append(lines, search, overlay.Rule(width, bg, pal))
 
 	if len(filtered) == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  No matching commands"))
+		lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  No matching commands"))
 		for len(lines) < visible+3 {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
@@ -78,7 +78,7 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 		}
 		if len(filtered) > visible {
 			info := fmt.Sprintf("%d of %d commands", len(filtered), len(items))
-			lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+info))
+			lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  "+info))
 		} else {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}

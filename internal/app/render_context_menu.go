@@ -117,9 +117,11 @@ func (m *OS) contextMenuRows(cm *ContextMenu) (start, visible int) {
 // contextMenuRow renders one runnable row, filled to the panel width so the
 // selection highlight spans it.
 //
-// A dimmed row is drawn in the muted color and never takes the highlight, even
-// if the selection somehow points at it: the colors are the only thing telling
-// the user the action is unavailable, so they do not get overridden.
+// A dimmed row is drawn a step down from the live rows and never takes the
+// highlight, even if the selection somehow points at it: the colors are the only
+// thing telling the user the action is unavailable, so they do not get
+// overridden. It is FgDim rather than FgMute because unavailable still has to be
+// readable, and FgMute measured 1.81:1 on the panel's Surface.
 func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg color.Color, pal overlay.Palette) string {
 	rowBg := bg
 	if selected && !it.Dim {
@@ -131,7 +133,7 @@ func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg col
 	hintColor := pal.FgDim
 	switch {
 	case it.Dim:
-		labelColor, iconColor, hintColor = pal.FgMute, pal.FgMute, pal.FgMute
+		labelColor, iconColor, hintColor = pal.FgDim, pal.FgDim, pal.FgDim
 	case it.Warn:
 		labelColor, iconColor = pal.Warn, pal.Warn
 	}

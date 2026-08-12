@@ -610,7 +610,7 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 		if !inSearch {
 			msg = "No keybindings in this section"
 		}
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+msg))
+		lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  "+msg))
 	}
 
 	rowCount := 0
@@ -627,7 +627,7 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 	// Scroll indicator.
 	if len(bindings) > visibleRows {
 		info := fmt.Sprintf("%d-%d of %d", m.HelpScrollOffset+1, end, len(bindings))
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+info))
+		lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  "+info))
 	} else {
 		lines = append(lines, overlay.Style(bg).Render(" "))
 	}

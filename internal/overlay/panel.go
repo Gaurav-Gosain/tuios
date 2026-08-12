@@ -196,7 +196,10 @@ func tabsRows(tabs []string, active int, bg color.Color, pal Palette, originX, o
 // the hints do not fit across one.
 func footerRows(hints []Hint, bg color.Color, pal Palette, width int) []string {
 	keyStyle := Style(bg).Foreground(pal.AccentBright).Bold(true)
-	labelStyle := Style(bg).Foreground(pal.FgMute)
+	// FgDim, not FgMute: the footer is the only place a panel says what its keys
+	// do, and FgMute is a furniture token picked to disappear against the canvas.
+	// On the panel's lighter Surface it measured 1.81:1 and did disappear.
+	labelStyle := Style(bg).Foreground(pal.FgDim)
 	sep := Style(bg).Render("   ")
 	const sepW = 3
 
