@@ -548,20 +548,26 @@ func (m *OS) flushGraphicsForView() {
 		}
 	}
 
-	// Hide images ONLY during full-screen overlays (help, palette, etc.).
-	// Copy-mode scroll is NOT a reason to hide  - RefreshAllPlacements uses
-	// the window's scrollback offset to reposition images so they scroll
-	// naturally with the terminal content.
-	hasOverlay := m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
+	// Hide images ONLY during full-screen overlays (help, palette, etc.) and
+	// for the length of a resize gesture. Copy-mode scroll is NOT a reason to
+	// hide  - RefreshAllPlacements uses the window's scrollback offset to
+	// reposition images so they scroll naturally with the terminal content.
+	//
+	// A resize hides for the same reason an overlay does: an image is drawn in
+	// host cells, and while the layout is moving under it the guest has not
+	// been told the new size yet, so it smears across the panes for the length
+	// of the drag. Hiding keeps the image data resident, so the gesture ending
+	// puts it back with no round trip to whatever drew it.
+	hideImages := m.Resizing || m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
 		m.ShowLayoutPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
 		m.ShowSettings || m.ShowThemePicker || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview
 	if m.KittyPassthrough != nil {
 		// Self-placed remote video images are hidden/dropped here, not by
 		// HideAllPlacements (they are not in `placements`).
-		m.KittyPassthrough.SetOverlayActive(hasOverlay)
+		m.KittyPassthrough.SetOverlayActive(hideImages)
 	}
-	if hasOverlay {
+	if hideImages {
 		if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 			m.KittyPassthrough.HideAllPlacements()
 		}

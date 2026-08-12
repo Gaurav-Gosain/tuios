@@ -138,6 +138,40 @@ func TestRemoteVideoFreezesDuringResize(t *testing.T) {
 	}
 }
 
+// TestResizeHidesGraphicsAndRestoresThem proves a pane's images are taken off
+// screen for the length of a resize gesture and put back when it ends. An image
+// occupies host cells that the guest has not been told about yet while the
+// layout is moving, so left up it smears across the resizing panes. It goes
+// through the same hide path an overlay uses, keeping the image data resident,
+// so coming back costs one a=p and no round trip to whatever drew it.
+func TestResizeHidesGraphicsAndRestoresThem(t *testing.T) {
+	rec := &recWriter{}
+	h := newVideoDragHarness(t, rec, rec)
+	_ = h.refresh() // prime: the image is placed and visible
+
+	m := &OS{KittyPassthrough: h.kp}
+
+	hidden := rec.count("a=d,d=i,i=")
+	m.Resizing = true
+	m.flushGraphicsForView()
+	if got := rec.count("a=d,d=i,i="); got != hidden+1 {
+		t.Fatalf("resize did not hide the image: a=d,d=i count %d -> %d, want one more", hidden, got)
+	}
+
+	// Further frames mid-gesture must not put it back on screen.
+	shown := rec.count("a=p")
+	m.flushGraphicsForView()
+	if got := rec.count("a=p"); got != shown {
+		t.Fatalf("a mid-resize frame re-showed the image: a=p count %d -> %d", shown, got)
+	}
+
+	m.Resizing = false
+	m.flushGraphicsForView()
+	if got := rec.count("a=p"); got != shown+1 {
+		t.Fatalf("the image was not restored after the resize: a=p count %d -> %d, want one more", shown, got)
+	}
+}
+
 // gatedWriter is a recWriter whose next Write (once armed) blocks until
 // released, to hold an async video frame mid-write while the test moves the
 // window underneath it.
