@@ -154,3 +154,56 @@ func TestAccentHueStripIgnoresButtonFreeMotion(t *testing.T) {
 		t.Errorf("the hue did not lock on release: %v -> %v", turned, m.AccentPicker.Hue)
 	}
 }
+
+// TestScrollbarThumbNeedsAHeldButton is the same class of bug one layer down. A
+// release lost while the pointer is off the surface leaves ScrollbarDragging
+// set, and under all-motion tracking every hover after it drags the thumb, so
+// the pane scrolls to wherever the pointer happens to be.
+func TestScrollbarThumbNeedsAHeldButton(t *testing.T) {
+	app.SetInputHandler(HandleInput)
+	o, win, rect := scrolledBackPane(t)
+
+	top := rect.TrackY
+	bottom := rect.TrackY + rect.TrackH - 1
+
+	o = pressed(o, rect.X, app.ScrollbarThumbRow(win))
+	if !o.ScrollbarDragging {
+		t.Fatal("a press on the thumb did not start a drag")
+	}
+	o = dragged(o, rect.X, bottom)
+	moved := app.ScrollbarThumbRow(win)
+
+	// The release never arrives; what comes back is motion reporting no button.
+	o = motion(o, rect.X, top)
+	if got := app.ScrollbarThumbRow(win); got != moved {
+		t.Errorf("button-free motion dragged the thumb from row %d to %d", moved, got)
+	}
+	if o.ScrollbarDragging {
+		t.Error("the scrollbar drag outlived the button that started it")
+	}
+
+	// And hover is reachable again: it is no longer swallowed by a drag that
+	// never ended.
+	o = motion(o, rect.X, bottom)
+	if got := app.ScrollbarThumbRow(win); got != moved {
+		t.Errorf("a second button-free motion moved the thumb to %d, want %d", got, moved)
+	}
+}
+
+// TestScrollbarThumbLocksOnRelease is the ordinary path: the thumb stops where
+// the button came up and later hover leaves it there.
+func TestScrollbarThumbLocksOnRelease(t *testing.T) {
+	app.SetInputHandler(HandleInput)
+	o, win, rect := scrolledBackPane(t)
+
+	bottom := rect.TrackY + rect.TrackH - 1
+	o = pressed(o, rect.X, app.ScrollbarThumbRow(win))
+	o = dragged(o, rect.X, bottom)
+	o = released(o, rect.X, bottom)
+	locked := app.ScrollbarThumbRow(win)
+
+	o = motion(o, rect.X, rect.TrackY)
+	if got := app.ScrollbarThumbRow(win); got != locked {
+		t.Errorf("the thumb did not lock on release: row %d -> %d", locked, got)
+	}
+}
