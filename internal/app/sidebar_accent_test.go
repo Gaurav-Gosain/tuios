@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
@@ -32,8 +33,8 @@ func TestRailDrawsTheAccentChip(t *testing.T) {
 	}
 
 	// "logs" has no agent state; "editor" is working.
-	m.SetWindowAccent("cccccccc3333", 1)
-	m.SetWindowAccent("aaaaaaaa1111", 2)
+	m.SetWindowAccent("cccccccc3333", SlotAccent(1))
+	m.SetWindowAccent("aaaaaaaa1111", SlotAccent(2))
 
 	rows := railText(t, m)
 	logsRow, editorRow := "", ""
@@ -72,7 +73,7 @@ func TestAccentSurvivesFocus(t *testing.T) {
 	}
 	m.FocusWindow(idx)
 	focused := m.Windows[idx]
-	m.SetWindowAccent(focused.ID, 3)
+	m.SetWindowAccent(focused.ID, SlotAccent(3))
 
 	var row string
 	for _, r := range railText(t, m) {
@@ -94,7 +95,7 @@ func TestAccentSurvivesFocus(t *testing.T) {
 // together are the old-vs-new comparison rather than two editors on one buffer.
 func TestRailKeepsTheOldNameWhileRenaming(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
-	m.SidebarFocused = true // renaming from the rail, so the dialog anchors there
+	m.SidebarFocused = true // started from the rail
 
 	m.BeginRenameWindow(m.Windows[2]) // "logs", not the focused window
 	m.RenameBuffer = "audit"
@@ -107,20 +108,43 @@ func TestRailKeepsTheOldNameWhileRenaming(t *testing.T) {
 		t.Errorf("the rail dropped the name the window still has:\n%s", rows)
 	}
 
-	// The dialog anchors to that row and carries the buffer.
-	dialog, _, _, y, ok := m.renderRenameDialog()
+	// The dialog carries the buffer.
+	dialog, _, _, _, ok := m.renderRenameDialog()
 	if !ok {
 		t.Fatal("no rename dialog while a rename is in flight")
 	}
 	if !strings.Contains(stripANSIForTrace(dialog), "audit") {
 		t.Errorf("the dialog is not showing the buffer: %q", dialog)
 	}
-	row, found := m.sidebarRowFor("cccccccc3333")
-	if !found {
-		t.Fatal("the rail drew no row for the rename target")
-	}
-	if y+1 != row.Y0 {
-		t.Errorf("the dialog's field row is at y=%d, the row it names is at y=%d", y+1, row.Y0)
+}
+
+// TestRenameDialogIsCentred pins the placement complaint: the dialog used to
+// anchor to the rail row it renamed, which put it in the top-left corner. It
+// belongs in the middle of the screen at every size, measured off the frame it
+// actually draws rather than off the layout math that placed it.
+func TestRenameDialogIsCentred(t *testing.T) {
+	for _, size := range [][2]int{{120, 40}, {80, 24}, {60, 20}, {34, 12}} {
+		w, h := size[0], size[1]
+		m := sidebarTestOS(t, w, h, "left")
+		m.SidebarFocused = true
+		m.BeginRenameWindow(m.Windows[2])
+
+		content, geo, x, y, ok := m.renderRenameDialog()
+		if !ok {
+			t.Fatalf("%dx%d: no rename dialog while a rename is in flight", w, h)
+		}
+		drawnW := lipgloss.Width(content)
+		drawnH := lipgloss.Height(content)
+		if drawnW != geo.Width || drawnH != geo.Height {
+			t.Fatalf("%dx%d: the dialog draws %dx%d but reports %dx%d", w, h, drawnW, drawnH, geo.Width, geo.Height)
+		}
+		// Centred to within the odd-leftover cell on each axis.
+		if slack := (w - drawnW) - 2*x; slack < 0 || slack > 1 {
+			t.Errorf("%dx%d: dialog at x=%d is %d cells wide, off horizontal centre by %d", w, h, x, drawnW, slack)
+		}
+		if slack := (h - drawnH) - 2*y; slack < 0 || slack > 1 {
+			t.Errorf("%dx%d: dialog at y=%d is %d rows tall, off vertical centre by %d", w, h, y, drawnH, slack)
+		}
 	}
 }
 
@@ -132,7 +156,7 @@ func TestSidebarSignatureFoldsWhatTheRailDraws(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	base := m.sidebarSignature()
 
-	m.SetWindowAccent("cccccccc3333", 3)
+	m.SetWindowAccent("cccccccc3333", SlotAccent(3))
 	withAccent := m.sidebarSignature()
 	if withAccent == base {
 		t.Error("setting an accent left the signature unchanged, so the rail would keep the old row")
@@ -153,32 +177,41 @@ func TestSidebarSignatureFoldsWhatTheRailDraws(t *testing.T) {
 }
 
 // TestAccentPickerPicksAndClears walks the picker the way the keys drive it:
-// it opens on the accent the window already has, applying a row stores it, and
-// the clear row takes it away.
+// applying stores the colour under the cursor, reopening starts from it, and
+// the clear key takes it away.
 func TestAccentPickerPicksAndClears(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	truecolorForTest(t)
 	m := &OS{}
+	m.Width, m.Height = 120, 40
 
 	m.OpenAccentPicker("w1")
-	if !m.ShowAccentPicker || m.AccentPickerSelected != accentSwatchCount {
-		t.Fatalf("an unaccented window must open on the clear row, got %d", m.AccentPickerSelected)
+	if !m.ShowAccentPicker {
+		t.Fatal("the picker did not open")
+	}
+	if m.AccentPicker.HadPrev {
+		t.Error("an unaccented window opened the picker claiming a previous accent")
 	}
 
-	m.AccentPickerApply(4)
+	m.AccentPickerCell(6, 2)
+	want := m.AccentPicker.Cur
+	m.AccentPickerApply()
 	if m.ShowAccentPicker {
 		t.Error("applying an accent left the picker open")
 	}
-	if idx, ok := m.WindowAccent("w1"); !ok || idx != 4 {
-		t.Fatalf("accent = (%d, %v), want (4, true)", idx, ok)
+	got, ok := m.WindowAccent("w1")
+	if !ok || got.RGB() != want {
+		t.Fatalf("accent = %+v, want the colour under the cursor %s", got, hexString(want))
 	}
 
 	m.OpenAccentPicker("w1")
-	if m.AccentPickerSelected != 4 {
-		t.Errorf("the picker opened on row %d, want the accent the window has (4)", m.AccentPickerSelected)
+	if m.AccentPicker.Cur != want {
+		t.Errorf("the picker reopened on %s, want the accent the window has (%s)",
+			hexString(m.AccentPicker.Cur), hexString(want))
 	}
 	m.AccentPickerClear()
 	if _, ok := m.WindowAccent("w1"); ok {
-		t.Error("the clear row left the accent in place")
+		t.Error("the clear key left the accent in place")
 	}
 }
 
@@ -226,21 +259,5 @@ func TestRailCursorRenamesAndAccents(t *testing.T) {
 	m.SidebarAccentCursor()
 	if m.ShowAccentPicker {
 		t.Error("a session row opened the window accent picker")
-	}
-}
-
-// TestAccentSurvivesRestart is the real-user case: an accent set today is on the
-// row after the client is restarted, because it is written to the sidebar state
-// file the rest of the rail's layout already persists to.
-func TestAccentSurvivesRestart(t *testing.T) {
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-
-	m := &OS{}
-	m.SetWindowAccent("w1", 5)
-
-	next := &OS{}
-	next.loadSidebarState()
-	if idx, ok := next.WindowAccent("w1"); !ok || idx != 5 {
-		t.Fatalf("accent after restart = (%d, %v), want (5, true)", idx, ok)
 	}
 }

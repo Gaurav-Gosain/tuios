@@ -16,9 +16,6 @@ func (m *OS) BeginRenameWindow(w *terminal.Window) {
 	m.RenamingWindow = true
 	m.RenameTargetID = w.ID
 	m.RenameBuffer = w.CustomName
-	// Where the dialog anchors. A rename started while the rail owns the
-	// keyboard came from a rail row; anything else came from the pane.
-	m.RenameFromRail = m.SidebarFocused
 	w.InvalidateCache()
 }
 
@@ -39,7 +36,6 @@ func (m *OS) EndRenameWindow() {
 	m.RenamingWindow = false
 	m.RenameTargetID = ""
 	m.RenameBuffer = ""
-	m.RenameFromRail = false
 	m.renameHit = overlay.Rect{}
 }
 

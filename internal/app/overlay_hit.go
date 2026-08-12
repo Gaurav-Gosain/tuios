@@ -143,6 +143,14 @@ func (m *OS) setOverlayOffset(kind string, x, y int) {
 	m.OverlayOffsets[kind] = [2]int{x, y}
 }
 
+// centerOrigin returns the top-left screen cell that centers a w by h block on
+// the whole screen. Every modal surface lands here: a dialog the user is being
+// asked to answer belongs where they are already looking, and the screen centre
+// is the only spot that means the same thing at every terminal size.
+func (m *OS) centerOrigin(w, h int) (int, int) {
+	return max((m.GetRenderWidth()-w)/2, 0), max((m.GetRenderHeight()-h)/2, 0)
+}
+
 // overlayOrigin returns the top-left screen cell for an overlay panel: centered,
 // shifted by that kind's drag offset, and clamped so the panel stays on screen.
 func (m *OS) overlayOrigin(kind string, geo overlay.Geometry) (int, int) {
@@ -171,10 +179,7 @@ func (m *OS) placeOverlayPanel(layers []*lipgloss.Layer, kind, content string, g
 // full-screen lipgloss.Place, this leaves the windows around the box visible
 // instead of blanking them with opaque padding spaces.
 func (m *OS) centeredBoxLayer(box string, z int, id string) *lipgloss.Layer {
-	w := lipgloss.Width(box)
-	h := lipgloss.Height(box)
-	x := max((m.GetRenderWidth()-w)/2, 0)
-	y := max((m.GetRenderHeight()-h)/2, 0)
+	x, y := m.centerOrigin(lipgloss.Width(box), lipgloss.Height(box))
 	return lipgloss.NewLayer(box).X(x).Y(y).Z(z).ID(id)
 }
 

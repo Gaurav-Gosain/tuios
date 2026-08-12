@@ -141,19 +141,20 @@ func (m *OS) sidebarSignature() uint64 {
 	// and the rail keeps drawing the old name, so typing no longer rebuilds the
 	// whole rail once per keystroke.
 
-	// An open accent picker previews its cursor slot on the row it targets, so
-	// the rail rebuilds exactly on picker navigation, which is already a frame,
-	// and never otherwise. No tick. Only what the preview actually draws is
-	// folded, so a closed picker's leftover selection cannot hold the rail on a
-	// signature it no longer renders.
+	// An open accent picker previews the colour under its cursor on the row it
+	// targets, so the rail rebuilds exactly on picker navigation, which is
+	// already a frame, and never otherwise. No tick. Only what the preview
+	// actually draws is folded, so a closed picker's leftover cursor cannot hold
+	// the rail on a signature it no longer renders.
 	mixB(m.ShowAccentPicker)
 	if m.ShowAccentPicker {
 		mixS(m.AccentPickerWindowID)
-		slot, ok := m.accentPreview(m.AccentPickerWindowID)
+		preview, ok := m.accentPreview(m.AccentPickerWindowID)
 		if !ok {
-			slot = -1
+			mixI(-1)
+		} else {
+			mixU(preview.fold())
 		}
-		mixI(slot)
 	}
 
 	// Live windows in row order: id, label, agent state, workspace, accent.
@@ -170,11 +171,11 @@ func (m *OS) sidebarSignature() uint64 {
 		// most once a minute per pane, on a frame that was happening anyway.
 		mixI(int(agentElapsedBucket(w.AgentStateAt)))
 		mixI(w.Workspace)
-		accent, ok := m.WindowAccent(w.ID)
-		if !ok {
-			accent = -1
+		if accent, ok := m.WindowAccent(w.ID); ok {
+			mixU(accent.fold())
+		} else {
+			mixI(-1)
 		}
-		mixI(accent)
 	}
 
 	// Unread bits, order-independent and over every window rather than only the

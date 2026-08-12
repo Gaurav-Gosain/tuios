@@ -2,7 +2,6 @@ package app
 
 import (
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -40,6 +39,11 @@ func renameFieldText(buf string, width int) string {
 // old name underneath, which is the old-vs-new comparison in situ: old on the
 // row, new in the dialog. Editing in both places at once made the rail cache
 // special-case renames and clipped the buffer to the rail's twenty columns.
+//
+// It is centred on the screen like every other modal. Anchoring it to the rail
+// row it renamed put it in the top-left corner, far from where the eye had to
+// go to read what it was typing, and the row it pointed at is right there in
+// the rail anyway.
 func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
 	if !m.RenamingWindow {
 		return "", overlay.Geometry{}, 0, 0, false
@@ -63,75 +67,6 @@ func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
 		Hints: renameHints(),
 	}.Render(pal)
 
-	x, y := m.renameDialogOrigin(geo)
+	x, y := m.centerOrigin(geo.Width, geo.Height)
 	return content, geo, x, y, true
-}
-
-// renameDialogOrigin anchors the dialog to the thing being renamed: the rail
-// row it was started from, else the pane's title bar. The field row (row 2 of
-// 3) is what lines up with the target, since that is the row the eye is on.
-// Everything is clamped inside the screen and off the dock.
-func (m *OS) renameDialogOrigin(geo overlay.Geometry) (int, int) {
-	renderW := m.GetRenderWidth()
-	top, bottom := m.GetTopMargin(), m.GetTopMargin()+m.GetUsableHeight()
-
-	x, y, anchored := -1, -1, false
-	if m.RenameFromRail {
-		if row, ok := m.sidebarRowFor(m.RenameTargetID); ok {
-			// Beside the rail rather than over it, mirrored for a right-hand
-			// rail so the dialog never covers the row it is naming.
-			if config.SidebarPosition == "right" {
-				x = row.X0 - geo.Width
-			} else {
-				x = row.X1
-			}
-			y, anchored = row.Y0-1, true
-		}
-	}
-	if !anchored {
-		if w := m.RenameTarget(); w != nil {
-			x, y, anchored = w.X, w.Y+1, true
-		}
-	}
-	if !anchored || x < 0 || x+geo.Width > renderW {
-		// Too narrow or nothing to anchor to: centre horizontally, top third
-		// vertically, which is where a prompt with no home belongs.
-		x = max((renderW-geo.Width)/2, 0)
-		if !anchored {
-			y = top + max(m.GetUsableHeight()/3, 0)
-		}
-	}
-	x = max(min(x, renderW-geo.Width), 0)
-	y = max(min(y, bottom-geo.Height), top)
-	return x, y
-}
-
-// sidebarRowFor is the rail row drawn for a window this frame, if the rail drew
-// one. The hits are the geometry the rail actually drew, so an anchor taken
-// from them lands on the row the user is looking at.
-//
-// A pane running an agent is drawn twice, once in the agents section and once
-// in the tree, so the row the keyboard cursor is on wins: that is the one the
-// rename was started from. Failing that the tree row does, since it is where a
-// pane lives whether or not it is running anything.
-func (m *OS) sidebarRowFor(windowID string) (sidebarRowHit, bool) {
-	want := sidebarRowWindow
-	if m.SidebarCursor >= 0 && m.SidebarCursor < len(m.SidebarNav) {
-		if n := m.SidebarNav[m.SidebarCursor]; n.WindowID == windowID {
-			want = n.Kind
-		}
-	}
-	best, ok := sidebarRowHit{}, false
-	for _, h := range m.SidebarHits {
-		if h.WindowID != windowID || (h.Kind != sidebarRowWindow && h.Kind != sidebarRowAgent) {
-			continue
-		}
-		if h.Kind == want {
-			return h, true
-		}
-		if !ok {
-			best, ok = h, true
-		}
-	}
-	return best, ok
 }
