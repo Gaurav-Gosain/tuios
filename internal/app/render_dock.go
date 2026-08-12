@@ -194,15 +194,6 @@ func (m *OS) renderDockString() (string, int) {
 	// closing cap: the block would lose the shape that makes it part of the bar.
 	notif, hasNotif := m.renderNotificationBlock(barWidth, max(barWidth-actualLeftWidth-centerWidth, 0))
 
-	// Recorded here rather than in the builder because this is the pass that
-	// places the block; the layout pass measures it against a different budget.
-	m.notifHit = notifHitZones{
-		Active:    hasNotif,
-		X0:        barWidth - notif.Width,
-		DismissX0: barWidth - notif.DismissW,
-		Y:         m.GetDockbarContentYPosition(),
-	}
-
 	inCopyMode := focusedWindow.CopyModeVisible()
 	switch {
 	case hasNotif:
@@ -260,6 +251,19 @@ func (m *OS) renderDockString() (string, int) {
 	}
 	if rightSpacer < 0 {
 		rightSpacer = 0
+	}
+
+	// The message block's own columns, taken from the spacers this pass drew
+	// rather than from the bar's right-hand end. The block is the last thing in
+	// the bar, so everything in front of it added up is where it starts, and the
+	// burn rule above it is placed from the same number.
+	notifX0 := actualLeftWidth + leftSpacer + centerWidth + rightSpacer
+	m.notifHit = notifHitZones{
+		Active:    hasNotif,
+		X0:        notifX0,
+		X1:        notifX0 + rightWidth,
+		DismissX0: notifX0 + rightWidth - notif.DismissW,
+		Y:         m.GetDockbarContentYPosition(),
 	}
 
 	// The entries' screen columns, now that the spacer in front of them is known.
@@ -320,14 +324,23 @@ func (m *OS) renderDockString() (string, int) {
 		Foreground(theme.NotificationRule()).
 		Render(m.cachedSeparator)
 
-	// The message burns down over the hairline directly above it. The lit run
-	// replaces the right-hand end of the separator rather than being drawn on
-	// top of it, so the row is still exactly one screen wide and the burn is
-	// aligned with the block by construction: they are the same span.
-	if ruleWidth := lipgloss.Width(notifRule); ruleWidth > 0 && ruleWidth <= renderWidth {
-		separator = lipgloss.NewStyle().
-			Foreground(theme.NotificationRule()).
-			Render(strings.Repeat(config.GetWindowSeparatorChar(), renderWidth-ruleWidth)) + notifRule
+	// The message burns down over the hairline directly above it, across the
+	// block's own columns. The lit run replaces that stretch of the separator
+	// rather than being drawn on top of it, so the row is still exactly one
+	// screen wide.
+	//
+	// It is placed at the block's recorded first column. Pinning it to the right
+	// edge of the screen was the same thing only while the bar ran to that edge:
+	// the session controls hold the last columns now, so the burn was drawn
+	// under them, a rule's width away from the message it belonged to.
+	if ruleWidth := lipgloss.Width(notifRule); ruleWidth > 0 && notifX0 < renderWidth {
+		if room := renderWidth - notifX0; ruleWidth > room {
+			notifRule, ruleWidth = truncateToWidth(notifRule, room), room
+		}
+		hairline := lipgloss.NewStyle().Foreground(theme.NotificationRule())
+		sepChar := config.GetWindowSeparatorChar()
+		separator = hairline.Render(strings.Repeat(sepChar, notifX0)) + notifRule +
+			hairline.Render(strings.Repeat(sepChar, renderWidth-notifX0-ruleWidth))
 	}
 
 	dockbarYPos := m.GetRenderHeight() - config.DockHeight

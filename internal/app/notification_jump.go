@@ -20,9 +20,11 @@ import (
 // by the renderer because only it knows the block's real width.
 type notifHitZones struct {
 	Active bool
-	// X0 is the block's first column; DismissX0 opens the right-hand zone (the
-	// counter, the esc affordance and the closing cap). Both absolute.
-	X0, DismissX0, Y int
+	// X0 is the block's first column and X1 the column past its last, so the
+	// pair is the block's extent and the burn rule above it is drawn to the same
+	// span. DismissX0 opens the right-hand zone (the counter, the esc affordance
+	// and the closing cap). All absolute.
+	X0, X1, DismissX0, Y int
 }
 
 // notifTargetedIndex is the newest message carrying a target, or -1. Activation
@@ -109,7 +111,7 @@ func (m *OS) sessionCached(name string) bool {
 // the press was inside the block at all.
 func (m *OS) NotificationClick(x, y int) bool {
 	z := m.notifHit
-	if !z.Active || len(m.Notifications) == 0 || y != z.Y || x < z.X0 {
+	if !z.Active || len(m.Notifications) == 0 || y != z.Y || x < z.X0 || x >= z.X1 {
 		return false
 	}
 	if x >= z.DismissX0 {

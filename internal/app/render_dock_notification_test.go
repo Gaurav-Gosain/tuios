@@ -146,6 +146,157 @@ func TestNotificationBurnsDownAndStickyDoesNot(t *testing.T) {
 	}
 }
 
+// dockRows splits a drawn dock into its hairline row and its content row,
+// whichever way round the bar is configured.
+func dockRows(t *testing.T, dock string) (hairline, content string) {
+	t.Helper()
+	rows := strings.Split(dock, "\n")
+	if len(rows) != 2 {
+		t.Fatalf("the dock drew %d rows, want a hairline and a bar", len(rows))
+	}
+	if config.DockbarPosition == "top" {
+		return rows[1], rows[0]
+	}
+	return rows[0], rows[1]
+}
+
+// notifBurnSpan is the stretch of the drawn hairline carrying the burn stroke,
+// as [x0, x1). Read off the frame rather than off the block, which is the whole
+// point: the two used to be a session strip's width apart and every measurement
+// taken from the block itself agreed with the block.
+func notifBurnSpan(t *testing.T, hairline string) (int, int) {
+	t.Helper()
+	stroke := []rune(config.GetNotificationRule(config.NotificationRuleHeavy))[0]
+	x0, x1 := -1, -1
+	for i, r := range []rune(stripANSIForTrace(hairline)) {
+		if r != stroke {
+			continue
+		}
+		if x0 < 0 {
+			x0 = i
+		}
+		if x1 >= 0 && x1 != i {
+			t.Fatalf("the burn is drawn in two pieces: a gap before column %d", i)
+		}
+		x1 = i + 1
+	}
+	if x0 < 0 {
+		t.Fatal("the hairline carries no burn at all")
+	}
+	return x0, x1
+}
+
+// cellsFrom is what a plain row shows from an absolute column onwards.
+func cellsFrom(plain string, col int) string {
+	x := 0
+	for i, r := range plain {
+		if x >= col {
+			return plain[i:]
+		}
+		x += lipgloss.Width(string(r))
+	}
+	return ""
+}
+
+// TestNotificationBurnSitsUnderItsOwnBlock is the anchoring contract, asserted
+// off the drawn frame.
+//
+// The burn was drawn at the right-hand end of the screen, which was the block's
+// own span only while the bar ran that far. The session controls hold those
+// columns now, so the rule was landing under them, a strip's width to the right
+// of the message it was timing: a progress indicator for something else.
+func TestNotificationBurnSitsUnderItsOwnBlock(t *testing.T) {
+	messages := []string{
+		"ok",
+		"Layout saved: development",
+		strings.Repeat("a message far longer than any dock will ever hold ", 4),
+	}
+
+	for _, width := range []int{80, 120, 200} {
+		for _, message := range messages {
+			m := notifTestOS(t, width)
+			// An error is sticky, so the whole span is lit and the burn's extent
+			// is the block's extent exactly.
+			m.ShowNotification(message, "error", config.NotificationDuration)
+
+			dock, _ := m.renderDockString()
+			hairline, content := dockRows(t, dock)
+			z := m.notifHit
+			if !z.Active {
+				t.Fatalf("width %d: the dock drew no message block", width)
+			}
+
+			x0, x1 := notifBurnSpan(t, hairline)
+			if x0 != z.X0 || x1 != z.X1 {
+				t.Errorf("width %d, %d-column message: the burn covers [%d,%d), the block sits at [%d,%d)",
+					width, lipgloss.Width(message), x0, x1, z.X0, z.X1)
+			}
+
+			// The recorded rect is the block's real place on the row below, so
+			// the two assertions above are about the same thing the user sees.
+			if got := cellsFrom(stripANSIForTrace(content), z.X0); !strings.HasPrefix(got, notifCap("error")) {
+				t.Errorf("width %d: column %d of the bar reads %q, want the block's opening cap",
+					width, z.X0, cellsFrom(got, 0))
+			}
+
+			// And nothing else is under it.
+			for _, h := range m.dockSessionHits {
+				if h.X0 < x1 && x0 < h.X1 {
+					t.Errorf("width %d: the burn [%d,%d) runs under a session control [%d,%d)",
+						width, x0, x1, h.X0, h.X1)
+				}
+			}
+		}
+	}
+}
+
+// TestNotificationBurnShortensFromTheBlocksOwnEnd: a half-burnt message keeps
+// its rule's left edge on the block's first column and gives up columns from
+// the right, so what is left of the rule is what is left of the message.
+func TestNotificationBurnShortensFromTheBlocksOwnEnd(t *testing.T) {
+	for _, width := range []int{80, 120, 200} {
+		m := notifTestOS(t, width)
+		m.ShowNotification("Recording saved: demo.tape", "warning", 10*time.Second)
+		m.Notifications[0].StartTime = time.Now().Add(-8 * time.Second)
+
+		dock, _ := m.renderDockString()
+		hairline, _ := dockRows(t, dock)
+		x0, x1 := notifBurnSpan(t, hairline)
+
+		z := m.notifHit
+		if x0 != z.X0 {
+			t.Errorf("width %d: an aged burn starts at %d, the block starts at %d", width, x0, z.X0)
+		}
+		if x1 >= z.X1 {
+			t.Errorf("width %d: an aged burn still covers [%d,%d) of a block ending at %d",
+				width, x0, x1, z.X1)
+		}
+		if x1 <= x0 {
+			t.Errorf("width %d: a live message burnt out entirely: [%d,%d)", width, x0, x1)
+		}
+	}
+}
+
+// TestNotificationBurnClearsTheDismissTarget: the burn is on the hairline and
+// the dismiss zone is on the bar, one row apart, so the timer can never cover
+// the way out of a sticky message.
+func TestNotificationBurnClearsTheDismissTarget(t *testing.T) {
+	m := notifTestOS(t, 120)
+	m.ShowNotification("Failed to save layout: permission denied", "error", config.NotificationDuration)
+
+	dock, _ := m.renderDockString()
+	hairline, _ := dockRows(t, dock)
+	notifBurnSpan(t, hairline)
+
+	z := m.notifHit
+	if z.DismissX0 < z.X0 || z.DismissX0 >= z.X1 {
+		t.Fatalf("the dismiss zone opens at %d, outside the block's [%d,%d)", z.DismissX0, z.X0, z.X1)
+	}
+	if !m.NotificationClick(z.DismissX0, z.Y) || len(m.Notifications) != 0 {
+		t.Error("the dismiss target did not take the sticky message off the dock")
+	}
+}
+
 // TestNotificationTruncationCutsTheMessageNotTheSeverity is the truncation
 // contract: whatever has to go, the severity does not.
 //
