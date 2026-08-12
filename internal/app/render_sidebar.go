@@ -262,12 +262,17 @@ type sidebarTerminalEntry struct {
 	State     string
 	DoneSeen  bool
 	Focused   bool
-	// Workspace is the workspace the pane lives on, or 0 when this client does
-	// not know (a peeked session's panes, until the daemon puts it on the wire).
-	Workspace int
+	// Tag is the quiet right-hand mark saying which workspace the pane sits on,
+	// empty for a pane on the session's own current workspace and for one whose
+	// workspace this client cannot know. Resolved where the session's context is
+	// still in hand, so the row itself does not have to go looking for it.
+	Tag string
 	// WindowIndex is the index into m.Windows, or -1 for a pane of a session
 	// this client is not attached to.
 	WindowIndex int
+	// workspace orders the section (workspace, then the session's own pane
+	// order). It draws nothing; Tag is what a row prints.
+	workspace int
 }
 
 // sidebarStyle returns a style carrying the given colors, either of which may
@@ -980,13 +985,25 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 		}
 		if node.IsCurrent {
 			e.WindowIndex = m.windowIndexByID(win.ID)
-			e.Workspace = m.windowWorkspace(win.ID)
 		}
-		// A peeked session's panes carry no workspace yet: it is not on the wire,
-		// so those rows go tagless until the protocol enrichment lands.
+		// A pane elsewhere is here for orientation and says where it went; a pane
+		// on the session's own workspace says nothing, because "here" is not
+		// information. A session whose workspace this client cannot know (an
+		// older daemon sends neither field) tags nothing at all rather than
+		// tagging everything.
+		e.workspace = win.Workspace
+		if node.Workspace > 0 && win.Workspace > 0 && win.Workspace != node.Workspace {
+			if node.IsCurrent {
+				e.Tag = m.workspaceTag(win.Workspace)
+			} else {
+				// Another session's workspace names are not on the wire, so its
+				// panes get the numbered form.
+				e.Tag = "w" + strconv.Itoa(win.Workspace)
+			}
+		}
 		out = append(out, e)
 	}
-	sort.SliceStable(out, func(a, b int) bool { return out[a].Workspace < out[b].Workspace })
+	sort.SliceStable(out, func(a, b int) bool { return out[a].workspace < out[b].workspace })
 	return out
 }
 
@@ -1277,10 +1294,9 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 	// to find out. A pane on this workspace says nothing, because "here" is not
 	// information.
 	right, rightW := "", 0
-	if e.Workspace > 0 && e.Workspace != m.sessionCurrentWorkspace(e.SessionID) {
-		tag := m.workspaceTag(e.Workspace)
-		right = sidebarStyle(rowBg, pal.FgMute).Render(tag)
-		rightW = lipgloss.Width(tag)
+	if e.Tag != "" {
+		right = sidebarStyle(rowBg, pal.FgMute).Render(e.Tag)
+		rightW = lipgloss.Width(e.Tag)
 	}
 
 	fg := pal.FgDim
@@ -1302,15 +1318,6 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, rowBg, pal), name, right, cw, rowBg)
 }
 
-// windowWorkspace is the workspace a rail row's window sits on, or 0 when this
-// client does not hold it.
-func (m *OS) windowWorkspace(id string) int {
-	if i := m.windowIndexByID(id); i >= 0 {
-		return m.Windows[i].Workspace
-	}
-	return 0
-}
-
 // workspaceTag is the quiet right-hand mark saying which workspace a pane sits
 // on. A named workspace says its name, because that is the thing the user gave
 // it to be recognised by; an unnamed one keeps the "w4" form, where the bare
@@ -1325,17 +1332,6 @@ func (m *OS) workspaceTag(ws int) string {
 // sidebarWorkspaceTagMax caps a named workspace's tag so the name it fronts can
 // never crowd out the pane name the row is actually about.
 const sidebarWorkspaceTagMax = 8
-
-// sessionCurrentWorkspace is the workspace a session is showing, which is what
-// decides whether a pane of it counts as "here" and so goes untagged. Only the
-// attached session's is known to this client; a peeked session answers 0, which
-// leaves its rows tagless rather than wrong.
-func (m *OS) sessionCurrentWorkspace(sessionID string) int {
-	if sessionID == m.sidebarCurrentSessionID() {
-		return m.CurrentWorkspace
-	}
-	return 0
-}
 
 // sidebarAgentsEmptyRow is what the agents section shows when its filter hides
 // every pane it has: the state it is in, the count it is hiding, and the way

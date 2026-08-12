@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -70,11 +71,22 @@ func TestOtherWorkspaceWindowRowCarriesItsDigit(t *testing.T) {
 	}
 }
 
-// TestForeignSessionWindowRowHasNoDigit: this client does not hold another
-// session's panes, so it does not know their workspaces and must not guess.
-func TestForeignSessionWindowRowHasNoDigit(t *testing.T) {
-	m := spreadTestOS(t, 120, 40, "left")
-	if got := m.windowWorkspace("no-such-window"); got != 0 {
-		t.Errorf("an unheld window reported workspace %d, want 0", got)
+// TestUnknownWorkspaceTagsNothing: a pane whose workspace is not known, and a
+// session whose current workspace is not known, must both go untagged. An older
+// daemon sends neither field, and a rail that tagged every row on that listing
+// would be confidently wrong about all of them.
+func TestUnknownWorkspaceTagsNothing(t *testing.T) {
+	m, _ := sectionsTestOS(t, 120, 30)
+	tree := sessiontree.Build([]sessiontree.SessionInput{
+		// No CurrentWorkspace and no per-pane workspace: an older daemon's reply.
+		{Name: "api", Windows: []sessiontree.WindowInput{
+			{ID: "dddddddd4444", Title: "server"},
+			{ID: "eeeeeeee5555", Title: "worker"},
+		}},
+	})
+	for _, e := range m.sidebarTerminals(tree.Sessions, "api") {
+		if e.Tag != "" {
+			t.Errorf("pane %q was tagged %q off a listing that says nothing about workspaces", e.WindowID, e.Tag)
+		}
 	}
 }

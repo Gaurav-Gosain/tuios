@@ -40,6 +40,10 @@ type Node struct {
 	// or 0 when unknown. The rail reads it to show how long a pane has been in
 	// its state, which is what tells a waiting agent from a busy one.
 	StateAt int64
+	// Workspace is the workspace a window node sits on, or 0 when unknown. On a
+	// session node it is the workspace that session is showing, which is what
+	// decides which of its panes count as "here".
+	Workspace int
 	// Attached is true for a session that has any client attached. Always false
 	// for window nodes.
 	Attached bool
@@ -72,6 +76,10 @@ type WindowInput struct {
 	StateAt int64
 	// Focused marks the currently focused window in its session.
 	Focused bool
+	// Workspace is the workspace the pane sits on, or 0 when the caller does
+	// not know. A surface showing panes of a session it is not attached to
+	// reads it off the wire, where an older daemon simply sends nothing.
+	Workspace int
 }
 
 // SessionInput is the caller's per-session data. Windows may be nil for a
@@ -86,7 +94,10 @@ type SessionInput struct {
 	Attached    bool
 	IsCurrent   bool
 	WindowCount int
-	Windows     []WindowInput
+	// CurrentWorkspace is the workspace this session is showing, or 0 when the
+	// caller does not know.
+	CurrentWorkspace int
+	Windows          []WindowInput
 }
 
 // AgentRank ranks agent states for both the session roll-up and the sidebar's
@@ -149,6 +160,7 @@ func BuildSession(s SessionInput) Node {
 		Attached:    s.Attached,
 		IsCurrent:   s.IsCurrent,
 		WindowCount: s.WindowCount,
+		Workspace:   s.CurrentWorkspace,
 	}
 	if len(s.Windows) == 0 {
 		return node
@@ -165,6 +177,7 @@ func BuildSession(s SessionInput) Node {
 			DoneSeen:   w.DoneSeen,
 			StateAt:    w.StateAt,
 			IsCurrent:  w.Focused,
+			Workspace:  w.Workspace,
 		})
 		if r := AgentRank(w.AgentState, w.DoneSeen); r > bestRank {
 			node.AgentState, node.DoneSeen, bestRank = w.AgentState, w.DoneSeen, r

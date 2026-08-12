@@ -1055,6 +1055,21 @@ func (c *TUIClient) SessionLabel(name string) (display, accent string) {
 	return "", ""
 }
 
+// SessionCurrentWorkspace is the workspace the named session is showing, from
+// the cached listing, or 0 when it is unknown: an older daemon does not send
+// the field, and a surface reading zero simply says nothing about where that
+// session's panes live rather than saying something wrong.
+func (c *TUIClient) SessionCurrentWorkspace(name string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return s.CurrentWorkspace
+		}
+	}
+	return 0
+}
+
 // SessionCount returns how many sessions the cache currently knows about. The
 // client gates its foreign-session poll on this so a lone-session client makes
 // no network round trips at idle.

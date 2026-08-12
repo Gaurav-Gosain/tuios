@@ -159,6 +159,11 @@ type WindowSummary struct {
 	// user has named, whose name is already the answer. Additive and omitted
 	// when empty, so an older peer just reads the title as before.
 	ForegroundCmd string `json:"foreground_cmd,omitempty"`
+	// Workspace is the workspace the pane sits on, so a client previewing a
+	// session it is not attached to can say where a pane lives. Additive and
+	// omitted when zero, which is exactly how an older daemon's listing reads:
+	// unknown, and the row goes untagged rather than wrongly tagged.
+	Workspace int `json:"workspace,omitempty"`
 }
 
 // SessionInfo describes a single session for listing.
@@ -182,6 +187,11 @@ type SessionInfo struct {
 	// how a client reads "fall back to Name".
 	DisplayName string `json:"display_name,omitempty"`
 	Accent      string `json:"accent,omitempty"`
+	// CurrentWorkspace is the workspace the session is showing, which is what
+	// decides whether one of its panes counts as "here" and so goes untagged.
+	// Additive and omitted when zero; a client reading zero tags nothing, which
+	// is the same graceful silence it had before the field existed.
+	CurrentWorkspace int `json:"current_workspace,omitempty"`
 }
 
 // SessionListPayload contains list of available sessions.

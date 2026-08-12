@@ -979,20 +979,22 @@ func (s *Session) Info() SessionInfo {
 
 	s.stateMu.RLock()
 	displayName, accent := s.state.DisplayName, s.state.Accent
+	currentWorkspace := s.state.CurrentWorkspace
 	s.stateMu.RUnlock()
 
 	return SessionInfo{
-		Name:        s.Name,
-		ID:          s.ID,
-		Created:     s.Created.Unix(),
-		LastActive:  s.LastActive.Unix(),
-		WindowCount: len(windows),
-		Attached:    false, // Will be set by manager
-		Width:       width,
-		Height:      height,
-		Windows:     windows,
-		DisplayName: displayName,
-		Accent:      accent,
+		Name:             s.Name,
+		ID:               s.ID,
+		Created:          s.Created.Unix(),
+		LastActive:       s.LastActive.Unix(),
+		WindowCount:      len(windows),
+		Attached:         false, // Will be set by manager
+		Width:            width,
+		Height:           height,
+		Windows:          windows,
+		DisplayName:      displayName,
+		Accent:           accent,
+		CurrentWorkspace: currentWorkspace,
 	}
 }
 
@@ -1033,6 +1035,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentState:    string(w.AgentState),
 			AgentStateAt:  w.AgentStateAt,
 			ForegroundCmd: fg,
+			Workspace:     w.Workspace,
 		})
 	}
 	return out

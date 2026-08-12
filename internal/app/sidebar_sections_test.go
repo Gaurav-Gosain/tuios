@@ -29,14 +29,14 @@ func sectionsTestOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	m.SidebarOrder = nil
 
 	tree := sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
-			{ID: "aaaaaaaa1111", Title: "nvim", Focused: true},
-			{ID: "bbbbbbbb2222", Title: "refactor", AgentState: "done"},
-			{ID: "cccccccc3333", Title: "build", AgentState: "working"},
+		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
+			{ID: "aaaaaaaa1111", Title: "nvim", Focused: true, Workspace: 1},
+			{ID: "bbbbbbbb2222", Title: "refactor", AgentState: "done", Workspace: 1},
+			{ID: "cccccccc3333", Title: "build", AgentState: "working", Workspace: 2},
 		}},
-		{Name: "api", Windows: []sessiontree.WindowInput{
-			{ID: "dddddddd4444", Title: "server", AgentState: "needs_input"},
-			{ID: "eeeeeeee5555", Title: "worker"},
+		{Name: "api", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
+			{ID: "dddddddd4444", Title: "server", AgentState: "needs_input", Workspace: 1},
+			{ID: "eeeeeeee5555", Title: "worker", Workspace: 3},
 		}},
 		{Name: "docs"},
 	})

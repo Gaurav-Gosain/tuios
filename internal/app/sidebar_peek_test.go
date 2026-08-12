@@ -264,4 +264,31 @@ func TestPeekIgnoresASessionThatIsGone(t *testing.T) {
 	}
 }
 
+// TestPeekedPanesCarryTheirWorkspaceTags is what the protocol enrichment buys:
+// before it, a peeked session's panes were tagless because this client had no
+// way to know where they lived. The names of another session's workspaces are
+// still not on the wire, so its tags take the numbered form.
+func TestPeekedPanesCarryTheirWorkspaceTags(t *testing.T) {
+	m, tree := sectionsTestOS(t, 120, 30)
+	m.SidebarPeek = "api"
+	lines := railPlain(t, m, tree)
+
+	worker := lineOf(lines, "worker")
+	if worker < 0 {
+		t.Fatalf("the peek did not show the other session's panes:\n%s", strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(lines[worker], "w3") {
+		t.Errorf("a peeked pane on workspace 3 says nothing about it: %q", lines[worker])
+	}
+	// A pane on the peeked session's own current workspace stays quiet, because
+	// "here" is not information whichever session is being looked at.
+	server := lineOf(lines, "server")
+	if server < 0 {
+		t.Fatalf("the peek lost a pane:\n%s", strings.Join(lines, "\n"))
+	}
+	if strings.Contains(lines[server], "w1") {
+		t.Errorf("a peeked pane on the session's own workspace was tagged anyway: %q", lines[server])
+	}
+}
+
 var _ = sessiontree.Tree{}
