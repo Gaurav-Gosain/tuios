@@ -1041,6 +1041,20 @@ func (c *TUIClient) AvailableSessionNames() []string {
 	return names
 }
 
+// SessionLabel returns the cached display name and accent for the named
+// session, both empty when it is unknown or carries neither. The caller falls
+// back to the session name, which stays the identity in every case.
+func (c *TUIClient) SessionLabel(name string) (display, accent string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return s.DisplayName, s.Accent
+		}
+	}
+	return "", ""
+}
+
 // SessionCount returns how many sessions the cache currently knows about. The
 // client gates its foreign-session poll on this so a lone-session client makes
 // no network round trips at idle.
@@ -1200,6 +1214,11 @@ func listingsAgree(a, b []SessionInfo) bool {
 	}
 	for i := range a {
 		if a[i].Name != b[i].Name || a[i].WindowCount != b[i].WindowCount {
+			return false
+		}
+		// A rename moves no window, so without these a renamed session kept the
+		// old label until something else happened to bump the generation.
+		if a[i].DisplayName != b[i].DisplayName || a[i].Accent != b[i].Accent {
 			return false
 		}
 		if !slices.Equal(a[i].Windows, b[i].Windows) {

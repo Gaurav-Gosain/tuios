@@ -977,6 +977,10 @@ func (s *Session) Info() SessionInfo {
 
 	windows := s.windowSummaries()
 
+	s.stateMu.RLock()
+	displayName, accent := s.state.DisplayName, s.state.Accent
+	s.stateMu.RUnlock()
+
 	return SessionInfo{
 		Name:        s.Name,
 		ID:          s.ID,
@@ -987,6 +991,8 @@ func (s *Session) Info() SessionInfo {
 		Width:       width,
 		Height:      height,
 		Windows:     windows,
+		DisplayName: displayName,
+		Accent:      accent,
 	}
 }
 

@@ -197,6 +197,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.LogInfo("[RESTORE] RestoreFromState: restoring %d windows", len(state.Windows))
 
 	m.SessionName = state.Name
+	m.adoptSessionLabels(state)
 	m.DaemonStateVersion = state.Version
 	// Clamp to a valid workspace: SwitchToWorkspace rejects workspace < 1, so a
 	// state carrying 0 (legacy, or a freshly created session with no windows)
@@ -443,6 +444,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 
 	// Update global state
 	m.SessionName = state.Name
+	m.adoptSessionLabels(state)
 	m.DaemonStateVersion = state.Version
 	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
 	m.MasterRatio = state.MasterRatio

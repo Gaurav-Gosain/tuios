@@ -78,7 +78,11 @@ type WindowInput struct {
 // non-attached session whose per-window detail is not available yet; WindowCount
 // then carries the count for the collapsed row.
 type SessionInput struct {
-	Name        string
+	Name string
+	// DisplayName is the user's label for the session, empty when unset. It
+	// never reaches ID: the name stays the identity every keyed map, every
+	// switch and the daemon's own addressing use, and only Title moves.
+	DisplayName string
 	Attached    bool
 	IsCurrent   bool
 	WindowCount int
@@ -134,10 +138,14 @@ func RollUpState(states []string) string {
 // sets WindowCount from the children; otherwise it keeps the coarse WindowCount
 // and leaves Children nil.
 func BuildSession(s SessionInput) Node {
+	title := s.Name
+	if s.DisplayName != "" {
+		title = s.DisplayName
+	}
 	node := Node{
 		Kind:        KindSession,
 		ID:          s.Name,
-		Title:       s.Name,
+		Title:       title,
 		Attached:    s.Attached,
 		IsCurrent:   s.IsCurrent,
 		WindowCount: s.WindowCount,

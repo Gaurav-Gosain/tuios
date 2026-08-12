@@ -298,10 +298,20 @@ type OS struct {
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
 	// Daemon mode fields
-	IsDaemonSession   bool               // True when running as part of a persistent daemon session
-	DaemonClient      *session.TUIClient // Client for daemon communication (nil in local mode)
-	SessionName       string             // Name of the daemon session (if attached)
-	RestoredFromState bool               // True after RestoreFromState, cleared after first resize
+	IsDaemonSession bool               // True when running as part of a persistent daemon session
+	DaemonClient    *session.TUIClient // Client for daemon communication (nil in local mode)
+	SessionName     string             // Name of the daemon session (if attached)
+	// SessionDisplayName and SessionAccent are the attached session's
+	// daemon-owned label and accent slot, both empty when unset. They are
+	// labels only: SessionName stays the identity every keyed map, every
+	// switch and the daemon's own addressing use.
+	SessionDisplayName string
+	SessionAccent      string
+	// WorkspaceNames maps a workspace number to its daemon-owned label. The
+	// number stays the workspace's identity and is what an unnamed workspace
+	// shows, so an absent entry is not a missing label but the normal case.
+	WorkspaceNames    map[int]string
+	RestoredFromState bool // True after RestoreFromState, cleared after first resize
 	// DaemonStateVersion is the daemon state version this client last saw. It is
 	// echoed back on every state sync so the daemon can tell a snapshot built
 	// from its current state apart from one built before a mutation of its own.
