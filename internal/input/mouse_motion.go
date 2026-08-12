@@ -6,8 +6,25 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 )
+
+// guestWantsMotion reports whether a guest's own mouse mode would have had the
+// host report this motion to it. The host is held in all-motion tracking so
+// tuios can draw its own hover and follow focus, so this is the only thing
+// standing between a guest and motion it never asked for:
+//
+//   - 1003 (any-event): every motion.
+//   - 1002 (button-event): only motion with a button held.
+//   - 1000/1001 (normal): none. Motion delivered to these apps comes back as
+//     phantom keypresses (issue #78).
+func guestWantsMotion(term *vt.Emulator, button tea.MouseButton) bool {
+	if term.HasAllMotionMode() {
+		return true
+	}
+	return term.HasCellMotionMode() && button != tea.MouseNone
+}
 
 // handleMouseMotion handles mouse motion events
 func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -112,16 +129,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Forward mouse motion to terminal if in terminal mode and window supports motion events.
-	// Only modes 1002 (button-event) and 1003 (any-event) support motion forwarding.
-	// Mode 1000/1001 (normal tracking) only supports click/release  - forwarding motion
-	// events to these apps causes phantom keypresses (issue #78).
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.Terminal != nil {
-			shouldForward := focusedWindow.Terminal.SupportsMotionEvents()
-
-			if shouldForward {
+			if guestWantsMotion(focusedWindow.Terminal, mouse.Button) {
 				// Convert to terminal-relative coordinates (0-based)
 				termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
 				// Check if motion is within terminal content area
