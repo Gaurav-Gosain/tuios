@@ -61,7 +61,7 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 		if g.IsCurrent {
 			attached = " (attached)"
 		}
-		treeRows = append(treeRows, treeRow{text: fmt.Sprintf("Workspace %d: %d windows%s", g.Workspace+1, g.WindowCount, attached)})
+		treeRows = append(treeRows, treeRow{text: fmt.Sprintf("Workspace %d: %d windows%s", g.Workspace, g.WindowCount, attached)})
 
 		for ii := range g.Items {
 			item := &g.Items[ii]

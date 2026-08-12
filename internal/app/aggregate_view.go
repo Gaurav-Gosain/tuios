@@ -128,7 +128,7 @@ func FilterAggregateViewItems(items []AggregateViewItem, query string) []Aggrega
 	for _, item := range items {
 		// Match against title, CWD, workspace number, or preview
 		searchText := strings.ToLower(fmt.Sprintf("%s %s %d %s",
-			item.Title, item.CWD, item.Workspace+1, item.Preview))
+			item.Title, item.CWD, item.Workspace, item.Preview))
 
 		if fuzzyMatch(searchText, query) {
 			filtered = append(filtered, item)
