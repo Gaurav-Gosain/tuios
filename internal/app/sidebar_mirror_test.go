@@ -100,13 +100,15 @@ func TestMirrorFooterCornersSwap(t *testing.T) {
 }
 
 // TestMirrorStripToggleHugsThePaneFacingColumn: the strip has one control and
-// two columns, so which of them it lands on is the whole decision.
+// two columns, so which of them its glyph lands on is the whole decision. The
+// zone behind it takes both columns either way, because a one-cell target is
+// not a control.
 func TestMirrorStripToggleHugsThePaneFacingColumn(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, tree := stripOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
 		m.SidebarCollapsed = true
-		m.sidebarPanelLinesForTree(tree)
+		lines, w := m.sidebarPanelLinesForTree(tree)
 
 		var toggle sidebarRowHit
 		for _, h := range m.SidebarHits {
@@ -117,19 +119,29 @@ func TestMirrorStripToggleHugsThePaneFacingColumn(t *testing.T) {
 		if toggle.X1 == 0 {
 			t.Fatalf("%s: the strip drew no toggle", pos)
 		}
-		w := m.GetSidebarWidth()
 		railX0 := 0
 		if pos == "right" {
 			railX0 = m.GetRenderWidth() - w
 		}
-		// The edge rule owns the pane-facing band column, so the control sits
-		// on the content column against it.
-		want := railX0 + w - 2
+		// The edge rule owns the pane-facing band column, so the zone is the two
+		// content columns beside it.
+		wantX0 := railX0
 		if pos == "right" {
-			want = railX0 + 1
+			wantX0 = railX0 + 1
 		}
-		if toggle.X0 != want {
-			t.Errorf("%s: the strip toggle is at x=%d, want %d", pos, toggle.X0, want)
+		if toggle.X0 != wantX0 || toggle.X1 != wantX0+w-1 {
+			t.Errorf("%s: the strip toggle zone is %d..%d, want %d..%d", pos, toggle.X0, toggle.X1, wantX0, wantX0+w-1)
+		}
+
+		// The glyph itself still sits against the pane-facing edge.
+		line := []rune(stripANSIForTrace(lines[toggle.Y0-m.GetTopMargin()]))
+		glyph, _ := m.sidebarCollapseGlyph(sidebarVariantGlyph)
+		at := w - 1 - len([]rune(glyph))
+		if pos == "right" {
+			at = 1
+		}
+		if got := string(line[at : at+len([]rune(glyph))]); got != glyph {
+			t.Errorf("%s: the toggle glyph is %q at column %d, want %q", pos, got, at, glyph)
 		}
 	}
 }

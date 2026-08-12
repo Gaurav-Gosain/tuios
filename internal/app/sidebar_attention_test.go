@@ -136,10 +136,12 @@ func TestRailNavAndHitsFollowDrawnOrder(t *testing.T) {
 	}
 }
 
-// TestGlyphRailInksAttention checks the three-column rail still says which
-// session wants you: an attention state fills the cell instead of tinting a
-// glyph nobody can see at two cells.
-func TestGlyphRailInksAttention(t *testing.T) {
+// TestGlyphRailMarksAttentionWithoutASecondFill checks the three-column rail
+// still says which session wants you, and says it once. The cell used to ink
+// whole, which put a second saturated block four rows from the badge that was
+// already shouting; the spine now swaps its resting dot for the state's own
+// glyph in its severity colour, on the same band as everything else.
+func TestGlyphRailMarksAttentionWithoutASecondFill(t *testing.T) {
 	m, _ := attentionOS(t, 120, 40)
 	withSidebar(t, true, "left", config.SidebarGlyphWidth)
 	pal := theme.UI()
@@ -149,19 +151,21 @@ func TestGlyphRailInksAttention(t *testing.T) {
 	loud := sessiontree.Node{ID: "s", Title: "s", AgentState: "needs_input"}
 
 	// The glyph rail draws sessions through sidebarStripCell, not
-	// sidebarSessionRow: at two content columns there is no room for a
-	// separate gutter mark, so the whole cell inks instead.
+	// sidebarSessionRow: at two content columns there is no room for a chevron,
+	// a name or a separate gutter mark.
 	calmRow := m.sidebarStripCell(calm, cw, pal, false, false)
 	loudRow := m.sidebarStripCell(loud, cw, pal, false, false)
 
-	if fill := ansiBackgroundCount(loudRow); fill == 0 {
-		t.Fatalf("needs_input glyph row carries no fill: %q", loudRow)
-	}
-	if ansiBackgroundCount(loudRow) <= ansiBackgroundCount(calmRow) {
-		t.Fatalf("needs_input row is no louder than working:\n  loud=%q\n  calm=%q", loudRow, calmRow)
+	if ansiBackgroundCount(loudRow) != ansiBackgroundCount(calmRow) {
+		t.Fatalf("attention paints a second fill on the spine:\n  loud=%q\n  calm=%q", loudRow, calmRow)
 	}
 	if got := overlay.Truncate(agentStateIndicator("needs_input"), 1); !strings.Contains(loudRow, got) {
-		t.Fatalf("filled cell dropped its glyph: %q", loudRow)
+		t.Fatalf("the attention cell dropped its glyph: %q", loudRow)
+	}
+	// Working is not an alarm and the panes already show it, so the spine keeps
+	// its resting dot: one mark shape, one interval, one thing that stands out.
+	if strings.Contains(stripANSIForTrace(calmRow), agentStateIndicator("working")) {
+		t.Fatalf("a working session marks the spine: %q", calmRow)
 	}
 }
 

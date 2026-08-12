@@ -641,7 +641,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 
 	if variant == sidebarVariantGlyph {
-		return m.sidebarStripLines(sessions, w, cw, height, topMargin, sidebarX, contentX0, pal, compose, blank)
+		// The strip lays its own ground, so it composes its lines itself rather
+		// than borrowing the expanded rail's bare-canvas edge.
+		return m.sidebarStripLines(sessions, w, cw, height, topMargin, sidebarX, contentX0, pal, edgeLeft)
 	}
 
 	// The keyboard cursor tracks a row by identity, not by index, so it survives a

@@ -1,9 +1,11 @@
 package app
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -30,66 +32,212 @@ func stripOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	return m, tree
 }
 
-// TestStripPinsTheAlarmAndTheControl: the badge lands where a glance lands and
-// the control where the rail meets the panes; the identity stack floats
-// between them. Stacking everything from the top left the rest blank, which
-// read as debris rather than as a composition.
-func TestStripPinsTheAlarmAndTheControl(t *testing.T) {
-	m, tree := stripOS(t, 120, 20)
+// quietStripOS is the state the strip is in nearly all the time: three sessions,
+// nothing blocked, nothing finished unread. It is the resting frame the redesign
+// is judged on, so it gets its own fixture.
+func quietStripOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
+	t.Helper()
+	m, _ := sectionsTestOS(t, w, h)
+	m.SidebarCollapsed = true
+	tree := sessiontree.Build([]sessiontree.SessionInput{
+		{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
+			{ID: "aaaaaaaa1111", Title: "nvim", Focused: true},
+			{ID: "bbbbbbbb2222", Title: "build", AgentState: "working"},
+		}},
+		{Name: "api", Windows: []sessiontree.WindowInput{{ID: "dddddddd4444", Title: "server"}}},
+		{Name: "docs"},
+	})
+	return m, tree
+}
+
+// sgrPattern matches one SGR sequence, so a rendered line can be walked cell by
+// cell with the style each cell was painted in still in hand.
+var stripSGR = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
+
+// stripCells splits a rendered rail line into one entry per cell, each carrying
+// the SGR sequences in force when it was drawn. Assertions about the band's
+// ground have to read the frame, not the layout maths that produced it.
+func stripCells(line string) []string {
+	var cells []string
+	style := ""
+	for len(line) > 0 {
+		if loc := stripSGR.FindStringIndex(line); loc != nil && loc[0] == 0 {
+			seq := line[:loc[1]]
+			if seq == "\x1b[m" || seq == "\x1b[0m" {
+				style = ""
+			} else {
+				style += seq
+			}
+			line = line[loc[1]:]
+			continue
+		}
+		r := []rune(line)[0]
+		cells = append(cells, style+string(r))
+		line = line[len(string(r)):]
+	}
+	return cells
+}
+
+// bgOf is the background colour a rendered cell carries, as its own SGR
+// parameters, or "" when it carries none. Pulled out of the sequence rather
+// than compared whole, because lipgloss folds the foreground in with it and two
+// cells on the same ground would otherwise never compare equal.
+func bgOf(cell string) string {
+	for _, seq := range stripSGR.FindAllString(cell, -1) {
+		parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b["), "m"), ";")
+		for i, p := range parts {
+			if p != "48" || i+1 >= len(parts) {
+				continue
+			}
+			switch parts[i+1] {
+			case "2":
+				return strings.Join(parts[i:min(i+5, len(parts))], ";")
+			case "5":
+				return strings.Join(parts[i:min(i+3, len(parts))], ";")
+			}
+		}
+	}
+	return ""
+}
+
+// panelSGR is the background any band cell should carry: Panel, rendered
+// through the same path the rail renders through.
+func panelSGR(t *testing.T) string {
+	t.Helper()
+	return bgOf(lipgloss.NewStyle().Background(theme.UI().Panel).Render(" "))
+}
+
+// TestStripRestsAsABandWithASpine is the state that matters, because it is the
+// usual one: a Panel band the full height of the rail, the accent bar and a dim
+// dot for the attached session, one dot per other session at a fixed interval,
+// and the expand control. No badge, no digits, no fills.
+func TestStripRestsAsABandWithASpine(t *testing.T) {
+	m, tree := quietStripOS(t, 120, 20)
 	lines := railPlain(t, m, tree)
 
 	if want := m.GetUsableHeight(); len(lines) != want {
 		t.Fatalf("the strip drew %d lines, want %d", len(lines), want)
 	}
-	// The badge: two panes want a human, and the worst of them is errored.
-	if !strings.HasPrefix(lines[0], "2"+agentStateIndicator("errored")) {
-		t.Errorf("line 0 = %q, want the attention badge 2%s", lines[0], agentStateIndicator("errored"))
+	rule := config.GetWindowBorderLeft()
+	want := []string{
+		"  " + rule, // pad: no badge, and no hole reserved for one
+		"▎·" + rule, // the attached session
+		"  " + rule,
+		" ·" + rule,
+		"  " + rule,
+		" ·" + rule,
 	}
-	if !strings.Contains(lines[len(lines)-1], "»") {
-		t.Errorf("the last line = %q, want the expand toggle", lines[len(lines)-1])
-	}
-
-	// The three session cells are contiguous and centred in what is left.
-	first, last := -1, -1
-	for i, l := range lines {
-		if strings.TrimSpace(l[:2]) != "" && i != 0 && i != len(lines)-1 {
-			if first < 0 {
-				first = i
-			}
-			last = i
+	for i, w := range want {
+		if lines[i] != w {
+			t.Errorf("resting line %d = %q, want %q\n%s", i, lines[i], w, strings.Join(lines, "\n"))
 		}
 	}
-	if first < 0 || last-first != 2 {
-		t.Fatalf("the session stack is not three contiguous lines (%d..%d):\n%s", first, last, strings.Join(lines, "\n"))
+	for i := len(want); i < len(lines)-2; i++ {
+		if lines[i] != "  "+rule {
+			t.Errorf("line %d = %q, want the slack under the spine to be empty band", i, lines[i])
+		}
 	}
-	above, below := first-1, len(lines)-2-last
-	if above-below > 1 || below-above > 1 {
-		t.Errorf("the stack is not centred: %d blank lines above, %d below", above, below)
+	if lines[len(lines)-2] != " »"+rule {
+		t.Errorf("the toggle line = %q, want the expand control above one pad", lines[len(lines)-2])
+	}
+	if lines[len(lines)-1] != "  "+rule {
+		t.Errorf("the last line = %q, want a pad", lines[len(lines)-1])
+	}
+	// The digits are gone: at three columns a window count is trivia, and it was
+	// the main source of the mixed vocabulary that stopped the marks scanning.
+	if got := strings.Join(lines, ""); strings.ContainsAny(got, "0123456789") {
+		t.Errorf("the resting strip prints a digit:\n%s", strings.Join(lines, "\n"))
 	}
 }
 
-// TestStripCentringAtOddAndEvenHeights pins the arithmetic directly, because a
-// stack that drifts by a line as the terminal resizes is what centring is for.
-func TestStripCentringAtOddAndEvenHeights(t *testing.T) {
-	for _, tc := range []struct {
-		height, badge, toggle, rows int
-		wantTop, wantShown          int
-	}{
-		{20, 1, 1, 3, 8, 3}, // 18 free, 15 spare, 7 above
-		{21, 1, 1, 3, 9, 3}, // 19 free, 16 spare, 8 above
-		{10, 0, 1, 3, 3, 3}, // no badge: the stack centres in 9
-		{5, 1, 1, 9, 1, 3},  // more sessions than lines: fill what there is
-		{2, 1, 1, 3, 1, 0},  // room for the pinned pair only
-		{1, 0, 0, 3, 0, 1},  // one line, and it goes to the stack
-	} {
-		top, shown := sidebarStripStackTop(tc.height, tc.badge, tc.toggle, tc.rows)
-		if top != tc.wantTop || shown != tc.wantShown {
-			t.Errorf("stackTop(h=%d badge=%d toggle=%d rows=%d) = %d/%d, want %d/%d",
-				tc.height, tc.badge, tc.toggle, tc.rows, top, shown, tc.wantTop, tc.wantShown)
+// TestStripBandCoversItsFullHeight is the figure/ground claim, asserted on the
+// drawn frame: an agent TUI's own left margin is a column of glyphs on Canvas,
+// so every cell of the strip has to sit on a ground of its own or the two read
+// as one object. That confusion is the whole reason for the redesign.
+func TestStripBandCoversItsFullHeight(t *testing.T) {
+	for _, pos := range []string{"left", "right"} {
+		m, tree := stripOS(t, 120, 20)
+		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.SidebarCollapsed = true
+		lines, w := m.sidebarPanelLinesForTree(tree)
+
+		panel := panelSGR(t)
+		badge := 0
+		for i, line := range lines {
+			cells := stripCells(line)
+			if len(cells) != w {
+				t.Fatalf("%s line %d drew %d cells, want %d", pos, i, len(cells), w)
+			}
+			for x, cell := range cells {
+				bg := bgOf(cell)
+				switch {
+				case bg == panel:
+				case bg == "":
+					t.Errorf("%s cell (%d,%d) %q sits on bare canvas; the band has to own every cell", pos, i, x, cell)
+				default:
+					badge++ // the badge's severity fill, counted below
+				}
+			}
 		}
-		if top+shown > tc.height {
-			t.Errorf("the stack runs past the rail: top=%d shown=%d height=%d", top, shown, tc.height)
+		// Exactly one inked cell pair on the whole strip, and it is the badge.
+		if badge != 2 {
+			t.Errorf("%s: %d cells carry a fill other than the band, want the badge's two", pos, badge)
 		}
+	}
+}
+
+// TestStripInksSeverityInExactlyOnePlace: the old strip said "something is
+// wrong" with a badge and again with an inked session cell four rows away. Two
+// saturated blocks on a three-column rail is decoration; the badge already
+// shouts, so the session carries its severity as a coloured mark.
+func TestStripInksSeverityInExactlyOnePlace(t *testing.T) {
+	m, tree := stripOS(t, 120, 20)
+	lines, _ := m.sidebarPanelLinesForTree(tree)
+
+	panel := panelSGR(t)
+	inked := 0
+	for _, line := range lines {
+		for _, cell := range stripCells(line) {
+			if bg := bgOf(cell); bg != "" && bg != panel {
+				inked++
+			}
+		}
+	}
+	if inked != 2 {
+		t.Errorf("%d cells are inked, want the badge's two only:\n%s", inked, strings.Join(lines, "\n"))
+	}
+
+	// The errored session still says so, as a mark rather than as a block.
+	plain := railPlain(t, m, tree)
+	if !strings.Contains(strings.Join(plain, "\n"), agentStateIndicator("errored")) {
+		t.Errorf("no session carries its severity glyph:\n%s", strings.Join(plain, "\n"))
+	}
+}
+
+// TestStripBadgeLeadsTheSpine: the badge is the strip's one digit and its one
+// fill, it appears only when something is blocked, and it reserves no hole when
+// nothing is.
+func TestStripBadgeLeadsTheSpine(t *testing.T) {
+	m, tree := stripOS(t, 120, 20)
+	lines := railPlain(t, m, tree)
+	rule := config.GetWindowBorderLeft()
+
+	if lines[0] != "  "+rule {
+		t.Errorf("line 0 = %q, want a pad above the badge", lines[0])
+	}
+	if want := "2" + agentStateIndicator("errored") + rule; lines[1] != want {
+		t.Errorf("line 1 = %q, want the badge %q", lines[1], want)
+	}
+	if lines[2] != "  "+rule {
+		t.Errorf("line 2 = %q, want a pad under the badge", lines[2])
+	}
+	if lines[3] != "▎·"+rule {
+		t.Errorf("line 3 = %q, want the spine to start under the badge's pad", lines[3])
+	}
+
+	quiet, qtree := quietStripOS(t, 120, 20)
+	if got := railPlain(t, quiet, qtree)[1]; got != "▎·"+rule {
+		t.Errorf("with nothing blocked line 1 = %q, want the spine, not a reserved hole", got)
 	}
 }
 
@@ -127,118 +275,226 @@ func TestStripBadgeRollsUpTheWorstSeverity(t *testing.T) {
 	}
 }
 
-// TestStripCellMarksTheAttachedSessionWithoutPaintingIt: the standing Surface
-// fill was the one band the rest of the rail spent a round removing; the same
-// mark the expanded rail wears in its gutter says it without painting.
-func TestStripCellMarksTheAttachedSession(t *testing.T) {
-	pal := theme.UI()
-	attached := stripANSIForTrace(new(OS).sidebarStripCell(
-		sessiontree.Node{ID: "main", IsCurrent: true, WindowCount: 4}, 2, pal, false, false))
-	if !strings.HasPrefix(attached, "▎") {
-		t.Errorf("the attached session leads with %q, want the accent mark", attached)
-	}
+// TestStripSpineKeepsOneShapeAtOneInterval: one glyph per session, always the
+// same column, one blank row between marks. The interval is what makes a column
+// of marks read as a list rather than as scattered debris, which was the
+// complaint.
+func TestStripSpineKeepsOneShapeAtOneInterval(t *testing.T) {
+	m, tree := quietStripOS(t, 120, 20)
+	lines := railPlain(t, m, tree)
 
-	other := stripANSIForTrace(new(OS).sidebarStripCell(
-		sessiontree.Node{ID: "api", WindowCount: 4}, 2, pal, false, false))
-	if !strings.HasPrefix(other, "4") {
-		t.Errorf("an unattached session leads with %q, want its window count", other)
-	}
-
-	solo := stripANSIForTrace(new(OS).sidebarStripCell(
-		sessiontree.Node{ID: "solo", WindowCount: 1}, 2, pal, false, false))
-	if !strings.HasPrefix(solo, " ") {
-		t.Errorf("a one-window session leads with %q, want a blank cell", solo)
-	}
-}
-
-// TestStripCellsAreTheirOwnHitRects: every session cell is a click target of
-// its own, and the toggle claims exactly the pane-facing column.
-func TestStripCellsAreTheirOwnHitRects(t *testing.T) {
-	m, tree := stripOS(t, 120, 20)
-	m.sidebarPanelLinesForTree(tree)
-
-	sessions, toggles := 0, 0
-	for _, h := range m.SidebarHits {
-		switch h.Kind {
-		case sidebarRowSession:
-			sessions++
-			if h.X1-h.X0 != m.GetSidebarWidth() {
-				t.Errorf("a strip session row claims %d columns, want the whole band", h.X1-h.X0)
-			}
-		case sidebarRowCollapse:
-			toggles++
-			if h.X1-h.X0 != 1 {
-				t.Errorf("the toggle claims %d columns, want the one its glyph takes", h.X1-h.X0)
-			}
-		default:
-			t.Errorf("the strip drew a %v hit, which it has no room to mean", h.Kind)
+	var marks []int
+	for i, l := range lines[:len(lines)-2] {
+		if strings.TrimSpace(l[:len(l)-len(config.GetWindowBorderLeft())]) != "" {
+			marks = append(marks, i)
 		}
 	}
-	if sessions != 3 || toggles != 1 {
-		t.Errorf("the strip recorded %d session hits and %d toggles, want 3 and 1", sessions, toggles)
+	if len(marks) != 3 {
+		t.Fatalf("the spine drew %d marks, want one per session:\n%s", len(marks), strings.Join(lines, "\n"))
 	}
-
-	// The badge is a readout, not a control, so it takes no click; it is
-	// recorded on the strip's own row list instead, which is what the tooltip
-	// reads.
-	kinds := map[sidebarStripRowKind]int{}
-	for _, r := range m.sidebarStripRows {
-		kinds[r.Kind]++
-	}
-	if kinds[sidebarStripBadge] != 1 || kinds[sidebarStripSession] != 3 || kinds[sidebarStripToggle] != 1 {
-		t.Errorf("strip rows = %v, want one badge, three sessions and one toggle", kinds)
-	}
-}
-
-// TestStripToggleExpandsTheRail: the strip's one control has to work, and it is
-// the only way back for a user who is not going to guess a keybind.
-func TestStripToggleExpandsTheRail(t *testing.T) {
-	m, tree := stripOS(t, 120, 20)
-	m.sidebarPanelLinesForTree(tree)
-
-	var toggle sidebarRowHit
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowCollapse {
-			toggle = h
+	for i := 1; i < len(marks); i++ {
+		if marks[i]-marks[i-1] != 2 {
+			t.Errorf("marks %d and %d are %d rows apart, want the fixed interval of 2", i-1, i, marks[i]-marks[i-1])
 		}
 	}
-	if toggle.X1 == 0 {
-		t.Fatal("the strip drew no toggle")
-	}
-	// The expand re-lays the panes, which syncs to the daemon; the stub client
-	// in the fixture is not one, and this test is about the toggle.
-	m.DaemonClient = nil
-	if !m.SidebarClick(toggle.X0, toggle.Y0, false) {
-		t.Fatal("the toggle did not consume its own click")
-	}
-	if m.SidebarCollapsed {
-		t.Error("clicking the expand toggle left the rail collapsed")
-	}
-	if got := sidebarVariant(m.GetSidebarWidth()); got == sidebarVariantGlyph {
-		t.Errorf("the rail is still a strip after expanding: variant %d", got)
+}
+
+// TestStripSpacingCollapsesBeforeMarksDrop pins the degradation order: a short
+// rail gives up the blank row between marks before it gives up a session, and
+// says so with a tail mark only once even packed rows have run out.
+func TestStripSpacingCollapsesBeforeMarksDrop(t *testing.T) {
+	for _, tc := range []struct {
+		region, sessions int
+		shown, interval  int
+		more             bool
+	}{
+		{20, 3, 3, 2, false}, // room to spare: spaced
+		{5, 3, 3, 2, false},  // exactly the spaced height
+		{4, 3, 3, 1, false},  // one short: packed, nothing lost
+		{3, 3, 3, 1, false},  // packed exactly
+		{2, 3, 1, 1, true},   // out of room: one mark and a tail
+		{0, 3, 0, 1, false},  // no region at all
+		{5, 0, 0, 1, false},  // no sessions
+	} {
+		shown, interval, more := sidebarStripPlan(tc.region, tc.sessions)
+		if shown != tc.shown || interval != tc.interval || more != tc.more {
+			t.Errorf("plan(region=%d sessions=%d) = %d/%d/%v, want %d/%d/%v",
+				tc.region, tc.sessions, shown, interval, more, tc.shown, tc.interval, tc.more)
+		}
+		// The last mark spends no trailing blank, so the spine's own span is one
+		// interval short of the naive product.
+		if span := max(shown*interval-(interval-1), 0); span > tc.region {
+			t.Errorf("plan(region=%d sessions=%d) spans %d rows", tc.region, tc.sessions, span)
+		}
 	}
 }
 
-// TestStripASCIIFallback: the strip is two cells, so a terminal without the
-// block glyphs has to get something in both of them.
-func TestStripASCIIFallback(t *testing.T) {
-	prev := config.UseASCIIOnly
-	config.UseASCIIOnly = true
-	overlay.SetASCII(true)
-	t.Cleanup(func() {
-		config.UseASCIIOnly = prev
-		overlay.SetASCII(prev)
+// TestStripHitsAndNavStayIndexForIndex: the strip records its rectangles as it
+// draws them, so a click and the keyboard cursor can never point at different
+// rows. Both rail sides, because the mirrored strip is the one that gets less
+// use and so drifts first.
+func TestStripHitsAndNavStayIndexForIndex(t *testing.T) {
+	for _, pos := range []string{"left", "right"} {
+		m, tree := stripOS(t, 120, 20)
+		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.SidebarCollapsed = true
+		lines, w := m.sidebarPanelLinesForTree(tree)
+
+		if len(m.SidebarHits) != len(m.SidebarNav) {
+			t.Fatalf("%s: %d hits against %d nav rows", pos, len(m.SidebarHits), len(m.SidebarNav))
+		}
+		sessions := 0
+		for i, h := range m.SidebarHits {
+			n := m.SidebarNav[i]
+			if h.Kind != n.Kind || h.SessionID != n.SessionID {
+				t.Errorf("%s: hit %d is %v/%q but nav %d is %v/%q", pos, i, h.Kind, h.SessionID, i, n.Kind, n.SessionID)
+			}
+			if h.Kind == sidebarRowSession {
+				sessions++
+				if h.X1-h.X0 != w {
+					t.Errorf("%s: a strip session row claims %d columns, want the whole band", pos, h.X1-h.X0)
+				}
+				// The rectangle names the row that was actually drawn there.
+				line := stripANSIForTrace(lines[h.Y0-m.GetTopMargin()])
+				if strings.TrimSpace(line) == "" {
+					t.Errorf("%s: hit %d points at a blank line %q", pos, i, line)
+				}
+			}
+		}
+		if sessions != 3 {
+			t.Errorf("%s: %d session hits, want one per session", pos, sessions)
+		}
+
+		// The badge is a readout, not a control, so it takes no click; it is
+		// recorded on the strip's own row list instead, which is what the tooltip
+		// reads.
+		kinds := map[sidebarStripRowKind]int{}
+		for _, r := range m.sidebarStripRows {
+			kinds[r.Kind]++
+		}
+		if kinds[sidebarStripBadge] != 1 || kinds[sidebarStripSession] != 3 || kinds[sidebarStripToggle] != 1 {
+			t.Errorf("%s: strip rows = %v, want one badge, three sessions and one toggle", pos, kinds)
+		}
+	}
+}
+
+// TestStripToggleIsClickableAtBothItsColumns: the strip's one control is the
+// only way back for a user who is not going to guess a keybind, so it claims
+// both content cells rather than the one its glyph happens to sit on.
+func TestStripToggleIsClickableAtBothItsColumns(t *testing.T) {
+	for _, pos := range []string{"left", "right"} {
+		for _, edge := range []string{"first", "last"} {
+			m, tree := stripOS(t, 120, 20)
+			withSidebar(t, true, pos, config.SidebarDefaultWidth)
+			m.SidebarCollapsed = true
+			m.sidebarPanelLinesForTree(tree)
+
+			var toggle sidebarRowHit
+			for _, h := range m.SidebarHits {
+				if h.Kind == sidebarRowCollapse {
+					toggle = h
+				}
+			}
+			if toggle.X1-toggle.X0 != m.GetSidebarWidth()-1 {
+				t.Fatalf("%s: the toggle claims %d columns, want both content cells", pos, toggle.X1-toggle.X0)
+			}
+			x := toggle.X0
+			if edge == "last" {
+				x = toggle.X1 - 1
+			}
+			// The expand re-lays the panes, which syncs to the daemon; the stub
+			// client in the fixture is not one, and this test is about the click.
+			m.DaemonClient = nil
+			if !m.SidebarClick(x, toggle.Y0, false) {
+				t.Fatalf("%s/%s: the toggle did not consume a click at x=%d", pos, edge, x)
+			}
+			if m.SidebarCollapsed {
+				t.Errorf("%s/%s: clicking the expand toggle left the rail collapsed", pos, edge)
+			}
+		}
+	}
+}
+
+// TestStripASCIIAndMonochromeBothStayCoherent: a design resting on a glyph or a
+// colour that either mode lacks fails invisibly. ASCII swaps every mark for a
+// plain one; monochrome drops the band's fill, which is why the hairline rule
+// stays as the boundary of last resort.
+func TestStripASCIIAndMonochromeBothStayCoherent(t *testing.T) {
+	t.Run("ascii", func(t *testing.T) {
+		prev := config.UseASCIIOnly
+		config.UseASCIIOnly = true
+		overlay.SetASCII(true)
+		t.Cleanup(func() {
+			config.UseASCIIOnly = prev
+			overlay.SetASCII(prev)
+		})
+
+		m, tree := stripOS(t, 120, 20)
+		lines := railPlain(t, m, tree)
+		joined := strings.Join(lines, "\n")
+		for _, glyph := range []string{"»", "▎", "×", "▲", "·", "⋮"} {
+			if strings.Contains(joined, glyph) {
+				t.Errorf("the ASCII strip still draws %q:\n%s", glyph, joined)
+			}
+		}
+		for _, want := range []string{">>", "2x", ">."} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("the ASCII strip is missing %q:\n%s", want, joined)
+			}
+		}
 	})
 
-	m, tree := stripOS(t, 120, 20)
-	lines := railPlain(t, m, tree)
-	joined := strings.Join(lines, "\n")
-	for _, glyph := range []string{"»", "▎", "×", "▲"} {
-		if strings.Contains(joined, glyph) {
-			t.Errorf("the ASCII strip still draws %q:\n%s", glyph, joined)
+	t.Run("monochrome", func(t *testing.T) {
+		// Monochrome is the rendered frame with every colour dropped, which is
+		// what a terminal with no palette to give leaves on screen.
+		m, tree := stripOS(t, 120, 20)
+		lines := railPlain(t, m, tree)
+		rule := config.GetWindowBorderLeft()
+		joined := strings.Join(lines, "\n")
+
+		for i, l := range lines {
+			if !strings.HasSuffix(l, rule) {
+				t.Fatalf("mono line %d = %q keeps no edge; with the fill gone the rule is the only boundary left", i, l)
+			}
 		}
-	}
-	if !strings.Contains(joined, ">>") {
-		t.Errorf("the ASCII strip has no expand control:\n%s", joined)
+		// The badge and the marks still say which is which without any colour.
+		for _, want := range []string{"2" + agentStateIndicator("errored"), "▎·", agentStateIndicator("errored"), "»"} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("monochrome loses %q:\n%s", want, joined)
+			}
+		}
+	})
+}
+
+// TestStripTooltipsStillPopAndStayOnScreen: two cells is enough to steer by and
+// not enough to read, so the label is the strip's only prose. The redesign
+// changed which rows exist, which is exactly what would silently unhook it.
+func TestStripTooltipsStillPopAndStayOnScreen(t *testing.T) {
+	for _, pos := range []string{"left", "right"} {
+		m, tree := stripOS(t, 120, 20)
+		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.SidebarCollapsed = true
+		m.sidebarPanelLinesForTree(tree)
+
+		var row sidebarStripRow
+		for _, r := range m.sidebarStripRows {
+			if r.Kind == sidebarStripSession {
+				row = r
+				break
+			}
+		}
+		if row.Label == "" {
+			t.Fatalf("%s: no session row carries a tooltip label", pos)
+		}
+		m.sidebarTooltipTrack(row.Y)
+		m.Tooltip.At = m.Tooltip.At.Add(-2 * tooltipDelay)
+		layer := m.renderRailTooltip()
+		if layer == nil {
+			t.Fatalf("%s: hovering a session row popped no tooltip", pos)
+		}
+		x, width := layer.GetX(), lipgloss.Width(layer.GetContent())
+		if x < 0 || x+width > m.GetRenderWidth() {
+			t.Errorf("%s: the tooltip spans %d..%d, outside the screen's 0..%d", pos, x, x+width, m.GetRenderWidth())
+		}
 	}
 }
