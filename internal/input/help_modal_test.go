@@ -41,7 +41,7 @@ func snapshotOS(o *app.OS) osState {
 		showAggregate: o.ShowAggregateView,
 		showSessions:  o.ShowSessionSwitcher,
 		workspace:     o.CurrentWorkspace,
-		renaming:      o.RenamingWindow,
+		renaming:      o.Renaming(),
 		prefixActive:  o.PrefixActive,
 	}
 }

@@ -343,7 +343,7 @@ func (m *OS) composeFrame() string {
 // visible windows, any overlay, separators, graphics, or active manipulation or
 // animation. Pure: it does not mutate render state.
 func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
-	if len(m.Animations) > 0 || m.RenamingWindow {
+	if len(m.Animations) > 0 || m.Renaming() {
 		return nil, false
 	}
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowWorkspaceSwitcher || m.ShowLayoutPicker ||

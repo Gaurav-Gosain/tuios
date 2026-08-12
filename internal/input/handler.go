@@ -199,7 +199,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ShowAccentPicker {
 		return handleAccentPickerInput(msg, o)
 	}
-	if o.RenamingWindow {
+	if o.Renaming() {
 		return handleRenameMode(msg, o)
 	}
 
@@ -305,23 +305,20 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return HandleWindowManagementModeKey(msg, o)
 }
 
-// handleRenameMode handles keyboard input during window renaming
+// handleRenameMode handles keyboard input while the rename editor is open, for
+// every kind of target it can point at. The editor is deliberately the same one
+// in all three cases.
 func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	target := o.RenameTarget()
 	switch msg.String() {
 	case "enter":
-		// Apply the new name. RenameWindowByID is the one rename: in a daemon
-		// session it asks the daemon, which owns the name, and the change comes
-		// back as a state push.
-		if target != nil {
-			_ = o.RenameWindowByID(target.ID, o.RenameBuffer)
-			target.InvalidateCache()
-		}
-		o.EndRenameWindow()
-		return o, nil
+		// CommitRename is the one rename. A window name is applied here; a
+		// session or workspace name is daemon-owned and comes back as a command,
+		// because the verb call must not run on this goroutine.
+		return o, o.CommitRename()
 	case "esc":
 		// Cancel renaming
-		o.EndRenameWindow()
+		o.EndRename()
 		return o, nil
 	case "backspace":
 		if len(o.RenameBuffer) > 0 {

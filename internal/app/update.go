@@ -1201,10 +1201,25 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				if oldWorkspace != newWorkspace {
 					m.ShowNotification(fmt.Sprintf("Switched to workspace %d", newWorkspace), "info", 2*time.Second)
 				}
+
+				// A rename by this client or any other arrives on this push, so
+				// an open switcher follows it without being reopened.
+				m.refreshSwitcherItems()
 			}
 		}
 		// Continue listening for more state syncs
 		return m, ListenForStateSync(m.StateSyncChan)
+
+	case RenameAppliedMsg:
+		if msg.Err != nil {
+			m.ShowNotification("Rename failed: "+msg.Err.Error(), "error", config.NotificationDuration*2)
+			return m, nil
+		}
+		// The attached session's new label rides the state push. A session this
+		// client is not attached to gets no push, so its listing is refreshed
+		// instead, off this goroutine.
+		m.refreshSwitcherItems()
+		return m, refreshForeignSessionsCmd(m.DaemonClient)
 
 	case ClientJoinedMsg:
 		// Another client joined the session

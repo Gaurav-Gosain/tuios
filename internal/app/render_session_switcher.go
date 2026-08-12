@@ -51,6 +51,7 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 		EmptyMsg:   empty,
 		Hints: []overlay.Hint{
 			{Key: "⏎", Label: "switch"},
+			{Key: "ctrl+r", Label: "rename"},
 			{Key: "ctrl+d", Label: "delete"},
 			{Key: "esc", Label: "close"},
 		},

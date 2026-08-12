@@ -35,6 +35,7 @@ func (m *OS) renderWorkspaceSwitcher() (string, overlay.Geometry, []overlayRowHi
 		EmptyMsg:   "No workspace matches",
 		Hints: []overlay.Hint{
 			{Key: "⏎", Label: "go"},
+			{Key: "ctrl+r", Label: "rename"},
 			{Key: "esc", Label: "close"},
 		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {

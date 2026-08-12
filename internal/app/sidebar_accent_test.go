@@ -227,7 +227,8 @@ func navIndexOfWindow(m *OS, id string) int {
 
 // TestRailCursorRenamesAndAccents drives the two rail keys through the cursor:
 // they act on the row the cursor is on, which need not be the focused pane, and
-// they refuse on a session row rather than acting on the wrong thing.
+// a session row renames the session rather than some window the cursor is not
+// on.
 func TestRailCursorRenamesAndAccents(t *testing.T) {
 	m, _ := railOS(t)
 
@@ -238,10 +239,10 @@ func TestRailCursorRenamesAndAccents(t *testing.T) {
 	m.SidebarCursor = idx
 
 	m.SidebarRenameCursor()
-	if !m.RenamingWindow || m.RenameTargetID != "cccccccc3333" {
-		t.Fatalf("rename targets %q (renaming=%v), want the cursor row's window", m.RenameTargetID, m.RenamingWindow)
+	if !m.Renaming() || m.RenameTargetID != "cccccccc3333" {
+		t.Fatalf("rename targets %q (renaming=%v), want the cursor row's window", m.RenameTargetID, m.Renaming())
 	}
-	m.EndRenameWindow()
+	m.EndRename()
 
 	m.SidebarAccentCursor()
 	if !m.ShowAccentPicker || m.AccentPickerWindowID != "cccccccc3333" {
@@ -249,13 +250,17 @@ func TestRailCursorRenamesAndAccents(t *testing.T) {
 	}
 	m.CloseAccentPicker()
 
-	// A session row is the daemon's to name; the rail must not rename some
-	// window by accident because the cursor was elsewhere.
+	// A session row renames the session's label, never a window: the rail must
+	// not rename some pane by accident because the cursor was elsewhere.
 	m.SidebarCursor = navIndexOfSession(m, "main")
 	m.SidebarRenameCursor()
-	if m.RenamingWindow {
+	if m.RenameKind == RenameWindow {
 		t.Error("a session row started a window rename")
 	}
+	if m.DaemonClient != nil && m.RenameKind != RenameSession {
+		t.Errorf("a session row started %v, want a session rename", m.RenameKind)
+	}
+	m.EndRename()
 	m.SidebarAccentCursor()
 	if m.ShowAccentPicker {
 		t.Error("a session row opened the window accent picker")

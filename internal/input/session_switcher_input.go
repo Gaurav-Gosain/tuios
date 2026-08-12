@@ -104,6 +104,14 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.SessionSwitcherScroll = 0
 		return o, nil
 
+	case "ctrl+r":
+		// Renames the label, never the identity: the session keeps the name it
+		// is addressed, persisted and detached by.
+		if selected, ok := o.SessionSwitcherTarget(o.SessionSwitcherSelected); ok {
+			o.BeginRenameSession(selected.ID)
+		}
+		return o, nil
+
 	case "ctrl+d":
 		// Request delete confirmation for the selected session
 		if selected, ok := o.SessionSwitcherTarget(o.SessionSwitcherSelected); ok {

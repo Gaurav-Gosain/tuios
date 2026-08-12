@@ -32,6 +32,12 @@ func handleWorkspaceSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.
 		o.WorkspaceSwitcherMove(1, len(filtered))
 		return o, nil
 
+	case "ctrl+r":
+		if target, ok := o.WorkspaceSwitcherTarget(o.WorkspaceSwitcherSelected); ok {
+			o.BeginRenameWorkspace(target.Number)
+		}
+		return o, nil
+
 	case "backspace":
 		if len(o.WorkspaceSwitcherQuery) > 0 {
 			o.WorkspaceSwitcherQuery = o.WorkspaceSwitcherQuery[:len(o.WorkspaceSwitcherQuery)-1]
