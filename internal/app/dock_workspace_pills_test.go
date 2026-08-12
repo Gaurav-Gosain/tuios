@@ -36,6 +36,17 @@ func pillOS(t *testing.T, w int, names map[int]string, workspaces ...int) *OS {
 	return m
 }
 
+// overflowOS is a dock whose named workspaces cannot all fit its bar, which is
+// the state the scrolling is for.
+func overflowOS(t *testing.T) *OS {
+	t.Helper()
+	names := map[int]string{
+		1: "editor", 2: "review", 3: "deploy-fix",
+		4: "logs-tail", 5: "scratchpad", 6: "db-console",
+	}
+	return pillOS(t, 90, names, 1, 2, 3, 4, 5, 6)
+}
+
 // dockBarRow renders the dock and returns its bar row as plain text, asserting
 // the row measures one cell per rune so the caller may index it by column.
 func dockBarRow(t *testing.T, m *OS) string {
@@ -121,18 +132,35 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 	}
 }
 
+// TestWorkspaceStripDrawsTheWidthItPlanned: the layout pass hands the rest of
+// the bar the columns the strip claimed, so a strip that draws one cell more
+// than it planned pushes the "+" into the columns the bar's own truncation
+// takes away, leaving a recorded rectangle over cells nobody can see.
+func TestWorkspaceStripDrawsTheWidthItPlanned(t *testing.T) {
+	names := map[int]string{1: "editor", 2: "review", 3: "deploy-fix", 4: "logs-tail", 5: "scratchpad"}
+	for _, w := range []int{160, 100, 90, 64, 50, 40, 34, 28} {
+		t.Run(strconv.Itoa(w), func(t *testing.T) {
+			m := pillOS(t, w, names, 1, 2, 3, 4, 5)
+			layout := m.CalculateDockLayout()
+			drawn := m.renderDockWorkspaceStrip(layout.WorkspaceStrip, 0)
+			if got := lipgloss.Width(drawn); got != layout.WorkspaceStrip.Width {
+				t.Errorf("the strip draws %d cells but claimed %d: %q", got, layout.WorkspaceStrip.Width, drawn)
+			}
+		})
+	}
+}
+
 // TestWorkspaceStripScrollsRatherThanTruncates: a strip too narrow for its
 // workspaces shows fewer of them whole, never a clipped name. A half-drawn name
 // is a workspace the user cannot identify, and the pill under it still claims
 // its columns.
 func TestWorkspaceStripScrollsRatherThanTruncates(t *testing.T) {
-	names := map[int]string{1: "editor", 2: "review", 3: "deploy-fix", 4: "logs-tail"}
-	m := pillOS(t, 80, names, 1, 2, 3, 4)
+	m := overflowOS(t)
 	row := dockBarRow(t, m)
 
 	tabs := m.buildDockWorkspaceTabs()
 	if len(m.dockWorkspaceHits) >= len(tabs) {
-		t.Fatalf("the strip drew all %d tabs at 80 columns, so nothing overflowed", len(tabs))
+		t.Fatalf("the strip drew all %d tabs, so nothing overflowed", len(tabs))
 	}
 	if len(m.dockWorkspaceArrowHits) == 0 {
 		t.Fatal("the strip overflowed without an arrow saying so")
@@ -185,8 +213,7 @@ func arrowHit(m *OS, delta int) *dockWorkspaceArrowHit {
 // more that way, so each one is drawn only while that is true. An arrow on the
 // right alone would be a lie the moment the strip has scrolled.
 func TestWorkspaceStripArrowsFollowTheContent(t *testing.T) {
-	names := map[int]string{1: "editor", 2: "review", 3: "deploy-fix", 4: "logs-tail"}
-	m := pillOS(t, 80, names, 1, 2, 3, 4)
+	m := overflowOS(t)
 	dockBarRow(t, m)
 
 	if arrowHit(m, -1) != nil {
@@ -227,8 +254,7 @@ func TestWorkspaceStripArrowsFollowTheContent(t *testing.T) {
 // the names on them, so a page is a different distance every time and would
 // skip past the workspace being reached for.
 func TestWorkspaceStripArrowStepsOnePill(t *testing.T) {
-	names := map[int]string{1: "editor", 2: "review", 3: "deploy-fix", 4: "logs-tail"}
-	m := pillOS(t, 80, names, 1, 2, 3, 4)
+	m := overflowOS(t)
 	dockBarRow(t, m)
 
 	before := m.dockWorkspaceHits[0].Workspace
@@ -265,8 +291,7 @@ func indexOfWorkspace(ws []int, want int) int {
 // you are. A keyboard switch to a workspace scrolled off the end must bring its
 // pill back, or the strip quietly points at the wrong one.
 func TestWorkspaceStripKeepsTheActivePillInView(t *testing.T) {
-	names := map[int]string{1: "editor", 2: "review", 3: "deploy-fix", 4: "logs-tail"}
-	m := pillOS(t, 80, names, 1, 2, 3, 4)
+	m := overflowOS(t)
 	dockBarRow(t, m)
 
 	drawn := func() map[int]bool {

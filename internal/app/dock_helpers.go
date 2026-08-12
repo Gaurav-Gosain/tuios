@@ -218,9 +218,10 @@ func pillsSpan(tabs []dockWorkspaceTab, from, to int) int {
 	return w
 }
 
-// pillsFitting is how many pills from first fit in width cells, at least one so
-// a pill wider than the whole viewport is still shown rather than the strip
-// going blank.
+// pillsFitting is how many whole pills from first fit in width cells. Zero is a
+// real answer: a pill drawn past the viewport it was measured into would push
+// the "+" onto columns the bar's own truncation then takes away, leaving a
+// recorded rectangle over cells nobody can see.
 func pillsFitting(tabs []dockWorkspaceTab, first, width int) int {
 	n := 0
 	for i := first; i < len(tabs); i++ {
@@ -229,20 +230,30 @@ func pillsFitting(tabs []dockWorkspaceTab, first, width int) int {
 		}
 		n++
 	}
-	return max(n, 1)
+	return n
 }
 
-// planDockWorkspaceStrip decides what the strip draws inside budget columns and
-// records the scroll offset it settled on.
+// planDockWorkspaceStrip decides what the strip draws in the room the mode pill
+// and the readout leave it, and records the scroll offset it settled on.
 //
 // The offset is only ever pulled back to the current workspace when that
 // workspace has changed since the last frame. A switch by keyboard therefore
 // scrolls the strip to the pill it just made active, while a user reading along
 // the strip with the arrows keeps the run they scrolled to.
-func (m *OS) planDockWorkspaceStrip(budget int) dockWorkspaceStrip {
+func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
 	tabs := m.buildDockWorkspaceTabs()
 	if len(tabs) == 0 {
 		return dockWorkspaceStrip{}
+	}
+
+	// The strip takes the columns it asks for while that is at most two thirds
+	// of the bar. Past that it is held to half and scrolls: a session of named
+	// workspaces would otherwise leave the minimized entries and the meters
+	// nothing, and reading the strip with an arrow costs a click where a
+	// minimized pane with no entry costs a search.
+	budget := min(dockWorkspaceTabsWidth(tabs), room)
+	if budget > barWidth*2/3 {
+		budget = min(barWidth/2, room)
 	}
 
 	strip := dockWorkspaceStrip{Pills: tabs}
@@ -258,16 +269,24 @@ func (m *OS) planDockWorkspaceStrip(budget int) dockWorkspaceStrip {
 	if strip.Add != nil {
 		addSpan = dockWorkspacePillGap + strip.Add.Width
 	}
-	avail := budget - 1 - addSpan
-	if avail <= 0 || len(strip.Pills) == 0 {
-		strip.Pills = nil
-		strip.Width = 0
-		if strip.Add != nil && budget >= 1+strip.Add.Width {
+	// What a strip with no room for a pill draws: the "+" against the leading
+	// column, and nothing if there is not even room for that. The gap between
+	// pills goes with the pills.
+	addOnly := func() dockWorkspaceStrip {
+		strip.Pills, strip.Scrolls, strip.Width = nil, false, 0
+		switch {
+		case strip.Add == nil:
+		case budget >= 1+strip.Add.Width:
 			strip.Width = 1 + strip.Add.Width
-		} else {
+		default:
 			strip.Add = nil
 		}
 		return strip
+	}
+
+	avail := budget - 1 - addSpan
+	if avail <= 0 || len(strip.Pills) == 0 {
+		return addOnly()
 	}
 
 	if natural := pillsSpan(strip.Pills, 0, len(strip.Pills)); natural <= avail {
@@ -281,9 +300,7 @@ func (m *OS) planDockWorkspaceStrip(budget int) dockWorkspaceStrip {
 	if inner < 1 {
 		// Room for the gutters and nothing to put between them: the arrows would
 		// scroll a strip with no pills in it.
-		strip.Pills = nil
-		strip.Width = 1 + addSpan
-		return strip
+		return addOnly()
 	}
 	strip.Scrolls, strip.Inner = true, inner
 
@@ -297,6 +314,11 @@ func (m *OS) planDockWorkspaceStrip(budget int) dockWorkspaceStrip {
 	m.dockWorkspaceScroll = first
 
 	count := pillsFitting(all, first, inner)
+	if count == 0 {
+		// Not even the narrowest pill fits between the gutters. Arrows over an
+		// empty track scroll nothing, so the strip falls back to the "+" alone.
+		return addOnly()
+	}
 	strip.Pills = all[first : first+count]
 	strip.MoreLeft = first > 0
 	strip.MoreRight = first+count < len(all)
@@ -390,12 +412,8 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	barWidth := max(m.GetRenderWidth()-m.dockSessionStripWidth(), 0)
 
 	// The workspace strip rides in the left region, so the dock items are laid
-	// out against the room it leaves. Half the bar is the most it may take: past
-	// that a session of named workspaces would push the minimized entries and
-	// the meters off the dock, and a strip that scrolls costs one click to read
-	// where a missing entry costs a search.
-	budget := min(max(barWidth-layout.LeftWidth, 0), barWidth/2)
-	layout.WorkspaceStrip = m.planDockWorkspaceStrip(budget)
+	// out against the room it leaves.
+	layout.WorkspaceStrip = m.planDockWorkspaceStrip(max(barWidth-layout.LeftWidth, 0), barWidth)
 	layout.LeftWidth += layout.WorkspaceStrip.Width
 
 	// Calculate right side width. The estimate below is what the right block
