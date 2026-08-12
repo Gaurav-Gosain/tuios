@@ -736,6 +736,31 @@ func GetDockPillRightChar() string {
 	return DockPillRightChar
 }
 
+// GetDockWorkspaceCapLeft returns the workspace pill's left cap.
+//
+// The strip keeps its own accessor for the reason the rail does: DockPillCaps
+// is about the mode chip and the minimized run, where a cap on every entry
+// turned the row into beads. A workspace pill is a tab, and a tab wants the
+// rounded end that says where it starts and stops.
+//
+// Empty under ASCII. A half circle has no 7-bit stand-in: "[" is a bracket
+// drawn beside the pill rather than the pill's own edge, and it reads as
+// punctuation in a row that has none.
+func GetDockWorkspaceCapLeft() string {
+	if UseASCIIOnly {
+		return ""
+	}
+	return DockPillLeftChar
+}
+
+// GetDockWorkspaceCapRight returns the workspace pill's right cap.
+func GetDockWorkspaceCapRight() string {
+	if UseASCIIOnly {
+		return ""
+	}
+	return DockPillRightChar
+}
+
 // GetDockModeIconWindow returns the appropriate window mode icon based on UseASCIIOnly
 func GetDockModeIconWindow() string {
 	if UseASCIIOnly {

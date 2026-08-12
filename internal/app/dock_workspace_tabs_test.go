@@ -151,25 +151,33 @@ func TestDockLeftRegionSurvivesTheStrip(t *testing.T) {
 	}
 }
 
-// The dock's pills are flat by default: the caps repeated on the mode pill,
-// every workspace tab and every minimized window read as a row of beads rather
-// than a status line. The capped look stays one config key away.
+// The dock's pills are flat by default: the caps repeated on the mode pill and
+// on every minimized window read as a row of beads rather than a status line.
+// The capped look stays one config key away.
+//
+// The workspace strip is deliberately outside this. Its pills are tabs, they
+// keep their rounded ends either way, and TestWorkspacePillsKeepTheirCapsWhatever
+// TheDockDoes is where that is pinned; the strip is turned off here so the two
+// rules are tested one at a time.
 func TestDockPillsAreFlatByDefault(t *testing.T) {
 	m := dockTabTestOS(t, 1, 1, 2, 3)
 
-	prev := config.DockPillCaps
-	t.Cleanup(func() { config.DockPillCaps = prev })
+	prevCaps, prevTabs := config.DockPillCaps, config.DockWorkspaceTabs
+	t.Cleanup(func() { config.DockPillCaps, config.DockWorkspaceTabs = prevCaps, prevTabs })
 
 	config.DockPillCaps = false
 	if lc := config.GetDockPillLeftChar(); lc != "" {
 		t.Errorf("flat pills still report a left cap %q", lc)
 	}
+	config.DockWorkspaceTabs = false
 	flat, _ := m.renderDockString()
 	for _, cap := range []string{config.DockPillLeftChar, config.DockPillRightChar} {
 		if strings.Contains(flat, cap) {
 			t.Errorf("flat dock still draws the cap glyph %q", cap)
 		}
 	}
+	config.DockWorkspaceTabs = prevTabs
+	m.renderDockString()
 
 	// The active tab is a filled cell rather than a cap pair, so the strip must
 	// keep its width and its hit rects across the two styles.
