@@ -115,6 +115,11 @@ type connState struct {
 	mu               sync.Mutex
 	sessionID        string // Session they're attached to
 	ptySubscriptions map[string]struct{}
+	// ptyResume is where each PTY's stream had got to when this client last
+	// unsubscribed, so hiding and showing a pane resumes rather than replays.
+	// It lives on the connection because that is what owns its lifetime: the
+	// positions go away with the client instead of accumulating on the PTY.
+	ptyResume map[string]int64
 
 	// Event stream state (JSON verb protocol). eventSub is the hub subscription
 	// once this connection has issued a subscribe verb; streaming guards against a
@@ -439,6 +444,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		done:             make(chan struct{}),
 		codec:            DefaultCodec(), // Default to gob, may be changed in handleHello
 		ptySubscriptions: make(map[string]struct{}),
+		ptyResume:        make(map[string]int64),
 	}
 
 	LogBasic("Client %s connected", clientID)
