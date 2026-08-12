@@ -222,6 +222,15 @@ func listRowMarker(selected bool) string {
 	return "  "
 }
 
+// listRowSpans composes a list row from segments the caller has already styled,
+// right-aligning the trailing one. It is listRowLine for rows whose two halves
+// are not one colour each, such as a label followed by a dimmer identity.
+func listRowSpans(width int, marker, left, right string, bg color.Color, pal overlay.Palette) string {
+	m := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker)
+	gap := max(width-lipgloss.Width(m)-lipgloss.Width(left)-lipgloss.Width(right), 1)
+	return m + left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + right
+}
+
 // listRowLine composes a standard "marker + label ... trailing" list row on the
 // given background, right-aligning the trailing text. Used by the list-based
 // overlays for a consistent look.

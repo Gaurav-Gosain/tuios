@@ -320,14 +320,13 @@ func settingsControlSpanContains(row overlayRowHit, lx, ly int) bool {
 // sessionSwitcherActivate switches to the session at the given index of the
 // filtered switcher list and closes the switcher, mirroring its Enter binding.
 func (m *OS) sessionSwitcherActivate(idx int) {
-	filtered := FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery)
-	if idx < 0 || idx >= len(filtered) {
+	selected, ok := m.SessionSwitcherTarget(idx)
+	if !ok {
 		return
 	}
-	selected := filtered[idx]
 	if selected.IsCurrent {
 		m.ShowNotification("Already on this session", "info", config.NotificationDuration)
-	} else if err := m.SwitchToSession(selected.Title); err != nil {
+	} else if err := m.SwitchToSession(selected.ID); err != nil {
 		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
 	}
 	m.closeOverlay("session")
