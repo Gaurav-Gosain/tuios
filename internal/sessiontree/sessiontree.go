@@ -52,6 +52,10 @@ type Node struct {
 	IsCurrent bool
 	// WindowCount is the number of windows in a session node. Zero for windows.
 	WindowCount int
+	// Restored marks a session the daemon rebuilt from saved state that nobody
+	// has attached to since: its layout is back and its shells are new. Always
+	// false for window nodes.
+	Restored bool
 	// Children are the window nodes of a session. Nil for a window node, and nil
 	// for a session whose windows are not known yet (a non-attached session over
 	// the coarse control protocol), which still carries a rolled-up glyph and a
@@ -94,6 +98,9 @@ type SessionInput struct {
 	Attached    bool
 	IsCurrent   bool
 	WindowCount int
+	// Restored says this session came back from saved state and has not been
+	// attached to since.
+	Restored bool
 	// CurrentWorkspace is the workspace this session is showing, or 0 when the
 	// caller does not know.
 	CurrentWorkspace int
@@ -161,6 +168,7 @@ func BuildSession(s SessionInput) Node {
 		IsCurrent:   s.IsCurrent,
 		WindowCount: s.WindowCount,
 		Workspace:   s.CurrentWorkspace,
+		Restored:    s.Restored,
 	}
 	if len(s.Windows) == 0 {
 		return node

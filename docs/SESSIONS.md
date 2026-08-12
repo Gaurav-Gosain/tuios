@@ -114,7 +114,7 @@ BSP tree and the layout mode.
 | | Client exits (detach, crash, SSH drop) | Daemon restart (`kill-server`, `SIGTERM`) | Daemon crash (`SIGKILL`, OOM) | Reboot |
 |---|---|---|---|---|
 | Session exists afterwards | Yes | Yes, restored on daemon start | Yes, restored on daemon start | Yes, restored on daemon start |
-| Window structure | Yes | Yes | Partial: as of the last save, up to 30s stale | Partial: as of the last save |
+| Window structure | Yes | Yes | Partial: as of the last save, a couple of seconds stale | Partial: as of the last save |
 | Shell processes | Yes, they keep running | No, fresh shells are spawned | No, fresh shells are spawned | No, fresh shells are spawned |
 | Working directories | Yes | Yes, on Linux (see below) | Partial: the cwd from the last save | Partial: the cwd from the last save |
 | Screen contents | Yes | No | No | No |
@@ -137,8 +137,12 @@ a daemon exit except what was written to disk.
 
 Resurrection is how a session comes back after the daemon that held it is gone.
 
-Each live session writes its state to a JSON file every 30 seconds, and again on
-a clean shutdown (`kill-server`, `SIGTERM` or `SIGINT`). The final save happens
+Each live session writes its state to a JSON file within a couple of seconds of
+any change to its structure, again every 30 seconds whether or not anything
+changed (which is how each window's working directory stays current, since
+typing `cd` changes no structure), and once more on a clean shutdown
+(`kill-server`, `SIGTERM` or `SIGINT`). A session nothing has changed costs one
+write per 30 seconds, as it always did. The final save happens
 while the shells are still alive, which is what makes the working directories in
 it accurate. The write is atomic: a temp file is renamed into place, so a crash
 mid-write cannot leave a half-written file where a good one used to be.
@@ -159,6 +163,19 @@ exists), and writes a dim one-line notice into it:
 
 Restored shells get `TUIOS_RESTORED=1` in their environment, so your shell rc can
 react to a restore without relying on the banner.
+
+The session itself is marked too, so you can tell a session that just came back
+from one that has been running for days without opening a pane. A restored
+session shows a `restored` tag in `tuios ls`, in the sidebar and in the session
+switcher, and `tuios attach` says so before it hands over the screen:
+
+```
+Session "work" was restored: layout came back from saved state; the shells are new.
+```
+
+The mark is cleared by the first attach, on the reasoning that once you have
+looked at the session the question has been answered. It never comes back for
+that session unless the daemon restores it again.
 
 What this means in practice: your layout comes back and each pane is sitting in
 the right directory, but whatever was running in those panes is not. A `vim` you
@@ -203,7 +220,7 @@ newer TUIOS. In the last two cases it also prints where the file was archived.
 | What | Path |
 |---|---|
 | Saved session state | `$XDG_STATE_HOME/tuios/sessions/<name>.json` (typically `~/.local/state/tuios/sessions/`) |
-| Archived bad state | `$XDG_STATE_HOME/tuios/sessions/archive/` |
+| Archived bad state | `$XDG_STATE_HOME/tuios/sessions/archive/`, pruned after 14 days |
 | Daemon socket | `$XDG_RUNTIME_DIR/tuios/tuios.sock`, falling back to `/tmp/tuios-<uid>/tuios.sock` |
 | Daemon PID file | the socket path with `.pid` appended |
 
@@ -220,9 +237,10 @@ reboot.
   `/proc/<pid>/cwd` to learn where each shell is. On platforms without procfs the
   read fails and restoration falls back to spawning the shell in its default
   directory. Everything else about the restore is unaffected.
-- **A crash loses up to 30 seconds of structural change.** Saves are periodic;
-  only a clean shutdown forces a final one. A window created 5 seconds before a
-  `SIGKILL` will not be in the restored session.
+- **A crash loses the last couple of seconds of structural change, and up to 30
+  seconds of working-directory drift.** Structural changes are saved within a
+  couple of seconds; the directory each shell is sitting in is captured on the
+  30-second tick, so a `cd` immediately before a `SIGKILL` may not survive.
 - **Restored shells use the daemon's environment.** No client is connected at
   restore time, so the shell comes from the daemon process's `$SHELL` and
   inherits the daemon's environment, not that of whichever terminal you later

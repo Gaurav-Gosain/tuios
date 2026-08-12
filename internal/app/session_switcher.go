@@ -43,6 +43,7 @@ func (m *OS) RefreshSessionList() []sessiontree.Node {
 			DisplayName: s.DisplayName,
 			IsCurrent:   s.Name == currentSession,
 			WindowCount: s.WindowCount,
+			Restored:    s.Restored,
 		}))
 	}
 	return items

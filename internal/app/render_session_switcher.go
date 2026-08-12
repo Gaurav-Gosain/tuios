@@ -75,6 +75,11 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 	if item.IsCurrent {
 		right = overlay.Style(rowBg).Foreground(pal.Success).Render("current  ") + right
 	}
+	// A restored session is by definition not the current one, so the tag sits
+	// in the slot "current" would otherwise hold and never competes with it.
+	if item.Restored {
+		right = overlay.Style(rowBg).Foreground(pal.FgMute).Render(sidebarRestoredTag+"  ") + right
+	}
 
 	// The identity is shown only when a display name is hiding it, so an
 	// unrenamed session reads exactly as it always has.

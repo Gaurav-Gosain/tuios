@@ -123,7 +123,17 @@ type SessionState struct {
 	// means the client's default. It lives here rather than in a client-side file
 	// because it has to survive a reattach and be the same for every client
 	// attached to this session.
-	Accent           string         `json:"accent,omitempty"`
+	Accent string `json:"accent,omitempty"`
+	// Restored marks a session the daemon rebuilt from saved state and that no
+	// client has attached to since. Nothing else at session level says so: the
+	// layout is back but every shell under it is new, and the only evidence was
+	// a per-pane banner that scrolls away. The daemon sets it on restore and
+	// clears it on the first attach, so it answers "why is this session here"
+	// for exactly as long as the question is unanswered.
+	//
+	// Daemon-owned: clients never send it, and false is what every older client
+	// and every pre-existing state file reads back as.
+	Restored         bool           `json:"restored,omitempty"`
 	Windows          []WindowState  `json:"windows"`
 	FocusedWindowID  string         `json:"focused_window_id,omitempty"`
 	CurrentWorkspace int            `json:"current_workspace"`
@@ -320,6 +330,13 @@ type Session struct {
 	stopResurrection func() // Stops periodic resurrection saving
 	stateMu          sync.RWMutex
 
+	// stateDirty is set by every change to the session's structure and consumed
+	// by the resurrection saver, which is how a new window reaches disk in a
+	// couple of seconds instead of at the next blind tick. It is an atomic rather
+	// than a field of state because the saver goroutine reads it and holds no
+	// lock of this session.
+	stateDirty atomic.Bool
+
 	// eventSink, when set, receives control-plane events raised by this session
 	// and its PTYs (window lifecycle, output activity, bell, mode changes). The
 	// daemon installs it so events reach the event hub; nil for a session with no
@@ -437,9 +454,10 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 	}
 
 	// Start periodic resurrection saving
-	session.stopResurrection = StartPeriodicSave(func() *SessionState {
-		return session.ResurrectionState()
-	})
+	session.stopResurrection = StartPeriodicSave(
+		func() *SessionState { return session.ResurrectionState() },
+		func() bool { return session.stateDirty.Swap(false) },
+	)
 
 	return session, nil
 }
@@ -763,6 +781,40 @@ func (s *Session) SetAccent(accent string) error {
 	})
 }
 
+// MarkRestored records that this session was rebuilt from saved state. It runs
+// through mutateState rather than being written into the state the restore
+// pushes, because a client sync always takes the daemon's value for this field
+// and would otherwise wipe it right back off.
+func (s *Session) MarkRestored() {
+	_ = s.mutateState(func(st *SessionState) error {
+		st.Restored = true
+		return nil
+	})
+}
+
+// ClearRestored drops the restored mark now that a client is looking at the
+// session. It is a no-op on a session that was not restored.
+//
+// Deliberately not published to the session's clients. This runs inside the
+// attach handler, which has already recorded the connection's session, so a
+// state push here reaches the attaching client on the same socket ahead of the
+// attach reply it is blocked waiting for, and that client fails the attach with
+// "unexpected response". Nothing needs the push: every surface that shows the
+// mark for a session it is not attached to reads it from the session listing,
+// which is polled.
+func (s *Session) ClearRestored() {
+	s.stateMu.RLock()
+	restored := s.state.Restored
+	s.stateMu.RUnlock()
+	if !restored {
+		return
+	}
+	_, _ = s.mutateStateLocked(func(st *SessionState) error {
+		st.Restored = false
+		return nil
+	})
+}
+
 // SetOption records a daemon-owned session option under stateMu. It is the write
 // side of the JSON verb protocol's set-option and is safe for concurrent use.
 func (s *Session) SetOption(key, value string) {
@@ -772,6 +824,7 @@ func (s *Session) SetOption(key, value string) {
 		s.state.Options = make(map[string]string)
 	}
 	s.state.Options[key] = value
+	s.stateDirty.Store(true)
 }
 
 // GetOption reads a daemon-owned session option under stateMu, returning the
@@ -870,6 +923,7 @@ func (s *Session) UpdateState(state *SessionState) bool {
 	before := snapshotLifecycle(prev)
 	s.state = state
 	s.LastActive = time.Now()
+	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
 	return accepted
 }
@@ -909,6 +963,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	// this point is reconciled by UpdateState rather than winning by arriving
 	// last.
 	s.state.Version++
+	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
 	return s.snapshotStateLocked(), nil
 }
@@ -933,7 +988,12 @@ func (s *Session) Stop() {
 		s.stopResurrection()
 	}
 	// Final save before stopping. Capture cwds while the shells are still alive.
-	_ = SaveSessionForResurrection(s.ResurrectionState())
+	// This is the last chance to persist the session, so a failure here is the
+	// difference between it coming back and not; it is reported rather than
+	// dropped even though Stop cannot act on it.
+	if err := SaveSessionForResurrection(s.ResurrectionState()); err != nil {
+		LogError("Final resurrection save for session %q failed, it will not come back: %v", s.Name, err)
+	}
 
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
@@ -985,6 +1045,7 @@ func (s *Session) Info() SessionInfo {
 	s.stateMu.RLock()
 	displayName, accent := s.state.DisplayName, s.state.Accent
 	currentWorkspace := s.state.CurrentWorkspace
+	restored := s.state.Restored
 	s.stateMu.RUnlock()
 
 	return SessionInfo{
@@ -1000,6 +1061,7 @@ func (s *Session) Info() SessionInfo {
 		DisplayName:      displayName,
 		Accent:           accent,
 		CurrentWorkspace: currentWorkspace,
+		Restored:         restored,
 	}
 }
 

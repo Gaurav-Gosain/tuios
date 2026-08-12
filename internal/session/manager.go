@@ -61,6 +61,12 @@ func (m *Manager) SocketPath() string {
 
 // CreateSession creates a new session with the given name.
 func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height int) (*Session, error) {
+	// Validated before the session exists, so a name that could never be saved
+	// is refused rather than producing a session that runs and never persists.
+	if err := ValidateSessionName(name); err != nil {
+		return nil, err
+	}
+
 	m.mu.Lock()
 
 	// Check if name already exists

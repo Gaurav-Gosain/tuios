@@ -3,7 +3,14 @@ package session
 import (
 	"fmt"
 	"log"
+	"maps"
+	"slices"
 )
+
+// hasWindow reports whether id names one of these windows.
+func hasWindow(windows []WindowState, id string) bool {
+	return slices.ContainsFunc(windows, func(w WindowState) bool { return w.ID == id })
+}
 
 // restoreAllSessions recreates every resurrectable session that is not already
 // live. It is called once on daemon start (unless auto-restore is disabled).
@@ -26,6 +33,13 @@ func (d *Daemon) restoreAllSessions() {
 			log.Printf("Skipping resurrection of %q: %v", name, err)
 			continue
 		}
+		if len(state.Windows) == 0 {
+			// It can never restore, so leaving it would keep offering a session
+			// that 'tuios resurrect' lists and cannot bring back.
+			log.Printf("Discarding saved state for %q: it has no windows", name)
+			RemoveResurrectionState(name)
+			continue
+		}
 		if _, err := d.restoreSession(state); err != nil {
 			LogError("Failed to restore session %q: %v", name, err)
 			continue
@@ -46,6 +60,16 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 
 	if existing := d.manager.GetSession(state.Name); existing != nil {
 		return existing, nil
+	}
+
+	// A session whose windows were all closed leaves a state file behind, and
+	// restoring it produced a session with nothing in it that no surface tells
+	// apart from a real one. There is nothing to bring back, so it is not a
+	// session; refusing here covers the automatic restore and the on-demand
+	// 'tuios resurrect' alike. Checked after the live lookup above, which is
+	// about the session that already exists rather than about what was saved.
+	if len(state.Windows) == 0 {
+		return nil, fmt.Errorf("saved state for session %q has no windows, there is nothing to restore", state.Name)
 	}
 
 	width, height := state.Width, state.Height
@@ -72,7 +96,14 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	restored := *state
 	restored.Windows = make([]WindowState, len(state.Windows))
 	copy(restored.Windows, state.Windows)
+	restored.WorkspaceFocus = maps.Clone(state.WorkspaceFocus)
 
+	// A window whose shell will not start is dropped rather than kept. Keeping it
+	// left its PTYID naming the dead daemon's PTY, which nothing will ever answer
+	// to: no output, no input, no way to revive it, and no UI anywhere that draws
+	// a pane as dead. Closing the window is what the daemon already does whenever
+	// a PTY goes away (see notifyPTYClosed), so the restore does the same.
+	kept := restored.Windows[:0]
 	for i := range restored.Windows {
 		w := &restored.Windows[i]
 
@@ -83,12 +114,28 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 
 		pty, err := sess.RestorePTY(w.ID, ptyWidth, ptyHeight, w.Cwd, onExit)
 		if err != nil {
-			LogError("Failed to respawn shell for restored window %s: %v", shortID(w.ID), err)
+			LogError("Dropping restored window %s, its shell could not be respawned: %v", shortID(w.ID), err)
 			continue
 		}
 		w.PTYID = pty.ID
+		kept = append(kept, *w)
+	}
+	restored.Windows = kept
+
+	// Focus must not name a window that was just dropped, or the client restores
+	// a focus onto a pane that is not there.
+	if restored.FocusedWindowID != "" && !hasWindow(kept, restored.FocusedWindowID) {
+		restored.FocusedWindowID = ""
+	}
+	for ws, id := range restored.WorkspaceFocus {
+		if !hasWindow(kept, id) {
+			delete(restored.WorkspaceFocus, ws)
+		}
 	}
 
 	sess.UpdateState(&restored)
+	// After UpdateState, which takes this field from canonical state and would
+	// undo it if the restore wrote it into the pushed snapshot instead.
+	sess.MarkRestored()
 	return sess, nil
 }

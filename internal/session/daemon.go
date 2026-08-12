@@ -290,6 +290,10 @@ func (d *Daemon) Start() error {
 
 	log.Printf("TUIOS daemon started on %s (PID %d)", socketPath, os.Getpid())
 
+	// Sweep the previous daemon's leftovers before reading the directory. Runs
+	// whether or not auto-restore is on, since the residue is there either way.
+	CleanResurrectionDir()
+
 	// Restore sessions saved before the previous shutdown/crash before we start
 	// accepting clients, so an attach immediately after start finds them. Runs
 	// synchronously; a single corrupt file is archived and skipped, never fatal.

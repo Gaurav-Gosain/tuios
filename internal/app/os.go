@@ -318,6 +318,12 @@ type OS struct {
 	// switch and the daemon's own addressing use.
 	SessionDisplayName string
 	SessionAccent      string
+	// SessionRestored is the attached session's daemon-owned restored mark. The
+	// daemon clears it on attach, so it is normally false here; it is carried
+	// anyway so the attached row reads from the same field every other row does.
+	// Distinct from RestoredFromState below, which is this client's own
+	// bookkeeping about having applied a state snapshot.
+	SessionRestored bool
 	// WorkspaceNames maps a workspace number to its daemon-owned label. The
 	// number stays the workspace's identity and is what an unnamed workspace
 	// shows, so an absent entry is not a missing label but the normal case.

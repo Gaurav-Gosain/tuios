@@ -7,14 +7,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/adrg/xdg"
 )
 
 const (
-	resurrectionDir      = "tuios/sessions"
+	resurrectionDir = "tuios/sessions"
+	// resurrectionInterval is how often a session is saved regardless of whether
+	// anything changed, which is what keeps each window's captured working
+	// directory current: a user typing cd changes no session structure.
 	resurrectionInterval = 30 * time.Second
+	// resurrectionDirtyInterval is how often the saver looks for a structural
+	// change, and so the most a SIGKILL can cost. It is a poll of a flag, not a
+	// write: a tick that finds nothing changed does nothing at all.
+	resurrectionDirtyInterval = 2 * time.Second
 
 	// ResurrectionVersion is the current on-disk resurrection schema version.
 	// It is bumped only when the schema changes in a way older daemons cannot
@@ -23,22 +32,66 @@ const (
 	// before versioning existed) is a structural subset of the current schema
 	// and loads without issue.
 	ResurrectionVersion = 1
+
+	// RestoredTag is the marker every surface shows on a session that came back
+	// from saved state, and RestoredNote is the sentence that says what came back
+	// with it. Both live here so the rail, the switcher, `tuios ls` and the
+	// attach path cannot word the same fact differently.
+	RestoredTag  = "restored"
+	RestoredNote = "layout came back from saved state; the shells are new"
 )
 
-// resurrectionDirOverride is set during tests to use a temp directory.
-var resurrectionDirOverride string
+// resurrectionDirOverride is set during tests to use a temp directory. It is an
+// atomic because the periodic saver reads it from its own goroutine, which keeps
+// running while a test sets or restores it.
+var resurrectionDirOverride atomic.Value // string
+
+// setResurrectionDirOverride redirects resurrection state, and returns the value
+// it replaced. Test-only.
+func setResurrectionDirOverride(dir string) string {
+	prev, _ := resurrectionDirOverride.Swap(dir).(string)
+	return prev
+}
 
 // getResurrectionDir returns the directory for session resurrection files.
 func getResurrectionDir() string {
-	if resurrectionDirOverride != "" {
-		return resurrectionDirOverride
+	if override, _ := resurrectionDirOverride.Load().(string); override != "" {
+		return override
 	}
 	return filepath.Join(xdg.StateHome, resurrectionDir)
 }
 
 // getResurrectionPath returns the path for a specific session's resurrection file.
+// Callers are responsible for having validated the name (see ValidateSessionName);
+// this is a plain join and cannot defend itself.
 func getResurrectionPath(sessionName string) string {
 	return filepath.Join(getResurrectionDir(), sessionName+".json")
+}
+
+// ValidateSessionName rejects a name a session could never be saved under. The
+// name is also the name of its state file, so a name carrying a path separator
+// produced a session that ran perfectly and silently never persisted: the write
+// went to a directory that does not exist, and the error was thrown away. The
+// only place the user can still be told is when they choose the name.
+//
+// An empty name is allowed: the manager generates one.
+func ValidateSessionName(name string) error {
+	if name == "" {
+		return nil
+	}
+	if strings.TrimSpace(name) != name {
+		return fmt.Errorf("session name %q has leading or trailing whitespace", name)
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("session name %q is reserved", name)
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("session name %q contains a path separator; a session name is also the name of its state file", name)
+	}
+	if strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return fmt.Errorf("session name %q contains a control character", name)
+	}
+	return nil
 }
 
 // ResurrectionStateDir returns the directory holding saved session state, so a
@@ -83,6 +136,55 @@ func archivedNote(dest string) string {
 		return "it could not be archived and was removed"
 	}
 	return "archived to " + dest
+}
+
+// archiveRetention is how long an archived state file is kept. The archive
+// exists so a user can look at state that would not load; a file nobody has
+// looked at in two weeks is not going to be, and nothing else bounds the
+// directory's growth.
+const archiveRetention = 14 * 24 * time.Hour
+
+// CleanResurrectionDir removes what the save and archive paths leave behind:
+// temp files from writes that died before their rename, and archived state past
+// archiveRetention. Neither had anything cleaning it, so both grew forever.
+//
+// Best effort and never fatal. It runs on daemon start, which is the one moment
+// no save of this daemon's can be in flight, and only one daemon runs at a time.
+func CleanResurrectionDir() {
+	dir := getResurrectionDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		// A completed write renames the temp file into place, so one still sitting
+		// here is the residue of a write that never finished.
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json.tmp") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+			LogError("Failed to remove leftover resurrection temp file %s: %v", entry.Name(), err)
+		}
+	}
+
+	archiveDir := ResurrectionArchiveDir()
+	archived, err := os.ReadDir(archiveDir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-archiveRetention)
+	for _, entry := range archived {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(archiveDir, entry.Name())); err != nil {
+			LogError("Failed to prune archived session state %s: %v", entry.Name(), err)
+		}
+	}
 }
 
 // SaveSessionForResurrection persists the session state to disk.
@@ -219,21 +321,42 @@ func RemoveResurrectionState(sessionName string) {
 	_ = os.Remove(path)
 }
 
-// StartPeriodicSave starts a goroutine that periodically saves session state.
-// Returns a stop function to halt the periodic saving.
-func StartPeriodicSave(getState func() *SessionState) func() {
+// StartPeriodicSave starts a goroutine that saves session state, and returns a
+// stop function to halt it.
+//
+// takeDirty reports whether the session's structure changed since the last save
+// and clears the mark; nil means every tick is a full save. It is what makes the
+// SIGKILL window small without making the saves frequent: the ticker runs at the
+// short interval but a tick that finds nothing changed does no work, so an idle
+// session still writes only once per resurrectionInterval (which is what keeps
+// each shell's working directory current) and a changed one reaches disk within
+// a couple of seconds. Before this, a session created less than a full interval
+// before a SIGKILL was lost entirely, which is the worst case there is: it is the
+// session the user just made.
+func StartPeriodicSave(getState func() *SessionState, takeDirty func() bool) func() {
 	stopCh := make(chan struct{})
+	done := make(chan struct{})
 
 	go func() {
-		ticker := time.NewTicker(resurrectionInterval)
+		defer close(done)
+		ticker := time.NewTicker(resurrectionDirtyInterval)
 		defer ticker.Stop()
+		lastSave := time.Now()
 
 		for {
 			select {
-			case <-ticker.C:
+			case now := <-ticker.C:
+				dirty := takeDirty == nil || takeDirty()
+				if !dirty && now.Sub(lastSave) < resurrectionInterval {
+					continue
+				}
+				lastSave = now
 				state := getState()
-				if state != nil {
-					_ = SaveSessionForResurrection(state)
+				if state == nil {
+					continue
+				}
+				if err := SaveSessionForResurrection(state); err != nil {
+					LogError("Resurrection save for session %q failed: %v", state.Name, err)
 				}
 			case <-stopCh:
 				return
@@ -241,7 +364,11 @@ func StartPeriodicSave(getState func() *SessionState) func() {
 		}
 	}()
 
+	// Waits for the saver to return. Session.Stop stops saving and then writes
+	// the state itself, and both writes go through the same fixed <name>.json.tmp
+	// path, so a stop that did not wait let the two interleave on it.
 	return func() {
 		close(stopCh)
+		<-done
 	}
 }

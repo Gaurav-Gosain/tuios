@@ -88,6 +88,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		DisplayName:      m.SessionDisplayName,
 		Attached:         true,
 		IsCurrent:        true,
+		Restored:         m.SessionRestored,
 		CurrentWorkspace: m.CurrentWorkspace,
 		Windows:          windows,
 	}
@@ -117,6 +118,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 	return sessiontree.SessionInput{
 		Name:             name,
 		DisplayName:      display,
+		Restored:         client.SessionRestored(name),
 		CurrentWorkspace: client.SessionCurrentWorkspace(name),
 		Windows:          windows,
 	}

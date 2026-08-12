@@ -192,6 +192,11 @@ type SessionInfo struct {
 	// Additive and omitted when zero; a client reading zero tags nothing, which
 	// is the same graceful silence it had before the field existed.
 	CurrentWorkspace int `json:"current_workspace,omitempty"`
+	// Restored marks a session rebuilt from saved state that nobody has attached
+	// to yet, so a listing can say why it is here without the client having to
+	// attach to find out. Omitted when false, which is what an older daemon
+	// sends and what every client reads as "an ordinary live session".
+	Restored bool `json:"restored,omitempty"`
 }
 
 // SessionListPayload contains list of available sessions.

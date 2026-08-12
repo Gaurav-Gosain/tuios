@@ -35,6 +35,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.Accent == "" {
 		incoming.Accent = canonical.Accent
 	}
+	// Restored is set by the restore and cleared by the first attach, both
+	// daemon-side. A bool cannot say "not sent", so canonical simply wins: no
+	// client can either raise the mark or clear it by syncing.
+	incoming.Restored = canonical.Restored
 	if incoming.WorkspaceNames == nil {
 		incoming.WorkspaceNames = canonical.WorkspaceNames
 	}
