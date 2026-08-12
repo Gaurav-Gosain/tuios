@@ -50,6 +50,19 @@ func quietStripOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	return m, tree
 }
 
+// manySessionsOS is a collapsed rail carrying more sessions than a short screen
+// has lines to draw them on.
+func manySessionsOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
+	t.Helper()
+	m, _ := sectionsTestOS(t, w, h)
+	m.SidebarCollapsed = true
+	in := make([]sessiontree.SessionInput, 0, 8)
+	for i := range 8 {
+		in = append(in, sessiontree.SessionInput{Name: string(rune('a' + i)), IsCurrent: i == 0, Attached: i == 0})
+	}
+	return m, sessiontree.Build(in)
+}
+
 // sgrPattern matches one SGR sequence, so a rendered line can be walked cell by
 // cell with the style each cell was painted in still in hand.
 var stripSGR = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
@@ -325,6 +338,66 @@ func TestStripSpacingCollapsesBeforeMarksDrop(t *testing.T) {
 		// interval short of the naive product.
 		if span := max(shown*interval-(interval-1), 0); span > tc.region {
 			t.Errorf("plan(region=%d sessions=%d) spans %d rows", tc.region, tc.sessions, span)
+		}
+	}
+}
+
+// TestStripPacksThenSaysWhatItCut is the same degradation read off the drawn
+// frame: a rail with eight sessions and room for four marks packs them, keeps
+// the top of the list, and ends on the tail mark rather than just stopping.
+func TestStripPacksThenSaysWhatItCut(t *testing.T) {
+	m, tree := manySessionsOS(t, 120, 9)
+	lines := railPlain(t, m, tree)
+	rule := config.GetWindowBorderLeft()
+
+	want := []string{
+		"  " + rule,
+		"▎·" + rule,
+		" ·" + rule,
+		" ·" + rule,
+		" ⋮" + rule, // the four it had no line for
+		" »" + rule,
+		"  " + rule,
+	}
+	for i := range want {
+		if i >= len(lines) || lines[i] != want[i] {
+			t.Fatalf("short rail = \n%s\nwant\n%s", strings.Join(lines, "\n"), strings.Join(want, "\n"))
+		}
+	}
+	if len(lines) != len(want) {
+		t.Errorf("the short rail drew %d lines, want %d", len(lines), len(want))
+	}
+}
+
+// TestStripSpineFollowsRailOrder: the strip is the same list, folded, so a
+// session cannot sit third collapsed and first expanded. Order is the one thing
+// the two states share, and it is what makes the fold learnable.
+func TestStripSpineFollowsRailOrder(t *testing.T) {
+	sessionsOf := func(m *OS) []string {
+		var out []string
+		for _, n := range m.SidebarNav {
+			if n.Kind == sidebarRowSession {
+				out = append(out, n.SessionID)
+			}
+		}
+		return out
+	}
+
+	m, tree := stripOS(t, 120, 30)
+	m.SidebarCollapsed = false
+	m.sidebarPanelLinesForTree(tree)
+	expanded := sessionsOf(m)
+
+	m.SidebarCollapsed = true
+	m.sidebarPanelLinesForTree(tree)
+	collapsed := sessionsOf(m)
+
+	if len(collapsed) != len(expanded) || len(collapsed) == 0 {
+		t.Fatalf("the strip lists %v, the expanded rail %v", collapsed, expanded)
+	}
+	for i := range collapsed {
+		if collapsed[i] != expanded[i] {
+			t.Fatalf("strip order %v differs from rail order %v", collapsed, expanded)
 		}
 	}
 }
