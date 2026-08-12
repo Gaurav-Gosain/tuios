@@ -562,8 +562,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 
 			isSelected := (window.IsSelecting || window.SelectedText != "") && m.isPositionInSelection(window, x, y)
-			// Only render fake cursor when real terminal cursor is not being used
-			isCursorPos := !useRealCursor && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
+			// Only render fake cursor when real terminal cursor is not being
+			// used. Suppressing the real one during a resize must not hand the
+			// job to this path instead: the gesture draws no cursor either way.
+			isCursorPos := !useRealCursor && !m.Resizing && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
 
 			isSelectionCursor := m.SelectionMode && !inTerminalMode && isFocused &&
 				x == window.SelectionCursor.X && y == window.SelectionCursor.Y

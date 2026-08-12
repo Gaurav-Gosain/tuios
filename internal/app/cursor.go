@@ -18,6 +18,15 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		return nil
 	}
 
+	// A resize gesture draws no cursor: the pane it is over is showing the size
+	// readout, not the guest's screen, so a cursor sitting in it points at
+	// nothing. The gesture borrows window management (BeginResizeMode), which
+	// the mode check above already catches; this says it directly so the
+	// property holds for any resize, however the mode got where it is.
+	if m.Resizing {
+		return nil
+	}
+
 	window := m.Windows[m.FocusedWindow]
 	if window == nil || window.Terminal == nil {
 		return nil
