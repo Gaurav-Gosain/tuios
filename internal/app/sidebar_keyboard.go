@@ -58,8 +58,7 @@ func (m *OS) EnterSidebarFocus() {
 
 // sidebarSetCursor moves the keyboard cursor and re-derives the preview from
 // where it landed, so a browse down the sessions section previews row by row
-// exactly as hovering it does. Discrete keys need no pair rule: one press is
-// one deliberate move.
+// exactly as hovering it does.
 func (m *OS) sidebarSetCursor(i int) {
 	m.SidebarCursor = i
 	row, ok := m.sidebarCursorRow()
@@ -67,7 +66,7 @@ func (m *OS) sidebarSetCursor(i int) {
 		m.sidebarClearPeek()
 		return
 	}
-	m.SidebarPeek, m.SidebarPeekArm = row.SessionID, row.SessionID
+	m.SidebarPeek = row.SessionID
 }
 
 // ExitSidebarFocus returns the keyboard to the panes. A sidebar revealed only to

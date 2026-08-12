@@ -20,41 +20,123 @@ func sessionRowY(t *testing.T, m *OS, id string) int {
 	return 0
 }
 
-// TestPeekPairRule pins the debounce the design gets for free from the motion
-// events already arriving, instead of from a clock. The table is a sequence of
-// pointer positions, because a single position never decides anything on its
-// own: what commits a peek is what the previous event resolved to.
-func TestPeekPairRule(t *testing.T) {
+// framePeek reads back off the rendered rail which session the terminals
+// section is showing: the peeked session's name is right-aligned in the
+// section's header, and "" is a rested frame showing the attached session.
+// Every claim below goes through this rather than through the state, because
+// the state was never what the complaint was about.
+func framePeek(t *testing.T, m *OS, tree sessiontree.Tree) string {
+	t.Helper()
+	lines := railPlain(t, m, tree)
+	h := lineOf(lines, " terminals")
+	if h < 0 {
+		t.Fatalf("no terminals header:\n%s", strings.Join(lines, "\n"))
+	}
+	for _, name := range []string{"api", "docs"} {
+		if strings.Contains(lines[h], name) {
+			return name
+		}
+	}
+	return ""
+}
+
+// TestPeekFollowsTheHoveredRow is the table the pair rule failed. Session rows
+// are one cell tall and terminals report motion once per cell entered, so a
+// pointer crossing a row vertically lands exactly one event on it however
+// slowly it moves: the pair the old rule waited for formed only on sideways
+// wobble. The sequences marked below are the ones a user reported as "works for
+// some sessions, not others"; the last two are the same gesture reaching the
+// same row by two paths, which must agree.
+func TestPeekFollowsTheHoveredRow(t *testing.T) {
 	m, tree := sectionsTestOS(t, 120, 30)
 	m.sidebarPanelLinesForTree(tree)
 	main, api, docs := sessionRowY(t, m, "main"), sessionRowY(t, m, "api"), sessionRowY(t, m, "docs")
-	pane := m.GetRenderWidth() - 2 // outside the band
+	pane := -1 // a y standing for "off the band entirely"
 
 	for _, tc := range []struct {
 		name string
 		ys   []int
 		want string
 	}{
-		{"a pair on one row commits", []int{api, api}, "api"},
-		{"entering sideways from the panes commits at once", []int{pane, api}, "api"},
-		{"a one-event sweep across three rows commits nothing", []int{main, api, docs}, ""},
-		{"a slow crossing commits row by row", []int{main, api, api, docs, docs}, "docs"},
-		{"the attached row is never a peek", []int{main, main}, ""},
-		{"leaving the sessions section snaps back", []int{api, api, main}, ""},
+		{"one event on a row is a peek", []int{api}, "api"},
+		{"a second event on the same row holds it", []int{api, api}, "api"},
+		{"entering sideways from the panes peeks at once", []int{pane, api}, "api"},
+
+		// Failed before: the first row committed and then kept showing while
+		// the pointer moved on, so the header named a session the hover band
+		// was no longer on.
+		{"stepping to the next row moves the preview with it", []int{pane, api, docs}, "docs"},
+		{"a fast sweep ends on the row under the pointer", []int{pane, api, docs, api}, "api"},
+
+		// Failed before: leaving the attached row armed it, so the neighbour
+		// needed a wobble to commit and the section stayed on the attached
+		// session's panes.
+		{"stepping off the attached row peeks the neighbour", []int{main, api}, "api"},
+		{"a sweep from the attached row through every session", []int{main, api, docs}, "docs"},
+
+		{"the attached row is never a peek", []int{api, main}, ""},
+		{"leaving the sessions section snaps back", []int{api, main}, ""},
+		{"leaving the band snaps back", []int{api, pane}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m.sidebarClearPeek()
 			for _, y := range tc.ys {
-				x := 1
 				if y == pane {
-					x, y = pane, main
+					m.SidebarMotion(m.GetRenderWidth()-2, main)
+					continue
 				}
-				m.SidebarMotion(x, y)
+				m.SidebarMotion(1, y)
 			}
-			if m.SidebarPeek != tc.want {
-				t.Errorf("peek = %q, want %q", m.SidebarPeek, tc.want)
+			if got := framePeek(t, m, tree); got != tc.want {
+				t.Errorf("the terminals section shows %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestPeekNeverNamesARowThePointerLeft is the complaint in one assertion: after
+// every event of a sweep the section must show the row the pointer is on, never
+// an earlier one. A preview that lags the hover band is worse than no preview,
+// because both marks are on screen at once saying different things.
+func TestPeekNeverNamesARowThePointerLeft(t *testing.T) {
+	m, tree := sectionsTestOS(t, 120, 30)
+	m.sidebarPanelLinesForTree(tree)
+
+	for _, name := range []string{"main", "api", "docs", "api", "main", "docs"} {
+		m.SidebarMotion(1, sessionRowY(t, m, name))
+		want := name
+		if name == "main" { // attached: the section already shows the truth
+			want = ""
+		}
+		if got := framePeek(t, m, tree); got != want {
+			t.Errorf("hovering %q the section shows %q, want %q", name, got, want)
+		}
+	}
+}
+
+// TestPeekEntryPathsAgree: arriving on a row sideways from the pane area and
+// arriving along the rail from the row above are the same hover and must draw
+// the same frame. Under the pair rule they did not, which is what made the
+// preview look like it worked on some rows and not on others.
+func TestPeekEntryPathsAgree(t *testing.T) {
+	m, tree := sectionsTestOS(t, 120, 30)
+	m.sidebarPanelLinesForTree(tree)
+	main, api, docs := sessionRowY(t, m, "main"), sessionRowY(t, m, "api"), sessionRowY(t, m, "docs")
+
+	m.sidebarClearPeek()
+	m.SidebarMotion(m.GetRenderWidth()-2, main)
+	m.SidebarMotion(1, docs)
+	sideways := railPlain(t, m, tree)
+
+	m.sidebarClearPeek()
+	m.SidebarMotion(1, main)
+	m.SidebarMotion(1, api)
+	m.SidebarMotion(1, docs)
+	alongTheRail := railPlain(t, m, tree)
+
+	if strings.Join(sideways, "\n") != strings.Join(alongTheRail, "\n") {
+		t.Errorf("the same hover draws two frames:\nsideways:\n%s\n\nalong the rail:\n%s",
+			strings.Join(sideways, "\n"), strings.Join(alongTheRail, "\n"))
 	}
 }
 
@@ -68,13 +150,12 @@ func TestPeekSnapsBackOnBandExit(t *testing.T) {
 	api := sessionRowY(t, m, "api")
 
 	m.SidebarMotion(1, api)
-	m.SidebarMotion(1, api)
-	if m.SidebarPeek != "api" {
+	if framePeek(t, m, tree) != "api" {
 		t.Fatalf("the fixture never peeked: %q", m.SidebarPeek)
 	}
 	m.SidebarMotion(m.GetRenderWidth()-2, api)
-	if m.SidebarPeek != "" || m.SidebarPeekArm != "" {
-		t.Errorf("band exit left peek=%q arm=%q", m.SidebarPeek, m.SidebarPeekArm)
+	if got := framePeek(t, m, tree); got != "" {
+		t.Errorf("band exit left the section showing %q", got)
 	}
 }
 
@@ -84,7 +165,7 @@ func TestPeekClearsOnAttach(t *testing.T) {
 	m, tree := sectionsTestOS(t, 120, 30)
 	m.sidebarPanelLinesForTree(tree)
 
-	m.SidebarPeek, m.SidebarPeekArm = "api", "api"
+	m.SidebarPeek = "api"
 	// Standalone, so the switch itself fails; the clear runs ahead of it and is
 	// unconditional, which is the half this test is about.
 	m.DaemonClient = nil
@@ -93,7 +174,7 @@ func TestPeekClearsOnAttach(t *testing.T) {
 		t.Errorf("attaching left the peek at %q", m.SidebarPeek)
 	}
 
-	m.SidebarPeek, m.SidebarPeekArm = "api", "api"
+	m.SidebarPeek = "api"
 	m.SidebarFocused = true
 	m.ExitSidebarFocus()
 	if m.SidebarPeek != "" {
@@ -102,7 +183,7 @@ func TestPeekClearsOnAttach(t *testing.T) {
 }
 
 // TestPeekKeyboardBrowseParity: the rail cursor previews exactly as the pointer
-// does, with no pair rule, because a keypress is already one deliberate move.
+// does: one keypress is one deliberate move, exactly as one motion event is.
 func TestPeekKeyboardBrowseParity(t *testing.T) {
 	m, tree := sectionsTestOS(t, 120, 30)
 	m.SidebarFocused = true
@@ -211,8 +292,7 @@ func TestHoveringTheAttachedSessionIsNotAPeek(t *testing.T) {
 }
 
 // TestPeekIsInTheSignature: a peeked frame and a resting one draw different
-// rows, so they must never share a cache entry. The pair rule's arm draws
-// nothing, so folding it in would rebuild the rail for no visible reason.
+// rows, so they must never share a cache entry.
 func TestPeekIsInTheSignature(t *testing.T) {
 	m, tree := sectionsTestOS(t, 120, 30)
 	m.sidebarPanelLinesForTree(tree)
@@ -225,9 +305,8 @@ func TestPeekIsInTheSignature(t *testing.T) {
 	}
 
 	m.SidebarPeek = ""
-	m.SidebarPeekArm = "api"
 	if m.sidebarSignature() != resting {
-		t.Error("the pair rule's arm moves the signature, so an armed pointer rebuilds the rail for nothing")
+		t.Error("clearing the peek does not restore the resting signature")
 	}
 }
 
@@ -240,7 +319,7 @@ func TestPeekNeedsNoTick(t *testing.T) {
 	if m.tickNeedsWork() {
 		t.Skip("the fixture is not idle to begin with")
 	}
-	m.SidebarPeek, m.SidebarPeekArm = "api", "api"
+	m.SidebarPeek = "api"
 	if m.tickNeedsWork() {
 		t.Error("a live peek woke the maintenance tick")
 	}

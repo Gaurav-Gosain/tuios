@@ -110,9 +110,7 @@ func (m *OS) sidebarSignature() uint64 {
 	mixI(m.SidebarHoverY)
 
 	// The peek swaps the whole terminals section and re-marks its header, so a
-	// peeked frame and a resting one can never share a cache entry. The pair
-	// rule's arm is not folded: it decides whether a later event commits, and
-	// draws nothing itself.
+	// peeked frame and a resting one can never share a cache entry.
 	mixS(m.SidebarPeek)
 
 	// The agents section's two controls decide which rows it holds and in what

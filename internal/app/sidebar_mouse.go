@@ -82,21 +82,25 @@ func (m *OS) sidebarRowAt(x, y int) (sidebarRowHit, bool) {
 	return sidebarRowHit{}, false
 }
 
-// sidebarClearPeek drops any live preview and the pair rule's arm with it. It
-// is called from every path that makes the preview a lie: attaching, leaving
-// the band or the rail scope, and hiding the rail.
+// sidebarClearPeek drops any live preview. It is called from every path that
+// makes the preview a lie: attaching, leaving the band or the rail scope, and
+// hiding the rail.
 func (m *OS) sidebarClearPeek() {
-	m.SidebarPeek, m.SidebarPeekArm = "", ""
+	m.SidebarPeek = ""
 }
 
-// sidebarPeekAt resolves one pointer position against the pair rule and commits
-// or clears the preview. A motion event on a non-attached session row peeks
-// when the previous event resolved to the same row (so a slow browse peeks row
-// by row) or to no session row at all (so entering sideways from the pane area
-// peeks instantly); a fast sweep delivers one event per row, forms no pair, and
-// commits nothing. Snap-back needs no pair: the first event landing anywhere
-// else clears the preview, which is why the pointer can never reach a peeked
-// row while the peek is still on screen.
+// sidebarPeekAt sets the preview to the session row under the pointer, or
+// clears it when the pointer is anywhere else. One event decides: session rows
+// are one cell tall and terminals report motion per cell, so a pointer crossing
+// a row vertically delivers exactly one event on it whether it crosses fast or
+// slow. A rule needing two events on the same row therefore fired only when the
+// hand happened to wobble sideways, which is why the preview committed on some
+// rows and not others, and why it could keep showing the row before the one the
+// hover band was on.
+//
+// Snap-back is the same single event: the first one landing off the session
+// rows clears the preview, which is why the pointer can never reach a peeked
+// terminal row while the peek is still on screen.
 func (m *OS) sidebarPeekAt(x, y int) {
 	if sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph {
 		// The strip has no terminals section to preview into, so a peek there
@@ -105,18 +109,12 @@ func (m *OS) sidebarPeekAt(x, y int) {
 		m.sidebarClearPeek()
 		return
 	}
-	row := ""
-	if hit, ok := m.sidebarRowAt(x, y); ok && hit.Kind == sidebarRowSession {
-		row = hit.SessionID
-	}
-	if row == "" || row == m.sidebarCurrentSessionID() {
-		m.SidebarPeek, m.SidebarPeekArm = "", row
+	hit, ok := m.sidebarRowAt(x, y)
+	if !ok || hit.Kind != sidebarRowSession || hit.SessionID == m.sidebarCurrentSessionID() {
+		m.sidebarClearPeek()
 		return
 	}
-	if m.SidebarPeekArm == row || m.SidebarPeekArm == "" {
-		m.SidebarPeek = row
-	}
-	m.SidebarPeekArm = row
+	m.SidebarPeek = hit.SessionID
 }
 
 // SidebarClick routes a left or right press at absolute (x, y) to the sidebar.

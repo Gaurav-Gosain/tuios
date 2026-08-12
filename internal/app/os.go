@@ -528,13 +528,10 @@ type OS struct {
 	// Gesture-scoped runtime state; the Shown latch is also the tick gate.
 	SidebarTooltip sidebarTooltipState
 	// SidebarPeek is the session the terminals section is previewing while the
-	// pointer or the rail cursor rests on its row, and SidebarPeekArm is the
-	// session row the previous motion event resolved to (empty when it resolved
-	// to no session row), which is what the pair rule debounces on. Both are
-	// gesture-scoped runtime state like the marquee: never persisted, cleared by
-	// the same motion stream that created them.
-	SidebarPeek    string
-	SidebarPeekArm string
+	// pointer or the rail cursor rests on its row. Gesture-scoped runtime state
+	// like the marquee: never persisted, cleared by the same motion stream that
+	// created it.
+	SidebarPeek string
 	// SidebarAgentFilter and SidebarAgentSort are the agents section's two
 	// controls: which sessions it lists ("all" or "session") and in what order
 	// ("priority" or "recent"). Persisted in the sidebar state file; an empty or
