@@ -6,8 +6,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // railFrame renders the rail and returns its rows with the styling stripped, so
@@ -30,7 +28,7 @@ func TestRailRendersTheThreeWidths(t *testing.T) {
 	}{
 		{"full", config.SidebarDefaultWidth, false, []string{" agents", " sessions", " + new", "«"}},
 		{"narrow", config.SidebarNarrowWidth, false, []string{" agents", " sessions", " + new", "«"}},
-		{"glyph", config.SidebarDefaultWidth, true, []string{" +", " »"}},
+		{"glyph", config.SidebarDefaultWidth, true, []string{"»"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := daemonRailOS(t, 120, 14)
@@ -54,33 +52,6 @@ func TestRailRendersTheThreeWidths(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// The glyph rail spends both its cells: herdr's count-and-state sliver, where
-// the digit is the only other thing worth saying at three columns.
-func TestGlyphRailShowsCountAndGlyph(t *testing.T) {
-	m := daemonRailOS(t, 120, 14)
-	prev := config.SidebarWidth
-	m.SidebarCollapsed = true
-	t.Cleanup(func() { config.SidebarWidth = prev })
-
-	lines := railFrame(t, m)
-	if len(lines) == 0 {
-		t.Fatal("the glyph rail drew nothing")
-	}
-	row := lines[0]
-	if len(row) < 2 || row[0] < '2' || row[0] > '9' {
-		t.Errorf("the session row leads with %q, want its window count: %q", row[:1], row)
-	}
-
-	// A single-window session has no count to give, so the cell stays blank
-	// rather than saying "1" on every row forever.
-	single := m.sidebarSessionRow(
-		sessiontree.Node{ID: "solo", Title: "solo", WindowCount: 1},
-		sidebarVariantGlyph, config.SidebarGlyphWidth-1, theme.UI(), false, false)
-	if got := stripANSIForTrace(single); !strings.HasPrefix(got, " ") {
-		t.Errorf("a one-window session leads with %q, want a blank cell", got)
 	}
 }
 

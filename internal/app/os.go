@@ -514,6 +514,11 @@ type OS struct {
 	SidebarScrollT  int
 	SidebarScrollA  int
 	sidebarSectionY [sidebarSectionCount][2]int
+	// sidebarStripRows is what the collapsed strip drew on each of its lines,
+	// recorded by the renderer as it draws. The hover tooltip reads it to name
+	// what is under the pointer, including the badge, which is a readout rather
+	// than a control and so has no hit rectangle of its own.
+	sidebarStripRows []sidebarStripRow
 	// SidebarPeek is the session the terminals section is previewing while the
 	// pointer or the rail cursor rests on its row, and SidebarPeekArm is the
 	// session row the previous motion event resolved to (empty when it resolved

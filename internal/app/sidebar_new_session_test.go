@@ -42,7 +42,8 @@ func TestNewSessionPillIsHiddenInStandalone(t *testing.T) {
 }
 
 // TestNewSessionSitsInThePinnedFooter puts the control where controls live: the
-// rail's last lines, below everything it is not a member of, at every width.
+// rail's last lines, below everything it is not a member of. The collapsed
+// strip has no room for it and does not draw it; its own test covers that.
 func TestNewSessionSitsInThePinnedFooter(t *testing.T) {
 	for _, size := range []struct {
 		name  string
@@ -51,7 +52,6 @@ func TestNewSessionSitsInThePinnedFooter(t *testing.T) {
 	}{
 		{"full", 120, 40, "+ new"},
 		{"narrow", 80, 24, "+ new"},
-		{"glyph", 51, 37, "+"},
 	} {
 		t.Run(size.name, func(t *testing.T) {
 			m := daemonRailOS(t, size.w, size.h)

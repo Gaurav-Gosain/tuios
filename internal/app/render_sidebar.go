@@ -1055,118 +1055,6 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 	return 0, 0, false
 }
 
-// sidebarStripLines draws the glyph-width rail: one cell of identity and one of
-// state per session, over the same pinned footer the wide rail has. Three
-// columns is all the responsive clamp leaves on a narrow screen, so there is
-// room for a stack and a control and nothing else.
-func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMargin, sidebarX, contentX0 int,
-	pal overlay.Palette, compose func(string) string, blank string,
-) ([]string, int) {
-	canCreate := m.SidebarCanCreateSession()
-	noCursor := func(sidebarRowKind) bool { return false }
-	footerLines, footerZones := m.sidebarFooter(sidebarVariantGlyph, cw, pal, canCreate, -1, -1, noCursor)
-	footerH := len(footerLines)
-	if footerH >= height {
-		footerLines, footerZones, footerH = nil, nil, 0
-	}
-
-	hover, footerHoverLine, footerHoverX := -1, -1, -1
-	if !m.SidebarDrag.Dragging && m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
-		delta := m.SidebarHoverY - topMargin
-		if footerH > 0 && delta >= height-footerH {
-			footerHoverLine, footerHoverX = delta-(height-footerH), m.SidebarHoverX-contentX0
-		} else {
-			hover = delta
-		}
-	}
-	if footerH > 0 {
-		footerLines, footerZones = m.sidebarFooter(sidebarVariantGlyph, cw, pal, canCreate, footerHoverLine, footerHoverX, noCursor)
-	}
-
-	nav := make([]sidebarNavRow, 0, len(sessions)+len(footerZones))
-	lines := make([]string, 0, height)
-	for i, s := range sessions {
-		if len(lines) >= height-footerH {
-			break
-		}
-		y := topMargin + len(lines)
-		m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
-			X0: sidebarX, X1: sidebarX + w,
-			Y0: y, Y1: y + 1,
-			Kind: sidebarRowSession, SessionID: s.ID, WindowIndex: -1,
-		})
-		nav = append(nav, sidebarNavRow{Kind: sidebarRowSession, SessionID: s.ID, WindowIndex: -1})
-		dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
-		lines = append(lines, compose(m.sidebarStripCell(s, cw, pal, i == hover, dragged)))
-	}
-	for len(lines) < height-footerH {
-		lines = append(lines, blank)
-	}
-	footerTop := topMargin + len(lines)
-	for _, z := range footerZones {
-		y := footerTop + z.Line
-		m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
-			X0: contentX0 + z.X0, X1: contentX0 + z.X1,
-			Y0: y, Y1: y + 1,
-			Kind:        z.Kind,
-			WindowIndex: -1,
-		})
-		nav = append(nav, sidebarNavRow{Kind: z.Kind, WindowIndex: -1})
-	}
-	for _, ln := range footerLines {
-		lines = append(lines, compose(ln))
-	}
-
-	// The strip has one section, so the wheel has nowhere else to send a scroll.
-	for s := range m.sidebarSectionY {
-		m.sidebarSectionY[s] = [2]int{topMargin, topMargin}
-	}
-	m.SidebarNav = nav
-	m.sidebarFollowSession = ""
-	if m.SidebarCursor >= len(nav) {
-		m.SidebarCursor = max(len(nav)-1, 0)
-	}
-	return lines, w
-}
-
-// sidebarStripCell is one session's two cells on the glyph rail: a count digit
-// and its rolled-up state glyph, with an attention session inking the whole
-// cell because two columns are too few for a coloured glyph to carry an alarm.
-func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette, hovered, dragged bool) string {
-	mark := agentStateIndicator(node.AgentState)
-	if mark == "" || !config.SidebarShowGlyphs {
-		mark = "·"
-		if overlay.UseASCII() {
-			mark = "."
-		}
-	}
-	var bg, fg color.Color
-	leadFg := pal.FgMute
-	switch {
-	case sidebarAttention(node.AgentState) && config.SidebarShowGlyphs:
-		bg, fg = agentGlyphColor(node.AgentState, pal), pal.Canvas
-		leadFg = pal.Canvas
-	case node.IsCurrent:
-		bg = pal.Surface
-	case hovered || dragged:
-		bg = pal.RowSel
-	}
-	if fg == nil {
-		fg = pal.FgMute
-		if config.SidebarShowGlyphs && agentStateIndicator(node.AgentState) != "" {
-			fg = sidebarStateColor(node.AgentState, node.DoneSeen, pal)
-		}
-	}
-	lead := " "
-	if config.SidebarShowCounts && node.WindowCount > 1 {
-		lead = strconv.Itoa(node.WindowCount)
-		if node.WindowCount > 9 {
-			lead = "+"
-		}
-	}
-	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+sidebarStyle(bg, fg).Render(mark), cw, bg)
-}
-
 // sidebarFooterZone is one control in the rail's footer: its kind and the
 // content-relative columns it was drawn on. Two zones can share a line, so the
 // footer hit-tests per zone rather than claiming the whole row.
@@ -1196,12 +1084,13 @@ func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
 	return down, true
 }
 
-// sidebarFooter renders the rail's pinned bottom rows: the new-session control
-// on the left and the width stepper on the right, both meta voice on the bare
-// canvas. Controls live down here rather than among the rows because they are
-// not things the rail is listing, and a control dressed as a session row read
-// as one. They share a line wherever both fit; the glyph rail gives them one
-// each, which is all a two-cell rail can do.
+// sidebarFooter renders the expanded rail's pinned bottom rows: the
+// new-session control on the outer end and the collapse toggle on the
+// pane-facing one, both meta voice on the bare canvas. Controls live down here
+// rather than among the rows because they are not things the rail is listing,
+// and a control dressed as a session row read as one. They share a line
+// wherever both fit. The collapsed strip draws its own single control; see
+// sidebar_strip.go.
 func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette, canCreate bool,
 	hoverLine, hoverX int, isCursor func(sidebarRowKind) bool,
 ) ([]string, []sidebarFooterZone) {
@@ -1210,10 +1099,7 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette, canCreate bool,
 		return nil, nil
 	}
 
-	newLabel := "+"
-	if variant != sidebarVariantGlyph {
-		newLabel = "+ new"
-	}
+	const newLabel = "+ new"
 	newW, stepW := lipgloss.Width(newLabel), lipgloss.Width(stepGlyph)
 
 	// One line when both fit with a cell of air between them, otherwise one

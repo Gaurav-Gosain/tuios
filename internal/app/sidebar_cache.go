@@ -17,6 +17,7 @@ type sidebarRenderCache struct {
 	sessionIDs []string
 	nav        []sidebarNavRow
 	sections   [sidebarSectionCount][2]int
+	stripRows  []sidebarStripRow
 }
 
 // invalidate drops the cached rail, forcing the next frame to rebuild. Called
@@ -36,6 +37,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs[:0], m.sidebarCache.sessionIDs...)
 		m.SidebarNav = append(m.SidebarNav[:0], m.sidebarCache.nav...)
 		m.sidebarSectionY = m.sidebarCache.sections
+		m.sidebarStripRows = append(m.sidebarStripRows[:0], m.sidebarCache.stripRows...)
 		return m.sidebarCache.lines, m.sidebarCache.w
 	}
 
@@ -50,6 +52,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		sessionIDs: append([]string(nil), m.SidebarSessionIDs...),
 		nav:        append([]sidebarNavRow(nil), m.SidebarNav...),
 		sections:   m.sidebarSectionY,
+		stripRows:  append([]sidebarStripRow(nil), m.sidebarStripRows...),
 	}
 	return lines, w
 }
