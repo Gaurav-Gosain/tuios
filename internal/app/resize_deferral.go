@@ -121,6 +121,7 @@ func (m *OS) endLostGesture() {
 	m.InteractionMode = false
 	m.DraggedWindowIndex = -1
 
+	m.EndResizeMode()
 	m.endResizeDeferral()
 	m.clearStaleManipulation()
 

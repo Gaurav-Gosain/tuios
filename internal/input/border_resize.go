@@ -101,6 +101,7 @@ func armFloatingBorderResize(x, y int, o *app.OS) bool {
 func beginBorderResize(o *app.OS, idx int, edge app.BorderResizeEdge) {
 	w := o.Windows[idx]
 	o.FocusWindow(idx)
+	o.BeginResizeMode()
 	o.Resizing = true
 	o.BorderResizing = true
 	o.BorderResizeEdge = edge

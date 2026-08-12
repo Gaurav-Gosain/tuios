@@ -132,6 +132,52 @@ func TestReleaseWithNoButtonHeldEndsResize(t *testing.T) {
 	assertGestureEnded(t, o, win)
 }
 
+// TestResizeBorrowsWindowMode: for the length of the gesture the pointer
+// belongs to the resize, not to the guest under it, so the app behaves as
+// window management and gives the mode back when the button comes up. Same
+// bargain a ctrl-drag move already strikes: resizing a pane is not a request to
+// stop typing in it.
+func TestResizeBorrowsWindowMode(t *testing.T) {
+	t.Run("started in terminal mode", func(t *testing.T) {
+		o, win := floatingResizeOS(t)
+		armBottomBorderResize(t, o, win)
+		if o.Mode != app.WindowManagementMode {
+			t.Fatalf("mode during resize = %v, want window management", o.Mode)
+		}
+
+		midX := win.X + win.Width/2
+		handleMouseRelease(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: midX, Y: win.Y + win.Height - 3}, o)
+		if o.Mode != app.TerminalMode {
+			t.Errorf("mode after resize = %v, want the terminal mode it started in", o.Mode)
+		}
+	})
+
+	// A gesture whose release is lost gives the mode back too, or the user is
+	// stranded in window management having done nothing to ask for it.
+	t.Run("release lost", func(t *testing.T) {
+		o, win := floatingResizeOS(t)
+		armBottomBorderResize(t, o, win)
+
+		o.Update(tea.MouseMotionMsg{Button: tea.MouseNone, X: 0, Y: 0})
+		if o.Mode != app.TerminalMode {
+			t.Errorf("mode after a lost release = %v, want the terminal mode it started in", o.Mode)
+		}
+	})
+
+	// Started in window management, it stays there: there is nothing to give back.
+	t.Run("started in window mode", func(t *testing.T) {
+		o, win := floatingResizeOS(t)
+		o.Mode = app.WindowManagementMode
+		armBottomBorderResize(t, o, win)
+
+		midX := win.X + win.Width/2
+		handleMouseRelease(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: midX, Y: win.Y + win.Height - 3}, o)
+		if o.Mode != app.WindowManagementMode {
+			t.Errorf("mode after resize = %v, want window management", o.Mode)
+		}
+	})
+}
+
 // TestPointerLeavingThePaneEndsResize: motion reporting no button held while a
 // resize is supposedly in progress means the release happened out of reach.
 func TestPointerLeavingThePaneEndsResize(t *testing.T) {

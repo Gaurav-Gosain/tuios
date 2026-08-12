@@ -16,8 +16,12 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// event. Every branch below can return early, and each one that fired while
 	// a resize was live left it running. Deferred so it covers all of them, and
 	// idempotent so the cleanup at the bottom stays the normal way a gesture
-	// ends. See OS.EndStrayGesture.
-	defer o.EndStrayGesture()
+	// ends. See OS.EndStrayGesture. The mode the gesture borrowed goes back the
+	// same way, for the same reason.
+	defer func() {
+		o.EndStrayGesture()
+		o.EndResizeMode()
+	}()
 
 	// End an in-progress overlay drag before anything else.
 	if o.OverlayDragActive() {

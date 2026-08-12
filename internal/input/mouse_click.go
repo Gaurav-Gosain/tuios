@@ -367,6 +367,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	switch mouse.Button {
 	case tea.MouseRight:
 		// Already in interaction mode, now set resize-specific flags
+		o.BeginResizeMode()
 		o.Resizing = true
 		o.DraggedWindowIndex = clickedWindowIndex
 		o.Windows[clickedWindowIndex].IsBeingManipulated = true
