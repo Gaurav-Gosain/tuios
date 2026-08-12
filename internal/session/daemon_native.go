@@ -424,12 +424,25 @@ func buildSessionInfoData(sess *Session, state *SessionState, hasClient bool) ma
 	if layoutMode == "" {
 		layoutMode = "unknown"
 	}
+	// Only named workspaces appear. A workspace missing from the map is unnamed
+	// and its number is its label, so an all-default session reports an empty
+	// object rather than a row of numbers repeated back as names.
+	workspaceNames := make(map[string]string, len(state.WorkspaceNames))
+	for ws, name := range state.WorkspaceNames {
+		workspaceNames[strconv.Itoa(ws)] = name
+	}
 	return map[string]any{
-		"session_name":      state.Name,
-		"session_id":        sess.ID,
+		"session_name": state.Name,
+		"session_id":   sess.ID,
+		// display_name and accent are the session's label, empty when it was never
+		// set. A reader that wants one string falls back to session_name, which is
+		// what it read before these existed.
+		"display_name":      state.DisplayName,
+		"accent":            state.Accent,
 		"mode":              "unknown",
 		"current_workspace": state.CurrentWorkspace,
 		"num_workspaces":    state.workspaceBound(),
+		"workspace_names":   workspaceNames,
 		"layout_mode":       layoutMode,
 		"window_count":      len(state.Windows),
 		"tiling_mode":       tilingMode,

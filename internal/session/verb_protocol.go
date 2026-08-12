@@ -292,6 +292,34 @@ func init() {
 			examples:    []string{`{"id":1,"verb":"unsubscribe"}`},
 			handler:     (*Daemon).verbUnsubscribe,
 		},
+		"set-session-name": {
+			description: "Set a session's display name. The session's identity is unchanged: it keeps the same name for addressing, persistence and TUIOS_SESSION.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "name", Type: "string", Description: "Display label for the session. Omit or pass an empty string to clear it and fall back to the session name."},
+			},
+			examples: []string{`{"id":1,"verb":"set-session-name","params":{"session":"work","name":"Payments API"}}`},
+			handler:  (*Daemon).verbSetSessionName,
+		},
+		"set-session-accent": {
+			description: "Set a session's accent, shared by every client attached to it and kept across a reattach.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "accent", Type: "string", Description: "Accent slot name, recorded verbatim. Omit or pass an empty string to clear it."},
+			},
+			examples: []string{`{"id":1,"verb":"set-session-accent","params":{"session":"work","accent":"cyan"}}`},
+			handler:  (*Daemon).verbSetSessionAccent,
+		},
+		"set-workspace-name": {
+			description: "Name a workspace. The number stays the workspace's identity and is the label an unnamed workspace shows.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Required: true, Description: "Workspace number to name."},
+				{Name: "name", Type: "string", Description: "Label for the workspace. Omit or pass an empty string to clear it and fall back to the number."},
+			},
+			examples: []string{`{"id":1,"verb":"set-workspace-name","params":{"session":"work","workspace":2,"name":"review"}}`},
+			handler:  (*Daemon).verbSetWorkspaceName,
+		},
 		"set-agent-state": {
 			description: "Set the agent state a window's pane reports (working, needs_input, idle, done, errored, or none to clear). A pane reports its own state by calling this against the daemon socket.",
 			params: []verbParam{
@@ -299,14 +327,17 @@ func init() {
 				windowParam,
 				{Name: "state", Type: "string", Required: true, Description: "The agent state to record.", Accepted: AgentStateNames},
 				{Name: "message", Type: "string", Description: "Optional short note reported with the state, e.g. what the agent is waiting for."},
+				{Name: "source", Type: "string", Description: "Where the state came from. A source ranked below the one that last set the window is refused, and the result reports applied false with the state that stands.", Accepted: AgentSourceNames, Default: "report"},
+				{Name: "harness", Type: "string", Description: "Optional id of the harness the state is about, reported back by get-agent-state."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"needs_input","message":"awaiting approval"}}`,
+				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"working","source":"osc","harness":"claude-code"}}`,
 			},
 			handler: (*Daemon).verbSetAgentState,
 		},
 		"get-agent-state": {
-			description: "Read the agent state a window's pane last reported, with its optional message and the time it was set.",
+			description: "Read the agent state a window's pane last reported, with its optional message, the time it was set, and which source and harness it came from.",
 			params:      []verbParam{sessionParam, windowParam},
 			examples:    []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
 			handler:     (*Daemon).verbGetAgentState,

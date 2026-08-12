@@ -181,6 +181,10 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 		closed = state.Windows[idx]
 		workspace := closed.Workspace
 		state.Windows = append(state.Windows[:idx], state.Windows[idx+1:]...)
+		// The window is gone, so nothing owns its agent state any more. The
+		// detector sweeps stale claims on its own tick too, but only when it is
+		// running, and a claim can now come from a source that is not the detector.
+		delete(s.agentClaims, closed.ID)
 
 		// Repair focus if we removed the focused window.
 		if state.FocusedWindowID == closed.ID {
@@ -298,6 +302,27 @@ func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 		if state.WorkspaceFocus != nil && state.WorkspaceFocus[oldWorkspace] == state.Windows[idx].ID {
 			delete(state.WorkspaceFocus, oldWorkspace)
 		}
+		return nil
+	})
+}
+
+// SetDaemonWorkspaceName sets workspace ws's optional label, or clears it when
+// name is empty. Clearing deletes the entry rather than storing an empty string,
+// so an unnamed workspace leaves no trace in serialized state and reads back the
+// way it did before workspaces could be named.
+func (s *Session) SetDaemonWorkspaceName(ws int, name string) error {
+	return s.mutateState(func(state *SessionState) error {
+		if ws < 1 || ws > state.workspaceBound() {
+			return fmt.Errorf("workspace %d out of range (1-%d)", ws, state.workspaceBound())
+		}
+		if name == "" {
+			delete(state.WorkspaceNames, ws)
+			return nil
+		}
+		if state.WorkspaceNames == nil {
+			state.WorkspaceNames = make(map[int]string)
+		}
+		state.WorkspaceNames[ws] = name
 		return nil
 	})
 }

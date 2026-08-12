@@ -108,7 +108,22 @@ type SerializedBSPTree struct {
 
 // SessionState represents the complete serializable state of a session.
 type SessionState struct {
-	Name             string         `json:"name"`
+	Name string `json:"name"`
+	// DisplayName is an optional user-facing label. Name stays the identity: it
+	// keys the session map, names the resurrection file, is exported as
+	// TUIOS_SESSION into every pane, and is what every verb's session parameter
+	// resolves against. Renaming for display must not disturb any of that, which
+	// is why the label is a field of its own rather than a write to Name.
+	//
+	// Empty means unnamed, and every reader falls back to Name, so a session that
+	// was never renamed reads exactly as it did before this field existed.
+	DisplayName string `json:"display_name,omitempty"`
+	// Accent is an optional accent slot for the session, recorded verbatim the
+	// way Options are: the daemon has no palette and does not interpret it. Empty
+	// means the client's default. It lives here rather than in a client-side file
+	// because it has to survive a reattach and be the same for every client
+	// attached to this session.
+	Accent           string         `json:"accent,omitempty"`
 	Windows          []WindowState  `json:"windows"`
 	FocusedWindowID  string         `json:"focused_window_id,omitempty"`
 	CurrentWorkspace int            `json:"current_workspace"`
@@ -124,6 +139,14 @@ type SessionState struct {
 	//
 	// BSP tiling state
 
+	// WorkspaceNames maps a workspace number to its optional label. The number
+	// stays the workspace's identity and its fallback label: everything that
+	// addresses a workspace (the window's Workspace field, WorkspaceFocus,
+	// WorkspaceTrees, the verbs, TUIOS_WORKSPACE) keeps using the number, and a
+	// workspace with no entry here is unnamed and renders as its number, exactly
+	// as every workspace did before this existed. Naming one is a daemon-owned
+	// change so it survives a reattach and every attached client sees it.
+	WorkspaceNames  map[int]string             `json:"workspace_names,omitempty"`
 	WorkspaceTrees  map[int]*SerializedBSPTree `json:"workspace_trees,omitempty"`  // BSP tree per workspace
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`
@@ -326,13 +349,16 @@ type Session struct {
 	// Configuration
 	config *SessionConfig
 
-	// autoAgentOwned records, by window ID, the windows whose agent state was set
-	// by the foreground-process auto-detector (applyAgentDetection) and not since
-	// relinquished. It is the detector's precedence marker: it only manages windows
-	// it owns and never touches a state a user set manually. It is read and written
-	// solely from applyAgentDetection, which runs under stateMu, so it needs no lock
-	// of its own.
-	autoAgentOwned map[string]bool
+	// agentClaims records, by window ID, who owns the window's agent state: the
+	// ranked source that last set it (see AgentSource) and whether the
+	// foreground-process detector promoted the window and so must clear it when
+	// the agent exits.
+	//
+	// It used to be a bool holding only the second half. That was enough while the
+	// detector was the only thing competing with an explicit report; it cannot
+	// express which of several sources should win, so the value carries the source
+	// now. Read and written under stateMu, so it needs no lock of its own.
+	agentClaims map[string]agentClaim
 
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
@@ -703,7 +729,33 @@ func (s *Session) snapshotStateLocked() *SessionState {
 		stateCopy.Options = make(map[string]string, len(s.state.Options))
 		maps.Copy(stateCopy.Options, s.state.Options)
 	}
+	if s.state.WorkspaceNames != nil {
+		stateCopy.WorkspaceNames = make(map[int]string, len(s.state.WorkspaceNames))
+		maps.Copy(stateCopy.WorkspaceNames, s.state.WorkspaceNames)
+	}
 	return &stateCopy
+}
+
+// SetDisplayName records the session's optional display label. It runs through
+// mutateState, so the new label reaches every attached client on the same push
+// every other daemon-side mutation uses, and the periodic resurrection save
+// picks it up with the rest of the state. An empty name clears the label; the
+// session's identity (Name) is untouched either way.
+func (s *Session) SetDisplayName(name string) error {
+	return s.mutateState(func(st *SessionState) error {
+		st.DisplayName = name
+		return nil
+	})
+}
+
+// SetAccent records the session's optional accent slot, propagated and persisted
+// exactly as SetDisplayName is. The value is opaque to the daemon: it is the
+// client's palette that knows what a slot name means.
+func (s *Session) SetAccent(accent string) error {
+	return s.mutateState(func(st *SessionState) error {
+		st.Accent = accent
+		return nil
+	})
 }
 
 // SetOption records a daemon-owned session option under stateMu. It is the write
