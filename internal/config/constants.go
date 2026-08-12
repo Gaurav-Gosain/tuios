@@ -546,6 +546,16 @@ var HideWindowButtons = false
 // appearance.scrollbar.style.
 var ScrollbarStyle = ScrollbarStyleThin
 
+// ScrollbarThumb, ScrollbarTrack and ScrollbarTint hold the rest of the
+// [appearance.scrollbar] table as written. Empty means unset, which is how a
+// config predating the keys asks for the style's own defaults; the getters
+// below resolve them.
+var (
+	ScrollbarThumb = ""
+	ScrollbarTrack = ""
+	ScrollbarTint  = ScrollbarTintBorder
+)
+
 // HideScrollbar controls whether the window scrollbar is hidden.
 // Automatically treated as true when BorderStyle == "hidden" since there is
 // no border to draw the thumb on in that mode.
@@ -830,15 +840,80 @@ func GetBorderForStyle() lipgloss.Border {
 	}
 }
 
-// GetScrollbarThumbChar returns the scrollbar thumb character. A right
-// one-eighth block hugs the border side of its cell, so the thumb floats over
-// content as a hairline instead of blanking a column of it. ASCII-only mode
-// falls back to '|'.
-func GetScrollbarThumbChar() string {
-	if UseASCIIOnly || BorderStyle == "ascii" {
-		return "|"
+// Per-style scrollbar glyphs. Both of the thin style's hug the right side of
+// the cell they float over, so the bar reads as an edge rather than blanking a
+// column of content: the thumb takes half a cell, the track an eighth. The
+// track style fills its column instead, so its thumb is a whole block and its
+// track is the surface fill behind it rather than a glyph.
+const (
+	scrollbarThinThumb  = "▐" // U+2590 RIGHT HALF BLOCK
+	scrollbarThinTrack  = "▕" // U+2595 RIGHT ONE EIGHTH BLOCK
+	scrollbarTrackThumb = "█"
+	scrollbarASCIIThumb = "|"
+)
+
+// scrollbarASCII reports whether the bar has to stay inside ASCII.
+func scrollbarASCII() bool {
+	return UseASCIIOnly || BorderStyle == "ascii"
+}
+
+// scrollbarGlyphOverride returns a configured glyph if it can be drawn: exactly
+// one cell wide, and plain ASCII when the rest of the frame is. Anything else
+// falls back to the default, matching the warning validation raises for it.
+func scrollbarGlyphOverride(glyph string) (string, bool) {
+	if glyph == "" || lipgloss.Width(glyph) != 1 {
+		return "", false
 	}
-	return "▕"
+	if scrollbarASCII() {
+		for _, r := range glyph {
+			if r > 127 {
+				return "", false
+			}
+		}
+	}
+	return glyph, true
+}
+
+// GetScrollbarThumbChar returns the glyph the thumb is drawn with: the
+// configured one when it is usable, else the active style's default.
+func GetScrollbarThumbChar() string {
+	if glyph, ok := scrollbarGlyphOverride(ScrollbarThumb); ok {
+		return glyph
+	}
+	if scrollbarASCII() {
+		return scrollbarASCIIThumb
+	}
+	if ScrollbarStyle == ScrollbarStyleTrack {
+		return scrollbarTrackThumb
+	}
+	return scrollbarThinThumb
+}
+
+// ScrollbarTintHex returns the configured tint when it is a colour literal
+// rather than a keyword. A malformed one is not a colour, so it is refused here
+// as well as warned about at load: a bar drawn in nothing is invisible.
+func ScrollbarTintHex() (string, bool) {
+	if hexColorPattern.MatchString(ScrollbarTint) {
+		return ScrollbarTint, true
+	}
+	return "", false
+}
+
+// GetScrollbarTrackChar returns the glyph drawn on the track's uncovered cells.
+// An empty string is a blank cell, which in the track style is its surface fill
+// and in the thin style is no track at all - the pre-track look, and what ASCII
+// gets since it has no hairline to draw one with.
+func GetScrollbarTrackChar() string {
+	if ScrollbarTrack == ScrollbarTrackNone {
+		return ""
+	}
+	if glyph, ok := scrollbarGlyphOverride(ScrollbarTrack); ok {
+		return glyph
+	}
+	if scrollbarASCII() || ScrollbarStyle == ScrollbarStyleTrack {
+		return ""
+	}
+	return scrollbarThinTrack
 }
 
 // Window decoration getter functions
