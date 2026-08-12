@@ -12,6 +12,38 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
+// separatorSplits returns the divider lines for the layout that placed the
+// panes. The two tilers reserve their gaps differently, so each has to answer
+// for its own: the BSP tree knows its splits, and the master-stack tiler has
+// them read back off the panes it positioned. Asking the tree while master-stack
+// is driving is what used to paint a line down the pane beside it, because the
+// tree survives the mode switch holding the geometry it last laid out.
+func (m *OS) separatorSplits() []layout.SplitLine {
+	if m.UseScrollingLayout {
+		return nil
+	}
+	if !m.UseBSPLayout {
+		return layout.SplitsBetween(m.tiledPaneRects(), 1)
+	}
+	tree := m.WorkspaceTrees[m.CurrentWorkspace]
+	if tree == nil || tree.IsEmpty() {
+		return nil
+	}
+	return tree.CollectSplits(m.GetBSPBounds())
+}
+
+// tiledPaneRects returns the rectangles of the panes currently tiled on screen.
+func (m *OS) tiledPaneRects() []layout.Rect {
+	rects := make([]layout.Rect, 0, len(m.Windows))
+	for _, w := range m.Windows {
+		if w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating || !w.Tiled {
+			continue
+		}
+		rects = append(rects, layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height})
+	}
+	return rects
+}
+
 // renderSeparatorOverlay renders thin separator lines between tiled panes.
 // Each separator line is its own lipgloss Layer to avoid occluding content.
 func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
@@ -20,13 +52,8 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		return nil
 	}
 
-	tree := m.WorkspaceTrees[m.CurrentWorkspace]
-	if tree == nil || tree.IsEmpty() {
-		return nil
-	}
-
 	bounds := m.GetBSPBounds()
-	splits := tree.CollectSplits(bounds)
+	splits := m.separatorSplits()
 	if len(splits) == 0 {
 		return nil
 	}

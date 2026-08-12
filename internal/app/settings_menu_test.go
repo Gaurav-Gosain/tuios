@@ -190,6 +190,11 @@ func TestSettingsStringValuesNilConfigSafe(t *testing.T) {
 func TestSharedBordersPaletteToggles(t *testing.T) {
 	useTempConfig(t)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
+	// The toggle writes a package global, and shared borders change how every
+	// layout is measured, so a test that left it on would move the geometry
+	// under whatever ran next.
+	orig := config.SharedBorders
+	t.Cleanup(func() { config.SharedBorders = orig })
 	config.SharedBorders = false
 
 	var toggle *CommandPaletteItem

@@ -117,6 +117,10 @@ func TestSettingsValueClickTogglesBool(t *testing.T) {
 
 	cx := h.OriginX + (row.Inc.X0+row.Inc.X1)/2
 	cy := h.OriginY + row.Inc.Y0
+	// The row writes a package global (the first bool row is shared borders,
+	// which changes how every layout is measured), so flip it back rather than
+	// leaving it on for whatever runs next.
+	t.Cleanup(func() { m.OverlayMouseClick(cx, cy, false) })
 	if handled, _ := m.OverlayMouseClick(cx, cy, false); !handled {
 		t.Fatal("click on the toggle was not handled")
 	}

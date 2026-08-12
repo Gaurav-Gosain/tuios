@@ -12,9 +12,19 @@ type TileLayout struct {
 
 // CalculateTilingLayout returns optimal positions for n windows
 // masterRatio controls the width ratio of the master (left) pane (0.3-0.7)
+//
+// Under config.SharedBorders the tiler reserves one cell between neighbours for
+// the drawn divider, exactly as the BSP splitter does (bsp.go childBounds).
+// Both layouts hand the separator its own column that way, so neither pane's
+// first column is painted over by the line between them.
 func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio float64) []TileLayout {
 	if n == 0 {
 		return nil
+	}
+
+	gap := 0
+	if config.SharedBorders {
+		gap = 1
 	}
 
 	layouts := make([]TileLayout, 0, n)
@@ -46,7 +56,6 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		// follows the shape on screen, and stack when it is taller.
 		if screenWidth >= usableHeight*cellAspect {
 			masterWidth := int(float64(screenWidth) * masterRatio)
-			slaveWidth := screenWidth - masterWidth
 			layouts = append(layouts,
 				TileLayout{
 					X:      0,
@@ -55,16 +64,15 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 					Height: usableHeight,
 				},
 				TileLayout{
-					X:      masterWidth,
+					X:      masterWidth + gap,
 					Y:      topMargin,
-					Width:  slaveWidth,
+					Width:  screenWidth - masterWidth - gap,
 					Height: usableHeight,
 				},
 			)
 			break
 		}
 		masterHeight := int(float64(usableHeight) * masterRatio)
-		slaveHeight := usableHeight - masterHeight
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
@@ -74,16 +82,17 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 			},
 			TileLayout{
 				X:      0,
-				Y:      topMargin + masterHeight,
+				Y:      topMargin + masterHeight + gap,
 				Width:  screenWidth,
-				Height: slaveHeight,
+				Height: usableHeight - masterHeight - gap,
 			},
 		)
 
 	case 3:
 		// Three windows - one left (master), two right stacked
 		masterWidth := int(float64(screenWidth) * masterRatio)
-		slaveWidth := screenWidth - masterWidth
+		slaveX := masterWidth + gap
+		slaveWidth := screenWidth - slaveX
 		halfHeight := usableHeight / 2
 		layouts = append(layouts,
 			TileLayout{
@@ -93,23 +102,25 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 				Height: usableHeight,
 			},
 			TileLayout{
-				X:      masterWidth,
+				X:      slaveX,
 				Y:      topMargin,
 				Width:  slaveWidth,
 				Height: halfHeight,
 			},
 			TileLayout{
-				X:      masterWidth,
-				Y:      topMargin + halfHeight,
+				X:      slaveX,
+				Y:      topMargin + halfHeight + gap,
 				Width:  slaveWidth,
-				Height: usableHeight - halfHeight,
+				Height: usableHeight - halfHeight - gap,
 			},
 		)
 
 	case 4:
 		// Four windows - 2x2 grid
 		halfWidth := screenWidth / 2
+		rightX := halfWidth + gap
 		halfHeight := usableHeight / 2
+		bottomY := topMargin + halfHeight + gap
 		layouts = append(layouts,
 			TileLayout{
 				X:      0,
@@ -118,22 +129,22 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 				Height: halfHeight,
 			},
 			TileLayout{
-				X:      halfWidth,
+				X:      rightX,
 				Y:      topMargin,
-				Width:  screenWidth - halfWidth,
+				Width:  screenWidth - rightX,
 				Height: halfHeight,
 			},
 			TileLayout{
 				X:      0,
-				Y:      topMargin + halfHeight,
+				Y:      bottomY,
 				Width:  halfWidth,
-				Height: usableHeight - halfHeight,
+				Height: usableHeight - halfHeight - gap,
 			},
 			TileLayout{
-				X:      halfWidth,
-				Y:      topMargin + halfHeight,
-				Width:  screenWidth - halfWidth,
-				Height: usableHeight - halfHeight,
+				X:      rightX,
+				Y:      bottomY,
+				Width:  screenWidth - rightX,
+				Height: usableHeight - halfHeight - gap,
 			},
 		)
 
@@ -146,8 +157,10 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		}
 		rows := (n + cols - 1) / cols // Ceiling division
 
-		cellWidth := screenWidth / cols
-		cellHeight := usableHeight / rows
+		// The gaps come out of the grid before the cells are sized, so the
+		// tiles still add up to the region.
+		cellWidth := (screenWidth - gap*(cols-1)) / cols
+		cellHeight := (usableHeight - gap*(rows-1)) / rows
 
 		for i := range n {
 			row := i / cols
@@ -159,13 +172,13 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 				remainingWindows := n - row*cols
 				if remainingWindows < cols {
 					actualCols = remainingWindows
-					cellWidth = screenWidth / actualCols
+					cellWidth = (screenWidth - gap*(actualCols-1)) / actualCols
 				}
 			}
 
 			layout := TileLayout{
-				X:      col * cellWidth,
-				Y:      topMargin + row*cellHeight,
+				X:      col * (cellWidth + gap),
+				Y:      topMargin + row*(cellHeight+gap),
 				Width:  cellWidth,
 				Height: cellHeight,
 			}
@@ -176,7 +189,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 			}
 			// Adjust last row height to fill screen
 			if row == rows-1 {
-				layout.Height = usableHeight - (row * cellHeight)
+				layout.Height = usableHeight - row*(cellHeight+gap)
 			}
 
 			layouts = append(layouts, layout)
@@ -198,4 +211,72 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 	}
 
 	return layouts
+}
+
+// SplitsBetween returns the separator lines that belong in the gaps between
+// adjacent rects.
+//
+// The master-stack tiler keeps no tree to walk, so its dividers are read back
+// from where the panes actually ended up. A line is only ever emitted on a cell
+// no pane occupies, which is the property that keeps it off the first column of
+// the pane beside it.
+func SplitsBetween(rects []Rect, gap int) []SplitLine {
+	if gap <= 0 {
+		return nil
+	}
+
+	free := func(x, y int) bool {
+		for _, r := range rects {
+			if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+				return false
+			}
+		}
+		return true
+	}
+	// Reach into the cells past each end while they are gap as well, so lines
+	// meet at a T junction instead of leaving a hole where three panes touch.
+	grow := func(pos, from, to int, vertical bool) (int, int) {
+		at := func(along int) bool {
+			if vertical {
+				return free(pos, along)
+			}
+			return free(along, pos)
+		}
+		for range gap {
+			if !at(from - 1) {
+				break
+			}
+			from--
+		}
+		for range gap {
+			if !at(to + 1) {
+				break
+			}
+			to++
+		}
+		return from, to
+	}
+
+	var splits []SplitLine
+	for _, a := range rects {
+		for _, b := range rects {
+			if b.X == a.X+a.W+gap {
+				if from, to := max(a.Y, b.Y), min(a.Y+a.H, b.Y+b.H)-1; from <= to {
+					for x := a.X + a.W; x < b.X; x++ {
+						f, t := grow(x, from, to, true)
+						splits = append(splits, SplitLine{Vertical: true, Pos: x, From: f, To: t})
+					}
+				}
+			}
+			if b.Y == a.Y+a.H+gap {
+				if from, to := max(a.X, b.X), min(a.X+a.W, b.X+b.W)-1; from <= to {
+					for y := a.Y + a.H; y < b.Y; y++ {
+						f, t := grow(y, from, to, false)
+						splits = append(splits, SplitLine{Vertical: false, Pos: y, From: f, To: t})
+					}
+				}
+			}
+		}
+	}
+	return splits
 }

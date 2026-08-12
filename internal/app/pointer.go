@@ -57,20 +57,16 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 
 	// In tiled mode with shared borders, check separator lines
 	if m.AutoTiling && config.SharedBorders && !m.UseScrollingLayout {
-		tree := m.GetOrCreateBSPTree()
-		if tree != nil {
-			// The same content-region box ApplyBSPLayout tiles into, so the
-			// separator positions the pointer test sees match the ones drawn.
-			bounds := m.GetBSPBounds()
-			for _, s := range tree.CollectSplits(bounds) {
-				if s.Vertical && x == s.Pos && y >= s.From && y <= s.To {
-					SetPointerShape(PointerEWResize)
-					return
-				}
-				if !s.Vertical && y == s.Pos && x >= s.From && x <= s.To {
-					SetPointerShape(PointerNSResize)
-					return
-				}
+		// The same lines the separator overlay draws, so the resize cursor is
+		// only offered over a divider that is really there.
+		for _, s := range m.separatorSplits() {
+			if s.Vertical && x == s.Pos && y >= s.From && y <= s.To {
+				SetPointerShape(PointerEWResize)
+				return
+			}
+			if !s.Vertical && y == s.Pos && x >= s.From && x <= s.To {
+				SetPointerShape(PointerNSResize)
+				return
 			}
 		}
 	}
