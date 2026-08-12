@@ -153,6 +153,8 @@ func (m *OS) switchToWorkspace(workspace, focusTarget int) {
 	if m.AutoTiling && !m.WorkspaceHasCustom[workspace] {
 		m.LogInfo("Auto-tiling workspace %d (no custom layout)", workspace)
 		m.TileVisibleWorkspaceWindows()
+	} else {
+		m.settleBorderMode(workspace)
 	}
 
 	// Mark all windows in new workspace as dirty for immediate render
@@ -178,6 +180,40 @@ func (m *OS) switchToWorkspace(workspace, focusTarget int) {
 		Workspace:         workspace,
 		PreviousWorkspace: oldWorkspace,
 	})
+}
+
+// settleBorderMode gives a workspace's panes the border mode its layout already
+// implies, moving nothing.
+//
+// Border mode is not geometry. Disabling tiling clears Tiled on every window in
+// the session, while enabling it again only tiles the workspace that happens to
+// be current, so every other workspace is left claiming a border of its own
+// inside rectangles whose separator gaps are still reserved. Switching back
+// normally settles that as a side effect of the retile, but a workspace holding
+// a custom layout skips the retile to keep its rectangles, and then the panes
+// draw boxes while the overlay fills the gaps between them: two border systems
+// in one frame, with the divider stuck on the unfocused color because a pane
+// that is not Tiled contributes no focus perimeter.
+//
+// Settling here, as the workspace becomes visible, is what a flag written by a
+// retile that may never run cannot do.
+func (m *OS) settleBorderMode(workspace int) {
+	if !m.AutoTiling || m.UseScrollingLayout {
+		return
+	}
+	// Without a tree there is no tiled layout to match, and borderless panes
+	// would leave the frame with no pane edges at all.
+	if m.UseBSPLayout {
+		if tree := m.WorkspaceTrees[workspace]; tree == nil || tree.IsEmpty() {
+			return
+		}
+	}
+	for _, w := range m.Windows {
+		if w.Workspace != workspace || w.Minimized || w.Minimizing || w.IsFloating {
+			continue
+		}
+		w.SetTiled(config.SharedBorders)
+	}
 }
 
 // MoveWindowToWorkspace moves a window to the specified workspace without changing focus.
