@@ -33,6 +33,13 @@ func (d *Daemon) restoreAllSessions() {
 			log.Printf("Skipping resurrection of %q: %v", name, err)
 			continue
 		}
+		if len(state.Windows) == 0 {
+			// It can never restore, so leaving it would keep offering a session
+			// that 'tuios resurrect' lists and cannot bring back.
+			log.Printf("Discarding saved state for %q: it has no windows", name)
+			RemoveResurrectionState(name)
+			continue
+		}
 		if _, err := d.restoreSession(state); err != nil {
 			LogError("Failed to restore session %q: %v", name, err)
 			continue
@@ -53,6 +60,16 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 
 	if existing := d.manager.GetSession(state.Name); existing != nil {
 		return existing, nil
+	}
+
+	// A session whose windows were all closed leaves a state file behind, and
+	// restoring it produced a session with nothing in it that no surface tells
+	// apart from a real one. There is nothing to bring back, so it is not a
+	// session; refusing here covers the automatic restore and the on-demand
+	// 'tuios resurrect' alike. Checked after the live lookup above, which is
+	// about the session that already exists rather than about what was saved.
+	if len(state.Windows) == 0 {
+		return nil, fmt.Errorf("saved state for session %q has no windows, there is nothing to restore", state.Name)
 	}
 
 	width, height := state.Width, state.Height
