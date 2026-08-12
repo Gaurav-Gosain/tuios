@@ -477,29 +477,19 @@ func (m *OS) View() tea.View {
 
 	view.AltScreen = true
 
-	// Dynamically select mouse tracking mode based on the child app's actual needs:
-	// - Window management mode: AllMotion for hover effects (dock, UI)
-	// - Terminal mode + child requested mode 1003 (any-event): AllMotion
-	// - Terminal mode + child requested mode 1002 (button-event): CellMotion
-	// - Terminal mode + child requested mode 1000/1001 (click only): CellMotion
-	// - Terminal mode + no mouse mode (kakoune default, nano): CellMotion
+	// All-motion tracking, always. Every hover affordance tuios draws (the rail
+	// rows and its footer controls, overlay rows, context menu rows) and
+	// focus-follows-mouse are driven by motion with no button held, and only mode
+	// 1003 makes the host report that. Asking for button-event tracking whenever
+	// a pane held focus is what made hover look like it randomly stopped: it was
+	// dead for as long as the user was in terminal mode, which is where they
+	// spend their time, and alive again the moment they left it.
 	//
-	// Using AllMotion for apps that only need click tracking (mode 1000) causes
-	// a flood of motion events that get forwarded as phantom keypresses (#78).
-	if m.Mode == TerminalMode {
-		fw := m.GetFocusedWindow()
-		useAllMotion := false
-		if fw != nil && fw.Terminal != nil {
-			useAllMotion = fw.Terminal.HasAllMotionMode()
-		}
-		if useAllMotion {
-			view.MouseMode = tea.MouseModeAllMotion
-		} else {
-			view.MouseMode = tea.MouseModeCellMotion
-		}
-	} else {
-		view.MouseMode = tea.MouseModeAllMotion
-	}
+	// This governs what the host reports to tuios. Forwarding to the guest is a
+	// separate decision, filtered there against the guest's own mouse mode so an
+	// app that asked for less than 1003 still sees only what it asked for (#78);
+	// see guestWantsMotion.
+	view.MouseMode = tea.MouseModeAllMotion
 
 	view.ReportFocus = true
 	view.DisableBracketedPasteMode = false
