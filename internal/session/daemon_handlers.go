@@ -177,11 +177,16 @@ func (d *Daemon) handleDetach(cs *connState) error {
 	cs.height = 0
 	cs.mu.Unlock()
 
-	// Unsubscribe from all PTYs
+	// Unsubscribe from all PTYs, keeping where each stream got to: a detach on
+	// this connection can be followed by an attach on it, and the client comes
+	// back holding what it already drew.
 	if session := d.manager.GetSessionByID(sessionID); session != nil {
 		for _, ptyID := range subs {
 			if pty := session.GetPTY(ptyID); pty != nil {
-				pty.Unsubscribe(clientID)
+				resume := pty.Unsubscribe(clientID)
+				cs.mu.Lock()
+				cs.ptyResume[ptyID] = resume
+				cs.mu.Unlock()
 			}
 		}
 	}
