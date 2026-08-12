@@ -79,6 +79,16 @@ type dockItemHit struct {
 	X0, X1, Y, WindowIndex int
 }
 
+// dockOverflowHit is where the entries' overflow marker was drawn, and whether
+// there was one. The marker stands for the panes the bar had no room for, and
+// with no rectangle of its own it was the only object on the dock that could be
+// seen and not clicked. It opens the aggregate view, which lists them all.
+type dockOverflowHit struct {
+	Active     bool
+	X0, X1, Y  int
+	Overflowed int
+}
+
 // dockWorkspacePillGap is the bare column between two pills. The pills carry a
 // fill of their own, so the gap is what makes them read as separate things
 // rather than as one banded run, and it belongs to neither pill's hit rect.
@@ -423,14 +433,26 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	layout.WorkspaceStrip = m.planDockWorkspaceStrip(max(barWidth-layout.LeftWidth, 0), barWidth)
 	layout.LeftWidth += layout.WorkspaceStrip.Width
 
+	// Get all dock items
+	allItems := m.getDockItems()
+
 	// Calculate right side width. The estimate below is what the right block
 	// would like; on a narrow screen it is capped at what the left block leaves,
 	// otherwise the two together are wider than the dock and the right-hand end
 	// (the system stats, or the copy-mode help) is drawn off the screen.
-	layout.RightWidth = min(m.calculateDockRightWidth(), max(barWidth-layout.LeftWidth, 0))
-
-	// Get all dock items
-	allItems := m.getDockItems()
+	//
+	// The minimized entries are measured out of that room first. A meter is a
+	// readout the user cannot act on; a minimized entry is the only way back to
+	// a pane by mouse, and when it was dropped it degraded to a "..." that
+	// carried no hit rectangle at all. So the readouts yield their columns
+	// before the entries do. A live message is exempt: it is an event that just
+	// happened, not metering, and it already holds the block for its duration.
+	room := max(barWidth-layout.LeftWidth, 0)
+	want, yields := m.dockRightWidth()
+	if yields {
+		room = max(room-dockItemsWidth(allItems), 0)
+	}
+	layout.RightWidth = min(want, room)
 
 	// Calculate how many items fit and their positions
 	layout.calculateItemPositions(barWidth, allItems)
@@ -573,6 +595,30 @@ func copyModeHelpTexts(state terminal.CopyModeState) []string {
 	return nil
 }
 
+// dockItemsWidth is the room every minimized entry needs laid out at once,
+// including the single column between two of them. It is what the renderer
+// builds, so the layout pass reserves against the same number the draw uses.
+func dockItemsWidth(items []DockItem) int {
+	w := 0
+	for i, it := range items {
+		if i > 0 {
+			w++
+		}
+		w += it.Width
+	}
+	return w
+}
+
+// dockRightWidth is the width the right-hand block wants, and whether it gives
+// way to the minimized entries when the bar is too narrow for both. A message
+// does not: it holds the block for the few seconds it is up.
+func (m *OS) dockRightWidth() (width int, yields bool) {
+	if block, ok := m.renderNotificationBlock(m.GetRenderWidth(), 0); ok {
+		return block.Width, false
+	}
+	return m.calculateDockRightWidth(), true
+}
+
 // calculateDockRightWidth calculates the width of the right side of the dock
 func (m *OS) calculateDockRightWidth() int {
 	// A live message owns the right-hand block, ahead of the copy-mode help
@@ -603,8 +649,26 @@ func (m *OS) calculateDockRightWidth() int {
 		return lipgloss.Width(texts[0]) + 2 // the help style's own padding
 	}
 
-	return 32 // CPU graph (~19 chars) + space + RAM (~11 chars) = ~31 chars
+	// The meters reserve the room they will draw in, and nothing when they are
+	// off, which is the default. A flat 32 columns held for a readout the user
+	// never turned on is the same inversion in its purest form: it was the
+	// single largest claim on the bar and it drew nothing at all.
+	var parts []string
+	if config.ShowCPU {
+		parts = append(parts, m.GetCPUGraph())
+	}
+	if config.ShowRAM {
+		parts = append(parts, m.GetRAMUsage())
+	}
+	if len(parts) == 0 {
+		return 0
+	}
+	return lipgloss.Width(strings.Join(parts, " ")) + dockSysInfoMargin
 }
+
+// dockSysInfoMargin is the gap the meters keep from the bar's right-hand end,
+// applied by the render style as a right margin.
+const dockSysInfoMargin = 2
 
 // getDockItems returns all dock items (minimized windows in current workspace)
 func (m *OS) getDockItems() []DockItem {

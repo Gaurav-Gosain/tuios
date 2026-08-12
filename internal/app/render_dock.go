@@ -231,9 +231,18 @@ func (m *OS) renderDockString() (string, int) {
 		itemNumber++
 	}
 
+	// The marker's own columns, measured as it is written for the same reason
+	// the entries' are: it is a target, and a target the renderer did not record
+	// is one the click path has to guess at.
+	overflowX0, overflowX1 := 0, 0
 	if layout.TruncatedCount > 0 {
-		truncStyle := lipgloss.NewStyle().Foreground(pal.FgMute)
-		dockItemsStr.WriteString(truncStyle.Render(" ..."))
+		marker := " ..."
+		// Drawn in the same ink as the strip's overflow arrows: it wears no fill
+		// and, now that it opens the aggregate view, it is a control rather than
+		// a separator. FgMute measured 2.60:1 against the bare canvas.
+		dockItemsStr.WriteString(lipgloss.NewStyle().Foreground(dockStripArrowFg(pal)).Render(marker))
+		overflowX0, overflowX1 = relX, relX+lipgloss.Width(marker)
+		relX = overflowX1
 	}
 
 	// The strip sits between the mode pill and the stats, and records where each
@@ -357,6 +366,13 @@ func (m *OS) renderDockString() (string, int) {
 		m.dockItemHits = append(m.dockItemHits, dockItemHit{
 			X0: itemsX + s.x0, X1: itemsX + s.x1, Y: itemY, WindowIndex: s.windowIndex,
 		})
+	}
+	m.dockOverflowHit = dockOverflowHit{}
+	if overflowX1 > overflowX0 {
+		m.dockOverflowHit = dockOverflowHit{
+			Active: true, X0: itemsX + overflowX0, X1: itemsX + overflowX1,
+			Y: itemY, Overflowed: layout.TruncatedCount,
+		}
 	}
 
 	paddedRightInfo := lipgloss.NewStyle().Width(rightWidth).Align(lipgloss.Right).Render(rightInfo)

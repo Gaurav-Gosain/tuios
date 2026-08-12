@@ -150,6 +150,22 @@ func (m *OS) DockItemAt(x, y int) int {
 	return -1
 }
 
+// DockOverflowAt reports whether the absolute cell (x, y) is on the marker
+// standing for the minimized panes the bar had no room for.
+func (m *OS) DockOverflowAt(x, y int) bool {
+	h := m.dockOverflowHit
+	return h.Active && y == h.Y && x >= h.X0 && x < h.X1
+}
+
+// OpenAggregateView shows the all-windows panel, which is where the panes the
+// dock could not fit are listed.
+func (m *OS) OpenAggregateView() {
+	m.ShowAggregateView = true
+	m.AggregateViewQuery = ""
+	m.AggregateViewSelected = 0
+	m.AggregateViewScroll = 0
+}
+
 // minimizedPosition returns the position of a window among the minimized
 // windows of the current workspace, counting from zero, or -1 when it is not
 // minimized. This is the index the restore_minimized_N actions count in.

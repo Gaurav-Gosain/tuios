@@ -115,6 +115,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.SwitchToWorkspace(ws)
 			return o, nil
 		}
+		// The marker standing for the entries that did not fit opens the panel
+		// that lists them, so a pane the bar had no room for is still reachable
+		// by mouse.
+		if o.DockOverflowAt(X, Y) {
+			o.OpenAggregateView()
+			return o, nil
+		}
 		// Handle dock click only if there are minimized windows
 		if o.HasMinimizedWindows() {
 			dockIndex := o.DockItemAt(X, Y)
