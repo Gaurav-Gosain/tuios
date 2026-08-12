@@ -32,7 +32,7 @@ type DockLayout struct {
 	TruncatedCount int        // Number of items that don't fit
 	VisibleItems   []DockItem // Items that fit and should be displayed
 	ModeInfo       ModeInfo   // Mode display information for styling
-	WorkspaceTabs  []dockWorkspaceTab
+	WorkspaceStrip dockWorkspaceStrip
 }
 
 // dockWorkspaceTab is one workspace chip in the dock's clickable strip.
@@ -60,6 +60,14 @@ type dockWorkspaceHit struct {
 	X0, X1, Y, Workspace int
 }
 
+// dockWorkspaceArrowHit is where an overflow arrow was drawn, and which way it
+// steps the strip. Recorded alongside the pills for the same reason: the
+// gutters exist only while the strip overflows, so their columns are a fact
+// about the frame rather than something a handler can work out.
+type dockWorkspaceArrowHit struct {
+	X0, X1, Y, Delta int
+}
+
 // dockItemHit is where a minimized entry was drawn on the last frame, recorded
 // for the same reason its neighbouring workspace tab is. The entries are
 // centred against the room the left and right regions leave, so recomputing
@@ -71,39 +79,39 @@ type dockItemHit struct {
 	X0, X1, Y, WindowIndex int
 }
 
-// workspaceChipCaps are the characters bracketing an active workspace chip: the
-// configurable pill glyphs when they exist, else spaces. Falling back to spaces
-// rather than to nothing is what keeps every chip the same width, so a strip of
-// them does not reflow as the current workspace moves along it.
-func workspaceChipCaps() (string, string) {
+// dockWorkspacePillGap is the bare column between two pills. The pills carry a
+// fill of their own, so the gap is what makes them read as separate things
+// rather than as one banded run, and it belongs to neither pill's hit rect.
+const dockWorkspacePillGap = 1
+
+// dockWorkspaceArrowWidth is one overflow gutter: the arrow and the column
+// separating it from the pills. Both gutters are held open for as long as the
+// strip scrolls at all, so reaching an end does not reflow the pills under the
+// pointer that just clicked.
+const dockWorkspaceArrowWidth = 2
+
+// workspacePillWidth is the column span of a pill carrying the given label: the
+// label, a column of padding either side of it, and the caps when they are
+// switched on. The span follows the label and nothing else, so a named
+// workspace and a numbered one are measured by the same rule.
+func workspacePillWidth(label string) int {
 	lc, rc := config.GetDockPillLeftChar(), config.GetDockPillRightChar()
-	if lc == "" || rc == "" {
-		return " ", " "
-	}
-	return lc, rc
+	return lipgloss.Width(lc) + lipgloss.Width(rc) + lipgloss.Width(label) + 2
 }
 
-// workspaceChipWidth is the column span of a chip carrying the given label. The
-// span follows the label and nothing else, so a named workspace and a numbered
-// one are measured by the same rule.
-func workspaceChipWidth(label string) int {
-	lc, rc := workspaceChipCaps()
-	return lipgloss.Width(lc) + lipgloss.Width(rc) + lipgloss.Width(label)
-}
-
-// workspaceChipLabelMax caps a name on a chip. The dock strip sits beside the
+// workspacePillLabelMax caps a name on a pill. The dock strip sits beside the
 // mode pill and the minimized entries, and a workspace called after a branch
 // would otherwise push both off the bar.
-const workspaceChipLabelMax = 12
+const workspacePillLabelMax = 12
 
-// workspaceChipLabel is what a chip prints: the workspace's name when it has
+// workspacePillLabel is what a pill prints: the workspace's name when it has
 // one, else its number, laundered as chrome and capped.
-func (m *OS) workspaceChipLabel(n int) string {
+func (m *OS) workspacePillLabel(n int) string {
 	label := printableTitle(m.WorkspaceLabel(n))
 	if label == "" {
 		label = strconv.Itoa(n)
 	}
-	return overlay.Truncate(label, workspaceChipLabelMax)
+	return overlay.Truncate(label, workspacePillLabelMax)
 }
 
 // occupiedWorkspaces lists the workspaces worth showing, in order: those
@@ -129,19 +137,19 @@ func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
 	}
 	tabs := make([]dockWorkspaceTab, 0, m.NumWorkspaces)
 	for _, n := range m.occupiedWorkspaces() {
-		label := m.workspaceChipLabel(n)
+		label := m.workspacePillLabel(n)
 		tabs = append(tabs, dockWorkspaceTab{
 			Workspace: n,
 			Label:     label,
 			Active:    n == m.CurrentWorkspace,
-			Width:     workspaceChipWidth(label),
+			Width:     workspacePillWidth(label),
 		})
 	}
 	// A trailing "+" opens the next empty workspace, so making one is a click
 	// rather than a remembered keybind. With it appended even a single-workspace
 	// session has two tabs, which is what makes the strip worth showing at all.
 	if next := m.nextFreeWorkspace(); next > 0 {
-		tabs = append(tabs, dockWorkspaceTab{Add: true, Label: "+", Width: workspaceChipWidth("+")})
+		tabs = append(tabs, dockWorkspaceTab{Add: true, Label: "+", Width: workspacePillWidth("+")})
 	}
 	if len(tabs) < 2 {
 		return nil
@@ -160,17 +168,176 @@ func (m *OS) nextFreeWorkspace() int {
 	return 0
 }
 
-// dockWorkspaceTabsWidth is the strip's total width including the space that
-// separates it from the mode pill. Zero when the strip is off.
+// dockWorkspaceTabsWidth is the width every tab would take laid out at once,
+// including the gaps between them and the column separating the strip from the
+// mode pill. Zero when the strip is off. This is what the strip wants; what it
+// gets is the budget planDockWorkspaceStrip is handed.
 func dockWorkspaceTabsWidth(tabs []dockWorkspaceTab) int {
 	if len(tabs) == 0 {
 		return 0
 	}
 	w := 1
-	for _, t := range tabs {
+	for i, t := range tabs {
+		if i > 0 {
+			w += dockWorkspacePillGap
+		}
 		w += t.Width
 	}
 	return w
+}
+
+// dockWorkspaceStrip is the strip as this frame will draw it: the run of pills
+// that fits, whether there is more workspace either side of that run, and the
+// pinned "+".
+//
+// The "+" is held out of the scrolling run on purpose. It is not a workspace,
+// it is the control that makes one, and a scrolled-away "+" would leave the
+// only way to add a workspace behind an arrow the user has no reason to press.
+type dockWorkspaceStrip struct {
+	Pills     []dockWorkspaceTab
+	Add       *dockWorkspaceTab
+	MoreLeft  bool
+	MoreRight bool
+	// Scrolls is set once the pills stopped fitting: both arrow gutters are then
+	// held open and Inner is the fixed span the pills are drawn into, so the
+	// "+" and the readout behind it do not walk about as the strip scrolls.
+	Scrolls bool
+	Inner   int
+	Width   int
+}
+
+// pillsSpan is the width of tabs[from:to) laid out with their gaps.
+func pillsSpan(tabs []dockWorkspaceTab, from, to int) int {
+	w := 0
+	for i := from; i < to; i++ {
+		if i > from {
+			w += dockWorkspacePillGap
+		}
+		w += tabs[i].Width
+	}
+	return w
+}
+
+// pillsFitting is how many pills from first fit in width cells, at least one so
+// a pill wider than the whole viewport is still shown rather than the strip
+// going blank.
+func pillsFitting(tabs []dockWorkspaceTab, first, width int) int {
+	n := 0
+	for i := first; i < len(tabs); i++ {
+		if pillsSpan(tabs, first, i+1) > width {
+			break
+		}
+		n++
+	}
+	return max(n, 1)
+}
+
+// planDockWorkspaceStrip decides what the strip draws inside budget columns and
+// records the scroll offset it settled on.
+//
+// The offset is only ever pulled back to the current workspace when that
+// workspace has changed since the last frame. A switch by keyboard therefore
+// scrolls the strip to the pill it just made active, while a user reading along
+// the strip with the arrows keeps the run they scrolled to.
+func (m *OS) planDockWorkspaceStrip(budget int) dockWorkspaceStrip {
+	tabs := m.buildDockWorkspaceTabs()
+	if len(tabs) == 0 {
+		return dockWorkspaceStrip{}
+	}
+
+	strip := dockWorkspaceStrip{Pills: tabs}
+	if last := tabs[len(tabs)-1]; last.Add {
+		strip.Add = &last
+		strip.Pills = tabs[:len(tabs)-1]
+	}
+
+	// The leading column and the "+" are spent before the pills get a look, so a
+	// dock too narrow for the workspaces still carries the control that makes
+	// one.
+	addSpan := 0
+	if strip.Add != nil {
+		addSpan = dockWorkspacePillGap + strip.Add.Width
+	}
+	avail := budget - 1 - addSpan
+	if avail <= 0 || len(strip.Pills) == 0 {
+		strip.Pills = nil
+		strip.Width = 0
+		if strip.Add != nil && budget >= 1+strip.Add.Width {
+			strip.Width = 1 + strip.Add.Width
+		} else {
+			strip.Add = nil
+		}
+		return strip
+	}
+
+	if natural := pillsSpan(strip.Pills, 0, len(strip.Pills)); natural <= avail {
+		m.dockWorkspaceScroll = 0
+		m.dockWorkspaceScrollFor = m.CurrentWorkspace
+		strip.Width = 1 + natural + addSpan
+		return strip
+	}
+
+	inner := avail - 2*dockWorkspaceArrowWidth
+	if inner < 1 {
+		// Room for the gutters and nothing to put between them: the arrows would
+		// scroll a strip with no pills in it.
+		strip.Pills = nil
+		strip.Width = 1 + addSpan
+		return strip
+	}
+	strip.Scrolls, strip.Inner = true, inner
+
+	all := strip.Pills
+	first := m.dockWorkspaceScroll
+	if m.CurrentWorkspace != m.dockWorkspaceScrollFor {
+		m.dockWorkspaceScrollFor = m.CurrentWorkspace
+		first = scrollToShow(all, m.activePillIndex(all), first, inner)
+	}
+	first = min(max(first, 0), lastScrollOffset(all, inner))
+	m.dockWorkspaceScroll = first
+
+	count := pillsFitting(all, first, inner)
+	strip.Pills = all[first : first+count]
+	strip.MoreLeft = first > 0
+	strip.MoreRight = first+count < len(all)
+	strip.Width = 1 + 2*dockWorkspaceArrowWidth + inner + addSpan
+	return strip
+}
+
+// activePillIndex is where the current workspace sits in the strip, or 0 when
+// it is not in it.
+func (m *OS) activePillIndex(pills []dockWorkspaceTab) int {
+	for i, p := range pills {
+		if p.Active {
+			return i
+		}
+	}
+	return 0
+}
+
+// scrollToShow is the smallest move from first that brings pill active into the
+// viewport, scrolling back for a pill off the left end and forward for one off
+// the right.
+func scrollToShow(pills []dockWorkspaceTab, active, first, inner int) int {
+	if active < first {
+		return active
+	}
+	for first < active && first+pillsFitting(pills, first, inner) <= active {
+		first++
+	}
+	return first
+}
+
+// lastScrollOffset is the furthest the strip can scroll: the first offset whose
+// run reaches the final pill. Scrolling past it would open dead columns at the
+// right-hand end.
+func lastScrollOffset(pills []dockWorkspaceTab, inner int) int {
+	for i := 0; i < len(pills); i++ {
+		if pillsSpan(pills, i, len(pills)) <= inner {
+			return i
+		}
+	}
+	return max(len(pills)-1, 0)
 }
 
 // DockWorkspaceAt returns the workspace whose dock tab covers the absolute cell
@@ -189,6 +356,25 @@ func (m *OS) DockWorkspaceAt(x, y int) int {
 	return 0
 }
 
+// ScrollDockWorkspacesAt steps the strip when (x, y) is on one of its overflow
+// arrows, and reports whether it was.
+//
+// A click steps one pill. The pills are as wide as the names on them, so a page
+// is a different distance every time and would skip past the workspace the user
+// was reaching for; one pill per click is the same gesture the arrows on a tab
+// strip have anywhere else.
+func (m *OS) ScrollDockWorkspacesAt(x, y int) bool {
+	for _, h := range m.dockWorkspaceArrowHits {
+		if y == h.Y && x >= h.X0 && x < h.X1 {
+			// The upper bound belongs to the next layout pass, which knows how
+			// many pills fit; here only the floor is knowable.
+			m.dockWorkspaceScroll = max(m.dockWorkspaceScroll+h.Delta, 0)
+			return true
+		}
+	}
+	return false
+}
+
 // CalculateDockLayout calculates the layout for the dock including positions of all items.
 // This function is shared between rendering (render.go) and mouse handling (mouse.go)
 // to ensure consistent positioning.
@@ -198,15 +384,19 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	// Build left side text (compact format)
 	layout.ModeLabel, layout.TrailText, layout.LeftWidth, layout.ModeInfo = m.buildDockLeftText()
 
-	// The workspace strip rides in the left region, so the dock items are laid
-	// out against the room it leaves.
-	layout.WorkspaceTabs = m.buildDockWorkspaceTabs()
-	layout.LeftWidth += dockWorkspaceTabsWidth(layout.WorkspaceTabs)
-
 	// The session controls hold the bar's right-hand end and never give any of it
 	// up, so everything else is laid out against what they leave rather than
 	// against the screen.
 	barWidth := max(m.GetRenderWidth()-m.dockSessionStripWidth(), 0)
+
+	// The workspace strip rides in the left region, so the dock items are laid
+	// out against the room it leaves. Half the bar is the most it may take: past
+	// that a session of named workspaces would push the minimized entries and
+	// the meters off the dock, and a strip that scrolls costs one click to read
+	// where a missing entry costs a search.
+	budget := min(max(barWidth-layout.LeftWidth, 0), barWidth/2)
+	layout.WorkspaceStrip = m.planDockWorkspaceStrip(budget)
+	layout.LeftWidth += layout.WorkspaceStrip.Width
 
 	// Calculate right side width. The estimate below is what the right block
 	// would like; on a narrow screen it is capped at what the left block leaves,

@@ -181,43 +181,46 @@ type OS struct {
 	// new pane is not built locally; it arrives later through a state sync. These
 	// remember which side of which pane the split was meant for so the sync path
 	// can honor the direction instead of falling back to the spiral scheme.
-	pendingSplitDir       layout.PreselectionDir
-	pendingSplitTarget    string
-	WindowToBSPID         map[string]int         // Maps window UUID to stable BSP integer ID
-	BSPIDToWindowID       map[int]string         // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for getWindowByIntID)
-	NextBSPWindowID       int                    // Next BSP window ID to assign (starts at 1)
-	RenameKind            RenameKind             // What the open rename editor targets (RenameNone when closed)
-	RenameBuffer          string                 // Buffer for new window name
-	RenameTargetID        string                 // Window the rename in flight applies to
-	renameHit             overlay.Rect           // Where the dialog was drawn, in screen cells
-	PrefixActive          bool                   // True when prefix key was pressed (tmux-style)
-	WorkspacePrefixActive bool                   // True when Ctrl+B, w was pressed (workspace sub-prefix)
-	MinimizePrefixActive  bool                   // True when Ctrl+B, m was pressed (minimize sub-prefix)
-	TilingPrefixActive    bool                   // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
-	DebugPrefixActive     bool                   // True when Ctrl+B, D was pressed (debug sub-prefix)
-	LastPrefixTime        time.Time              // Time when prefix was activated
-	HelpScrollOffset      int                    // Scroll offset for help menu
-	HelpCategory          int                    // Current help category index (for left/right navigation)
-	HelpSearchMode        bool                   // True when help search is active
-	HelpSearchQuery       string                 // Current search query in help menu
-	CurrentWorkspace      int                    // Current active workspace (1-9)
-	NumWorkspaces         int                    // Total number of workspaces
-	WorkspaceFocus        map[int]int            // Remembers focused window per workspace
-	WorkspaceLayouts      map[int][]WindowLayout // Stores custom layouts per workspace
-	WorkspaceHasCustom    map[int]bool           // Tracks if workspace has custom layout
-	WorkspaceMasterRatio  map[int]float64        // Stores master ratio per workspace
-	ShowLogs              bool                   // True when showing log overlay
-	LogMessages           []LogMessage           // Store log messages
-	LogScrollOffset       int                    // Scroll offset for log viewer
-	Notifications         []Notification         // Active notifications
-	notifHit              notifHitZones          // where the message block was drawn last frame
-	dockWorkspaceHits     []dockWorkspaceHit     // where the dock's workspace tabs were drawn last frame
-	dockItemHits          []dockItemHit          // where the dock's minimized entries were drawn last frame
-	dockSessionHits       []dockSessionHit       // where the dock's session controls were drawn last frame
-	dockSessionHover      DockSessionAction      // which session control the pointer is on, DockSessionNone for neither
-	SelectionMode         bool                   // True when in text selection mode
-	ClipboardContent      string                 // Store clipboard content from tea.ClipboardMsg
-	ShowCacheStats        bool                   // True when showing style cache statistics overlay
+	pendingSplitDir        layout.PreselectionDir
+	pendingSplitTarget     string
+	WindowToBSPID          map[string]int          // Maps window UUID to stable BSP integer ID
+	BSPIDToWindowID        map[int]string          // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for getWindowByIntID)
+	NextBSPWindowID        int                     // Next BSP window ID to assign (starts at 1)
+	RenameKind             RenameKind              // What the open rename editor targets (RenameNone when closed)
+	RenameBuffer           string                  // Buffer for new window name
+	RenameTargetID         string                  // Window the rename in flight applies to
+	renameHit              overlay.Rect            // Where the dialog was drawn, in screen cells
+	PrefixActive           bool                    // True when prefix key was pressed (tmux-style)
+	WorkspacePrefixActive  bool                    // True when Ctrl+B, w was pressed (workspace sub-prefix)
+	MinimizePrefixActive   bool                    // True when Ctrl+B, m was pressed (minimize sub-prefix)
+	TilingPrefixActive     bool                    // True when Ctrl+B, t was pressed (tiling/window sub-prefix)
+	DebugPrefixActive      bool                    // True when Ctrl+B, D was pressed (debug sub-prefix)
+	LastPrefixTime         time.Time               // Time when prefix was activated
+	HelpScrollOffset       int                     // Scroll offset for help menu
+	HelpCategory           int                     // Current help category index (for left/right navigation)
+	HelpSearchMode         bool                    // True when help search is active
+	HelpSearchQuery        string                  // Current search query in help menu
+	CurrentWorkspace       int                     // Current active workspace (1-9)
+	NumWorkspaces          int                     // Total number of workspaces
+	WorkspaceFocus         map[int]int             // Remembers focused window per workspace
+	WorkspaceLayouts       map[int][]WindowLayout  // Stores custom layouts per workspace
+	WorkspaceHasCustom     map[int]bool            // Tracks if workspace has custom layout
+	WorkspaceMasterRatio   map[int]float64         // Stores master ratio per workspace
+	ShowLogs               bool                    // True when showing log overlay
+	LogMessages            []LogMessage            // Store log messages
+	LogScrollOffset        int                     // Scroll offset for log viewer
+	Notifications          []Notification          // Active notifications
+	notifHit               notifHitZones           // where the message block was drawn last frame
+	dockWorkspaceHits      []dockWorkspaceHit      // where the dock's workspace pills were drawn last frame
+	dockWorkspaceArrowHits []dockWorkspaceArrowHit // where the strip's overflow arrows were drawn last frame
+	dockWorkspaceScroll    int                     // index of the first workspace pill the strip draws
+	dockWorkspaceScrollFor int                     // the workspace that offset was last pulled into view for
+	dockItemHits           []dockItemHit           // where the dock's minimized entries were drawn last frame
+	dockSessionHits        []dockSessionHit        // where the dock's session controls were drawn last frame
+	dockSessionHover       DockSessionAction       // which session control the pointer is on, DockSessionNone for neither
+	SelectionMode          bool                    // True when in text selection mode
+	ClipboardContent       string                  // Store clipboard content from tea.ClipboardMsg
+	ShowCacheStats         bool                    // True when showing style cache statistics overlay
 	// Quit menu state. The menu replaces the old yes/no quit dialog: a small
 	// list overlay on the shared list-overlay grammar, registered in OverlayHits
 	// as kind "quit" so hover, click and click-away routing come from the same

@@ -102,6 +102,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.NotificationClick(X, Y) {
 			return o, nil
 		}
+		// The strip's overflow arrows sit in the strip's own columns and are
+		// tested before its pills, so a gutter is an arrow and never the pill
+		// that was under it before the strip started scrolling.
+		if o.ScrollDockWorkspacesAt(X, Y) {
+			return o, nil
+		}
 		// The workspace strip owns its columns in the left region, ahead of the
 		// dock items: the two never overlap, but the strip is tested first so a
 		// tab stays a tab whatever the item layout does.

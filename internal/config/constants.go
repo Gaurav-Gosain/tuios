@@ -252,6 +252,13 @@ var (
 	// DockSeparator is the separator between dock sections
 	DockSeparator = "  " // Two spaces for breathing room
 
+	// DockWorkspaceMoreLeft and DockWorkspaceMoreRight are the workspace strip's
+	// overflow arrows. Single-angle quotes rather than triangles: they are one
+	// cell in every font, so the strip's columns do not move with the glyph set,
+	// and they read as "there is more this way" without the weight of a button.
+	DockWorkspaceMoreLeft  = "‹"
+	DockWorkspaceMoreRight = "›"
+
 	// WindowPillLeft is the left pill-style character for window decorations.
 	WindowPillLeft string
 	// WindowPillRight is the right pill-style character for window decorations.
@@ -315,6 +322,11 @@ const (
 
 	// DockSeparatorASCII is the ASCII fallback separator
 	DockSeparatorASCII = " | "
+
+	// DockWorkspaceMoreLeftASCII and DockWorkspaceMoreRightASCII are the ASCII
+	// fallbacks for the workspace strip's overflow arrows.
+	DockWorkspaceMoreLeftASCII  = "<"
+	DockWorkspaceMoreRightASCII = ">"
 )
 
 // =============================================================================
@@ -786,6 +798,22 @@ func GetDockSeparator() string {
 		return DockSeparatorASCII
 	}
 	return DockSeparator
+}
+
+// GetDockWorkspaceMoreLeft returns the strip's left overflow arrow.
+func GetDockWorkspaceMoreLeft() string {
+	if UseASCIIOnly {
+		return DockWorkspaceMoreLeftASCII
+	}
+	return DockWorkspaceMoreLeft
+}
+
+// GetDockWorkspaceMoreRight returns the strip's right overflow arrow.
+func GetDockWorkspaceMoreRight() string {
+	if UseASCIIOnly {
+		return DockWorkspaceMoreRightASCII
+	}
+	return DockWorkspaceMoreRight
 }
 
 // =============================================================================

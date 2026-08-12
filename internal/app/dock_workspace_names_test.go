@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // chipOS is a dock with three occupied workspaces, the middle one named.
@@ -55,18 +56,18 @@ func TestWorkspaceChipsCarryTheirNames(t *testing.T) {
 func TestWorkspaceChipWidthFollowsItsLabel(t *testing.T) {
 	m := chipOS(t)
 	for _, tab := range m.buildDockWorkspaceTabs() {
-		drawn := lipgloss.Width(workspaceChip(tab.Label, tab.Active, nil, nil))
+		drawn := lipgloss.Width(workspacePill(tab.Label, tab.Active, theme.UI()))
 		if drawn != tab.Width {
 			t.Errorf("workspace %d's chip draws %d cells but claims %d", tab.Workspace, drawn, tab.Width)
 		}
-		if tab.Width != workspaceChipWidth(tab.Label) {
+		if tab.Width != workspacePillWidth(tab.Label) {
 			t.Errorf("workspace %d's recorded width %d is not its label's %d",
-				tab.Workspace, tab.Width, workspaceChipWidth(tab.Label))
+				tab.Workspace, tab.Width, workspacePillWidth(tab.Label))
 		}
 		// Active and inactive must measure the same, or the strip reflows as the
 		// current workspace moves along it and every rect past it shifts.
-		if a, b := lipgloss.Width(workspaceChip(tab.Label, true, nil, nil)),
-			lipgloss.Width(workspaceChip(tab.Label, false, nil, nil)); a != b {
+		if a, b := lipgloss.Width(workspacePill(tab.Label, true, theme.UI())),
+			lipgloss.Width(workspacePill(tab.Label, false, theme.UI())); a != b {
 			t.Errorf("workspace %d measures %d active and %d inactive", tab.Workspace, a, b)
 		}
 	}
@@ -85,8 +86,11 @@ func TestWorkspaceChipHitsCoverEveryCellOfTheirChip(t *testing.T) {
 
 	for i, h := range m.dockWorkspaceHits {
 		if i > 0 {
-			if prev := m.dockWorkspaceHits[i-1]; h.X0 != prev.X1 {
-				t.Errorf("tab %d starts at %d but its neighbour ended at %d: a gap or an overlap", i, h.X0, prev.X1)
+			// The pills are separated by a bare column that belongs to neither
+			// of them, so a rect starting on or before its neighbour's last cell
+			// is an overlap and one starting further out has swallowed a pill.
+			if prev := m.dockWorkspaceHits[i-1]; h.X0 != prev.X1+dockWorkspacePillGap {
+				t.Errorf("tab %d starts at %d but its neighbour ended at %d", i, h.X0, prev.X1)
 			}
 		}
 		// Both edge cells resolve to this tab, and the cell before the first one
@@ -123,14 +127,14 @@ func TestWorkspaceChipLabelIsCapped(t *testing.T) {
 	m.adoptSessionLabels(&session.SessionState{
 		WorkspaceNames: map[int]string{2: strings.Repeat("long-", 12)},
 	})
-	label := m.workspaceChipLabel(2)
-	if lipgloss.Width(label) > workspaceChipLabelMax {
-		t.Errorf("a long name renders %d cells on the chip, want at most %d", lipgloss.Width(label), workspaceChipLabelMax)
+	label := m.workspacePillLabel(2)
+	if lipgloss.Width(label) > workspacePillLabelMax {
+		t.Errorf("a long name renders %d cells on the chip, want at most %d", lipgloss.Width(label), workspacePillLabelMax)
 	}
 
 	// An unnamed workspace is still its number, which is both its identity and
 	// what the chip has always shown.
-	if got := m.workspaceChipLabel(3); got != "3" {
+	if got := m.workspacePillLabel(3); got != "3" {
 		t.Errorf("an unnamed workspace's chip reads %q, want its number", got)
 	}
 }

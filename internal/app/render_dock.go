@@ -7,56 +7,111 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// workspaceChip renders one workspace chip for the dock strip. Inactive is the
-// bare dim label; active is the accent label, bold and underlined, on no fill of
-// its own. An inverse fill is the loudest mark the grammar has and it was being
-// spent on the thing the user already knows; the underline says the same in one
-// attribute, survives ASCII mode and monochrome (both are attributes, not
-// glyphs), and leaves the mode chip as the bar's only filled element. Both
-// states pad to the caps' widths, so a chip is exactly workspaceChipWidth(label)
-// wide whatever its state. rowBg is what sits behind the chip (nil for the bare
-// terminal background), fg the resting label color.
+// workspacePill renders one workspace pill for the dock strip. Every pill rests
+// on the same Panel step the minimized entries do, with a column of padding
+// either side of its label: the fill is what gives it a shape, and the bare
+// column between two of them is what keeps them apart.
+//
+// Active is the accent label, bold and underlined across the whole pill, on
+// that same quiet fill. An inverse slab is the loudest mark the grammar has and
+// it was being spent on the thing the user already knows; the underline says
+// the same in one attribute, survives ASCII mode and monochrome (both are
+// attributes, not glyphs), and leaves the mode pill as the bar's only saturated
+// element. Both states measure workspacePillWidth(label), so the strip does not
+// reflow as the current workspace moves along it.
 //
 // The label is passed in rather than derived: the tab that carries it also
 // carries the width the hit rectangle was cut to, and the two must be the same
 // string.
-func workspaceChip(label string, active bool, fg, rowBg color.Color) string {
-	lc, rc := workspaceChipCaps()
-	pad := func(s string) string { return sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", lipgloss.Width(s))) }
-	if !active {
-		return sidebarStyle(rowBg, fg).Render(
-			strings.Repeat(" ", lipgloss.Width(lc)) + label + strings.Repeat(" ", lipgloss.Width(rc)))
+func workspacePill(label string, active bool, pal overlay.Palette) string {
+	fg := color.Color(pal.FgMute)
+	body := sidebarStyle(pal.Panel, fg)
+	if active {
+		body = sidebarStyle(pal.Panel, pal.Accent).Bold(true).Underline(true)
 	}
-	// The pill caps go with the fill they capped: a half-circle around bare
-	// canvas is a glyph with nothing behind it. They keep their columns so the
-	// strip does not reflow when the current workspace moves along it.
-	body := sidebarStyle(rowBg, theme.UI().Accent).Bold(true).Underline(true)
-	return pad(lc) + body.Render(label) + pad(rc)
+	// The caps take the fill's colour as their foreground, which is how a half
+	// circle reads as the rounded end of the pill rather than as a glyph beside
+	// it. They are empty when the dock is flat.
+	caps := lipgloss.NewStyle().Foreground(pal.Panel)
+	return caps.Render(config.GetDockPillLeftChar()) +
+		body.Render(" "+label+" ") +
+		caps.Render(config.GetDockPillRightChar())
 }
 
-// renderDockWorkspaceTabs styles the workspace strip starting at column startX
-// and records each tab's screen span into m.dockWorkspaceHits.
-func (m *OS) renderDockWorkspaceTabs(tabs []dockWorkspaceTab, startX int) string {
+// renderDockWorkspaceStrip draws the strip starting at column startX and records
+// every pill and arrow it draws into m.dockWorkspaceHits and
+// m.dockWorkspaceArrowHits.
+//
+// The layout is: a bare column, the left gutter, the run of pills, the right
+// gutter, then the "+". The gutters exist only while the strip scrolls, and
+// hold their columns whether or not there is anything that way, so an arrow
+// appearing does not shift the pill under the pointer.
+func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 	m.dockWorkspaceHits = m.dockWorkspaceHits[:0]
-	if len(tabs) == 0 {
+	m.dockWorkspaceArrowHits = m.dockWorkspaceArrowHits[:0]
+	if len(s.Pills) == 0 && s.Add == nil {
 		return ""
 	}
 
 	pal := theme.UI()
 	y := m.GetDockbarContentYPosition()
+	arrow := lipgloss.NewStyle().Foreground(pal.FgMute)
 
 	var b strings.Builder
 	b.WriteString(" ")
 	x := startX + 1
-	for _, t := range tabs {
-		b.WriteString(workspaceChip(t.Label, t.Active, pal.FgMute, nil))
+
+	gutter := func(glyph string, live bool, delta int) {
+		if !s.Scrolls {
+			return
+		}
+		if live {
+			b.WriteString(arrow.Render(glyph) + " ")
+			m.dockWorkspaceArrowHits = append(m.dockWorkspaceArrowHits, dockWorkspaceArrowHit{
+				X0: x, X1: x + dockWorkspaceArrowWidth, Y: y, Delta: delta,
+			})
+		} else {
+			b.WriteString(strings.Repeat(" ", dockWorkspaceArrowWidth))
+		}
+		x += dockWorkspaceArrowWidth
+	}
+
+	gutter(config.GetDockWorkspaceMoreLeft(), s.MoreLeft, -1)
+
+	drawn := 0
+	for i, t := range s.Pills {
+		if i > 0 {
+			b.WriteString(strings.Repeat(" ", dockWorkspacePillGap))
+			x, drawn = x+dockWorkspacePillGap, drawn+dockWorkspacePillGap
+		}
+		b.WriteString(workspacePill(t.Label, t.Active, pal))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
 		})
-		x += t.Width
+		x, drawn = x+t.Width, drawn+t.Width
+	}
+	// A scrolling strip holds its viewport open, so the "+" and the readout
+	// behind it stay put as the pills move under them.
+	if s.Scrolls && drawn < s.Inner {
+		b.WriteString(strings.Repeat(" ", s.Inner-drawn))
+		x += s.Inner - drawn
+	}
+
+	gutter(config.GetDockWorkspaceMoreRight(), s.MoreRight, 1)
+
+	if s.Add != nil {
+		if len(s.Pills) > 0 {
+			b.WriteString(strings.Repeat(" ", dockWorkspacePillGap))
+			x += dockWorkspacePillGap
+		}
+		b.WriteString(workspacePill(s.Add.Label, false, pal))
+		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
+			X0: x, X1: x + s.Add.Width, Y: y, Workspace: 0,
+		})
 	}
 	return b.String()
 }
@@ -157,7 +212,7 @@ func (m *OS) renderDockString() (string, int) {
 	// The strip sits between the mode pill and the stats, and records where each
 	// tab landed as it goes: both dock paths render through here, so the hit
 	// rects are the drawn geometry rather than a second guess at it.
-	styledTabs := m.renderDockWorkspaceTabs(layout.WorkspaceTabs, lipgloss.Width(styledModeText))
+	styledTabs := m.renderDockWorkspaceStrip(layout.WorkspaceStrip, lipgloss.Width(styledModeText))
 
 	leftInfo := lipgloss.JoinHorizontal(lipgloss.Top,
 		styledModeText,
