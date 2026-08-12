@@ -148,9 +148,9 @@ func sidebarStateColor(state string, doneSeen bool, pal overlay.Palette) color.C
 }
 
 // sidebarAttention reports the states that mean a human is required. They are
-// the only ones allowed a severity gutter mark, the rail's one bold, or an
-// inked cell on the glyph rail: reserving those for the two states is what
-// keeps them legible as an alarm.
+// the only ones allowed a severity gutter mark, the rail's one bold, or a
+// severity mark on the collapsed strip's spine: reserving those for the two
+// states is what keeps them legible as an alarm.
 func sidebarAttention(state string) bool {
 	return state == "needs_input" || state == "errored"
 }

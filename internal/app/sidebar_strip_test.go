@@ -199,6 +199,24 @@ func TestStripBandCoversItsFullHeight(t *testing.T) {
 	}
 }
 
+// TestBandIsConfinedToTheCollapsedStrip: a standing fill is the thing the rest
+// of the rail spent a round removing, so the exception has to stay where it was
+// argued for. Expanded, the rail is still lines of text on the bare canvas.
+func TestBandIsConfinedToTheCollapsedStrip(t *testing.T) {
+	m, tree := stripOS(t, 120, 30)
+	m.SidebarCollapsed = false
+	lines, _ := m.sidebarPanelLinesForTree(tree)
+
+	panel := panelSGR(t)
+	for i, line := range lines {
+		for x, cell := range stripCells(line) {
+			if bgOf(cell) == panel {
+				t.Fatalf("the expanded rail paints Panel at (%d,%d): %q", i, x, cell)
+			}
+		}
+	}
+}
+
 // TestStripInksSeverityInExactlyOnePlace: the old strip said "something is
 // wrong" with a badge and again with an inked session cell four rows away. Two
 // saturated blocks on a three-column rail is decoration; the badge already
