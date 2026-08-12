@@ -181,6 +181,10 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 		closed = state.Windows[idx]
 		workspace := closed.Workspace
 		state.Windows = append(state.Windows[:idx], state.Windows[idx+1:]...)
+		// The window is gone, so nothing owns its agent state any more. The
+		// detector sweeps stale claims on its own tick too, but only when it is
+		// running, and a claim can now come from a source that is not the detector.
+		delete(s.agentClaims, closed.ID)
 
 		// Repair focus if we removed the focused window.
 		if state.FocusedWindowID == closed.ID {

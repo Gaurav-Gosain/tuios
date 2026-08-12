@@ -349,13 +349,16 @@ type Session struct {
 	// Configuration
 	config *SessionConfig
 
-	// autoAgentOwned records, by window ID, the windows whose agent state was set
-	// by the foreground-process auto-detector (applyAgentDetection) and not since
-	// relinquished. It is the detector's precedence marker: it only manages windows
-	// it owns and never touches a state a user set manually. It is read and written
-	// solely from applyAgentDetection, which runs under stateMu, so it needs no lock
-	// of its own.
-	autoAgentOwned map[string]bool
+	// agentClaims records, by window ID, who owns the window's agent state: the
+	// ranked source that last set it (see AgentSource) and whether the
+	// foreground-process detector promoted the window and so must clear it when
+	// the agent exits.
+	//
+	// It used to be a bool holding only the second half. That was enough while the
+	// detector was the only thing competing with an explicit report; it cannot
+	// express which of several sources should win, so the value carries the source
+	// now. Read and written under stateMu, so it needs no lock of its own.
+	agentClaims map[string]agentClaim
 
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a

@@ -270,11 +270,11 @@ func readCmdline(pid int) []string {
 //   - It promotes a window to AgentStateWorking only when an agent appears in the
 //     foreground AND the window currently has no agent state (AgentStateNone).
 //     A window a user already set through set-agent-state is never overwritten.
-//   - It records the windows it promoted (autoAgentOwned) and only ever manages
-//     those. While it owns a window and the agent is still in the foreground it
-//     leaves the state alone, so the output-stall heuristic may demote it to idle
-//     and an explicit set-agent-state may move it anywhere; either wins until the
-//     agent exits.
+//   - It records the windows it promoted (the auto bit of agentClaims) and only
+//     ever manages those. While it owns a window and the agent is still in the
+//     foreground it leaves the state alone, so the output-stall heuristic may
+//     demote it to idle and an explicit set-agent-state may move it anywhere;
+//     either wins until the agent exits.
 //   - When the agent leaves the foreground (the pane returns to its shell) it
 //     clears an owned window back to AgentStateNone and relinquishes ownership.
 //
@@ -295,10 +295,13 @@ func (s *Session) applyAgentDetection(
 		now := time.Now().UnixNano()
 		for i := range st.Windows {
 			w := &st.Windows[i]
+			// Recorded before the PTY check: live is what the claim sweep below
+			// keeps, and a window with no PTY still exists and may hold a claim from
+			// a source other than the detector.
+			live[w.ID] = struct{}{}
 			if w.PTYID == "" {
 				continue
 			}
-			live[w.ID] = struct{}{}
 			comm, argv, running := resolve(w.PTYID)
 			// The row label rides this poll rather than one of its own: the
 			// process was read for the agent check either way.
@@ -307,7 +310,7 @@ func (s *Session) applyAgentDetection(
 				labels++
 			}
 			detected := running && isAgent(comm, argv)
-			owned := s.autoAgentOwned[w.ID]
+			owned := s.agentClaims[w.ID].auto
 			switch {
 			case detected && !owned:
 				// Take ownership only if no state is set, so a manual report wins.
@@ -315,15 +318,12 @@ func (s *Session) applyAgentDetection(
 					w.AgentState = AgentStateWorking
 					w.AgentMessage = ""
 					w.AgentStateAt = now
-					if s.autoAgentOwned == nil {
-						s.autoAgentOwned = make(map[string]bool)
-					}
-					s.autoAgentOwned[w.ID] = true
+					s.setAgentClaim(w.ID, agentClaim{source: AgentSourceDetect, auto: true})
 					changed++
 				}
 			case !detected && owned:
 				// Agent gone from the foreground: relinquish and clear.
-				delete(s.autoAgentOwned, w.ID)
+				delete(s.agentClaims, w.ID)
 				w.AgentState = AgentStateNone
 				w.AgentMessage = ""
 				w.AgentStateAt = now
@@ -332,12 +332,12 @@ func (s *Session) applyAgentDetection(
 			// detected && owned: leave the state to the stall heuristic and to
 			// explicit reports. !detected && !owned: not ours, do not touch.
 		}
-		// Drop ownership of windows that no longer exist so the map cannot grow
+		// Drop claims on windows that no longer exist so the map cannot grow
 		// without bound. This touches only in-memory bookkeeping, never state, so
 		// it does not count as a change.
-		for id := range s.autoAgentOwned {
+		for id := range s.agentClaims {
 			if _, ok := live[id]; !ok {
-				delete(s.autoAgentOwned, id)
+				delete(s.agentClaims, id)
 			}
 		}
 		if changed == 0 && labels == 0 {
@@ -380,13 +380,13 @@ func (s *Session) clearExitedAgent(
 			if w.PTYID != ptyID {
 				continue
 			}
-			if !s.autoAgentOwned[w.ID] {
+			if !s.agentClaims[w.ID].auto {
 				return errNoAgentDetectChange
 			}
 			if comm, argv, running := resolve(ptyID); running && isAgent(comm, argv) {
 				return errNoAgentDetectChange
 			}
-			delete(s.autoAgentOwned, w.ID)
+			delete(s.agentClaims, w.ID)
 			w.AgentState = AgentStateNone
 			w.AgentMessage = ""
 			w.AgentStateAt = time.Now().UnixNano()
@@ -406,7 +406,7 @@ func (s *Session) ownsAutoAgent(ptyID string) bool {
 	defer s.stateMu.RUnlock()
 	for i := range s.state.Windows {
 		if s.state.Windows[i].PTYID == ptyID {
-			return s.autoAgentOwned[s.state.Windows[i].ID]
+			return s.agentClaims[s.state.Windows[i].ID].auto
 		}
 	}
 	return false

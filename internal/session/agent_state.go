@@ -1,6 +1,9 @@
 package session
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 // AgentState is the semantic state of an agent (a coding-agent CLI or any other
 // long-running process) running in a window's pane. It is daemon-owned per-window
@@ -69,28 +72,85 @@ func (a AgentState) Name() string {
 	return string(a)
 }
 
-// SetDaemonWindowAgentState records the agent state (and an optional short
-// message) on the window matching target, stamping the time it was set. It runs
-// through mutateState, so it bumps the session version and reaches attached
-// clients through the same state-push every other daemon-side mutation uses.
-//
-// This is an explicit report. The output-stall heuristic never overrides it: the
-// heuristic only ever moves a window out of AgentStateWorking, and only after the
-// pane has been silent for the configured window, so any state set here other
-// than working is left untouched, and a fresh working report resets the silence
-// clock.
+// AgentReport is one source's claim on a window's agent state. Source empty
+// means AgentSourceReport, so the zero value is an explicit report, which is
+// what every caller predating sources sends.
+type AgentReport struct {
+	State   AgentState
+	Message string
+	Source  AgentSource
+	Harness string // optional harness id, reported back by get-agent-state
+}
+
+// SetDaemonWindowAgentState records an explicit report on the window matching
+// target. It is the no-source path: every caller that names no source is
+// reporting for itself and gets AgentSourceReport, the highest rank, which is
+// exactly the authority such a caller had before sources existed.
 func (s *Session) SetDaemonWindowAgentState(target string, state AgentState, message string) error {
-	return s.mutateState(func(st *SessionState) error {
+	_, _, err := s.ApplyAgentReport(target, AgentReport{State: state, Message: message})
+	return err
+}
+
+// ApplyAgentReport records r on the window matching target, stamping the time it
+// was set, and returns the window's effective state afterwards and whether r was
+// the thing that set it. It runs through mutateState, so an applied report bumps
+// the session version and reaches attached clients through the same state-push
+// every other daemon-side mutation uses.
+//
+// A report from a source ranked below the one that currently owns the window is
+// refused, and refusing is not an error: a screen rule guessing at a pane whose
+// harness reports for itself is the ordinary case, and the weaker guess has to
+// leave the better answer alone. A refused report changes nothing, so it neither
+// bumps the version nor pushes.
+//
+// The output-stall heuristic is deliberately not routed through here; see
+// applyStallHeuristic for why.
+func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bool, error) {
+	if r.Source == "" {
+		r.Source = AgentSourceReport
+	}
+	var effective AgentState
+	applied := false
+	err := s.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, target)
 		if err != nil {
 			return err
 		}
-		st.Windows[idx].AgentState = state
-		st.Windows[idx].AgentMessage = message
-		st.Windows[idx].AgentStateAt = time.Now().UnixNano()
+		w := &st.Windows[idx]
+		claim, held := s.agentClaims[w.ID]
+		// held, not the zero claim's rank: a window nobody has claimed is open to
+		// any source, including the weakest.
+		if held && r.Source.rank() < claim.source.rank() {
+			effective = w.AgentState
+			return errAgentClaimHeld
+		}
+		w.AgentState = r.State
+		w.AgentMessage = r.Message
+		w.AgentStateAt = time.Now().UnixNano()
+		// auto is carried over: it says the detector will clear this pane when the
+		// agent exits, which a report taking the state over does not change.
+		s.setAgentClaim(w.ID, agentClaim{source: r.Source, harness: r.Harness, auto: claim.auto})
+		effective = r.State
+		applied = true
 		return nil
 	})
+	if errors.Is(err, errAgentClaimHeld) {
+		return effective, false, nil
+	}
+	if err != nil {
+		return effective, false, err
+	}
+	return effective, applied, nil
 }
+
+// errAgentClaimHeld tells mutateState that a higher-ranked source owns the
+// window, so the refused report neither bumps the version nor pushes state. It
+// never leaves the package.
+var errAgentClaimHeld = agentClaimHeld{}
+
+type agentClaimHeld struct{}
+
+func (agentClaimHeld) Error() string { return "agent state is held by a higher-ranked source" }
 
 // applyStallHeuristic moves any window that has been silently working for at
 // least stall into AgentStateIdle, and reports how many it moved. It is the
@@ -109,6 +169,13 @@ func (s *Session) SetDaemonWindowAgentState(target string, state AgentState, mes
 //     producing output) is never demoted, and a working report just made is given
 //     the full stall window before it can be demoted.
 //   - It never promotes a pane into working; only an explicit report does that.
+//
+// Those three rules are why it writes state directly instead of going through
+// ApplyAgentReport's precedence gate: reading only working and writing only idle
+// is already narrower than the gate, and gating it would silently stop it
+// demoting a reported working state, which is the case it exists for. It does
+// record itself as the window's source afterwards, so get-agent-state can say
+// the idle came from the silence timer rather than from the agent.
 //
 // now and stall are passed in, and lastOutput returns the unix-nano time of a
 // PTY's most recent output (0 when unknown), so the whole rule is deterministic
@@ -134,6 +201,9 @@ func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOu
 			if lastActivity <= cutoff {
 				w.AgentState = AgentStateIdle
 				w.AgentStateAt = now.UnixNano()
+				claim := s.agentClaims[w.ID]
+				claim.source = AgentSourceStall
+				s.setAgentClaim(w.ID, claim)
 				flipped++
 			}
 		}

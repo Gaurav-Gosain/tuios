@@ -327,14 +327,17 @@ func init() {
 				windowParam,
 				{Name: "state", Type: "string", Required: true, Description: "The agent state to record.", Accepted: AgentStateNames},
 				{Name: "message", Type: "string", Description: "Optional short note reported with the state, e.g. what the agent is waiting for."},
+				{Name: "source", Type: "string", Description: "Where the state came from. A source ranked below the one that last set the window is refused, and the result reports applied false with the state that stands.", Accepted: AgentSourceNames, Default: "report"},
+				{Name: "harness", Type: "string", Description: "Optional id of the harness the state is about, reported back by get-agent-state."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"needs_input","message":"awaiting approval"}}`,
+				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"working","source":"osc","harness":"claude-code"}}`,
 			},
 			handler: (*Daemon).verbSetAgentState,
 		},
 		"get-agent-state": {
-			description: "Read the agent state a window's pane last reported, with its optional message and the time it was set.",
+			description: "Read the agent state a window's pane last reported, with its optional message, the time it was set, and which source and harness it came from.",
 			params:      []verbParam{sessionParam, windowParam},
 			examples:    []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
 			handler:     (*Daemon).verbGetAgentState,

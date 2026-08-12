@@ -536,6 +536,8 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		Window  string `json:"window"`
 		State   string `json:"state"`
 		Message string `json:"message"`
+		Source  string `json:"source"`
+		Harness string `json:"harness"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -552,6 +554,17 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 			Detail:     "state names the pane's semantic agent state; use none to clear it.",
 		})
 	}
+	// An omitted source is a report, so a caller written before sources existed
+	// keeps the authority it had.
+	source, ok := ParseAgentSource(p.Source)
+	if !ok {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "unknown agent state source "+echoName(p.Source), &VerbHint{
+			Param:      "source",
+			DidYouMean: closestMatch(p.Source, AgentSourceNames),
+			Available:  AgentSourceNames,
+			Detail:     "source says where the state came from and decides which of two competing reports wins; omit it to report for yourself.",
+		})
+	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
@@ -566,10 +579,25 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		target = id
 	}
 
-	if err := sess.SetDaemonWindowAgentState(target, state, p.Message); err != nil {
+	effective, applied, err := sess.ApplyAgentReport(target, AgentReport{
+		State:   state,
+		Message: p.Message,
+		Source:  source,
+		Harness: p.Harness,
+	})
+	if err != nil {
 		return nil, mapResolveErr(err, sess)
 	}
-	return map[string]any{"type": "agent_state_set", "state": state.Name(), "message": p.Message}, nil
+	// state is the effective state, so a report a higher-ranked source outranked
+	// reports what the pane actually shows rather than what was asked for.
+	// applied says which of the two happened.
+	return map[string]any{
+		"type":    "agent_state_set",
+		"state":   effective.Name(),
+		"message": p.Message,
+		"source":  source.Name(),
+		"applied": applied,
+	}, nil
 }
 
 func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *verbError) {
@@ -596,12 +624,18 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		return nil, mapResolveErr(err, sess)
 	}
 	w := state.Windows[idx]
+	claim := sess.agentClaimFor(w.ID)
 	return map[string]any{
 		"type":           "agent_state",
 		"window_id":      w.ID,
 		"state":          w.AgentState.Name(),
 		"message":        w.AgentMessage,
 		"agent_state_at": w.AgentStateAt,
+		// source and harness_id are what make a shown state explainable: which
+		// tier put it there and, once the harness registry lands, which harness.
+		// harness_id is empty until something names one.
+		"source":     claim.source.Name(),
+		"harness_id": claim.harness,
 	}, nil
 }
 

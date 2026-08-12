@@ -9,6 +9,7 @@ an indicator for it.
 
 - [States](#states)
 - [Reporting state](#reporting-state)
+- [Sources and precedence](#sources-and-precedence)
 - [The stall heuristic](#the-stall-heuristic)
 - [Indicator](#indicator)
 - [Claude Code integration](#claude-code-integration)
@@ -58,6 +59,30 @@ pane's state in one call.
 Targeting follows the same rules as the other window verbs: `-s`/`--session`
 selects the session (default: most recently active), `-w`/`--window` selects the
 window by id or name (default: the focused window).
+
+## Sources and precedence
+
+More than one thing can have an opinion about a pane. `set-agent-state` takes an
+optional `source` saying where the state came from, and the daemon uses it to
+decide which opinion wins:
+
+| Source   | Meaning                                          |
+| -------- | ------------------------------------------------ |
+| `report` | The agent reporting for itself (default)         |
+| `osc`    | An escape sequence the pane emitted              |
+| `screen` | A rule matched against the pane's rendered text  |
+| `stall`  | The silence timer                                |
+
+A source may write over a claim ranked at or below its own and never over one
+ranked above it, so a screen rule cannot overwrite what an agent reported for
+itself. A source updating its own claim is always allowed. A report that loses
+comes back with `"applied": false` and the state that stands, rather than an
+error.
+
+Omitting `source` means `report`, so a caller that never sets it behaves exactly
+as it always has. `get-agent-state` reports the winning `source` and, when one
+was named, the `harness_id`, so a surprising indicator can be traced to the thing
+that set it.
 
 ## The stall heuristic
 
