@@ -128,6 +128,55 @@ func archivedNote(dest string) string {
 	return "archived to " + dest
 }
 
+// archiveRetention is how long an archived state file is kept. The archive
+// exists so a user can look at state that would not load; a file nobody has
+// looked at in two weeks is not going to be, and nothing else bounds the
+// directory's growth.
+const archiveRetention = 14 * 24 * time.Hour
+
+// CleanResurrectionDir removes what the save and archive paths leave behind:
+// temp files from writes that died before their rename, and archived state past
+// archiveRetention. Neither had anything cleaning it, so both grew forever.
+//
+// Best effort and never fatal. It runs on daemon start, which is the one moment
+// no save of this daemon's can be in flight, and only one daemon runs at a time.
+func CleanResurrectionDir() {
+	dir := getResurrectionDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		// A completed write renames the temp file into place, so one still sitting
+		// here is the residue of a write that never finished.
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json.tmp") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+			LogError("Failed to remove leftover resurrection temp file %s: %v", entry.Name(), err)
+		}
+	}
+
+	archiveDir := ResurrectionArchiveDir()
+	archived, err := os.ReadDir(archiveDir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-archiveRetention)
+	for _, entry := range archived {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(archiveDir, entry.Name())); err != nil {
+			LogError("Failed to prune archived session state %s: %v", entry.Name(), err)
+		}
+	}
+}
+
 // SaveSessionForResurrection persists the session state to disk.
 func SaveSessionForResurrection(state *SessionState) error {
 	if state == nil || state.Name == "" {

@@ -220,7 +220,7 @@ newer TUIOS. In the last two cases it also prints where the file was archived.
 | What | Path |
 |---|---|
 | Saved session state | `$XDG_STATE_HOME/tuios/sessions/<name>.json` (typically `~/.local/state/tuios/sessions/`) |
-| Archived bad state | `$XDG_STATE_HOME/tuios/sessions/archive/` |
+| Archived bad state | `$XDG_STATE_HOME/tuios/sessions/archive/`, pruned after 14 days |
 | Daemon socket | `$XDG_RUNTIME_DIR/tuios/tuios.sock`, falling back to `/tmp/tuios-<uid>/tuios.sock` |
 | Daemon PID file | the socket path with `.pid` appended |
 
