@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -44,8 +45,36 @@ func getResurrectionDir() string {
 }
 
 // getResurrectionPath returns the path for a specific session's resurrection file.
+// Callers are responsible for having validated the name (see ValidateSessionName);
+// this is a plain join and cannot defend itself.
 func getResurrectionPath(sessionName string) string {
 	return filepath.Join(getResurrectionDir(), sessionName+".json")
+}
+
+// ValidateSessionName rejects a name a session could never be saved under. The
+// name is also the name of its state file, so a name carrying a path separator
+// produced a session that ran perfectly and silently never persisted: the write
+// went to a directory that does not exist, and the error was thrown away. The
+// only place the user can still be told is when they choose the name.
+//
+// An empty name is allowed: the manager generates one.
+func ValidateSessionName(name string) error {
+	if name == "" {
+		return nil
+	}
+	if strings.TrimSpace(name) != name {
+		return fmt.Errorf("session name %q has leading or trailing whitespace", name)
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("session name %q is reserved", name)
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("session name %q contains a path separator; a session name is also the name of its state file", name)
+	}
+	if strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return fmt.Errorf("session name %q contains a control character", name)
+	}
+	return nil
 }
 
 // ResurrectionStateDir returns the directory holding saved session state, so a
@@ -239,8 +268,11 @@ func StartPeriodicSave(getState func() *SessionState) func() {
 			select {
 			case <-ticker.C:
 				state := getState()
-				if state != nil {
-					_ = SaveSessionForResurrection(state)
+				if state == nil {
+					continue
+				}
+				if err := SaveSessionForResurrection(state); err != nil {
+					LogError("Resurrection save for session %q failed: %v", state.Name, err)
 				}
 			case <-stopCh:
 				return

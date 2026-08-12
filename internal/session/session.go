@@ -971,7 +971,12 @@ func (s *Session) Stop() {
 		s.stopResurrection()
 	}
 	// Final save before stopping. Capture cwds while the shells are still alive.
-	_ = SaveSessionForResurrection(s.ResurrectionState())
+	// This is the last chance to persist the session, so a failure here is the
+	// difference between it coming back and not; it is reported rather than
+	// dropped even though Stop cannot act on it.
+	if err := SaveSessionForResurrection(s.ResurrectionState()); err != nil {
+		LogError("Final resurrection save for session %q failed, it will not come back: %v", s.Name, err)
+	}
 
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
