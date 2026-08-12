@@ -48,6 +48,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_command_palette", handlePrefixCommandPalette)
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
+	d.Register("prefix_workspace_switcher", handlePrefixWorkspaceSwitcher)
 	d.Register("prefix_explore", handleToggleFocusSidebar)
 	d.Register("prefix_jump_notif", handlePrefixJumpNotif)
 	d.Register("prefix_detach", handlePrefixDetach)
@@ -324,6 +325,11 @@ func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handlePrefixSessionSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenSessionSwitcher()
+	return o, nil
+}
+
+func handlePrefixWorkspaceSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenWorkspaceSwitcher()
 	return o, nil
 }
 

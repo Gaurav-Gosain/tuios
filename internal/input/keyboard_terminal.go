@@ -132,6 +132,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleSessionSwitcherInput(msg, o)
 	}
 
+	// Handle workspace switcher overlay
+	if o.ShowWorkspaceSwitcher {
+		return handleWorkspaceSwitcherInput(msg, o)
+	}
+
 	// Handle aggregate view
 	if o.ShowAggregateView {
 		return handleAggregateViewInput(msg, o)

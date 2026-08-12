@@ -389,25 +389,26 @@ func DefaultConfig() *UserConfig {
 				// Capital X, one shift away from the x that closes a single pane.
 				// The two verbs sound alike and only one of them is recoverable, so
 				// the slip that matters costs a pane and never the session.
-				"prefix_close_session":    {"X"},
-				"prefix_exit_mode":        {"esc"},
-				"prefix_selection":        {"["},
-				"prefix_help":             {"?"},
-				"prefix_debug":            {"D"},
-				"prefix_tape":             {"T"},
-				"prefix_quit":             {"q"},
-				"prefix_fullscreen":       {"z"},
-				"prefix_split_horizontal": {"-"},
-				"prefix_split_vertical":   {"|", "\\"},
-				"prefix_rotate_split":     {"R"},
-				"prefix_equalize_splits":  {"="},
-				"prefix_scrollback":       {"s"},
-				"prefix_command_palette":  {"P"},
-				"prefix_toggle_sidebar":   {"b"},
-				"prefix_session_switcher": {"S"},
-				"prefix_layout":           {"L"},
-				"prefix_explore":          {"e"}, // the same key goes to the rail and comes back
-				"prefix_jump_notif":       {"j"}, // the keyboard twin of clicking a message
+				"prefix_close_session":      {"X"},
+				"prefix_exit_mode":          {"esc"},
+				"prefix_selection":          {"["},
+				"prefix_help":               {"?"},
+				"prefix_debug":              {"D"},
+				"prefix_tape":               {"T"},
+				"prefix_quit":               {"q"},
+				"prefix_fullscreen":         {"z"},
+				"prefix_split_horizontal":   {"-"},
+				"prefix_split_vertical":     {"|", "\\"},
+				"prefix_rotate_split":       {"R"},
+				"prefix_equalize_splits":    {"="},
+				"prefix_scrollback":         {"s"},
+				"prefix_command_palette":    {"P"},
+				"prefix_toggle_sidebar":     {"b"},
+				"prefix_session_switcher":   {"S"},
+				"prefix_workspace_switcher": {"W"},
+				"prefix_layout":             {"L"},
+				"prefix_explore":            {"e"}, // the same key goes to the rail and comes back
+				"prefix_jump_notif":         {"j"}, // the keyboard twin of clicking a message
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},

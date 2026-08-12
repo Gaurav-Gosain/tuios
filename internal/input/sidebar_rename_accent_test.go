@@ -31,7 +31,7 @@ func TestRailRenameKeyStartsARename(t *testing.T) {
 	o.SidebarNav = nil // no rows built: the key must still be handled by the rail
 
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'r', Text: "r"}, o)
-	if o.RenamingWindow {
+	if o.Renaming() {
 		t.Fatal("r renamed something with the cursor on no row at all")
 	}
 
@@ -45,7 +45,7 @@ func TestRailRenameKeyStartsARename(t *testing.T) {
 	}
 
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyEnter}, o)
-	if o.RenamingWindow {
+	if o.Renaming() {
 		t.Fatal("enter did not end the rename")
 	}
 	if o.Windows[1].CustomName != "rightjk" {

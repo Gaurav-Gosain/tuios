@@ -348,10 +348,10 @@ func (m *OS) composeFrame() string {
 // visible windows, any overlay, separators, graphics, or active manipulation or
 // animation. Pure: it does not mutate render state.
 func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
-	if len(m.Animations) > 0 || m.RenamingWindow {
+	if len(m.Animations) > 0 || m.Renaming() {
 		return nil, false
 	}
-	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowLayoutPicker ||
+	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowWorkspaceSwitcher || m.ShowLayoutPicker ||
 		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker ||
 		m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil {
@@ -558,7 +558,7 @@ func (m *OS) flushGraphicsForView() {
 	// of the drag. Hiding keeps the image data resident, so the gesture ending
 	// puts it back with no round trip to whatever drew it.
 	hideImages := m.Resizing || m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
-		m.ShowLayoutPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
+		m.ShowWorkspaceSwitcher || m.ShowLayoutPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
 		m.ShowSettings || m.ShowThemePicker || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview
 	if m.KittyPassthrough != nil {

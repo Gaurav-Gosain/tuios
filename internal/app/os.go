@@ -186,7 +186,7 @@ type OS struct {
 	WindowToBSPID         map[string]int         // Maps window UUID to stable BSP integer ID
 	BSPIDToWindowID       map[int]string         // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for getWindowByIntID)
 	NextBSPWindowID       int                    // Next BSP window ID to assign (starts at 1)
-	RenamingWindow        bool                   // True when renaming a window
+	RenameKind            RenameKind             // What the open rename editor targets (RenameNone when closed)
 	RenameBuffer          string                 // Buffer for new window name
 	RenameTargetID        string                 // Window the rename in flight applies to
 	renameHit             overlay.Rect           // Where the dialog was drawn, in screen cells
@@ -305,10 +305,20 @@ type OS struct {
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
 	IsSSHMode  bool        // True when running over SSH
 	// Daemon mode fields
-	IsDaemonSession   bool               // True when running as part of a persistent daemon session
-	DaemonClient      *session.TUIClient // Client for daemon communication (nil in local mode)
-	SessionName       string             // Name of the daemon session (if attached)
-	RestoredFromState bool               // True after RestoreFromState, cleared after first resize
+	IsDaemonSession bool               // True when running as part of a persistent daemon session
+	DaemonClient    *session.TUIClient // Client for daemon communication (nil in local mode)
+	SessionName     string             // Name of the daemon session (if attached)
+	// SessionDisplayName and SessionAccent are the attached session's
+	// daemon-owned label and accent slot, both empty when unset. They are
+	// labels only: SessionName stays the identity every keyed map, every
+	// switch and the daemon's own addressing use.
+	SessionDisplayName string
+	SessionAccent      string
+	// WorkspaceNames maps a workspace number to its daemon-owned label. The
+	// number stays the workspace's identity and is what an unnamed workspace
+	// shows, so an absent entry is not a missing label but the normal case.
+	WorkspaceNames    map[int]string
+	RestoredFromState bool // True after RestoreFromState, cleared after first resize
 	// DaemonStateVersion is the daemon state version this client last saw. It is
 	// echoed back on every state sync so the daemon can tell a snapshot built
 	// from its current state apart from one built before a mutation of its own.
@@ -438,6 +448,12 @@ type OS struct {
 	SessionSwitcherItems         []sessiontree.Node
 	SessionSwitcherError         string
 	SessionSwitcherConfirmDelete string // non-empty = confirming deletion of this session name
+	// Workspace switcher overlay, scoped to the attached session
+	ShowWorkspaceSwitcher     bool
+	WorkspaceSwitcherQuery    string
+	WorkspaceSwitcherSelected int
+	WorkspaceSwitcherScroll   int
+	WorkspaceSwitcherItems    []WorkspaceItem
 	// Aggregate view overlay (all windows across workspaces)
 	ShowAggregateView     bool
 	AggregateViewQuery    string

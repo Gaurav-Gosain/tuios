@@ -341,15 +341,20 @@ func (m *OS) sidebarCursorWindow() *terminal.Window {
 	return nil
 }
 
-// SidebarRenameCursor starts an inline rename on the cursor row. Sessions are
-// the daemon's to name, so the rail renames windows only.
+// SidebarRenameCursor starts a rename on the cursor row, whatever it is. A
+// window is renamed locally; a session row renames the session's label through
+// the daemon, which owns it. The session's identity is never touched.
 func (m *OS) SidebarRenameCursor() {
-	w := m.sidebarCursorWindow()
-	if w == nil {
-		m.ShowNotification("Rename works on a window of this session", "info", config.NotificationDuration)
+	if w := m.sidebarCursorWindow(); w != nil {
+		m.BeginRenameWindow(w)
 		return
 	}
-	m.BeginRenameWindow(w)
+	row, ok := m.sidebarCursorRow()
+	if ok && row.Kind == sidebarRowSession && row.SessionID != "" && m.DaemonClient != nil {
+		m.BeginRenameSession(row.SessionID)
+		return
+	}
+	m.ShowNotification("Nothing on this row to rename", "info", config.NotificationDuration)
 }
 
 // SidebarCanCreateSession reports whether this client can make a session at

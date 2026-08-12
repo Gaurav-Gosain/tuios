@@ -45,7 +45,7 @@ func renameFieldText(buf string, width int) string {
 // go to read what it was typing, and the row it pointed at is right there in
 // the rail anyway.
 func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
-	if !m.RenamingWindow {
+	if !m.Renaming() {
 		return "", overlay.Geometry{}, 0, 0, false
 	}
 	pal := theme.UI()
@@ -61,7 +61,7 @@ func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
 		overlay.Cursor(" ", pal.Canvas, pal.Fg)
 
 	content, geo := overlay.Dialog{
-		Title: "rename",
+		Title: m.RenameDialogTitle(),
 		Width: inner,
 		Body:  body,
 		Hints: renameHints(),

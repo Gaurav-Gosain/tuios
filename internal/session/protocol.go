@@ -175,6 +175,13 @@ type SessionInfo struct {
 	// session's tree from the listing alone. Omitted by older daemons, which
 	// older and newer clients both read back as "windows not known yet".
 	Windows []WindowSummary `json:"windows,omitempty"`
+	// DisplayName and Accent carry the session's daemon-owned label and accent
+	// slot. Only a state push carries them, and a push only reaches the session
+	// a client is attached to, so without them here a client could not show a
+	// label for any session but its own. Both are omitted when unset, which is
+	// how a client reads "fall back to Name".
+	DisplayName string `json:"display_name,omitempty"`
+	Accent      string `json:"accent,omitempty"`
 }
 
 // SessionListPayload contains list of available sessions.

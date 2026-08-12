@@ -83,10 +83,11 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		name = "local"
 	}
 	return sessiontree.SessionInput{
-		Name:      name,
-		Attached:  true,
-		IsCurrent: true,
-		Windows:   windows,
+		Name:        name,
+		DisplayName: m.SessionDisplayName,
+		Attached:    true,
+		IsCurrent:   true,
+		Windows:     windows,
 	}
 }
 
@@ -109,7 +110,8 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 			StateAt:    w.AgentStateAt,
 		})
 	}
-	return sessiontree.SessionInput{Name: name, Windows: windows}
+	display, _ := client.SessionLabel(name)
+	return sessiontree.SessionInput{Name: name, DisplayName: display, Windows: windows}
 }
 
 // BuildSessionTree builds the unified tree for the session-management surfaces.

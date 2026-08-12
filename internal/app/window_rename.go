@@ -1,9 +1,33 @@
 package app
 
 import (
+	"strconv"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
+
+// RenameKind names what an in-progress rename points at. There is one rename
+// editor and one dialog for all three, so a user who has renamed a pane already
+// knows how to rename a session.
+type RenameKind int
+
+const (
+	// RenameNone means no rename is running.
+	RenameNone RenameKind = iota
+	// RenameWindow targets a window's custom name.
+	RenameWindow
+	// RenameSession targets a session's display name. It never touches the
+	// session's identity, which stays the name it is addressed and persisted by.
+	RenameSession
+	// RenameWorkspace targets a workspace's name. The number stays its identity.
+	RenameWorkspace
+)
+
+// Renaming reports whether a rename editor is open, whatever it targets.
+func (m *OS) Renaming() bool { return m.RenameKind != RenameNone }
 
 // BeginRenameWindow starts an inline rename of a window, seeded with the name it
 // already carries. There is one rename in flight at a time and it names the
@@ -13,16 +37,54 @@ func (m *OS) BeginRenameWindow(w *terminal.Window) {
 	if w == nil {
 		return
 	}
-	m.RenamingWindow = true
+	m.RenameKind = RenameWindow
 	m.RenameTargetID = w.ID
 	m.RenameBuffer = w.CustomName
 	w.InvalidateCache()
 }
 
+// BeginRenameSession starts a rename of a session's display label, seeded with
+// the label it already has. The seed is the label and not the identity name, so
+// an empty field means "no label" rather than "about to overwrite the identity".
+func (m *OS) BeginRenameSession(name string) {
+	if name == "" {
+		return
+	}
+	m.RenameKind = RenameSession
+	m.RenameTargetID = name
+	m.RenameBuffer = ""
+	if display, _ := m.daemonSessionLabel(name); display != "" {
+		m.RenameBuffer = display
+	}
+}
+
+// BeginRenameWorkspace starts a rename of a workspace, seeded with its current
+// name. An unnamed workspace opens empty: its number is not a name it was given.
+func (m *OS) BeginRenameWorkspace(ws int) {
+	if ws <= 0 {
+		return
+	}
+	m.RenameKind = RenameWorkspace
+	m.RenameTargetID = strconv.Itoa(ws)
+	m.RenameBuffer = m.WorkspaceNames[ws]
+}
+
+// daemonSessionLabel reads the cached label for a session, preferring the live
+// value for the attached one.
+func (m *OS) daemonSessionLabel(name string) (display, accent string) {
+	if name == m.SessionName {
+		return m.SessionDisplayName, m.SessionAccent
+	}
+	if m.DaemonClient == nil {
+		return "", ""
+	}
+	return m.DaemonClient.SessionLabel(name)
+}
+
 // RenameTarget is the window an in-progress rename applies to, or nil when no
-// rename is running or the window went away under it.
+// window rename is running or the window went away under it.
 func (m *OS) RenameTarget() *terminal.Window {
-	if !m.RenamingWindow {
+	if m.RenameKind != RenameWindow {
 		return nil
 	}
 	if i := m.windowIndexByID(m.RenameTargetID); i >= 0 {
@@ -31,9 +93,69 @@ func (m *OS) RenameTarget() *terminal.Window {
 	return nil
 }
 
-// EndRenameWindow clears the rename state, committed or cancelled.
-func (m *OS) EndRenameWindow() {
-	m.RenamingWindow = false
+// RenameDialogTitle names what the open editor is renaming, so the dialog says
+// which of the three it is about to change.
+func (m *OS) RenameDialogTitle() string {
+	switch m.RenameKind {
+	case RenameSession:
+		return "rename session"
+	case RenameWorkspace:
+		return "rename workspace " + m.RenameTargetID
+	default:
+		return "rename"
+	}
+}
+
+// CommitRename applies the rename in progress and clears the editor. A window
+// name is client-owned and applied here; a session or workspace name is
+// daemon-owned and returned as a command, because reaching the daemon is a
+// blocking round trip that must not run on the Update goroutine.
+func (m *OS) CommitRename() tea.Cmd {
+	kind, target := m.RenameKind, m.RenameTargetID
+	label := strings.TrimSpace(m.RenameBuffer)
+	defer m.EndRename()
+
+	if kind == RenameWindow {
+		if w := m.RenameTarget(); w != nil {
+			_ = m.RenameWindowByID(w.ID, m.RenameBuffer)
+			w.InvalidateCache()
+		}
+		return nil
+	}
+	verb, params, ok := renameVerb(kind, target, m.SessionName, label)
+	if !ok {
+		return nil
+	}
+	return renameVerbCmd(verb, params)
+}
+
+// renameVerb picks the daemon verb a rename goes through and builds its params.
+// A session rename addresses the session by its identity and sends the label
+// separately, which is the whole point: set-session-name changes display_name
+// and leaves the name the session is addressed and persisted by alone.
+func renameVerb(kind RenameKind, target, sessionName, label string) (string, map[string]any, bool) {
+	switch kind {
+	case RenameSession:
+		if target == "" {
+			return "", nil, false
+		}
+		return "set-session-name", map[string]any{"session": target, "name": label}, true
+	case RenameWorkspace:
+		ws, err := strconv.Atoi(target)
+		if err != nil || ws <= 0 {
+			return "", nil, false
+		}
+		return "set-workspace-name", map[string]any{
+			"session": sessionName, "workspace": ws, "name": label,
+		}, true
+	default:
+		return "", nil, false
+	}
+}
+
+// EndRename clears the rename state, committed or cancelled.
+func (m *OS) EndRename() {
+	m.RenameKind = RenameNone
 	m.RenameTargetID = ""
 	m.RenameBuffer = ""
 	m.renameHit = overlay.Rect{}
@@ -45,11 +167,11 @@ func (m *OS) EndRenameWindow() {
 // open over a pane the user has moved on to. The mouse is never required: the
 // same keys that opened it commit or cancel it.
 func (m *OS) RenameMouseClick(x, y int) bool {
-	if !m.RenamingWindow {
+	if !m.Renaming() {
 		return false
 	}
 	if !m.renameHit.Contains(x, y) {
-		m.EndRenameWindow()
+		m.EndRename()
 	}
 	return true
 }
