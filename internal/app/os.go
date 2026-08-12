@@ -215,6 +215,7 @@ type OS struct {
 	dockWorkspaceArrowHits []dockWorkspaceArrowHit // where the strip's overflow arrows were drawn last frame
 	dockWorkspaceScroll    int                     // index of the first workspace pill the strip draws
 	dockWorkspaceScrollFor int                     // the workspace that offset was last pulled into view for
+	dockWorkspaceScrollAt  int                     // the viewport width it was pulled into view at
 	dockItemHits           []dockItemHit           // where the dock's minimized entries were drawn last frame
 	dockSessionHits        []dockSessionHit        // where the dock's session controls were drawn last frame
 	dockSessionHover       DockSessionAction       // which session control the pointer is on, DockSessionNone for neither

@@ -376,6 +376,31 @@ func TestWorkspaceStripKeepsTheActivePillInView(t *testing.T) {
 	}
 }
 
+// TestWorkspaceStripKeepsTheActivePillInViewOnResize: the strip can start
+// scrolling without the user asking, when the terminal narrows. The pill that
+// says where you are cannot be what the narrowing pushes out.
+func TestWorkspaceStripKeepsTheActivePillInViewOnResize(t *testing.T) {
+	m := overflowOS(t)
+	m.Width, m.EffectiveWidth = 200, 200
+	m.SwitchToWorkspace(6)
+	dockBarRow(t, m)
+	if len(m.dockWorkspaceArrowHits) != 0 {
+		t.Fatal("the strip already scrolls at 200 columns, so the narrowing proves nothing")
+	}
+
+	m.Width, m.EffectiveWidth = 90, 90
+	dockBarRow(t, m)
+	if len(m.dockWorkspaceArrowHits) == 0 {
+		t.Fatal("the strip did not start scrolling when the dock narrowed")
+	}
+	for _, h := range m.dockWorkspaceHits {
+		if h.Workspace == 6 {
+			return
+		}
+	}
+	t.Errorf("narrowing the dock pushed the current workspace off the strip: %v", m.dockWorkspaceHits)
+}
+
 // TestWorkspaceStripLeavesTheRestOfTheBarAlone: the "+", the readout and the
 // session controls are not workspaces, so the strip may not spend their columns
 // on itself however many workspaces there are.

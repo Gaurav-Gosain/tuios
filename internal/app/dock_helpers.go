@@ -290,8 +290,7 @@ func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
 	}
 
 	if natural := pillsSpan(strip.Pills, 0, len(strip.Pills)); natural <= avail {
-		m.dockWorkspaceScroll = 0
-		m.dockWorkspaceScrollFor = m.CurrentWorkspace
+		m.dockWorkspaceScroll, m.dockWorkspaceScrollFor, m.dockWorkspaceScrollAt = 0, m.CurrentWorkspace, 0
 		strip.Width = 1 + natural + addSpan
 		return strip
 	}
@@ -306,8 +305,12 @@ func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
 
 	all := strip.Pills
 	first := m.dockWorkspaceScroll
-	if m.CurrentWorkspace != m.dockWorkspaceScrollFor {
-		m.dockWorkspaceScrollFor = m.CurrentWorkspace
+	// A switch pulls the strip to the workspace it made current, and so does a
+	// resize: a viewport that just narrowed can leave the current pill outside a
+	// run the user never scrolled. Scrolling by arrow changes neither, so it
+	// keeps the run it was given.
+	if m.CurrentWorkspace != m.dockWorkspaceScrollFor || inner != m.dockWorkspaceScrollAt {
+		m.dockWorkspaceScrollFor, m.dockWorkspaceScrollAt = m.CurrentWorkspace, inner
 		first = scrollToShow(all, m.activePillIndex(all), first, inner)
 	}
 	first = min(max(first, 0), lastScrollOffset(all, inner))
