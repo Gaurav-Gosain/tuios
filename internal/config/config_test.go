@@ -817,3 +817,36 @@ func TestSidebarKeybindsDoNotLeakToPanes(t *testing.T) {
 		t.Fatalf("GetAction(s) = %q, want focus_sidebar", got)
 	}
 }
+
+// TestAgentsKeybindsFilledForAPreExistingSidebarSection is the same trap one
+// level down: a config that already has a [keybindings.sidebar] table, written
+// before the agents section grew its two controls, must still resolve them.
+// fillMapDefaults fills per key, not per section, and this pins that.
+func TestAgentsKeybindsFilledForAPreExistingSidebarSection(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "tuios"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A rail-era config: it names the section, and the rail keys it knew about,
+	// but nothing about the agents section's filter or sort.
+	older := "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.sidebar]\ncursor_down = [\"j\"]\nexit = [\"esc\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "tuios", "config.toml"), []byte(older), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadUserConfig()
+	if err != nil {
+		t.Fatalf("LoadUserConfig: %v", err)
+	}
+	r := config.NewKeybindRegistry(cfg)
+	for key, want := range map[string]string{"f": "agents_filter", "o": "agents_sort"} {
+		if got := r.GetSidebarAction(key); got != want {
+			t.Fatalf("GetSidebarAction(%q) = %q, want %q: the new keys never reached an existing section", key, got, want)
+		}
+	}
+	// The keys the file did set are still its own.
+	if got := r.GetSidebarAction("j"); got != "cursor_down" {
+		t.Fatalf("GetSidebarAction(j) = %q, want cursor_down", got)
+	}
+}

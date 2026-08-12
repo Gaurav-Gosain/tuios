@@ -46,6 +46,14 @@ const (
 	// sidebarRowAgent is a row in the agents section; it targets a window
 	// exactly like sidebarRowWindow, it just lives in the other section.
 	sidebarRowAgent
+	// sidebarRowAgentFilter is the all/here token in the agents header, and the
+	// hint row a filter that hides everything leaves behind. Both cycle the
+	// filter, which is the only thing either of them can usefully mean.
+	sidebarRowAgentFilter
+	// sidebarRowAgentSort is the pri/rec token beside it. Like the footer's
+	// controls these two are narrower than their line, so they carry their own
+	// columns rather than claiming the whole header.
+	sidebarRowAgentSort
 	// sidebarRowNewSession is the "+ new" control in the rail's footer. It
 	// targets nothing that exists yet.
 	sidebarRowNewSession
@@ -396,6 +404,61 @@ func sidebarHeaderRow(label, right string, cw int, pal overlay.Palette) string {
 	return sidebarFit(row, cw, nil)
 }
 
+// sidebarAgentsHeaderW is the columns the "agents" label occupies, its leading
+// inset included. The header's controls refuse to draw over it.
+const sidebarAgentsHeaderW = 7
+
+// sidebarTokenSpan is one clickable token inside a header row, in
+// content-relative columns. Several share a line, so the header hit-tests per
+// token rather than claiming the whole row, exactly as the footer does.
+type sidebarTokenSpan struct {
+	Kind   sidebarRowKind
+	X0, X1 int
+}
+
+// sidebarAgentsControls renders the agents header's filter and sort tokens,
+// right-aligned in meta voice, and says where each landed so the renderer can
+// publish a rectangle for it. A token at its default value reads FgMute, so the
+// header stays silent until a control is actually biting; a non-default one
+// reads Fg, which is the whole reason the section's shape is not a mystery.
+//
+// Returns nothing when the header has no room for both tokens: half a control
+// is half a click target.
+func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX int) (string, []sidebarTokenSpan) {
+	filter, sort := "all", "pri"
+	filterOn, sortOn := false, false
+	if m.sidebarAgentsFilter() == sidebarAgentsSession {
+		filter, filterOn = "here", true
+	}
+	if m.sidebarAgentsSort() == sidebarAgentsRecent {
+		sort, sortOn = "rec", true
+	}
+	sep := " · "
+	if overlay.UseASCII() {
+		sep = " . "
+	}
+
+	fw, sw := lipgloss.Width(filter), lipgloss.Width(sort)
+	total := fw + lipgloss.Width(sep) + sw
+	x0 := cw - 1 - total
+	if x0 < headerW+1 {
+		return "", nil
+	}
+	spans := []sidebarTokenSpan{
+		{Kind: sidebarRowAgentFilter, X0: x0, X1: x0 + fw},
+		{Kind: sidebarRowAgentSort, X0: x0 + fw + lipgloss.Width(sep), X1: x0 + total},
+	}
+	ink := func(on bool, s sidebarTokenSpan) color.Color {
+		if on || (hoverX >= s.X0 && hoverX < s.X1) {
+			return pal.Fg
+		}
+		return pal.FgMute
+	}
+	return sidebarStyle(nil, ink(filterOn, spans[0])).Render(filter) +
+		sidebarStyle(nil, pal.FgMute).Render(sep) +
+		sidebarStyle(nil, ink(sortOn, spans[1])).Render(sort), spans
+}
+
 // sidebarComposeRow assembles one rail row on the single spine: gutter, glyph,
 // a cell of air, the name, and an optional right-aligned figure inset one cell
 // from the rail's edge. Every piece arrives already styled; name must already
@@ -594,11 +657,19 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// counts, and hover has to resolve against the same arithmetic the draw uses.
 	shown, peeking := m.sidebarShownSession(sessions)
 	terminals := m.sidebarTerminals(sessions, shown)
-	agents := m.sidebarAgents(sessions, variant)
+	agents, agentsTotal := m.sidebarFilterAgents(m.sidebarAgents(sessions, variant))
+	m.sidebarSortAgents(agents)
+	// A filter that hides everything leaves one row saying so and offering the
+	// way back, because a section that vanished on a control the user set two
+	// days ago reads as "no agents anywhere", which is the opposite of the truth.
+	emptyFilter := len(agents) == 0 && agentsTotal > 0
 
 	nS := len(sessions)
 	nT := len(terminals)
 	nA := len(agents)
+	if emptyFilter {
+		nA = 1
+	}
 	// A peeked session with no panes says so, or the section would read as "the
 	// attached session has no panes".
 	emptyPeek := peeking && nT == 0
@@ -686,12 +757,18 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		hoverRow[s] = -1
 	}
 	footerHoverLine, footerHoverX := -1, -1
+	// The agents header carries two click targets of its own, so the pointer's
+	// column on that one line matters as well as which line it is on.
+	agentsHeaderHoverX := -1
 	if !m.SidebarDrag.Dragging && m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
 		delta := m.SidebarHoverY - topMargin
 		footerTop := height - footerH
-		if footerH > 0 && delta >= footerTop && delta < height {
+		switch {
+		case footerH > 0 && delta >= footerTop && delta < height:
 			footerHoverLine, footerHoverX = delta-footerTop, m.SidebarHoverX-contentX0
-		} else {
+		case nA > 0 && delta == place[sidebarSectionAgents].header:
+			agentsHeaderHoverX = m.SidebarHoverX - contentX0
+		default:
 			for s := range place {
 				if d := delta - place[s].top; d >= 0 && d < count[s] {
 					hoverRow[s] = start[s] + d
@@ -778,16 +855,37 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// agents, pinned to the bottom by the slack above them
 	if nA > 0 {
 		lines = append(lines, blank)
-		lines = append(lines, compose(sidebarHeaderRow("agents", "", cw, pal)))
-		for i := range count[sidebarSectionAgents] {
-			idx := start[sidebarSectionAgents] + i
-			e := agents[idx]
-			hovered := idx == hoverRow[sidebarSectionAgents] || isCursor(sidebarRowAgent, e.SessionID, e.WindowID)
-			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex)
-			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, hovered)))
+		controls, tokens := m.sidebarAgentsControls(cw, sidebarAgentsHeaderW, pal, agentsHeaderHoverX)
+		for _, tk := range tokens {
+			y := topMargin + len(lines)
+			m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
+				X0: contentX0 + tk.X0, X1: contentX0 + tk.X1,
+				Y0: y, Y1: y + 1,
+				Kind:        tk.Kind,
+				WindowIndex: -1,
+			})
+			nav = append(nav, sidebarNavRow{Kind: tk.Kind, WindowIndex: -1})
 		}
-		if h := hidden[sidebarSectionAgents]; h > 0 {
-			lines = append(lines, overflowRow(h))
+		lines = append(lines, compose(sidebarHeaderRow("agents", controls, cw, pal)))
+		switch {
+		case emptyFilter:
+			// The hint is about the attached session ("here"), so it carries that
+			// identity: it is a second filter control, and without something to tell
+			// it apart from the header's token the cursor could not address it.
+			recordHit(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), "", -1)
+			lines = append(lines, compose(m.sidebarAgentsEmptyRow(agentsTotal, cw, pal,
+				hoverRow[sidebarSectionAgents] == 0 || isCursor(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), ""))))
+		default:
+			for i := range count[sidebarSectionAgents] {
+				idx := start[sidebarSectionAgents] + i
+				e := agents[idx]
+				hovered := idx == hoverRow[sidebarSectionAgents] || isCursor(sidebarRowAgent, e.SessionID, e.WindowID)
+				recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex)
+				lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, hovered)))
+			}
+			if h := hidden[sidebarSectionAgents]; h > 0 {
+				lines = append(lines, overflowRow(h))
+			}
 		}
 	}
 
@@ -923,13 +1021,9 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node, variant int) []sidebarAg
 			})
 		}
 	}
-	// Ordered by need, stable within a rank so panes keep their tree order.
-	// This is what makes the section's cap safe: what it hides is provably the
-	// calm end of the list, never the pane waiting on an answer.
-	sort.SliceStable(agents, func(a, b int) bool {
-		return sessiontree.AgentRank(agents[a].State, agents[a].DoneSeen) >
-			sessiontree.AgentRank(agents[b].State, agents[b].DoneSeen)
-	})
+	// Left in tree order; the section's own filter and sort run over it, which is
+	// what makes the cap safe: what it hides is the calm end of whichever order
+	// the user asked for, never the pane waiting on an answer.
 	return agents
 }
 
@@ -1342,6 +1436,25 @@ func (m *OS) sessionCurrentWorkspace(sessionID string) int {
 		return m.CurrentWorkspace
 	}
 	return 0
+}
+
+// sidebarAgentsEmptyRow is what the agents section shows when its filter hides
+// every pane it has: the state it is in, the count it is hiding, and the way
+// back, all on the name spine so it reads as the section's one row rather than
+// as a message about it. Clicking anywhere on it flips the filter.
+func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, hovered bool) string {
+	var rowBg color.Color
+	fg := pal.FgMute
+	if hovered {
+		rowBg, fg = pal.Surface, pal.Fg
+	}
+	sep := " · "
+	if overlay.UseASCII() {
+		sep = " . "
+	}
+	text := "none here" + sep + strconv.Itoa(total) + " all"
+	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", sidebarNameCol))+
+		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, sidebarNameAvail(cw, 0))), cw, rowBg)
 }
 
 // sidebarAgentRow renders one row of the agents section: state glyph, pane name

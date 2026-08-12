@@ -157,6 +157,10 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	switch hit.Kind {
 	case sidebarRowWindow, sidebarRowAgent:
 		m.sidebarFocusWindow(hit)
+	case sidebarRowAgentFilter:
+		m.SidebarCycleAgentsFilter()
+	case sidebarRowAgentSort:
+		m.SidebarCycleAgentsSort()
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
 	case sidebarRowCollapse:

@@ -251,6 +251,8 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		row("reorder_down", "Move the session down the rail"),
 		row("reorder_up", "Move the session up the rail"),
 		row("section", "Cycle the sessions, terminals and agents sections"),
+		row("agents_filter", "Agents: all sessions, or this one"),
+		row("agents_sort", "Agents: by priority, or by recency"),
 		row("narrow", "Narrow the rail a step: full, narrow, glyphs"),
 		row("widen", "Widen the rail back to its configured width"),
 		row("menu", "Open the menu for the row under the cursor"),

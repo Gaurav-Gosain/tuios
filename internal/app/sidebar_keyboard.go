@@ -172,6 +172,10 @@ func (m *OS) SidebarActivateCursor() bool {
 			WindowIndex: row.WindowIndex,
 		})
 		return true
+	case sidebarRowAgentFilter:
+		m.SidebarCycleAgentsFilter()
+	case sidebarRowAgentSort:
+		m.SidebarCycleAgentsSort()
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
 	case sidebarRowCollapse:

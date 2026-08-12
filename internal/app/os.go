@@ -522,6 +522,12 @@ type OS struct {
 	// the same motion stream that created them.
 	SidebarPeek    string
 	SidebarPeekArm string
+	// SidebarAgentFilter and SidebarAgentSort are the agents section's two
+	// controls: which sessions it lists ("all" or "session") and in what order
+	// ("priority" or "recent"). Persisted in the sidebar state file; an empty or
+	// unrecognised value reads back as the default.
+	SidebarAgentFilter string
+	SidebarAgentSort   string
 	// SidebarOrder is the user's drag-defined session order, applied over the
 	// daemon's creation-order list (sessions not named here keep their natural
 	// order after the named ones). Persisted in the sidebar state file.

@@ -83,6 +83,10 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarReorderCursor(-1)
 	case sidebarActSection:
 		o.SidebarCycleSection()
+	case sidebarActAgentFilter:
+		o.SidebarCycleAgentsFilter()
+	case sidebarActAgentSort:
+		o.SidebarCycleAgentsSort()
 	case sidebarActNarrow:
 		o.SidebarStepWidth(-1)
 	case sidebarActWiden:

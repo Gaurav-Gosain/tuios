@@ -43,16 +43,17 @@ func agentNavIDs(m *OS) []string {
 	return ids
 }
 
-// TestAgentsSectionPriorityOrder checks the agents section leads the rail and
-// is ordered by need, with the unread bit ranking an untouched done pane above
-// a working one and focusing it dropping it back below.
+// TestAgentsSectionPriorityOrder checks the agents section is ordered by what
+// to handle next. That is not the session roll-up's order: a working pane needs
+// nothing from anybody, so an untouched finished pane sits below it, and once
+// looked at it sinks below that again.
 func TestAgentsSectionPriorityOrder(t *testing.T) {
 	m, tree := attentionOS(t, 120, 40)
 	m.sidebarPanelLinesForTree(tree)
 
-	want := []string{"w-err", "w-input", "w-done", "w-work", "w-idle"}
+	want := []string{"w-err", "w-input", "w-work", "w-done", "w-idle"}
 	if got := agentNavIDs(m); !equalStrings(got, want) {
-		t.Fatalf("agent order = %v, want %v (errored > needs_input > done-unseen > working > idle)", got, want)
+		t.Fatalf("agent order = %v, want %v (errored > needs_input > working > done-unread > done-seen > idle)", got, want)
 	}
 
 	// Looking at the finished pane is what demotes it.
@@ -118,8 +119,16 @@ func TestRailNavAndHitsFollowDrawnOrder(t *testing.T) {
 		if h.Kind != r.Kind || h.SessionID != r.SessionID || h.WindowID != r.WindowID {
 			t.Fatalf("row %d: nav %v/%s/%s, hit %v/%s/%s", i, r.Kind, r.SessionID, r.WindowID, h.Kind, h.SessionID, h.WindowID)
 		}
-		if i > 0 && h.Y0 <= m.SidebarHits[i-1].Y0 {
-			t.Fatalf("hit %d at y=%d is not below hit %d at y=%d", i, h.Y0, i-1, m.SidebarHits[i-1].Y0)
+		// Rows step down the rail; the only exception is a pair of controls drawn
+		// side by side on one line, which then must not overlap.
+		if i > 0 {
+			prev := m.SidebarHits[i-1]
+			switch {
+			case h.Y0 > prev.Y0:
+			case h.Y0 == prev.Y0 && h.X0 >= prev.X1:
+			default:
+				t.Fatalf("hit %d at (%d,%d) does not follow hit %d at (%d,%d)", i, h.X0, h.Y0, i-1, prev.X0, prev.Y0)
+			}
 		}
 	}
 	if m.SidebarNav[0].Kind != sidebarRowSession {

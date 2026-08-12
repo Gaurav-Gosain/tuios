@@ -49,6 +49,11 @@ type sidebarStateFile struct {
 	// AgentSeen holds the window IDs of finished panes already looked at, so a
 	// pane reviewed before a detach does not come back demanding attention.
 	AgentSeen map[string]bool `json:"agent_seen,omitempty"`
+	// AgentsFilter and AgentsSort are the agents section's two header controls.
+	// Absent means the default ("all" and "priority"), so a file written before
+	// they existed needs no migration.
+	AgentsFilter string `json:"agents_filter,omitempty"`
+	AgentsSort   string `json:"agents_sort,omitempty"`
 }
 
 // loadSidebarState reads the persisted sidebar preferences. Any failure leaves
@@ -72,6 +77,7 @@ func (m *OS) loadSidebarState() {
 	if len(st.AgentSeen) > 0 {
 		m.SidebarAgentSeen = st.AgentSeen
 	}
+	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
 	// A stored drag width wins over the config default; GetSidebarWidth still
 	// folds it against the breakpoints and pane floor, so an out-of-range value
 	// cannot starve the panes.
@@ -95,6 +101,8 @@ func (m *OS) saveSidebarState() {
 		Accents:      slots,
 		AccentColors: colors,
 		AgentSeen:    m.SidebarAgentSeen,
+		AgentsFilter: m.SidebarAgentFilter,
+		AgentsSort:   m.SidebarAgentSort,
 	})
 	if err != nil {
 		return

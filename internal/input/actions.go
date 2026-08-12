@@ -29,6 +29,8 @@ const (
 	sidebarActReorderDown = "reorder_down"
 	sidebarActReorderUp   = "reorder_up"
 	sidebarActSection     = "section"
+	sidebarActAgentFilter = "agents_filter"
+	sidebarActAgentSort   = "agents_sort"
 	sidebarActNarrow      = "narrow"
 	sidebarActWiden       = "widen"
 	sidebarActNewSession  = "new_session"

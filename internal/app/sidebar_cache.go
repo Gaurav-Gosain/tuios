@@ -112,6 +112,12 @@ func (m *OS) sidebarSignature() uint64 {
 	// draws nothing itself.
 	mixS(m.SidebarPeek)
 
+	// The agents section's two controls decide which rows it holds and in what
+	// order, so both are drawn state and both are folded. The tokens themselves
+	// change ink with them, which is the other half of what the frame shows.
+	mixS(m.sidebarAgentsFilter())
+	mixS(m.sidebarAgentsSort())
+
 	// Rail keyboard focus: the accent edge and the cursor-row highlight both
 	// depend on it, so a focus change or a cursor move must rebuild.
 	mixB(m.SidebarFocused)
