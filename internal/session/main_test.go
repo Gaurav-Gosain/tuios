@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	resurrectionDirOverride = tmp
+	setResurrectionDirOverride(tmp)
 
 	code := m.Run()
 
@@ -32,7 +32,6 @@ func TestMain(m *testing.M) {
 // clearing it keeps the TestMain default in place, so a later test cannot fall
 // back to the developer's real state directory.
 func useResurrectionDir(dir string) func() {
-	prev := resurrectionDirOverride
-	resurrectionDirOverride = dir
-	return func() { resurrectionDirOverride = prev }
+	prev := setResurrectionDirOverride(dir)
+	return func() { setResurrectionDirOverride(prev) }
 }

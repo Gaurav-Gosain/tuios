@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -40,13 +41,22 @@ const (
 	RestoredNote = "layout came back from saved state; the shells are new"
 )
 
-// resurrectionDirOverride is set during tests to use a temp directory.
-var resurrectionDirOverride string
+// resurrectionDirOverride is set during tests to use a temp directory. It is an
+// atomic because the periodic saver reads it from its own goroutine, which keeps
+// running while a test sets or restores it.
+var resurrectionDirOverride atomic.Value // string
+
+// setResurrectionDirOverride redirects resurrection state, and returns the value
+// it replaced. Test-only.
+func setResurrectionDirOverride(dir string) string {
+	prev, _ := resurrectionDirOverride.Swap(dir).(string)
+	return prev
+}
 
 // getResurrectionDir returns the directory for session resurrection files.
 func getResurrectionDir() string {
-	if resurrectionDirOverride != "" {
-		return resurrectionDirOverride
+	if override, _ := resurrectionDirOverride.Load().(string); override != "" {
+		return override
 	}
 	return filepath.Join(xdg.StateHome, resurrectionDir)
 }
@@ -325,8 +335,10 @@ func RemoveResurrectionState(sessionName string) {
 // session the user just made.
 func StartPeriodicSave(getState func() *SessionState, takeDirty func() bool) func() {
 	stopCh := make(chan struct{})
+	done := make(chan struct{})
 
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(resurrectionDirtyInterval)
 		defer ticker.Stop()
 		lastSave := time.Now()
@@ -352,7 +364,11 @@ func StartPeriodicSave(getState func() *SessionState, takeDirty func() bool) fun
 		}
 	}()
 
+	// Waits for the saver to return. Session.Stop stops saving and then writes
+	// the state itself, and both writes go through the same fixed <name>.json.tmp
+	// path, so a stop that did not wait let the two interleave on it.
 	return func() {
 		close(stopCh)
+		<-done
 	}
 }

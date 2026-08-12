@@ -793,9 +793,15 @@ func (s *Session) MarkRestored() {
 }
 
 // ClearRestored drops the restored mark now that a client is looking at the
-// session. It is a no-op on a session that was not restored, so an ordinary
-// attach costs no state push; when it does fire it goes through mutateState so
-// every other attached client and the next save agree with it.
+// session. It is a no-op on a session that was not restored.
+//
+// Deliberately not published to the session's clients. This runs inside the
+// attach handler, which has already recorded the connection's session, so a
+// state push here reaches the attaching client on the same socket ahead of the
+// attach reply it is blocked waiting for, and that client fails the attach with
+// "unexpected response". Nothing needs the push: every surface that shows the
+// mark for a session it is not attached to reads it from the session listing,
+// which is polled.
 func (s *Session) ClearRestored() {
 	s.stateMu.RLock()
 	restored := s.state.Restored
@@ -803,7 +809,7 @@ func (s *Session) ClearRestored() {
 	if !restored {
 		return
 	}
-	_ = s.mutateState(func(st *SessionState) error {
+	_, _ = s.mutateStateLocked(func(st *SessionState) error {
 		st.Restored = false
 		return nil
 	})
