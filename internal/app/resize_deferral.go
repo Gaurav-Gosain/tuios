@@ -153,6 +153,30 @@ func (m *OS) endGestureWithoutButton() {
 	}
 }
 
+// EndPointerGrabs releases the gestures the chrome holds in flags of its own
+// rather than in Dragging: a grabbed overlay panel, the accent picker's grab on
+// its grid or hue strip, the rail's width drag and session reorder, and an
+// armed ctrl-drag. endLostGesture covers the window layer; nothing covered
+// these, so a release that went missing left them running against every motion
+// the host reports, button or no button.
+//
+// They are abandoned rather than committed. A lost release says nothing about
+// where the button came up, and a stranded session-row press committed as the
+// click it might have been would switch session on a bare hover. The rail's
+// width is the one thing kept, because it is already on screen at the width the
+// last held motion gave it and only the persist was still outstanding.
+func (m *OS) EndPointerGrabs() {
+	m.OverlayDrag.Active = false
+	m.accentDragging = false
+	m.accentDrag = accentHitNone
+	m.SidebarDrag = sidebarDragState{}
+	m.CtrlDragPending = false
+	if m.SidebarEdge.Active {
+		m.SidebarEdge = sidebarEdgeState{}
+		m.saveSidebarState()
+	}
+}
+
 // EndStrayGesture ends a drag or resize that something other than the window
 // layer claimed the release for.
 //

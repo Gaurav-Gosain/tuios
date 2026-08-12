@@ -35,6 +35,20 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 
+	// The host is held in all-motion tracking so hover and focus-follows-mouse
+	// see the pointer, which means motion no longer implies a button is down.
+	// Everything below that means "drag" is routed off a flag a press set, so a
+	// release that went missing would keep the gesture alive against bare hover:
+	// the panel would follow the cursor, the rail would resize, the picker would
+	// repaint. Update already retires the window layer's drag and resize this
+	// way; this covers the gestures the chrome holds in flags of its own.
+	//
+	// Only the gesture routing is retired here. The hover paths below run either
+	// way, which is the whole point of asking for button-free motion.
+	if mouse.Button == tea.MouseNone {
+		o.EndPointerGrabs()
+	}
+
 	// An open context menu tracks the pointer, so the row that would run on a
 	// click is the row the cursor is on. It also stops here rather than falling
 	// through: the pane underneath is behind a modal menu and has no business

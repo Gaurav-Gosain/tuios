@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // The host is held in all-motion tracking so hover and focus-follows-mouse work,
@@ -205,5 +206,127 @@ func TestScrollbarThumbLocksOnRelease(t *testing.T) {
 	o = motion(o, rect.X, rect.TrackY)
 	if got := app.ScrollbarThumbRow(win); got != locked {
 		t.Errorf("the thumb did not lock on release: row %d -> %d", locked, got)
+	}
+}
+
+// TestOverlayPanelNeedsAHeldButton: a grabbed panel follows the pointer while
+// the button is down and stops the moment it is not.
+func TestOverlayPanelNeedsAHeldButton(t *testing.T) {
+	app.SetInputHandler(HandleInput)
+	m := hoverOS(t)
+	m.ShowHelp = true
+	m.HelpCategory = 0
+	_ = frameLines(m)
+	if len(m.OverlayHits) == 0 {
+		t.Fatal("the composed frame recorded no overlay panel to grab")
+	}
+	px, py := m.OverlayHits[0].OriginX+2, m.OverlayHits[0].OriginY+1
+
+	// A right press anywhere on the panel grabs it.
+	next, _ := m.Update(tea.MouseClickMsg{X: px, Y: py, Button: tea.MouseRight})
+	m = next.(*app.OS)
+	if !m.OverlayDragActive() {
+		t.Fatal("a right press on the panel did not grab it")
+	}
+	m = dragged(m, px+12, py+4)
+	_ = frameLines(m)
+	moved := m.OverlayHits[0].OriginX
+	if moved == px-2 {
+		t.Fatal("a held drag did not move the panel")
+	}
+
+	m = motion(m, px-20, py-3)
+	if m.OverlayDragActive() {
+		t.Error("the panel grab outlived the button that started it")
+	}
+	_ = frameLines(m)
+	if got := m.OverlayHits[0].OriginX; got != moved {
+		t.Errorf("button-free motion moved the panel from x=%d to x=%d", moved, got)
+	}
+}
+
+// TestSidebarEdgeResizeNeedsAHeldButton: the rail's width follows a held drag on
+// its edge rule and stays put under bare hover.
+func TestSidebarEdgeResizeNeedsAHeldButton(t *testing.T) {
+	app.SetInputHandler(HandleInput)
+	m := hoverOS(t)
+	_ = frameLines(m)
+	edgeX := config.SidebarWidth - 1
+
+	m = pressed(m, edgeX, 5)
+	if !m.SidebarEdgeActive() {
+		t.Fatal("a press on the rail's edge rule did not arm the width resize")
+	}
+	m = dragged(m, edgeX-8, 5)
+	dragged := config.SidebarWidth
+	if dragged == edgeX+1 {
+		t.Fatal("a held drag did not resize the rail")
+	}
+
+	m = motion(m, edgeX-20, 5)
+	if m.SidebarEdgeActive() {
+		t.Error("the rail's width drag outlived the button that started it")
+	}
+	if config.SidebarWidth != dragged {
+		t.Errorf("button-free motion resized the rail from %d to %d", dragged, config.SidebarWidth)
+	}
+}
+
+// TestCtrlDragNeedsAHeldButton: an armed ctrl-grab commits to a move only while
+// the button is down. Ctrl alone is a modifier, and hovering with it held is
+// not a request to move a pane.
+func TestCtrlDragNeedsAHeldButton(t *testing.T) {
+	app.SetInputHandler(HandleInput)
+	o, wa, wb := twoPaneBSP(t)
+	left, _ := leftPaneOf(wa, wb)
+	cx, cy := left.X+5, left.Y+5
+
+	next, _ := o.Update(tea.MouseClickMsg{X: cx, Y: cy, Button: tea.MouseLeft, Mod: tea.ModCtrl})
+	o = next.(*app.OS)
+	if !o.CtrlDragPending {
+		t.Fatal("ctrl+left press on pane content did not arm a move")
+	}
+
+	before := left.X
+	next, _ = o.Update(tea.MouseMotionMsg{X: cx + 20, Y: cy + 5, Mod: tea.ModCtrl})
+	o = next.(*app.OS)
+	if o.CtrlDragging {
+		t.Error("button-free motion committed the armed ctrl-grab to a move")
+	}
+	if left.X != before {
+		t.Errorf("button-free motion moved the pane from x=%d to x=%d", before, left.X)
+	}
+
+	// Held, the same motion does commit and move it.
+	next, _ = o.Update(tea.MouseClickMsg{X: cx, Y: cy, Button: tea.MouseLeft, Mod: tea.ModCtrl})
+	o = next.(*app.OS)
+	next, _ = o.Update(tea.MouseMotionMsg{X: cx + 20, Y: cy + 5, Button: tea.MouseLeft, Mod: tea.ModCtrl})
+	o = next.(*app.OS)
+	if !o.CtrlDragging {
+		t.Fatal("a held ctrl-drag past the threshold did not commit to a move")
+	}
+	if left.X == before {
+		t.Errorf("a held ctrl-drag left the pane at x=%d", left.X)
+	}
+}
+
+// TestCopyModeSelectionIgnoresButtonFreeMotion is the one that would go
+// unnoticed: a selection that kept extending on hover would quietly copy the
+// wrong text.
+func TestCopyModeSelectionIgnoresButtonFreeMotion(t *testing.T) {
+	app.SetInputHandler(HandleInput)
+	o, win := selectPane(t, "hello world this is a line of text")
+
+	pressAt(o, 2, 0)
+	dragTo(o, 10, 0)
+	want := selectedText(win)
+	if want == "" {
+		t.Fatal("a held drag selected nothing")
+	}
+
+	next, _ := o.Update(tea.MouseMotionMsg{X: 21, Y: 1})
+	o = next.(*app.OS)
+	if got := selectedText(win); got != want {
+		t.Errorf("button-free motion extended the selection: %q -> %q", want, got)
 	}
 }
