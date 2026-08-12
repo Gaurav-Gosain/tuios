@@ -271,11 +271,11 @@ func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Co
 	if m.Mode == TerminalMode {
 		focus = theme.BorderFocusedTerminal()
 	}
-	idx, ok := m.WindowAccent(window.ID)
+	acc, ok := m.WindowAccent(window.ID)
 	if !ok {
 		return focus
 	}
-	accent := accentColor(idx)
+	accent := acc.Color()
 	if contrastRatio(accent, ground) < scrollbarMinContrast {
 		return focus
 	}

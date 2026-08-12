@@ -555,7 +555,7 @@ func TestScrollbarTintFollowsTheFocusedPane(t *testing.T) {
 	fillScrollback(t, win, 400)
 	scrollBack(t, win, 200)
 	m := newTestOS(win)
-	m.SidebarAccents = map[string]int{win.ID: greenAccent}
+	m.SidebarAccents = map[string]Accent{win.ID: SlotAccent(greenAccent)}
 	m.Mode = TerminalMode
 
 	accent := accentColor(greenAccent)
@@ -614,7 +614,7 @@ func TestScrollbarTintFloorRejectsAnUnreadableAccent(t *testing.T) {
 	fillScrollback(t, win, 400)
 	scrollBack(t, win, 200)
 	m := newTestOS(win)
-	m.SidebarAccents = map[string]int{win.ID: darkBlueAccent}
+	m.SidebarAccents = map[string]Accent{win.ID: SlotAccent(darkBlueAccent)}
 	m.Mode = TerminalMode
 
 	for _, style := range []string{config.ScrollbarStyleThin, config.ScrollbarStyleTrack} {
@@ -641,7 +641,7 @@ func TestScrollbarTintKeywordsAndHex(t *testing.T) {
 	fillScrollback(t, win, 400)
 	scrollBack(t, win, 200)
 	m := newTestOS(win)
-	m.SidebarAccents = map[string]int{win.ID: 2}
+	m.SidebarAccents = map[string]Accent{win.ID: SlotAccent(2)}
 	m.Mode = TerminalMode
 
 	withScrollbarTint(t, darkBlue, func() {
