@@ -229,6 +229,9 @@ func TestAccentPickerHueDragStaysOnTheStrip(t *testing.T) {
 			cell = h
 		}
 	}
+	// Update tracks the button for the real path; this drives the routing
+	// directly, so it has to say the button is down itself.
+	m.pointerDown = true
 	if !m.accentPickerPress(strip.Rect.X0, strip.Rect.Y0) {
 		t.Fatal("the press on the hue strip was not routed")
 	}

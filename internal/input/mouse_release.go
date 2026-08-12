@@ -23,9 +23,15 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.EndResizeMode()
 	}()
 
-	// End an in-progress overlay drag before anything else.
-	if o.OverlayDragActive() {
-		o.OverlayMouseRelease()
+	// End every overlay gesture before anything else. Both a grabbed panel and
+	// the accent picker's grab on its grid or hue strip end on this button, but
+	// only a panel drag consumes the release. Ending them together matters
+	// because the picker's grab used to be cleared only when a panel happened to
+	// be under drag as well, so a press in the picker left the colour following
+	// the pointer for the rest of the dialog's life.
+	panelDrag := o.OverlayDragActive()
+	o.OverlayMouseRelease()
+	if panelDrag {
 		return o, nil
 	}
 

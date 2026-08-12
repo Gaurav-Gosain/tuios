@@ -49,7 +49,11 @@ func (m *OS) accentPickerPress(lx, ly int) bool {
 // wanders a row into the grid on the way, and a drag that changed meaning
 // halfway would repaint the swatch with whatever the pointer brushed past.
 func (m *OS) accentPickerDragTo(lx, ly int) {
-	if !m.accentDragging {
+	// The host reports every motion, held or not, so the grab flag alone does not
+	// mean a drag is under way: a release lost when the pointer leaves the
+	// surface would leave it set and the colour would track bare hover from then
+	// on. The button itself is the authority on whether this is still a drag.
+	if !m.accentDragging || !m.pointerDown {
 		return
 	}
 	hit, ok := m.accentHitAt(lx, ly)
