@@ -164,7 +164,7 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
 	case sidebarRowCollapse:
-		m.SidebarStepWidth(0) // whichever step the footer is offering
+		m.SidebarToggleCollapsed()
 	case sidebarRowSession:
 		m.SidebarDrag = sidebarDragState{
 			PressActive: true,
@@ -227,9 +227,13 @@ func (m *OS) SidebarEdgeMotion(x, y int) bool {
 	}
 	lo, hi := m.sidebarWidthBounds()
 	w = max(min(w, hi), lo)
-	if w == config.SidebarWidth {
+	// Dragging the edge out of the strip is an expand: the gesture asks for a
+	// width, and a collapsed rail that ignored it would look broken.
+	collapsed := m.SidebarCollapsed && w <= config.SidebarGlyphWidth
+	if w == config.SidebarWidth && collapsed == m.SidebarCollapsed {
 		return true
 	}
+	m.SidebarCollapsed = collapsed
 	config.SidebarWidth = w
 	if m.AutoTiling {
 		m.TileAllWindows()

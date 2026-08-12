@@ -18,22 +18,25 @@ func railFrame(t *testing.T, m *OS) []string {
 	return railText(t, m)
 }
 
-// The rail's three widths, asserted as whole frames: the resting state is the
-// point of the pass, so it is what the test reads.
+// The rail's widths, asserted as whole frames: the resting state is the point
+// of the pass, so it is what the test reads. Two of them are the user's own
+// states; the middle one is only ever the responsive clamp's doing.
 func TestRailRendersTheThreeWidths(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		width int
-		want  []string
+		name      string
+		width     int
+		collapsed bool
+		want      []string
 	}{
-		{"full", config.SidebarDefaultWidth, []string{" agents", " sessions", " + new", "«"}},
-		{"narrow", config.SidebarNarrowWidth, []string{" agents", " sessions", " + new", "«"}},
-		{"glyph", config.SidebarGlyphWidth, []string{" +", " »"}},
+		{"full", config.SidebarDefaultWidth, false, []string{" agents", " sessions", " + new", "«"}},
+		{"narrow", config.SidebarNarrowWidth, false, []string{" agents", " sessions", " + new", "«"}},
+		{"glyph", config.SidebarDefaultWidth, true, []string{" +", " »"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := daemonRailOS(t, 120, 14)
 			prev := config.SidebarWidth
 			config.SidebarWidth = tc.width
+			m.SidebarCollapsed = tc.collapsed
 			t.Cleanup(func() { config.SidebarWidth = prev })
 
 			lines := railFrame(t, m)
@@ -59,7 +62,7 @@ func TestRailRendersTheThreeWidths(t *testing.T) {
 func TestGlyphRailShowsCountAndGlyph(t *testing.T) {
 	m := daemonRailOS(t, 120, 14)
 	prev := config.SidebarWidth
-	config.SidebarWidth = config.SidebarGlyphWidth
+	m.SidebarCollapsed = true
 	t.Cleanup(func() { config.SidebarWidth = prev })
 
 	lines := railFrame(t, m)
@@ -81,36 +84,35 @@ func TestGlyphRailShowsCountAndGlyph(t *testing.T) {
 	}
 }
 
-// The footer's stepper is offered only where it can move: a control that
+// The footer's toggle is offered only where it can move: a control that
 // provably cannot do anything is noise, which is the same rule the new-session
 // control follows in a standalone session.
-func TestRailStepperIsOfferedOnlyWhereItCanMove(t *testing.T) {
+func TestRailToggleIsOfferedOnlyWhereItCanMove(t *testing.T) {
 	m := daemonRailOS(t, 120, 14)
 	prev := config.SidebarWidth
 	t.Cleanup(func() { config.SidebarWidth = prev })
 
 	config.SidebarWidth = config.SidebarDefaultWidth
-	if _, _, ok := m.sidebarCollapseGlyph(sidebarVariantFull); !ok {
-		t.Error("a full rail on a wide screen is not offered a step down")
+	if _, ok := m.sidebarCollapseGlyph(sidebarVariantFull); !ok {
+		t.Error("a full rail on a wide screen is not offered a collapse")
 	}
 
-	// A glyph rail on a screen too narrow for anything wider cannot widen.
+	// A strip on a screen too narrow for anything wider cannot expand.
 	narrow := daemonRailOS(t, config.SidebarBreakpointNarrow-1, 14)
-	config.SidebarWidth = config.SidebarGlyphWidth
-	if _, _, ok := narrow.sidebarCollapseGlyph(sidebarVariantGlyph); ok {
-		t.Error("a glyph rail is offered a step up on a screen with no room for one")
+	if _, ok := narrow.sidebarCollapseGlyph(sidebarVariantGlyph); ok {
+		t.Error("a strip is offered an expand on a screen with no room for one")
 	}
-	// On a wide screen the same rail can go back.
-	if _, _, ok := m.sidebarCollapseGlyph(sidebarVariantGlyph); !ok {
-		t.Error("a glyph rail on a wide screen is not offered a step back up")
+	// On a wide screen the same rail can open again.
+	if _, ok := m.sidebarCollapseGlyph(sidebarVariantGlyph); !ok {
+		t.Error("a strip on a wide screen is not offered an expand")
 	}
 }
 
-// The stepper walks full, narrow, glyph and back, and the keyboard and the
-// click reach the same mutation.
-func TestRailStepperWalksTheVariants(t *testing.T) {
-	// No daemon client: the step re-lays the panes, and this is about the width
-	// ladder rather than about syncing it anywhere.
+// The rail has two user states and the toggle walks between them, idempotently:
+// pressing the same directed key twice is not a flicker.
+func TestRailCollapseIsBinaryAndIdempotent(t *testing.T) {
+	// No daemon client: the toggle re-lays the panes, and this is about the two
+	// states rather than about syncing them anywhere.
 	m := sidebarTestOS(t, 120, 14, "left")
 	prev := config.SidebarWidth
 	config.SidebarWidth = config.SidebarDefaultWidth
@@ -119,21 +121,26 @@ func TestRailStepperWalksTheVariants(t *testing.T) {
 	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantFull {
 		t.Fatalf("the rail starts at variant %d, want full", got)
 	}
-	m.SidebarStepWidth(-1)
-	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantNarrow {
-		t.Fatalf("one step down landed on variant %d, want narrow", got)
-	}
-	m.SidebarStepWidth(-1)
+	m.SidebarSetCollapsed(true)
 	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantGlyph {
-		t.Fatalf("two steps down landed on variant %d, want glyph", got)
+		t.Fatalf("collapsing landed on variant %d, want glyph", got)
 	}
-	m.SidebarStepWidth(-1) // already the narrowest
+	m.SidebarSetCollapsed(true) // already collapsed
 	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantGlyph {
-		t.Fatalf("a third step down landed on variant %d, want glyph", got)
+		t.Fatalf("collapsing twice landed on variant %d, want glyph", got)
 	}
-	m.SidebarStepWidth(1)
+	m.SidebarSetCollapsed(false)
 	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantFull {
-		t.Fatalf("a step up landed on variant %d, want full", got)
+		t.Fatalf("expanding landed on variant %d, want full", got)
+	}
+	// There is no middle stop left to land on.
+	m.SidebarToggleCollapsed()
+	m.SidebarToggleCollapsed()
+	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantFull {
+		t.Fatalf("a round trip landed on variant %d, want full", got)
+	}
+	if config.SidebarWidth != config.SidebarDefaultWidth {
+		t.Errorf("the round trip moved the stored width to %d", config.SidebarWidth)
 	}
 }
 
@@ -203,16 +210,16 @@ func TestSidebarSignatureCoversTheWidthStep(t *testing.T) {
 	t.Cleanup(func() { config.SidebarWidth = prev })
 
 	before := m.sidebarSignature()
-	m.SidebarStepWidth(-1)
+	m.SidebarSetCollapsed(true)
 	if after := m.sidebarSignature(); after == before {
-		t.Error("narrowing the rail did not change its signature; the cache would serve the old width")
+		t.Error("collapsing the rail did not change its signature; the cache would serve the old width")
 	}
 }
 
-// A click on the stepper has to step the rail. A hit rect that resolves to the
+// A click on the toggle has to move the rail. A hit rect that resolves to the
 // control is not the control doing anything, which is how the footer shipped a
 // stepper only the keyboard could move.
-func TestRailStepperClickNarrowsTheRail(t *testing.T) {
+func TestRailToggleClickCollapsesTheRail(t *testing.T) {
 	m := sidebarTestOS(t, 120, 14, "left")
 	prev := config.SidebarWidth
 	config.SidebarWidth = config.SidebarDefaultWidth
@@ -226,13 +233,13 @@ func TestRailStepperClickNarrowsTheRail(t *testing.T) {
 		}
 	}
 	if step.X1 == 0 {
-		t.Fatal("the footer drew no stepper to click")
+		t.Fatal("the footer drew no toggle to click")
 	}
 
 	if !m.SidebarClick(step.X0, step.Y0, false) {
-		t.Fatal("the stepper did not consume its own click")
+		t.Fatal("the toggle did not consume its own click")
 	}
-	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantNarrow {
-		t.Errorf("a click on the stepper landed on variant %d, want narrow", got)
+	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantGlyph {
+		t.Errorf("a click on the toggle landed on variant %d, want glyph", got)
 	}
 }

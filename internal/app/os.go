@@ -528,6 +528,12 @@ type OS struct {
 	// unrecognised value reads back as the default.
 	SidebarAgentFilter string
 	SidebarAgentSort   string
+	// SidebarCollapsed is the rail folded down to its glyph strip. It is one of
+	// the two states the user can put the rail in (the other is the stored
+	// width, which a drag on the edge still sets freely); the responsive
+	// breakpoints fold over it exactly as they fold over the stored width.
+	// Persisted in the sidebar state file.
+	SidebarCollapsed bool
 	// SidebarOrder is the user's drag-defined session order, applied over the
 	// daemon's creation-order list (sessions not named here keep their natural
 	// order after the named ones). Persisted in the sidebar state file.

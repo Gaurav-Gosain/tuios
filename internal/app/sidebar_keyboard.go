@@ -179,7 +179,7 @@ func (m *OS) SidebarActivateCursor() bool {
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
 	case sidebarRowCollapse:
-		m.SidebarStepWidth(0) // whichever step the footer is offering
+		m.SidebarToggleCollapsed()
 	case sidebarRowSession:
 		m.sidebarSwitchSession(row.SessionID)
 		m.sidebarFollowSession = row.SessionID
@@ -355,36 +355,28 @@ func (m *OS) SidebarCanCreateSession() bool {
 	return m.DaemonClient != nil
 }
 
-// SidebarStepWidth moves the rail one variant narrower (dir < 0) or back to the
-// configured width (dir > 0), the keyboard's half of the footer stepper. dir 0
-// takes whichever step the footer is currently offering, so the key and a click
-// on the glyph do exactly the same thing.
-//
-// It writes the preferred width, not the drawn one: the screen still has the
-// last word through GetSidebarWidth, so a step that the render width cannot
-// honour is simply not offered.
-func (m *OS) SidebarStepWidth(dir int) {
-	variant := sidebarVariant(m.GetSidebarWidth())
-	switch {
-	case dir < 0 && variant == sidebarVariantFull:
-		config.SidebarWidth = config.SidebarNarrowWidth
-	case dir < 0 && variant == sidebarVariantNarrow:
-		config.SidebarWidth = config.SidebarGlyphWidth
-	case dir < 0:
-		return // already the narrowest
-	case dir > 0 && variant == sidebarVariantGlyph:
-		config.SidebarWidth = max(config.SidebarDefaultWidth, config.SidebarNarrowWidth)
-	case dir > 0 && variant == sidebarVariantNarrow:
-		config.SidebarWidth = config.SidebarDefaultWidth
-	case dir > 0:
-		return // already the widest
-	default:
-		_, target, ok := m.sidebarCollapseGlyph(variant)
-		if !ok {
-			return
-		}
-		config.SidebarWidth = target
+// SidebarToggleCollapsed folds the rail down to its glyph strip, or back out to
+// the width the user last sized it to. Two states and one control: the old
+// three-stop ladder had a middle width no control named and no way back out of
+// except by stepping through it, and the responsive clamp already owns that
+// width on the screens where it belongs.
+func (m *OS) SidebarToggleCollapsed() { m.SidebarSetCollapsed(!m.SidebarCollapsed) }
+
+// SidebarSetCollapsed is the directed half: the footer's arrow and the keys
+// point somewhere, so pressing the same one twice is a no-op rather than a
+// flicker.
+func (m *OS) SidebarSetCollapsed(collapsed bool) {
+	if collapsed == m.SidebarCollapsed {
+		return
 	}
+	// Expanding cannot help on a screen whose breakpoint already pins the rail
+	// to the strip; saying so beats appearing to do nothing.
+	if !collapsed && sidebarVariant(m.sidebarWidthFor(m.sidebarStoredWidth())) == sidebarVariantGlyph {
+		m.ShowNotification("The screen is too narrow for a wider rail", "info", config.NotificationDuration)
+		return
+	}
+	m.SidebarCollapsed = collapsed
+	m.sidebarClearPeek()
 	if m.AutoTiling {
 		m.TileAllWindows()
 	} else {

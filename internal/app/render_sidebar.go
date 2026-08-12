@@ -1176,27 +1176,24 @@ type sidebarFooterZone struct {
 	X0, X1 int
 }
 
-// sidebarCollapseGlyph is the footer stepper's mark and the preferred width it
-// would step to, or ok false when the rail cannot move at this render width.
-// The rail narrows on the way down (full, narrow, glyph) and goes straight back
-// to the configured default on the way up, which is the width the user picked
-// the last time they sized it.
-func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, target int, ok bool) {
+// sidebarCollapseGlyph is the footer control's mark, or ok false when the rail
+// cannot move at this render width. Two states, not three: the arrow points
+// where the rail is about to go, so a collapsed rail offers to reopen and an
+// open one offers to get out of the way. The old three-stop ladder made the
+// middle width a place the user could get stranded in with no name for it; it
+// survives only as the responsive clamp on a 60-89 column screen, which no
+// control targets.
+func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
 	down, up := "«", "»"
 	if overlay.UseASCII() {
 		down, up = "<<", ">>"
 	}
-	switch variant {
-	case sidebarVariantFull:
-		return down, config.SidebarNarrowWidth, true
-	case sidebarVariantNarrow:
-		return down, config.SidebarGlyphWidth, true
-	default:
-		// Only offer the step back up when the screen has room to honour it;
-		// a control that provably cannot move is noise.
-		target = max(config.SidebarDefaultWidth, config.SidebarNarrowWidth)
-		return up, target, sidebarVariant(m.sidebarWidthFor(target)) > variant
+	if variant == sidebarVariantGlyph {
+		// Only offer to reopen when the screen has room to honour it; a control
+		// that provably cannot move is noise.
+		return up, sidebarVariant(m.sidebarWidthFor(m.sidebarStoredWidth())) > variant
 	}
+	return down, true
 }
 
 // sidebarFooter renders the rail's pinned bottom rows: the new-session control
@@ -1208,7 +1205,7 @@ func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, target int, ok boo
 func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette, canCreate bool,
 	hoverLine, hoverX int, isCursor func(sidebarRowKind) bool,
 ) ([]string, []sidebarFooterZone) {
-	stepGlyph, _, canStep := m.sidebarCollapseGlyph(variant)
+	stepGlyph, canStep := m.sidebarCollapseGlyph(variant)
 	if !canCreate && !canStep {
 		return nil, nil
 	}

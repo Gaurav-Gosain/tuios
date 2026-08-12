@@ -300,7 +300,24 @@ func (m *OS) GetRenderWidth() int {
 // to nothing. If the floor would be violated it steps down to a narrower variant
 // first, then hides.
 func (m *OS) GetSidebarWidth() int {
-	return m.sidebarWidthFor(config.SidebarWidth)
+	return m.sidebarWidthFor(m.sidebarPreferredWidth())
+}
+
+// sidebarPreferredWidth is the width the user is asking for: the stored one, or
+// the glyph strip while the rail is collapsed. Collapse rides the same path the
+// breakpoints do rather than short-circuiting them, so a collapsed rail on a
+// wide screen and a rail the screen collapsed for itself are one state.
+func (m *OS) sidebarPreferredWidth() int {
+	if m.SidebarCollapsed {
+		return config.SidebarGlyphWidth
+	}
+	return m.sidebarStoredWidth()
+}
+
+// sidebarStoredWidth is the expanded width the rail returns to, never below the
+// narrow variant: an expand that lands back on the glyph strip is not an expand.
+func (m *OS) sidebarStoredWidth() int {
+	return max(config.SidebarWidth, config.SidebarNarrowWidth)
 }
 
 // sidebarWidthFor is GetSidebarWidth against a hypothetical preferred width, so

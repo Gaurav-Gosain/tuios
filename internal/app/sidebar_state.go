@@ -54,6 +54,9 @@ type sidebarStateFile struct {
 	// they existed needs no migration.
 	AgentsFilter string `json:"agents_filter,omitempty"`
 	AgentsSort   string `json:"agents_sort,omitempty"`
+	// Collapsed is the rail folded to its glyph strip. Absent means expanded,
+	// which is what every file written before the toggle existed says.
+	Collapsed bool `json:"collapsed,omitempty"`
 }
 
 // loadSidebarState reads the persisted sidebar preferences. Any failure leaves
@@ -78,6 +81,7 @@ func (m *OS) loadSidebarState() {
 		m.SidebarAgentSeen = st.AgentSeen
 	}
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
+	m.SidebarCollapsed = st.Collapsed
 	// A stored drag width wins over the config default; GetSidebarWidth still
 	// folds it against the breakpoints and pane floor, so an out-of-range value
 	// cannot starve the panes.
@@ -103,6 +107,7 @@ func (m *OS) saveSidebarState() {
 		AgentSeen:    m.SidebarAgentSeen,
 		AgentsFilter: m.SidebarAgentFilter,
 		AgentsSort:   m.SidebarAgentSort,
+		Collapsed:    m.SidebarCollapsed,
 	})
 	if err != nil {
 		return
