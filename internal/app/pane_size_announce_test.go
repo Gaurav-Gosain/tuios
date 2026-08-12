@@ -62,9 +62,9 @@ func checkPaneSizes(t *testing.T, m *OS, told map[string]*toldSize, label string
 func newAnnounceOS(t *testing.T, width, height int) (*OS, map[string]*toldSize) {
 	t.Helper()
 	m := &OS{
-		NumWorkspaces:    9,
-		CurrentWorkspace: 1,
-		WorkspaceFocus:   make(map[int]int),
+		NumWorkspaces:        9,
+		CurrentWorkspace:     1,
+		WorkspaceFocus:       make(map[int]int),
 		WorkspaceLayouts:     make(map[int][]WindowLayout),
 		WorkspaceHasCustom:   map[int]bool{},
 		WorkspaceMasterRatio: map[int]float64{},
