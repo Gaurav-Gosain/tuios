@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -265,6 +266,13 @@ func (m *OS) buildDockLeftText() (modeLabel, trail string, width int, modeInfo M
 	if focusedWindow != nil && focusedWindow.Zoomed && !m.SidebarFocused {
 		modeLabel += " Z"
 	}
+
+	// The chip is a filled pill, so its background has to end the way it
+	// starts. The icons above carry their own padding, and every suffix (the
+	// split direction, the zoom flag) landed after the trailing space, leaving
+	// the fill flush against the last glyph; the rail's label had none at all.
+	// One cell either side, applied once, whatever the label ended up being.
+	modeLabel = " " + strings.TrimSpace(modeLabel) + " "
 
 	// What is left of the "2:3 • 5  3 " stats blob. The totals went: the strip
 	// two cells to the right names every occupied workspace and marks the
