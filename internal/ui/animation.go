@@ -37,7 +37,6 @@ type Animation struct {
 	Progress       float64
 	Complete       bool
 	InitialResized bool // Track if we've done the initial resize
-	TileOnComplete bool // Set window.Tiled = true when animation completes
 }
 
 // NewMinimizeAnimation creates a minimize animation for the specified window.
