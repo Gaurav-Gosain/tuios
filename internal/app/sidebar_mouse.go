@@ -98,6 +98,13 @@ func (m *OS) sidebarClearPeek() {
 // else clears the preview, which is why the pointer can never reach a peeked
 // row while the peek is still on screen.
 func (m *OS) sidebarPeekAt(x, y int) {
+	if sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph {
+		// The strip has no terminals section to preview into, so a peek there
+		// would be invisible state churning the render cache once per motion
+		// event. The strip's own tooltip is what a hover means at this width.
+		m.sidebarClearPeek()
+		return
+	}
 	row := ""
 	if hit, ok := m.sidebarRowAt(x, y); ok && hit.Kind == sidebarRowSession {
 		row = hit.SessionID

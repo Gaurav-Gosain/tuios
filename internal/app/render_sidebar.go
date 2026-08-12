@@ -1159,6 +1159,17 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette, canCreate bool,
 		items = append(items, placed{sidebarFooterZone{Kind: sidebarRowCollapse, Line: line, X0: x0, X1: x0 + stepW}, stepGlyph})
 	}
 
+	// Published in screen order, which is not the order they were placed in: on
+	// a right rail the toggle is the leftmost of the two. The hit rectangles and
+	// the nav rows both come off this slice, and every consumer of them assumes
+	// a frame reads left to right and top to bottom.
+	sort.SliceStable(items, func(a, b int) bool {
+		if items[a].zone.Line != items[b].zone.Line {
+			return items[a].zone.Line < items[b].zone.Line
+		}
+		return items[a].zone.X0 < items[b].zone.X0
+	})
+
 	// Cell-addressed rather than spliced into a rendered string: two zones share
 	// a line, and the first one's escape sequences would make byte offsets lie
 	// to the second.
