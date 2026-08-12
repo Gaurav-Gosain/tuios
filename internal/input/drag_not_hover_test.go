@@ -1,12 +1,14 @@
 package input
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // The host is held in all-motion tracking so hover and focus-follows-mouse work,
@@ -307,6 +309,37 @@ func TestCtrlDragNeedsAHeldButton(t *testing.T) {
 	}
 	if left.X == before {
 		t.Errorf("a held ctrl-drag left the pane at x=%d", left.X)
+	}
+}
+
+// TestSidebarReorderNeedsAHeldButton: a session row press that lost its release
+// must not turn into a reorder that follows the pointer down the rail.
+func TestSidebarReorderNeedsAHeldButton(t *testing.T) {
+	app.SetInputHandler(HandleInput)
+	m := hoverOS(t)
+	client := session.NewTUIClient()
+	client.UpdateSessionCache([]session.SessionInfo{
+		{Name: "main"}, {Name: "scratch"}, {Name: "deploy"},
+	})
+	m.DaemonClient = client
+	m.SessionName = "main"
+
+	lines := frameLines(m)
+	sx, sy := railCell(t, lines, "scratch")
+	_, dy := railCell(t, lines, "deploy")
+
+	m = pressed(m, sx, sy)
+	if !m.SidebarDragActive() {
+		t.Fatal("a press on a session row did not arm the reorder gesture")
+	}
+
+	before := append([]string(nil), m.SidebarOrder...)
+	m = motion(m, sx, dy)
+	if m.SidebarDragActive() {
+		t.Error("the session reorder outlived the button that started it")
+	}
+	if !reflect.DeepEqual(m.SidebarOrder, before) {
+		t.Errorf("button-free motion reordered the rail: %v -> %v", before, m.SidebarOrder)
 	}
 }
 
