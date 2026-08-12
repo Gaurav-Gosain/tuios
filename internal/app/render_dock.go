@@ -35,11 +35,15 @@ func workspacePill(label string, active bool, pal overlay.Palette) string {
 	}
 	// The caps take the fill's colour as their foreground, which is how a half
 	// circle reads as the rounded end of the pill rather than as a glyph beside
-	// it. They are empty when the dock is flat.
+	// it. A flat dock has none, and styling nothing still costs the frame the
+	// escape sequences around it.
+	lc, rc := config.GetDockPillLeftChar(), config.GetDockPillRightChar()
+	pill := body.Render(" " + label + " ")
+	if lc == "" && rc == "" {
+		return pill
+	}
 	caps := lipgloss.NewStyle().Foreground(pal.Panel)
-	return caps.Render(config.GetDockPillLeftChar()) +
-		body.Render(" "+label+" ") +
-		caps.Render(config.GetDockPillRightChar())
+	return caps.Render(lc) + pill + caps.Render(rc)
 }
 
 // renderDockWorkspaceStrip draws the strip starting at column startX and records

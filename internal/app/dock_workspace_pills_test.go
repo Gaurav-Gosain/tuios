@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // pillOS is a dock w columns wide with one window per listed workspace and the
@@ -130,6 +131,62 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestActiveWorkspacePillReadsAsActive checks the drawn dock rather than the
+// pill in isolation: the styled run the renderer emitted has to be the active
+// one, underline and all, or the strip is a row of identical pills that never
+// says which workspace you are on.
+func TestActiveWorkspacePillReadsAsActive(t *testing.T) {
+	m := pillOS(t, 120, map[int]string{2: "review"}, 1, 2, 3)
+	m.CurrentWorkspace = 2
+	dock, _ := m.renderDockString()
+
+	pal := theme.UI()
+	active := workspacePill("review", true, pal)
+	if !strings.Contains(dock, active) {
+		t.Errorf("the dock does not draw workspace 2's pill as the active one: %q", active)
+	}
+	if !isUnderlined(active) {
+		t.Error("the active pill lost the underline, which is the whole of its emphasis")
+	}
+	// The resting pills carry the fill but not the emphasis.
+	resting := workspacePill("1", false, pal)
+	if !strings.Contains(dock, resting) {
+		t.Errorf("the dock does not draw workspace 1's pill at rest: %q", resting)
+	}
+	if isUnderlined(resting) {
+		t.Error("a resting pill is underlined, so every pill reads as current")
+	}
+}
+
+// isUnderlined reports whether any SGR sequence in s sets the underline
+// attribute. The parameters arrive merged with the colours, so the sequence is
+// parsed rather than matched as a literal.
+func isUnderlined(s string) bool {
+	for _, seq := range strings.Split(s, "\x1b[") {
+		end := strings.IndexByte(seq, 'm')
+		if end < 0 {
+			continue
+		}
+		params := strings.Split(seq[:end], ";")
+		for i := 0; i < len(params); i++ {
+			// A colour carries its channels as parameters of its own, and one of
+			// them may well be a 4.
+			if p := params[i]; p == "38" || p == "48" {
+				if i+1 < len(params) && params[i+1] == "5" {
+					i += 2
+					continue
+				}
+				i += 4
+				continue
+			}
+			if params[i] == "4" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // TestWorkspaceStripDrawsTheWidthItPlanned: the layout pass hands the rest of
