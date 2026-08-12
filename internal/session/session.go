@@ -953,20 +953,20 @@ func (s *Session) Size() (width, height int) {
 	return s.width, s.height
 }
 
-// Resize updates the session dimensions.
-// This is called when the effective size changes (min of all connected clients).
+// Resize records the session dimensions when the effective size changes (min
+// of all connected clients).
+//
+// It records and nothing more. A pane's winsize belongs to the client layout,
+// which announces each pane's own content size over ResizePTY. Resizing every
+// PTY to the session's outer box here handed each guest the whole viewport's
+// dimensions; the retile that followed re-announced only panes whose tile size
+// changed, so a pane whose geometry survived the resize kept a winsize wider
+// than the pane and its shell drew prompts the pane's emulator had to wrap.
 func (s *Session) Resize(width, height int) {
 	s.sizeMu.Lock()
 	s.width = width
 	s.height = height
 	s.sizeMu.Unlock()
-
-	// Resize all PTYs to match the new session size
-	s.ptysMu.RLock()
-	defer s.ptysMu.RUnlock()
-	for _, pty := range s.ptys {
-		_ = pty.Resize(width, height) // Best effort resize
-	}
 }
 
 // Info returns session information.

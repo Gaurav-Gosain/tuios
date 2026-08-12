@@ -1,19 +1,25 @@
 package terminal
 
+// contentSize is the drawable box inside an outer rectangle of the given
+// dimensions. Every consumer of a pane's inner size derives it from here: the
+// renderer's clip (ContentWidth/ContentHeight), the emulator grid and the PTY
+// announcement (Resize, ResizeVisual). One formula, so what the guest is told
+// and what it gets to draw in cannot drift apart.
+func (w *Window) contentSize(width, height int) (int, int) {
+	d := 2 * w.BorderOffset()
+	return max(width-d, 1), max(height-d, 1)
+}
+
 // ContentWidth returns the usable content width (excluding borders if not tiled).
 func (w *Window) ContentWidth() int {
-	if w.Tiled {
-		return max(w.Width, 1)
-	}
-	return max(w.Width-2, 1)
+	cw, _ := w.contentSize(w.Width, w.Height)
+	return cw
 }
 
 // ContentHeight returns the usable content height (excluding borders if not tiled).
 func (w *Window) ContentHeight() int {
-	if w.Tiled {
-		return max(w.Height, 1)
-	}
-	return max(w.Height-2, 1)
+	_, ch := w.contentSize(w.Width, w.Height)
+	return ch
 }
 
 // BorderOffset returns the number of cells used by each border edge.
@@ -94,12 +100,7 @@ func (w *Window) Resize(width, height int) {
 		return
 	}
 
-	borderDeduct := 2
-	if w.Tiled {
-		borderDeduct = 0
-	}
-	termWidth := max(width-borderDeduct, 1)
-	termHeight := max(height-borderDeduct, 1)
+	termWidth, termHeight := w.contentSize(width, height)
 
 	// Did anything downstream actually change? Measured against what was last
 	// announced, not against Width and Height: a deferred resize has already
@@ -164,12 +165,7 @@ func (w *Window) ResizeVisual(width, height int) {
 	// This prevents the "stuck" height and dimension mismatch issues during drag.
 	// PTY resize is still deferred until mouse release (via pending resizes).
 	if w.Terminal != nil {
-		borderDeduct := 2
-		if w.Tiled {
-			borderDeduct = 0
-		}
-		termWidth := max(width-borderDeduct, 1)
-		termHeight := max(height-borderDeduct, 1)
+		termWidth, termHeight := w.contentSize(width, height)
 		// ioMu serializes the buffer reallocation with the render reader and
 		// PTY writers; Terminal has no lock of its own.
 		w.ioMu.Lock()
