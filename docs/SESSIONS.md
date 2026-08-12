@@ -160,6 +160,19 @@ exists), and writes a dim one-line notice into it:
 Restored shells get `TUIOS_RESTORED=1` in their environment, so your shell rc can
 react to a restore without relying on the banner.
 
+The session itself is marked too, so you can tell a session that just came back
+from one that has been running for days without opening a pane. A restored
+session shows a `restored` tag in `tuios ls`, in the sidebar and in the session
+switcher, and `tuios attach` says so before it hands over the screen:
+
+```
+Session "work" was restored: layout came back from saved state; the shells are new.
+```
+
+The mark is cleared by the first attach, on the reasoning that once you have
+looked at the session the question has been answered. It never comes back for
+that session unless the daemon restores it again.
+
 What this means in practice: your layout comes back and each pane is sitting in
 the right directory, but whatever was running in those panes is not. A `vim` you
 had open is closed, a build you had running is dead, and the scrollback above the

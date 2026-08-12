@@ -23,6 +23,13 @@ const (
 	// before versioning existed) is a structural subset of the current schema
 	// and loads without issue.
 	ResurrectionVersion = 1
+
+	// RestoredTag is the marker every surface shows on a session that came back
+	// from saved state, and RestoredNote is the sentence that says what came back
+	// with it. Both live here so the rail, the switcher, `tuios ls` and the
+	// attach path cannot word the same fact differently.
+	RestoredTag  = "restored"
+	RestoredNote = "layout came back from saved state; the shells are new"
 )
 
 // resurrectionDirOverride is set during tests to use a temp directory.

@@ -109,6 +109,12 @@ func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 			// why their window shrank.
 			fmt.Printf("Session %q already has a client attached; TUIOS shares it between clients and renders at the smallest client's size.\n", sessionName)
 		}
+		// Said before the attach, because the attach itself clears the mark. This
+		// is the answer to "why is my session still here after I killed the
+		// daemon", at the moment the user is asking it.
+		if s.Restored {
+			fmt.Printf("Session %q was %s: %s.\n", sessionName, session.RestoredTag, session.RestoredNote)
+		}
 		return nil
 	}
 	return explainMissingSession(sessionName, names)
@@ -544,10 +550,17 @@ func runListSessions(jsonOutput bool) error {
 	}
 
 	rows := make([][]string, 0, len(sessions))
+	anyRestored := false
 	for _, s := range sessions {
 		status := "detached"
 		if s.Attached {
 			status = "attached"
+		}
+		// A restored session has by construction never been attached, so the tag
+		// replaces "detached" rather than needing a column of its own.
+		if s.Restored {
+			status = session.RestoredTag
+			anyRestored = true
 		}
 
 		rows = append(rows, []string{
@@ -588,6 +601,9 @@ func runListSessions(jsonOutput bool) error {
 
 	fmt.Println(t.Render())
 	fmt.Printf("\n%d session(s)\n", len(sessions))
+	if anyRestored {
+		fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
+	}
 	return nil
 }
 

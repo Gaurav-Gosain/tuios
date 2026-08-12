@@ -1055,6 +1055,21 @@ func (c *TUIClient) SessionLabel(name string) (display, accent string) {
 	return "", ""
 }
 
+// SessionRestored reports whether the named session came back from saved state
+// and has not been attached to since, from the cached listing. False for an
+// unknown session and for an older daemon that does not send the field, which
+// is the same silence a surface had before the field existed.
+func (c *TUIClient) SessionRestored(name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return s.Restored
+		}
+	}
+	return false
+}
+
 // SessionCurrentWorkspace is the workspace the named session is showing, from
 // the cached listing, or 0 when it is unknown: an older daemon does not send
 // the field, and a surface reading zero simply says nothing about where that
@@ -1234,6 +1249,11 @@ func listingsAgree(a, b []SessionInfo) bool {
 		// A rename moves no window, so without these a renamed session kept the
 		// old label until something else happened to bump the generation.
 		if a[i].DisplayName != b[i].DisplayName || a[i].Accent != b[i].Accent {
+			return false
+		}
+		// Attaching to a restored session moves no window either, and the tag has
+		// to come off the row when it does.
+		if a[i].Restored != b[i].Restored {
 			return false
 		}
 		if !slices.Equal(a[i].Windows, b[i].Windows) {

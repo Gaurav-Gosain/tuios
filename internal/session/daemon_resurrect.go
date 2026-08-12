@@ -90,5 +90,8 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	}
 
 	sess.UpdateState(&restored)
+	// After UpdateState, which takes this field from canonical state and would
+	// undo it if the restore wrote it into the pushed snapshot instead.
+	sess.MarkRestored()
 	return sess, nil
 }

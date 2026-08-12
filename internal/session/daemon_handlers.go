@@ -118,6 +118,11 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		d.notifyClientJoined(session.ID, cs)
 	}
 
+	// A client is now looking at the session, so the restored mark has served its
+	// purpose. Cleared before the snapshot below so the attaching client is never
+	// handed a mark that the next state push would take straight back off.
+	session.ClearRestored()
+
 	// Get session state to return
 	state := session.GetState()
 	// Only update state dimensions if we have real client sizes

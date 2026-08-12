@@ -14,6 +14,7 @@ import (
 func (m *OS) adoptSessionLabels(state *session.SessionState) {
 	m.SessionDisplayName = state.DisplayName
 	m.SessionAccent = state.Accent
+	m.SessionRestored = state.Restored
 	if len(state.WorkspaceNames) == 0 {
 		m.WorkspaceNames = nil
 		return

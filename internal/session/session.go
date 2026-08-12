@@ -123,7 +123,17 @@ type SessionState struct {
 	// means the client's default. It lives here rather than in a client-side file
 	// because it has to survive a reattach and be the same for every client
 	// attached to this session.
-	Accent           string         `json:"accent,omitempty"`
+	Accent string `json:"accent,omitempty"`
+	// Restored marks a session the daemon rebuilt from saved state and that no
+	// client has attached to since. Nothing else at session level says so: the
+	// layout is back but every shell under it is new, and the only evidence was
+	// a per-pane banner that scrolls away. The daemon sets it on restore and
+	// clears it on the first attach, so it answers "why is this session here"
+	// for exactly as long as the question is unanswered.
+	//
+	// Daemon-owned: clients never send it, and false is what every older client
+	// and every pre-existing state file reads back as.
+	Restored         bool           `json:"restored,omitempty"`
 	Windows          []WindowState  `json:"windows"`
 	FocusedWindowID  string         `json:"focused_window_id,omitempty"`
 	CurrentWorkspace int            `json:"current_workspace"`
@@ -763,6 +773,34 @@ func (s *Session) SetAccent(accent string) error {
 	})
 }
 
+// MarkRestored records that this session was rebuilt from saved state. It runs
+// through mutateState rather than being written into the state the restore
+// pushes, because a client sync always takes the daemon's value for this field
+// and would otherwise wipe it right back off.
+func (s *Session) MarkRestored() {
+	_ = s.mutateState(func(st *SessionState) error {
+		st.Restored = true
+		return nil
+	})
+}
+
+// ClearRestored drops the restored mark now that a client is looking at the
+// session. It is a no-op on a session that was not restored, so an ordinary
+// attach costs no state push; when it does fire it goes through mutateState so
+// every other attached client and the next save agree with it.
+func (s *Session) ClearRestored() {
+	s.stateMu.RLock()
+	restored := s.state.Restored
+	s.stateMu.RUnlock()
+	if !restored {
+		return
+	}
+	_ = s.mutateState(func(st *SessionState) error {
+		st.Restored = false
+		return nil
+	})
+}
+
 // SetOption records a daemon-owned session option under stateMu. It is the write
 // side of the JSON verb protocol's set-option and is safe for concurrent use.
 func (s *Session) SetOption(key, value string) {
@@ -985,6 +1023,7 @@ func (s *Session) Info() SessionInfo {
 	s.stateMu.RLock()
 	displayName, accent := s.state.DisplayName, s.state.Accent
 	currentWorkspace := s.state.CurrentWorkspace
+	restored := s.state.Restored
 	s.stateMu.RUnlock()
 
 	return SessionInfo{
@@ -1000,6 +1039,7 @@ func (s *Session) Info() SessionInfo {
 		DisplayName:      displayName,
 		Accent:           accent,
 		CurrentWorkspace: currentWorkspace,
+		Restored:         restored,
 	}
 }
 

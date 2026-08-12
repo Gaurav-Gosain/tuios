@@ -10,9 +10,14 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
+
+// sidebarRestoredTag is the rail's marker for a session rebuilt from saved
+// state, shared with every other surface that shows it.
+const sidebarRestoredTag = session.RestoredTag
 
 // The sidebar is drawn as chrome in tuios's own visual language rather than as
 // a filled panel: rows sit directly on the terminal background (like the dock),
@@ -1244,6 +1249,17 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		countStr := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(rowBg, pal.FgMute).Render(countStr)
 		rightW = lipgloss.Width(countStr)
+	}
+	// The restored tag rides the right slot, dim, and only where there is room
+	// for a word: it says the layout came back without its processes, which is
+	// worth a column or two off the name until someone attaches and it goes.
+	if node.Restored && variant == sidebarVariantFull {
+		tag := sidebarRestoredTag
+		if rightW > 0 {
+			tag += " "
+		}
+		right = sidebarStyle(rowBg, pal.FgMute).Render(tag) + right
+		rightW += lipgloss.Width(tag)
 	}
 
 	// The attached session's name reads at full strength; the rest are dim. A
