@@ -207,15 +207,6 @@ type ScrollbarConfig struct {
 	Tint  string `toml:"tint"`  // border, muted, #RRGGBB (default: border)
 }
 
-// Sidebar workspace-band modes. See SidebarConfig.Workspaces.
-const (
-	SidebarWorkspacesBand = "band"
-	SidebarWorkspacesOff  = "off"
-)
-
-// SidebarWorkspacesModes lists the valid values for appearance.sidebar.workspaces.
-var SidebarWorkspacesModes = []string{SidebarWorkspacesBand, SidebarWorkspacesOff}
-
 // SidebarConfig holds the [appearance.sidebar] table: everything about the
 // vertical session rail. Each toggle is a pointer so nil can mean "unset, use
 // the default" and an explicit false survives a reload.
@@ -223,12 +214,16 @@ type SidebarConfig struct {
 	Enabled     *bool  `toml:"enabled"`      // Show the rail (default: false)
 	Position    string `toml:"position"`     // Edge: left, right, hidden (default: left)
 	Width       int    `toml:"width"`        // Preferred width in columns for a wide screen (default: 28)
-	ShowWindows *bool  `toml:"show_windows"` // Window rows under the current session (default: true)
+	ShowWindows *bool  `toml:"show_windows"` // The terminals section (default: true)
 	ShowGlyphs  *bool  `toml:"show_glyphs"`  // Agent-state glyph on each row (default: true)
 	ShowCounts  *bool  `toml:"show_counts"`  // Window count on each session row (default: true)
-	ShowAgents  *bool  `toml:"show_agents"`  // Running-agents section at the top (default: true)
-	Workspaces  string `toml:"workspaces"`   // Workspace chip band: band, off (default: off)
-	Marquee     *bool  `toml:"marquee"`      // Scroll a hovered row's overflowing title (default: true)
+	ShowAgents  *bool  `toml:"show_agents"`  // Agents section at the rail's bottom (default: true)
+	// Workspaces named the workspace chip band, which the rail no longer draws:
+	// panes say which workspace they are on with a tag of their own, and
+	// switching stays on the dock and alt+1..9. Still parsed so an existing
+	// config file loads unchanged; validation warns once and nothing reads it.
+	Workspaces string `toml:"workspaces"`
+	Marquee    *bool  `toml:"marquee"` // Scroll a hovered row's overflowing title (default: true)
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
@@ -280,9 +275,8 @@ func DefaultConfig() *UserConfig {
 			PreferredShell:    "",
 			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintBorder},
 			Sidebar: SidebarConfig{
-				Position:   "left",
-				Width:      SidebarDefaultWidth,
-				Workspaces: SidebarWorkspacesOff,
+				Position: "left",
+				Width:    SidebarDefaultWidth,
 			},
 		},
 		Daemon: DaemonConfig{
@@ -735,9 +729,6 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.Sidebar.Width <= 0 {
 		cfg.Appearance.Sidebar.Width = defaultCfg.Appearance.Sidebar.Width
 	}
-	if cfg.Appearance.Sidebar.Workspaces == "" {
-		cfg.Appearance.Sidebar.Workspaces = defaultCfg.Appearance.Sidebar.Workspaces
-	}
 	if cfg.Appearance.Scrollbar.Style == "" {
 		cfg.Appearance.Scrollbar.Style = defaultCfg.Appearance.Scrollbar.Style
 	}
@@ -822,9 +813,6 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 	if sb.ShowAgents != nil {
 		SidebarShowAgents = *sb.ShowAgents
-	}
-	if sb.Workspaces != "" {
-		SidebarWorkspaces = sb.Workspaces
 	}
 	if sb.Marquee != nil {
 		SidebarMarquee = *sb.Marquee

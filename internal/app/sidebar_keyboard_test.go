@@ -83,41 +83,50 @@ func TestRailCursorNavigatesRows(t *testing.T) {
 	}
 }
 
-// TestRailCollapseMatchesMouse checks h/l on the cursor session drive the same
-// OS mutation a chevron click does.
-func TestRailCollapseMatchesMouse(t *testing.T) {
+// TestRailCursorExpandCollapseStepSections checks h/l (the old collapse and
+// expand keys) walk the cursor between the rail's sections instead: a flat
+// rail has nothing left in it to expand or collapse, so the keys were
+// repurposed for the one thing left shaped like a depth to step through, and
+// they stop at the ends rather than wrapping.
+func TestRailCursorExpandCollapseStepSections(t *testing.T) {
 	m, tree := railOS(t)
 	_ = tree
-	// Cursor is on main (current, expanded). h collapses it.
-	m.SidebarCursorCollapse()
-	if !m.SidebarCollapsed["main"] {
-		t.Fatalf("h did not collapse the cursor session; state=%v", m.SidebarCollapsed)
+	if row, ok := m.sidebarCursorRow(); !ok || row.Kind != sidebarRowSession {
+		t.Fatalf("cursor did not start on a session row: %+v ok=%v", row, ok)
 	}
-	m.SidebarCursorExpand()
-	if m.SidebarCollapsed["main"] {
-		t.Fatalf("l did not expand the cursor session; state=%v", m.SidebarCollapsed)
+
+	m.SidebarCursorExpand() // one section forward: sessions -> terminals
+	if row, ok := m.sidebarCursorRow(); !ok || row.Kind != sidebarRowWindow {
+		t.Fatalf("l moved the cursor to %+v, want the terminals section", row)
+	}
+
+	m.SidebarCursorCollapse() // one section back: terminals -> sessions
+	if row, ok := m.sidebarCursorRow(); !ok || row.Kind != sidebarRowSession {
+		t.Fatalf("h moved the cursor to %+v, want back to sessions", row)
+	}
+
+	m.SidebarCursorCollapse() // already the first section: nowhere left to go
+	if row, ok := m.sidebarCursorRow(); !ok || row.Kind != sidebarRowSession {
+		t.Fatalf("h past the first section moved to %+v, want to stay put", row)
 	}
 }
 
 // TestRailActivateEqualsClick checks enter on a row is the same OS mutation a
-// click on it is: on the current session it toggles collapse, on a window it
-// focuses that pane and asks to leave the rail.
+// click on it is: on the current session it attaches (a no-op, since it is
+// already attached) and keeps the rail, on a window it focuses that pane and
+// asks to leave the rail.
 func TestRailActivateEqualsClick(t *testing.T) {
 	m, tree := railOS(t)
 	_ = tree
 
-	// Current session: enter toggles collapse, like clicking its row.
+	// Current session: enter attaches, like clicking its row, and stays on
+	// the rail since navigating sessions is not a request for a pane.
 	if exit := m.SidebarActivateCursor(); exit {
 		t.Fatal("activating the current session asked to leave the rail")
 	}
-	if !m.SidebarCollapsed["main"] {
-		t.Fatalf("enter on the current session did not toggle collapse; state=%v", m.SidebarCollapsed)
-	}
-	m.SidebarActivateCursor() // toggle back so windows are addressable again
-	m.sidebarPanelLinesForTree(tree)
 
 	// Window row: enter focuses the pane and asks to exit, exactly as a click.
-	m.SidebarCursor = navIndexOfSession(m, "main") + 1 // first window under main
+	m.SidebarCursor = m.sidebarFirstRowOfKind(sidebarRowWindow) // first row of the terminals section
 	row := m.SidebarNav[m.SidebarCursor]
 	if row.Kind != sidebarRowWindow {
 		t.Fatalf("nav[%d] is %v, want a window row", m.SidebarCursor, row.Kind)

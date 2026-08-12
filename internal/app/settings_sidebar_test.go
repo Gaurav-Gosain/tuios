@@ -13,7 +13,7 @@ func TestSidebarTabCoverage(t *testing.T) {
 	want := map[string][]string{
 		"Sidebar": {
 			"Sidebar", "Position", "Width", "Show windows", "Show glyphs",
-			"Show counts", "Agents section", "Workspaces", "Marquee",
+			"Show counts", "Agents section", "Marquee",
 		},
 		"Dock": {"Workspace tabs"},
 	}
@@ -73,29 +73,6 @@ func TestSidebarSettingsApplyLiveAndPersist(t *testing.T) {
 				t.Errorf("%s: reload did not restore the off state", tc.label)
 			}
 		})
-	}
-}
-
-// TestSidebarWorkspacesRowPersists covers the one enum among the new rows.
-func TestSidebarWorkspacesRowPersists(t *testing.T) {
-	useTempConfig(t)
-	old := config.SidebarWorkspaces
-	config.SidebarWorkspaces = config.SidebarWorkspacesBand
-	t.Cleanup(func() { config.SidebarWorkspaces = old })
-
-	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-	focusSetting(t, m, "Sidebar", "Workspaces")
-	m.SettingsAdjust(1)
-
-	if config.SidebarWorkspaces != config.SidebarWorkspacesOff {
-		t.Fatalf("live value = %q, want off", config.SidebarWorkspaces)
-	}
-	reloaded, err := config.LoadUserConfig()
-	if err != nil {
-		t.Fatalf("reload config: %v", err)
-	}
-	if got := reloaded.Appearance.Sidebar.Workspaces; got != config.SidebarWorkspacesOff {
-		t.Errorf("persisted workspaces = %q, want off", got)
 	}
 }
 

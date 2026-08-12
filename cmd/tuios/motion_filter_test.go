@@ -65,3 +65,28 @@ func TestMotionFilterPassesRailHover(t *testing.T) {
 		})
 	}
 }
+
+// TestMotionFilterPassesTheBandExitEvent pins the event the rail's hover peek
+// snaps back on. The peek owns no clock: it is cleared by the first motion that
+// resolves off the sessions rows, and when the pointer leaves the band
+// altogether the only motion that can carry that is the one extra event
+// SidebarHoverActive keeps flowing. Drop it here and a preview outlives the
+// pointer that made it, with nothing left to take it down.
+func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
+	o := filterOS(t)
+	o.Mode = app.TerminalMode
+
+	// The pointer is in the band and hovering, then steps out over a plain pane.
+	o.SidebarHoverActive = true
+	exit := tea.MouseMotionMsg{X: 50, Y: 10}
+	if filterMouseMotion(o, exit) == nil {
+		t.Fatal("the band-exit event was dropped; the peek and the hover highlight both outlive the pointer")
+	}
+
+	// And once it has been delivered the guard closes again: the handler clears
+	// HoverActive, so the next event over the same pane is noise once more.
+	o.SidebarHoverActive = false
+	if filterMouseMotion(o, exit) != nil {
+		t.Error("motion over a plain pane stayed whitelisted after the exit event")
+	}
+}

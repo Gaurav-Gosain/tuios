@@ -238,7 +238,12 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 		[]string{"bottom", "top", "hidden"})
 	checkEnum("sidebar.position", cfg.Appearance.Sidebar.Position,
 		[]string{"left", "right", "hidden"})
-	checkEnum("sidebar.workspaces", cfg.Appearance.Sidebar.Workspaces, SidebarWorkspacesModes)
+	if cfg.Appearance.Sidebar.Workspaces != "" {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance.sidebar.workspaces",
+			Message: "no longer used: panes name their own workspace, and switching lives on the dock and alt+1..9",
+		})
+	}
 	checkEnum("scrollbar.style", cfg.Appearance.Scrollbar.Style, ScrollbarStyles)
 	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition,
 		[]string{"bottom-right", "bottom-left", "top-right", "top-left", "center"})

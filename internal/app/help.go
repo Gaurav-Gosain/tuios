@@ -236,9 +236,9 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		row("cursor_up", "Move the cursor up a row"),
 		row("first", "Jump to the first row"),
 		row("last", "Jump to the last row"),
-		row("collapse", "Collapse a session"),
-		row("expand", "Expand a session"),
-		row("activate", "Activate the row: switch session, focus window"),
+		row("collapse", "Step up to the previous section"),
+		row("expand", "Step down to the next section"),
+		row("activate", "Activate the row: attach, or focus the pane"),
 	)
 	if first, last := registry.GetSidebarKeys("jump_1"), registry.GetSidebarKeys("jump_9"); len(first) > 0 && len(last) > 0 {
 		bindings = append(bindings, HelpBinding{
@@ -250,7 +250,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 	bindings = append(bindings,
 		row("reorder_down", "Move the session down the rail"),
 		row("reorder_up", "Move the session up the rail"),
-		row("section", "Cycle between agents and the session tree"),
+		row("section", "Cycle the sessions, terminals and agents sections"),
 		row("narrow", "Narrow the rail a step: full, narrow, glyphs"),
 		row("widen", "Widen the rail back to its configured width"),
 		row("menu", "Open the menu for the row under the cursor"),
@@ -269,8 +269,8 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 	bindings = bound
 
 	return append(bindings,
-		HelpBinding{Keys: []string{"click a row"}, Description: "Switch to that session, or focus that window", Category: cat},
-		HelpBinding{Keys: []string{"click the chevron"}, Description: "Expand or collapse a session", Category: cat},
+		HelpBinding{Keys: []string{"click a row"}, Description: "Attach to that session, or focus that pane", Category: cat},
+		HelpBinding{Keys: []string{"hover a session"}, Description: "Preview its panes in the terminals section", Category: cat},
 		HelpBinding{Keys: []string{"drag a session"}, Description: "Reorder the sessions", Category: cat},
 		HelpBinding{Keys: []string{"right-click a row"}, Description: "Open that row's menu", Category: cat},
 		HelpBinding{Keys: []string{"drag the rail edge"}, Description: "Resize the rail", Category: cat},

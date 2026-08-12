@@ -103,7 +103,7 @@ func TestSidebarMarqueeOnlyHoveredTruncatedRow(t *testing.T) {
 	m.SidebarHoverX = m.SidebarHits[0].X0 + 6
 	m.SidebarHoverY = longY
 	before := render()[longY-top]
-	if !m.SidebarMarqueeActive() || m.SidebarMarqueeKey != "w:bbbbbbbb2222" {
+	if !m.SidebarMarqueeActive() || m.SidebarMarqueeKey != "t:bbbbbbbb2222" {
 		t.Fatalf("truncated hovered row did not start the marquee (active=%v key=%q)",
 			m.SidebarMarqueeActive(), m.SidebarMarqueeKey)
 	}

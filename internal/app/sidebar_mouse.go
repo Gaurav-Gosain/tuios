@@ -36,7 +36,8 @@ func (m *OS) ToggleSidebar() {
 		v := config.SidebarEnabled
 		m.UserConfig.Appearance.SidebarEnabled = &v
 	}
-	m.SidebarScroll = 0
+	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA = 0, 0, 0
+	m.sidebarClearPeek()
 	if m.AutoTiling {
 		m.TileAllWindows()
 	} else {
@@ -80,34 +81,44 @@ func (m *OS) sidebarRowAt(x, y int) (sidebarRowHit, bool) {
 	return sidebarRowHit{}, false
 }
 
-// sidebarChevronZone reports whether x falls on a session row's chevron
-// columns, where a press toggles expand/collapse immediately instead of arming
-// the click-or-drag gesture.
-func (m *OS) sidebarChevronZone(hit sidebarRowHit, x int) bool {
-	w := m.GetSidebarWidth()
-	if w <= config.SidebarGlyphWidth {
-		return false
+// sidebarClearPeek drops any live preview and the pair rule's arm with it. It
+// is called from every path that makes the preview a lie: attaching, leaving
+// the band or the rail scope, and hiding the rail.
+func (m *OS) sidebarClearPeek() {
+	m.SidebarPeek, m.SidebarPeekArm = "", ""
+}
+
+// sidebarPeekAt resolves one pointer position against the pair rule and commits
+// or clears the preview. A motion event on a non-attached session row peeks
+// when the previous event resolved to the same row (so a slow browse peeks row
+// by row) or to no session row at all (so entering sideways from the pane area
+// peeks instantly); a fast sweep delivers one event per row, forms no pair, and
+// commits nothing. Snap-back needs no pair: the first event landing anywhere
+// else clears the preview, which is why the pointer can never reach a peeked
+// row while the peek is still on screen.
+func (m *OS) sidebarPeekAt(x, y int) {
+	row := ""
+	if hit, ok := m.sidebarRowAt(x, y); ok && hit.Kind == sidebarRowSession {
+		row = hit.SessionID
 	}
-	// The chevron sits on the first content column in both variants, so the zone
-	// is that cell plus the space after it.
-	contentX0 := hit.X0
-	span := 2
-	if config.SidebarPosition == "right" {
-		contentX0++ // the edge rule owns the first band column
+	if row == "" || row == m.sidebarCurrentSessionID() {
+		m.SidebarPeek, m.SidebarPeekArm = "", row
+		return
 	}
-	return x >= contentX0 && x < contentX0+span
+	if m.SidebarPeekArm == row || m.SidebarPeekArm == "" {
+		m.SidebarPeek = row
+	}
+	m.SidebarPeekArm = row
 }
 
 // SidebarClick routes a left or right press at absolute (x, y) to the sidebar.
 // It returns whether the event was consumed (any press in the band is), so the
 // caller stops before the press can reach a pane underneath.
 //
-//   - Window or agent row, left press: focus that window, switching session
+//   - Terminal or agent row, left press: focus that window, switching session
 //     first when the window belongs to another session.
-//   - Session row, left press on the chevron: toggle its expand/collapse.
-//   - Session row, left press elsewhere: arm the click-or-drag gesture; the
-//     release switches (or toggles the current session), a vertical drag
-//     reorders the session list.
+//   - Session row, left press: arm the click-or-drag gesture; the release
+//     attaches to that session, a vertical drag reorders the session list.
 //   - Footer control, left press: make a session, or step the rail's width.
 //   - Right press on any row: open the context menu (pane menu for a window or
 //     agent row, the session/desktop menu for a session row).
@@ -146,17 +157,11 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	switch hit.Kind {
 	case sidebarRowWindow, sidebarRowAgent:
 		m.sidebarFocusWindow(hit)
-	case sidebarRowWorkspace:
-		m.SwitchToWorkspace(hit.Workspace)
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
 	case sidebarRowCollapse:
 		m.SidebarStepWidth(0) // whichever step the footer is offering
 	case sidebarRowSession:
-		if m.sidebarChevronZone(hit, x) {
-			m.sidebarToggleCollapse(hit.SessionID)
-			return true
-		}
 		m.SidebarDrag = sidebarDragState{
 			PressActive: true,
 			SessionID:   hit.SessionID,
@@ -309,8 +314,9 @@ func (m *OS) sidebarSessionRowIDAt(y int) string {
 }
 
 // SidebarRelease finishes the click-or-drag gesture: a drag commits its draft
-// order and persists it; a plain release on the pressed row performs the
-// click (toggle the current session's expansion, switch to any other).
+// order and persists it; a plain release on the pressed row attaches to that
+// session. One gesture, one meaning: a release on the session already attached
+// is simply nothing to do.
 func (m *OS) SidebarRelease(x, y int) bool {
 	d := m.SidebarDrag
 	if !d.PressActive && !d.Dragging {
@@ -328,11 +334,7 @@ func (m *OS) SidebarRelease(x, y int) bool {
 	if !ok || hit.Kind != sidebarRowSession || hit.SessionID != d.SessionID {
 		return true // the pointer left the row; the click is void
 	}
-	if hit.SessionID == m.sidebarCurrentSessionID() {
-		m.sidebarToggleCollapse(hit.SessionID)
-	} else {
-		m.sidebarSwitchSession(hit.SessionID)
-	}
+	m.sidebarSwitchSession(hit.SessionID)
 	return true
 }
 
@@ -344,25 +346,37 @@ func (m *OS) SidebarRelease(x, y int) bool {
 func (m *OS) SidebarMotion(x, y int) bool {
 	if !m.SidebarBandContains(x, y) {
 		m.SidebarHoverActive = false
+		// The one out-of-band event the motion whitelist keeps flowing is what
+		// clears the stale highlight; the preview leaves with it.
+		m.sidebarClearPeek()
 		return false
 	}
 	m.SidebarHoverActive = true
 	m.SidebarHoverX, m.SidebarHoverY = x, y
+	m.sidebarPeekAt(x, y)
 	return true
 }
 
-// SidebarWheel scrolls the sidebar list when the cursor is over the band, and
-// reports whether it consumed the event. The list scrolls, never the pane under
-// it.
+// SidebarWheel scrolls the section under the pointer and reports whether it
+// consumed the event. Per-section rather than rail-wide: one offset over the
+// whole rail unpins the headers and can scroll the agents section, the alarm,
+// off the screen entirely.
 func (m *OS) SidebarWheel(x, y int, up bool) bool {
 	if !m.SidebarBandContains(x, y) {
 		return false
 	}
-	if up {
-		m.SidebarScroll = max(m.SidebarScroll-config.ScrollLines, 0)
-	} else {
-		// The upper bound is clamped against the row count on the next render.
-		m.SidebarScroll += config.ScrollLines
+	offsets := [sidebarSectionCount]*int{&m.SidebarScrollS, &m.SidebarScrollT, &m.SidebarScrollA}
+	for s, band := range m.sidebarSectionY {
+		if y < band[0] || y >= band[1] {
+			continue
+		}
+		if up {
+			*offsets[s] = max(*offsets[s]-config.ScrollLines, 0)
+		} else {
+			// The upper bound is clamped against the row count on the next render.
+			*offsets[s] += config.ScrollLines
+		}
+		break
 	}
 	return true
 }
@@ -376,24 +390,10 @@ func (m *OS) sidebarCurrentSessionID() string {
 	return m.SessionName
 }
 
-// sidebarToggleCollapse flips a session's expand/collapse state in the sidebar
-// and persists the toggle.
-func (m *OS) sidebarToggleCollapse(sessionID string) {
-	if m.SidebarCollapsed == nil {
-		m.SidebarCollapsed = make(map[string]bool)
-	}
-	// Default expanded state is IsCurrent; storing the negation of the current
-	// shown state toggles it regardless of whether an entry already exists.
-	shown := true
-	if v, ok := m.SidebarCollapsed[sessionID]; ok {
-		shown = !v
-	}
-	m.SidebarCollapsed[sessionID] = shown // collapsed = shown was true
-	m.saveSidebarState()
-}
-
-// sidebarSwitchSession switches to another session from a sidebar click.
+// sidebarSwitchSession attaches to another session from a sidebar click or key.
+// Attaching makes any preview the truth, so it takes the preview down.
 func (m *OS) sidebarSwitchSession(sessionID string) {
+	m.sidebarClearPeek()
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		return
 	}

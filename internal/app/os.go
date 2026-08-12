@@ -505,16 +505,27 @@ type OS struct {
 	// Sidebar mouse hit-testing and view state. SidebarHits records the on-screen
 	// rectangle of every sidebar row rendered in the current frame, so the mouse
 	// handlers can route clicks, wheels, and right-clicks without re-deriving the
-	// layout. SidebarScroll is the row the list is scrolled to. SidebarCollapsed
-	// records sessions the user has explicitly collapsed (the current session is
-	// expanded by default, others collapsed).
-	SidebarHits      []sidebarRowHit
-	SidebarScroll    int
-	SidebarCollapsed map[string]bool
+	// layout. Each of the rail's three sections holds its own scroll offset, so
+	// the wheel scrolls the one under the pointer and no header can be scrolled
+	// away; sidebarSectionY is where each section was drawn, which is how a
+	// wheel event finds its section. Scrolls are clamped by the next render.
+	SidebarHits     []sidebarRowHit
+	SidebarScrollS  int
+	SidebarScrollT  int
+	SidebarScrollA  int
+	sidebarSectionY [sidebarSectionCount][2]int
+	// SidebarPeek is the session the terminals section is previewing while the
+	// pointer or the rail cursor rests on its row, and SidebarPeekArm is the
+	// session row the previous motion event resolved to (empty when it resolved
+	// to no session row), which is what the pair rule debounces on. Both are
+	// gesture-scoped runtime state like the marquee: never persisted, cleared by
+	// the same motion stream that created them.
+	SidebarPeek    string
+	SidebarPeekArm string
 	// SidebarOrder is the user's drag-defined session order, applied over the
 	// daemon's creation-order list (sessions not named here keep their natural
-	// order after the named ones). Persisted in the sidebar state file together
-	// with SidebarCollapsed. SidebarSessionIDs is the session order actually
+	// order after the named ones). Persisted in the sidebar state file.
+	// SidebarSessionIDs is the session order actually
 	// displayed last frame (the draft order while a drag is in progress), which
 	// is what a starting drag snapshots. SidebarDrag carries the press-or-drag
 	// gesture on a session row between mouse events.
@@ -523,8 +534,8 @@ type OS struct {
 	SidebarDrag       sidebarDragState
 	// SidebarAccents is the accent the user gave a window, by window ID: either
 	// a theme ANSI slot or a picked colour (see Accent). Persisted alongside the
-	// order and the collapse state; the daemon does not own it, so it is this
-	// client's view of its own windows.
+	// order; the daemon does not own it, so it is this client's view of its own
+	// windows.
 	SidebarAccents map[string]Accent
 	// SidebarAgentSeen is the unread bit of finished panes, by window ID: an
 	// entry means "this done pane has been looked at". Whether a client has
@@ -559,9 +570,9 @@ type OS struct {
 	// Sidebar keyboard focus scope (the rail). While SidebarFocused the rail owns
 	// the keyboard: pane and window bindings do not fire, and the cursor row is
 	// SidebarNav[SidebarCursor]. SidebarNav is the ordered list of interactive
-	// rows the last frame rendered (sessions, their windows, then agents), the
-	// keyboard equivalent of SidebarHits, so keyboard navigation lands on exactly
-	// the rows a click would. SidebarRevealedForFocus records that entering the
+	// rows the last frame rendered (sessions, terminals, agents, then the footer
+	// controls), the keyboard equivalent of SidebarHits, so keyboard navigation
+	// lands on exactly the rows a click would. SidebarRevealedForFocus records that entering the
 	// scope had to turn the sidebar on, so exiting turns it back off.
 	SidebarFocused          bool
 	SidebarCursor           int

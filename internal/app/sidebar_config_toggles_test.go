@@ -43,26 +43,6 @@ func TestSidebarShowAgentsTogglesSection(t *testing.T) {
 	}
 }
 
-// TestSidebarWorkspacesOffDropsBand checks the band and its chip hit rects both
-// go, so nothing invisible stays clickable.
-func TestSidebarWorkspacesOffDropsBand(t *testing.T) {
-	m := bandTestOS(t, 120, 40, "left")
-	sidebarText(t, m)
-	if len(bandHits(m)) == 0 {
-		t.Fatal("band missing with the default config; the test premise is wrong")
-	}
-
-	old := config.SidebarWorkspaces
-	config.SidebarWorkspaces = config.SidebarWorkspacesOff
-	t.Cleanup(func() { config.SidebarWorkspaces = old })
-
-	m = spreadTestOS(t, 120, 40, "left")
-	sidebarText(t, m)
-	if got := len(bandHits(m)); got != 0 {
-		t.Errorf("workspaces = off still drew %d chips", got)
-	}
-}
-
 // TestDockWorkspaceTabsToggle checks the dock strip is off by config alone, and
 // that the columns it used to own stop routing to a workspace.
 func TestDockWorkspaceTabsToggle(t *testing.T) {

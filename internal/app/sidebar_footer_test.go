@@ -75,7 +75,7 @@ func TestGlyphRailShowsCountAndGlyph(t *testing.T) {
 	// rather than saying "1" on every row forever.
 	single := m.sidebarSessionRow(
 		sessiontree.Node{ID: "solo", Title: "solo", WindowCount: 1},
-		sidebarVariantGlyph, false, config.SidebarGlyphWidth-1, theme.UI(), false, false)
+		sidebarVariantGlyph, config.SidebarGlyphWidth-1, theme.UI(), false, false)
 	if got := stripANSIForTrace(single); !strings.HasPrefix(got, " ") {
 		t.Errorf("a one-window session leads with %q, want a blank cell", got)
 	}
@@ -111,7 +111,7 @@ func TestRailStepperIsOfferedOnlyWhereItCanMove(t *testing.T) {
 func TestRailStepperWalksTheVariants(t *testing.T) {
 	// No daemon client: the step re-lays the panes, and this is about the width
 	// ladder rather than about syncing it anywhere.
-	m := bandTestOS(t, 120, 14, "left")
+	m := sidebarTestOS(t, 120, 14, "left")
 	prev := config.SidebarWidth
 	config.SidebarWidth = config.SidebarDefaultWidth
 	t.Cleanup(func() { config.SidebarWidth = prev })
@@ -197,7 +197,7 @@ func TestRailFooterDegradesToASCII(t *testing.T) {
 // The rail is cached by signature, so a width step that the cache cannot see
 // would leave yesterday's rail on screen.
 func TestSidebarSignatureCoversTheWidthStep(t *testing.T) {
-	m := bandTestOS(t, 120, 14, "left")
+	m := sidebarTestOS(t, 120, 14, "left")
 	prev := config.SidebarWidth
 	config.SidebarWidth = config.SidebarDefaultWidth
 	t.Cleanup(func() { config.SidebarWidth = prev })
@@ -213,7 +213,7 @@ func TestSidebarSignatureCoversTheWidthStep(t *testing.T) {
 // control is not the control doing anything, which is how the footer shipped a
 // stepper only the keyboard could move.
 func TestRailStepperClickNarrowsTheRail(t *testing.T) {
-	m := bandTestOS(t, 120, 14, "left")
+	m := sidebarTestOS(t, 120, 14, "left")
 	prev := config.SidebarWidth
 	config.SidebarWidth = config.SidebarDefaultWidth
 	t.Cleanup(func() { config.SidebarWidth = prev })

@@ -367,23 +367,34 @@ func colorDistance(a, b color.RGBA) int {
 // keystrokes that move the cursor.
 func TestAccentPickerPreviewsOnTheRail(t *testing.T) {
 	m := accentTestOS(t, 120, 30)
-	mark := accentMark()
 
 	resting := m.sidebarSignature()
-	m.OpenAccentPicker("aaaaaaaa1111") // "editor", no agent state
+	m.OpenAccentPicker("aaaaaaaa1111") // "editor", no agent state, and the focused window
 	m.AccentPickerCell(4, 1)
 	if m.sidebarSignature() == resting {
 		t.Fatal("opening the picker left the rail signature unchanged, so the preview would not draw")
 	}
 	withFirst := m.sidebarSignature()
 
+	// "editor" is the focused window, so the preview reaches the rail through
+	// the gutter mark's own colour rather than a separate accent chip: a
+	// focused row wears exactly one identity bar.
+	preview, ok := m.accentPreview("aaaaaaaa1111")
+	if !ok {
+		t.Fatal("no preview colour under the picker cursor")
+	}
+	lines, _ := m.sidebarPanelLines()
 	row := ""
-	for _, l := range railText(t, m) {
-		if strings.Contains(l, "editor") {
+	for _, l := range lines {
+		if strings.Contains(stripANSIForTrace(l), "editor") {
 			row = l
+			break
 		}
 	}
-	if !strings.Contains(row, mark) {
+	if row == "" {
+		t.Fatalf("no rail row for editor")
+	}
+	if !strings.Contains(row, fgSeq(preview.Color())) {
 		t.Errorf("the rail row is not previewing the colour under the cursor: %q", row)
 	}
 

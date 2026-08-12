@@ -17,17 +17,13 @@ type sidebarNavRow struct {
 	SessionID   string
 	WindowID    string
 	WindowIndex int
-	// Workspace identifies a band chip, whose siblings share one drawn row and
-	// so cannot be told apart by session and window alone. 0 on other kinds.
-	Workspace int
 }
 
 // sidebarNavRowsEqual reports whether two nav rows point at the same target, so
 // the render can mark the cursor row by identity instead of by a fragile index
 // shared across the render and the keyboard handler.
 func sidebarNavRowsEqual(a, b sidebarNavRow) bool {
-	return a.Kind == b.Kind && a.SessionID == b.SessionID &&
-		a.WindowID == b.WindowID && a.Workspace == b.Workspace
+	return a.Kind == b.Kind && a.SessionID == b.SessionID && a.WindowID == b.WindowID
 }
 
 // sidebarCursorRow is the nav row the cursor is on, and whether the cursor is
@@ -57,7 +53,21 @@ func (m *OS) EnterSidebarFocus() {
 	// cursor on row 0. Follow the current session by identity so the next render
 	// anchors the cursor on it once the rows exist.
 	m.sidebarFollowSession = m.sidebarCurrentSessionID()
-	m.SidebarCursor = m.sidebarCurrentSessionNavIndex()
+	m.sidebarSetCursor(m.sidebarCurrentSessionNavIndex())
+}
+
+// sidebarSetCursor moves the keyboard cursor and re-derives the preview from
+// where it landed, so a browse down the sessions section previews row by row
+// exactly as hovering it does. Discrete keys need no pair rule: one press is
+// one deliberate move.
+func (m *OS) sidebarSetCursor(i int) {
+	m.SidebarCursor = i
+	row, ok := m.sidebarCursorRow()
+	if !ok || row.Kind != sidebarRowSession || row.SessionID == m.sidebarCurrentSessionID() {
+		m.sidebarClearPeek()
+		return
+	}
+	m.SidebarPeek, m.SidebarPeekArm = row.SessionID, row.SessionID
 }
 
 // ExitSidebarFocus returns the keyboard to the panes. A sidebar revealed only to
@@ -67,6 +77,7 @@ func (m *OS) ExitSidebarFocus() {
 		return
 	}
 	m.SidebarFocused = false
+	m.sidebarClearPeek()
 	if m.SidebarRevealedForFocus {
 		m.SidebarRevealedForFocus = false
 		if config.SidebarEnabled {
@@ -93,73 +104,58 @@ func (m *OS) SidebarCursorMove(delta int) {
 	if len(m.SidebarNav) == 0 {
 		return
 	}
-	m.SidebarCursor = max(min(m.SidebarCursor+delta, len(m.SidebarNav)-1), 0)
+	m.sidebarSetCursor(max(min(m.SidebarCursor+delta, len(m.SidebarNav)-1), 0))
 }
 
 // SidebarCursorFirst and SidebarCursorLast jump to the ends of the rail.
-func (m *OS) SidebarCursorFirst() { m.SidebarCursor = 0 }
+func (m *OS) SidebarCursorFirst() { m.sidebarSetCursor(0) }
 func (m *OS) SidebarCursorLast() {
 	if n := len(m.SidebarNav); n > 0 {
-		m.SidebarCursor = n - 1
+		m.sidebarSetCursor(n - 1)
 	}
 }
 
-// SidebarCursorExpand expands the session under the cursor. On a window or agent
-// row it does nothing (the row is already inside its expanded session).
-func (m *OS) SidebarCursorExpand() {
-	row, ok := m.sidebarCursorRow()
-	if !ok || row.Kind != sidebarRowSession {
-		return
-	}
-	if !m.sidebarCollapsedState(row.SessionID) {
-		return // already expanded
-	}
-	m.sidebarToggleCollapse(row.SessionID)
-}
+// SidebarCursorExpand and SidebarCursorCollapse step the cursor one section
+// down and up. With the tree gone there is nothing left to expand, and the keys
+// that walked its depth are the natural pair for walking the sections. The
+// config action names stay, so a config file written before this still resolves
+// both keys.
+func (m *OS) SidebarCursorExpand()   { m.sidebarStepSection(1) }
+func (m *OS) SidebarCursorCollapse() { m.sidebarStepSection(-1) }
 
-// SidebarCursorCollapse collapses the session under the cursor; on a window or
-// agent row it moves the cursor up to the parent session row instead, the
-// keyboard equivalent of the design's "h jumps to parent".
-func (m *OS) SidebarCursorCollapse() {
-	row, ok := m.sidebarCursorRow()
-	if !ok {
-		return
-	}
-	if row.Kind != sidebarRowSession {
-		m.sidebarCursorToSession(row.SessionID)
-		return
-	}
-	if m.sidebarCollapsedState(row.SessionID) {
-		return // already collapsed
-	}
-	m.sidebarToggleCollapse(row.SessionID)
-}
-
-// sidebarCollapsedState reports whether a session row is currently collapsed,
-// reading the same default (current session expanded, others collapsed) the
-// render uses.
-func (m *OS) sidebarCollapsedState(sessionID string) bool {
-	if m.SidebarCollapsed != nil {
-		if v, ok := m.SidebarCollapsed[sessionID]; ok {
-			return v
+// sidebarStepSection moves the cursor to the first row of the next (delta 1) or
+// previous (delta -1) section that has rows, stopping at the ends.
+func (m *OS) sidebarStepSection(delta int) {
+	order := [sidebarSectionCount]sidebarRowKind{sidebarRowSession, sidebarRowWindow, sidebarRowAgent}
+	here := 0
+	if row, ok := m.sidebarCursorRow(); ok {
+		for i, k := range order {
+			if row.Kind == k {
+				here = i
+			}
 		}
 	}
-	return sessionID != m.sidebarCurrentSessionID()
-}
-
-// sidebarCursorToSession moves the cursor to a session's own row.
-func (m *OS) sidebarCursorToSession(sessionID string) {
-	for i, r := range m.SidebarNav {
-		if r.Kind == sidebarRowSession && r.SessionID == sessionID {
-			m.SidebarCursor = i
+	for i := here + delta; i >= 0 && i < len(order); i += delta {
+		if j := m.sidebarFirstRowOfKind(order[i]); j >= 0 {
+			m.sidebarSetCursor(j)
 			return
 		}
 	}
 }
 
+// sidebarFirstRowOfKind is the index of the first nav row of a kind, or -1.
+func (m *OS) sidebarFirstRowOfKind(kind sidebarRowKind) int {
+	for i, r := range m.SidebarNav {
+		if r.Kind == kind {
+			return i
+		}
+	}
+	return -1
+}
+
 // SidebarActivateCursor is the keyboard's enter: it runs exactly what a click on
-// the cursor row would (switch session, toggle the current session's expansion,
-// or focus a window), reusing the mouse handlers so the two never diverge. It
+// the cursor row would (attach to a session, focus a pane, work a footer
+// control), reusing the mouse handlers so the two never diverge. It
 // reports whether activation should leave the rail: focusing a window is a
 // request for that pane, so the scope exits; navigating sessions keeps it.
 func (m *OS) SidebarActivateCursor() bool {
@@ -176,21 +172,13 @@ func (m *OS) SidebarActivateCursor() bool {
 			WindowIndex: row.WindowIndex,
 		})
 		return true
-	case sidebarRowWorkspace:
-		// Switching workspace is navigation, not a request for a pane, so the
-		// rail keeps the keyboard and the cursor stays on the band.
-		m.SwitchToWorkspace(row.Workspace)
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
 	case sidebarRowCollapse:
 		m.SidebarStepWidth(0) // whichever step the footer is offering
 	case sidebarRowSession:
-		if row.SessionID == m.sidebarCurrentSessionID() {
-			m.sidebarToggleCollapse(row.SessionID)
-		} else {
-			m.sidebarSwitchSession(row.SessionID)
-			m.sidebarFollowSession = row.SessionID
-		}
+		m.sidebarSwitchSession(row.SessionID)
+		m.sidebarFollowSession = row.SessionID
 	}
 	return false
 }
@@ -223,21 +211,21 @@ func (m *OS) SidebarReorderCursor(delta int) {
 	m.sidebarFollowSession = row.SessionID
 }
 
-// SidebarCycleSection jumps the cursor between the sessions section and the
-// agents section, landing on the first row of the other one. With no agents
-// shown it is a no-op.
+// SidebarCycleSection walks the cursor forward through the rail's three
+// sections, wrapping at the end and skipping any that has no rows.
 func (m *OS) SidebarCycleSection() {
-	inAgents := false
+	order := [sidebarSectionCount]sidebarRowKind{sidebarRowSession, sidebarRowWindow, sidebarRowAgent}
+	here := 0
 	if row, ok := m.sidebarCursorRow(); ok {
-		inAgents = row.Kind == sidebarRowAgent
+		for i, k := range order {
+			if row.Kind == k {
+				here = i
+			}
+		}
 	}
-	target := sidebarRowAgent
-	if inAgents {
-		target = sidebarRowSession
-	}
-	for i, r := range m.SidebarNav {
-		if r.Kind == target || (target == sidebarRowSession && r.Kind != sidebarRowAgent) {
-			m.SidebarCursor = i
+	for step := 1; step <= len(order); step++ {
+		if j := m.sidebarFirstRowOfKind(order[(here+step)%len(order)]); j >= 0 {
+			m.sidebarSetCursor(j)
 			return
 		}
 	}
@@ -253,10 +241,8 @@ func (m *OS) SidebarJumpToSession(n int) {
 		}
 		count++
 		if count == n {
-			m.SidebarCursor = i
-			if r.SessionID != m.sidebarCurrentSessionID() {
-				m.sidebarSwitchSession(r.SessionID)
-			}
+			m.sidebarSetCursor(i)
+			m.sidebarSwitchSession(r.SessionID)
 			return
 		}
 	}
@@ -308,6 +294,8 @@ func (m *OS) sidebarSetCursorToHit(hit sidebarRowHit) {
 	target := navRowOf(hit)
 	for i, r := range m.SidebarNav {
 		if sidebarNavRowsEqual(r, target) {
+			// The pointer, not the cursor, owns the preview while the mouse is
+			// steering, so this only re-homes the cursor.
 			m.SidebarCursor = i
 			return
 		}
@@ -323,7 +311,6 @@ func navRowOf(h sidebarRowHit) sidebarNavRow {
 		SessionID:   h.SessionID,
 		WindowID:    h.WindowID,
 		WindowIndex: h.WindowIndex,
-		Workspace:   h.Workspace,
 	}
 }
 

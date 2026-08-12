@@ -17,12 +17,15 @@ import (
 // The sidebar is drawn as chrome in tuios's own visual language rather than as
 // a filled panel: rows sit directly on the terminal background (like the dock),
 // a single muted rule in the window-border character separates the rail from
-// the panes, and emphasis is carried by the same pills the dock uses. Two
-// sections share the rail: the panes currently running an agent at the top,
-// priority-ordered, and the session tree below them. Attention leads because
-// the first question a rail full of agents has to answer is "which one needs
-// me", not "what exists"; the tree keeps every behaviour it had, one section
-// lower.
+// the panes, and emphasis is carried by the same pills the dock uses.
+//
+// Three flat sections share the rail, top to bottom: the sessions that exist,
+// the terminals of the one being looked at, and the agents wanting a human.
+// Agents pin to the bottom so the alarm block sits at a stable screen position
+// at any rail height, and the slack rides above it. The session->window tree
+// this replaces indented, which cost three separate name spines; flat sections
+// land the whole rail on one: gutter col 0, glyph col 1, text col 3, and any
+// right-aligned figure inset one cell from the rail's own edge.
 //
 // Emphasis is spent on two things and no more, and neither of them paints a
 // standing row. "This is the current one" (the attached session, the focused
@@ -30,27 +33,37 @@ import (
 // places; a state wanting a human takes the same cell in its severity colour,
 // plus the rail's one bold. That leaves the only full-width band on the rail to
 // "this is where the cursor or the pointer is", which is the thing the user is
-// steering and was previously the least visible mark on screen.
+// steering.
 
 // sidebarRowKind distinguishes what a sidebar row points at for mouse routing.
 type sidebarRowKind int
 
 const (
 	sidebarRowSession sidebarRowKind = iota
+	// sidebarRowWindow is a row of the terminals section: one pane of the
+	// session currently being shown there.
 	sidebarRowWindow
-	// sidebarRowAgent is a row in the running-agents section; it targets a
-	// window exactly like sidebarRowWindow, it just lives in the other section.
+	// sidebarRowAgent is a row in the agents section; it targets a window
+	// exactly like sidebarRowWindow, it just lives in the other section.
 	sidebarRowAgent
-	// sidebarRowWorkspace is one chip of the workspace band under the current
-	// session. Unlike every other kind it is narrower than its line: several
-	// chips share one row, each with its own columns.
-	sidebarRowWorkspace
 	// sidebarRowNewSession is the "+ new" control in the rail's footer. It
 	// targets nothing that exists yet.
 	sidebarRowNewSession
-	// sidebarRowCollapse is the footer's width stepper. Like the band chips it
-	// is narrower than its line, so it carries its own columns.
+	// sidebarRowCollapse is the footer's collapse toggle. Like the footer's
+	// other control it is narrower than its line, so it carries its own columns.
 	sidebarRowCollapse
+)
+
+// sidebarSection identifies one of the rail's three stacked lists. Each owns
+// its own scroll offset and its own band of screen lines, so the wheel scrolls
+// the one under the pointer and neither header can be scrolled away.
+type sidebarSection int
+
+const (
+	sidebarSectionSessions sidebarSection = iota
+	sidebarSectionTerminals
+	sidebarSectionAgents
+	sidebarSectionCount
 )
 
 // sidebarRowHit is the on-screen rectangle of one sidebar row, in absolute
@@ -65,8 +78,6 @@ type sidebarRowHit struct {
 	// attached session, or -1 for a window row of another session (not directly
 	// focusable without switching first) and for session rows.
 	WindowIndex int
-	// Workspace is the target of a band chip, 0 on every other kind.
-	Workspace int
 }
 
 // Contains reports whether the absolute cell (x, y) falls on this row.
@@ -91,18 +102,6 @@ func sidebarVariant(w int) int {
 	default:
 		return sidebarVariantFull
 	}
-}
-
-// sidebarSessionExpanded reports whether a session's window rows are shown. The
-// currently attached session is expanded by default; others are collapsed. The
-// user's explicit toggles in SidebarCollapsed override the default.
-func (m *OS) sidebarSessionExpanded(node sessiontree.Node) bool {
-	if m.SidebarCollapsed != nil {
-		if v, ok := m.SidebarCollapsed[node.ID]; ok {
-			return !v
-		}
-	}
-	return node.IsCurrent
 }
 
 // agentGlyphColor maps an agent state to the palette color its glyph is drawn
@@ -166,13 +165,24 @@ func sidebarSeverityColor(state string, pal overlay.Palette) color.Color {
 // quietest mark on the rail. A margin strip scans without painting, which frees
 // the only band on a resting screen for the pointer and the keyboard cursor.
 func sidebarGutter(current bool, state string, bg color.Color, pal overlay.Palette) string {
+	return sidebarGutterTinted(current, state, nil, bg, pal)
+}
+
+// sidebarGutterTinted is sidebarGutter with the current-mark drawn in a colour
+// of the caller's choosing: the focused pane's gutter burns the accent the user
+// gave that pane, so the row wears exactly one identity bar instead of an
+// accent chip beside a focus mark. tint nil falls back to the rail accent.
+func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal overlay.Palette) string {
 	mark, ascii := "▎", overlay.UseASCII()
 	switch {
 	case current:
 		if ascii {
 			mark = ">"
 		}
-		return sidebarStyle(bg, pal.Accent).Render(mark)
+		if tint == nil {
+			tint = pal.Accent
+		}
+		return sidebarStyle(bg, tint).Render(mark)
 	case sidebarAttention(state):
 		if ascii {
 			mark = "!"
@@ -227,9 +237,29 @@ type sidebarAgentEntry struct {
 	DoneSeen    bool
 	StateAt     int64
 	WindowIndex int
+	// SessionLabel is what to print for SessionID: the session's display name
+	// when it has one. Identity keys the row, the label only fronts it.
+	SessionLabel string
 	// Foreign marks a pane of a session other than the attached one, whose row
 	// carries the session name for context.
 	Foreign bool
+}
+
+// sidebarTerminalEntry is one pane of the session the terminals section is
+// showing, whether that is the attached session or a peeked one.
+type sidebarTerminalEntry struct {
+	SessionID string
+	WindowID  string
+	Title     string
+	State     string
+	DoneSeen  bool
+	Focused   bool
+	// Workspace is the workspace the pane lives on, or 0 when this client does
+	// not know (a peeked session's panes, until the daemon puts it on the wire).
+	Workspace int
+	// WindowIndex is the index into m.Windows, or -1 for a pane of a session
+	// this client is not attached to.
+	WindowIndex int
 }
 
 // sidebarStyle returns a style carrying the given colors, either of which may
@@ -259,11 +289,10 @@ func sidebarFit(s string, cw int, bg color.Color) string {
 }
 
 // chromeGlyphs are the symbol codepoints we draw ourselves: the agent-state
-// indicators and the session chevron. They sit inside the decorative blocks
-// printableTitle strips, so they are named rather than kept by range.
+// indicators. They sit inside the decorative blocks printableTitle strips, so
+// they are named rather than kept by range.
 var chromeGlyphs = map[rune]bool{
 	'●': true, '▲': true, '○': true, '■': true, // agentStateIndicator
-	'▾': true, '▸': true, // sidebarChevron
 }
 
 // printableTitle strips what a terminal cannot be trusted to render out of a
@@ -306,31 +335,10 @@ func printableTitle(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// sidebarChevron is the expand/collapse marker for a session row.
-func sidebarChevron(expanded bool) string {
-	if overlay.UseASCII() {
-		if expanded {
-			return "v"
-		}
-		return ">"
-	}
-	if expanded {
-		return "▾"
-	}
-	return "▸"
-}
-
-// sidebarPaneIndent is the gutter a pane row spends before its state glyph: one
-// level in from the session row that owns it. Window rows, the workspace band
-// and the agents section all measure from it, so the rail keeps one glyph column
-// and one name spine (indent+2) whatever kind of row you are looking at.
-func sidebarPaneIndent(variant int) int {
-	// One indent at every width. A session row is chevron, space, glyph at every
-	// variant, so its name always starts three cells in; narrowing panes to two
-	// in the narrow rail put their titles a column left of the names above them,
-	// which is the ragged edge you see before you can name it.
-	return 3
-}
+// sidebarNameCol is the column every rail row's text starts on: gutter, glyph,
+// one cell of air. One spine for all three sections, which is what the flat
+// layout buys over the tree.
+const sidebarNameCol = 3
 
 // sidebarGlyph returns the styled agent-state glyph for a row, or a single
 // space on the row background when there is no state or glyphs are disabled,
@@ -346,6 +354,20 @@ func sidebarGlyph(state string, doneSeen bool, bg color.Color, pal overlay.Palet
 	return sidebarStyle(bg, sidebarStateColor(state, doneSeen, pal)).Render(g)
 }
 
+// sidebarQuietDot is the placeholder a session row puts in its glyph column
+// when nothing in it is running an agent: the column stays occupied, so the
+// names below it never step left and the section reads as one list.
+func sidebarQuietDot(bg color.Color, pal overlay.Palette) string {
+	if !config.SidebarShowGlyphs {
+		return sidebarStyle(bg, nil).Render(" ")
+	}
+	dot := "·"
+	if overlay.UseASCII() {
+		dot = "."
+	}
+	return sidebarStyle(bg, pal.FgMute).Render(dot)
+}
+
 // sidebarEdgeRule is the one-cell vertical rule separating the rail from the
 // panes, drawn in the window-border character at the dock separator's color:
 // the rail's edge is the vertical sibling of the dock's hairline.
@@ -358,61 +380,43 @@ func sidebarEdgeRule() string {
 // unbolded because a header is furniture: the rail spends its one bold voice on
 // a row that wants a human, and spending it here would rank a label above them.
 // It carries no count on purpose, because the number only restated the rows
-// printed directly underneath it, and the agents section already owns up to
-// what it hides with its own "+N" line.
-func sidebarHeaderRow(label string, cw int, pal overlay.Palette) string {
+// printed directly underneath it, and a capped section already owns up to what
+// it hides with its own "+N" line.
+//
+// right is an already-styled trailing element (the peeked session's name, the
+// agents section's controls), inset one cell from the rail's edge so it lands
+// on the same spine the rows' figures do.
+func sidebarHeaderRow(label, right string, cw int, pal overlay.Palette) string {
 	row := sidebarStyle(nil, nil).Render(" ") +
 		sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(label, max(cw-2, 1)))
+	if rw := lipgloss.Width(right); rw > 0 {
+		gap := max(cw-lipgloss.Width(row)-rw-1, 0)
+		row += strings.Repeat(" ", gap) + right + " "
+	}
 	return sidebarFit(row, cw, nil)
 }
 
-// sidebarChipSpan is one band chip's columns, measured from the rail's content
-// start. Several of these share a single drawn row, which is why the band is the
-// one place a row maps to more than one hit rectangle.
-type sidebarChipSpan struct {
-	Workspace int
-	X0, X1    int
+// sidebarComposeRow assembles one rail row on the single spine: gutter, glyph,
+// a cell of air, the name, and an optional right-aligned figure inset one cell
+// from the rail's edge. Every piece arrives already styled; name must already
+// be truncated to sidebarNameAvail so the fit below cannot eat the figure.
+func sidebarComposeRow(gutter, glyph, name, right string, cw int, bg color.Color) string {
+	row := gutter + glyph + sidebarStyle(bg, nil).Render(" ") + name
+	if rw := lipgloss.Width(right); rw > 0 {
+		gap := max(cw-lipgloss.Width(row)-rw-1, 0)
+		row += sidebarStyle(bg, nil).Render(strings.Repeat(" ", gap)) +
+			right + sidebarStyle(bg, nil).Render(" ")
+	}
+	return sidebarFit(row, cw, bg)
 }
 
-// sidebarWorkspaceBand renders the current session's workspaces as one row of
-// chips: the same set the dock strip names, re-rendered in the rail. It returns
-// the row and where each chip landed, or nothing when there is nowhere a click
-// could take you (one workspace) or no room to say so.
-//
-// cursorWS is the workspace the keyboard cursor sits on and hoverX the pointer's
-// column within the content, both 0 and -1 when absent. A chip that would not
-// fit is dropped rather than clipped: half a chip is half a click target.
-func (m *OS) sidebarWorkspaceBand(variant, cw int, pal overlay.Palette, cursorWS, hoverX int) (string, []sidebarChipSpan) {
-	if config.SidebarWorkspaces == config.SidebarWorkspacesOff {
-		return "", nil
+// sidebarNameAvail is how many cells a row's name may take: everything between
+// the spine and the right-aligned figure's inset.
+func sidebarNameAvail(cw, rightW int) int {
+	if rightW > 0 {
+		rightW++ // the inset cell
 	}
-	occupied := m.occupiedWorkspaces()
-	if len(occupied) < 2 {
-		return "", nil
-	}
-
-	indent := sidebarPaneIndent(variant)
-	row := strings.Repeat(" ", indent)
-	x := indent
-	spans := make([]sidebarChipSpan, 0, len(occupied))
-	for _, n := range occupied {
-		w := workspaceChipWidth(n)
-		if x+w > cw {
-			break
-		}
-		active := n == m.CurrentWorkspace
-		fg, rowBg := pal.FgMute, color.Color(nil)
-		if !active && (n == cursorWS || (hoverX >= x && hoverX < x+w)) {
-			fg, rowBg = pal.Fg, pal.Surface
-		}
-		row += workspaceChip(n, active, fg, rowBg)
-		spans = append(spans, sidebarChipSpan{Workspace: n, X0: x, X1: x + w})
-		x += w
-	}
-	if len(spans) < 2 {
-		return "", nil
-	}
-	return sidebarFit(row, cw, nil), spans
+	return max(cw-sidebarNameCol-rightW, 1)
 }
 
 // renderSidebar composes the vertical session sidebar as a single layer, the way
@@ -432,17 +436,72 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID("sidebar")
 }
 
+// sidebarBudget divides avail lines between the three sections, per the design's
+// table: sessions are content-sized up to about a quarter of the rail, agents up
+// to about a third, and the terminals section takes the slack because it is the
+// list the user actually works in. A rail too short for the terminals floor
+// shrinks agents first, then sessions, and never below their own floors.
+func sidebarBudget(avail, nS, nT, nA int) (sH, tH, aH int) {
+	avail = max(avail, 0)
+	sFloor, tFloor, aFloor := min(nS, 2), min(nT, 3), min(nA, 2)
+
+	sH = min(nS, max(avail/4, sFloor))
+	aH = min(nA, max(avail/3, aFloor))
+	tH = avail - sH - aH
+	if tH < tFloor {
+		aH = max(aFloor, aH-(tFloor-tH))
+		tH = avail - sH - aH
+		if tH < tFloor {
+			sH = max(sFloor, sH-(tFloor-tH))
+			tH = avail - sH - aH
+		}
+	}
+	tH = max(min(tH, nT), 0)
+
+	// The floors can still overrun a rail with almost no lines at all, so the
+	// last word belongs to the space that exists: give it up from the quietest
+	// section outwards.
+	for sH+tH+aH > avail {
+		switch {
+		case aH > 0:
+			aH--
+		case sH > 0:
+			sH--
+		default:
+			tH--
+		}
+	}
+	return sH, tH, aH
+}
+
+// sidebarWindowSection windows one section's rows onto the lines it was given,
+// returning the first row to draw and how many, plus how many rows are hidden
+// below the fold. A section that does not fit spends its last line on "… +N",
+// except at the bottom of its own scroll where there is nothing left to own up
+// to and the line goes back to being a row: that is what keeps the last row
+// reachable by wheel.
+func sidebarWindowSection(scroll, rows, lines int) (start, shown, hidden int) {
+	if lines <= 0 || rows <= 0 {
+		return 0, 0, 0
+	}
+	if rows <= lines {
+		return 0, rows, 0
+	}
+	maxScroll := rows - lines
+	start = max(min(scroll, maxScroll), 0)
+	if start == maxScroll {
+		return start, lines, 0
+	}
+	return start, lines - 1, rows - start - (lines - 1)
+}
+
 // sidebarPanelLinesForTree lays the rail out for a given tree and records the
 // on-screen hit geometry of every row into m.SidebarHits, returning the rows
 // and the reserved width. It returns nil rows when the sidebar reserves
 // nothing.
 //
-// The rail is two sections: the running-agents section at the top, ordered by
-// how much it wants a human (hidden entirely when no pane is running an agent,
-// or when the rail is too small to carry it), and the session tree below a
-// hairline, scrolled by m.SidebarScroll. Every emitted line is exactly the
-// reserved width: the content columns plus the one-cell edge rule on the side
-// facing the panes.
+// Every emitted line is exactly the reserved width: the content columns plus
+// the one-cell edge rule on the side facing the panes.
 func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
@@ -489,33 +548,6 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		edge = lipgloss.NewStyle().Foreground(pal.Accent).Render(config.GetWindowBorderLeft())
 	}
 
-	// The keyboard cursor tracks a row by identity, not by index, so it survives a
-	// relayout: the target is the session the last action asked to follow, else
-	// the nav row the cursor was on last frame. Rows matching it draw the same
-	// RowSel bar hover uses; the two share one cursor.
-	var cursorTarget sidebarNavRow
-	haveCursorTarget := false
-	switch {
-	case m.sidebarFollowSession != "":
-		cursorTarget = sidebarNavRow{Kind: sidebarRowSession, SessionID: m.sidebarFollowSession}
-		haveCursorTarget = true
-	case m.SidebarCursor >= 0 && m.SidebarCursor < len(m.SidebarNav):
-		cursorTarget = m.SidebarNav[m.SidebarCursor]
-		haveCursorTarget = true
-	}
-	isCursor := func(kind sidebarRowKind, sessionID, windowID string) bool {
-		return m.SidebarFocused && haveCursorTarget &&
-			cursorTarget.Kind == kind && cursorTarget.SessionID == sessionID && cursorTarget.WindowID == windowID
-	}
-	// The band's cursor is a chip rather than a row, so it is addressed by
-	// workspace; 0 means the cursor is elsewhere.
-	cursorWS := 0
-	if m.SidebarFocused && haveCursorTarget && cursorTarget.Kind == sidebarRowWorkspace {
-		cursorWS = cursorTarget.Workspace
-	}
-	nav := make([]sidebarNavRow, 0, 16)
-	cursorLogical := -1
-
 	// compose attaches the edge rule on the pane-facing side.
 	compose := func(content string) string {
 		if edgeLeft {
@@ -535,61 +567,54 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs, s.ID)
 	}
 
-	// Flatten the panes running agents. Sessions with known windows contribute:
-	// the attached one from live state, others from the cached listing, so
-	// agents on other sessions surface here marked Foreign.
-	var agents []sidebarAgentEntry
-	if variant != sidebarVariantGlyph && config.SidebarShowAgents {
-		for _, s := range sessions {
-			for _, win := range s.Children {
-				if win.AgentState == "" {
-					continue
-				}
-				idx := -1
-				if s.IsCurrent {
-					idx = m.windowIndexByID(win.ID)
-				}
-				agents = append(agents, sidebarAgentEntry{
-					SessionID:   s.ID,
-					WindowID:    win.ID,
-					Title:       win.Title,
-					State:       win.AgentState,
-					DoneSeen:    win.DoneSeen,
-					StateAt:     win.StateAt,
-					WindowIndex: idx,
-					Foreign:     !s.IsCurrent,
-				})
-			}
-		}
-		// Ordered by need, stable within a rank so panes keep their tree order.
-		// This is what makes the cap below safe: what it hides is provably the
-		// calm end of the list, never the pane waiting on an answer.
-		sort.SliceStable(agents, func(a, b int) bool {
-			return sessiontree.AgentRank(agents[a].State, agents[a].DoneSeen) >
-				sessiontree.AgentRank(agents[b].State, agents[b].DoneSeen)
-		})
+	if variant == sidebarVariantGlyph {
+		return m.sidebarStripLines(sessions, w, cw, height, topMargin, sidebarX, contentX0, pal, compose, blank)
 	}
 
-	// Section geometry: the agents section takes at most a third of the rail
-	// and only exists when there is something to show and room to show it.
-	// agentRows is how many of those lines are real rows; a capped section
-	// spends its last line owning up to what it hides.
-	agentShown, agentSection := 0, 0
-	if len(agents) > 0 && height >= 8 {
-		agentShown = min(len(agents), max(height/3, 1))
-		// Header plus a blank row. The hairline that used to close the section
-		// was the third rule on one screen, beside the rail edge and the dock
-		// separator; empty space separates just as well and says nothing.
-		agentSection = agentShown + 2
+	// The keyboard cursor tracks a row by identity, not by index, so it survives a
+	// relayout: the target is the session the last action asked to follow, else
+	// the nav row the cursor was on last frame. Rows matching it draw the same
+	// band hover uses; the two share one cursor.
+	var cursorTarget sidebarNavRow
+	haveCursorTarget := false
+	switch {
+	case m.sidebarFollowSession != "":
+		cursorTarget = sidebarNavRow{Kind: sidebarRowSession, SessionID: m.sidebarFollowSession}
+		haveCursorTarget = true
+	case m.SidebarCursor >= 0 && m.SidebarCursor < len(m.SidebarNav):
+		cursorTarget = m.SidebarNav[m.SidebarCursor]
+		haveCursorTarget = true
 	}
-	overflow := len(agents) - agentShown
-	agentRows := agentShown
-	if overflow > 0 {
-		agentRows--
+	isCursor := func(kind sidebarRowKind, sessionID, windowID string) bool {
+		return m.SidebarFocused && haveCursorTarget &&
+			cursorTarget.Kind == kind && cursorTarget.SessionID == sessionID && cursorTarget.WindowID == windowID
 	}
 
-	// The footer is pinned to the rail's last lines, so the tree scrolls above
-	// it rather than under it.
+	// The three lists, built before anything is drawn: the budget needs their
+	// counts, and hover has to resolve against the same arithmetic the draw uses.
+	shown, peeking := m.sidebarShownSession(sessions)
+	terminals := m.sidebarTerminals(sessions, shown)
+	agents := m.sidebarAgents(sessions, variant)
+
+	nS := len(sessions)
+	nT := len(terminals)
+	nA := len(agents)
+	// A peeked session with no panes says so, or the section would read as "the
+	// attached session has no panes".
+	emptyPeek := peeking && nT == 0
+	if emptyPeek {
+		nT = 1
+	}
+	showTerminals := config.SidebarShowWindows && nT > 0
+	if !showTerminals {
+		nT = 0
+	}
+	// The current rule, kept: a rail this short cannot carry an alarm block and
+	// a working list both, and the working list is the one with no other home.
+	if height < 8 {
+		nA = 0
+	}
+
 	canCreate := m.SidebarCanCreateSession()
 	footerCursor := func(kind sidebarRowKind) bool { return isCursor(kind, "", "") }
 	footerLines, footerZones := m.sidebarFooter(variant, cw, pal, canCreate, -1, -1, footerCursor)
@@ -600,139 +625,91 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if footerH >= height {
 		footerLines, footerZones, footerH = nil, nil, 0
 	}
-	treeH := max(height-agentSection-footerH, 0)
 
-	// Hover, derived from the last motion seen inside the band. Rows are one
-	// screen line each, so the hovered agent row is the pointer's distance from
-	// the top less the section header, and the hovered tree row is the scroll
-	// offset plus its distance past the whole agents block. Hover yields
-	// entirely to a drag.
-	treeHover, agentHover := -1, -1
+	chrome := 1 // the sessions header
+	if nT > 0 {
+		chrome++
+	}
+	if nA > 0 {
+		chrome += 2 // the gap that floats the agents block, plus its header
+	}
+	sH, tH, aH := sidebarBudget(height-footerH-chrome, nS, nT, nA)
+	slack := max(height-footerH-chrome-sH-tH-aH, 0)
+
+	// Where each section's lines land, in the rail's own coordinates. Computed
+	// before any row is rendered so hover resolves against the draw's arithmetic
+	// rather than a second copy of it.
+	var place [sidebarSectionCount]struct{ header, top, lines, y0, y1 int }
+	line := 0
+	place[sidebarSectionSessions] = struct{ header, top, lines, y0, y1 int }{line, line + 1, sH, line, line + 1 + sH}
+	line += 1 + sH
+	place[sidebarSectionTerminals] = struct{ header, top, lines, y0, y1 int }{-1, line, 0, line, line}
+	if nT > 0 {
+		place[sidebarSectionTerminals] = struct{ header, top, lines, y0, y1 int }{line, line + 1, tH, line, line + 1 + tH + slack}
+		line += 1 + tH
+	}
+	line += slack
+	place[sidebarSectionAgents] = struct{ header, top, lines, y0, y1 int }{-1, line, 0, line, line}
+	if nA > 0 {
+		place[sidebarSectionAgents] = struct{ header, top, lines, y0, y1 int }{line + 1, line + 2, aH, line, line + 2 + aH}
+		line += 2 + aH
+	}
+	for s := range m.sidebarSectionY {
+		m.sidebarSectionY[s] = [2]int{topMargin + place[s].y0, topMargin + place[s].y1}
+	}
+
+	// Keyboard cursor auto-scroll, per section: a cursor past a section's fold
+	// scrolls that section the way a wheel would, and never disturbs the others.
+	scroll := [sidebarSectionCount]*int{&m.SidebarScrollS, &m.SidebarScrollT, &m.SidebarScrollA}
+	rowsIn := [sidebarSectionCount]int{nS, nT, nA}
+	if m.SidebarFocused && haveCursorTarget {
+		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessions, terminals, agents); ok {
+			if lines := place[sec].lines; lines > 0 {
+				if idx < *scroll[sec] {
+					*scroll[sec] = idx
+				} else if idx >= *scroll[sec]+lines {
+					*scroll[sec] = idx - lines + 1
+				}
+			}
+		}
+	}
+	var start, count, hidden [sidebarSectionCount]int
+	for s := range rowsIn {
+		start[s], count[s], hidden[s] = sidebarWindowSection(*scroll[s], rowsIn[s], place[s].lines)
+		*scroll[s] = start[s]
+	}
+
+	// Hover, derived from the last motion seen inside the band, resolved against
+	// the placement above. Hover yields entirely to a drag.
+	var hoverRow [sidebarSectionCount]int
+	for s := range hoverRow {
+		hoverRow[s] = -1
+	}
 	footerHoverLine, footerHoverX := -1, -1
 	if !m.SidebarDrag.Dragging && m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
 		delta := m.SidebarHoverY - topMargin
 		footerTop := height - footerH
-		switch {
-		case footerH > 0 && delta >= footerTop && delta < height:
+		if footerH > 0 && delta >= footerTop && delta < height {
 			footerHoverLine, footerHoverX = delta-footerTop, m.SidebarHoverX-contentX0
-		case delta < agentSection:
-			if d := delta - 1; d >= 0 && d < agentRows {
-				agentHover = d
+		} else {
+			for s := range place {
+				if d := delta - place[s].top; d >= 0 && d < count[s] {
+					hoverRow[s] = start[s] + d
+				}
 			}
-		default:
-			treeHover = m.SidebarScroll + delta - agentSection
 		}
 	}
 	// Re-rendered now the pointer is resolved; the first pass only measured how
-	// many lines the footer takes so the tree region could be sized.
+	// many lines the footer takes so the sections could be sized.
 	if footerH > 0 {
 		footerLines, footerZones = m.sidebarFooter(variant, cw, pal, canCreate, footerHoverLine, footerHoverX, footerCursor)
 	}
 
-	// Nav rows are published in drawn order, so the agents lead here exactly as
-	// they lead on screen and j/k walks what the eye reads.
-	for i := 0; i < agentRows; i++ {
-		e := agents[i]
-		nav = append(nav, sidebarNavRow{Kind: sidebarRowAgent, SessionID: e.SessionID, WindowID: e.WindowID, WindowIndex: e.WindowIndex})
-	}
-
-	// Build the logical tree rows (header + sessions + expanded windows), each
-	// with the target it routes to, then window them by SidebarScroll.
-	type logicalRow struct {
-		text        string
-		interactive bool
-		sessionID   string
-		windowID    string
-		windowIndex int
-		kind        sidebarRowKind
-		// chips is set on the band row only: it hit-tests per chip instead of
-		// claiming the whole line.
-		chips []sidebarChipSpan
-	}
-	rows := make([]logicalRow, 0, 16)
-
-	if variant != sidebarVariantGlyph {
-		rows = append(rows, logicalRow{text: sidebarHeaderRow("sessions", cw, pal)})
-	}
-
-	for _, session := range sessions {
-		expanded := m.sidebarSessionExpanded(session)
-		dragged := m.SidebarDrag.Dragging && session.ID == m.SidebarDrag.SessionID
-		if isCursor(sidebarRowSession, session.ID, "") {
-			cursorLogical = len(rows)
-		}
-		rows = append(rows, logicalRow{
-			text:        m.sidebarSessionRow(session, variant, expanded, cw, pal, len(rows) == treeHover || isCursor(sidebarRowSession, session.ID, ""), dragged),
-			interactive: true,
-			sessionID:   session.ID,
-			windowIndex: -1,
-			kind:        sidebarRowSession,
-		})
-		nav = append(nav, sidebarNavRow{Kind: sidebarRowSession, SessionID: session.ID, WindowIndex: -1})
-
-		if variant == sidebarVariantGlyph || !expanded {
-			continue
-		}
-
-		// The band rides directly under the session it belongs to. Only the
-		// attached session has workspace data at all (a foreign session's
-		// workspaces are not on the wire), so only it gets one.
-		if session.IsCurrent {
-			hoverX := -1
-			if len(rows) == treeHover && m.SidebarHoverActive {
-				hoverX = m.SidebarHoverX - contentX0
-			}
-			if band, chips := m.sidebarWorkspaceBand(variant, cw, pal, cursorWS, hoverX); len(chips) > 0 {
-				rows = append(rows, logicalRow{text: band, interactive: true, sessionID: session.ID, kind: sidebarRowWorkspace, windowIndex: -1, chips: chips})
-				for _, c := range chips {
-					if cursorWS == c.Workspace {
-						cursorLogical = len(rows) - 1
-					}
-					nav = append(nav, sidebarNavRow{Kind: sidebarRowWorkspace, SessionID: session.ID, WindowIndex: -1, Workspace: c.Workspace})
-				}
-			}
-		}
-
-		if !config.SidebarShowWindows {
-			continue
-		}
-		for _, win := range session.Children {
-			idx := -1
-			if session.IsCurrent {
-				idx = m.windowIndexByID(win.ID)
-			}
-			if isCursor(sidebarRowWindow, session.ID, win.ID) {
-				cursorLogical = len(rows)
-			}
-			rows = append(rows, logicalRow{
-				text:        m.sidebarWindowRow(win, variant, cw, pal, len(rows) == treeHover || isCursor(sidebarRowWindow, session.ID, win.ID)),
-				interactive: true,
-				sessionID:   session.ID,
-				windowID:    win.ID,
-				windowIndex: idx,
-				kind:        sidebarRowWindow,
-			})
-			nav = append(nav, sidebarNavRow{Kind: sidebarRowWindow, SessionID: session.ID, WindowID: win.ID, WindowIndex: idx})
-		}
-	}
-
-	// Keyboard cursor auto-scroll: a cursor in the tree region is kept on screen,
-	// so j/k past the fold scrolls the list the way a wheel would.
-	if m.SidebarFocused && cursorLogical >= 0 && treeH > 0 {
-		if cursorLogical < m.SidebarScroll {
-			m.SidebarScroll = cursorLogical
-		} else if cursorLogical >= m.SidebarScroll+treeH {
-			m.SidebarScroll = cursorLogical - treeH + 1
-		}
-	}
-
-	// Vertical scroll over the tree region only; the agents section is pinned.
-	// Clamp so the last row is always reachable and never overscrolled.
-	maxScroll := max(len(rows)-treeH, 0)
-	m.SidebarScroll = max(min(m.SidebarScroll, maxScroll), 0)
-
-	end := min(m.SidebarScroll+treeH, len(rows))
+	nav := make([]sidebarNavRow, 0, nS+nT+nA+2)
 	lines := make([]string, 0, height)
+	// recordHit publishes a drawn row's rectangle and its nav row together, in
+	// drawn order, so the mouse and the keyboard address one target set. Hits
+	// only ever come from the renderer as it draws; nothing recomputes them.
 	recordHit := func(kind sidebarRowKind, sessionID, windowID string, windowIndex int) {
 		y := topMargin + len(lines)
 		m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
@@ -743,46 +720,77 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			WindowID:    windowID,
 			WindowIndex: windowIndex,
 		})
+		nav = append(nav, sidebarNavRow{Kind: kind, SessionID: sessionID, WindowID: windowID, WindowIndex: windowIndex})
 	}
-	if agentSection > 0 {
-		lines = append(lines, compose(sidebarHeaderRow("agents", cw, pal)))
-		for i := range agentShown {
-			if i >= agentRows {
-				// Stands in for the rows it hides, so it starts on their name spine.
-				more := overlay.Ellipsis() + " +" + strconv.Itoa(overflow+1)
-				lines = append(lines, compose(sidebarFit(
-					strings.Repeat(" ", sidebarPaneIndent(variant)+2)+
-						sidebarStyle(nil, pal.FgMute).Render(more), cw, nil)))
-				continue
-			}
-			e := agents[i]
-			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex)
-			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, i == agentHover || isCursor(sidebarRowAgent, e.SessionID, e.WindowID))))
+	overflowRow := func(n int) string {
+		// Stands in for the rows it hides, so it starts on the name spine.
+		more := overlay.Ellipsis() + " +" + strconv.Itoa(n)
+		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol)+
+			sidebarStyle(nil, pal.FgMute).Render(more), cw, nil))
+	}
+
+	// sessions
+	lines = append(lines, compose(sidebarHeaderRow("sessions", "", cw, pal)))
+	for i := range count[sidebarSectionSessions] {
+		idx := start[sidebarSectionSessions] + i
+		s := sessions[idx]
+		dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
+		hovered := idx == hoverRow[sidebarSectionSessions] || isCursor(sidebarRowSession, s.ID, "")
+		recordHit(sidebarRowSession, s.ID, "", -1)
+		lines = append(lines, compose(m.sidebarSessionRow(s, variant, cw, pal, hovered, dragged)))
+	}
+	if h := hidden[sidebarSectionSessions]; h > 0 {
+		lines = append(lines, overflowRow(h))
+	}
+
+	// terminals
+	if nT > 0 {
+		right := ""
+		if peeking {
+			// Whose panes these are, since they are not the attached session's.
+			right = sidebarStyle(nil, pal.Fg).Render(overlay.Truncate(printableTitle(shown), max(cw/2, 1)))
 		}
+		lines = append(lines, compose(sidebarHeaderRow("terminals", right, cw, pal)))
+		if emptyPeek {
+			hint := "no terminals"
+			lines = append(lines, compose(sidebarFit(
+				sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal)+
+					sidebarStyle(nil, nil).Render(" ")+
+					sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
+		} else {
+			for i := range count[sidebarSectionTerminals] {
+				idx := start[sidebarSectionTerminals] + i
+				e := terminals[idx]
+				hovered := idx == hoverRow[sidebarSectionTerminals] || isCursor(sidebarRowWindow, e.SessionID, e.WindowID)
+				recordHit(sidebarRowWindow, e.SessionID, e.WindowID, e.WindowIndex)
+				lines = append(lines, compose(m.sidebarTerminalRow(e, cw, pal, hovered, peeking)))
+			}
+			if h := hidden[sidebarSectionTerminals]; h > 0 {
+				lines = append(lines, overflowRow(h))
+			}
+		}
+	}
+
+	for range slack {
 		lines = append(lines, blank)
 	}
 
-	for _, r := range rows[m.SidebarScroll:end] {
-		switch {
-		case len(r.chips) > 0:
-			// One rectangle per chip, published in drawn order so the hits stay
-			// aligned with the nav rows the band added.
-			y := topMargin + len(lines)
-			for _, c := range r.chips {
-				m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
-					X0: contentX0 + c.X0, X1: contentX0 + c.X1,
-					Y0: y, Y1: y + 1,
-					Kind:        r.kind,
-					SessionID:   r.sessionID,
-					WindowIndex: -1,
-					Workspace:   c.Workspace,
-				})
-			}
-		case r.interactive:
-			recordHit(r.kind, r.sessionID, r.windowID, r.windowIndex)
+	// agents, pinned to the bottom by the slack above them
+	if nA > 0 {
+		lines = append(lines, blank)
+		lines = append(lines, compose(sidebarHeaderRow("agents", "", cw, pal)))
+		for i := range count[sidebarSectionAgents] {
+			idx := start[sidebarSectionAgents] + i
+			e := agents[idx]
+			hovered := idx == hoverRow[sidebarSectionAgents] || isCursor(sidebarRowAgent, e.SessionID, e.WindowID)
+			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex)
+			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, hovered)))
 		}
-		lines = append(lines, compose(r.text))
+		if h := hidden[sidebarSectionAgents]; h > 0 {
+			lines = append(lines, overflowRow(h))
+		}
 	}
+
 	for len(lines) < height-footerH {
 		lines = append(lines, blank)
 	}
@@ -805,16 +813,21 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		lines = append(lines, compose(ln))
 	}
 
-	// Publish the frame's navigable rows for the keyboard, then re-anchor the
-	// cursor onto the row it was tracking so its index stays valid across a
-	// relayout (reorder, switch, expand/collapse). A follow request is consumed
-	// here, once the row it named exists in the new layout.
+	m.sidebarPublishNav(nav, cursorTarget, haveCursorTarget)
+	return lines, w
+}
+
+// sidebarPublishNav hands the frame's navigable rows to the keyboard, then
+// re-anchors the cursor onto the row it was tracking so its index stays valid
+// across a relayout (reorder, switch, filter, peek). A follow request is
+// consumed here, once the row it named exists in the new layout.
+func (m *OS) sidebarPublishNav(nav []sidebarNavRow, target sidebarNavRow, haveTarget bool) {
 	m.SidebarNav = nav
 	m.sidebarFollowSession = ""
-	if haveCursorTarget {
+	if haveTarget {
 		m.SidebarCursor = 0
 		for i, r := range nav {
-			if sidebarNavRowsEqual(r, cursorTarget) {
+			if sidebarNavRowsEqual(r, target) {
 				m.SidebarCursor = i
 				break
 			}
@@ -823,8 +836,241 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if m.SidebarCursor >= len(nav) {
 		m.SidebarCursor = max(len(nav)-1, 0)
 	}
+}
 
+// sidebarShownSession is the session whose panes the terminals section is
+// showing, and whether that is a peek rather than the attached session. A peek
+// naming a session that no longer exists (or the attached one) is simply not a
+// peek: the render never has to trust stale runtime state.
+func (m *OS) sidebarShownSession(sessions []sessiontree.Node) (string, bool) {
+	attached := m.sidebarCurrentSessionID()
+	if m.SidebarPeek == "" || m.SidebarPeek == attached {
+		return attached, false
+	}
+	for _, s := range sessions {
+		if s.ID == m.SidebarPeek {
+			return s.ID, true
+		}
+	}
+	return attached, false
+}
+
+// sidebarTerminals flattens the panes of one session for the terminals section,
+// ordered by workspace and then by the session's own pane order so a row never
+// moves under the pointer for a reason the user cannot see.
+func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []sidebarTerminalEntry {
+	var node *sessiontree.Node
+	for i := range sessions {
+		if sessions[i].ID == sessionID {
+			node = &sessions[i]
+			break
+		}
+	}
+	if node == nil {
+		return nil
+	}
+	out := make([]sidebarTerminalEntry, 0, len(node.Children))
+	for _, win := range node.Children {
+		e := sidebarTerminalEntry{
+			SessionID:   node.ID,
+			WindowID:    win.ID,
+			Title:       win.Title,
+			State:       win.AgentState,
+			DoneSeen:    win.DoneSeen,
+			Focused:     win.IsCurrent,
+			WindowIndex: -1,
+		}
+		if node.IsCurrent {
+			e.WindowIndex = m.windowIndexByID(win.ID)
+			e.Workspace = m.windowWorkspace(win.ID)
+		}
+		// A peeked session's panes carry no workspace yet: it is not on the wire,
+		// so those rows go tagless until the protocol enrichment lands.
+		out = append(out, e)
+	}
+	sort.SliceStable(out, func(a, b int) bool { return out[a].Workspace < out[b].Workspace })
+	return out
+}
+
+// sidebarAgents flattens every pane running an agent, across every session.
+// Sessions with known windows contribute: the attached one from live state,
+// others from the cached listing, so agents elsewhere surface here marked
+// Foreign.
+func (m *OS) sidebarAgents(sessions []sessiontree.Node, variant int) []sidebarAgentEntry {
+	if variant == sidebarVariantGlyph || !config.SidebarShowAgents {
+		return nil
+	}
+	var agents []sidebarAgentEntry
+	for _, s := range sessions {
+		for _, win := range s.Children {
+			if win.AgentState == "" {
+				continue
+			}
+			idx := -1
+			if s.IsCurrent {
+				idx = m.windowIndexByID(win.ID)
+			}
+			agents = append(agents, sidebarAgentEntry{
+				SessionID:    s.ID,
+				SessionLabel: s.Title,
+				WindowID:     win.ID,
+				Title:        win.Title,
+				State:        win.AgentState,
+				DoneSeen:     win.DoneSeen,
+				StateAt:      win.StateAt,
+				WindowIndex:  idx,
+				Foreign:      !s.IsCurrent,
+			})
+		}
+	}
+	// Ordered by need, stable within a rank so panes keep their tree order.
+	// This is what makes the section's cap safe: what it hides is provably the
+	// calm end of the list, never the pane waiting on an answer.
+	sort.SliceStable(agents, func(a, b int) bool {
+		return sessiontree.AgentRank(agents[a].State, agents[a].DoneSeen) >
+			sessiontree.AgentRank(agents[b].State, agents[b].DoneSeen)
+	})
+	return agents
+}
+
+// sidebarCursorIndex locates the cursor's target inside its section, so the
+// auto-scroll knows which offset to move and by how much.
+func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Node,
+	terminals []sidebarTerminalEntry, agents []sidebarAgentEntry,
+) (sidebarSection, int, bool) {
+	switch target.Kind {
+	case sidebarRowSession:
+		for i, s := range sessions {
+			if s.ID == target.SessionID {
+				return sidebarSectionSessions, i, true
+			}
+		}
+	case sidebarRowWindow:
+		for i, e := range terminals {
+			if e.WindowID == target.WindowID {
+				return sidebarSectionTerminals, i, true
+			}
+		}
+	case sidebarRowAgent:
+		for i, e := range agents {
+			if e.WindowID == target.WindowID && e.SessionID == target.SessionID {
+				return sidebarSectionAgents, i, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// sidebarStripLines draws the glyph-width rail: one cell of identity and one of
+// state per session, over the same pinned footer the wide rail has. Three
+// columns is all the responsive clamp leaves on a narrow screen, so there is
+// room for a stack and a control and nothing else.
+func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMargin, sidebarX, contentX0 int,
+	pal overlay.Palette, compose func(string) string, blank string,
+) ([]string, int) {
+	canCreate := m.SidebarCanCreateSession()
+	noCursor := func(sidebarRowKind) bool { return false }
+	footerLines, footerZones := m.sidebarFooter(sidebarVariantGlyph, cw, pal, canCreate, -1, -1, noCursor)
+	footerH := len(footerLines)
+	if footerH >= height {
+		footerLines, footerZones, footerH = nil, nil, 0
+	}
+
+	hover, footerHoverLine, footerHoverX := -1, -1, -1
+	if !m.SidebarDrag.Dragging && m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
+		delta := m.SidebarHoverY - topMargin
+		if footerH > 0 && delta >= height-footerH {
+			footerHoverLine, footerHoverX = delta-(height-footerH), m.SidebarHoverX-contentX0
+		} else {
+			hover = delta
+		}
+	}
+	if footerH > 0 {
+		footerLines, footerZones = m.sidebarFooter(sidebarVariantGlyph, cw, pal, canCreate, footerHoverLine, footerHoverX, noCursor)
+	}
+
+	nav := make([]sidebarNavRow, 0, len(sessions)+len(footerZones))
+	lines := make([]string, 0, height)
+	for i, s := range sessions {
+		if len(lines) >= height-footerH {
+			break
+		}
+		y := topMargin + len(lines)
+		m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
+			X0: sidebarX, X1: sidebarX + w,
+			Y0: y, Y1: y + 1,
+			Kind: sidebarRowSession, SessionID: s.ID, WindowIndex: -1,
+		})
+		nav = append(nav, sidebarNavRow{Kind: sidebarRowSession, SessionID: s.ID, WindowIndex: -1})
+		dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
+		lines = append(lines, compose(m.sidebarStripCell(s, cw, pal, i == hover, dragged)))
+	}
+	for len(lines) < height-footerH {
+		lines = append(lines, blank)
+	}
+	footerTop := topMargin + len(lines)
+	for _, z := range footerZones {
+		y := footerTop + z.Line
+		m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
+			X0: contentX0 + z.X0, X1: contentX0 + z.X1,
+			Y0: y, Y1: y + 1,
+			Kind:        z.Kind,
+			WindowIndex: -1,
+		})
+		nav = append(nav, sidebarNavRow{Kind: z.Kind, WindowIndex: -1})
+	}
+	for _, ln := range footerLines {
+		lines = append(lines, compose(ln))
+	}
+
+	// The strip has one section, so the wheel has nowhere else to send a scroll.
+	for s := range m.sidebarSectionY {
+		m.sidebarSectionY[s] = [2]int{topMargin, topMargin}
+	}
+	m.SidebarNav = nav
+	m.sidebarFollowSession = ""
+	if m.SidebarCursor >= len(nav) {
+		m.SidebarCursor = max(len(nav)-1, 0)
+	}
 	return lines, w
+}
+
+// sidebarStripCell is one session's two cells on the glyph rail: a count digit
+// and its rolled-up state glyph, with an attention session inking the whole
+// cell because two columns are too few for a coloured glyph to carry an alarm.
+func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette, hovered, dragged bool) string {
+	mark := agentStateIndicator(node.AgentState)
+	if mark == "" || !config.SidebarShowGlyphs {
+		mark = "·"
+		if overlay.UseASCII() {
+			mark = "."
+		}
+	}
+	var bg, fg color.Color
+	leadFg := pal.FgMute
+	switch {
+	case sidebarAttention(node.AgentState) && config.SidebarShowGlyphs:
+		bg, fg = agentGlyphColor(node.AgentState, pal), pal.Canvas
+		leadFg = pal.Canvas
+	case node.IsCurrent:
+		bg = pal.Surface
+	case hovered || dragged:
+		bg = pal.RowSel
+	}
+	if fg == nil {
+		fg = pal.FgMute
+		if config.SidebarShowGlyphs && agentStateIndicator(node.AgentState) != "" {
+			fg = sidebarStateColor(node.AgentState, node.DoneSeen, pal)
+		}
+	}
+	lead := " "
+	if config.SidebarShowCounts && node.WindowCount > 1 {
+		lead = strconv.Itoa(node.WindowCount)
+		if node.WindowCount > 9 {
+			lead = "+"
+		}
+	}
+	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+sidebarStyle(bg, fg).Render(mark), cw, bg)
 }
 
 // sidebarFooterZone is one control in the rail's footer: its kind and the
@@ -945,15 +1191,12 @@ func (m *OS) windowIndexByID(id string) int {
 	return -1
 }
 
-// sidebarSessionRow renders one session row for the given variant.
+// sidebarSessionRow renders one session row.
 //
-// Full variant anatomy, kept to fixed columns so the rows scan vertically:
-//
-//	▎▸ ● name           3
-//	^^ ^ ^              ^ window count, right-aligned, muted, collapsed only
-//	|| | name: full strength on the attached session, dim on the rest
-//	|| rolled-up agent glyph, state-colored
-//	|expand chevron, muted; blank when there is nothing to expand
+//	▎● name              3
+//	^ ^ ^                ^ window count, right-aligned, muted, inset one cell
+//	| | name: full strength on the attached session, dim on the rest
+//	| rolled-up agent glyph, state-colored, a quiet dot when there is none
 //	gutter: accent when attached, severity when a pane wants a human
 //
 // Emphasis ladder, quietest to loudest: other rows dim; attached session an
@@ -964,88 +1207,22 @@ func (m *OS) windowIndexByID(id string) int {
 //
 // A drag in progress keeps the band on the dragged row while it rides the
 // pointer.
-func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool, cw int, pal overlay.Palette, hovered, dragged bool) string {
-	if variant == sidebarVariantGlyph {
-		// One rolled-up glyph per session. A session with no agent state still
-		// marks its slot with a dim dot, otherwise its row would be an invisible
-		// strip of nothing to aim a click at.
-		mark := agentStateIndicator(node.AgentState)
-		if mark == "" || !config.SidebarShowGlyphs {
-			mark = "·"
-			if overlay.UseASCII() {
-				mark = "."
-			}
-		}
-		var bg, fg color.Color
-		leadFg := pal.FgMute
-		switch {
-		case sidebarAttention(node.AgentState) && config.SidebarShowGlyphs:
-			// Two cells is too little room for a coloured glyph to carry an
-			// alarm, so at this width the cell itself is inked and the glyph is
-			// knocked out of it. This outranks the current-session fill: the
-			// whole job of a three-column rail is saying which session wants you.
-			// The count is knocked out with it, or it would be a muted mark on
-			// a saturated fill.
-			bg, fg = agentGlyphColor(node.AgentState, pal), pal.Canvas
-			leadFg = pal.Canvas
-		case node.IsCurrent:
-			bg = pal.Surface
-		case hovered || dragged:
-			bg = pal.RowSel
-		}
-		if fg == nil {
-			fg = pal.FgMute
-			if config.SidebarShowGlyphs && agentStateIndicator(node.AgentState) != "" {
-				fg = sidebarStateColor(node.AgentState, node.DoneSeen, pal)
-			}
-		}
-		// The spare cell carries the window count rather than a blank: at three
-		// columns "how many panes" is the only other thing worth saying, and a
-		// digit beside a state glyph is the whole rail in two cells. Blank for a
-		// single-window session, where the count says nothing.
-		lead := " "
-		if config.SidebarShowCounts && node.WindowCount > 1 {
-			lead = strconv.Itoa(node.WindowCount)
-			if node.WindowCount > 9 {
-				lead = "+"
-			}
-		}
-		row := sidebarStyle(bg, leadFg).Render(lead) + sidebarStyle(bg, fg).Render(mark)
-		return sidebarFit(row, cw, bg)
-	}
-
-	// The only band left on the rail is the transient one: pointer or keyboard
-	// cursor. It sits on Surface rather than RowSel, which was one luminance
-	// step off the canvas and left the cursor all but invisible. Identity and
-	// attention moved to the gutter.
+func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overlay.Palette, hovered, dragged bool) string {
 	var rowBg color.Color
 	if hovered || dragged {
 		rowBg = pal.Surface
 	}
 
-	chevron := " "
-	if config.SidebarShowWindows && len(node.Children) > 0 {
-		chevron = sidebarChevron(expanded)
+	glyph := sidebarQuietDot(rowBg, pal)
+	if agentStateIndicator(node.AgentState) != "" {
+		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal)
 	}
 
-	// Gutter, chevron, a space, the state glyph, then one cell of inset: the
-	// name lands on column 5, the spine the pane rows below it use, and the
-	// glyph on column 3 with theirs.
-	left := sidebarGutter(node.IsCurrent, node.AgentState, rowBg, pal) +
-		sidebarStyle(rowBg, pal.FgMute).Render(chevron) +
-		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal)
-
-	right := ""
-	rightW := 0
-	// Only a collapsed session counts its windows. Expanded, the rows are printed
-	// directly underneath and the eye can count them, while the digit sat in the
-	// same column as the window rows' own digits and meant something else.
-	if config.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull && !expanded {
+	right, rightW := "", 0
+	if config.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
 		countStr := strconv.Itoa(node.WindowCount)
-		right = sidebarStyle(rowBg, pal.FgMute).Render(countStr) +
-			sidebarStyle(rowBg, nil).Render(" ")
-		rightW = lipgloss.Width(countStr) + 1
+		right = sidebarStyle(rowBg, pal.FgMute).Render(countStr)
+		rightW = lipgloss.Width(countStr)
 	}
 
 	// The attached session's name reads at full strength; the rest are dim. A
@@ -1055,84 +1232,85 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant int, expanded bool
 	if node.IsCurrent || hovered || dragged {
 		fg = pal.Fg
 	}
-	nameStyle := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState))
-	name := m.sidebarMarquee("s:"+node.ID, printableTitle(node.Title),
-		max(cw-rightW-8, 1), hovered)
-	row := left + sidebarStyle(rowBg, nil).Render(" ") +
-		nameStyle.Render(name) + sidebarStyle(rowBg, nil).Render("  ")
-	gap := max(cw-lipgloss.Width(row)-rightW, 0)
-	row += sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", gap)) + right
-	return sidebarFit(row, cw, rowBg)
+	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
+		Render(m.sidebarMarquee("s:"+node.ID, printableTitle(node.Title), sidebarNameAvail(cw, rightW), hovered))
+	return sidebarComposeRow(sidebarGutter(node.IsCurrent, node.AgentState, rowBg, pal),
+		glyph, name, right, cw, rowBg)
 }
 
-// sidebarWindowRow renders one window row under an expanded session, indented
-// one level past the session name. The focused window wears the accent gutter
-// mark and reads at full strength; the rest stay dim so the list reads as
-// detail under its session, not as a second list of equals.
-func (m *OS) sidebarWindowRow(node sessiontree.Node, variant int, cw int, pal overlay.Palette, hovered bool) string {
-	title := printableTitle(node.Title)
-	if title == "" {
-		title = "shell"
-	}
-
-	// One level past the session's glyph column, so a window title lands on the
-	// same spine as its session name.
-	indent := sidebarPaneIndent(variant)
-
-	// Same as a session row: the only band is the transient one under the
-	// pointer or the keyboard cursor. Focus and attention are gutter marks.
+// sidebarTerminalRow renders one pane of the session the terminals section is
+// showing. The focused pane wears exactly one identity bar: the gutter mark,
+// burning its own accent when the user gave it one, which is why the glyph
+// column carries agent state and nothing else on that row. An unfocused pane
+// with an accent wears the chip in the gutter instead, so the rail keeps one
+// column of identity top to bottom.
+//
+// A peeked row is a photograph: uniformly dim, no focus mark, no unread
+// emphasis. Severity gutters and state glyph colours stay, because they are
+// what the user peeked to see.
+func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Palette, hovered, peeked bool) string {
 	var rowBg color.Color
 	if hovered {
 		rowBg = pal.Surface
 	}
 
+	title := printableTitle(e.Title)
+	if title == "" {
+		title = "shell"
+	}
+
+	gutter := sidebarGutter(false, e.State, rowBg, pal)
+	if !peeked {
+		var tint color.Color
+		accent, accented := m.WindowAccent(e.WindowID)
+		if m.ShowAccentPicker && e.WindowID == m.AccentPickerWindowID {
+			// The open picker previews the colour under its cursor on the row it
+			// targets, so the choice reads on the thing being accented.
+			accent, accented = m.accentPreview(e.WindowID)
+		}
+		if accented {
+			tint = accent.Color()
+		}
+		switch {
+		case e.Focused:
+			gutter = sidebarGutterTinted(true, e.State, tint, rowBg, pal)
+		case accented && !sidebarAttention(e.State):
+			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
+		}
+	}
+
+	// A pane on another workspace is here for orientation: it names the
+	// workspace it is on, so the row answers "where did it go" without a switch
+	// to find out. A pane on this workspace says nothing, because "here" is not
+	// information.
+	right, rightW := "", 0
+	if e.Workspace > 0 && e.Workspace != m.sessionCurrentWorkspace(e.SessionID) {
+		tag := m.workspaceTag(e.Workspace)
+		right = sidebarStyle(rowBg, pal.FgMute).Render(tag)
+		rightW = lipgloss.Width(tag)
+	}
+
 	fg := pal.FgDim
 	switch {
-	case node.IsCurrent:
+	case peeked:
+		// Nothing in a peek is yours to act on, so nothing in it is emphasised.
+	case e.Focused:
 		fg = pal.Fg
-	case node.AgentState == "done" && !node.DoneSeen:
+	case e.State == "done" && !e.DoneSeen:
 		// Unseen work reads at full strength; seeing it is what dims it.
 		fg = pal.Fg
 	}
-
-	// A pane on another workspace is here for orientation, not for reading: it
-	// goes a step further down and names the workspace it is on, so the row
-	// answers "where did it go" without a switch to find out.
-	elsewhere := 0
-	if ws := m.windowWorkspace(node.ID); ws > 0 && ws != m.CurrentWorkspace {
-		elsewhere = ws
-		fg = pal.FgMute
-	}
-
 	if hovered {
 		fg = pal.Fg
 	}
 
-	right, rightW := "", 0
-	if elsewhere > 0 {
-		// "w4" rather than a bare "4": a plain digit in this column is a session
-		// row's window count, so on adjacent lines the same mark meant two things.
-		tag := "w" + strconv.Itoa(elsewhere)
-		right = sidebarStyle(rowBg, pal.FgMute).Render(tag) + sidebarStyle(rowBg, nil).Render(" ")
-		rightW = lipgloss.Width(tag) + 1
-	}
-
-	row := sidebarGutter(node.IsCurrent, node.AgentState, rowBg, pal) +
-		sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent-1)) +
-		m.sidebarWindowGlyph(node, rowBg, pal) +
-		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
-			Render(m.sidebarMarquee("w:"+node.ID, title, max(cw-indent-3-rightW, 1), hovered))
-	if rightW > 0 {
-		gap := max(cw-lipgloss.Width(row)-rightW, 0)
-		row += sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", gap)) + right
-	}
-	return sidebarFit(row, cw, rowBg)
+	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(e.State)).
+		Render(m.sidebarMarquee("t:"+e.WindowID, title, sidebarNameAvail(cw, rightW), hovered))
+	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, rowBg, pal), name, right, cw, rowBg)
 }
 
 // windowWorkspace is the workspace a rail row's window sits on, or 0 when this
-// client does not hold it (a pane of a session it is not attached to, whose
-// workspace is not on the wire).
+// client does not hold it.
 func (m *OS) windowWorkspace(id string) int {
 	if i := m.windowIndexByID(id); i >= 0 {
 		return m.Windows[i].Workspace
@@ -1140,29 +1318,36 @@ func (m *OS) windowWorkspace(id string) int {
 	return 0
 }
 
-// sidebarWindowGlyph is the one cell in front of a window's name: its agent
-// state when it has one, else the accent the user gave it. State outranks
-// identity, so a working pane keeps its state dot and the accent waits.
-func (m *OS) sidebarWindowGlyph(node sessiontree.Node, rowBg color.Color, pal overlay.Palette) string {
-	if node.AgentState == "" && config.SidebarShowGlyphs {
-		accent, ok := m.WindowAccent(node.ID)
-		if m.ShowAccentPicker && node.ID == m.AccentPickerWindowID {
-			// The open picker previews the colour under its cursor on the row it
-			// targets, so the choice reads on the thing being accented, not in
-			// the dialog.
-			accent, ok = m.accentPreview(node.ID)
-		}
-		if ok {
-			return sidebarStyle(rowBg, accent.Color()).Render(accentMark())
-		}
+// workspaceTag is the quiet right-hand mark saying which workspace a pane sits
+// on. A named workspace says its name, because that is the thing the user gave
+// it to be recognised by; an unnamed one keeps the "w4" form, where the bare
+// digit would read as a session row's window count on the line above.
+func (m *OS) workspaceTag(ws int) string {
+	if label := printableTitle(m.WorkspaceLabel(ws)); label != strconv.Itoa(ws) && label != "" {
+		return overlay.Truncate(label, sidebarWorkspaceTagMax)
 	}
-	return sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal)
+	return "w" + strconv.Itoa(ws)
 }
 
-// sidebarAgentRow renders one row of the running-agents section: state glyph,
-// pane name (session-qualified when the pane lives in another session), and,
-// in the full variant, the state word right-aligned and muted.
-func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overlay.Palette, hovered bool) string {
+// sidebarWorkspaceTagMax caps a named workspace's tag so the name it fronts can
+// never crowd out the pane name the row is actually about.
+const sidebarWorkspaceTagMax = 8
+
+// sessionCurrentWorkspace is the workspace a session is showing, which is what
+// decides whether a pane of it counts as "here" and so goes untagged. Only the
+// attached session's is known to this client; a peeked session answers 0, which
+// leaves its rows tagless rather than wrong.
+func (m *OS) sessionCurrentWorkspace(sessionID string) int {
+	if sessionID == m.sidebarCurrentSessionID() {
+		return m.CurrentWorkspace
+	}
+	return 0
+}
+
+// sidebarAgentRow renders one row of the agents section: state glyph, pane name
+// (session-qualified when the pane lives in another session), and, in the full
+// variant, how long it has been in its state, right-aligned.
+func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, hovered bool) string {
 	var rowBg color.Color
 	fg := pal.FgDim
 	if e.State == "done" && !e.DoneSeen {
@@ -1182,7 +1367,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 	// gives its cells up first when the row runs out of room.
 	prefix := ""
 	if e.Foreign {
-		if s := printableTitle(e.SessionID); s != "" {
+		if s := printableTitle(e.SessionLabel); s != "" {
 			prefix = s + "/"
 		}
 	}
@@ -1191,19 +1376,13 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 	// glyph, colour and sort position already say which state it is, while the
 	// duration is the part nothing else carries. A pane waiting twenty minutes
 	// on input reads very differently from one that just asked.
-	label := ""
-	labelW := 0
+	label, labelW := "", 0
 	if variant == sidebarVariantFull {
 		label = agentElapsed(e.State, e.StateAt, time.Now())
-		if label != "" {
-			labelW = lipgloss.Width(label) + 1
-		}
+		labelW = lipgloss.Width(label)
 	}
 
-	// An agent row points at a pane, so it takes a window row's columns: same
-	// glyph column, same name spine, read straight down the rail.
-	indent := sidebarPaneIndent(variant)
-	avail := max(cw-indent-2-labelW-1, 1)
+	avail := sidebarNameAvail(cw, labelW)
 	nameStyle := sidebarStyle(rowBg, fg)
 	timeFg := pal.FgMute
 	if sidebarAttention(e.State) {
@@ -1218,19 +1397,15 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant int, cw int, pal overl
 	if lipgloss.Width(shown)+2 > avail {
 		shown = ""
 	}
-	// An agent row is only ever "current" through the pane it points at, which
-	// the tree section below already marks, so its gutter carries severity only.
-	row := sidebarGutter(false, e.State, rowBg, pal) +
-		sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent-1)) +
-		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal) +
-		sidebarStyle(rowBg, nil).Render(" ") +
-		sidebarStyle(rowBg, pal.FgMute).Render(shown) +
-		nameStyle.Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, max(avail-lipgloss.Width(shown), 1), hovered))
+	right := ""
 	if label != "" {
-		gap := max(cw-lipgloss.Width(row)-labelW, 0)
-		row += sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", gap)) +
-			sidebarStyle(rowBg, timeFg).Render(label) +
-			sidebarStyle(rowBg, nil).Render(" ")
+		right = sidebarStyle(rowBg, timeFg).Render(label)
 	}
-	return sidebarFit(row, cw, rowBg)
+	// An agent row is only ever "current" through the pane it points at, which
+	// the terminals section already marks, so its gutter carries severity only.
+	body := sidebarStyle(rowBg, pal.FgMute).Render(shown) +
+		nameStyle.Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name,
+			max(avail-lipgloss.Width(shown), 1), hovered))
+	return sidebarComposeRow(sidebarGutter(false, e.State, rowBg, pal),
+		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal), body, right, cw, rowBg)
 }

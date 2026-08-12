@@ -10,11 +10,12 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// The sidebar keeps two pieces of state worth surviving a restart: the user's
-// drag-defined session order and the per-session expand/collapse toggles. They
-// are view preferences of this user's sidebar, not session data, so they live
-// in a small state file of their own rather than in config.toml (which the
-// settings page rewrites) or in the daemon (which serves many clients).
+// The sidebar keeps the view preferences worth surviving a restart: the user's
+// drag-defined session order, the rail width, and the per-window accents and
+// unread bits. They are preferences of this user's sidebar, not session data,
+// so they live in a small state file of their own rather than in config.toml
+// (which the settings page rewrites) or in the daemon (which serves many
+// clients).
 
 // sidebarStateDir returns the directory the sidebar state file lives in. A
 // variable so tests can point it at a scratch directory.
@@ -24,12 +25,11 @@ var sidebarStateDir = func() string {
 
 const sidebarStateFileName = "sidebar.json"
 
-// sidebarStateFile is the on-disk shape. Collapsed records only explicit user
-// toggles (true = collapsed); sessions without an entry keep the default of
-// "expanded when current, collapsed otherwise".
+// sidebarStateFile is the on-disk shape. The tree's per-session "collapsed"
+// map is gone with the tree; a file still carrying it parses fine, because
+// encoding/json drops keys the struct no longer names.
 type sidebarStateFile struct {
-	Order     []string        `json:"order,omitempty"`
-	Collapsed map[string]bool `json:"collapsed,omitempty"`
+	Order []string `json:"order,omitempty"`
 	// Width is the user's drag-defined full-rail width, overriding the config
 	// default at runtime. Zero means never dragged, so the config width stands.
 	Width int `json:"width,omitempty"`
@@ -51,9 +51,9 @@ type sidebarStateFile struct {
 	AgentSeen map[string]bool `json:"agent_seen,omitempty"`
 }
 
-// loadSidebarState reads the persisted sidebar order and collapse toggles.
-// Any failure leaves the defaults in place; a missing file is the ordinary
-// first-run case, not an error worth surfacing.
+// loadSidebarState reads the persisted sidebar preferences. Any failure leaves
+// the defaults in place; a missing file is the ordinary first-run case, not an
+// error worth surfacing.
 func (m *OS) loadSidebarState() {
 	data, err := os.ReadFile(filepath.Join(sidebarStateDir(), sidebarStateFileName))
 	if err != nil {
@@ -65,9 +65,6 @@ func (m *OS) loadSidebarState() {
 	}
 	if len(st.Order) > 0 {
 		m.SidebarOrder = st.Order
-	}
-	if len(st.Collapsed) > 0 {
-		m.SidebarCollapsed = st.Collapsed
 	}
 	if a := accentsFromFile(st); len(a) > 0 {
 		m.SidebarAccents = a
@@ -83,9 +80,9 @@ func (m *OS) loadSidebarState() {
 	}
 }
 
-// saveSidebarState writes the sidebar order and collapse toggles. Best effort:
-// the state is a convenience, and a failed write must never interrupt the
-// interaction that triggered it.
+// saveSidebarState writes the sidebar preferences. Best effort: the state is a
+// convenience, and a failed write must never interrupt the interaction that
+// triggered it.
 func (m *OS) saveSidebarState() {
 	dir := sidebarStateDir()
 	if os.MkdirAll(dir, 0o750) != nil {
@@ -94,7 +91,6 @@ func (m *OS) saveSidebarState() {
 	slots, colors := accentsToFile(m.SidebarAccents)
 	data, err := json.Marshal(sidebarStateFile{
 		Order:        m.SidebarOrder,
-		Collapsed:    m.SidebarCollapsed,
 		Width:        config.SidebarWidth,
 		Accents:      slots,
 		AccentColors: colors,

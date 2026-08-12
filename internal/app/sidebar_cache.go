@@ -16,6 +16,7 @@ type sidebarRenderCache struct {
 	hits       []sidebarRowHit
 	sessionIDs []string
 	nav        []sidebarNavRow
+	sections   [sidebarSectionCount][2]int
 }
 
 // invalidate drops the cached rail, forcing the next frame to rebuild. Called
@@ -34,6 +35,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		m.SidebarHits = append(m.SidebarHits[:0], m.sidebarCache.hits...)
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs[:0], m.sidebarCache.sessionIDs...)
 		m.SidebarNav = append(m.SidebarNav[:0], m.sidebarCache.nav...)
+		m.sidebarSectionY = m.sidebarCache.sections
 		return m.sidebarCache.lines, m.sidebarCache.w
 	}
 
@@ -47,6 +49,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		hits:       append([]sidebarRowHit(nil), m.SidebarHits...),
 		sessionIDs: append([]string(nil), m.SidebarSessionIDs...),
 		nav:        append([]sidebarNavRow(nil), m.SidebarNav...),
+		sections:   m.sidebarSectionY,
 	}
 	return lines, w
 }
@@ -93,44 +96,49 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(config.SidebarShowGlyphs)
 	mixB(config.SidebarShowCounts)
 
-	// View state: scroll, focus, and hover all restyle rows.
-	mixI(m.SidebarScroll)
+	// View state: scroll, focus, and hover all restyle rows. Each section holds
+	// its own offset, so all three are folded.
+	mixI(m.SidebarScrollS)
+	mixI(m.SidebarScrollT)
+	mixI(m.SidebarScrollA)
 	mixI(m.FocusedWindow)
 	mixB(m.SidebarHoverActive)
 	mixI(m.SidebarHoverX)
 	mixI(m.SidebarHoverY)
+
+	// The peek swaps the whole terminals section and re-marks its header, so a
+	// peeked frame and a resting one can never share a cache entry. The pair
+	// rule's arm is not folded: it decides whether a later event commits, and
+	// draws nothing itself.
+	mixS(m.SidebarPeek)
 
 	// Rail keyboard focus: the accent edge and the cursor-row highlight both
 	// depend on it, so a focus change or a cursor move must rebuild.
 	mixB(m.SidebarFocused)
 	mixI(m.SidebarCursor)
 
-	// The workspace band and the other-workspace digits both turn on which
-	// workspace is current; which chips exist follows from the per-window
-	// workspaces folded in below.
+	// Which terminal rows carry a workspace tag turns on which workspace is
+	// current; the per-window workspaces themselves are folded in below. The
+	// names print in the tag, so renaming a workspace has to restyle the rows on
+	// it. Order-independent, so map iteration order does not matter.
 	mixI(m.CurrentWorkspace)
-	mixI(m.NumWorkspaces)
+	var wsFold uint64
+	for ws, name := range m.WorkspaceNames {
+		e := uint64(1469598103934665603) ^ uint64(ws)
+		e *= prime
+		for i := range len(name) {
+			e ^= uint64(name[i])
+			e *= prime
+		}
+		wsFold ^= e
+	}
+	mixU(wsFold)
 
 	// Session identity and the user's drag-defined order.
 	mixS(m.SessionName)
 	for _, o := range m.SidebarOrder {
 		mixS(o)
 	}
-
-	// Expand state, order-independent so map iteration order does not matter.
-	var collapsedFold uint64
-	for id, collapsed := range m.SidebarCollapsed {
-		e := uint64(1469598103934665603)
-		for i := range len(id) {
-			e ^= uint64(id[i])
-			e *= prime
-		}
-		if collapsed {
-			e ^= 0x9e3779b97f4a7c15
-		}
-		collapsedFold ^= e
-	}
-	mixU(collapsedFold)
 
 	// Foreign-session data, folded by generation instead of by locking the client.
 	if m.DaemonClient != nil {

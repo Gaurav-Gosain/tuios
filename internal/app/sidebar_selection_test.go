@@ -23,22 +23,20 @@ func fgParams(c color.Color) string {
 	return fmt.Sprintf("38;2;%d;%d;%d", r>>8, g>>8, b>>8)
 }
 
-// treeRow returns the styled session-tree row containing want. A pane running
-// an agent is also listed in the agents section above, so the last match is the
-// tree row.
+// treeRow returns the styled terminals-section row containing want. A pane
+// running an agent is also listed in the agents section, which is pinned
+// below the terminals section at the rail's bottom, so the first match is the
+// terminals row.
 func treeRow(t *testing.T, m *OS, want string) string {
 	t.Helper()
 	lines, _ := m.sidebarPanelLines()
-	found := ""
 	for _, l := range lines {
 		if strings.Contains(stripANSIForTrace(l), want) {
-			found = l
+			return l
 		}
 	}
-	if found == "" {
-		t.Fatalf("no row contains %q", want)
-	}
-	return found
+	t.Fatalf("no row contains %q", want)
+	return ""
 }
 
 // gutterCell is the first content column of a styled rail row, which is the

@@ -187,13 +187,12 @@ func (m *OS) tapeAutorunConfigValue() string {
 const themeNone = "none"
 
 var (
-	borderStyleOptions      = []string{"rounded", "normal", "thick", "double", "block", "outer-half-block", "inner-half-block", "ascii", "hidden"}
-	positionOptions         = []string{"bottom", "top", "hidden"}
-	whichKeyPosOptions      = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
-	fpsOptions              = []string{"30", "60", "90", "120", "144", "unlimited"}
-	sidebarPositionOptions  = []string{"left", "right", "hidden"}
-	sidebarWorkspaceOptions = config.SidebarWorkspacesModes
-	scrollbarStyleOptions   = config.ScrollbarStyles
+	borderStyleOptions     = []string{"rounded", "normal", "thick", "double", "block", "outer-half-block", "inner-half-block", "ascii", "hidden"}
+	positionOptions        = []string{"bottom", "top", "hidden"}
+	whichKeyPosOptions     = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
+	fpsOptions             = []string{"30", "60", "90", "120", "144", "unlimited"}
+	sidebarPositionOptions = []string{"left", "right", "hidden"}
+	scrollbarStyleOptions  = config.ScrollbarStyles
 )
 
 // boolPtr returns a pointer to b, for the *bool config fields.
@@ -456,18 +455,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowCounts = boolPtr(v) })
 					m.applyAppearanceLive(false)
 				}),
-			boolItem("Agents section", "List the panes running an agent above the session tree",
+			boolItem("Agents section", "List the panes running an agent, pinned to the rail's bottom",
 				func() bool { return config.SidebarShowAgents },
 				func(m *OS, v bool) {
 					config.SidebarShowAgents = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowAgents = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			enumItem("Workspaces", "Show the workspace chips under the current session", sidebarWorkspaceOptions,
-				func() string { return config.SidebarWorkspaces },
-				func(m *OS, v string) {
-					config.SidebarWorkspaces = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Workspaces = v })
 					m.applyAppearanceLive(false)
 				}),
 			boolItem("Marquee", "Scroll a hovered row's title when it does not fit",

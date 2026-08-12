@@ -12,7 +12,7 @@ import (
 // enough for the pill to be offered, which is what these tests are about.
 func daemonRailOS(t *testing.T, w, h int) *OS {
 	t.Helper()
-	m := bandTestOS(t, w, h, "left")
+	m := sidebarTestOS(t, w, h, "left")
 	m.DaemonClient = &session.TUIClient{}
 	m.IsDaemonSession = true
 	m.SessionName = "session-0"
@@ -31,7 +31,7 @@ func newSessionHit(m *OS) (sidebarRowHit, bool) {
 // TestNewSessionPillIsHiddenInStandalone: a control that can never work is
 // noise, so standalone does not draw it at all.
 func TestNewSessionPillIsHiddenInStandalone(t *testing.T) {
-	m := bandTestOS(t, 120, 40, "left") // no DaemonClient
+	m := sidebarTestOS(t, 120, 40, "left") // no DaemonClient
 	if m.SidebarCanCreateSession() {
 		t.Fatal("standalone reported it can create sessions")
 	}
@@ -112,7 +112,7 @@ func TestNextSessionNameSkipsTakenNames(t *testing.T) {
 // TestNewSessionWithoutADaemonSaysSo rather than panicking on a nil client: the
 // row is hidden in standalone, but the key is still bound.
 func TestNewSessionWithoutADaemonSaysSo(t *testing.T) {
-	m := bandTestOS(t, 120, 40, "left")
+	m := sidebarTestOS(t, 120, 40, "left")
 	m.SidebarNewSession()
 	if len(m.Notifications) == 0 {
 		t.Fatal("no daemon and no explanation")
@@ -126,7 +126,7 @@ func TestNewSessionWithoutADaemonSaysSo(t *testing.T) {
 // method. Without a live daemon the call fails at the wire, which is fine: what
 // is under test is that the row routes there at all rather than sitting inert.
 func TestNewSessionPillActivatesByClickAndByKey(t *testing.T) {
-	m := bandTestOS(t, 120, 40, "left")
+	m := sidebarTestOS(t, 120, 40, "left")
 	sidebarText(t, m)
 
 	// The pill is hidden here, so drive the routing through a synthetic row of

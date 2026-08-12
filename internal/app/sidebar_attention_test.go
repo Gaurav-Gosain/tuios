@@ -28,7 +28,7 @@ func attentionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	}
 	m.FocusedWindow = 0
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	m.SidebarOrder, m.SidebarCollapsed, m.SidebarAgentSeen = nil, nil, nil
+	m.SidebarOrder, m.SidebarAgentSeen = nil, nil
 	return m, m.BuildSessionTree()
 }
 
@@ -73,37 +73,37 @@ func TestAgentsSectionPriorityOrder(t *testing.T) {
 	}
 }
 
-// TestRailDrawsAgentsAboveTree checks the inverted layout on screen: the agents
-// header is the rail's first row, a blank row closes the section, and the
-// sessions header follows it. Blank rather than a hairline: that rule was the
-// third on one screen beside the rail edge and the dock separator, and empty
-// space separates as well while saying nothing.
-func TestRailDrawsAgentsAboveTree(t *testing.T) {
+// TestRailDrawsAgentsAtTheBottom checks the pinned layout on screen: the
+// sessions header is the rail's first row, and the agents header comes last,
+// with a blank row of slack opening its section. Blank rather than a
+// hairline: that rule was the third on one screen beside the rail edge and
+// the dock separator, and empty space separates as well while saying nothing.
+func TestRailDrawsAgentsAtTheBottom(t *testing.T) {
 	m, tree := attentionOS(t, 120, 40)
 	lines, _ := m.sidebarPanelLinesForTree(tree)
 
-	if !strings.Contains(lines[0], "agents") {
-		t.Fatalf("row 0 = %q, want the Agents header first", lines[0])
+	if !strings.Contains(lines[0], "sessions") {
+		t.Fatalf("row 0 = %q, want the sessions header first", lines[0])
 	}
-	sessionsRow := -1
+	agentsRow := -1
 	for i, ln := range lines {
-		if strings.Contains(ln, "sessions") {
-			sessionsRow = i
+		if strings.Contains(ln, "agents") {
+			agentsRow = i
 			break
 		}
 	}
-	if sessionsRow <= 0 {
-		t.Fatalf("Sessions header at row %d, want it below the agents section", sessionsRow)
+	if agentsRow <= 0 {
+		t.Fatalf("agents header at row %d, want it below the sessions section", agentsRow)
 	}
-	if got := strings.TrimSpace(stripANSIForTrace(lines[sessionsRow-1])); got != "│" && got != "" {
-		t.Fatalf("row %d = %q, want a blank row closing the agents section", sessionsRow-1, lines[sessionsRow-1])
+	if got := strings.TrimSpace(stripANSIForTrace(lines[agentsRow-1])); got != "│" && got != "" {
+		t.Fatalf("row %d = %q, want a blank row opening the agents section", agentsRow-1, lines[agentsRow-1])
 	}
-	if rule := config.GetWindowSeparatorChar(); strings.Contains(lines[sessionsRow-1], strings.Repeat(rule, 4)) {
-		t.Fatalf("row %d still draws the hairline: %q", sessionsRow-1, lines[sessionsRow-1])
+	if rule := config.GetWindowSeparatorChar(); strings.Contains(lines[agentsRow-1], strings.Repeat(rule, 4)) {
+		t.Fatalf("row %d still draws the hairline: %q", agentsRow-1, lines[agentsRow-1])
 	}
 }
 
-// TestRailNavAndHitsFollowDrawnOrder is the parity guard for the inversion:
+// TestRailNavAndHitsFollowDrawnOrder is the parity guard for the layout:
 // every navigable row's nth entry must be the nth recorded hit, so the keyboard
 // cursor and a click land on the same thing.
 func TestRailNavAndHitsFollowDrawnOrder(t *testing.T) {
@@ -122,8 +122,8 @@ func TestRailNavAndHitsFollowDrawnOrder(t *testing.T) {
 			t.Fatalf("hit %d at y=%d is not below hit %d at y=%d", i, h.Y0, i-1, m.SidebarHits[i-1].Y0)
 		}
 	}
-	if m.SidebarNav[0].Kind != sidebarRowAgent {
-		t.Fatalf("first nav row is %v, want an agent row", m.SidebarNav[0].Kind)
+	if m.SidebarNav[0].Kind != sidebarRowSession {
+		t.Fatalf("first nav row is %v, want a session row", m.SidebarNav[0].Kind)
 	}
 }
 
@@ -139,8 +139,11 @@ func TestGlyphRailInksAttention(t *testing.T) {
 	calm := sessiontree.Node{ID: "s", Title: "s", AgentState: "working"}
 	loud := sessiontree.Node{ID: "s", Title: "s", AgentState: "needs_input"}
 
-	calmRow := m.sidebarSessionRow(calm, sidebarVariantGlyph, false, cw, pal, false, false)
-	loudRow := m.sidebarSessionRow(loud, sidebarVariantGlyph, false, cw, pal, false, false)
+	// The glyph rail draws sessions through sidebarStripCell, not
+	// sidebarSessionRow: at two content columns there is no room for a
+	// separate gutter mark, so the whole cell inks instead.
+	calmRow := m.sidebarStripCell(calm, cw, pal, false, false)
+	loudRow := m.sidebarStripCell(loud, cw, pal, false, false)
 
 	if fill := ansiBackgroundCount(loudRow); fill == 0 {
 		t.Fatalf("needs_input glyph row carries no fill: %q", loudRow)

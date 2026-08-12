@@ -25,7 +25,18 @@ func sidebarTestOS(t *testing.T, w, h int, pos string) *OS {
 	withSidebar(t, true, pos, config.SidebarDefaultWidth)
 	// NewOS ran before withSidebar redirected the state dir, so drop anything
 	// it may have loaded from the developer's real state file.
-	m.SidebarOrder, m.SidebarCollapsed = nil, nil
+	m.SidebarOrder = nil
+	return m
+}
+
+// spreadTestOS is sidebarTestOS with its windows spread over workspaces 1, 2
+// and 4, which is what gives a terminal row something to tag: a pane not on
+// the current workspace names the one it is on.
+func spreadTestOS(t *testing.T, w, h int, pos string) *OS {
+	t.Helper()
+	m := sidebarTestOS(t, w, h, pos)
+	m.Windows[1].Workspace = 2
+	m.Windows[2].Workspace = 4
 	return m
 }
 
@@ -81,11 +92,11 @@ func TestSidebarFitsNarrowScreens(t *testing.T) {
 					sidebarX = m.GetRenderWidth() - w
 				}
 				for _, hit := range m.SidebarHits {
-					// A row hit claims the whole band. A band chip and a footer
-					// control share their line with a sibling, so each claims its
-					// own columns and only has to stay inside it.
+					// A row hit claims the whole band. A footer control shares its
+					// line with a sibling, so it claims only its own columns and has
+					// to stay inside them.
 					switch hit.Kind {
-					case sidebarRowWorkspace, sidebarRowNewSession, sidebarRowCollapse:
+					case sidebarRowNewSession, sidebarRowCollapse:
 						if hit.X0 < sidebarX || hit.X1 > sidebarX+w || hit.X0 >= hit.X1 {
 							t.Errorf("zone hit X range [%d,%d) outside the sidebar band [%d,%d)",
 								hit.X0, hit.X1, sidebarX, sidebarX+w)
@@ -155,49 +166,76 @@ func TestSidebarClickFocusesWindow(t *testing.T) {
 	}
 }
 
-// TestSidebarClickTogglesCurrentSession checks that clicking the current session
-// row toggles its expand/collapse state rather than switching.
-func TestSidebarClickTogglesCurrentSession(t *testing.T) {
-	m := sidebarTestOS(t, 120, 40, "left")
-	m.sidebarPanelLines()
+// TestSidebarClickOnASessionRowAttaches checks a click always resolves to an
+// attach attempt, never a local toggle: a session row no longer expands or
+// collapses, so the same press-then-release gesture now always tries to
+// switch. A click on a different session's row is what exercises the attach
+// branch; with no daemon behind this client the attempt fails loudly, and
+// that failure is the proof it was attempted at all.
+func TestSidebarClickOnASessionRowAttaches(t *testing.T) {
+	m, tree := sidebarMultiSessionOS(t, 120, 40)
+	m.sidebarPanelLinesForTree(tree)
 
-	var sessionRow sidebarRowHit
+	var scratch sidebarRowHit
 	found := false
 	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowSession {
-			sessionRow = h
+		if h.Kind == sidebarRowSession && h.SessionID == "scratch" {
+			scratch = h
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("no session row recorded")
+		t.Fatalf("no session row for scratch")
 	}
 
-	// The current (local) session starts expanded; a click collapses it.
-	m.SidebarClick(sessionRow.X0+1, sessionRow.Y0, false)
-	if !m.SidebarCollapsed[sessionRow.SessionID] {
-		t.Errorf("session %q not collapsed after click", sessionRow.SessionID)
+	before := len(m.Notifications)
+	if !m.SidebarClick(scratch.X0+1, scratch.Y0, false) {
+		t.Fatalf("press on a session row was not consumed")
 	}
-	// A second click expands it again.
-	m.SidebarClick(sessionRow.X0+1, sessionRow.Y0, false)
-	if m.SidebarCollapsed[sessionRow.SessionID] {
-		t.Errorf("session %q not re-expanded after second click", sessionRow.SessionID)
+	if !m.SidebarRelease(scratch.X0+1, scratch.Y0) {
+		t.Fatalf("release on a session row was not consumed")
+	}
+	if len(m.Notifications) <= before {
+		t.Fatalf("clicking a different session row did not attempt to attach")
+	}
+	if got := m.Notifications[len(m.Notifications)-1].Message; !strings.Contains(got, "Switch failed") {
+		t.Errorf("notification = %q, want an attach failure", got)
 	}
 }
 
-// TestSidebarWheelScrollsList checks the wheel over the band moves the scroll and
-// is consumed, and that a wheel outside the band is ignored.
-func TestSidebarWheelScrollsList(t *testing.T) {
+// TestSidebarWheelScrollsTheSectionUnderThePointer checks the wheel moves the
+// offset of whichever section the pointer sits over, not one rail-wide
+// scroll: the sessions, terminals and agents bands each hold their own
+// offset, so a wheel over one must never move another's, and a wheel outside
+// the band is ignored entirely.
+func TestSidebarWheelScrollsTheSectionUnderThePointer(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.sidebarPanelLines()
 
-	if !m.SidebarWheel(1, m.GetTopMargin(), false) {
-		t.Fatalf("wheel over the band was not consumed")
+	sessionsY := m.sidebarSectionY[sidebarSectionSessions][0]
+	terminalsY := m.sidebarSectionY[sidebarSectionTerminals][0]
+	if terminalsY <= sessionsY {
+		t.Fatalf("terminals band (%d) is not below the sessions band (%d)", terminalsY, sessionsY)
 	}
-	if m.SidebarScroll <= 0 {
-		t.Errorf("scroll did not advance: %d", m.SidebarScroll)
+
+	if !m.SidebarWheel(1, sessionsY, false) {
+		t.Fatalf("wheel over the sessions band was not consumed")
 	}
+	if m.SidebarScrollS <= 0 {
+		t.Errorf("sessions scroll did not advance: %d", m.SidebarScrollS)
+	}
+	if m.SidebarScrollT != 0 {
+		t.Errorf("a wheel over the sessions band moved the terminals scroll: %d", m.SidebarScrollT)
+	}
+
+	if !m.SidebarWheel(1, terminalsY, false) {
+		t.Fatalf("wheel over the terminals band was not consumed")
+	}
+	if m.SidebarScrollT <= 0 {
+		t.Errorf("terminals scroll did not advance: %d", m.SidebarScrollT)
+	}
+
 	// Outside the band (to the right of a left sidebar) is not the sidebar's.
 	if m.SidebarWheel(m.GetRenderWidth()-1, m.GetTopMargin(), false) {
 		t.Errorf("wheel outside the band was wrongly consumed")

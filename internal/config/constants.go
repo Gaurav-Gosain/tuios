@@ -535,14 +535,8 @@ var (
 	// SidebarShowCounts draws the window count on each session row.
 	SidebarShowCounts = true
 
-	// SidebarShowAgents draws the running-agents section above the session tree.
+	// SidebarShowAgents draws the agents section at the rail's bottom.
 	SidebarShowAgents = true
-
-	// SidebarWorkspaces is how the current session's workspaces appear in the
-	// rail: "band" (a row of chips) or "off". Off by default because the dock
-	// draws the same strip and is always present; "band" is for people who hide
-	// the dock.
-	SidebarWorkspaces = SidebarWorkspacesOff
 
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
 	SidebarMarquee = true

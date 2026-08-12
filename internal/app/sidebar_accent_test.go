@@ -63,30 +63,33 @@ func TestRailDrawsTheAccentChip(t *testing.T) {
 // selecting the pane made the colour disappear.
 func TestAccentSurvivesFocus(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
-	mark := accentMark()
 
-	// "logs" carries no agent state, so its accent is the glyph. Focus it, which
-	// renders the row as the focus pill.
+	// "logs" carries no agent state, so its accent is the glyph. Focus it,
+	// which used to render the row as a saturated focus pill that swallowed a
+	// coloured mark; now the focused pane's own gutter mark burns the accent
+	// instead of drawing a separate chip beside it.
 	idx := m.windowIndexByID("cccccccc3333")
 	if idx < 0 {
 		t.Fatal("fixture window missing")
 	}
 	m.FocusWindow(idx)
 	focused := m.Windows[idx]
-	m.SetWindowAccent(focused.ID, SlotAccent(3))
+	accent := SlotAccent(3)
+	m.SetWindowAccent(focused.ID, accent)
 
+	lines, _ := m.sidebarPanelLines()
 	var row string
-	for _, r := range railText(t, m) {
-		if strings.Contains(r, printableTitle(windowRowTitle(focused))) {
-			row = r
+	for _, l := range lines {
+		if strings.Contains(stripANSIForTrace(l), printableTitle(windowRowTitle(focused))) {
+			row = l
 			break
 		}
 	}
 	if row == "" {
-		t.Fatalf("focused window row missing from the rail:\n%s", strings.Join(railText(t, m), "\n"))
+		t.Fatalf("focused window row missing from the rail")
 	}
-	if !strings.Contains(row, mark) {
-		t.Errorf("focused row lost its accent: %q", row)
+	if !strings.Contains(row, fgSeq(accent.Color())) {
+		t.Errorf("focused row's gutter does not burn the accent colour: %q", row)
 	}
 }
 

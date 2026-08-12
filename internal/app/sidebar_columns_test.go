@@ -39,6 +39,10 @@ func rowColumn(row, name string) int {
 func TestSidebarRowsShareOneNameSpine(t *testing.T) {
 	m, _ := sidebarMultiSessionOS(t, 120, 40)
 	m.DaemonClient = nil
+	// The terminals section shows the session sidebarCurrentSessionID names,
+	// which is m.SessionName, not whichever tree node happens to be marked
+	// IsCurrent: the fixture's current session must carry that name.
+	m.SessionName = "attached"
 	tree := sessiontree.Build([]sessiontree.SessionInput{
 		{Name: "attached", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
 			{ID: "aaaaaaaa1111", Title: "focused", AgentState: "working", Focused: true},
@@ -60,10 +64,24 @@ func TestSidebarRowsShareOneNameSpine(t *testing.T) {
 		}
 	}
 
-	// The agents section leads the rail, so its first row is the highest-ranked
-	// agent; it has to sit on the spine too.
-	if got := rowColumn(ansi.Strip(lines[1]), "sibling"); got != spine {
-		t.Errorf("agent row starts at column %d, want %d: %q", got, spine, ansi.Strip(lines[1]))
+	// The agents section is pinned to the rail's bottom; find its highest-ranked
+	// row (needs_input outranks working, so "sibling" leads) by its recorded hit
+	// rather than by a fixed line index, and check it sits on the spine too.
+	var agentLine string
+	for _, h := range m.SidebarHits {
+		if h.Kind == sidebarRowAgent {
+			agentLine = lines[h.Y0-m.GetTopMargin()]
+			if h.WindowID != "bbbbbbbb2222" {
+				t.Fatalf("first agent row targets %q, want the needs_input pane", h.WindowID)
+			}
+			break
+		}
+	}
+	if agentLine == "" {
+		t.Fatal("no agent row recorded")
+	}
+	if got := rowColumn(ansi.Strip(agentLine), "sibling"); got != spine {
+		t.Errorf("agent row starts at column %d, want %d: %q", got, spine, ansi.Strip(agentLine))
 	}
 }
 

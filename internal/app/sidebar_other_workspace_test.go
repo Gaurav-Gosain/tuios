@@ -7,11 +7,10 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The window IDs sidebarTestOS builds, which bandTestOS then spreads over
+// The window IDs sidebarTestOS builds, which spreadTestOS then spreads over
 // workspaces 1, 2 and 4.
 const (
 	winHereID      = "aaaaaaaa1111" // "editor", workspace 1 (current)
@@ -52,7 +51,7 @@ func fgSeq(c color.Color) string {
 // workspace names the workspace it is on, right-aligned; a pane on the current
 // one does not, and the digit costs the row no width.
 func TestOtherWorkspaceWindowRowCarriesItsDigit(t *testing.T) {
-	m := bandTestOS(t, 120, 40, "left")
+	m := spreadTestOS(t, 120, 40, "left")
 	m.SidebarHoverActive = false
 	m.FocusedWindow = -1 // the focused pane draws a pill, which is a different row
 
@@ -71,34 +70,10 @@ func TestOtherWorkspaceWindowRowCarriesItsDigit(t *testing.T) {
 	}
 }
 
-// TestOtherWorkspaceWindowRowIsDim: the digit says where, the dimming says "not
-// here". FgMute is one step below the FgDim a same-workspace row rests at.
-func TestOtherWorkspaceWindowRowIsDim(t *testing.T) {
-	m := bandTestOS(t, 120, 40, "left")
-	m.SidebarHoverActive = false
-	m.FocusedWindow = -1 // the focused pane draws a pill, which is a different row
-
-	pal := theme.UI()
-	dim, muted := fgSeq(pal.FgDim), fgSeq(pal.FgMute)
-	if dim == muted {
-		t.Skip("this theme does not separate FgDim from FgMute")
-	}
-
-	if here := windowRowFor(t, m, winHereID); !strings.Contains(here, dim) {
-		t.Errorf("a same-workspace row should rest at FgDim: %q", rowContent(here))
-	}
-	if there := windowRowFor(t, m, winElsewhereID); strings.Contains(there, dim) {
-		t.Errorf("an other-workspace row should not rest at FgDim: %q", rowContent(there))
-	}
-	if there := windowRowFor(t, m, winElsewhereID); !strings.Contains(there, muted) {
-		t.Errorf("an other-workspace row should rest at FgMute: %q", rowContent(there))
-	}
-}
-
 // TestForeignSessionWindowRowHasNoDigit: this client does not hold another
 // session's panes, so it does not know their workspaces and must not guess.
 func TestForeignSessionWindowRowHasNoDigit(t *testing.T) {
-	m := bandTestOS(t, 120, 40, "left")
+	m := spreadTestOS(t, 120, 40, "left")
 	if got := m.windowWorkspace("no-such-window"); got != 0 {
 		t.Errorf("an unheld window reported workspace %d, want 0", got)
 	}

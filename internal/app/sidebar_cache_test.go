@@ -44,7 +44,7 @@ func BenchmarkSidebarPanelLinesCached(b *testing.B) {
 // TestSidebarCacheServesAndInvalidates is the stale-row regression guard. The
 // rail is cached between frames, so the danger is serving a row that no longer
 // matches state. This walks the cases that must invalidate: a renamed window, a
-// focus move, a hover move, a width change, a collapsed session, a foreign-cache
+// focus move, a hover move, each section's own scroll offset, a foreign-cache
 // update, and MarkAllDirty. Each must show through; an unchanged frame must
 // reuse the cache.
 func TestSidebarCacheServesAndInvalidates(t *testing.T) {
@@ -101,17 +101,23 @@ func TestSidebarCacheServesAndInvalidates(t *testing.T) {
 	}
 	m.SidebarHoverActive = false
 
-	m.SidebarScroll = 2
+	m.SidebarScrollS = 2
 	if m.sidebarSignature() == base {
-		t.Fatal("scroll did not change the signature")
+		t.Fatal("sessions scroll did not change the signature")
 	}
-	m.SidebarScroll = 0
+	m.SidebarScrollS = 0
 
-	m.SidebarCollapsed = map[string]bool{"s": true}
+	m.SidebarScrollT = 2
 	if m.sidebarSignature() == base {
-		t.Fatal("collapse did not change the signature")
+		t.Fatal("terminals scroll did not change the signature")
 	}
-	m.SidebarCollapsed = nil
+	m.SidebarScrollT = 0
+
+	m.SidebarScrollA = 2
+	if m.sidebarSignature() == base {
+		t.Fatal("agents scroll did not change the signature")
+	}
+	m.SidebarScrollA = 0
 
 	// MarkAllDirty drops the cache so a theme or config change restyles.
 	sidebarText(t, m)

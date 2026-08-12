@@ -14,11 +14,11 @@ func withSidebarGlobals(t *testing.T) {
 	t.Helper()
 	e, p, w := SidebarEnabled, SidebarPosition, SidebarWidth
 	sw, sg, sc := SidebarShowWindows, SidebarShowGlyphs, SidebarShowCounts
-	sa, ws, mq, dt := SidebarShowAgents, SidebarWorkspaces, SidebarMarquee, DockWorkspaceTabs
+	sa, mq, dt := SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs
 	t.Cleanup(func() {
 		SidebarEnabled, SidebarPosition, SidebarWidth = e, p, w
 		SidebarShowWindows, SidebarShowGlyphs, SidebarShowCounts = sw, sg, sc
-		SidebarShowAgents, SidebarWorkspaces, SidebarMarquee, DockWorkspaceTabs = sa, ws, mq, dt
+		SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs = sa, mq, dt
 	})
 }
 
@@ -59,9 +59,9 @@ sidebar_show_counts = false
 			SidebarShowWindows, SidebarShowGlyphs, SidebarShowCounts)
 	}
 	// Knobs the old file never mentioned keep their defaults.
-	if !SidebarShowAgents || SidebarWorkspaces != SidebarWorkspacesOff || !SidebarMarquee || !DockWorkspaceTabs {
-		t.Errorf("unmentioned knobs drifted: agents=%v workspaces=%q marquee=%v docktabs=%v",
-			SidebarShowAgents, SidebarWorkspaces, SidebarMarquee, DockWorkspaceTabs)
+	if !SidebarShowAgents || !SidebarMarquee || !DockWorkspaceTabs {
+		t.Errorf("unmentioned knobs drifted: agents=%v marquee=%v docktabs=%v",
+			SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs)
 	}
 }
 
@@ -129,8 +129,10 @@ workspaces = "off"
 		t.Errorf("explicit false dropped: agents=%v marquee=%v docktabs=%v",
 			SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs)
 	}
-	if SidebarWorkspaces != SidebarWorkspacesOff {
-		t.Errorf("workspaces = %q, want off", SidebarWorkspaces)
+	// The deprecated key still parses into the struct (a config file written
+	// before it was dropped must not fail to load); nothing reads it any more.
+	if cfg.Appearance.Sidebar.Workspaces != "off" {
+		t.Errorf("workspaces = %q, want the deprecated key still parsed as off", cfg.Appearance.Sidebar.Workspaces)
 	}
 }
 

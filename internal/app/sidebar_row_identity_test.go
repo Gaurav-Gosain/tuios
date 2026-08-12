@@ -25,7 +25,7 @@ func bareShellOS(t *testing.T, n int) *OS {
 	}
 	m.FocusedWindow = 0
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	m.SidebarOrder, m.SidebarCollapsed = nil, nil
+	m.SidebarOrder = nil
 	return m
 }
 
@@ -130,7 +130,7 @@ func TestRailWindowLabelPrecedence(t *testing.T) {
 }
 
 // TestRailLabelsForeignSessionRows: a pane of a session this client is not
-// attached to is labelled from the listing by the same rules, so expanding
+// attached to is labelled from the listing by the same rules, so peeking
 // another session does not drop back to five identical rows.
 func TestRailLabelsForeignSessionRows(t *testing.T) {
 	m := bareShellOS(t, 1)
@@ -144,7 +144,9 @@ func TestRailLabelsForeignSessionRows(t *testing.T) {
 			{ID: "o3", Title: "~/dev/tuios - fish", ForegroundCmd: "nvim"},
 		}},
 	})
-	m.SidebarCollapsed = map[string]bool{"other": false}
+	// The terminals section shows one session's panes at a time: the attached
+	// one, or a peeked one. Peeking "other" is what puts its panes on screen.
+	m.SidebarPeek = "other"
 
 	rows := railText(t, m)
 	if len(paneRows(rows, "nvim")) != 1 {

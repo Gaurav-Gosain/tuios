@@ -18,21 +18,16 @@ func sessionRowText(t *testing.T, m *OS, name string) string {
 	return ""
 }
 
-// TestSessionCountOnlyWhenCollapsed: the count and a window row's workspace
-// number were the same muted digit in the same column, so "1" meant two things
-// on adjacent lines. An expanded session prints the rows it would be counting.
-func TestSessionCountOnlyWhenCollapsed(t *testing.T) {
+// TestSessionRowShowsWindowCount: a session row no longer expands or
+// collapses (its panes live in the separate terminals section instead), so
+// the window count is a permanent feature of the row rather than something
+// shown only while collapsed.
+func TestSessionRowShowsWindowCount(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 
-	expanded := sessionRowText(t, m, "local")
-	if strings.HasSuffix(expanded, "3") {
-		t.Errorf("an expanded session still counts its visible rows: %q", expanded)
-	}
-
-	m.SidebarCollapsed = map[string]bool{"local": true}
-	collapsed := sessionRowText(t, m, "local")
-	if !strings.HasSuffix(collapsed, "3") {
-		t.Errorf("a collapsed session lost its count: %q", collapsed)
+	row := sessionRowText(t, m, "local")
+	if !strings.HasSuffix(row, "3") {
+		t.Errorf("the session row does not carry its window count: %q", row)
 	}
 }
 

@@ -1,8 +1,6 @@
 package app
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -30,7 +28,7 @@ func sidebarMultiSessionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	}
 	m.FocusedWindow = 0
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	m.SidebarOrder, m.SidebarCollapsed = nil, nil
+	m.SidebarOrder = nil
 
 	tree := sessiontree.Build([]sessiontree.SessionInput{
 		{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
@@ -71,49 +69,6 @@ func TestSidebarSessionOrderPreserved(t *testing.T) {
 	m.sidebarPanelLinesForTree(grown)
 	if want := []string{"main", "scratch", "deploy", "fresh"}; !reflect.DeepEqual(m.SidebarSessionIDs, want) {
 		t.Fatalf("after a new session, display order = %v, want %v (new sessions append)", m.SidebarSessionIDs, want)
-	}
-}
-
-// TestSidebarExpandCollapsePersists checks a collapse toggle survives a
-// restart: the toggle lands in the state file and a fresh OS loads it back.
-func TestSidebarExpandCollapsePersists(t *testing.T) {
-	m, tree := sidebarMultiSessionOS(t, 120, 40)
-	m.sidebarPanelLinesForTree(tree)
-
-	hits := sessionHits(m)
-	if len(hits) != 3 {
-		t.Fatalf("session rows = %d, want 3", len(hits))
-	}
-	// The current session starts expanded: its window rows are on screen. The
-	// footer's width stepper is a hit too, pinned below them.
-	if got := len(m.SidebarHits) - len(hits); got != 3+2+1 {
-		t.Fatalf("non-session rows = %d, want 6 (3 windows + 2 agents + the footer stepper)", got)
-	}
-
-	// A press on the name area of the current session row plus a release on it
-	// toggles the expansion.
-	row := hits[0]
-	if !m.SidebarClick(row.X0+5, row.Y0, false) || !m.SidebarRelease(row.X0+5, row.Y0) {
-		t.Fatalf("click on the current session row was not consumed")
-	}
-	if !m.SidebarCollapsed["main"] {
-		t.Fatalf("current session not collapsed after click; state=%v", m.SidebarCollapsed)
-	}
-	m.sidebarPanelLinesForTree(tree)
-	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowWindow {
-			t.Fatalf("window rows still on screen after collapsing their session")
-		}
-	}
-
-	// The toggle was persisted: a fresh OS reads it back.
-	if _, err := os.Stat(filepath.Join(sidebarStateDir(), sidebarStateFileName)); err != nil {
-		t.Fatalf("state file not written: %v", err)
-	}
-	fresh := &OS{}
-	fresh.loadSidebarState()
-	if !fresh.SidebarCollapsed["main"] {
-		t.Fatalf("fresh OS did not load the collapse toggle; state=%v", fresh.SidebarCollapsed)
 	}
 }
 

@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -25,14 +26,13 @@ func TestUnnamedSessionPresentsAsItsIdentity(t *testing.T) {
 
 // TestDisplayRenameLeavesTheIdentityKeysAlone is the regression this whole
 // design exists to prevent. A display rename must move the label and nothing
-// else: the node id, the rail's collapsed map and the rail's drag order are all
+// else: the node id, the rail's row targets and the rail's drag order are all
 // keyed on the identity name and must survive the rename untouched.
 func TestDisplayRenameLeavesTheIdentityKeysAlone(t *testing.T) {
 	m := &OS{
-		SessionName:      "work",
-		Windows:          []*terminal.Window{{ID: "w1"}},
-		SidebarCollapsed: map[string]bool{"work": true},
-		SidebarOrder:     []string{"other", "work"},
+		SessionName:  "work",
+		Windows:      []*terminal.Window{{ID: "w1"}},
+		SidebarOrder: []string{"other", "work"},
 	}
 
 	before := m.BuildSessionTree().Sessions[0]
@@ -49,13 +49,24 @@ func TestDisplayRenameLeavesTheIdentityKeysAlone(t *testing.T) {
 	if after.ID != "work" {
 		t.Fatalf("ID = %q, want the identity name %q: renaming the identity orphans the session's persisted state", after.ID, "work")
 	}
-	if !m.sidebarCollapsedState("work") {
-		t.Error("collapsed state keyed on the identity was lost by a display rename")
+
+	// The rail's own row targets are the other half of the split: a click or an
+	// enter has to address the session the daemon knows, whatever the row says.
+	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Width, m.Height = 120, 30
+	m.EffectiveWidth, m.EffectiveHeight = 120, 30
+	m.sidebarPanelLinesForTree(m.BuildSessionTree())
+	found := false
+	for _, h := range m.SidebarHits {
+		if h.Kind == sidebarRowSession {
+			found = true
+			if h.SessionID != "work" {
+				t.Errorf("session row targets %q, want the identity work", h.SessionID)
+			}
+		}
 	}
-	// The rail keys the map off the node id, so the display name must never
-	// appear as a key: a second entry would split one session's state in two.
-	if _, ok := m.SidebarCollapsed["Payments API"]; ok {
-		t.Error("the display name became a key in SidebarCollapsed")
+	if !found {
+		t.Error("no session row was drawn")
 	}
 
 	// The rail's drag order is keyed on the identity too, and it is persisted,
