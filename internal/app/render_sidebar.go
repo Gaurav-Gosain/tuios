@@ -1071,17 +1071,25 @@ type sidebarFooterZone struct {
 // middle width a place the user could get stranded in with no name for it; it
 // survives only as the responsive clamp on a 60-89 column screen, which no
 // control targets.
+//
+// The arrow flips with the rail's side, because where the rail is about to go
+// does: a left rail collapses leftward and reopens rightward, a right rail the
+// other way round. Nothing else about the row mirrors.
 func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
-	down, up := "«", "»"
+	left, right := "«", "»"
 	if overlay.UseASCII() {
-		down, up = "<<", ">>"
+		left, right = "<<", ">>"
+	}
+	collapse, expand := left, right
+	if config.SidebarPosition == "right" {
+		collapse, expand = right, left
 	}
 	if variant == sidebarVariantGlyph {
 		// Only offer to reopen when the screen has room to honour it; a control
 		// that provably cannot move is noise.
-		return up, sidebarVariant(m.sidebarWidthFor(m.sidebarStoredWidth())) > variant
+		return expand, sidebarVariant(m.sidebarWidthFor(m.sidebarStoredWidth())) > variant
 	}
-	return down, true
+	return collapse, true
 }
 
 // sidebarFooter renders the expanded rail's pinned bottom rows: the
@@ -1110,16 +1118,24 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette, canCreate bool,
 		zone  sidebarFooterZone
 		label string
 	}
+	// The control hugs the pane-facing corner and "+ new" holds the outer end,
+	// which swaps with the rail's side: the toggle is always the thing nearest
+	// the panes, where the pointer arrives from.
+	outer, facing := 1, max(cw-1-stepW, 1)
+	if config.SidebarPosition == "right" {
+		outer, facing = max(cw-1-newW, 1), 1
+	}
+
 	var items []placed
 	line := 0
 	if canCreate {
-		items = append(items, placed{sidebarFooterZone{Kind: sidebarRowNewSession, Line: line, X0: 1, X1: 1 + newW}, newLabel})
+		items = append(items, placed{sidebarFooterZone{Kind: sidebarRowNewSession, Line: line, X0: outer, X1: outer + newW}, newLabel})
 		if !oneLine {
 			line++
 		}
 	}
 	if canStep {
-		x0 := max(cw-1-stepW, 1)
+		x0 := facing
 		if !oneLine {
 			x0 = 1
 		}
