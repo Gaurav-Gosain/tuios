@@ -330,6 +330,13 @@ type Session struct {
 	stopResurrection func() // Stops periodic resurrection saving
 	stateMu          sync.RWMutex
 
+	// stateDirty is set by every change to the session's structure and consumed
+	// by the resurrection saver, which is how a new window reaches disk in a
+	// couple of seconds instead of at the next blind tick. It is an atomic rather
+	// than a field of state because the saver goroutine reads it and holds no
+	// lock of this session.
+	stateDirty atomic.Bool
+
 	// eventSink, when set, receives control-plane events raised by this session
 	// and its PTYs (window lifecycle, output activity, bell, mode changes). The
 	// daemon installs it so events reach the event hub; nil for a session with no
@@ -447,9 +454,10 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 	}
 
 	// Start periodic resurrection saving
-	session.stopResurrection = StartPeriodicSave(func() *SessionState {
-		return session.ResurrectionState()
-	})
+	session.stopResurrection = StartPeriodicSave(
+		func() *SessionState { return session.ResurrectionState() },
+		func() bool { return session.stateDirty.Swap(false) },
+	)
 
 	return session, nil
 }
@@ -810,6 +818,7 @@ func (s *Session) SetOption(key, value string) {
 		s.state.Options = make(map[string]string)
 	}
 	s.state.Options[key] = value
+	s.stateDirty.Store(true)
 }
 
 // GetOption reads a daemon-owned session option under stateMu, returning the
@@ -908,6 +917,7 @@ func (s *Session) UpdateState(state *SessionState) bool {
 	before := snapshotLifecycle(prev)
 	s.state = state
 	s.LastActive = time.Now()
+	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
 	return accepted
 }
@@ -947,6 +957,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	// this point is reconciled by UpdateState rather than winning by arriving
 	// last.
 	s.state.Version++
+	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
 	return s.snapshotStateLocked(), nil
 }

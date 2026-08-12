@@ -14,8 +14,15 @@ import (
 )
 
 const (
-	resurrectionDir      = "tuios/sessions"
+	resurrectionDir = "tuios/sessions"
+	// resurrectionInterval is how often a session is saved regardless of whether
+	// anything changed, which is what keeps each window's captured working
+	// directory current: a user typing cd changes no session structure.
 	resurrectionInterval = 30 * time.Second
+	// resurrectionDirtyInterval is how often the saver looks for a structural
+	// change, and so the most a SIGKILL can cost. It is a poll of a flag, not a
+	// write: a tick that finds nothing changed does nothing at all.
+	resurrectionDirtyInterval = 2 * time.Second
 
 	// ResurrectionVersion is the current on-disk resurrection schema version.
 	// It is bumped only when the schema changes in a way older daemons cannot
@@ -255,18 +262,34 @@ func RemoveResurrectionState(sessionName string) {
 	_ = os.Remove(path)
 }
 
-// StartPeriodicSave starts a goroutine that periodically saves session state.
-// Returns a stop function to halt the periodic saving.
-func StartPeriodicSave(getState func() *SessionState) func() {
+// StartPeriodicSave starts a goroutine that saves session state, and returns a
+// stop function to halt it.
+//
+// takeDirty reports whether the session's structure changed since the last save
+// and clears the mark; nil means every tick is a full save. It is what makes the
+// SIGKILL window small without making the saves frequent: the ticker runs at the
+// short interval but a tick that finds nothing changed does no work, so an idle
+// session still writes only once per resurrectionInterval (which is what keeps
+// each shell's working directory current) and a changed one reaches disk within
+// a couple of seconds. Before this, a session created less than a full interval
+// before a SIGKILL was lost entirely, which is the worst case there is: it is the
+// session the user just made.
+func StartPeriodicSave(getState func() *SessionState, takeDirty func() bool) func() {
 	stopCh := make(chan struct{})
 
 	go func() {
-		ticker := time.NewTicker(resurrectionInterval)
+		ticker := time.NewTicker(resurrectionDirtyInterval)
 		defer ticker.Stop()
+		lastSave := time.Now()
 
 		for {
 			select {
-			case <-ticker.C:
+			case now := <-ticker.C:
+				dirty := takeDirty == nil || takeDirty()
+				if !dirty && now.Sub(lastSave) < resurrectionInterval {
+					continue
+				}
+				lastSave = now
 				state := getState()
 				if state == nil {
 					continue
