@@ -172,6 +172,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.LayoutPickerSelected = idx
 	case "quit":
 		m.QuitMenuSelected = idx
+	case "sessionclose":
+		m.SessionCloseSelected = idx
 	}
 }
 
@@ -294,6 +296,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "quit":
 		m.QuitMenuSelected = row.Idx
 		return m.QuitMenuActivate(row.Idx)
+	case "sessionclose":
+		m.SessionCloseSelected = row.Idx
+		return m.SessionCloseActivate(row.Idx)
 	}
 	return nil
 }
@@ -370,6 +375,10 @@ func (m *OS) closeOverlay(kind string) {
 		m.ShowAggregateView = false
 	case "quit":
 		m.CloseQuitMenu()
+	case "sessionclose":
+		// Click-away cancels, like esc. Dismissing is the safe answer, so it is
+		// the one an ambiguous gesture gets.
+		m.CloseSessionClose()
 	}
 	if m.OverlayDrag.Kind == kind {
 		m.OverlayDrag.Active = false

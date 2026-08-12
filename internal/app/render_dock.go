@@ -176,11 +176,20 @@ func (m *OS) renderDockString() (string, int) {
 	)
 
 	renderWidth := m.GetRenderWidth()
+
+	// The session controls take the bar's right-hand end before anything else is
+	// measured, and barWidth is the bar every other block is fitted into. They
+	// are built first because whether the leave control is there at all depends
+	// on the run path, not on the width, so their span is not something the rest
+	// of the layout can infer.
+	sessionStrip, sessionCells := m.buildDockSessionStrip()
+	barWidth := max(renderWidth-lipgloss.Width(sessionStrip), 0)
+
 	actualLeftWidth := lipgloss.Width(leftInfo)
 	centerWidth := lipgloss.Width(dockItemsStr.String())
 	// The right block never takes more room than the left block and the dock
 	// items leave, so the bar as a whole stays inside the screen.
-	rightWidth := max(min(layout.RightWidth, renderWidth-actualLeftWidth-centerWidth), 0)
+	rightWidth := max(min(layout.RightWidth, barWidth-actualLeftWidth-centerWidth), 0)
 
 	var rightInfo string
 	// notifRule is the run of hairline the message burns down over, drawn into
@@ -193,14 +202,14 @@ func (m *OS) renderDockString() (string, int) {
 	// correction afterwards. Correcting it afterwards is what the generic
 	// truncation below would do, and the first thing that would cut is the
 	// closing cap: the block would lose the shape that makes it part of the bar.
-	notif, hasNotif := m.renderNotificationBlock(renderWidth, max(renderWidth-actualLeftWidth-centerWidth, 0))
+	notif, hasNotif := m.renderNotificationBlock(barWidth, max(barWidth-actualLeftWidth-centerWidth, 0))
 
 	// Recorded here rather than in the builder because this is the pass that
 	// places the block; the layout pass measures it against a different budget.
 	m.notifHit = notifHitZones{
 		Active:    hasNotif,
-		X0:        renderWidth - notif.Width,
-		DismissX0: renderWidth - notif.DismissW,
+		X0:        barWidth - notif.Width,
+		DismissX0: barWidth - notif.DismissW,
 		Y:         m.GetDockbarContentYPosition(),
 	}
 
@@ -251,7 +260,7 @@ func (m *OS) renderDockString() (string, int) {
 		rightInfo = truncateToWidth(rightInfo, rightWidth)
 	}
 
-	availableSpace := m.GetRenderWidth() - actualLeftWidth - rightWidth - centerWidth
+	availableSpace := barWidth - actualLeftWidth - rightWidth - centerWidth
 	leftSpacer := availableSpace / 2
 	rightSpacer := availableSpace - leftSpacer
 
@@ -285,10 +294,27 @@ func (m *OS) renderDockString() (string, int) {
 		paddedRightInfo,
 	)
 
-	// Backstop: whatever the parts add up to, the bar is one screen wide.
-	if lipgloss.Width(dockBar) > renderWidth {
-		dockBar = truncateToWidth(dockBar, renderWidth)
+	// Backstop: whatever the parts add up to, the bar stops where the session
+	// controls begin. The controls are appended after it, so an overfull bar
+	// loses its own right-hand end and never the strip.
+	if lipgloss.Width(dockBar) > barWidth {
+		dockBar = truncateToWidth(dockBar, barWidth)
 	}
+
+	// The strip's screen columns, now that the bar in front of it is drawn.
+	// Recorded from this pass for the reason the minimized entries are: whether
+	// the leave control exists at all comes from the run path, so a handler that
+	// recomputed the columns would need to re-derive that too and could disagree
+	// with the frame the user clicked.
+	m.dockSessionHits = m.dockSessionHits[:0]
+	sessionX := barWidth + 1 // the strip opens with a bare column
+	for _, c := range sessionCells {
+		m.dockSessionHits = append(m.dockSessionHits, dockSessionHit{
+			X0: sessionX, X1: sessionX + c.Width, Y: itemY, Action: c.Action,
+		})
+		sessionX += c.Width
+	}
+	dockBar += sessionStrip
 
 	// Keyed on the glyph as well as the width: the separator character follows
 	// the border style, which is switchable from the settings menu, and a

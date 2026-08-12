@@ -30,7 +30,7 @@ type overlayPanelHit struct {
 
 // overlayKindOrder is the deterministic order newly-opened overlays are added to
 // the stack (used only to break ties when several open in the same frame).
-var overlayKindOrder = []string{"help", "palette", "session", "layout", "aggregate", "settings", "themepicker", "quit"}
+var overlayKindOrder = []string{"help", "palette", "session", "layout", "aggregate", "settings", "themepicker", "quit", "sessionclose"}
 
 // openOverlayKinds returns the set of draggable overlay kinds currently shown.
 func (m *OS) openOverlayKinds() map[string]bool {
@@ -61,6 +61,9 @@ func (m *OS) openOverlayKinds() map[string]bool {
 	}
 	if m.ShowQuitMenu {
 		open["quit"] = true
+	}
+	if m.ShowSessionClose {
+		open["sessionclose"] = true
 	}
 	return open
 }
