@@ -197,16 +197,17 @@ func (m *OS) ApplyBSPLayout() {
 		)
 
 		if anim != nil {
-			if config.SharedBorders && !wasTiled {
-				// New window entering tiled mode: keep Tiled=false during animation
-				// so it renders with individual borders. TileOnComplete transitions
-				// it to shared borders when animation finishes.
-				anim.TileOnComplete = true
-			} else {
-				win.Tiled = config.SharedBorders
-				if win.Tiled != wasTiled {
-					win.InvalidateCache()
-				}
+			// Border mode is settled here, with the rest of the layout, so that one
+			// value decides it for the whole frame. A pane used to keep the old mode
+			// until its snap completed, which let a frame draw both border systems
+			// at once: the separator overlay reads config.SharedBorders live, so it
+			// filled the gaps the new layout had already reserved while every pane
+			// still drew a box of its own. Any path that retired a snap early then
+			// made that permanent, since the flag was waiting on an animation that
+			// no longer existed.
+			win.Tiled = config.SharedBorders
+			if win.Tiled != wasTiled {
+				win.InvalidateCache()
 			}
 			m.Animations = append(m.Animations, anim)
 		} else {
