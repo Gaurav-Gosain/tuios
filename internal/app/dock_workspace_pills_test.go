@@ -74,10 +74,23 @@ func cells(row string, x0, x1 int) string {
 	return string(r[x0:x1])
 }
 
+// pillCapsOS is pillOS with the Nerd Font glyph set on, which is the state the
+// rounded caps are drawn in. Every glyph the bar uses is still one cell wide, so
+// dockBarRow's rune-per-column assertion holds and a recorded rectangle can
+// still be compared against the cells that were painted in it.
+func pillCapsOS(t *testing.T, w int, names map[int]string, workspaces ...int) *OS {
+	t.Helper()
+	prev := config.UseASCIIOnly
+	t.Cleanup(func() { config.UseASCIIOnly = prev })
+	m := pillOS(t, w, names, workspaces...)
+	config.UseASCIIOnly = false
+	return m
+}
+
 // pillText is what a pill carrying label draws: a column of padding either side
-// of the label, inside the caps when they are on.
+// of the label, inside the rounded caps the glyph set provides.
 func pillText(label string) string {
-	return config.GetDockPillLeftChar() + " " + label + " " + config.GetDockPillRightChar()
+	return config.GetDockWorkspaceCapLeft() + " " + label + " " + config.GetDockWorkspaceCapRight()
 }
 
 // TestWorkspacePillRectsMatchTheirDrawnCells is the invariant a named workspace
@@ -86,21 +99,28 @@ func pillText(label string) string {
 // is how a minimized dock entry came to be unclickable while the cell to its
 // right worked.
 //
-// Both edge columns of every pill are walked, at three dock widths, with and
-// without the caps, and with named and unnamed workspaces in the same strip.
+// Both edge columns of every pill are walked, at three dock widths, in both
+// glyph sets, and with named and unnamed workspaces in the same strip. With the
+// caps on those edge columns are the caps themselves, which is the case worth
+// walking: a rounded end drawn outside the rectangle is a pill whose visible
+// shape is wider than the thing you can click.
 func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 	names := map[int]string{2: "review", 4: "deploy-fix"}
-	for _, caps := range []bool{false, true} {
+	for _, capped := range []bool{false, true} {
 		for _, w := range []int{160, 100, 64} {
-			t.Run(strconv.FormatBool(caps)+"/"+strconv.Itoa(w), func(t *testing.T) {
-				prev := config.DockPillCaps
-				config.DockPillCaps = caps
-				t.Cleanup(func() { config.DockPillCaps = prev })
-
-				m := pillOS(t, w, names, 1, 2, 3, 4)
+			t.Run(strconv.FormatBool(capped)+"/"+strconv.Itoa(w), func(t *testing.T) {
+				build := pillOS
+				if capped {
+					build = pillCapsOS
+				}
+				m := build(t, w, names, 1, 2, 3, 4)
 				row := dockBarRow(t, m)
 				if len(m.dockWorkspaceHits) == 0 {
 					t.Fatal("the strip recorded no rectangles")
+				}
+				lc := config.GetDockWorkspaceCapLeft()
+				if capped == (lc == "") {
+					t.Fatalf("the glyph set is wrong for this case: left cap %q with capped=%v", lc, capped)
 				}
 
 				for _, h := range m.dockWorkspaceHits {
@@ -111,6 +131,17 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 					if got, want := cells(row, h.X0, h.X1), pillText(label); got != want {
 						t.Errorf("workspace %d's rect [%d,%d) covers %q, but its pill draws %q",
 							h.Workspace, h.X0, h.X1, got, want)
+					}
+					if capped {
+						// The cap columns are the rect's own first and last, so
+						// the shape and the target are the same rectangle.
+						if got := cells(row, h.X0, h.X0+1); got != lc {
+							t.Errorf("workspace %d's rect opens on %q, not its left cap %q", h.Workspace, got, lc)
+						}
+						if rc := config.GetDockWorkspaceCapRight(); cells(row, h.X1-1, h.X1) != rc {
+							t.Errorf("workspace %d's rect ends on %q, not its right cap %q",
+								h.Workspace, cells(row, h.X1-1, h.X1), rc)
+						}
 					}
 					if h.Workspace == 0 {
 						continue // the add pill resolves at click time
@@ -129,6 +160,50 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 					}
 				}
 			})
+		}
+	}
+}
+
+// TestWorkspacePillsKeepTheirCapsWhateverTheDockDoes: dock_pill_caps is about
+// the mode chip and the minimized run, where a cap on every entry turned the row
+// into beads. The workspace pills are tabs and keep their shape either way, so a
+// flat dock is still a dock with rounded workspace tabs in it.
+func TestWorkspacePillsKeepTheirCapsWhateverTheDockDoes(t *testing.T) {
+	for _, flat := range []bool{false, true} {
+		t.Run(strconv.FormatBool(flat), func(t *testing.T) {
+			prev := config.DockPillCaps
+			config.DockPillCaps = !flat
+			t.Cleanup(func() { config.DockPillCaps = prev })
+
+			m := pillCapsOS(t, 120, map[int]string{2: "review"}, 1, 2, 3)
+			row := dockBarRow(t, m)
+			for _, h := range m.dockWorkspaceHits {
+				if got := cells(row, h.X0, h.X0+1); got != config.GetDockWorkspaceCapLeft() {
+					t.Errorf("workspace %d lost its left cap with dock_pill_caps=%v: %q",
+						h.Workspace, !flat, got)
+				}
+			}
+		})
+	}
+}
+
+// TestWorkspacePillsDropTheCapsUnderASCII: a half circle has no 7-bit stand-in,
+// so the ASCII strip draws the fill alone rather than bracketing every pill.
+// The rectangles have to follow it down, or a terminal without the font records
+// two columns per pill that nothing was painted in.
+func TestWorkspacePillsDropTheCapsUnderASCII(t *testing.T) {
+	m := pillOS(t, 120, map[int]string{2: "review"}, 1, 2, 3)
+	if got := config.GetDockWorkspaceCapLeft() + config.GetDockWorkspaceCapRight(); got != "" {
+		t.Fatalf("the ASCII strip still has caps: %q", got)
+	}
+	row := dockBarRow(t, m)
+	for _, h := range m.dockWorkspaceHits {
+		label := "+"
+		if h.Workspace > 0 {
+			label = m.workspacePillLabel(h.Workspace)
+		}
+		if got, want := cells(row, h.X0, h.X1), " "+label+" "; got != want {
+			t.Errorf("workspace %d's rect covers %q, but its uncapped pill draws %q", h.Workspace, got, want)
 		}
 	}
 }

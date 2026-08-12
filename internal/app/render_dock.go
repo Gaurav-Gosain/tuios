@@ -11,6 +11,30 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
+// workspacePillFg is the ink one pill state is drawn in, over the Panel step
+// every pill rests on.
+//
+// Both states go through theme.Readable, so the strip is legible by
+// measurement rather than by whichever theme it was last looked at under. At
+// rest that is FgDim: FgMute is the token for separators and disabled things
+// and it put a workspace you can switch to at 2.19:1, present but not readable.
+// Active is the accent, which follows the terminal theme and so cannot be
+// trusted on its own; Charple alone measures 2.76:1 on Panel.
+func workspacePillFg(active bool, pal overlay.Palette) color.Color {
+	if active {
+		return theme.Readable(pal.Accent, pal.Panel)
+	}
+	return theme.Readable(pal.FgDim, pal.Panel)
+}
+
+// dockStripArrowFg is the ink the overflow arrows are drawn in. They wear no
+// fill, so they are read against the bare canvas the bar sits on, where FgMute
+// measured 2.60:1. They are controls, not separators, and an overflow arrow
+// nobody can see is a strip that looks like it ends.
+func dockStripArrowFg(pal overlay.Palette) color.Color {
+	return theme.Readable(pal.FgDim, pal.Canvas)
+}
+
 // workspacePill renders one workspace pill for the dock strip. Every pill rests
 // on the same Panel step the minimized entries do, with a column of padding
 // either side of its label: the fill is what gives it a shape, and the bare
@@ -28,16 +52,15 @@ import (
 // carries the width the hit rectangle was cut to, and the two must be the same
 // string.
 func workspacePill(label string, active bool, pal overlay.Palette) string {
-	fg := color.Color(pal.FgMute)
-	body := sidebarStyle(pal.Panel, fg)
+	body := sidebarStyle(pal.Panel, workspacePillFg(active, pal))
 	if active {
-		body = sidebarStyle(pal.Panel, pal.Accent).Bold(true).Underline(true)
+		body = body.Bold(true).Underline(true)
 	}
 	// The caps take the fill's colour as their foreground, which is how a half
 	// circle reads as the rounded end of the pill rather than as a glyph beside
-	// it. A flat dock has none, and styling nothing still costs the frame the
-	// escape sequences around it.
-	lc, rc := config.GetDockPillLeftChar(), config.GetDockPillRightChar()
+	// it. ASCII has none, and styling nothing still costs the frame the escape
+	// sequences around it.
+	lc, rc := config.GetDockWorkspaceCapLeft(), config.GetDockWorkspaceCapRight()
 	pill := body.Render(" " + label + " ")
 	if lc == "" && rc == "" {
 		return pill
@@ -63,7 +86,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 
 	pal := theme.UI()
 	y := m.GetDockbarContentYPosition()
-	arrow := lipgloss.NewStyle().Foreground(pal.FgMute)
+	arrow := lipgloss.NewStyle().Foreground(dockStripArrowFg(pal))
 
 	var b strings.Builder
 	b.WriteString(" ")

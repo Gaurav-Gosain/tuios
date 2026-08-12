@@ -2,15 +2,86 @@ package theme
 
 import (
 	"image/color"
+	"math"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/exp/charmtone"
 )
 
+// ContrastFloor is the ratio a chrome label has to clear against the ground it
+// is drawn on. WCAG AA for body text, applied to chrome because chrome is where
+// the small type is: the dock's labels are one row tall and read at a glance.
+const ContrastFloor = 4.5
+
 // perceivedLuminance returns the 0..1 perceived brightness of c.
 func perceivedLuminance(c color.Color) float64 {
 	r, g, b, _ := c.RGBA()
 	return (0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) / 65535.0
+}
+
+// linearize undoes the sRGB transfer curve for one channel, which is what makes
+// the luminance below additive.
+func linearize(c float64) float64 {
+	if c <= 0.03928 {
+		return c / 12.92
+	}
+	return math.Pow((c+0.055)/1.055, 2.4)
+}
+
+// relativeLuminance is the WCAG 2.1 quantity, not perceivedLuminance's cheap
+// weighted average. The two disagree by enough to matter at the low end, which
+// is exactly where a dock on a dark ground lives.
+func relativeLuminance(c color.Color) float64 {
+	r, g, b, _ := c.RGBA()
+	return 0.2126*linearize(float64(r)/65535) +
+		0.7152*linearize(float64(g)/65535) +
+		0.0722*linearize(float64(b)/65535)
+}
+
+// ContrastRatio returns the WCAG 2.1 contrast ratio between two colours: 1 for
+// a pair that are the same, 21 for black against white. Chrome foregrounds are
+// picked and tested against this rather than by eye, so a theme swap cannot
+// quietly take a label below the floor.
+func ContrastRatio(a, b color.Color) float64 {
+	la, lb := relativeLuminance(a), relativeLuminance(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+// mixColors blends a toward b by t in 0..1.
+func mixColors(a, b color.Color, t float64) color.Color {
+	ar, ag, ab, _ := a.RGBA()
+	br, bg, bb, _ := b.RGBA()
+	blend := func(x, y uint32) uint8 {
+		return uint8((float64(x)*(1-t) + float64(y)*t) / 257)
+	}
+	return color.RGBA{R: blend(ar, br), G: blend(ag, bg), B: blend(ab, bb), A: 0xFF}
+}
+
+// Readable returns c lifted toward the ground's text end until it clears
+// ContrastFloor against bg, and c untouched when it already does.
+//
+// It exists for the colours the theme owns. The accent follows the terminal
+// theme, so an accent label on the chrome's own dark ground is legible only for
+// the themes that happen to be bright ones; blending toward the text colour
+// keeps the hue that says "this is the current thing" and buys the legibility
+// with luminance instead.
+func Readable(c, bg color.Color) color.Color {
+	if ContrastRatio(c, bg) >= ContrastFloor {
+		return c
+	}
+	target := ContrastText(bg)
+	// Sixteen steps puts the answer within ~6% of the least blending that
+	// works, which is finer than the terminal's own colour rounding.
+	const steps = 16
+	for i := 1; i < steps; i++ {
+		if mixed := mixColors(c, target, float64(i)/steps); ContrastRatio(mixed, bg) >= ContrastFloor {
+			return mixed
+		}
+	}
+	return target
 }
 
 // ContrastText picks a foreground that reads on the given (usually saturated)

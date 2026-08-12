@@ -559,7 +559,7 @@ func TestScrollbarTintFollowsTheFocusedPane(t *testing.T) {
 	m.Mode = TerminalMode
 
 	accent := accentColor(greenAccent)
-	if got := contrastRatio(accent, theme.UI().Canvas); got < scrollbarMinContrast {
+	if got := theme.ContrastRatio(accent, theme.UI().Canvas); got < scrollbarMinContrast {
 		t.Fatalf("the readable accent chosen for this test measures %.2f:1; pick another", got)
 	}
 
@@ -602,10 +602,10 @@ func TestScrollbarTintFloorRejectsAnUnreadableAccent(t *testing.T) {
 	accent := accentColor(darkBlueAccent)
 	pal := theme.UI()
 
-	if got := contrastRatio(accent, pal.Canvas); math.Abs(got-1.74) > 0.05 {
+	if got := theme.ContrastRatio(accent, pal.Canvas); math.Abs(got-1.74) > 0.05 {
 		t.Errorf("dark blue on the canvas measures %.2f:1, want the documented 1.74:1", got)
 	}
-	if got := contrastRatio(accent, pal.Surface); math.Abs(got-1.21) > 0.05 {
+	if got := theme.ContrastRatio(accent, pal.Surface); math.Abs(got-1.21) > 0.05 {
 		t.Errorf("dark blue on the surface measures %.2f:1, want the documented 1.21:1", got)
 	}
 
@@ -645,7 +645,7 @@ func TestScrollbarTintKeywordsAndHex(t *testing.T) {
 	m.Mode = TerminalMode
 
 	withScrollbarTint(t, darkBlue, func() {
-		if got := contrastRatio(lipgloss.Color(darkBlue), theme.UI().Canvas); got >= scrollbarMinContrast {
+		if got := theme.ContrastRatio(lipgloss.Color(darkBlue), theme.UI().Canvas); got >= scrollbarMinContrast {
 			t.Fatalf("the hex chosen for this test measures %.2f:1, so it never meets the floor", got)
 		}
 		if !barInk(t, m, win, barFrame(t, m, win, true), lipgloss.Color(darkBlue)) {

@@ -380,7 +380,7 @@ func (m *OS) tickNeedsWork() bool {
 	if len(m.Animations) > 0 || m.InteractionMode || m.Dragging || m.Resizing ||
 		m.PrefixActive || m.ScriptMode || len(m.Notifications) > 0 ||
 		config.NeedsDockTick() || config.ShowCPU || config.ShowRAM ||
-		m.SidebarMarqueeActive() || m.SidebarTooltipPending() || m.sidebarTitlePending {
+		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
 		return true
 	}
 	// A moved daemon listing can carry a new title for a window this client
@@ -797,7 +797,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// cost smoothness without limiting the motion flood, since motion
 			// events drove their own renders regardless of the tick rate.
 			nextTick = TickCmd()
-		} else if hasAnimations || m.PrefixActive || needsScriptFrame || needsDockTick || hasNotifications || m.SidebarMarqueeActive() || m.SidebarTooltipPending() || m.sidebarTitlePending {
+		} else if hasAnimations || m.PrefixActive || needsScriptFrame || needsDockTick || hasNotifications || m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
 			nextTick = TickCmd() // Normal FPS when things need periodic updates
 		} else {
 			nextTick = IdleTickCmd() // Slow idle tick (process cleanup, etc.)
@@ -812,7 +812,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Render on tick if something periodic needs visual updates OR background windows changed
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
 			needsDockTick || hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode ||
-			m.SidebarMarqueeActive() || m.SidebarTooltipPending() || railTitleChanged
+			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged
 		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {

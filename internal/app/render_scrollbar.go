@@ -2,7 +2,6 @@ package app
 
 import (
 	"image/color"
-	"math"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -218,31 +217,10 @@ func scrollbarRows(contentH, scrollbackLen, offset int) (rows []string, thumbTop
 // ground it is drawn on. Below it the bar is present but unreadable, which is
 // worse than a bar that does not match its pane: dark blue measures 1.74:1 on
 // the canvas and 1.21:1 on the track's surface.
+//
+// It sits below theme.ContrastFloor on purpose. A scrollbar is a shape, not a
+// label: it has to be seen, not read.
 const scrollbarMinContrast = 2.5
-
-// relativeLuminance is WCAG 2.x relative luminance, which is what the measured
-// ratios behind the floor were taken with.
-func relativeLuminance(c color.Color) float64 {
-	r, g, b, _ := c.RGBA()
-	channel := func(v uint32) float64 {
-		f := float64(v) / 65535.0
-		if f <= 0.03928 {
-			return f / 12.92
-		}
-		return math.Pow((f+0.055)/1.055, 2.4)
-	}
-	return 0.2126*channel(r) + 0.7152*channel(g) + 0.0722*channel(b)
-}
-
-// contrastRatio returns the WCAG contrast ratio between two colours, 1:1 to
-// 21:1.
-func contrastRatio(a, b color.Color) float64 {
-	la, lb := relativeLuminance(a), relativeLuminance(b)
-	if la < lb {
-		la, lb = lb, la
-	}
-	return (la + 0.05) / (lb + 0.05)
-}
 
 // scrollbarInk resolves the colour the thumb is drawn in. The rule is the
 // owner's: the bar matches the highlighted terminal, so the focused pane's is
@@ -276,7 +254,7 @@ func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Co
 		return focus
 	}
 	accent := acc.Color()
-	if contrastRatio(accent, ground) < scrollbarMinContrast {
+	if theme.ContrastRatio(accent, ground) < scrollbarMinContrast {
 		return focus
 	}
 	return accent

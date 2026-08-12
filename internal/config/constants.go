@@ -314,10 +314,15 @@ const (
 	// DockIconLeaveRunningASCII is the ASCII fallback for the leave-running
 	// control. One cell, like the glyph it stands in for, so the strip's columns
 	// do not move with the font.
-	DockIconLeaveRunningASCII = "<"
+	//
+	// The keybind's own letter. "<" was an angle bracket that meant nothing on
+	// its own, and the workspace strip's overflow arrow on the same row is also
+	// "<"; with the words gone the fallback has to carry the control by itself,
+	// and prefix-d is the thing it does.
+	DockIconLeaveRunningASCII = "d"
 
 	// DockIconCloseSessionASCII is the ASCII fallback for the close-session
-	// control.
+	// control, which is also the letter prefix-X ends a session with.
 	DockIconCloseSessionASCII = "X"
 
 	// DockSeparatorASCII is the ASCII fallback separator
@@ -553,10 +558,10 @@ var (
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
 	SidebarMarquee = true
 
-	// SidebarTooltips pops a one-row label beside the collapsed strip naming
-	// what the pointer is over. Two cells is enough to steer by and not enough
-	// to read.
-	SidebarTooltips = true
+	// Tooltips pops a one-row label naming whatever icon-only control the
+	// pointer is over: a row of the collapsed rail, or one of the dock's session
+	// controls. A glyph is enough to steer by and not enough to read.
+	Tooltips = true
 )
 
 // DockWorkspaceTabs draws the dock's clickable workspace strip. Off leaves the
@@ -732,6 +737,31 @@ func GetDockPillRightChar() string {
 	}
 	if UseASCIIOnly {
 		return DockPillRightCharASCII
+	}
+	return DockPillRightChar
+}
+
+// GetDockWorkspaceCapLeft returns the workspace pill's left cap.
+//
+// The strip keeps its own accessor for the reason the rail does: DockPillCaps
+// is about the mode chip and the minimized run, where a cap on every entry
+// turned the row into beads. A workspace pill is a tab, and a tab wants the
+// rounded end that says where it starts and stops.
+//
+// Empty under ASCII. A half circle has no 7-bit stand-in: "[" is a bracket
+// drawn beside the pill rather than the pill's own edge, and it reads as
+// punctuation in a row that has none.
+func GetDockWorkspaceCapLeft() string {
+	if UseASCIIOnly {
+		return ""
+	}
+	return DockPillLeftChar
+}
+
+// GetDockWorkspaceCapRight returns the workspace pill's right cap.
+func GetDockWorkspaceCapRight() string {
+	if UseASCIIOnly {
+		return ""
 	}
 	return DockPillRightChar
 }

@@ -91,11 +91,15 @@ const dockWorkspacePillGap = 1
 const dockWorkspaceArrowWidth = 2
 
 // workspacePillWidth is the column span of a pill carrying the given label: the
-// label, a column of padding either side of it, and the caps when they are
-// switched on. The span follows the label and nothing else, so a named
-// workspace and a numbered one are measured by the same rule.
+// label, a column of padding either side of it, and the caps. The span follows
+// the label and nothing else, so a named workspace and a numbered one are
+// measured by the same rule.
+//
+// The caps are counted here and nowhere else, which is what puts them inside
+// the rectangle the renderer records: a cap is part of the pill's shape, so
+// clicking the rounded end selects the workspace it belongs to.
 func workspacePillWidth(label string) int {
-	lc, rc := config.GetDockPillLeftChar(), config.GetDockPillRightChar()
+	lc, rc := config.GetDockWorkspaceCapLeft(), config.GetDockWorkspaceCapRight()
 	return lipgloss.Width(lc) + lipgloss.Width(rc) + lipgloss.Width(label) + 2
 }
 

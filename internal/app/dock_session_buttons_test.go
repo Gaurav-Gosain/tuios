@@ -31,14 +31,10 @@ func dockSessionOS(t testing.TB, width int, daemon bool) *OS {
 	return m
 }
 
-// dockSessionBody is the cells one control is drawn as at a given tier: a pad,
-// the glyph, the label when there is room, and a pad.
-func dockSessionBody(a DockSessionAction, tier dockSessionTier) string {
-	body := dockSessionIcon(a)
-	if tier == dockSessionTierLabel {
-		body += " " + dockSessionLabel(a)
-	}
-	return " " + body + " "
+// dockSessionBody is the cells one control is drawn as: a pad, the glyph, a pad.
+// The words are the hover label now and are never on the bar.
+func dockSessionBody(a DockSessionAction) string {
+	return " " + dockSessionIcon(a) + " "
 }
 
 // dockSessionColumns finds where a control was actually drawn on the dock row,
@@ -67,31 +63,25 @@ func dockSessionColumns(t *testing.T, m *OS, body string) (x0, x1 int) {
 // TestDockSessionControlsAreClickableWhereTheyAreDrawn is the invariant the
 // minimized entries had to learn the hard way: the hit rect is what the
 // renderer drew, at every width, including the button's first and last column.
+//
+// The controls are three cells now, so the edge columns are most of them: a rect
+// off by one is a third of the target gone rather than a fifth.
 func TestDockSessionControlsAreClickableWhereTheyAreDrawn(t *testing.T) {
-	widths := []struct {
-		width int
-		tier  dockSessionTier
-	}{
-		{160, dockSessionTierLabel},
-		{100, dockSessionTierIcon},
-		{40, dockSessionTierIcon},
-	}
-
-	for _, w := range widths {
+	for _, width := range []int{160, 100, 40} {
 		for _, pos := range []string{"bottom", "top"} {
-			t.Run(strconv.Itoa(w.width)+"/"+pos, func(t *testing.T) {
+			t.Run(strconv.Itoa(width)+"/"+pos, func(t *testing.T) {
 				prev := config.DockbarPosition
 				config.DockbarPosition = pos
 				t.Cleanup(func() { config.DockbarPosition = prev })
 
-				m := dockSessionOS(t, w.width, true)
-				if got := dockSessionTierFor(w.width); got != w.tier {
-					t.Fatalf("width %d drew tier %d, want %d", w.width, got, w.tier)
+				m := dockSessionOS(t, width, true)
+				if !dockSessionControlsFit(width) {
+					t.Fatalf("width %d drew no controls at all", width)
 				}
 				y := m.GetDockbarContentYPosition()
 
 				for _, want := range []DockSessionAction{DockSessionLeave, DockSessionClose} {
-					body := dockSessionBody(want, w.tier)
+					body := dockSessionBody(want)
 					x0, x1 := dockSessionColumns(t, m, body)
 
 					// Both edges, and everything between them.
@@ -126,11 +116,11 @@ func TestDockSessionControlsAreClickableWhereTheyAreDrawn(t *testing.T) {
 				// The destructive control does not sit on the screen's last
 				// column: a pointer thrown at the right edge has to stop on a
 				// cell that does nothing.
-				_, closeX1 := dockSessionColumns(t, m, dockSessionBody(DockSessionClose, w.tier))
-				if closeX1 != w.width-1 {
-					t.Errorf("the close control ends at column %d, want %d so a bare column is left at the edge", closeX1, w.width-1)
+				_, closeX1 := dockSessionColumns(t, m, dockSessionBody(DockSessionClose))
+				if closeX1 != width-1 {
+					t.Errorf("the close control ends at column %d, want %d so a bare column is left at the edge", closeX1, width-1)
 				}
-				if got := m.DockSessionActionAt(w.width-1, y); got != DockSessionNone {
+				if got := m.DockSessionActionAt(width-1, y); got != DockSessionNone {
 					t.Errorf("the screen's last column routed to %v, want nothing there", got)
 				}
 			})
@@ -143,7 +133,7 @@ func TestDockSessionControlsAreClickableWhereTheyAreDrawn(t *testing.T) {
 // the mode pill and the meters both move on their own.
 func TestDockSessionControlsSurviveStaleState(t *testing.T) {
 	m := dockSessionOS(t, 160, true)
-	body := dockSessionBody(DockSessionClose, dockSessionTierLabel)
+	body := dockSessionBody(DockSessionClose)
 	x0, x1 := dockSessionColumns(t, m, body)
 	y := m.GetDockbarContentYPosition()
 
@@ -175,7 +165,7 @@ func TestLeaveRunningNeedsADaemon(t *testing.T) {
 
 			dock, _ := m.renderDockString()
 			row := stripANSIForTrace(dock)
-			drawn := strings.Contains(row, dockSessionLeaveLabel)
+			drawn := strings.Contains(row, dockSessionBody(DockSessionLeave))
 			if drawn != tc.want {
 				t.Errorf("the dock drew the leave control = %v, want %v:\n%q", drawn, tc.want, row)
 			}
@@ -190,7 +180,7 @@ func TestLeaveRunningNeedsADaemon(t *testing.T) {
 
 			// Closing is offered on every run path, since every run path can
 			// end the thing it is running.
-			if !strings.Contains(row, dockSessionCloseLabel) {
+			if !strings.Contains(row, dockSessionBody(DockSessionClose)) {
 				t.Errorf("the dock never drew the close control:\n%q", row)
 			}
 		})
@@ -231,7 +221,7 @@ func TestDockSessionControlsAreDroppedOnATinyDock(t *testing.T) {
 // only where a click would land, and goes back to muted on the way out.
 func TestDockSessionHoverTracksThePointer(t *testing.T) {
 	m := dockSessionOS(t, 160, true)
-	x0, _ := dockSessionColumns(t, m, dockSessionBody(DockSessionClose, dockSessionTierLabel))
+	x0, _ := dockSessionColumns(t, m, dockSessionBody(DockSessionClose))
 	y := m.GetDockbarContentYPosition()
 
 	if !m.DockSessionHoverAt(x0, y) || m.dockSessionHover != DockSessionClose {
