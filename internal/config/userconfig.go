@@ -223,7 +223,8 @@ type SidebarConfig struct {
 	// switching stays on the dock and alt+1..9. Still parsed so an existing
 	// config file loads unchanged; validation warns once and nothing reads it.
 	Workspaces string `toml:"workspaces"`
-	Marquee    *bool  `toml:"marquee"` // Scroll a hovered row's overflowing title (default: true)
+	Marquee    *bool  `toml:"marquee"`  // Scroll a hovered row's overflowing title (default: true)
+	Tooltips   *bool  `toml:"tooltips"` // Label the collapsed strip on hover (default: true)
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
@@ -821,6 +822,9 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 	if sb.Marquee != nil {
 		SidebarMarquee = *sb.Marquee
+	}
+	if sb.Tooltips != nil {
+		SidebarTooltips = *sb.Tooltips
 	}
 	if cfg.Appearance.DockWorkspaceTabs != nil {
 		DockWorkspaceTabs = *cfg.Appearance.DockWorkspaceTabs

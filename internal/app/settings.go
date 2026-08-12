@@ -469,6 +469,13 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Marquee = boolPtr(v) })
 					m.applyAppearanceLive(false)
 				}),
+			boolItem("Tooltips", "Label the collapsed rail on hover",
+				func() bool { return config.SidebarTooltips },
+				func(m *OS, v bool) {
+					config.SidebarTooltips = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Tooltips = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
 		},
 	}
 

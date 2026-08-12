@@ -37,8 +37,13 @@ const (
 type sidebarStripRow struct {
 	Kind sidebarStripRowKind
 	Y    int
-	// SessionID is set on a session row; the tooltip resolves the rest from it.
+	// SessionID is set on a session row, so a click can still address it.
 	SessionID string
+	// Label is what the hover tooltip says about this row, built here from the
+	// same tree the cells were drawn from. Building it at draw time rather than
+	// at hover time is what stops the label and the cell under it from ever
+	// describing different frames.
+	Label string
 }
 
 // sidebarStripBadgeInfo is the alarm block at the strip's top: how many panes
@@ -109,11 +114,15 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 		y, i := topMargin+len(lines), len(lines)
 		switch {
 		case badgeH > 0 && i == 0:
-			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{Kind: sidebarStripBadge, Y: y})
+			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
+				Kind: sidebarStripBadge, Y: y, Label: sidebarTooltipBadgeLabel(badge),
+			})
 			lines = append(lines, compose(sidebarStripBadgeCell(badge, cw, pal)))
 		case i >= stackTop && i < stackTop+shown:
 			s := sessions[i-stackTop]
-			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{Kind: sidebarStripSession, Y: y, SessionID: s.ID})
+			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
+				Kind: sidebarStripSession, Y: y, SessionID: s.ID, Label: sidebarTooltipSessionLabel(s),
+			})
 			m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
 				X0: sidebarX, X1: sidebarX + w,
 				Y0: y, Y1: y + 1,
@@ -132,7 +141,9 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 			if config.SidebarPosition == "right" {
 				x0 = 0
 			}
-			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{Kind: sidebarStripToggle, Y: y})
+			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
+				Kind: sidebarStripToggle, Y: y, Label: "expand",
+			})
 			m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
 				X0: contentX0 + x0, X1: contentX0 + min(x0+tw, cw),
 				Y0: y, Y1: y + 1,

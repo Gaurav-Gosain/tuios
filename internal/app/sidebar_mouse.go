@@ -38,6 +38,7 @@ func (m *OS) ToggleSidebar() {
 	}
 	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA = 0, 0, 0
 	m.sidebarClearPeek()
+	m.sidebarTooltipClear()
 	if m.AutoTiling {
 		m.TileAllWindows()
 	} else {
@@ -126,6 +127,9 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	if !m.SidebarBandContains(x, y) {
 		return false
 	}
+	// Any press takes the label down: it is a hover readout, and leaving it up
+	// over whatever the press opened is how a tooltip becomes litter.
+	m.sidebarTooltipClear()
 
 	// The edge rule is the rail's frame, so a left press on it arms the width
 	// resize before any row routing: the column belongs to the sidebar, not to
@@ -355,13 +359,15 @@ func (m *OS) SidebarMotion(x, y int) bool {
 	if !m.SidebarBandContains(x, y) {
 		m.SidebarHoverActive = false
 		// The one out-of-band event the motion whitelist keeps flowing is what
-		// clears the stale highlight; the preview leaves with it.
+		// clears the stale highlight; the preview and the label leave with it.
 		m.sidebarClearPeek()
+		m.sidebarTooltipClear()
 		return false
 	}
 	m.SidebarHoverActive = true
 	m.SidebarHoverX, m.SidebarHoverY = x, y
 	m.sidebarPeekAt(x, y)
+	m.sidebarTooltipTrack(y)
 	return true
 }
 

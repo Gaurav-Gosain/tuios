@@ -377,6 +377,7 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 	}
 	m.SidebarCollapsed = collapsed
 	m.sidebarClearPeek()
+	m.sidebarTooltipClear()
 	if m.AutoTiling {
 		m.TileAllWindows()
 	} else {

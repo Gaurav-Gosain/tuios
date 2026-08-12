@@ -540,6 +540,11 @@ var (
 
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
 	SidebarMarquee = true
+
+	// SidebarTooltips pops a one-row label beside the collapsed strip naming
+	// what the pointer is over. Two cells is enough to steer by and not enough
+	// to read.
+	SidebarTooltips = true
 )
 
 // DockWorkspaceTabs draws the dock's clickable workspace strip. Off leaves the

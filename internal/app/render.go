@@ -225,6 +225,11 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		if sidebarLayer := m.renderSidebar(); sidebarLayer != nil {
 			layers = append(layers, sidebarLayer)
 		}
+		// The collapsed strip's hover label rides above the panes and the dock,
+		// composed after the rail that anchors it.
+		if tip := m.renderSidebarTooltip(); tip != nil {
+			layers = append(layers, tip)
+		}
 
 		overlays := m.renderOverlays()
 		layers = append(layers, overlays...)
