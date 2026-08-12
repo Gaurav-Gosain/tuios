@@ -3,7 +3,14 @@ package session
 import (
 	"fmt"
 	"log"
+	"maps"
+	"slices"
 )
+
+// hasWindow reports whether id names one of these windows.
+func hasWindow(windows []WindowState, id string) bool {
+	return slices.ContainsFunc(windows, func(w WindowState) bool { return w.ID == id })
+}
 
 // restoreAllSessions recreates every resurrectable session that is not already
 // live. It is called once on daemon start (unless auto-restore is disabled).
@@ -72,7 +79,14 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	restored := *state
 	restored.Windows = make([]WindowState, len(state.Windows))
 	copy(restored.Windows, state.Windows)
+	restored.WorkspaceFocus = maps.Clone(state.WorkspaceFocus)
 
+	// A window whose shell will not start is dropped rather than kept. Keeping it
+	// left its PTYID naming the dead daemon's PTY, which nothing will ever answer
+	// to: no output, no input, no way to revive it, and no UI anywhere that draws
+	// a pane as dead. Closing the window is what the daemon already does whenever
+	// a PTY goes away (see notifyPTYClosed), so the restore does the same.
+	kept := restored.Windows[:0]
 	for i := range restored.Windows {
 		w := &restored.Windows[i]
 
@@ -83,10 +97,23 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 
 		pty, err := sess.RestorePTY(w.ID, ptyWidth, ptyHeight, w.Cwd, onExit)
 		if err != nil {
-			LogError("Failed to respawn shell for restored window %s: %v", shortID(w.ID), err)
+			LogError("Dropping restored window %s, its shell could not be respawned: %v", shortID(w.ID), err)
 			continue
 		}
 		w.PTYID = pty.ID
+		kept = append(kept, *w)
+	}
+	restored.Windows = kept
+
+	// Focus must not name a window that was just dropped, or the client restores
+	// a focus onto a pane that is not there.
+	if restored.FocusedWindowID != "" && !hasWindow(kept, restored.FocusedWindowID) {
+		restored.FocusedWindowID = ""
+	}
+	for ws, id := range restored.WorkspaceFocus {
+		if !hasWindow(kept, id) {
+			delete(restored.WorkspaceFocus, ws)
+		}
 	}
 
 	sess.UpdateState(&restored)
