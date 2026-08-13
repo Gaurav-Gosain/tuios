@@ -10,6 +10,7 @@ This document provides a complete reference for TUIOS command-line interface.
 - [Commands](#commands)
   - [Root Command](#root-command)
   - [Theming](#theming)
+  - [Agent Skill](#agent-skill)
   - [Daemon Mode (Session Persistence)](#daemon-mode-session-persistence)
   - [Remote Control Commands](#remote-control-commands)
   - [Inspection Commands](#inspection-commands)
@@ -105,6 +106,7 @@ tuios
 - `--theme <name>` - Set color theme (default: "tokyonight")
 - `--list-themes` - List all available themes and exit
 - `--preview-theme <name>` - Preview a theme's 16 ANSI colors and exit
+- `--skill` - Print the embedded agent skill and exit
 - `--ascii-only` - Use ASCII characters instead of Nerd Font icons
 - `--show-keys` - Enable showkeys overlay (screencaster-style key display)
 - `--border-style <style>` - Window border style (rounded, normal, thick, double, hidden, block, ascii)
@@ -131,6 +133,7 @@ tuios --ascii-only             # Start without Nerd Font icons
 tuios --show-keys              # Start with showkeys overlay enabled
 tuios --list-themes            # List all available themes
 tuios --preview-theme nord     # Preview Nord theme colors
+tuios --skill                  # Print the agent skill and exit
 tuios --debug                  # Start with debug logging
 tuios --cpuprofile cpu.prof    # Start with CPU profiling
 
@@ -212,6 +215,33 @@ alias tuios='tuios --theme nord'
 ```bash
 #!/bin/bash
 exec tuios --theme dracula "$@"
+```
+
+---
+
+## Agent Skill
+
+`tuios --skill` prints the agent skill embedded in the binary and exits. The
+skill teaches an agent to drive TUIOS from inside a pane: how to tell it is in
+one, how to address sessions and windows, how to read and write other panes,
+how to wait on a condition, and how to report its own state.
+
+```bash
+tuios --skill
+```
+
+The text ships inside the binary as `skills/tuios/SKILL.md`, so it always
+describes the TUIOS that printed it. Nothing is fetched and no daemon is
+needed.
+
+**Examples:**
+```bash
+# Read it
+tuios --skill
+
+# Install it where an agent harness looks for skills
+mkdir -p ~/.claude/skills/tuios
+tuios --skill > ~/.claude/skills/tuios/SKILL.md
 ```
 
 ---
@@ -435,6 +465,83 @@ tuios send-keys --session mysession Escape
 tuios send-keys -s mysession Escape
 ```
 
+### `tuios send-text`
+
+Write text verbatim to a pane's PTY, with no key parsing at all.
+
+Nothing in the argument is interpreted, so spaces, quotes and punctuation
+arrive as typed. A trailing newline is the Enter that runs the line, which
+makes this one call where `send-keys` needs two.
+
+**Usage:**
+```bash
+tuios send-text <text> [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `-w, --window <id-or-name>` - Target window (default: focused)
+
+**Examples:**
+```bash
+# Run a command in the focused pane (the trailing newline submits it)
+tuios send-text 'go build ./...
+'
+
+# Type without submitting
+tuios send-text -w build 'partial input'
+
+# Text with spaces, quotes and commas needs no flags
+tuios send-text -w build 'git commit -m "fix: cache, retries"'
+```
+
+### `tuios new-window`
+
+Open a new window in a session and print its id.
+
+The window is created by the daemon whether or not a client is attached, so
+this works on a detached session. Give it a name to address it later without
+holding on to the id.
+
+**Usage:**
+```bash
+tuios new-window [name] [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `--json` - Output result as JSON
+
+**Output:**
+The 8-character window id and the window's name, separated by two spaces:
+
+```
+a1b2c3d4  build
+```
+
+That id prefix is what `-w` accepts everywhere else.
+
+**Examples:**
+```bash
+# Open an unnamed window
+tuios new-window
+
+# Open a named window and run something in it
+tuios new-window build
+tuios send-text -w build 'go build ./...
+'
+
+# Capture the new window's id for scripting
+tuios new-window --json | jq -r .window_id
+
+# JSON output carries the full id and the name
+tuios new-window --json build
+# Output: {"success":true,"message":"command executed","window_id":"a1b2c3d4-...","name":"build"}
+
+# Target a specific session
+tuios new-window -s mysession dev
+```
+
 ### `tuios run-command`
 
 Execute a TUIOS command (same commands available via tape scripts).
@@ -529,6 +636,207 @@ tuios set-config hide_window_buttons true
 tuios set-config -s mysession dockbar_position bottom
 ```
 
+### `tuios wait-for`
+
+Block until the daemon reports that a condition matched.
+
+The daemon watches its own events, so a script stops polling a pane and
+sleeping between captures. The command exits `0` when the condition matches,
+and non-zero with the `timeout` error when it does not match before
+`--timeout`.
+
+**Usage:**
+```bash
+tuios wait-for <condition> [flags]
+```
+
+**Conditions:**
+| Condition | Matches when |
+|-----------|--------------|
+| `session-exists` | The named session is present |
+| `window-output` | The window's content matches `--pattern` |
+| `window-exit` | The window's shell exited |
+| `window-idle` | The window printed nothing for `--idle` milliseconds |
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `-w, --window <id-or-name>` - Target window (default: focused)
+- `--pattern <regexp>` - Go regular expression (RE2), required by `window-output`
+- `--idle <ms>` - Milliseconds of silence that count as idle (default: 500)
+- `--timeout <ms>` - Milliseconds to wait before giving up (default: 30000)
+- `--json` - Output result as JSON
+
+The `window-output` pattern is matched against the window's scrollback, so
+output that has already scrolled off the visible screen still matches, and
+output printed before the wait started matches immediately.
+
+That last part has a sharp edge. A pane echoes the command it was sent, so a
+marker written literally in the command matches its own echo and the wait
+returns before the work has run. A marker left in the scrollback by an earlier
+run matches the same way. Assemble the marker so the literal appears only in the
+output (`printf "BUILD_%s\n" OK`), or use `window-exit` in a window opened for
+the one command.
+
+**Examples:**
+```bash
+# Wait for a build to print its marker
+tuios wait-for window-output -w build --pattern 'BUILD OK'
+
+# Wait for a pane to go quiet for two seconds
+tuios wait-for window-idle -w build --idle 2000
+
+# Wait for a command's shell to exit, allowing ten minutes
+tuios wait-for window-exit -w build --timeout 600000
+
+# Wait for a session to appear
+tuios wait-for session-exists -s work
+
+# Branch on the result
+if tuios wait-for window-output -w build --pattern 'BUILD OK' --timeout 60000; then
+    echo "build finished"
+else
+    echo "build timed out"
+fi
+```
+
+### `tuios set-agent-state`
+
+Report a pane's agent state so the session can show which panes need
+attention.
+
+**Usage:**
+```bash
+tuios set-agent-state <state> [flags]
+```
+
+**States:** `none`, `working`, `needs_input`, `idle`, `done`, `errored`
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `-w, --window <id-or-name>` - Target window (default: focused)
+- `-m, --message <text>` - Short note reported with the state
+- `--source <source>` - Where the state came from: `report`, `osc`, `screen`, `stall` (default: `report`)
+- `--harness <id>` - Id of the harness the state is about, e.g. `claude-code`
+
+**Sources and precedence:**
+More than one source can have an opinion about the same pane. Each source is
+ranked, and a source may write over a claim ranked at or below its own and
+never over one ranked above it. A source updating its own claim is the
+same-rank case and is always allowed.
+
+| Source | Rank | What it is |
+|--------|------|------------|
+| `report` | highest | The harness, or its hook shim, calling for itself |
+| `osc` | | An escape sequence the pane emitted |
+| `screen` | | A rule matched against the pane's rendered text |
+| `stall` | lowest | The output-stall heuristic |
+
+`report` is the default, so a caller written before sources existed keeps its
+authority. A report the daemon declines prints to stderr and leaves the state
+alone:
+
+```
+Not applied: a higher-ranked source owns this pane; it still reports working.
+```
+
+**Examples:**
+```bash
+# Mark the focused pane as working
+tuios set-agent-state working
+
+# Mark a specific pane as needing input, with a note
+tuios set-agent-state needs_input -w build -m "awaiting approval"
+
+# Report on behalf of a named harness, from an escape sequence
+tuios set-agent-state working --source osc --harness claude-code
+
+# Clear a pane's agent state
+tuios set-agent-state none
+```
+
+### `tuios set-session-name`
+
+Set the label a session shows in the sidebar and the dock.
+
+The session keeps its own name for addressing, persistence and
+`TUIOS_SESSION`, so a script that targets it by name keeps working. Pass no
+name to clear the label.
+
+**Usage:**
+```bash
+tuios set-session-name [name] [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+
+**Examples:**
+```bash
+# Label the current session
+tuios set-session-name "Payments API"
+
+# Label a specific session
+tuios set-session-name -s work "Payments API"
+
+# Clear the label
+tuios set-session-name
+```
+
+### `tuios set-session-accent`
+
+Set the accent a session uses. It is shared by every client attached to the
+session and kept across a reattach. Pass no accent to clear it.
+
+**Usage:**
+```bash
+tuios set-session-accent [accent] [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+
+**Examples:**
+```bash
+# Accent the current session
+tuios set-session-accent cyan
+
+# Accent a specific session
+tuios set-session-accent -s work cyan
+
+# Clear the accent
+tuios set-session-accent
+```
+
+### `tuios set-workspace-name`
+
+Name a workspace so the dock and the sidebar show the label instead of the
+number. The number stays the workspace's identity, and is the label an unnamed
+workspace shows. Pass no name to clear it.
+
+**Usage:**
+```bash
+tuios set-workspace-name <workspace> [name] [flags]
+```
+
+**Arguments:**
+- `workspace` - Workspace number, 1-based
+- `name` - Label for the workspace. Omit to clear it.
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+
+**Examples:**
+```bash
+# Name workspace 2
+tuios set-workspace-name 2 review
+
+# Name a workspace in a specific session
+tuios set-workspace-name -s work 2 review
+
+# Clear the name
+tuios set-workspace-name 2
+```
+
 ---
 
 ## Inspection Commands
@@ -588,6 +896,21 @@ tuios list-windows --json
 # Query a specific session
 tuios list-windows -s mysession --json
 ```
+
+**Example output:**
+```
+╭─────┬──────────┬───────┬────┬────────┬─────────╮
+│ IDX │ ID       │ NAME  │ WS │ SIZE   │ AGENT   │
+├─────┼──────────┼───────┼────┼────────┼─────────┤
+│ *1  │ a1b2c3d4 │ dev   │ 1  │ 120x40 │         │
+│ 2   │ e5f6a7b8 │ build │ 1  │ 120x40 │ working │
+╰─────┴──────────┴───────┴────┴────────┴─────────╯
+
+2 window(s). * marks the focused one.
+```
+
+The `ID` column is the 8-character prefix that `-w` accepts. With no windows
+the command says so and points at `tuios new-window`.
 
 **JSON Output Structure:**
 ```json
@@ -653,6 +976,22 @@ tuios get-window a1b2c3d4 --json
 tuios get-window -s mysession dev --json
 ```
 
+**Example output:**
+```
+name           build
+id             e5f6a7b8-1c2d-4e3f-9a8b-7c6d5e4f3a2b
+index          2
+title          Terminal e5f6a7b8
+workspace      1
+size           120x40
+focused        false
+minimized      false
+agent          working
+agent message  awaiting approval
+```
+
+The `agent message` line appears only when the pane reported one.
+
 **JSON Output Structure:**
 ```json
 {
@@ -702,6 +1041,21 @@ tuios session-info --json
 tuios session-info -s mysession --json
 ```
 
+**Example output:**
+```
+session        work
+display name   Payments API
+accent         cyan
+windows        3
+workspace      1 of 9
+tiling         bsp
+size           120x40
+attached       true
+named          2=review
+```
+
+The `display name`, `accent` and `named` lines appear only when those are set.
+
 **JSON Output Structure:**
 ```json
 {
@@ -731,6 +1085,44 @@ tuios session-info -s mysession --json
 | `animations_enabled` | Whether animations are enabled |
 | `script_mode` | Whether in tape script execution mode |
 | `workspace_windows` | Array of window counts per workspace (indices 0-8 for workspaces 1-9) |
+
+### `tuios capture-pane`
+
+Capture the content of a terminal pane and write it to stdout.
+
+**Usage:**
+```bash
+tuios capture-pane [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `-w, --window <id-or-name>` - Target window (default: focused)
+- `-S, --scrollback` - Include the full scrollback history
+- `--lines <N>` - Keep only the last N lines (0 keeps all)
+- `--ansi` - Preserve ANSI escape codes (colors, styles)
+
+`--lines` counts from the last line that has content, so the blank rows below
+the cursor do not count. This is how you read the tail of a long scrollback
+without pulling all of it.
+
+**Examples:**
+```bash
+# Capture the focused window's visible screen
+tuios capture-pane
+
+# Capture a specific window with its scrollback
+tuios capture-pane -w build --scrollback
+
+# Read the last 40 lines a build printed
+tuios capture-pane -w build --scrollback --lines 40
+
+# Capture with ANSI colors preserved
+tuios capture-pane --ansi
+
+# Pipe to a file
+tuios capture-pane -w editor --scrollback > pane.txt
+```
 
 ---
 
@@ -774,6 +1166,26 @@ while true; do
     fi
     sleep 0.5
 done
+```
+
+### Run a Command and Wait for It
+
+```bash
+#!/bin/bash
+# Open a window, run a build in it, and block until it finishes.
+# The marker is assembled by printf so the literal BUILD_OK never appears in
+# the command line the pane echoes, which would match the wait immediately.
+
+tuios new-window build
+tuios send-text -w build 'go build ./... ; printf "BUILD_%s %s\n" OK "$?"
+'
+
+if tuios wait-for window-output -w build --pattern 'BUILD_OK' --timeout 120000; then
+    tuios capture-pane -w build --scrollback --lines 5
+else
+    tuios capture-pane -w build --scrollback --lines 40
+    exit 1
+fi
 ```
 
 ### Integration with Other Tools
@@ -1209,6 +1621,7 @@ These flags are available on the root command:
 - `--theme <name>` - Set color theme (default: "tokyonight")
 - `--list-themes` - List all available themes and exit
 - `--preview-theme <name>` - Preview a theme's colors and exit
+- `--skill` - Print the embedded agent skill and exit
 - `--ascii-only` - Use ASCII characters instead of Nerd Font icons
 - `--show-keys` - Enable showkeys overlay (screencaster-style key display)
 - `--show-clock` - Show clock in the status area

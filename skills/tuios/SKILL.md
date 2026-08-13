@@ -191,15 +191,43 @@ A match exits 0. A timeout exits non-zero with the `timeout` error and a hint
 telling you to capture the pane and see what it actually printed. `--timeout` is
 milliseconds and defaults to 30000, so raise it for anything slow.
 
-The reliable pattern for running work somewhere else is to make the end of the
-work observable:
+### The one trap in window-output
+
+`window-output` matches the pane's whole scrollback, including text that was
+already there before you started waiting. Two things follow, and both bite.
+
+The pane echoes the command you typed. If your marker appears in the command, the
+wait matches that echo and returns at once, before any work has run:
+
+```sh
+tuios send-text -s work -w build 'sleep 4; echo DONE_MARKER
+'
+tuios wait-for window-output -s work -w build --pattern DONE_MARKER   # returns in 8ms
+```
+
+A marker from an earlier run is still in the scrollback, so the same wait in the
+same pane matches instantly the second time.
+
+Two patterns avoid both. Build the marker so the literal exists only in the
+output, never in the command line:
+
+```sh
+tuios send-text -s work -w build 'go test ./... ; printf "TESTS_%s %s\n" DONE "$?"
+'
+tuios wait-for window-output -s work -w build --pattern 'TESTS_DONE' --timeout 300000
+tuios capture-pane -s work -w build --scrollback --lines 60
+```
+
+Or run the work in a window that exits, and wait for the exit. Nothing has to be
+matched at all, so nothing can match early. Send the output somewhere you can
+read after the pane is gone:
 
 ```sh
 tuios new-window -s work build
-tuios send-text -s work -w build 'go test ./... ; echo "TESTS_EXIT=$?"
+tuios send-text -s work -w build 'go test ./... > /tmp/test.log 2>&1; exit
 '
-tuios wait-for window-output -s work -w build --pattern 'TESTS_EXIT=' --timeout 300000
-tuios capture-pane -s work -w build --scrollback --lines 60
+tuios wait-for window-exit -s work -w build --timeout 300000
+tail -60 /tmp/test.log
 ```
 
 ## Reporting your own state
