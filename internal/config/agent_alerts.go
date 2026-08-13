@@ -45,8 +45,9 @@ type AgentAlertsConfig struct {
 	SettleSeconds *int `toml:"settle_seconds"`
 
 	// SuppressFocused drops alerts for the pane the user is already looking at,
-	// for the states that merely report progress. needs_input and errored ignore
-	// it: the pane being on screen is not evidence anyone read it. Default: true.
+	// which is what tuios did before any of this was configurable. Set it false
+	// to be told anyway, on the grounds that a pane being on screen is not
+	// evidence anyone read it. Default: true.
 	SuppressFocused *bool `toml:"suppress_focused"`
 
 	// QuietHours silences every sink inside a local-time window written
@@ -62,10 +63,12 @@ type AgentAlertStates struct {
 	NeedsInput *bool `toml:"needs_input"`
 	// Errored is the agent having stopped on an error. Default: true.
 	Errored *bool `toml:"errored"`
-	// Done is the agent having finished its task. Default: false.
+	// Done is the agent having finished its task, which only an explicit report
+	// produces. Default: true.
 	Done *bool `toml:"done"`
-	// Idle is the agent having gone quiet, which the stall timer also produces
-	// from a guess. Default: false.
+	// Idle is the agent having gone quiet. The stall timer guesses this one from
+	// silence, so it is the flappy state and the one that would make tuios the
+	// thing people mute. Default: false.
 	Idle *bool `toml:"idle"`
 	// Working is the agent starting work, which is not news. Default: false.
 	Working *bool `toml:"working"`
@@ -110,7 +113,7 @@ func ResolveAgentAlerts(c *AgentAlertsConfig) AgentAlertPolicy {
 		states: map[string]bool{
 			"needs_input": true,
 			"errored":     true,
-			"done":        false,
+			"done":        true,
 			"idle":        false,
 			"working":     false,
 		},
@@ -147,14 +150,6 @@ func ResolveAgentAlerts(c *AgentAlertsConfig) AgentAlertPolicy {
 // about. It is the only place the state toggles are read.
 func (p AgentAlertPolicy) Alerts(state string) bool {
 	return p.Enabled && p.states[state]
-}
-
-// IgnoresFocus reports whether an alert for state is raised even for the pane
-// the user is looking at. Being on screen says the pane is visible, not that
-// anyone read it, so the two states that mean "stopped, waiting on you" are
-// raised anyway; the rest are progress reports and are suppressed.
-func (p AgentAlertPolicy) IgnoresFocus(state string) bool {
-	return state == "needs_input" || state == "errored"
 }
 
 // Quiet reports whether now falls inside the configured quiet-hours window. A

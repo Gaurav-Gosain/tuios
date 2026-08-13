@@ -572,6 +572,10 @@ type OS struct {
 	// looked at a pane is that client's business, not the daemon's, so it lives
 	// beside the accents rather than in session state.
 	SidebarAgentSeen map[string]bool
+	// pendingAgentAlerts holds agent alerts waiting out their settle window, by
+	// window ID. A non-empty map is the only thing that keeps the maintenance
+	// tick awake for them, so an idle session with nothing parked pays nothing.
+	pendingAgentAlerts map[string]pendingAgentAlert
 	// Accent picker state: the window being accented, the colour under the
 	// cursor and where that cursor is, and the hit geometry the renderer records
 	// as it draws the grid, the hue strip and the chips.

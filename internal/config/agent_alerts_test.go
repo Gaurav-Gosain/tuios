@@ -18,14 +18,14 @@ func TestResolveAgentAlertsDefaults(t *testing.T) {
 	if p.Settle != 2*time.Second {
 		t.Fatalf("settle = %v, want 2s", p.Settle)
 	}
-	// The whole point of the defaults: only the states that mean the machine
-	// stopped and is waiting on a human.
-	for _, state := range []string{"needs_input", "errored"} {
+	// The whole point of the defaults: the states that mean the agent stopped,
+	// and none of the ones that report progress.
+	for _, state := range []string{"needs_input", "errored", "done"} {
 		if !p.Alerts(state) {
 			t.Errorf("%s should alert by default", state)
 		}
 	}
-	for _, state := range []string{"done", "idle", "working", "none", ""} {
+	for _, state := range []string{"idle", "working", "none", ""} {
 		if p.Alerts(state) {
 			t.Errorf("%s must not alert by default", state)
 		}
@@ -55,16 +55,6 @@ func TestAgentAlertsMasterSwitchSilencesEveryState(t *testing.T) {
 		if p.Alerts(state) {
 			t.Errorf("enabled=false must silence %s", state)
 		}
-	}
-}
-
-func TestAgentAlertsIgnoresFocus(t *testing.T) {
-	p := ResolveAgentAlerts(nil)
-	if !p.IgnoresFocus("needs_input") || !p.IgnoresFocus("errored") {
-		t.Fatal("a stopped agent is worth saying even about the visible pane")
-	}
-	if p.IgnoresFocus("done") || p.IgnoresFocus("idle") {
-		t.Fatal("progress reports about the visible pane are suppressible")
 	}
 }
 
