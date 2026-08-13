@@ -13,12 +13,6 @@ import (
 // the small type is: the dock's labels are one row tall and read at a glance.
 const ContrastFloor = 4.5
 
-// perceivedLuminance returns the 0..1 perceived brightness of c.
-func perceivedLuminance(c color.Color) float64 {
-	r, g, b, _ := c.RGBA()
-	return (0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) / 65535.0
-}
-
 // linearize undoes the sRGB transfer curve for one channel, which is what makes
 // the luminance below additive.
 func linearize(c float64) float64 {
@@ -28,9 +22,9 @@ func linearize(c float64) float64 {
 	return math.Pow((c+0.055)/1.055, 2.4)
 }
 
-// relativeLuminance is the WCAG 2.1 quantity, not perceivedLuminance's cheap
-// weighted average. The two disagree by enough to matter at the low end, which
-// is exactly where a dock on a dark ground lives.
+// relativeLuminance is the WCAG 2.1 quantity rather than a cheap weighted
+// average of the channels. The two disagree by enough to matter at the low end,
+// which is exactly where a dock on a dark ground lives.
 func relativeLuminance(c color.Color) float64 {
 	r, g, b, _ := c.RGBA()
 	return 0.2126*linearize(float64(r)/65535) +
@@ -87,8 +81,14 @@ func Readable(c, bg color.Color) color.Color {
 // ContrastText picks a foreground that reads on the given (usually saturated)
 // background: near-white on a dark/mid accent, near-black on a light one. This
 // keeps title chips and active tabs legible regardless of the theme's accent.
+//
+// The choice is by measured ratio rather than by a luminance threshold. A
+// threshold has to be set somewhere, and saturated greens sit right in the miss
+// zone: a pure green reads 0.55 perceived against a 0.6 cut and so was given the
+// light ink, which measures 1.32:1 on it. Taking whichever ink measures better
+// has no miss zone to fall into.
 func ContrastText(bg color.Color) color.Color {
-	if perceivedLuminance(bg) < 0.6 {
+	if ContrastRatio(charmtone.Butter, bg) >= ContrastRatio(charmtone.Pepper, bg) {
 		return charmtone.Butter
 	}
 	return charmtone.Pepper
