@@ -1,0 +1,6 @@
+# guest-cells fired because the target flipped SidebarCollapsed directly instead
+# of going through SidebarSetCollapsed, so the rail changed width without the
+# panes being re-laid out and the expanded rail painted over the pane beneath.
+sidebar-collapse
+new-pane
+sidebar-collapse

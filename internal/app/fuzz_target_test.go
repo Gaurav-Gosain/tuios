@@ -280,7 +280,13 @@ func (f *fuzzOS) Apply(a fuzz.Action) error {
 	case fuzz.ToggleSidebar:
 		m.ToggleSidebar()
 	case fuzz.SidebarCollapse:
-		m.SidebarCollapsed = !m.SidebarCollapsed
+		// Through the entry point the keybinding and the strip's own control
+		// use, not the bare field. Collapsing changes the columns the rail
+		// reserves, so the panes have to be re-laid out into the region that
+		// leaves them; writing the field alone left them tiled for the old band
+		// and the rail painted over the pane beneath it, which is a finding
+		// about this file rather than about tuios.
+		m.SidebarSetCollapsed(!m.SidebarCollapsed)
 	case fuzz.SidebarPosition:
 		config.SidebarPosition = []string{"left", "right"}[a.A%2]
 		m.applyAppearanceLive(true)

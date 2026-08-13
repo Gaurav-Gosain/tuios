@@ -474,7 +474,11 @@ func checkDividersUseTheirOwnGlyphs(f *fuzzOS) []fuzz.Violation {
 // against them there would be asserting that the feature does not work.
 func (f *fuzzOS) framePaintsPanes() bool {
 	m := f.m
-	if !f.hasRoomToDraw() || m.AnyOverlayOpen() || m.ShowHelp || m.ShowLogs {
+	// AnyOverlayOpen reports the draggable overlay panels only, which is what its
+	// callers want and what its one production caller pairs with
+	// ContextMenuActive. The context menu is drawn over the panes like the rest,
+	// so this rule needs the same pair rather than the panel half alone.
+	if !f.hasRoomToDraw() || m.AnyOverlayOpen() || m.ContextMenuActive() || m.ShowHelp || m.ShowLogs {
 		return false
 	}
 	if m.LayoutModeName() == LayoutModeScrolling {

@@ -1,0 +1,4 @@
+# guest-cells fired on the context menu, which legitimately draws over the
+# panes. AnyOverlayOpen reports the draggable overlay panels only, so the rule
+# needed ContextMenuActive beside it, the same pair the production caller uses.
+overlay-open 7
