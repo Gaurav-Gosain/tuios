@@ -44,6 +44,44 @@ func (m *OS) tiledPaneRects() []layout.Rect {
 	return rects
 }
 
+// joinSide names the side of the content region a divider runs into. A divider
+// that reaches the region's edge carries on for one cell onto the rule the
+// chrome draws there, so the two meet at a junction instead of the divider
+// ending a cell short of the boundary it divides up to.
+type joinSide uint8
+
+const (
+	joinNone joinSide = iota
+	joinTop
+	joinBottom
+	joinLeft
+	joinRight
+)
+
+// chromeRules gives the row or column of the rule that closes the content
+// region on each side: the dock's hairline on the dock's side, the sidebar's
+// edge rule on the sidebar's. A side the region shares with the screen edge has
+// no rule and reports -1, since there is no cell beyond it to reach.
+type chromeRules struct{ top, bottom, left, right int }
+
+func (m *OS) chromeRules(bounds layout.Rect) chromeRules {
+	r := chromeRules{top: -1, bottom: -1, left: -1, right: -1}
+	switch config.DockbarPosition {
+	case "hidden":
+	case "top":
+		r.top = bounds.Y - 1
+	default:
+		r.bottom = bounds.Y + bounds.H
+	}
+	if m.GetLeftMargin() > 0 {
+		r.left = bounds.X - 1
+	}
+	if m.GetRightMargin() > 0 {
+		r.right = bounds.X + bounds.W
+	}
+	return r
+}
+
 // renderSeparatorOverlay renders thin separator lines between tiled panes.
 // Each separator line is its own lipgloss Layer to avoid occluding content.
 func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
@@ -62,7 +100,10 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	viewH := m.GetRenderHeight()
 
 	// Collect all separator characters with positions
-	type cell struct{ vert, horiz bool }
+	type cell struct {
+		vert, horiz bool
+		join        joinSide
+	}
 	grid := make(map[[2]int]*cell)
 	get := func(x, y int) *cell {
 		k := [2]int{x, y}
@@ -74,6 +115,11 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		return c
 	}
 
+	// A divider that stops inside the region stops on another divider, and the
+	// junction logic below draws that meeting. One that runs to the region's edge
+	// has the chrome's rule to meet instead, one cell further out.
+	rules := m.chromeRules(bounds)
+
 	for _, s := range splits {
 		if s.Vertical {
 			if s.Pos < 0 || s.Pos >= viewW {
@@ -82,12 +128,24 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 			for y := max(s.From, 0); y <= min(s.To, viewH-1); y++ {
 				get(s.Pos, y).vert = true
 			}
+			if s.From <= bounds.Y && rules.top >= 0 {
+				get(s.Pos, rules.top).join = joinTop
+			}
+			if s.To >= bounds.Y+bounds.H-1 && rules.bottom >= 0 {
+				get(s.Pos, rules.bottom).join = joinBottom
+			}
 		} else {
 			if s.Pos < 0 || s.Pos >= viewH {
 				continue
 			}
 			for x := max(s.From, 0); x <= min(s.To, viewW-1); x++ {
 				get(x, s.Pos).horiz = true
+			}
+			if s.From <= bounds.X && rules.left >= 0 {
+				get(rules.left, s.Pos).join = joinLeft
+			}
+			if s.To >= bounds.X+bounds.W-1 && rules.right >= 0 {
+				get(rules.right, s.Pos).join = joinRight
 			}
 		}
 	}
@@ -112,6 +170,7 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		x, y    int
 		ch      rune
 		focused bool
+		join    bool
 	}
 	var chars []charPos
 
@@ -119,6 +178,14 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		x, y := k[0], k[1]
 		var ch rune
 		switch {
+		case c.join == joinTop:
+			ch = chTDown
+		case c.join == joinBottom:
+			ch = chTUp
+		case c.join == joinLeft:
+			ch = chTRight
+		case c.join == joinRight:
+			ch = chTLeft
 		case c.vert && c.horiz:
 			ch = chCross
 		case c.vert:
@@ -156,14 +223,15 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		// At a corner of the focused perimeter, bend the line into the focused
 		// window. This is the only signal that is independent of color, and it
 		// is what disambiguates two panes sharing a single divider: the divider
-		// hooks toward whichever side owns it. Only plain segments are replaced,
-		// so a real T-junction or crossing keeps the arms its neighbours need.
-		if onFocus && (ch == chVert || ch == chHoriz) {
+		// hooks toward whichever side owns it. Plain segments and the meeting
+		// with a chrome rule are replaced, both being places the perimeter turns;
+		// a crossing between two dividers keeps the arms its neighbours need.
+		if onFocus && (ch == chVert || ch == chHoriz || c.join != joinNone) {
 			if corner, ok := focus.corner(x, y, border); ok {
 				ch = corner
 			}
 		}
-		chars = append(chars, charPos{x, y, ch, onFocus})
+		chars = append(chars, charPos{x, y, ch, onFocus, c.join != joinNone})
 	}
 
 	if len(chars) == 0 {
@@ -187,6 +255,7 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	type run struct {
 		x, y int
 		text string
+		join bool
 	}
 
 	// Sort chars by (y, x) for grouping
@@ -205,7 +274,7 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	i := 0
 	for i < len(chars) {
 		// Start a new run
-		r := run{x: chars[i].x, y: chars[i].y}
+		r := run{x: chars[i].x, y: chars[i].y, join: chars[i].join}
 		focused := chars[i].focused
 		var sb strings.Builder
 		if focused {
@@ -216,7 +285,7 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		sb.WriteRune(chars[i].ch)
 		j := i + 1
 		for j < len(chars) && chars[j].y == r.y && chars[j].x == chars[j-1].x+1 &&
-			chars[j].focused == focused {
+			chars[j].focused == focused && chars[j].join == r.join {
 			sb.WriteRune(chars[j].ch)
 			j++
 		}
@@ -226,12 +295,18 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		i = j
 	}
 
-	// Create one layer per run
+	// Create one layer per run. The cell where a divider meets a chrome rule is
+	// on the dock's or the sidebar's own row, both of which compose above the
+	// separators, so it rides above them to land on the rule it joins.
 	layers := make([]*lipgloss.Layer, len(runs))
 	for idx, r := range runs {
+		z := config.ZIndexSeparators
+		if r.join {
+			z = config.ZIndexDock + 1
+		}
 		layers[idx] = lipgloss.NewLayer(r.text).
 			X(r.x).Y(r.y).
-			Z(config.ZIndexSeparators).
+			Z(z).
 			ID(fmt.Sprintf("sep-%d-%d", r.y, r.x))
 	}
 
@@ -253,11 +328,10 @@ type borderPerimeter struct {
 	ok                                       bool
 	left, right, top, bottom                 int
 	clipLeft, clipRight, clipTop, clipBottom int
-	// suppressLeft/suppressRight drop the boundary cap on a side where the
-	// sidebar already draws its own edge rule. Without this the focused pane's
-	// outer corner lands in the last content column, one cell from the sidebar
-	// edge, and the two read as a doubled border.
-	suppressLeft, suppressRight bool
+	// capLeft/capRight are false on a side where the ring falls on the sidebar's
+	// own edge rule. Capping there draws the window's corner on the rule the
+	// sidebar already drew, and the two read as a doubled border.
+	capLeft, capRight bool
 }
 
 // contains reports whether the cell lies on the focused window's perimeter.
@@ -272,17 +346,19 @@ func (p borderPerimeter) contains(x, y int) bool {
 }
 
 // corner returns the border glyph for a corner of the focused perimeter, bending
-// into the focused window. The ring corner is reported at its clipped position,
-// so a window flush against a screen edge still gets a cap on the divider it does
-// have: that cap is what tells two side-by-side panes apart.
+// into the focused window. It is only reported where the ring actually turns,
+// which for a window running to the edge of the content region is the cell on
+// the chrome's rule: pulling the cap inside the region instead would end the
+// divider on a glyph that paints half a cell, a cell short of the boundary it
+// divides up to.
 func (p borderPerimeter) corner(x, y int, border lipgloss.Border) (rune, bool) {
 	if !p.ok {
 		return 0, false
 	}
-	atLeft := x == p.left || (!p.suppressLeft && p.left < p.clipLeft && x == p.clipLeft)
-	atRight := x == p.right || (!p.suppressRight && p.right > p.clipRight && x == p.clipRight)
-	atTop := y == p.top || (p.top < p.clipTop && y == p.clipTop)
-	atBottom := y == p.bottom || (p.bottom > p.clipBottom && y == p.clipBottom)
+	atLeft := p.capLeft && x == p.left
+	atRight := p.capRight && x == p.right
+	atTop := y == p.top
+	atBottom := y == p.bottom
 
 	switch {
 	case atTop && atLeft:
@@ -317,8 +393,8 @@ func (m *OS) focusPerimeter(bounds layout.Rect) borderPerimeter {
 		clipTop:    max(win.Y-1, bounds.Y),
 		clipBottom: min(win.Y+win.Height, bounds.Y+bounds.H-1),
 
-		suppressLeft:  m.GetLeftMargin() > 0,
-		suppressRight: m.GetRightMargin() > 0,
+		capLeft:  m.GetLeftMargin() == 0 || win.X-1 >= bounds.X,
+		capRight: m.GetRightMargin() == 0 || win.X+win.Width < bounds.X+bounds.W,
 	}
 }
 
