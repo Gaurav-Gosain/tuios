@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
+	"github.com/adrg/xdg"
 )
 
 // The entry points. Three of them, because the same engine has to run in three
@@ -174,7 +175,12 @@ func TestFuzzScript(t *testing.T) {
 func fuzzScratch(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+	// The reload is what makes the redirect take. CrashLogDir reads
+	// xdg.StateHome, which was resolved at package init, so the Setenv alone
+	// left the reports going wherever that had already pointed.
+	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_STATE_HOME", dir)
+	xdg.Reload()
 	return dir
 }
 

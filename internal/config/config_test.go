@@ -1,8 +1,6 @@
 package config_test
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
@@ -575,9 +573,10 @@ func TestLoadUserConfig_Pure(t *testing.T) {
 	defer func() { config.AnimationsEnabled = original }()
 
 	config.AnimationsEnabled = false
-	if _, err := config.LoadUserConfig(); err != nil {
-		t.Skipf("LoadUserConfig unavailable in this environment: %v", err)
-	}
+	// Load a config of this test's own. Reading whatever the developer happens
+	// to have made the result depend on the machine, and the skip that guarded
+	// it turned a genuine load failure into a silent pass.
+	writeConfig(t, "[appearance]\nanimations_enabled = true\n")
 	if config.AnimationsEnabled {
 		t.Error("LoadUserConfig must not mutate appearance globals")
 	}
@@ -766,25 +765,20 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 // empty rail keymap, so every rail key resolved to nothing. Because the scope
 // swallows unbound keys, the keyboard was stuck in the rail with no way out.
 func TestSidebarKeybindsFilledForOlderConfig(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-	if err := os.MkdirAll(filepath.Join(dir, "tuios"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	// A pre-rail config: it has a keybindings table, but no [keybindings.sidebar].
-	older := "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.window_management]\nclose_window = [\"x\"]\n"
-	if err := os.WriteFile(filepath.Join(dir, "tuios", "config.toml"), []byte(older), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	cfg := writeConfig(t, "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.window_management]\nclose_window = [\"x\"]\n")
 
-	cfg, err := config.LoadUserConfig()
-	if err != nil {
-		t.Fatalf("LoadUserConfig: %v", err)
+	r := config.NewKeybindRegistry(cfg)
+	// The file bound close_window to "x" alone, where the default binds both "w"
+	// and "x". Checking "w" came loose is what proves the fixture was read at
+	// all: every rail assertion below is also true of the defaults, so without
+	// this the test passes just as well on a config it never loaded.
+	if got := r.GetAction("w"); got == "close_window" {
+		t.Fatal("close_window still answers to w, so the fixture was never loaded")
 	}
 	if len(cfg.Keybindings.Sidebar) == 0 {
 		t.Fatal("an older config loaded with an empty rail keymap; every rail key would be swallowed")
 	}
-	r := config.NewKeybindRegistry(cfg)
 	for key, want := range map[string]string{"j": "cursor_down", "enter": "activate", "esc": "exit"} {
 		if got := r.GetSidebarAction(key); got != want {
 			t.Fatalf("GetSidebarAction(%q) = %q, want %q", key, got, want)
@@ -823,23 +817,22 @@ func TestSidebarKeybindsDoNotLeakToPanes(t *testing.T) {
 // before the agents section grew its two controls, must still resolve them.
 // fillMapDefaults fills per key, not per section, and this pins that.
 func TestAgentsKeybindsFilledForAPreExistingSidebarSection(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-	if err := os.MkdirAll(filepath.Join(dir, "tuios"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	// A rail-era config: it names the section, and the rail keys it knew about,
 	// but nothing about the agents section's filter or sort.
-	older := "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.sidebar]\ncursor_down = [\"j\"]\nexit = [\"esc\"]\n"
-	if err := os.WriteFile(filepath.Join(dir, "tuios", "config.toml"), []byte(older), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	cfg := writeConfig(t, "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.sidebar]\ncursor_down = [\"j\"]\nexit = [\"esc\"]\n")
 
-	cfg, err := config.LoadUserConfig()
-	if err != nil {
-		t.Fatalf("LoadUserConfig: %v", err)
-	}
 	r := config.NewKeybindRegistry(cfg)
+	// The file narrowed both keys it named: cursor_down loses "down" and exit
+	// loses "s", where the defaults carry the second binding for each. That is
+	// the half of the fixture the defaults cannot imitate, so it is what says
+	// the file was loaded rather than skipped over.
+	for key, gone := range map[string]string{"down": "cursor_down", "s": "exit"} {
+		if got := r.GetSidebarAction(key); got == gone {
+			t.Fatalf("GetSidebarAction(%q) still answers %q, so the fixture was never loaded", key, gone)
+		}
+	}
+	// Filling is per key, not per section: a section the file already names
+	// still gains the keys it predates.
 	for key, want := range map[string]string{"f": "agents_filter", "o": "agents_sort"} {
 		if got := r.GetSidebarAction(key); got != want {
 			t.Fatalf("GetSidebarAction(%q) = %q, want %q: the new keys never reached an existing section", key, got, want)

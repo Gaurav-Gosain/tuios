@@ -19,9 +19,12 @@ import (
 func legacyConfig(t *testing.T, src string) *config.UserConfig {
 	t.Helper()
 	dir := t.TempDir()
+	// Registered before t.Setenv so it runs after it: cleanups are LIFO, and a
+	// reload that ran first would leave the xdg globals pointing at the temp
+	// dir for the rest of the binary, after the directory is gone.
+	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	xdg.Reload()
-	t.Cleanup(xdg.Reload)
 	if err := os.MkdirAll(filepath.Join(dir, "tuios"), 0o755); err != nil {
 		t.Fatal(err)
 	}

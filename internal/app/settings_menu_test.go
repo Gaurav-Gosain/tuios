@@ -52,10 +52,15 @@ func editSetting(t *testing.T, m *OS, category, label, value string) {
 	}
 }
 
-// useTempConfig points the XDG config dir at a temp location so persistSettings
-// never touches the developer's real config, and returns the resolved path.
+// useTempConfig points the XDG config dir at a temp location of this test's
+// own, so one test's saved settings cannot be read by the next, and returns the
+// resolved path.
 func useTempConfig(t *testing.T) string {
 	t.Helper()
+	// Registered before t.Setenv so it runs after it: cleanups are LIFO, and
+	// without it the xdg globals stayed on this test's temp dir for the rest of
+	// the binary, after the directory is gone.
+	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	xdg.Reload()
 	path, err := xdg.ConfigFile("tuios/config.toml")

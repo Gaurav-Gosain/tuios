@@ -23,8 +23,9 @@ func sidebarTestOS(t *testing.T, w, h int, pos string) *OS {
 	}
 	m.FocusedWindow = 0
 	withSidebar(t, true, pos, config.SidebarDefaultWidth)
-	// NewOS ran before withSidebar redirected the state dir, so drop anything
-	// it may have loaded from the developer's real state file.
+	// NewOS ran before withSidebar redirected the state dir, so it read the
+	// tree the whole binary shares, where an earlier test may have saved an
+	// order. Drop it, so the rows come out in the order set below.
 	m.SidebarOrder = nil
 	return m
 }
