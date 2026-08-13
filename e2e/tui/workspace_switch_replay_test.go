@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -55,4 +56,39 @@ func TestWorkspaceSwitchDoesNotRepaintThePane(t *testing.T) {
 			n, term.Snapshot())
 	}
 	alive(t, term, "after workspace switching")
+}
+
+// TestWorkspaceSwitchKeepsScrollback is the other half of what a hidden pane
+// has to bring back. Its panes keep their emulators across a workspace switch,
+// so their history is never rebuilt from the daemon; this pins that, so a
+// change to how a returning client is caught up cannot quietly empty it.
+func TestWorkspaceSwitchKeepsScrollback(t *testing.T) {
+	const last = 300
+
+	term, _ := start(t, startOpts{cols: 120, rows: 40, args: []string{"new", "e2e-wsscroll"}})
+	waitBoot(t, term)
+
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, fmt.Sprintf("for i in $(seq 1 %d); do echo \"WS-$i-END\"; done", last),
+		fmt.Sprintf("WS-%d-END", last), bulkTimeout)
+	leaveTerminalMode(t, term)
+
+	switchWorkspace(t, term, "2", 0)
+	switchWorkspace(t, term, "1", 1)
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+		t.Fatalf("enter copy mode: %v", err)
+	}
+	if err := term.WaitForText("COPY MODE", uiTimeout); err != nil {
+		t.Fatalf("copy mode never opened: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("g", "g"); err != nil {
+		t.Fatalf("jump to oldest: %v", err)
+	}
+	if err := term.WaitForText("WS-1-END", uiTimeout); err != nil {
+		t.Fatalf("the pane's scrollback did not survive a workspace round trip: %v\n%s",
+			err, term.Snapshot())
+	}
+	alive(t, term, "after workspace switch scrollback")
 }

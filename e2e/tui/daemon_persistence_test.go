@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -86,6 +87,63 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 		t.Fatalf("the reattached pane shows its output %d times, want 1\n%s", n, second.Snapshot())
 	}
 	alive(t, second, "after reattach")
+}
+
+// TestDetachAndReattachKeepsScrollback is the reattach twin of the pane-content
+// case: a client that comes back gets a new emulator per pane, so the history
+// behind the screen has to be rebuilt from the daemon as well as the screen
+// itself. Counted from the oldest line the scrollback viewer can reach.
+func TestDetachAndReattachKeepsScrollback(t *testing.T) {
+	const last = 300
+
+	base := t.TempDir()
+	killDaemon(t, base)
+
+	if out, err := tuiosCLI(t, base, "new", "e2e-rescroll", "--detach"); err != nil {
+		t.Fatalf("create detached session: %v: %s", err, out)
+	}
+
+	first := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "e2e-rescroll"}})
+	if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("first client never attached: %v\n%s", err, first.Snapshot())
+	}
+	time.Sleep(insertGuard + 150*time.Millisecond)
+
+	runInShell(t, first, fmt.Sprintf("for i in $(seq 1 %d); do echo \"RS-$i-END\"; done", last),
+		fmt.Sprintf("RS-%d-END", last), bulkTimeout)
+
+	if err := first.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
+		t.Fatalf("send leader d: %v", err)
+	}
+	waitExit(t, first, "after leader d")
+
+	second := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "e2e-rescroll"}})
+	if err := second.WaitForText(fmt.Sprintf("RS-%d-END", last), bootTimeout); err != nil {
+		t.Fatalf("the reattached pane never showed its screen: %v\n%s", err, second.Snapshot())
+	}
+
+	if err := second.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatalf("to window mode: %v", err)
+	}
+	if err := second.WaitForText("Window Management Mode", uiTimeout); err != nil {
+		t.Fatalf("never entered window management mode: %v\n%s", err, second.Snapshot())
+	}
+	time.Sleep(insertGuard)
+
+	if err := second.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+		t.Fatalf("enter copy mode: %v", err)
+	}
+	if err := second.WaitForText("COPY MODE", uiTimeout); err != nil {
+		t.Fatalf("copy mode never opened: %v\n%s", err, second.Snapshot())
+	}
+	if err := second.SendKeys("g", "g"); err != nil {
+		t.Fatalf("jump to oldest: %v", err)
+	}
+	if err := second.WaitForText("RS-1-END", uiTimeout); err != nil {
+		t.Fatalf("the pane's scrollback did not survive the reattach: %v\n%s",
+			err, second.Snapshot())
+	}
+	alive(t, second, "after reattach scrollback")
 }
 
 // TestSessionSurvivesTheDaemonAndSaysItWasRestored is resurrection through the
