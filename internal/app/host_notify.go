@@ -53,53 +53,86 @@ func sanitizeNotifyText(s string) string {
 		}
 		out = strings.TrimSpace(out)
 	}
-	return out
+	return guardNumericOSCPrefix(out)
 }
 
-// hostNotifySequence builds the in-band notification for text, wrapping it for
-// tmux when tuios is running inside one. Empty text yields no bytes.
-func hostNotifySequence(text string, insideTmux bool) []byte {
+// guardNumericOSCPrefix keeps an OSC 9 payload from being read as a command.
+//
+// OSC 9 was extended by ConEmu with a dozen numbered subcommands (9;4 progress,
+// 9;9 cwd, and so on) and terminals split on how much of that they honour:
+// Ghostty intercepts all twelve, kitty and WezTerm only 4, and foot drops the
+// payload outright when everything before the first semicolon parses as a
+// number. A pane the user named "4" would otherwise turn its notification into a
+// progress-bar command. One leading space costs nothing and settles it.
+func guardNumericOSCPrefix(s string) string {
+	i := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i > 0 && i < len(s) && s[i] == ';' {
+		return " " + s
+	}
+	return s
+}
+
+// screenStringLimit is the 768-byte cap GNU screen puts on a string sequence.
+// Past it screen dumps the remainder onto the display as literal text, so the
+// wrapper chunks rather than truncating.
+const screenStringLimit = 768
+
+// hostNotifySequence builds the in-band notification for text, wrapped for
+// whatever multiplexer tuios is running inside. Empty text yields no bytes.
+//
+// OSC 9 rather than OSC 777 or OSC 99: it is the one sequence every terminal
+// that does notifications at all accepts, and it is the one already vendored
+// here and already used to forward a guest pane's notifications to the host.
+func hostNotifySequence(text string, outer outerMultiplexer) []byte {
 	text = sanitizeNotifyText(text)
 	if text == "" {
 		return nil
 	}
-	seq := []byte(ansi.Notify(text))
-	if insideTmux {
-		seq = wrapTmuxPassthrough(seq)
+	seq := ansi.Notify(text)
+	switch outer {
+	case outerTmux:
+		// tmux forwards no OSC 9 of its own (it handles only the 9;4 progress
+		// form and drops the rest), so under tmux the wrap is not an
+		// optimisation, it is the only thing that gets the sequence out.
+		seq = ansi.TmuxPassthrough(seq)
+	case outerScreen:
+		// screen's wrapping is not tmux's: it must NOT double the inner ESC, and
+		// the inner sequence has to be BEL-terminated so an ST does not end the
+		// passthrough early. ansi.Notify is BEL-terminated, which is what makes
+		// it usable here.
+		seq = ansi.ScreenPassthrough(seq, screenStringLimit)
 	}
-	return seq
+	return []byte(seq)
 }
 
-// wrapTmuxPassthrough wraps a sequence so tmux forwards it to the terminal
-// outside instead of swallowing it. Every inner ESC is doubled, which is what
-// tmux's DCS passthrough parser expects. It requires `allow-passthrough on` in
-// the user's tmux config; without it tmux drops the sequence, which is the same
-// outcome as not wrapping and so costs nothing to attempt.
-func wrapTmuxPassthrough(seq []byte) []byte {
-	out := make([]byte, 0, len(seq)+16)
-	out = append(out, "\x1bPtmux;"...)
-	for _, b := range seq {
-		if b == 0x1b {
-			out = append(out, 0x1b)
-		}
-		out = append(out, b)
-	}
-	return append(out, 0x1b, '\\')
-}
+// outerMultiplexer names the multiplexer between tuios and the user's terminal.
+type outerMultiplexer int
 
-// insideTmux reports whether this process is running inside tmux.
+const (
+	outerNone outerMultiplexer = iota
+	outerTmux
+	outerScreen
+)
+
+// detectOuterMultiplexer reports what tuios is running inside.
 //
-// $TMUX is the direct answer and is what tmux sets for its own children. TERM
-// is the answer for the case that matters most here: with `tuios ssh` the TUI
-// runs on the remote host, where $TMUX is unset even though the user's local
-// terminal is inside tmux, and the forwarded TERM is what carries that fact.
-// GNU screen is deliberately not matched: its passthrough uses a different
-// wrapping, and emitting tmux's form into screen would paint garbage.
-func insideTmux() bool {
-	if os.Getenv("TMUX") != "" {
-		return true
+// $TMUX and $STY are the direct answers, set for their own children. TERM is
+// the answer for the case that matters most here: with `tuios ssh` the TUI runs
+// on the remote host, where neither variable is set even though the user's local
+// terminal is inside a multiplexer, and the forwarded TERM is what carries that
+// fact.
+func detectOuterMultiplexer() outerMultiplexer {
+	term := os.Getenv("TERM")
+	switch {
+	case os.Getenv("TMUX") != "", strings.HasPrefix(term, "tmux"):
+		return outerTmux
+	case os.Getenv("STY") != "", strings.HasPrefix(term, "screen"):
+		return outerScreen
 	}
-	return strings.HasPrefix(os.Getenv("TERM"), "tmux")
+	return outerNone
 }
 
 // writeHostSequence writes raw bytes to the terminal the client is attached to.

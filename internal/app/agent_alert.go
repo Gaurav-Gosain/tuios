@@ -144,7 +144,7 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 	// does not race the notification it belongs to.
 	var seq []byte
 	if policy.Notify {
-		seq = hostNotifySequence(text, insideTmux())
+		seq = hostNotifySequence(text, detectOuterMultiplexer())
 	}
 	if policy.Sound {
 		seq = append(seq, 0x07)

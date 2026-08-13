@@ -493,6 +493,76 @@ the minimum any message of that severity is given.
 
 **Default:** `6`
 
+### The `[notifications.agent]` table
+
+What tuios does when a pane's agent state changes. Every key can be turned off,
+and `enabled = false` turns off all of them at once.
+
+```toml
+[notifications.agent]
+enabled = true          # master switch for everything below
+notify = true           # in-band notification to the terminal you are attached to
+sound = false           # a BEL alongside it; your terminal decides what that means
+dock = true             # the clickable message in tuios's own dock
+settle_seconds = 2      # hold an alert this long, drop it if the pane moves on
+suppress_focused = true # say nothing about the pane you are already looking at
+quiet_hours = ""        # "22:00-08:00" local time; empty means never quiet
+command = ""            # shell command to run on an alert
+
+[notifications.agent.states]
+needs_input = true      # blocked on you
+errored = true          # stopped on an error
+done = true             # finished its task
+idle = false            # went quiet, which the stall timer guesses at
+working = false         # started working, which is not news
+```
+
+**Which transitions alert.** Only the three that mean the agent has stopped.
+`working` and `idle` are silent by default and should usually stay that way:
+`idle` is what the silence timer produces from a guess, so an agent that pauses
+between tool calls would alert every time.
+
+**How the alert reaches you.** `notify` writes an OSC 9 escape sequence into the
+same stream the interface is rendered through, so it arrives at whatever terminal
+is in front of you, including over `tuios ssh` and inside tmux (which needs
+`set -g allow-passthrough on`). This is deliberately not a desktop notification
+raised by tuios itself: with `tuios ssh` the interface runs on the *remote* host,
+where such a notification would pop on a machine nobody is sitting at.
+
+`sound` writes a BEL. Your terminal already has a preference for what a bell
+does - a sound, a flash, a mark in the tab, nothing - and that preference wins.
+tuios ships no audio files and runs no media player.
+
+`dock` is the in-app message. It is the only one you can click: clicking it (or
+pressing the notification-jump binding) focuses the pane that raised it,
+switching workspace and session on the way.
+
+**Anti-flicker.** `settle_seconds` holds an alert and drops it if the pane leaves
+the state before the wait is up, so an agent that flips into `needs_input` and
+straight back out says nothing at all, and one that stays says it once. Set it to
+`0` to alert immediately.
+
+**quiet_hours** silences every sink inside a local-time window written
+`HH:MM-HH:MM`. A window that wraps midnight (`"22:00-08:00"`) is understood. An
+unparseable value is reported as a config warning and ignored.
+
+**command** is shorthand for registering a command under the `after-agent-state`
+hook, which is where the full contract is documented; see
+[HOOKS.md](HOOKS.md). It is how you wire a notifier tuios does not ship - ntfy,
+Pushover, a webhook, or `notify-send` on a machine that actually has a display:
+
+```toml
+[notifications.agent]
+command = 'curl -s -d "$TUIOS_WINDOW_NAME is $TUIOS_AGENT_STATE" ntfy.sh/my-topic'
+```
+
+**When nothing fires.** Alerts are raised by an attached client, so a session
+with nobody attached raises none - there is no terminal to write to and no dock
+to draw on. With two clients attached, each raises its own, in its own terminal.
+A pane that is already in a state when a client first sees it is not a
+transition and says nothing, so reattaching does not replay every agent's state
+at you.
+
 **Note on short values:** durations under 4 seconds are applied as written but
 produce a config warning. A message that disappears before it can be read is a
 time limit on reading content with no way to extend it, which fails WCAG 2.2.1
