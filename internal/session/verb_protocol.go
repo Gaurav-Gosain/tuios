@@ -305,7 +305,7 @@ func init() {
 			description: "Set a session's accent, shared by every client attached to it and kept across a reattach.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "accent", Type: "string", Description: "Accent slot name, recorded verbatim. Omit or pass an empty string to clear it."},
+				{Name: "accent", Type: "string", Description: "Colour name from the ANSI sixteen (\"cyan\", \"bright blue\") or a #rrggbb literal, recorded verbatim. Omit or pass an empty string to clear it and let the client pick the session's colour."},
 			},
 			examples: []string{`{"id":1,"verb":"set-session-accent","params":{"session":"work","accent":"cyan"}}`},
 			handler:  (*Daemon).verbSetSessionAccent,

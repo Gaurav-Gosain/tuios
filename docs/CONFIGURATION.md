@@ -457,6 +457,43 @@ Reverses the mouse wheel direction when scrolling the viewport in the scrolling
 
 **Default:** `false`
 
+### session_colors
+
+Gives every session a colour of its own and marks it wherever more than one
+session is visible at once: the sidebar's sessions section, the sidebar's
+agents section (on the rows whose pane lives in another session), and the
+session switcher. The panes of the session you are attached to are not
+coloured, because you only ever see one session's panes at a time and a colour
+there would tell them apart from nothing.
+
+The colour is derived from the session's name, so it is the same in every
+attached client and after a daemon restart, and it is unchanged by renaming the
+session's label. Six hues from the active theme are available; where two
+sessions would ask for the same one, the sidebar settles it so no two visible
+sessions share a colour, up to six. Beyond six, colours repeat.
+
+To pin a session to a colour of your choosing, overriding the automatic one,
+send the `set-session-accent` control verb (see [protocol.md](protocol.md)):
+
+```json
+{"id": 1, "verb": "set-session-accent", "params": {"session": "work", "accent": "cyan"}}
+```
+
+The accent takes a colour name from the ANSI sixteen (`red`, `bright blue`,
+`magenta`, …) or a hex literal (`#89b4fa`). An empty accent clears it and
+returns the session to its automatic colour. A hue an accent has claimed is not
+handed out automatically to another session.
+
+The colour rides marks the sidebar already draws, so a terminal that cannot
+show colour renders what it always did, apart from one mark on the agent rows
+whose pane is in another session. Those rows also name that session in words.
+
+**Valid values:**
+- `true` - Sessions carry their colours (default)
+- `false` - Renders exactly as it did before the colours existed
+
+**Default:** `true`
+
 ### theme
 
 The color theme to use, by ID. Custom themes loaded from
