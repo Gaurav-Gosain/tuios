@@ -886,8 +886,15 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if nT > 0 {
 		right := ""
 		if peeking {
-			// Whose panes these are, since they are not the attached session's.
-			right = sidebarStyle(nil, pal.Fg).Render(overlay.Truncate(printableTitle(shown), max(cw/2, 1)))
+			// Whose panes these are, since they are not the attached session's,
+			// in that session's own colour: the row the pointer is on is marked
+			// the same way three lines up, so the preview and its source are
+			// visibly one thing rather than two lists that happen to be adjacent.
+			ink := pal.Fg
+			if tint := m.sessionTint(shown, theme.TerminalBg()); tint != nil {
+				ink = tint
+			}
+			right = sidebarStyle(nil, ink).Render(overlay.Truncate(printableTitle(shown), max(cw/2, 1)))
 		}
 		lines = append(lines, compose(sidebarHeaderRow("terminals", right, cw, pal)))
 		if emptyPeek {

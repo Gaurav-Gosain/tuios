@@ -479,6 +479,33 @@ func TestSessionSwitcherRowsCarryTheRailsMark(t *testing.T) {
 	}
 }
 
+// TestPeekedSectionNamesItsSessionInItsColour is the one case where the
+// terminals section is not showing the attached session's panes, and so the one
+// case where a colour there says something: hovering a session swaps the
+// section for a preview, and the header names whose panes those are in the same
+// colour the row under the pointer is marked with.
+func TestPeekedSectionNamesItsSessionInItsColour(t *testing.T) {
+	withSessionColors(t, true)
+	m, tree := sessionColorOS(t, 120, 40)
+	m.SidebarPeek = "api"
+
+	lines := railStyled(t, m, tree)
+	header := styledRow(t, lines, "terminals")
+	ink := fgParams(m.sessionTint("api", theme.TerminalBg()))
+	if !strings.Contains(header, ink) {
+		t.Errorf("the peeked header does not name its session in its colour: %q", header)
+	}
+	if row := styledRow(t, lines, "api"); !strings.Contains(row, ink) {
+		t.Errorf("the session row the peek came from is marked in another colour: %q", row)
+	}
+
+	// Not peeking, no colour: the header is the plain one it has always been.
+	m.SidebarPeek = ""
+	if got := styledRow(t, railStyled(t, m, tree), "terminals"); strings.Contains(got, ink) {
+		t.Errorf("the resting terminals header picked up a session colour: %q", got)
+	}
+}
+
 // TestSessionAccentVocabulary pins what a session accent may be written as. The
 // daemon records the string verbatim and has never read it, so anything already
 // on disk has to keep meaning what it meant, and anything unreadable has to read
