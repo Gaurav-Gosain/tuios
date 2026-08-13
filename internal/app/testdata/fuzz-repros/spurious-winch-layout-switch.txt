@@ -1,0 +1,6 @@
+# spurious-winch: a layout-mode switch cleared every pane's Tiled flag first,
+# announcing a bordered box at the rectangle the pane still had, and the retile
+# that followed announced the real one. Two SIGWINCHes for a switch that left
+# the pane exactly the size it started at.
+shared-borders
+layout 0

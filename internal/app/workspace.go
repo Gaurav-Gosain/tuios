@@ -21,6 +21,11 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 // default, so a cross-workspace FocusWindow lands its target without first
 // firing the focus hooks for an intermediate window.
 func (m *OS) switchToWorkspace(workspace, focusTarget int) {
+	m.settleSizes(func() { m.switchToWorkspaceHeld(workspace, focusTarget) })
+}
+
+// switchToWorkspaceHeld is switchToWorkspace with the announcements already held.
+func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	if workspace < 1 || workspace > m.NumWorkspaces {
 		m.LogWarn("Cannot switch to workspace %d: out of range (1-%d)", workspace, m.NumWorkspaces)
 		return
@@ -39,36 +44,28 @@ func (m *OS) switchToWorkspace(workspace, focusTarget int) {
 	windowsInNew := m.GetWorkspaceWindowCount(workspace)
 	m.LogInfo("Switching workspace: %d → %d (%d windows)", oldWorkspace, workspace, windowsInNew)
 
-	// Clear all animations BEFORE switching to prevent windows from getting stuck mid-animation
-	// Then directly position windows to correct tiled layout WITHOUT creating new animations
+	// Clear all animations BEFORE switching to prevent windows from getting stuck
+	// mid-animation. A pane left at an interpolated rectangle keeps it until
+	// something retiles the workspace, which may be never.
+	//
+	// Land each one where it was already heading, through the normal path. The
+	// old code recomputed a master-stack layout instead - the wrong rectangles
+	// under BSP or scrolling - and stamped Width and Height straight onto the
+	// window, so the emulator and the guest kept the size the pane had before the
+	// switch and only heard the real one on some later, unrelated action.
 	if len(m.Animations) > 0 {
-		m.Animations = m.Animations[:0] // Cancel all animations without snapping to potentially wrong end positions
-		m.LogInfo("Cancelled animations during workspace switch")
-
-		// For tiling mode: directly position windows to correct tiled layout
-		if m.AutoTiling {
-			visibleWindows := make([]int, 0)
-			for i, w := range m.Windows {
-				if w.Workspace == oldWorkspace && !w.Minimized && !w.Minimizing {
-					visibleWindows = append(visibleWindows, i)
-				}
+		for _, anim := range m.Animations {
+			if anim.Type != ui.AnimationSnap || anim.Window == nil {
+				continue
 			}
-
-			if len(visibleWindows) > 0 {
-				layouts := m.calculateTilingLayout(len(visibleWindows))
-				for i, windowIndex := range visibleWindows {
-					if i < len(layouts) {
-						window := m.Windows[windowIndex]
-						window.X = layouts[i].x
-						window.Y = layouts[i].y
-						window.Width = layouts[i].width
-						window.Height = layouts[i].height
-						window.PositionDirty = true
-					}
-				}
-				m.LogInfo("Repositioned windows in workspace %d to correct tiled layout", oldWorkspace)
-			}
+			win := anim.Window
+			win.X, win.Y = anim.EndX, anim.EndY
+			win.Resize(anim.EndWidth, anim.EndHeight)
+			win.InvalidateCache()
+			win.MarkPositionDirty()
 		}
+		m.Animations = m.Animations[:0]
+		m.LogInfo("Landed and cancelled animations during workspace switch")
 	}
 
 	// Save current workspace focus and layout

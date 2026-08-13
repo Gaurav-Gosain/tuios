@@ -1,0 +1,7 @@
+# spurious-winch: leaving zoom restored the pre-zoom rectangle with a resize and
+# then retiled, so the guest heard both.
+tiling
+zoom
+tiling
+setting 7 0
+zoom

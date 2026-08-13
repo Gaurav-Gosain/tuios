@@ -88,11 +88,60 @@ func (w *Window) ScreenToTerminal(screenX, screenY int) (termX, termY int, ok bo
 // made it true.
 func (w *Window) SeedAnnouncedSize(width, height int) {
 	w.announcedW, w.announcedH = width, height
+	w.toldW, w.toldH = width, height
 }
 
 // AnnouncedSize returns the emulator size last handed downstream.
 func (w *Window) AnnouncedSize() (int, int) {
 	return w.announcedW, w.announcedH
+}
+
+// HoldAnnouncements stops Resize from telling the guest anything until
+// ReleaseAnnouncements, which then sends the settled size if it differs from
+// what the guest already has.
+//
+// One layout update is several steps: settle the border allowance, place the
+// rectangle, reclaim the columns a divider was holding, drain a deferred
+// resize. Each step used to reach the guest as its own SIGWINCH, and a
+// full-screen program repaints on every one, so a switch that left a pane
+// exactly the size it started at still cost it two full repaints. Only the
+// size the pane settles at was ever real.
+func (w *Window) HoldAnnouncements() { w.announceHeld = true }
+
+// ReleaseAnnouncements ends a hold and sends the size the pane settled at.
+func (w *Window) ReleaseAnnouncements() {
+	if !w.announceHeld {
+		return
+	}
+	w.announceHeld = false
+	if w.announcedW != w.toldW || w.announcedH != w.toldH {
+		w.tellGuest(w.announcedW, w.announcedH)
+	}
+}
+
+// tellGuest sends one size downstream. Both the local PTY and the daemon turn
+// it into a SIGWINCH, so it is only ever called for a size the guest does not
+// already have - re-sending an unchanged size makes the shell repaint its
+// prompt for nothing, which is what stacked prompts on a same-size session
+// switch were.
+func (w *Window) tellGuest(termWidth, termHeight int) {
+	w.toldW, w.toldH = termWidth, termHeight
+	if w.Pty != nil {
+		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
+			_ = err
+		}
+		if w.CellPixelWidth > 0 && w.CellPixelHeight > 0 {
+			xpixel := termWidth * w.CellPixelWidth
+			ypixel := termHeight * w.CellPixelHeight
+			_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
+		}
+		w.TriggerRedraw()
+	} else if w.DaemonMode && w.DaemonResizeFunc != nil {
+		// In daemon mode, use the resize callback to notify the daemon
+		if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
+			_ = err // Acknowledge error but don't break functionality
+		}
+	}
 }
 
 func (w *Window) Resize(width, height int) {
@@ -119,26 +168,8 @@ func (w *Window) Resize(width, height int) {
 		w.Terminal.Resize(termWidth, termHeight)
 	}
 	w.ioMu.Unlock()
-	// Announce downstream only when the emulator size actually changed. Both the
-	// local PTY and the daemon turn a resize into a SIGWINCH, so re-sending an
-	// unchanged size makes the shell repaint its prompt for nothing - which is
-	// what stacked prompts on a same-size session switch were.
-	if sizeChanged {
-		if w.Pty != nil {
-			if err := w.Pty.Resize(termWidth, termHeight); err != nil {
-				_ = err
-			}
-			if w.CellPixelWidth > 0 && w.CellPixelHeight > 0 {
-				xpixel := termWidth * w.CellPixelWidth
-				ypixel := termHeight * w.CellPixelHeight
-				_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
-			}
-		} else if w.DaemonMode && w.DaemonResizeFunc != nil {
-			// In daemon mode, use the resize callback to notify the daemon
-			if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
-				_ = err // Acknowledge error but don't break functionality
-			}
-		}
+	if sizeChanged && !w.announceHeld {
+		w.tellGuest(termWidth, termHeight)
 	}
 	w.Width = width
 	w.Height = height
@@ -146,11 +177,6 @@ func (w *Window) Resize(width, height int) {
 	// Mark both position and content dirty for resize operations
 	w.MarkPositionDirty()
 	w.MarkContentDirty()
-
-	// Trigger redraw if size changed to force applications to adapt
-	if sizeChanged && w.Pty != nil {
-		w.TriggerRedraw()
-	}
 }
 
 // ResizeVisual updates the window dimensions without triggering PTY resize.

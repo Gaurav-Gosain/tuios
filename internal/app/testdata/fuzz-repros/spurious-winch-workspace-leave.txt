@@ -1,0 +1,7 @@
+# spurious-winch: leaving a workspace cancelled its animations by recomputing a
+# master-stack layout, whatever the active mode, and stamping the rectangle
+# straight onto each pane. The emulator and the guest kept the old size until an
+# unrelated later action noticed.
+layout 2
+workspace 0
+attach

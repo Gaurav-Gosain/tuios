@@ -59,6 +59,11 @@ func (m *OS) calculateTilingLayout(n int) []tileLayout {
 
 // TileAllWindows arranges all visible windows in a tiling layout
 func (m *OS) TileAllWindows() {
+	m.settleSizes(func() { m.tileAllWindows() })
+}
+
+// tileAllWindows is TileAllWindows with the announcements already held.
+func (m *OS) tileAllWindows() {
 	// Get list of visible windows in current workspace (not minimized)
 	var visibleWindows []*terminal.Window
 	for _, w := range m.Windows {
@@ -100,6 +105,13 @@ func (m *OS) TileAllWindows() {
 		layouts := m.contentTileLayouts(len(visibleWindows))
 		for i, l := range layouts {
 			if i < len(visibleWindows) {
+				// A snap still in flight owns this window's geometry and stamps
+				// its own rectangle back on the next tick, without resizing the
+				// emulator with it. ApplyBSPLayout and placePane both retire it
+				// first; this branch did not, so a mode switch away from a
+				// scrolling layout mid-slide left the pane drawing at one size
+				// and its guest writing at another.
+				m.CancelSnapAnimation(visibleWindows[i])
 				visibleWindows[i].X = l.X
 				visibleWindows[i].Y = l.Y
 				// Set Tiled before Resize so the border deduction (and therefore
@@ -209,6 +221,11 @@ func (m *OS) TileAllWindows() {
 
 // ToggleAutoTiling toggles automatic tiling mode
 func (m *OS) ToggleAutoTiling() {
+	m.settleSizes(func() { m.toggleAutoTiling() })
+}
+
+// toggleAutoTiling is ToggleAutoTiling with the announcements already held.
+func (m *OS) toggleAutoTiling() {
 	// Switching mode is structural: the layout it lands on is final, not a step
 	// on the way to a size the user is still choosing.
 	m.requireRealLayout()
@@ -272,10 +289,19 @@ func (m *OS) ToggleAutoTiling() {
 		m.LogInfo("BSP: Disabling tiling mode")
 		// Clear preselection when disabling tiling
 		m.PreselectionDir = layout.PreselectionNone
-		// Reset Tiled flag and resize PTY to account for borders reappearing
+		// Every pane draws its own border again, so the column each split was
+		// holding open for a divider now draws nothing at all. Hand it back to
+		// the panes on either side instead of leaving it empty between them.
+		//
+		// First, so each tilable pane hears its new box once. The loop below used
+		// to clear the flag at the pane's old rectangle and reclaim then gave it
+		// the real one, which is two SIGWINCHes for one settled size.
+		m.reclaimSeparatorGaps()
 		for i := range m.Windows {
-			// SetTiled re-announces at the new border deduction (Tiled=false →
-			// width-2) and is a no-op for a pane already drawing its own border.
+			// Still needed for the panes reclaim does not place - minimized and
+			// floating ones - which keep their rectangle and owe the guest the two
+			// columns and rows their border has just taken back. A no-op for the
+			// panes reclaim already settled.
 			m.Windows[i].SetTiled(false)
 			m.Windows[i].CachedContent = ""
 			m.Windows[i].CachedLayer = nil
@@ -284,10 +310,6 @@ func (m *OS) ToggleAutoTiling() {
 			m.Windows[i].PositionDirty = true
 			m.Windows[i].HasNewOutput.Store(true)
 		}
-		// Every pane draws its own border again, so the column each split was
-		// holding open for a divider now draws nothing at all. Hand it back to
-		// the panes on either side instead of leaving it empty between them.
-		m.reclaimSeparatorGaps()
 		m.MarkAllDirty()
 	}
 

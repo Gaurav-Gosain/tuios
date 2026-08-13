@@ -1,0 +1,5 @@
+# spurious-winch: closing a pane applied the BSP layout whenever a tree existed,
+# even under master-stack, so the retile that followed moved every pane again.
+new-pane
+layout 1
+close-pane 1

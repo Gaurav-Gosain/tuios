@@ -83,7 +83,17 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
-		if win.Width != rect.W || win.Height != rect.H {
+		// The strip has no dividers to share, so its panes always draw their own
+		// border. Settle that allowance before the rectangle, as placePane does:
+		// it decides how much of the rectangle the guest gets, so settling it
+		// afterwards announces the rectangle twice, once at each allowance.
+		borderChanged := win.Tiled
+		if borderChanged {
+			win.Tiled = false
+			win.InvalidateCache()
+		}
+		// A changed allowance owes the guest a new box even at the same rectangle.
+		if borderChanged || win.Width != rect.W || win.Height != rect.H {
 			win.Resize(rect.W, rect.H)
 		}
 
@@ -114,7 +124,6 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		win.Y = rect.Y
 		win.Width = rect.W
 		win.Height = rect.H
-		win.SetTiled(false)
 		win.MarkPositionDirty()
 		win.InvalidateCache()
 	}

@@ -646,23 +646,20 @@ func (m *OS) DeleteWindow(i int) *OS {
 				}
 			}
 
-			tree := m.WorkspaceTrees[m.CurrentWorkspace]
-			if tree != nil && !tree.IsEmpty() && len(m.Windows) > 0 {
-				m.ApplyBSPLayout()
+			// Place what is left through the one path that knows which tiler is
+			// active. Applying the BSP layout directly when a tree happened to
+			// exist laid the panes out with that tree even in master-stack mode,
+			// so the retile that followed moved every one of them again: two
+			// sizes announced for one close, and a guest repaints on each.
+			hasVisibleInWorkspace := false
+			for _, w := range m.Windows {
+				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+					hasVisibleInWorkspace = true
+					break
+				}
 			}
-
-			// If there are still visible windows in this workspace, retile them
-			if len(m.Windows) > 0 {
-				hasVisibleInWorkspace := false
-				for _, w := range m.Windows {
-					if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-						hasVisibleInWorkspace = true
-						break
-					}
-				}
-				if hasVisibleInWorkspace && (tree == nil || tree.IsEmpty()) {
-					m.TileAllWindows()
-				}
+			if hasVisibleInWorkspace {
+				m.TileAllWindows()
 			}
 		}
 	}

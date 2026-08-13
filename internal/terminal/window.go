@@ -209,8 +209,15 @@ type Window struct {
 	// that would have corrected the shell. That is exactly how a full-screen
 	// pane ended up running an 80x24 shell.
 	announcedW, announcedH int
-	UpdateCounter          int                // Counter for throttling background updates
-	cancelFunc             context.CancelFunc // For graceful goroutine cleanup
+	// toldW/H are the size the guest has actually been sent, which equals
+	// announcedW/H except while a hold is open. A layout update walks a pane
+	// through several rectangles and only the last one is real, so the hold lets
+	// Resize record the intent step by step and sends the settled size once.
+	// See HoldAnnouncements.
+	toldW, toldH  int
+	announceHeld  bool
+	UpdateCounter int                // Counter for throttling background updates
+	cancelFunc    context.CancelFunc // For graceful goroutine cleanup
 	// ioMu guards the emulator cell buffer and the Pty/Terminal handles. See
 	// the block comment above LockIO for the full contract; the short version:
 	//

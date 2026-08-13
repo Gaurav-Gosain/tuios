@@ -146,6 +146,11 @@ func (m *OS) ApplyLayoutModeName(name string) {
 
 // ToggleLayoutMode cycles through layout modes: BSP -> master-stack -> scrolling -> BSP.
 func (m *OS) ToggleLayoutMode() {
+	m.settleSizes(func() { m.toggleLayoutMode() })
+}
+
+// toggleLayoutMode is ToggleLayoutMode with the announcements already held.
+func (m *OS) toggleLayoutMode() {
 	m.resetTiledFlags()
 	if m.UseScrollingLayout {
 		// scrolling -> BSP
@@ -175,23 +180,21 @@ func (m *OS) ToggleLayoutMode() {
 	m.FireLayoutChanged()
 }
 
-// resetTiledFlags clears the Tiled flag on all current workspace windows
-// and invalidates caches. Call when switching layout modes to prevent
-// stale shared-border state from bleeding between modes.
-// Its callers are the layout-mode switches, every one of them a structural
-// change whose result is final, so this is also where a resize deferral that is
-// still in flight gets finished rather than being allowed to make the new
-// layout visual-only. See resize_deferral.go.
+// resetTiledFlags drops the cached frames of the current workspace's panes so
+// the new mode restyles them, and finishes a resize deferral still in flight so
+// the new layout is real rather than visual-only. See resize_deferral.go.
+//
+// It deliberately does not touch the Tiled flag. Every caller is a layout-mode
+// switch that goes on to place each pane, and placing a pane settles its border
+// allowance along with its rectangle. Clearing the flag here instead announced a
+// bordered box at the rectangle the pane still had, which the placement then
+// replaced: two SIGWINCHes for a switch that often left the pane exactly the
+// size it started at, and a full-screen guest repaints for each.
 func (m *OS) resetTiledFlags() {
 	m.requireRealLayout()
 
 	for i := range m.Windows {
 		if m.Windows[i].Workspace == m.CurrentWorkspace {
-			// SetTiled, not the bare flag: a pane that starts drawing its own
-			// border owes the guest two fewer columns and rows, and the write
-			// that skips the re-announcement is what leaves a shell wrapping
-			// its prompt past the border it now has.
-			m.Windows[i].SetTiled(false)
 			m.Windows[i].InvalidateCache()
 		}
 	}
@@ -199,6 +202,11 @@ func (m *OS) resetTiledFlags() {
 
 // EnableScrollingLayout directly enables scrolling layout mode.
 func (m *OS) EnableScrollingLayout() {
+	m.settleSizes(func() { m.enableScrollingLayout() })
+}
+
+// enableScrollingLayout is EnableScrollingLayout with the announcements already held.
+func (m *OS) enableScrollingLayout() {
 	m.resetTiledFlags()
 	m.UseScrollingLayout = true
 	m.UseBSPLayout = false
@@ -214,6 +222,11 @@ func (m *OS) EnableScrollingLayout() {
 
 // EnableBSPLayout directly enables BSP layout mode.
 func (m *OS) EnableBSPLayout() {
+	m.settleSizes(func() { m.enableBSPLayout() })
+}
+
+// enableBSPLayout is EnableBSPLayout with the announcements already held.
+func (m *OS) enableBSPLayout() {
 	m.resetTiledFlags()
 	m.UseScrollingLayout = false
 	m.UseBSPLayout = true
@@ -232,6 +245,11 @@ func (m *OS) EnableBSPLayout() {
 
 // EnableMasterStackLayout directly enables master-stack layout mode.
 func (m *OS) EnableMasterStackLayout() {
+	m.settleSizes(func() { m.enableMasterStackLayout() })
+}
+
+// enableMasterStackLayout is EnableMasterStackLayout with the announcements already held.
+func (m *OS) enableMasterStackLayout() {
 	m.resetTiledFlags()
 	m.UseScrollingLayout = false
 	m.UseBSPLayout = false
@@ -245,6 +263,11 @@ func (m *OS) EnableMasterStackLayout() {
 
 // DisableAllTiling disables all tiling modes and resets window state.
 func (m *OS) DisableAllTiling() {
+	m.settleSizes(func() { m.disableAllTiling() })
+}
+
+// disableAllTiling is DisableAllTiling with the announcements already held.
+func (m *OS) disableAllTiling() {
 	m.AutoTiling = false
 	m.UseScrollingLayout = false
 	m.resetTiledFlags()

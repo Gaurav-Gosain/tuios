@@ -1,0 +1,10 @@
+# spurious-winch: the BSP placement settled the border allowance after placing
+# the pane, so the snap applied the rectangle at the old allowance and the flag
+# write re-applied it at the new one.
+new-pane
+new-pane
+overlay-open 0
+tiling
+resize 93 20
+tiling
+shared-borders

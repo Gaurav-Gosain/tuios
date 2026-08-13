@@ -96,15 +96,19 @@ func (m *OS) tilablePanes(workspace int) []*terminal.Window {
 // placePane puts a pane at a rectangle and gives it the border that rectangle
 // was partitioned for.
 //
-// SetTiled runs before Resize because the border allowance decides how much of
-// the rectangle the guest can draw in: announcing the new size first would tell
-// the guest a box measured against the border it is about to stop drawing.
+// The border allowance is settled before the resize because it decides how much
+// of the rectangle the guest can draw in: announcing the new size first would
+// tell the guest a box measured against the border it is about to stop drawing.
+// The flag is written directly rather than through SetTiled, which resizes to
+// the rectangle the pane has now - one announcement at a size the pane never
+// occupied, then a second at the real one. Both are SIGWINCHes and a
+// full-screen guest repaints for each.
 func (m *OS) placePane(win *terminal.Window, x, y, w, h int, borderless bool) {
 	// A snap animation owns its window's geometry until it finishes and would
 	// stamp its own rectangle back over this one on the next tick.
 	m.CancelSnapAnimation(win)
 	win.X, win.Y = x, y
-	win.SetTiled(borderless)
+	win.Tiled = borderless
 	win.Resize(w, h)
 	win.InvalidateCache()
 	win.MarkPositionDirty()

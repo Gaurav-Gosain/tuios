@@ -200,6 +200,24 @@ func (m *OS) ApplyBSPLayout() {
 			continue
 		}
 
+		// Border mode is settled here, with the rest of the layout, so that one
+		// value decides it for the whole frame. A pane used to keep the old mode
+		// until its snap completed, which let a frame draw both border systems at
+		// once: the separator overlay reads config.SharedBorders live, so it
+		// filled the gaps the new layout had already reserved while every pane
+		// still drew a box of its own. Any path that retired a snap early then
+		// made that permanent, since the flag was waiting on an animation that no
+		// longer existed.
+		//
+		// Before the placement, not after, and for the same reason the deferred
+		// branch above does it first: the allowance decides how much of the
+		// rectangle the guest gets, so settling it afterwards announces the
+		// rectangle twice, once at each allowance.
+		win.Tiled = borderless
+		if borderless != wasTiled {
+			win.InvalidateCache()
+		}
+
 		// Create animation for smooth transition
 		anim := ui.NewSnapAnimation(
 			win,
@@ -208,24 +226,12 @@ func (m *OS) ApplyBSPLayout() {
 		)
 
 		if anim != nil {
-			// Border mode is settled here, with the rest of the layout, so that one
-			// value decides it for the whole frame. A pane used to keep the old mode
-			// until its snap completed, which let a frame draw both border systems
-			// at once: the separator overlay reads config.SharedBorders live, so it
-			// filled the gaps the new layout had already reserved while every pane
-			// still drew a box of its own. Any path that retired a snap early then
-			// made that permanent, since the flag was waiting on an animation that
-			// no longer existed.
-			win.Tiled = borderless
-			if win.Tiled != wasTiled {
-				win.InvalidateCache()
-			}
 			m.Animations = append(m.Animations, anim)
-		} else {
-			// Already at target, or animations disabled (NewSnapAnimation applied
-			// the size instantly). SetTiled re-syncs the emulator for the new
-			// border deduction when the flag actually changes.
-			win.SetTiled(borderless)
+		} else if borderless != wasTiled {
+			// A pane already at its target rectangle is left alone by
+			// NewSnapAnimation unless it is daemon-backed, and a changed
+			// allowance owes the guest a new box even at the same rectangle.
+			win.Resize(rect.W, rect.H)
 		}
 	}
 }

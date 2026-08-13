@@ -1013,6 +1013,11 @@ func (m *OS) RestoreTerminalStates() error {
 // This must be called AFTER SetupPTYOutputHandlers so that DaemonResizeFunc is available.
 // This fixes the issue where PTY dimensions become out of sync after detach/reattach.
 func (m *OS) SyncDaemonPTYDimensions() {
+	m.settleSizes(func() { m.syncDaemonPTYDimensions() })
+}
+
+// syncDaemonPTYDimensions is SyncDaemonPTYDimensions with the announcements already held.
+func (m *OS) syncDaemonPTYDimensions() {
 	for _, w := range m.Windows {
 		if w.DaemonMode && w.DaemonResizeFunc != nil {
 			termWidth := w.ContentWidth()

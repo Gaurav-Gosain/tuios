@@ -1,0 +1,7 @@
+# spurious-winch: disabling tiling cleared every pane's Tiled flag at its old
+# rectangle, then reclaimed the divider columns and gave it the real one.
+sidebar-collapse
+shared-borders
+new-pane
+new-pane
+tiling

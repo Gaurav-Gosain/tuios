@@ -75,6 +75,11 @@ func (m *OS) resizeDeferralActive() bool {
 // timestamp stale the deferral stays off until a fresh resize step refreshes
 // it, and a gesture that resumes simply re-enters the deferral.
 func (m *OS) endResizeDeferral() {
+	m.settleSizes(func() { m.endResizeDeferralLocked() })
+}
+
+// endResizeDeferralLocked is endResizeDeferral with the announcements already held.
+func (m *OS) endResizeDeferralLocked() {
 	m.viewportResizing = false
 	m.renderSkipped = false
 	m.ApplyPendingResizes()
