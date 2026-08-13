@@ -466,6 +466,26 @@ func viewportResizeSettleCmd(gen uint64) tea.Cmd {
 	})
 }
 
+// interactionSettleDelay is how long content polling stays parked after a drag
+// or resize ends. Shells redraw their prompt when the SIGWINCH lands, not when
+// the pointer comes up, so resuming the moment the button is released polls a
+// prompt that is still being written.
+const interactionSettleDelay = 150 * time.Millisecond
+
+// InteractionSettledMsg says that delay has passed and the interaction mode the
+// gesture borrowed can go back. It travels as a message rather than as a
+// goroutine that writes the model directly: two gestures inside the delay had
+// two of those writing the same field from off the update loop.
+type InteractionSettledMsg struct{}
+
+// InteractionSettleCmd waits out [interactionSettleDelay]. One shot, armed by a
+// gesture ending, so nothing is left ticking at idle.
+func InteractionSettleCmd() tea.Cmd {
+	return tea.Tick(interactionSettleDelay, func(time.Time) tea.Msg {
+		return InteractionSettledMsg{}
+	})
+}
+
 // TriggerAltScreenRedrawMsg triggers alt screen apps to redraw.
 type TriggerAltScreenRedrawMsg struct{}
 
@@ -1145,6 +1165,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// for the newest resize, so whatever state the flag is in, the deferred
 		// work is due now. Draining an empty PendingResizes costs nothing.
 		m.endResizeDeferral()
+		return m, nil
+
+	case InteractionSettledMsg:
+		// A gesture started inside the delay owns the mode now, and its own
+		// release will hand it back.
+		if !m.Dragging && !m.Resizing {
+			m.InteractionMode = false
+		}
 		return m, nil
 
 	case tea.MouseMsg:

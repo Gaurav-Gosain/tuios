@@ -93,12 +93,9 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 
 	win := m.Windows[topIdx]
 
-	// Tiled windows with shared borders have no individual border
-	if win.Tiled && config.SharedBorders {
-		SetPointerShape(PointerDefault)
-		return
-	}
-
+	// A pane with no border of its own has no edge to offer, whatever the
+	// setting says: BorderOffset is the pane's own answer, and the divider
+	// between borderless panes was already handled above.
 	borderOff := win.BorderOffset()
 	if borderOff == 0 {
 		SetPointerShape(PointerDefault)

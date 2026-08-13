@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -54,6 +55,17 @@ func checkPaneSizes(t *testing.T, m *OS, told map[string]*toldSize, label string
 		}
 		if rec := told[win.ID]; rec != nil && rec.calls > 0 && (rec.w != aw || rec.h != ah) {
 			t.Errorf("%s: %s PTY told %dx%d, announce record %dx%d", label, win.ID, rec.w, rec.h, aw, ah)
+		}
+		// The guest's own frame, measured where the renderer would place it. The
+		// three sizes above are all derived from BorderOffset, so they agree with
+		// each other even when the pane has since started drawing a border the
+		// guest was never told about; this is the check that reads the drawn
+		// result instead. Anything wider than the box is the overflow the user
+		// sees, and fitToContentBox trimming it is what hides it from the frame.
+		gw, gh := lipgloss.Size(m.renderTerminal(win, false, false))
+		if gw > cw || gh > ch {
+			t.Errorf("%s: %s guest frame %dx%d overflows the box it is drawn in, %dx%d",
+				label, win.ID, gw, gh, cw, ch)
 		}
 	}
 }
@@ -177,6 +189,77 @@ func TestNewWindowInNewWorkspaceAnnouncesItsSize(t *testing.T) {
 		if w.X != bounds.X || w.Y != bounds.Y || w.Width != bounds.W || w.Height != bounds.H {
 			t.Errorf("workspace 2 window at (%d,%d) %dx%d, want the content box (%d,%d) %dx%d",
 				w.X, w.Y, w.Width, w.Height, bounds.X, bounds.Y, bounds.W, bounds.H)
+		}
+	}
+}
+
+// setSharedBorders flips the setting the way the settings panel and the command
+// palette do, so the test exercises whatever those paths do about it.
+func setSharedBorders(m *OS, v bool) {
+	config.SharedBorders = v
+	m.applyAppearanceLive(true)
+}
+
+// TestBorderAllowanceMatrix walks the four combinations of tiling and shared
+// borders. They are independent settings, so the border cells a pane withholds
+// from its guest must follow the border that pane actually draws, not either
+// setting on its own: the two cells where the settings disagree are where a
+// pane drew a box around a guest that had been told it owned those columns.
+//
+// Every route into a cell is walked, because the flag and the announcement part
+// company at whichever one forgets to resize, not at the state itself.
+func TestBorderAllowanceMatrix(t *testing.T) {
+	prevAnim := config.AnimationsEnabled
+	prevShared := config.SharedBorders
+	config.AnimationsEnabled = false
+	t.Cleanup(func() {
+		config.AnimationsEnabled = prevAnim
+		config.SharedBorders = prevShared
+	})
+
+	for _, tiling := range []bool{true, false} {
+		for _, shared := range []bool{false, true} {
+			name := fmt.Sprintf("tiling=%v/shared=%v", tiling, shared)
+			t.Run(name, func(t *testing.T) {
+				config.SharedBorders = shared
+				m, told := newAnnounceOS(t, 200, 50)
+				m.TileAllWindows()
+
+				// Reaching the cell by the two routes that turn tiling off: the
+				// keybinding's toggle and the command palette's disable.
+				if !tiling {
+					m.ToggleAutoTiling()
+				}
+				checkPaneSizes(t, m, told, name+"/settled")
+
+				setSharedBorders(m, !shared)
+				checkPaneSizes(t, m, told, name+"/shared-flipped")
+				setSharedBorders(m, shared)
+				checkPaneSizes(t, m, told, name+"/shared-restored")
+
+				m.ToggleAutoTiling()
+				checkPaneSizes(t, m, told, name+"/tiling-flipped")
+				m.ToggleAutoTiling()
+				checkPaneSizes(t, m, told, name+"/tiling-restored")
+
+				// Layout mode switches clear the flag on their way through.
+				m.ToggleLayoutMode()
+				checkPaneSizes(t, m, told, name+"/layout-mode-next")
+				m.EnableBSPLayout()
+				checkPaneSizes(t, m, told, name+"/layout-mode-bsp")
+
+				// Floating a pane takes it out of the tiled grid, so it starts
+				// drawing its own border wherever it was borderless before.
+				m.ToggleFloating()
+				checkPaneSizes(t, m, told, name+"/floated")
+				m.ToggleFloating()
+				checkPaneSizes(t, m, told, name+"/unfloated")
+
+				m.DisableAllTiling()
+				checkPaneSizes(t, m, told, name+"/tiling-disabled")
+				m.ToggleAutoTiling()
+				checkPaneSizes(t, m, told, name+"/tiling-reenabled")
+			})
 		}
 	}
 }

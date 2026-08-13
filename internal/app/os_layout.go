@@ -187,7 +187,11 @@ func (m *OS) resetTiledFlags() {
 
 	for i := range m.Windows {
 		if m.Windows[i].Workspace == m.CurrentWorkspace {
-			m.Windows[i].Tiled = false
+			// SetTiled, not the bare flag: a pane that starts drawing its own
+			// border owes the guest two fewer columns and rows, and the write
+			// that skips the re-announcement is what leaves a shell wrapping
+			// its prompt past the border it now has.
+			m.Windows[i].SetTiled(false)
 			m.Windows[i].InvalidateCache()
 		}
 	}

@@ -24,7 +24,7 @@ func (m *OS) ToggleFloating() {
 		if m.AutoTiling {
 			m.RemoveWindowFromBSPTree(fw)
 		}
-		fw.Tiled = false
+		fw.SetTiled(false)
 		fw.InvalidateCache()
 		m.RecalcZOrder()
 		m.ShowNotification("Window: floating", "info", config.NotificationDuration)

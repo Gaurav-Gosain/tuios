@@ -2,7 +2,6 @@ package input
 
 import (
 	"fmt"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -22,6 +21,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.EndStrayGesture()
 		o.EndResizeMode()
 	}()
+
+	// Armed by the cleanup below and returned from whichever branch gets there.
+	var settleCmd tea.Cmd
 
 	// End every overlay gesture before anything else. Both a grabbed panel and
 	// the accent picker's grab on its grid or hue strip end on this button, but
@@ -399,18 +401,11 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// 3. Recalculate and redraw the prompt for the new width
 		// 4. Write the new prompt to the PTY
 		// Without this delay, content polling resumes before the shell finishes,
-		// resulting in incomplete or stale prompt displays.
+		// resulting in incomplete or stale prompt displays. The wait comes back
+		// through Update (InteractionSettledMsg) so the field is only ever
+		// written on the loop that owns it.
 		if wasResizing {
-			go func() {
-				time.Sleep(150 * time.Millisecond)
-				// Only clear if no new interaction has started in the meantime
-				// This prevents a race condition where a user quickly switches from
-				// resizing to dragging, and the delayed goroutine would incorrectly
-				// clear InteractionMode during the active drag operation.
-				if !o.Dragging && !o.Resizing {
-					o.InteractionMode = false
-				}
-			}()
+			settleCmd = app.InteractionSettleCmd()
 		} else {
 			o.InteractionMode = false
 		}
@@ -429,10 +424,11 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// so finish what a newcomer expects a click to do. The dispatcher runs the
 	// same handler the Enter keybinding runs, notification included.
 	if enterTerminalOnRelease {
-		return GetDispatcher().Dispatch("enter_terminal_mode", tea.KeyPressMsg{}, o)
+		next, cmd := GetDispatcher().Dispatch("enter_terminal_mode", tea.KeyPressMsg{}, o)
+		return next, tea.Batch(settleCmd, cmd)
 	}
 
-	return o, nil
+	return o, settleCmd
 }
 
 // rightClickDragThreshold and clickToTypeDragThreshold separate a click from a

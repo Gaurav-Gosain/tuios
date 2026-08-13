@@ -275,15 +275,15 @@ func (m *OS) ToggleAutoTiling() {
 		m.PreselectionDir = layout.PreselectionNone
 		// Reset Tiled flag and resize PTY to account for borders reappearing
 		for i := range m.Windows {
-			m.Windows[i].Tiled = false
+			// SetTiled re-announces at the new border deduction (Tiled=false →
+			// width-2) and is a no-op for a pane already drawing its own border.
+			m.Windows[i].SetTiled(false)
 			m.Windows[i].CachedContent = ""
 			m.Windows[i].CachedLayer = nil
 			m.Windows[i].ContentDirty = true
 			m.Windows[i].Dirty = true
 			m.Windows[i].PositionDirty = true
 			m.Windows[i].HasNewOutput.Store(true)
-			// Resize PTY: now uses border deduction (Tiled=false → width-2)
-			m.Windows[i].Resize(m.Windows[i].Width, m.Windows[i].Height)
 		}
 		m.MarkAllDirty()
 	}
