@@ -170,11 +170,15 @@ func (m *OS) ApplyBSPLayout() {
 		// later retile placing panes visually and never giving them a real size.
 		if deferring {
 			win.X, win.Y = rect.X, rect.Y
-			if win.Tiled != config.SharedBorders {
+			borderChanged := win.Tiled != config.SharedBorders
+			if borderChanged {
 				win.Tiled = config.SharedBorders
 				win.InvalidateCache()
 			}
-			if win.Width != rect.W || win.Height != rect.H {
+			// A changed border allowance owes the guest a new box even at the
+			// same rectangle: the drawable area is the rectangle less the border
+			// cells, and those just appeared or went away.
+			if borderChanged || win.Width != rect.W || win.Height != rect.H {
 				win.ResizeVisual(rect.W, rect.H)
 				// IsBeingManipulated freezes a pane's content at its cached
 				// frame, which is right for a pane the pointer is dragging and

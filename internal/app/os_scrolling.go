@@ -114,7 +114,7 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		win.Y = rect.Y
 		win.Width = rect.W
 		win.Height = rect.H
-		win.Tiled = false
+		win.SetTiled(false)
 		win.MarkPositionDirty()
 		win.InvalidateCache()
 	}
