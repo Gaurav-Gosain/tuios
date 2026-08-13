@@ -153,8 +153,8 @@ func TestGlyphRailMarksAttentionWithoutASecondFill(t *testing.T) {
 	// The glyph rail draws sessions through sidebarStripCell, not
 	// sidebarSessionRow: at two content columns there is no room for a chevron,
 	// a name or a separate gutter mark.
-	calmRow := m.sidebarStripCell(calm, cw, pal, false, false)
-	loudRow := m.sidebarStripCell(loud, cw, pal, false, false)
+	calmRow := m.sidebarStripCell(calm, cw, pal, pal.Panel, false)
+	loudRow := m.sidebarStripCell(loud, cw, pal, pal.Panel, false)
 
 	if ansiBackgroundCount(loudRow) != ansiBackgroundCount(calmRow) {
 		t.Fatalf("attention paints a second fill on the spine:\n  loud=%q\n  calm=%q", loudRow, calmRow)

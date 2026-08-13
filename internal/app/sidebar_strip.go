@@ -275,18 +275,32 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 	newY := height - tailH
 	toggleY := newY + newH
 
-	// The pointer highlights the whole slot it is in, not the one line the mark
-	// sits on: the highlight is the target made visible, and a target you cannot
-	// see the edges of is a target you have to aim at.
+	// The band is the target made visible, so it covers the slot the pointer is
+	// in and exactly the slot: every row of it, including the blank the mark's
+	// interval owns, and every column of it, the edge rule included. A band
+	// narrower than the rectangle it stands for teaches the wrong edges, which is
+	// worse than either half of the mismatch alone.
+	//
+	// The rows nothing is recorded on take no band at all. The pads, the slack
+	// between the two lists and the group's rule are furniture; painting them
+	// offers a target that is not there.
 	hoverY0, hoverY1 := -1, -1
 	if !m.SidebarDrag.Dragging && m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
-		hoverY0 = m.SidebarHoverY - topMargin
-		hoverY1 = hoverY0 + 1
-		if y0, y1, ok := stripSlot(hoverY0, stackTop, spineEnd, interval); ok {
-			hoverY0, hoverY1 = y0, y1
-		}
-		if y0, y1, ok := stripSlot(hoverY0, groupTop, groupEnd, intervalA); ok {
-			hoverY0, hoverY1 = y0, y1
+		hy := m.SidebarHoverY - topMargin
+		switch {
+		case badgeH > 0 && hy == badgeY,
+			more && hy == moreY,
+			moreA && hy == moreAY,
+			newH > 0 && hy == newY,
+			toggleH > 0 && hy == toggleY:
+			hoverY0, hoverY1 = hy, hy+1
+		default:
+			if y0, y1, ok := stripSlot(hy, stackTop, spineEnd, interval); ok {
+				hoverY0, hoverY1 = y0, y1
+			}
+			if y0, y1, ok := stripSlot(hy, groupTop, groupEnd, intervalA); ok {
+				hoverY0, hoverY1 = y0, y1
+			}
 		}
 	}
 	hovered := func(i int) bool { return i >= hoverY0 && i < hoverY1 }
@@ -314,7 +328,14 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 				Kind: sidebarStripBadge, Y0: y, Y1: y + 1, Label: sidebarTooltipBadgeLabel(badge),
 			})
 			record(sidebarRowAgent, badge.SessionID, badge.WindowID, y, 1)
-			lines = append(lines, m.sidebarStripBand(sidebarStripBadgeCell(badge, cw, pal), cw, edgeLeft, pal))
+			// Hovered, the alarm's own ink is the band, so the hairline beside it
+			// takes the badge's knockout: a rule mixed for Panel does not show on a
+			// saturated fill, and the rail's frame may not break for one row.
+			bg, edgeFg := stripRowBg(false, pal), color.Color(nil)
+			if hovered(i) {
+				bg, edgeFg = agentGlyphColor(badge.State, pal), pal.Canvas
+			}
+			lines = append(lines, m.sidebarStripBand(sidebarStripBadgeCell(badge, cw, pal), cw, edgeLeft, bg, edgeFg, pal))
 		case i >= stackTop && i < spineEnd && (i-stackTop)%interval == 0:
 			s := sessions[(i-stackTop)/interval]
 			rows := min(interval, spineEnd-i)
@@ -323,7 +344,9 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 			})
 			record(sidebarRowSession, s.ID, "", y, rows)
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
-			lines = append(lines, m.sidebarStripBand(m.sidebarStripCell(s, cw, pal, hovered(i), dragged), cw, edgeLeft, pal))
+			lit := hovered(i) || dragged
+			bg := stripRowBg(lit, pal)
+			lines = append(lines, m.sidebarStripBand(m.sidebarStripCell(s, cw, pal, bg, lit), cw, edgeLeft, bg, nil, pal))
 		case more && i == moreY:
 			// The tail names what it cut, and expanding is the only way to see it,
 			// so that is what a click on it does.
@@ -332,12 +355,14 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 				Label: strconv.Itoa(len(sessions)-shown) + " more " + plural("session", len(sessions)-shown),
 			})
 			record(sidebarRowCollapse, "", "", y, 1)
-			lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal), cw, edgeLeft, pal))
+			bg := stripRowBg(hovered(i), pal)
+			lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal, bg, hovered(i)), cw, edgeLeft, bg, nil, pal))
 		case ruleH > 0 && i == ruleY:
 			// The groups are separated by a drawn rule rather than by a blank row,
 			// because a blank row is already the spine's own rhythm: spending it
-			// here would read as one more session, not as a boundary.
-			lines = append(lines, m.sidebarStripBand(sidebarStripRuleCell(cw, pal), cw, edgeLeft, pal))
+			// here would read as one more session, not as a boundary. Nothing is
+			// recorded on it, so it never takes a band.
+			lines = append(lines, m.sidebarStripBand(sidebarStripRuleCell(cw, pal), cw, edgeLeft, pal.Panel, nil, pal))
 		case i >= groupTop && i < groupEnd && (i-groupTop)%intervalA == 0:
 			e := agents[(i-groupTop)/intervalA]
 			rows := min(intervalA, groupEnd-i)
@@ -347,14 +372,16 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 				Label: sidebarTooltipAgentLabel(e),
 			})
 			record(sidebarRowAgent, e.SessionID, e.WindowID, y, rows)
-			lines = append(lines, m.sidebarStripBand(m.sidebarStripAgentCell(e, cw, pal, hovered(i)), cw, edgeLeft, pal))
+			bg := stripRowBg(hovered(i), pal)
+			lines = append(lines, m.sidebarStripBand(m.sidebarStripAgentCell(e, cw, pal, bg, hovered(i)), cw, edgeLeft, bg, nil, pal))
 		case moreA && i == moreAY:
 			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
 				Kind: sidebarStripMore, Y0: y, Y1: y + 1,
 				Label: strconv.Itoa(len(agents)-shownA) + " more " + plural("agent", len(agents)-shownA),
 			})
 			record(sidebarRowCollapse, "", "", y, 1)
-			lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal), cw, edgeLeft, pal))
+			bg := stripRowBg(hovered(i), pal)
+			lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal, bg, hovered(i)), cw, edgeLeft, bg, nil, pal))
 		case newH > 0 && i == newY:
 			// The two controls stack rather than share a line: two content cells
 			// shared out give each of them one cell, which is the target this round
@@ -365,7 +392,8 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 				Kind: sidebarStripNew, Y0: y, Y1: y + 1, Label: "new session",
 			})
 			record(sidebarRowNewSession, "", "", y, 1)
-			lines = append(lines, m.sidebarStripBand(sidebarStripControlCell("+", cw, edgeLeft, hovered(i), pal), cw, edgeLeft, pal))
+			bg := stripRowBg(hovered(i), pal)
+			lines = append(lines, m.sidebarStripBand(sidebarStripControlCell("+", cw, edgeLeft, hovered(i), bg, pal), cw, edgeLeft, bg, nil, pal))
 		case toggleH > 0 && i == toggleY:
 			// The glyph hugs the pane-facing column, the edge the pointer arrives
 			// from, but the zone is the whole band: the only control the user has
@@ -374,7 +402,8 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 				Kind: sidebarStripToggle, Y0: y, Y1: y + 1, Label: "expand",
 			})
 			record(sidebarRowCollapse, "", "", y, 1)
-			lines = append(lines, m.sidebarStripBand(sidebarStripControlCell(toggleGlyph, cw, edgeLeft, hovered(i), pal), cw, edgeLeft, pal))
+			bg := stripRowBg(hovered(i), pal)
+			lines = append(lines, m.sidebarStripBand(sidebarStripControlCell(toggleGlyph, cw, edgeLeft, hovered(i), bg, pal), cw, edgeLeft, bg, nil, pal))
 		default:
 			lines = append(lines, m.sidebarStripBlank(cw, edgeLeft, hovered(i), pal))
 		}
@@ -392,18 +421,38 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 	return lines, w
 }
 
-// sidebarStripBand paints one line of the strip: its content cells and the
-// hairline rule beside them, every cell of it on Panel. The band is the whole
-// point of the collapsed rail. It measures 1.19:1 against Canvas, which makes it
-// a ground rather than a message, and which is also why the rule stays: on a
-// terminal that drops the fill the rule is the only edge left.
-func (m *OS) sidebarStripBand(content string, cw int, edgeLeft bool, pal overlay.Palette) string {
-	rule := theme.NotificationRule()
-	if m.SidebarFocused {
-		rule = pal.Accent
+// stripRowBg is the ground one line of the strip stands on: the hover band
+// where the pointer is, and the strip's own Panel everywhere else.
+func stripRowBg(lit bool, pal overlay.Palette) color.Color {
+	if lit {
+		return pal.Surface
 	}
-	edge := lipgloss.NewStyle().Background(pal.Panel).Foreground(rule).Render(config.GetWindowBorderLeft())
-	body := sidebarFit(content, cw, pal.Panel)
+	return pal.Panel
+}
+
+// sidebarStripBand paints one line of the strip: its content cells and the
+// hairline rule beside them, every cell of it on the line's own ground. The band
+// is the whole point of the collapsed rail. At rest it measures 1.19:1 against
+// Canvas, which makes it a ground rather than a message, and which is also why
+// the rule stays: on a terminal that drops the fill the rule is the only edge
+// left.
+//
+// The rule shares the line's ground rather than keeping Panel under it, so a
+// hover band is one unbroken rectangle three columns wide. It used to stop a
+// column short of the rectangle it was standing for, on the pane-facing side the
+// pointer arrives from. edgeFg overrides the hairline's colour for a line whose
+// ground is inked, where a hairline mixed for Panel would not show at all.
+func (m *OS) sidebarStripBand(content string, cw int, edgeLeft bool, bg, edgeFg color.Color, pal overlay.Palette) string {
+	rule := edgeFg
+	switch {
+	case rule != nil:
+	case m.SidebarFocused:
+		rule = pal.Accent
+	default:
+		rule = theme.NotificationRule()
+	}
+	edge := lipgloss.NewStyle().Background(bg).Foreground(rule).Render(config.GetWindowBorderLeft())
+	body := sidebarFit(content, cw, bg)
 	if edgeLeft {
 		return body + edge
 	}
@@ -414,11 +463,8 @@ func (m *OS) sidebarStripBand(content string, cw int, edgeLeft bool, pal overlay
 // a slot, or the slack. It takes the hover fill with the rest of its slot, which
 // is what draws the target's real edges.
 func (m *OS) sidebarStripBlank(cw int, edgeLeft, hovered bool, pal overlay.Palette) string {
-	bg := color.Color(pal.Panel)
-	if hovered {
-		bg = pal.Surface
-	}
-	return m.sidebarStripBand(sidebarFit("", cw, bg), cw, edgeLeft, pal)
+	bg := stripRowBg(hovered, pal)
+	return m.sidebarStripBand(sidebarFit("", cw, bg), cw, edgeLeft, bg, nil, pal)
 }
 
 // sidebarStripRuleCell is the boundary above the agents group: a dim rule across
@@ -443,12 +489,7 @@ func sidebarStripRuleCell(cw int, pal overlay.Palette) string {
 // in its terminals section, and the strip has no terminals section, so the mark
 // has nowhere else to live. Severity in the gutter would also ink the same state
 // twice in a two-cell row, which is the double-inking the redesign removed.
-func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Palette, hovered bool) string {
-	bg := color.Color(pal.Panel)
-	if hovered {
-		bg = pal.Surface
-	}
-
+func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Palette, bg color.Color, lit bool) string {
 	lead, leadFg := " ", color.Color(nil)
 	if e.WindowIndex >= 0 && e.WindowIndex == m.FocusedWindow {
 		lead, leadFg = "▎", railFocusTint(m.agentIdentityTint(e, bg), pal)
@@ -457,7 +498,7 @@ func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Pale
 		}
 	}
 
-	mark, markFg := "·", color.Color(pal.FgDim)
+	mark, markFg := "·", stripRestingInk(lit, pal)
 	if overlay.UseASCII() {
 		mark = "."
 	}
@@ -467,10 +508,29 @@ func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Pale
 	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+sidebarStyle(bg, markFg).Render(mark), cw, bg)
 }
 
+// stripRestingInk is the colour a mark saying nothing in particular is drawn in.
+// Under the pointer it comes up to full strength, which is the same thing
+// hovering a row does on the expanded rail, so the pointer means one thing at
+// both widths. A mark already carrying a state keeps its state colour: the
+// pointer may not repaint an alarm, and a strip busy enough to have one is
+// exactly when the band has to stay readable as a band.
+func stripRestingInk(lit bool, pal overlay.Palette) color.Color {
+	if lit {
+		return pal.Fg
+	}
+	return pal.FgDim
+}
+
 // sidebarStripBadgeCell is the alarm: how many panes want a human anywhere and
 // the worst state among them, knocked out of a cell inked in that severity. It
 // is the strip's only filled cell and its only digit, which is what lets one
 // glance answer "does anything want me" before reading anything else.
+//
+// It is the one target whose band is not the hover ground: under the pointer the
+// alarm's own ink runs the width of the band instead, so touching it makes it
+// louder rather than laying a quiet slab over the loudest thing on the rail.
+// That keeps severity inked exactly once and adds no emphasis the strip did not
+// already have.
 func sidebarStripBadgeCell(info sidebarStripBadgeInfo, cw int, pal overlay.Palette) string {
 	count := strconv.Itoa(info.Count)
 	if info.Count > 9 {
@@ -487,30 +547,34 @@ func sidebarStripBadgeCell(info sidebarStripBadgeInfo, cw int, pal overlay.Palet
 // sidebarStripMoreCell is the spine's tail when a short rail cannot draw every
 // session: one muted mark on the spine's own column, so the list ends by saying
 // it is cut rather than by stopping.
-func sidebarStripMoreCell(cw int, pal overlay.Palette) string {
+func sidebarStripMoreCell(cw int, pal overlay.Palette, bg color.Color, lit bool) string {
 	mark := "⋮"
 	if overlay.UseASCII() {
 		mark = ":"
 	}
-	return sidebarFit(sidebarStyle(pal.Panel, nil).Render(" ")+
-		sidebarStyle(pal.Panel, pal.FgMute).Render(mark), cw, pal.Panel)
+	fg := color.Color(pal.FgMute)
+	if lit {
+		fg = pal.Fg
+	}
+	return sidebarFit(sidebarStyle(bg, nil).Render(" ")+
+		sidebarStyle(bg, fg).Render(mark), cw, bg)
 }
 
 // sidebarStripControlCell draws one of the strip's two controls against the
 // pane-facing edge, which is the edge the pointer arrives from and the column
 // every other mark on the strip already sits in. It is measured from that edge
 // inwards, so the two-cell ASCII form still lands against it.
-func sidebarStripControlCell(glyph string, cw int, edgeLeft, hovered bool, pal overlay.Palette) string {
-	fg := pal.FgMute
-	if hovered {
+func sidebarStripControlCell(glyph string, cw int, edgeLeft, lit bool, bg color.Color, pal overlay.Palette) string {
+	fg := color.Color(pal.FgMute)
+	if lit {
 		fg = pal.Fg
 	}
 	x0 := max(cw-lipgloss.Width(glyph), 0)
 	if !edgeLeft {
 		x0 = 0
 	}
-	return sidebarFit(sidebarStyle(pal.Panel, nil).Render(strings.Repeat(" ", x0))+
-		sidebarStyle(pal.Panel, fg).Render(glyph), cw, pal.Panel)
+	return sidebarFit(sidebarStyle(bg, nil).Render(strings.Repeat(" ", x0))+
+		sidebarStyle(bg, fg).Render(glyph), cw, bg)
 }
 
 // sidebarStripCell is one session's two cells on the spine: the accent bar in
@@ -523,12 +587,7 @@ func sidebarStripControlCell(glyph string, cw int, edgeLeft, hovered bool, pal o
 // square. Working does not mark at all: it is not an alarm, the panes already
 // show it, and spending the spine on it was what made every row a different
 // shape.
-func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette, hovered, dragged bool) string {
-	bg := color.Color(pal.Panel)
-	if hovered || dragged {
-		bg = pal.Surface
-	}
-
+func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette, bg color.Color, lit bool) string {
 	lead, leadFg := " ", color.Color(nil)
 	if node.IsCurrent {
 		lead, leadFg = "▎", railFocusTint(m.sessionTint(node.ID, bg), pal)
@@ -537,7 +596,7 @@ func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette
 		}
 	}
 
-	mark, markFg := "·", color.Color(pal.FgDim)
+	mark, markFg := "·", stripRestingInk(lit, pal)
 	if overlay.UseASCII() {
 		mark = "."
 	}

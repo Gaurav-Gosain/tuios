@@ -120,10 +120,15 @@ func (m *OS) renderRailTooltip() *lipgloss.Layer {
 	// never going to draw anything.
 	m.Tooltip.Shown = true
 
-	text := ""
+	// The label anchors on the slot's first line rather than on the line the
+	// pointer happens to be on, so it lands level with the mark it is naming and
+	// with the top edge of the band under it. Both are drawn on Surface, so
+	// aligned they read as one object opening out of the rail; a label floating
+	// one row down read as a second thing that happened to be nearby.
+	text, row := "", m.Tooltip.Key
 	for _, r := range m.sidebarStripRows {
 		if r.contains(m.Tooltip.Key) {
-			text = r.Label
+			text, row = r.Label, r.Y0
 			break
 		}
 	}
@@ -140,5 +145,5 @@ func (m *OS) renderRailTooltip() *lipgloss.Layer {
 		// its right edge lands flush against the rail's first column.
 		x = renderW - railW - lipgloss.Width(label)
 	}
-	return tooltipLayer(label, x, m.Tooltip.Key, renderW, "sidebar-tooltip")
+	return tooltipLayer(label, x, row, renderW, "sidebar-tooltip")
 }

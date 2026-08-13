@@ -295,9 +295,6 @@ func TestStripHoverPaintsTheWholeSlot(t *testing.T) {
 	top := m.GetTopMargin()
 	for y := slot.Y0; y < slot.Y1; y++ {
 		for x, cell := range stripCells(lines[y-top]) {
-			if x == m.GetSidebarWidth()-1 {
-				continue // the edge rule keeps the band's own ground
-			}
 			if bgOf(cell) == panel {
 				t.Errorf("cell (%d,%d) of the hovered slot is unhighlighted", x, y-top)
 			}
