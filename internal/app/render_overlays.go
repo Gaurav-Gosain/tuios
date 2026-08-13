@@ -37,22 +37,21 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			statusText = currentTime
 		}
 
+		// The badge rests on the same Panel step the rest of the chrome does and
+		// only lights up for a state the user is holding: the prefix is a mode
+		// waiting for a key, and recording is the one that writes to disk.
+		pal := theme.UI()
 		timeStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#a0a0b0")).
+			Foreground(pal.FgDim).
+			Background(pal.Panel).
 			Bold(true).
 			Padding(0, 1)
 
-		if isRecording {
-			timeStyle = timeStyle.
-				Background(lipgloss.Color("#cc0000")).
-				Foreground(lipgloss.Color("#ffffff"))
-		} else if m.PrefixActive {
-			timeStyle = timeStyle.
-				Background(lipgloss.Color("#ff6b6b")).
-				Foreground(lipgloss.Color("#ffffff"))
-		} else {
-			timeStyle = timeStyle.
-				Background(lipgloss.Color("#1a1a2e"))
+		switch {
+		case isRecording:
+			timeStyle = timeStyle.Background(pal.Warn).Foreground(theme.ContrastText(pal.Warn))
+		case m.PrefixActive:
+			timeStyle = timeStyle.Background(pal.Warning).Foreground(theme.ContrastText(pal.Warning))
 		}
 
 		renderedTime := timeStyle.Render(statusText)
@@ -77,16 +76,16 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		// The splash is the first thing anyone sees, at whatever width. Its
 		// three parts have fixed widths - 38 columns of block letters, a 28
-		// column subtitle and a 68 column hint line - and the box adds a border
+		// column subtitle and a 44 column hint line - and the box adds a border
 		// and two columns of padding on each side. Asking for all of it needs 74
 		// columns, so on anything narrower it used to run off the right edge
 		// with the border cut away. Drop to what fits instead.
 		const (
 			artCols      = 38
 			subtitleCols = 28
-			hintCols     = 68
-			boxCols      = 6 // both borders, both paddings
-			boxRows      = 4 // border and padding, top and bottom
+			hintCols     = 44 // three key chips and their labels, spaced
+			boxCols      = 6  // both borders, both paddings
+			boxRows      = 4  // border and padding, top and bottom
 		)
 		// The splash belongs to the content region: the sidebar's reserved
 		// columns and the dock's rows are drawn by someone else, and centering
@@ -118,18 +117,23 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 
 		// The hints read as one line when there is room for one, and stack when
-		// there is not, so no width loses a hint entirely.
-		hints := []string{
-			"Press 'n' for a new window",
-			"'?' for help",
-			"',' for settings",
+		// there is not, so no width loses a hint entirely. They are key chips and
+		// lowercase labels, the same shape every overlay footer uses: the quoted
+		// Title-case prose was the only surface speaking that way.
+		hints := make([]string, 0, 3)
+		for _, h := range []overlay.Hint{
+			{Key: "n", Label: "new window"},
+			{Key: "?", Label: "help"},
+			{Key: ",", Label: "settings"},
+		} {
+			hints = append(hints, overlay.KeyBadge(h.Key, ui)+
+				lipgloss.NewStyle().Foreground(ui.FgDim).Render(" "+h.Label))
 		}
 		sep := "\n"
 		if avail >= hintCols {
-			sep = "   •   "
+			sep = "   "
 		}
 		parts = append(parts, "", lipgloss.NewStyle().
-			Foreground(ui.FgDim).
 			Align(lipgloss.Center).
 			Render(strings.Join(hints, sep)))
 
@@ -150,7 +154,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			box = lipgloss.NewStyle().
 				Foreground(ui.FgDim).
 				MaxWidth(contentW).
-				Render("n: new window")
+				Render("n new window")
 		}
 
 		centeredContent := lipgloss.Place(
@@ -250,23 +254,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ShowCacheStats {
 		stats := GetGlobalStyleCache().GetStats()
 
-		statsTitle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("14")).
-			Bold(true).
-			Render("Style Cache Statistics")
-
-		labelStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("11")).
-			Render
-
-		valueStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("10")).
-			Bold(true).
-			Render
+		pal := theme.UI()
+		bg := pal.Surface
+		labelStyle := overlay.Style(bg).Foreground(pal.FgDim).Render
+		valueStyle := overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render
 
 		var statsLines []string
-		statsLines = append(statsLines, statsTitle)
-		statsLines = append(statsLines, "")
 		statsLines = append(statsLines, labelStyle("Hit Rate:      ")+valueStyle(fmt.Sprintf("%.2f%%", stats.HitRate)))
 		statsLines = append(statsLines, labelStyle("Cache Hits:    ")+valueStyle(fmt.Sprintf("%d", stats.Hits)))
 		statsLines = append(statsLines, labelStyle("Cache Misses:  ")+valueStyle(fmt.Sprintf("%d", stats.Misses)))
@@ -277,129 +270,97 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		statsLines = append(statsLines, labelStyle("Fill Rate:     ")+valueStyle(fmt.Sprintf("%.1f%%", float64(stats.Size)/float64(stats.Capacity)*100.0)))
 		statsLines = append(statsLines, "")
 
-		perfLabel := "Performance: "
-		var perfText, perfColor string
-		if stats.HitRate >= 95.0 {
-			perfText = "Excellent"
-			perfColor = "10"
-		} else if stats.HitRate >= 85.0 {
-			perfText = "Good"
-			perfColor = "11"
-		} else if stats.HitRate >= 70.0 {
-			perfText = "Fair"
-			perfColor = "214"
-		} else {
-			perfText = "Poor"
-			perfColor = "9"
+		// The verdict is a status word, so it takes a status token: the same
+		// three the logs and the message block are read by.
+		perfText, perfColor := "Poor", pal.Warn
+		switch {
+		case stats.HitRate >= 95.0:
+			perfText, perfColor = "Excellent", pal.Success
+		case stats.HitRate >= 85.0:
+			perfText, perfColor = "Good", pal.Success
+		case stats.HitRate >= 70.0:
+			perfText, perfColor = "Fair", pal.Warning
 		}
+		statsLines = append(statsLines,
+			labelStyle("Performance:   ")+overlay.Style(bg).Foreground(perfColor).Bold(true).Render(perfText))
 
-		statsLines = append(statsLines, labelStyle(perfLabel)+lipgloss.NewStyle().
-			Foreground(lipgloss.Color(perfColor)).
-			Bold(true).
-			Render(perfText))
+		width := m.panelWidth(60)
+		hints := []overlay.Hint{{Key: "r", Label: "reset"}, {Key: "esc", Label: "close"}}
+		rows, hints := m.panelBody(len(statsLines), 0, width, nil, hints)
+		panel := overlay.Panel{
+			Title: "cache stats",
+			Width: width,
+			Body:  clipStyledLines(strings.Join(squeezeLines(statsLines, rows), "\n"), width),
+			Hints: hints,
+		}
+		content, _ := panel.Render(pal)
 
-		statsLines = append(statsLines, "")
-		statsLines = append(statsLines, lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")).
-			Render("Press 'q'/'esc' to exit, 'r' to reset stats"))
-
-		statsLines = squeezeLines(statsLines, m.dialogContentRows())
-		statsContent := clipStyledLines(strings.Join(statsLines, "\n"), m.dialogWidth(60)-dialogChrome)
-
-		statsBox := lipgloss.NewStyle().
-			Border(getBorder()).
-			BorderForeground(theme.HelpBorder()).
-			Padding(1, 2).
-			Background(lipgloss.Color("#1a1a2a")).
-			Render(statsContent)
-
-		layers = append(layers, m.centeredBoxLayer(statsBox, config.ZIndexLogs, "cache-stats"))
+		layers = append(layers, m.centeredBoxLayer(content, config.ZIndexLogs, "cache-stats"))
 	}
 
 	if m.ShowLogs {
-		logTitle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("14")).
-			Bold(true).
-			Render("System Logs")
+		pal := theme.UI()
+		bg := pal.Surface
 
 		// The viewer prefers 80 columns; a narrower screen gets a narrower
 		// viewer rather than a viewer with its right-hand side off the edge.
-		logBoxWidth := m.dialogWidth(80)
-		logTextWidth := logBoxWidth - dialogChrome
-
-		maxDisplayHeight := max(m.GetRenderHeight()-8, 8)
+		logTextWidth := m.panelWidth(80)
 		totalLogs := len(m.LogMessages)
 
-		fixedLines := 4
-
-		if totalLogs > maxDisplayHeight-fixedLines {
-			fixedLines = 6
+		hints := []overlay.Hint{
+			{Key: "j/k", Label: "scroll"},
+			{Key: "E", Label: "copy errors"},
+			{Key: "A", Label: "copy all"},
+			{Key: "q", Label: "close"},
 		}
-
-		logsPerPage := max(maxDisplayHeight-fixedLines, 1)
+		// A viewer that scrolls spends two more body lines saying where in the
+		// log it is, so it is measured again with them once it knows it does.
+		logsPerPage, hints := m.panelBody(totalLogs, 0, logTextWidth, nil, hints)
+		if totalLogs > logsPerPage {
+			logsPerPage, hints = m.panelBody(totalLogs, 2, logTextWidth, nil, hints)
+		}
 
 		maxScroll := max(totalLogs-logsPerPage, 0)
 		m.LogScrollOffset = max(0, min(m.LogScrollOffset, maxScroll))
 
 		var logLines []string
-		logLines = append(logLines, logTitle)
-		logLines = append(logLines, "")
-
 		startIdx := m.LogScrollOffset
 
 		displayCount := 0
 		for i := startIdx; i < len(m.LogMessages) && displayCount < logsPerPage; i++ {
 			msg := m.LogMessages[i]
 
-			var levelColor string
+			// The severity tokens the rest of the app reads by, so a log line
+			// says the same thing a message in the dock does.
+			levelColor := pal.Success
 			switch msg.Level {
 			case "ERROR":
-				levelColor = "9"
+				levelColor = pal.Warn
 			case "WARN":
-				levelColor = "11"
-			default:
-				levelColor = "10"
+				levelColor = pal.Warning
 			}
 
-			timeStr := msg.Time.Format("15:04:05")
-			levelStr := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(levelColor)).
-				Render(fmt.Sprintf("[%s]", msg.Level))
-
-			logLine := fmt.Sprintf("%s %s %s", timeStr, levelStr, msg.Message)
-			logLines = append(logLines, clipStyled(logLine, logTextWidth))
+			line := overlay.Style(bg).Foreground(pal.FgDim).Render(msg.Time.Format("15:04:05")+" ") +
+				overlay.Style(bg).Foreground(levelColor).Render(fmt.Sprintf("[%s] ", msg.Level)) +
+				overlay.Style(bg).Foreground(pal.Fg).Render(msg.Message)
+			logLines = append(logLines, clipStyled(line, logTextWidth))
 			displayCount++
 		}
 
 		if maxScroll > 0 {
-			scrollInfo := fmt.Sprintf("Showing %d-%d of %d logs (↑/↓ to scroll)",
-				startIdx+1, startIdx+displayCount, len(m.LogMessages))
-			logLines = append(logLines, "")
-			logLines = append(logLines, lipgloss.NewStyle().
-				Foreground(lipgloss.Color("8")).
-				Render(scrollInfo))
+			logLines = append(logLines, "", overlay.Style(bg).Foreground(pal.FgDim).Italic(true).
+				Render(fmt.Sprintf("  %d-%d of %d logs", startIdx+1, startIdx+displayCount, len(m.LogMessages))))
 		}
 
-		logLines = append(logLines, "")
-		hints := "q:close  j/k:scroll  E:copy errors  A:copy all"
-		if logTextWidth < lipgloss.Width(hints) {
-			hints = "q:close  j/k:scroll"
+		panel := overlay.Panel{
+			Title: "logs",
+			Width: logTextWidth,
+			Body:  strings.Join(logLines, "\n"),
+			Hints: hints,
 		}
-		logLines = append(logLines, lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")).
-			Render(clipStyled(hints, logTextWidth)))
+		content, _ := panel.Render(pal)
 
-		logContent := strings.Join(logLines, "\n")
-
-		logBox := lipgloss.NewStyle().
-			Border(getBorder()).
-			BorderForeground(theme.HelpBorder()).
-			Padding(1, 2).
-			Width(logBoxWidth).
-			Background(lipgloss.Color("#1a1a2a")).
-			Render(logContent)
-
-		layers = append(layers, m.centeredBoxLayer(logBox, config.ZIndexLogs, "logs"))
+		layers = append(layers, m.centeredBoxLayer(content, config.ZIndexLogs, "logs"))
 	}
 
 	showScriptIndicator := true
@@ -441,12 +402,16 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			} else {
 				barWidth := 15
 				filledWidth := (progress * barWidth) / 100
+				full, empty := "█", "░"
+				if config.UseASCIIOnly {
+					full, empty = "#", "-"
+				}
 				var bar strings.Builder
 				for i := range barWidth {
 					if i < filledWidth {
-						bar.WriteString("█")
+						bar.WriteString(full)
 					} else {
-						bar.WriteString("░")
+						bar.WriteString(empty)
 					}
 				}
 
@@ -463,9 +428,10 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			scriptStatus = "TAPE"
 		}
 
+		pal := theme.UI()
 		scriptStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("255")).
-			Background(lipgloss.Color("55")).
+			Foreground(theme.ContrastText(pal.Accent)).
+			Background(pal.Accent).
 			Padding(0, 1)
 
 		scriptIndicator := scriptStyle.Render(scriptStatus)
@@ -550,58 +516,37 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 		descWidth := max(contentWidth-maxKeyLen-2, 1)
 
-		bg := lipgloss.Color("#1f2937")
+		// The panel's own ground and tokens. This overlay was the last one on a
+		// palette of its own, which is why it was the only amber on the screen.
+		pal := theme.UI()
+		bg := pal.Surface
 
 		var styledLines []string
 
 		padLine := func(s string, targetWidth int) string {
-			currentWidth := lipgloss.Width(s)
-			if currentWidth < targetWidth {
-				s += lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", targetWidth-currentWidth))
-			}
-			return s
+			return overlay.Fill(s, targetWidth, bg)
 		}
 
-		titleStyled := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#ffffff")).
-			Bold(true).
-			Background(bg).
-			Render(truncateString(title, contentWidth))
+		titleStyled := overlay.Style(bg).Foreground(pal.Fg).Bold(true).
+			Render(truncateString(strings.ToLower(title), contentWidth))
 		styledLines = append(styledLines, padLine(titleStyled, contentWidth))
-
-		sepStyled := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#4b5563")).
-			Background(bg).
-			Render(strings.Repeat("─", contentWidth))
-		styledLines = append(styledLines, sepStyled)
+		styledLines = append(styledLines, overlay.Rule(contentWidth, bg, pal))
 
 		for _, binding := range bindings {
-			keyStyled := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#fbbf24")).
-				Bold(true).
-				Background(bg).
-				Render(binding.Key)
-			paddingStyled := lipgloss.NewStyle().
-				Background(bg).
-				Render(strings.Repeat(" ", maxKeyLen-len(binding.Key)+2))
-			descStyled := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#d1d5db")).
-				Background(bg).
-				Render(truncateString(binding.Description, descWidth))
-			line := keyStyled + paddingStyled + descStyled
+			line := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(binding.Key) +
+				overlay.Style(bg).Render(strings.Repeat(" ", maxKeyLen-len(binding.Key)+2)) +
+				overlay.Style(bg).Foreground(pal.FgDim).Render(truncateString(binding.Description, descWidth))
 			styledLines = append(styledLines, padLine(line, contentWidth))
 		}
 
 		if moreCount > 0 {
-			more := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#9ca3af")).
-				Background(bg).
+			more := overlay.Style(bg).Foreground(pal.FgMute).
 				Render(truncateString(fmt.Sprintf("+%d more", moreCount), contentWidth))
 			styledLines = append(styledLines, padLine(more, contentWidth))
 		}
 
-		paddingH := lipgloss.NewStyle().Background(bg).Render("  ")
-		emptyLine := lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", contentWidth+4))
+		paddingH := overlay.Style(bg).Render("  ")
+		emptyLine := overlay.Style(bg).Render(strings.Repeat(" ", contentWidth+4))
 
 		var finalLines []string
 		finalLines = append(finalLines, emptyLine)
@@ -666,20 +611,24 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		matchCount := len(focusedWindow.CopyMode.SearchMatches)
 		currentMatch := focusedWindow.CopyMode.CurrentMatch
 
-		searchText := "/" + searchQuery + "█"
-		if matchCount > 0 {
-			searchText += fmt.Sprintf(" [%d/%d]", currentMatch+1, matchCount)
-		} else if searchQuery != "" {
-			searchText += " [0]"
+		// The rename dialog's canon: text on Surface, a reverse-video cell for
+		// the cursor rather than a block glyph drawn in the foreground colour,
+		// and the match count in the accent because it is the answer the search
+		// is for.
+		pal := theme.UI()
+		bg := pal.Surface
+		body := overlay.Style(bg).Foreground(pal.Fg).Render("/"+searchQuery) +
+			overlay.Cursor(" ", bg, pal.Fg)
+		switch {
+		case matchCount > 0:
+			body += overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).
+				Render(fmt.Sprintf(" [%d/%d]", currentMatch+1, matchCount))
+		case searchQuery != "":
+			body += overlay.Style(bg).Foreground(pal.FgMute).Render(" [0]")
 		}
 
-		searchStyle := lipgloss.NewStyle().
-			Background(lipgloss.Color("#000000")).
-			Foreground(lipgloss.Color("#FFFF00")).
-			Bold(true).
-			Padding(0, 1)
-
-		renderedSearch := searchStyle.Render(searchText)
+		pad := overlay.Style(bg).Render(" ")
+		renderedSearch := pad + body + pad
 
 		searchOff := focusedWindow.BorderOffset()
 		searchX := focusedWindow.X + searchOff + 1
