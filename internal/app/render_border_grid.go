@@ -156,11 +156,10 @@ func (m *OS) dividerLines(bounds layout.Rect) ([]dividerLine, []paneLayer) {
 // paneEdges returns the four lines one cell outside r's sides, each spanning its
 // own side only.
 //
-// The corners are left out on purpose. A divider turns at the cell where two
-// panes' edges meet, and the neighbour probe in renderSeparatorOverlay draws that
-// turn from the lines that actually reach the cell; claiming the corner would
-// instead give it an arm pointing along a side that has no divider on it, which
-// is how a T at the head of a division would come out as a crossing.
+// A side stops short of the corner it turns on, which paneCorners answers for
+// separately. Running it through the corner instead would lay a line along a
+// side that has no divider on it, and that arm is what would come out as a
+// crossing where a division only meets another pane's edge.
 func paneEdges(r layout.Rect) [4]layout.SplitLine {
 	return [4]layout.SplitLine{
 		{Vertical: true, Pos: r.X - 1, From: r.Y, To: r.Y + r.H - 1},
@@ -358,17 +357,10 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 
 	// Get border characters from the configured style
 	border := config.GetBorderForStyle()
-	chVert := firstRune(border.Left, '│')
-	chHoriz := firstRune(border.Top, '─')
-	// The arms of a junction are what show two strokes meeting. A style that
-	// leaves them empty is drawn with fills, whose cells already touch along the
-	// edge they share, so its junction is its own divider glyph carried through:
-	// falling back to a box-drawing arm welds a line onto a bar of blocks.
-	chCross := firstRune(border.Middle, chVert)
-	chTRight := firstRune(border.MiddleLeft, chVert) // ├ T pointing right
-	chTLeft := firstRune(border.MiddleRight, chVert) // ┤ T pointing left
-	chTDown := firstRune(border.MiddleTop, chHoriz)  // ┬ T pointing down
-	chTUp := firstRune(border.MiddleBottom, chHoriz) // ┴ T pointing up
+	g := dividerGlyphs(border)
+	chVert, chHoriz := g.vert, g.horiz
+	chCross, chTRight, chTLeft := g.cross, g.tRight, g.tLeft
+	chTDown, chTUp := g.tDown, g.tUp
 
 	// The perimeter of the focused window, clipped to the tiled bounds. Cells on
 	// it are drawn in the focus color, so the focused pane reads as an outlined
@@ -433,7 +425,7 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 			r, ok := junctionGlyph(
 				grid[[2]int{x - 1, y}].isHoriz(), grid[[2]int{x + 1, y}].isHoriz(),
 				grid[[2]int{x, y - 1}].isVert(), grid[[2]int{x, y + 1}].isVert(),
-				border,
+				g,
 			)
 			if !ok {
 				continue
@@ -537,34 +529,68 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	return layers
 }
 
+// dividerGlyphSet is the glyph a divider cell is drawn with for each shape it
+// can take. One set built once, so every cell of the grid answers the question
+// the same way whether the layout is settled or in motion.
+type dividerGlyphSet struct {
+	vert, horiz                      rune
+	cross, tRight, tLeft, tDown, tUp rune
+	topLeft, topRight                rune
+	bottomLeft, bottomRight          rune
+}
+
+// dividerGlyphs resolves the set for a border style.
+//
+// The arms of a junction are what show two strokes meeting. A style that leaves
+// them empty is drawn with fills, whose cells already touch along the edge they
+// share, so its junction is its own divider glyph carried through: falling back
+// to a box-drawing arm welds a line onto a bar of blocks.
+func dividerGlyphs(border lipgloss.Border) dividerGlyphSet {
+	vert := firstRune(border.Left, '│')
+	horiz := firstRune(border.Top, '─')
+	return dividerGlyphSet{
+		vert:        vert,
+		horiz:       horiz,
+		cross:       firstRune(border.Middle, vert),
+		tRight:      firstRune(border.MiddleLeft, vert),    // ├ T pointing right
+		tLeft:       firstRune(border.MiddleRight, vert),   // ┤ T pointing left
+		tDown:       firstRune(border.MiddleTop, horiz),    // ┬ T pointing down
+		tUp:         firstRune(border.MiddleBottom, horiz), // ┴ T pointing up
+		topLeft:     firstRune(border.TopLeft, vert),
+		topRight:    firstRune(border.TopRight, vert),
+		bottomLeft:  firstRune(border.BottomLeft, vert),
+		bottomRight: firstRune(border.BottomRight, vert),
+	}
+}
+
 // junctionGlyph picks the glyph for a cell that runs in no direction of its own
 // from the arms that reach it. A pane alone in open space turns its own corner
 // here; where a division meets the cell it becomes the tee or crossing that
 // meeting needs. A cell nothing reaches reports false and is left unpainted.
-func junctionGlyph(l, r, u, d bool, border lipgloss.Border) (rune, bool) {
+func junctionGlyph(l, r, u, d bool, g dividerGlyphSet) (rune, bool) {
 	switch {
 	case l && r && u && d:
-		return firstRune(border.Middle, '┼'), true
+		return g.cross, true
 	case l && r && d:
-		return firstRune(border.MiddleTop, '┬'), true
+		return g.tDown, true
 	case l && r && u:
-		return firstRune(border.MiddleBottom, '┴'), true
+		return g.tUp, true
 	case u && d && r:
-		return firstRune(border.MiddleLeft, '├'), true
+		return g.tRight, true
 	case u && d && l:
-		return firstRune(border.MiddleRight, '┤'), true
+		return g.tLeft, true
 	case r && d:
-		return firstRune(border.TopLeft, '╭'), true
+		return g.topLeft, true
 	case l && d:
-		return firstRune(border.TopRight, '╮'), true
+		return g.topRight, true
 	case r && u:
-		return firstRune(border.BottomLeft, '╰'), true
+		return g.bottomLeft, true
 	case l && u:
-		return firstRune(border.BottomRight, '╯'), true
+		return g.bottomRight, true
 	case l || r:
-		return firstRune(border.Top, '─'), true
+		return g.horiz, true
 	case u || d:
-		return firstRune(border.Left, '│'), true
+		return g.vert, true
 	}
 	return 0, false
 }

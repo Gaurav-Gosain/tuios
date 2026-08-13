@@ -317,6 +317,37 @@ func TestTransitionLandsOnTheSettledGrid(t *testing.T) {
 	})
 }
 
+// TestTransitionDrawsInTheStylesOwnGlyphs holds the transition to the rule the
+// settled grid is held to: a divider is drawn in the style the frame is drawn
+// in, at every junction a layout in motion can put it in, including the corners
+// a pane in flight turns on its own.
+func TestTransitionDrawsInTheStylesOwnGlyphs(t *testing.T) {
+	for _, style := range config.BorderStyles {
+		t.Run(style, func(t *testing.T) {
+			restoreTransitionConfig(t)
+			config.SharedBorders = true
+			config.AnimationsEnabled = true
+			config.BorderStyle = style
+
+			allowed := styleGlyphs(config.GetBorderForStyle())
+			m := newTransitionOS(t, 4, true)
+			spawnPane(t, m)
+			for _, step := range transitionSteps {
+				seekTransition(m, step)
+				for cell, ch := range gridCells(m) {
+					if ch == ' ' && style == "hidden" {
+						continue
+					}
+					if !strings.ContainsRune(allowed, ch) {
+						t.Fatalf("t=%.3f: (%d,%d) is %q, which %s does not draw with (%q)",
+							step, cell[0], cell[1], string(ch), style, allowed)
+					}
+				}
+			}
+		})
+	}
+}
+
 // TestTransitionSettlesWhereNoAnimationWould is the other half of that: the
 // layout the panes travel to is the one the same session reaches with animations
 // off, so turning them on changes the journey and nothing else.
