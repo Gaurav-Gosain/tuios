@@ -55,6 +55,31 @@ var (
 )
 
 func main() {
+	rootCmd := newRootCommand()
+
+	// Command failures are printed here rather than by fang, which would query
+	// the terminal for its background color first and stall for seconds when
+	// nothing answers. See errorStyles.
+	var cmdErr error
+	interceptErrors(rootCmd, &cmdErr)
+
+	if err := fang.Execute(
+		context.Background(),
+		rootCmd,
+		fang.WithVersion(fmt.Sprintf("%s\nCommit: %s\nBuilt: %s\nBy: %s", version, commit, date, builtBy)),
+		fang.WithErrorHandler(diagnosticErrorHandler),
+	); err != nil {
+		os.Exit(1)
+	}
+	if reportCommandError(cmdErr) {
+		os.Exit(1)
+	}
+}
+
+// newRootCommand builds the whole command tree. It is separate from main so a
+// test can resolve a command line against the real tree rather than against a
+// second description of it that would drift.
+func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "tuios",
 		Short: "Terminal UI Operating System",
@@ -1265,21 +1290,5 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd)
 
-	// Command failures are printed here rather than by fang, which would query
-	// the terminal for its background color first and stall for seconds when
-	// nothing answers. See errorStyles.
-	var cmdErr error
-	interceptErrors(rootCmd, &cmdErr)
-
-	if err := fang.Execute(
-		context.Background(),
-		rootCmd,
-		fang.WithVersion(fmt.Sprintf("%s\nCommit: %s\nBuilt: %s\nBy: %s", version, commit, date, builtBy)),
-		fang.WithErrorHandler(diagnosticErrorHandler),
-	); err != nil {
-		os.Exit(1)
-	}
-	if reportCommandError(cmdErr) {
-		os.Exit(1)
-	}
+	return rootCmd
 }
