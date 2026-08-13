@@ -369,6 +369,9 @@ Access debug and development tools:
 - **Left Click**: Focus window
 - **Left Drag on the title bar**: Move window (non-tiling) or swap windows (tiling). In window management mode the whole window is a drag handle
 - **Right Drag**: Resize window (non-tiling only)
+- **Alt+Left Drag**: Move the window, from anywhere on it, including while you are typing in it. This is the usual desktop window-manager gesture, and it is what a plain left drag over a pane's content cannot be, since that selects text. Typing resumes in the pane when the window lands. Set `alt_drag = false` under `[appearance]` to hand the gesture back to the pane
+- **Ctrl+Left Drag**: Also moves the window, and drops it as soon as Ctrl is released. Kept alongside Alt+Left Drag; use whichever your hands know
+- **Alt+Right Drag**: Resize the window from the nearest corner. The same as Right Drag, except it never opens the context menu, so a short drag cannot turn into a menu by accident
 - **Shift+Right Click**: Open the context menu for whatever is under the pointer
 - **Title Bar Buttons**: Minimize, maximize, or close window
 - **Click Dock Item**: Restore minimized window
@@ -377,7 +380,10 @@ Access debug and development tools:
 - **Right Border Drag**: Scrollbar scroll
 
 Panes running an application that asked for the mouse (vim, less, htop) receive
-every one of these events themselves; tuios does not interpret them.
+every one of these events themselves; tuios does not interpret them. Alt+Left
+Drag and Ctrl+Left Drag are the two exceptions, so a pane can always be moved
+without first leaving the app inside it. `alt_drag = false` gives Alt+Left Drag
+back to such an app.
 
 ### Context Menus
 

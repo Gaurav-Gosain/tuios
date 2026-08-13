@@ -3,7 +3,7 @@ package app
 // The rail borrows the keyboard, not the user's place in the panes. Entering it
 // records the mode and the focused pane so leaving it hands both back: browsing
 // the sessions is not a request to stop typing, any more than moving a pane is
-// (BeginResizeMode and CtrlDragWasTerminal, the same bargain).
+// (BeginPointerGesture and CtrlDragWasTerminal, the same bargain).
 //
 // A rail action that deliberately relocates the user disarms the return, and
 // what it chose stands. There are three: focusing a pane from a window row,

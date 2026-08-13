@@ -19,7 +19,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// same way, for the same reason.
 	defer func() {
 		o.EndStrayGesture()
-		o.EndResizeMode()
+		o.EndPointerGesture()
 	}()
 
 	// Armed by the cleanup below and returned from whichever branch gets there.

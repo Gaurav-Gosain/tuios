@@ -127,7 +127,7 @@ func (m *OS) endLostGesture() {
 	m.ScrollbarDragWindowIndex = -1
 	m.ScrollbarGrabOffset = 0
 
-	m.EndResizeMode()
+	m.EndPointerGesture()
 	m.endResizeDeferral()
 	m.clearStaleManipulation()
 

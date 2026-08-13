@@ -215,6 +215,8 @@ func generateMouseBindings() []HelpBinding {
 		{Keys: []string{"click"}, Description: "Focus a pane and start typing in it", Category: cat},
 		{Keys: []string{"double / triple click"}, Description: "Select the word / line under the pointer", Category: cat},
 		{Keys: []string{"drag title bar"}, Description: "Move a pane", Category: cat},
+		{Keys: []string{"alt+drag"}, Description: "Move a pane, even while typing in it", Category: cat},
+		{Keys: []string{"alt+right-drag"}, Description: "Resize a pane; never opens the menu", Category: cat},
 		{Keys: []string{"ctrl+drag"}, Description: "Move a pane; drops when ctrl is let go", Category: cat},
 		{Keys: []string{"ctrl+shift+click"}, Description: "Add or remove a pane from multi-select", Category: cat},
 		{Keys: []string{"drag pane border"}, Description: "Resize one edge: divider or floating side", Category: cat},
