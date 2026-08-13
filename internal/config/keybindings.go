@@ -24,6 +24,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 		return []Keybinding{
 			{"1-9", "Switch to workspace"},
 			{"Shift+1-9", "Move window to workspace"},
+			{"r", "Rename workspace"},
 			{"Esc", "Cancel"},
 		}
 	case "minimize":

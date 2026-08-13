@@ -381,6 +381,19 @@ func lastScrollOffset(pills []dockWorkspaceTab, inner int) int {
 
 // DockWorkspaceAt returns the workspace whose dock tab covers the absolute cell
 // (x, y), or 0 when none does.
+// DockWorkspacePillAt returns the workspace of the pill covering the absolute
+// cell (x, y), or 0. Unlike DockWorkspaceAt it does not resolve the trailing "+"
+// tab: that tab stands for a workspace that does not exist yet, and there is
+// nothing there to rename.
+func (m *OS) DockWorkspacePillAt(x, y int) int {
+	for _, h := range m.dockWorkspaceHits {
+		if y == h.Y && x >= h.X0 && x < h.X1 {
+			return h.Workspace
+		}
+	}
+	return 0
+}
+
 func (m *OS) DockWorkspaceAt(x, y int) int {
 	for _, h := range m.dockWorkspaceHits {
 		if y == h.Y && x >= h.X0 && x < h.X1 {

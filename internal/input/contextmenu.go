@@ -27,9 +27,14 @@ func runContextMenuAction(action string, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	dispatcher := GetDispatcher()
 	if !dispatcher.HasAction(action) {
+		o.ClearMenuWorkspace()
 		return o, nil
 	}
-	return dispatcher.Dispatch(action, tea.KeyPressMsg{}, o)
+	next, cmd := dispatcher.Dispatch(action, tea.KeyPressMsg{}, o)
+	// The workspace a pill menu carried lives for exactly this one dispatch, so
+	// the same action reached later by key acts on the workspace in view.
+	next.ClearMenuWorkspace()
+	return next, cmd
 }
 
 // handleContextMenuKey drives an open context menu from the keyboard: arrows or

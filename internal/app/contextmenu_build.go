@@ -37,7 +37,7 @@ const (
 // one that happened to have focus. The mode is deliberately left alone, so
 // right-clicking from terminal mode does not kick the user out of it.
 func (m *OS) OpenContextMenu(x, y int) {
-	target, windowIndex := m.contextMenuTargetAt(x, y)
+	target, windowIndex, workspace := m.contextMenuTargetAt(x, y)
 
 	if target == CtxTargetPane {
 		m.FocusWindow(windowIndex)
@@ -46,6 +46,7 @@ func (m *OS) OpenContextMenu(x, y int) {
 	cm := &ContextMenu{
 		Target:      target,
 		WindowIndex: windowIndex,
+		Workspace:   workspace,
 		AnchorX:     x,
 		AnchorY:     y,
 		Selected:    -1,
@@ -57,6 +58,8 @@ func (m *OS) OpenContextMenu(x, y int) {
 		cm.Title, cm.Items = m.paneMenu(windowIndex)
 	case CtxTargetDockItem:
 		cm.Title, cm.Items = m.dockItemMenu(windowIndex)
+	case CtxTargetWorkspacePill:
+		cm.Title, cm.Items = m.workspacePillMenu(workspace)
 	case CtxTargetDock:
 		cm.Title, cm.Items = m.dockMenu()
 	default:
@@ -77,21 +80,24 @@ func (m *OS) OpenContextMenu(x, y int) {
 // the same thing an ordinary click would act on: the dock band is reserved and
 // wins over any window drawn near it, then the topmost window under the point,
 // then the desktop.
-func (m *OS) contextMenuTargetAt(x, y int) (ContextMenuTarget, int) {
+func (m *OS) contextMenuTargetAt(x, y int) (target ContextMenuTarget, windowIndex, workspace int) {
 	if m.inDockBand(y) {
 		if idx := m.DockItemAt(x, y); idx >= 0 {
-			return CtxTargetDockItem, idx
+			return CtxTargetDockItem, idx, 0
 		}
-		return CtxTargetDock, -1
+		if ws := m.DockWorkspacePillAt(x, y); ws > 0 {
+			return CtxTargetWorkspacePill, -1, ws
+		}
+		return CtxTargetDock, -1, 0
 	}
 
 	// Anywhere on a pane, border rows included, opens that pane's menu. The
 	// title row is not a target of its own; see the note on the target
 	// constants.
 	if idx := m.WindowAt(x, y); idx >= 0 {
-		return CtxTargetPane, idx
+		return CtxTargetPane, idx, 0
 	}
-	return CtxTargetDesktop, -1
+	return CtxTargetDesktop, -1, 0
 }
 
 // InDockBand reports whether a screen row falls in the reserved dock band.
@@ -277,6 +283,21 @@ func (m *OS) dockItemMenu(windowIndex int) (string, []ContextMenuItem) {
 	return title, []ContextMenuItem{
 		m.item(glyphRestore, "Restore", action, action == ""),
 		m.item(glyphRestore, "Restore all", "restore_all", false),
+	}
+}
+
+// workspacePillMenu is the menu for one workspace tab in the dock's strip. It
+// is where renaming a workspace became findable: the feature existed but was
+// reachable only from inside the workspace switcher, which is not where a user
+// looks for it when the thing they want to rename is on screen in front of
+// them.
+//
+// The title is what the tab says, so the menu names the workspace it will act
+// on even when that workspace is not the one being shown.
+func (m *OS) workspacePillMenu(ws int) (string, []ContextMenuItem) {
+	return printableTitle(m.WorkspaceLabel(ws)), []ContextMenuItem{
+		m.item(glyphSwitch, "Switch to", "workspace_pill_switch", ws == m.CurrentWorkspace),
+		m.item(glyphRename, "Rename", "workspace_prefix_rename", false),
 	}
 }
 

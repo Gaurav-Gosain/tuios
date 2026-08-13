@@ -165,6 +165,17 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry) []HelpBinding {
 		}
 	}
 
+	// Renaming a workspace is a chord rather than a plain key, so its row is
+	// built from the same whole-chord hint the pill menu shows.
+	if chord := contextMenuHint(registry, "workspace_prefix_rename"); chord != "" {
+		bindings = append(bindings, HelpBinding{
+			Action:      "workspace_prefix_rename",
+			Keys:        []string{chord},
+			Description: "Rename workspace",
+			Category:    "Workspaces",
+		})
+	}
+
 	return bindings
 }
 
@@ -193,6 +204,7 @@ func generateMouseBindings() []HelpBinding {
 		{Keys: []string{"right-click desktop"}, Description: "Desktop menu", Category: cat},
 		{Keys: []string{"click dock entry"}, Description: "Restore that minimized window", Category: cat},
 		{Keys: []string{"right-click dock"}, Description: "Dock menu, or the entry's own menu", Category: cat},
+		{Keys: []string{"right-click workspace tab"}, Description: "Switch or rename that workspace", Category: cat},
 		{Keys: []string{"drag a panel"}, Description: "Move an overlay; click outside to close", Category: cat},
 	}
 }

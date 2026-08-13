@@ -293,6 +293,9 @@ var ActionDescriptions = map[string]string{
 	"move_and_follow_7":  "Move to workspace 7 and follow",
 	"move_and_follow_8":  "Move to workspace 8 and follow",
 	"move_and_follow_9":  "Move to workspace 9 and follow",
+	// Reached by the chord and by a dock pill's menu, so both name it the same.
+	"workspace_prefix_rename": "Rename workspace",
+	"workspace_pill_switch":   "Switch to workspace",
 
 	// Layout
 	"snap_left":                 "Snap left",

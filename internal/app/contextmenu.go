@@ -32,6 +32,9 @@ const (
 	CtxTargetDock
 	// CtxTargetDockItem is one minimized-window entry in the dock.
 	CtxTargetDockItem
+	// CtxTargetWorkspacePill is one workspace tab in the dock's strip. The "+"
+	// tab is not one: it stands for a workspace that does not exist yet.
+	CtxTargetWorkspacePill
 )
 
 // ContextMenuItem is one row of a context menu.
@@ -76,6 +79,10 @@ type ContextMenu struct {
 	// WindowIndex is the pane or minimized window the menu was opened on, or -1
 	// for the desktop and the dock background.
 	WindowIndex int
+	// Workspace is the workspace pill the menu was opened on, or 0. A menu row
+	// runs after the menu has closed, so this is handed to the dispatch through
+	// menuWorkspace rather than read off the menu by the handler.
+	Workspace int
 
 	AnchorX int
 	AnchorY int
@@ -169,8 +176,19 @@ func (m *OS) ContextMenuSelectedAction() string {
 	if cm == nil || !cm.selectable(cm.Selected) {
 		return ""
 	}
+	m.menuWorkspace = cm.Workspace
 	return cm.Items[cm.Selected].Action
 }
+
+// TakeMenuWorkspace returns the workspace whose pill menu produced the action
+// being dispatched, or 0. It is set only when a row is actually taken and
+// cleared as soon as that one dispatch is over, so an action reached by
+// keybinding always sees 0 and falls back to the workspace the user is on.
+func (m *OS) TakeMenuWorkspace() int { return m.menuWorkspace }
+
+// ClearMenuWorkspace ends the carry. The input layer calls it after dispatching
+// a menu row.
+func (m *OS) ClearMenuWorkspace() { m.menuWorkspace = 0 }
 
 // ContextMenuMove moves the selection by delta, skipping separators and dimmed
 // rows.
@@ -209,6 +227,7 @@ func (m *OS) ContextMenuClick(x, y int) (action string, consumed bool) {
 	}
 	cm.Selected = idx
 	action = cm.Items[idx].Action
+	m.menuWorkspace = cm.Workspace
 	m.CloseContextMenu()
 	return action, true
 }

@@ -117,6 +117,18 @@ func combiningOnly(s string) bool {
 	return true
 }
 
+// BeginRenameCurrentWorkspace starts a rename of the workspace the user meant:
+// the one whose pill menu the action came from, or the one they are on when it
+// came from a key. Both entry points land here so the dialog is the same either
+// way.
+func (m *OS) BeginRenameCurrentWorkspace() {
+	ws := m.TakeMenuWorkspace()
+	if ws <= 0 {
+		ws = m.CurrentWorkspace
+	}
+	m.BeginRenameWorkspace(ws)
+}
+
 // daemonSessionLabel reads the cached label for a session, preferring the live
 // value for the attached one.
 func (m *OS) daemonSessionLabel(name string) (display, accent string) {
