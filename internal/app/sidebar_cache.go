@@ -99,6 +99,13 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(config.SidebarShowGlyphs)
 	mixB(config.SidebarShowCounts)
 
+	// The glyph set the rows are drawn from. ASCII mode swaps the collapse
+	// chevrons and the agent-state indicators for their fallbacks, and both it
+	// and the border style pick the character of the edge rule facing the panes,
+	// so a rail drawn before either moved is not the rail this frame draws.
+	mixB(config.UseASCIIOnly)
+	mixS(config.BorderStyle)
+
 	// View state: scroll, focus, and hover all restyle rows. Each section holds
 	// its own offset, so all three are folded.
 	mixI(m.SidebarScrollS)

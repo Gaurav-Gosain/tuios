@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -157,5 +158,55 @@ func TestSidebarCacheFollowsForeignCache(t *testing.T) {
 	client.UpdateSessionCache([]session.SessionInfo{{Name: "s"}})
 	if after := sidebarText(t, m); strings.Contains(after, "other") {
 		t.Fatalf("stale foreign session 'other' survived a cache update:\n%s", after)
+	}
+}
+
+// TestSidebarSignatureFollowsTheGlyphSet walks the appearance switches that
+// change the characters the rail draws. The signature decides whether the next
+// frame is served from the cache, so a switch that moves the rail without
+// moving the signature hands back the previous rail.
+//
+// ASCII mode swaps the collapse chevrons and the agent-state indicators for
+// their fallbacks, and it and the border style pick the edge rule facing the
+// panes. Neither input was folded in.
+func TestSidebarSignatureFollowsTheGlyphSet(t *testing.T) {
+	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	prevASCII, prevStyle := config.UseASCIIOnly, config.BorderStyle
+	t.Cleanup(func() {
+		config.UseASCIIOnly, config.BorderStyle = prevASCII, prevStyle
+		overlay.SetASCII(prevASCII)
+	})
+
+	flips := []struct {
+		name string
+		flip func()
+	}{
+		{"ascii-only", func() { config.UseASCIIOnly = true }},
+		{"border-style", func() { config.BorderStyle = "double" }},
+	}
+	for _, f := range flips {
+		t.Run(f.name, func(t *testing.T) {
+			config.UseASCIIOnly, config.BorderStyle = false, "rounded"
+			overlay.SetASCII(false)
+			m := &OS{
+				Windows:       []*terminal.Window{{ID: "w1", CustomName: "ALPHA", AgentState: "needs_input"}},
+				FocusedWindow: 0,
+				Width:         120,
+				Height:        40,
+				SessionName:   "s",
+			}
+			before, sig := sidebarText(t, m), m.sidebarSignature()
+
+			f.flip()
+			overlay.SetASCII(config.UseASCIIOnly)
+			// The cache is dropped so this render shows what the rail draws now,
+			// which is what the signature has to have followed.
+			m.sidebarCache.invalidate()
+			after := sidebarText(t, m)
+
+			if after != before && m.sidebarSignature() == sig {
+				t.Errorf("the rail redrew and the signature stayed at %d", sig)
+			}
+		})
 	}
 }

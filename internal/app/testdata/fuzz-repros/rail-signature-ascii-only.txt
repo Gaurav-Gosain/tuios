@@ -1,0 +1,6 @@
+# rail-signature: turning ASCII-only mode on swaps the glyphs the rail draws,
+# and sidebarSignature did not fold it, so the cache kept serving the previous
+# rail.
+setting 6 2
+sidebar
+setting 1 5
