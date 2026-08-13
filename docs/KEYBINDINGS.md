@@ -5,6 +5,7 @@ Complete keyboard shortcut reference for TUIOS. All keybindings are customizable
 ## Table of Contents
 
 - [Modes](#modes)
+  - [Terminal Mode Keys](#terminal-mode-keys)
 - [Sidebar](#sidebar)
 - [Window Management](#window-management)
 - [Workspaces](#workspaces)
@@ -26,6 +27,36 @@ TUIOS has two main modes:
 | `Ctrl+B` then `d` or `Esc` | Return to Window Management Mode (from Terminal Mode) |
 | `?` (Window Mode) or `Ctrl+B ?` (universal) | Toggle help overlay |
 | `q` (Window Mode) or `Ctrl+B q` (universal) | Quit TUIOS |
+
+### Terminal Mode Keys
+
+These work while typing into a pane, without the leader key. They live in `[keybindings.terminal_mode]`.
+
+| Key | Action |
+|-----|--------|
+| `Alt+N` / `Alt+P` | Next / previous window |
+| `Alt+Esc` | Leave Terminal Mode |
+| `Alt+←` `Alt+→` `Alt+↑` `Alt+↓` | Focus the pane in that direction |
+
+Focus moves to the nearest pane whose facing edge lies in that direction and whose span overlaps the current pane's; ties go to the earlier pane. At the edge of the layout nothing happens, and focus does not wrap.
+
+#### Alt+← / Alt+→ conflict with your shell
+
+In readline, fish and zsh, `Alt+←` and `Alt+→` move the cursor one word at a time, which is one of the most-used shell editing bindings there is. TUIOS binds them to pane focus by default, as zellij and most tiling window managers do. Each direction is a separate action, so hand back whichever you want:
+
+```toml
+[keybindings.terminal_mode]
+terminal_focus_left = []
+terminal_focus_right = []
+```
+
+With those unbound, the keys reach the shell unchanged. `Alt+↑` and `Alt+↓` are unclaimed by the common shells, so they are the safer pair to keep. If you would rather keep word movement and still have directional focus, put it on a chord the shell does not want:
+
+```toml
+[keybindings.terminal_mode]
+terminal_focus_left = ["alt+shift+left"]
+terminal_focus_right = ["alt+shift+right"]
+```
 
 ## Sidebar
 

@@ -286,17 +286,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Handle Alt+Left/Right for scrolling tiling column navigation
-	if o.AutoTiling && o.UseScrollingLayout {
-		switch msg.String() {
-		case "alt+left":
-			o.ScrollingFocusLeft()
-			return o, nil
-		case "alt+right":
-			o.ScrollingFocusRight()
-			return o, nil
-		}
-	}
+	// alt+left/right used to navigate the scrolling layout's columns from here,
+	// hardcoded. They are terminal_focus_left/right now, which reach the same
+	// navigation through the registry, so the keys are rebindable and the block
+	// above no longer shadows them.
 
 	keyStr := msg.String()
 

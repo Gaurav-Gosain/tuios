@@ -528,12 +528,25 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 			"terminal_next_window": {"opt+tab", "alt+n"},
 			"terminal_prev_window": {"opt+shift+tab", "alt+p"},
 			"terminal_exit_mode":   {"opt+esc"},
+			"terminal_focus_left":  {"alt+left"},
+			"terminal_focus_right": {"alt+right"},
+			"terminal_focus_up":    {"alt+up"},
+			"terminal_focus_down":  {"alt+down"},
 		}
 	}
 	return map[string][]string{
 		"terminal_next_window": {"alt+n"},
 		"terminal_prev_window": {"alt+p"},
 		"terminal_exit_mode":   {"alt+esc"},
+		// alt+left and alt+right are word-wise cursor movement in readline, fish
+		// and zsh, and taking them costs a user that. They are bound because
+		// directional focus on the arrows is what zellij and most tiling window
+		// managers do, and because each of the four is a separate action a user
+		// can set to [] to hand back. See docs/KEYBINDINGS.md.
+		"terminal_focus_left":  {"alt+left"},
+		"terminal_focus_right": {"alt+right"},
+		"terminal_focus_up":    {"alt+up"},
+		"terminal_focus_down":  {"alt+down"},
 	}
 }
 

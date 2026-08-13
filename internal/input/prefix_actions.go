@@ -109,6 +109,40 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("terminal_next_window", handleTerminalNextWindow)
 	d.Register("terminal_prev_window", handleTerminalPrevWindow)
 	d.Register("terminal_exit_mode", handleTerminalExitMode)
+	d.Register("terminal_focus_left", handleTerminalFocusDirection("left"))
+	d.Register("terminal_focus_right", handleTerminalFocusDirection("right"))
+	d.Register("terminal_focus_up", handleTerminalFocusDirection("up"))
+	d.Register("terminal_focus_down", handleTerminalFocusDirection("down"))
+}
+
+// handleTerminalFocusDirection moves focus to the neighbouring pane in one
+// direction. It runs the same geometry the FocusDirection tape command does
+// rather than a second rule: the nearest pane whose facing edge lies that way
+// and whose span overlaps this one's, ties going to the earlier pane. At the
+// edge of the layout there is no such pane and focus stays put; it does not
+// wrap.
+//
+// The scrolling layout is one strip of columns, where left and right are the
+// only directions and moving between columns is what focus means, so it answers
+// with its own navigation. Both branches move focus one pane in the direction
+// pressed, which is the whole of what the key claims to do.
+func handleTerminalFocusDirection(dir string) ActionHandler {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		if o.AutoTiling && o.UseScrollingLayout {
+			switch dir {
+			case "left":
+				o.ScrollingFocusLeft()
+			case "right":
+				o.ScrollingFocusRight()
+			}
+			return o, nil
+		}
+		// A direction with nothing in it is a no-op, which is what stopping at the
+		// edge of the layout looks like.
+		_ = o.FocusDirection(dir)
+		refreshFocusedWindow(o)
+		return o, nil
+	}
 }
 
 // refreshFocusedWindow invalidates the focused window's render cache. Every

@@ -34,6 +34,8 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 				"minimize_window", "restore_all", "toggle_zoom",
 				"next_window", "prev_window",
 				"terminal_next_window", "terminal_prev_window",
+				"terminal_focus_left", "terminal_focus_right",
+				"terminal_focus_up", "terminal_focus_down",
 				"copy_selection", "focus_sidebar",
 				"next_session", "prev_session",
 			}),

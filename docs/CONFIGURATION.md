@@ -852,6 +852,16 @@ Use an empty array to disable a keybinding:
 close_window = []  # Disables this action
 ```
 
+In `[keybindings.terminal_mode]` an unbound key is handed back to the shell in the pane. This matters most for `alt+left` and `alt+right`, which TUIOS binds to directional pane focus and which readline, fish and zsh use for word-wise cursor movement:
+
+```toml
+[keybindings.terminal_mode]
+terminal_focus_left = []
+terminal_focus_right = []
+```
+
+See [Terminal Mode Keys](KEYBINDINGS.md#terminal-mode-keys).
+
 ## Platform-Specific Configuration
 
 ### macOS

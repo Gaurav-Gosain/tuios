@@ -438,4 +438,8 @@ var ActionDescriptions = map[string]string{
 	"terminal_next_window": "Next window (terminal mode)",
 	"terminal_prev_window": "Previous window (terminal mode)",
 	"terminal_exit_mode":   "Exit terminal mode (to window mode)",
+	"terminal_focus_left":  "Focus the pane to the left",
+	"terminal_focus_right": "Focus the pane to the right",
+	"terminal_focus_up":    "Focus the pane above",
+	"terminal_focus_down":  "Focus the pane below",
 }
