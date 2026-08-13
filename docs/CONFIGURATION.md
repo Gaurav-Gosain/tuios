@@ -493,6 +493,42 @@ the minimum any message of that severity is given.
 
 **Default:** `6`
 
+**Note on short values:** durations under 4 seconds are applied as written but
+produce a config warning. A message that disappears before it can be read is a
+time limit on reading content with no way to extend it, which fails WCAG 2.2.1
+Level A. Four seconds is the shortest the evidence supports (tmux-sensible
+overrides tmux's own 750ms to 4s); VS Code purges at 10, 12 and 15 seconds by
+severity.
+
+### warning_duration
+
+How long a warning stays up. Warnings get longer than routine messages because
+they usually name something you have to decide about.
+
+**Default:** `8`
+
+### error_duration
+
+How long an error stays up, used **only** when `error_sticky = false`.
+
+**Default:** `15`
+
+### error_sticky
+
+When true, errors do not expire at all: they stay until dismissed with `esc`.
+The dock's hairline above a sticky error is lit end to end and stops moving,
+which is the affordance that it is waiting for you rather than counting down.
+
+Nothing carrying a failure should vanish on a timer the user did not start, so
+this is on by default. Set it to `false` if you would rather errors time out
+like everything else, in which case `error_duration` applies.
+
+**Valid values:**
+- `true` - Errors wait for `esc` (default)
+- `false` - Errors expire after `error_duration` seconds
+
+**Default:** `true`
+
 ### The `[notifications.agent]` table
 
 What tuios does when a pane's agent state changes. Every key can be turned off,
@@ -562,42 +598,6 @@ to draw on. With two clients attached, each raises its own, in its own terminal.
 A pane that is already in a state when a client first sees it is not a
 transition and says nothing, so reattaching does not replay every agent's state
 at you.
-
-**Note on short values:** durations under 4 seconds are applied as written but
-produce a config warning. A message that disappears before it can be read is a
-time limit on reading content with no way to extend it, which fails WCAG 2.2.1
-Level A. Four seconds is the shortest the evidence supports (tmux-sensible
-overrides tmux's own 750ms to 4s); VS Code purges at 10, 12 and 15 seconds by
-severity.
-
-### warning_duration
-
-How long a warning stays up. Warnings get longer than routine messages because
-they usually name something you have to decide about.
-
-**Default:** `8`
-
-### error_duration
-
-How long an error stays up, used **only** when `error_sticky = false`.
-
-**Default:** `15`
-
-### error_sticky
-
-When true, errors do not expire at all: they stay until dismissed with `esc`.
-The dock's hairline above a sticky error is lit end to end and stops moving,
-which is the affordance that it is waiting for you rather than counting down.
-
-Nothing carrying a failure should vanish on a timer the user did not start, so
-this is on by default. Set it to `false` if you would rather errors time out
-like everything else, in which case `error_duration` applies.
-
-**Valid values:**
-- `true` - Errors wait for `esc` (default)
-- `false` - Errors expire after `error_duration` seconds
-
-**Default:** `true`
 
 ## Startup Settings
 

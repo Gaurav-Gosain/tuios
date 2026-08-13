@@ -14,6 +14,7 @@ an indicator for it.
 - [Indicator](#indicator)
 - [Claude Code integration](#claude-code-integration)
 - [Environment](#environment)
+- [Alerts](#alerts)
 
 ## States
 
@@ -140,3 +141,19 @@ When tuios spawns a pane it exports the environment a state-reporting shim needs
 
 A shim guards on these and no-ops when they are unset, so it is safe to leave
 wired up outside tuios.
+
+## Alerts
+
+A state change can raise a notification, a bell, a clickable dock message, and a
+shell command of your choosing. What fires, for which transitions, and when it is
+held back is the `[notifications.agent]` table; see
+[CONFIGURATION.md](CONFIGURATION.md#the-notificationsagent-table) for the keys
+and [HOOKS.md](HOOKS.md) for the command contract.
+
+Two things are worth knowing here rather than there. The notification is an
+in-band escape sequence written into the same stream the interface is drawn
+through, so it reaches whatever terminal is in front of you even when the session
+is on another machine; a desktop notification raised by tuios would appear on the
+host running the daemon, which under `tuios ssh` is not where you are. And alerts
+are raised by an attached client, so a detached session tracks state without
+announcing it.
