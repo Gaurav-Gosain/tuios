@@ -182,19 +182,27 @@ func (d *Daemon) handleDetach(cs *connState) error {
 	cs.height = 0
 	cs.mu.Unlock()
 
-	// Unsubscribe from all PTYs, keeping where each stream got to: a detach on
-	// this connection can be followed by an attach on it, and the client comes
-	// back holding what it already drew.
+	// Unsubscribe from all PTYs and forget where each stream got to. A resume
+	// position is a claim that the client still holds the pane it drew, and a
+	// detach is the client letting the whole session's panes go: the one path
+	// that detaches and attaches again on this connection is a session switch,
+	// which closes every window and builds the next session's panes on new
+	// emulators. Keeping the positions there told the daemon those empty
+	// emulators were already caught up, so a pane came back with the screen its
+	// snapshot restored and none of the history behind it.
 	if session := d.manager.GetSessionByID(sessionID); session != nil {
 		for _, ptyID := range subs {
 			if pty := session.GetPTY(ptyID); pty != nil {
-				resume := pty.Unsubscribe(clientID)
-				cs.mu.Lock()
-				cs.ptyResume[ptyID] = resume
-				cs.mu.Unlock()
+				pty.Unsubscribe(clientID)
 			}
 		}
 	}
+	cs.mu.Lock()
+	// Cleared whole rather than per subscription: a switching client
+	// unsubscribes each pane before it detaches, so by here the positions are
+	// all in ptyResume and none of them are in subs.
+	cs.ptyResume = make(map[string]int64)
+	cs.mu.Unlock()
 
 	// Notify other clients that this client left
 	d.notifyClientLeft(sessionID, clientID)
