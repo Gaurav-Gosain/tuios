@@ -319,7 +319,14 @@ func checkRailAddressing(f *fuzzOS) []fuzz.Violation {
 	if !config.SidebarEnabled || m.GetSidebarWidth() <= 0 {
 		return nil
 	}
-	f.frameRows() // the hits and nav lists are published by the render
+	// The hits and nav lists are published by the render, so a viewport too small
+	// to compose a frame at all leaves nothing to judge: the buffers still hold
+	// the last frame that was drawn, at a geometry that no longer applies, and
+	// the app never presented them. Every other geometry rule here already
+	// declines on a viewport with no room to draw in.
+	if f.frameRows() == nil {
+		return nil
+	}
 
 	// Index for index: every hit names a nav row, in order. nav also carries
 	// the rows scrolled out of sight, so the relation is a subsequence.
@@ -426,6 +433,15 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 	g := f.renderGrid()
 	for i, w := range panes {
 		x, y := w.X+w.BorderOffset(), w.Y+w.BorderOffset()
+		// The sidebar and the dock are reserved bands, drawn above the panes by
+		// design, and with auto-tiling off a pane may sit under one: floating
+		// panes keep the rectangle the user gave them, and ClampWindowsToView only
+		// guarantees a corner of each stays in the content region. The chrome owns
+		// those cells, so the question this rule asks does not apply there. Same
+		// reasoning as the overlap rule's own escape for free-floating panes.
+		if m.SidebarBandContains(x, y) || m.InDockBand(y) {
+			continue
+		}
 		got := runesAt(g, x, y, len([]rune(marks[i])))
 		if got != marks[i] {
 			return vio("guest-cells", "%s owns (%d,%d) and wrote %q, the frame shows %q",

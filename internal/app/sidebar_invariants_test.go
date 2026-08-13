@@ -47,6 +47,36 @@ func TestRailAddressingHoldsAcrossEveryCombination(t *testing.T) {
 	}
 }
 
+// TestRailFitsAShortRegion walks every host height from nothing up to a rail
+// that comfortably fits, on both sides.
+//
+// The heights above are the ones a rail is designed for; these are the ones it
+// is squeezed into. Each section's header is drawn whether or not the budget
+// could afford it, so once the chrome alone overran the region the rail emitted
+// more lines than it had been given: the extra rows painted over the dock, and
+// the hit rectangles recorded on them made a row outside the band clickable.
+func TestRailFitsAShortRegion(t *testing.T) {
+	for _, pos := range []string{"left", "right"} {
+		for h := range 16 {
+			t.Run(fmt.Sprintf("%s/h=%d", pos, h), func(t *testing.T) {
+				m, tree := sectionsTestOS(t, 120, h)
+				withSidebar(t, true, pos, config.SidebarDefaultWidth)
+				// The expanded rail, which is the one that lays out sections; the
+				// collapsed strip composes its own lines against the same height.
+				m.SidebarCollapsed = false
+				lines, _ := m.sidebarPanelLinesForTree(tree)
+
+				if got, want := len(lines), m.GetUsableHeight(); got > want {
+					t.Errorf("the rail drew %d rows into a region %d rows tall", got, want)
+				}
+				assertHitsFollowNav(t, m)
+				assertHitsStayInTheBand(t, m)
+				assertCursorIsOnARealRow(t, m)
+			})
+		}
+	}
+}
+
 // assertHitsFollowNav is the index-for-index rule, stated as the subsequence it
 // actually is: nav also carries the rows scrolled out of sight, which is what
 // lets the keyboard reach them.

@@ -987,6 +987,23 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		lines = append(lines, compose(ln))
 	}
 
+	// The rail is exactly the rows its region gave it. Each section's header is
+	// drawn whether or not the budget could afford it, so a region short enough
+	// that the chrome alone overruns it produced a rail taller than its own band:
+	// the extra rows painted over the dock, and the hit rectangles recorded on
+	// them made a row outside the band clickable.
+	if len(lines) > height {
+		lines = lines[:height]
+		bottom := topMargin + height
+		kept := m.SidebarHits[:0]
+		for _, h := range m.SidebarHits {
+			if h.Y1 <= bottom {
+				kept = append(kept, h)
+			}
+		}
+		m.SidebarHits = kept
+	}
+
 	m.sidebarPublishNav(nav, cursorTarget, haveCursorTarget)
 	return lines, w
 }

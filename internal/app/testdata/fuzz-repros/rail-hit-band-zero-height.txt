@@ -1,0 +1,10 @@
+# rail-hit-band on a viewport with no room for a frame at all. Nothing is
+# composed at zero height, so the hits left in the model belong to the last frame
+# that was drawn, at a geometry that no longer applies. The rule now declines
+# there, as every other geometry rule already does.
+#
+# The other half of this finding - the rail emitting more rows than its region
+# gave it - needs a four-row host, which is inside the pane class the campaigns
+# floor out, so it is pinned by TestRailFitsAShortRegion instead.
+tick
+resize 50 0
