@@ -114,9 +114,15 @@ func Toggle(on, selected bool, bg color.Color, pal Palette) string {
 		bracket.Render(" ]")
 }
 
-// Rule returns a full-width muted horizontal rule on the given background.
+// Rule returns a full-width muted horizontal rule on the given background. It
+// degrades like DashRule does: a panel's own separator was the last unguarded
+// glyph the family drew in ASCII mode.
 func Rule(width int, bg color.Color, pal Palette) string {
-	return Style(bg).Foreground(pal.FgMute).Render(strings.Repeat("─", width))
+	ch := "─"
+	if UseASCII() {
+		ch = "-"
+	}
+	return Style(bg).Foreground(pal.FgMute).Render(strings.Repeat(ch, max(width, 0)))
 }
 
 // Ellipsis returns the truncation marker for the current ASCII setting.

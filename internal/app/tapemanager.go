@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,7 +10,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
@@ -403,160 +404,136 @@ func (m *OS) RenderTapeManager() string {
 		m.InitTapeManager()
 	}
 
-	// Define styles using theme
-	titleStyle := lipgloss.NewStyle().
-		Foreground(theme.WelcomeTitle()).
-		Bold(true)
+	pal := theme.UI()
+	bg := pal.Surface
+	width := m.panelWidth(tapeManagerWidth)
 
-	subtitleStyle := lipgloss.NewStyle().
-		Foreground(theme.WelcomeSubtitle())
-
-	selectedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("0")).
-		Background(theme.HelpTabActive()).
-		Bold(true).
-		Padding(0, 1)
-
-	normalStyle := lipgloss.NewStyle().
-		Foreground(theme.WelcomeText()).
-		Padding(0, 1)
-
-	dimStyle := lipgloss.NewStyle().
-		Foreground(theme.HelpGray())
-
-	errorStyle := lipgloss.NewStyle().
-		Foreground(theme.NotificationError())
-
-	successStyle := lipgloss.NewStyle().
-		Foreground(theme.NotificationSuccess())
-
-	keyStyle := lipgloss.NewStyle().
-		Foreground(theme.HelpKeyBadge()).
-		Bold(true)
-
-	// The dialog is content-sized, so every line has to be built against what
-	// the screen can hold rather than against a comfortable desktop width.
-	textW := m.dialogTextWidth()
-
-	// Build content based on mode
-	var lines []string
-
-	// Title
-	title := config.TapeManagerTitle
-	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
-		title = config.TapeRecordingIndicator + " Recording: " + m.TapeRecordingName
+	text := func(fg color.Color) func(string) string {
+		return func(s string) string { return overlay.Style(bg).Foreground(fg).Render(s) }
 	}
-	lines = append(lines, titleStyle.Render(title))
-	lines = append(lines, "")
+	dim, body := text(pal.FgDim), text(pal.Fg)
+
+	title := "tapes"
+	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
+		title = "recording " + m.TapeRecordingName
+	}
+
+	var lines []string
+	var hints []overlay.Hint
 
 	switch m.TapeManager.Mode {
 	case TapeManagerNaming:
-		lines = append(lines, subtitleStyle.Render("Enter tape name:"))
-		lines = append(lines, "")
-
-		// Show input field with cursor
-		inputStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(theme.HelpBorder()).
-			Padding(0, 1).
-			Width(min(40, textW))
-		lines = append(lines, inputStyle.Render(truncateString(m.TapeManager.NameBuffer, max(textW-4, 1))+"█"))
-		lines = append(lines, "")
-		lines = append(lines, dimStyle.Render(keyStyle.Render("Enter")+" Confirm  "+keyStyle.Render("Esc")+" Cancel"))
+		lines = append(lines,
+			dim("Name this tape"),
+			"",
+			overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(overlay.Sigil())+
+				body(truncateString(m.TapeManager.NameBuffer, max(width-4, 1)))+
+				overlay.Cursor(" ", bg, pal.Fg))
+		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: "save"}, {Key: "esc", Label: "cancel"}}
 
 	case TapeManagerConfirmDelete:
 		if len(m.TapeManager.Files) > 0 {
 			selected := m.TapeManager.Files[m.TapeManager.SelectedIndex]
-			lines = append(lines, errorStyle.Render("Delete '"+selected.Name+"'?"))
-			lines = append(lines, "")
-			lines = append(lines, dimStyle.Render(keyStyle.Render("y")+" Confirm  "+keyStyle.Render("n/Esc")+" Cancel"))
+			lines = append(lines, text(pal.Warn)("Delete "+selected.Name+"?"))
+			hints = []overlay.Hint{{Key: "y", Label: "delete"}, {Key: "n", Label: "keep"}}
 		}
 
 	case TapeManagerList:
-		// Show messages if any
-		if m.TapeManager.ErrorMessage != "" && time.Since(m.TapeManager.MessageTime) < 3*time.Second {
-			lines = append(lines, errorStyle.Render("Error: "+m.TapeManager.ErrorMessage))
-			lines = append(lines, "")
-		} else if m.TapeManager.SuccessMessage != "" && time.Since(m.TapeManager.MessageTime) < 3*time.Second {
-			lines = append(lines, successStyle.Render(config.TapeSuccessIcon+" "+m.TapeManager.SuccessMessage))
-			lines = append(lines, "")
+		hints = []overlay.Hint{
+			{Key: "↑↓", Label: "select"},
+			{Key: overlay.EnterKey(), Label: "play"},
+			{Key: "r", Label: "record"},
+			{Key: "d", Label: "delete"},
+			{Key: "esc", Label: "close"},
+		}
+		if overlay.UseASCII() {
+			hints[0].Key = "jk"
 		}
 
-		// File list
+		if m.TapeManager.ErrorMessage != "" && time.Since(m.TapeManager.MessageTime) < tapeMessageLinger {
+			lines = append(lines, text(pal.Warn)(m.TapeManager.ErrorMessage), "")
+		} else if m.TapeManager.SuccessMessage != "" && time.Since(m.TapeManager.MessageTime) < tapeMessageLinger {
+			lines = append(lines, text(pal.Success)(m.TapeManager.SuccessMessage), "")
+		}
+
 		if len(m.TapeManager.Files) == 0 {
-			lines = append(lines, dimStyle.Render("No tape files found"))
-			lines = append(lines, "")
-			lines = append(lines, dimStyle.Render("Press "+keyStyle.Render("r")+" to start recording"))
-		} else {
-			lines = append(lines, subtitleStyle.Render(fmt.Sprintf("Tapes (%d files):", len(m.TapeManager.Files))))
-			lines = append(lines, "")
-
-			// Calculate visible range
-			maxVisible := m.dialogRows(tapeManagerVisibleRows, 10)
-			startIdx := m.TapeManager.ScrollOffset
-			endIdx := min(startIdx+maxVisible, len(m.TapeManager.Files))
-
-			for i := startIdx; i < endIdx; i++ {
-				file := m.TapeManager.Files[i]
-
-				// Format file info
-				sizeStr := formatFileSize(file.Size)
-				timeStr := file.Modified.Format("Jan 02 15:04")
-				// The name column gives way first, then the timestamp: a row
-				// that keeps its full name at the cost of the screen edge is
-				// not a row anyone can read.
-				nameW := clampInt(textW-26, 6, 20)
-				info := fmt.Sprintf("%-*s %8s  %s", nameW, truncateString(file.Name, nameW), sizeStr, timeStr)
-				if textW < nameW+24 {
-					info = fmt.Sprintf("%-*s %8s", nameW, truncateString(file.Name, nameW), sizeStr)
-				}
-
-				if i == m.TapeManager.SelectedIndex {
-					lines = append(lines, selectedStyle.Render(config.TapeSelectedIcon+" "+info))
-				} else {
-					lines = append(lines, normalStyle.Render("  "+info))
-				}
-			}
-
-			// Scroll indicator
-			if len(m.TapeManager.Files) > maxVisible {
-				lines = append(lines, "")
-				scrollInfo := fmt.Sprintf("Showing %d-%d of %d", startIdx+1, endIdx, len(m.TapeManager.Files))
-				lines = append(lines, dimStyle.Render(scrollInfo))
-			}
+			lines = append(lines,
+				overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  No tapes recorded yet"))
+			break
 		}
 
-		// Controls
-		lines = append(lines, "")
-		controls := keyStyle.Render("↑/↓") + " Select  " +
-			keyStyle.Render("Enter") + " Play  " +
-			keyStyle.Render("r") + " Record  " +
-			keyStyle.Render("d") + " Delete  " +
-			keyStyle.Render("Esc") + " Close"
-		if lipgloss.Width(controls) > textW {
-			// A narrow dialog gets the same actions under shorter labels.
-			controls = keyStyle.Render("↑↓") + " Sel  " +
-				keyStyle.Render("⏎") + " Play  " +
-				keyStyle.Render("r") + " Rec  " +
-				keyStyle.Render("d") + " Del  " +
-				keyStyle.Render("Esc") + " Close"
+		rows, trimmed := m.panelBody(len(m.TapeManager.Files), len(lines)+1, width, nil, hints)
+		hints = trimmed
+		startIdx := m.TapeManager.ScrollOffset
+		endIdx := min(startIdx+rows, len(m.TapeManager.Files))
+
+		for i := startIdx; i < endIdx; i++ {
+			lines = append(lines, m.tapeFileRow(i, width, pal))
 		}
-		lines = append(lines, dimStyle.Render(controls))
+		if len(m.TapeManager.Files) > rows {
+			lines = append(lines, "",
+				overlay.Style(bg).Foreground(pal.FgDim).Italic(true).
+					Render(fmt.Sprintf("  %d-%d of %d", startIdx+1, endIdx, len(m.TapeManager.Files))))
+		}
 	}
 
-	lines = squeezeLines(lines, m.dialogContentRows())
-	content := clipStyledLines(lipgloss.JoinVertical(lipgloss.Left, lines...), textW)
+	panel := overlay.Panel{
+		Title: title,
+		Width: width,
+		Body:  clipStyledLines(strings.Join(lines, "\n"), width),
+		Hints: hints,
+	}
+	content, _ := panel.Render(pal)
+	return content
+}
 
-	// Create bordered box
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(theme.HelpBorder()).
-		Padding(1, 2).
-		Background(theme.LogViewerBg())
+// tapeManagerWidth is the panel's preferred inner width: a name, a size and a
+// timestamp with room to breathe.
+const tapeManagerWidth = 56
 
-	// Return the content-sized box; the caller centers it as a layer so the
-	// windows behind stay visible.
-	return boxStyle.Render(content)
+// tapeMessageLinger is how long a tape's own success or error line stays up.
+const tapeMessageLinger = 3 * time.Second
+
+// tapeFileRow renders one tape as a full-width row. The fill spans the panel so
+// the selection reads as a row rather than as a slab painted around the text.
+func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
+	file := m.TapeManager.Files[i]
+	selected := i == m.TapeManager.SelectedIndex
+
+	rowBg := pal.Surface
+	nameFg := pal.Fg
+	if selected {
+		rowBg, nameFg = pal.RowSel, pal.Fg
+	}
+
+	marker := "  "
+	if selected {
+		marker = "› "
+		if overlay.UseASCII() {
+			marker = "> "
+		}
+	}
+
+	// The name gives way first, then the timestamp: a row that keeps its whole
+	// name at the cost of the panel's edge is not a row anyone can read.
+	size := formatFileSize(file.Size)
+	stamp := file.Modified.Format("Jan 02 15:04")
+	nameW := max(width-lipgloss.Width(size)-lipgloss.Width(stamp)-6, 6)
+	if width < 40 {
+		stamp = ""
+		nameW = max(width-lipgloss.Width(size)-4, 6)
+	}
+
+	row := overlay.Style(rowBg).Foreground(pal.Accent).Bold(true).Render(marker) +
+		overlay.Style(rowBg).Foreground(nameFg).Bold(selected).
+			Render(overlay.Truncate(file.Name, nameW))
+	right := overlay.Style(rowBg).Foreground(pal.FgDim).Render(size)
+	if stamp != "" {
+		right += overlay.Style(rowBg).Foreground(pal.FgMute).Render("  " + stamp)
+	}
+
+	gap := max(width-lipgloss.Width(row)-lipgloss.Width(right), 1)
+	return overlay.Fill(row+overlay.Style(rowBg).Render(strings.Repeat(" ", gap))+right, width, rowBg)
 }
 
 func formatFileSize(size int64) string {

@@ -2,12 +2,13 @@ package app
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/tape/trust"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -270,101 +271,84 @@ func (m *OS) RenderTapeReview() string {
 		return ""
 	}
 
-	titleStyle := lipgloss.NewStyle().Foreground(theme.WelcomeTitle()).Bold(true)
-	labelStyle := lipgloss.NewStyle().Foreground(theme.WelcomeSubtitle())
-	pathStyle := lipgloss.NewStyle().Foreground(theme.WelcomeText())
-	dimStyle := lipgloss.NewStyle().Foreground(theme.HelpGray())
-	keyStyle := lipgloss.NewStyle().Foreground(theme.HelpKeyBadge()).Bold(true)
-	codeStyle := lipgloss.NewStyle().Foreground(theme.WelcomeText())
-	warnStyle := lipgloss.NewStyle().Foreground(theme.NotificationWarning())
-
-	// The dialog is content-sized, so its longest line decides its width; every
-	// line is built against what the screen can hold.
-	textW := m.dialogTextWidth()
+	pal := theme.UI()
+	bg := pal.Surface
+	width := m.panelWidth(tapeReviewWidth)
 	rows := m.tapeReviewRows()
 
-	var lines []string
-	lines = append(lines, titleStyle.Render("Project Tape"))
-	lines = append(lines, "")
+	label := func(s string) string { return overlay.Style(bg).Foreground(pal.FgDim).Render(s) }
+	value := func(s string) string { return overlay.Style(bg).Foreground(pal.Fg).Render(s) }
 
+	var lines []string
 	// Header: path + trust status. A long path keeps its tail, which is the
 	// part that says which project this is.
-	lines = append(lines, labelStyle.Render("Path:  ")+pathStyle.Render(tailFit(shortTapePath(r.Path), max(textW-7, 1))))
-	lines = append(lines, labelStyle.Render("Trust: ")+tapeStatusLabel(r.Status, r.Changed))
+	lines = append(lines, label("path  ")+value(tailFit(shortTapePath(r.Path), max(width-6, 1))))
+	lines = append(lines, label("trust ")+tapeStatusLabel(r.Status, r.Changed, bg, pal))
 
 	// What running it will do, from a cheap header parse (no execution).
-	lines = append(lines, labelStyle.Render("Runs:  ")+pathStyle.Render(truncateString(tapeRunSummary(r.Header, r.Dir), max(textW-7, 1))))
+	lines = append(lines, label("runs  ")+value(overlay.Truncate(tapeRunSummary(r.Header, r.Dir), max(width-6, 1))))
 	if r.Status == trust.StatusIneligible && r.Reason != "" {
-		lines = append(lines, warnStyle.Render("Ignored: "+r.Reason))
+		lines = append(lines, overlay.Style(bg).Foreground(pal.Warning).Render("ignored: "+r.Reason))
 	}
 	lines = append(lines, "")
 
-	// Body: the full tape content, scrollable.
+	// Body: the full tape content, scrollable. It rests on the Card step, the
+	// same one a key chip uses, so the tape reads as quoted material without a
+	// second border inside the panel.
 	if r.Status != trust.StatusIneligible {
 		content := r.tapeContentLines()
 		start := min(r.Scroll, m.tapeReviewMaxScroll())
 		end := min(start+rows, len(content))
-		box := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(theme.HelpBorder()).
-			Padding(0, 1)
-		var body []string
-		// The content box adds a border and a column of padding on each side.
-		lineW := min(72, max(textW-4, 8))
+		code := pal.Card
+		if end <= start {
+			lines = append(lines, overlay.Fill(
+				overlay.Style(code).Foreground(pal.FgMute).Italic(true).Render(" (empty)"), width, code))
+		}
 		for i := start; i < end; i++ {
-			body = append(body, codeStyle.Render(truncateString(content[i], lineW)))
+			lines = append(lines, overlay.Fill(
+				overlay.Style(code).Foreground(pal.Fg).Render(" "+overlay.Truncate(content[i], width-2)), width, code))
 		}
-		if len(body) == 0 {
-			body = append(body, dimStyle.Render("(empty)"))
-		}
-		lines = append(lines, box.Render(strings.Join(body, "\n")))
 		if len(content) > rows {
-			lines = append(lines, dimStyle.Render(fmt.Sprintf("lines %d-%d of %d  (↑/↓ scroll)", start+1, end, len(content))))
+			lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).
+				Render(fmt.Sprintf("  lines %d-%d of %d", start+1, end, len(content))))
 		}
 	}
 
-	lines = append(lines, "")
-	lines = append(lines, dimStyle.Render(tapeReviewFooter(r, keyStyle, dimStyle, textW)))
-
-	content := clipStyledLines(lipgloss.JoinVertical(lipgloss.Left, lines...), textW)
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(theme.HelpBorder()).
-		Padding(1, 2).
-		Background(theme.LogViewerBg())
-	return boxStyle.Render(content)
+	panel := overlay.Panel{
+		Title: "project tape",
+		Width: width,
+		Body:  clipStyledLines(strings.Join(lines, "\n"), width),
+		Hints: tapeReviewHints(r),
+	}
+	out, _ := panel.Render(pal)
+	return out
 }
 
-// tapeReviewFooter builds the action hint line for the dialog's current status.
-func tapeReviewFooter(r *TapeReviewState, keyStyle, dimStyle lipgloss.Style, width int) string {
-	var full, short string
+// tapeReviewWidth is the dialog's preferred inner width: enough for a tape's
+// own lines without wrapping the ones that matter.
+const tapeReviewWidth = 72
+
+// tapeReviewHints are the actions the dialog offers for its current status.
+// They are the point of the dialog, so every one of them is named at every
+// width and the panel wraps them rather than dropping any.
+func tapeReviewHints(r *TapeReviewState) []overlay.Hint {
 	switch r.Status {
 	case trust.StatusIneligible:
-		full = keyStyle.Render("Esc") + " Dismiss"
-		short = full
+		return []overlay.Hint{{Key: "esc", Label: "dismiss"}}
 	case trust.StatusTrusted:
-		full = keyStyle.Render("r") + " Run   " +
-			keyStyle.Render("n") + " Revoke trust   " +
-			keyStyle.Render("Esc") + " Close"
-		short = keyStyle.Render("r") + " Run   " +
-			keyStyle.Render("n") + " Revoke   " +
-			keyStyle.Render("Esc") + " Close"
+		return []overlay.Hint{
+			{Key: "r", Label: "run"},
+			{Key: "n", Label: "revoke trust"},
+			{Key: "esc", Label: "close"},
+		}
 	default:
-		full = keyStyle.Render("r") + " Run once   " +
-			keyStyle.Render("t") + " Trust and run   " +
-			keyStyle.Render("n") + " Never   " +
-			keyStyle.Render("Esc") + " Not now"
-		short = keyStyle.Render("r") + " Run   " +
-			keyStyle.Render("t") + " Trust   " +
-			keyStyle.Render("n") + " Never   " +
-			keyStyle.Render("Esc") + " Close"
+		return []overlay.Hint{
+			{Key: "r", Label: "run once"},
+			{Key: "t", Label: "trust and run"},
+			{Key: "n", Label: "never"},
+			{Key: "esc", Label: "not now"},
+		}
 	}
-	// The actions are the point of the dialog, so a narrow screen gets shorter
-	// labels rather than fewer keys.
-	if lipgloss.Width(full) > width {
-		return short
-	}
-	return full
 }
 
 // tailFit shortens s from the left, keeping its last width cells behind an
@@ -383,19 +367,18 @@ func tailFit(s string, width int) string {
 	return "..." + string(runes[len(runes)-(width-3):])
 }
 
-// tapeStatusLabel renders a colored trust-status word for the dialog header.
-func tapeStatusLabel(status trust.Status, changed bool) string {
-	switch status {
-	case trust.StatusTrusted:
-		return lipgloss.NewStyle().Foreground(theme.NotificationSuccess()).Render("trusted")
-	case trust.StatusIneligible:
-		return lipgloss.NewStyle().Foreground(theme.NotificationError()).Render("ineligible")
-	default:
-		if changed {
-			return lipgloss.NewStyle().Foreground(theme.NotificationWarning()).Render("untrusted (changed since you trusted it)")
-		}
-		return lipgloss.NewStyle().Foreground(theme.NotificationWarning()).Render("untrusted")
+// tapeStatusLabel renders the trust status in the status token that matches it.
+func tapeStatusLabel(status trust.Status, changed bool, bg color.Color, pal overlay.Palette) string {
+	word, fg := "untrusted", pal.Warning
+	switch {
+	case status == trust.StatusTrusted:
+		word, fg = "trusted", pal.Success
+	case status == trust.StatusIneligible:
+		word, fg = "ineligible", pal.Warn
+	case changed:
+		word = "untrusted (changed since you trusted it)"
 	}
+	return overlay.Style(bg).Foreground(fg).Render(word)
 }
 
 // tapeRunSummary describes, from the parsed header alone, what running the tape
