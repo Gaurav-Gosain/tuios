@@ -255,6 +255,37 @@ func (m *OS) CancelSnapAnimation(win *terminal.Window) {
 	}
 }
 
+// landSnapAnimations finishes every snap in flight at its own destination and
+// retires it, leaving the other animation kinds alone.
+//
+// Cancelling is right for a caller that is about to place the window itself.
+// A caller that is not - a structural change that settles the layout by some
+// other route - has to land the snap instead: a snap deliberately leaves the
+// emulator at the size the pane had when it started and catches up in one
+// resize at the end, so dropping it mid-flight leaves the pane at an
+// interpolated rectangle with an emulator that matches neither end. Turning
+// tiling off while the scrolling strip was still sliding did exactly that, and
+// a tick later the panes were back at the strip's rectangles with their guests
+// writing at the old size.
+func (m *OS) landSnapAnimations() {
+	if len(m.Animations) == 0 {
+		return
+	}
+	kept := m.Animations[:0]
+	for _, anim := range m.Animations {
+		if anim.Type != ui.AnimationSnap || anim.Window == nil {
+			kept = append(kept, anim)
+			continue
+		}
+		win := anim.Window
+		win.X, win.Y = anim.EndX, anim.EndY
+		win.Resize(anim.EndWidth, anim.EndHeight)
+		win.InvalidateCache()
+		win.MarkPositionDirty()
+	}
+	m.Animations = kept
+}
+
 // AddWindowToBSPTree adds a window to the BSP tree and applies the layout.
 // This should be called when a new window is created in tiling mode.
 func (m *OS) AddWindowToBSPTree(window *terminal.Window) {

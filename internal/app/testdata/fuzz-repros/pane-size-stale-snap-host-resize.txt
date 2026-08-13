@@ -1,0 +1,8 @@
+# pane-size: the scrolling strip's snap survived a host resize that had already
+# placed the panes, and the next tick stamped the strip's rectangle back without
+# resizing the emulator with it.
+resize 60 20
+layout 2
+resize 93 20
+resize 60 20
+tick

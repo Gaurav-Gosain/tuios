@@ -75,6 +75,13 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		dur = config.GetAnimationDuration()
 	}
 
+	// Asked once for the whole layout, as ApplyBSPLayout does, because it ends a
+	// stale deferral as a side effect. The strip used to skip the deferral
+	// altogether and announce a real size per pane per resize step, which is one
+	// SIGWINCH per pane for every column the user drags the host edge through -
+	// the exact storm the deferral exists to stop.
+	deferring := m.resizeDeferralActive()
+
 	for windowIntID, rect := range layouts {
 		// ComputePositions works in strip coordinates; place the strip inside
 		// the content region.
@@ -94,7 +101,12 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		}
 		// A changed allowance owes the guest a new box even at the same rectangle.
 		if borderChanged || win.Width != rect.W || win.Height != rect.H {
-			win.Resize(rect.W, rect.H)
+			if deferring {
+				win.ResizeVisual(rect.W, rect.H)
+				m.PendingResizes[win.ID] = [2]int{rect.W, rect.H}
+			} else {
+				win.Resize(rect.W, rect.H)
+			}
 		}
 
 		// If this window already has an in-flight animation heading to
@@ -120,6 +132,14 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 			}
 		}
 
+		// A snap left over from an earlier placement owns this window's geometry
+		// and stamps its own rectangle back on the next tick, without resizing
+		// the emulator with it. The branch above only retires one when it creates
+		// a replacement, so a column that changed width without changing column -
+		// the host resizing while the strip stays put - fell through to here with
+		// the old snap still live, and one tick later the pane was drawing at one
+		// size while its guest wrote at another.
+		m.CancelSnapAnimation(win)
 		win.X = rect.X
 		win.Y = rect.Y
 		win.Width = rect.W

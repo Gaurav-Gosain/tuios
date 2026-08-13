@@ -1,0 +1,9 @@
+# pane-size: turning tiling off mid-slide left the scrolling strip's snaps
+# running, and a later host resize plus a tick put the panes back at the strip's
+# rectangles with their emulators at the resized size.
+layout 2
+tiling
+sidebar
+new-pane
+resize 60 20
+tick

@@ -48,22 +48,15 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	// mid-animation. A pane left at an interpolated rectangle keeps it until
 	// something retiles the workspace, which may be never.
 	//
-	// Land each one where it was already heading, through the normal path. The
-	// old code recomputed a master-stack layout instead - the wrong rectangles
-	// under BSP or scrolling - and stamped Width and Height straight onto the
-	// window, so the emulator and the guest kept the size the pane had before the
-	// switch and only heard the real one on some later, unrelated action.
+	// Land each one where it was already heading. The old code recomputed a
+	// master-stack layout instead - the wrong rectangles under BSP or scrolling -
+	// and stamped Width and Height straight onto the window, so the emulator and
+	// the guest kept the size the pane had before the switch and only heard the
+	// real one on some later, unrelated action.
 	if len(m.Animations) > 0 {
-		for _, anim := range m.Animations {
-			if anim.Type != ui.AnimationSnap || anim.Window == nil {
-				continue
-			}
-			win := anim.Window
-			win.X, win.Y = anim.EndX, anim.EndY
-			win.Resize(anim.EndWidth, anim.EndHeight)
-			win.InvalidateCache()
-			win.MarkPositionDirty()
-		}
+		m.landSnapAnimations()
+		// Anything else in flight belongs to a workspace that is leaving the
+		// screen, so there is nothing left for it to animate.
 		m.Animations = m.Animations[:0]
 		m.LogInfo("Landed and cancelled animations during workspace switch")
 	}

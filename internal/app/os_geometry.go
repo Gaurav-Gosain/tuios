@@ -211,6 +211,12 @@ func (m *OS) ClampWindowsToView() {
 
 		// If position changed, mark as dirty and log
 		if win.X != originalX || win.Y != originalY || needsResize {
+			// The new viewport decides where this pane goes, so a snap still
+			// heading somewhere the old one implied is obsolete. Left running it
+			// stamps that rectangle back on the next tick without resizing the
+			// emulator with it, and the pane draws at one size while its guest
+			// writes at another.
+			m.CancelSnapAnimation(win)
 			win.MarkPositionDirty()
 			if needsResize {
 				win.Resize(win.Width, win.Height)

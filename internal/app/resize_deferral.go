@@ -97,15 +97,23 @@ func (m *OS) notePointerEvent(at time.Time) {
 	m.lastPointerAt = at
 }
 
-// requireRealLayout ends any deferred resize before a structural change to the
-// layout - a window opening, closing or splitting, tiling being toggled, a
-// layout being loaded. Those are not resize steps, and their result is what the
-// user is left looking at, so they must never be laid out visually-only and
-// left for a message that may not come.
+// requireRealLayout settles every transient geometry mechanism before a
+// structural change to the layout - a window opening, closing or splitting,
+// tiling being toggled, a layout being loaded. Those are not resize steps, and
+// their result is what the user is left looking at, so they must never be laid
+// out visually-only and left for a message that may not come.
+//
+// That means both a deferred resize and a snap still in flight. See
+// landSnapAnimations for why a snap cannot simply be dropped. Both settle inside
+// one hold: a pane that a landed snap and a drained deferral both touch has one
+// size at the end of this, and that is the only one worth sending.
 func (m *OS) requireRealLayout() {
-	if m.viewportResizing || len(m.PendingResizes) > 0 {
-		m.endResizeDeferral()
-	}
+	m.settleSizes(func() {
+		m.landSnapAnimations()
+		if m.viewportResizing || len(m.PendingResizes) > 0 {
+			m.endResizeDeferral()
+		}
+	})
 }
 
 // endLostGesture retires a drag or resize whose release never arrived.
