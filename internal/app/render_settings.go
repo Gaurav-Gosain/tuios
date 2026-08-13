@@ -22,6 +22,12 @@ const (
 	// the strip and is why the strip wrapped.
 	settingsMaxInnerWidth = 80
 	settingsVisibleRows   = 7
+
+	// settingsDescLines is how many lines the description box holds when the
+	// screen has the room. Two covers every description in the set at the
+	// panel's maximum width, and the box is a fixed height so the panel does
+	// not jump as the selection crosses from a short description to a long one.
+	settingsDescLines = 2
 )
 
 // settingsHints is the settings footer, shared by the renderer and the sizing
@@ -34,26 +40,28 @@ var settingsHints = []overlay.Hint{
 }
 
 // settingsLayout returns the fitted inner width, the number of setting rows that
-// fit, the footer, and whether there is room for the description line, given the
-// category tabs (which may wrap onto several rows).
+// fit, the footer, and how many lines the description box gets.
 //
 // On a screen too short to hold the minimum body, the footer goes first
-// (panelBody), then the description: it restates the selected row, whereas a
-// body below three rows stops being a list. Without this a second tab row would
-// push the panel one line past a 12-row screen.
-func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int, hints []overlay.Hint, desc bool) {
+// (panelBody), then the description box loses a line at a time and finally goes
+// altogether: it restates the selected row, whereas a body below three rows
+// stops being a list.
+func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int, hints []overlay.Hint, descLines int) {
 	width = m.panelWidth(settingsMaxInnerWidth)
 	preferred := max(itemCount, settingsVisibleRows)
-	// Body lines that are not setting rows: a blank and the description.
-	const descRows = 2
-	rows, hints = m.panelBody(preferred, descRows, width, tabs, settingsHints)
-
 	rh := m.GetRenderHeight()
-	if rh <= 0 || rows+descRows+panelChrome(0, width, tabs, hints) <= rh {
-		return width, rows, hints, true
+
+	for n := settingsDescLines; n > 0; n-- {
+		// Body lines that are not setting rows: the blank above the box, then
+		// the box itself.
+		extra := n + 1
+		rows, hints = m.panelBody(preferred, extra, width, tabs, settingsHints)
+		if rh <= 0 || rows+extra+panelChrome(0, width, tabs, hints) <= rh {
+			return width, rows, hints, n
+		}
 	}
 	rows, hints = m.panelBody(preferred, 0, width, tabs, settingsHints)
-	return width, rows, hints, false
+	return width, rows, hints, 0
 }
 
 // renderSettings draws the settings overlay and returns the rendered panel, its
@@ -79,7 +87,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		tabs[i] = c.Name
 	}
 
-	width, visible, hints, showDesc := m.settingsLayout(tabs, len(cat.Items))
+	width, visible, hints, descLines := m.settingsLayout(tabs, len(cat.Items))
 	// A category with more settings than fit scrolls; the selection stays in
 	// view so the arrow keys can always reach every setting.
 	m.SettingsScroll = scrollWindow(m.SettingsScroll, m.SettingsSelected, len(cat.Items), visible)
@@ -104,7 +112,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		lines = append(lines, overlay.Style(bg).Render(" "))
 	}
 
-	if showDesc {
+	if descLines > 0 {
 		desc := ""
 		if len(cat.Items) > 0 {
 			desc = cat.Items[m.SettingsSelected].Desc
@@ -114,14 +122,8 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 			// is discoverable rather than simply missing.
 			desc = lipgloss.Sprintf("(%d/%d) ", m.SettingsSelected+1, len(cat.Items)) + desc
 		}
-		// "  " prefix counts against the inner width budget, same as the row
-		// marker does for setting rows, so the truncation target leaves room
-		// for it.
-		desc = overlay.Truncate(desc, width-2)
-		lines = append(lines,
-			overlay.Style(bg).Render(" "),
-			overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+desc),
-		)
+		lines = append(lines, overlay.Style(bg).Render(" "))
+		lines = append(lines, settingsDescription(desc, width, descLines, pal)...)
 	}
 
 	panel := overlay.Panel{
@@ -154,6 +156,40 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	return content, geo, rows
+}
+
+// settingsDescription lays the selected row's help text into a box n lines tall.
+//
+// It wraps rather than truncates. The panel has the room across two lines for
+// every description it carries, and a sentence cut off at the first line is a
+// sentence the user has to go and find in the config file; the mark said only
+// that something was missing. A description longer than the box still has its
+// last line truncated with the usual mark, so nothing ever paints past the
+// panel edge.
+//
+// The box is padded out to n lines whatever the text needs, so the panel keeps
+// its height as the selection moves and does not re-centre itself under the
+// pointer.
+func settingsDescription(desc string, width, n int, pal overlay.Palette) []string {
+	style := overlay.Style(pal.Surface).Foreground(pal.FgMute).Italic(true)
+	// The "  " indent counts against the inner width, same as the marker does on
+	// a setting row, so the wrap target leaves room for it.
+	avail := width - 2
+	wrapped := wrapPlain(desc, avail)
+	out := make([]string, 0, n)
+	for i := range n {
+		text := ""
+		switch {
+		case i == n-1 && len(wrapped) > n:
+			// More than the box holds: the last line carries what is left of the
+			// text up to the mark, so the cut is visible rather than silent.
+			text = overlay.Truncate(strings.Join(wrapped[i:], " "), avail)
+		case i < len(wrapped):
+			text = wrapped[i]
+		}
+		out = append(out, style.Render("  "+text))
+	}
+	return out
 }
 
 // settingsRow renders a single setting and returns the row string, its control
