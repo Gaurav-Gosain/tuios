@@ -3,6 +3,8 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"math"
+	"sort"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -32,16 +34,120 @@ func (m *OS) separatorSplits() []layout.SplitLine {
 	return tree.CollectSplits(m.GetBSPBounds(), m.separatorGap())
 }
 
-// tiledPaneRects returns the rectangles of the panes currently tiled on screen.
+// tiledPaneRects returns the rectangles of the panes currently tiled on screen,
+// ordered bottom to top the way the compositor stacks them.
 func (m *OS) tiledPaneRects() []layout.Rect {
-	rects := make([]layout.Rect, 0, len(m.Windows))
-	for _, w := range m.Windows {
+	idx := make([]int, 0, len(m.Windows))
+	for i, w := range m.Windows {
 		if w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating || !w.Tiled {
 			continue
 		}
-		rects = append(rects, layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height})
+		idx = append(idx, i)
+	}
+	sort.SliceStable(idx, func(a, b int) bool { return m.Windows[idx[a]].Z < m.Windows[idx[b]].Z })
+	rects := make([]layout.Rect, len(idx))
+	for i, wi := range idx {
+		w := m.Windows[wi]
+		rects[i] = layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}
 	}
 	return rects
+}
+
+// dividerLine is a divider the frame will draw, carrying the depth of the pane
+// whose edge it is. Panes overlap while a transition is in flight, and a divider
+// belonging to the lower one gives way to the pane on top exactly as that pane's
+// own content does.
+type dividerLine struct {
+	layout.SplitLine
+	depth int
+}
+
+// settledDepth marks a divider that belongs to the layout rather than to one
+// pane, so nothing occludes it. The settled layout reserves every divider cell,
+// which is why no pane can be covering one.
+const settledDepth = math.MaxInt
+
+// transitioning reports whether a tiled pane on screen is mid-animation, so the
+// settled layout describes where the panes are going rather than where they are.
+func (m *OS) transitioning() bool {
+	for _, a := range m.Animations {
+		if a.Complete || a.Window == nil {
+			continue
+		}
+		if a.Window.Tiled && a.Window.Workspace == m.CurrentWorkspace && !a.Window.Minimized {
+			return true
+		}
+	}
+	return false
+}
+
+// dividerLines returns the dividers to draw on this frame.
+//
+// A settled layout has its divisions in the gaps it reserved for them, and the
+// tiler that placed the panes answers for those. A layout in motion has not
+// reserved anything yet: its panes are between two layouts, so a division taken
+// from either one sits where no pane edge is, and the frame reads as panes
+// sliding under a skeleton that is not theirs.
+//
+// So while panes are moving the divisions are the panes' own edges, which makes
+// every one of them a real boundary on the frame being drawn. A pane that has
+// not moved contributes the same edges the settled grid would have drawn there,
+// and a pane in flight carries its edges with it, so the layout moves as one
+// object and the moving pane reads as a pane rather than as a bare rectangle.
+func (m *OS) dividerLines(bounds layout.Rect) ([]dividerLine, []layout.Rect) {
+	if !m.transitioning() {
+		splits := m.separatorSplits()
+		lines := make([]dividerLine, len(splits))
+		for i, s := range splits {
+			lines[i] = dividerLine{SplitLine: s, depth: settledDepth}
+		}
+		return lines, nil
+	}
+	stack := m.tiledPaneRects()
+	lines := make([]dividerLine, 0, 4*len(stack))
+	for depth, r := range stack {
+		for _, s := range paneEdges(r) {
+			if clipped, ok := clipSplit(s, bounds); ok {
+				lines = append(lines, dividerLine{SplitLine: clipped, depth: depth})
+			}
+		}
+	}
+	return lines, stack
+}
+
+// paneEdges returns the four lines one cell outside r's sides, each spanning its
+// own side only.
+//
+// The corners are left out on purpose. A divider turns at the cell where two
+// panes' edges meet, and the neighbour probe in renderSeparatorOverlay draws that
+// turn from the lines that actually reach the cell; claiming the corner would
+// instead give it an arm pointing along a side that has no divider on it, which
+// is how a T at the head of a division would come out as a crossing.
+func paneEdges(r layout.Rect) [4]layout.SplitLine {
+	return [4]layout.SplitLine{
+		{Vertical: true, Pos: r.X - 1, From: r.Y, To: r.Y + r.H - 1},
+		{Vertical: true, Pos: r.X + r.W, From: r.Y, To: r.Y + r.H - 1},
+		{Vertical: false, Pos: r.Y - 1, From: r.X, To: r.X + r.W - 1},
+		{Vertical: false, Pos: r.Y + r.H, From: r.X, To: r.X + r.W - 1},
+	}
+}
+
+// clipSplit trims s to the content region, reporting false when nothing of it is
+// left. A pane against the region's edge has its outer side on the chrome beyond
+// it, which the chrome rules answer for instead.
+func clipSplit(s layout.SplitLine, bounds layout.Rect) (layout.SplitLine, bool) {
+	// A vertical line's Pos is a column and its extent is rows; a horizontal
+	// line's is the other way round.
+	posLo, posHi := bounds.X, bounds.X+bounds.W-1
+	extLo, extHi := bounds.Y, bounds.Y+bounds.H-1
+	if !s.Vertical {
+		posLo, posHi, extLo, extHi = extLo, extHi, posLo, posHi
+	}
+	if s.Pos < posLo || s.Pos > posHi {
+		return s, false
+	}
+	s.From, s.To = max(s.From, extLo), min(s.To, extHi)
+	return s, s.From <= s.To
 }
 
 // joinSide names the side of the content region a divider runs into. A divider
@@ -88,6 +194,17 @@ func (m *OS) chromeRules(bounds layout.Rect) chromeRules {
 	return r
 }
 
+// cell is one cell of the divider grid: which axes run through it, and whether
+// it is the cell where a divider meets a chrome rule. A nil receiver is an empty
+// cell, so a neighbour probe can ask about a cell that was never filled in.
+type cell struct {
+	vert, horiz bool
+	join        joinSide
+}
+
+func (c *cell) isVert() bool  { return c != nil && c.vert }
+func (c *cell) isHoriz() bool { return c != nil && c.horiz }
+
 // renderSeparatorOverlay renders thin separator lines between tiled panes.
 // Each separator line is its own lipgloss Layer to avoid occluding content.
 func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
@@ -97,19 +214,31 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	}
 
 	bounds := m.GetBSPBounds()
-	splits := m.separatorSplits()
+	splits, stack := m.dividerLines(bounds)
 	if len(splits) == 0 {
 		return nil
+	}
+
+	// Two panes crossing mid-transition leave one of them covering the other's
+	// edge. Nothing may be painted into a cell a pane's guest owns, so the edge
+	// underneath stands down; the pane on top is drawing its own there anyway.
+	// A settled layout reserves every divider cell, so this never fires.
+	occluded := func(x, y, depth int) bool {
+		if depth == settledDepth {
+			return false
+		}
+		for d := depth + 1; d < len(stack); d++ {
+			if r := stack[d]; x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+				return true
+			}
+		}
+		return false
 	}
 
 	viewW := m.GetRenderWidth()
 	viewH := m.GetRenderHeight()
 
 	// Collect all separator characters with positions
-	type cell struct {
-		vert, horiz bool
-		join        joinSide
-	}
 	grid := make(map[[2]int]*cell)
 	get := func(x, y int) *cell {
 		k := [2]int{x, y}
@@ -132,6 +261,9 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 				continue
 			}
 			for y := max(s.From, 0); y <= min(s.To, viewH-1); y++ {
+				if occluded(s.Pos, y, s.depth) {
+					continue
+				}
 				get(s.Pos, y).vert = true
 			}
 			if s.From <= bounds.Y && rules.top >= 0 {
@@ -145,6 +277,9 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 				continue
 			}
 			for x := max(s.From, 0); x <= min(s.To, viewW-1); x++ {
+				if occluded(x, s.Pos, s.depth) {
+					continue
+				}
 				get(x, s.Pos).horiz = true
 			}
 			if s.From <= bounds.X && rules.left >= 0 {
@@ -199,9 +334,13 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		case c.vert && c.horiz:
 			ch = chCross
 		case c.vert:
-			// Check horizontal neighbors for T-junctions
-			_, hasL := grid[[2]int{x - 1, y}]
-			_, hasR := grid[[2]int{x + 1, y}]
+			// Check horizontal neighbors for T-junctions. An arm is only grown
+			// toward a neighbour carrying a line that runs into this one: two
+			// dividers a cell apart on the same axis are two edges that have not
+			// closed up yet, which a transition leaves on the frame, and reading
+			// one as an arm of the other would draw a tee where nothing meets.
+			hasL := grid[[2]int{x - 1, y}].isHoriz()
+			hasR := grid[[2]int{x + 1, y}].isHoriz()
 			switch {
 			case hasL && hasR:
 				ch = chCross
@@ -213,8 +352,8 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 				ch = chVert
 			}
 		case c.horiz:
-			_, hasU := grid[[2]int{x, y - 1}]
-			_, hasD := grid[[2]int{x, y + 1}]
+			hasU := grid[[2]int{x, y - 1}].isVert()
+			hasD := grid[[2]int{x, y + 1}].isVert()
 			switch {
 			case hasU && hasD:
 				ch = chCross
