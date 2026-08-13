@@ -26,11 +26,16 @@ type settingItem struct {
 	Desc    string
 	Control settingControl
 	Options []string
-	// Placeholder is shown greyed out for an empty controlString value.
+	// Placeholder is the example value, shown on the description line. It is
+	// deliberately not drawn in the value's place: an example there reads as the
+	// value in force.
 	Placeholder string
-	value       func(m *OS) string
-	boolVal     func(m *OS) bool
-	adjust      func(m *OS, dir int)
+	// Unset is what the field shows when nothing is set: what happens instead,
+	// in the row's own terms.
+	Unset   string
+	value   func(m *OS) string
+	boolVal func(m *OS) bool
+	adjust  func(m *OS, dir int)
 	// setStr commits an edited controlString value.
 	setStr func(m *OS, v string)
 	// activate, when set, runs on Enter/click instead of adjusting the value
@@ -243,12 +248,21 @@ func intItem(label, desc string, lo, hi, step int, get func() int, set func(m *O
 // against a missing config), set commits a trimmed value. Editing happens inline
 // via the settings input handler; set is called on commit and the change is
 // persisted afterward.
-func stringItem(label, desc, placeholder string, get func(m *OS) string, set func(m *OS, v string)) settingItem {
+func stringItem(label, desc, placeholder, unset string, get func(m *OS) string, set func(m *OS, v string)) settingItem {
+	// The example belongs to the description. Rendered in the value's place it
+	// was indistinguishable from a value the user had actually set.
+	if placeholder != "" {
+		desc += ", e.g. " + placeholder
+	}
+	if unset == "" {
+		unset = "(default)"
+	}
 	return settingItem{
 		Label:       label,
 		Desc:        desc,
 		Control:     controlString,
 		Placeholder: placeholder,
+		Unset:       unset,
 		value:       get,
 		setStr:      set,
 	}
@@ -331,7 +345,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.Scrollbar.Style = v })
 					m.applyAppearanceLive(false)
 				}),
-			stringItem("Focused border color", "Hex color for the focused pane border (empty = theme)", "#89b4fa",
+			stringItem("Focused border color", "Hex color for the focused pane border", "#89b4fa", "(theme)",
 				func(m *OS) string {
 					return m.appearanceString(func(a *config.AppearanceConfig) string { return a.BorderFocusedColor })
 				},
@@ -339,7 +353,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.BorderFocusedColor = v })
 					m.applyBorderColors()
 				}),
-			stringItem("Unfocused border color", "Hex color for unfocused pane borders (empty = theme)", "#585b70",
+			stringItem("Unfocused border color", "Hex color for unfocused pane borders", "#585b70", "(theme)",
 				func(m *OS) string {
 					return m.appearanceString(func(a *config.AppearanceConfig) string { return a.BorderUnfocusedColor })
 				},
@@ -347,7 +361,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.BorderUnfocusedColor = v })
 					m.applyBorderColors()
 				}),
-			stringItem("Window title format", "Template: {title}, {index}, {cwd} (empty = raw title)", "{index}: {title}",
+			stringItem("Window title format", "Template: {title}, {index}, {cwd}", "{index}: {title}", "(raw title)",
 				func(m *OS) string { return config.WindowTitleFormat },
 				func(m *OS, v string) {
 					config.WindowTitleFormat = v
@@ -536,7 +550,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 					config.NormalFPS = fps
 					m.setAppearance(func(a *config.AppearanceConfig) { a.MaxFPS = fps })
 				}),
-			stringItem("Preferred shell", "Shell for new windows, empty = auto-detect (applies to new windows)", "/bin/bash",
+			stringItem("Preferred shell", "Shell for new windows (applies to new windows)", "/bin/bash", "(auto-detect)",
 				func(m *OS) string {
 					return m.appearanceString(func(a *config.AppearanceConfig) string { return a.PreferredShell })
 				},
@@ -588,7 +602,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 					config.CopyOnSelect = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.CopyOnSelect = &v })
 				}),
-			stringItem("Word characters", "Punctuation double-click keeps inside a word (letters and digits always count)", "@-./_~?&=%+#",
+			stringItem("Word characters", "Punctuation double-click keeps inside a word (letters and digits always count)", "@-./_~?&=%+#", "(default)",
 				func(m *OS) string { return config.WordCharacters },
 				func(m *OS, v string) {
 					config.WordCharacters = v

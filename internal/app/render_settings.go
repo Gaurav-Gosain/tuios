@@ -183,8 +183,8 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 }
 
 // settingsStringControl renders a free-text setting as a bracketed field. An
-// empty value shows the placeholder greyed out; while the row is being edited it
-// shows the live buffer with a trailing cursor.
+// unset value shows the marker in italic muted text; while the row is being
+// edited it shows the live buffer with a trailing cursor.
 func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Color, pal overlay.Palette, width int) string {
 	editing := m.SettingsEditing && selected
 	val := item.value(m)
@@ -196,10 +196,13 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 	if !selected {
 		fg = pal.FgDim
 	}
-	text := val
+	// An unset field says it is unset. It used to print its own placeholder
+	// example in the value's own style, which reads as the value in force: the
+	// panel told the user their focused border was #89b4fa while the border on
+	// screen was the theme's. The example lives on the description line now.
+	text, italic := val, false
 	if val == "" && !editing {
-		text = item.Placeholder
-		fg = pal.FgMute
+		text, italic, fg = item.Unset, true, pal.FgMute
 	}
 	// The field never takes more than half the row, so the label it sits beside
 	// keeps something to show even on a narrow panel.
@@ -218,6 +221,6 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 	}
 	bracket := overlay.Style(bg).Foreground(bracketColor)
 	return bracket.Render("[ ") +
-		overlay.Style(bg).Foreground(fg).Render(text) +
+		overlay.Style(bg).Foreground(fg).Italic(italic).Render(text) +
 		bracket.Render(" ]")
 }
