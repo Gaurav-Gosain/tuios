@@ -148,7 +148,7 @@ func TestStripRestsAsABandWithASpine(t *testing.T) {
 	// The fixture has one pane working, so the bottom group carries it: the rule,
 	// the mark, the blank that holds the group off the controls, then the toggle
 	// and the rail's last pad.
-	tail := []string{"──" + rule, " ●" + rule, "  " + rule, " »" + rule, "  " + rule}
+	tail := []string{"──" + rule, " ●" + rule, "  " + rule, " +" + rule, " »" + rule, "  " + rule}
 	for i, w := range tail {
 		if got := lines[len(lines)-len(tail)+i]; got != w {
 			t.Errorf("tail line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
@@ -385,8 +385,8 @@ func TestStripPacksThenSaysWhatItCut(t *testing.T) {
 		"  " + rule,
 		"▎·" + rule,
 		" ·" + rule,
-		" ·" + rule,
-		" ⋮" + rule, // the four it had no line for
+		" ⋮" + rule, // the six it had no line for
+		" +" + rule,
 		" »" + rule,
 		"  " + rule,
 	}

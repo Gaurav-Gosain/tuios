@@ -55,6 +55,9 @@ const (
 	// sidebarStripMore is the tail mark standing in for the rows a short rail has
 	// no line left to draw, in either list.
 	sidebarStripMore
+	// sidebarStripNew is the new-session control, and sidebarStripToggle the
+	// expand arrow under it: the strip's two controls, stacked at the bottom.
+	sidebarStripNew
 	sidebarStripToggle
 )
 
@@ -218,19 +221,28 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 		toggleH = 1
 	}
 
-	// The head is a pad, the badge, and a pad under it; the tail is the toggle
-	// and a pad below it. A rail with no room for both plus a mark drops the
-	// badge first and then the pads, because the spine is the only thing the
-	// strip cannot say any other way.
-	headH, tailH := 1+2*badgeH, toggleH+1
+	newH := 0
+	if m.SidebarCanCreateSession() {
+		newH = 1
+	}
+
+	// The head is a pad, the badge, and a pad under it; the tail is the two
+	// controls and a pad below them. A rail with no room for all of it plus a mark
+	// gives up the new-session control first, then the badge, then the pads: the
+	// spine is the only thing the strip cannot say any other way, the way out has
+	// to survive everything, and making a session is the one thing that can wait
+	// for the rail to be reopened.
+	headH, tailH := 1+2*badgeH, toggleH+newH+1
 	switch {
 	case height >= headH+tailH+1:
+	case height >= headH+toggleH+2:
+		newH, tailH = 0, toggleH+1
 	case height >= toggleH+3:
-		badgeH, headH, tailH = 0, 1, toggleH+1
+		badgeH, headH, newH, tailH = 0, 1, 0, toggleH+1
 	case height >= toggleH+1:
-		badgeH, headH, tailH = 0, 0, toggleH
+		badgeH, headH, newH, tailH = 0, 0, 0, toggleH
 	default:
-		badgeH, headH, tailH, toggleH = 0, 0, 0, 0
+		badgeH, headH, newH, tailH, toggleH = 0, 0, 0, 0, 0
 	}
 
 	agents := m.sidebarStripAgents(sessions)
@@ -259,7 +271,9 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 		ruleH = 0
 	}
 
-	badgeY, moreY, toggleY := 1, stackTop+shown*interval, height-tailH
+	badgeY, moreY := 1, stackTop+shown*interval
+	newY := height - tailH
+	toggleY := newY + newH
 
 	// The pointer highlights the whole slot it is in, not the one line the mark
 	// sits on: the highlight is the target made visible, and a target you cannot
@@ -341,6 +355,17 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 			})
 			record(sidebarRowCollapse, "", "", y, 1)
 			lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal), cw, edgeLeft, pal))
+		case newH > 0 && i == newY:
+			// The two controls stack rather than share a line: two content cells
+			// shared out give each of them one cell, which is the target this round
+			// exists to stop drawing, and the ASCII toggle is two cells wide and
+			// would leave no room at all. Stacked, they also sit in the column every
+			// other mark on the strip is already in.
+			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
+				Kind: sidebarStripNew, Y0: y, Y1: y + 1, Label: "new session",
+			})
+			record(sidebarRowNewSession, "", "", y, 1)
+			lines = append(lines, m.sidebarStripBand(sidebarStripControlCell("+", cw, edgeLeft, hovered(i), pal), cw, edgeLeft, pal))
 		case toggleH > 0 && i == toggleY:
 			// The glyph hugs the pane-facing column, the edge the pointer arrives
 			// from, but the zone is the whole band: the only control the user has
@@ -349,7 +374,7 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 				Kind: sidebarStripToggle, Y0: y, Y1: y + 1, Label: "expand",
 			})
 			record(sidebarRowCollapse, "", "", y, 1)
-			lines = append(lines, m.sidebarStripBand(sidebarStripToggleCell(toggleGlyph, cw, edgeLeft, hovered(i), pal), cw, edgeLeft, pal))
+			lines = append(lines, m.sidebarStripBand(sidebarStripControlCell(toggleGlyph, cw, edgeLeft, hovered(i), pal), cw, edgeLeft, pal))
 		default:
 			lines = append(lines, m.sidebarStripBlank(cw, edgeLeft, hovered(i), pal))
 		}
@@ -471,10 +496,11 @@ func sidebarStripMoreCell(cw int, pal overlay.Palette) string {
 		sidebarStyle(pal.Panel, pal.FgMute).Render(mark), cw, pal.Panel)
 }
 
-// sidebarStripToggleCell draws the expand arrow against the pane-facing edge,
-// which is the edge the pointer arrives from. It is measured from that edge
+// sidebarStripControlCell draws one of the strip's two controls against the
+// pane-facing edge, which is the edge the pointer arrives from and the column
+// every other mark on the strip already sits in. It is measured from that edge
 // inwards, so the two-cell ASCII form still lands against it.
-func sidebarStripToggleCell(glyph string, cw int, edgeLeft, hovered bool, pal overlay.Palette) string {
+func sidebarStripControlCell(glyph string, cw int, edgeLeft, hovered bool, pal overlay.Palette) string {
 	fg := pal.FgMute
 	if hovered {
 		fg = pal.Fg

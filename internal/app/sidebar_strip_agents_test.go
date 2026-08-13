@@ -101,13 +101,17 @@ func TestStripStaysSilentWithNoAgents(t *testing.T) {
 			t.Errorf("line %d = %q, want %q\n%s", i, lines[i], w, strings.Join(lines, "\n"))
 		}
 	}
-	for i := len(want); i < len(lines)-2; i++ {
-		if lines[i] != "  "+rule {
-			t.Errorf("line %d = %q, want empty band all the way to the toggle", i, lines[i])
+	// Nothing between the spine and the two controls at the bottom.
+	tail := []string{" +" + rule, " »" + rule, "  " + rule}
+	for i, w := range tail {
+		if got := lines[len(lines)-len(tail)+i]; got != w {
+			t.Errorf("tail line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
 		}
 	}
-	if lines[len(lines)-2] != " »"+rule {
-		t.Errorf("the toggle line = %q, want the expand control above one pad", lines[len(lines)-2])
+	for i := len(want); i < len(lines)-len(tail); i++ {
+		if lines[i] != "  "+rule {
+			t.Errorf("line %d = %q, want empty band all the way to the controls", i, lines[i])
+		}
 	}
 	if joined := strings.Join(lines, "\n"); strings.Contains(joined, "─") {
 		t.Errorf("the quiet strip drew the group's rule with no group behind it:\n%s", joined)
@@ -174,6 +178,7 @@ func TestStripGroupSitsUnderARuleAtTheBottom(t *testing.T) {
 		" ▲" + rule, "  " + rule,
 		"▎●" + rule, "  " + rule, // the working pane is the focused one
 		" ■" + rule, "  " + rule,
+		" +" + rule,
 		" »" + rule,
 		"  " + rule,
 	}

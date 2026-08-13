@@ -72,7 +72,10 @@ func TestStripTargetsOwnEveryCellOfTheirSlot(t *testing.T) {
 // object, because the interval is what the eye reads as the row. A rectangle
 // covering only the glyph's line is the mismatch that made the rail fiddly.
 func TestStripSessionSlotIsTwoRowsTall(t *testing.T) {
-	m := stripHits(t, "left", 20)
+	// A rail with a row to spare. With none, the last slot gives its trailing
+	// blank to whatever is drawn directly under it, which is the one case where a
+	// slot is shorter than the interval.
+	m := stripHits(t, "left", 24)
 	sessions := 0
 	for _, h := range m.SidebarHits {
 		if h.Kind != sidebarRowSession {
