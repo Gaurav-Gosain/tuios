@@ -2,9 +2,11 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -69,17 +71,106 @@ func ParseAccent(s string) (Accent, bool) {
 	return Accent{}, false
 }
 
-// sessionAutoAccent is the colour a session with no explicit accent is known
-// by: an FNV-1a fold of its name onto one of the six hues. Same name, same
-// colour, on every client and after every restart.
-func sessionAutoAccent(name string) Accent {
+// sessionPreferredSlot is the hue a session asks for: an FNV-1a fold of its
+// name, so the same name asks for the same hue on every client and after every
+// restart, with nothing written down.
+func sessionPreferredSlot(name string) int {
 	const prime = 1099511628211
 	h := uint64(1469598103934665603)
 	for i := range len(name) {
 		h ^= uint64(name[i])
 		h *= prime
 	}
-	return SlotAccent(sessionAccentSlotFirst + int(h%sessionAccentSlotCount))
+	return int(h % sessionAccentSlotCount)
+}
+
+// sessionAutoAccent is the colour a session gets when nothing is known about
+// what else exists: its preferred hue, unarbitrated.
+func sessionAutoAccent(name string) Accent {
+	return SlotAccent(sessionAccentSlotFirst + sessionPreferredSlot(name))
+}
+
+// assignSessionColors hands out a hue to each name, settling the collisions six
+// hues make unavoidable. Three sessions asking at random collide about half the
+// time, and two sessions in one colour is the exact case the colours exist to
+// prevent, so the ask alone is not enough.
+//
+// Everyone who can have the hue they asked for gets it, in sorted-name order so
+// the answer depends on the set of sessions and on nothing local: not on the
+// rail's drag order, not on which session this client is attached to. Whoever is
+// left walks forward to the first free hue. A session nobody else asked for
+// therefore keeps its colour for as long as it exists, and only a session that
+// was already in a collision can be moved by one appearing or going away.
+//
+// reserved holds the hues explicit accents have already claimed, so an accent
+// the user set is not duplicated by one we derived.
+func assignSessionColors(names []string, reserved [sessionAccentSlotCount]bool) map[string]Accent {
+	sorted := slices.Clone(names)
+	slices.Sort(sorted)
+
+	out := make(map[string]Accent, len(sorted))
+	taken := reserved
+	var spilled []string
+	for _, name := range sorted {
+		if _, done := out[name]; done || name == "" {
+			continue
+		}
+		if slot := sessionPreferredSlot(name); !taken[slot] {
+			taken[slot] = true
+			out[name] = SlotAccent(sessionAccentSlotFirst + slot)
+			continue
+		}
+		spilled = append(spilled, name)
+	}
+	for _, name := range spilled {
+		slot := sessionPreferredSlot(name)
+		for step := 1; step <= sessionAccentSlotCount; step++ {
+			next := (slot + step) % sessionAccentSlotCount
+			if !taken[next] {
+				slot = next
+				break
+			}
+		}
+		// Past the sixth session there is no free hue left and the preferred one
+		// stands: a duplicate is better than a hue picked by arithmetic nobody
+		// can predict.
+		taken[slot] = true
+		out[name] = SlotAccent(sessionAccentSlotFirst + slot)
+	}
+	return out
+}
+
+// refreshSessionColorsFor is refreshSessionColors over the session nodes a
+// surface was handed, which is the form both callers have.
+func (m *OS) refreshSessionColorsFor(sessions []sessiontree.Node) {
+	names := make([]string, 0, len(sessions))
+	for i := range sessions {
+		names = append(names, sessions[i].ID)
+	}
+	m.refreshSessionColors(names)
+}
+
+// refreshSessionColors settles the colours for the sessions a surface is about
+// to draw. Called once per rail and once per switcher render, off the cached
+// path, so a row can ask per cell without redoing the arbitration.
+func (m *OS) refreshSessionColors(names []string) {
+	if !config.SessionColors {
+		m.sessionColors = nil
+		return
+	}
+	var reserved [sessionAccentSlotCount]bool
+	auto := names[:0:0]
+	for _, name := range names {
+		a, ok := ParseAccent(m.sessionAccentString(name))
+		if !ok {
+			auto = append(auto, name)
+			continue
+		}
+		if slot := a.Slot - sessionAccentSlotFirst; a.IsSlot() && slot >= 0 && slot < sessionAccentSlotCount {
+			reserved[slot] = true
+		}
+	}
+	m.sessionColors = assignSessionColors(auto, reserved)
 }
 
 // sessionAccentString is the accent the daemon has recorded for a session, from
@@ -102,11 +193,18 @@ func (m *OS) sessionAccentString(name string) string {
 // set-session-accent wins outright, an unset or unreadable one falls back to
 // the automatic colour rather than to nothing, and the config key off returns
 // nothing at all so every surface renders as it did before.
+//
+// The automatic colour is the arbitrated one when the surface being drawn has
+// said which sessions it holds, and the session's bare preference otherwise, so
+// a caller outside a render still gets a stable answer rather than none.
 func (m *OS) SessionColor(name string) (Accent, bool) {
 	if !config.SessionColors || name == "" {
 		return Accent{}, false
 	}
 	if a, ok := ParseAccent(m.sessionAccentString(name)); ok {
+		return a, true
+	}
+	if a, ok := m.sessionColors[name]; ok {
 		return a, true
 	}
 	return sessionAutoAccent(name), true

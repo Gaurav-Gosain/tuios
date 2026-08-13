@@ -319,6 +319,12 @@ type OS struct {
 	// switch and the daemon's own addressing use.
 	SessionDisplayName string
 	SessionAccent      string
+	// sessionColors is the automatic colour each session was arbitrated onto for
+	// the surface currently being drawn, settled once per render by
+	// refreshSessionColors. Derived state, never persisted and never synced: it
+	// is a pure function of the session names on screen, so every client
+	// computes the same map without saying anything to anyone.
+	sessionColors map[string]Accent
 	// SessionRestored is the attached session's daemon-owned restored mark. The
 	// daemon clears it on attach, so it is normally false here; it is carried
 	// anyway so the attached row reads from the same field every other row does.

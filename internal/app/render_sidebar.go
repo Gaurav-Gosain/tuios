@@ -404,6 +404,16 @@ func sidebarQuietDot(bg color.Color, pal overlay.Palette) string {
 	return sidebarQuietDotTinted(pal.FgMute, bg, pal)
 }
 
+// dotTint is the colour the quiet dot burns: the session's, or the muted ink it
+// has always used when there is no colour to show or the cell is about to be
+// taken by an agent state.
+func dotTint(tint color.Color, pal overlay.Palette, stated bool) color.Color {
+	if tint == nil || stated {
+		return pal.FgMute
+	}
+	return tint
+}
+
 // sidebarQuietDotTinted is sidebarQuietDot in a colour of the caller's
 // choosing: a session row with no agent running burns its session's colour in
 // the dot it was already drawing, so the colour costs the rail no cell and a
@@ -617,6 +627,7 @@ func sidebarWindowSection(scroll, rows, lines int) (start, shown, hidden int) {
 func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
+	m.refreshSessionColorsFor(tree.Sessions)
 
 	// Re-armed each frame: a marquee row sets it, so a key left standing after
 	// the row stops drawing hovered means the scroll is over and the tick idles.
@@ -1280,18 +1291,17 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		rowBg = pal.Surface
 	}
 
-	// The session's colour rides the marks the row already has: the gutter on
-	// the attached session, the quiet dot on the rest. Nothing new is drawn, so
-	// a terminal that cannot show colour renders exactly the row it did before,
-	// and a row whose panes are running an agent keeps the state glyph, because
-	// state outranks identity everywhere else on the rail too.
+	// The session's colour takes whichever of the row's two marks the louder
+	// signals have not claimed. The quiet dot first, which costs the rail
+	// nothing: a terminal with no colour draws the row it drew before. When a
+	// pane is running an agent the state owns that cell, so identity falls to
+	// the gutter, and when a pane wants a human the severity owns that one too
+	// and identity gives way entirely. An alarm outranks a label.
 	tint := m.sessionTint(node.ID, railGround(rowBg))
+	stated := agentStateIndicator(node.AgentState) != ""
 
-	glyph := sidebarQuietDot(rowBg, pal)
-	if tint != nil {
-		glyph = sidebarQuietDotTinted(tint, rowBg, pal)
-	}
-	if agentStateIndicator(node.AgentState) != "" {
+	glyph := sidebarQuietDotTinted(dotTint(tint, pal, stated), rowBg, pal)
+	if stated {
 		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal)
 	}
 
@@ -1323,8 +1333,11 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
 		Render(m.sidebarMarquee("s:"+node.ID, printableTitle(node.Title), sidebarNameAvail(cw, rightW), hovered))
 
-	return sidebarComposeRow(sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal),
-		glyph, name, right, cw, rowBg)
+	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal)
+	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
+		gutter = sidebarStyle(rowBg, tint).Render(accentMark())
+	}
+	return sidebarComposeRow(gutter, glyph, name, right, cw, rowBg)
 }
 
 // sidebarTerminalRow renders one pane of the session the terminals section is

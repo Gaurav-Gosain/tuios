@@ -28,6 +28,11 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 			[]overlay.Hint{{Key: "y", Label: "delete"}, {Key: "n", Label: "cancel"}, {Key: "esc", Label: "cancel"}})
 	}
 
+	// Arbitrated over every session the switcher knows, not over the filtered
+	// rows: a query is a view, and a session must not change colour because
+	// something else was typed out of sight.
+	m.refreshSessionColorsFor(m.SessionSwitcherItems)
+
 	filtered := FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery)
 	if len(filtered) > 0 {
 		m.SessionSwitcherSelected = clampInt(m.SessionSwitcherSelected, 0, len(filtered)-1)
