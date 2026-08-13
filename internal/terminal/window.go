@@ -329,6 +329,9 @@ type Window struct {
 	AgentState string
 	// AgentMessage is the optional short note reported with AgentState.
 	AgentMessage string
+	// AgentHarness is the harness id the reporting source named, empty when the
+	// state came from something that named none. Alert sinks pass it on.
+	AgentHarness string
 	// AgentStateAt is when the pane entered AgentState (Unix nanoseconds), as
 	// the daemon stamped it. The rail shows the elapsed time so a pane waiting
 	// on input reads differently from one that just started working.

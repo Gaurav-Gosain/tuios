@@ -81,6 +81,12 @@ type WindowState struct {
 	// AgentStateAt is the unix-nano time AgentState was last set. It is stamped
 	// daemon-side and drives the output-stall heuristic (see applyStallHeuristic).
 	AgentStateAt int64 `json:"agent_state_at,omitempty"`
+	// AgentHarness is the harness id the reporting source named, empty when
+	// nothing named one (the foreground detector never does). It is synced
+	// because a client-side alert has to be able to say which harness stopped;
+	// the ranked source that won stays daemon-side, where get-agent-state reads
+	// it from the claim.
+	AgentHarness string `json:"agent_harness,omitempty"`
 	// ForegroundCmd is the base name of the program running in the pane's
 	// foreground, empty while the pane sits at its login shell. It is what lets a
 	// row say "nvim" instead of repeating a title every pane in one directory

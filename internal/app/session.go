@@ -611,10 +611,13 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.PreMinimizeWidth = ws.PreMinimizeW
 	w.PreMinimizeHeight = ws.PreMinimizeH
 	w.SetAltScreen(ws.IsAltScreen)
-	m.noteAgentState(w, string(ws.AgentState))
-	w.AgentState = string(ws.AgentState)
 	w.AgentMessage = ws.AgentMessage
+	w.AgentHarness = ws.AgentHarness
 	w.AgentStateAt = ws.AgentStateAt
+	// Last, and it adopts AgentState itself: an alert raised from here reads the
+	// message and harness above, which have to be the ones that arrived with the
+	// state rather than the ones it replaced.
+	m.noteAgentState(w, string(ws.AgentState))
 	w.ForegroundCmd = ws.ForegroundCmd
 
 	if renderTraceEnabled && !sizeChanged {
@@ -691,6 +694,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.SetAltScreen(ws.IsAltScreen) // also drives mouse event forwarding
 	window.AgentState = string(ws.AgentState)
 	window.AgentMessage = ws.AgentMessage
+	window.AgentHarness = ws.AgentHarness
 	window.AgentStateAt = ws.AgentStateAt
 	window.ForegroundCmd = ws.ForegroundCmd
 }

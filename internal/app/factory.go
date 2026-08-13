@@ -2,6 +2,7 @@ package app
 
 import (
 	"io"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -169,6 +170,13 @@ func NewOS(opts OSOptions) *OS {
 		}
 		if cfg.Hooks != nil {
 			os.HookManager.LoadFromConfig(cfg.Hooks)
+		}
+		// [notifications.agent].command is shorthand for the after-agent-state
+		// hook, so it is discoverable beside the toggles that gate it. Registering
+		// rather than replacing means a user who wrote both spellings gets both,
+		// which is what [hooks] does for two commands on any other event.
+		if cmd := strings.TrimSpace(cfg.Notifications.Agent.Command); cmd != "" {
+			os.HookManager.Register(hooks.AfterAgentState, cmd)
 		}
 	}
 

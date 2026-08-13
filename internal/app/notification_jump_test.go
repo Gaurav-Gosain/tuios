@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -202,7 +203,10 @@ func TestAgentStateChangeNotifiesWithATarget(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 	m := jumpTestOS(t)
 
+	// Alerts wait out the settle window before they reach any sink, so the tick
+	// that would raise this one is driven by hand.
 	m.noteAgentState(m.Windows[1], "needs_input")
+	m.flushDueAgentAlerts(time.Now().Add(time.Minute))
 	if len(m.Notifications) != 1 {
 		t.Fatalf("an unattended pane needing input posted %d messages, want 1", len(m.Notifications))
 	}
@@ -214,6 +218,7 @@ func TestAgentStateChangeNotifiesWithATarget(t *testing.T) {
 	m.Notifications = nil
 	m.Windows[0].AgentState = "working"
 	m.noteAgentState(m.Windows[0], "done")
+	m.flushDueAgentAlerts(time.Now().Add(time.Minute))
 	if len(m.Notifications) != 0 {
 		t.Fatalf("the focused pane announced itself: %v", m.Notifications)
 	}

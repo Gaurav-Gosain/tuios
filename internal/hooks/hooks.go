@@ -27,6 +27,11 @@ const (
 	AfterDetach          Event = "after-detach"
 	AfterLayoutChange    Event = "after-layout-change"
 	AfterResize          Event = "after-resize"
+	// AfterAgentState fires when a pane's agent state changes to one the
+	// [notifications.agent] policy alerts on. It is the only event gated by
+	// config rather than by the raw fact, because it is an alert sink: firing it
+	// on every flip would make it the thing people mute.
+	AfterAgentState Event = "after-agent-state"
 )
 
 // AllEvents returns all valid hook event names.
@@ -34,7 +39,7 @@ func AllEvents() []Event {
 	return []Event{
 		AfterNewWindow, AfterCloseWindow, AfterFocusChange,
 		AfterWorkspaceSwitch, AfterAttach, AfterDetach,
-		AfterLayoutChange, AfterResize,
+		AfterLayoutChange, AfterResize, AfterAgentState,
 	}
 }
 
@@ -59,6 +64,19 @@ type Context struct {
 	// after-resize. Zero for every other event.
 	Width  int
 	Height int
+	// AgentState is the state the pane moved into on an after-agent-state, and
+	// PrevAgentState the one it came from, both in the wire spelling
+	// set-agent-state accepts. AgentHarness is the harness id the reporting
+	// source named and AgentMessage the free text it carried. All empty for
+	// every other event.
+	//
+	// The ranked source that won is deliberately absent: it lives in the
+	// daemon's claim map rather than in synced window state, and get-agent-state
+	// is where it is read.
+	AgentState     string
+	PrevAgentState string
+	AgentHarness   string
+	AgentMessage   string
 }
 
 // Manager manages hook registrations and execution.
@@ -206,6 +224,10 @@ func executeHook(cmdStr string, ctx Context) {
 		fmt.Sprintf("TUIOS_LAYOUT=%s", ctx.Layout),
 		fmt.Sprintf("TUIOS_WIDTH=%d", ctx.Width),
 		fmt.Sprintf("TUIOS_HEIGHT=%d", ctx.Height),
+		fmt.Sprintf("TUIOS_AGENT_STATE=%s", ctx.AgentState),
+		fmt.Sprintf("TUIOS_AGENT_PREV_STATE=%s", ctx.PrevAgentState),
+		fmt.Sprintf("TUIOS_AGENT_HARNESS=%s", ctx.AgentHarness),
+		fmt.Sprintf("TUIOS_AGENT_MESSAGE=%s", ctx.AgentMessage),
 	)
 
 	// Run silently - don't capture output or block

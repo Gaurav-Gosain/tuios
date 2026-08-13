@@ -251,6 +251,9 @@ func TestEveryDeclaredEventIsCovered(t *testing.T) {
 		hooks.AfterDetach:          true,
 		hooks.AfterLayoutChange:    true,
 		hooks.AfterResize:          true,
+		// Fire site and payload: TestAgentAlertHookCarriesTheDocumentedContract
+		// in agent_alert_test.go, which is where the policy that gates it lives.
+		hooks.AfterAgentState: true,
 	}
 	for _, e := range hooks.AllEvents() {
 		if !covered[e] {

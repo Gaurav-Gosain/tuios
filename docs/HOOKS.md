@@ -35,7 +35,7 @@ valid events; it is not a fatal config error.
 
 ## Events
 
-All eight events fire. Each one lists the fields of the payload that are
+All nine events fire. Each one lists the fields of the payload that are
 meaningful for it; the rest are present but zero.
 
 | Event | Fires when | Payload beyond the common fields |
@@ -48,6 +48,7 @@ meaningful for it; the rest are present but zero.
 | `after-detach` | This client is leaving a session that keeps running | `TUIOS_SESSION_ID` |
 | `after-layout-change` | The layout has changed, including tiling being turned on or off | `TUIOS_LAYOUT` |
 | `after-resize` | A window has settled at a new size | `TUIOS_WINDOW_ID`, `TUIOS_WIDTH`, `TUIOS_HEIGHT` |
+| `after-agent-state` | A pane's agent state changed to one you asked to be alerted about | `TUIOS_WINDOW_ID`, `TUIOS_WINDOW_NAME`, `TUIOS_AGENT_STATE`, `TUIOS_AGENT_PREV_STATE`, `TUIOS_AGENT_HARNESS`, `TUIOS_AGENT_MESSAGE` |
 
 Notes on when these do and do not fire:
 
@@ -62,6 +63,14 @@ Notes on when these do and do not fire:
   it.
 - `after-layout-change` reports the layout that is now in force, not the one
   being left.
+- `after-agent-state` is the one event gated by configuration rather than by the
+  raw fact. It fires for the transitions `[notifications.agent]` alerts on, after
+  the same settle window and under the same master switch, so it is a sink
+  alongside the notification and the bell rather than a firehose of every flip.
+  Details of that policy are in
+  [CONFIGURATION.md](CONFIGURATION.md#the-notificationsagent-table). It does not
+  fire for a pane that is already in a state when a client first sees it, since
+  that is not a transition, so reattaching does not replay every agent at you.
 
 ## Environment Variables
 
@@ -77,6 +86,15 @@ Every hook command receives the full parent environment plus:
 | `TUIOS_PREV_WORKSPACE` | Workspace active before an `after-workspace-switch`, `0` otherwise |
 | `TUIOS_LAYOUT` | Layout after an `after-layout-change`: `bsp`, `master-stack`, `scrolling` or `floating`. Empty otherwise |
 | `TUIOS_WIDTH`, `TUIOS_HEIGHT` | Window size in cells after an `after-resize`, `0` otherwise |
+| `TUIOS_AGENT_STATE` | The state the pane moved into: `working`, `needs_input`, `idle`, `done`, `errored` or `none`. Empty for every other event |
+| `TUIOS_AGENT_PREV_STATE` | The state it came from, same vocabulary. Empty for a pane that had no state before |
+| `TUIOS_AGENT_HARNESS` | The harness id the reporting source named, for example `claude`. Empty when nothing named one, which includes every pane the foreground detector recognised on its own |
+| `TUIOS_AGENT_MESSAGE` | The free-text note reported alongside the state, for example what the agent is waiting for. Empty when none was sent |
+
+The agent fields are passed as environment rather than arguments for the same
+reason as everything else here: `TUIOS_AGENT_MESSAGE` is free text written by a
+harness, and it must not be able to break a command line or shift the position
+of a later field.
 
 ## Examples
 
@@ -102,6 +120,29 @@ case "$TUIOS_WORKSPACE" in
   *) dark-theme ;;
 esac
 logger "tuios: workspace $TUIOS_PREV_WORKSPACE -> $TUIOS_WORKSPACE"
+```
+
+Send an agent alert to your phone. This is what the hook exists for: it reaches a
+machine tuios cannot see, and it keeps working on platforms tuios has no built-in
+sink for.
+
+```toml
+[hooks]
+after-agent-state = 'curl -s -d "$TUIOS_WINDOW_NAME is $TUIOS_AGENT_STATE" ntfy.sh/my-topic'
+```
+
+The same command can be written as `[notifications.agent] command = "..."`, which
+registers it for this event and puts it beside the toggles that gate it. Both
+spellings are honoured, and a config with both runs both.
+
+Alert only on the state that means the agent is stuck, whatever the config
+allows through:
+
+```bash
+#!/bin/sh
+# ~/.config/tuios/agent.sh
+[ "$TUIOS_AGENT_STATE" = "needs_input" ] || exit 0
+notify-send "tuios" "$TUIOS_WINDOW_NAME: ${TUIOS_AGENT_MESSAGE:-waiting for you}"
 ```
 
 One script handling several events, dispatching on `TUIOS_EVENT`:
@@ -132,7 +173,10 @@ esac
   longer is abandoned rather than allowed to hold the client open.
 - Output and exit status are discarded. A hook that needs to report something
   should write to a file, a logger, or a notification daemon.
-- Hooks run on the client, not the daemon. In a multi-client session each
+- Hooks run on the client, not the daemon, which for `after-agent-state` means a
+  session with nobody attached fires nothing at all. Agent state keeps being
+  tracked while you are detached; the alert about it happens when a client is
+  there to raise it. In a multi-client session each
   attached client fires its own hooks for the events it observes.
 - Hooks are read at startup from the config file.
 

@@ -57,6 +57,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	type agent struct {
 		state   AgentState
 		message string
+		harness string
 		at      int64
 	}
 	agents := make(map[string]agent, len(canonical.Windows))
@@ -68,8 +69,8 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if cmd := w.ForegroundCmd; cmd != "" {
 			fgCmds[w.ID] = cmd
 		}
-		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentStateAt != 0 {
-			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentStateAt}
+		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentHarness != "" || w.AgentStateAt != 0 {
+			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentHarness, w.AgentStateAt}
 		}
 	}
 	for i := range incoming.Windows {
@@ -80,9 +81,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if w.ForegroundCmd == "" {
 			w.ForegroundCmd = fgCmds[w.ID]
 		}
-		if a, ok := agents[w.ID]; ok && w.AgentState == AgentStateNone && w.AgentMessage == "" && w.AgentStateAt == 0 {
+		if a, ok := agents[w.ID]; ok && w.AgentState == AgentStateNone && w.AgentMessage == "" && w.AgentHarness == "" && w.AgentStateAt == 0 {
 			w.AgentState = a.state
 			w.AgentMessage = a.message
+			w.AgentHarness = a.harness
 			w.AgentStateAt = a.at
 		}
 	}

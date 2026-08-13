@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -33,10 +32,11 @@ func (m *OS) markAgentSeen(windowID string) {
 	m.saveSidebarState()
 }
 
-// agentTransitionNotice is the word and severity a state change earns on the
-// dock, or "" for the transitions that are not news. working is deliberately
-// silent: an agent starting is not worth interrupting for, and a message per
-// start would train the user to ignore the block that also carries the errors.
+// agentTransitionNotice is the word and severity a state change earns, or "" for
+// a transition with nothing to say. Which of these actually reaches the user is
+// the [notifications.agent] policy's decision, not this function's: working and
+// idle have words here because they are configurable, and are silent by default
+// because an agent starting is not news and the stall timer guesses at idle.
 func agentTransitionNotice(to string) (string, string) {
 	switch to {
 	case "needs_input":
@@ -45,19 +45,28 @@ func agentTransitionNotice(to string) (string, string) {
 		return "errored", "error"
 	case "done":
 		return "finished", "success"
+	case "working":
+		return "working", "info"
+	case "idle":
+		return "idle", "info"
 	}
 	return "", ""
 }
 
 // noteAgentState folds one window's agent-state transition into the unread bit
-// and, when it wants a human, onto the dock as a message that jumps back here.
-// Leaving done clears the bit; finishing under the user's own eyes counts as
-// seen and says nothing, since a pane you are already looking at has nothing
-// left to announce.
+// and hands it to the alert policy. Leaving done clears the bit; finishing under
+// the user's own eyes counts as seen.
+//
+// It adopts the new state itself, so a caller applies the rest of the pane's
+// agent fields first and lets this one land last. That ordering is what lets an
+// alert read the message and harness that arrived with the state rather than the
+// ones it replaced.
 func (m *OS) noteAgentState(w *terminal.Window, to string) {
 	if w == nil || w.AgentState == to {
 		return
 	}
+	from := w.AgentState
+	w.AgentState = to
 	focused := m.GetFocusedWindow() == w
 
 	switch {
@@ -70,17 +79,7 @@ func (m *OS) noteAgentState(w *terminal.Window, to string) {
 		m.markAgentSeen(w.ID)
 	}
 
-	if focused {
-		return
-	}
-	if word, sev := agentTransitionNotice(to); word != "" {
-		name := printableTitle(m.railTitleShown(w))
-		if name == "" {
-			name = "pane"
-		}
-		m.ShowNotificationFrom(name+" "+word, sev, config.NotificationDuration,
-			NotifTarget{SessionID: m.sidebarCurrentSessionID(), WindowID: w.ID})
-	}
+	m.considerAgentAlert(w, from, to)
 }
 
 // markFocusedAgentSeen clears the unread bit of the window being focused, which

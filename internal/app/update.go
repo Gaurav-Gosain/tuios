@@ -380,7 +380,8 @@ func (m *OS) tickNeedsWork() bool {
 	if len(m.Animations) > 0 || m.InteractionMode || m.Dragging || m.Resizing ||
 		m.PrefixActive || m.ScriptMode || len(m.Notifications) > 0 ||
 		config.NeedsDockTick() || config.ShowCPU || config.ShowRAM ||
-		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
+		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending ||
+		len(m.pendingAgentAlerts) > 0 {
 		return true
 	}
 	// A moved daemon listing can carry a new title for a window this client
@@ -658,6 +659,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, IdleTickCmd()
 		}
 		m.tickStats.Work++
+
+		// Agent alerts whose settle window has closed. Done before the window
+		// sweep below so an alert about a pane that exited this tick is dropped
+		// by its own re-validation rather than by a nil window.
+		m.flushDueAgentAlerts(time.Time(msg))
 
 		// This ensures windows close even if the exit channel message was missed
 		for i := len(m.Windows) - 1; i >= 0; i-- {

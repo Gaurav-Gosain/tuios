@@ -212,6 +212,22 @@ func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 	check("duration", cfg.Notifications.Duration)
 	check("warning_duration", cfg.Notifications.WarningDuration)
 	check("error_duration", cfg.Notifications.ErrorDuration)
+
+	agent := &cfg.Notifications.Agent
+	if _, _, err := ParseQuietHours(agent.QuietHours); err != nil {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "notifications.agent",
+			Key:     "quiet_hours",
+			Message: fmt.Sprintf("%v; ignored, so alerts are never silenced by the clock", err),
+		})
+	}
+	if agent.SettleSeconds != nil && *agent.SettleSeconds < 0 {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "notifications.agent",
+			Key:     "settle_seconds",
+			Message: "a negative wait is not a thing; falling back to the default",
+		})
+	}
 }
 
 // validateAppearanceEnums warns when an enum appearance option holds a value
