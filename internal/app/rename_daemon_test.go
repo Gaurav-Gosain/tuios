@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -142,6 +143,67 @@ func TestRenameDialogSaysWhatItRenames(t *testing.T) {
 	m.EndRename()
 	if _, _, _, _, ok = m.renderRenameDialog(); ok {
 		t.Error("a dialog is still drawn after the editor closed")
+	}
+}
+
+// TestRenameFieldKeepsWhatWasTyped: the field laundered its buffer through the
+// trimming sanitizer, so a space the user had just pressed was rubbed off the
+// display and the key looked dead even once it reached the buffer. A wide rune
+// costs two cells, and the frame has to stay square around it.
+func TestRenameFieldKeepsWhatWasTyped(t *testing.T) {
+	m := &OS{Width: 100, Height: 30, SessionName: "work", NumWorkspaces: 9}
+	m.BeginRenameSession("work")
+
+	m.RenameBuffer = "build "
+	out, _, _, _, ok := m.renderRenameDialog()
+	if !ok {
+		t.Fatal("no dialog while a rename is open")
+	}
+	t.Logf("\n%s", out)
+	if !strings.Contains(out, "build ") {
+		t.Errorf("the trailing space is missing from the field:\n%s", out)
+	}
+
+	m.RenameBuffer = "日本語 café"
+	out, geo, _, _, _ := m.renderRenameDialog()
+	t.Logf("\n%s", out)
+	if !strings.Contains(out, "日本語 café") {
+		t.Errorf("a non-ASCII name does not reach the field:\n%s", out)
+	}
+	for i, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w != geo.Width {
+			t.Errorf("row %d is %d cells wide, want %d: a wide rune knocked the frame out of square\n%s", i, w, geo.Width, out)
+		}
+	}
+}
+
+// TestRenameAppendGate is the editor's own rule, checked without a keyboard: it
+// takes what the chrome will draw and refuses what the chrome would strip.
+func TestRenameAppendGate(t *testing.T) {
+	m := &OS{Width: 100, Height: 30, SessionName: "work"}
+	m.BeginRenameSession("work")
+	m.RenameBuffer = ""
+
+	for _, in := range []string{" ", "é", "日", "a"} {
+		before := m.RenameBuffer
+		m.RenameAppend(in)
+		if m.RenameBuffer != before+in {
+			t.Errorf("appending %q gave %q, want %q", in, m.RenameBuffer, before+in)
+		}
+	}
+	for _, in := range []string{"\x1b", "\u0301", "\U0001f600", "\ue0a0", "\u25b6"} {
+		before := m.RenameBuffer
+		m.RenameAppend(in)
+		if m.RenameBuffer != before {
+			t.Errorf("appending %q was accepted: %q", in, m.RenameBuffer)
+		}
+	}
+
+	// Nothing lands anywhere once the editor is closed.
+	m.EndRename()
+	m.RenameAppend("x")
+	if m.RenameBuffer != "" {
+		t.Errorf("typing after the editor closed left %q", m.RenameBuffer)
 	}
 }
 

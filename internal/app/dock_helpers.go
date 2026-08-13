@@ -702,6 +702,20 @@ func (m *OS) calculateDockRightWidth() int {
 // applied by the render style as a right margin.
 const dockSysInfoMargin = 2
 
+// dockItemNameCells is how much of a window's name a dock pill shows.
+const dockItemNameCells = 12
+
+// dockItemLabel is the text inside a dock pill. The minimize animation has to
+// fly to the pill it is aiming at, so it measures the same label this builds
+// rather than keeping its own copy of the format, which it did in bytes and got
+// wrong the moment a name held a wide rune.
+func dockItemLabel(number int, name string) string {
+	if name = printableTitle(name); name != "" {
+		return fmt.Sprintf(" %d:%s ", number, overlay.Truncate(name, dockItemNameCells))
+	}
+	return fmt.Sprintf(" %d ", number)
+}
+
 // getDockItems returns all dock items (minimized windows in current workspace)
 func (m *OS) getDockItems() []DockItem {
 	// Find all minimized/minimizing windows in current workspace
@@ -723,22 +737,7 @@ func (m *OS) getDockItems() []DockItem {
 
 	for _, windowIndex := range dockWindows {
 		window := m.Windows[windowIndex]
-
-		// Get window name (only custom names), laundered for the dock as chrome.
-		windowName := printableTitle(window.CustomName)
-
-		// Format label based on whether we have a custom name
-		var labelText string
-		if windowName != "" {
-			// Truncate if too long (max 12 chars for dock item)
-			if len(windowName) > 12 {
-				windowName = windowName[:9] + "..."
-			}
-			labelText = fmt.Sprintf(" %d:%s ", itemNumber, windowName)
-		} else {
-			// Just show the number if no custom name
-			labelText = fmt.Sprintf(" %d ", itemNumber)
-		}
+		labelText := dockItemLabel(itemNumber, window.CustomName)
 
 		// Calculate width: 2 for circles (left + right) + actual rendered label width
 		// Use lipgloss.Width to get proper display width (handles Unicode, emojis, etc.)

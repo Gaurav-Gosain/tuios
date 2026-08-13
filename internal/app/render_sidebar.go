@@ -323,34 +323,56 @@ var chromeGlyphs = map[rune]bool{
 // data; our own chrome glyphs are audited, so they are kept by codepoint.
 // Titles have to be laundered.
 func printableTitle(s string) string {
+	return strings.TrimSpace(printableRunes(s))
+}
+
+// printableRunes is printableTitle without the trim, for the rename field: a
+// space the user has just typed is the last thing in the buffer, and trimming it
+// off the display makes the key look like it did nothing.
+func printableRunes(s string) string {
 	ascii := overlay.UseASCII()
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
-		switch {
-		case r < 0x20 || (r >= 0x7f && r < 0xa0):
-			// C0/C1 controls.
-		case r >= 0xe000 && r <= 0xf8ff:
-			// BMP private use area.
-		case r >= 0xf0000:
-			// Plane 15/16 private use.
-		case r >= 0x25a0 && r <= 0x2bff && !chromeGlyphs[r]:
-			// Geometric Shapes through Miscellaneous Symbols and Arrows. Agents
-			// park spinners and status ornaments in here (Claude Code alone uses
-			// U+2733 idle and a U+2802/U+2810 Braille spinner) and they tofu in
-			// any font that stops at Latin. Box Drawing and Block Elements end at
-			// U+259F, so a title may still draw with them.
-		case r >= 0xfe00 && r <= 0xfe0f:
-			// Variation Selectors (VS1-16), including the emoji VS16.
-		case r >= 0x1f000 && r <= 0x1faff:
-			// Emoji and pictographic planes (Regional Indicator flag halves
-			// U+1F1E6-1F1FF sit inside this span).
-		case ascii && r > 0x7e:
-		default:
+		if printableRune(r, ascii) {
 			b.WriteRune(r)
 		}
 	}
-	return strings.TrimSpace(b.String())
+	return b.String()
+}
+
+// printableRune is the per-codepoint half of the rule printableTitle applies,
+// exposed on its own so the rename editor can refuse a keypress the chrome would
+// only strip again the moment the name was drawn.
+func printableRune(r rune, ascii bool) bool {
+	switch {
+	case r < 0x20 || (r >= 0x7f && r < 0xa0):
+		// C0/C1 controls.
+		return false
+	case r >= 0xe000 && r <= 0xf8ff:
+		// BMP private use area.
+		return false
+	case r >= 0xf0000:
+		// Plane 15/16 private use.
+		return false
+	case r >= 0x25a0 && r <= 0x2bff && !chromeGlyphs[r]:
+		// Geometric Shapes through Miscellaneous Symbols and Arrows. Agents
+		// park spinners and status ornaments in here (Claude Code alone uses
+		// U+2733 idle and a U+2802/U+2810 Braille spinner) and they tofu in
+		// any font that stops at Latin. Box Drawing and Block Elements end at
+		// U+259F, so a title may still draw with them.
+		return false
+	case r >= 0xfe00 && r <= 0xfe0f:
+		// Variation Selectors (VS1-16), including the emoji VS16.
+		return false
+	case r >= 0x1f000 && r <= 0x1faff:
+		// Emoji and pictographic planes (Regional Indicator flag halves
+		// U+1F1E6-1F1FF sit inside this span).
+		return false
+	case ascii && r > 0x7e:
+		return false
+	}
+	return true
 }
 
 // sidebarNameCol is the column every rail row's text starts on: gutter, glyph,

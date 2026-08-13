@@ -309,7 +309,6 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // every kind of target it can point at. The editor is deliberately the same one
 // in all three cases.
 func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	target := o.RenameTarget()
 	switch msg.String() {
 	case "enter":
 		// CommitRename is the one rename. A window name is applied here; a
@@ -321,22 +320,17 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.EndRename()
 		return o, nil
 	case "backspace":
-		if len(o.RenameBuffer) > 0 {
-			o.RenameBuffer = o.RenameBuffer[:len(o.RenameBuffer)-1]
-			if target != nil {
-				target.InvalidateCache()
-			}
-		}
+		o.RenameBackspace()
+		return o, nil
+	case "space":
+		// A space arrives under its key name, never as a one-character string,
+		// which is why names could not hold one.
+		o.RenameAppend(" ")
 		return o, nil
 	default:
-		// Add character to buffer if it's a printable character
-		if len(msg.String()) == 1 && msg.String()[0] >= 32 && msg.String()[0] < 127 {
-			o.RenameBuffer += msg.String()
-			// Invalidate cache so the rename input is visible immediately
-			if target != nil {
-				target.InvalidateCache()
-			}
-		}
+		// Text carries the characters the keypress actually produced, so an
+		// accented or wide rune arrives whole instead of as stray bytes.
+		o.RenameAppend(msg.Text)
 		return o, nil
 	}
 }

@@ -1,10 +1,10 @@
 package app
 
 import (
-	"fmt"
 	"slices"
 	"sort"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -212,22 +212,8 @@ func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
 	// Calculate actual width of each dock item (matching renderDock pill rendering)
 	var dockItemsWidth int
 	for idx, winIdx := range dockWindows {
-		window := m.Windows[winIdx]
-		windowName := window.CustomName
-
-		// Match the exact label format from renderDock
-		var labelWidth int
-		if windowName != "" {
-			if len(windowName) > 12 {
-				windowName = windowName[:9] + "..."
-			}
-			labelWidth = len(fmt.Sprintf(" %d:%s ", idx+1, windowName))
-		} else {
-			labelWidth = len(fmt.Sprintf(" %d ", idx+1))
-		}
-
 		// Add left circle (1) + label + right circle (1)
-		itemWidth := 1 + labelWidth + 1
+		itemWidth := 1 + m.dockItemLabelWidth(idx, winIdx) + 1
 		dockItemsWidth += itemWidth
 
 		// Add space between items
@@ -243,39 +229,22 @@ func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
 	// Calculate X position for target dock item
 	dockX := leftWidth + leftSpacer
 	for idx, winIdx := range dockWindows {
+		itemWidth := 1 + m.dockItemLabelWidth(idx, winIdx) + 1
 		if idx == targetDockIndex {
 			// Add half the item width to center on it
-			window := m.Windows[winIdx]
-			windowName := window.CustomName
-			var labelWidth int
-			if windowName != "" {
-				if len(windowName) > 12 {
-					windowName = windowName[:9] + "..."
-				}
-				labelWidth = len(fmt.Sprintf(" %d:%s ", idx+1, windowName))
-			} else {
-				labelWidth = len(fmt.Sprintf(" %d ", idx+1))
-			}
-			itemWidth := 1 + labelWidth + 1
 			dockX += itemWidth / 2
 			break
 		}
 
 		// Add width of previous items
-		window := m.Windows[winIdx]
-		windowName := window.CustomName
-		var labelWidth int
-		if windowName != "" {
-			if len(windowName) > 12 {
-				windowName = windowName[:9] + "..."
-			}
-			labelWidth = len(fmt.Sprintf(" %d:%s ", idx+1, windowName))
-		} else {
-			labelWidth = len(fmt.Sprintf(" %d ", idx+1))
-		}
-		itemWidth := 1 + labelWidth + 1
 		dockX += itemWidth + 1 // +1 for space between items
 	}
 
 	return dockX, dockY
+}
+
+// dockItemLabelWidth is the cell width of the pill the dock will draw for a
+// window, measured off the label the dock itself builds.
+func (m *OS) dockItemLabelWidth(idx, winIdx int) int {
+	return lipgloss.Width(dockItemLabel(idx+1, m.Windows[winIdx].CustomName))
 }

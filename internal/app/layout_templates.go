@@ -345,7 +345,9 @@ func GenerateTapeScript(tmpl LayoutTemplate) string {
 			sb.WriteString("NewWindow\n")
 		}
 		if w.CustomName != "" {
-			fmt.Fprintf(&sb, "RenameWindow %s\n", w.CustomName)
+			// Quoted, because a name may hold spaces and the tape lexer splits an
+			// unquoted argument on them: an unquoted "my project" replayed as "my".
+			fmt.Fprintf(&sb, "RenameWindow %q\n", w.CustomName)
 		}
 		if w.WorkingDir != "" {
 			fmt.Fprintf(&sb, "Type cd %s\nEnter\n", w.WorkingDir)

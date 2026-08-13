@@ -3,6 +3,8 @@ package app
 import (
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -67,6 +69,52 @@ func (m *OS) BeginRenameWorkspace(ws int) {
 	m.RenameKind = RenameWorkspace
 	m.RenameTargetID = strconv.Itoa(ws)
 	m.RenameBuffer = m.WorkspaceNames[ws]
+}
+
+// RenameAppend adds typed text to the rename buffer, keeping only what the
+// chrome will actually draw. The gate is printableRune, the same rule the rail,
+// title bar, palette and dock launder names through, so the editor can never
+// take a codepoint that would vanish or tofu the moment the name was shown.
+func (m *OS) RenameAppend(text string) {
+	if !m.Renaming() || text == "" {
+		return
+	}
+	add := printableRunes(text)
+	// A keypress that is nothing but combining marks has no base to sit on, so
+	// it would stack an accent on whatever the field already ends with, or on
+	// the cursor. Terminals send composed text as one precomposed rune.
+	if add == "" || combiningOnly(add) {
+		return
+	}
+	m.RenameBuffer += add
+	if t := m.RenameTarget(); t != nil {
+		t.InvalidateCache()
+	}
+}
+
+// RenameBackspace drops the last rune of the buffer. It counts in runes because
+// a name may hold multi-byte text, and cutting one byte off é leaves the buffer
+// holding a broken sequence that renders as a replacement glyph.
+func (m *OS) RenameBackspace() {
+	if !m.Renaming() || m.RenameBuffer == "" {
+		return
+	}
+	_, size := utf8.DecodeLastRuneInString(m.RenameBuffer)
+	m.RenameBuffer = m.RenameBuffer[:len(m.RenameBuffer)-size]
+	if t := m.RenameTarget(); t != nil {
+		t.InvalidateCache()
+	}
+}
+
+// combiningOnly reports whether s is nothing but marks that attach to a
+// preceding character.
+func combiningOnly(s string) bool {
+	for _, r := range s {
+		if !unicode.In(r, unicode.Mn, unicode.Me) {
+			return false
+		}
+	}
+	return true
 }
 
 // daemonSessionLabel reads the cached label for a session, preferring the live
