@@ -416,6 +416,50 @@ func TestAccentPickerPreviewsOnTheRail(t *testing.T) {
 	}
 }
 
+// TestAccentPreviewFoldStaysAllocationFree: the rail's cache key is folded on
+// every frame, so it has to cost nothing. An open picker adds its preview to the
+// fold, and the picker gaining a continuous model and five more controls must
+// not have turned that into an allocation per frame.
+func TestAccentPreviewFoldStaysAllocationFree(t *testing.T) {
+	m := accentTestOS(t, 120, 30)
+	m.OpenAccentPicker("aaaaaaaa1111")
+	m.AccentPickerSetSlider(accentChanS, 61)
+	m.sidebarSignature() // warm anything one-off
+
+	if got := testing.AllocsPerRun(200, func() { m.sidebarSignature() }); got != 0 {
+		t.Errorf("folding the signature with the picker open allocates %.1f times a frame", got)
+	}
+}
+
+// TestAccentPickerMovesTheRailSignatureOnlyWhenTheColourMoves: the preview is
+// the picker's whole contribution to the rail, so the rail must rebuild on the
+// keystrokes that change the colour and on nothing else. A slider step too fine
+// to change the colour is a step the rail has no reason to hear about.
+func TestAccentPickerMovesTheRailSignatureOnlyWhenTheColourMoves(t *testing.T) {
+	m := accentTestOS(t, 120, 30)
+	m.OpenAccentPicker("aaaaaaaa1111")
+
+	for _, step := range []struct {
+		name string
+		do   func()
+	}{
+		{"a grid move", func() { m.AccentPickerMoveCell(1, 0) }},
+		{"a hue turn", func() { m.AccentPickerMoveHue(1) }},
+		{"a hue nudge", func() { m.AccentPickerNudgeHue(5) }},
+		{"a red step", func() { m.AccentPickerSliderStep(accentChanR, 10) }},
+		{"a saturation step", func() { m.AccentPickerSliderStep(accentChanS, 10) }},
+		{"a harmony step", func() { m.AccentPickerHarmonyAt(1) }},
+	} {
+		before, wasColour := m.sidebarSignature(), m.AccentPicker.Cur
+		step.do()
+		moved := m.AccentPicker.Cur != wasColour
+		changed := m.sidebarSignature() != before
+		if moved != changed {
+			t.Errorf("%s moved the colour=%v but moved the rail signature=%v", step.name, moved, changed)
+		}
+	}
+}
+
 // The dialog fits a short screen by shrinking the grid rather than drawing off
 // the bottom of it, and every row it draws is exactly its own width.
 func TestAccentPickerFitsShortScreens(t *testing.T) {
