@@ -8,10 +8,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/skills"
 	"github.com/charmbracelet/fang"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/spf13/cobra"
@@ -49,9 +51,35 @@ var (
 	showRAM             bool
 	sharedBorders       bool
 	zoomMaxWidth        int
+	printSkill          bool
 )
 
 func main() {
+	rootCmd := newRootCommand()
+
+	// Command failures are printed here rather than by fang, which would query
+	// the terminal for its background color first and stall for seconds when
+	// nothing answers. See errorStyles.
+	var cmdErr error
+	interceptErrors(rootCmd, &cmdErr)
+
+	if err := fang.Execute(
+		context.Background(),
+		rootCmd,
+		fang.WithVersion(fmt.Sprintf("%s\nCommit: %s\nBuilt: %s\nBy: %s", version, commit, date, builtBy)),
+		fang.WithErrorHandler(diagnosticErrorHandler),
+	); err != nil {
+		os.Exit(1)
+	}
+	if reportCommandError(cmdErr) {
+		os.Exit(1)
+	}
+}
+
+// newRootCommand builds the whole command tree. It is separate from main so a
+// test can resolve a command line against the real tree rather than against a
+// second description of it that would drift.
+func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "tuios",
 		Short: "Terminal UI Operating System",
@@ -91,9 +119,19 @@ comprehensive keyboard/mouse interactions.`,
   tuios config edit
 
   # List all keybindings
-  tuios keybinds list`,
+  tuios keybinds list
+
+  # Print the agent skill for driving tuios from a pane
+  tuios --skill`,
 		Version: version,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			// The skill is printed before anything else can decide to draw: it is
+			// a document, and a caller asking for it never wants the interface.
+			if printSkill {
+				fmt.Print(skills.TUIOS)
+				return nil
+			}
+
 			if previewTheme != "" {
 				return previewThemeColors(previewTheme)
 			}
@@ -136,6 +174,10 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&sharedBorders, "shared-borders", false, "Share borders between adjacent tiled windows")
 
 	rootCmd.PersistentFlags().IntVar(&zoomMaxWidth, "zoom-max-width", 0, "Max width in cells for zoom mode (0 = fullscreen, e.g. 120)")
+
+	// Local to the root command: the skill describes tuios as a whole, so
+	// offering it on every subcommand would only add noise to their help.
+	rootCmd.Flags().BoolVar(&printSkill, "skill", false, "Print the agent skill for driving tuios from a pane and exit")
 
 	var sshPort, sshHost, sshKeyPath, sshDefaultSession string
 	var sshEphemeral bool
@@ -600,6 +642,7 @@ Window targeting (--window):
 	var capturePaneWindow string
 	var capturePaneScrollback bool
 	var capturePaneANSI bool
+	var capturePaneLines int
 	capturePaneCmd := &cobra.Command{
 		Use:   "capture-pane",
 		Short: "Capture the content of a pane",
@@ -607,6 +650,8 @@ Window targeting (--window):
 
 Output is written to stdout. By default captures the focused window's visible screen.
 Use --scrollback to include the full scrollback history.
+Use --lines to keep only the last N lines, which is how you read the tail of a
+long scrollback without pulling all of it.
 Use --ansi to preserve ANSI escape codes (colors, styles).`,
 		Example: `  # Capture focused window
   tuios capture-pane
@@ -614,19 +659,23 @@ Use --ansi to preserve ANSI escape codes (colors, styles).`,
   # Capture specific window with scrollback
   tuios capture-pane -w mywindow --scrollback
 
+  # Read the last 40 lines a build printed
+  tuios capture-pane -w build --scrollback --lines 40
+
   # Capture with ANSI colors preserved
   tuios capture-pane --ansi
 
   # Pipe to a file
   tuios capture-pane -w editor --scrollback > pane.txt`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI)
+			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI, capturePaneLines)
 		},
 	}
 	capturePaneCmd.Flags().StringVarP(&capturePaneSession, "session", "s", "", "Target session")
 	capturePaneCmd.Flags().StringVarP(&capturePaneWindow, "window", "w", "", "Target window by name or ID")
 	capturePaneCmd.Flags().BoolVarP(&capturePaneScrollback, "scrollback", "S", false, "Include full scrollback history")
 	capturePaneCmd.Flags().BoolVar(&capturePaneANSI, "ansi", false, "Preserve ANSI escape codes")
+	capturePaneCmd.Flags().IntVar(&capturePaneLines, "lines", 0, "Keep only the last N lines (0 keeps all)")
 	_ = capturePaneCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var runCommandSession string
@@ -731,6 +780,8 @@ whether or not a TUI client is attached.`,
 	var setAgentStateSession string
 	var setAgentStateWindow string
 	var setAgentStateMessage string
+	var setAgentStateSource string
+	var setAgentStateHarness string
 	setAgentStateCmd := &cobra.Command{
 		Use:   "set-agent-state <state>",
 		Short: "Report a pane's agent state to the running TUIOS session",
@@ -749,13 +800,19 @@ daemon socket; the reference Claude Code shim does exactly that.`,
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: session.AgentStateNames,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runSetAgentState(setAgentStateSession, setAgentStateWindow, args[0], setAgentStateMessage)
+			return runSetAgentState(setAgentStateSession, setAgentStateWindow, args[0],
+				setAgentStateMessage, setAgentStateSource, setAgentStateHarness)
 		},
 	}
 	setAgentStateCmd.Flags().StringVarP(&setAgentStateSession, "session", "s", "", "Target session (default: most recently active)")
 	setAgentStateCmd.Flags().StringVarP(&setAgentStateWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	setAgentStateCmd.Flags().StringVarP(&setAgentStateMessage, "message", "m", "", "Optional short note reported with the state")
+	setAgentStateCmd.Flags().StringVar(&setAgentStateSource, "source", "", "Where the state came from: report, osc, screen, stall (default: report)")
+	setAgentStateCmd.Flags().StringVar(&setAgentStateHarness, "harness", "", "Id of the harness the state is about, e.g. claude-code")
 	_ = setAgentStateCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	_ = setAgentStateCmd.RegisterFlagCompletionFunc("source", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return session.AgentSourceNames, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	var getAgentStateSession string
 	var getAgentStateWindow string
@@ -778,6 +835,188 @@ daemon socket; the reference Claude Code shim does exactly that.`,
 	getAgentStateCmd.Flags().StringVarP(&getAgentStateWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	getAgentStateCmd.Flags().BoolVar(&getAgentStateJSON, "json", false, "Output result as JSON")
 	_ = getAgentStateCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var sendTextSession string
+	var sendTextWindow string
+	sendTextCmd := &cobra.Command{
+		Use:   "send-text <text>",
+		Short: "Write text verbatim to a pane",
+		Long: `Write text straight to a pane's PTY with no key parsing at all.
+
+Nothing in the argument is interpreted, so spaces, quotes and punctuation arrive
+as typed. A trailing newline is the Enter that runs the line, which makes this
+one call where send-keys needs two.`,
+		Example: `  # Run a command in the focused pane
+  tuios send-text 'go build ./...
+'
+
+  # The same thing without an embedded newline
+  printf 'go build ./...\n' | xargs -0 tuios send-text -w build
+
+  # Type without submitting
+  tuios send-text -w build 'partial input'`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runSendText(sendTextSession, sendTextWindow, args[0])
+		},
+	}
+	sendTextCmd.Flags().StringVarP(&sendTextSession, "session", "s", "", "Target session (default: most recently active)")
+	sendTextCmd.Flags().StringVarP(&sendTextWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	_ = sendTextCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var newWindowSession string
+	var newWindowJSON bool
+	newWindowCmd := &cobra.Command{
+		Use:   "new-window [name]",
+		Short: "Open a new window in a session",
+		Long: `Open a new window in a running TUIOS session and print its id.
+
+The window is created by the daemon whether or not a client is attached, so this
+works on a detached session. Give it a name to address it later without holding
+on to the id.`,
+		Example: `  # Open an unnamed window
+  tuios new-window
+
+  # Open a named window and run something in it
+  tuios new-window build
+  tuios send-text -w build 'go build ./...
+'
+
+  # Capture the new window's id for scripting
+  tuios new-window --json | jq -r .window_id`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			return runNewWindow(newWindowSession, name, newWindowJSON)
+		},
+	}
+	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	newWindowCmd.Flags().BoolVar(&newWindowJSON, "json", false, "Output result as JSON")
+	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var waitForSession string
+	var waitForWindow string
+	var waitForPattern string
+	var waitForIdle int
+	var waitForTimeout int
+	var waitForJSON bool
+	waitForCmd := &cobra.Command{
+		Use:   "wait-for <condition>",
+		Short: "Block until a condition matches",
+		Long: `Block until the daemon reports that a condition matched, then exit 0.
+
+Conditions:
+  session-exists  the named session is present
+  window-output   the window printed something matching --pattern
+  window-exit     the window's shell exited
+  window-idle     the window printed nothing for --idle milliseconds
+
+The daemon watches its own events, so this is exact where a capture-and-sleep
+loop is a guess. A condition that does not match before --timeout exits non-zero
+with the timeout error.`,
+		Example: `  # Wait for a build to print its marker
+  tuios wait-for window-output -w build --pattern 'BUILD OK'
+
+  # Wait for a pane to go quiet for two seconds
+  tuios wait-for window-idle -w build --idle 2000
+
+  # Wait for a command's shell to exit
+  tuios wait-for window-exit -w build --timeout 600000`,
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: session.WaitConditionNames,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runWaitFor(waitForSession, waitForWindow, args[0], waitForPattern,
+				waitForIdle, waitForTimeout, waitForJSON)
+		},
+	}
+	waitForCmd.Flags().StringVarP(&waitForSession, "session", "s", "", "Target session (default: most recently active)")
+	waitForCmd.Flags().StringVarP(&waitForWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	waitForCmd.Flags().StringVar(&waitForPattern, "pattern", "", "Regular expression to match, required by window-output")
+	waitForCmd.Flags().IntVar(&waitForIdle, "idle", 0, "Milliseconds of silence that count as idle, for window-idle (default: 500)")
+	waitForCmd.Flags().IntVar(&waitForTimeout, "timeout", 30000, "Milliseconds to wait before giving up")
+	waitForCmd.Flags().BoolVar(&waitForJSON, "json", false, "Output result as JSON")
+	_ = waitForCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var setSessionNameSession string
+	setSessionNameCmd := &cobra.Command{
+		Use:   "set-session-name [name]",
+		Short: "Set a session's display name",
+		Long: `Set the label a session shows in the sidebar and the dock.
+
+The session keeps its own name for addressing, persistence and TUIOS_SESSION, so
+a script that targets it by name keeps working. Pass no name to clear the label.`,
+		Example: `  # Label the current session
+  tuios set-session-name "Payments API"
+
+  # Label a specific session
+  tuios set-session-name -s work "Payments API"
+
+  # Clear the label
+  tuios set-session-name`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			return runSetSessionName(setSessionNameSession, name)
+		},
+	}
+	setSessionNameCmd.Flags().StringVarP(&setSessionNameSession, "session", "s", "", "Target session (default: most recently active)")
+	_ = setSessionNameCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var setSessionAccentSession string
+	setSessionAccentCmd := &cobra.Command{
+		Use:   "set-session-accent [accent]",
+		Short: "Set a session's accent",
+		Long: `Set the accent slot a session uses, shared by every client attached to it and
+kept across a reattach. Pass no accent to clear it.`,
+		Example: `  # Accent the current session
+  tuios set-session-accent cyan
+
+  # Clear the accent
+  tuios set-session-accent`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			accent := ""
+			if len(args) > 0 {
+				accent = args[0]
+			}
+			return runSetSessionAccent(setSessionAccentSession, accent)
+		},
+	}
+	setSessionAccentCmd.Flags().StringVarP(&setSessionAccentSession, "session", "s", "", "Target session (default: most recently active)")
+	_ = setSessionAccentCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var setWorkspaceNameSession string
+	setWorkspaceNameCmd := &cobra.Command{
+		Use:   "set-workspace-name <workspace> [name]",
+		Short: "Name a workspace",
+		Long: `Name a workspace so the dock and the sidebar show the label instead of the
+number. The number stays the workspace's identity. Pass no name to clear it.`,
+		Example: `  # Name workspace 2
+  tuios set-workspace-name 2 review
+
+  # Clear the name
+  tuios set-workspace-name 2`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			workspace, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("workspace must be a number, got %q", args[0])
+			}
+			name := ""
+			if len(args) > 1 {
+				name = args[1]
+			}
+			return runSetWorkspaceName(setWorkspaceNameSession, workspace, name)
+		},
+	}
+	setWorkspaceNameCmd.Flags().StringVarP(&setWorkspaceNameSession, "session", "s", "", "Target session (default: most recently active)")
+	_ = setWorkspaceNameCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	getConfigCmd.Flags().StringVarP(&getConfigSession, "session", "s", "", "Target session (default: most recently active)")
 	_ = getConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
@@ -910,10 +1149,7 @@ Use --json for machine-readable output.`,
   tuios get-window --json`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if len(args) > 0 {
-				return runCommand(getWindowSession, "GetWindow", args, getWindowJSON)
-			}
-			return runCommand(getWindowSession, "GetWindow", nil, getWindowJSON)
+			return runCommandRendered(getWindowSession, "GetWindow", args, getWindowJSON, printWindowDetail)
 		},
 	}
 	getWindowCmd.Flags().StringVarP(&getWindowSession, "session", "s", "", "Target session (default: most recently active)")
@@ -1050,23 +1286,9 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd)
 	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd)
+	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd)
+	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd)
 
-	// Command failures are printed here rather than by fang, which would query
-	// the terminal for its background color first and stall for seconds when
-	// nothing answers. See errorStyles.
-	var cmdErr error
-	interceptErrors(rootCmd, &cmdErr)
-
-	if err := fang.Execute(
-		context.Background(),
-		rootCmd,
-		fang.WithVersion(fmt.Sprintf("%s\nCommit: %s\nBuilt: %s\nBy: %s", version, commit, date, builtBy)),
-		fang.WithErrorHandler(diagnosticErrorHandler),
-	); err != nil {
-		os.Exit(1)
-	}
-	if reportCommandError(cmdErr) {
-		os.Exit(1)
-	}
+	return rootCmd
 }

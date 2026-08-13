@@ -30,11 +30,15 @@ var (
 	// which rows are soft wrapped (the scrollback wrap flag is written as a
 	// constant and the live screen carries none), so unwrapping cannot be
 	// implemented without guessing at row boundaries.
+	// WaitConditionNames are the conditions wait-for understands. It is exported
+	// so the CLI offers exactly this set and cannot drift from the daemon's.
+	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle"}
+
 	retiredCaptureSources = map[string]string{
 		"recent-unwrapped": "unwrapped capture is not implemented; it previously returned the same physical rows as \"recent\" without unwrapping them",
 	}
 	// waitConditions are the conditions wait-for understands.
-	waitConditions = []string{"session-exists", "window-output", "window-exit", "window-idle"}
+	waitConditions = WaitConditionNames
 	// knownEventTypes are the event types a subscribe filter can name.
 	knownEventTypes = []string{
 		EventWindowCreated, EventWindowClosed, EventWindowExit, EventWindowRetitled,

@@ -6,9 +6,12 @@ import (
 	"maps"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/google/uuid"
@@ -156,8 +159,60 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 	return nil
 }
 
-// runCapturePane captures the content of a pane and prints to stdout.
-func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool) error {
+// runNewWindow opens a window in a session and reports its id, which is the
+// handle every later call needs.
+func runNewWindow(sessionName, name string, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("new-window", map[string]any{
+		"session": sessionName,
+		"name":    name,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("new-window", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res struct {
+		WindowID string `json:"window_id"`
+		Name     string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
+	return nil
+}
+
+// runSendText writes text verbatim to a pane's PTY. Unlike send-keys it parses
+// nothing, so a trailing newline in the argument is the Enter that submits the
+// line, and one call is enough to type and run a command.
+func runSendText(sessionName, windowTarget, text string) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := client.Call("send-text", map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+		"text":    text,
+	}); err != nil {
+		return explainVerbError("send-text", err)
+	}
+	return nil
+}
+
+// runCapturePane captures the content of a pane and prints to stdout. lines
+// keeps only the last N lines when positive, which is what bounds a capture of a
+// long scrollback to something a caller can actually read.
+func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool, lines int) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -169,6 +224,7 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool) err
 		"window":     windowTarget,
 		"scrollback": scrollback,
 		"ansi":       ansi,
+		"lines":      lines,
 	})
 	if err != nil {
 		return explainVerbError("capture-pane", err)
@@ -186,6 +242,13 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool) err
 
 // runCommand executes a tape command in a running TUIOS session.
 func runCommand(sessionName, command string, args []string, jsonOutput bool) error {
+	return runCommandRendered(sessionName, command, args, jsonOutput, nil)
+}
+
+// runCommandRendered is runCommand with a printer for the human output. A
+// command that answers with data, rather than only succeeding, passes one so the
+// answer is shown instead of thrown away; render is nil for the rest.
+func runCommandRendered(sessionName, command string, args []string, jsonOutput bool, render resultRenderer) error {
 	if err := requireDaemon(); err != nil {
 		return err
 	}
@@ -212,7 +275,7 @@ func runCommand(sessionName, command string, args []string, jsonOutput bool) err
 		return fmt.Errorf("failed to create message: %w", err)
 	}
 
-	if err := sendAndWaitForResultWithFormat(client, msg, requestID, jsonOutput); err != nil {
+	if err := sendAndWaitForResultWithFormat(client, msg, requestID, jsonOutput, render); err != nil {
 		return err
 	}
 
@@ -231,7 +294,138 @@ func queryWindows(sessionName string, jsonOutput bool) error {
 	if err != nil {
 		return reportVerbError(explainVerbError("list-windows", err), jsonOutput)
 	}
-	return printVerbResult(raw, jsonOutput)
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	return printWindowList(raw)
+}
+
+// windowRow is the subset of a listed window both the table and the single
+// window view render.
+type windowRow struct {
+	WindowID   string `json:"window_id"`
+	Index      int    `json:"index"`
+	Title      string `json:"title"`
+	Display    string `json:"display_name"`
+	CustomName string `json:"custom_name"`
+	Workspace  int    `json:"workspace"`
+	Focused    bool   `json:"focused"`
+	Minimized  bool   `json:"minimized"`
+	AgentState string `json:"agent_state"`
+	AgentMsg   string `json:"agent_message"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+}
+
+// printWindowList renders the window list as a table. Without this the command
+// printed only that it had succeeded, which told a reader nothing they asked
+// for and made --json the only way to see a window.
+func printWindowList(raw json.RawMessage) error {
+	var res struct {
+		Windows []windowRow `json:"windows"`
+		Total   int         `json:"total"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if len(res.Windows) == 0 {
+		fmt.Println("No windows. Create one with 'tuios new-window'.")
+		return nil
+	}
+
+	rows := make([][]string, 0, len(res.Windows))
+	for _, w := range res.Windows {
+		marker := ""
+		if w.Focused {
+			marker = "*"
+		}
+		rows = append(rows, []string{
+			marker + fmt.Sprintf("%d", w.Index),
+			shortWindowID(w.WindowID),
+			windowLabel(w),
+			fmt.Sprintf("%d", w.Workspace),
+			fmt.Sprintf("%dx%d", w.Width, w.Height),
+			w.AgentState,
+		})
+	}
+
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
+		Headers("IDX", "ID", "NAME", "WS", "SIZE", "AGENT").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			base := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return base.Bold(true).Foreground(lipgloss.Color("12"))
+			}
+			switch col {
+			case 2:
+				return base.Foreground(lipgloss.Color("3")).Bold(true)
+			case 1, 3, 4:
+				return base.Foreground(lipgloss.Color("8"))
+			default:
+				return base
+			}
+		})
+
+	fmt.Println(t.Render())
+	fmt.Printf("\n%d window(s). * marks the focused one.\n", res.Total)
+	return nil
+}
+
+// windowLabel is the name to show for a window: the name it was given, else
+// whatever its shell set as the title.
+func windowLabel(w windowRow) string {
+	switch {
+	case w.CustomName != "":
+		return w.CustomName
+	case w.Display != "":
+		return w.Display
+	default:
+		return w.Title
+	}
+}
+
+// shortWindowID trims a window uuid to the prefix that addresses it. The verb
+// protocol resolves a window from 8 or more leading characters, so this is the
+// shortest form that can be pasted back into another command.
+func shortWindowID(id string) string {
+	const prefix = 8
+	if len(id) <= prefix {
+		return id
+	}
+	return id[:prefix]
+}
+
+// printWindowDetail renders one window as labelled lines.
+func printWindowDetail(data map[string]any) error {
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	var w windowRow
+	if err := json.Unmarshal(encoded, &w); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fields := [][2]string{
+		{"name", windowLabel(w)},
+		{"id", w.WindowID},
+		{"index", fmt.Sprintf("%d", w.Index)},
+		{"title", w.Title},
+		{"workspace", fmt.Sprintf("%d", w.Workspace)},
+		{"size", fmt.Sprintf("%dx%d", w.Width, w.Height)},
+		{"focused", fmt.Sprintf("%t", w.Focused)},
+		{"minimized", fmt.Sprintf("%t", w.Minimized)},
+		{"agent", w.AgentState},
+	}
+	if w.AgentMsg != "" {
+		fields = append(fields, [2]string{"agent message", w.AgentMsg})
+	}
+	for _, f := range fields {
+		fmt.Printf("%-14s %s\n", f[0], f[1])
+	}
+	return nil
 }
 
 // querySession queries session info over the verb protocol (no TUI required).
@@ -246,7 +440,61 @@ func querySession(sessionName string, jsonOutput bool) error {
 	if err != nil {
 		return reportVerbError(explainVerbError("session-info", err), jsonOutput)
 	}
-	return printVerbResult(raw, jsonOutput)
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	return printSessionInfo(raw)
+}
+
+// printSessionInfo renders session details as labelled lines, for the same
+// reason printWindowList exists.
+func printSessionInfo(raw json.RawMessage) error {
+	var res struct {
+		Name             string         `json:"session_name"`
+		DisplayName      string         `json:"display_name"`
+		Accent           string         `json:"accent"`
+		CurrentWorkspace int            `json:"current_workspace"`
+		NumWorkspaces    int            `json:"num_workspaces"`
+		WorkspaceNames   map[string]any `json:"workspace_names"`
+		WindowCount      int            `json:"window_count"`
+		TilingMode       string         `json:"tiling_mode"`
+		Width            int            `json:"width"`
+		Height           int            `json:"height"`
+		TUIAttached      bool           `json:"tui_attached"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	fields := [][2]string{
+		{"session", res.Name},
+	}
+	if res.DisplayName != "" {
+		fields = append(fields, [2]string{"display name", res.DisplayName})
+	}
+	if res.Accent != "" {
+		fields = append(fields, [2]string{"accent", res.Accent})
+	}
+	fields = append(fields,
+		[2]string{"windows", fmt.Sprintf("%d", res.WindowCount)},
+		[2]string{"workspace", fmt.Sprintf("%d of %d", res.CurrentWorkspace, res.NumWorkspaces)},
+		[2]string{"tiling", res.TilingMode},
+		[2]string{"size", fmt.Sprintf("%dx%d", res.Width, res.Height)},
+		[2]string{"attached", fmt.Sprintf("%t", res.TUIAttached)},
+	)
+	for _, f := range fields {
+		fmt.Printf("%-14s %s\n", f[0], f[1])
+	}
+
+	if len(res.WorkspaceNames) > 0 {
+		named := make([]string, 0, len(res.WorkspaceNames))
+		for num, name := range res.WorkspaceNames {
+			named = append(named, fmt.Sprintf("%s=%v", num, name))
+		}
+		sort.Strings(named)
+		fmt.Printf("%-14s %s\n", "named", strings.Join(named, " "))
+	}
+	return nil
 }
 
 // runSetConfig sets a session option over the verb protocol. The value is
@@ -297,21 +545,155 @@ func runGetConfig(sessionName, path string) error {
 // runSetAgentState reports a pane's agent state to the daemon over the verb
 // protocol. It is what the reference shim calls, and what a user runs to mark a
 // pane by hand.
-func runSetAgentState(sessionName, windowTarget, state, message string) error {
+//
+// A report the daemon declines because a higher-ranked source already owns the
+// window comes back as applied:false, not as an error. Saying so matters: the
+// caller otherwise believes it set a state that never took.
+func runSetAgentState(sessionName, windowTarget, state, message, source, harness string) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	if _, err := client.Call("set-agent-state", map[string]any{
+	raw, err := client.Call("set-agent-state", map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"state":   state,
 		"message": message,
-	}); err != nil {
+		"source":  source,
+		"harness": harness,
+	})
+	if err != nil {
 		return explainVerbError("set-agent-state", err)
 	}
+
+	var res struct {
+		Applied bool   `json:"applied"`
+		State   string `json:"state"`
+		Source  string `json:"source"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if !res.Applied {
+		fmt.Fprintf(os.Stderr, "Not applied: a higher-ranked source owns this pane; it still reports %s.\n", res.State)
+	}
+	return nil
+}
+
+// runSetSessionName sets a session's display label. The session keeps its own
+// name for addressing, so renaming the label never breaks a script.
+func runSetSessionName(sessionName, name string) error {
+	return callAndReport("set-session-name", map[string]any{
+		"session": sessionName,
+		"name":    name,
+	}, func(res map[string]any) {
+		if name == "" {
+			fmt.Printf("Cleared the display name of session %v.\n", res["session"])
+			return
+		}
+		fmt.Printf("Session %v now shows as %q.\n", res["session"], res["display_name"])
+	})
+}
+
+// runSetSessionAccent sets a session's accent slot, shared by every attached
+// client.
+func runSetSessionAccent(sessionName, accent string) error {
+	return callAndReport("set-session-accent", map[string]any{
+		"session": sessionName,
+		"accent":  accent,
+	}, func(res map[string]any) {
+		if accent == "" {
+			fmt.Printf("Cleared the accent of session %v.\n", res["session"])
+			return
+		}
+		fmt.Printf("Session %v now uses accent %v.\n", res["session"], res["accent"])
+	})
+}
+
+// runSetWorkspaceName labels a workspace. The number stays its identity.
+func runSetWorkspaceName(sessionName string, workspace int, name string) error {
+	return callAndReport("set-workspace-name", map[string]any{
+		"session":   sessionName,
+		"workspace": workspace,
+		"name":      name,
+	}, func(res map[string]any) {
+		if name == "" {
+			fmt.Printf("Cleared the name of workspace %v.\n", res["workspace"])
+			return
+		}
+		fmt.Printf("Workspace %v is now named %q.\n", res["workspace"], res["name"])
+	})
+}
+
+// callAndReport makes a one-shot verb call and hands the decoded result to a
+// printer, so the small setter commands do not each repeat the dial, the error
+// wrapping, and the decode.
+func callAndReport(verb string, params map[string]any, report func(map[string]any)) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call(verb, params)
+	if err != nil {
+		return explainVerbError(verb, err)
+	}
+	var res map[string]any
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	report(res)
+	return nil
+}
+
+// runWaitFor blocks until a daemon-side condition matches, so a caller can stop
+// polling a pane and sleeping between captures.
+//
+// The read deadline is stretched past the requested timeout because the daemon
+// only answers once the wait resolves: a client deadline shorter than the wait
+// would report a connection failure for a wait that was still perfectly healthy.
+func runWaitFor(sessionName, windowTarget, condition, pattern string, idle, timeout int, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	params := map[string]any{
+		"session":   sessionName,
+		"window":    windowTarget,
+		"condition": condition,
+		"pattern":   pattern,
+		"timeout":   timeout,
+	}
+	if idle > 0 {
+		params["idle"] = idle
+	}
+
+	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
+	raw, err := client.CallWithTimeout("wait-for", params, grace)
+	if err != nil {
+		return reportVerbError(explainVerbError("wait-for", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+
+	var res struct {
+		Condition string `json:"condition"`
+		Window    string `json:"window"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if res.Window != "" {
+		fmt.Printf("%s matched on %s\n", res.Condition, res.Window)
+		return nil
+	}
+	fmt.Printf("%s matched\n", res.Condition)
 	return nil
 }
 
@@ -396,12 +778,15 @@ func runTapeExec(sessionName, filePath string) error {
 
 // sendAndWaitForResult sends a message and waits for the result (human-readable output).
 func sendAndWaitForResult(client *session.Client, msg *session.Message, requestID string) error {
-	return sendAndWaitForResultWithFormat(client, msg, requestID, false)
+	return sendAndWaitForResultWithFormat(client, msg, requestID, false, nil)
 }
+
+// resultRenderer prints a command result's data for a human reader.
+type resultRenderer func(map[string]any) error
 
 // sendAndWaitForResultWithFormat sends a message and waits for the result.
 // If jsonOutput is true, outputs machine-readable JSON.
-func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message, requestID string, jsonOutput bool) error {
+func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message, requestID string, jsonOutput bool, render resultRenderer) error {
 	resp, err := client.SendControlMessage(msg)
 	if err != nil {
 		if jsonOutput {
@@ -443,6 +828,9 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 		}
 		if !result.Success {
 			return fmt.Errorf("command failed: %s", result.Message)
+		}
+		if render != nil {
+			return render(result.Data)
 		}
 		fmt.Printf("Command executed successfully: %s\n", result.Message)
 		return nil

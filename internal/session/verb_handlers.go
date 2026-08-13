@@ -670,8 +670,19 @@ func sliceCaptureLines(content string, start, end, lines int) string {
 			return ""
 		}
 		selected = split[lo-1 : hi]
-	case lines > 0 && lines < len(split):
-		selected = split[len(split)-lines:]
+	case lines > 0:
+		// A capture ends at the bottom of the pane, so below the cursor there is
+		// always a run of empty rows. Counting those as lines makes "the last 20
+		// lines" of a quiet pane twenty blanks, which is never what was wanted.
+		// start and end stay row-exact for callers who need the geometry.
+		body := split
+		for len(body) > 0 && strings.TrimSpace(body[len(body)-1]) == "" {
+			body = body[:len(body)-1]
+		}
+		if lines < len(body) {
+			body = body[len(body)-lines:]
+		}
+		selected = body
 	default:
 		selected = split
 	}

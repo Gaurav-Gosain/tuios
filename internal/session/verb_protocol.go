@@ -231,7 +231,7 @@ func init() {
 				windowParam,
 				{Name: "source", Type: "string", Description: "Which buffer to capture.", Accepted: captureSources, Default: "visible"},
 				{Name: "styled", Type: "bool", Description: "Include ANSI styling in the captured text.", Default: "false"},
-				{Name: "lines", Type: "int", Description: "Keep only the last N lines. Ignored when start or end is given."},
+				{Name: "lines", Type: "int", Description: "Keep only the last N non-empty-tailed lines, so the blank rows below the cursor do not count. Ignored when start or end is given."},
 				{Name: "start", Type: "int", Description: "1-based inclusive first line of the region to keep."},
 				{Name: "end", Type: "int", Description: "1-based inclusive last line of the region to keep."},
 			},
