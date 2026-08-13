@@ -1,0 +1,236 @@
+package app
+
+import (
+	"strings"
+	"testing"
+
+	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+)
+
+// TestAccentLayoutBreakpoints pins the two widths the layout turns on and the
+// column either side of each, because a breakpoint is only a decision at its
+// own edge.
+func TestAccentLayoutBreakpoints(t *testing.T) {
+	for _, tc := range []struct {
+		w    int
+		want accentLayout
+		name string
+	}{
+		{120, accentLayoutWide, "desktop"},
+		{74, accentLayoutWide, "one over the wide floor"},
+		{73, accentLayoutWide, "the wide floor"},
+		{72, accentLayoutStacked, "one under the wide floor"},
+		{41, accentLayoutStacked, "one over the stacked floor"},
+		{40, accentLayoutStacked, "the stacked floor"},
+		{39, accentLayoutCompact, "one under the stacked floor"},
+		{30, accentLayoutCompact, "the narrowest screen the overlays support"},
+	} {
+		m := accentTestOS(t, tc.w, 30)
+		if got := m.accentPlan().Mode; got != tc.want {
+			t.Errorf("w=%d (%s): layout %d, want %d", tc.w, tc.name, got, tc.want)
+		}
+	}
+
+	// Wide also needs the height for its right column whole, since a clipped
+	// column is worse than a stacked one.
+	if got := (&OS{Width: 120, Height: 8, EffectiveWidth: 120, EffectiveHeight: 8}).accentPlan().Mode; got == accentLayoutWide {
+		t.Error("a wide screen with eight rows still laid out wide")
+	}
+}
+
+// accentFrame renders the picker and returns the frame with styling stripped
+// and the geometry it reports.
+func accentFrame(t *testing.T, m *OS) ([]string, overlay.Geometry) {
+	t.Helper()
+	content, geo, _ := m.renderAccentPicker()
+	rows := strings.Split(content, "\n")
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, stripANSIForTrace(r))
+	}
+	return out, geo
+}
+
+// TestAccentLayoutRowsAreRectangular: every row of the dialog is exactly the
+// dialog's width, at every screen the layout has an opinion about. A row that
+// is a cell short leaves a hole the pane behind shows through.
+func TestAccentLayoutRowsAreRectangular(t *testing.T) {
+	for _, w := range []int{120, 74, 73, 72, 60, 41, 40, 39, 30} {
+		for _, h := range []int{40, 30, 22, 20, 16, 14, 12, 10, 9} {
+			m := accentTestOS(t, w, h)
+			m.OpenAccentPicker("aaaaaaaa1111")
+			lines, geo := accentFrame(t, m)
+			if len(lines) != geo.Height {
+				t.Fatalf("%dx%d: drew %d rows, reports %d", w, h, len(lines), geo.Height)
+			}
+			if geo.Height > h {
+				t.Errorf("%dx%d: the dialog is %d rows tall", w, h, geo.Height)
+			}
+			for i, l := range lines {
+				if got := lipgloss.Width(l); got != geo.Width {
+					t.Fatalf("%dx%d: row %d is %d cells, want %d: %q", w, h, i, got, geo.Width, l)
+				}
+			}
+			if geo.Width > w {
+				t.Errorf("%dx%d: the dialog is %d cells wide", w, h, geo.Width)
+			}
+		}
+	}
+}
+
+// TestAccentWideColumnsStayOnTheirOwnSide: the rule is the boundary, and a rect
+// recorded on the wrong side of it would take clicks meant for the other
+// column. Recording in column coordinates and shifting once is what this is
+// checking held.
+func TestAccentWideColumnsStayOnTheirOwnSide(t *testing.T) {
+	for _, w := range []int{73, 74, 100, 160} {
+		m := accentTestOS(t, w, 30)
+		m.OpenAccentPicker("aaaaaaaa1111")
+		lines, geo := accentFrame(t, m)
+
+		// The rule's column, found in the frame rather than computed.
+		ruleX := -1
+		for x, r := range []rune(lines[len(lines)/2]) {
+			if r == '┆' {
+				ruleX = x
+			}
+		}
+		if ruleX < 0 {
+			t.Fatalf("w=%d: no column rule in the wide layout:\n%s", w, strings.Join(lines, "\n"))
+		}
+		if want := geo.BodyX + accentWideLeft; ruleX != want {
+			t.Errorf("w=%d: the rule is in column %d, want %d", w, ruleX, want)
+		}
+
+		left := map[accentHitKind]bool{accentHitANSI: true, accentHitHue: true, accentHitGrid: true, accentHitClear: true}
+		right := map[accentHitKind]bool{accentHitHex: true, accentHitSlider: true, accentHitHarmony: true}
+		for _, h := range m.accentHits {
+			switch {
+			case left[h.Kind]:
+				if h.Rect.X1 > ruleX {
+					t.Errorf("w=%d: a left-column rect %v reaches past the rule at %d", w, h.Rect, ruleX)
+				}
+			case right[h.Kind]:
+				if h.Rect.X0 <= ruleX {
+					t.Errorf("w=%d: a right-column rect %v starts at or before the rule at %d", w, h.Rect, ruleX)
+				}
+			}
+			if h.Rect.X0 < 0 || h.Rect.X1 > geo.Width || h.Rect.Y0 < 0 || h.Rect.Y1 > geo.Height {
+				t.Errorf("w=%d: %v is outside the %dx%d dialog", w, h.Rect, geo.Width, geo.Height)
+			}
+		}
+	}
+}
+
+// TestAccentHitsMatchTheDrawnCellsAtEveryBreakpoint presses both edge columns
+// of every recorded rect and checks the picker lands where the rect was drawn
+// for. Both edges rather than the middle: an off-by-one in a rect only shows at
+// its ends.
+func TestAccentHitsMatchTheDrawnCellsAtEveryBreakpoint(t *testing.T) {
+	for _, w := range []int{120, 74, 73, 72, 40, 39, 30} {
+		m := accentTestOS(t, w, 30)
+		m.OpenAccentPicker("aaaaaaaa1111")
+		p := m.accentPlan()
+		m.renderAccentPicker()
+
+		hits := append([]accentHit(nil), m.accentHits...)
+		var grid, hue int
+		for _, h := range hits {
+			switch h.Kind {
+			case accentHitGrid:
+				grid++
+			case accentHitHue:
+				hue++
+			}
+		}
+		if grid != p.GridCols*p.GridRows {
+			t.Errorf("w=%d: %d grid rects for a %dx%d grid", w, grid, p.GridCols, p.GridRows)
+		}
+		if hue != p.GridCols {
+			t.Errorf("w=%d: %d hue rects for a %d-cell strip", w, hue, p.GridCols)
+		}
+
+		for _, h := range hits {
+			for _, x := range []int{h.Rect.X0, h.Rect.X1 - 1} {
+				switch h.Kind {
+				case accentHitGrid:
+					if ok, _ := m.accentPickerPress(x, h.Rect.Y0); !ok {
+						t.Fatalf("w=%d: a press at column %d of %v was not routed", w, x, h.Rect)
+					}
+					if m.AccentPicker.Col != h.Col || m.AccentPicker.Row != h.Row {
+						t.Fatalf("w=%d: pressing column %d of cell (%d,%d) selected (%d,%d)",
+							w, x, h.Col, h.Row, m.AccentPicker.Col, m.AccentPicker.Row)
+					}
+				case accentHitHue:
+					if ok, _ := m.accentPickerPress(x, h.Rect.Y0); !ok {
+						t.Fatalf("w=%d: a press at column %d of %v was not routed", w, x, h.Rect)
+					}
+					if want := accentHueAt(h.Col, p.GridCols); m.AccentPicker.Hue != want {
+						t.Fatalf("w=%d: pressing column %d of hue cell %d held %v, want %v",
+							w, x, h.Col, m.AccentPicker.Hue, want)
+					}
+				case accentHitANSI:
+					if ok, _ := m.accentPickerPress(x, h.Rect.Y0); !ok {
+						t.Fatalf("w=%d: a press at column %d of %v was not routed", w, x, h.Rect)
+					}
+					if m.AccentPicker.Slot != h.Col {
+						t.Fatalf("w=%d: pressing column %d of slot %d selected %d",
+							w, x, h.Col, m.AccentPicker.Slot)
+					}
+				}
+			}
+			m.OverlayMouseRelease()
+		}
+	}
+}
+
+// TestAccentWideDropsInOrder: on a screen too short for everything the wide
+// layout gives up the breathing blanks first and the theme's colours next, and
+// never the sliders, which are the reason the column exists.
+func TestAccentWideDropsInOrder(t *testing.T) {
+	for _, tc := range []struct {
+		h                     int
+		wantBlanks, wantSlots bool
+	}{
+		{40, true, true},
+		{16, true, true},
+		{15, true, false},
+		{13, true, false},
+		{12, false, false},
+		{10, false, false},
+	} {
+		m := accentTestOS(t, 100, tc.h)
+		p := m.accentPlan()
+		if p.Mode != accentLayoutWide {
+			t.Fatalf("h=%d: the layout is not wide", tc.h)
+		}
+		if p.Blanks != tc.wantBlanks || p.Slots != tc.wantSlots {
+			t.Errorf("h=%d: blanks=%v slots=%v, want blanks=%v slots=%v",
+				tc.h, p.Blanks, p.Slots, tc.wantBlanks, tc.wantSlots)
+		}
+		if !p.Sliders {
+			t.Errorf("h=%d: the wide layout dropped its sliders", tc.h)
+		}
+		if p.GridRows < 1 {
+			t.Errorf("h=%d: the grid is %d rows", tc.h, p.GridRows)
+		}
+	}
+}
+
+// TestAccentCompactKeepsTheV1Layout: below the stacked floor the picker is the
+// layout it shipped with, so the screens that worked before still work.
+func TestAccentCompactKeepsTheV1Layout(t *testing.T) {
+	m := accentTestOS(t, 38, 24)
+	m.OpenAccentPicker("aaaaaaaa1111")
+	p := m.accentPlan()
+	if p.Sliders {
+		t.Error("the compact layout drew sliders it has no width for")
+	}
+	plain := strings.Join(pickerLines(t, m), "\n")
+	for _, want := range []string{"accent", "now", "hex", "comp"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("the compact dialog lost %q:\n%s", want, plain)
+		}
+	}
+}

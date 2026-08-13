@@ -145,6 +145,10 @@ func TestAccentGridFollowsAHeldDrag(t *testing.T) {
 // code path as the grid and fails the same way.
 func TestAccentHueStripIgnoresButtonFreeMotion(t *testing.T) {
 	m := pickerOS(t)
+	// Start at the left-hand end of the strip, so the drag below has strip to
+	// travel over whatever hue the pane happened to be wearing and however many
+	// cells the layout gives the strip.
+	m.AccentPickerHueCell(0)
 	marks := cursorCells(t, m)
 	if len(marks) < 2 {
 		t.Fatalf("the picker drew %d cursor marks", len(marks))

@@ -160,28 +160,32 @@ func TestAccentSLAndGridAreOneModel(t *testing.T) {
 	m.OpenAccentPicker("aaaaaaaa1111")
 	cols, rows := m.accentGridSize()
 
-	// The nearest cell, found by looking at all of them rather than by asking the
-	// function under test.
-	nearest := func(sat, light float64) (int, int) {
-		bestCol, bestRow, best := 0, 0, math.MaxFloat64
+	// The distance from a saturation and lightness to a cell, and the least of
+	// them over the whole grid, found by looking at every cell rather than by
+	// asking the function under test. A value exactly between two cells is
+	// equally near both, so the claim is about the distance, not the cell.
+	dist := func(sat, light float64, col, row int) float64 {
+		cs, cl := accentCellSL(col, row, cols, rows)
+		return math.Abs(cs-sat) + math.Abs(cl-light)
+	}
+	least := func(sat, light float64) float64 {
+		best := math.MaxFloat64
 		for col := range cols {
 			for row := range rows {
-				cs, cl := accentCellSL(col, row, cols, rows)
-				if d := math.Abs(cs-sat) + math.Abs(cl-light); d < best-1e-12 {
-					bestCol, bestRow, best = col, row, d
-				}
+				best = math.Min(best, dist(sat, light, col, row))
 			}
 		}
-		return bestCol, bestRow
+		return best
 	}
 
 	for v := 0; v <= 100; v += 3 {
 		m.AccentPickerSetSlider(accentChanS, v)
 		m.AccentPickerSetSlider(accentChanL, 100-v)
-		wantCol, wantRow := nearest(m.AccentPicker.Sat, m.AccentPicker.Light)
-		if m.AccentPicker.Col != wantCol || m.AccentPicker.Row != wantRow {
-			t.Errorf("S=%d%% L=%d%%: the cursor sits on (%d,%d), want the nearest cell (%d,%d)",
-				v, 100-v, m.AccentPicker.Col, m.AccentPicker.Row, wantCol, wantRow)
+		sat, light := m.AccentPicker.Sat, m.AccentPicker.Light
+		got := dist(sat, light, m.AccentPicker.Col, m.AccentPicker.Row)
+		if want := least(sat, light); got > want+1e-12 {
+			t.Errorf("S=%d%% L=%d%%: the cursor sits on (%d,%d), %.4f away, when a cell %.4f away exists",
+				v, 100-v, m.AccentPicker.Col, m.AccentPicker.Row, got, want)
 		}
 		// The colour is built from the model, not from the cell under the cursor.
 		if want := hslToRGB(m.AccentPicker.Hue, m.AccentPicker.Sat, m.AccentPicker.Light); m.AccentPicker.Cur != want {

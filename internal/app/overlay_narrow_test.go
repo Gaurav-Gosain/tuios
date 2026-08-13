@@ -23,6 +23,11 @@ var narrowScreens = []struct {
 	{"very-narrow", 30, 24},
 	{"very-short", 100, 12},
 	{"desktop", 120, 40},
+	// The accent picker's wide layout: the first screen that gets it, one just
+	// over it, and a wide screen too short to keep everything.
+	{"wide-picker-floor", 73, 30},
+	{"wide-picker", 74, 20},
+	{"wide-picker-short", 100, 14},
 }
 
 // assertFitsScreen fails if any line of out is wider than w, the block is

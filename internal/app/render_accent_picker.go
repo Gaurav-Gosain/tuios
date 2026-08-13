@@ -9,9 +9,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// accentPickerInnerWidth is the dialog's preferred inner width. It is the width
-// of the shades grid plus a pad column either side, and the widest line the
-// dialog carries is the old-to-new readout with two hexes on it.
+// accentPickerInnerWidth is the compact dialog's preferred inner width. It is
+// the width of the shades grid plus a pad column either side, and the widest
+// line that layout carries is the old-to-new readout with two hexes on it.
 const accentPickerInnerWidth = 34
 
 // accentHitKind names what a recorded rect in the picker does when it is
@@ -87,81 +87,27 @@ func accentSwatch(c color.RGBA, n int) string {
 // renderAccentPicker draws the colour picker for the window being accented and
 // records the hit geometry of everything in it.
 //
-// Top to bottom: the hue strip, the shades grid holding that hue with
-// saturation across and lightness down, then the old-to-new readout, the hex
-// field, and the harmony chips. The keyboard reaches all four with tab and the
-// arrows; the mouse reaches every cell of them through the rects recorded here.
+// Wide, it is two columns either side of a dashed rule: the colour space on the
+// left (the theme's colours, the hue strip, the shades grid, the readout) and
+// the numbers on the right (the hex field, the five sliders, the harmony
+// chips). Narrower, the same controls stack into one column, and narrower still
+// the sliders go and the swatches shrink to a cell each.
+//
+// The keyboard reaches every control with tab and the arrows; the mouse reaches
+// every cell of them through the rects recorded here.
 func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 	pal := theme.UI()
-	bg := pal.Canvas
-	width := overlay.DialogFitWidth(accentPickerInnerWidth, m.GetRenderWidth())
-	cols, rows := m.accentGridSize()
-	s := &m.AccentPicker
+	p := m.accentPlan()
 	m.accentHits = m.accentHits[:0]
 
-	// Body rows are laid out first and the dialog's own border row is added to
-	// every y afterwards, so the recorded rects and the drawn rows come off the
-	// same counter.
 	var body []string
-	at := func() int { return len(body) }
-
-	// The theme's own colours, first because picking one by name is the easy
-	// answer and the rest of the dialog is the long way round.
-	if m.accentSlotsShown() {
-		body = append(body, m.accentSlotLines(width, at(), pal)...)
+	if p.Mode == accentLayoutWide {
+		left := m.accentRecordAt(0, 0, func() []string { return m.accentSpaceColumn(p, pal) })
+		right := m.accentRecordAt(accentWideLeft+1, 0, func() []string { return m.accentNumberColumn(p, pal) })
+		body = accentJoinColumns(left, right, pal)
+	} else {
+		body = m.accentRecordAt(0, 0, func() []string { return m.accentStackedBody(p, pal) })
 	}
-
-	// The hue strip: one cell per step around the circle, the held hue marked.
-	hueY := at()
-	hueCell := accentHueCell(s.Hue, cols)
-	strip := accentFocusMark(s.Focus == accentFocusHue, bg, pal)
-	for i := range cols {
-		c := hslToRGB(accentHueAt(i, cols), 1, 0.5)
-		if i == hueCell {
-			strip += overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).Render(accentCursorGlyph())
-		} else {
-			strip += accentSwatch(c, 1)
-		}
-		m.accentHits = append(m.accentHits, accentHit{
-			Rect: overlay.Rect{X0: 1 + i, Y0: hueY, X1: 2 + i, Y1: hueY + 1},
-			Kind: accentHitHue, Col: i,
-		})
-	}
-	body = append(body, overlay.Fill(strip, width, bg))
-
-	// The shades grid.
-	for row := range rows {
-		y := at()
-		line := accentFocusMark(row == 0 && s.Focus == accentFocusGrid, bg, pal)
-		for col := range cols {
-			c := accentCellColor(s.Hue, col, row, cols, rows)
-			if col == s.Col && row == s.Row {
-				line += overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).Render(accentCursorGlyph())
-			} else {
-				line += accentSwatch(c, 1)
-			}
-			m.accentHits = append(m.accentHits, accentHit{
-				Rect: overlay.Rect{X0: 1 + col, Y0: y, X1: 2 + col, Y1: y + 1},
-				Kind: accentHitGrid, Col: col, Row: row,
-			})
-		}
-		body = append(body, overlay.Fill(line, width, bg))
-	}
-
-	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg))
-	body = append(body, m.accentNowLine(width, at(), pal))
-	body = append(body, m.accentHexLine(width, at(), pal))
-	if m.accentSlidersShown() {
-		for ch := accentChannel(0); ch < accentChanCount; ch++ {
-			// The bytes and the two that move the colour as a whole are different
-			// kinds of control, and one blank row is what says so.
-			if ch == accentChanS {
-				body = append(body, overlay.Fill("", width, bg))
-			}
-			body = append(body, m.accentSliderLine(ch, width, at(), pal))
-		}
-	}
-	body = append(body, m.accentHarmonyLine(width, at(), pal))
 
 	title := "accent"
 	if m.AccentPickerTarget == AccentTargetSession {
@@ -171,7 +117,7 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	content, geo := overlay.Dialog{
 		Title: title,
-		Width: width,
+		Width: p.Inner,
 		Body:  strings.Join(body, "\n"),
 		Hints: accentPickerHints(),
 	}.Render(pal)
@@ -189,6 +135,181 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 	// generic body rows: a row hit would swallow the click before it could reach
 	// the cell under it.
 	return content, geo, nil
+}
+
+// accentRecordAt runs a column builder and moves every rect it recorded onto
+// that column's origin. Builders count from their own left edge, so a control
+// does not have to know which side of the rule it landed on, and the rects still
+// come from the renderer as it draws rather than from arithmetic repeated in a
+// handler.
+func (m *OS) accentRecordAt(x, y int, build func() []string) []string {
+	first := len(m.accentHits)
+	lines := build()
+	for i := first; i < len(m.accentHits); i++ {
+		r := &m.accentHits[i].Rect
+		r.X0, r.X1 = r.X0+x, r.X1+x
+		r.Y0, r.Y1 = r.Y0+y, r.Y1+y
+	}
+	return lines
+}
+
+// accentColumnRule is the vertical dash between the wide layout's two columns.
+// A rule rather than a second bordered float: two frames cost four columns and a
+// z-order story, and one dialog drags as one object.
+func accentColumnRule() string {
+	if overlay.UseASCII() {
+		return "|"
+	}
+	return "┆"
+}
+
+// accentJoinColumns lays two columns either side of the rule, padding the
+// shorter one so the body stays a rectangle.
+func accentJoinColumns(left, right []string, pal overlay.Palette) []string {
+	bg := pal.Canvas
+	rule := overlay.Style(bg).Foreground(pal.FgMute).Render(accentColumnRule())
+	out := make([]string, 0, max(len(left), len(right)))
+	for i := range max(len(left), len(right)) {
+		l, r := "", ""
+		if i < len(left) {
+			l = left[i]
+		}
+		if i < len(right) {
+			r = right[i]
+		}
+		out = append(out, overlay.Fill(l, accentWideLeft, bg)+rule+overlay.Fill(r, accentWideRight, bg))
+	}
+	return out
+}
+
+// accentSpaceColumn is the wide layout's left column: the colour space, from
+// the theme's own colours down to the readout of what is about to be applied.
+func (m *OS) accentSpaceColumn(p accentLayoutPlan, pal overlay.Palette) []string {
+	bg := pal.Canvas
+	var body []string
+	at := func() int { return len(body) }
+
+	if p.Slots {
+		body = append(body, m.accentSlotLines(p.ColInner, at(), pal)...)
+		if p.Blanks {
+			body = append(body, overlay.Fill("", p.ColInner, bg))
+		}
+	}
+	body = append(body, m.accentHueLine(p, at(), pal))
+	body = append(body, m.accentGridLines(p, at(), pal)...)
+	body = append(body, m.accentRuleLine(p.ColInner, pal))
+	body = append(body, m.accentNowLine(p.ColInner, at(), pal))
+	return body
+}
+
+// accentNumberColumn is the wide layout's right column: the hex field, the five
+// sliders, and the harmony chips.
+func (m *OS) accentNumberColumn(p accentLayoutPlan, pal overlay.Palette) []string {
+	bg := pal.Canvas
+	var body []string
+	at := func() int { return len(body) }
+	blank := func() {
+		if p.Blanks {
+			body = append(body, overlay.Fill("", accentWideRight, bg))
+		}
+	}
+
+	body = append(body, m.accentHexLine(accentWideRight, at(), pal))
+	blank()
+	body = append(body, m.accentSliderLines(accentWideRight, at(), pal)...)
+	blank()
+	body = append(body, m.accentHarmonyLine(accentWideRight, at(), pal))
+	return body
+}
+
+// accentStackedBody is the one-column layout, which is also the compact one
+// with its sliders dropped and its swatches down to a cell each.
+func (m *OS) accentStackedBody(p accentLayoutPlan, pal overlay.Palette) []string {
+	var body []string
+	at := func() int { return len(body) }
+
+	if p.Slots {
+		body = append(body, m.accentSlotLines(p.Inner, at(), pal)...)
+	}
+	body = append(body, m.accentHueLine(p, at(), pal))
+	body = append(body, m.accentGridLines(p, at(), pal)...)
+	body = append(body, m.accentRuleLine(p.Inner, pal))
+	body = append(body, m.accentNowLine(p.Inner, at(), pal))
+	body = append(body, m.accentHexLine(p.Inner, at(), pal))
+	if p.Sliders {
+		body = append(body, m.accentSliderLines(p.Inner, at(), pal)...)
+	}
+	body = append(body, m.accentHarmonyLine(p.Inner, at(), pal))
+	return body
+}
+
+// accentRuleLine is the dashed divider under the shades grid.
+func (m *OS) accentRuleLine(width int, pal overlay.Palette) string {
+	bg := pal.Canvas
+	return overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg)
+}
+
+// accentHueLine renders the hue strip: one cell per step around the circle,
+// with the held hue marked.
+func (m *OS) accentHueLine(p accentLayoutPlan, y int, pal overlay.Palette) string {
+	bg := pal.Canvas
+	s := &m.AccentPicker
+	cols := p.GridCols
+	held := accentHueCell(s.Hue, cols)
+
+	line := accentFocusMark(s.Focus == accentFocusHue, bg, pal)
+	for i := range cols {
+		c := hslToRGB(accentHueAt(i, cols), 1, 0.5)
+		if i == held {
+			line += overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).Render(accentCursorGlyph())
+		} else {
+			line += accentSwatch(c, 1)
+		}
+		m.accentHits = append(m.accentHits, accentHit{
+			Rect: overlay.Rect{X0: 1 + i, Y0: y, X1: 2 + i, Y1: y + 1},
+			Kind: accentHitHue, Col: i,
+		})
+	}
+	return overlay.Fill(line, p.ColInner, bg)
+}
+
+// accentGridLines renders the shades grid: saturation across, lightness down,
+// at the held hue.
+func (m *OS) accentGridLines(p accentLayoutPlan, y int, pal overlay.Palette) []string {
+	bg := pal.Canvas
+	s := &m.AccentPicker
+	out := make([]string, 0, p.GridRows)
+	for row := range p.GridRows {
+		line := accentFocusMark(row == 0 && s.Focus == accentFocusGrid, bg, pal)
+		for col := range p.GridCols {
+			c := accentCellColor(s.Hue, col, row, p.GridCols, p.GridRows)
+			if col == s.Col && row == s.Row {
+				line += overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).Render(accentCursorGlyph())
+			} else {
+				line += accentSwatch(c, 1)
+			}
+			m.accentHits = append(m.accentHits, accentHit{
+				Rect: overlay.Rect{X0: 1 + col, Y0: y + row, X1: 2 + col, Y1: y + row + 1},
+				Kind: accentHitGrid, Col: col, Row: row,
+			})
+		}
+		out = append(out, overlay.Fill(line, p.ColInner, bg))
+	}
+	return out
+}
+
+// accentSliderLines renders the five channels with a blank between the bytes
+// and the two that move the colour as a whole, which are different kinds of
+// control and one blank row is what says so.
+func (m *OS) accentSliderLines(width, y int, pal overlay.Palette) []string {
+	out := make([]string, 0, accentSliderRows)
+	for ch := accentChannel(0); ch < accentChanCount; ch++ {
+		if ch == accentChanS {
+			out = append(out, overlay.Fill("", width, pal.Canvas))
+		}
+		out = append(out, m.accentSliderLine(ch, width, y+len(out), pal))
+	}
+	return out
 }
 
 // accentSlotWidth is how many cells one of the theme's colours is drawn in. Two

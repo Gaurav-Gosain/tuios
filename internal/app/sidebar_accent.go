@@ -139,51 +139,143 @@ type accentPickerState struct {
 	Src accentSource
 }
 
-// accentGridSize is the shades grid's dimensions for the current screen. One
-// function, read by the renderer as it draws and by the keyboard as it moves,
-// so a cursor position always names a cell that exists.
-func (m *OS) accentGridSize() (cols, rows int) {
-	inner := overlay.DialogFitWidth(accentPickerInnerWidth, m.GetRenderWidth())
-	// Body furniture around the grid: the hue strip, a rule, the now line, the
-	// hex line and the harmony line, plus the dialog's two border rows, plus the
-	// slot rows where they are drawn.
-	furniture := 7
-	if m.accentSlotsShown() {
-		furniture += accentSlotRows
-	}
-	if m.accentSlidersShown() {
-		furniture += accentSliderRows
-	}
-	return max(inner-2, 1), clampInt(m.GetRenderHeight()-furniture, 1, accentGridMaxRows)
-}
+// accentLayout names the shape the picker takes on this screen. Fit and
+// degrade, never refuse: the compact mode is the layout the picker shipped with
+// and it works down to MinDialogWidth.
+type accentLayout uint8
+
+const (
+	// accentLayoutCompact is one narrow column of one-cell swatches, no sliders.
+	accentLayoutCompact accentLayout = iota
+	// accentLayoutStacked is one column with everything on it.
+	accentLayoutStacked
+	// accentLayoutWide is two columns either side of a dashed rule: the colour
+	// space on the left, the numbers and the harmony on the right.
+	accentLayoutWide
+)
+
+// The three widths, as inner widths between the dialog's border cells. The wide
+// one is its two columns plus the rule between them.
+const (
+	accentWideLeft  = 38
+	accentWideRight = 32
+	accentWideInner = accentWideLeft + 1 + accentWideRight
+	// The one-column width, wider than the compact dialog because a slider needs
+	// a track worth dragging: eight cells go to the sigil, the label and the
+	// value, and what is left is the resolution.
+	accentStackedInnerWidth = accentWideLeft
+)
+
+// accentSlotRows is how many rows the theme's colours are drawn on.
+const accentSlotRows = 2
 
 // accentSliderRows is how many rows the slider block occupies: one per channel
 // plus the blank that separates the bytes from the two that move the whole
 // colour.
 const accentSliderRows = int(accentChanCount) + 1
 
-// accentSliderMinHeight is the screen height the slider block needs. It is the
-// first of the picker's controls to go on a short screen: it is the tallest
-// thing in the dialog, and the grid and the hex field still reach every colour
-// without it.
+// accentSliderMinHeight is the screen height the stacked layout needs before it
+// will draw the slider block. It is the first of that layout's controls to go on
+// a short screen: it is the tallest thing in the dialog, and the grid and the
+// hex field still reach every colour without it.
 const accentSliderMinHeight = 22
 
-// accentSlidersShown reports whether the screen has room for the slider block.
-func (m *OS) accentSlidersShown() bool { return m.GetRenderHeight() >= accentSliderMinHeight }
+// accentWideSlotsMinHeight is the screen height the wide layout keeps the
+// theme's colours at. They are the last thing it drops, after the breathing
+// blanks, because they are the easy way in.
+const accentWideSlotsMinHeight = 16
 
-// accentSlotRows is how many rows the theme's colours are drawn on.
-const accentSlotRows = 2
+// accentWideBlanksMinBody is the body rows the wide layout needs before it will
+// spend three of them on breathing room. It is also the full right column's
+// height, so below it the blanks are not a choice.
+const accentWideBlanksMinBody = accentWideRightRows + 3
+
+// accentWideRightRows is the right column's content: the hex line, the slider
+// block, and the harmony row.
+const accentWideRightRows = 1 + accentSliderRows + 1
+
+// accentLayoutPlan is everything the picker decided about this screen. One
+// value, read by the renderer as it draws and by the keyboard as it moves, so a
+// cursor position always names a cell that is on screen.
+type accentLayoutPlan struct {
+	Mode     accentLayout
+	Inner    int // the dialog's inner width
+	ColInner int // the width of the column the strip and the grid live in
+	Slots    bool
+	Sliders  bool
+	Blanks   bool
+	GridCols int
+	GridRows int
+}
+
+// accentPlan works out the layout for the current screen.
+func (m *OS) accentPlan() accentLayoutPlan {
+	w, h := m.GetRenderWidth(), m.GetRenderHeight()
+	avail := h - 2 // the body, between the dialog's two border rows
+
+	// Wide needs the columns to be full width and the right one to fit whole. A
+	// clipped column is worse than a stacked one.
+	if w >= accentWideInner+2 && avail >= accentWideRightRows {
+		p := accentLayoutPlan{
+			Mode: accentLayoutWide, Inner: accentWideInner, ColInner: accentWideLeft,
+			Sliders: true,
+			Blanks:  avail >= accentWideBlanksMinBody,
+			Slots:   h >= accentWideSlotsMinHeight,
+		}
+		// The left column around the grid: the hue strip, the rule under the grid,
+		// the now line, and the theme's colours with their breathing blank.
+		fixed := 3
+		if p.Slots {
+			fixed += accentSlotRows
+			if p.Blanks {
+				fixed++
+			}
+		}
+		p.GridCols = max(p.ColInner-2, 1)
+		p.GridRows = clampInt(avail-fixed, 1, accentGridMaxRows)
+		return p
+	}
+
+	p := accentLayoutPlan{Mode: accentLayoutStacked, Inner: accentStackedInnerWidth}
+	if w < accentStackedInnerWidth+2 {
+		p.Mode = accentLayoutCompact
+		p.Inner = overlay.DialogFitWidth(accentPickerInnerWidth, w)
+	}
+	p.ColInner = p.Inner
+	p.GridCols = max(p.Inner-2, 1)
+
+	// Body furniture around the grid: the hue strip, a rule, the now line, the
+	// hex line and the harmony line, plus the dialog's two border rows, plus the
+	// slot rows and the sliders where they are drawn.
+	furniture := 7
+	// One grid row, the rest of the furniture, and the slot rows on top.
+	p.Slots = h >= 1+7+accentSlotRows
+	if p.Slots {
+		furniture += accentSlotRows
+	}
+	p.Sliders = p.Mode == accentLayoutStacked && h >= accentSliderMinHeight
+	if p.Sliders {
+		furniture += accentSliderRows
+	}
+	p.GridRows = clampInt(h-furniture, 1, accentGridMaxRows)
+	return p
+}
+
+// accentGridSize is the shades grid's dimensions for the current screen.
+func (m *OS) accentGridSize() (cols, rows int) {
+	p := m.accentPlan()
+	return p.GridCols, p.GridRows
+}
+
+// accentSlidersShown reports whether the sliders are drawn on this screen.
+func (m *OS) accentSlidersShown() bool { return m.accentPlan().Sliders }
 
 // accentSlotsShown reports whether the screen has room for the quick-pick rows.
-// They are the first thing dropped on a screen too short for everything: the
-// readout, the hex field and one row of the grid are what the picker cannot work
-// without, and the same colours are still reachable by name through the hex
-// field and by eye through the grid.
-func (m *OS) accentSlotsShown() bool {
-	// One grid row, the rest of the furniture, and the slot rows on top.
-	const need = 1 + 7 + accentSlotRows
-	return m.GetRenderHeight() >= need
-}
+// In the stacked and compact layouts they are the first thing dropped on a
+// screen too short for everything: the readout, the hex field and one row of the
+// grid are what the picker cannot work without, and the same colours are still
+// reachable by name through the hex field and by eye through the grid.
+func (m *OS) accentSlotsShown() bool { return m.accentPlan().Slots }
 
 // accentGridLightRange is the lightness the grid's top and bottom rows carry.
 // It stops short of white and black: those are one colour each at every

@@ -453,7 +453,7 @@ func TestAccentPickerDegradesToASCII(t *testing.T) {
 	m.OpenAccentPicker("aaaaaaaa1111")
 
 	for i, l := range pickerLines(t, m) {
-		if strings.ContainsAny(l, "╭╮╰╯│─╌✕●›→◆") {
+		if strings.ContainsAny(l, "╭╮╰╯│─╌┆✕●›→◆━") {
 			t.Errorf("row %d still draws non-ASCII marks: %q", i, l)
 		}
 	}
