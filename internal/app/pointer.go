@@ -56,7 +56,7 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 	}
 
 	// In tiled mode with shared borders, check separator lines
-	if m.AutoTiling && config.SharedBorders && !m.UseScrollingLayout {
+	if m.panesBorderless() {
 		// The same lines the separator overlay draws, so the resize cursor is
 		// only offered over a divider that is really there.
 		for _, s := range m.separatorSplits() {

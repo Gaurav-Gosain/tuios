@@ -80,7 +80,7 @@ func TestSyncedWindowJoinsTheTiledLayout(t *testing.T) {
 	// Both windows must have been given a share of the screen rather than the
 	// full-size box the daemon sent. BSP applies its layout through snap
 	// animations, so the target rects are what the tree resolved to.
-	rects := tree.ApplyLayout(m.GetBSPBounds())
+	rects := tree.ApplyLayout(m.GetBSPBounds(), m.separatorGap())
 	if len(rects) != 2 {
 		t.Fatalf("tree laid out %d windows, want 2", len(rects))
 	}
@@ -156,7 +156,7 @@ func TestSyncedCloseLeavesNoTile(t *testing.T) {
 		t.Error("closed window is still in the BSP tree")
 	}
 	// The survivor takes the whole area back.
-	rects := tree.ApplyLayout(m.GetBSPBounds())
+	rects := tree.ApplyLayout(m.GetBSPBounds(), m.separatorGap())
 	if len(rects) != 1 {
 		t.Fatalf("tree laid out %d windows, want 1", len(rects))
 	}

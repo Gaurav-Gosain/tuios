@@ -957,7 +957,7 @@ func (m *OS) applyPendingForcedSplit(win *terminal.Window) {
 		return // already in the tree; nothing to force
 	}
 	targetIntID := m.getWindowIntID(targetID)
-	tree.InsertWindowWithPreselection(windowIntID, targetIntID, dir, m.GetBSPBounds())
+	tree.InsertWindowWithPreselection(windowIntID, targetIntID, dir, m.GetBSPBounds(), m.separatorGap())
 }
 
 // convertSessionBSPNode converts session.SerializedBSPNode to layout.SerializedNode

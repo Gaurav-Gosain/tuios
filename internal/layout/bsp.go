@@ -225,7 +225,7 @@ func (t *BSPTree) FindNode(windowID int) *TileNode {
 // InsertWindow adds a new window to the tree by splitting the focused window.
 // If direction is SplitNone, uses the auto scheme to determine split direction.
 // The new window is inserted as the right/bottom child.
-func (t *BSPTree) InsertWindow(windowID int, focusedWindowID int, direction SplitType, ratio float64, bounds Rect) {
+func (t *BSPTree) InsertWindow(windowID int, focusedWindowID int, direction SplitType, ratio float64, bounds Rect, gap int) {
 	// Don't insert duplicates
 	if t.HasWindow(windowID) {
 		return
@@ -255,7 +255,7 @@ func (t *BSPTree) InsertWindow(windowID int, focusedWindowID int, direction Spli
 
 	// Determine split direction if not specified
 	if direction == SplitNone {
-		direction = t.determineAutoSplit(targetNode, bounds)
+		direction = t.determineAutoSplit(targetNode, bounds, gap)
 	}
 
 	// Use default ratio if not specified
@@ -289,7 +289,7 @@ func (t *BSPTree) InsertWindow(windowID int, focusedWindowID int, direction Spli
 
 // InsertWindowWithPreselection adds a new window using preselection direction.
 // Preselection determines which side of the focused window to place the new window.
-func (t *BSPTree) InsertWindowWithPreselection(windowID int, focusedWindowID int, preselect PreselectionDir, bounds Rect) {
+func (t *BSPTree) InsertWindowWithPreselection(windowID int, focusedWindowID int, preselect PreselectionDir, bounds Rect, gap int) {
 	var direction SplitType
 	var newWindowIsLeft bool
 
@@ -308,7 +308,7 @@ func (t *BSPTree) InsertWindowWithPreselection(windowID int, focusedWindowID int
 		newWindowIsLeft = false
 	default:
 		// No preselection, use normal insert
-		t.InsertWindow(windowID, focusedWindowID, SplitNone, t.DefaultRatio, bounds)
+		t.InsertWindow(windowID, focusedWindowID, SplitNone, t.DefaultRatio, bounds, gap)
 		return
 	}
 
@@ -402,9 +402,15 @@ func (t *BSPTree) RemoveWindow(windowID int) {
 
 // ApplyLayout calculates positions for all windows in the tree.
 // Returns a map of windowID -> Rect with the calculated layout.
-func (t *BSPTree) ApplyLayout(bounds Rect) map[int]Rect {
+//
+// gap is the cells to keep free between two neighbouring panes, and it is the
+// caller's answer to whether a divider is drawn there at all: one cell while
+// the panes are borderless and the separator overlay paints the column, none
+// once each pane draws its own border, because two adjacent border columns are
+// already the division and a third would hold nothing.
+func (t *BSPTree) ApplyLayout(bounds Rect, gap int) map[int]Rect {
 	result := make(map[int]Rect)
-	t.ApplyLayoutInto(bounds, result)
+	t.ApplyLayoutInto(bounds, result, gap)
 	return result
 }
 
@@ -412,12 +418,12 @@ func (t *BSPTree) ApplyLayout(bounds Rect) map[int]Rect {
 // reapplies the layout on every motion event, and allocating a fresh map each
 // time makes the cost of a single event scale with how many panes the workspace
 // holds; reusing one keeps it flat.
-func (t *BSPTree) ApplyLayoutInto(bounds Rect, result map[int]Rect) map[int]Rect {
+func (t *BSPTree) ApplyLayoutInto(bounds Rect, result map[int]Rect, gap int) map[int]Rect {
 	clear(result)
 	if t.Root == nil {
 		return result
 	}
-	t.applyLayoutRecursive(t.Root, bounds, result)
+	t.applyLayoutRecursive(t.Root, bounds, result, gap)
 	// Safety net: keep every laid-out rectangle inside the root bounds. The
 	// recursive partition already stays within bounds, so this is a no-op in the
 	// normal case; it only bites if a future change lets a rectangle escape.
@@ -429,7 +435,7 @@ func (t *BSPTree) ApplyLayoutInto(bounds Rect, result map[int]Rect) map[int]Rect
 	return result
 }
 
-func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[int]Rect) {
+func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[int]Rect, gap int) {
 	if node == nil {
 		return
 	}
@@ -446,9 +452,9 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 		return
 	}
 
-	leftBounds, rightBounds := childBounds(node, bounds)
-	t.applyLayoutRecursive(node.Left, leftBounds, result)
-	t.applyLayoutRecursive(node.Right, rightBounds, result)
+	leftBounds, rightBounds := childBounds(node, bounds, gap)
+	t.applyLayoutRecursive(node.Left, leftBounds, result, gap)
+	t.applyLayoutRecursive(node.Right, rightBounds, result, gap)
 }
 
 // childBounds divides an internal node's rectangle between its two children.
@@ -458,7 +464,7 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 // in particular depends on that, because a ratio computed against a rectangle
 // the layout does not agree with puts the divider somewhere the drag did not
 // ask for.
-func childBounds(node *TileNode, bounds Rect) (leftBounds, rightBounds Rect) {
+func childBounds(node *TileNode, bounds Rect, gap int) (leftBounds, rightBounds Rect) {
 	if node.SplitType == SplitStacked {
 		// Stacked: the active child gets the content area, the inactive one is
 		// reduced to a single title bar row.
@@ -473,13 +479,8 @@ func childBounds(node *TileNode, bounds Rect) (leftBounds, rightBounds Rect) {
 		return leftBounds, rightBounds
 	}
 
-	// Shared borders reserve one cell between the two children for the drawn
-	// separator, so the far child starts one past the divider line.
-	gap := 0
-	if config.SharedBorders {
-		gap = 1
-	}
-
+	// The reserved cell between the two children is the drawn separator's, so
+	// the far child starts one past the divider line.
 	if node.SplitType == SplitVertical {
 		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
 		if gap > 0 {
@@ -531,7 +532,7 @@ func (e ResizeEdge) far() bool {
 // coincide, which they do by default because fresh splits are all 0.5. The tree
 // says exactly which two subtrees the divider separates, and nothing outside
 // them may move.
-func (t *BSPTree) ResizeSplit(windowID int, e ResizeEdge, pos int, bounds Rect) bool {
+func (t *BSPTree) ResizeSplit(windowID int, e ResizeEdge, pos int, bounds Rect, gap int) bool {
 	leaf := t.WindowToNode[windowID]
 	if leaf == nil {
 		return false
@@ -558,14 +559,9 @@ func (t *BSPTree) ResizeSplit(windowID int, e ResizeEdge, pos int, bounds Rect) 
 		return false
 	}
 
-	rect, ok := t.nodeBounds(node, bounds)
+	rect, ok := t.nodeBounds(node, bounds, gap)
 	if !ok {
 		return false
-	}
-
-	gap := 0
-	if config.SharedBorders {
-		gap = 1
 	}
 
 	// The near child's far edge is the divider line itself; the far child's near
@@ -585,8 +581,8 @@ func (t *BSPTree) ResizeSplit(windowID int, e ResizeEdge, pos int, bounds Rect) 
 
 	// Neither subtree may be squeezed below what its own leaves need, and a
 	// subtree split along the same axis needs the sum of its children.
-	lo := origin + minExtent(node.Left, e.vertical())
-	hi := origin + extent - gap - minExtent(node.Right, e.vertical())
+	lo := origin + minExtent(node.Left, e.vertical(), gap)
+	hi := origin + extent - gap - minExtent(node.Right, e.vertical(), gap)
 	if lo > hi {
 		return false
 	}
@@ -601,7 +597,7 @@ func (t *BSPTree) ResizeSplit(windowID int, e ResizeEdge, pos int, bounds Rect) 
 
 // minExtent is the smallest width (or height) a subtree can be laid out in
 // without pushing one of its leaves under the minimum window size.
-func minExtent(node *TileNode, vertical bool) int {
+func minExtent(node *TileNode, vertical bool, gap int) int {
 	if node == nil {
 		return 0
 	}
@@ -612,8 +608,8 @@ func minExtent(node *TileNode, vertical bool) int {
 		return config.DefaultWindowHeight
 	}
 
-	left := minExtent(node.Left, vertical)
-	right := minExtent(node.Right, vertical)
+	left := minExtent(node.Left, vertical, gap)
+	right := minExtent(node.Right, vertical, gap)
 
 	if node.SplitType == SplitStacked {
 		if vertical {
@@ -629,10 +625,6 @@ func minExtent(node *TileNode, vertical bool) int {
 		return max(left, right)
 	}
 
-	gap := 0
-	if config.SharedBorders {
-		gap = 1
-	}
 	return left + right + gap
 }
 
@@ -640,7 +632,7 @@ func minExtent(node *TileNode, vertical bool) int {
 // It descends from the root through childBounds rather than recomputing the
 // split model, so a ratio derived from it lands the divider where the caller
 // asked.
-func (t *BSPTree) nodeBounds(target *TileNode, bounds Rect) (Rect, bool) {
+func (t *BSPTree) nodeBounds(target *TileNode, bounds Rect, gap int) (Rect, bool) {
 	if target == nil || t.Root == nil {
 		return Rect{}, false
 	}
@@ -660,7 +652,7 @@ func (t *BSPTree) nodeBounds(target *TileNode, bounds Rect) (Rect, bool) {
 		if node.IsLeaf() {
 			return Rect{}, false
 		}
-		leftBounds, rightBounds := childBounds(node, rect)
+		leftBounds, rightBounds := childBounds(node, rect, gap)
 		if path[i-1] == node.Left {
 			rect = leftBounds
 		} else {
@@ -672,26 +664,20 @@ func (t *BSPTree) nodeBounds(target *TileNode, bounds Rect) (Rect, bool) {
 
 // SyncRatiosFromGeometry updates the tree's split ratios based on actual window positions.
 // This is called after mouse resize to keep the tree in sync with reality.
-func (t *BSPTree) SyncRatiosFromGeometry(windows map[int]Rect, bounds Rect) {
+func (t *BSPTree) SyncRatiosFromGeometry(windows map[int]Rect, bounds Rect, gap int) {
 	if t.Root == nil {
 		return
 	}
-	t.syncRatiosRecursive(t.Root, bounds, windows)
+	t.syncRatiosRecursive(t.Root, bounds, windows, gap)
 }
 
-func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[int]Rect) {
+// syncRatiosRecursive has to use the same model applyLayoutRecursive does,
+// separator gap included; otherwise every ratio in the tree is re-derived one
+// cell off on each sync, and a resize on one axis walks the dividers on the
+// other axis. Nested bounds must account for it too.
+func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[int]Rect, gap int) {
 	if node == nil || node.IsLeaf() {
 		return
-	}
-
-	// Shared-border layouts reserve one cell for the separator, so the near edge
-	// of the right/bottom subtree sits one cell past the divider. Sync has to use
-	// the same model applyLayoutRecursive does; otherwise every ratio in the tree
-	// is re-derived one cell off on each sync, and a resize on one axis walks the
-	// dividers on the other axis. Nested bounds must account for it too.
-	gap := 0
-	if config.SharedBorders {
-		gap = 1
 	}
 
 	if node.SplitType == SplitStacked {
@@ -701,13 +687,13 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 		content := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: bounds.H - titleBarHeight}
 		title := Rect{X: bounds.X, Y: bounds.Y + bounds.H - titleBarHeight, W: bounds.W, H: titleBarHeight}
 		if node.StackedActiveLeft {
-			t.syncRatiosRecursive(node.Left, content, windows)
-			t.syncRatiosRecursive(node.Right, title, windows)
+			t.syncRatiosRecursive(node.Left, content, windows, gap)
+			t.syncRatiosRecursive(node.Right, title, windows, gap)
 		} else {
 			title.Y = bounds.Y
 			content.Y = bounds.Y + titleBarHeight
-			t.syncRatiosRecursive(node.Left, title, windows)
-			t.syncRatiosRecursive(node.Right, content, windows)
+			t.syncRatiosRecursive(node.Left, title, windows, gap)
+			t.syncRatiosRecursive(node.Right, content, windows, gap)
 		}
 		return
 	}
@@ -726,7 +712,7 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 	// exists for change - master-stack, floating windows, windows outside the
 	// tree, and the geometry-scan fallback - and it leaves every other split
 	// holding the value a resize deliberately put there.
-	expectedLeft, expectedRight := childBounds(node, bounds)
+	expectedLeft, expectedRight := childBounds(node, bounds, gap)
 
 	// Calculate the actual split ratio from window geometry.
 	if node.SplitType == SplitVertical {
@@ -761,8 +747,8 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
 			rightBounds = Rect{X: splitX + gap, Y: bounds.Y, W: bounds.X + bounds.W - splitX - gap, H: bounds.H}
 		}
-		t.syncRatiosRecursive(node.Left, leftBounds, windows)
-		t.syncRatiosRecursive(node.Right, rightBounds, windows)
+		t.syncRatiosRecursive(node.Left, leftBounds, windows, gap)
+		t.syncRatiosRecursive(node.Right, rightBounds, windows, gap)
 	} else {
 		// The split boundary is the near (top) edge of the bottom subtree's
 		// topmost leaf. Fall back to the top subtree's bottom edge only when the
@@ -792,8 +778,8 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
 			rightBounds = Rect{X: bounds.X, Y: splitY + gap, W: bounds.W, H: bounds.Y + bounds.H - splitY - gap}
 		}
-		t.syncRatiosRecursive(node.Left, leftBounds, windows)
-		t.syncRatiosRecursive(node.Right, rightBounds, windows)
+		t.syncRatiosRecursive(node.Left, leftBounds, windows, gap)
+		t.syncRatiosRecursive(node.Right, rightBounds, windows, gap)
 	}
 }
 
@@ -821,7 +807,7 @@ func (t *BSPTree) findAnyWindowInSubtree(node *TileNode) int {
 const cellAspect = 2
 
 // determineAutoSplit determines the split direction based on the auto scheme
-func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitType {
+func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect, gap int) SplitType {
 	switch t.AutoScheme {
 	case SchemeLongestSide:
 		// Split along the longest dimension as it appears on screen.
@@ -867,7 +853,7 @@ func (t *BSPTree) determineAutoSplit(targetNode *TileNode, bounds Rect) SplitTyp
 		// nodeBounds mirrors the layout exactly, separator gap and stacked
 		// title bars included, so the aspect ratio this heuristic reads is the
 		// one on screen.
-		r, ok := t.nodeBounds(targetNode, bounds)
+		r, ok := t.nodeBounds(targetNode, bounds, gap)
 		if !ok {
 			r = bounds
 		}
@@ -978,17 +964,19 @@ type SplitLine struct {
 }
 
 // CollectSplits returns all separator line positions for shared border rendering.
-// Must be called with the same bounds used for ApplyLayout.
-func (t *BSPTree) CollectSplits(bounds Rect) []SplitLine {
+// Must be called with the same bounds and gap used for ApplyLayout: a divider
+// is drawn in the cell the layout reserved for it, so with nothing reserved
+// there is no divider and any line would land on a cell a pane owns.
+func (t *BSPTree) CollectSplits(bounds Rect, gap int) []SplitLine {
 	var splits []SplitLine
-	if t.Root == nil {
+	if t.Root == nil || gap <= 0 {
 		return splits
 	}
-	t.collectSplitsRecursive(t.Root, bounds, &splits)
+	t.collectSplitsRecursive(t.Root, bounds, &splits, gap)
 	return splits
 }
 
-func (t *BSPTree) collectSplitsRecursive(node *TileNode, bounds Rect, splits *[]SplitLine) {
+func (t *BSPTree) collectSplitsRecursive(node *TileNode, bounds Rect, splits *[]SplitLine, gap int) {
 	if node == nil || node.IsLeaf() {
 		return
 	}
@@ -998,7 +986,7 @@ func (t *BSPTree) collectSplitsRecursive(node *TileNode, bounds Rect, splits *[]
 	// from a second copy of the split arithmetic. A separator drawn where no
 	// divider is means the pointer offers a resize cursor over a line that
 	// dragging will not move.
-	leftBounds, rightBounds := childBounds(node, bounds)
+	leftBounds, rightBounds := childBounds(node, bounds, gap)
 
 	// A stacked node splits by raising one child's title bar, not by a
 	// separator, and ResizeSplit will not move one. Emitting a line for it
@@ -1021,8 +1009,8 @@ func (t *BSPTree) collectSplitsRecursive(node *TileNode, bounds Rect, splits *[]
 		}
 	}
 
-	t.collectSplitsRecursive(node.Left, leftBounds, splits)
-	t.collectSplitsRecursive(node.Right, rightBounds, splits)
+	t.collectSplitsRecursive(node.Left, leftBounds, splits, gap)
+	t.collectSplitsRecursive(node.Right, rightBounds, splits, gap)
 }
 
 // GetAllWindowIDs returns all window IDs in the tree (in-order traversal)

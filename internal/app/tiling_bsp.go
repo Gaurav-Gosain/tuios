@@ -121,11 +121,18 @@ func (m *OS) ApplyBSPLayout() {
 	}
 
 	bounds := m.GetBSPBounds()
-	layouts := tree.ApplyLayout(bounds)
+	layouts := tree.ApplyLayout(bounds, m.separatorGap())
 
 	// Asked once for the whole layout, not per pane: it is what decides between
 	// the two branches below, and it ends a stale deferral as a side effect.
 	deferring := m.resizeDeferralActive()
+
+	// Read alongside the gap the rectangles above were partitioned with, so the
+	// border every pane draws and the column the layout left between them are
+	// the same decision. A pane given a bordered box inside a rectangle that
+	// still holds a separator gap wastes that column; given a borderless one
+	// where no gap was reserved, its neighbour's line lands on its own content.
+	borderless := m.panesBorderless()
 
 	for windowIntID, rect := range layouts {
 		win := m.getWindowByIntID(windowIntID)
@@ -170,9 +177,9 @@ func (m *OS) ApplyBSPLayout() {
 		// later retile placing panes visually and never giving them a real size.
 		if deferring {
 			win.X, win.Y = rect.X, rect.Y
-			borderChanged := win.Tiled != config.SharedBorders
+			borderChanged := win.Tiled != borderless
 			if borderChanged {
-				win.Tiled = config.SharedBorders
+				win.Tiled = borderless
 				win.InvalidateCache()
 			}
 			// A changed border allowance owes the guest a new box even at the
@@ -209,7 +216,7 @@ func (m *OS) ApplyBSPLayout() {
 			// still drew a box of its own. Any path that retired a snap early then
 			// made that permanent, since the flag was waiting on an animation that
 			// no longer existed.
-			win.Tiled = config.SharedBorders
+			win.Tiled = borderless
 			if win.Tiled != wasTiled {
 				win.InvalidateCache()
 			}
@@ -218,7 +225,7 @@ func (m *OS) ApplyBSPLayout() {
 			// Already at target, or animations disabled (NewSnapAnimation applied
 			// the size instantly). SetTiled re-syncs the emulator for the new
 			// border deduction when the flag actually changes.
-			win.SetTiled(config.SharedBorders)
+			win.SetTiled(borderless)
 		}
 	}
 }
@@ -279,10 +286,10 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 	// Check for preselection
 	if m.PreselectionDir != layout.PreselectionNone {
 		m.LogInfo("BSP: Inserting with preselection %d", m.PreselectionDir)
-		tree.InsertWindowWithPreselection(windowIntID, targetIntID, m.PreselectionDir, bounds)
+		tree.InsertWindowWithPreselection(windowIntID, targetIntID, m.PreselectionDir, bounds, m.separatorGap())
 		m.PreselectionDir = layout.PreselectionNone // Clear preselection
 	} else {
-		tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, bounds)
+		tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, bounds, m.separatorGap())
 	}
 
 	m.LogInfo("BSP: Tree now has %d windows", tree.WindowCount())
@@ -370,7 +377,7 @@ func (m *OS) SyncBSPTreeFromGeometry() {
 	}
 
 	bounds := m.GetBSPBounds()
-	tree.SyncRatiosFromGeometry(geometry, bounds)
+	tree.SyncRatiosFromGeometry(geometry, bounds, m.separatorGap())
 
 	// In shared borders mode, re-apply layout after sync to enforce separator gaps
 	if config.SharedBorders {

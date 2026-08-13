@@ -25,7 +25,7 @@ func TestDaemonCloseKeepsTheOtherPanesPut(t *testing.T) {
 
 	bounds := m.GetBSPBounds()
 	before := map[string]layout.Rect{}
-	for id, r := range m.WorkspaceTrees[m.CurrentWorkspace].ApplyLayout(bounds) {
+	for id, r := range m.WorkspaceTrees[m.CurrentWorkspace].ApplyLayout(bounds, m.separatorGap()) {
 		before[m.getWindowByIntID(id).ID] = r
 	}
 
@@ -54,7 +54,7 @@ func TestDaemonCloseKeepsTheOtherPanesPut(t *testing.T) {
 	checkWorkspaceLayout(t, m, "after a daemon close")
 
 	after := map[string]layout.Rect{}
-	for id, r := range m.WorkspaceTrees[m.CurrentWorkspace].ApplyLayout(bounds) {
+	for id, r := range m.WorkspaceTrees[m.CurrentWorkspace].ApplyLayout(bounds, m.separatorGap()) {
 		after[m.getWindowByIntID(id).ID] = r
 	}
 

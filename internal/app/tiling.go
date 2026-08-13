@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -34,7 +33,7 @@ type tileLayout struct {
 // same box GetBSPBounds hands the BSP tree, so panes never tile under a
 // reserved sidebar band on either side.
 func (m *OS) contentTileLayouts(n int) []layout.TileLayout {
-	layouts := layout.CalculateTilingLayout(n, m.GetContentWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio)
+	layouts := layout.CalculateTilingLayout(n, m.GetContentWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio, m.separatorGap())
 	if lm := m.GetLeftMargin(); lm != 0 {
 		for i := range layouts {
 			layouts[i].X += lm
@@ -105,7 +104,7 @@ func (m *OS) TileAllWindows() {
 				visibleWindows[i].Y = l.Y
 				// Set Tiled before Resize so the border deduction (and therefore
 				// the emulator size) matches the shared-borders state.
-				visibleWindows[i].Tiled = config.SharedBorders
+				visibleWindows[i].Tiled = m.panesBorderless()
 				// Mid-resize the PTY round trip is deferred, exactly as the BSP
 				// path does it; ViewportResizeSettledMsg drains PendingResizes.
 				if deferring {
@@ -164,7 +163,7 @@ func (m *OS) TileAllWindows() {
 
 		for i, win := range visibleWindows {
 			windowIntID := m.getWindowIntID(win.ID)
-			tree.InsertWindow(windowIntID, lastInsertedID, layout.SplitNone, 0.5, bounds)
+			tree.InsertWindow(windowIntID, lastInsertedID, layout.SplitNone, 0.5, bounds, m.separatorGap())
 			lastInsertedID = windowIntID
 			m.LogInfo("BSP: Added window %d (int ID %d) with target %d", i+1, windowIntID, lastInsertedID)
 		}
@@ -201,7 +200,7 @@ func (m *OS) TileAllWindows() {
 			}
 
 			bounds := m.GetBSPBounds()
-			tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, bounds)
+			tree.InsertWindow(windowIntID, targetIntID, layout.SplitNone, 0.5, bounds, m.separatorGap())
 			m.LogInfo("BSP: Added missing window (int ID %d) with target %d", windowIntID, targetIntID)
 		}
 	}
@@ -258,7 +257,7 @@ func (m *OS) ToggleAutoTiling() {
 
 		for i, win := range visibleWindows {
 			windowIntID := m.getWindowIntID(win.ID)
-			tree.InsertWindow(windowIntID, lastInsertedID, layout.SplitNone, 0.5, bounds)
+			tree.InsertWindow(windowIntID, lastInsertedID, layout.SplitNone, 0.5, bounds, m.separatorGap())
 			lastInsertedID = windowIntID
 			m.LogInfo("BSP: Added window %d (int ID %d) with target %d, split count now: %d",
 				i+1, windowIntID, lastInsertedID, tree.WindowCount())
@@ -285,6 +284,10 @@ func (m *OS) ToggleAutoTiling() {
 			m.Windows[i].PositionDirty = true
 			m.Windows[i].HasNewOutput.Store(true)
 		}
+		// Every pane draws its own border again, so the column each split was
+		// holding open for a divider now draws nothing at all. Hand it back to
+		// the panes on either side instead of leaving it empty between them.
+		m.reclaimSeparatorGaps()
 		m.MarkAllDirty()
 	}
 

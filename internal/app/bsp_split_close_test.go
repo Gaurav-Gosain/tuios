@@ -90,7 +90,7 @@ func checkWorkspaceLayout(t *testing.T, m *OS, what string) {
 
 	bounds := m.GetBSPBounds()
 	covered := map[[2]int]int{}
-	for id, r := range tree.ApplyLayout(bounds) {
+	for id, r := range tree.ApplyLayout(bounds, m.separatorGap()) {
 		if r.W <= 0 || r.H <= 0 {
 			t.Errorf("%s: window %d has size %dx%d", what, id, r.W, r.H)
 			continue

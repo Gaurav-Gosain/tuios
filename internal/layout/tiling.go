@@ -13,18 +13,13 @@ type TileLayout struct {
 // CalculateTilingLayout returns optimal positions for n windows
 // masterRatio controls the width ratio of the master (left) pane (0.3-0.7)
 //
-// Under config.SharedBorders the tiler reserves one cell between neighbours for
-// the drawn divider, exactly as the BSP splitter does (bsp.go childBounds).
-// Both layouts hand the separator its own column that way, so neither pane's
-// first column is painted over by the line between them.
-func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio float64) []TileLayout {
+// gap is the cells reserved between neighbours for the drawn divider, on the
+// same terms as the BSP splitter (bsp.go childBounds). Both layouts hand the
+// separator its own column that way, so neither pane's first column is painted
+// over by the line between them.
+func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio float64, gap int) []TileLayout {
 	if n == 0 {
 		return nil
-	}
-
-	gap := 0
-	if config.SharedBorders {
-		gap = 1
 	}
 
 	layouts := make([]TileLayout, 0, n)

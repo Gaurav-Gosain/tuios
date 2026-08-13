@@ -212,7 +212,7 @@ func (m *OS) settleBorderMode(workspace int) {
 		if w.Workspace != workspace || w.Minimized || w.Minimizing || w.IsFloating {
 			continue
 		}
-		w.SetTiled(config.SharedBorders)
+		w.SetTiled(m.panesBorderless())
 	}
 }
 

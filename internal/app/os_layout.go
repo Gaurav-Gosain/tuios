@@ -32,9 +32,9 @@ func (m *OS) RebuildBSPTreeFromPositions() {
 		intID := m.getWindowIntID(w.ID)
 		existingIDs := tree.GetAllWindowIDs()
 		if len(existingIDs) == 0 {
-			tree.InsertWindow(intID, 0, layout.SplitNone, 0.5, m.GetBSPBounds())
+			tree.InsertWindow(intID, 0, layout.SplitNone, 0.5, m.GetBSPBounds(), m.separatorGap())
 		} else {
-			tree.InsertWindow(intID, existingIDs[len(existingIDs)-1], layout.SplitNone, 0.5, m.GetBSPBounds())
+			tree.InsertWindow(intID, existingIDs[len(existingIDs)-1], layout.SplitNone, 0.5, m.GetBSPBounds(), m.separatorGap())
 		}
 	}
 
@@ -44,7 +44,7 @@ func (m *OS) RebuildBSPTreeFromPositions() {
 		intID := m.getWindowIntID(w.ID)
 		windowRects[intID] = layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}
 	}
-	tree.SyncRatiosFromGeometry(windowRects, m.GetBSPBounds())
+	tree.SyncRatiosFromGeometry(windowRects, m.GetBSPBounds(), m.separatorGap())
 }
 
 // Layout mode names as they travel in session state. They name the selection

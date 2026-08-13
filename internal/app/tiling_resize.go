@@ -339,7 +339,7 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 		if edge.old == edge.new {
 			continue
 		}
-		if tree.ResizeSplit(intID, edge.e, edge.new, bounds) {
+		if tree.ResizeSplit(intID, edge.e, edge.new, bounds, m.separatorGap()) {
 			moved = true
 		}
 	}
@@ -354,7 +354,7 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 	if m.bspResizeScratch == nil {
 		m.bspResizeScratch = make(map[int]layout.Rect, len(m.Windows))
 	}
-	for windowIntID, rect := range tree.ApplyLayoutInto(bounds, m.bspResizeScratch) {
+	for windowIntID, rect := range tree.ApplyLayoutInto(bounds, m.bspResizeScratch, m.separatorGap()) {
 		win := m.getWindowByIntID(windowIntID)
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue

@@ -23,13 +23,13 @@ func (m *OS) separatorSplits() []layout.SplitLine {
 		return nil
 	}
 	if !m.UseBSPLayout {
-		return layout.SplitsBetween(m.tiledPaneRects(), 1)
+		return layout.SplitsBetween(m.tiledPaneRects(), m.separatorGap())
 	}
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil || tree.IsEmpty() {
 		return nil
 	}
-	return tree.CollectSplits(m.GetBSPBounds())
+	return tree.CollectSplits(m.GetBSPBounds(), m.separatorGap())
 }
 
 // tiledPaneRects returns the rectangles of the panes currently tiled on screen.

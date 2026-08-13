@@ -219,7 +219,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	}
 
 	// Add shared border separator overlay when active (not in scrolling mode)
-	if config.SharedBorders && m.AutoTiling && !m.UseScrollingLayout {
+	if m.panesBorderless() {
 		if sepLayers := m.renderSeparatorOverlay(); len(sepLayers) > 0 {
 			layers = append(layers, sepLayers...)
 		}
@@ -383,7 +383,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.ShowKeys && len(m.RecentKeys) > 0 {
 		return nil, false
 	}
-	if config.SharedBorders && m.AutoTiling && !m.UseScrollingLayout {
+	if m.panesBorderless() {
 		return nil, false
 	}
 	// The sidebar is a reserved-region layer the fast path does not compose. When
