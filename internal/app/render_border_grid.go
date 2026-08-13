@@ -66,6 +66,13 @@ type chromeRules struct{ top, bottom, left, right int }
 
 func (m *OS) chromeRules(bounds layout.Rect) chromeRules {
 	r := chromeRules{top: -1, bottom: -1, left: -1, right: -1}
+	// A style drawn with fills has nothing to meet on the rule. Its last cell is
+	// inked to the region's boundary already, and a fill carried onto the rule
+	// would cover the rule rather than join it, leaving the divider a whole cell
+	// longer than the division it draws.
+	if config.BorderFillsCells() {
+		return r
+	}
 	switch config.DockbarPosition {
 	case "hidden":
 	case "top":
@@ -154,11 +161,15 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	border := config.GetBorderForStyle()
 	chVert := firstRune(border.Left, '│')
 	chHoriz := firstRune(border.Top, '─')
-	chCross := firstRune(border.Middle, '┼')
-	chTRight := firstRune(border.MiddleLeft, '├') // ├ T pointing right
-	chTLeft := firstRune(border.MiddleRight, '┤') // ┤ T pointing left
-	chTDown := firstRune(border.MiddleTop, '┬')   // ┬ T pointing down
-	chTUp := firstRune(border.MiddleBottom, '┴')  // ┴ T pointing up
+	// The arms of a junction are what show two strokes meeting. A style that
+	// leaves them empty is drawn with fills, whose cells already touch along the
+	// edge they share, so its junction is its own divider glyph carried through:
+	// falling back to a box-drawing arm welds a line onto a bar of blocks.
+	chCross := firstRune(border.Middle, chVert)
+	chTRight := firstRune(border.MiddleLeft, chVert) // ├ T pointing right
+	chTLeft := firstRune(border.MiddleRight, chVert) // ┤ T pointing left
+	chTDown := firstRune(border.MiddleTop, chHoriz)  // ┬ T pointing down
+	chTUp := firstRune(border.MiddleBottom, chHoriz) // ┴ T pointing up
 
 	// The perimeter of the focused window, clipped to the tiled bounds. Cells on
 	// it are drawn in the focus color, so the focused pane reads as an outlined

@@ -248,8 +248,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 		})
 	}
 
-	checkEnum("border_style", cfg.Appearance.BorderStyle,
-		[]string{"rounded", "normal", "thick", "double", "hidden", "block", "ascii", "outer-half-block", "inner-half-block"})
+	checkEnum("border_style", cfg.Appearance.BorderStyle, BorderStyles)
 	checkEnum("dockbar_position", cfg.Appearance.DockbarPosition,
 		[]string{"bottom", "top", "hidden"})
 	checkEnum("sidebar.position", cfg.Appearance.Sidebar.Position,

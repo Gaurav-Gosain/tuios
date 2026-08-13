@@ -943,6 +943,30 @@ const (
 	WindowSeparatorCharASCII = "-"
 )
 
+// BorderStyles is every border style the app offers, in the order the settings
+// page cycles them. One list so a style added here is offered, validated and
+// covered by the border tests at once.
+var BorderStyles = []string{
+	"rounded", "normal", "thick", "double",
+	"block", "outer-half-block", "inner-half-block",
+	"ascii", "hidden",
+}
+
+// BorderFillsCells reports whether the active style draws with area fills rather
+// than strokes. Its glyphs ink a whole cell or a half of one, so two of them
+// already touch along the edge they share: there is no stroke to join, and the
+// junction and corner glyphs that draw a joining are meaningless for it.
+func BorderFillsCells() bool {
+	if UseASCIIOnly {
+		return false
+	}
+	switch BorderStyle {
+	case "block", "outer-half-block", "inner-half-block":
+		return true
+	}
+	return false
+}
+
 // GetBorderForStyle returns the lipgloss Border for the current style
 func GetBorderForStyle() lipgloss.Border {
 	if UseASCIIOnly || BorderStyle == "ascii" {

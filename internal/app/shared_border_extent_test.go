@@ -24,13 +24,19 @@ import (
 // exercised against every shape the content region takes.
 func extentOS(t *testing.T, n int, dock, sidebar string) *OS {
 	t.Helper()
+	return extentOSStyled(t, n, dock, sidebar, "rounded")
+}
+
+// extentOSStyled is the same session drawn in a given border style.
+func extentOSStyled(t *testing.T, n int, dock, sidebar, borderStyle string) *OS {
+	t.Helper()
 	shared, anim, ascii := config.SharedBorders, config.AnimationsEnabled, config.UseASCIIOnly
 	style, dockPos := config.BorderStyle, config.DockbarPosition
 	sidebarOn, sidebarPos := config.SidebarEnabled, config.SidebarPosition
 	config.SharedBorders = true
 	config.AnimationsEnabled = false
 	config.UseASCIIOnly = false
-	config.BorderStyle = "rounded"
+	config.BorderStyle = borderStyle
 	config.DockbarPosition = dock
 	config.SidebarEnabled = sidebar != ""
 	if sidebar != "" {
@@ -56,7 +62,7 @@ func extentOS(t *testing.T, n int, dock, sidebar string) *OS {
 		MasterRatio:      0.5,
 	}
 	for i := range n {
-		win := newTestWindow(t, fmt.Sprintf("extent-%s-%s-%d-%d", dock, sidebar, n, i), 40, 20)
+		win := newTestWindow(t, fmt.Sprintf("extent-%s-%s-%s-%d-%d", borderStyle, dock, sidebar, n, i), 40, 20)
 		win.Workspace = 1
 		m.Windows = append(m.Windows, win)
 	}
@@ -118,40 +124,51 @@ func cellIn(g [][]rune, x, y int) string { return fmt.Sprintf("%q", string(cellA
 // TestVerticalDividerRunsItsWholeDivision: with two panes side by side the
 // divider splits the whole content region, so every row of it carries the line
 // and the end rows are the line rather than a corner that paints half a cell.
-// Where the dock closes the region, the divider reaches the hairline and meets
-// it with a junction.
+// Where the dock closes the region, a divider drawn with strokes reaches the
+// hairline and meets it with a junction; one drawn with fills has already inked
+// its last cell to the boundary and leaves the hairline to the dock.
 func TestVerticalDividerRunsItsWholeDivision(t *testing.T) {
-	for _, dock := range []string{"top", "bottom"} {
-		for _, side := range []string{"left", "right", ""} {
-			t.Run(dock+"-dock/"+sidebarName(side), func(t *testing.T) {
-				m := extentOS(t, 2, dock, side)
-				b := m.GetBSPBounds()
-				border := config.GetBorderForStyle()
-				vert := firstRune(border.Left, '│')
-				s := firstSplit(t, m, true)
-				g := frameCells(t, m)
+	for _, style := range config.BorderStyles {
+		for _, dock := range []string{"top", "bottom"} {
+			for _, side := range []string{"left", "right", ""} {
+				t.Run(style+"/"+dock+"-dock/"+sidebarName(side), func(t *testing.T) {
+					m := extentOSStyled(t, 2, dock, side, style)
+					b := m.GetBSPBounds()
+					border := config.GetBorderForStyle()
+					vert := firstRune(border.Left, '│')
+					s := firstSplit(t, m, true)
+					g := frameCells(t, m)
 
-				for y := b.Y; y < b.Y+b.H; y++ {
-					if got := cellAt(g, s.Pos, y); got != vert {
-						t.Errorf("divider row %d is %s, want %s: the line does not run the whole division (%d-%d)",
-							y, cellIn(g, s.Pos, y), fmt.Sprintf("%q", string(vert)), b.Y, b.Y+b.H-1)
+					for y := b.Y; y < b.Y+b.H; y++ {
+						if got := cellAt(g, s.Pos, y); got != vert {
+							t.Errorf("divider row %d is %s, want %s: the line does not run the whole division (%d-%d)",
+								y, cellIn(g, s.Pos, y), fmt.Sprintf("%q", string(vert)), b.Y, b.Y+b.H-1)
+						}
 					}
-				}
 
-				rule := dockRuleRow(m)
-				want := firstRune(border.MiddleTop, '┬') // the divider hangs off the rule
-				caps := border.TopLeft + border.TopRight
-				if dock != "top" {
-					want = firstRune(border.MiddleBottom, '┴')
-					caps = border.BottomLeft + border.BottomRight
-				}
-				// The focused pane caps its own corner there, which is the same
-				// meeting drawn with a hook instead of a T.
-				if got := cellAt(g, s.Pos, rule); got != want && !strings.ContainsRune(caps, got) {
-					t.Errorf("the divider meets the dock hairline at row %d with %s, want %q or one of %q",
-						rule, cellIn(g, s.Pos, rule), string(want), caps)
-				}
-			})
+					rule := dockRuleRow(m)
+					if config.BorderFillsCells() {
+						want := firstRune(config.GetWindowSeparatorChar(), '─')
+						if got := cellAt(g, s.Pos, rule); got != want {
+							t.Errorf("the dock hairline at row %d is %s under the divider, want the hairline's own %q",
+								rule, cellIn(g, s.Pos, rule), string(want))
+						}
+						return
+					}
+					want := firstRune(border.MiddleTop, '┬') // the divider hangs off the rule
+					caps := border.TopLeft + border.TopRight
+					if dock != "top" {
+						want = firstRune(border.MiddleBottom, '┴')
+						caps = border.BottomLeft + border.BottomRight
+					}
+					// The focused pane caps its own corner there, which is the same
+					// meeting drawn with a hook instead of a T.
+					if got := cellAt(g, s.Pos, rule); got != want && !strings.ContainsRune(caps, got) {
+						t.Errorf("the divider meets the dock hairline at row %d with %s, want %q or one of %q",
+							rule, cellIn(g, s.Pos, rule), string(want), caps)
+					}
+				})
+			}
 		}
 	}
 }
@@ -161,36 +178,49 @@ func TestVerticalDividerRunsItsWholeDivision(t *testing.T) {
 // where the sidebar closes the region, and the last content column where the
 // screen does.
 func TestHorizontalDividerRunsItsWholeDivision(t *testing.T) {
-	for _, side := range []string{"left", "right", ""} {
-		t.Run(sidebarName(side), func(t *testing.T) {
-			m := extentOS(t, 3, "bottom", side)
-			b := m.GetBSPBounds()
-			border := config.GetBorderForStyle()
-			horiz := firstRune(border.Top, '─')
-			s := firstSplit(t, m, false)
-			g := frameCells(t, m)
+	for _, style := range config.BorderStyles {
+		for _, side := range []string{"left", "right", ""} {
+			t.Run(style+"/"+sidebarName(side), func(t *testing.T) {
+				m := extentOSStyled(t, 3, "bottom", side, style)
+				b := m.GetBSPBounds()
+				border := config.GetBorderForStyle()
+				horiz := firstRune(border.Top, '─')
+				s := firstSplit(t, m, false)
+				g := frameCells(t, m)
 
-			for x := s.From; x <= s.To; x++ {
-				if got := cellAt(g, x, s.Pos); got != horiz {
-					t.Errorf("divider column %d is %s, want %q: the line does not run its whole division",
-						x, cellIn(g, x, s.Pos), string(horiz))
+				for x := s.From; x <= s.To; x++ {
+					if got := cellAt(g, x, s.Pos); got != horiz {
+						t.Errorf("divider column %d is %s, want %q: the line does not run its whole division",
+							x, cellIn(g, x, s.Pos), string(horiz))
+					}
 				}
-			}
 
-			if s.To != b.X+b.W-1 {
-				t.Fatalf("this divider ends at column %d, inside the region (%d-%d); it cannot answer for the region's edge",
-					s.To, b.X, b.X+b.W-1)
-			}
-			if side != "right" {
-				return
-			}
-			want := firstRune(border.MiddleRight, '┤')
-			caps := border.TopRight + border.BottomRight
-			if got := cellAt(g, b.X+b.W, s.Pos); got != want && !strings.ContainsRune(caps, got) {
-				t.Errorf("the divider meets the sidebar's edge rule at column %d with %s, want %q or one of %q",
-					b.X+b.W, cellIn(g, b.X+b.W, s.Pos), string(want), caps)
-			}
-		})
+				if s.To != b.X+b.W-1 {
+					t.Fatalf("this divider ends at column %d, inside the region (%d-%d); it cannot answer for the region's edge",
+						s.To, b.X, b.X+b.W-1)
+				}
+				if side != "right" {
+					return
+				}
+				edge := b.X + b.W
+				if config.BorderFillsCells() {
+					// The rail draws its edge rule in the same style, so the two fills
+					// touch on the column they share and the divider adds nothing.
+					want := firstRune(config.GetWindowBorderLeft(), '│')
+					if got := cellAt(g, edge, s.Pos); got != want {
+						t.Errorf("the sidebar's edge rule at column %d is %s under the divider, want the rule's own %q",
+							edge, cellIn(g, edge, s.Pos), string(want))
+					}
+					return
+				}
+				want := firstRune(border.MiddleRight, '┤')
+				caps := border.TopRight + border.BottomRight
+				if got := cellAt(g, edge, s.Pos); got != want && !strings.ContainsRune(caps, got) {
+					t.Errorf("the divider meets the sidebar's edge rule at column %d with %s, want %q or one of %q",
+						edge, cellIn(g, edge, s.Pos), string(want), caps)
+				}
+			})
+		}
 	}
 }
 
@@ -198,31 +228,35 @@ func TestHorizontalDividerRunsItsWholeDivision(t *testing.T) {
 // divider it meets, drawn as a junction rather than one line over another, and
 // nothing of it is drawn past that cell.
 func TestDividerStopsAtACrossing(t *testing.T) {
-	for _, n := range []int{3, 4} {
-		t.Run(fmt.Sprintf("%d-panes", n), func(t *testing.T) {
-			m := extentOS(t, n, "bottom", "")
-			border := config.GetBorderForStyle()
-			junctions := border.Middle + border.MiddleTop + border.MiddleBottom +
-				border.MiddleLeft + border.MiddleRight
-			g := frameCells(t, m)
-			b := m.GetBSPBounds()
+	for _, style := range config.BorderStyles {
+		for _, n := range []int{3, 4} {
+			t.Run(fmt.Sprintf("%s/%d-panes", style, n), func(t *testing.T) {
+				m := extentOSStyled(t, n, "bottom", "", style)
+				border := config.GetBorderForStyle()
+				junctions := junctionGlyphs(border)
+				g := frameCells(t, m)
+				b := m.GetBSPBounds()
 
-			for _, s := range m.separatorSplits() {
-				if !s.Vertical || s.From <= b.Y {
-					continue
+				for _, s := range m.separatorSplits() {
+					if !s.Vertical || s.From <= b.Y {
+						continue
+					}
+					// This divider starts below the region's top, so it starts on the
+					// horizontal divider that bounds it.
+					if got := cellAt(g, s.Pos, s.From-1); !strings.ContainsRune(junctions, got) {
+						t.Errorf("the divider at column %d starts at row %d but the cell above it is %s, want a junction from %q",
+							s.Pos, s.From, cellIn(g, s.Pos, s.From-1), junctions)
+					}
+					if strings.TrimSpace(junctions) == "" {
+						continue // a style that draws nothing cannot draw too much
+					}
+					if got := cellAt(g, s.Pos, s.From-2); strings.ContainsRune(junctions+string(firstRune(border.Left, '│')), got) {
+						t.Errorf("the divider at column %d is drawn past its crossing, into row %d (%s)",
+							s.Pos, s.From-2, cellIn(g, s.Pos, s.From-2))
+					}
 				}
-				// This divider starts below the region's top, so it starts on the
-				// horizontal divider that bounds it.
-				if got := cellAt(g, s.Pos, s.From-1); !strings.ContainsRune(junctions, got) {
-					t.Errorf("the divider at column %d starts at row %d but the cell above it is %s, want a junction from %q",
-						s.Pos, s.From, cellIn(g, s.Pos, s.From-1), junctions)
-				}
-				if got := cellAt(g, s.Pos, s.From-2); strings.ContainsRune(junctions+string(firstRune(border.Left, '│')), got) {
-					t.Errorf("the divider at column %d is drawn past its crossing, into row %d (%s)",
-						s.Pos, s.From-2, cellIn(g, s.Pos, s.From-2))
-				}
-			}
-		})
+			})
+		}
 	}
 }
 

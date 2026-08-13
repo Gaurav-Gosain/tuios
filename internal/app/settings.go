@@ -192,7 +192,7 @@ func (m *OS) tapeAutorunConfigValue() string {
 const themeNone = "none"
 
 var (
-	borderStyleOptions     = []string{"rounded", "normal", "thick", "double", "block", "outer-half-block", "inner-half-block", "ascii", "hidden"}
+	borderStyleOptions     = config.BorderStyles
 	positionOptions        = []string{"bottom", "top", "hidden"}
 	whichKeyPosOptions     = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
 	fpsOptions             = []string{"30", "60", "90", "120", "144", "unlimited"}
