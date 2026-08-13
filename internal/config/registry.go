@@ -1,6 +1,7 @@
 package config
 
 import (
+	"sort"
 	"strings"
 )
 
@@ -44,18 +45,43 @@ func (r *KeybindRegistry) buildMappings() {
 	// - WorkspacePrefix (used after Ctrl+B, w)
 }
 
-// addSection adds all keybindings from a section to the registry
-// Uses the key normalizer to expand platform-specific key variants
+// addSection adds all keybindings from a section to the registry. Later
+// sections still override earlier ones, which is how the section order in
+// buildMappings decides a cross-section clash.
 func (r *KeybindRegistry) addSection(section map[string][]string) {
-	for action, keys := range section {
-		// Expand keys using the normalizer (handles opt+N → unicode on macOS)
-		expandedKeys := r.normalizer.ExpandKeys(keys)
-		for _, key := range expandedKeys {
-			// Store keys exactly as normalized (preserves case for single letters)
-			// Don't lowercase here - we need case sensitivity for M vs m, etc.
-			r.keyToAction[key] = action
+	for key, action := range r.sectionKeyMap(section) {
+		// Store keys exactly as normalized (preserves case for single letters)
+		// Don't lowercase here - we need case sensitivity for M vs m, etc.
+		r.keyToAction[key] = action
+	}
+}
+
+// sectionKeyMap is the key→action map for one section, with the normalizer's
+// platform variants expanded (opt+N → unicode on macOS).
+//
+// Actions are visited in name order and the first claimant of a key keeps it.
+// A Go map iterates in a different order every time, so when two actions in one
+// section bind the same key, last-write-wins made the key resolve to a
+// different action on each press: a config that kept prefix_rename_window on
+// "," after the default moved to prefix_settings opened settings on roughly one
+// press in five. Duplicates are repaired at load (see dropStaleDuplicateKeys);
+// this makes whatever survives behave the same way every time.
+func (r *KeybindRegistry) sectionKeyMap(section map[string][]string) map[string]string {
+	actions := make([]string, 0, len(section))
+	for action := range section {
+		actions = append(actions, action)
+	}
+	sort.Strings(actions)
+
+	keyMap := make(map[string]string, len(section))
+	for _, action := range actions {
+		for _, key := range r.normalizer.ExpandKeys(section[action]) {
+			if _, taken := keyMap[key]; !taken {
+				keyMap[key] = action
+			}
 		}
 	}
+	return keyMap
 }
 
 // GetAction returns the action name for a given key in normal mode
@@ -116,15 +142,7 @@ func (r *KeybindRegistry) GetSidebarKeys(action string) []string {
 
 // lookupKeyInSection looks up a key in a specific config section
 func (r *KeybindRegistry) lookupKeyInSection(key string, section map[string][]string) string {
-	// Build a temporary map for this section
-	tempMap := make(map[string]string)
-	for action, keys := range section {
-		expandedKeys := r.normalizer.ExpandKeys(keys)
-		for _, k := range expandedKeys {
-			tempMap[k] = action
-		}
-	}
-	return r.lookupKey(key, tempMap)
+	return r.lookupKey(key, r.sectionKeyMap(section))
 }
 
 // lookupKey performs the actual key lookup with case handling

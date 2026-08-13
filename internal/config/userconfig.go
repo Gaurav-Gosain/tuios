@@ -1147,12 +1147,91 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// unfilled it resolves every rail key to nothing, and since the scope swallows
 	// unbound keys that traps the keyboard in the rail with no way out.
 	fillMapDefaults(cfg.Keybindings.Sidebar, defaultCfg.Keybindings.Sidebar)
+
+	for _, section := range keybindSectionPairs(cfg, defaultCfg) {
+		dropStaleDuplicateKeys(section.target, section.defaults)
+	}
 }
 
 func fillMapDefaults(target, defaults map[string][]string) {
 	for k, v := range defaults {
 		if _, exists := target[k]; !exists {
 			target[k] = v
+		}
+	}
+}
+
+// keybindSection pairs a config section with the defaults for that section.
+type keybindSection struct{ target, defaults map[string][]string }
+
+func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
+	c, d := &cfg.Keybindings, &defaultCfg.Keybindings
+	return []keybindSection{
+		{c.WindowManagement, d.WindowManagement},
+		{c.Workspaces, d.Workspaces},
+		{c.Layout, d.Layout},
+		{c.ModeControl, d.ModeControl},
+		{c.System, d.System},
+		{c.Navigation, d.Navigation},
+		{c.RestoreMinimized, d.RestoreMinimized},
+		{c.PrefixMode, d.PrefixMode},
+		{c.WindowPrefix, d.WindowPrefix},
+		{c.MinimizePrefix, d.MinimizePrefix},
+		{c.WorkspacePrefix, d.WorkspacePrefix},
+		{c.DebugPrefix, d.DebugPrefix},
+		{c.TapePrefix, d.TapePrefix},
+		{c.TerminalMode, d.TerminalMode},
+		{c.Sidebar, d.Sidebar},
+	}
+}
+
+// dropStaleDuplicateKeys resolves a key that two actions in the same section
+// both claim, in favour of the action that owns it by default.
+//
+// A default binding that moves from one action to another leaves the old key
+// behind in every config written before the move: the file already names the
+// old action with the key, and fillMapDefaults only adds the new action, so
+// both end up on it. That is how "," ended up on prefix_rename_window and
+// prefix_settings at once, which made the leader chord a coin flip between
+// renaming a pane and opening settings. Dropping the key from the action whose
+// own default no longer lists it leaves the binding a fresh config would have.
+//
+// A key no default claims, or one two defaults claim, is left alone: the first
+// is the user's own arrangement to resolve, the second is a defaults bug that
+// silently picking a winner would hide. ValidateConfig warns about both.
+func dropStaleDuplicateKeys(section, defaults map[string][]string) {
+	claimants := make(map[string][]string)
+	for action, keys := range section {
+		for _, key := range keys {
+			claimants[key] = append(claimants[key], action)
+		}
+	}
+
+	for key, actions := range claimants {
+		if len(actions) < 2 {
+			continue
+		}
+		owner := ""
+		for _, action := range actions {
+			if !slices.Contains(defaults[action], key) {
+				continue
+			}
+			if owner != "" {
+				owner = ""
+				break
+			}
+			owner = action
+		}
+		if owner == "" {
+			continue
+		}
+		for _, action := range actions {
+			if action == owner {
+				continue
+			}
+			section[action] = slices.DeleteFunc(slices.Clone(section[action]), func(k string) bool {
+				return k == key
+			})
 		}
 	}
 }
