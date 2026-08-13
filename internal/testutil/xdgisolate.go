@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/adrg/xdg"
@@ -30,21 +31,10 @@ var xdgVars = []string{
 	"XDG_CACHE_HOME", "XDG_RUNTIME_DIR",
 }
 
-// appDir is the subdirectory the app owns inside each base directory. The
-// escape check watches these and nothing else, so unrelated churn in the
-// developer's ~/.cache cannot make a test flake.
-const appDir = "tuios"
-
 // isolateXDG points every XDG directory at a throwaway tree and returns that
 // tree's path along with a function that removes it and reports whether the
-// run reached the developer's real directories anyway.
+// redirect was still in force when the run ended.
 func isolateXDG() (dir string, check func() error) {
-	real := realAppDirs()
-	before, err := hashDirs(real)
-	if err != nil {
-		panic(fmt.Sprintf("testutil: snapshot real XDG dirs: %v", err))
-	}
-
 	tmp, err := os.MkdirTemp("", "tuios-test-xdg")
 	if err != nil {
 		panic(fmt.Sprintf("testutil: create XDG tree: %v", err))
@@ -54,8 +44,9 @@ func isolateXDG() (dir string, check func() error) {
 			panic(fmt.Sprintf("testutil: set %s: %v", name, err))
 		}
 	}
-	// Also move HOME, so a path built from os.UserHomeDir rather than xdg
-	// lands in the tree too.
+	// HOME moves too, so a path built from os.UserHomeDir rather than from xdg
+	// lands in the tree as well. internal/server derives an SSH host key that
+	// way.
 	if err := os.Setenv("HOME", tmp); err != nil {
 		panic(fmt.Sprintf("testutil: set HOME: %v", err))
 	}
@@ -63,18 +54,43 @@ func isolateXDG() (dir string, check func() error) {
 
 	return tmp, func() error {
 		defer func() { _ = os.RemoveAll(tmp) }()
-		after, err := hashDirs(real)
-		if err != nil {
-			return err
-		}
-		return diffDirs(before, after)
+		return stillRedirected(tmp)
 	}
 }
 
+// stillRedirected reports any XDG base that no longer resolves inside the tree.
+//
+// The way back out is a test that redirects xdg for itself and reloads without
+// restoring, which leaves the globals wherever the environment pointed at that
+// moment for every test that follows. Three helpers had a version of this: they
+// registered the restoring reload after t.Setenv, and cleanups run last in
+// first out, so the reload went first and re-resolved onto the very temp
+// directory it was meant to be leaving, moments before that directory was
+// deleted.
+func stillRedirected(tmp string) error {
+	var escaped []string
+	for name, path := range map[string]string{
+		"XDG_CONFIG_HOME": xdg.ConfigHome,
+		"XDG_DATA_HOME":   xdg.DataHome,
+		"XDG_STATE_HOME":  xdg.StateHome,
+		"XDG_CACHE_HOME":  xdg.CacheHome,
+		"XDG_RUNTIME_DIR": xdg.RuntimeDir,
+		"HOME":            xdg.Home,
+	} {
+		if !strings.HasPrefix(filepath.Clean(path)+string(filepath.Separator), filepath.Clean(tmp)+string(filepath.Separator)) {
+			escaped = append(escaped, fmt.Sprintf("  %s is %s", name, path))
+		}
+	}
+	if len(escaped) == 0 {
+		return nil
+	}
+	sort.Strings(escaped)
+	return fmt.Errorf("the run left these pointing outside its own tree %s, so the tests after it reached the developer's files:\n%s",
+		tmp, strings.Join(escaped, "\n"))
+}
+
 // RunIsolated runs the package's tests against a throwaway XDG tree and
-// returns the exit code to hand to os.Exit. A run that wrote into the
-// developer's real directories fails, whatever path it took to get there, so a
-// write site added later cannot reintroduce the leak quietly.
+// returns the exit code to hand to os.Exit.
 //
 // Each setup function runs after the redirect and before the first test, and
 // receives the tree's path. That is where a package seeds the fixture files its
@@ -87,34 +103,12 @@ func RunIsolated(m *testing.M, setup ...func(dir string)) int {
 	}
 	code := m.Run()
 	if err := check(); err != nil {
-		fmt.Fprintf(os.Stderr, "\nescaped the test XDG tree and wrote the developer's own files:\n%v\n", err)
+		fmt.Fprintf(os.Stderr, "\n%v\n", err)
 		if code == 0 {
 			code = 1
 		}
 	}
 	return code
-}
-
-// realAppDirs returns the app's directory inside each of the developer's real
-// base directories. It must be called before the redirect, while the xdg
-// package still holds the values it resolved at init.
-func realAppDirs() []string {
-	bases := []string{xdg.ConfigHome, xdg.DataHome, xdg.StateHome, xdg.CacheHome, xdg.RuntimeDir}
-	seen := make(map[string]bool, len(bases))
-	out := make([]string, 0, len(bases))
-	for _, b := range bases {
-		if b == "" {
-			continue
-		}
-		d := filepath.Join(b, appDir)
-		if seen[d] {
-			continue
-		}
-		seen[d] = true
-		out = append(out, d)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // hashDirs maps every file under the given directories to a digest of its
@@ -135,7 +129,7 @@ func hashDirs(dirs []string) (map[string]string, error) {
 			}
 			sum, err := hashFile(path)
 			if err != nil {
-				// A socket or a file removed mid-walk is not evidence of a
+				// A socket, or a file removed mid-walk, is not evidence of a
 				// write, and reporting it would make the check flaky.
 				return nil //nolint:nilerr // unreadable entries are not evidence
 			}
@@ -182,9 +176,5 @@ func diffDirs(before, after map[string]string) error {
 		return nil
 	}
 	sort.Strings(lines)
-	msg := lines[0]
-	for _, l := range lines[1:] {
-		msg += "\n" + l
-	}
-	return fmt.Errorf("%s", msg)
+	return fmt.Errorf("%s", strings.Join(lines, "\n"))
 }

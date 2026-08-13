@@ -13,8 +13,12 @@ import (
 // identically. The daemon path used to omit ConfirmQuit from its Overrides; this
 // pins that it no longer can, since all paths now flow through this function.
 func TestLoadAndApplyConfigHonorsConfirmQuit(t *testing.T) {
-	// Isolate config lookup so the bootstrap reads defaults, not the developer's
-	// real config, and any default write lands in the temp dir.
+	// Give the bootstrap a config directory of its own, so it reads defaults
+	// rather than anything an earlier test in this binary saved. Registered
+	// before the Setenvs so it runs after them: cleanups are LIFO, and a reload
+	// that ran first would leave the xdg globals on these temp dirs for every
+	// test after this one, moments before they are deleted.
+	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	xdg.Reload()
