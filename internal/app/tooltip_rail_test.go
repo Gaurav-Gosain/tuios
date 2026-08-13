@@ -20,7 +20,7 @@ func tooltipOS(t *testing.T, pos string, kind sidebarStripRowKind) (*OS, int) {
 	m.sidebarPanelLinesForTree(tree)
 	for _, r := range m.sidebarStripRows {
 		if r.Kind == kind {
-			return m, r.Y
+			return m, r.Y0
 		}
 	}
 	t.Fatalf("the strip drew no row of kind %v", kind)
@@ -93,7 +93,7 @@ func TestTooltipSwapsInstantlyOnceWarm(t *testing.T) {
 	var rows []int
 	for _, r := range m.sidebarStripRows {
 		if r.Kind == sidebarStripSession {
-			rows = append(rows, r.Y)
+			rows = append(rows, r.Y0)
 		}
 	}
 	if len(rows) < 2 {
@@ -187,7 +187,7 @@ func TestTooltipClampsToThePaneArea(t *testing.T) {
 	y := -1
 	for _, r := range m.sidebarStripRows {
 		if r.Kind == sidebarStripSession {
-			y = r.Y
+			y = r.Y0
 		}
 	}
 	if y < 0 {

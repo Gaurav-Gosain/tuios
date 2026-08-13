@@ -19,7 +19,7 @@ import (
 // the motion handler, which is the only thing that knows the pointer moved.
 func (m *OS) sidebarTooltipTrack(y int) {
 	for _, r := range m.sidebarStripRows {
-		if r.Y == y {
+		if r.contains(y) {
 			m.tooltipTrack(tooltipRailStrip, y)
 			return
 		}
@@ -51,6 +51,31 @@ func sidebarTooltipSessionLabel(s sessiontree.Node) string {
 			loud += " " + age
 		}
 		label += "  " + loud
+	}
+	return label
+}
+
+// sidebarTooltipAgentLabel is what one row of the strip's agents group says in
+// words: which pane it is, whose session it is in when that is not this one,
+// what it is doing and for how long. The group's two cells carry the state and
+// nothing else, so the name only exists here.
+func sidebarTooltipAgentLabel(e sidebarAgentEntry) string {
+	sep := " · "
+	if overlay.UseASCII() {
+		sep = " - "
+	}
+	name := printableTitle(e.Title)
+	if name == "" {
+		name = "shell"
+	}
+	if e.Foreign {
+		if s := printableTitle(e.SessionLabel); s != "" {
+			name = s + "/" + name
+		}
+	}
+	label := name + sep + sidebarStateWords(e.State)
+	if age := agentElapsed(e.State, e.StateAt, time.Now()); age != "" {
+		label += " " + age
 	}
 	return label
 }
@@ -97,7 +122,7 @@ func (m *OS) renderRailTooltip() *lipgloss.Layer {
 
 	text := ""
 	for _, r := range m.sidebarStripRows {
-		if r.Y == m.Tooltip.Key {
+		if r.contains(m.Tooltip.Key) {
 			text = r.Label
 			break
 		}

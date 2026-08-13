@@ -24,6 +24,14 @@ type sidebarDragState struct {
 // edge column belongs to the rail's frame, not to any row.
 type sidebarEdgeState struct {
 	Active bool
+	// PressX is the column the gesture started on, and Row the strip slot under
+	// it. On the collapsed strip the edge rule is a third of the rail's width, so
+	// a press there is far more often a click on the row than a grab of the
+	// handle; the row is activated on a release that never moved, and the handle
+	// takes the gesture back the moment the pointer changes column.
+	PressX  int
+	Row     sidebarRowHit
+	HaveRow bool
 }
 
 // ToggleSidebar flips the sidebar on or off live, re-tiles or re-clamps the
@@ -140,7 +148,12 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	// resize before any row routing: the column belongs to the sidebar, not to
 	// the session row whose hit rectangle spans it.
 	if !right && m.sidebarOnEdge(x) {
-		m.SidebarEdge = sidebarEdgeState{Active: true}
+		m.SidebarEdge = sidebarEdgeState{Active: true, PressX: x}
+		if sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph {
+			if hit, ok := m.sidebarRowAt(x, y); ok {
+				m.SidebarEdge.Row, m.SidebarEdge.HaveRow = hit, true
+			}
+		}
 		return true
 	}
 
@@ -228,6 +241,9 @@ func (m *OS) SidebarEdgeMotion(x, y int) bool {
 	if !m.SidebarEdge.Active {
 		return false
 	}
+	if x != m.SidebarEdge.PressX {
+		m.SidebarEdge.HaveRow = false // the gesture is a resize now, not a click
+	}
 	var w int
 	if config.SidebarPosition == "right" {
 		w = m.GetRenderWidth() - x
@@ -258,9 +274,36 @@ func (m *OS) SidebarEdgeRelease(x, y int) bool {
 	if !m.SidebarEdge.Active {
 		return false
 	}
+	edge := m.SidebarEdge
 	m.SidebarEdge = sidebarEdgeState{}
 	m.saveSidebarState()
+	if edge.HaveRow && x == edge.PressX {
+		m.sidebarActivateRow(edge.Row)
+	}
 	return true
+}
+
+// sidebarActivateRow runs what a completed click on a row means, for the paths
+// that resolve a whole gesture at release: the edge column's click, and the
+// keyboard's enter through SidebarActivateCursor.
+func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
+	if m.SidebarFocused {
+		m.sidebarSetCursorToHit(hit)
+	}
+	switch hit.Kind {
+	case sidebarRowWindow, sidebarRowAgent:
+		m.sidebarFocusWindow(hit)
+	case sidebarRowAgentFilter:
+		m.SidebarCycleAgentsFilter()
+	case sidebarRowAgentSort:
+		m.SidebarCycleAgentsSort()
+	case sidebarRowNewSession:
+		m.SidebarNewSession()
+	case sidebarRowCollapse:
+		m.SidebarToggleCollapsed()
+	case sidebarRowSession:
+		m.sidebarSwitchSession(hit.SessionID)
+	}
 }
 
 // SidebarDragMotion advances the click-or-drag gesture. The first vertical

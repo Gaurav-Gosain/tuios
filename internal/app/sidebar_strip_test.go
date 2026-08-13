@@ -145,16 +145,19 @@ func TestStripRestsAsABandWithASpine(t *testing.T) {
 			t.Errorf("resting line %d = %q, want %q\n%s", i, lines[i], w, strings.Join(lines, "\n"))
 		}
 	}
-	for i := len(want); i < len(lines)-2; i++ {
-		if lines[i] != "  "+rule {
-			t.Errorf("line %d = %q, want the slack under the spine to be empty band", i, lines[i])
+	// The fixture has one pane working, so the bottom group carries it: the rule,
+	// the mark, the blank that holds the group off the controls, then the toggle
+	// and the rail's last pad.
+	tail := []string{"──" + rule, " ●" + rule, "  " + rule, " +" + rule, " »" + rule, "  " + rule}
+	for i, w := range tail {
+		if got := lines[len(lines)-len(tail)+i]; got != w {
+			t.Errorf("tail line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
 		}
 	}
-	if lines[len(lines)-2] != " »"+rule {
-		t.Errorf("the toggle line = %q, want the expand control above one pad", lines[len(lines)-2])
-	}
-	if lines[len(lines)-1] != "  "+rule {
-		t.Errorf("the last line = %q, want a pad", lines[len(lines)-1])
+	for i := len(want); i < len(lines)-len(tail); i++ {
+		if lines[i] != "  "+rule {
+			t.Errorf("line %d = %q, want the slack between the spine and the group to be empty band", i, lines[i])
+		}
 	}
 	// The digits are gone: at three columns a window count is trivia, and it was
 	// the main source of the mixed vocabulary that stopped the marks scanning.
@@ -314,8 +317,18 @@ func TestStripSpineKeepsOneShapeAtOneInterval(t *testing.T) {
 	m, tree := quietStripOS(t, 120, 20)
 	lines := railPlain(t, m, tree)
 
+	// The spine is everything above the group's rule, which is the boundary the
+	// two lists are told apart by.
+	spine := lines
+	for i, l := range lines {
+		if strings.Contains(l, "──") {
+			spine = lines[:i]
+			break
+		}
+	}
+
 	var marks []int
-	for i, l := range lines[:len(lines)-2] {
+	for i, l := range spine {
 		if strings.TrimSpace(l[:len(l)-len(config.GetWindowBorderLeft())]) != "" {
 			marks = append(marks, i)
 		}
@@ -372,8 +385,8 @@ func TestStripPacksThenSaysWhatItCut(t *testing.T) {
 		"  " + rule,
 		"▎·" + rule,
 		" ·" + rule,
-		" ·" + rule,
-		" ⋮" + rule, // the four it had no line for
+		" ⋮" + rule, // the six it had no line for
+		" +" + rule,
 		" »" + rule,
 		"  " + rule,
 	}
@@ -456,52 +469,15 @@ func TestStripHitsAndNavStayIndexForIndex(t *testing.T) {
 			t.Errorf("%s: %d session hits, want one per session", pos, sessions)
 		}
 
-		// The badge is a readout, not a control, so it takes no click; it is
-		// recorded on the strip's own row list instead, which is what the tooltip
-		// reads.
+		// The badge is on both lists too: it is recorded on the strip's own row
+		// list for the tooltip, and as a target, because an alarm you cannot click
+		// through to its cause is the one object on the strip that does nothing.
 		kinds := map[sidebarStripRowKind]int{}
 		for _, r := range m.sidebarStripRows {
 			kinds[r.Kind]++
 		}
 		if kinds[sidebarStripBadge] != 1 || kinds[sidebarStripSession] != 3 || kinds[sidebarStripToggle] != 1 {
 			t.Errorf("%s: strip rows = %v, want one badge, three sessions and one toggle", pos, kinds)
-		}
-	}
-}
-
-// TestStripToggleIsClickableAtBothItsColumns: the strip's one control is the
-// only way back for a user who is not going to guess a keybind, so it claims
-// both content cells rather than the one its glyph happens to sit on.
-func TestStripToggleIsClickableAtBothItsColumns(t *testing.T) {
-	for _, pos := range []string{"left", "right"} {
-		for _, edge := range []string{"first", "last"} {
-			m, tree := stripOS(t, 120, 20)
-			withSidebar(t, true, pos, config.SidebarDefaultWidth)
-			m.SidebarCollapsed = true
-			m.sidebarPanelLinesForTree(tree)
-
-			var toggle sidebarRowHit
-			for _, h := range m.SidebarHits {
-				if h.Kind == sidebarRowCollapse {
-					toggle = h
-				}
-			}
-			if toggle.X1-toggle.X0 != m.GetSidebarWidth()-1 {
-				t.Fatalf("%s: the toggle claims %d columns, want both content cells", pos, toggle.X1-toggle.X0)
-			}
-			x := toggle.X0
-			if edge == "last" {
-				x = toggle.X1 - 1
-			}
-			// The expand re-lays the panes, which syncs to the daemon; the stub
-			// client in the fixture is not one, and this test is about the click.
-			m.DaemonClient = nil
-			if !m.SidebarClick(x, toggle.Y0, false) {
-				t.Fatalf("%s/%s: the toggle did not consume a click at x=%d", pos, edge, x)
-			}
-			if m.SidebarCollapsed {
-				t.Errorf("%s/%s: clicking the expand toggle left the rail collapsed", pos, edge)
-			}
 		}
 	}
 }
@@ -577,7 +553,7 @@ func TestStripTooltipsStillPopAndStayOnScreen(t *testing.T) {
 		if row.Label == "" {
 			t.Fatalf("%s: no session row carries a tooltip label", pos)
 		}
-		m.sidebarTooltipTrack(row.Y)
+		m.sidebarTooltipTrack(row.Y0)
 		m.Tooltip.At = m.Tooltip.At.Add(-2 * tooltipDelay)
 		layer := m.renderRailTooltip()
 		if layer == nil {

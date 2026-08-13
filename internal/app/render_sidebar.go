@@ -671,7 +671,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if variant == sidebarVariantGlyph {
 		// The strip lays its own ground, so it composes its lines itself rather
 		// than borrowing the expanded rail's bare-canvas edge.
-		return m.sidebarStripLines(sessions, w, cw, height, topMargin, sidebarX, contentX0, pal, edgeLeft)
+		return m.sidebarStripLines(sessions, w, cw, height, topMargin, sidebarX, pal, edgeLeft)
 	}
 
 	// The keyboard cursor tracks a row by identity, not by index, so it survives a
@@ -697,7 +697,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// counts, and hover has to resolve against the same arithmetic the draw uses.
 	shown, peeking := m.sidebarShownSession(sessions)
 	terminals := m.sidebarTerminals(sessions, shown)
-	agents, agentsTotal := m.sidebarFilterAgents(m.sidebarAgents(sessions, variant))
+	agents, agentsTotal := m.sidebarFilterAgents(m.sidebarAgents(sessions))
 	m.sidebarSortAgents(agents)
 	// A filter that hides everything leaves one row saying so and offering the
 	// way back, because a section that vanished on a control the user set two
@@ -1046,8 +1046,8 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 // Sessions with known windows contribute: the attached one from live state,
 // others from the cached listing, so agents elsewhere surface here marked
 // Foreign.
-func (m *OS) sidebarAgents(sessions []sessiontree.Node, variant int) []sidebarAgentEntry {
-	if variant == sidebarVariantGlyph || !config.SidebarShowAgents {
+func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
+	if !config.SidebarShowAgents {
 		return nil
 	}
 	var agents []sidebarAgentEntry

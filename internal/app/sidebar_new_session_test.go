@@ -43,7 +43,7 @@ func TestNewSessionPillIsHiddenInStandalone(t *testing.T) {
 
 // TestNewSessionSitsInThePinnedFooter puts the control where controls live: the
 // rail's last lines, below everything it is not a member of. The collapsed
-// strip has no room for it and does not draw it; its own test covers that.
+// strip stacks it above its own toggle instead; its own test covers that.
 func TestNewSessionSitsInThePinnedFooter(t *testing.T) {
 	for _, size := range []struct {
 		name  string
