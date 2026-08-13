@@ -82,7 +82,7 @@ import (
 
 const (
 	welcomeText = "Terminal UI Operating System"
-	welcomeHint = "Press 'n' for a new window"
+	welcomeHint = "new window"
 
 	// insertGuard is tuios's post-terminal-mode suppression window for
 	// unmodified single-character keys (internal/input/keyboard_terminal.go).

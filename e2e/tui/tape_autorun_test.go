@@ -82,12 +82,12 @@ func TestProjectTapeAutoReviewOpensDialog(t *testing.T) {
 
 	// Entering the directory auto-opens the review dialog - no leader T t.
 	enterProjectDir(t, term, dir)
-	if err := term.WaitForText("Project Tape", uiTimeout); err != nil {
+	if err := term.WaitForText("project tape", uiTimeout); err != nil {
 		t.Fatalf("review dialog did not auto-open with auto_review=true: %v\n%s", err, term.Snapshot())
 	}
 	// It is the untrusted review, and it shows the actions - nothing has run.
-	if err := term.WaitForText("Trust and run", uiTimeout); err != nil {
-		t.Fatalf("auto-opened dialog missing the Trust and run action: %v\n%s", err, term.Snapshot())
+	if err := term.WaitForText("trust and run", uiTimeout); err != nil {
+		t.Fatalf("auto-opened dialog missing the trust and run action: %v\n%s", err, term.Snapshot())
 	}
 	if !contains(term.Screen().Text(), "untrusted") {
 		t.Fatalf("auto-opened dialog is not the untrusted review\n%s", term.Snapshot())
@@ -103,7 +103,7 @@ func TestProjectTapeAutoReviewOpensDialog(t *testing.T) {
 		t.Fatalf("send esc: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !contains(s.Text(), "Project Tape")
+		return !contains(s.Text(), "project tape")
 	}, uiTimeout); err != nil {
 		t.Fatalf("dialog did not close on Esc: %v\n%s", err, term.Snapshot())
 	}
@@ -115,7 +115,7 @@ func TestProjectTapeAutoReviewOpensDialog(t *testing.T) {
 		t.Fatalf("re-emit osc7: %v", err)
 	}
 	time.Sleep(2 * time.Second)
-	if contains(term.Screen().Text(), "Project Tape") {
+	if contains(term.Screen().Text(), "project tape") {
 		t.Fatalf("re-entering a handled dir re-popped the review dialog\n%s", term.Snapshot())
 	}
 	alive(t, term, "after auto-review opened, dismissed, and did not re-pop")
@@ -142,7 +142,7 @@ func TestProjectTapeAutoReviewDisabledStaysPassive(t *testing.T) {
 	}
 	// ...but the dialog must NOT auto-open.
 	time.Sleep(1500 * time.Millisecond)
-	if contains(term.Screen().Text(), "Project Tape") {
+	if contains(term.Screen().Text(), "project tape") {
 		t.Fatalf("review dialog auto-opened with auto_review off (default must stay passive)\n%s", term.Snapshot())
 	}
 	alive(t, term, "after a passive-only detection")
@@ -177,7 +177,7 @@ func TestProjectTapeCurrentScopeRendersLayout(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "T", "t"); err != nil {
 		t.Fatalf("send review chord: %v", err)
 	}
-	if err := term.WaitForText("Project Tape", uiTimeout); err != nil {
+	if err := term.WaitForText("project tape", uiTimeout); err != nil {
 		t.Fatalf("review dialog did not open on leader T t: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("t"); err != nil {
@@ -240,7 +240,7 @@ func TestProjectTapeSessionScopeBuildsSession(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "T", "t"); err != nil {
 		t.Fatalf("review chord: %v", err)
 	}
-	if err := term.WaitForText("Project Tape", uiTimeout); err != nil {
+	if err := term.WaitForText("project tape", uiTimeout); err != nil {
 		t.Fatalf("dialog did not open: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("t"); err != nil {
@@ -323,7 +323,7 @@ func TestProjectTapeUntrustedNeverAutoRuns(t *testing.T) {
 	if lsHasSession(t, base, sessionName) {
 		t.Fatalf("auto mode ran an untrusted tape; session %q must not exist", sessionName)
 	}
-	if contains(term.Screen().Text(), "Project Tape") {
+	if contains(term.Screen().Text(), "project tape") {
 		t.Fatalf("auto mode force-opened the review dialog for an untrusted tape")
 	}
 	alive(t, term, "after an untrusted tape was ignored in auto mode")
