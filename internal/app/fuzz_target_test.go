@@ -44,7 +44,9 @@ type fuzzOS struct {
 	// rule compares against: the last state with no resize in flight.
 	settledDrawable map[string][2]int
 	settledCalls    map[string]int
-	closed          bool
+	// prevStateDir is the sidebar state directory to put back on Close. See Reset.
+	prevStateDir func() string
+	closed       bool
 }
 
 // configSnapshot is every package-global the action alphabet can move. Missing
@@ -107,9 +109,16 @@ func (f *fuzzOS) Reset() error {
 	config.SidebarWidth = config.SidebarDefaultWidth
 	config.SessionColors = true
 
-	prevDir := sidebarStateDir
+	// Redirected for the life of the target, not just for this call. Actions
+	// write the state file too - collapsing the rail persists it - and
+	// XDG_STATE_HOME cannot be used to catch them, because the xdg package
+	// resolves its paths once at init and t.Setenv comes far too late. A run that
+	// left the redirect behind wrote a collapsed rail into the developer's own
+	// state file, which then made every later sidebar test render a glyph strip.
+	if f.prevStateDir == nil {
+		f.prevStateDir = sidebarStateDir
+	}
 	sidebarStateDir = f.dir
-	defer func() { sidebarStateDir = prevDir }()
 
 	cfg := config.DefaultConfig()
 	// No daemon client, on purpose. The panes are daemon-backed windows, which
@@ -185,6 +194,10 @@ func (f *fuzzOS) Close() {
 	f.closed = true
 	f.releaseWindows()
 	f.saved.restore()
+	if f.prevStateDir != nil {
+		sidebarStateDir = f.prevStateDir
+		f.prevStateDir = nil
+	}
 }
 
 // send pushes one message through the real Update. Update recovers panics

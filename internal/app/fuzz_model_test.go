@@ -119,8 +119,17 @@ func FuzzModel(f *testing.F) {
 	f.Fuzz(func(t *testing.T, in []byte) {
 		// The corpus entry decides the run; the seed is carried only so a
 		// finding can be re-run through the seeded loop as well.
+		// The floor goes to the shrinker as well as to the generator. With it set
+		// on one side only, the shrinker halves a host size step by step until the
+		// run leaves the region it was exploring and lands in the class below the
+		// floor, and every report reads as that class whatever was found.
 		res, err := fuzz.Run(func() (fuzz.Target, error) { return newFuzzTarget(dir) },
-			fuzz.Config{Actions: fuzz.GenerateBytesFloor(in, fuzzSteps, fuzzFloorW, fuzzFloorH), ShrinkBudget: 400})
+			fuzz.Config{
+				Actions:      fuzz.GenerateBytesFloor(in, fuzzSteps, fuzzFloorW, fuzzFloorH),
+				ShrinkBudget: 400,
+				MinWidth:     fuzzFloorW,
+				MinHeight:    fuzzFloorH,
+			})
 		if err != nil {
 			t.Fatal(err)
 		}
