@@ -8,7 +8,7 @@ import (
 )
 
 // TestMain isolates the whole test binary from the developer's own XDG
-// directories, and fails the run if anything reached them anyway.
+// directories.
 //
 // Constructing an app.OS loads (and, when absent, writes) the user config, and
 // several overlays read and write tape and layout files. See
