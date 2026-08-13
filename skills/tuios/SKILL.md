@@ -29,9 +29,9 @@ TUIOS_SESSION=work
 TUIOS_SOCKET=/run/user/1000/tuios/tuios.sock
 ```
 
-`TUIOS_PANE_ID` and `TUIOS_WINDOW_ID` are the same uuid under two names. It is
-your own window, and it is what you pass to `-w` when you want to act on
-yourself rather than on whatever happens to be focused.
+`TUIOS_PANE_ID` and `TUIOS_WINDOW_ID` are the same uuid under two names: your own
+window. Pass it to `-w` whenever you mean yourself rather than whatever happens
+to be focused.
 
 A pane in a standalone `tuios` (started without a daemon) gets only
 `TUIOS_WINDOW_ID`. There is no socket to talk to, so guard on `TUIOS_ENV` and
@@ -47,7 +47,8 @@ Windows are addressed by `-w` and accept, in order:
 
 - the full uuid
 - a unique id prefix of 8 or more characters (`98db8226`)
-- the exact window name, matching a name you gave it before its shell's title
+- the exact window name, checking a name you gave it first and its shell's title
+  second
 
 Omit `-w` and the session's focused window is used. The index column in
 `list-windows` output is a position, not an address; do not pass it to `-w`.
@@ -324,7 +325,7 @@ instead of answering once. Reach those by writing newline-delimited JSON to
 python3 -c '
 import json, os, socket, sys
 s = socket.socket(socket.AF_UNIX); s.connect(os.environ["TUIOS_SOCKET"])
-s.sendall(json.dumps({"verb": "subscribe", "params": {"types": ["window-created", "window-exit"]}}).encode() + b"\n")
+s.sendall(json.dumps({"id": 1, "verb": "subscribe", "params": {"types": ["window-created", "window-exit"]}}).encode() + b"\n")
 for line in s.makefile():
     print(line.strip()); sys.stdout.flush()
 '
