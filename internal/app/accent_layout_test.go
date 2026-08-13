@@ -295,6 +295,60 @@ func TestAccentWideDropsInOrder(t *testing.T) {
 	}
 }
 
+// TestAccentHueNudgeReachesBetweenTheCells: the strip is a cell every ten
+// degrees, so nine hues in ten are not on a cell. The shifted arrow reaches
+// them, the cursor stays on the nearest cell, and the hex says which hue is
+// actually held.
+func TestAccentHueNudgeReachesBetweenTheCells(t *testing.T) {
+	m := accentTestOS(t, 120, 30)
+	m.OpenAccentPicker("aaaaaaaa1111")
+	cells := m.accentHueCells()
+	if cells != 36 {
+		t.Fatalf("the wide strip is %d cells, want 36 (ten degrees each)", cells)
+	}
+
+	m.AccentPickerHueCell(21) // 210 degrees
+	m.AccentPicker.Focus = accentFocusHue
+	for range 3 {
+		m.AccentPickerMoveShift(1, 0)
+	}
+	if got := m.AccentPicker.Hue; got != 213 {
+		t.Errorf("three shifted steps from 210 reached %v, want 213", got)
+	}
+	if got := accentHueCell(m.AccentPicker.Hue, cells); got != 21 {
+		t.Errorf("hue 213 puts the strip cursor on cell %d, want 21", got)
+	}
+
+	// The colour is the exact hue, not the cell's, and the dialog prints it.
+	s := &m.AccentPicker
+	if want := hslToRGB(213, s.Sat, s.Light); s.Cur != want {
+		t.Errorf("hue 213 holds %s, want %s", hexString(s.Cur), hexString(want))
+	}
+	if want := hexString(s.Cur); !strings.Contains(strings.Join(pickerLines(t, m), "\n"), want) {
+		t.Errorf("the dialog does not print the nudged colour %s", want)
+	}
+
+	// A plain arrow is still a whole cell.
+	m.AccentPickerMove(1, 0)
+	if got := m.AccentPicker.Hue; got != 220 {
+		t.Errorf("a plain arrow from 213 reached %v, want the next cell at 220", got)
+	}
+
+	// The circle wraps in both directions.
+	m.AccentPickerHueCell(0)
+	m.AccentPicker.Focus = accentFocusHue
+	m.AccentPickerMoveShift(-1, 0)
+	if got := m.AccentPicker.Hue; got != 359 {
+		t.Errorf("stepping back off zero reached %v, want 359", got)
+	}
+	for range 2 {
+		m.AccentPickerMoveShift(1, 0)
+	}
+	if got := m.AccentPicker.Hue; got != 1 {
+		t.Errorf("stepping forward over the wrap reached %v, want 1", got)
+	}
+}
+
 // TestAccentCompactKeepsTheV1Layout: below the stacked floor the picker is the
 // layout it shipped with, so the screens that worked before still work.
 func TestAccentCompactKeepsTheV1Layout(t *testing.T) {

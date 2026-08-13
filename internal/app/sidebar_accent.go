@@ -782,14 +782,32 @@ func (m *OS) AccentPickerMove(dx, dy int) {
 
 // AccentPickerMoveShift is the shifted arrow: the same direction at the other
 // granularity. On a slider it is the eyeballing jump the one-unit step is too
-// fine for; nothing else has a second granularity to offer yet.
+// fine for; on the hue strip it is the opposite, a single degree where a plain
+// arrow is a whole cell of ten.
 func (m *OS) AccentPickerMoveShift(dx, dy int) {
 	if !m.ShowAccentPicker {
 		return
 	}
 	if ch, ok := m.AccentPicker.Focus.sliderChannel(); ok {
 		m.AccentPickerSliderStep(ch, (dx-dy)*ch.coarse())
+		return
 	}
+	if m.AccentPicker.Focus == accentFocusHue {
+		m.AccentPickerNudgeHue(dx + dy)
+	}
+}
+
+// AccentPickerNudgeHue turns the held hue by whole degrees, wrapping. The strip
+// is a cell every ten degrees, so this reaches the nine hues between two cells;
+// the cursor stays on the nearest cell and the hex says which one is held.
+func (m *OS) AccentPickerNudgeHue(deg int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	s := &m.AccentPicker
+	s.Focus = accentFocusHue
+	s.Hue = math.Mod(math.Mod(s.Hue+float64(deg), 360)+360, 360)
+	m.accentPickerSetHSL(s.Sat, s.Light)
 }
 
 // AccentPickerMoveSlot walks the theme's colours. Left and right stay in the row
