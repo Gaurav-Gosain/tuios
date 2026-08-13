@@ -145,16 +145,19 @@ func TestStripRestsAsABandWithASpine(t *testing.T) {
 			t.Errorf("resting line %d = %q, want %q\n%s", i, lines[i], w, strings.Join(lines, "\n"))
 		}
 	}
-	for i := len(want); i < len(lines)-2; i++ {
-		if lines[i] != "  "+rule {
-			t.Errorf("line %d = %q, want the slack under the spine to be empty band", i, lines[i])
+	// The fixture has one pane working, so the bottom group carries it: the rule,
+	// the mark, the blank that holds the group off the controls, then the toggle
+	// and the rail's last pad.
+	tail := []string{"──" + rule, " ●" + rule, "  " + rule, " »" + rule, "  " + rule}
+	for i, w := range tail {
+		if got := lines[len(lines)-len(tail)+i]; got != w {
+			t.Errorf("tail line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
 		}
 	}
-	if lines[len(lines)-2] != " »"+rule {
-		t.Errorf("the toggle line = %q, want the expand control above one pad", lines[len(lines)-2])
-	}
-	if lines[len(lines)-1] != "  "+rule {
-		t.Errorf("the last line = %q, want a pad", lines[len(lines)-1])
+	for i := len(want); i < len(lines)-len(tail); i++ {
+		if lines[i] != "  "+rule {
+			t.Errorf("line %d = %q, want the slack between the spine and the group to be empty band", i, lines[i])
+		}
 	}
 	// The digits are gone: at three columns a window count is trivia, and it was
 	// the main source of the mixed vocabulary that stopped the marks scanning.
@@ -314,8 +317,18 @@ func TestStripSpineKeepsOneShapeAtOneInterval(t *testing.T) {
 	m, tree := quietStripOS(t, 120, 20)
 	lines := railPlain(t, m, tree)
 
+	// The spine is everything above the group's rule, which is the boundary the
+	// two lists are told apart by.
+	spine := lines
+	for i, l := range lines {
+		if strings.Contains(l, "──") {
+			spine = lines[:i]
+			break
+		}
+	}
+
 	var marks []int
-	for i, l := range lines[:len(lines)-2] {
+	for i, l := range spine {
 		if strings.TrimSpace(l[:len(l)-len(config.GetWindowBorderLeft())]) != "" {
 			marks = append(marks, i)
 		}

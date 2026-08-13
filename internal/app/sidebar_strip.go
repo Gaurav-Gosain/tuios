@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -27,6 +28,14 @@ import (
 // single-column list at a fixed interval reads as a list; the old centred stack
 // of digits, glyphs and inked cells at irregular intervals read as debris.
 //
+// Under the spine sits the second list: the agents group, pinned to the bottom
+// above the controls and fenced off by a drawn rule. It is the same interval and
+// the same two columns as the spine, because one interval is what makes either
+// of them scan; what tells them apart is the rule, the anchor, and that every
+// mark in the group is a state glyph while the spine at rest is all dots. It
+// lists panes, the spine lists sessions, and with nothing running the group is
+// absent entirely rather than standing empty.
+//
 // Severity is inked exactly once, in the badge. A session wanting a human swaps
 // its resting dot for its own glyph in its severity colour, which is a mark and
 // not a second alarm; two saturated blocks on a three-column strip are
@@ -40,8 +49,11 @@ type sidebarStripRowKind int
 const (
 	sidebarStripBadge sidebarStripRowKind = iota
 	sidebarStripSession
-	// sidebarStripMore is the tail mark standing in for the sessions a short
-	// rail has no line left to draw.
+	// sidebarStripAgent is a row of the bottom group: one pane with something to
+	// say about itself.
+	sidebarStripAgent
+	// sidebarStripMore is the tail mark standing in for the rows a short rail has
+	// no line left to draw, in either list.
 	sidebarStripMore
 	sidebarStripToggle
 )
@@ -56,8 +68,10 @@ type sidebarStripRow struct {
 	// up to the next mark rather than the one the glyph sits on: the strip draws
 	// at a fixed interval, so the interval is what the eye reads as the row.
 	Y0, Y1 int
-	// SessionID is set on a session row, so a click can still address it.
+	// SessionID and WindowID are what the slot addresses: a session row carries
+	// the session, an agent row the pane inside it.
 	SessionID string
+	WindowID  string
 	// Label is what the hover tooltip says about this row, built here from the
 	// same tree the cells were drawn from. Building it at draw time rather than
 	// at hover time is what stops the label and the cell under it from ever
@@ -103,6 +117,70 @@ func sidebarStripBadgeFor(sessions []sessiontree.Node) sidebarStripBadgeInfo {
 	return info
 }
 
+// sidebarStripAgents is the queue the strip's bottom group lists: every pane
+// with something to say about itself, worst first.
+//
+// It drops idle agents and finished ones already looked at, which the expanded
+// section keeps. At two columns an idle agent draws the same quiet dot an idle
+// session does, so keeping them would stand a permanent group under the spine
+// saying nothing, which is the standing furniture this redesign spent a round
+// removing. What is left is what the group is for: blocked, working, and
+// finished but unread.
+//
+// The order is sidebarAgentPriority, the expanded section's own priority sort,
+// so the folded rail cannot rank a pane differently from the open one. The
+// section's filter is deliberately not applied: its control is not on the strip,
+// and the badge pinned above the group counts every session, so a group hiding
+// what the badge counts would contradict the cell above it.
+func (m *OS) sidebarStripAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
+	all := m.sidebarAgents(sessions)
+	kept := make([]sidebarAgentEntry, 0, len(all))
+	for _, e := range all {
+		if sidebarAgentPriority(e.State, e.DoneSeen) > 1 {
+			kept = append(kept, e)
+		}
+	}
+	sort.SliceStable(kept, func(a, b int) bool {
+		return sidebarAgentPriority(kept[a].State, kept[a].DoneSeen) >
+			sidebarAgentPriority(kept[b].State, kept[b].DoneSeen)
+	})
+	return kept
+}
+
+// sidebarStripSplit shares the strip's free rows between the session spine at
+// the top and the agents group at the bottom, and says whether there is room for
+// the rule between them.
+//
+// Neither list may starve the other, so past the point where both fit the group
+// takes half and no more: the spine is where you are, the group is what wants
+// you. A rail too short for a rule plus a mark keeps the spine alone, because a
+// group of one line under a rule is a rule with a mark stuck to it.
+func sidebarStripSplit(region, sessions, agents int) (spine, group, rule int) {
+	if agents == 0 || region < 4 {
+		return max(region, 0), 0, 0
+	}
+	free := region - 1
+	// Each mark owns its interval, trailing blank included: the group's last
+	// blank is what holds it off the controls under it.
+	wantSpine, wantGroup := max(2*sessions-1, 0), 2*agents
+	if wantSpine+wantGroup <= free {
+		return free - wantGroup, wantGroup, 1
+	}
+	group = min(wantGroup, max(free/2, 1))
+	return free - group, group, 1
+}
+
+// stripSlot is the slot row i belongs to in a list drawn from top at a fixed
+// interval: the whole interval, because that is the block the marks make the eye
+// read as one row.
+func stripSlot(i, top, end, interval int) (y0, y1 int, ok bool) {
+	if interval <= 0 || i < top || i >= end {
+		return 0, 0, false
+	}
+	y0 = top + (i-top)/interval*interval
+	return y0, min(y0+interval, end), true
+}
+
 // sidebarStripPlan decides how many session marks the spine shows and at what
 // interval. The blank row between marks is what makes them scan as a list, so a
 // short rail gives it up before it gives up a mark: full spacing while it fits,
@@ -122,7 +200,8 @@ func sidebarStripPlan(region, sessions int) (shown, interval int, more bool) {
 
 // sidebarStripLines draws the collapsed rail: a Panel band the full height of
 // the rail, carrying the attention badge under a pad, the session spine
-// top-pinned below it, and the expand toggle on the rail's last line but one.
+// top-pinned below it, the agents group pinned to the bottom under its rule, and
+// the expand toggle on the rail's last line but one.
 func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMargin, sidebarX int,
 	pal overlay.Palette, edgeLeft bool,
 ) ([]string, int) {
@@ -154,13 +233,32 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 		badgeH, headH, tailH, toggleH = 0, 0, 0, 0
 	}
 
-	stackTop := headH
+	agents := m.sidebarStripAgents(sessions)
 	region := max(height-headH-tailH, 0)
-	shown, interval, more := sidebarStripPlan(region, len(sessions))
+	spineRegion, groupRegion, ruleH := sidebarStripSplit(region, len(sessions), len(agents))
+
+	stackTop := headH
+	shown, interval, more := sidebarStripPlan(spineRegion, len(sessions))
 	// Each mark owns its interval, trailing blank included, because that is what
 	// the eye reads as its row. The span is clamped to the region so the last
-	// slot cannot claim a line the toggle or the slack below it is standing on.
-	spineEnd := stackTop + min(shown*interval, region)
+	// slot cannot claim a line the group or the toggle below it is standing on.
+	spineEnd := stackTop + min(shown*interval, spineRegion)
+
+	// The group is pinned to the bottom, above the controls, exactly as the
+	// expanded rail pins its agents section: the alarm keeps one screen position
+	// whatever the rail is carrying above it, and the slack rides between them.
+	shownA, intervalA, moreA := sidebarStripPlan(groupRegion, len(agents))
+	groupRows := shownA * intervalA
+	if moreA {
+		groupRows++
+	}
+	groupTop := height - tailH - groupRows
+	groupEnd := groupTop + shownA*intervalA
+	ruleY, moreAY := groupTop-1, groupEnd
+	if groupRows == 0 {
+		ruleH = 0
+	}
+
 	badgeY, moreY, toggleY := 1, stackTop+shown*interval, height-tailH
 
 	// The pointer highlights the whole slot it is in, not the one line the mark
@@ -170,9 +268,11 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 	if !m.SidebarDrag.Dragging && m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
 		hoverY0 = m.SidebarHoverY - topMargin
 		hoverY1 = hoverY0 + 1
-		if hoverY0 >= stackTop && hoverY0 < spineEnd {
-			hoverY0 = stackTop + (hoverY0-stackTop)/interval*interval
-			hoverY1 = min(hoverY0+interval, spineEnd)
+		if y0, y1, ok := stripSlot(hoverY0, stackTop, spineEnd, interval); ok {
+			hoverY0, hoverY1 = y0, y1
+		}
+		if y0, y1, ok := stripSlot(hoverY0, groupTop, groupEnd, intervalA); ok {
+			hoverY0, hoverY1 = y0, y1
 		}
 	}
 	hovered := func(i int) bool { return i >= hoverY0 && i < hoverY1 }
@@ -216,6 +316,28 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
 				Kind: sidebarStripMore, Y0: y, Y1: y + 1,
 				Label: strconv.Itoa(len(sessions)-shown) + " more " + plural("session", len(sessions)-shown),
+			})
+			record(sidebarRowCollapse, "", "", y, 1)
+			lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal), cw, edgeLeft, pal))
+		case ruleH > 0 && i == ruleY:
+			// The groups are separated by a drawn rule rather than by a blank row,
+			// because a blank row is already the spine's own rhythm: spending it
+			// here would read as one more session, not as a boundary.
+			lines = append(lines, m.sidebarStripBand(sidebarStripRuleCell(cw, pal), cw, edgeLeft, pal))
+		case i >= groupTop && i < groupEnd && (i-groupTop)%intervalA == 0:
+			e := agents[(i-groupTop)/intervalA]
+			rows := min(intervalA, groupEnd-i)
+			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
+				Kind: sidebarStripAgent, Y0: y, Y1: y + rows,
+				SessionID: e.SessionID, WindowID: e.WindowID,
+				Label: sidebarTooltipAgentLabel(e),
+			})
+			record(sidebarRowAgent, e.SessionID, e.WindowID, y, rows)
+			lines = append(lines, m.sidebarStripBand(m.sidebarStripAgentCell(e, cw, pal, hovered(i)), cw, edgeLeft, pal))
+		case moreA && i == moreAY:
+			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
+				Kind: sidebarStripMore, Y0: y, Y1: y + 1,
+				Label: strconv.Itoa(len(agents)-shownA) + " more " + plural("agent", len(agents)-shownA),
 			})
 			record(sidebarRowCollapse, "", "", y, 1)
 			lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal), cw, edgeLeft, pal))
@@ -272,6 +394,52 @@ func (m *OS) sidebarStripBlank(cw int, edgeLeft, hovered bool, pal overlay.Palet
 		bg = pal.Surface
 	}
 	return m.sidebarStripBand(sidebarFit("", cw, bg), cw, edgeLeft, pal)
+}
+
+// sidebarStripRuleCell is the boundary above the agents group: a dim rule across
+// both content cells. It is the one piece of furniture the strip draws, and it
+// earns the line because it is what stops the group's marks reading as more
+// sessions. It is a glyph, not a fill, so it survives a terminal that drops the
+// band's own ground.
+func sidebarStripRuleCell(cw int, pal overlay.Palette) string {
+	mark := "─"
+	if overlay.UseASCII() {
+		mark = "-"
+	}
+	return sidebarFit(sidebarStyle(pal.Panel, theme.NotificationRule()).Render(strings.Repeat(mark, cw)), cw, pal.Panel)
+}
+
+// sidebarStripAgentCell is one pane of the bottom group in two cells: the gutter
+// marks the pane you are looking at, the spine column carries the pane's state
+// glyph in the colour the rest of the rail draws it in.
+//
+// The gutter says "current" here and severity in the expanded section, which
+// looks like a divergence and is not: the expanded rail marks the focused pane
+// in its terminals section, and the strip has no terminals section, so the mark
+// has nowhere else to live. Severity in the gutter would also ink the same state
+// twice in a two-cell row, which is the double-inking the redesign removed.
+func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Palette, hovered bool) string {
+	bg := color.Color(pal.Panel)
+	if hovered {
+		bg = pal.Surface
+	}
+
+	lead, leadFg := " ", color.Color(nil)
+	if e.WindowIndex >= 0 && e.WindowIndex == m.FocusedWindow {
+		lead, leadFg = "▎", pal.Accent
+		if overlay.UseASCII() {
+			lead = ">"
+		}
+	}
+
+	mark, markFg := "·", color.Color(pal.FgDim)
+	if overlay.UseASCII() {
+		mark = "."
+	}
+	if g := agentStateIndicator(e.State); g != "" && config.SidebarShowGlyphs {
+		mark, markFg = g, sidebarStateColor(e.State, e.DoneSeen, pal)
+	}
+	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+sidebarStyle(bg, markFg).Render(mark), cw, bg)
 }
 
 // sidebarStripBadgeCell is the alarm: how many panes want a human anywhere and
