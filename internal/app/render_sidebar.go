@@ -1384,10 +1384,10 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 		// screen at a time, so a hue per row would separate them from nothing.
 		tint := m.sessionTint(e.SessionID, railGround(rowBg))
 		accent, accented := m.WindowAccent(e.WindowID)
-		if m.ShowAccentPicker && e.WindowID == m.AccentPickerWindowID {
+		if preview, ok := m.accentPreview(AccentTargetWindow, e.WindowID); ok {
 			// The open picker previews the colour under its cursor on the row it
 			// targets, so the choice reads on the thing being accented.
-			accent, accented = m.accentPreview(e.WindowID)
+			accent, accented = preview, true
 		}
 		if accented {
 			tint = accent.Color()

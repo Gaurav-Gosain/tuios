@@ -2,20 +2,33 @@ package app
 
 import (
 	"image/color"
+	"math"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The fifteen ANSI slots the picker used to offer. They are no longer a way in:
-// the picker reaches the whole colour space now. They stay because a stored
-// accent index means one of them, and an accents file written before the picker
-// grew must keep meaning what it meant. Eight bright slots first, then seven
-// normal ones; black is skipped, since an accent nobody can see is not a choice.
+// The theme's own accent slots, and the quick-pick row's whole vocabulary. They
+// are also what a stored accent index means, so an accents file written before
+// the picker reached the full colour space keeps meaning what it meant. Eight
+// bright slots first, then seven normal ones; ANSI black is skipped, since an
+// accent nobody can see is not a choice, which is why this is fifteen and not
+// sixteen.
 const accentSwatchCount = 15
 
 // accentBrightCount is how many of the slots are the bright half.
 const accentBrightCount = 8
+
+// accentSlotNames names the slots, in the words set-session-accent already
+// takes: the picker prints them and the daemon is sent them, so the label on
+// screen and the value stored are the same string. ParseAccent ignores the
+// space, so "bright cyan" reads back as the slot it was drawn for.
+var accentSlotNames = [accentSwatchCount]string{
+	"bright black", "bright red", "bright green", "bright yellow",
+	"bright blue", "bright purple", "bright cyan", "bright white",
+	"red", "green", "yellow", "blue", "purple", "cyan", "white",
+}
 
 // accentColor resolves a legacy accent index against the live theme: the first
 // eight are ANSI 8-15, the rest ANSI 1-7.
@@ -69,7 +82,11 @@ func (m *OS) ClearWindowAccent(windowID string) {
 type accentFocus uint8
 
 const (
-	accentFocusHue accentFocus = iota
+	// The theme's own colours come first, drawn first and reached first, because
+	// picking one by name is the easy answer and the whole colour space below it
+	// is the expert one.
+	accentFocusANSI accentFocus = iota
+	accentFocusHue
 	accentFocusGrid
 	accentFocusHex
 	accentFocusHarmony
@@ -93,9 +110,20 @@ type accentPickerState struct {
 	Base     color.RGBA
 	Hex      string // the hex field's buffer
 	Harmony  int    // which chip the harmony cursor is on
-	Focus    accentFocus
-	Prev     Accent // what the target wore when the picker opened
-	HadPrev  bool
+	// Slot is the theme slot the current colour was picked as, or -1 when it is
+	// a literal. Cur is the same colour either way; this is what says whether it
+	// will follow the next theme. Set to -1 by every control that produces a
+	// colour of its own, so a slot cannot outlive the pick that chose it.
+	Slot    int
+	Focus   accentFocus
+	Prev    Accent // the colour the target was wearing when the picker opened
+	HadPrev bool
+	// Src says where Prev came from. A colour the target was given and a colour
+	// it derives look the same on the rail and behave differently: a pane with
+	// no accent follows its session wherever that goes, a session with no accent
+	// follows the arbitration, and a pinned one does neither. The picker has to
+	// keep them apart and say which it is showing.
+	Src accentSource
 }
 
 // accentGridSize is the shades grid's dimensions for the current screen. One
@@ -104,9 +132,27 @@ type accentPickerState struct {
 func (m *OS) accentGridSize() (cols, rows int) {
 	inner := overlay.DialogFitWidth(accentPickerInnerWidth, m.GetRenderWidth())
 	// Body furniture around the grid: the hue strip, a rule, the now line, the
-	// hex line and the harmony line, plus the dialog's two border rows.
-	const furniture = 7
+	// hex line and the harmony line, plus the dialog's two border rows, plus the
+	// slot rows where they are drawn.
+	furniture := 7
+	if m.accentSlotsShown() {
+		furniture += accentSlotRows
+	}
 	return max(inner-2, 1), clampInt(m.GetRenderHeight()-furniture, 1, accentGridMaxRows)
+}
+
+// accentSlotRows is how many rows the theme's colours are drawn on.
+const accentSlotRows = 2
+
+// accentSlotsShown reports whether the screen has room for the quick-pick rows.
+// They are the first thing dropped on a screen too short for everything: the
+// readout, the hex field and one row of the grid are what the picker cannot work
+// without, and the same colours are still reachable by name through the hex
+// field and by eye through the grid.
+func (m *OS) accentSlotsShown() bool {
+	// One grid row, the rest of the furniture, and the slot rows on top.
+	const need = 1 + 7 + accentSlotRows
+	return m.GetRenderHeight() >= need
 }
 
 // accentGridLightRange is the lightness the grid's top and bottom rows carry.
@@ -180,34 +226,116 @@ func (s *accentPickerState) harmonyColor(i int) color.RGBA {
 }
 
 // setCur moves the colour the picker would apply, and with it the base the
-// harmony chips hang off and the text in the hex field.
+// harmony chips hang off and the text in the hex field. The colour is a literal:
+// every control but the slot row produces one.
 func (s *accentPickerState) setCur(c color.RGBA) {
 	s.Cur, s.Base = c, c
 	s.Hex = hexString(c)
+	s.Slot = -1
 }
 
+// selection is the accent the picker would store: the slot when the user picked
+// one by name, and the colour itself otherwise. Keeping the slot is what lets a
+// pane pinned to "cyan" follow the user to another theme.
+func (s *accentPickerState) selection() Accent {
+	if s.Slot >= 0 {
+		return SlotAccent(s.Slot)
+	}
+	return RGBAccent(s.Cur)
+}
+
+// accentPayload is how an accent is written down for the daemon, which records
+// the string verbatim: a slot goes over as its name so every client resolves it
+// against its own theme, and a literal as its hex.
+func accentPayload(a Accent) string {
+	if a.IsSlot() {
+		return accentSlotNames[clampInt(a.Slot, 0, accentSwatchCount-1)]
+	}
+	return a.Hex()
+}
+
+// accentNearestSlot is the slot closest to a colour, which is where the ANSI
+// cursor lands when the keyboard arrives from a colour no slot names. The grid
+// does the same thing with a typed hex.
+func accentNearestSlot(c color.RGBA) int {
+	best, bestDist := 0, math.MaxFloat64
+	for i := range accentSwatchCount {
+		s := SlotAccent(i).RGB()
+		dr, dg, db := float64(s.R)-float64(c.R), float64(s.G)-float64(c.G), float64(s.B)-float64(c.B)
+		if d := dr*dr + dg*dg + db*db; d < bestDist {
+			best, bestDist = i, d
+		}
+	}
+	return best
+}
+
+// AccentTarget names what the picker is pointed at. There is one picker for
+// both, the way there is one rename editor for a window, a session and a
+// workspace: a user who has coloured a pane already knows how to colour a
+// session.
+type AccentTarget int
+
+const (
+	// AccentTargetWindow is a pane's own accent, held by this client.
+	AccentTargetWindow AccentTarget = iota
+	// AccentTargetSession is a session's accent, held by the daemon and shared
+	// by every client attached to it.
+	AccentTargetSession
+)
+
 // OpenAccentPicker opens the colour picker for a window, landing on the colour
-// it already wears so the picker opens showing the truth.
+// the pane is wearing on screen: its own accent, or its session's when it has
+// none of its own. Seeding from the effective colour is what makes "change this
+// colour" start from the colour being changed; the chrome's accent is left as
+// the seed only when the pane is wearing nothing at all.
+//
+// Seeding from an inherited colour does not pin the pane to it. Prev and
+// Inherited record where the seed came from, and nothing is written unless the
+// user picks something else.
 func (m *OS) OpenAccentPicker(windowID string) {
 	if windowID == "" {
 		return
 	}
-	m.ShowAccentPicker = true
-	m.AccentPickerWindowID = windowID
+	prev, src := m.effectiveAccent(windowID, m.SessionName)
+	m.openAccentPicker(AccentTargetWindow, windowID, prev, src)
+}
 
-	prev, hadPrev := m.WindowAccent(windowID)
+// OpenSessionAccentPicker opens the same picker on a session, seeded the same
+// way: the accent the session was given, or the colour it was assigned when it
+// has none.
+func (m *OS) OpenSessionAccentPicker(name string) {
+	if name == "" {
+		return
+	}
+	prev, src := m.sessionEffectiveAccent(name)
+	m.openAccentPicker(AccentTargetSession, name, prev, src)
+}
+
+// openAccentPicker installs the picker on a target already resolved to a colour
+// and a source. The seed is resolved before the picker is opened because an open
+// picker previews over the very thing it was seeded from.
+func (m *OS) openAccentPicker(target AccentTarget, id string, prev Accent, src accentSource) {
 	start := toRGBA(theme.UI().Accent)
-	if hadPrev {
+	if src != accentSourceNone {
 		start = prev.RGB()
 	}
 	cols, rows := m.accentGridSize()
 	hue, col, row := accentCellFor(start, 0, cols, rows)
 
+	m.ShowAccentPicker = true
+	m.AccentPickerTarget, m.AccentPickerTargetID = target, id
 	m.AccentPicker = accentPickerState{
-		Hue: hue, Col: col, Row: row,
-		Focus: accentFocusGrid, Prev: prev, HadPrev: hadPrev,
+		Hue: hue, Col: col, Row: row, Focus: accentFocusGrid,
+		Prev: prev, HadPrev: src != accentSourceNone, Src: src,
 	}
 	m.AccentPicker.setCur(start)
+
+	// A colour that is a slot opens on that slot, cursor and keyboard both: the
+	// target is wearing the name, not the hex, and the picker showing a grid
+	// position instead would hide the one thing it could say about it.
+	if src != accentSourceNone && prev.IsSlot() && m.accentSlotsShown() {
+		m.AccentPickerSlot(prev.Slot)
+	}
 }
 
 // CloseAccentPicker dismisses the picker, changing nothing. Cancelling needs no
@@ -215,7 +343,7 @@ func (m *OS) OpenAccentPicker(windowID string) {
 // preview is derived from this state, so dropping the state is the revert.
 func (m *OS) CloseAccentPicker() {
 	m.ShowAccentPicker = false
-	m.AccentPickerWindowID = ""
+	m.AccentPickerTarget, m.AccentPickerTargetID = AccentTargetWindow, ""
 	m.AccentPicker = accentPickerState{}
 	m.accentHits = m.accentHits[:0]
 }
@@ -226,29 +354,65 @@ func (m *OS) CloseAccentPicker() {
 // than stored beside it: one fewer thing that can disagree with what is on
 // screen, and the fields it reads are in the rail's signature, so the preview
 // repaints on the keystrokes that change it and on nothing else.
-func (m *OS) accentPreview(windowID string) (Accent, bool) {
-	if !m.ShowAccentPicker || windowID == "" || windowID != m.AccentPickerWindowID {
+func (m *OS) accentPreview(target AccentTarget, id string) (Accent, bool) {
+	if !m.ShowAccentPicker || id == "" {
+		return Accent{}, false
+	}
+	if target != m.AccentPickerTarget || id != m.AccentPickerTargetID {
 		return Accent{}, false
 	}
 	return RGBAccent(m.AccentPicker.Cur), true
 }
 
 // AccentPickerApply commits the colour under the cursor and closes the picker.
-func (m *OS) AccentPickerApply() {
+// A window's accent is this client's and is written here; a session's belongs to
+// the daemon and comes back as a command, because reaching it is a blocking
+// round trip that must not run on the Update goroutine.
+//
+// Applying the colour the target already wears writes nothing, which is what
+// the picker opening on the effective colour costs: a user who opens it and
+// presses enter has changed their mind about nothing, and writing the seed
+// through would pin an inheriting pane to a literal colour, take a session out
+// of the automatic arbitration, or freeze a theme slot to whatever hex it
+// resolves to today. All three are losses the user was never told about. Moving
+// anywhere first stores the colour landed on, as it always has.
+func (m *OS) AccentPickerApply() tea.Cmd {
 	if !m.ShowAccentPicker {
-		return
+		return nil
 	}
-	m.SetWindowAccent(m.AccentPickerWindowID, RGBAccent(m.AccentPicker.Cur))
-	m.CloseAccentPicker()
+	s := &m.AccentPicker
+	target, id := m.AccentPickerTarget, m.AccentPickerTargetID
+	sel := s.selection()
+	unchanged := s.HadPrev && sel == s.Prev
+	defer m.CloseAccentPicker()
+
+	if unchanged {
+		return nil
+	}
+	if target == AccentTargetSession {
+		return m.setSessionAccentCmd(id, accentPayload(sel))
+	}
+	m.SetWindowAccent(id, sel)
+	return nil
 }
 
-// AccentPickerClear drops the target's accent and closes the picker.
-func (m *OS) AccentPickerClear() {
+// AccentPickerClear takes the target's own accent away and closes the picker,
+// which returns it to whatever it falls back to rather than to no colour at
+// all: a pane goes back to following its session, and a session back to the
+// colour it is assigned automatically. Clearing is how a pinned thing rejoins
+// the scheme.
+func (m *OS) AccentPickerClear() tea.Cmd {
 	if !m.ShowAccentPicker {
-		return
+		return nil
 	}
-	m.ClearWindowAccent(m.AccentPickerWindowID)
+	target, id := m.AccentPickerTarget, m.AccentPickerTargetID
 	m.CloseAccentPicker()
+
+	if target == AccentTargetSession {
+		return m.setSessionAccentCmd(id, "")
+	}
+	m.ClearWindowAccent(id)
+	return nil
 }
 
 // AccentPickerFocus moves the keyboard between the picker's four controls,
@@ -261,11 +425,23 @@ func (m *OS) AccentPickerFocus(delta int) {
 	}
 	s := &m.AccentPicker
 	n := int(accentFocusCount)
-	s.Focus = accentFocus(((int(s.Focus)+delta)%n + n) % n)
+	step := func() { s.Focus = accentFocus(((int(s.Focus)+delta)%n + n) % n) }
+	step()
+	if s.Focus == accentFocusANSI && !m.accentSlotsShown() {
+		// Tab must never land on a control that is not on screen.
+		step()
+	}
 	switch s.Focus {
 	case accentFocusHarmony:
 		s.Cur = s.harmonyColor(s.Harmony)
 		s.Hex = hexString(s.Cur)
+		s.Slot = -1
+	case accentFocusANSI:
+		slot := s.Slot
+		if slot < 0 {
+			slot = accentNearestSlot(s.Cur)
+		}
+		m.AccentPickerSlot(slot)
 	case accentFocusGrid, accentFocusHue:
 		cols, rows := m.accentGridSize()
 		s.setCur(accentCellColor(s.Hue, s.Col, s.Row, cols, rows))
@@ -286,17 +462,58 @@ func (m *OS) AccentPickerMove(dx, dy int) {
 		m.AccentPickerMoveHue(dx + dy)
 	case accentFocusHarmony:
 		m.AccentPickerMoveHarmony(dx + dy)
+	case accentFocusANSI:
+		m.AccentPickerMoveSlot(dx, dy)
 	default:
 		m.AccentPickerMoveCell(dx, dy)
 	}
 }
 
+// AccentPickerMoveSlot walks the theme's colours. Left and right stay in the row
+// they started in, because the two rows are two rows on screen; up and down step
+// between a bright colour and the normal one drawn under it, which is the pairing
+// the layout is for. Bright black has nothing under it and stays where it is.
+func (m *OS) AccentPickerMoveSlot(dx, dy int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	i := m.AccentPicker.Slot
+	if i < 0 {
+		i = accentNearestSlot(m.AccentPicker.Cur)
+	}
+	switch {
+	case dy > 0 && i >= 1 && i < accentBrightCount:
+		i += accentBrightCount - 1
+	case dy < 0 && i >= accentBrightCount:
+		i -= accentBrightCount - 1
+	case i < accentBrightCount:
+		i = clampInt(i+dx, 0, accentBrightCount-1)
+	default:
+		i = clampInt(i+dx, accentBrightCount, accentSwatchCount-1)
+	}
+	m.AccentPickerSlot(i)
+}
+
+// AccentPickerSlot puts the cursor on one of the theme's colours and takes it as
+// the slot it is, not as the colour that slot resolves to today.
+func (m *OS) AccentPickerSlot(i int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	s := &m.AccentPicker
+	s.Focus = accentFocusANSI
+	i = clampInt(i, 0, accentSwatchCount-1)
+	s.setCur(SlotAccent(i).RGB())
+	s.Slot = i
+}
+
 // AccentPickerClearKey is the clear key. It does nothing while the hex field
 // has the keyboard, where the same keystroke was meant for the buffer.
-func (m *OS) AccentPickerClearKey() {
+func (m *OS) AccentPickerClearKey() tea.Cmd {
 	if m.ShowAccentPicker && m.AccentPicker.Focus != accentFocusHex {
-		m.AccentPickerClear()
+		return m.AccentPickerClear()
 	}
+	return nil
 }
 
 // AccentPickerMoveCell moves the shades-grid cursor. The grid is clamped rather
@@ -358,6 +575,7 @@ func (m *OS) AccentPickerHarmonyAt(i int) {
 	s.Harmony = clampInt(i, 0, accentHarmonyCount-1)
 	s.Cur = s.harmonyColor(s.Harmony)
 	s.Hex = hexString(s.Cur)
+	s.Slot = -1
 }
 
 // AccentPickerMoveHarmony walks the harmony chips.
@@ -417,6 +635,9 @@ func (m *OS) accentPickerSetHex(buf string) {
 	s := &m.AccentPicker
 	s.Focus = accentFocusHex
 	s.Hex = buf
+	// Typing a hex is asking for that exact colour, so the slot goes even before
+	// the buffer names one: a half-typed hex is no longer "cyan".
+	s.Slot = -1
 	c, ok := parseHexColor(buf)
 	if !ok {
 		return

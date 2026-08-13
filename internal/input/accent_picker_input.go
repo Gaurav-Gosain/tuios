@@ -19,8 +19,7 @@ func handleAccentPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		o.CloseAccentPicker()
 		return o, nil
 	case "enter":
-		o.AccentPickerApply()
-		return o, nil
+		return o, o.AccentPickerApply()
 	case "tab":
 		o.AccentPickerFocus(1)
 		return o, nil
@@ -52,7 +51,7 @@ func handleAccentPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 			return o, nil
 		}
 		if r[0] == 'x' {
-			o.AccentPickerClearKey()
+			return o, o.AccentPickerClearKey()
 		}
 	}
 	return o, nil

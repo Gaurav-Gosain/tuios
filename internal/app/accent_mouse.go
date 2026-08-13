@@ -1,5 +1,7 @@
 package app
 
+import tea "charm.land/bubbletea/v2"
+
 // The picker's mouse routing. Every decision here is taken against the rects
 // the renderer recorded as it drew (m.accentHits), never against the layout
 // arithmetic that produced them: the grid reflows with the dialog's width and
@@ -18,11 +20,12 @@ func (m *OS) accentHitAt(lx, ly int) (accentHit, bool) {
 
 // accentPickerPress routes a left press at dialog-relative (lx, ly). A press on
 // the grid or the hue strip also grabs that control, so the colour follows the
-// pointer until the button comes up.
-func (m *OS) accentPickerPress(lx, ly int) bool {
+// pointer until the button comes up. The clear control can reach the daemon, so
+// the press hands back a command the way the keyboard path does.
+func (m *OS) accentPickerPress(lx, ly int) (bool, tea.Cmd) {
 	hit, ok := m.accentHitAt(lx, ly)
 	if !ok {
-		return false
+		return false, nil
 	}
 	switch hit.Kind {
 	case accentHitGrid:
@@ -31,16 +34,18 @@ func (m *OS) accentPickerPress(lx, ly int) bool {
 	case accentHitHue:
 		m.accentDragging, m.accentDrag = true, accentHitHue
 		m.AccentPickerHueCell(hit.Col)
+	case accentHitANSI:
+		m.AccentPickerSlot(hit.Col)
 	case accentHitHex:
 		m.AccentPickerFocusHex()
 	case accentHitHarmony:
 		m.AccentPickerHarmonyAt(hit.Col)
 	case accentHitClear:
-		m.AccentPickerClear()
+		return true, m.AccentPickerClear()
 	default:
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 // accentPickerDragTo continues a grabbed drag at dialog-relative (lx, ly).

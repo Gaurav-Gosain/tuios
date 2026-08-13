@@ -163,8 +163,9 @@ func (m *OS) sidebarSignature() uint64 {
 	// the rail on a signature it no longer renders.
 	mixB(m.ShowAccentPicker)
 	if m.ShowAccentPicker {
-		mixS(m.AccentPickerWindowID)
-		preview, ok := m.accentPreview(m.AccentPickerWindowID)
+		mixI(int(m.AccentPickerTarget))
+		mixS(m.AccentPickerTargetID)
+		preview, ok := m.accentPreview(m.AccentPickerTarget, m.AccentPickerTargetID)
 		if !ok {
 			mixI(-1)
 		} else {

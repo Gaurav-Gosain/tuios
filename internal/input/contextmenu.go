@@ -27,13 +27,13 @@ func runContextMenuAction(action string, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	dispatcher := GetDispatcher()
 	if !dispatcher.HasAction(action) {
-		o.ClearMenuWorkspace()
+		o.ClearMenuTarget()
 		return o, nil
 	}
 	next, cmd := dispatcher.Dispatch(action, tea.KeyPressMsg{}, o)
-	// The workspace a pill menu carried lives for exactly this one dispatch, so
-	// the same action reached later by key acts on the workspace in view.
-	next.ClearMenuWorkspace()
+	// What a menu row carried (a workspace, a session) lives for exactly this one
+	// dispatch, so the same action reached later by key acts on what is in view.
+	next.ClearMenuTarget()
 	return next, cmd
 }
 

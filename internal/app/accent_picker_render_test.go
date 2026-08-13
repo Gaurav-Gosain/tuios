@@ -114,7 +114,7 @@ func TestAccentPickerCancelRestores(t *testing.T) {
 	m.OpenAccentPicker("aaaaaaaa1111")
 	m.AccentPickerHueCell(4)
 	m.AccentPickerCell(7, 2)
-	previewed, ok := m.accentPreview("aaaaaaaa1111")
+	previewed, ok := m.accentPreview(AccentTargetWindow, "aaaaaaaa1111")
 	if !ok || previewed.RGB() == before.RGB() {
 		t.Fatalf("the picker is not previewing a new colour (%v, ok=%v)", previewed, ok)
 	}
@@ -195,7 +195,7 @@ func TestAccentPickerHitsMatchTheDrawnCells(t *testing.T) {
 			if h.Kind != accentHitGrid {
 				continue
 			}
-			if !m.accentPickerPress(h.Rect.X0, h.Rect.Y0) {
+			if ok, _ := m.accentPickerPress(h.Rect.X0, h.Rect.Y0); !ok {
 				t.Fatalf("w=%d: a press on the recorded rect %v was not routed", w, h.Rect)
 			}
 			if m.AccentPicker.Col != h.Col || m.AccentPicker.Row != h.Row {
@@ -232,7 +232,7 @@ func TestAccentPickerHueDragStaysOnTheStrip(t *testing.T) {
 	// Update tracks the button for the real path; this drives the routing
 	// directly, so it has to say the button is down itself.
 	m.pointerDown = true
-	if !m.accentPickerPress(strip.Rect.X0, strip.Rect.Y0) {
+	if ok, _ := m.accentPickerPress(strip.Rect.X0, strip.Rect.Y0); !ok {
 		t.Fatal("the press on the hue strip was not routed")
 	}
 	hue := m.AccentPicker.Hue
@@ -382,7 +382,7 @@ func TestAccentPickerPreviewsOnTheRail(t *testing.T) {
 	// "editor" is the focused window, so the preview reaches the rail through
 	// the gutter mark's own colour rather than a separate accent chip: a
 	// focused row wears exactly one identity bar.
-	preview, ok := m.accentPreview("aaaaaaaa1111")
+	preview, ok := m.accentPreview(AccentTargetWindow, "aaaaaaaa1111")
 	if !ok {
 		t.Fatal("no preview colour under the picker cursor")
 	}

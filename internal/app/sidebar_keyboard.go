@@ -435,12 +435,19 @@ func (m *OS) nextSessionName() string {
 	}
 }
 
-// SidebarAccentCursor opens the accent swatches for the cursor row's window.
+// SidebarAccentCursor opens the colour picker on the cursor row: the pane's own
+// accent on a window row, and the session's on a session row, which is the
+// colour every pane in it inherits. The key used to refuse on a session row
+// because a session had no colour to set.
 func (m *OS) SidebarAccentCursor() {
-	w := m.sidebarCursorWindow()
-	if w == nil {
-		m.ShowNotification("Accents work on a window of this session", "info", config.NotificationDuration)
+	if w := m.sidebarCursorWindow(); w != nil {
+		m.OpenAccentPicker(w.ID)
 		return
 	}
-	m.OpenAccentPicker(w.ID)
+	row, ok := m.sidebarCursorRow()
+	if ok && row.Kind == sidebarRowSession && row.SessionID != "" {
+		m.OpenSessionAccentPicker(row.SessionID)
+		return
+	}
+	m.ShowNotification("Accents work on a pane or a session row", "info", config.NotificationDuration)
 }

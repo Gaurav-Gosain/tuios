@@ -65,6 +65,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("close_window", handleCloseWindow)
 	d.Register("rename_window", handleRenameWindow)
 	d.Register("set_accent", handleSetAccent)
+	d.Register("set_session_accent", handleSetSessionAccent)
 	d.Register("minimize_window", handleMinimizeWindow)
 	d.Register("restore_all", handleRestoreAll)
 	d.Register("next_window", handleNextWindow)
@@ -259,6 +260,18 @@ func handleSetAccent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if w := o.GetFocusedWindow(); w != nil {
 		o.OpenAccentPicker(w.ID)
 	}
+	return o, nil
+}
+
+// handleSetSessionAccent opens the same picker on a session: the row's own
+// session when the action came from a rail menu, and the attached one when it
+// came from a key.
+func handleSetSessionAccent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	name := o.TakeMenuSession()
+	if name == "" {
+		name = o.SessionName
+	}
+	o.OpenSessionAccentPicker(name)
 	return o, nil
 }
 

@@ -582,11 +582,13 @@ type OS struct {
 	// window ID. A non-empty map is the only thing that keeps the maintenance
 	// tick awake for them, so an idle session with nothing parked pays nothing.
 	pendingAgentAlerts map[string]pendingAgentAlert
-	// Accent picker state: the window being accented, the colour under the
-	// cursor and where that cursor is, and the hit geometry the renderer records
-	// as it draws the grid, the hue strip and the chips.
+	// Accent picker state: what is being accented (a pane or a session) and
+	// which one, the colour under the cursor and where that cursor is, and the
+	// hit geometry the renderer records as it draws the grid, the hue strip and
+	// the chips.
 	ShowAccentPicker     bool
-	AccentPickerWindowID string
+	AccentPickerTarget   AccentTarget
+	AccentPickerTargetID string
 	AccentPicker         accentPickerState
 	accentHits           []accentHit
 	accentDrag           accentHitKind
@@ -681,6 +683,9 @@ type OS struct {
 	// gap between the menu closing and its row's action being dispatched. See
 	// TakeMenuWorkspace.
 	menuWorkspace int
+	// menuSession carries the session a rail row's menu was opened on, the same
+	// way menuWorkspace carries a pill's. See TakeMenuSession.
+	menuSession string
 
 	// UserConfig is the loaded user configuration. The settings page mutates
 	// it in place and persists it so live changes survive a restart. May be

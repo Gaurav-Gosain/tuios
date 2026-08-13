@@ -42,7 +42,8 @@ func pickerOS(t *testing.T) *app.OS {
 }
 
 // cursorCells returns the screen positions of the picker's cursor marks in the
-// composed frame, topmost first: the hue strip's, then the grid's. Working off
+// composed frame, topmost first: the slot row's when it has one, then the hue
+// strip's, then the grid's. Working off
 // the drawn glyph rather than the picker's own rects is deliberate, since the
 // claim under test is about where the mark the user is looking at ends up.
 func cursorCells(t *testing.T, m *app.OS) [][2]int {
@@ -137,7 +138,9 @@ func TestAccentHueStripIgnoresButtonFreeMotion(t *testing.T) {
 	if len(marks) < 2 {
 		t.Fatalf("the picker drew %d cursor marks", len(marks))
 	}
-	hx, hy := marks[0][0], marks[0][1]
+	// The strip sits directly above the grid, whose mark is the lowest, so it is
+	// the one before it however many rows are drawn over them.
+	hx, hy := marks[len(marks)-2][0], marks[len(marks)-2][1]
 
 	hue := m.AccentPicker.Hue
 	m = motion(m, hx+6, hy)

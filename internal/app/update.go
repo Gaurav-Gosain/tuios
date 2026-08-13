@@ -1246,7 +1246,11 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case RenameAppliedMsg:
 		if msg.Err != nil {
-			m.ShowNotification("Rename failed: "+msg.Err.Error(), "error", config.NotificationDuration*2)
+			what := msg.What
+			if what == "" {
+				what = "Rename"
+			}
+			m.ShowNotification(what+" failed: "+msg.Err.Error(), "error", config.NotificationDuration*2)
 			return m, nil
 		}
 		// The attached session's new label rides the state push. A session this
