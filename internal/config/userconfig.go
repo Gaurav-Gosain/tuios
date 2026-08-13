@@ -1198,7 +1198,9 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 //
 // A key no default claims, or one two defaults claim, is left alone: the first
 // is the user's own arrangement to resolve, the second is a defaults bug that
-// silently picking a winner would hide. ValidateConfig warns about both.
+// silently picking a winner would hide. Nor is an action's last key ever taken,
+// however the defaults read: a sole binding is a deliberate choice, and only a
+// redundant extra one can be residue. ValidateConfig warns about what is left.
 func dropStaleDuplicateKeys(section, defaults map[string][]string) {
 	claimants := make(map[string][]string)
 	for action, keys := range section {
@@ -1226,7 +1228,7 @@ func dropStaleDuplicateKeys(section, defaults map[string][]string) {
 			continue
 		}
 		for _, action := range actions {
-			if action == owner {
+			if action == owner || len(section[action]) < 2 {
 				continue
 			}
 			section[action] = slices.DeleteFunc(slices.Clone(section[action]), func(k string) bool {
