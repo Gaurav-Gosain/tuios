@@ -40,6 +40,37 @@ func vio(rule, format string, args ...any) []fuzz.Violation {
 	return []fuzz.Violation{{Rule: rule, Detail: fmt.Sprintf(format, args...)}}
 }
 
+// fuzzRules is the oracle, in the order Check runs it: cheapest first, so the
+// common case where nothing is wrong stays off the expensive render.
+var fuzzRules = []struct {
+	name  string
+	check func(*fuzzOS) []fuzz.Violation
+}{
+	{"panic", checkNoRecoveredPanic},
+	{"model-indexes", checkModelIndexes},
+	{"pane-size", checkPaneSizeAgreement},
+	{"spurious-winch", checkNoSpuriousResize},
+	{"layout-overlap", checkLayoutIsDisjoint},
+	{"stuck-gesture", checkGestureNeedsAButton},
+	{"scrollbar-column", checkScrollbarColumn},
+	{"frame-size", checkFrameFitsTheHost},
+	{"rail-addressing", checkRailAddressing},
+	{"rail-signature", checkRailSignatureFollowsTheRail},
+	{"guest-cells", checkGuestCellsAreNotPaintedOver},
+	{"divider-glyph", checkDividersUseTheirOwnGlyphs},
+}
+
+// Rules names the oracle for an attached display. It is the optional half of
+// the observer seam: without it a display still sees actions and failures, with
+// it the display can show every rule and how it fared.
+func (f *fuzzOS) Rules() []string {
+	names := make([]string, len(fuzzRules))
+	for i, r := range fuzzRules {
+		names[i] = r.name
+	}
+	return names
+}
+
 // Check runs the oracle against the current model.
 //
 // A panic raised by a rule is a finding rather than a crash. Update recovers
@@ -55,20 +86,8 @@ func (f *fuzzOS) Check() (found []fuzz.Violation) {
 		}
 	}()
 	m := f.m
-	for _, rule := range []func(*fuzzOS) []fuzz.Violation{
-		checkNoRecoveredPanic,
-		checkModelIndexes,
-		checkPaneSizeAgreement,
-		checkNoSpuriousResize,
-		checkLayoutIsDisjoint,
-		checkGestureNeedsAButton,
-		checkScrollbarColumn,
-		checkFrameFitsTheHost,
-		checkRailAddressing,
-		checkRailSignatureFollowsTheRail,
-		checkGuestCellsAreNotPaintedOver,
-	} {
-		if vs := rule(f); len(vs) > 0 {
+	for _, rule := range fuzzRules {
+		if vs := rule.check(f); len(vs) > 0 {
 			for i := range vs {
 				vs[i].Detail += fmt.Sprintf(" [after %s, %d panes, %dx%d]",
 					f.lastAction, len(m.Windows), m.Width, m.Height)
@@ -186,10 +205,11 @@ func checkNoSpuriousResize(f *fuzzOS) []fuzz.Violation {
 // over one cell means whichever draws second wins and the other's guest is
 // invisible.
 func checkLayoutIsDisjoint(f *fuzzOS) []fuzz.Violation {
-	// Only the modes that claim to partition. The scrolling layout is a strip
-	// wider than the viewport that the user scrolls along, so its columns are
-	// not a partition of the region and overlap there means something else.
-	if f.m.LayoutModeName() == LayoutModeScrolling || !f.hasRoomToDraw() {
+	// Only when something claims to be partitioning. With auto-tiling off the
+	// panes are free-floating windows a user may deliberately stack, and the
+	// scrolling layout is a strip wider than the viewport that is scrolled
+	// along rather than a partition of it.
+	if !f.m.AutoTiling || f.m.LayoutModeName() == LayoutModeScrolling || !f.hasRoomToDraw() {
 		return nil
 	}
 	wins := tiledRects(f.m)
@@ -385,25 +405,12 @@ func checkRailSignatureFollowsTheRail(f *fuzzOS) []fuzz.Violation {
 // clamped into the pane area all show up here as a missing marker.
 func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 	m := f.m
+	// The rule is about the chrome that is never supposed to reach into a pane:
+	// a divider that ran one cell too far, a toast that leaned out of the dock,
+	// a tooltip that clamped inward, the scrollbar thumb.
 	panes := visibleFuzzPanes(m)
-	// An overlay is drawn over the panes by design, so while one is up the
-	// cells belong to it. The rule is about the chrome that is never supposed
-	// to reach into a pane: dividers, toasts, tooltips, the scrollbar.
-	if len(panes) == 0 || !f.hasRoomToDraw() || m.AnyOverlayOpen() || m.ShowHelp || m.ShowLogs {
+	if len(panes) == 0 || !f.framePaintsPanes() {
 		return nil
-	}
-	// The scrolling layout deliberately places panes past the edge of the
-	// viewport, so a pane being absent from the frame is the layout working.
-	if m.LayoutModeName() == LayoutModeScrolling {
-		return nil
-	}
-	// A zoom draws one pane and hides the rest, so only the zoomed one owns any
-	// cells; the others are legitimately absent from the frame.
-	for _, w := range panes {
-		if w.Zoomed {
-			panes = []*terminal.Window{w}
-			break
-		}
 	}
 	marks := make([]string, len(panes))
 	for i, w := range panes {
@@ -434,6 +441,51 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 // effect and an oracle must not move the state it is judging.
 func (f *fuzzOS) deferring() bool {
 	return f.m.viewportResizing || f.m.Resizing || len(f.m.PendingResizes) > 0
+}
+
+// A divider is drawn in the style the frame is drawn in, so every cell it owns
+// has to come out of that style's own glyph set. The table test walks nine
+// styles against three dock positions and three sidebar states from a settled
+// start; this asks the same question after any sequence, which is where a style
+// changed at runtime under a live layout gets checked.
+func checkDividersUseTheirOwnGlyphs(f *fuzzOS) []fuzz.Violation {
+	m := f.m
+	if !config.SharedBorders || !f.framePaintsPanes() {
+		return nil
+	}
+	own := styleGlyphs(config.GetBorderForStyle())
+	if own == "" {
+		return nil
+	}
+	g := f.renderGrid()
+	for _, c := range dividerCells(m) {
+		if got := cellAt(g, c.X, c.Y); !strings.ContainsRune(own, got) {
+			return vio("divider-glyph", "divider cell (%d,%d) is %q, outside style %q's own glyphs %q",
+				c.X, c.Y, string(got), config.BorderStyle, own)
+		}
+	}
+	return nil
+}
+
+// framePaintsPanes reports whether this frame is the ordinary one: panes tiled
+// across the region with nothing drawn over them. The rules that read the
+// composed frame are all statements about that frame. An overlay, a zoom, or a
+// scrolling strip each legitimately covers or omits a pane, so asserting
+// against them there would be asserting that the feature does not work.
+func (f *fuzzOS) framePaintsPanes() bool {
+	m := f.m
+	if !f.hasRoomToDraw() || m.AnyOverlayOpen() || m.ShowHelp || m.ShowLogs {
+		return false
+	}
+	if m.LayoutModeName() == LayoutModeScrolling {
+		return false
+	}
+	for _, w := range visibleFuzzPanes(m) {
+		if w.Zoomed {
+			return false
+		}
+	}
+	return true
 }
 
 // hasRoomToDraw reports whether there is a content region at all. On a viewport

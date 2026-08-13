@@ -215,7 +215,9 @@ func (g *Generator) one() Action {
 	case Rename:
 		a.S = g.pick(awkwardNames)
 	case Setting:
-		a.A, a.B = g.u(settingCount), g.u(2)
+		// B is wider than a flag because some settings are a choice from a list
+		// rather than on or off, and a target reads it either way.
+		a.A, a.B = g.u(settingCount), g.u(settingValues)
 	case Guest:
 		a.S = g.pick(guestWrites)
 	}

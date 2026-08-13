@@ -218,7 +218,7 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 			}
 			return false
 		}
-		res.Actions = shrink(res.Actions, still, obs)
+		res.Actions = shrink(res.Actions, still, obs, cfg.MinWidth, cfg.MinHeight)
 		if s, svs, serr := replay(res.Actions, false); serr == nil && s >= 0 {
 			res.Step, res.Violations = s, svs
 		}

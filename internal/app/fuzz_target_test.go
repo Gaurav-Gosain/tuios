@@ -301,7 +301,7 @@ func (f *fuzzOS) Apply(a fuzz.Action) error {
 		m.FireAttached()
 		m.SyncDaemonPTYDimensions()
 	case fuzz.Setting:
-		applyFuzzSetting(m, a.A, a.B != 0)
+		applyFuzzSetting(m, a.A, a.B)
 	case fuzz.Tick:
 		// A tick is where time passes, and passing time is what ends a resize
 		// deferral. Update returns the settle as a command and nothing here
@@ -372,7 +372,8 @@ func (f *fuzzOS) openOverlay(n int) {
 // the settings panel or the command palette while panes are on screen. Each one
 // changes what a pane's frame looks like, which is why they belong in the
 // alphabet rather than in the fixture.
-func applyFuzzSetting(m *OS, which int, on bool) {
+func applyFuzzSetting(m *OS, which, value int) {
+	on := value&1 != 0
 	switch which % 12 {
 	case 0:
 		setSharedBorders(m, on)
@@ -380,7 +381,12 @@ func applyFuzzSetting(m *OS, which int, on bool) {
 		config.UseASCIIOnly = on
 		m.applyAppearanceLive(true)
 	case 2:
-		config.BorderStyle = map[bool]string{true: "double", false: "rounded"}[on]
+		// Every style the settings page offers, not two of them: the divider
+		// glyph rule is a statement about all nine, and a style swapped under a
+		// live layout is the sequence the table test cannot reach.
+		if n := len(config.BorderStyles); n > 0 {
+			config.BorderStyle = config.BorderStyles[value%n]
+		}
 		m.applyAppearanceLive(true)
 	case 3:
 		config.DockbarPosition = map[bool]string{true: "top", false: "bottom"}[on]

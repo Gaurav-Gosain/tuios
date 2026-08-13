@@ -86,4 +86,8 @@ var awkwardNames = []string{
 const (
 	overlayCount = 10
 	settingCount = 12
+	// settingValues is wide enough for the longest choice list behind a
+	// setting, which is the border styles. A target reading a flag takes the
+	// low bit and a target reading a choice takes the whole value.
+	settingValues = 12
 )

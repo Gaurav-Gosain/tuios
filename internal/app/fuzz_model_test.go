@@ -53,14 +53,26 @@ func TestFuzzModelSweep(t *testing.T) {
 	runFuzzSeeds(t, first, envInt(t, "TUIOS_FUZZ_SEEDS", 1000), envInt(t, "TUIOS_FUZZ_STEPS", fuzzSteps))
 }
 
+// fuzzFloorW and fuzzFloorH are the host sizes the default campaigns stay above.
+// Below the layout's own minimum pane size the panes clamp, stack, and take
+// negative origins, and every finding there belongs to one class; with no floor
+// a run reports that class within two actions and never reaches anything else.
+// TUIOS_FUZZ_FLOOR_W=0 TUIOS_FUZZ_FLOOR_H=0 runs the campaign that hunts it.
+const (
+	fuzzFloorW = 60
+	fuzzFloorH = 20
+)
+
 func runFuzzSeeds(t *testing.T, first uint64, count, steps int) {
 	t.Helper()
 	dir := fuzzScratch(t)
+	minW := envInt(t, "TUIOS_FUZZ_FLOOR_W", fuzzFloorW)
+	minH := envInt(t, "TUIOS_FUZZ_FLOOR_H", fuzzFloorH)
 	deadline := time.Now().Add(fuzzBudget(t))
 	for i := range uint64(count) {
 		seed := first + i
 		res, err := fuzz.Run(func() (fuzz.Target, error) { return newFuzzTarget(dir) },
-			fuzz.Config{Seed: seed, Steps: steps, ShrinkBudget: 1500})
+			fuzz.Config{Seed: seed, Steps: steps, ShrinkBudget: 1500, MinWidth: minW, MinHeight: minH})
 		if err != nil {
 			t.Fatalf("seed %d: %v", seed, err)
 		}
@@ -108,7 +120,7 @@ func FuzzModel(f *testing.F) {
 		// The corpus entry decides the run; the seed is carried only so a
 		// finding can be re-run through the seeded loop as well.
 		res, err := fuzz.Run(func() (fuzz.Target, error) { return newFuzzTarget(dir) },
-			fuzz.Config{Actions: fuzz.GenerateBytes(in, fuzzSteps), ShrinkBudget: 400})
+			fuzz.Config{Actions: fuzz.GenerateBytesFloor(in, fuzzSteps, fuzzFloorW, fuzzFloorH), ShrinkBudget: 400})
 		if err != nil {
 			t.Fatal(err)
 		}

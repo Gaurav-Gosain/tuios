@@ -11,13 +11,13 @@ package fuzz
 // when still agrees, so the result is guaranteed to reproduce.
 
 // shrink returns the smallest sequence it could reach that still fails.
-func shrink(as []Action, still func([]Action) bool, obs Observer) []Action {
+func shrink(as []Action, still func([]Action) bool, obs Observer, minW, minH int) []Action {
 	best := as
 	for {
 		start := len(best)
 		best = dropBlocks(best, still, obs)
 		best = dropSingles(best, still, obs)
-		best = simplify(best, still, obs)
+		best = simplify(best, still, obs, minW, minH)
 		if len(best) >= start {
 			// A round that removed nothing has reached the fixpoint. simplify
 			// can change actions without shortening, so the loop ends on
@@ -25,7 +25,7 @@ func shrink(as []Action, still func([]Action) bool, obs Observer) []Action {
 			break
 		}
 	}
-	return simplify(best, still, obs)
+	return simplify(best, still, obs, minW, minH)
 }
 
 // dropBlocks is the delta-debugging half: try removing contiguous runs, coarse
@@ -70,9 +70,9 @@ func dropSingles(as []Action, still func([]Action) bool, obs Observer) []Action 
 // statement about degenerate sizes; the same repro reading `resize 137 29` says
 // nothing, even though both reproduce. Each candidate replacement is tried in
 // order from most to least aggressive and the first one that still fails wins.
-func simplify(as []Action, still func([]Action) bool, obs Observer) []Action {
+func simplify(as []Action, still func([]Action) bool, obs Observer, minW, minH int) []Action {
 	for i := range as {
-		for _, cand := range simpler(as[i]) {
+		for _, cand := range simpler(as[i], minW, minH) {
 			next := make([]Action, len(as))
 			copy(next, as)
 			next[i] = cand
@@ -88,7 +88,7 @@ func simplify(as []Action, still func([]Action) bool, obs Observer) []Action {
 
 // simpler lists the replacements for one action, most aggressive first. A Tick
 // is the floor: it stands for "this step did not need to be anything".
-func simpler(a Action) []Action {
+func simpler(a Action, minW, minH int) []Action {
 	var out []Action
 	if a.Kind != Tick {
 		out = append(out, Action{Kind: Tick})
@@ -111,7 +111,15 @@ func simpler(a Action) []Action {
 		func(x Action) Action { x.B /= 2; return x },
 		func(x Action) Action { x.A, x.B = x.A/2, x.B/2; return x },
 	} {
-		if c := f(a); c != a {
+		c := f(a)
+		// A resize must stay inside the campaign's declared floor. Without this
+		// the shrinker walks a finding out of the region the run was exploring
+		// and back into whatever bug class lives below it, and every report
+		// reads as that one class no matter what was actually found.
+		if c.Kind == Resize {
+			c.A, c.B = max(c.A, minW), max(c.B, minH)
+		}
+		if c != a {
 			out = append(out, c)
 		}
 	}
