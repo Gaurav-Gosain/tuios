@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/skills"
 	"github.com/charmbracelet/fang"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/spf13/cobra"
@@ -50,6 +51,7 @@ var (
 	showRAM             bool
 	sharedBorders       bool
 	zoomMaxWidth        int
+	printSkill          bool
 )
 
 func main() {
@@ -92,9 +94,19 @@ comprehensive keyboard/mouse interactions.`,
   tuios config edit
 
   # List all keybindings
-  tuios keybinds list`,
+  tuios keybinds list
+
+  # Print the agent skill for driving tuios from a pane
+  tuios --skill`,
 		Version: version,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			// The skill is printed before anything else can decide to draw: it is
+			// a document, and a caller asking for it never wants the interface.
+			if printSkill {
+				fmt.Print(skills.TUIOS)
+				return nil
+			}
+
 			if previewTheme != "" {
 				return previewThemeColors(previewTheme)
 			}
@@ -137,6 +149,10 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&sharedBorders, "shared-borders", false, "Share borders between adjacent tiled windows")
 
 	rootCmd.PersistentFlags().IntVar(&zoomMaxWidth, "zoom-max-width", 0, "Max width in cells for zoom mode (0 = fullscreen, e.g. 120)")
+
+	// Local to the root command: the skill describes tuios as a whole, so
+	// offering it on every subcommand would only add noise to their help.
+	rootCmd.Flags().BoolVar(&printSkill, "skill", false, "Print the agent skill for driving tuios from a pane and exit")
 
 	var sshPort, sshHost, sshKeyPath, sshDefaultSession string
 	var sshEphemeral bool
