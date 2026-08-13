@@ -178,10 +178,17 @@ func (m *OS) accentNowLine(width, y int, pal overlay.Palette) string {
 	s := &m.AccentPicker
 
 	line := overlay.Style(bg).Foreground(pal.FgMute).Render(" now ")
-	if s.HadPrev {
+	switch {
+	case s.Inherited:
+		// The colour is real but it is the session's, and the pane is not holding
+		// it. Naming the source rather than printing a hex is the difference
+		// between the two states, and the word fits where the hex would have gone.
+		line += accentSwatch(s.Prev.RGB(), 2) +
+			overlay.Style(bg).Foreground(pal.FgDim).Render(" session")
+	case s.HadPrev:
 		line += accentSwatch(s.Prev.RGB(), 2) +
 			overlay.Style(bg).Foreground(pal.FgDim).Render(" "+s.Prev.Hex())
-	} else {
+	default:
 		line += overlay.Style(bg).Foreground(pal.FgMute).Render(accentClearGlyph() + " none")
 	}
 	line += overlay.Style(bg).Foreground(pal.FgMute).Render(arrow) +

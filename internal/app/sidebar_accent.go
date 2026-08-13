@@ -94,8 +94,13 @@ type accentPickerState struct {
 	Hex      string // the hex field's buffer
 	Harmony  int    // which chip the harmony cursor is on
 	Focus    accentFocus
-	Prev     Accent // what the target wore when the picker opened
+	Prev     Accent // the colour the target was wearing when the picker opened
 	HadPrev  bool
+	// Inherited says Prev came from the target's session rather than from the
+	// target. The two look the same on the rail and behave differently: an
+	// inheriting pane follows its session's colour wherever that goes, a pinned
+	// one does not, so the picker has to keep them apart and say which is which.
+	Inherited bool
 }
 
 // accentGridSize is the shades grid's dimensions for the current screen. One
@@ -187,7 +192,14 @@ func (s *accentPickerState) setCur(c color.RGBA) {
 }
 
 // OpenAccentPicker opens the colour picker for a window, landing on the colour
-// it already wears so the picker opens showing the truth.
+// the pane is wearing on screen: its own accent, or its session's when it has
+// none of its own. Seeding from the effective colour is what makes "change this
+// colour" start from the colour being changed; the chrome's accent is left as
+// the seed only when the pane is wearing nothing at all.
+//
+// Seeding from an inherited colour does not pin the pane to it. Prev and
+// Inherited record where the seed came from, and nothing is written unless the
+// user picks something else.
 func (m *OS) OpenAccentPicker(windowID string) {
 	if windowID == "" {
 		return
@@ -195,17 +207,17 @@ func (m *OS) OpenAccentPicker(windowID string) {
 	m.ShowAccentPicker = true
 	m.AccentPickerWindowID = windowID
 
-	prev, hadPrev := m.WindowAccent(windowID)
+	prev, src := m.effectiveAccent(windowID, m.SessionName)
 	start := toRGBA(theme.UI().Accent)
-	if hadPrev {
+	if src != accentSourceNone {
 		start = prev.RGB()
 	}
 	cols, rows := m.accentGridSize()
 	hue, col, row := accentCellFor(start, 0, cols, rows)
 
 	m.AccentPicker = accentPickerState{
-		Hue: hue, Col: col, Row: row,
-		Focus: accentFocusGrid, Prev: prev, HadPrev: hadPrev,
+		Hue: hue, Col: col, Row: row, Focus: accentFocusGrid,
+		Prev: prev, HadPrev: src != accentSourceNone, Inherited: src == accentSourceSession,
 	}
 	m.AccentPicker.setCur(start)
 }
@@ -234,15 +246,28 @@ func (m *OS) accentPreview(windowID string) (Accent, bool) {
 }
 
 // AccentPickerApply commits the colour under the cursor and closes the picker.
+//
+// Applying the colour the target already wears writes nothing, which is what
+// the picker opening on the effective colour costs: a user who opens it and
+// presses enter has changed their mind about nothing, and writing the seed
+// through would pin an inheriting pane to a literal colour, or freeze a theme
+// slot to whatever hex it resolves to today. Both are losses the user was never
+// told about. Moving anywhere first stores the colour landed on, as it always
+// has.
 func (m *OS) AccentPickerApply() {
 	if !m.ShowAccentPicker {
 		return
 	}
-	m.SetWindowAccent(m.AccentPickerWindowID, RGBAccent(m.AccentPicker.Cur))
+	s := &m.AccentPicker
+	if !s.HadPrev || s.Cur != s.Prev.RGB() {
+		m.SetWindowAccent(m.AccentPickerWindowID, RGBAccent(s.Cur))
+	}
 	m.CloseAccentPicker()
 }
 
-// AccentPickerClear drops the target's accent and closes the picker.
+// AccentPickerClear takes the target's own accent away and closes the picker,
+// which returns a pane to following its session's colour rather than to having
+// no colour at all. Clearing is how a pinned pane rejoins its session.
 func (m *OS) AccentPickerClear() {
 	if !m.ShowAccentPicker {
 		return

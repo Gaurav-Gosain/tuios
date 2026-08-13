@@ -241,6 +241,31 @@ func railGround(rowBg color.Color) color.Color {
 	return theme.TerminalBg()
 }
 
+// accentSource says where the colour something is wearing came from, which
+// inherited and pinned cannot be told apart by afterwards: both are just a
+// colour on screen.
+type accentSource uint8
+
+const (
+	accentSourceNone accentSource = iota
+	accentSourceOwn
+	accentSourceSession
+)
+
+// effectiveAccent is the colour a pane is actually wearing: the accent pinned
+// to it when it has one, and its session's colour otherwise. This is the whole
+// precedence in one place, so the picker opens on the colour the rail is
+// drawing rather than on a second opinion about what that colour is.
+func (m *OS) effectiveAccent(windowID, sessionID string) (Accent, accentSource) {
+	if a, ok := m.WindowAccent(windowID); ok {
+		return a, accentSourceOwn
+	}
+	if a, ok := m.SessionColor(sessionID); ok {
+		return a, accentSourceSession
+	}
+	return Accent{}, accentSourceNone
+}
+
 // agentIdentityTint is the colour an agents-section row is marked with. The
 // section is the one place panes from several sessions stand in one list, so a
 // row says which session it came from in the same column and the same colour
@@ -250,8 +275,9 @@ func (m *OS) agentIdentityTint(e sidebarAgentEntry, bg color.Color) color.Color 
 	if !config.SessionColors {
 		return nil
 	}
-	if a, ok := m.WindowAccent(e.WindowID); ok {
-		return theme.Readable(a.RGB(), bg)
+	a, src := m.effectiveAccent(e.WindowID, e.SessionID)
+	if src == accentSourceNone {
+		return nil
 	}
-	return m.sessionTint(e.SessionID, bg)
+	return theme.Readable(a.RGB(), bg)
 }
