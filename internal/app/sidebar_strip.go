@@ -451,7 +451,7 @@ func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Pale
 
 	lead, leadFg := " ", color.Color(nil)
 	if e.WindowIndex >= 0 && e.WindowIndex == m.FocusedWindow {
-		lead, leadFg = "▎", pal.Accent
+		lead, leadFg = "▎", railFocusTint(m.agentIdentityTint(e, bg), pal)
 		if overlay.UseASCII() {
 			lead = ">"
 		}
@@ -531,7 +531,7 @@ func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette
 
 	lead, leadFg := " ", color.Color(nil)
 	if node.IsCurrent {
-		lead, leadFg = "▎", pal.Accent
+		lead, leadFg = "▎", railFocusTint(m.sessionTint(node.ID, bg), pal)
 		if overlay.UseASCII() {
 			lead = ">"
 		}

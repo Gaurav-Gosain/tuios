@@ -14,8 +14,14 @@ import (
 // than one of them is on screen at once: the rail's sessions section, the
 // rail's agents section (which lists panes across every session), the session
 // switcher, and the collapsed strip. The content area and the rail's terminals
-// section show one session's panes and nothing else, so a colour there would
-// distinguish them from nothing and is left off.
+// section show one session's panes and nothing else, so a colour per row there
+// would distinguish them from nothing and is left off.
+//
+// The focus marks are the exception, and they are about coherence rather than
+// information: the rail is one object, so the bar on the focused pane is the
+// same hue as the bar on the session two rows above it. A single mark taking a
+// colour the rail is already showing adds no vocabulary; two marks contradicting
+// each other is what read as a defect.
 //
 // The colour comes from the session's name, which is its identity everywhere
 // else too. That makes it stable across a daemon restart, identical on every

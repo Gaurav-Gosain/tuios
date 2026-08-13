@@ -62,8 +62,11 @@ func TestRailMarksCurrentWithAGutterMark(t *testing.T) {
 	if got := gutterCell(focused); got != "▎" {
 		t.Errorf("the focused pane row has no gutter mark, column 0 is %q: %q", got, focused)
 	}
-	if !strings.Contains(focused, fgParams(pal.Accent)) {
-		t.Errorf("the focused pane's gutter mark is not accent: %q", focused)
+	// The same mark and the same colour as the session row above it: the rail is
+	// one object, so the pane you are on cannot be a different hue from the
+	// session you are in.
+	if !strings.Contains(focused, fgParams(m.sessionTint("local", theme.TerminalBg()))) {
+		t.Errorf("the focused pane's gutter mark is not its session's colour: %q", focused)
 	}
 
 	lines, _ := m.sidebarPanelLines()
@@ -139,7 +142,7 @@ func TestRailAttentionMarksAnUnfocusedPane(t *testing.T) {
 	m.FocusedWindow = 4 // "server", needs_input
 	m.sidebarCache.invalidate()
 	row = treeRow(t, m, "server")
-	if !strings.Contains(row, fgParams(pal.Accent)) {
+	if !strings.Contains(row, fgParams(m.sessionTint("main", theme.TerminalBg()))) {
 		t.Errorf("the focused attention row lost its identity mark: %q", row)
 	}
 	if !strings.Contains(row, fgParams(agentGlyphColor("needs_input", pal))) {

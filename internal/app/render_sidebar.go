@@ -181,6 +181,16 @@ func sidebarGutter(current bool, state string, bg color.Color, pal overlay.Palet
 	return sidebarGutterTinted(current, state, nil, bg, pal)
 }
 
+// railFocusTint is the colour a focus mark burns: the identity the caller
+// resolved, and the rail accent when there is none, which is every mark on the
+// rail before session colours existed and every mark again with them off.
+func railFocusTint(tint color.Color, pal overlay.Palette) color.Color {
+	if tint != nil {
+		return tint
+	}
+	return pal.Accent
+}
+
 // sidebarGutterTinted is sidebarGutter with the current-mark drawn in a colour
 // of the caller's choosing: the focused pane's gutter burns the accent the user
 // gave that pane, so the row wears exactly one identity bar instead of an
@@ -192,10 +202,7 @@ func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal o
 		if ascii {
 			mark = ">"
 		}
-		if tint == nil {
-			tint = pal.Accent
-		}
-		return sidebarStyle(bg, tint).Render(mark)
+		return sidebarStyle(bg, railFocusTint(tint, pal)).Render(mark)
 	case sidebarAttention(state):
 		if ascii {
 			mark = "!"
@@ -1370,7 +1377,12 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 
 	gutter := sidebarGutter(false, e.State, rowBg, pal)
 	if !peeked {
-		var tint color.Color
+		// The focus mark is the session's own colour. The rail is one object, and a
+		// session marked magenta two rows above its focused pane marked blue reads
+		// as a mismatch rather than as a distinction. It says nothing new, which is
+		// why the section is otherwise still uncoloured: one session's panes are on
+		// screen at a time, so a hue per row would separate them from nothing.
+		tint := m.sessionTint(e.SessionID, railGround(rowBg))
 		accent, accented := m.WindowAccent(e.WindowID)
 		if m.ShowAccentPicker && e.WindowID == m.AccentPickerWindowID {
 			// The open picker previews the colour under its cursor on the row it
