@@ -94,6 +94,8 @@ const (
 	accentFocusR
 	accentFocusG
 	accentFocusB
+	accentFocusS
+	accentFocusL
 	accentFocusHarmony
 	accentFocusCount
 )
@@ -109,12 +111,18 @@ const accentGridMaxRows = 8
 // field move it: walking the chips has to leave the chips where they are, or
 // the row slides out from under the cursor.
 type accentPickerState struct {
-	Hue      float64 // 0..360, the hue the shades grid holds
-	Col, Row int     // cursor in the grid: saturation across, lightness down
-	Cur      color.RGBA
-	Base     color.RGBA
-	Hex      string // the hex field's buffer
-	Harmony  int    // which chip the harmony cursor is on
+	Hue float64 // 0..360, the hue the shades grid holds
+	// Sat and Light are the continuous 0..1 model the S and L sliders edit. The
+	// grid is a coarse projection of the same two numbers (9.1 % of saturation a
+	// column, 12.1 % of lightness a row), so the cursor shows the nearest cell
+	// while the sliders keep the value between cells. One model, two views,
+	// which is why they cannot disagree.
+	Sat, Light float64
+	Col, Row   int // cursor in the grid: saturation across, lightness down
+	Cur        color.RGBA
+	Base       color.RGBA
+	Hex        string // the hex field's buffer
+	Harmony    int    // which chip the harmony cursor is on
 	// Slot is the theme slot the current colour was picked as, or -1 when it is
 	// a literal. Cur is the same colour either way; this is what says whether it
 	// will follow the next theme. Set to -1 by every control that produces a
@@ -149,12 +157,15 @@ func (m *OS) accentGridSize() (cols, rows int) {
 	return max(inner-2, 1), clampInt(m.GetRenderHeight()-furniture, 1, accentGridMaxRows)
 }
 
-// accentSliderRows is how many rows the slider block occupies.
-const accentSliderRows = int(accentChanCount)
+// accentSliderRows is how many rows the slider block occupies: one per channel
+// plus the blank that separates the bytes from the two that move the whole
+// colour.
+const accentSliderRows = int(accentChanCount) + 1
 
 // accentSliderMinHeight is the screen height the slider block needs. It is the
-// first of the picker's fine controls to go on a short screen: the grid and the
-// hex field still reach every colour without it, and it is three rows.
+// first of the picker's controls to go on a short screen: it is the tallest
+// thing in the dialog, and the grid and the hex field still reach every colour
+// without it.
 const accentSliderMinHeight = 22
 
 // accentSlidersShown reports whether the screen has room for the slider block.
@@ -182,18 +193,43 @@ const (
 	accentLightBottom = 0.10
 )
 
-// accentCellColor is the colour of shades-grid cell (col, row) at the held hue:
-// saturation runs left to right, lightness top to bottom.
-func accentCellColor(hue float64, col, row, cols, rows int) color.RGBA {
-	s := 1.0
+// accentCellSL is the saturation and lightness shades-grid cell (col, row)
+// stands for: saturation runs left to right, lightness top to bottom. The cell
+// is those two numbers, and the colour below is what they make at a hue, which
+// is why picking a cell sets the model rather than reading it back off the
+// eight-bit colour the cell was painted with.
+func accentCellSL(col, row, cols, rows int) (sat, light float64) {
+	sat = 1.0
 	if cols > 1 {
-		s = float64(col) / float64(cols-1)
+		sat = float64(col) / float64(cols-1)
 	}
-	l := accentLightTop
+	light = accentLightTop
 	if rows > 1 {
-		l = accentLightTop - float64(row)*(accentLightTop-accentLightBottom)/float64(rows-1)
+		light = accentLightTop - float64(row)*(accentLightTop-accentLightBottom)/float64(rows-1)
 	}
-	return hslToRGB(hue, s, l)
+	return sat, light
+}
+
+// accentCellColor is the colour of shades-grid cell (col, row) at the held hue.
+func accentCellColor(hue float64, col, row, cols, rows int) color.RGBA {
+	sat, light := accentCellSL(col, row, cols, rows)
+	return hslToRGB(hue, sat, light)
+}
+
+// accentCellForSL is the grid cell nearest to a saturation and lightness, the
+// inverse of accentCellSL. The sliders use this rather than accentCellFor
+// because they hold the two numbers exactly: going by way of the colour would
+// put the cursor a cell off near white, where eight bits a channel no longer
+// tell saturation and its neighbours apart.
+func accentCellForSL(sat, light float64, cols, rows int) (col, row int) {
+	if cols > 1 {
+		col = clampInt(int(sat*float64(cols-1)+0.5), 0, cols-1)
+	}
+	if rows > 1 {
+		step := (accentLightTop - accentLightBottom) / float64(rows-1)
+		row = clampInt(int((accentLightTop-light)/step+0.5), 0, rows-1)
+	}
+	return col, row
 }
 
 // accentCellFor is the grid cell nearest to a colour, which is how a hex the
@@ -245,13 +281,53 @@ func (s *accentPickerState) harmonyColor(i int) color.RGBA {
 }
 
 // setCur moves the colour the picker would apply, and with it the base the
-// harmony chips hang off and the text in the hex field. The colour is a literal:
-// every control but the slot row produces one.
+// harmony chips hang off, the text in the hex field, and the saturation and
+// lightness the sliders show. The colour is a literal: every control but the
+// slot row produces one.
 func (s *accentPickerState) setCur(c color.RGBA) {
+	s.takeColor(c)
+	// A grey reports no hue, so the held one stands; saturation and lightness it
+	// does report, and zero saturation is the true answer for a grey.
+	_, s.Sat, s.Light = rgbToHSL(c)
+}
+
+// takeColor installs the colour without touching the HSL model, for the callers
+// that already hold the exact saturation and lightness it was built from. Going
+// through rgbToHSL there would be a round trip through eight bits a channel for
+// numbers that were never rounded.
+func (s *accentPickerState) takeColor(c color.RGBA) {
 	s.Cur, s.Base = c, c
 	s.Hex = hexString(c)
 	s.Slot = -1
 }
+
+// takeHarmony selects a harmony chip. It moves the colour without moving Base,
+// so the chips stay where they are while the cursor walks them.
+func (s *accentPickerState) takeHarmony(i int) {
+	s.Harmony = clampInt(i, 0, accentHarmonyCount-1)
+	c := s.harmonyColor(s.Harmony)
+	s.Cur = c
+	s.Hex = hexString(c)
+	s.Slot = -1
+	_, s.Sat, s.Light = rgbToHSL(c)
+}
+
+// accentPickerSetHSL moves the picker's saturation and lightness and rebuilds
+// the colour from them at the held hue. The sliders write the model directly
+// rather than editing the colour and reading the model back off it, so a step
+// out and back is not a round trip through eight bits a channel.
+func (m *OS) accentPickerSetHSL(sat, light float64) {
+	s := &m.AccentPicker
+	s.Sat, s.Light = clamp01(sat), clamp01(light)
+	c := hslToRGB(s.Hue, s.Sat, s.Light)
+	s.takeColor(c)
+	// The grid cursor is the coarse view of the same two numbers.
+	cols, rows := m.accentGridSize()
+	s.Col, s.Row = accentCellForSL(s.Sat, s.Light, cols, rows)
+}
+
+// clamp01 holds a fraction in range.
+func clamp01(v float64) float64 { return math.Min(math.Max(v, 0), 1) }
 
 // accentPickerAdopt takes a literal colour from a control that names one
 // outright rather than by cell, and walks the grid cursor and the held hue to
@@ -478,9 +554,7 @@ func (m *OS) AccentPickerFocus(delta int) {
 	}
 	switch s.Focus {
 	case accentFocusHarmony:
-		s.Cur = s.harmonyColor(s.Harmony)
-		s.Hex = hexString(s.Cur)
-		s.Slot = -1
+		s.takeHarmony(s.Harmony)
 	case accentFocusANSI:
 		slot := s.Slot
 		if slot < 0 {
@@ -488,8 +562,11 @@ func (m *OS) AccentPickerFocus(delta int) {
 		}
 		m.AccentPickerSlot(slot)
 	case accentFocusGrid, accentFocusHue:
+		// Focus names the selection, so arriving at the grid takes the cell the
+		// cursor is on, at that cell's own saturation and lightness.
 		cols, rows := m.accentGridSize()
-		s.setCur(accentCellColor(s.Hue, s.Col, s.Row, cols, rows))
+		s.Sat, s.Light = accentCellSL(s.Col, s.Row, cols, rows)
+		s.takeColor(hslToRGB(s.Hue, s.Sat, s.Light))
 	}
 }
 
@@ -592,6 +669,9 @@ func (m *OS) AccentPickerMoveCell(dx, dy int) {
 }
 
 // AccentPickerCell puts the shades-grid cursor on a cell and takes its colour.
+// The cell is a saturation and a lightness, so it is those two the picker takes
+// and the colour that follows from them, which is what lets the S and L sliders
+// step off a cell and back onto exactly it.
 func (m *OS) AccentPickerCell(col, row int) {
 	if !m.ShowAccentPicker {
 		return
@@ -600,7 +680,8 @@ func (m *OS) AccentPickerCell(col, row int) {
 	s := &m.AccentPicker
 	s.Focus = accentFocusGrid
 	s.Col, s.Row = clampInt(col, 0, cols-1), clampInt(row, 0, rows-1)
-	s.setCur(accentCellColor(s.Hue, s.Col, s.Row, cols, rows))
+	s.Sat, s.Light = accentCellSL(s.Col, s.Row, cols, rows)
+	s.takeColor(hslToRGB(s.Hue, s.Sat, s.Light))
 }
 
 // AccentPickerMoveHue turns the held hue by whole strip cells, wrapping: the
@@ -615,17 +696,18 @@ func (m *OS) AccentPickerMoveHue(delta int) {
 	m.AccentPickerHueCell(at)
 }
 
-// AccentPickerHueCell holds a new hue, keeping the grid cursor where it is so
-// the same saturation and lightness carry across the change.
+// AccentPickerHueCell holds a new hue, carrying the saturation and lightness
+// across it. They come from the continuous model rather than from the cell the
+// grid cursor is on, so turning the hue does not round a slider's work away.
 func (m *OS) AccentPickerHueCell(i int) {
 	if !m.ShowAccentPicker {
 		return
 	}
-	cols, rows := m.accentGridSize()
+	cols, _ := m.accentGridSize()
 	s := &m.AccentPicker
 	s.Focus = accentFocusHue
 	s.Hue = accentHueAt(clampInt(i, 0, cols-1), cols)
-	s.setCur(accentCellColor(s.Hue, s.Col, s.Row, cols, rows))
+	m.accentPickerSetHSL(s.Sat, s.Light)
 }
 
 // AccentPickerHarmonyAt puts the harmony cursor on a chip and takes its colour.
@@ -635,10 +717,7 @@ func (m *OS) AccentPickerHarmonyAt(i int) {
 	}
 	s := &m.AccentPicker
 	s.Focus = accentFocusHarmony
-	s.Harmony = clampInt(i, 0, accentHarmonyCount-1)
-	s.Cur = s.harmonyColor(s.Harmony)
-	s.Hex = hexString(s.Cur)
-	s.Slot = -1
+	s.takeHarmony(i)
 }
 
 // AccentPickerMoveHarmony walks the harmony chips.
@@ -708,6 +787,7 @@ func (m *OS) accentPickerSetHex(buf string) {
 	cols, rows := m.accentGridSize()
 	s.Cur, s.Base = c, c
 	s.Hue, s.Col, s.Row = accentCellFor(c, s.Hue, cols, rows)
+	_, s.Sat, s.Light = rgbToHSL(c)
 }
 
 // hexDigitsOf strips the leading hash from a hex buffer.

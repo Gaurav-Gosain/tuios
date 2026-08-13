@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -75,6 +76,138 @@ func TestAccentSliderPrintsWhatItHolds(t *testing.T) {
 			if want := accentSliderCol(v, barW, ch.max()); row.thumb != want {
 				t.Fatalf("%s at %d drew its thumb in cell %d, want %d", ch.label(), v, row.thumb, want)
 			}
+		}
+	}
+}
+
+// TestAccentSLStepsOffACellAndBackOntoIt is what the continuous model buys. The
+// grid quantises saturation to about nine percent a column; a slider stepping
+// the printed percent would leave the cell on the way out and land beside it on
+// the way back. Stepping the model returns the cell's exact colour.
+func TestAccentSLStepsOffACellAndBackOntoIt(t *testing.T) {
+	m := accentTestOS(t, 120, 30)
+	m.OpenAccentPicker("aaaaaaaa1111")
+	cols, rows := m.accentGridSize()
+
+	for _, hue := range []int{0, 5, 11} {
+		m.AccentPickerHueCell(hue % cols)
+		for col := range cols {
+			for row := range rows {
+				m.AccentPickerCell(col, row)
+				want := m.AccentPicker.Cur
+				for _, ch := range []accentChannel{accentChanS, accentChanL} {
+					m.AccentPicker.Focus = ch.focus()
+					// Step away from whichever end the cell sits at: a step into the
+					// end of a range clamps, and clamping is the point of a range.
+					dir := 1
+					if m.AccentPicker.sliderValue(ch) >= ch.max() {
+						dir = -1
+					}
+					m.AccentPickerSliderStep(ch, dir)
+					m.AccentPickerSliderStep(ch, -dir)
+					if got := m.AccentPicker.Cur; got != want {
+						t.Fatalf("cell (%d,%d): %s out and back gave %s, want %s",
+							col, row, ch.label(), hexString(got), hexString(want))
+					}
+					// And the grid cursor is back on the cell it started on.
+					if m.AccentPicker.Col != col || m.AccentPicker.Row != row {
+						t.Fatalf("cell (%d,%d): %s out and back left the cursor on (%d,%d)",
+							col, row, ch.label(), m.AccentPicker.Col, m.AccentPicker.Row)
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestAccentSLOpenTellingTheTruth: the sliders open on the colour the target is
+// wearing, not on a default. A picker that opened showing 50 % of something it
+// was not holding would be lying on its first frame.
+func TestAccentSLOpenTellingTheTruth(t *testing.T) {
+	const id = "aaaaaaaa1111"
+	for _, hex := range []string{"#3aa0ff", "#801020", "#ffffff", "#000000", "#7f7f7f"} {
+		want, ok := parseHexColor(hex)
+		if !ok {
+			t.Fatalf("%q is not a colour", hex)
+		}
+		m := accentTestOS(t, 120, 30)
+		m.SetWindowAccent(id, RGBAccent(want))
+		m.OpenAccentPicker(id)
+
+		_, sat, light := rgbToHSL(want)
+		rows := readSliders(t, m)
+		for ch, wantF := range map[accentChannel]float64{accentChanS: sat, accentChanL: light} {
+			if got := rows[int(ch)].value; got != int(math.Round(wantF*100)) {
+				t.Errorf("%s: %s opened at %d%%, want %d%%",
+					hex, ch.label(), got, int(math.Round(wantF*100)))
+			}
+		}
+		for ch, wantV := range map[accentChannel]int{
+			accentChanR: int(want.R), accentChanG: int(want.G), accentChanB: int(want.B),
+		} {
+			if got := rows[int(ch)].value; got != wantV {
+				t.Errorf("%s: %s opened at %d, want %d", hex, ch.label(), got, wantV)
+			}
+		}
+	}
+}
+
+// TestAccentSLAndGridAreOneModel: the grid cursor is the coarse view of the
+// saturation and lightness the sliders hold, so moving a slider moves the
+// cursor to the cell nearest what it now holds and never anywhere else.
+func TestAccentSLAndGridAreOneModel(t *testing.T) {
+	m := accentTestOS(t, 120, 30)
+	m.OpenAccentPicker("aaaaaaaa1111")
+	cols, rows := m.accentGridSize()
+
+	// The nearest cell, found by looking at all of them rather than by asking the
+	// function under test.
+	nearest := func(sat, light float64) (int, int) {
+		bestCol, bestRow, best := 0, 0, math.MaxFloat64
+		for col := range cols {
+			for row := range rows {
+				cs, cl := accentCellSL(col, row, cols, rows)
+				if d := math.Abs(cs-sat) + math.Abs(cl-light); d < best-1e-12 {
+					bestCol, bestRow, best = col, row, d
+				}
+			}
+		}
+		return bestCol, bestRow
+	}
+
+	for v := 0; v <= 100; v += 3 {
+		m.AccentPickerSetSlider(accentChanS, v)
+		m.AccentPickerSetSlider(accentChanL, 100-v)
+		wantCol, wantRow := nearest(m.AccentPicker.Sat, m.AccentPicker.Light)
+		if m.AccentPicker.Col != wantCol || m.AccentPicker.Row != wantRow {
+			t.Errorf("S=%d%% L=%d%%: the cursor sits on (%d,%d), want the nearest cell (%d,%d)",
+				v, 100-v, m.AccentPicker.Col, m.AccentPicker.Row, wantCol, wantRow)
+		}
+		// The colour is built from the model, not from the cell under the cursor.
+		if want := hslToRGB(m.AccentPicker.Hue, m.AccentPicker.Sat, m.AccentPicker.Light); m.AccentPicker.Cur != want {
+			t.Errorf("S=%d%%: the colour is %s, want %s from the model it holds",
+				v, hexString(m.AccentPicker.Cur), hexString(want))
+		}
+	}
+}
+
+// TestAccentHueTurnKeepsTheFineValue: turning the hue is a hue change, so the
+// saturation and lightness the sliders were left holding carry across it rather
+// than rounding to the grid cell the cursor happens to sit in.
+func TestAccentHueTurnKeepsTheFineValue(t *testing.T) {
+	m := accentTestOS(t, 120, 30)
+	m.OpenAccentPicker("aaaaaaaa1111")
+	cols, _ := m.accentGridSize()
+
+	m.AccentPickerSetSlider(accentChanS, 82)
+	m.AccentPickerSetSlider(accentChanL, 66)
+	for i := range cols {
+		m.AccentPickerHueCell(i)
+		if got := m.AccentPicker.sliderValue(accentChanS); got != 82 {
+			t.Fatalf("hue cell %d: saturation became %d%%, want 82%%", i, got)
+		}
+		if got := m.AccentPicker.sliderValue(accentChanL); got != 66 {
+			t.Fatalf("hue cell %d: lightness became %d%%, want 66%%", i, got)
 		}
 	}
 }
@@ -194,19 +327,20 @@ func TestAccentSliderKeysStepAndJump(t *testing.T) {
 	m.OpenAccentPicker("aaaaaaaa1111")
 
 	for ch := accentChannel(0); ch < accentChanCount; ch++ {
+		mid := ch.max() / 2
 		m.AccentPicker.Focus = ch.focus()
-		m.AccentPickerSetSlider(ch, 128)
+		m.AccentPickerSetSlider(ch, mid)
 		m.AccentPickerMove(1, 0)
-		if got := m.AccentPicker.sliderValue(ch); got != 129 {
-			t.Errorf("%s: right moved 128 to %d", ch.label(), got)
+		if got := m.AccentPicker.sliderValue(ch); got != mid+1 {
+			t.Errorf("%s: right moved %d to %d", ch.label(), mid, got)
 		}
 		m.AccentPickerMove(0, 1)
-		if got := m.AccentPicker.sliderValue(ch); got != 128 {
-			t.Errorf("%s: down moved 129 to %d", ch.label(), got)
+		if got := m.AccentPicker.sliderValue(ch); got != mid {
+			t.Errorf("%s: down moved %d to %d", ch.label(), mid+1, got)
 		}
 		m.AccentPickerMoveShift(1, 0)
-		if got := m.AccentPicker.sliderValue(ch); got != 138 {
-			t.Errorf("%s: shift+right moved 128 to %d", ch.label(), got)
+		if got := m.AccentPicker.sliderValue(ch); got != mid+ch.coarse() {
+			t.Errorf("%s: shift+right moved %d to %d", ch.label(), mid, got)
 		}
 		m.AccentPickerSliderEnd(true)
 		if got := m.AccentPicker.sliderValue(ch); got != ch.max() {

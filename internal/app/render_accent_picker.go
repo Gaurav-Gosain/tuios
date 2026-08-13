@@ -153,6 +153,11 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 	body = append(body, m.accentHexLine(width, at(), pal))
 	if m.accentSlidersShown() {
 		for ch := accentChannel(0); ch < accentChanCount; ch++ {
+			// The bytes and the two that move the colour as a whole are different
+			// kinds of control, and one blank row is what says so.
+			if ch == accentChanS {
+				body = append(body, overlay.Fill("", width, bg))
+			}
 			body = append(body, m.accentSliderLine(ch, width, at(), pal))
 		}
 	}
@@ -347,7 +352,7 @@ func (m *OS) accentSliderLine(ch accentChannel, width, y int, pal overlay.Palett
 	v := s.sliderValue(ch)
 	pos := accentSliderCol(v, barW, ch.max())
 	run, rest, thumb := accentSliderGlyphs()
-	runColor := ch.runColor()
+	runColor := ch.runColor(pal)
 
 	line := accentFocusMark(focused, bg, pal) +
 		overlay.Style(bg).Foreground(pal.FgDim).Render(ch.label()+" ")
