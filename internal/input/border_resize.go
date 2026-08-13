@@ -9,9 +9,9 @@ import (
 // armBorderResize starts a pane-border resize when a left press lands on a
 // border cell. Reports whether it consumed the press.
 //
-// Tiled/BSP: the grab target is the reserved separator cell between two panes;
-// dragging it moves the shared divider through the same visual-resize machinery
-// a corner drag uses (AdjustTilingNeighborsVisual + deferred PTY resize).
+// Tiled/BSP: the grab target is the division between two panes; dragging it
+// moves the divider through the same visual-resize machinery a corner drag uses
+// (AdjustTilingNeighborsVisual + deferred PTY resize).
 // Floating: the grab target is the pane's own frame; the dragged edge resizes.
 //
 // It never fires on content (only the border/separator cells), on the sidebar
@@ -27,39 +27,47 @@ func armBorderResize(x, y int, o *app.OS) bool {
 		return false
 	}
 	if o.AutoTiling {
-		// Only shared borders reserve a separator cell to grab; without them the
-		// panes are edge-to-edge and every column is content.
-		if !config.SharedBorders {
-			return false
-		}
 		return armTiledBorderResize(x, y, o)
 	}
 	return armFloatingBorderResize(x, y, o)
 }
 
-// armTiledBorderResize grabs the shared divider between two tiled panes. The
-// near pane (left of a vertical divider, above a horizontal one) is the resize
-// target; its far edge is the divider the BSP/tiling path will move.
+// armTiledBorderResize grabs the division between two tiled panes. The pane
+// whose edge was grabbed is the resize target; the BSP tree moves the divider
+// that owns that edge, so either neighbour of a division will do.
+//
+// Where the division is drawn depends on the panes, not on the setting. Under
+// shared borders the tilers reserve a cell between neighbours (layout.
+// CalculateTilingLayout, bsp.childBounds) and that cell is the divider, owned by
+// neither pane. Without them the panes are edge to edge and the division is the
+// border column each pane draws for itself, which is why the grab is measured
+// from BorderOffset: it is the pane's own answer to whether it drew one.
 func armTiledBorderResize(x, y int, o *app.OS) bool {
-	contentRight := o.GetLeftMargin() + o.GetContentWidth()
-	contentBottom := o.GetTopMargin() + o.GetUsableHeight()
+	contentLeft, contentTop := o.GetLeftMargin(), o.GetTopMargin()
+	contentRight := contentLeft + o.GetContentWidth()
+	contentBottom := contentTop + o.GetUsableHeight()
 
 	for i := range o.Windows {
 		w := o.Windows[i]
 		if w.Workspace != o.CurrentWorkspace || w.Minimized || w.IsFloating {
 			continue
 		}
-		// Vertical divider: the separator column sits one past this pane's right
-		// edge. Interior only; the outermost right edge is the screen boundary.
-		if x == w.X+w.Width && x < contentRight && y >= w.Y && y < w.Y+w.Height {
+		off := w.BorderOffset()
+		// Interior divisions only. A pane edge lying on the content boundary is
+		// the screen's own, with no neighbour behind it to give space to.
+		switch {
+		case y >= w.Y && y < w.Y+w.Height && x == w.X+w.Width-off && w.X+w.Width < contentRight:
 			beginBorderResize(o, i, app.BorderEdgeRight)
-			return true
-		}
-		// Horizontal divider: the separator row sits one past this pane's bottom.
-		if y == w.Y+w.Height && y < contentBottom && x >= w.X && x < w.X+w.Width {
+		case y >= w.Y && y < w.Y+w.Height && off > 0 && x == w.X && w.X > contentLeft:
+			// The neighbour's own border is the other half of the same drawn
+			// division, so grabbing it has to work too.
+			beginBorderResize(o, i, app.BorderEdgeLeft)
+		case x >= w.X && x < w.X+w.Width && y == w.Y+w.Height-off && w.Y+w.Height < contentBottom:
 			beginBorderResize(o, i, app.BorderEdgeBottom)
-			return true
+		default:
+			continue
 		}
+		return true
 	}
 	return false
 }
@@ -122,16 +130,23 @@ func applyBorderResize(o *app.OS, mx, my int) {
 	}
 	w := o.Windows[idx]
 
+	// The same allowance the arming used, read from the same place: on a pane
+	// that draws its own border the pointer sits on the last cell the pane owns,
+	// so its far edge is one past the pointer, while a reserved separator cell is
+	// already past the pane. Without this the pane jumps a cell on the press,
+	// before the pointer has moved at all.
+	off := w.BorderOffset()
+
 	newX, newY, newW, newH := w.X, w.Y, w.Width, w.Height
 	switch o.BorderResizeEdge {
 	case app.BorderEdgeRight:
-		newW = mx - w.X
+		newW = mx - w.X + off
 	case app.BorderEdgeLeft:
 		right := w.X + w.Width
 		newX = mx
 		newW = right - mx
 	case app.BorderEdgeBottom:
-		newH = my - w.Y
+		newH = my - w.Y + off
 	case app.BorderEdgeTop:
 		bottom := w.Y + w.Height
 		newY = my
