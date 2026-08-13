@@ -185,14 +185,28 @@ const accentSliderMinHeight = 22
 // blanks, because they are the easy way in.
 const accentWideSlotsMinHeight = 16
 
-// accentWideBlanksMinBody is the body rows the wide layout needs before it will
-// spend three of them on breathing room. It is also the full right column's
-// height, so below it the blanks are not a choice.
-const accentWideBlanksMinBody = accentWideRightRows + 3
+// accentWideRightRows is how tall the wide layout's right column comes out for
+// a set of choices: the hex line, the slider block, the harmony label, its rows
+// of chips, and the three breathing blanks when they are affordable.
+func accentWideRightRows(blanks bool, chipRows int) int {
+	n := 1 + accentSliderRows + 1 + chipRows
+	if blanks {
+		n += 3
+	}
+	return n
+}
 
-// accentWideRightRows is the right column's content: the hex line, the slider
-// block, and the harmony row.
-const accentWideRightRows = 1 + accentSliderRows + 1
+// The harmony wheel's width in chips, and how many cells one chip is painted in.
+// Twelve at a stroke is more useful than a second row would be in one column,
+// and the wide layout has the height for sixteen.
+const (
+	accentWideChipCols    = 8
+	accentStackedChipCols = 12
+	accentChipWidth       = 3
+	// The compact row names its three, so the chips are wider and the labels sit
+	// between them.
+	accentCompactChipWidth = 4
+)
 
 // accentLayoutPlan is everything the picker decided about this screen. One
 // value, read by the renderer as it draws and by the keyboard as it moves, so a
@@ -208,7 +222,17 @@ type accentLayoutPlan struct {
 	GridCols  int
 	GridRows  int
 	CellWidth int // cells one shades-grid swatch is painted in
+	// The harmony chips, as a grid of them. Wide draws two rows of eight under a
+	// label, stacked one row of twelve, compact the three named ones.
+	HarmonyCols  int
+	HarmonyRows  int
+	HarmonyLabel bool
+	ChipWidth    int
+	ChipGap      int
 }
+
+// HarmonyCount is how many chips the layout draws.
+func (p accentLayoutPlan) HarmonyCount() int { return p.HarmonyCols * p.HarmonyRows }
 
 // accentGridChunkyCols is the shades grid's width where a swatch can afford to
 // be three cells: twelve columns of saturation. Fewer steps than the strip of
@@ -228,12 +252,24 @@ func (m *OS) accentPlan() accentLayoutPlan {
 
 	// Wide needs the columns to be full width and the right one to fit whole. A
 	// clipped column is worse than a stacked one.
-	if w >= accentWideInner+2 && avail >= accentWideRightRows {
+	if w >= accentWideInner+2 && avail >= accentWideRightRows(false, 1) {
 		p := accentLayoutPlan{
 			Mode: accentLayoutWide, Inner: accentWideInner, ColInner: accentWideLeft,
 			Sliders: true,
-			Blanks:  avail >= accentWideBlanksMinBody,
 			Slots:   h >= accentWideSlotsMinHeight,
+			// Eight three-cell chips with a cell between them is the column exactly,
+			// and the gaps are what make them read as a set of chips.
+			HarmonyCols: accentWideChipCols, HarmonyRows: 2, HarmonyLabel: true,
+			ChipWidth: accentChipWidth, ChipGap: 1,
+		}
+		// Give up the breathing blanks before the second row of chips: a blank row
+		// is spacing and a chip is a colour the user can pick.
+		switch {
+		case avail >= accentWideRightRows(true, 2):
+			p.Blanks = true
+		case avail >= accentWideRightRows(false, 2):
+		default:
+			p.HarmonyRows = 1
 		}
 		// The left column around the grid: the hue strip, the rule under the grid,
 		// the now line, and the theme's colours with their breathing blank.
@@ -260,8 +296,12 @@ func (m *OS) accentPlan() accentLayoutPlan {
 	// The compact layout has no width to spend on a chunky swatch, so it keeps
 	// the one-cell cells and the resolution that comes with them.
 	p.GridCols, p.CellWidth = accentGridChunkyCols, accentGridChunkyCell
+	p.HarmonyCols, p.HarmonyRows = accentStackedChipCols, 1
+	p.ChipWidth, p.ChipGap = accentChipWidth, 0
 	if p.Mode == accentLayoutCompact {
 		p.GridCols, p.CellWidth = p.HueCells, 1
+		p.HarmonyCols = accentHarmonyCompactCount
+		p.ChipWidth = accentCompactChipWidth
 	}
 
 	// Body furniture around the grid: the hue strip, a rule, the now line, the
@@ -385,17 +425,39 @@ func accentHueCell(hue float64, cols int) int {
 	return clampInt(int(hue*float64(cols)/360+0.5)%cols, 0, cols-1)
 }
 
-// accentHarmonyCount is how many chips the harmony row carries: the complement,
-// then the two analogous neighbours.
-const accentHarmonyCount = 3
+// accentHarmonyCompactCount is how many chips the compact layout's row carries:
+// the complement, then the two analogous neighbours. Named rather than turned,
+// because three chips is a set of relationships and there is no room to draw the
+// wheel they would be points on.
+const accentHarmonyCompactCount = 3
 
-// accentHarmonyRotations are the hue turns the chips apply to the base colour.
-var accentHarmonyRotations = [accentHarmonyCount]float64{180, -30, 30}
+// accentHarmonyCompactRotations are the hue turns those three apply.
+var accentHarmonyCompactRotations = [accentHarmonyCompactCount]float64{180, -30, 30}
 
-// accentHarmonyColor is the harmony chip at index i for the picker's base
-// colour.
-func (s *accentPickerState) harmonyColor(i int) color.RGBA {
-	return rotateHue(s.Base, accentHarmonyRotations[clampInt(i, 0, accentHarmonyCount-1)])
+// baseHue is the hue the harmony chips are turned from. A grey base reports no
+// hue, so the one the picker is holding stands, which is what keeps the chips
+// meaningful on the grid's left-hand column.
+func (s *accentPickerState) baseHue() float64 {
+	h, sat, _ := rgbToHSL(s.Base)
+	if sat == 0 {
+		return s.Hue
+	}
+	return h
+}
+
+// harmonyColor is the chip at index i of a set of count.
+//
+// A chip keeps the saturation and lightness the picker is holding and moves
+// only the hue. Picking one is asking for this colour at another hue, not for
+// the seed's whole look back, so the sliders' work survives the pick.
+func (s *accentPickerState) harmonyColor(i, count int) color.RGBA {
+	count = max(count, 1)
+	i = clampInt(i, 0, count-1)
+	turn := 180 + float64(i)*360/float64(count)
+	if count == accentHarmonyCompactCount {
+		turn = accentHarmonyCompactRotations[i]
+	}
+	return hslToRGB(s.baseHue()+turn, s.Sat, s.Light)
 }
 
 // setCur moves the colour the picker would apply, and with it the base the
@@ -419,15 +481,18 @@ func (s *accentPickerState) takeColor(c color.RGBA) {
 	s.Slot = -1
 }
 
-// takeHarmony selects a harmony chip. It moves the colour without moving Base,
-// so the chips stay where they are while the cursor walks them.
-func (s *accentPickerState) takeHarmony(i int) {
-	s.Harmony = clampInt(i, 0, accentHarmonyCount-1)
-	c := s.harmonyColor(s.Harmony)
+// takeHarmony selects a harmony chip. It moves the colour without moving Base
+// or the model, so the chips stay where they are while the cursor walks them:
+// the chip was built from the saturation and lightness already held, and reading
+// them back off it would drift the whole row a little on every step.
+func (m *OS) takeHarmony(i int) {
+	s := &m.AccentPicker
+	count := m.accentPlan().HarmonyCount()
+	s.Harmony = clampInt(i, 0, max(count-1, 0))
+	c := s.harmonyColor(s.Harmony, count)
 	s.Cur = c
 	s.Hex = hexString(c)
 	s.Slot = -1
-	_, s.Sat, s.Light = rgbToHSL(c)
 }
 
 // accentPickerSetHSL moves the picker's saturation and lightness and rebuilds
@@ -672,7 +737,7 @@ func (m *OS) AccentPickerFocus(delta int) {
 	}
 	switch s.Focus {
 	case accentFocusHarmony:
-		s.takeHarmony(s.Harmony)
+		m.takeHarmony(s.Harmony)
 	case accentFocusANSI:
 		slot := s.Slot
 		if slot < 0 {
@@ -833,9 +898,8 @@ func (m *OS) AccentPickerHarmonyAt(i int) {
 	if !m.ShowAccentPicker {
 		return
 	}
-	s := &m.AccentPicker
-	s.Focus = accentFocusHarmony
-	s.takeHarmony(i)
+	m.AccentPicker.Focus = accentFocusHarmony
+	m.takeHarmony(i)
 }
 
 // AccentPickerMoveHarmony walks the harmony chips.

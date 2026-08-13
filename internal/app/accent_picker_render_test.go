@@ -184,8 +184,8 @@ func TestAccentPickerHitsMatchTheDrawnCells(t *testing.T) {
 		if cells := m.accentHueCells(); hue != cells {
 			t.Errorf("w=%d: %d hue rects recorded for a %d-cell strip", w, hue, cells)
 		}
-		if harmony != accentHarmonyCount {
-			t.Errorf("w=%d: %d harmony rects recorded, want %d", w, harmony, accentHarmonyCount)
+		if want := m.accentPlan().HarmonyCount(); harmony != want {
+			t.Errorf("w=%d: %d harmony rects recorded, want %d", w, harmony, want)
 		}
 
 		// Press the middle of every recorded grid rect and check the picker lands
@@ -435,10 +435,21 @@ func TestAccentPickerFitsShortScreens(t *testing.T) {
 		}
 		// The furniture the picker cannot do without is still there.
 		plain := stripANSIForTrace(content)
-		for _, want := range []string{"accent", "now", "hex", "comp"} {
+		for _, want := range []string{"accent", "now", "hex"} {
 			if !strings.Contains(plain, want) {
 				t.Errorf("h=%d: the dialog lost %q:\n%s", h, want, plain)
 			}
+		}
+		// The harmony chips have no words on them in every layout, so they are
+		// counted rather than read.
+		var chips int
+		for _, hit := range m.accentHits {
+			if hit.Kind == accentHitHarmony {
+				chips++
+			}
+		}
+		if chips == 0 {
+			t.Errorf("h=%d: the dialog lost the harmony chips:\n%s", h, plain)
 		}
 	}
 }

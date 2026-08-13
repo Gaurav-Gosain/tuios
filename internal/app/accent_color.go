@@ -233,3 +233,8 @@ func accentFallbackLabel(c color.RGBA) string {
 // accentContrast picks a marker colour that reads on a swatch, so the cursor is
 // findable on a white cell and on a black one.
 func accentContrast(c color.RGBA) color.Color { return theme.ContrastText(c) }
+
+// accentMonochrome reports whether this terminal can paint no colour at all, in
+// which case every background-painted swatch in the picker renders as blank
+// space and the controls made of them stop being visible.
+func accentMonochrome() bool { return accentColorProfile() <= colorprofile.ASCII }

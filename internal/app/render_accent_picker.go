@@ -87,9 +87,48 @@ func accentSwatch(c color.RGBA, n int) string {
 // accentCursorSwatch paints the same n cells with the cursor mark centred in
 // them, in a colour picked to read against that swatch.
 func accentCursorSwatch(c color.RGBA, n int) string {
-	lead := (max(n, 1) - 1) / 2
 	return overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).
-		Render(strings.Repeat(" ", lead) + accentCursorGlyph() + strings.Repeat(" ", max(n, 1)-1-lead))
+		Render(accentCentred(accentCursorGlyph(), n))
+}
+
+// accentCentred puts a one-cell mark in the middle of n cells of space.
+func accentCentred(mark string, n int) string {
+	n = max(n, 1)
+	lead := (n - 1) / 2
+	return strings.Repeat(" ", lead) + mark + strings.Repeat(" ", n-1-lead)
+}
+
+// accentChipGlyph is the mark a harmony chip wears where the terminal cannot
+// paint a background.
+func accentChipGlyph() string {
+	if overlay.UseASCII() {
+		return "o"
+	}
+	return "●"
+}
+
+// accentChip paints one harmony chip.
+//
+// On a colourless terminal every background-painted swatch in the dialog
+// renders as blank space, and the chips would be a row of nothing: no cursor to
+// see, no target to aim at, and no way to tell there was a control there. The
+// grid and the strip at least keep their shape from the cursor mark and the
+// numbers beside them. So the chips fall back to a foreground glyph, which
+// survives, and the hex line says what the one under the cursor holds. A plainer
+// picker beats an unusable one.
+func accentChip(c color.RGBA, n int, cursor bool, pal overlay.Palette) string {
+	if !accentMonochrome() {
+		if cursor {
+			return accentCursorSwatch(c, n)
+		}
+		return accentSwatch(c, n)
+	}
+	mark := accentChipGlyph()
+	if cursor {
+		mark = accentCursorGlyph()
+	}
+	return overlay.Style(pal.Canvas).Foreground(theme.Readable(c, pal.Canvas)).Bold(cursor).
+		Render(accentCentred(mark, n))
 }
 
 // renderAccentPicker draws the colour picker for the window being accented and
@@ -226,7 +265,7 @@ func (m *OS) accentNumberColumn(p accentLayoutPlan, pal overlay.Palette) []strin
 	blank()
 	body = append(body, m.accentSliderLines(accentWideRight, at(), pal)...)
 	blank()
-	body = append(body, m.accentHarmonyLine(accentWideRight, at(), pal))
+	body = append(body, m.accentHarmonyLines(p, accentWideRight, at(), pal)...)
 	return body
 }
 
@@ -247,7 +286,7 @@ func (m *OS) accentStackedBody(p accentLayoutPlan, pal overlay.Palette) []string
 	if p.Sliders {
 		body = append(body, m.accentSliderLines(p.Inner, at(), pal)...)
 	}
-	body = append(body, m.accentHarmonyLine(p.Inner, at(), pal))
+	body = append(body, m.accentHarmonyLines(p, p.Inner, at(), pal)...)
 	return body
 }
 
@@ -519,29 +558,47 @@ func padLeft(s string, n int) string {
 	return s
 }
 
-// accentHarmonyLine renders the complement and the two analogous neighbours of
-// the picker's base colour.
-func (m *OS) accentHarmonyLine(width, y int, pal overlay.Palette) string {
+// accentHarmonyLines renders the harmony chips: even turns around the circle
+// from the base colour's complement, each at the saturation and lightness the
+// picker is holding.
+//
+// Wide and stacked draw the wheel; compact keeps the named three, where there is
+// no room to draw a wheel and three relationships are worth more than three
+// arbitrary points on one.
+func (m *OS) accentHarmonyLines(p accentLayoutPlan, width, y int, pal overlay.Palette) []string {
 	bg := pal.Canvas
 	s := &m.AccentPicker
 	focused := s.Focus == accentFocusHarmony
+	count := p.HarmonyCount()
 
-	line := accentFocusMark(focused, bg, pal)
-	labels := [accentHarmonyCount]string{"comp ", " ana ", " "}
-	for i := range accentHarmonyCount {
-		line += overlay.Style(bg).Foreground(pal.FgMute).Render(labels[i])
-		c := s.harmonyColor(i)
-		x := lipgloss.Width(line)
-		if focused && i == s.Harmony {
-			line += overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).Render(accentCursorGlyph()) +
-				accentSwatch(c, 3)
-		} else {
-			line += accentSwatch(c, 4)
-		}
-		m.accentHits = append(m.accentHits, accentHit{
-			Rect: overlay.Rect{X0: x, Y0: y, X1: x + 4, Y1: y + 1},
-			Kind: accentHitHarmony, Col: i,
-		})
+	var out []string
+	if p.HarmonyLabel {
+		out = append(out, overlay.Fill(
+			overlay.Style(bg).Render(" ")+overlay.Style(bg).Foreground(pal.FgDim).Render("harmony"), width, bg))
 	}
-	return overlay.Fill(line, width, bg)
+
+	labels := [accentHarmonyCompactCount]string{"comp ", " ana ", " "}
+	for row := range p.HarmonyRows {
+		if row > 0 && p.Blanks {
+			out = append(out, overlay.Fill("", width, bg))
+		}
+		line := accentFocusMark(row == 0 && focused, bg, pal)
+		for col := range p.HarmonyCols {
+			i := row*p.HarmonyCols + col
+			if count == accentHarmonyCompactCount {
+				line += overlay.Style(bg).Foreground(pal.FgMute).Render(labels[i])
+			} else if col > 0 && p.ChipGap > 0 {
+				line += overlay.Style(bg).Render(strings.Repeat(" ", p.ChipGap))
+			}
+			c := s.harmonyColor(i, count)
+			x := lipgloss.Width(line)
+			line += accentChip(c, p.ChipWidth, focused && i == s.Harmony, pal)
+			m.accentHits = append(m.accentHits, accentHit{
+				Rect: overlay.Rect{X0: x, Y0: y + len(out), X1: x + p.ChipWidth, Y1: y + len(out) + 1},
+				Kind: accentHitHarmony, Col: i,
+			})
+		}
+		out = append(out, overlay.Fill(line, width, bg))
+	}
+	return out
 }

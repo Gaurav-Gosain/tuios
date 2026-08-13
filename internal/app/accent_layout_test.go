@@ -265,13 +265,14 @@ func TestAccentWideDropsInOrder(t *testing.T) {
 	for _, tc := range []struct {
 		h                     int
 		wantBlanks, wantSlots bool
+		wantChipRows          int
 	}{
-		{40, true, true},
-		{16, true, true},
-		{15, true, false},
-		{13, true, false},
-		{12, false, false},
-		{10, false, false},
+		{40, true, true, 2},
+		{16, true, true, 2},
+		{15, true, false, 2},
+		{14, false, false, 2},
+		{12, false, false, 2},
+		{11, false, false, 1},
 	} {
 		m := accentTestOS(t, 100, tc.h)
 		p := m.accentPlan()
@@ -281,6 +282,9 @@ func TestAccentWideDropsInOrder(t *testing.T) {
 		if p.Blanks != tc.wantBlanks || p.Slots != tc.wantSlots {
 			t.Errorf("h=%d: blanks=%v slots=%v, want blanks=%v slots=%v",
 				tc.h, p.Blanks, p.Slots, tc.wantBlanks, tc.wantSlots)
+		}
+		if p.HarmonyRows != tc.wantChipRows {
+			t.Errorf("h=%d: %d rows of chips, want %d", tc.h, p.HarmonyRows, tc.wantChipRows)
 		}
 		if !p.Sliders {
 			t.Errorf("h=%d: the wide layout dropped its sliders", tc.h)
