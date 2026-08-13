@@ -595,6 +595,10 @@ type OS struct {
 	accentHits           []accentHit
 	accentDrag           accentHitKind
 	accentDragging       bool
+	// accentDragCol pins a slider drag to the channel it started on. The kind
+	// alone is not enough for a control that has five of itself stacked in a
+	// column: without this, sliding down from R onto G would start driving G.
+	accentDragCol int
 	// Sidebar hover: the last mouse position seen inside the band, so the row
 	// under the cursor is highlighted the way overlay rows are. HoverActive is
 	// cleared as soon as motion leaves the band.

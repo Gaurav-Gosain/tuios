@@ -26,6 +26,7 @@ const (
 	accentHitHarmony
 	accentHitClear
 	accentHitANSI
+	accentHitSlider
 )
 
 // accentHit is where one interactive cell of the picker was drawn, in
@@ -150,6 +151,11 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg))
 	body = append(body, m.accentNowLine(width, at(), pal))
 	body = append(body, m.accentHexLine(width, at(), pal))
+	if m.accentSlidersShown() {
+		for ch := accentChannel(0); ch < accentChanCount; ch++ {
+			body = append(body, m.accentSliderLine(ch, width, at(), pal))
+		}
+	}
 	body = append(body, m.accentHarmonyLine(width, at(), pal))
 
 	title := "accent"
@@ -311,6 +317,71 @@ func (m *OS) accentHexLine(width, y int, pal overlay.Palette) string {
 		Kind: accentHitHex,
 	})
 	return overlay.Fill(line, width, bg)
+}
+
+// accentSliderGlyphs are the run, the rest of the track, and the thumb.
+func accentSliderGlyphs() (run, rest, thumb string) {
+	if overlay.UseASCII() {
+		return "=", "-", "+"
+	}
+	return "━", "─", "◆"
+}
+
+// accentSliderValueWidth is the cells the printed value is right-aligned in:
+// three digits for a byte, or two and a percent sign.
+const accentSliderValueWidth = 4
+
+// accentSliderLine renders one channel: a sigil, the letter, the track with the
+// thumb on it, and the number.
+//
+// The number is printed from the value the picker holds, not from the thumb's
+// column. The bar quantises and the value does not, so deriving one from the
+// other is how a slider comes to disagree with itself.
+func (m *OS) accentSliderLine(ch accentChannel, width, y int, pal overlay.Palette) string {
+	bg := pal.Canvas
+	s := &m.AccentPicker
+	focused := s.Focus == ch.focus()
+	grabbed := m.accentDragging && m.accentDrag == accentHitSlider && m.accentDragCol == int(ch)
+
+	barW := accentSliderBarWidth(width)
+	v := s.sliderValue(ch)
+	pos := accentSliderCol(v, barW, ch.max())
+	run, rest, thumb := accentSliderGlyphs()
+	runColor := ch.runColor()
+
+	line := accentFocusMark(focused, bg, pal) +
+		overlay.Style(bg).Foreground(pal.FgDim).Render(ch.label()+" ")
+	x := lipgloss.Width(line)
+
+	if pos > 0 {
+		line += overlay.Style(bg).Foreground(runColor).Render(strings.Repeat(run, pos))
+	}
+	// The thumb is lifted off its own run until it reads against it, which is the
+	// same rule the cursor on a swatch follows.
+	thumbStyle := overlay.Style(bg).Foreground(theme.Readable(runColor, bg)).Bold(true)
+	if grabbed {
+		thumbStyle = thumbStyle.Reverse(true)
+	}
+	line += thumbStyle.Render(thumb)
+	if tail := barW - pos - 1; tail > 0 {
+		line += overlay.Style(bg).Foreground(pal.FgMute).Render(strings.Repeat(rest, tail))
+	}
+	m.accentHits = append(m.accentHits, accentHit{
+		Rect: overlay.Rect{X0: x, Y0: y, X1: x + barW, Y1: y + 1},
+		Kind: accentHitSlider, Col: int(ch),
+	})
+
+	line += overlay.Style(bg).Render(" ") +
+		overlay.Style(bg).Foreground(pal.Fg).Render(padLeft(ch.text(v), accentSliderValueWidth))
+	return overlay.Fill(line, width, bg)
+}
+
+// padLeft right-aligns s in n cells.
+func padLeft(s string, n int) string {
+	if gap := n - lipgloss.Width(s); gap > 0 {
+		return strings.Repeat(" ", gap) + s
+	}
+	return s
 }
 
 // accentHarmonyLine renders the complement and the two analogous neighbours of

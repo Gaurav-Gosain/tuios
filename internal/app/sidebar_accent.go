@@ -89,6 +89,11 @@ const (
 	accentFocusHue
 	accentFocusGrid
 	accentFocusHex
+	// The sliders, in channel order, so accentChannel and the focus stop it owns
+	// are one addition apart.
+	accentFocusR
+	accentFocusG
+	accentFocusB
 	accentFocusHarmony
 	accentFocusCount
 )
@@ -138,8 +143,22 @@ func (m *OS) accentGridSize() (cols, rows int) {
 	if m.accentSlotsShown() {
 		furniture += accentSlotRows
 	}
+	if m.accentSlidersShown() {
+		furniture += accentSliderRows
+	}
 	return max(inner-2, 1), clampInt(m.GetRenderHeight()-furniture, 1, accentGridMaxRows)
 }
+
+// accentSliderRows is how many rows the slider block occupies.
+const accentSliderRows = int(accentChanCount)
+
+// accentSliderMinHeight is the screen height the slider block needs. It is the
+// first of the picker's fine controls to go on a short screen: the grid and the
+// hex field still reach every colour without it, and it is three rows.
+const accentSliderMinHeight = 22
+
+// accentSlidersShown reports whether the screen has room for the slider block.
+func (m *OS) accentSlidersShown() bool { return m.GetRenderHeight() >= accentSliderMinHeight }
 
 // accentSlotRows is how many rows the theme's colours are drawn on.
 const accentSlotRows = 2
@@ -232,6 +251,16 @@ func (s *accentPickerState) setCur(c color.RGBA) {
 	s.Cur, s.Base = c, c
 	s.Hex = hexString(c)
 	s.Slot = -1
+}
+
+// accentPickerAdopt takes a literal colour from a control that names one
+// outright rather than by cell, and walks the grid cursor and the held hue to
+// the nearest cell so every part of the dialog is pointing at the same colour.
+func (m *OS) accentPickerAdopt(c color.RGBA) {
+	cols, rows := m.accentGridSize()
+	s := &m.AccentPicker
+	s.setCur(c)
+	s.Hue, s.Col, s.Row = accentCellFor(c, s.Hue, cols, rows)
 }
 
 // selection is the accent the picker would store: the slot when the user picked
@@ -415,21 +444,37 @@ func (m *OS) AccentPickerClear() tea.Cmd {
 	return nil
 }
 
-// AccentPickerFocus moves the keyboard between the picker's four controls,
-// wrapping in both directions. Landing on the harmony row takes its chip as the
-// current colour; leaving it hands the colour back to the grid cursor, so the
-// preview always shows the thing the focused control is pointing at.
+// accentFocusShown reports whether a focus stop is drawn on this screen. The
+// sliders and the slot rows both come and go with the screen's height, and a
+// keyboard stop on a control nobody can see is a control the user has lost.
+func (m *OS) accentFocusShown(f accentFocus) bool {
+	if f == accentFocusANSI {
+		return m.accentSlotsShown()
+	}
+	if _, ok := f.sliderChannel(); ok {
+		return m.accentSlidersShown()
+	}
+	return true
+}
+
+// AccentPickerFocus moves the keyboard between the picker's controls, wrapping
+// in both directions. Landing on the harmony row takes its chip as the current
+// colour; leaving it hands the colour back to the grid cursor, so the preview
+// always shows the thing the focused control is pointing at. A slider is
+// already showing the held colour, so landing on one changes nothing.
 func (m *OS) AccentPickerFocus(delta int) {
 	if !m.ShowAccentPicker {
 		return
 	}
 	s := &m.AccentPicker
 	n := int(accentFocusCount)
-	step := func() { s.Focus = accentFocus(((int(s.Focus)+delta)%n + n) % n) }
-	step()
-	if s.Focus == accentFocusANSI && !m.accentSlotsShown() {
-		// Tab must never land on a control that is not on screen.
-		step()
+	// Tab must never land on a control that is not on screen, and a short screen
+	// can have dropped a run of them.
+	for range n {
+		s.Focus = accentFocus(((int(s.Focus)+delta)%n + n) % n)
+		if m.accentFocusShown(s.Focus) {
+			break
+		}
 	}
 	switch s.Focus {
 	case accentFocusHarmony:
@@ -457,6 +502,12 @@ func (m *OS) AccentPickerMove(dx, dy int) {
 	if !m.ShowAccentPicker {
 		return
 	}
+	if ch, ok := m.AccentPicker.Focus.sliderChannel(); ok {
+		// Right and up raise the channel, left and down lower it, so the number
+		// moves the way the thumb does and the way a column of them reads.
+		m.AccentPickerSliderStep(ch, dx-dy)
+		return
+	}
 	switch m.AccentPicker.Focus {
 	case accentFocusHue:
 		m.AccentPickerMoveHue(dx + dy)
@@ -466,6 +517,18 @@ func (m *OS) AccentPickerMove(dx, dy int) {
 		m.AccentPickerMoveSlot(dx, dy)
 	default:
 		m.AccentPickerMoveCell(dx, dy)
+	}
+}
+
+// AccentPickerMoveShift is the shifted arrow: the same direction at the other
+// granularity. On a slider it is the eyeballing jump the one-unit step is too
+// fine for; nothing else has a second granularity to offer yet.
+func (m *OS) AccentPickerMoveShift(dx, dy int) {
+	if !m.ShowAccentPicker {
+		return
+	}
+	if ch, ok := m.AccentPicker.Focus.sliderChannel(); ok {
+		m.AccentPickerSliderStep(ch, (dx-dy)*ch.coarse())
 	}
 }
 

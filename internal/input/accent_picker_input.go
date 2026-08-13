@@ -5,11 +5,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// handleAccentPickerInput drives the colour picker. Tab walks the four controls
-// (hue strip, shades grid, hex field, harmony chips) and the arrows move within
-// whichever one has the keyboard, so everything the mouse can reach the
-// keyboard can reach too. Enter applies, esc cancels and puts back the colour
-// the window had.
+// handleAccentPickerInput drives the colour picker. Tab walks the controls (the
+// theme's colours, the hue strip, the shades grid, the hex field, the channel
+// sliders, the harmony chips) and the arrows move within whichever one has the
+// keyboard, so everything the mouse can reach the keyboard can reach too.
+// Shifted arrows are the same direction at the other granularity, home and end
+// the ends of a slider's range. Enter applies, esc cancels and puts back the
+// colour the window had.
 //
 // Which axis a motion key moves is the picker's business, not this handler's:
 // it takes the step and hands it over.
@@ -40,6 +42,24 @@ func handleAccentPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		return o, nil
 	case "down", "j":
 		o.AccentPickerMove(0, 1)
+		return o, nil
+	case "shift+left":
+		o.AccentPickerMoveShift(-1, 0)
+		return o, nil
+	case "shift+right":
+		o.AccentPickerMoveShift(1, 0)
+		return o, nil
+	case "shift+up":
+		o.AccentPickerMoveShift(0, -1)
+		return o, nil
+	case "shift+down":
+		o.AccentPickerMoveShift(0, 1)
+		return o, nil
+	case "home":
+		o.AccentPickerSliderEnd(false)
+		return o, nil
+	case "end":
+		o.AccentPickerSliderEnd(true)
 		return o, nil
 	}
 

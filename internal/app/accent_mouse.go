@@ -18,6 +18,18 @@ func (m *OS) accentHitAt(lx, ly int) (accentHit, bool) {
 	return accentHit{}, false
 }
 
+// accentHitByKindCol returns the recorded rect for one indexed control, which
+// is how a grabbed slider finds its own track again after the pointer has left
+// it: the answer is the rect that was drawn, not one worked out here.
+func (m *OS) accentHitByKindCol(kind accentHitKind, col int) (accentHit, bool) {
+	for _, h := range m.accentHits {
+		if h.Kind == kind && h.Col == col {
+			return h, true
+		}
+	}
+	return accentHit{}, false
+}
+
 // accentPickerPress routes a left press at dialog-relative (lx, ly). A press on
 // the grid or the hue strip also grabs that control, so the colour follows the
 // pointer until the button comes up. The clear control can reach the daemon, so
@@ -34,6 +46,9 @@ func (m *OS) accentPickerPress(lx, ly int) (bool, tea.Cmd) {
 	case accentHitHue:
 		m.accentDragging, m.accentDrag = true, accentHitHue
 		m.AccentPickerHueCell(hit.Col)
+	case accentHitSlider:
+		m.accentDragging, m.accentDrag, m.accentDragCol = true, accentHitSlider, hit.Col
+		m.AccentPickerSliderAt(accentChannel(hit.Col), lx-hit.Rect.X0, hit.Rect.X1-hit.Rect.X0)
 	case accentHitANSI:
 		m.AccentPickerSlot(hit.Col)
 	case accentHitHex:
@@ -59,6 +74,18 @@ func (m *OS) accentPickerDragTo(lx, ly int) {
 	// surface would leave it set and the colour would track bare hover from then
 	// on. The button itself is the authority on whether this is still a drag.
 	if !m.accentDragging || !m.pointerDown {
+		return
+	}
+	// A grabbed slider keeps tracking the pointer's column after it has left the
+	// track, which is what a user dragging a thumb to one end and overshooting
+	// expects. The other controls are two-dimensional and have no such reading of
+	// a point outside them.
+	if m.accentDrag == accentHitSlider {
+		h, ok := m.accentHitByKindCol(accentHitSlider, m.accentDragCol)
+		if !ok {
+			return
+		}
+		m.AccentPickerSliderAt(accentChannel(h.Col), lx-h.Rect.X0, h.Rect.X1-h.Rect.X0)
 		return
 	}
 	hit, ok := m.accentHitAt(lx, ly)

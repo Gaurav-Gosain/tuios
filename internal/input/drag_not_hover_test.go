@@ -41,18 +41,29 @@ func pickerOS(t *testing.T) *app.OS {
 	return m
 }
 
-// cursorCells returns the screen positions of the picker's cursor marks in the
-// composed frame, topmost first: the slot row's when it has one, then the hue
-// strip's, then the grid's. Working off
-// the drawn glyph rather than the picker's own rects is deliberate, since the
-// claim under test is about where the mark the user is looking at ends up.
+// cursorCells returns the screen positions of the picker's swatch cursors in
+// the composed frame, topmost first: the slot row's when it has one, then the
+// hue strip's, then the grid's. Working off the drawn glyph rather than the
+// picker's own rects is deliberate, since the claim under test is about where
+// the mark the user is looking at ends up.
+//
+// The channel sliders wear the same mark on a track rather than on a swatch, so
+// a mark with track glyph beside it is a thumb and not a cursor.
 func cursorCells(t *testing.T, m *app.OS) [][2]int {
 	t.Helper()
+	onTrack := func(plain []rune, x int) bool {
+		for _, at := range []int{x - 1, x + 1} {
+			if at >= 0 && at < len(plain) && strings.ContainsRune("━─=-", plain[at]) {
+				return true
+			}
+		}
+		return false
+	}
 	var out [][2]int
 	for y, line := range frameLines(m) {
 		plain := []rune(stripSGR(line))
 		for x, r := range plain {
-			if r == '◆' {
+			if r == '◆' && !onTrack(plain, x) {
 				out = append(out, [2]int{x, y})
 			}
 		}
