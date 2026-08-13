@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/colorprofile"
 )
@@ -220,6 +221,57 @@ func TestAccentHintsArePressable(t *testing.T) {
 	}
 	if m.AccentPicker.Focus == was {
 		t.Error("the focus hint did not move the keyboard on")
+	}
+}
+
+// TestAccentPickerStaysCoherentOnALesserTerminal walks the layouts through the
+// profiles a real terminal might have. The claim is not that it looks the same,
+// which it cannot, but that the frame stays a rectangle, the numbers stay
+// readable, and every swatch shown agrees with the hex printed for it.
+func TestAccentPickerStaysCoherentOnALesserTerminal(t *testing.T) {
+	for _, prof := range []colorprofile.Profile{colorprofile.TrueColor, colorprofile.ANSI256, colorprofile.ANSI, colorprofile.ASCII} {
+		for _, ascii := range []bool{false, true} {
+			for _, w := range []int{120, 60, 38} {
+				m := accentTestOS(t, w, 30)
+				m.OpenAccentPicker("aaaaaaaa1111")
+				m.AccentPickerSetSlider(accentChanR, 137)
+
+				overlay.SetASCII(ascii)
+				SetAccentColorProfile(prof)
+				lines, geo := accentFrame(t, m)
+				overlay.SetASCII(false)
+
+				name := prof.String()
+				for i, l := range lines {
+					if got := lipgloss.Width(l); got != geo.Width {
+						t.Fatalf("%s ascii=%v w=%d: row %d is %d cells, want %d",
+							name, ascii, w, i, got, geo.Width)
+					}
+				}
+				text := strings.Join(lines, "\n")
+				// The numbers are the picker's floor: they survive every profile,
+				// and on the ones that cannot show the colour they are all there is.
+				if !strings.Contains(text, hexString(m.AccentPicker.Cur)) {
+					t.Errorf("%s ascii=%v w=%d: the frame lost the hex:\n%s", name, ascii, w, text)
+				}
+				// Where the sliders are drawn at all, their numbers are the last
+				// thing standing on a terminal that can paint no colour.
+				if m.accentSlidersShown() && !strings.Contains(text, "137") {
+					t.Errorf("%s ascii=%v w=%d: the frame lost the red channel's value:\n%s", name, ascii, w, text)
+				}
+				// A terminal that cannot show the colour exactly says so, beside it.
+				if fb := accentFallbackLabel(m.AccentPicker.Cur); fb != "" && !strings.Contains(text, fb) {
+					t.Errorf("%s w=%d: the frame does not admit the fallback %q:\n%s", name, w, fb, text)
+				}
+				if ascii {
+					for i, l := range lines {
+						if strings.ContainsAny(l, "╭╮╰╯│─╌┆✕●›→◆━") {
+							t.Errorf("%s w=%d: ASCII row %d still draws a box glyph: %q", name, w, i, l)
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
