@@ -620,6 +620,11 @@ type OS struct {
 	SidebarCursor           int
 	SidebarNav              []sidebarNavRow
 	SidebarRevealedForFocus bool
+	// sidebarReturn* record where the keyboard came from when the rail took it,
+	// so leaving the rail can hand that back. See sidebar_return.go.
+	sidebarReturnArmed  bool
+	sidebarReturnMode   Mode
+	sidebarReturnWindow string
 	// sidebarFollowSession, when set, tells the next nav build to place the
 	// cursor on that session's row after it rebuilds. It is how a reorder or a
 	// switch keeps the cursor on the session it moved once the tree relaid out,
@@ -669,9 +674,9 @@ type OS struct {
 	// dropping the window puts the user back where they were instead of leaving
 	// them in window management. Moving a pane is not a request to stop typing.
 	CtrlDragWasTerminal bool
-	// ResizeWasTerminal is the same bargain for a resize gesture: see
-	// BeginResizeMode.
-	ResizeWasTerminal bool
+	// pointerGestureWasTerminal is the same bargain for a resize or an alt-drag
+	// move: see BeginPointerGesture.
+	pointerGestureWasTerminal bool
 
 	// ContextMenu is the open shift+right-click menu, or nil. It is deliberately
 	// not one of the draggable overlay kinds: a context menu is anchored to the

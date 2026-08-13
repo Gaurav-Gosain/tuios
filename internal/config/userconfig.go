@@ -129,6 +129,7 @@ type AppearanceConfig struct {
 	CopyOnSelect                *bool   `toml:"copy_on_select"`                  // Copy a mouse selection to the clipboard on release (default: true)
 	FocusFollowsMouse           *bool   `toml:"focus_follows_mouse"`             // Focus the pane under the cursor as the mouse moves (default: false)
 	FocusFollowsMouseInTerminal *bool   `toml:"focus_follows_mouse_in_terminal"` // Also hover-focus while in terminal mode (default: false)
+	AltDrag                     *bool   `toml:"alt_drag"`                        // Alt + left-drag moves a pane (default: true)
 	WordCharacters              *string `toml:"word_characters"`                 // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
 	DockbarPosition             string  `toml:"dockbar_position"`                // Dockbar position: bottom, top, hidden
 	PreferredShell              string  `toml:"preferred_shell"`                 // Preferred shell: if empty, auto-detect based on platform.
@@ -515,6 +516,7 @@ func getDefaultSidebarKeybinds() map[string][]string {
 		"accent":        {"c"},
 		"kill":          {"x"},
 		"menu":          {"m"},
+		"help":          {"?"},
 		"exit":          {"esc", "s"},
 	}
 }
@@ -527,12 +529,25 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 			"terminal_next_window": {"opt+tab", "alt+n"},
 			"terminal_prev_window": {"opt+shift+tab", "alt+p"},
 			"terminal_exit_mode":   {"opt+esc"},
+			"terminal_focus_left":  {"alt+left"},
+			"terminal_focus_right": {"alt+right"},
+			"terminal_focus_up":    {"alt+up"},
+			"terminal_focus_down":  {"alt+down"},
 		}
 	}
 	return map[string][]string{
 		"terminal_next_window": {"alt+n"},
 		"terminal_prev_window": {"alt+p"},
 		"terminal_exit_mode":   {"alt+esc"},
+		// alt+left and alt+right are word-wise cursor movement in readline, fish
+		// and zsh, and taking them costs a user that. They are bound because
+		// directional focus on the arrows is what zellij and most tiling window
+		// managers do, and because each of the four is a separate action a user
+		// can set to [] to hand back. See docs/KEYBINDINGS.md.
+		"terminal_focus_left":  {"alt+left"},
+		"terminal_focus_right": {"alt+right"},
+		"terminal_focus_up":    {"alt+up"},
+		"terminal_focus_down":  {"alt+down"},
 	}
 }
 
@@ -943,6 +958,12 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// an explicit false in the settings page survives a reload.
 	if cfg.Appearance.FocusFollowsMouseInTerminal != nil {
 		FocusFollowsMouseInTerminal = *cfg.Appearance.FocusFollowsMouseInTerminal
+	}
+
+	// AltDrag defaults to true; a pointer so an explicit false in the config
+	// survives the default being on.
+	if cfg.Appearance.AltDrag != nil {
+		AltDrag = *cfg.Appearance.AltDrag
 	}
 
 	// WordCharacters is a pointer so an explicitly empty string can mean "no

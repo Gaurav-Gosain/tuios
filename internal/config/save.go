@@ -36,6 +36,23 @@ func configFileHeader(configPath string) string {
 	sb.WriteString("# [appearance.scrollbar]: style = thin, track; thumb/track = a one-cell glyph\n")
 	sb.WriteString("#               (track also takes \"none\"); tint = border, muted, #RRGGBB\n")
 	sb.WriteString("# ============================================================================\n\n")
+
+	sb.WriteString("# ============================================================================\n")
+	sb.WriteString("# KEYBINDINGS\n")
+	sb.WriteString("# ============================================================================\n")
+	sb.WriteString("# Set an action to [] to unbind it and hand the key back to the shell.\n")
+	sb.WriteString("#\n")
+	sb.WriteString("# [keybindings.terminal_mode] binds alt+arrows to move focus between panes.\n")
+	sb.WriteString("# In readline, fish and zsh, alt+left and alt+right move the cursor a word\n")
+	sb.WriteString("# at a time. If you want those back:\n")
+	sb.WriteString("#\n")
+	sb.WriteString("#   [keybindings.terminal_mode]\n")
+	sb.WriteString("#   terminal_focus_left = []\n")
+	sb.WriteString("#   terminal_focus_right = []\n")
+	sb.WriteString("#\n")
+	sb.WriteString("# alt+up and alt+down are unclaimed by the common shells, so they are the\n")
+	sb.WriteString("# safer pair to keep.\n")
+	sb.WriteString("# ============================================================================\n\n")
 	return sb.String()
 }
 

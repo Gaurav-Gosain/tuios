@@ -172,6 +172,29 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Alt + left press grabs the pane for moving, the gesture nearly every
+	// desktop window manager binds and so the one a newcomer's hands try first.
+	// It sits beside ctrl+drag rather than replacing it: ctrl+drag is in the help
+	// and in people's fingers, and a move gesture costs nothing to have twice.
+	//
+	// It grabs at once instead of arming a threshold the way ctrl+drag does,
+	// because ctrl+left already means multi-select and alt+left means nothing
+	// else, so there is no click-versus-drag question to answer. Grabbing at once
+	// also sets Dragging on the press, which is what keeps the motion filter in
+	// cmd/tuios from dropping the very motion that would move the pane.
+	//
+	// Placed above the guest forwarding below, exactly as ctrl+drag is, so the
+	// gesture works over a pane whose app asked for mouse tracking. That does
+	// take alt-drag away from such an app, which is what alt_drag = false hands
+	// back.
+	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft &&
+		msg.Mod&tea.ModAlt != 0 && msg.Mod&(tea.ModCtrl|tea.ModShift) == 0 &&
+		config.AltDrag && !o.Windows[clickedWindowIndex].Zoomed {
+		o.BeginPointerGesture()
+		beginWindowDrag(o, clickedWindowIndex, X, Y)
+		return o, nil
+	}
+
 	// Scrollbar click: left press on cells the bar was drawn on. The bar floats
 	// in the pane's last content column and only while the pane is scrolled
 	// back, so the grab is gated on the rect the renderer recorded - otherwise a
@@ -349,6 +372,15 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Focus the clicked window and bring to front Z-index
 	// This happens AFTER button and copy mode checks
+	//
+	// A right press starts a resize, which borrows window-management mode. The
+	// borrow is taken here rather than beside the resize flags below, which run
+	// after the flip: by then there is no terminal mode left for
+	// BeginPointerGesture to notice, and a resize begun while typing gave back
+	// window management instead of the shell.
+	if mouse.Button == tea.MouseRight {
+		o.BeginPointerGesture()
+	}
 	o.FocusWindow(clickedWindowIndex)
 	if o.Mode == app.TerminalMode {
 		o.Mode = app.WindowManagementMode
@@ -392,8 +424,8 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	switch mouse.Button {
 	case tea.MouseRight:
-		// Already in interaction mode, now set resize-specific flags
-		o.BeginResizeMode()
+		// Already in interaction mode and past the mode borrow above, now set
+		// resize-specific flags.
 		o.Resizing = true
 		o.DraggedWindowIndex = clickedWindowIndex
 		o.Windows[clickedWindowIndex].IsBeingManipulated = true

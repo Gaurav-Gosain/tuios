@@ -95,6 +95,8 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarOpenCursorMenu(true) // session menu, Kill among its rows
 	case sidebarActMenu:
 		o.SidebarOpenCursorMenu(false)
+	case sidebarActHelp:
+		o.OpenHelpAtCategory(app.HelpCategorySidebar)
 	case sidebarActRename:
 		o.SidebarRenameCursor()
 	case sidebarActAccent:

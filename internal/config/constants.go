@@ -687,6 +687,15 @@ var FocusFollowsMouse = false
 // Set via appearance.focus_follows_mouse_in_terminal config.
 var FocusFollowsMouseInTerminal = false
 
+// AltDrag makes alt + left-drag move a pane, the gesture nearly every desktop
+// window manager binds. It is on by default because the hands that know it
+// already outnumber the ones that do not. Turning it off hands alt-drag back to
+// the pane: selection while typing, and whatever a mouse-tracking app makes of
+// it. Alt + right-drag resizes either way, since that is the ordinary
+// right-press resize with alt only keeping the menu out of the way.
+// Set via appearance.alt_drag config.
+var AltDrag = true
+
 // WordCharacters lists the punctuation that counts as part of a word when a
 // double-click selects one, on top of letters and digits, which always do.
 //

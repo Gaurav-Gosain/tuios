@@ -34,6 +34,8 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 				"minimize_window", "restore_all", "toggle_zoom",
 				"next_window", "prev_window",
 				"terminal_next_window", "terminal_prev_window",
+				"terminal_focus_left", "terminal_focus_right",
+				"terminal_focus_up", "terminal_focus_down",
 				"copy_selection", "focus_sidebar",
 				"next_session", "prev_session",
 			}),
@@ -107,6 +109,29 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 	}
 
 	return filteredCategories
+}
+
+// HelpCategorySidebar is the name of the section listing the rail's keys, used
+// by the rail's own help key to open the overlay already on it.
+const HelpCategorySidebar = "Sidebar"
+
+// OpenHelpAtCategory shows the help overlay with a named section selected. The
+// rail has its own keys and no way to discover them from inside it, so its help
+// key opens this one overlay on the rail's section rather than a second surface
+// that would have to be kept in step with it. An unknown name falls back to the
+// usual auto-selection.
+func (m *OS) OpenHelpAtCategory(name string) {
+	m.ShowHelp = true
+	m.HelpScrollOffset = 0
+	m.HelpSearchMode = false
+	m.HelpSearchQuery = ""
+	m.HelpCategory = -1
+	for i, cat := range GetHelpCategories(m.KeybindRegistry) {
+		if cat.Name == name {
+			m.HelpCategory = i
+			return
+		}
+	}
 }
 
 // generateCategoryBindings generates bindings for a specific category
@@ -190,6 +215,8 @@ func generateMouseBindings() []HelpBinding {
 		{Keys: []string{"click"}, Description: "Focus a pane and start typing in it", Category: cat},
 		{Keys: []string{"double / triple click"}, Description: "Select the word / line under the pointer", Category: cat},
 		{Keys: []string{"drag title bar"}, Description: "Move a pane", Category: cat},
+		{Keys: []string{"alt+drag"}, Description: "Move a pane, even while typing in it", Category: cat},
+		{Keys: []string{"alt+right-drag"}, Description: "Resize a pane; never opens the menu", Category: cat},
 		{Keys: []string{"ctrl+drag"}, Description: "Move a pane; drops when ctrl is let go", Category: cat},
 		{Keys: []string{"ctrl+shift+click"}, Description: "Add or remove a pane from multi-select", Category: cat},
 		{Keys: []string{"drag pane border"}, Description: "Resize one edge: divider or floating side", Category: cat},
@@ -271,6 +298,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		row("kill", "Open the session menu, which is where Kill lives"),
 		row("rename", "Rename the window under the cursor"),
 		row("accent", "Recolor the window under the cursor"),
+		row("help", "Show this list of the rail's keys"),
 	)
 
 	// Drop rows whose action is unbound, exactly as generateCategoryBindings does.

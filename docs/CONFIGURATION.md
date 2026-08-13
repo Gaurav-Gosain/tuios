@@ -307,6 +307,20 @@ A drag copies the moment the button comes up. A double-click or triple-click wai
 
 **Note:** The clipboard is written with OSC 52, the same path copy mode's `y` uses, so it reaches whatever the host terminal supports (including over SSH). Also settable from the in-app settings page (Advanced, "Copy on select").
 
+### alt_drag
+
+Controls whether Alt + left-drag moves a pane, the gesture nearly every desktop window manager binds. It works from anywhere on the pane, including its content while you are typing in it, and typing resumes when the pane lands.
+
+Ctrl + left-drag moves a pane as well and is unaffected by this; the two are aliases, kept because one is already in people's fingers and the other is what a newcomer tries first.
+
+Alt + right-drag resizes a pane from the nearest corner whatever this is set to. That is the ordinary right-drag resize, with Alt only keeping the context menu out of the way, so there is nothing here to turn off.
+
+**Valid values:** `true`, `false`
+
+**Default:** `true`
+
+**Note:** With this on, Alt + left-drag is taken from a pane running an application that asked for the mouse (vim, less, htop), the same way Ctrl + left-drag already is. Set it to `false` to hand the gesture back to such an application; the pane then treats Alt + left-drag as ordinary text selection.
+
 ### word_characters
 
 The punctuation that counts as part of a word when a double-click selects one. Letters and digits always count and do not need listing.
@@ -851,6 +865,16 @@ Use an empty array to disable a keybinding:
 ```toml
 close_window = []  # Disables this action
 ```
+
+In `[keybindings.terminal_mode]` an unbound key is handed back to the shell in the pane. This matters most for `alt+left` and `alt+right`, which TUIOS binds to directional pane focus and which readline, fish and zsh use for word-wise cursor movement:
+
+```toml
+[keybindings.terminal_mode]
+terminal_focus_left = []
+terminal_focus_right = []
+```
+
+See [Terminal Mode Keys](KEYBINDINGS.md#terminal-mode-keys).
 
 ## Platform-Specific Configuration
 

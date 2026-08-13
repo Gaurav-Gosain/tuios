@@ -459,6 +459,7 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		return
 	}
+	m.clearSidebarReturn() // attaching elsewhere is not something esc should undo
 	if err := m.SwitchToSession(sessionID); err != nil {
 		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
 	}
@@ -467,6 +468,7 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 // sidebarFocusWindow focuses the window a window row points at, switching session
 // first when it lives in another session.
 func (m *OS) sidebarFocusWindow(hit sidebarRowHit) {
+	m.clearSidebarReturn() // picking a pane is the whole point; esc must not undo it
 	// Resolve by ID, never by the index the row was drawn with. A pane closing
 	// between that render and this click shifts every later index, so the index
 	// alone could focus a different pane than the row names, and the context menu

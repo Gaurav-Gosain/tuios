@@ -5,6 +5,8 @@ Complete keyboard shortcut reference for TUIOS. All keybindings are customizable
 ## Table of Contents
 
 - [Modes](#modes)
+  - [Terminal Mode Keys](#terminal-mode-keys)
+- [Sidebar](#sidebar)
 - [Window Management](#window-management)
 - [Workspaces](#workspaces)
 - [Window Layout](#window-layout)
@@ -25,6 +27,48 @@ TUIOS has two main modes:
 | `Ctrl+B` then `d` or `Esc` | Return to Window Management Mode (from Terminal Mode) |
 | `?` (Window Mode) or `Ctrl+B ?` (universal) | Toggle help overlay |
 | `q` (Window Mode) or `Ctrl+B q` (universal) | Quit TUIOS |
+
+### Terminal Mode Keys
+
+These work while typing into a pane, without the leader key. They live in `[keybindings.terminal_mode]`.
+
+| Key | Action |
+|-----|--------|
+| `Alt+N` / `Alt+P` | Next / previous window |
+| `Alt+Esc` | Leave Terminal Mode |
+| `Alt+←` `Alt+→` `Alt+↑` `Alt+↓` | Focus the pane in that direction |
+
+Focus moves to the nearest pane whose facing edge lies in that direction and whose span overlaps the current pane's; ties go to the earlier pane. At the edge of the layout nothing happens, and focus does not wrap.
+
+#### Alt+← / Alt+→ conflict with your shell
+
+In readline, fish and zsh, `Alt+←` and `Alt+→` move the cursor one word at a time, which is one of the most-used shell editing bindings there is. TUIOS binds them to pane focus by default, as zellij and most tiling window managers do. Each direction is a separate action, so hand back whichever you want:
+
+```toml
+[keybindings.terminal_mode]
+terminal_focus_left = []
+terminal_focus_right = []
+```
+
+With those unbound, the keys reach the shell unchanged. `Alt+↑` and `Alt+↓` are unclaimed by the common shells, so they are the safer pair to keep. If you would rather keep word movement and still have directional focus, put it on a chord the shell does not want:
+
+```toml
+[keybindings.terminal_mode]
+terminal_focus_left = ["alt+shift+left"]
+terminal_focus_right = ["alt+shift+right"]
+```
+
+## Sidebar
+
+The sidebar (the rail) is a keyboard scope: while it is focused it owns every key, so its bindings live in their own `[keybindings.sidebar]` section and never fire on a pane.
+
+| Key | Action |
+|-----|--------|
+| `s` (Window Mode) or `Ctrl+B e` (universal) | Focus the rail, or leave it |
+| `?` (in the rail) | Open the help overlay on the rail's section |
+| `Esc` (in the rail) | Leave the rail, back to the mode and pane you came from |
+
+The rail's remaining keys are listed by that help overlay, which reads them from your configuration, so it stays correct when you rebind them. `Esc` always leaves the rail even when the section binds nothing.
 
 ## Window Management
 
@@ -325,6 +369,9 @@ Access debug and development tools:
 - **Left Click**: Focus window
 - **Left Drag on the title bar**: Move window (non-tiling) or swap windows (tiling). In window management mode the whole window is a drag handle
 - **Right Drag**: Resize window (non-tiling only)
+- **Alt+Left Drag**: Move the window, from anywhere on it, including while you are typing in it. This is the usual desktop window-manager gesture, and it is what a plain left drag over a pane's content cannot be, since that selects text. Typing resumes in the pane when the window lands. Set `alt_drag = false` under `[appearance]` to hand the gesture back to the pane
+- **Ctrl+Left Drag**: Also moves the window, and drops it as soon as Ctrl is released. Kept alongside Alt+Left Drag; use whichever your hands know
+- **Alt+Right Drag**: Resize the window from the nearest corner. The same as Right Drag, except it never opens the context menu, so a short drag cannot turn into a menu by accident
 - **Shift+Right Click**: Open the context menu for whatever is under the pointer
 - **Title Bar Buttons**: Minimize, maximize, or close window
 - **Click Dock Item**: Restore minimized window
@@ -333,7 +380,10 @@ Access debug and development tools:
 - **Right Border Drag**: Scrollbar scroll
 
 Panes running an application that asked for the mouse (vim, less, htop) receive
-every one of these events themselves; tuios does not interpret them.
+every one of these events themselves; tuios does not interpret them. Alt+Left
+Drag and Ctrl+Left Drag are the two exceptions, so a pane can always be moved
+without first leaving the app inside it. `alt_drag = false` gives Alt+Left Drag
+back to such an app.
 
 ### Context Menus
 
