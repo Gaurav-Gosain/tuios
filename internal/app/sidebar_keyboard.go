@@ -48,6 +48,7 @@ func (m *OS) EnterSidebarFocus() {
 		m.SidebarRevealedForFocus = true
 	}
 	m.SidebarFocused = true
+	m.beginSidebarReturn()
 	// Revealing a hidden rail builds its nav rows only on the next render, so
 	// sidebarCurrentSessionNavIndex has nothing to match yet and would land the
 	// cursor on row 0. Follow the current session by identity so the next render
@@ -77,6 +78,7 @@ func (m *OS) ExitSidebarFocus() {
 	}
 	m.SidebarFocused = false
 	m.sidebarClearPeek()
+	m.endSidebarReturn()
 	if m.SidebarRevealedForFocus {
 		m.SidebarRevealedForFocus = false
 		if config.SidebarEnabled {
@@ -394,6 +396,7 @@ func (m *OS) SidebarNewSession() {
 		m.ShowNotification("Sessions need the daemon", "info", config.NotificationDuration)
 		return
 	}
+	m.clearSidebarReturn() // the new session is where the user asked to end up
 	// Creating a session is a daemon round trip, and this runs on the Update
 	// goroutine. Doing it inline parked input, rendering and socket draining for
 	// as long as the daemon took, made worse by the background session poll
