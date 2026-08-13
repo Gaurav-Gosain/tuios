@@ -1,4 +1,4 @@
-package input
+package layout
 
 import (
 	"os"
@@ -8,9 +8,6 @@ import (
 )
 
 // TestMain isolates the whole test binary from the developer's own XDG
-// directories, and fails the run if anything reached them anyway.
-//
-// Constructing an app.OS loads (and, when absent, writes) the user config, and
-// several overlays read and write tape and layout files. See
+// directories, and fails the run if anything reached them anyway. See
 // testutil.RunIsolated for why this cannot be a per-test helper.
 func TestMain(m *testing.M) { os.Exit(testutil.RunIsolated(m)) }

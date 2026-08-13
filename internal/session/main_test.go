@@ -2,29 +2,35 @@ package session
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// TestMain redirects resurrection state for the whole test binary.
-//
-// The resurrection state directory is derived from xdg.StateHome, which is
-// resolved at package init, so a per-test t.Setenv cannot redirect it. Without
-// this, every test that creates a session persists a real state file into the
-// developer's ~/.local/state/tuios/sessions, which both pollutes their state
-// directory and leaves phantom sessions for the next real daemon start to
-// resurrect. Tests that need to inspect state files still set
-// resurrectionDirOverride themselves; this only provides a safe default.
-func TestMain(m *testing.M) {
-	tmp, err := os.MkdirTemp("", "tuios-session-test-state")
-	if err != nil {
+// TestMain isolates the whole test binary from the developer's own XDG
+// directories and from their login shell.
+func TestMain(m *testing.M) { os.Exit(testutil.RunIsolated(m, pinResurrectionDir, pinShell)) }
+
+// pinResurrectionDir gives the resurrection state a directory of its own.
+// Without it, every test that creates a session persists a real state file and
+// leaves a phantom session for the next real daemon start to resurrect. Tests
+// that need to inspect state files still point the override at their own
+// directory; this only provides a safe default for the ones that do not.
+func pinResurrectionDir(dir string) {
+	setResurrectionDirOverride(filepath.Join(dir, "resurrection"))
+}
+
+// pinShell makes the daemon spawn a POSIX shell rather than the developer's
+// login shell. A window is a real process, so tests that drive one were
+// running whatever $SHELL named, with that shell's startup files and startup
+// cost: TestWaitForWindowExit passes under a shell that reaches its prompt
+// quickly and times out under one that does not, which makes it a test of the
+// machine rather than of the daemon.
+func pinShell(string) {
+	if err := os.Setenv("SHELL", "/bin/sh"); err != nil {
 		panic(err)
 	}
-	setResurrectionDirOverride(tmp)
-
-	code := m.Run()
-
-	_ = os.RemoveAll(tmp)
-	os.Exit(code)
 }
 
 // useResurrectionDir points resurrection state at dir and returns a function
