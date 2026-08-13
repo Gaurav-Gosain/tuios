@@ -515,6 +515,7 @@ func getDefaultSidebarKeybinds() map[string][]string {
 		"accent":        {"c"},
 		"kill":          {"x"},
 		"menu":          {"m"},
+		"help":          {"?"},
 		"exit":          {"esc", "s"},
 	}
 }

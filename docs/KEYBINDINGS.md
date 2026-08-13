@@ -5,6 +5,7 @@ Complete keyboard shortcut reference for TUIOS. All keybindings are customizable
 ## Table of Contents
 
 - [Modes](#modes)
+- [Sidebar](#sidebar)
 - [Window Management](#window-management)
 - [Workspaces](#workspaces)
 - [Window Layout](#window-layout)
@@ -25,6 +26,18 @@ TUIOS has two main modes:
 | `Ctrl+B` then `d` or `Esc` | Return to Window Management Mode (from Terminal Mode) |
 | `?` (Window Mode) or `Ctrl+B ?` (universal) | Toggle help overlay |
 | `q` (Window Mode) or `Ctrl+B q` (universal) | Quit TUIOS |
+
+## Sidebar
+
+The sidebar (the rail) is a keyboard scope: while it is focused it owns every key, so its bindings live in their own `[keybindings.sidebar]` section and never fire on a pane.
+
+| Key | Action |
+|-----|--------|
+| `s` (Window Mode) or `Ctrl+B e` (universal) | Focus the rail, or leave it |
+| `?` (in the rail) | Open the help overlay on the rail's section |
+| `Esc` (in the rail) | Leave the rail, back to the mode and pane you came from |
+
+The rail's remaining keys are listed by that help overlay, which reads them from your configuration, so it stays correct when you rebind them. `Esc` always leaves the rail even when the section binds nothing.
 
 ## Window Management
 

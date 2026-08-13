@@ -39,6 +39,7 @@ const (
 	sidebarActAccent      = "accent"
 	sidebarActKill        = "kill"
 	sidebarActMenu        = "menu"
+	sidebarActHelp        = "help"
 	sidebarActExit        = "exit"
 	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
 	sidebarActJumpPrefix = "jump_"

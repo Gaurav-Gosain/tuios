@@ -109,6 +109,29 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 	return filteredCategories
 }
 
+// HelpCategorySidebar is the name of the section listing the rail's keys, used
+// by the rail's own help key to open the overlay already on it.
+const HelpCategorySidebar = "Sidebar"
+
+// OpenHelpAtCategory shows the help overlay with a named section selected. The
+// rail has its own keys and no way to discover them from inside it, so its help
+// key opens this one overlay on the rail's section rather than a second surface
+// that would have to be kept in step with it. An unknown name falls back to the
+// usual auto-selection.
+func (m *OS) OpenHelpAtCategory(name string) {
+	m.ShowHelp = true
+	m.HelpScrollOffset = 0
+	m.HelpSearchMode = false
+	m.HelpSearchQuery = ""
+	m.HelpCategory = -1
+	for i, cat := range GetHelpCategories(m.KeybindRegistry) {
+		if cat.Name == name {
+			m.HelpCategory = i
+			return
+		}
+	}
+}
+
 // generateCategoryBindings generates bindings for a specific category
 func generateCategoryBindings(registry *config.KeybindRegistry, categoryName string, actions []string) []HelpBinding {
 	bindings := []HelpBinding{}
@@ -271,6 +294,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		row("kill", "Open the session menu, which is where Kill lives"),
 		row("rename", "Rename the window under the cursor"),
 		row("accent", "Recolor the window under the cursor"),
+		row("help", "Show this list of the rail's keys"),
 	)
 
 	// Drop rows whose action is unbound, exactly as generateCategoryBindings does.
