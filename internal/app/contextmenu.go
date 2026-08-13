@@ -83,6 +83,10 @@ type ContextMenu struct {
 	// runs after the menu has closed, so this is handed to the dispatch through
 	// menuWorkspace rather than read off the menu by the handler.
 	Workspace int
+	// SessionID is the session row the menu was opened on, or "". It carries the
+	// same way Workspace does, so a row acting on a session acts on the one the
+	// user pointed at rather than on the attached one.
+	SessionID string
 
 	AnchorX int
 	AnchorY int
@@ -176,7 +180,7 @@ func (m *OS) ContextMenuSelectedAction() string {
 	if cm == nil || !cm.selectable(cm.Selected) {
 		return ""
 	}
-	m.menuWorkspace = cm.Workspace
+	m.menuWorkspace, m.menuSession = cm.Workspace, cm.SessionID
 	return cm.Items[cm.Selected].Action
 }
 
@@ -186,9 +190,14 @@ func (m *OS) ContextMenuSelectedAction() string {
 // keybinding always sees 0 and falls back to the workspace the user is on.
 func (m *OS) TakeMenuWorkspace() int { return m.menuWorkspace }
 
-// ClearMenuWorkspace ends the carry. The input layer calls it after dispatching
-// a menu row.
-func (m *OS) ClearMenuWorkspace() { m.menuWorkspace = 0 }
+// TakeMenuSession returns the session whose row menu produced the action being
+// dispatched, or "". It carries exactly as far as TakeMenuWorkspace does, so the
+// same action reached by key falls back to the attached session.
+func (m *OS) TakeMenuSession() string { return m.menuSession }
+
+// ClearMenuTarget ends the carry. The input layer calls it after dispatching a
+// menu row.
+func (m *OS) ClearMenuTarget() { m.menuWorkspace, m.menuSession = 0, "" }
 
 // ContextMenuMove moves the selection by delta, skipping separators and dimmed
 // rows.
@@ -227,7 +236,7 @@ func (m *OS) ContextMenuClick(x, y int) (action string, consumed bool) {
 	}
 	cm.Selected = idx
 	action = cm.Items[idx].Action
-	m.menuWorkspace = cm.Workspace
+	m.menuWorkspace, m.menuSession = cm.Workspace, cm.SessionID
 	m.CloseContextMenu()
 	return action, true
 }

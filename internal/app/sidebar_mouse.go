@@ -516,8 +516,10 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		cm.WindowIndex = -1
 		if m.IsDaemonSession {
 			// A session row gets the session lifecycle menu: the same rows the
-			// quit menu offers, anchored where the user right-clicked.
-			cm.Title, cm.Items = m.sessionMenu()
+			// quit menu offers, anchored where the user right-clicked, plus the
+			// colour of the row's own session.
+			cm.SessionID = hit.SessionID
+			cm.Title, cm.Items = m.sessionMenu(hit.SessionID)
 		} else {
 			cm.Title, cm.Items = m.desktopMenu()
 		}

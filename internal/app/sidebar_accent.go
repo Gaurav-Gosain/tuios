@@ -3,6 +3,7 @@ package app
 import (
 	"image/color"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -96,11 +97,12 @@ type accentPickerState struct {
 	Focus    accentFocus
 	Prev     Accent // the colour the target was wearing when the picker opened
 	HadPrev  bool
-	// Inherited says Prev came from the target's session rather than from the
-	// target. The two look the same on the rail and behave differently: an
-	// inheriting pane follows its session's colour wherever that goes, a pinned
-	// one does not, so the picker has to keep them apart and say which is which.
-	Inherited bool
+	// Src says where Prev came from. A colour the target was given and a colour
+	// it derives look the same on the rail and behave differently: a pane with
+	// no accent follows its session wherever that goes, a session with no accent
+	// follows the arbitration, and a pinned one does neither. The picker has to
+	// keep them apart and say which it is showing.
+	Src accentSource
 }
 
 // accentGridSize is the shades grid's dimensions for the current screen. One
@@ -191,6 +193,20 @@ func (s *accentPickerState) setCur(c color.RGBA) {
 	s.Hex = hexString(c)
 }
 
+// AccentTarget names what the picker is pointed at. There is one picker for
+// both, the way there is one rename editor for a window, a session and a
+// workspace: a user who has coloured a pane already knows how to colour a
+// session.
+type AccentTarget int
+
+const (
+	// AccentTargetWindow is a pane's own accent, held by this client.
+	AccentTargetWindow AccentTarget = iota
+	// AccentTargetSession is a session's accent, held by the daemon and shared
+	// by every client attached to it.
+	AccentTargetSession
+)
+
 // OpenAccentPicker opens the colour picker for a window, landing on the colour
 // the pane is wearing on screen: its own accent, or its session's when it has
 // none of its own. Seeding from the effective colour is what makes "change this
@@ -204,10 +220,25 @@ func (m *OS) OpenAccentPicker(windowID string) {
 	if windowID == "" {
 		return
 	}
-	m.ShowAccentPicker = true
-	m.AccentPickerWindowID = windowID
-
 	prev, src := m.effectiveAccent(windowID, m.SessionName)
+	m.openAccentPicker(AccentTargetWindow, windowID, prev, src)
+}
+
+// OpenSessionAccentPicker opens the same picker on a session, seeded the same
+// way: the accent the session was given, or the colour it was assigned when it
+// has none.
+func (m *OS) OpenSessionAccentPicker(name string) {
+	if name == "" {
+		return
+	}
+	prev, src := m.sessionEffectiveAccent(name)
+	m.openAccentPicker(AccentTargetSession, name, prev, src)
+}
+
+// openAccentPicker installs the picker on a target already resolved to a colour
+// and a source. The seed is resolved before the picker is opened because an open
+// picker previews over the very thing it was seeded from.
+func (m *OS) openAccentPicker(target AccentTarget, id string, prev Accent, src accentSource) {
 	start := toRGBA(theme.UI().Accent)
 	if src != accentSourceNone {
 		start = prev.RGB()
@@ -215,9 +246,11 @@ func (m *OS) OpenAccentPicker(windowID string) {
 	cols, rows := m.accentGridSize()
 	hue, col, row := accentCellFor(start, 0, cols, rows)
 
+	m.ShowAccentPicker = true
+	m.AccentPickerTarget, m.AccentPickerTargetID = target, id
 	m.AccentPicker = accentPickerState{
 		Hue: hue, Col: col, Row: row, Focus: accentFocusGrid,
-		Prev: prev, HadPrev: src != accentSourceNone, Inherited: src == accentSourceSession,
+		Prev: prev, HadPrev: src != accentSourceNone, Src: src,
 	}
 	m.AccentPicker.setCur(start)
 }
@@ -227,7 +260,7 @@ func (m *OS) OpenAccentPicker(windowID string) {
 // preview is derived from this state, so dropping the state is the revert.
 func (m *OS) CloseAccentPicker() {
 	m.ShowAccentPicker = false
-	m.AccentPickerWindowID = ""
+	m.AccentPickerTarget, m.AccentPickerTargetID = AccentTargetWindow, ""
 	m.AccentPicker = accentPickerState{}
 	m.accentHits = m.accentHits[:0]
 }
@@ -238,42 +271,64 @@ func (m *OS) CloseAccentPicker() {
 // than stored beside it: one fewer thing that can disagree with what is on
 // screen, and the fields it reads are in the rail's signature, so the preview
 // repaints on the keystrokes that change it and on nothing else.
-func (m *OS) accentPreview(windowID string) (Accent, bool) {
-	if !m.ShowAccentPicker || windowID == "" || windowID != m.AccentPickerWindowID {
+func (m *OS) accentPreview(target AccentTarget, id string) (Accent, bool) {
+	if !m.ShowAccentPicker || id == "" {
+		return Accent{}, false
+	}
+	if target != m.AccentPickerTarget || id != m.AccentPickerTargetID {
 		return Accent{}, false
 	}
 	return RGBAccent(m.AccentPicker.Cur), true
 }
 
 // AccentPickerApply commits the colour under the cursor and closes the picker.
+// A window's accent is this client's and is written here; a session's belongs to
+// the daemon and comes back as a command, because reaching it is a blocking
+// round trip that must not run on the Update goroutine.
 //
 // Applying the colour the target already wears writes nothing, which is what
 // the picker opening on the effective colour costs: a user who opens it and
 // presses enter has changed their mind about nothing, and writing the seed
-// through would pin an inheriting pane to a literal colour, or freeze a theme
-// slot to whatever hex it resolves to today. Both are losses the user was never
-// told about. Moving anywhere first stores the colour landed on, as it always
-// has.
-func (m *OS) AccentPickerApply() {
+// through would pin an inheriting pane to a literal colour, take a session out
+// of the automatic arbitration, or freeze a theme slot to whatever hex it
+// resolves to today. All three are losses the user was never told about. Moving
+// anywhere first stores the colour landed on, as it always has.
+func (m *OS) AccentPickerApply() tea.Cmd {
 	if !m.ShowAccentPicker {
-		return
+		return nil
 	}
 	s := &m.AccentPicker
-	if !s.HadPrev || s.Cur != s.Prev.RGB() {
-		m.SetWindowAccent(m.AccentPickerWindowID, RGBAccent(s.Cur))
+	target, id := m.AccentPickerTarget, m.AccentPickerTargetID
+	unchanged := s.HadPrev && s.Cur == s.Prev.RGB()
+	defer m.CloseAccentPicker()
+
+	if unchanged {
+		return nil
 	}
-	m.CloseAccentPicker()
+	if target == AccentTargetSession {
+		return m.setSessionAccentCmd(id, hexString(s.Cur))
+	}
+	m.SetWindowAccent(id, RGBAccent(s.Cur))
+	return nil
 }
 
 // AccentPickerClear takes the target's own accent away and closes the picker,
-// which returns a pane to following its session's colour rather than to having
-// no colour at all. Clearing is how a pinned pane rejoins its session.
-func (m *OS) AccentPickerClear() {
+// which returns it to whatever it falls back to rather than to no colour at
+// all: a pane goes back to following its session, and a session back to the
+// colour it is assigned automatically. Clearing is how a pinned thing rejoins
+// the scheme.
+func (m *OS) AccentPickerClear() tea.Cmd {
 	if !m.ShowAccentPicker {
-		return
+		return nil
 	}
-	m.ClearWindowAccent(m.AccentPickerWindowID)
+	target, id := m.AccentPickerTarget, m.AccentPickerTargetID
 	m.CloseAccentPicker()
+
+	if target == AccentTargetSession {
+		return m.setSessionAccentCmd(id, "")
+	}
+	m.ClearWindowAccent(id)
+	return nil
 }
 
 // AccentPickerFocus moves the keyboard between the picker's four controls,
@@ -318,10 +373,11 @@ func (m *OS) AccentPickerMove(dx, dy int) {
 
 // AccentPickerClearKey is the clear key. It does nothing while the hex field
 // has the keyboard, where the same keystroke was meant for the buffer.
-func (m *OS) AccentPickerClearKey() {
+func (m *OS) AccentPickerClearKey() tea.Cmd {
 	if m.ShowAccentPicker && m.AccentPicker.Focus != accentFocusHex {
-		m.AccentPickerClear()
+		return m.AccentPickerClear()
 	}
+	return nil
 }
 
 // AccentPickerMoveCell moves the shades-grid cursor. The grid is clamped rather

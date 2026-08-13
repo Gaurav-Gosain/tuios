@@ -172,11 +172,31 @@ func (m *OS) refreshSessionColors(names []string) {
 			auto = append(auto, name)
 			continue
 		}
-		if slot := a.Slot - sessionAccentSlotFirst; a.IsSlot() && slot >= 0 && slot < sessionAccentSlotCount {
+		if slot, ok := sessionReservedSlot(a); ok {
 			reserved[slot] = true
 		}
 	}
 	m.sessionColors = assignSessionColors(auto, reserved)
+}
+
+// sessionReservedSlot is the hue an explicit accent takes out of the automatic
+// pool. A named accent says its slot outright. A literal claims one only when it
+// is exactly that slot's colour, which is what the picker writes when the user
+// lands on the session's own hue: without the match, an accent set to the very
+// colour another session was about to be handed would not stop it being handed
+// out, and the two would collide in the one way the colours exist to prevent.
+func sessionReservedSlot(a Accent) (int, bool) {
+	if a.IsSlot() {
+		slot := a.Slot - sessionAccentSlotFirst
+		return slot, slot >= 0 && slot < sessionAccentSlotCount
+	}
+	rgb := a.RGB()
+	for i := range sessionAccentSlotCount {
+		if SlotAccent(sessionAccentSlotFirst+i).RGB() == rgb {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // sessionAccentString is the accent the daemon has recorded for a session, from
@@ -206,6 +226,11 @@ func (m *OS) sessionAccentString(name string) string {
 func (m *OS) SessionColor(name string) (Accent, bool) {
 	if !config.SessionColors || name == "" {
 		return Accent{}, false
+	}
+	// An open picker outranks all of it, so every surface wearing this session's
+	// colour shows the one under the cursor while it is being chosen.
+	if a, ok := m.accentPreview(AccentTargetSession, name); ok {
+		return a, true
 	}
 	if a, ok := ParseAccent(m.sessionAccentString(name)); ok {
 		return a, true
@@ -241,15 +266,19 @@ func railGround(rowBg color.Color) color.Color {
 	return theme.TerminalBg()
 }
 
-// accentSource says where the colour something is wearing came from, which
-// inherited and pinned cannot be told apart by afterwards: both are just a
-// colour on screen.
+// accentSource says where the colour something is wearing came from, which the
+// colour itself cannot: a derived colour and a pinned one are the same pixels
+// and follow different rules.
 type accentSource uint8
 
 const (
 	accentSourceNone accentSource = iota
+	// accentSourceOwn is a colour the user set on this exact thing.
 	accentSourceOwn
+	// accentSourceSession is a pane wearing the colour of the session it is in.
 	accentSourceSession
+	// accentSourceAuto is a session wearing the colour it was assigned.
+	accentSourceAuto
 )
 
 // effectiveAccent is the colour a pane is actually wearing: the accent pinned
@@ -262,6 +291,23 @@ func (m *OS) effectiveAccent(windowID, sessionID string) (Accent, accentSource) 
 	}
 	if a, ok := m.SessionColor(sessionID); ok {
 		return a, accentSourceSession
+	}
+	return Accent{}, accentSourceNone
+}
+
+// sessionEffectiveAccent is the same question one level up: the accent the
+// session was given, or the one it was assigned. It reads the daemon's recorded
+// string through the same parser SessionColor uses, so the two cannot disagree
+// about what "cyan" means.
+func (m *OS) sessionEffectiveAccent(name string) (Accent, accentSource) {
+	if name == "" {
+		return Accent{}, accentSourceNone
+	}
+	if a, ok := ParseAccent(m.sessionAccentString(name)); ok {
+		return a, accentSourceOwn
+	}
+	if a, ok := m.SessionColor(name); ok {
+		return a, accentSourceAuto
 	}
 	return Accent{}, accentSourceNone
 }

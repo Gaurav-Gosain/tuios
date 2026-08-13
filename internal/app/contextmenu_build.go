@@ -326,22 +326,32 @@ func (m *OS) desktopMenu() (string, []ContextMenuItem) {
 // sessionMenu mirrors the quit menu's rows for a sidebar session row: the
 // session lifecycle actions, dispatched through the same registry actions the
 // keybindings use, so the menu and the quit menu cannot drift apart.
-func (m *OS) sessionMenu() (string, []ContextMenuItem) {
+//
+// The lifecycle rows act on the session this client is attached to and can only
+// mean that, so they are dimmed on any other session's row rather than left
+// looking like they would kill the row they are under. The accent belongs to the
+// row's own session and is offered on every one of them.
+func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
+	if sessionID == "" {
+		sessionID = m.SessionName
+	}
+	attached := sessionID == m.SessionName
 	hasOthers := len(m.otherSessionNames()) > 0
 
-	killNext := m.item(glyphClose, "Kill session, go to next", "kill_session_next", !hasOthers)
+	killNext := m.item(glyphClose, "Kill session, go to next", "kill_session_next", !attached || !hasOthers)
 	killNext.Warn = true
-	killQuit := m.item(glyphClose, "Kill session and quit", "kill_session_quit", false)
+	killQuit := m.item(glyphClose, "Kill session and quit", "kill_session_quit", !attached)
 	killQuit.Warn = true
 
 	// The menu heads with what the session is called, which is its display name
 	// once it has one.
-	title := m.SessionLabel(m.SessionName)
+	title := m.SessionLabel(sessionID)
 	if title == "" {
 		title = "Session"
 	}
 	return title, []ContextMenuItem{
-		m.item(glyphDetach, "Detach", "prefix_detach", false),
+		m.item(glyphPalette, "Session color", "set_session_accent", false),
+		m.item(glyphDetach, "Detach", "prefix_detach", !attached),
 		m.item(glyphSwitch, "Switch session...", "prefix_session_switcher", false),
 		m.item(glyphSwitch, "Switch workspace...", "prefix_workspace_switcher", false),
 		separator(),

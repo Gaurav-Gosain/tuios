@@ -145,8 +145,14 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 	body = append(body, m.accentHexLine(width, at(), pal))
 	body = append(body, m.accentHarmonyLine(width, at(), pal))
 
+	title := "accent"
+	if m.AccentPickerTarget == AccentTargetSession {
+		// A session's colour is shared by every client attached to it, so the
+		// dialog says which of the two the user is about to change.
+		title = "session accent"
+	}
 	content, geo := overlay.Dialog{
-		Title: "accent",
+		Title: title,
 		Width: width,
 		Body:  strings.Join(body, "\n"),
 		Hints: accentPickerHints(),
@@ -179,12 +185,17 @@ func (m *OS) accentNowLine(width, y int, pal overlay.Palette) string {
 
 	line := overlay.Style(bg).Foreground(pal.FgMute).Render(" now ")
 	switch {
-	case s.Inherited:
-		// The colour is real but it is the session's, and the pane is not holding
-		// it. Naming the source rather than printing a hex is the difference
-		// between the two states, and the word fits where the hex would have gone.
+	case s.Src == accentSourceSession || s.Src == accentSourceAuto:
+		// The colour is real but the target is not holding it: a pane is wearing
+		// its session's, a session is wearing the one it was assigned. Naming the
+		// source rather than printing a hex is the whole difference between the
+		// two states, and the word fits where the hex would have gone.
+		word := " session"
+		if s.Src == accentSourceAuto {
+			word = " auto"
+		}
 		line += accentSwatch(s.Prev.RGB(), 2) +
-			overlay.Style(bg).Foreground(pal.FgDim).Render(" session")
+			overlay.Style(bg).Foreground(pal.FgDim).Render(word)
 	case s.HadPrev:
 		line += accentSwatch(s.Prev.RGB(), 2) +
 			overlay.Style(bg).Foreground(pal.FgDim).Render(" "+s.Prev.Hex())

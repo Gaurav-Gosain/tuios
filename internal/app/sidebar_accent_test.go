@@ -248,8 +248,8 @@ func TestRailCursorRenamesAndAccents(t *testing.T) {
 	m.EndRename()
 
 	m.SidebarAccentCursor()
-	if !m.ShowAccentPicker || m.AccentPickerWindowID != "cccccccc3333" {
-		t.Fatalf("accent picker targets %q (open=%v), want the cursor row's window", m.AccentPickerWindowID, m.ShowAccentPicker)
+	if !m.ShowAccentPicker || m.AccentPickerTargetID != "cccccccc3333" {
+		t.Fatalf("accent picker targets %q (open=%v), want the cursor row's window", m.AccentPickerTargetID, m.ShowAccentPicker)
 	}
 	m.CloseAccentPicker()
 
@@ -265,7 +265,8 @@ func TestRailCursorRenamesAndAccents(t *testing.T) {
 	}
 	m.EndRename()
 	m.SidebarAccentCursor()
-	if m.ShowAccentPicker {
-		t.Error("a session row opened the window accent picker")
+	if m.AccentPickerTarget != AccentTargetSession || m.AccentPickerTargetID != "main" {
+		t.Errorf("a session row opened the picker on %v %q, want the session's own colour",
+			m.AccentPickerTarget, m.AccentPickerTargetID)
 	}
 }

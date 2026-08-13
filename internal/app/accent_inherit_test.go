@@ -39,7 +39,7 @@ func TestAccentPickerSeedsOnTheColourThePaneWears(t *testing.T) {
 	if got := m.AccentPicker.Cur; got != want.RGB() {
 		t.Errorf("the picker opened on %s, want the session's colour %s", hexString(got), want.Hex())
 	}
-	if !m.AccentPicker.Inherited {
+	if m.AccentPicker.Src != accentSourceSession {
 		t.Error("the picker opened on the session's colour without saying it was inherited")
 	}
 	m.CloseAccentPicker()
@@ -61,7 +61,7 @@ func TestAccentPickerSeedsOnTheColourThePaneWears(t *testing.T) {
 	if got := m.AccentPicker.Cur; got != green.RGB() {
 		t.Errorf("a pinned pane opened the picker on %s, want its own accent %s", hexString(got), green.Hex())
 	}
-	if m.AccentPicker.Inherited {
+	if m.AccentPicker.Src == accentSourceSession {
 		t.Error("a pinned pane opened the picker claiming an inherited colour")
 	}
 }
@@ -78,8 +78,8 @@ func TestAccentPickerSeedWithSessionColoursOff(t *testing.T) {
 	if got, want := s.Cur, toRGBA(theme.UI().Accent); got != want {
 		t.Errorf("the picker seeded %s, want the chrome accent %s", hexString(got), hexString(want))
 	}
-	if s.HadPrev || s.Inherited {
-		t.Errorf("with session colours off the picker claims a colour it is not wearing (had=%v inherited=%v)", s.HadPrev, s.Inherited)
+	if s.HadPrev || s.Src != accentSourceNone {
+		t.Errorf("with session colours off the picker claims a colour it is not wearing (had=%v src=%v)", s.HadPrev, s.Src)
 	}
 }
 
@@ -177,8 +177,8 @@ func TestAccentEntryPointsSeedIdentically(t *testing.T) {
 	}
 	m.SidebarCursor = idx
 	m.SidebarAccentCursor()
-	if m.AccentPickerWindowID != "aaaaaaaa1111" {
-		t.Fatalf("the rail's accent key targeted %q", m.AccentPickerWindowID)
+	if m.AccentPickerTargetID != "aaaaaaaa1111" {
+		t.Fatalf("the rail's accent key targeted %q", m.AccentPickerTargetID)
 	}
 	if got := m.AccentPicker; got != direct {
 		t.Errorf("the rail's accent key seeded %+v, want the same state as the menu (%+v)", got, direct)

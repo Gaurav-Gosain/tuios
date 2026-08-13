@@ -98,7 +98,7 @@ func TestWorkspacePillMenuRenamesThePillItWasOpenedOn(t *testing.T) {
 	m.EndRename()
 
 	// With no menu behind it, the same entry point renames the workspace in view.
-	m.ClearMenuWorkspace()
+	m.ClearMenuTarget()
 	m.CurrentWorkspace = 3
 	m.BeginRenameCurrentWorkspace()
 	if m.RenameTargetID != "3" {

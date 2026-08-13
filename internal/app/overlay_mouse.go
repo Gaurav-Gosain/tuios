@@ -87,8 +87,10 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 	// The accent picker is a field of cells rather than a list of rows, so it
 	// routes off its own recorded geometry. Ahead of the row loop because it
 	// registers no rows for the generic path to find.
-	if h.Kind == "accent" && m.accentPickerPress(lx, ly) {
-		return true, nil
+	if h.Kind == "accent" {
+		if handled, cmd := m.accentPickerPress(lx, ly); handled {
+			return true, cmd
+		}
 	}
 
 	// Left-click on a body row selects/activates it.
