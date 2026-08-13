@@ -22,6 +22,11 @@ func sharedBorderOS(t *testing.T, n int) *OS {
 	t.Helper()
 	originalShared, originalAnim := config.SharedBorders, config.AnimationsEnabled
 	originalStyle, originalASCII := config.BorderStyle, config.UseASCIIOnly
+	originalDock := config.DockbarPosition
+	// The caps sit where the perimeter turns, and the dock's hairline is what a
+	// full-height divider turns on, so the dock's position is part of the shape
+	// these tests read. Other tests in this package move it.
+	config.DockbarPosition = "bottom"
 	config.SharedBorders = true
 	// Tiling applies geometry through an animation when animations are on, which
 	// would leave the windows at their nominal size for the duration of the test.
@@ -35,6 +40,7 @@ func sharedBorderOS(t *testing.T, n int) *OS {
 		config.AnimationsEnabled = originalAnim
 		config.BorderStyle = originalStyle
 		config.UseASCIIOnly = originalASCII
+		config.DockbarPosition = originalDock
 	})
 
 	m := &OS{
@@ -160,6 +166,10 @@ func TestSharedBorderFocusIsNotColorAlone(t *testing.T) {
 // TestSharedBorderCapsBendTowardTheFocusedPane is the two-pane case that a naive
 // implementation cannot express: one divider, two windows. Colouring it is
 // symmetric, so the caps have to differ.
+//
+// Both panes run the height of the content region, so the corner the perimeter
+// turns at is the one on the dock's hairline, at the foot of the divider. The
+// head of it is the screen edge, which the divider runs into rather than caps.
 func TestSharedBorderCapsBendTowardTheFocusedPane(t *testing.T) {
 	m := sharedBorderOS(t, 2)
 	border := config.GetBorderForStyle()
@@ -170,11 +180,13 @@ func TestSharedBorderCapsBendTowardTheFocusedPane(t *testing.T) {
 	_, right := separatorText(t, m)
 
 	// The left pane owns the divider's right edge, the right pane its left edge.
-	if !strings.Contains(left, border.TopRight) {
-		t.Errorf("left pane focused: divider should cap with %q, got %q", border.TopRight, left)
+	if !strings.Contains(left, border.BottomRight) || strings.Contains(left, border.BottomLeft) {
+		t.Errorf("left pane focused: divider should cap with %q and not %q, got %q",
+			border.BottomRight, border.BottomLeft, left)
 	}
-	if !strings.Contains(right, border.TopLeft) {
-		t.Errorf("right pane focused: divider should cap with %q, got %q", border.TopLeft, right)
+	if !strings.Contains(right, border.BottomLeft) || strings.Contains(right, border.BottomRight) {
+		t.Errorf("right pane focused: divider should cap with %q and not %q, got %q",
+			border.BottomLeft, border.BottomRight, right)
 	}
 	if left == right {
 		t.Error("two panes sharing one divider render identically; focus is ambiguous")
