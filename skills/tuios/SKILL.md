@@ -225,7 +225,7 @@ tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" -m "buildi
 Name your harness so anything reading the state knows what reported it:
 
 ```sh
-tuios set-agent-state working -w "$TUIOS_PANE_ID" --harness claude-code
+tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --harness claude-code
 ```
 
 `--source` says where the state came from and decides who wins when two things
@@ -245,8 +245,8 @@ are doing and nothing watching from outside does.
 Read it back, yours or another pane's:
 
 ```sh
-tuios get-agent-state -w build
-tuios get-agent-state -w build --json
+tuios get-agent-state -s work -w build
+tuios get-agent-state -s work -w build --json
 ```
 
 ```json
@@ -271,9 +271,9 @@ a working example: a shim that maps session start to `working`, a notification t
 Three signals, in order of how definite they are:
 
 ```sh
-tuios wait-for window-exit -w build                  # the shell exited
-tuios get-agent-state -w build                       # what that pane reports
-tuios list-windows --json | jq -r '.windows[] | select(.agent_state=="needs_input")'
+tuios wait-for window-exit -s work -w build          # the shell exited
+tuios get-agent-state -s work -w build               # what that pane reports
+tuios list-windows -s work --json | jq -r '.windows[] | select(.agent_state=="needs_input")'
 ```
 
 A pane that reports its own state is the only one you can trust to say
@@ -316,13 +316,29 @@ tuios list-verbs capture-pane
 tuios list-verbs --json
 ```
 
-Some verbs have no wrapper, notably `subscribe`, which opens a live event stream.
-Reach those by writing newline-delimited JSON to `$TUIOS_SOCKET` and reading one
-JSON line back per request:
+Some verbs have no wrapper, notably `subscribe`, which opens a live event stream
+instead of answering once. Reach those by writing newline-delimited JSON to
+`$TUIOS_SOCKET` and reading one JSON line back per request:
 
 ```sh
-printf '{"id":1,"verb":"subscribe","params":{"types":["window-exit"]}}\n' | nc -U "$TUIOS_SOCKET"
+python3 -c '
+import json, os, socket, sys
+s = socket.socket(socket.AF_UNIX); s.connect(os.environ["TUIOS_SOCKET"])
+s.sendall(json.dumps({"verb": "subscribe", "params": {"types": ["window-created", "window-exit"]}}).encode() + b"\n")
+for line in s.makefile():
+    print(line.strip()); sys.stdout.flush()
+'
 ```
+
+```
+{"id":1,"result":{"seq":133,"type":"subscribed"}}
+{"seq":134,"type":"window-created","session":"work","window":"86e5e19f-...","title":"Terminal 86e5e19f","time":1786611217427984525}
+```
+
+Events arrive from the moment you subscribe, with no backfill, so subscribe
+before you start the thing you want to watch. `wait-for` is the same machinery
+with the bookkeeping done for you; reach for `subscribe` only when you need to
+watch several things at once.
 
 `tuios run-command --list` shows the window-management commands (focus, move,
 minimize, switch workspace, close) that are not verbs.

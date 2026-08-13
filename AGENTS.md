@@ -1,5 +1,14 @@
 # AGENTS.md - Agent Guide for TUIOS
 
+This file is for an agent **working on the TUIOS codebase**: how it is laid out,
+how to build it, and the conventions to follow when changing it.
+
+An agent **running inside a TUIOS pane** wants the other document. Run
+`tuios --skill` for the recipes that drive a running session: addressing panes,
+reading and writing them, opening panes to run work in, waiting on conditions,
+and reporting agent state. The source is [skills/tuios/SKILL.md](skills/tuios/SKILL.md),
+embedded in the binary so the printed copy always matches the build.
+
 ## Project Overview
 
 TUIOS (Terminal UI Operating System) is a terminal-based window manager built in Go using the Charm stack (Bubble Tea v2, Lipgloss v2). It provides vim-like modal interface, workspace support, mouse interaction, and SSH server mode.

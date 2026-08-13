@@ -5,6 +5,10 @@ panes need attention. A pane running a coding agent reports what it is doing;
 tuios stores that state per window, syncs it to every attached client, and draws
 an indicator for it.
 
+This page is the reference for the feature. An agent that wants to use it from
+inside a pane should run `tuios --skill`, which prints the reporting recipes
+alongside the rest of the pane-driving surface.
+
 ## Table of Contents
 
 - [States](#states)
