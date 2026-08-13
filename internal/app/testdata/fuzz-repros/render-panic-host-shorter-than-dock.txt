@@ -1,0 +1,6 @@
+# render-panic: slice bounds out of range [:-1] in clipWindowContent, reached
+# from GetCanvas. A host shorter than the dock made GetUsableHeight negative and
+# the render loop passed it on as a viewport height. View has no recover, so
+# this took the whole process down.
+tiling
+resize 1 1

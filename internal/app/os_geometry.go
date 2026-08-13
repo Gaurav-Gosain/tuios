@@ -257,11 +257,16 @@ func (m *OS) GetTimeYPosition() int {
 // mode keeps the reservation so tiled windows have a stable layout  - the dock
 // only hides when a specific window (zoom/float) explicitly expands into its
 // rows.
+//
+// The floor is not cosmetic. On a host shorter than the dock the subtraction
+// goes negative, and every caller reads this as an extent: the render loop
+// hands it to clipWindowContent as a viewport height, which then slices a line
+// list by a negative bound and panics inside View, outside Update's recover.
 func (m *OS) GetUsableHeight() int {
 	if config.DockbarPosition == "hidden" {
 		return m.GetRenderHeight()
 	}
-	return m.GetRenderHeight() - config.DockHeight
+	return max(m.GetRenderHeight()-config.DockHeight, 0)
 }
 
 // GetRenderWidth returns the width to use for rendering.
