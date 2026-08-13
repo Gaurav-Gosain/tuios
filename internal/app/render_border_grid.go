@@ -60,6 +60,12 @@ func (m *OS) tiledPaneRects() []layout.Rect {
 type dividerLine struct {
 	layout.SplitLine
 	depth int
+	// corner marks the single cell diagonally off a pane's rectangle, where two
+	// of its edges turn. It runs in neither direction of its own: which arms it
+	// grows is decided by the lines that reach it, which is what lets the same
+	// cell be a pane's own corner in open space and the head of a division where
+	// a third pane meets it.
+	corner bool
 }
 
 // settledDepth marks a divider that belongs to the layout rather than to one
@@ -104,11 +110,16 @@ func (m *OS) dividerLines(bounds layout.Rect) ([]dividerLine, []layout.Rect) {
 		return lines, nil
 	}
 	stack := m.tiledPaneRects()
-	lines := make([]dividerLine, 0, 4*len(stack))
+	lines := make([]dividerLine, 0, 8*len(stack))
 	for depth, r := range stack {
 		for _, s := range paneEdges(r) {
 			if clipped, ok := clipSplit(s, bounds); ok {
 				lines = append(lines, dividerLine{SplitLine: clipped, depth: depth})
+			}
+		}
+		for _, c := range paneCorners(r) {
+			if _, ok := clipSplit(c, bounds); ok {
+				lines = append(lines, dividerLine{SplitLine: c, depth: depth, corner: true})
 			}
 		}
 	}
@@ -129,6 +140,20 @@ func paneEdges(r layout.Rect) [4]layout.SplitLine {
 		{Vertical: true, Pos: r.X + r.W, From: r.Y, To: r.Y + r.H - 1},
 		{Vertical: false, Pos: r.Y - 1, From: r.X, To: r.X + r.W - 1},
 		{Vertical: false, Pos: r.Y + r.H, From: r.X, To: r.X + r.W - 1},
+	}
+}
+
+// paneCorners returns the four cells diagonally off r, each as the single cell
+// it is. Pos carries the column and From/To the row, so clipSplit answers for
+// them the same way it does for an edge.
+func paneCorners(r layout.Rect) [4]layout.SplitLine {
+	left, right := r.X-1, r.X+r.W
+	top, bottom := r.Y-1, r.Y+r.H
+	return [4]layout.SplitLine{
+		{Vertical: true, Pos: left, From: top, To: top},
+		{Vertical: true, Pos: right, From: top, To: top},
+		{Vertical: true, Pos: left, From: bottom, To: bottom},
+		{Vertical: true, Pos: right, From: bottom, To: bottom},
 	}
 }
 
@@ -199,6 +224,7 @@ func (m *OS) chromeRules(bounds layout.Rect) chromeRules {
 // cell, so a neighbour probe can ask about a cell that was never filled in.
 type cell struct {
 	vert, horiz bool
+	junction    bool
 	join        joinSide
 }
 
@@ -256,6 +282,13 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	rules := m.chromeRules(bounds)
 
 	for _, s := range splits {
+		if s.corner {
+			if s.Pos >= 0 && s.Pos < viewW && s.From >= 0 && s.From < viewH &&
+				!occluded(s.Pos, s.From, s.depth) {
+				get(s.Pos, s.From).junction = true
+			}
+			continue
+		}
 		if s.Vertical {
 			if s.Pos < 0 || s.Pos >= viewW {
 				continue
@@ -364,6 +397,16 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 			default:
 				ch = chHoriz
 			}
+		case c.junction:
+			r, ok := junctionGlyph(
+				grid[[2]int{x - 1, y}].isHoriz(), grid[[2]int{x + 1, y}].isHoriz(),
+				grid[[2]int{x, y - 1}].isVert(), grid[[2]int{x, y + 1}].isVert(),
+				border,
+			)
+			if !ok {
+				continue
+			}
+			ch = r
 		default:
 			continue
 		}
@@ -460,6 +503,38 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	}
 
 	return layers
+}
+
+// junctionGlyph picks the glyph for a cell that runs in no direction of its own
+// from the arms that reach it. A pane alone in open space turns its own corner
+// here; where a division meets the cell it becomes the tee or crossing that
+// meeting needs. A cell nothing reaches reports false and is left unpainted.
+func junctionGlyph(l, r, u, d bool, border lipgloss.Border) (rune, bool) {
+	switch {
+	case l && r && u && d:
+		return firstRune(border.Middle, '┼'), true
+	case l && r && d:
+		return firstRune(border.MiddleTop, '┬'), true
+	case l && r && u:
+		return firstRune(border.MiddleBottom, '┴'), true
+	case u && d && r:
+		return firstRune(border.MiddleLeft, '├'), true
+	case u && d && l:
+		return firstRune(border.MiddleRight, '┤'), true
+	case r && d:
+		return firstRune(border.TopLeft, '╭'), true
+	case l && d:
+		return firstRune(border.TopRight, '╮'), true
+	case r && u:
+		return firstRune(border.BottomLeft, '╰'), true
+	case l && u:
+		return firstRune(border.BottomRight, '╯'), true
+	case l || r:
+		return firstRune(border.Top, '─'), true
+	case u || d:
+		return firstRune(border.Left, '│'), true
+	}
+	return 0, false
 }
 
 // sgrForeground renders c as a truecolor SGR foreground sequence.
