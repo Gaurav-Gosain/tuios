@@ -147,8 +147,18 @@ func TestAccentHitsMatchTheDrawnCellsAtEveryBreakpoint(t *testing.T) {
 		if grid != p.GridCols*p.GridRows {
 			t.Errorf("w=%d: %d grid rects for a %dx%d grid", w, grid, p.GridCols, p.GridRows)
 		}
-		if hue != p.GridCols {
-			t.Errorf("w=%d: %d hue rects for a %d-cell strip", w, hue, p.GridCols)
+		if hue != p.HueCells {
+			t.Errorf("w=%d: %d hue rects for a %d-cell strip", w, hue, p.HueCells)
+		}
+		// Every swatch is drawn in the cells its rect claims, and the row of them
+		// exactly fills the column between the sigil and the pad.
+		for _, h := range hits {
+			if h.Kind != accentHitGrid {
+				continue
+			}
+			if got := h.Rect.X1 - h.Rect.X0; got != p.CellWidth {
+				t.Fatalf("w=%d: cell (%d,%d) is %d cells wide, want %d", w, h.Col, h.Row, got, p.CellWidth)
+			}
 		}
 
 		for _, h := range hits {
@@ -166,7 +176,7 @@ func TestAccentHitsMatchTheDrawnCellsAtEveryBreakpoint(t *testing.T) {
 					if ok, _ := m.accentPickerPress(x, h.Rect.Y0); !ok {
 						t.Fatalf("w=%d: a press at column %d of %v was not routed", w, x, h.Rect)
 					}
-					if want := accentHueAt(h.Col, p.GridCols); m.AccentPicker.Hue != want {
+					if want := accentHueAt(h.Col, p.HueCells); m.AccentPicker.Hue != want {
 						t.Fatalf("w=%d: pressing column %d of hue cell %d held %v, want %v",
 							w, x, h.Col, m.AccentPicker.Hue, want)
 					}
@@ -181,6 +191,69 @@ func TestAccentHitsMatchTheDrawnCellsAtEveryBreakpoint(t *testing.T) {
 				}
 			}
 			m.OverlayMouseRelease()
+		}
+	}
+}
+
+// TestAccentGridCursorSitsInTheMiddleOfItsSwatch: a three-cell swatch with the
+// mark against one edge reads as belonging to the swatch beside it. Checked in
+// the frame, at every cell of every layout.
+func TestAccentGridCursorSitsInTheMiddleOfItsSwatch(t *testing.T) {
+	for _, w := range []int{120, 60, 38} {
+		m := accentTestOS(t, w, 30)
+		m.OpenAccentPicker("aaaaaaaa1111")
+		p := m.accentPlan()
+
+		for col := range p.GridCols {
+			for row := range p.GridRows {
+				m.AccentPickerCell(col, row)
+				lines, _ := accentFrame(t, m)
+				var rect overlay.Rect
+				for _, h := range m.accentHits {
+					if h.Kind == accentHitGrid && h.Col == col && h.Row == row {
+						rect = h.Rect
+					}
+				}
+				at := -1
+				for x, r := range []rune(lines[rect.Y0]) {
+					if r == '◆' && x >= rect.X0 && x < rect.X1 {
+						at = x
+					}
+				}
+				if want := rect.X0 + (p.CellWidth-1)/2; at != want {
+					t.Fatalf("w=%d: the mark on cell (%d,%d) is in column %d of %v, want %d",
+						w, col, row, at, rect, want)
+				}
+			}
+		}
+	}
+}
+
+// TestAccentSeedLandsOnItsOwnCell: the picker opens on the colour the target is
+// wearing, and the cursor opens on the cell nearest it. A coarser grid makes
+// that cell coarser; it must not make it wrong.
+func TestAccentSeedLandsOnItsOwnCell(t *testing.T) {
+	const id = "aaaaaaaa1111"
+	for _, hex := range []string{"#3aa0ff", "#801020", "#12ef88", "#cccccc", "#101010"} {
+		want, ok := parseHexColor(hex)
+		if !ok {
+			t.Fatalf("%q is not a colour", hex)
+		}
+		for _, w := range []int{120, 60, 38} {
+			m := accentTestOS(t, w, 30)
+			m.SetWindowAccent(id, RGBAccent(want))
+			m.OpenAccentPicker(id)
+
+			cols, rows := m.accentGridSize()
+			wantHue, wantCol, wantRow := accentCellFor(want, 0, cols, rows)
+			s := &m.AccentPicker
+			if s.Cur != want {
+				t.Errorf("%s w=%d: the picker opened on %s", hex, w, hexString(s.Cur))
+			}
+			if s.Hue != wantHue || s.Col != wantCol || s.Row != wantRow {
+				t.Errorf("%s w=%d: the cursor opened on hue %v (%d,%d), want %v (%d,%d)",
+					hex, w, s.Hue, s.Col, s.Row, wantHue, wantCol, wantRow)
+			}
 		}
 	}
 }

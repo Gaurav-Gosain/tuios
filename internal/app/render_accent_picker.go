@@ -84,6 +84,14 @@ func accentSwatch(c color.RGBA, n int) string {
 	return overlay.Style(accentShown(c)).Render(strings.Repeat(" ", n))
 }
 
+// accentCursorSwatch paints the same n cells with the cursor mark centred in
+// them, in a colour picked to read against that swatch.
+func accentCursorSwatch(c color.RGBA, n int) string {
+	lead := (max(n, 1) - 1) / 2
+	return overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).
+		Render(strings.Repeat(" ", lead) + accentCursorGlyph() + strings.Repeat(" ", max(n, 1)-1-lead))
+}
+
 // renderAccentPicker draws the colour picker for the window being accented and
 // records the hit geometry of everything in it.
 //
@@ -254,14 +262,14 @@ func (m *OS) accentRuleLine(width int, pal overlay.Palette) string {
 func (m *OS) accentHueLine(p accentLayoutPlan, y int, pal overlay.Palette) string {
 	bg := pal.Canvas
 	s := &m.AccentPicker
-	cols := p.GridCols
-	held := accentHueCell(s.Hue, cols)
+	cells := p.HueCells
+	held := accentHueCell(s.Hue, cells)
 
 	line := accentFocusMark(s.Focus == accentFocusHue, bg, pal)
-	for i := range cols {
-		c := hslToRGB(accentHueAt(i, cols), 1, 0.5)
+	for i := range cells {
+		c := hslToRGB(accentHueAt(i, cells), 1, 0.5)
 		if i == held {
-			line += overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).Render(accentCursorGlyph())
+			line += accentCursorSwatch(c, 1)
 		} else {
 			line += accentSwatch(c, 1)
 		}
@@ -284,12 +292,13 @@ func (m *OS) accentGridLines(p accentLayoutPlan, y int, pal overlay.Palette) []s
 		for col := range p.GridCols {
 			c := accentCellColor(s.Hue, col, row, p.GridCols, p.GridRows)
 			if col == s.Col && row == s.Row {
-				line += overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).Render(accentCursorGlyph())
+				line += accentCursorSwatch(c, p.CellWidth)
 			} else {
-				line += accentSwatch(c, 1)
+				line += accentSwatch(c, p.CellWidth)
 			}
+			x := 1 + col*p.CellWidth
 			m.accentHits = append(m.accentHits, accentHit{
-				Rect: overlay.Rect{X0: 1 + col, Y0: y + row, X1: 2 + col, Y1: y + row + 1},
+				Rect: overlay.Rect{X0: x, Y0: y + row, X1: x + p.CellWidth, Y1: y + row + 1},
 				Kind: accentHitGrid, Col: col, Row: row,
 			})
 		}

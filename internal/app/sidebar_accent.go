@@ -198,15 +198,28 @@ const accentWideRightRows = 1 + accentSliderRows + 1
 // value, read by the renderer as it draws and by the keyboard as it moves, so a
 // cursor position always names a cell that is on screen.
 type accentLayoutPlan struct {
-	Mode     accentLayout
-	Inner    int // the dialog's inner width
-	ColInner int // the width of the column the strip and the grid live in
-	Slots    bool
-	Sliders  bool
-	Blanks   bool
-	GridCols int
-	GridRows int
+	Mode      accentLayout
+	Inner     int // the dialog's inner width
+	ColInner  int // the width of the column the strip and the grid live in
+	Slots     bool
+	Sliders   bool
+	Blanks    bool
+	HueCells  int // cells around the hue circle, one column each
+	GridCols  int
+	GridRows  int
+	CellWidth int // cells one shades-grid swatch is painted in
 }
+
+// accentGridChunkyCols is the shades grid's width where a swatch can afford to
+// be three cells: twelve columns of saturation. Fewer steps than the strip of
+// one-cell cells it replaces, and the S slider is the fine path now, so what the
+// grid is for is reading a colour at a glance rather than resolving it.
+const accentGridChunkyCols = 12
+
+// accentGridChunkyCell is how many cells one of those swatches is painted in.
+// Three is the narrowest that reads as a swatch rather than as a stripe, and
+// twelve of them plus the sigil and a pad column is exactly the column width.
+const accentGridChunkyCell = 3
 
 // accentPlan works out the layout for the current screen.
 func (m *OS) accentPlan() accentLayoutPlan {
@@ -231,7 +244,8 @@ func (m *OS) accentPlan() accentLayoutPlan {
 				fixed++
 			}
 		}
-		p.GridCols = max(p.ColInner-2, 1)
+		p.HueCells = max(p.ColInner-2, 1)
+		p.GridCols, p.CellWidth = accentGridChunkyCols, accentGridChunkyCell
 		p.GridRows = clampInt(avail-fixed, 1, accentGridMaxRows)
 		return p
 	}
@@ -242,7 +256,13 @@ func (m *OS) accentPlan() accentLayoutPlan {
 		p.Inner = overlay.DialogFitWidth(accentPickerInnerWidth, w)
 	}
 	p.ColInner = p.Inner
-	p.GridCols = max(p.Inner-2, 1)
+	p.HueCells = max(p.Inner-2, 1)
+	// The compact layout has no width to spend on a chunky swatch, so it keeps
+	// the one-cell cells and the resolution that comes with them.
+	p.GridCols, p.CellWidth = accentGridChunkyCols, accentGridChunkyCell
+	if p.Mode == accentLayoutCompact {
+		p.GridCols, p.CellWidth = p.HueCells, 1
+	}
 
 	// Body furniture around the grid: the hue strip, a rule, the now line, the
 	// hex line and the harmony line, plus the dialog's two border rows, plus the
@@ -266,6 +286,12 @@ func (m *OS) accentGridSize() (cols, rows int) {
 	p := m.accentPlan()
 	return p.GridCols, p.GridRows
 }
+
+// accentHueCells is how many steps the hue strip is drawn in. It is the strip's
+// own number, not the grid's: the strip is one cell a step and the grid's
+// swatches are three, so the two stopped being the same count when the swatches
+// got wide enough to read.
+func (m *OS) accentHueCells() int { return m.accentPlan().HueCells }
 
 // accentSlidersShown reports whether the sliders are drawn on this screen.
 func (m *OS) accentSlidersShown() bool { return m.accentPlan().Sliders }
@@ -783,8 +809,8 @@ func (m *OS) AccentPickerMoveHue(delta int) {
 	if !m.ShowAccentPicker {
 		return
 	}
-	cols, _ := m.accentGridSize()
-	at := (accentHueCell(m.AccentPicker.Hue, cols) + delta%cols + cols) % cols
+	cells := m.accentHueCells()
+	at := (accentHueCell(m.AccentPicker.Hue, cells) + delta%cells + cells) % cells
 	m.AccentPickerHueCell(at)
 }
 
@@ -795,10 +821,10 @@ func (m *OS) AccentPickerHueCell(i int) {
 	if !m.ShowAccentPicker {
 		return
 	}
-	cols, _ := m.accentGridSize()
+	cells := m.accentHueCells()
 	s := &m.AccentPicker
 	s.Focus = accentFocusHue
-	s.Hue = accentHueAt(clampInt(i, 0, cols-1), cols)
+	s.Hue = accentHueAt(clampInt(i, 0, cells-1), cells)
 	m.accentPickerSetHSL(s.Sat, s.Light)
 }
 

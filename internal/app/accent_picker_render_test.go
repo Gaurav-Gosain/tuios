@@ -52,8 +52,8 @@ func TestAccentPickerReachesTheWholeColourSpace(t *testing.T) {
 	cols, rows := m.accentGridSize()
 
 	seen := map[color.RGBA]bool{}
-	for _, hue := range []int{0, 7, 15, 23} {
-		m.AccentPickerHueCell(hue % cols)
+	for hue := range m.accentHueCells() {
+		m.AccentPickerHueCell(hue)
 		for col := range cols {
 			for row := range rows {
 				m.AccentPickerCell(col, row)
@@ -181,8 +181,8 @@ func TestAccentPickerHitsMatchTheDrawnCells(t *testing.T) {
 		if grid != cols*rows {
 			t.Errorf("w=%d: %d grid rects recorded for a %dx%d grid", w, grid, cols, rows)
 		}
-		if hue != cols {
-			t.Errorf("w=%d: %d hue rects recorded for a %d-cell strip", w, hue, cols)
+		if cells := m.accentHueCells(); hue != cells {
+			t.Errorf("w=%d: %d hue rects recorded for a %d-cell strip", w, hue, cells)
 		}
 		if harmony != accentHarmonyCount {
 			t.Errorf("w=%d: %d harmony rects recorded, want %d", w, harmony, accentHarmonyCount)
