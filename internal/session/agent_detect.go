@@ -317,6 +317,7 @@ func (s *Session) applyAgentDetection(
 				if w.AgentState == AgentStateNone {
 					w.AgentState = AgentStateWorking
 					w.AgentMessage = ""
+					w.AgentHarness = ""
 					w.AgentStateAt = now
 					s.setAgentClaim(w.ID, agentClaim{source: AgentSourceDetect, auto: true})
 					changed++
@@ -326,6 +327,7 @@ func (s *Session) applyAgentDetection(
 				delete(s.agentClaims, w.ID)
 				w.AgentState = AgentStateNone
 				w.AgentMessage = ""
+				w.AgentHarness = ""
 				w.AgentStateAt = now
 				changed++
 			}
@@ -389,6 +391,7 @@ func (s *Session) clearExitedAgent(
 			delete(s.agentClaims, w.ID)
 			w.AgentState = AgentStateNone
 			w.AgentMessage = ""
+			w.AgentHarness = ""
 			w.AgentStateAt = time.Now().UnixNano()
 			changed = true
 			return nil

@@ -126,6 +126,7 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		}
 		w.AgentState = r.State
 		w.AgentMessage = r.Message
+		w.AgentHarness = r.Harness
 		w.AgentStateAt = time.Now().UnixNano()
 		// auto is carried over: it says the detector will clear this pane when the
 		// agent exits, which a report taking the state over does not change.

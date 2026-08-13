@@ -24,7 +24,6 @@ func TestAgentStateHookEnvironmentContract(t *testing.T) {
 		SessionID:      "main",
 		AgentState:     "needs_input",
 		PrevAgentState: "working",
-		AgentSource:    "report",
 		AgentHarness:   "claude",
 		AgentMessage:   "awaiting approval",
 	})
@@ -43,7 +42,6 @@ func TestAgentStateHookEnvironmentContract(t *testing.T) {
 		"TUIOS_SESSION_ID=main",
 		"TUIOS_AGENT_STATE=needs_input",
 		"TUIOS_AGENT_PREV_STATE=working",
-		"TUIOS_AGENT_SOURCE=report",
 		"TUIOS_AGENT_HARNESS=claude",
 		"TUIOS_AGENT_MESSAGE=awaiting approval",
 	} {

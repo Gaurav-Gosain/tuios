@@ -66,12 +66,15 @@ type Context struct {
 	Height int
 	// AgentState is the state the pane moved into on an after-agent-state, and
 	// PrevAgentState the one it came from, both in the wire spelling
-	// set-agent-state accepts. AgentSource names which of the ranked sources
-	// won, AgentHarness the harness id it reported, and AgentMessage the free
-	// text the report carried. All empty for every other event.
+	// set-agent-state accepts. AgentHarness is the harness id the reporting
+	// source named and AgentMessage the free text it carried. All empty for
+	// every other event.
+	//
+	// The ranked source that won is deliberately absent: it lives in the
+	// daemon's claim map rather than in synced window state, and get-agent-state
+	// is where it is read.
 	AgentState     string
 	PrevAgentState string
-	AgentSource    string
 	AgentHarness   string
 	AgentMessage   string
 }
@@ -223,7 +226,6 @@ func executeHook(cmdStr string, ctx Context) {
 		fmt.Sprintf("TUIOS_HEIGHT=%d", ctx.Height),
 		fmt.Sprintf("TUIOS_AGENT_STATE=%s", ctx.AgentState),
 		fmt.Sprintf("TUIOS_AGENT_PREV_STATE=%s", ctx.PrevAgentState),
-		fmt.Sprintf("TUIOS_AGENT_SOURCE=%s", ctx.AgentSource),
 		fmt.Sprintf("TUIOS_AGENT_HARNESS=%s", ctx.AgentHarness),
 		fmt.Sprintf("TUIOS_AGENT_MESSAGE=%s", ctx.AgentMessage),
 	)
