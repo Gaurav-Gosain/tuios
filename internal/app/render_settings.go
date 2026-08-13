@@ -12,8 +12,16 @@ import (
 // Settings overlay layout constants. These are the preferred sizes; a narrower
 // or shorter screen gets a panel fitted to it (see overlay_fit.go).
 const (
-	settingsInnerWidth  = 62
-	settingsVisibleRows = 7
+	// settingsMaxInnerWidth is as wide as the panel grows. A settings row is a
+	// label on the left and its control on the right, and past about eighty
+	// columns the eye stops carrying one to the other: the panel would be wider
+	// but every row in it harder to read. Eighty also clears the section strip's
+	// natural sixty-three columns with room for another section or a longer name
+	// before a desktop terminal has to scroll it, and leaves all but one of the
+	// descriptions a single line. It used to be 62, which is one column short of
+	// the strip and is why the strip wrapped.
+	settingsMaxInnerWidth = 80
+	settingsVisibleRows   = 7
 )
 
 // settingsHints is the settings footer, shared by the renderer and the sizing
@@ -34,7 +42,7 @@ var settingsHints = []overlay.Hint{
 // body below three rows stops being a list. Without this a second tab row would
 // push the panel one line past a 12-row screen.
 func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int, hints []overlay.Hint, desc bool) {
-	width = m.panelWidth(settingsInnerWidth)
+	width = m.panelWidth(settingsMaxInnerWidth)
 	preferred := max(itemCount, settingsVisibleRows)
 	// Body lines that are not setting rows: a blank and the description.
 	const descRows = 2

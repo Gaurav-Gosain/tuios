@@ -54,25 +54,13 @@ func FitWidth(preferred, screenW int) int {
 
 // TabRowCount reports how many rows the tab strip of a panel of the given inner
 // width needs. Hosts use it to budget the body's row count against the screen
-// height before they build the body.
-func TabRowCount(tabs []string, width int) int {
+// height before they build the body. The strip scrolls rather than wraps, so
+// the answer is one row for as many tabs as a panel cares to carry.
+func TabRowCount(tabs []string, _ int) int {
 	if len(tabs) == 0 {
 		return 0
 	}
-	rows := 1
-	curW := 0
-	wrapW := tabWrapWidth(width)
-	for _, name := range tabs {
-		w := min(
-			// Padding(0, 1)
-			lipgloss.Width(name)+2, wrapW)
-		if curW > 0 && curW+w > wrapW {
-			rows++
-			curW = 0
-		}
-		curW += w
-	}
-	return rows
+	return 1
 }
 
 // HintRowCount reports how many rows the footer hint strip of a panel of the
@@ -102,14 +90,113 @@ func hintWidth(h Hint) int {
 	return lipgloss.Width(h.Key) + 1 + lipgloss.Width(h.Label)
 }
 
-// tabWrapWidth is the width the tab strip lays out against, which is the inner
-// width every other row uses. Letting the strip spill into the right-hand pad
-// buys one more tab per row and costs the panel its symmetry: the first tab sits
-// on the left pad while the last runs past the rule underneath it, which reads
-// as the strip being shoved rightwards. A tab that no longer fits belongs on the
-// next row, which the strip already wraps onto.
-func tabWrapWidth(width int) int {
-	return width
+// tabGap is the single bg-colored column between two tabs.
+const tabGap = 1
+
+// tabArrowWidth is the span one overflow gutter holds: the arrow glyph and the
+// column after it. Both gutters are held open for as long as the strip scrolls,
+// whether or not there is anything that way, so an arrow appearing does not
+// shift the tab under the pointer.
+const tabArrowWidth = 2
+
+// tabRun is the strip as this frame will draw it: the run of tabs that fits on
+// one row, and whether there are more either side of it.
+//
+// The strip scrolls rather than wraps. A second row of tabs reads as a broken
+// panel, and it breaks the row-indexed addressing the body underneath relies on:
+// every body rect is derived from the row the tabs left free.
+type tabRun struct {
+	First, Count        int
+	MoreLeft, MoreRight bool
+	// Scrolls is set once the tabs stopped fitting: both gutters are then held
+	// open and Inner is the fixed span the tabs are drawn into.
+	Scrolls bool
+	Inner   int
+}
+
+// tabWidths measures each tab as it will be drawn. Only the active tab is a
+// padded pill, so the widths depend on which tab is active.
+func tabWidths(tabs []string, active int) []int {
+	w := make([]int, len(tabs))
+	for i, name := range tabs {
+		w[i] = lipgloss.Width(name)
+		if i == active {
+			w[i] += 2 // Padding(0, 1)
+		}
+	}
+	return w
+}
+
+// tabsSpan is the width of widths[from:to) laid out with their gaps.
+func tabsSpan(widths []int, from, to int) int {
+	w := 0
+	for i := from; i < to; i++ {
+		if i > from {
+			w += tabGap
+		}
+		w += widths[i]
+	}
+	return w
+}
+
+// tabsFitting is how many whole tabs from first fit in width cells. A tab drawn
+// past the viewport it was measured into leaves a recorded rectangle over cells
+// the panel then truncates away.
+func tabsFitting(widths []int, first, width int) int {
+	n := 0
+	for i := first; i < len(widths); i++ {
+		if tabsSpan(widths, first, i+1) > width {
+			break
+		}
+		n++
+	}
+	return n
+}
+
+// planTabRun decides which tabs one row shows. The offset is derived from the
+// active tab rather than remembered, which is what keeps the active tab in view
+// however it was changed: the smallest offset that shows it is the answer to
+// both a click and a keyboard switch, and there is no stale scroll state to go
+// wrong between frames.
+func planTabRun(tabs []string, active, width int) tabRun {
+	widths := tabWidths(tabs, active)
+	if tabsSpan(widths, 0, len(widths)) <= width {
+		return tabRun{Count: len(tabs)}
+	}
+
+	inner := width - 2*tabArrowWidth
+	if inner < 1 {
+		// No room for the gutters and anything between them. The strip keeps the
+		// active tab, shortened by the renderer to the width there is, because a
+		// strip that says nothing is worse than one that says only where you are.
+		return tabRun{First: active, Count: 1}
+	}
+	first := 0
+	// Walk forward only while the active tab is off the right of the run, so a
+	// tab that already fits from the left end does not scroll at all.
+	for first < active && first+tabsFitting(widths, first, inner) <= active {
+		first++
+	}
+	count := tabsFitting(widths, first, inner)
+	if count == 0 {
+		// Not even the active tab fits whole between the gutters. It is drawn
+		// anyway, shortened to the viewport: the arrows are the only sign the
+		// other sections exist at this width, so they stay.
+		first, count = active, 1
+	}
+	return tabRun{
+		First: first, Count: count,
+		MoreLeft: first > 0, MoreRight: first+count < len(tabs),
+		Scrolls: true, Inner: inner,
+	}
+}
+
+// tabArrows returns the overflow glyphs, honoring ASCII mode.
+func tabArrows() (string, string) {
+	if UseASCII() {
+		return "<", ">"
+	}
+	return "‹", "›"
 }
 
 // glyphPrefix returns the glyph plus a trailing space, honoring ASCII mode.
@@ -120,11 +207,12 @@ func glyphPrefix(glyph string) string {
 	return glyph + " "
 }
 
-// tabsRows renders the section tab strip, wrapping onto further rows when the
-// pills do not fit across one. The active tab is an accent pill, the rest muted.
-// It also returns the panel-relative rect of each tab, given the strip's
-// top-left origin (originX, originY).
-func tabsRows(tabs []string, active int, bg color.Color, pal Palette, originX, originY, width int) ([]string, []Rect) {
+// tabsRow renders the section tab strip on exactly one row: a left gutter, the
+// run of tabs that fits, a right gutter. The active tab is an accent pill, the
+// rest muted. It also returns the panel-relative rect of each drawn tab and of
+// each live arrow, given the strip's top-left origin (originX, originY). A tab
+// scrolled out of the run gets the zero rect, which hit-tests as nothing.
+func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, originY, width int) (string, []Rect, Rect, Rect) {
 	// Only the active pill is padded. It carries a background, so the padding is
 	// the gap between its colour and its label; on the others it is invisible
 	// spacing, and paying two columns per tab for it is what pushed the strip
@@ -138,58 +226,70 @@ func tabsRows(tabs []string, active int, bg color.Color, pal Palette, originX, o
 		}
 		return Style(bg).Foreground(pal.FgDim).Render(name)
 	}
-	gap := Style(bg).Render(" ")
 
-	wrapW := tabWrapWidth(width)
-	var rows []string
+	run := planTabRun(tabs, active, width)
+	// FgDim, the colour the inactive labels already carry on this surface: the
+	// arrow is furniture beside them, not quieter than them.
+	arrowStyle := Style(bg).Foreground(pal.FgDim)
+	left, right := tabArrows()
+
+	var b strings.Builder
 	rects := make([]Rect, len(tabs))
-	var cur []string
-	curW, y := 0, originY
+	x := originX
+	var prev, next Rect
 
-	flush := func() {
-		if len(cur) == 0 {
-			return
+	gutter := func(glyph string, live bool) Rect {
+		if !run.Scrolls {
+			return Rect{}
 		}
-		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, cur...))
-		cur = cur[:0]
-		curW = 0
-		y++
+		r := Rect{}
+		if live {
+			b.WriteString(arrowStyle.Render(glyph) + Style(bg).Render(" "))
+			r = Rect{X0: x, Y0: originY, X1: x + tabArrowWidth, Y1: originY + 1}
+		} else {
+			b.WriteString(Style(bg).Render(strings.Repeat(" ", tabArrowWidth)))
+		}
+		x += tabArrowWidth
+		return r
 	}
 
-	for i, name := range tabs {
+	prev = gutter(left, run.MoreLeft)
+
+	drawn := 0
+	for i := run.First; i < run.First+run.Count && i < len(tabs); i++ {
+		// The separator belongs to the tab that follows it, so the run never ends
+		// on a trailing space and the hit area has no dead column between tabs: a
+		// click that lands in the gap picks the tab it precedes.
+		hitX := x
+		if i > run.First {
+			b.WriteString(Style(bg).Render(strings.Repeat(" ", tabGap)))
+			x, drawn = x+tabGap, drawn+tabGap
+		}
+		// A tab wider than the span it is drawn into is shortened rather than let
+		// to hang off the edge, which on a scrolling strip means over the arrow.
+		span := width
+		if run.Scrolls {
+			span = run.Inner
+		}
+		name := tabs[i]
 		p := pill(name, i == active)
+		if lipgloss.Width(p) > span {
+			p = pill(Truncate(name, max(span-2, 1)), i == active)
+		}
 		w := lipgloss.Width(p)
-		if w > wrapW {
-			// A single pill wider than the strip: shorten the label rather than
-			// let it hang off the edge.
-			p = pill(Truncate(name, max(wrapW-2, 1)), i == active)
-			w = lipgloss.Width(p)
-		}
-		// The separator belongs to the tab that follows it, so a row never ends
-		// on a trailing space and the width test counts what will actually be
-		// drawn.
-		lead := 0
-		if curW > 0 {
-			lead = 1
-		}
-		if curW > 0 && curW+lead+w > wrapW {
-			flush()
-			lead = 0
-		}
-		// The hit area starts at the separator rather than at the label, so the
-		// strip has no dead column between tabs: a click that lands in the gap
-		// picks the tab it precedes.
-		hitX := curW
-		if lead > 0 {
-			cur = append(cur, gap)
-			curW += lead
-		}
-		rects[i] = Rect{X0: originX + hitX, Y0: y, X1: originX + curW + w, Y1: y + 1}
-		cur = append(cur, p)
-		curW += w
+		b.WriteString(p)
+		rects[i] = Rect{X0: hitX, Y0: originY, X1: x + w, Y1: originY + 1}
+		x, drawn = x+w, drawn+w
 	}
-	flush()
-	return rows, rects
+	// A scrolling strip holds its viewport open, so the right-hand arrow stays
+	// put as the tabs move under it.
+	if run.Scrolls && drawn < run.Inner {
+		b.WriteString(Style(bg).Render(strings.Repeat(" ", run.Inner-drawn)))
+		x += run.Inner - drawn
+	}
+
+	next = gutter(right, run.MoreRight)
+	return b.String(), rects, prev, next
 }
 
 // footerRows renders the muted key-hint strip, wrapping onto further rows when
@@ -257,11 +357,9 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	lines = append(lines, blank) // 2: blank
 
 	if len(p.Tabs) > 0 {
-		tabRows, rects := tabsRows(p.Tabs, p.ActiveTab, bg, pal, sidePad, len(lines), p.Width)
-		for _, r := range tabRows {
-			lines = append(lines, line(r))
-		}
-		geo.Tabs = rects
+		row, rects, prev, next := tabsRow(p.Tabs, p.ActiveTab, bg, pal, sidePad, len(lines), p.Width)
+		lines = append(lines, line(row))
+		geo.Tabs, geo.TabPrev, geo.TabNext = rects, prev, next
 		lines = append(lines, line(Rule(p.Width, bg, pal)))
 		lines = append(lines, blank)
 	}

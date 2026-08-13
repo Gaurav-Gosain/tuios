@@ -241,8 +241,8 @@ func TestOverlayDesktopSizesUnchanged(t *testing.T) {
 	for i, cat := range cats {
 		m.SettingsCategory = i
 		w, rows, _, _ := m.settingsLayout([]string{"Appearance", "Dock", "Behavior"}, len(cat.Items))
-		if w != settingsInnerWidth {
-			t.Errorf("settings[%s] width = %d, want %d", cat.Name, w, settingsInnerWidth)
+		if w != settingsMaxInnerWidth {
+			t.Errorf("settings[%s] width = %d, want %d", cat.Name, w, settingsMaxInnerWidth)
 		}
 		// Every category shows all of its rows at a desktop height: nothing
 		// scrolls that did not scroll before.

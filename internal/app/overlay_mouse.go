@@ -76,9 +76,18 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 		return true, nil
 	}
 
-	// Left-click on a tab switches section.
+	// Left-click on a tab switches section. The strip's overflow arrows step to
+	// the neighbouring section, which is the tab the run would scroll to anyway.
+	switch {
+	case h.Geo.TabPrev.Contains(lx, ly):
+		m.stepOverlayTab(h.Kind, -1)
+		return true, nil
+	case h.Geo.TabNext.Contains(lx, ly):
+		m.stepOverlayTab(h.Kind, 1)
+		return true, nil
+	}
 	for i, r := range h.Geo.Tabs {
-		if r.Contains(lx, ly) {
+		if !r.Empty() && r.Contains(lx, ly) {
 			m.setOverlayTab(h.Kind, i)
 			return true, nil
 		}
@@ -259,6 +268,18 @@ func (m *OS) setOverlayTab(kind string, i int) {
 		m.SettingsCategory = i
 		m.SettingsSelected = 0
 		m.SettingsScroll = 0
+	}
+}
+
+// stepOverlayTab moves the overlay's active section by delta. The arrow that
+// calls this is only drawn while there is a section that way, so the neighbour
+// always exists.
+func (m *OS) stepOverlayTab(kind string, delta int) {
+	switch kind {
+	case "help":
+		m.setOverlayTab(kind, m.HelpCategory+delta)
+	case "settings":
+		m.setOverlayTab(kind, m.SettingsCategory+delta)
 	}
 }
 

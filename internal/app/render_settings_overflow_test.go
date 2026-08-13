@@ -70,14 +70,16 @@ func TestSettingsPanelLinesMatchGeometryWidth(t *testing.T) {
 func TestSettingsDescriptionTruncates(t *testing.T) {
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 	m.ShowSettings = true
-	ci, ii, item, ok := findSetting(m, "Behavior", "Preferred shell")
+	// The longest description in the set, so the test still exercises the
+	// truncation path now the panel is wider.
+	ci, ii, item, ok := findSetting(m, "Advanced", "Word characters")
 	if !ok {
-		t.Fatal("Preferred shell setting not found")
+		t.Fatal("Word characters setting not found")
 	}
 	m.SettingsCategory = ci
 	m.SettingsSelected = ii
 
-	if lipgloss.Width(item.Desc) <= settingsInnerWidth-2 {
+	if lipgloss.Width(item.Desc) <= settingsMaxInnerWidth-2 {
 		t.Fatalf("fixture description %q is not longer than the truncation budget; test would not exercise truncation", item.Desc)
 	}
 
@@ -85,7 +87,7 @@ func TestSettingsDescriptionTruncates(t *testing.T) {
 	lines := strings.Split(content, "\n")
 	var descLine string
 	for _, ln := range lines {
-		if strings.Contains(ln, "Shell for new windows") {
+		if strings.Contains(ln, "Punctuation double-click") {
 			descLine = ln
 			break
 		}

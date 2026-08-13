@@ -25,6 +25,11 @@ type Geometry struct {
 	Width, Height int  // total rendered size in cells
 	TitleBar      Rect // the title row; a natural drag handle
 	Tabs          []Rect
-	BodyX, BodyY  int // top-left cell of the body area
-	InnerWidth    int // content width between the side padding
+	// TabPrev and TabNext are the tab strip's overflow arrows, empty unless the
+	// strip is scrolling and has tabs that way. They step the active tab rather
+	// than scroll the run past it: the run follows whichever tab is active, so
+	// scrolling on its own would have nothing to hold it where the user left it.
+	TabPrev, TabNext Rect
+	BodyX, BodyY     int // top-left cell of the body area
+	InnerWidth       int // content width between the side padding
 }
