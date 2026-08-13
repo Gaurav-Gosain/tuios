@@ -485,9 +485,15 @@ func sidebarComposeRow(gutter, glyph, name, right string, cw int, bg color.Color
 
 // sidebarNameAvail is how many cells a row's name may take: everything between
 // the spine and the right-aligned figure's inset.
+//
+// The figure costs two cells beyond itself: the inset that holds it off the
+// rail's edge rule, and one blank in front of it. Without that blank a name cut
+// to the last cell butts against its own window count, and "documentation-site"
+// beside a count of 2 reads as "documentation-site2". The name is what gives way
+// there, never the gap.
 func sidebarNameAvail(cw, rightW int) int {
 	if rightW > 0 {
-		rightW++ // the inset cell
+		rightW += 2 // the inset cell, and the gap in front of the figure
 	}
 	return max(cw-sidebarNameCol-rightW, 1)
 }
