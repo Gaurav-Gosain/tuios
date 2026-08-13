@@ -409,6 +409,13 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.DockWorkspaceTabs = boolPtr(v) })
 					m.applyAppearanceLive(false)
 				}),
+			boolItem("Workspace name on hover", "Pop a workspace's full name when its pill cut it short",
+				func() bool { return config.DockWorkspaceTooltip },
+				func(m *OS, v bool) {
+					config.DockWorkspaceTooltip = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.DockWorkspaceTooltip = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
 			boolItem("Pill caps", "Powerline caps on the dock's pills instead of flat cells",
 				func() bool { return config.DockPillCaps },
 				func(m *OS, v bool) {

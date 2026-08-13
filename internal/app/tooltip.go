@@ -9,14 +9,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// A tooltip is what a control says when it has had to give up its words. Two
+// A tooltip is what a control says when it has had to give up its words. Three
 // surfaces need one: the collapsed rail, which says a whole session in two
-// cells, and the dock's session controls, which are a glyph each.
+// cells; the dock's session controls, which are a glyph each; and a dock
+// workspace pill, which cuts a name off at twelve.
 //
-// Neither is the only way to the meaning, which is the condition for taking the
-// words off at all. The expanded rail spells the sessions out, and the help menu
-// and the which-key sheet name both session actions for the people who never
-// hover because they never reach for the mouse.
+// None is the only way to the meaning, which is the condition for taking the
+// words off at all. The expanded rail spells the sessions out, the help menu and
+// the which-key sheet name both session actions for the people who never hover
+// because they never reach for the mouse, and a workspace's full name is on its
+// rename dialog and its context menu.
 //
 // It costs no standing tick. Hover-enter records the target and the instant;
 // while the label is pending, TooltipPending joins tickNeedsWork exactly as the
@@ -48,6 +50,9 @@ const (
 	tooltipRailStrip
 	// tooltipDockSession is one of the dock's session controls.
 	tooltipDockSession
+	// tooltipDockWorkspace is a workspace pill on the dock strip whose name did
+	// not fit the twelve cells the pill has.
+	tooltipDockWorkspace
 )
 
 // tooltipState is the live hover. Runtime only, gesture-scoped like the marquee
@@ -76,6 +81,9 @@ func (m *OS) tooltipsEnabled(src tooltipSource) bool {
 		// The expanded rail says all of it in words already, so a label over it
 		// would only repeat what is on the screen.
 		return sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph
+	}
+	if src == tooltipDockWorkspace {
+		return config.DockWorkspaceTooltip
 	}
 	return true
 }
@@ -142,6 +150,8 @@ func (m *OS) renderTooltip() *lipgloss.Layer {
 		return m.renderRailTooltip()
 	case tooltipDockSession:
 		return m.renderDockSessionTooltip()
+	case tooltipDockWorkspace:
+		return m.renderDockWorkspaceTooltip()
 	}
 	return nil
 }

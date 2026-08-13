@@ -118,14 +118,27 @@ func workspacePillWidth(label string) int {
 // would otherwise push both off the bar.
 const workspacePillLabelMax = 12
 
-// workspacePillLabel is what a pill prints: the workspace's name when it has
-// one, else its number, laundered as chrome and capped.
-func (m *OS) workspacePillLabel(n int) string {
+// workspacePillName is the whole name a pill stands for: the workspace's name
+// when it has one, else its number, laundered as chrome and uncapped. This is
+// what the hover label says, so the words come from state at draw time and a
+// rename is on the label the same frame it lands.
+func (m *OS) workspacePillName(n int) string {
 	label := printableTitle(m.WorkspaceLabel(n))
 	if label == "" {
 		label = strconv.Itoa(n)
 	}
-	return overlay.Truncate(label, workspacePillLabelMax)
+	return label
+}
+
+// workspacePillLabel is what a pill prints: the name, capped.
+func (m *OS) workspacePillLabel(n int) string {
+	return overlay.Truncate(m.workspacePillName(n), workspacePillLabelMax)
+}
+
+// workspacePillClipped reports whether the pill had to cut n's name short, which
+// is the only case with anything left to reveal.
+func (m *OS) workspacePillClipped(n int) bool {
+	return lipgloss.Width(m.workspacePillName(n)) > workspacePillLabelMax
 }
 
 // occupiedWorkspaces lists the workspaces worth showing, in order: those

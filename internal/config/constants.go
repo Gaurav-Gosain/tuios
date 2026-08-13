@@ -568,6 +568,10 @@ var (
 // dock exactly as it was before the strip existed.
 var DockWorkspaceTabs = true
 
+// DockWorkspaceTooltip pops the whole name of a workspace whose pill had to cut
+// it short. Off, a long name stays truncated with no way to read the rest.
+var DockWorkspaceTooltip = true
+
 // DockPillCaps puts powerline half-circle caps back on the dock's mode pill,
 // workspace tabs and minimized-window pills. Off, each is a flat filled cell:
 // the caps repeated on every one of them, so a status line read as a row of

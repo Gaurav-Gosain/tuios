@@ -100,6 +100,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// tick is held only across the delay window of a live gesture.
 	o.DockSessionHoverAt(mouse.X, mouse.Y)
 
+	// The workspace strip is timed off the same arriving motion, for the pills
+	// that had to cut a name short. It runs after the session controls so a
+	// pointer crossing from one to the other hands the label over in one pass:
+	// each call clears only its own surface's hover.
+	o.DockWorkspaceHoverAt(mouse.X, mouse.Y)
+
 	// Ctrl-drag: an armed grab commits to a move once the pointer passes the
 	// drag threshold, then rides the same path as a title-bar drag (the block
 	// below moves the now-focused window). Ctrl let go before the grab commits

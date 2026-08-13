@@ -60,3 +60,65 @@ func (m *OS) renderDockSessionTooltip() *lipgloss.Layer {
 	}
 	return nil
 }
+
+// dockWorkspaceTooltipTrack arms the label for the workspace pill under the
+// pointer. A pill whose name fits arms nothing: it is already saying all of it,
+// so a label would repeat the screen and hold the maintenance tick open across
+// the delay for no reason. The "+" tab resolves to no workspace and is skipped
+// with it.
+func (m *OS) dockWorkspaceTooltipTrack(ws int) {
+	if ws <= 0 || !m.workspacePillClipped(ws) {
+		if m.Tooltip.Source == tooltipDockWorkspace {
+			m.tooltipClear()
+		}
+		return
+	}
+	m.tooltipTrack(tooltipDockWorkspace, ws)
+}
+
+// renderDockWorkspaceTooltip says the hovered pill's name in full.
+//
+// It is placed exactly as the session controls' label is, one row off the bar,
+// anchored to the pill's recorded first column so it opens under the name it is
+// finishing. tooltipLayer clamps it, so a pill near the right-hand end opens
+// leftward instead of running off the screen.
+//
+// The pill itself is untouched: its columns are the columns the strip measured
+// and the renderer recorded, and the label floats on the row above them. Nothing
+// about the strip reflows while the label is up, so the rectangle under the
+// pointer is still the rectangle a click lands on.
+func (m *OS) renderDockWorkspaceTooltip() *lipgloss.Layer {
+	if !m.tooltipVisible(tooltipDockWorkspace) {
+		return nil
+	}
+	// Latched for the reason the other two are: a pill scrolled out of the strip
+	// still ends the pending state, or the tick gate stays open forever.
+	m.Tooltip.Shown = true
+
+	for _, h := range m.dockWorkspaceHits {
+		if h.Workspace != m.Tooltip.Key {
+			continue
+		}
+		renderW := m.GetRenderWidth()
+		label := tooltipLabel(m.workspacePillName(h.Workspace), renderW, theme.UI())
+		y := h.Y - 1
+		if config.DockbarPosition == "top" {
+			y = h.Y + 1
+		}
+		return tooltipLayer(label, h.X0, y, renderW, "dock-workspace-tooltip")
+	}
+	return nil
+}
+
+// DockWorkspaceHoverAt arms the pill label for whatever workspace pill covers
+// (x, y), and drops it when the pointer is on none. It reports whether the
+// pointer is on a pill.
+//
+// Like the session controls' hover it does not consume the motion: the strip has
+// no other reaction to a pointer crossing it, and the arriving motion is the
+// only clock the label has.
+func (m *OS) DockWorkspaceHoverAt(x, y int) bool {
+	ws := m.DockWorkspacePillAt(x, y)
+	m.dockWorkspaceTooltipTrack(ws)
+	return ws > 0
+}
