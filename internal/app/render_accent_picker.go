@@ -25,6 +25,7 @@ const (
 	accentHitHex
 	accentHitHarmony
 	accentHitClear
+	accentHitANSI
 )
 
 // accentHit is where one interactive cell of the picker was drawn, in
@@ -103,6 +104,12 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 	var body []string
 	at := func() int { return len(body) }
 
+	// The theme's own colours, first because picking one by name is the easy
+	// answer and the rest of the dialog is the long way round.
+	if m.accentSlotsShown() {
+		body = append(body, m.accentSlotLines(width, at(), pal)...)
+	}
+
 	// The hue strip: one cell per step around the circle, the held hue marked.
 	hueY := at()
 	hueCell := accentHueCell(s.Hue, cols)
@@ -171,6 +178,56 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 	// generic body rows: a row hit would swallow the click before it could reach
 	// the cell under it.
 	return content, geo, nil
+}
+
+// accentSlotWidth is how many cells one of the theme's colours is drawn in. Two
+// rather than one: this row is the easy way in, and a one-cell chip reads as
+// punctuation next to the grid below it.
+const accentSlotWidth = 2
+
+// accentSlotLines renders the theme's own colours as two rows, the bright eight
+// and the seven normal ones under their bright counterparts, so a colour and its
+// bright twin are one column apart rather than eight cells apart on one long
+// row. Bright black has no normal twin, which is why the lower row starts one
+// swatch in.
+//
+// Only the selected colour is named: fifteen names do not fit, and the name is
+// the thing the row exists to offer, so it is printed for whichever swatch the
+// cursor is on and printed in that colour, lifted until it reads on the dialog.
+func (m *OS) accentSlotLines(width, y int, pal overlay.Palette) []string {
+	bg := pal.Canvas
+	s := &m.AccentPicker
+	focused := s.Focus == accentFocusANSI
+
+	rowFor := func(first, count, indent, rowY int) string {
+		line := accentFocusMark(first == 0 && focused, bg, pal) +
+			overlay.Style(bg).Render(strings.Repeat(" ", indent*accentSlotWidth))
+		for i := first; i < first+count; i++ {
+			c := SlotAccent(i).RGB()
+			x := lipgloss.Width(line)
+			if i == s.Slot {
+				line += overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).Render(accentCursorGlyph()) +
+					accentSwatch(c, accentSlotWidth-1)
+			} else {
+				line += accentSwatch(c, accentSlotWidth)
+			}
+			m.accentHits = append(m.accentHits, accentHit{
+				Rect: overlay.Rect{X0: x, Y0: rowY, X1: x + accentSlotWidth, Y1: rowY + 1},
+				Kind: accentHitANSI, Col: i,
+			})
+		}
+		return line
+	}
+
+	bright := rowFor(0, accentBrightCount, 0, y)
+	if s.Slot >= 0 {
+		name := " " + accentSlotNames[s.Slot]
+		if lipgloss.Width(bright)+lipgloss.Width(name) <= width {
+			bright += overlay.Style(bg).Foreground(theme.Readable(SlotAccent(s.Slot).RGB(), bg)).Render(name)
+		}
+	}
+	normal := rowFor(accentBrightCount, accentSwatchCount-accentBrightCount, 1, y+1)
+	return []string{overlay.Fill(bright, width, bg), overlay.Fill(normal, width, bg)}
 }
 
 // accentNowLine renders the old-to-new readout and the control that clears the

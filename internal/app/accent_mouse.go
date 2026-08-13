@@ -34,6 +34,8 @@ func (m *OS) accentPickerPress(lx, ly int) (bool, tea.Cmd) {
 	case accentHitHue:
 		m.accentDragging, m.accentDrag = true, accentHitHue
 		m.AccentPickerHueCell(hit.Col)
+	case accentHitANSI:
+		m.AccentPickerSlot(hit.Col)
 	case accentHitHex:
 		m.AccentPickerFocusHex()
 	case accentHitHarmony:
