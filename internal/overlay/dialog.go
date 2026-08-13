@@ -171,6 +171,21 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	}
 	lines = append(lines, bottom)
 
+	// Where each hint landed on the bottom border, so a host can make them
+	// pressable: the strip is right-aligned with one pad cell and one rule cell
+	// after it, and the pairs are two cells apart.
+	var hintRects []Rect
+	if stripW > 0 {
+		x, y := w-stripW-1, len(lines)-1
+		for i, h := range hints {
+			if i > 0 {
+				x += 2
+			}
+			hintRects = append(hintRects, Rect{X0: x, Y0: y, X1: x + hintWidth(h), Y1: y + 1})
+			x += hintWidth(h)
+		}
+	}
+
 	return strings.Join(lines, "\n"), Geometry{
 		Width:      w + 2,
 		Height:     len(lines),
@@ -178,5 +193,6 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 		BodyX:      1,
 		BodyY:      1,
 		TitleBar:   Rect{X0: 0, Y0: 0, X1: w + 2, Y1: 1},
+		Hints:      hintRects,
 	}
 }

@@ -32,4 +32,10 @@ type Geometry struct {
 	TabPrev, TabNext Rect
 	BodyX, BodyY     int // top-left cell of the body area
 	InnerWidth       int // content width between the side padding
+	// Hints is where each surviving key hint was drawn, in the order it was
+	// given. A hint strip drops from its end on a narrow frame, so this is as
+	// long as the strip that fitted rather than as long as the strip asked for,
+	// and a host reads the ones it got. Empty for surfaces whose hints are not
+	// worth pressing.
+	Hints []Rect
 }

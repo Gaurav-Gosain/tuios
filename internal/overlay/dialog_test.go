@@ -125,6 +125,41 @@ func TestDialogDegradesToASCII(t *testing.T) {
 	}
 }
 
+// TestDialogReportsWhereItsHintsLanded: a host that wants to make the key hints
+// pressable has to be told where they were drawn, and the answer has to be the
+// cells the words are actually in.
+func TestDialogReportsWhereItsHintsLanded(t *testing.T) {
+	hints := []Hint{{Key: "tab", Label: "field"}, {Key: "x", Label: "clear"}, {Key: "esc", Label: "cancel"}}
+	for _, w := range []int{60, 40, 30, 22, 16, 10} {
+		out, geo := Dialog{Title: "accent", Width: w, Body: "body", Hints: hints}.Render(dialogTestPalette())
+		lines := plainLines(out)
+		bottom := []rune(lines[len(lines)-1])
+
+		if len(geo.Hints) > len(hints) {
+			t.Fatalf("w=%d: %d rects for %d hints", w, len(geo.Hints), len(hints))
+		}
+		for i, r := range geo.Hints {
+			if r.Y0 != geo.Height-1 || r.Y1 != geo.Height {
+				t.Errorf("w=%d: hint %d is on row %d, not the bottom border", w, i, r.Y0)
+				continue
+			}
+			if r.X0 < 0 || r.X1 > len(bottom) {
+				t.Fatalf("w=%d: hint %d spans %v, outside a %d-cell row", w, i, r, len(bottom))
+			}
+			if want, got := hints[i].Key+" "+hints[i].Label, string(bottom[r.X0:r.X1]); got != want {
+				t.Errorf("w=%d: hint %d spans %q, want %q (row %q)", w, i, got, want, string(bottom))
+			}
+		}
+		// A frame too narrow drops hints from the end rather than reporting rects
+		// for words it never drew.
+		for i := len(geo.Hints); i < len(hints); i++ {
+			if strings.Contains(string(bottom), hints[i].Label) {
+				t.Errorf("w=%d: hint %d was drawn but got no rect", w, i)
+			}
+		}
+	}
+}
+
 // The cursor is reverse video, not a painted background: it is the one mark
 // that still has to be found on a monochrome terminal.
 func TestDialogCursorIsReverseVideo(t *testing.T) {

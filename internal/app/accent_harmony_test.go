@@ -126,6 +126,103 @@ func TestAccentHarmonyChipsAreClickableAtEveryLayout(t *testing.T) {
 	}
 }
 
+// accentHintRect returns where the named hint was drawn, off the recorded
+// geometry rather than off the layout arithmetic that produced it.
+func accentHintRect(t *testing.T, m *OS, which int) overlay.Rect {
+	t.Helper()
+	for _, h := range m.accentHits {
+		if h.Kind == accentHitHint && h.Col == which {
+			return h.Rect
+		}
+	}
+	t.Fatalf("hint %d was not recorded", which)
+	return overlay.Rect{}
+}
+
+// TestAccentHintsArePressable: the border hints are the mouse's only way to
+// apply or cancel, so each one has to do what its own words say, and the words
+// have to be where the rect claims they are.
+func TestAccentHintsArePressable(t *testing.T) {
+	const id = "aaaaaaaa1111"
+	seed, ok := parseHexColor("#3aa0ff")
+	if !ok {
+		t.Fatal("the fixture hex does not parse")
+	}
+
+	// The words are in the cells the rects claim.
+	m := accentTestOS(t, 120, 30)
+	m.OpenAccentPicker(id)
+	lines, _ := accentFrame(t, m)
+	for i, want := range []string{"tab field", "↵ apply", "x clear", "esc cancel"} {
+		r := accentHintRect(t, m, i)
+		row := []rune(lines[r.Y0])
+		if got := string(row[r.X0:r.X1]); got != want {
+			t.Errorf("hint %d spans %q, want %q", i, got, want)
+		}
+	}
+
+	// Apply stores the colour under the cursor.
+	m = accentTestOS(t, 120, 30)
+	m.SetWindowAccent(id, RGBAccent(seed))
+	m.OpenAccentPicker(id)
+	m.renderAccentPicker()
+	m.AccentPickerCell(4, 2)
+	want := m.AccentPicker.Cur
+	r := accentHintRect(t, m, accentHintApply)
+	if handled, _ := m.accentPickerPress(r.X0, r.Y0); !handled {
+		t.Fatal("a press on the apply hint was not routed")
+	}
+	if m.ShowAccentPicker {
+		t.Error("the apply hint left the picker open")
+	}
+	if got, _ := m.WindowAccent(id); got.RGB() != want {
+		t.Errorf("the apply hint stored %s, want %s", got.Hex(), hexString(want))
+	}
+
+	// Cancel closes and writes nothing, even after moving.
+	m = accentTestOS(t, 120, 30)
+	m.SetWindowAccent(id, RGBAccent(seed))
+	m.OpenAccentPicker(id)
+	m.renderAccentPicker()
+	m.AccentPickerCell(6, 1)
+	r = accentHintRect(t, m, accentHintCancel)
+	if handled, _ := m.accentPickerPress(r.X1-1, r.Y0); !handled {
+		t.Fatal("a press on the cancel hint was not routed")
+	}
+	if m.ShowAccentPicker {
+		t.Error("the cancel hint left the picker open")
+	}
+	if got, _ := m.WindowAccent(id); got.RGB() != seed {
+		t.Errorf("the cancel hint wrote %s over the colour that was there", got.Hex())
+	}
+
+	// Clear takes the accent away, which is a return to inheriting.
+	m = accentTestOS(t, 120, 30)
+	m.SetWindowAccent(id, RGBAccent(seed))
+	m.OpenAccentPicker(id)
+	m.renderAccentPicker()
+	r = accentHintRect(t, m, accentHintClear)
+	if handled, _ := m.accentPickerPress(r.X0, r.Y0); !handled {
+		t.Fatal("a press on the clear hint was not routed")
+	}
+	if _, still := m.WindowAccent(id); still {
+		t.Error("the clear hint left the accent in place")
+	}
+
+	// And the focus hint walks the controls, so no hint is a dead word.
+	m = accentTestOS(t, 120, 30)
+	m.OpenAccentPicker(id)
+	m.renderAccentPicker()
+	was := m.AccentPicker.Focus
+	r = accentHintRect(t, m, accentHintFocus)
+	if handled, _ := m.accentPickerPress(r.X0, r.Y0); !handled {
+		t.Fatal("a press on the focus hint was not routed")
+	}
+	if m.AccentPicker.Focus == was {
+		t.Error("the focus hint did not move the keyboard on")
+	}
+}
+
 // TestAccentChipsSurviveAMonochromeTerminal is the honest floor. Without colour
 // every background-painted swatch renders as blank space; the chips fall back to
 // a foreground glyph so the row is still a row of somethings the user can aim

@@ -57,6 +57,28 @@ func (m *OS) accentPickerPress(lx, ly int) (bool, tea.Cmd) {
 		m.AccentPickerHarmonyAt(hit.Col)
 	case accentHitClear:
 		return true, m.AccentPickerClear()
+	case accentHitHint:
+		return m.accentPickerHintPress(hit.Col)
+	default:
+		return false, nil
+	}
+	return true, nil
+}
+
+// accentPickerHintPress runs the hint in the bottom border that was clicked.
+// Applying and cancelling are keyboard-only otherwise, which leaves a mouse
+// user having to reach for the keyboard to finish a gesture they started with
+// the pointer.
+func (m *OS) accentPickerHintPress(i int) (bool, tea.Cmd) {
+	switch i {
+	case accentHintFocus:
+		m.AccentPickerFocus(1)
+	case accentHintApply:
+		return true, m.AccentPickerApply()
+	case accentHintClear:
+		return true, m.AccentPickerClear()
+	case accentHintCancel:
+		m.CloseAccentPicker()
 	default:
 		return false, nil
 	}

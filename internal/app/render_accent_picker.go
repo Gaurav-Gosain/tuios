@@ -27,6 +27,19 @@ const (
 	accentHitClear
 	accentHitANSI
 	accentHitSlider
+	// The key hints in the bottom border, which are the mouse's only way to
+	// apply or cancel: the keyboard has enter and esc, and a boxed button inside
+	// the dialog would be the only object of its kind in the overlay grammar.
+	accentHitHint
+)
+
+// The hints, in the order they are drawn and so in the order their rects come
+// back from the dialog. Col carries the index.
+const (
+	accentHintFocus = iota
+	accentHintApply
+	accentHintClear
+	accentHintCancel
 )
 
 // accentHit is where one interactive cell of the picker was drawn, in
@@ -47,6 +60,7 @@ func accentPickerHints() []overlay.Hint {
 	return []overlay.Hint{
 		{Key: "tab", Label: "field"},
 		{Key: overlay.EnterKey(), Label: "apply"},
+		{Key: "x", Label: "clear"},
 		{Key: "esc", Label: "cancel"},
 	}
 }
@@ -176,6 +190,13 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 		r := &m.accentHits[i].Rect
 		r.X0, r.X1 = r.X0+geo.BodyX, r.X1+geo.BodyX
 		r.Y0, r.Y1 = r.Y0+geo.BodyY, r.Y1+geo.BodyY
+	}
+
+	// The hints ride the border rather than the body, so they come from the
+	// dialog's own geometry and are already in its coordinates. A narrow frame
+	// drops them from the end, and what comes back is what was drawn.
+	for i, r := range geo.Hints {
+		m.accentHits = append(m.accentHits, accentHit{Rect: r, Kind: accentHitHint, Col: i})
 	}
 
 	// The picker routes its own clicks off the rects above, so it registers no
