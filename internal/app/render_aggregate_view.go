@@ -70,11 +70,8 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 				selectedItem = item
 			}
 
-			title := item.Title
-			maxTitle := max(treeWidth-18, 10)
-			if len(title) > maxTitle {
-				title = title[:maxTitle-3] + "..."
-			}
+			// Cells, not bytes: a byte cut lands inside a multi-byte rune.
+			title := overlay.Truncate(item.Title, max(treeWidth-18, 10))
 			mark := " "
 			if item.IsFocused {
 				mark = "*"

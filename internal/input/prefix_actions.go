@@ -87,6 +87,8 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 		d.Register("workspace_prefix_switch_"+string(rune('0'+i)), makeSwitchWorkspaceHandler(i))
 		d.Register("workspace_prefix_move_"+string(rune('0'+i)), makeMoveAndFollowHandler(i))
 	}
+	d.Register("workspace_prefix_rename", handleWorkspaceRename)
+	d.Register("workspace_pill_switch", handleWorkspacePillSwitch)
 	d.Register("workspace_prefix_cancel", handlePrefixCancel)
 
 	// Debug prefix (leader, D, ...)
@@ -186,6 +188,25 @@ func handleWindowPrefixRename(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 		return o, nil
 	}
 	return handlePrefixRenameWindow(msg, o)
+}
+
+// handleWorkspaceRename opens the one rename editor on a workspace. It is
+// reached from the chord and from a dock pill's menu, and the target follows
+// from which: the pill the menu was opened on, or the workspace in view.
+// Renaming is a window-management activity, like renaming a pane.
+func handleWorkspaceRename(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.Mode = app.WindowManagementMode
+	o.BeginRenameCurrentWorkspace()
+	return o, nil
+}
+
+// handleWorkspacePillSwitch switches to the workspace whose pill menu is
+// dispatching, which is what the pill's own left click already does.
+func handleWorkspacePillSwitch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if ws := o.TakeMenuWorkspace(); ws > 0 {
+		o.SwitchToWorkspace(ws)
+	}
+	return o, nil
 }
 
 func handlePrefixSettings(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

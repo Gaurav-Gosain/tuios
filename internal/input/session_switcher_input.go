@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -91,8 +93,9 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 
 	case "backspace":
-		if len(o.SessionSwitcherQuery) > 0 {
-			o.SessionSwitcherQuery = o.SessionSwitcherQuery[:len(o.SessionSwitcherQuery)-1]
+		if o.SessionSwitcherQuery != "" {
+			_, size := utf8.DecodeLastRuneInString(o.SessionSwitcherQuery)
+			o.SessionSwitcherQuery = o.SessionSwitcherQuery[:len(o.SessionSwitcherQuery)-size]
 			o.SessionSwitcherSelected = 0
 			o.SessionSwitcherScroll = 0
 		}
@@ -124,9 +127,16 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 
 	default:
-		// Accept printable characters for fuzzy search (including 'n', 'd', etc.)
-		if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
-			o.SessionSwitcherQuery += keyStr
+		// The search has to be able to spell the names the rename editor can now
+		// produce, so it takes a space and any typed rune the same way the
+		// palette does. A session called "Payments API" is otherwise unfindable
+		// past its first word.
+		text := msg.Text
+		if keyStr == "space" {
+			text = " "
+		}
+		if text != "" {
+			o.SessionSwitcherQuery += text
 			o.SessionSwitcherSelected = 0
 			o.SessionSwitcherScroll = 0
 		}

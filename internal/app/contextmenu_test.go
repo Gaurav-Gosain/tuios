@@ -437,7 +437,7 @@ func TestContextMenuTargetResolution(t *testing.T) {
 		{"the dock band", 1, 39, CtxTargetDock},
 	}
 	for _, tc := range cases {
-		got, _ := m.contextMenuTargetAt(tc.x, tc.y)
+		got, _, _ := m.contextMenuTargetAt(tc.x, tc.y)
 		if got != tc.want {
 			t.Errorf("%s: (%d,%d) resolved to target %d, want %d", tc.name, tc.x, tc.y, got, tc.want)
 		}
@@ -476,7 +476,7 @@ func TestContextMenuDockBandExcludesTopWindowRow(t *testing.T) {
 		t.Errorf("row %d is the first row of the topmost window, but the dock band claims it; "+
 			"the pane is unreachable there", top)
 	}
-	if got, idx := m.contextMenuTargetAt(2, top); got != CtxTargetPane || idx != 0 {
+	if got, idx, _ := m.contextMenuTargetAt(2, top); got != CtxTargetPane || idx != 0 {
 		t.Errorf("the topmost window's first row resolved to target %d (window %d), want the pane (%d, window 0)",
 			got, idx, CtxTargetPane)
 	}

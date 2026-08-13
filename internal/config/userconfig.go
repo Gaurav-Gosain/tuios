@@ -447,6 +447,7 @@ func DefaultConfig() *UserConfig {
 				"workspace_prefix_move_7":   {"&"},
 				"workspace_prefix_move_8":   {"*"},
 				"workspace_prefix_move_9":   {"("},
+				"workspace_prefix_rename":   {"r"},
 				"workspace_prefix_cancel":   {"esc"},
 			},
 			DebugPrefix: map[string][]string{

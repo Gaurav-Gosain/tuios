@@ -667,6 +667,11 @@ type OS struct {
 	// for a drag offset or a place in the click-to-raise order.
 	ContextMenu *ContextMenu
 
+	// menuWorkspace carries the workspace a pill menu was opened on across the
+	// gap between the menu closing and its row's action being dispatched. See
+	// TakeMenuWorkspace.
+	menuWorkspace int
+
 	// UserConfig is the loaded user configuration. The settings page mutates
 	// it in place and persists it so live changes survive a restart. May be
 	// nil if the config failed to load at startup.
