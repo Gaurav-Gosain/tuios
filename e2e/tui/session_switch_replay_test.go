@@ -115,6 +115,109 @@ func TestSessionSwitchDoesNotRepaintThePane(t *testing.T) {
 	alive(t, term, "after session round trip")
 }
 
+// TestSessionSwitchSwapsPanesAtomically watches every frame a switch composes.
+// The pane the user is leaving must hold until the pane they are arriving at is
+// ready: a frame carrying neither session's output is the blank the flash is
+// made of, whatever fills it in afterwards.
+func TestSessionSwitchSwapsPanesAtomically(t *testing.T) {
+	const last = 300
+	amark := fmt.Sprintf("ALPHA-%d-END", last)
+	const bmark = "BRAVOMARK-3311"
+
+	term := twoSessionClient(t)
+	// Enough history that catching the returning client up is a real replay
+	// rather than a line or two, since a pane repainting its history is exactly
+	// what the flash would look like.
+	runInShell(t, term, fmt.Sprintf("for i in $(seq 1 %d); do echo \"ALPHA-$i-END\"; done", last),
+		amark, bulkTimeout)
+	switchSession(t, term, "bravo")
+	runInShell(t, term, `printf '%s\n' "$(echo BRAVOMARK)-3311"`, bmark, shellTimeout)
+
+	if err := term.SendKeys(tuitest.Alt("N")); err != nil {
+		t.Fatalf("back to alpha: %v", err)
+	}
+
+	// Sampled rather than waited on: the fault being ruled out is a frame that
+	// exists only between two good ones, which any wait would step over.
+	type frame struct {
+		alpha, bravo bool
+		text         string
+		pane         string
+	}
+	var frames []frame
+	settled := 0
+	for deadline := time.Now().Add(uiTimeout); time.Now().Before(deadline) && settled < 30; {
+		s := term.Screen()
+		text := s.Text()
+		f := frame{
+			alpha: strings.Contains(text, amark),
+			bravo: strings.Contains(text, bmark),
+			text:  text,
+			pane:  paneRegion(s),
+		}
+		frames = append(frames, f)
+		if f.alpha {
+			settled++
+		} else {
+			settled = 0
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if settled < 30 {
+		t.Fatalf("never settled back on alpha across %d frames\n%s", len(frames), term.Snapshot())
+	}
+	// Sampling that began after the swap had already happened would assert
+	// nothing, so the run only counts if it saw the pane being left.
+	sawBravo := 0
+	for _, f := range frames {
+		if f.bravo {
+			sawBravo++
+		}
+	}
+	if sawBravo == 0 {
+		t.Fatalf("sampled %d frames and none of them was still on bravo: the sampler started too late to see the swap", len(frames))
+	}
+	t.Logf("sampled %d frames across the swap, %d of them still on bravo", len(frames), sawBravo)
+
+	for i, f := range frames {
+		if !f.alpha && !f.bravo {
+			t.Fatalf("frame %d of %d shows neither session's output: the swap left the pane blank\n%s",
+				i, len(frames), f.text)
+		}
+	}
+
+	// And the pane arrives finished. A pane that is painted once and then
+	// painted over is the same flash seen from the other side, so every frame
+	// showing alpha has to show the same alpha.
+	var first string
+	for _, f := range frames {
+		if !f.alpha {
+			continue
+		}
+		if first == "" {
+			first = f.pane
+			continue
+		}
+		if f.pane != first {
+			t.Fatalf("the arrived pane was repainted after it was shown\nfirst:\n%s\nlater:\n%s", first, f.pane)
+		}
+	}
+	alive(t, term, "after the atomic swap")
+}
+
+// paneRegion is the screen above the dock, which is where pane content lives.
+// The dock is excluded because its notification and its countdown change on
+// their own and would make every frame differ from every other.
+func paneRegion(s tuitest.Screen) string {
+	_, rows := s.Size()
+	var b strings.Builder
+	for r := range rows - 2 {
+		b.WriteString(s.Line(r))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
 // TestSessionSwitchKeepsScrollback is the separate half: output that scrolled
 // off the pane must still be reachable in the scrollback after a session round
 // trip, not only the screenful that survived on screen.
