@@ -952,19 +952,21 @@ var BorderStyles = []string{
 	"ascii", "hidden",
 }
 
-// BorderFillsCells reports whether the active style draws with area fills rather
-// than strokes. Its glyphs ink a whole cell or a half of one, so two of them
-// already touch along the edge they share: there is no stroke to join, and the
-// junction and corner glyphs that draw a joining are meaningless for it.
-func BorderFillsCells() bool {
+// BorderJoinsChromeRules reports whether a divider drawn in the active style can
+// meet the rule that closes the content region. Only a style drawn with strokes
+// can: its junction glyph carries the rule's own stroke through the cell it
+// takes over. A style drawn with fills would cover the rule instead, having
+// inked its last cell up to the boundary already, and the hidden style would rub
+// a cell of the rule out.
+func BorderJoinsChromeRules() bool {
 	if UseASCIIOnly {
-		return false
-	}
-	switch BorderStyle {
-	case "block", "outer-half-block", "inner-half-block":
 		return true
 	}
-	return false
+	switch BorderStyle {
+	case "block", "outer-half-block", "inner-half-block", "hidden":
+		return false
+	}
+	return true
 }
 
 // GetBorderForStyle returns the lipgloss Border for the current style

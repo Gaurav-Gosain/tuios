@@ -125,8 +125,8 @@ func cellIn(g [][]rune, x, y int) string { return fmt.Sprintf("%q", string(cellA
 // divider splits the whole content region, so every row of it carries the line
 // and the end rows are the line rather than a corner that paints half a cell.
 // Where the dock closes the region, a divider drawn with strokes reaches the
-// hairline and meets it with a junction; one drawn with fills has already inked
-// its last cell to the boundary and leaves the hairline to the dock.
+// hairline and meets it with a junction; one with no stroke to meet it with
+// stops at the boundary and leaves the hairline to the dock.
 func TestVerticalDividerRunsItsWholeDivision(t *testing.T) {
 	for _, style := range config.BorderStyles {
 		for _, dock := range []string{"top", "bottom"} {
@@ -147,7 +147,7 @@ func TestVerticalDividerRunsItsWholeDivision(t *testing.T) {
 					}
 
 					rule := dockRuleRow(m)
-					if config.BorderFillsCells() {
+					if !config.BorderJoinsChromeRules() {
 						want := firstRune(config.GetWindowSeparatorChar(), '─')
 						if got := cellAt(g, s.Pos, rule); got != want {
 							t.Errorf("the dock hairline at row %d is %s under the divider, want the hairline's own %q",
@@ -199,11 +199,15 @@ func TestHorizontalDividerRunsItsWholeDivision(t *testing.T) {
 					t.Fatalf("this divider ends at column %d, inside the region (%d-%d); it cannot answer for the region's edge",
 						s.To, b.X, b.X+b.W-1)
 				}
+				// This layout stacks its panes in the region's right half, so the
+				// divider's far end is the region's right edge. The rail on the left
+				// is answered for by TestDividerMeetsTheRailEdgeOnEitherSide, which
+				// lays a division the whole width of the region.
 				if side != "right" {
 					return
 				}
-				edge := b.X + b.W
-				if config.BorderFillsCells() {
+				edge, want, caps := b.X+b.W, firstRune(border.MiddleRight, '┤'), border.TopRight+border.BottomRight
+				if !config.BorderJoinsChromeRules() {
 					// The rail draws its edge rule in the same style, so the two fills
 					// touch on the column they share and the divider adds nothing.
 					want := firstRune(config.GetWindowBorderLeft(), '│')
@@ -213,8 +217,6 @@ func TestHorizontalDividerRunsItsWholeDivision(t *testing.T) {
 					}
 					return
 				}
-				want := firstRune(border.MiddleRight, '┤')
-				caps := border.TopRight + border.BottomRight
 				if got := cellAt(g, edge, s.Pos); got != want && !strings.ContainsRune(caps, got) {
 					t.Errorf("the divider meets the sidebar's edge rule at column %d with %s, want %q or one of %q",
 						edge, cellIn(g, edge, s.Pos), string(want), caps)

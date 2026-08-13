@@ -84,8 +84,8 @@ func TestDividerCellsStayInTheStylesOwnGlyphs(t *testing.T) {
 
 // TestDividerMeetsTheChromeRuleInItsOwnTerms is the question the junction cell
 // answers: a style drawn with strokes carries one cell onto the rule and joins
-// it, and a style drawn with fills leaves the rule alone, having already inked
-// its last cell up to the boundary. Either way nothing foreign lands on the rule.
+// it, and every other style leaves the rule to the chrome that drew it. Either
+// way nothing foreign lands on the rule.
 func TestDividerMeetsTheChromeRuleInItsOwnTerms(t *testing.T) {
 	for _, style := range config.BorderStyles {
 		for _, dock := range []string{"top", "bottom"} {
@@ -97,9 +97,9 @@ func TestDividerMeetsTheChromeRuleInItsOwnTerms(t *testing.T) {
 				s := firstSplit(t, m, true)
 				got := cellAt(frameCells(t, m), s.Pos, dockRuleRow(m))
 
-				if config.BorderFillsCells() {
+				if !config.BorderJoinsChromeRules() {
 					if got != rule {
-						t.Errorf("the dock's rule under the divider is %q, want the rule's own %q: a fill has no stroke to join, so it stops at the boundary",
+						t.Errorf("the dock's rule under the divider is %q, want the rule's own %q: this style has no stroke to join it with, so it stops at the boundary",
 							string(got), string(rule))
 					}
 					return
@@ -107,6 +107,56 @@ func TestDividerMeetsTheChromeRuleInItsOwnTerms(t *testing.T) {
 				if !strings.ContainsRune(own, got) {
 					t.Errorf("the divider meets the dock's rule with %q, which is not one of this style's own glyphs %q",
 						string(got), own)
+				}
+			})
+		}
+	}
+}
+
+// stackedOS lays two panes one above the other across the whole content region,
+// so the divider between them runs the region's full width and ends on whatever
+// closes the region on the left and on the right. The tilers both put a three
+// pane stack in one half, which leaves the far rail untouched.
+func stackedOS(t *testing.T, sidebar, style string) *OS {
+	t.Helper()
+	m := extentOSStyled(t, 2, "bottom", sidebar, style)
+	m.UseBSPLayout = false
+	b := m.GetBSPBounds()
+	h := (b.H - 1) / 2
+	top, bottom := m.Windows[0], m.Windows[1]
+	top.X, top.Y, top.Width, top.Height = b.X, b.Y, b.W, h
+	bottom.X, bottom.Y, bottom.Width, bottom.Height = b.X, b.Y+h+1, b.W, b.H-h-1
+	return m
+}
+
+// TestDividerMeetsTheRailEdgeOnEitherSide: the rail closes the content region on
+// whichever side it sits, and a division that runs the region's whole width ends
+// on that rule from either direction.
+func TestDividerMeetsTheRailEdgeOnEitherSide(t *testing.T) {
+	for _, style := range config.BorderStyles {
+		for _, side := range []string{"left", "right"} {
+			t.Run(style+"/"+side+"-sidebar", func(t *testing.T) {
+				m := stackedOS(t, side, style)
+				b := m.GetBSPBounds()
+				border := config.GetBorderForStyle()
+				s := firstSplit(t, m, false)
+				if s.From > b.X || s.To < b.X+b.W-1 {
+					t.Fatalf("this divider spans columns %d-%d, not the region's %d-%d; it cannot answer for either edge",
+						s.From, s.To, b.X, b.X+b.W-1)
+				}
+				g := frameCells(t, m)
+
+				edge, want, caps := b.X+b.W, firstRune(border.MiddleRight, '┤'), border.TopRight+border.BottomRight
+				if side == "left" {
+					edge, want, caps = b.X-1, firstRune(border.MiddleLeft, '├'), border.TopLeft+border.BottomLeft
+				}
+				if !config.BorderJoinsChromeRules() {
+					want = firstRune(config.GetWindowBorderLeft(), '│')
+					caps = ""
+				}
+				if got := cellAt(g, edge, s.Pos); got != want && !strings.ContainsRune(caps, got) {
+					t.Errorf("the divider meets the rail's edge rule at column %d with %q, want %q or one of %q",
+						edge, string(got), string(want), caps)
 				}
 			})
 		}

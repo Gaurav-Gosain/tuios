@@ -66,11 +66,10 @@ type chromeRules struct{ top, bottom, left, right int }
 
 func (m *OS) chromeRules(bounds layout.Rect) chromeRules {
 	r := chromeRules{top: -1, bottom: -1, left: -1, right: -1}
-	// A style drawn with fills has nothing to meet on the rule. Its last cell is
-	// inked to the region's boundary already, and a fill carried onto the rule
-	// would cover the rule rather than join it, leaving the divider a whole cell
-	// longer than the division it draws.
-	if config.BorderFillsCells() {
+	// Only a divider with a stroke has something to meet the rule with. The rest
+	// stop at the boundary, since a cell of fill covers the rule rather than
+	// joining it and a cell of the hidden style rubs it out.
+	if !config.BorderJoinsChromeRules() {
 		return r
 	}
 	switch config.DockbarPosition {
