@@ -8,7 +8,7 @@ import (
 
 // TestCalculateTilingLayout_SingleWindow tests layout with one window
 func TestCalculateTilingLayout_SingleWindow(t *testing.T) {
-	layouts := CalculateTilingLayout(1, 200, 100, 0, 0.5)
+	layouts := CalculateTilingLayout(1, 200, 100, 0, 0.5, 0)
 
 	if len(layouts) != 1 {
 		t.Fatalf("Expected 1 layout, got %d", len(layouts))
@@ -41,7 +41,7 @@ func TestCalculateTilingLayout_TwoWindows(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			layouts := CalculateTilingLayout(2, 200, 100, 0, tt.masterRatio)
+			layouts := CalculateTilingLayout(2, 200, 100, 0, tt.masterRatio, 0)
 
 			if len(layouts) != 2 {
 				t.Fatalf("Expected 2 layouts, got %d", len(layouts))
@@ -81,7 +81,7 @@ func TestCalculateTilingLayout_TwoWindows(t *testing.T) {
 
 // TestCalculateTilingLayout_ThreeWindows tests layout with three windows
 func TestCalculateTilingLayout_ThreeWindows(t *testing.T) {
-	layouts := CalculateTilingLayout(3, 200, 100, 0, 0.5)
+	layouts := CalculateTilingLayout(3, 200, 100, 0, 0.5, 0)
 
 	if len(layouts) != 3 {
 		t.Fatalf("Expected 3 layouts, got %d", len(layouts))
@@ -109,7 +109,7 @@ func TestCalculateTilingLayout_ThreeWindows(t *testing.T) {
 
 // TestCalculateTilingLayout_FourWindows tests 2x2 grid layout
 func TestCalculateTilingLayout_FourWindows(t *testing.T) {
-	layouts := CalculateTilingLayout(4, 200, 100, 0, 0.5)
+	layouts := CalculateTilingLayout(4, 200, 100, 0, 0.5, 0)
 
 	if len(layouts) != 4 {
 		t.Fatalf("Expected 4 layouts, got %d", len(layouts))
@@ -148,7 +148,7 @@ func TestCalculateTilingLayout_ManyWindows(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			layouts := CalculateTilingLayout(tt.numWindows, 300, 200, 0, 0.5)
+			layouts := CalculateTilingLayout(tt.numWindows, 300, 200, 0, 0.5, 0)
 
 			if len(layouts) != tt.numWindows {
 				t.Fatalf("Expected %d layouts, got %d", tt.numWindows, len(layouts))
@@ -172,7 +172,7 @@ func TestCalculateTilingLayout_ManyWindows(t *testing.T) {
 // TestCalculateTilingLayout_MinimumSize tests that minimum sizes are enforced
 func TestCalculateTilingLayout_MinimumSize(t *testing.T) {
 	// Create a very small screen to test minimum size enforcement
-	layouts := CalculateTilingLayout(2, 50, 20, 0, 0.5)
+	layouts := CalculateTilingLayout(2, 50, 20, 0, 0.5, 0)
 
 	if len(layouts) != 2 {
 		t.Fatalf("Expected 2 layouts, got %d", len(layouts))
@@ -193,7 +193,7 @@ func TestCalculateTilingLayout_MinimumSize(t *testing.T) {
 // TestCalculateTilingLayout_WithTopMargin tests layout with top margin
 func TestCalculateTilingLayout_WithTopMargin(t *testing.T) {
 	topMargin := 2
-	layouts := CalculateTilingLayout(2, 200, 100, topMargin, 0.5)
+	layouts := CalculateTilingLayout(2, 200, 100, topMargin, 0.5, 0)
 
 	if len(layouts) != 2 {
 		t.Fatalf("Expected 2 layouts, got %d", len(layouts))
@@ -209,7 +209,7 @@ func TestCalculateTilingLayout_WithTopMargin(t *testing.T) {
 
 // TestCalculateTilingLayout_ZeroWindows tests edge case with no windows
 func TestCalculateTilingLayout_ZeroWindows(t *testing.T) {
-	layouts := CalculateTilingLayout(0, 200, 100, 0, 0.5)
+	layouts := CalculateTilingLayout(0, 200, 100, 0, 0.5, 0)
 
 	if layouts != nil {
 		t.Errorf("Expected nil for 0 windows, got %d layouts", len(layouts))
@@ -219,13 +219,13 @@ func TestCalculateTilingLayout_ZeroWindows(t *testing.T) {
 // BenchmarkCalculateTilingLayout benchmarks the tiling calculation
 func BenchmarkCalculateTilingLayout(b *testing.B) {
 	for b.Loop() {
-		_ = CalculateTilingLayout(10, 1920, 1080, 0, 0.5)
+		_ = CalculateTilingLayout(10, 1920, 1080, 0, 0.5, 0)
 	}
 }
 
 // BenchmarkCalculateTilingLayout_ManyWindows benchmarks with many windows
 func BenchmarkCalculateTilingLayout_ManyWindows(b *testing.B) {
 	for b.Loop() {
-		_ = CalculateTilingLayout(50, 1920, 1080, 0, 0.5)
+		_ = CalculateTilingLayout(50, 1920, 1080, 0, 0.5, 0)
 	}
 }

@@ -58,7 +58,7 @@ func twoPaneBSP(t *testing.T) (*OS2, *terminal.Window, *terminal.Window) {
 	if tree == nil {
 		t.Fatal("no BSP tree")
 	}
-	for intID, rect := range tree.ApplyLayout(m.GetBSPBounds()) {
+	for intID, rect := range tree.ApplyLayout(m.GetBSPBounds(), sharedGap()) {
 		if win := m.GetWindowByIntID(intID); win != nil {
 			win.X, win.Y, win.Width, win.Height = rect.X, rect.Y, rect.W, rect.H
 		}
@@ -146,4 +146,14 @@ func TestBorderDragIgnoresContent(t *testing.T) {
 	if o.BorderResizing {
 		t.Fatal("a content press wrongly armed a border resize")
 	}
+}
+
+// sharedGap is the column the layout keeps between panes for the divider, on
+// the same terms app.OS.separatorGap does. These tests drive the layout
+// directly, so they answer the question the app would answer for them.
+func sharedGap() int {
+	if config.SharedBorders {
+		return 1
+	}
+	return 0
 }

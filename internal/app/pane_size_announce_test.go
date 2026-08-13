@@ -40,6 +40,11 @@ func newAnnounceWindow(t testing.TB, id string, w, h int) (*terminal.Window, *to
 // checkPaneSizes asserts the three-way invariant for every visible pane.
 func checkPaneSizes(t *testing.T, m *OS, told map[string]*toldSize, label string) {
 	t.Helper()
+	// A pane announced at exactly its drawable size can still be one column
+	// short of what the layout could have given it, if the division beside it is
+	// holding a cell open for a divider nobody draws. Checked here so every
+	// transition below is checked for it too.
+	checkDivisions(t, m, label)
 	for _, win := range m.Windows {
 		if win.Workspace != m.CurrentWorkspace || win.Minimized {
 			continue

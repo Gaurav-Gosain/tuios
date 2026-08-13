@@ -75,7 +75,7 @@ func benchResizeOS(tb testing.TB, n int) *app.OS {
 	if tree == nil {
 		tb.Fatal("benchResizeOS: no BSP tree")
 	}
-	for intID, rect := range tree.ApplyLayout(m.GetBSPBounds()) {
+	for intID, rect := range tree.ApplyLayout(m.GetBSPBounds(), sharedGap()) {
 		if win := m.GetWindowByIntID(intID); win != nil {
 			win.X, win.Y, win.Width, win.Height = rect.X, rect.Y, rect.W, rect.H
 		}

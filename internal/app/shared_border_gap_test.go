@@ -32,6 +32,11 @@ func gapTestOS(t *testing.T, n int) *OS {
 		Height:           48,
 		AutoTiling:       true,
 		MasterRatio:      0.5,
+
+		WorkspaceLayouts:     map[int][]WindowLayout{},
+		WorkspaceHasCustom:   map[int]bool{},
+		WorkspaceMasterRatio: map[int]float64{},
+		PendingResizes:       map[string][2]int{},
 	}
 	for i := range n {
 		win := newTestWindow(t, fmt.Sprintf("gap-%d-%d", n, i), 40, 20)

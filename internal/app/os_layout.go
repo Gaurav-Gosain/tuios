@@ -248,6 +248,10 @@ func (m *OS) DisableAllTiling() {
 	m.AutoTiling = false
 	m.UseScrollingLayout = false
 	m.resetTiledFlags()
+	// The panes draw their own borders again, so the column every split held
+	// open for a divider now draws nothing. Give it back to them, the same way
+	// the tiling toggle does.
+	m.reclaimSeparatorGaps()
 	m.ShowNotification("Tiling disabled", "info", config.NotificationDuration)
 	m.FireLayoutChanged()
 }

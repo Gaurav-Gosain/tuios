@@ -159,7 +159,7 @@ func TestBSPTree_InsertFirstWindow(t *testing.T) {
 	tree := NewBSPTree()
 	bounds := Rect{X: 0, Y: 0, W: 100, H: 100}
 
-	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds)
+	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds, 0)
 
 	if tree.IsEmpty() {
 		t.Error("Tree should not be empty after inserting window")
@@ -187,10 +187,10 @@ func TestBSPTree_InsertSecondWindow(t *testing.T) {
 	bounds := Rect{X: 0, Y: 0, W: 100, H: 100}
 
 	// Insert first window
-	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds)
+	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds, 0)
 
 	// Insert second window
-	tree.InsertWindow(2, 1, SplitVertical, 0.5, bounds)
+	tree.InsertWindow(2, 1, SplitVertical, 0.5, bounds, 0)
 
 	if tree.WindowCount() != 2 {
 		t.Errorf("Expected 2 windows, got %d", tree.WindowCount())
@@ -211,8 +211,8 @@ func TestBSPTree_InsertDuplicate(t *testing.T) {
 	tree := NewBSPTree()
 	bounds := Rect{X: 0, Y: 0, W: 100, H: 100}
 
-	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds)
-	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds) // Try to insert again
+	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds, 0)
+	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds, 0) // Try to insert again
 
 	if tree.WindowCount() != 1 {
 		t.Errorf("Duplicate insert should be ignored, expected 1 window, got %d", tree.WindowCount())
@@ -225,8 +225,8 @@ func TestBSPTree_RemoveWindow(t *testing.T) {
 	bounds := Rect{X: 0, Y: 0, W: 100, H: 100}
 
 	// Insert two windows
-	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds)
-	tree.InsertWindow(2, 1, SplitVertical, 0.5, bounds)
+	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds, 0)
+	tree.InsertWindow(2, 1, SplitVertical, 0.5, bounds, 0)
 
 	// Remove first window
 	tree.RemoveWindow(1)
@@ -256,7 +256,7 @@ func TestBSPTree_RemoveLastWindow(t *testing.T) {
 	tree := NewBSPTree()
 	bounds := Rect{X: 0, Y: 0, W: 100, H: 100}
 
-	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds)
+	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds, 0)
 	tree.RemoveWindow(1)
 
 	if !tree.IsEmpty() {
@@ -276,9 +276,9 @@ func TestBSPTree_GetAllWindowIDs(t *testing.T) {
 	bounds := Rect{X: 0, Y: 0, W: 100, H: 100}
 
 	// Insert windows
-	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds)
-	tree.InsertWindow(2, 1, SplitVertical, 0.5, bounds)
-	tree.InsertWindow(3, 2, SplitHorizontal, 0.5, bounds)
+	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds, 0)
+	tree.InsertWindow(2, 1, SplitVertical, 0.5, bounds, 0)
+	tree.InsertWindow(3, 2, SplitHorizontal, 0.5, bounds, 0)
 
 	ids := tree.GetAllWindowIDs()
 
@@ -305,8 +305,8 @@ func TestBSPTree_SwapWindows(t *testing.T) {
 	bounds := Rect{X: 0, Y: 0, W: 100, H: 100}
 
 	// Insert two windows
-	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds)
-	tree.InsertWindow(2, 1, SplitVertical, 0.5, bounds)
+	tree.InsertWindow(1, 0, SplitNone, 0.5, bounds, 0)
+	tree.InsertWindow(2, 1, SplitVertical, 0.5, bounds, 0)
 
 	// Get original positions
 	node1Before := tree.FindNode(1)
@@ -397,7 +397,7 @@ func BenchmarkBSPTree_Insert(b *testing.B) {
 		tree := NewBSPTree()
 		lastID := 0
 		for j := range 10 {
-			tree.InsertWindow(j+1, lastID, SplitNone, 0.5, bounds)
+			tree.InsertWindow(j+1, lastID, SplitNone, 0.5, bounds, 0)
 			lastID = j + 1
 		}
 	}
@@ -411,13 +411,13 @@ func BenchmarkBSPTree_ApplyLayout(b *testing.B) {
 	// Build a tree with 10 windows
 	lastID := 0
 	for j := range 10 {
-		tree.InsertWindow(j+1, lastID, SplitNone, 0.5, bounds)
+		tree.InsertWindow(j+1, lastID, SplitNone, 0.5, bounds, 0)
 		lastID = j + 1
 	}
 
 	b.ResetTimer()
 	for b.Loop() {
-		_ = tree.ApplyLayout(bounds)
+		_ = tree.ApplyLayout(bounds, 0)
 	}
 }
 
@@ -439,11 +439,11 @@ func TestApplyLayoutNeverOverlaps(t *testing.T) {
 		tree.AutoScheme = SchemeSpiral
 		last := 0
 		for i := range n {
-			tree.InsertWindow(i+1, last, SplitNone, 0.5, bounds)
+			tree.InsertWindow(i+1, last, SplitNone, 0.5, bounds, 0)
 			last = i + 1
 		}
 
-		rects := tree.ApplyLayout(bounds)
+		rects := tree.ApplyLayout(bounds, 0)
 		if len(rects) != n {
 			t.Fatalf("n=%d: laid out %d windows, want %d", n, len(rects), n)
 		}

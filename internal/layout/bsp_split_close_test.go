@@ -96,9 +96,9 @@ type splitStep struct {
 // SplitFocusedHorizontal/Vertical do.
 func buildSplits(bounds layout.Rect, steps []splitStep) *layout.BSPTree {
 	tree := layout.NewBSPTree()
-	tree.InsertWindow(1, 0, layout.SplitNone, 0.5, bounds)
+	tree.InsertWindow(1, 0, layout.SplitNone, 0.5, bounds, 0)
 	for i, s := range steps {
-		tree.InsertWindowWithPreselection(i+2, s.target, s.dir, bounds)
+		tree.InsertWindowWithPreselection(i+2, s.target, s.dir, bounds, 0)
 	}
 	return tree
 }
@@ -132,7 +132,7 @@ func TestUnevenSplitsSurviveEveryCloseOrder(t *testing.T) {
 					tree := buildSplits(bounds, steps)
 					skewRatios(tree, ratio)
 					checkTree(t, tree, what+" (before)")
-					checkPartition(t, tree.ApplyLayout(bounds), bounds, what+" (before)")
+					checkPartition(t, tree.ApplyLayout(bounds, 0), bounds, what+" (before)")
 
 					// Close every pane, starting at victim and wrapping, so each
 					// layout is torn down in n different orders.
@@ -141,7 +141,7 @@ func TestUnevenSplitsSurviveEveryCloseOrder(t *testing.T) {
 						tree.RemoveWindow(id)
 						step := fmt.Sprintf("%s after closing %d", what, id)
 						checkTree(t, tree, step)
-						checkPartition(t, tree.ApplyLayout(bounds), bounds, step)
+						checkPartition(t, tree.ApplyLayout(bounds, 0), bounds, step)
 					}
 					if tree.Root != nil {
 						t.Errorf("%s: closing every pane left a tree behind", what)

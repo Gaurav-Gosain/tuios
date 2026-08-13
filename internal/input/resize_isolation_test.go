@@ -98,7 +98,7 @@ func buildTree(m *app.OS, build func(leaf func(int) *layout.TileNode) *layout.Ti
 	}
 	m.WorkspaceTrees[1] = tree
 
-	for intID, r := range tree.ApplyLayout(m.GetBSPBounds()) {
+	for intID, r := range tree.ApplyLayout(m.GetBSPBounds(), sharedGap()) {
 		if win := m.GetWindowByIntID(intID); win != nil {
 			win.X, win.Y = r.X, r.Y
 			win.Resize(r.W, r.H)

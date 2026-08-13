@@ -213,13 +213,13 @@ func TestResizeKeepsOffAxisGeometry(t *testing.T) {
 					for _, e := range edges {
 						for _, delta := range []int{4, -4} {
 							tree := lay.build()
-							before := tree.ApplyLayout(bounds)
+							before := tree.ApplyLayout(bounds, sharedGap())
 							dragged, ok := dragEdge(before, pane, e, delta)
 							if !ok {
 								continue
 							}
-							tree.SyncRatiosFromGeometry(dragged, bounds)
-							after := tree.ApplyLayout(bounds)
+							tree.SyncRatiosFromGeometry(dragged, bounds, sharedGap())
+							after := tree.ApplyLayout(bounds, sharedGap())
 
 							label := lay.name + "/pane" + string(rune('0'+pane)) + "/" + e.String()
 							if shared {
@@ -244,7 +244,7 @@ func TestRepeatedResizeDoesNotDrift(t *testing.T) {
 		withSharedBorders(t, shared, func() {
 			for _, lay := range resizeLayouts {
 				tree := lay.build()
-				start := tree.ApplyLayout(bounds)
+				start := tree.ApplyLayout(bounds, sharedGap())
 				geo := start
 
 				const steps = 8
@@ -253,8 +253,8 @@ func TestRepeatedResizeDoesNotDrift(t *testing.T) {
 					if !ok {
 						break
 					}
-					tree.SyncRatiosFromGeometry(dragged, bounds)
-					geo = tree.ApplyLayout(bounds)
+					tree.SyncRatiosFromGeometry(dragged, bounds, sharedGap())
+					geo = tree.ApplyLayout(bounds, sharedGap())
 				}
 
 				label := lay.name
@@ -278,9 +278,9 @@ func TestSyncRoundTripIsStable(t *testing.T) {
 					for _, h := range []int{24, 31, 48, 60} {
 						bounds := Rect{X: 0, Y: 1, W: w, H: h}
 						tree := lay.build()
-						before := tree.ApplyLayout(bounds)
-						tree.SyncRatiosFromGeometry(before, bounds)
-						after := tree.ApplyLayout(bounds)
+						before := tree.ApplyLayout(bounds, sharedGap())
+						tree.SyncRatiosFromGeometry(before, bounds, sharedGap())
+						after := tree.ApplyLayout(bounds, sharedGap())
 						for id, b := range before {
 							if after[id] != b {
 								t.Errorf("shared=%v %s %dx%d: pane %d drifted on sync round trip: %+v -> %+v",
@@ -301,7 +301,7 @@ func TestHorizontalResizeKeepsRightColumnHeights(t *testing.T) {
 	withSharedBorders(t, true, func() {
 		bounds := Rect{X: 0, Y: 1, W: 80, H: 30}
 		tree := tallLeft()
-		before := tree.ApplyLayout(bounds)
+		before := tree.ApplyLayout(bounds, sharedGap())
 
 		geo := before
 		for i := range 4 {
@@ -309,8 +309,8 @@ func TestHorizontalResizeKeepsRightColumnHeights(t *testing.T) {
 			if !ok {
 				t.Fatalf("drag %d hit the minimum size", i)
 			}
-			tree.SyncRatiosFromGeometry(dragged, bounds)
-			geo = tree.ApplyLayout(bounds)
+			tree.SyncRatiosFromGeometry(dragged, bounds, sharedGap())
+			geo = tree.ApplyLayout(bounds, sharedGap())
 		}
 
 		if geo[2].H != before[2].H {
