@@ -200,7 +200,7 @@ func addToBorder(content string, color color.Color, window *terminal.Window, pos
 		if isTiling {
 			buttons = makeRounded(dash+cross, color)
 		} else {
-			square := buttonStyle.Render(" □ ")
+			square := buttonStyle.Render(config.GetWindowButtonMaximize())
 			buttons = makeRounded(dash+square+cross, color)
 		}
 		buttonsWidth = lipgloss.Width(buttons)

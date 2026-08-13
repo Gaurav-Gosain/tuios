@@ -14,6 +14,13 @@ import (
 )
 
 func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
+	// Before anything is built. The overlay package's glyph set used to be
+	// synced inside renderOverlays, which runs after the sidebar layer is
+	// already composed, so a client launched with ascii_only painted its first
+	// frame with unicode glyphs in the rail and only corrected itself on the
+	// next redraw.
+	syncOverlayASCII()
+
 	// Reuse the canvas across frames. Allocating a fresh one each frame was the
 	// single largest source of allocations (a full-screen cell buffer per frame).
 	// Resize is a no-op when the dimensions are unchanged; Clear resets the cells

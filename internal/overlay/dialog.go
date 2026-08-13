@@ -64,7 +64,7 @@ func DashRule(width int, bg color.Color, pal Palette) string {
 // the word where it does not. Three cells either way, like "esc" beside it.
 func EnterKey() string {
 	if UseASCII() {
-		return "ret"
+		return "enter"
 	}
 	return "↵"
 }

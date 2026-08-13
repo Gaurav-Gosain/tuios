@@ -899,6 +899,8 @@ const (
 	// U+292B, so it still measures 1 cell and the button pill keeps its old
 	// width. See the hit-test offsets below, which depend on that width.
 	WindowButtonClose = " ✕ " // Close/kill window
+	// WindowButtonMaximize is the maximize window button character.
+	WindowButtonMaximize = " □ " // U+25A1
 	// WindowSeparatorChar is the separator character for window elements.
 	WindowSeparatorChar = "─" // U+2500
 )
@@ -919,6 +921,10 @@ const (
 
 	// WindowButtonCloseASCII is the close/kill window button character (ASCII fallback).
 	WindowButtonCloseASCII = " X "
+	// WindowButtonMaximizeASCII is the maximize window button character (ASCII
+	// fallback). Three cells like the close button, so the pill keeps its width
+	// and the hit-test offsets below still hold.
+	WindowButtonMaximizeASCII = " O "
 	// WindowPillLeftASCII is the left pill-style character for window decorations (ASCII fallback).
 	WindowPillLeftASCII = "["
 	// WindowPillRightASCII is the right pill-style character for window decorations (ASCII fallback).
@@ -1090,6 +1096,14 @@ func GetWindowButtonClose() string {
 		return WindowButtonCloseASCII
 	}
 	return WindowButtonClose
+}
+
+// GetWindowButtonMaximize returns the appropriate maximize button character
+func GetWindowButtonMaximize() string {
+	if UseASCIIOnly {
+		return WindowButtonMaximizeASCII
+	}
+	return WindowButtonMaximize
 }
 
 // GetWindowPillLeft returns the appropriate pill left character

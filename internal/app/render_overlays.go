@@ -16,9 +16,9 @@ import (
 func (m *OS) renderOverlays() []*lipgloss.Layer {
 	var layers []*lipgloss.Layer
 
-	// Keep the overlay glyphs in sync with ASCII mode, and clear last frame's
-	// hit geometry; each panel that renders below re-records itself.
-	syncOverlayASCII()
+	// Clear last frame's hit geometry; each panel that renders below re-records
+	// itself. The ASCII glyph set is synced at the top of GetCanvas, ahead of
+	// every layer that reads it.
 	m.OverlayHits = m.OverlayHits[:0]
 	m.reconcileOverlayZOrder()
 
