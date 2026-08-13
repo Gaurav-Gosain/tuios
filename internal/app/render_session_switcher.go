@@ -28,6 +28,11 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 			[]overlay.Hint{{Key: "y", Label: "delete"}, {Key: "n", Label: "cancel"}, {Key: "esc", Label: "cancel"}})
 	}
 
+	// Arbitrated over every session the switcher knows, not over the filtered
+	// rows: a query is a view, and a session must not change colour because
+	// something else was typed out of sight.
+	m.refreshSessionColorsFor(m.SessionSwitcherItems)
+
 	filtered := FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery)
 	if len(filtered) > 0 {
 		m.SessionSwitcherSelected = clampInt(m.SessionSwitcherSelected, 0, len(filtered)-1)
@@ -88,12 +93,22 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 		identity = " (" + printableTitle(item.ID) + ")"
 	}
 
-	avail := max(width-lipgloss.Width(right)-len(identity)-4, 1)
+	// The switcher wears the rail's identity mark in the rail's colour, so the
+	// row picked here is recognisably the row that was being looked at there.
+	// It leads the label rather than riding the marker column, which the
+	// selection cursor owns.
+	mark, markW := "", 0
+	if tint := m.sessionTint(item.ID, rowBg); tint != nil {
+		mark = overlay.Style(rowBg).Foreground(tint).Render(accentMark() + " ")
+		markW = 2
+	}
+
+	avail := max(width-lipgloss.Width(right)-len(identity)-markW-4, 1)
 	labelColor := pal.FgDim
 	if selected {
 		labelColor = pal.Fg
 	}
-	left := overlay.Style(rowBg).Foreground(labelColor).Bold(selected).
+	left := mark + overlay.Style(rowBg).Foreground(labelColor).Bold(selected).
 		Render(overlay.Truncate(printableTitle(item.Title), avail))
 	if identity != "" {
 		left += overlay.Style(rowBg).Foreground(pal.FgMute).Render(identity)

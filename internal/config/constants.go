@@ -564,6 +564,12 @@ var (
 	Tooltips = true
 )
 
+// SessionColors gives every session a colour of its own and marks it on the
+// surfaces that show more than one session at once: the rail's sessions and
+// agents sections, and the session switcher. Off leaves each of those exactly
+// as it was before the colours existed.
+var SessionColors = true
+
 // DockWorkspaceTabs draws the dock's clickable workspace strip. Off leaves the
 // dock exactly as it was before the strip existed.
 var DockWorkspaceTabs = true

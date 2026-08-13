@@ -124,11 +124,12 @@ type SessionState struct {
 	// Empty means unnamed, and every reader falls back to Name, so a session that
 	// was never renamed reads exactly as it did before this field existed.
 	DisplayName string `json:"display_name,omitempty"`
-	// Accent is an optional accent slot for the session, recorded verbatim the
-	// way Options are: the daemon has no palette and does not interpret it. Empty
-	// means the client's default. It lives here rather than in a client-side file
-	// because it has to survive a reattach and be the same for every client
-	// attached to this session.
+	// Accent is an optional accent for the session, recorded verbatim the way
+	// Options are: the daemon has no palette and does not interpret it. Clients
+	// read it as a colour name from the ANSI sixteen or as a hex literal, and an
+	// empty or unreadable value means they pick the session's colour themselves.
+	// It lives here rather than in a client-side file because it has to survive a
+	// reattach and be the same for every client attached to this session.
 	Accent string `json:"accent,omitempty"`
 	// Restored marks a session the daemon rebuilt from saved state and that no
 	// client has attached to since. Nothing else at session level says so: the

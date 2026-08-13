@@ -136,6 +136,7 @@ func TestRailSignatureMovesForDrawnStateAndNotForTheRest(t *testing.T) {
 		{"sessions scroll", func() { m.SidebarScrollS = 2 }, true},
 		{"terminals scroll", func() { m.SidebarScrollT = 2 }, true},
 		{"agents scroll", func() { m.SidebarScrollA = 2 }, true},
+		{"the attached session's accent", func() { m.SessionAccent = "cyan" }, true},
 
 		// State the rail carries but never draws. Folding any of it in would
 		// rebuild the rail on a mouse move that changed nothing on screen.

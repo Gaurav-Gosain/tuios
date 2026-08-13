@@ -401,11 +401,32 @@ func sidebarQuietDot(bg color.Color, pal overlay.Palette) string {
 	if !config.SidebarShowGlyphs {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
+	return sidebarQuietDotTinted(pal.FgMute, bg, pal)
+}
+
+// dotTint is the colour the quiet dot burns: the session's, or the muted ink it
+// has always used when there is no colour to show or the cell is about to be
+// taken by an agent state.
+func dotTint(tint color.Color, pal overlay.Palette, stated bool) color.Color {
+	if tint == nil || stated {
+		return pal.FgMute
+	}
+	return tint
+}
+
+// sidebarQuietDotTinted is sidebarQuietDot in a colour of the caller's
+// choosing: a session row with no agent running burns its session's colour in
+// the dot it was already drawing, so the colour costs the rail no cell and a
+// terminal without colour sees the row it saw before.
+func sidebarQuietDotTinted(tint, bg color.Color, pal overlay.Palette) string {
+	if !config.SidebarShowGlyphs {
+		return sidebarStyle(bg, nil).Render(" ")
+	}
 	dot := "·"
 	if overlay.UseASCII() {
 		dot = "."
 	}
-	return sidebarStyle(bg, pal.FgMute).Render(dot)
+	return sidebarStyle(bg, tint).Render(dot)
 }
 
 // sidebarEdgeRule is the one-cell vertical rule separating the rail from the
@@ -606,6 +627,7 @@ func sidebarWindowSection(scroll, rows, lines int) (start, shown, hidden int) {
 func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
+	m.refreshSessionColorsFor(tree.Sessions)
 
 	// Re-armed each frame: a marquee row sets it, so a key left standing after
 	// the row stops drawing hovered means the scroll is over and the tick idles.
@@ -864,8 +886,15 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if nT > 0 {
 		right := ""
 		if peeking {
-			// Whose panes these are, since they are not the attached session's.
-			right = sidebarStyle(nil, pal.Fg).Render(overlay.Truncate(printableTitle(shown), max(cw/2, 1)))
+			// Whose panes these are, since they are not the attached session's,
+			// in that session's own colour: the row the pointer is on is marked
+			// the same way three lines up, so the preview and its source are
+			// visibly one thing rather than two lists that happen to be adjacent.
+			ink := pal.Fg
+			if tint := m.sessionTint(shown, theme.TerminalBg()); tint != nil {
+				ink = tint
+			}
+			right = sidebarStyle(nil, ink).Render(overlay.Truncate(printableTitle(shown), max(cw/2, 1)))
 		}
 		lines = append(lines, compose(sidebarHeaderRow("terminals", right, cw, pal)))
 		if emptyPeek {
@@ -1253,7 +1282,7 @@ func (m *OS) windowIndexByID(id string) int {
 //	^ ^ ^                ^ window count, right-aligned, muted, inset one cell
 //	| | name: full strength on the attached session, dim on the rest
 //	| rolled-up agent glyph, state-colored, a quiet dot when there is none
-//	gutter: accent when attached, severity when a pane wants a human
+//	gutter: the session's own colour, severity when a pane wants a human
 //
 // Emphasis ladder, quietest to loudest: other rows dim; attached session an
 // accent gutter mark and a full-strength name; pointer or keyboard cursor a
@@ -1269,8 +1298,17 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		rowBg = pal.Surface
 	}
 
-	glyph := sidebarQuietDot(rowBg, pal)
-	if agentStateIndicator(node.AgentState) != "" {
+	// The session's colour takes whichever of the row's two marks the louder
+	// signals have not claimed. The quiet dot first, which costs the rail
+	// nothing: a terminal with no colour draws the row it drew before. When a
+	// pane is running an agent the state owns that cell, so identity falls to
+	// the gutter, and when a pane wants a human the severity owns that one too
+	// and identity gives way entirely. An alarm outranks a label.
+	tint := m.sessionTint(node.ID, railGround(rowBg))
+	stated := agentStateIndicator(node.AgentState) != ""
+
+	glyph := sidebarQuietDotTinted(dotTint(tint, pal, stated), rowBg, pal)
+	if stated {
 		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal)
 	}
 
@@ -1301,8 +1339,12 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	}
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
 		Render(m.sidebarMarquee("s:"+node.ID, printableTitle(node.Title), sidebarNameAvail(cw, rightW), hovered))
-	return sidebarComposeRow(sidebarGutter(node.IsCurrent, node.AgentState, rowBg, pal),
-		glyph, name, right, cw, rowBg)
+
+	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal)
+	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
+		gutter = sidebarStyle(rowBg, tint).Render(accentMark())
+	}
+	return sidebarComposeRow(gutter, glyph, name, right, cw, rowBg)
 }
 
 // sidebarTerminalRow renders one pane of the session the terminals section is
@@ -1467,10 +1509,20 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		right = sidebarStyle(rowBg, timeFg).Render(label)
 	}
 	// An agent row is only ever "current" through the pane it points at, which
-	// the terminals section already marks, so its gutter carries severity only.
+	// the terminals section already marks, so its gutter carries severity, and
+	// below that the fact that the pane is somewhere else. The mark is drawn on
+	// foreign rows only, so it says "not from here" on a terminal with no colour
+	// and says which session on one with colour. It is the answer the prefix
+	// gives in words and gives up first when the row runs out of room.
+	gutter := sidebarGutter(false, e.State, rowBg, pal)
+	if e.Foreign && !sidebarAttention(e.State) {
+		if tint := m.agentIdentityTint(e, railGround(rowBg)); tint != nil {
+			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
+		}
+	}
 	body := sidebarStyle(rowBg, pal.FgMute).Render(shown) +
 		nameStyle.Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name,
 			max(avail-lipgloss.Width(shown), 1), hovered))
-	return sidebarComposeRow(sidebarGutter(false, e.State, rowBg, pal),
+	return sidebarComposeRow(gutter,
 		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal), body, right, cw, rowBg)
 }
