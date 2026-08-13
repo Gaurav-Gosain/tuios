@@ -123,14 +123,11 @@ func TestMirrorStripToggleHugsThePaneFacingColumn(t *testing.T) {
 		if pos == "right" {
 			railX0 = m.GetRenderWidth() - w
 		}
-		// The edge rule owns the pane-facing band column, so the zone is the two
-		// content columns beside it.
-		wantX0 := railX0
-		if pos == "right" {
-			wantX0 = railX0 + 1
-		}
-		if toggle.X0 != wantX0 || toggle.X1 != wantX0+w-1 {
-			t.Errorf("%s: the strip toggle zone is %d..%d, want %d..%d", pos, toggle.X0, toggle.X1, wantX0, wantX0+w-1)
+		// The zone is the whole band, edge rule included: the glyph sits against
+		// the pane-facing edge, but a three-column rail cannot afford to spend a
+		// third of its width on a column that only resizes.
+		if toggle.X0 != railX0 || toggle.X1 != railX0+w {
+			t.Errorf("%s: the strip toggle zone is %d..%d, want %d..%d", pos, toggle.X0, toggle.X1, railX0, railX0+w)
 		}
 
 		// The glyph itself still sits against the pane-facing edge.

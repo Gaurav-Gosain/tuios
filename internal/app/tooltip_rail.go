@@ -19,7 +19,7 @@ import (
 // the motion handler, which is the only thing that knows the pointer moved.
 func (m *OS) sidebarTooltipTrack(y int) {
 	for _, r := range m.sidebarStripRows {
-		if r.Y == y {
+		if r.contains(y) {
 			m.tooltipTrack(tooltipRailStrip, y)
 			return
 		}
@@ -97,7 +97,7 @@ func (m *OS) renderRailTooltip() *lipgloss.Layer {
 
 	text := ""
 	for _, r := range m.sidebarStripRows {
-		if r.Y == m.Tooltip.Key {
+		if r.contains(m.Tooltip.Key) {
 			text = r.Label
 			break
 		}

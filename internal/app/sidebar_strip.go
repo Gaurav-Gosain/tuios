@@ -46,14 +46,16 @@ const (
 	sidebarStripToggle
 )
 
-// sidebarStripRow is one drawn line of the collapsed strip, recorded by the
-// renderer as it draws. Only the session rows and the toggle are clickable, so
-// they also carry hit rectangles; this list exists because the strip's hover
-// tooltip has to name what is under the pointer, including the badge, which is
-// a readout rather than a control.
+// sidebarStripRow is one drawn slot of the collapsed strip, recorded by the
+// renderer as it draws. Every slot is also a hit rectangle; this list exists
+// alongside them because the tooltip has to name what is under the pointer in
+// words, which a rectangle does not carry.
 type sidebarStripRow struct {
 	Kind sidebarStripRowKind
-	Y    int
+	// Y0 and Y1 are the absolute screen rows the slot owns, which is every row
+	// up to the next mark rather than the one the glyph sits on: the strip draws
+	// at a fixed interval, so the interval is what the eye reads as the row.
+	Y0, Y1 int
 	// SessionID is set on a session row, so a click can still address it.
 	SessionID string
 	// Label is what the hover tooltip says about this row, built here from the
@@ -63,16 +65,26 @@ type sidebarStripRow struct {
 	Label string
 }
 
+// contains reports whether absolute screen row y falls in this slot.
+func (r sidebarStripRow) contains(y int) bool { return y >= r.Y0 && y < r.Y1 }
+
 // sidebarStripBadgeInfo is the alarm block at the strip's top: how many panes
-// want a human anywhere, and the worst state among them.
+// want a human anywhere, the worst state among them, and which pane that is.
 type sidebarStripBadgeInfo struct {
 	Count int
 	State string
+	// SessionID and WindowID address the pane the badge is counting from, so a
+	// click on the alarm goes to what is alarming. The badge used to be a pure
+	// readout, which made the strip's largest, loudest object the one thing on it
+	// that did nothing.
+	SessionID string
+	WindowID  string
 }
 
 // sidebarStripBadgeFor counts the panes wanting a human across every session
 // and picks the loudest state among them. Zero count means no badge at all:
-// an alarm that is always on the screen is not an alarm.
+// an alarm that is always on the screen is not an alarm. Ties go to the first
+// in rail order, so the badge points where the spine below it does.
 func sidebarStripBadgeFor(sessions []sessiontree.Node) sidebarStripBadgeInfo {
 	var info sidebarStripBadgeInfo
 	best := 0
@@ -84,6 +96,7 @@ func sidebarStripBadgeFor(sessions []sessiontree.Node) sidebarStripBadgeInfo {
 			info.Count++
 			if r := sessiontree.AgentRank(win.AgentState, win.DoneSeen); r > best {
 				info.State, best = win.AgentState, r
+				info.SessionID, info.WindowID = s.ID, win.ID
 			}
 		}
 	}
@@ -110,7 +123,7 @@ func sidebarStripPlan(region, sessions int) (shown, interval int, more bool) {
 // sidebarStripLines draws the collapsed rail: a Panel band the full height of
 // the rail, carrying the attention badge under a pad, the session spine
 // top-pinned below it, and the expand toggle on the rail's last line but one.
-func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMargin, sidebarX, contentX0 int,
+func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMargin, sidebarX int,
 	pal overlay.Palette, edgeLeft bool,
 ) ([]string, int) {
 	m.sidebarStripRows = m.sidebarStripRows[:0]
@@ -142,60 +155,81 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 	}
 
 	stackTop := headH
-	shown, interval, more := sidebarStripPlan(height-headH-tailH, len(sessions))
+	region := max(height-headH-tailH, 0)
+	shown, interval, more := sidebarStripPlan(region, len(sessions))
+	// Each mark owns its interval, trailing blank included, because that is what
+	// the eye reads as its row. The span is clamped to the region so the last
+	// slot cannot claim a line the toggle or the slack below it is standing on.
+	spineEnd := stackTop + min(shown*interval, region)
 	badgeY, moreY, toggleY := 1, stackTop+shown*interval, height-tailH
 
-	hover := -1
+	// The pointer highlights the whole slot it is in, not the one line the mark
+	// sits on: the highlight is the target made visible, and a target you cannot
+	// see the edges of is a target you have to aim at.
+	hoverY0, hoverY1 := -1, -1
 	if !m.SidebarDrag.Dragging && m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
-		hover = m.SidebarHoverY - topMargin
+		hoverY0 = m.SidebarHoverY - topMargin
+		hoverY1 = hoverY0 + 1
+		if hoverY0 >= stackTop && hoverY0 < spineEnd {
+			hoverY0 = stackTop + (hoverY0-stackTop)/interval*interval
+			hoverY1 = min(hoverY0+interval, spineEnd)
+		}
+	}
+	hovered := func(i int) bool { return i >= hoverY0 && i < hoverY1 }
+
+	nav := make([]sidebarNavRow, 0, shown+3)
+	// record claims a slot for a target: the whole band width, including the edge
+	// rule (a third of this rail's columns), and every row of the slot. The
+	// mismatch this replaces was a one-cell-tall rectangle under a two-row mark,
+	// which asked the user to hit half the object they could see.
+	record := func(kind sidebarRowKind, sessionID, windowID string, y, rows int) {
+		m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
+			X0: sidebarX, X1: sidebarX + w,
+			Y0: y, Y1: y + rows,
+			Kind: kind, SessionID: sessionID, WindowID: windowID, WindowIndex: -1,
+		})
+		nav = append(nav, sidebarNavRow{Kind: kind, SessionID: sessionID, WindowID: windowID, WindowIndex: -1})
 	}
 
-	nav := make([]sidebarNavRow, 0, shown+1)
 	lines := make([]string, 0, height)
 	for i := range height {
 		y := topMargin + i
 		switch {
 		case badgeH > 0 && i == badgeY:
 			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
-				Kind: sidebarStripBadge, Y: y, Label: sidebarTooltipBadgeLabel(badge),
+				Kind: sidebarStripBadge, Y0: y, Y1: y + 1, Label: sidebarTooltipBadgeLabel(badge),
 			})
+			record(sidebarRowAgent, badge.SessionID, badge.WindowID, y, 1)
 			lines = append(lines, m.sidebarStripBand(sidebarStripBadgeCell(badge, cw, pal), cw, edgeLeft, pal))
-		case i >= stackTop && i < stackTop+shown*interval && (i-stackTop)%interval == 0:
+		case i >= stackTop && i < spineEnd && (i-stackTop)%interval == 0:
 			s := sessions[(i-stackTop)/interval]
+			rows := min(interval, spineEnd-i)
 			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
-				Kind: sidebarStripSession, Y: y, SessionID: s.ID, Label: sidebarTooltipSessionLabel(s),
+				Kind: sidebarStripSession, Y0: y, Y1: y + rows, SessionID: s.ID, Label: sidebarTooltipSessionLabel(s),
 			})
-			m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
-				X0: sidebarX, X1: sidebarX + w,
-				Y0: y, Y1: y + 1,
-				Kind: sidebarRowSession, SessionID: s.ID, WindowIndex: -1,
-			})
-			nav = append(nav, sidebarNavRow{Kind: sidebarRowSession, SessionID: s.ID, WindowIndex: -1})
+			record(sidebarRowSession, s.ID, "", y, rows)
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
-			lines = append(lines, m.sidebarStripBand(m.sidebarStripCell(s, cw, pal, i == hover, dragged), cw, edgeLeft, pal))
+			lines = append(lines, m.sidebarStripBand(m.sidebarStripCell(s, cw, pal, hovered(i), dragged), cw, edgeLeft, pal))
 		case more && i == moreY:
+			// The tail names what it cut, and expanding is the only way to see it,
+			// so that is what a click on it does.
 			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
-				Kind: sidebarStripMore, Y: y,
+				Kind: sidebarStripMore, Y0: y, Y1: y + 1,
 				Label: strconv.Itoa(len(sessions)-shown) + " more " + plural("session", len(sessions)-shown),
 			})
+			record(sidebarRowCollapse, "", "", y, 1)
 			lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal), cw, edgeLeft, pal))
 		case toggleH > 0 && i == toggleY:
 			// The glyph hugs the pane-facing column, the edge the pointer arrives
-			// from, but the zone is both content cells: a one-cell target on a
-			// three-cell rail is the only control the user has and it has to be
-			// hittable without aiming.
+			// from, but the zone is the whole band: the only control the user has
+			// has to be hittable without aiming.
 			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
-				Kind: sidebarStripToggle, Y: y, Label: "expand",
+				Kind: sidebarStripToggle, Y0: y, Y1: y + 1, Label: "expand",
 			})
-			m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
-				X0: contentX0, X1: contentX0 + cw,
-				Y0: y, Y1: y + 1,
-				Kind: sidebarRowCollapse, WindowIndex: -1,
-			})
-			nav = append(nav, sidebarNavRow{Kind: sidebarRowCollapse, WindowIndex: -1})
-			lines = append(lines, m.sidebarStripBand(sidebarStripToggleCell(toggleGlyph, cw, edgeLeft, i == hover, pal), cw, edgeLeft, pal))
+			record(sidebarRowCollapse, "", "", y, 1)
+			lines = append(lines, m.sidebarStripBand(sidebarStripToggleCell(toggleGlyph, cw, edgeLeft, hovered(i), pal), cw, edgeLeft, pal))
 		default:
-			lines = append(lines, m.sidebarStripBand("", cw, edgeLeft, pal))
+			lines = append(lines, m.sidebarStripBlank(cw, edgeLeft, hovered(i), pal))
 		}
 	}
 
@@ -227,6 +261,17 @@ func (m *OS) sidebarStripBand(content string, cw int, edgeLeft bool, pal overlay
 		return body + edge
 	}
 	return edge + body
+}
+
+// sidebarStripBlank is a band line with no mark on it: a pad, the spacer inside
+// a slot, or the slack. It takes the hover fill with the rest of its slot, which
+// is what draws the target's real edges.
+func (m *OS) sidebarStripBlank(cw int, edgeLeft, hovered bool, pal overlay.Palette) string {
+	bg := color.Color(pal.Panel)
+	if hovered {
+		bg = pal.Surface
+	}
+	return m.sidebarStripBand(sidebarFit("", cw, bg), cw, edgeLeft, pal)
 }
 
 // sidebarStripBadgeCell is the alarm: how many panes want a human anywhere and
