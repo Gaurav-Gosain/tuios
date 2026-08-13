@@ -128,6 +128,13 @@ func (m *OS) toggleZoom() {
 		return
 	}
 
+	// Zoom sets the pane's rectangle directly, and a snap still in flight owns
+	// that rectangle: zooming while the scrolling strip was mid-slide put the
+	// pane back in its column one tick later, with the emulator still at the
+	// zoomed size. Retiring it also keeps the pre-zoom rectangle honest, since it
+	// is read off the window a line below.
+	m.CancelSnapAnimation(fw)
+
 	if fw.Zoomed {
 		// Restore from zoom
 		fw.Zoomed = false

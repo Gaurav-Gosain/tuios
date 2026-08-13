@@ -1,0 +1,9 @@
+# pane-size: zooming while the scrolling strip was mid-slide left the pane's
+# snap running, and one tick later it stamped the column's rectangle back over
+# the zoomed one with the emulator still at the zoomed size.
+layout 2
+tiling
+resize 60 20
+tiling
+zoom
+tick
