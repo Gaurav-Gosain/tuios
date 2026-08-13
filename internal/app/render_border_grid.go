@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -34,21 +35,44 @@ func (m *OS) separatorSplits() []layout.SplitLine {
 	return tree.CollectSplits(m.GetBSPBounds(), m.separatorGap())
 }
 
-// tiledPaneRects returns the rectangles of the panes currently tiled on screen,
-// ordered bottom to top the way the compositor stacks them.
-func (m *OS) tiledPaneRects() []layout.Rect {
-	idx := make([]int, 0, len(m.Windows))
-	for i, w := range m.Windows {
+// paneLayer is a tiled pane as the divider grid sees it: the rectangle it holds
+// on this frame, and whether it is in flight toward another one.
+type paneLayer struct {
+	layout.Rect
+	moving bool
+}
+
+// tiledPaneLayers returns the panes currently tiled on screen, ordered bottom to
+// top the way the compositor stacks them.
+func (m *OS) tiledPaneLayers() []paneLayer {
+	inFlight := make(map[*terminal.Window]struct{}, len(m.Animations))
+	for _, a := range m.Animations {
+		if !a.Complete && a.Window != nil {
+			inFlight[a.Window] = struct{}{}
+		}
+	}
+	wins := make([]*terminal.Window, 0, len(m.Windows))
+	for _, w := range m.Windows {
 		if w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating || !w.Tiled {
 			continue
 		}
-		idx = append(idx, i)
+		wins = append(wins, w)
 	}
-	sort.SliceStable(idx, func(a, b int) bool { return m.Windows[idx[a]].Z < m.Windows[idx[b]].Z })
-	rects := make([]layout.Rect, len(idx))
-	for i, wi := range idx {
-		w := m.Windows[wi]
-		rects[i] = layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}
+	sort.SliceStable(wins, func(a, b int) bool { return wins[a].Z < wins[b].Z })
+	layers := make([]paneLayer, len(wins))
+	for i, w := range wins {
+		_, moving := inFlight[w]
+		layers[i] = paneLayer{Rect: layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}, moving: moving}
+	}
+	return layers
+}
+
+// tiledPaneRects returns the rectangles of the panes currently tiled on screen.
+func (m *OS) tiledPaneRects() []layout.Rect {
+	layers := m.tiledPaneLayers()
+	rects := make([]layout.Rect, len(layers))
+	for i, l := range layers {
+		rects[i] = l.Rect
 	}
 	return rects
 }
@@ -100,8 +124,11 @@ func (m *OS) transitioning() bool {
 // not moved contributes the same edges the settled grid would have drawn there,
 // and a pane in flight carries its edges with it, so the layout moves as one
 // object and the moving pane reads as a pane rather than as a bare rectangle.
-func (m *OS) dividerLines(bounds layout.Rect) ([]dividerLine, []layout.Rect) {
-	if !m.transitioning() {
+func (m *OS) dividerLines(bounds layout.Rect) ([]dividerLine, []paneLayer) {
+	// The BSP tree answers for a settled layout of its own because a stacked node
+	// divides by raising a title bar rather than by a divider, which is a division
+	// the panes' edges cannot tell apart from any other.
+	if m.UseBSPLayout && !m.transitioning() {
 		splits := m.separatorSplits()
 		lines := make([]dividerLine, len(splits))
 		for i, s := range splits {
@@ -109,15 +136,15 @@ func (m *OS) dividerLines(bounds layout.Rect) ([]dividerLine, []layout.Rect) {
 		}
 		return lines, nil
 	}
-	stack := m.tiledPaneRects()
+	stack := m.tiledPaneLayers()
 	lines := make([]dividerLine, 0, 8*len(stack))
 	for depth, r := range stack {
-		for _, s := range paneEdges(r) {
+		for _, s := range paneEdges(r.Rect) {
 			if clipped, ok := clipSplit(s, bounds); ok {
 				lines = append(lines, dividerLine{SplitLine: clipped, depth: depth})
 			}
 		}
-		for _, c := range paneCorners(r) {
+		for _, c := range paneCorners(r.Rect) {
 			if _, ok := clipSplit(c, bounds); ok {
 				lines = append(lines, dividerLine{SplitLine: c, depth: depth, corner: true})
 			}
@@ -245,16 +272,21 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		return nil
 	}
 
-	// Two panes crossing mid-transition leave one of them covering the other's
-	// edge. Nothing may be painted into a cell a pane's guest owns, so the edge
-	// underneath stands down; the pane on top is drawing its own there anyway.
-	// A settled layout reserves every divider cell, so this never fires.
+	// Nothing may be painted into a cell a pane's guest owns, and two panes
+	// crossing mid-transition put one of them over the other's edge. So an edge
+	// gives way to any pane in front of it, and a pane that is standing still
+	// gives way to every pane it overlaps: only a pane travelling draws its own
+	// box over a neighbour, which is what its border does when it has one. A
+	// settled layout reserves every divider cell, so this never fires there.
 	occluded := func(x, y, depth int) bool {
 		if depth == settledDepth {
 			return false
 		}
-		for d := depth + 1; d < len(stack); d++ {
-			if r := stack[d]; x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+		for d, r := range stack {
+			if d == depth || (d < depth && stack[depth].moving) {
+				continue
+			}
+			if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
 				return true
 			}
 		}
