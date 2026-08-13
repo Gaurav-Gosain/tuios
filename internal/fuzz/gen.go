@@ -67,6 +67,18 @@ type Generator struct {
 	w, h       int // the host size it last chose, so clicks land somewhere plausible
 	weights    []int
 	weightsSum int
+	// minW and minH floor the host sizes this generator picks. With no floor a
+	// run spends nearly its whole budget inside the one bug class that lives
+	// below the layout's own minimum pane size and never reaches anything else,
+	// so a campaign above the floor is how the rest of the space gets explored.
+	minW, minH int
+}
+
+// Floor restricts the host sizes the generator produces. Zero means no floor,
+// which is the campaign that hunts degenerate viewports.
+func (g *Generator) Floor(w, h int) *Generator {
+	g.minW, g.minH = w, h
+	return g
 }
 
 // NewGenerator seeds a generator for the local loop. The same seed always
@@ -133,8 +145,11 @@ func (g *Generator) Next() Action {
 }
 
 // Generate produces a whole run up front, which is what the shrinker replays.
-func Generate(seed uint64, n int) []Action {
-	g := NewGenerator(seed)
+func Generate(seed uint64, n int) []Action { return GenerateFloor(seed, n, 0, 0) }
+
+// GenerateFloor is Generate with a lower bound on the host sizes it picks.
+func GenerateFloor(seed uint64, n, minW, minH int) []Action {
+	g := NewGenerator(seed).Floor(minW, minH)
 	out := make([]Action, 0, n)
 	for range n {
 		out = append(out, g.Next())
@@ -143,8 +158,11 @@ func Generate(seed uint64, n int) []Action {
 }
 
 // GenerateBytes is Generate for a coverage-guided input.
-func GenerateBytes(b []byte, n int) []Action {
-	g := NewByteGenerator(b)
+func GenerateBytes(b []byte, n int) []Action { return GenerateBytesFloor(b, n, 0, 0) }
+
+// GenerateBytesFloor is GenerateBytes with a host-size floor.
+func GenerateBytesFloor(b []byte, n, minW, minH int) []Action {
+	g := NewByteGenerator(b).Floor(minW, minH)
 	out := make([]Action, 0, n)
 	for range n {
 		out = append(out, g.Next())
@@ -241,10 +259,11 @@ func (g *Generator) cell() (int, int) {
 // zero width, one column, and a viewport too short for the dock are the sizes
 // that have divided by zero or produced a negative slice bound.
 func (g *Generator) size() (int, int) {
+	w, h := 20+g.u(200), 6+g.u(60)
 	if g.u(3) == 0 {
-		return degenerateW[g.u(len(degenerateW))], degenerateH[g.u(len(degenerateH))]
+		w, h = degenerateW[g.u(len(degenerateW))], degenerateH[g.u(len(degenerateH))]
 	}
-	return 20 + g.u(200), 6 + g.u(60)
+	return max(w, g.minW), max(h, g.minH)
 }
 
 var (
@@ -316,7 +335,7 @@ func (g *Generator) pattern() []Action {
 	case 7: // Shrink to a degenerate viewport and back with panes present.
 		return []Action{
 			{Kind: NewPane},
-			{Kind: Resize, A: degenerateW[g.u(len(degenerateW))], B: degenerateH[g.u(len(degenerateH))]},
+			{Kind: Resize, A: max(degenerateW[g.u(len(degenerateW))], g.minW), B: max(degenerateH[g.u(len(degenerateH))], g.minH)},
 			{Kind: Tick},
 			{Kind: Resize, A: 120, B: 40},
 		}

@@ -30,15 +30,31 @@ type Target interface {
 	Close()
 }
 
-// Observer watches a run. It exists so a display can attach without the driver
-// knowing anything about presentation; every method may be called from the
-// driver's goroutine and must not block for long.
+// Observer watches a run. It is the only seam a display attaches to, and it is
+// deliberately narrow and read only: the driver hands out what happened and
+// takes nothing back, so no display can change what the fuzzer does. Every
+// method is called from the driver's goroutine and must not block.
+//
+// The four calls are the whole vocabulary:
+//
+//	Start  once, before the first action
+//	Step   one action executed, with whatever it broke
+//	Rule   one invariant checked and its result, for every rule, every step
+//	Shrink one minimisation candidate and whether it was kept
+//	Done   once, with the final result and the minimal repro
 type Observer interface {
 	Start(seed uint64, steps int)
 	Step(i int, a Action, vs []Violation)
+	Rule(step int, rule string, ok bool)
 	Shrink(pass string, size int, accepted bool)
 	Done(r Result)
 }
+
+// RuleLister is an optional Target capability. A target that can name its rules
+// gets per-rule results reported to the Observer; one that cannot still gets
+// Step, carrying whichever rules actually broke. It is optional so the oracle
+// never has to know an observer exists.
+type RuleLister interface{ Rules() []string }
 
 // NopObserver is the default. Embed it to implement only the methods a display
 // cares about.
@@ -46,6 +62,7 @@ type NopObserver struct{}
 
 func (NopObserver) Start(uint64, int)             {}
 func (NopObserver) Step(int, Action, []Violation) {}
+func (NopObserver) Rule(int, string, bool)        {}
 func (NopObserver) Shrink(string, int, bool)      {}
 func (NopObserver) Done(Result)                   {}
 
@@ -56,6 +73,10 @@ type Config struct {
 	Seed uint64
 	// Steps is how many actions to generate when Actions is empty.
 	Steps int
+	// MinWidth and MinHeight floor the host sizes the generator picks, which is
+	// how a campaign steps over a bug class it has already reported in order to
+	// reach the rest of the space.
+	MinWidth, MinHeight int
 	// Actions overrides generation, which is how the coverage-guided entry
 	// point and a saved repro both drive the same loop.
 	Actions []Action
@@ -110,7 +131,7 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 	}
 	actions := cfg.Actions
 	if len(actions) == 0 {
-		actions = Generate(cfg.Seed, cfg.Steps)
+		actions = GenerateFloor(cfg.Seed, cfg.Steps, cfg.MinWidth, cfg.MinHeight)
 	}
 	res := Result{Seed: cfg.Seed, Actions: actions}
 	obs.Start(cfg.Seed, len(actions))
@@ -133,6 +154,22 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 			vs := t.Check()
 			if watch {
 				obs.Step(i, a, vs)
+				// Per-rule results, so a display can show the whole oracle
+				// rather than only the rule that broke. Check stops at the
+				// first failure, so every rule after it is reported as unrun by
+				// omission rather than as passing.
+				if lister, ok := t.(RuleLister); ok {
+					broke := ""
+					if len(vs) > 0 {
+						broke = vs[0].Rule
+					}
+					for _, name := range lister.Rules() {
+						obs.Rule(i, name, name != broke)
+						if name == broke {
+							break
+						}
+					}
+				}
 			}
 			if len(vs) > 0 {
 				return i, vs, nil
