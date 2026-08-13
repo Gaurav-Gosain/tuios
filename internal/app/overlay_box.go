@@ -35,16 +35,6 @@ func (m *OS) dialogRows(preferred, chrome int) int {
 	return max(min(preferred, rh-chrome), minPanelRows)
 }
 
-// dialogTextWidth is the widest a line of a content-sized dialog may be before
-// the box around it would reach past the edge of the screen.
-func (m *OS) dialogTextWidth() int {
-	rw := m.GetRenderWidth()
-	if rw <= 0 {
-		return 1 << 20 // size not known yet; do not clip anything
-	}
-	return max(rw-dialogChrome, 8)
-}
-
 // dialogContentRows is the tallest a content-sized dialog's body may be before
 // the box around it would reach past the top or bottom of the screen.
 func (m *OS) dialogContentRows() int {

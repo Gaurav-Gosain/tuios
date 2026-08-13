@@ -113,6 +113,14 @@ func hintStrip(hints []Hint, bg color.Color, pal Palette) (string, int) {
 	return strings.Join(parts, labelStyle.Render("  ")), w
 }
 
+// HintStrip renders key hints as one line on the given background, in the shape
+// every footer uses. It is for the surfaces that carry hints outside a panel of
+// their own, so they say what a key does the same way the panels do.
+func HintStrip(hints []Hint, bg color.Color, pal Palette) string {
+	s, _ := hintStrip(hints, bg, pal)
+	return s
+}
+
 // Render assembles the dialog and returns the rendered string plus the geometry
 // of its interactive regions in dialog-relative coordinates.
 func (d Dialog) Render(pal Palette) (string, Geometry) {

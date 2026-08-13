@@ -295,17 +295,12 @@ func (m *OS) renderDockString() (string, int) {
 		notifRule = notif.Rule
 		rightWidth = notif.Width
 	case inCopyMode:
-		helpTexts := copyModeHelpTexts(focusedWindow.CopyMode.State)
-
-		helpStyle := lipgloss.NewStyle().
-			Foreground(pal.FgDim).
-			Background(pal.Panel).
-			Padding(0, 1)
-		// Take the longest help line that fits; the copy-mode keys are worth a
+		// Take the longest help tier that fits; the copy-mode keys are worth a
 		// dock's width but not worth spilling off the end of it.
-		for i, text := range helpTexts {
-			rightInfo = helpStyle.Render(text)
-			if lipgloss.Width(rightInfo) <= rightWidth || i == len(helpTexts)-1 {
+		tiers := copyModeHelpTiers(focusedWindow.CopyMode.State)
+		for i, tier := range tiers {
+			rightInfo = renderCopyModeHelp(tier, pal)
+			if lipgloss.Width(rightInfo) <= rightWidth || i == len(tiers)-1 {
 				break
 			}
 		}

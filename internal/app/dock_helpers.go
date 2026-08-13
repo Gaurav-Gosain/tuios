@@ -565,34 +565,66 @@ func (m *OS) buildDockLeftText() (modeLabel, trail string, width int, modeInfo M
 	return modeLabel, trail, width, modeInfo
 }
 
-// copyModeHelpTexts returns the dock's copy-mode help line for a sub-state,
-// longest first. The renderer takes the longest one that fits the room the dock
-// has; on a narrow screen that is the shortest of them, which still names the
-// keys that matter. Shared with the width calculation so the space reserved
-// matches the line actually drawn.
-func copyModeHelpTexts(state terminal.CopyModeState) []string {
+// copyModeHelpTiers returns the dock's copy-mode help for a sub-state, longest
+// first. The renderer takes the longest tier that fits the room the dock has;
+// on a narrow screen that is the shortest of them, which still names the keys
+// that matter. Shared with the width calculation so the space reserved matches
+// the line actually drawn.
+//
+// They are key/label pairs rather than a "hjkl:move" string because the dock is
+// the one place left saying what a key does in its own format. Rendered through
+// the same strip a panel footer uses, copy mode reads like the rest of the app.
+func copyModeHelpTiers(state terminal.CopyModeState) [][]overlay.Hint {
 	switch state {
 	case terminal.CopyModeNormal:
-		return []string{
-			"hjkl:move w/b/e:word f/F/t/T:char /:search n/N:next/prev C-l:clear ;,:repeat v:visual y:yank i:term q:quit",
-			"hjkl:move w/b/e:word /:search v:visual y:yank q:quit",
-			"hjkl /:search v y q",
+		return [][]overlay.Hint{
+			{
+				{Key: "hjkl", Label: "move"}, {Key: "w/b/e", Label: "word"},
+				{Key: "f/t", Label: "char"}, {Key: "/", Label: "search"},
+				{Key: "n/N", Label: "next"}, {Key: "v", Label: "visual"},
+				{Key: "y", Label: "yank"}, {Key: "q", Label: "quit"},
+			},
+			{
+				{Key: "hjkl", Label: "move"}, {Key: "/", Label: "search"},
+				{Key: "v", Label: "visual"}, {Key: "y", Label: "yank"},
+				{Key: "q", Label: "quit"},
+			},
+			{{Key: "hjkl", Label: "move"}, {Key: "y", Label: "yank"}, {Key: "q", Label: "quit"}},
 		}
 	case terminal.CopyModeSearch:
-		return []string{
-			"Type to search  n/N:next/prev  Enter:done  Esc:cancel",
-			"n/N:next  Enter:done  Esc:cancel",
+		return [][]overlay.Hint{
+			{
+				{Key: "type", Label: "search"}, {Key: "n/N", Label: "next"},
+				{Key: overlay.EnterKey(), Label: "done"}, {Key: "esc", Label: "cancel"},
+			},
+			{{Key: "n/N", Label: "next"}, {Key: overlay.EnterKey(), Label: "done"}, {Key: "esc", Label: "cancel"}},
 		}
 	case terminal.CopyModeVisualChar:
-		return []string{
-			"hjkl:extend w/b/e:word f/F/t/T:char ;,:repeat {/}:para %:bracket y:yank Esc:cancel",
-			"hjkl:extend w/b/e:word y:yank Esc:cancel",
-			"hjkl y:yank Esc",
+		return [][]overlay.Hint{
+			{
+				{Key: "hjkl", Label: "extend"}, {Key: "w/b/e", Label: "word"},
+				{Key: "%", Label: "bracket"}, {Key: "y", Label: "yank"},
+				{Key: "esc", Label: "cancel"},
+			},
+			{{Key: "hjkl", Label: "extend"}, {Key: "y", Label: "yank"}, {Key: "esc", Label: "cancel"}},
 		}
 	case terminal.CopyModeVisualLine:
-		return []string{"jk:extend  y:yank  Esc:cancel", "jk y Esc"}
+		return [][]overlay.Hint{
+			{{Key: "jk", Label: "extend"}, {Key: "y", Label: "yank"}, {Key: "esc", Label: "cancel"}},
+			{{Key: "jk", Label: "extend"}, {Key: "y", Label: "yank"}},
+		}
 	}
 	return nil
+}
+
+// renderCopyModeHelp draws one tier as the dock's help block: the footer's own
+// strip, on the Panel step the block rests on, with a column either side.
+func renderCopyModeHelp(hints []overlay.Hint, pal overlay.Palette) string {
+	if len(hints) == 0 {
+		return ""
+	}
+	pad := overlay.Style(pal.Panel).Render(" ")
+	return pad + overlay.HintStrip(hints, pal.Panel, pal) + pad
 }
 
 // dockItemsWidth is the room every minimized entry needs laid out at once,
@@ -642,11 +674,11 @@ func (m *OS) calculateDockRightWidth() int {
 		// longest variant rather than guessing at it, so a terminal with room
 		// for it reserves exactly enough and one without falls to a shorter
 		// line instead of being one cell short of the full one.
-		texts := copyModeHelpTexts(focusedWindow.CopyMode.State)
-		if len(texts) == 0 {
-			return 32
+		tiers := copyModeHelpTiers(focusedWindow.CopyMode.State)
+		if len(tiers) == 0 {
+			return 0
 		}
-		return lipgloss.Width(texts[0]) + 2 // the help style's own padding
+		return lipgloss.Width(renderCopyModeHelp(tiers[0], theme.UI()))
 	}
 
 	// The meters reserve the room they will draw in, and nothing when they are
