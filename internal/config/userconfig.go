@@ -45,6 +45,10 @@ type NotificationsConfig struct {
 
 	// ErrorSticky makes errors wait for esc instead of expiring (default true).
 	ErrorSticky *bool `toml:"error_sticky"`
+
+	// Agent is the [notifications.agent] table: what happens when a pane's
+	// agent state changes. See agent_alerts.go.
+	Agent AgentAlertsConfig `toml:"agent"`
 }
 
 // DebugConfig holds diagnostic settings. These are off by default so a normal
