@@ -86,9 +86,22 @@ func (c *VerbClient) Close() error {
 	return c.conn.Close()
 }
 
+// defaultCallTimeout bounds how long a verb call waits for its response. It is
+// generous for verbs that answer immediately and is the wrong bound for the ones
+// that block by design, which is what CallWithTimeout exists for.
+const defaultCallTimeout = 30 * time.Second
+
 // Call sends a verb request with the given params (may be nil) and returns the
 // raw result object. A daemon error envelope is returned as a *VerbCallError.
 func (c *VerbClient) Call(verb string, params any) (json.RawMessage, error) {
+	return c.CallWithTimeout(verb, params, defaultCallTimeout)
+}
+
+// CallWithTimeout is Call with an explicit read deadline. wait-for blocks for as
+// long as its own timeout, so a caller that passes one larger than the default
+// must widen this deadline too or the connection gives up before the daemon
+// answers, turning a satisfied wait into a read failure.
+func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error) {
 	c.callMu.Lock()
 	defer c.callMu.Unlock()
 
@@ -120,7 +133,7 @@ func (c *VerbClient) Call(verb string, params any) (json.RawMessage, error) {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
-	_ = c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = c.conn.SetReadDeadline(time.Now().Add(timeout))
 	respLine, err := c.r.ReadBytes('\n')
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
