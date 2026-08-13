@@ -916,12 +916,17 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			lines = append(lines, compose(m.sidebarAgentsEmptyRow(agentsTotal, cw, pal,
 				hoverRow[sidebarSectionAgents] == 0 || isCursor(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), ""))))
 		default:
+			// Identity marks are drawn only when the section actually holds more
+			// than one session's panes, which is the only time they say anything.
+			// A rail listing one session's agents in one colour is a column of
+			// decoration, and the rail spends emphasis on nothing decorative.
+			mixed := agentsSpanSessions(agents)
 			for i := range count[sidebarSectionAgents] {
 				idx := start[sidebarSectionAgents] + i
 				e := agents[idx]
 				hovered := idx == hoverRow[sidebarSectionAgents] || isCursor(sidebarRowAgent, e.SessionID, e.WindowID)
 				recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex)
-				lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, hovered)))
+				lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, hovered, mixed)))
 			}
 			if h := hidden[sidebarSectionAgents]; h > 0 {
 				lines = append(lines, overflowRow(h))
@@ -1253,7 +1258,7 @@ func (m *OS) windowIndexByID(id string) int {
 //	^ ^ ^                ^ window count, right-aligned, muted, inset one cell
 //	| | name: full strength on the attached session, dim on the rest
 //	| rolled-up agent glyph, state-colored, a quiet dot when there is none
-//	gutter: accent when attached, severity when a pane wants a human
+//	gutter: the session's own colour, severity when a pane wants a human
 //
 // Emphasis ladder, quietest to loudest: other rows dim; attached session an
 // accent gutter mark and a full-strength name; pointer or keyboard cursor a
@@ -1301,8 +1306,21 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	}
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
 		Render(m.sidebarMarquee("s:"+node.ID, printableTitle(node.Title), sidebarNameAvail(cw, rightW), hovered))
-	return sidebarComposeRow(sidebarGutter(node.IsCurrent, node.AgentState, rowBg, pal),
-		glyph, name, right, cw, rowBg)
+
+	// The session's colour rides the rail's one identity column, exactly as a
+	// pane's accent does two sections down, so the two read as one spine rather
+	// than as two schemes. Severity keeps the cell outright where it claims it:
+	// an alarm outranks an identity.
+	gutter := sidebarGutter(node.IsCurrent, node.AgentState, rowBg, pal)
+	if tint := m.sessionTint(node.ID, railGround(rowBg)); tint != nil {
+		switch {
+		case node.IsCurrent:
+			gutter = sidebarGutterTinted(true, node.AgentState, tint, rowBg, pal)
+		case !sidebarAttention(node.AgentState):
+			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
+		}
+	}
+	return sidebarComposeRow(gutter, glyph, name, right, cw, rowBg)
 }
 
 // sidebarTerminalRow renders one pane of the session the terminals section is
@@ -1409,10 +1427,25 @@ func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, hovered b
 		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, sidebarNameAvail(cw, 0))), cw, rowBg)
 }
 
+// agentsSpanSessions reports whether the agents section is showing panes from
+// more than one session, which is the condition for a session colour to carry
+// information there.
+func agentsSpanSessions(agents []sidebarAgentEntry) bool {
+	for i := range agents {
+		if agents[i].SessionID != agents[0].SessionID {
+			return true
+		}
+	}
+	return false
+}
+
 // sidebarAgentRow renders one row of the agents section: state glyph, pane name
 // (session-qualified when the pane lives in another session), and, in the full
 // variant, how long it has been in its state, right-aligned.
-func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, hovered bool) string {
+//
+// mixed says the section spans several sessions, which is when the gutter is
+// allowed to carry the row's identity colour.
+func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, hovered, mixed bool) string {
 	var rowBg color.Color
 	fg := pal.FgDim
 	if e.State == "done" && !e.DoneSeen {
@@ -1467,10 +1500,19 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		right = sidebarStyle(rowBg, timeFg).Render(label)
 	}
 	// An agent row is only ever "current" through the pane it points at, which
-	// the terminals section already marks, so its gutter carries severity only.
+	// the terminals section already marks, so its gutter carries severity, and
+	// below that the identity of the session the pane lives in. That is the
+	// answer the prefix gives in words and gives up first when the row is tight,
+	// in the column that is already the rail's place for identity.
+	gutter := sidebarGutter(false, e.State, rowBg, pal)
+	if mixed && !sidebarAttention(e.State) {
+		if tint := m.agentIdentityTint(e, railGround(rowBg)); tint != nil {
+			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
+		}
+	}
 	body := sidebarStyle(rowBg, pal.FgMute).Render(shown) +
 		nameStyle.Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name,
 			max(avail-lipgloss.Width(shown), 1), hovered))
-	return sidebarComposeRow(sidebarGutter(false, e.State, rowBg, pal),
+	return sidebarComposeRow(gutter,
 		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal), body, right, cw, rowBg)
 }

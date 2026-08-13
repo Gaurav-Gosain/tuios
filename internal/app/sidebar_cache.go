@@ -172,6 +172,16 @@ func (m *OS) sidebarSignature() uint64 {
 		}
 	}
 
+	// Session colours mark the sessions and agents sections. They are derived
+	// from the session names, which are folded above and, for foreign sessions,
+	// covered by the cache generation; the attached session's explicit accent is
+	// the one input nothing else carries, and it is folded only while the
+	// colours are actually drawn.
+	mixB(config.SessionColors)
+	if config.SessionColors {
+		mixS(m.SessionAccent)
+	}
+
 	// Live windows in row order: id, label, agent state, workspace, accent.
 	for _, w := range m.Windows {
 		if w == nil {

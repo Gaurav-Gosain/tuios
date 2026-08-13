@@ -88,12 +88,22 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 		identity = " (" + printableTitle(item.ID) + ")"
 	}
 
-	avail := max(width-lipgloss.Width(right)-len(identity)-4, 1)
+	// The switcher wears the rail's identity mark in the rail's colour, so the
+	// row picked here is recognisably the row that was being looked at there.
+	// It leads the label rather than riding the marker column, which the
+	// selection cursor owns.
+	mark, markW := "", 0
+	if tint := m.sessionTint(item.ID, rowBg); tint != nil {
+		mark = overlay.Style(rowBg).Foreground(tint).Render(accentMark() + " ")
+		markW = 2
+	}
+
+	avail := max(width-lipgloss.Width(right)-len(identity)-markW-4, 1)
 	labelColor := pal.FgDim
 	if selected {
 		labelColor = pal.Fg
 	}
-	left := overlay.Style(rowBg).Foreground(labelColor).Bold(selected).
+	left := mark + overlay.Style(rowBg).Foreground(labelColor).Bold(selected).
 		Render(overlay.Truncate(printableTitle(item.Title), avail))
 	if identity != "" {
 		left += overlay.Style(rowBg).Foreground(pal.FgMute).Render(identity)

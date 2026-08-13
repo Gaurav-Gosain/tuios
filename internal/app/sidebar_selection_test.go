@@ -89,8 +89,8 @@ func TestRailMarksCurrentWithAGutterMark(t *testing.T) {
 
 // The current session rolls up a pane that wants a human. Identity and
 // attention no longer fight for the row background: the gutter says which
-// session you are attached to, while the state keeps the coloured glyph and the
-// rail's one bold.
+// session you are attached to, in that session's own colour, while the state
+// keeps the coloured glyph and the rail's one bold.
 func TestRailCurrentSessionKeepsIdentityUnderAttention(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	pal := theme.UI()
@@ -99,8 +99,8 @@ func TestRailCurrentSessionKeepsIdentityUnderAttention(t *testing.T) {
 	if got := gutterCell(session); got != "▎" {
 		t.Errorf("the attached session row has no gutter mark, column 0 is %q: %q", got, session)
 	}
-	if !strings.Contains(session, fgParams(pal.Accent)) {
-		t.Errorf("the attached session's gutter mark is not accent: %q", session)
+	if !strings.Contains(session, fgParams(m.sessionTint("local", theme.TerminalBg()))) {
+		t.Errorf("the attached session's gutter mark is not its session colour: %q", session)
 	}
 	if !strings.Contains(session, fgParams(agentGlyphColor("needs_input", pal))) {
 		t.Errorf("the rolled-up attention glyph lost its severity colour: %q", session)

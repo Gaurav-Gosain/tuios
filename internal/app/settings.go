@@ -490,6 +490,13 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Tooltips = boolPtr(v) })
 					m.applyAppearanceLive(false)
 				}),
+			boolItem("Session colors", "Give each session its own colour on the rail and the switcher",
+				func() bool { return config.SessionColors },
+				func(m *OS, v bool) {
+					config.SessionColors = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.SessionColors = boolPtr(v) })
+					m.applyAppearanceLive(false)
+				}),
 		},
 	}
 
