@@ -43,6 +43,11 @@ type DaemonDiagnosis struct {
 	SocketPath string
 	// PID is the daemon's process id when it is running and left a pid file.
 	PID int
+	// Restorable counts the sessions saved on disk, filled in only when no
+	// daemon is running. It is what stops the message claiming the user has
+	// nothing when their sessions are sitting there waiting for a daemon to
+	// come back and restore them.
+	Restorable int
 	// Err is the underlying failure, when there was one.
 	Err error
 }
@@ -57,6 +62,20 @@ func (d DaemonDiagnosis) Running() bool { return d.State == DaemonRunning }
 // running" there, yet one is fixed by starting a session and the other is not
 // fixed by anything the user would think to try.
 func DiagnoseDaemon() DaemonDiagnosis {
+	d := probeDaemonSocket()
+	if !d.Running() {
+		// Only when there is no daemon, since that is the only case where the
+		// answer changes what the user should be told to run.
+		names, err := ListResurrectableSessions()
+		if err == nil {
+			d.Restorable = len(names)
+		}
+	}
+	return d
+}
+
+// probeDaemonSocket classifies the socket alone, without consulting saved state.
+func probeDaemonSocket() DaemonDiagnosis {
 	socketPath, err := GetSocketPath()
 	if err != nil {
 		return DaemonDiagnosis{State: DaemonUnreachable, Err: err}
@@ -135,6 +154,15 @@ func WaitForDaemonShutdown(timeout time.Duration) error {
 	}
 }
 
+// savedSessionsPhrase names how many sessions are waiting on disk, so every
+// message that mentions them agrees with itself on the plural.
+func (d DaemonDiagnosis) savedSessionsPhrase() string {
+	if d.Restorable == 1 {
+		return "1 saved session"
+	}
+	return fmt.Sprintf("%d saved sessions", d.Restorable)
+}
+
 // Explain renders the diagnosis as a message that states what failed, the most
 // likely cause, and the exact command that resolves it. It returns an empty
 // string when the daemon is running, so a caller can use it as a guard.
@@ -144,14 +172,27 @@ func (d DaemonDiagnosis) Explain() string {
 		return ""
 
 	case DaemonAbsent:
-		return "The TUIOS daemon is not running.\n" +
-			"Most likely cause: no session has been started yet, or the daemon was shut down.\n" +
+		if d.Restorable > 0 {
+			return "The TUIOS daemon is not running.\n" +
+				"Most likely cause: the daemon was shut down or the machine restarted. TUIOS has " +
+				d.savedSessionsPhrase() + " on disk, restored automatically when a daemon starts.\n" +
+				// Both routes, because this message is also what a scripted
+				// caller sees, and 'tuios attach' takes over its terminal.
+				"Fix: run 'tuios attach' to start the daemon and reopen them, or 'tuios start-server' to bring them back without attaching."
+		}
+		return "The TUIOS daemon is not running, and no sessions are saved on disk.\n" +
+			"Most likely cause: no session has been started yet.\n" +
 			"Fix: run 'tuios new' to start a session, or 'tuios start-server' for a daemon with no session."
 
 	case DaemonStaleSocket:
+		fix := "Fix: run 'tuios kill-server' to clear it, then 'tuios new' to start a session."
+		if d.Restorable > 0 {
+			fix = "Fix: run 'tuios kill-server' to clear it, then 'tuios attach' to start a daemon and reopen " +
+				d.savedSessionsPhrase() + "."
+		}
 		return fmt.Sprintf("The TUIOS daemon is not running, but a stale socket is left over at %s.\n"+
 			"Most likely cause: the daemon crashed or was killed without cleaning up.\n"+
-			"Fix: run 'tuios kill-server' to clear it, then 'tuios new' to start a session.", d.SocketPath)
+			"%s", d.SocketPath, fix)
 
 	case DaemonPermissionDenied:
 		return fmt.Sprintf("Permission denied connecting to the TUIOS daemon socket at %s.\n"+

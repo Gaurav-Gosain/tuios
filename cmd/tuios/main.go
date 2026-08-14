@@ -71,8 +71,8 @@ func main() {
 	); err != nil {
 		os.Exit(1)
 	}
-	if reportCommandError(cmdErr) {
-		os.Exit(1)
+	if code := exitStatus(cmdErr); code != 0 {
+		os.Exit(code)
 	}
 }
 
@@ -378,9 +378,11 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 		Long: `Attach to an existing TUIOS session.
 
 If no session name is provided, attaches to the most recent session.
-The session must already exist (use 'tuios new' to create one).
 
-This requires the TUIOS daemon to be running.`,
+The daemon is started if it is not running, which restores every session
+saved on disk; attach then opens one of those. With nothing saved and no
+name given, a new session is opened instead. A name that matches no session
+is reported rather than created, unless -c is given.`,
 		Example: `  # Attach to the most recent session
   tuios attach
 
@@ -444,7 +446,13 @@ with 'tuios attach'.`,
 		Long: `List all active TUIOS sessions.
 
 Shows session names, window counts, and whether clients are attached.
-Use --json for machine-readable output.`,
+
+With no daemon running, the sessions saved on disk are listed instead,
+marked "saved", and the command exits 3. That status is what tells a
+script a stopped daemon from a running one holding no sessions, which
+exits 0 with an empty list.
+
+Use --json for machine-readable output; saved rows carry "saved": true.`,
 		Example: `  tuios ls
   tuios ls --json`,
 		Aliases: []string{"list-sessions"},

@@ -28,21 +28,23 @@ func runAttach(sessionName string, createIfMissing bool) error {
 		return err
 	}
 
-	diag := session.DiagnoseDaemon()
-	if !diag.Running() {
-		if !createIfMissing {
-			return explainAttachWithoutDaemon(sessionName, diag)
+	// A daemon restores every saved session as it starts, so the sessions the
+	// user is asking for are one process away. Refusing here and naming a
+	// command that would create a different session is what made attach look
+	// like it had lost them.
+	if !session.IsDaemonRunning() {
+		// Said before the daemon starts, because afterwards the sessions simply
+		// exist and the user is left to work out where they came from.
+		if reportSavedSessionsBeforeStart() == 0 && sessionName == "" {
+			// An unnamed attach against an empty daemon opens a new session:
+			// that is what the daemon has always done, and it is the only thing
+			// left that gets the user to a terminal. Say so rather than let a
+			// session appear unannounced.
+			fmt.Println("No saved sessions to restore; opening a new one.")
 		}
-		fmt.Println("Starting TUIOS daemon...")
-		if err := startDaemonBackground(); err != nil {
-			return &diagnosticError{
-				What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
-				Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
-				Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
-				Err:   err,
-			}
+		if err := ensureDaemon(); err != nil {
+			return err
 		}
-		time.Sleep(500 * time.Millisecond)
 	}
 
 	if err := ensureAttachTarget(sessionName, createIfMissing); err != nil {
@@ -52,27 +54,26 @@ func runAttach(sessionName string, createIfMissing bool) error {
 	return runDaemonSession(sessionName, createIfMissing)
 }
 
-// explainAttachWithoutDaemon reports that attach found no daemon, and adds the
-// one thing a user in that state most wants to know: whether the session they
-// asked for is saved and can be brought back.
-func explainAttachWithoutDaemon(sessionName string, diag session.DaemonDiagnosis) error {
-	e := &diagnosticError{What: diag.Explain(), Err: diag.Err}
-
-	if sessionName == "" {
-		return e
-	}
+// reportSavedSessionsBeforeStart says what is about to be brought back, and
+// returns how many. It is said before the daemon starts because afterwards the
+// sessions simply exist, and the user is left to guess where they came from.
+func reportSavedSessionsBeforeStart() int {
 	infos, err := session.ListResurrectableInfos()
-	if err != nil {
-		return e
+	if err != nil || len(infos) == 0 {
+		return 0
 	}
+
+	names := make([]string, 0, len(infos))
 	for _, info := range infos {
-		if info.Name == sessionName {
-			e.Extra = append(e.Extra, fmt.Sprintf("Session %q has saved state (%d window(s)) and can be restored.", sessionName, info.WindowCount))
-			e.Fix = fmt.Sprintf("run 'tuios resurrect %s' to restore it and attach.", sessionName)
-			return e
-		}
+		names = append(names, info.Name)
 	}
-	return e
+	noun := "sessions"
+	if len(names) == 1 {
+		noun = "session"
+	}
+	fmt.Printf("Restoring %d saved %s: %s.\n", len(names), noun, strings.Join(truncateList(names, 12), ", "))
+	fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
+	return len(names)
 }
 
 // ensureAttachTarget verifies the named session exists before the TUI starts,
@@ -136,17 +137,8 @@ func listSessionInfos(client *session.VerbClient) ([]session.SessionInfo, error)
 }
 
 func runNewSession(sessionName string) error {
-	if !session.IsDaemonRunning() {
-		fmt.Println("Starting TUIOS daemon...")
-		if err := startDaemonBackground(); err != nil {
-			return &diagnosticError{
-				What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
-				Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
-				Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
-				Err:   err,
-			}
-		}
-		time.Sleep(500 * time.Millisecond)
+	if err := ensureDaemon(); err != nil {
+		return err
 	}
 
 	if sessionName == "" {
@@ -169,17 +161,8 @@ func runNewSession(sessionName string) error {
 // without launching the TUI. The session holds an initial window, is usable by
 // control verbs immediately, and can be attached later with 'tuios attach'.
 func runNewSessionDetached(sessionName string) error {
-	if !session.IsDaemonRunning() {
-		fmt.Println("Starting TUIOS daemon...")
-		if err := startDaemonBackground(); err != nil {
-			return &diagnosticError{
-				What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
-				Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
-				Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
-				Err:   err,
-			}
-		}
-		time.Sleep(500 * time.Millisecond)
+	if err := ensureDaemon(); err != nil {
+		return err
 	}
 
 	client := session.NewClient(&session.ClientConfig{Version: version})
@@ -506,15 +489,19 @@ func reportSessionExit(sessionName string, reason app.ExitReason, killed bool) e
 	}
 }
 
+// lsEntry is a row of 'tuios ls --json'. It is the wire type plus the one fact
+// the wire cannot carry: a session that exists only on disk, because no daemon
+// is holding it. The flag is omitted for live sessions, so a listing from a
+// running daemon is unchanged.
+type lsEntry struct {
+	session.SessionInfo
+	Saved bool `json:"saved,omitempty"`
+}
+
 func runListSessions(jsonOutput bool) error {
 	diag := session.DiagnoseDaemon()
 	if !diag.Running() {
-		if jsonOutput {
-			fmt.Println("[]")
-		} else {
-			fmt.Println(diag.Explain())
-		}
-		return nil
+		return listSavedSessions(diag, jsonOutput)
 	}
 
 	client, err := dialVerb()
@@ -536,12 +523,11 @@ func runListSessions(jsonOutput bool) error {
 	sessions := listed.Sessions
 
 	if jsonOutput {
-		data, err := json.MarshalIndent(sessions, "", "  ")
-		if err != nil {
-			return err
+		entries := make([]lsEntry, 0, len(sessions))
+		for _, s := range sessions {
+			entries = append(entries, lsEntry{SessionInfo: s})
 		}
-		fmt.Println(string(data))
-		return nil
+		return printJSON(entries)
 	}
 
 	if len(sessions) == 0 {
@@ -572,7 +558,86 @@ func runListSessions(jsonOutput bool) error {
 		})
 	}
 
-	t := table.New().
+	fmt.Println(renderSessionTable(rows))
+	fmt.Printf("\n%d session(s)\n", len(sessions))
+	if anyRestored {
+		fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
+	}
+	return nil
+}
+
+// listSavedSessions is 'tuios ls' with no daemon listening. The sessions are on
+// disk and a daemon brings them back, so listing them is the truth; printing an
+// empty list was what made attach's refusal incomprehensible.
+//
+// It reports the no-daemon status, which is what lets a script tell this apart
+// from a daemon that is running and holds nothing.
+func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
+	infos, err := session.ListResurrectableInfos()
+	if err != nil {
+		return err
+	}
+
+	if jsonOutput {
+		entries := make([]lsEntry, 0, len(infos))
+		for _, info := range infos {
+			entries = append(entries, lsEntry{
+				SessionInfo: session.SessionInfo{
+					Name:        info.Name,
+					WindowCount: info.WindowCount,
+					LastActive:  savedUnix(info.SavedAt),
+				},
+				Saved: true,
+			})
+		}
+		if err := printJSON(entries); err != nil {
+			return err
+		}
+		return &statusError{code: noDaemonStatus}
+	}
+
+	if len(infos) > 0 {
+		rows := make([][]string, 0, len(infos))
+		for _, info := range infos {
+			rows = append(rows, []string{
+				info.Name,
+				fmt.Sprintf("%d", info.WindowCount),
+				session.SavedTag,
+				"-",
+				formatTimeAgo(savedUnix(info.SavedAt)),
+			})
+		}
+		fmt.Println(renderSessionTable(rows))
+		fmt.Printf("\n%d session(s)\n", len(infos))
+		fmt.Printf("%s: %s.\n\n", session.SavedTag, session.SavedNote)
+	}
+
+	fmt.Println(diag.Explain())
+	return &statusError{code: noDaemonStatus}
+}
+
+// savedUnix converts a save time to the epoch seconds the listing formats,
+// keeping zero as "unknown" rather than turning it into 1970.
+func savedUnix(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
+func printJSON(v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+// renderSessionTable draws the session listing. Both listings use it so a
+// session reads the same whether a daemon is holding it or a disk is.
+func renderSessionTable(rows [][]string) string {
+	return table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
 		Headers("NAME", "WINDOWS", "STATUS", "CREATED", "LAST ACTIVE").
@@ -597,14 +662,7 @@ func runListSessions(jsonOutput bool) error {
 			default:
 				return baseStyle
 			}
-		})
-
-	fmt.Println(t.Render())
-	fmt.Printf("\n%d session(s)\n", len(sessions))
-	if anyRestored {
-		fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
-	}
-	return nil
+		}).Render()
 }
 
 func formatTimeAgo(unixTime int64) string {
@@ -664,12 +722,8 @@ func runResurrect(sessionName string) error {
 	}
 
 	// Ensure the daemon is running so it can hold the restored session.
-	if !session.IsDaemonRunning() {
-		fmt.Println("Starting TUIOS daemon...")
-		if err := startDaemonBackground(); err != nil {
-			return fmt.Errorf("failed to start daemon: %w", err)
-		}
-		time.Sleep(500 * time.Millisecond)
+	if err := ensureDaemon(); err != nil {
+		return err
 	}
 
 	// Ask the daemon to restore the session from saved state. This is a no-op if
@@ -936,6 +990,6 @@ func awaitDaemonShutdown(pid int, socketPath string) error {
 	}
 }
 
-// startDaemonBackground is defined in platform-specific files:
+// killDaemonProcess is defined in platform-specific files:
 // - session_commands_unix.go for Unix/Linux/macOS
 // - session_commands_windows.go for Windows

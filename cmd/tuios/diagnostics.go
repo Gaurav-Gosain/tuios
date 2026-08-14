@@ -37,6 +37,9 @@ type diagnosticError struct {
 	// Extra holds optional detail lines shown between the cause and the fix,
 	// such as the list of session names that do exist.
 	Extra []string
+	// Status is the exit status this failure should produce. Zero means the
+	// generic 1.
+	Status int
 	// Err is the underlying error, preserved for errors.Is/As.
 	Err error
 }
@@ -57,6 +60,46 @@ func (e *diagnosticError) Error() string {
 }
 
 func (e *diagnosticError) Unwrap() error { return e.Err }
+
+// ExitStatus reports the process status this failure should produce, defaulting
+// to the generic 1.
+func (e *diagnosticError) ExitStatus() int {
+	if e.Status == 0 {
+		return 1
+	}
+	return e.Status
+}
+
+// noDaemonStatus is the exit status of a command that needed a daemon and found
+// none. It is distinct from 1 so a script can tell "no daemon" from "the daemon
+// answered and had nothing" (0) and from a command that genuinely failed (1).
+const noDaemonStatus = 3
+
+// statusError carries an exit status and nothing to print. It is for a command
+// that has already said everything it has to say on stdout and only needs the
+// status to differ.
+type statusError struct{ code int }
+
+func (e *statusError) Error() string   { return "" }
+func (e *statusError) ExitStatus() int { return e.code }
+func (e *statusError) Unwrap() error   { return nil }
+
+// exitStatus renders a failed command, when it has anything to render, and
+// returns the status the process should exit with.
+func exitStatus(err error) int {
+	if err == nil {
+		return 0
+	}
+	code := 1
+	var coded interface{ ExitStatus() int }
+	if errors.As(err, &coded) {
+		code = coded.ExitStatus()
+	}
+	if err.Error() != "" {
+		reportCommandError(err)
+	}
+	return code
+}
 
 // diagnosticErrorHandler renders errors for the CLI. A diagnostic error is
 // printed with its line structure intact, because the whole value of the
@@ -162,7 +205,7 @@ func requireDaemon() error {
 	if d.Running() {
 		return nil
 	}
-	return &diagnosticError{What: d.Explain(), Err: d.Err}
+	return &diagnosticError{What: d.Explain(), Err: d.Err, Status: noDaemonStatus}
 }
 
 // dialVerb connects to the daemon for a JSON verb-protocol call. Every failure
@@ -194,7 +237,7 @@ func explainDialError(err error) error {
 	if !d.Running() {
 		// The daemon disappeared between the check and the dial, which is
 		// itself worth reporting accurately.
-		return &diagnosticError{What: d.Explain(), Err: err}
+		return &diagnosticError{What: d.Explain(), Err: err, Status: noDaemonStatus}
 	}
 	return &diagnosticError{
 		What:  fmt.Sprintf("Could not open a control connection to the TUIOS daemon: %v.", err),
@@ -278,6 +321,17 @@ func explainMissingSession(name string, available []string) error {
 		What: fmt.Sprintf("Session %q was not found.", name),
 	}
 
+	// A daemon started with --no-restore holds nothing while the sessions are
+	// still on disk, so the name can be real and absent at the same time. That
+	// is the one case where the answer is neither "create it" nor "you typed it
+	// wrong".
+	if info, ok := savedSession(name); ok {
+		e.Cause = "the daemon is running but has not restored it."
+		e.Extra = append(e.Extra, fmt.Sprintf("It has saved state (%d window(s)) and can be brought back.", info.WindowCount))
+		e.Fix = fmt.Sprintf("run 'tuios resurrect %s' to restore it and attach.", name)
+		return e
+	}
+
 	sorted := append([]string(nil), available...)
 	sort.Strings(sorted)
 
@@ -294,6 +348,20 @@ func explainMissingSession(name string, available []string) error {
 		e.Fix = fmt.Sprintf("run 'tuios ls' to list sessions, or 'tuios new %s' to create this one.", name)
 	}
 	return e
+}
+
+// savedSession looks up one name in the saved state on disk.
+func savedSession(name string) (session.ResurrectableInfo, bool) {
+	infos, err := session.ListResurrectableInfos()
+	if err != nil {
+		return session.ResurrectableInfo{}, false
+	}
+	for _, info := range infos {
+		if info.Name == name {
+			return info, true
+		}
+	}
+	return session.ResurrectableInfo{}, false
 }
 
 // closestName is the CLI-side spelling suggestion, matching the policy the

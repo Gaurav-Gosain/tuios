@@ -39,6 +39,13 @@ const (
 	// attach path cannot word the same fact differently.
 	RestoredTag  = "restored"
 	RestoredNote = "layout came back from saved state; the shells are new"
+
+	// SavedTag and SavedNote word the state before that one: state that is on
+	// disk with no daemon holding it. A saved session is not a restored session
+	// and must not borrow its wording, or a listing would claim sessions are
+	// back when nothing has started them yet.
+	SavedTag  = "saved"
+	SavedNote = "on disk only, with no daemon running to hold it"
 )
 
 // resurrectionDirOverride is set during tests to use a temp directory. It is an
