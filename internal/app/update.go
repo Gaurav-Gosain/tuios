@@ -942,6 +942,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case ForeignSessionRefreshTickMsg:
+		// The listing this tick refreshes is also the only thing that knows which
+		// windows still exist anywhere, so the client's window-keyed state is
+		// pruned here, against the listing the last refresh left behind.
+		m.pruneWindowKeyedState()
 		after, refresh := m.foreignSessionRefreshPlan()
 		if !refresh {
 			return m, foreignSessionRefreshTick(after)

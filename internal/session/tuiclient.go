@@ -1094,6 +1094,17 @@ func (c *TUIClient) SessionCount() int {
 	return len(c.availableSessions)
 }
 
+// CachedSessions returns the cached listing as it stands, each session with the
+// window summaries it was listed with. A reader needing more than one field of
+// an entry takes this instead of one accessor per field. The slice is a copy,
+// and a refresh replaces entries rather than editing them, so the summaries it
+// shares cannot change underneath the caller.
+func (c *TUIClient) CachedSessions() []SessionInfo {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]SessionInfo(nil), c.availableSessions...)
+}
+
 // SessionWindows returns the cached per-window summaries for the named session,
 // or nil if the session is unknown or its windows have not been fetched yet. The
 // sidebar reads this to expand a non-attached session's tree without a blocking

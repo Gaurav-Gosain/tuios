@@ -115,6 +115,76 @@ func (m *OS) saveSidebarState() {
 	_ = os.WriteFile(filepath.Join(dir, sidebarStateFileName), data, 0o600)
 }
 
+// pruneWindowKeyedState drops the accents and unread bits of windows that are
+// gone. Both maps are keyed by window ID and both are persisted, so an entry a
+// closed pane leaves behind outlives the pane in the state file and is reloaded
+// every start; the rail's signature folds every unread bit on every frame, so
+// the map's size is also a per-frame cost.
+func (m *OS) pruneWindowKeyedState() {
+	if len(m.SidebarAccents) == 0 && len(m.SidebarAgentSeen) == 0 {
+		return
+	}
+	known, ok := m.knownWindowIDs()
+	if !ok {
+		return
+	}
+	changed := false
+	for id := range m.SidebarAccents {
+		if !known[id] {
+			delete(m.SidebarAccents, id)
+			changed = true
+		}
+	}
+	for id := range m.SidebarAgentSeen {
+		if !known[id] {
+			delete(m.SidebarAgentSeen, id)
+			changed = true
+		}
+	}
+	if changed {
+		m.saveSidebarState()
+	}
+}
+
+// knownWindowIDs is every window this client can legitimately name: its own
+// live ones plus the panes of every session in the daemon's cached listing,
+// because a foreign session's done pane is ranked and coloured out of the same
+// two maps.
+//
+// The second return is whether the listing could account for all of them. It
+// says no when there is no daemon to ask, when a session was listed with a
+// window count but no summaries (an older daemon), and when the attached
+// session is missing from the listing, which is what a cache from before the
+// switch looks like. Pruning against a listing that cannot say what exists
+// would take live panes' colours with it, so the caller stands down instead.
+func (m *OS) knownWindowIDs() (map[string]bool, bool) {
+	if m.DaemonClient == nil {
+		return nil, false
+	}
+	known := make(map[string]bool, len(m.Windows))
+	for _, w := range m.Windows {
+		if w != nil {
+			known[w.ID] = true
+		}
+	}
+	attached := false
+	for _, s := range m.DaemonClient.CachedSessions() {
+		if len(s.Windows) != s.WindowCount {
+			return nil, false
+		}
+		if s.Name == m.SessionName {
+			attached = true
+		}
+		for _, w := range s.Windows {
+			known[w.ID] = true
+		}
+	}
+	if !attached {
+		return nil, false
+	}
+	return known, true
+}
+
 // accentsFromFile reads both accent maps into one. Slots are read first so a
 // file written before the colour picker existed loads exactly as it did: an
 // index stays an index, resolves against the live theme the way it always has,
