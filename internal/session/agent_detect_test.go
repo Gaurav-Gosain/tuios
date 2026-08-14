@@ -234,8 +234,8 @@ func TestClearExitedAgent(t *testing.T) {
 	shell := fakeResolver(map[string]fakeProc{ptyID: {"bash", []string{"-bash"}, true}})
 
 	// Unowned: an output probe must not touch a window the detector never claimed.
-	if sess.clearExitedAgent(ptyID, shell, agent.isAgent) {
-		t.Fatal("clearExitedAgent changed an unowned window")
+	if sess.reconcileAgentOnOutput(ptyID, shell, agent.isAgent) {
+		t.Fatal("reconcileAgentOnOutput changed an unowned window")
 	}
 
 	// Detector takes ownership of the pane.
@@ -244,19 +244,87 @@ func TestClearExitedAgent(t *testing.T) {
 	}
 
 	// Agent still in the foreground: a probe on output leaves it working.
-	if sess.clearExitedAgent(ptyID, running, agent.isAgent) {
-		t.Fatal("clearExitedAgent cleared a window whose agent is still running")
+	if sess.reconcileAgentOnOutput(ptyID, running, agent.isAgent) {
+		t.Fatal("reconcileAgentOnOutput cleared a window whose agent is still running")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
 		t.Fatalf("state while agent runs = %q, want working", got)
 	}
 
 	// Agent quits: the very next output probe clears it, no detection poll needed.
-	if !sess.clearExitedAgent(ptyID, shell, agent.isAgent) {
-		t.Fatal("clearExitedAgent did not clear after the agent left the foreground")
+	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.isAgent) {
+		t.Fatal("reconcileAgentOnOutput did not clear after the agent left the foreground")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNone {
 		t.Fatalf("state after agent exit = %q, want none", got)
+	}
+}
+
+// TestAgentResumesAfterStall is the regression for an agent whose indicator
+// latched: once the silence timer demoted a detected agent to idle, nothing in
+// the daemon could ever move it back to working, so a pane running a coding
+// agent showed idle for the rest of its life no matter how hard the agent then
+// worked. Output from a pane whose agent is still in the foreground is the
+// signal that it resumed.
+func TestAgentResumesAfterStall(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
+
+	// The detector finds the agent and promotes the pane.
+	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
+		t.Fatalf("promotion changed %d windows, want 1", n)
+	}
+
+	// The pane goes quiet and the silence timer demotes it to idle.
+	const stall = 30 * time.Second
+	if n := sess.applyStallHeuristic(time.Now().Add(stall+time.Second), stall, func(string) int64 { return 0 }); n != 1 {
+		t.Fatalf("stall heuristic demoted %d windows, want 1", n)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
+		t.Fatalf("state after stall = %q, want idle", got)
+	}
+
+	// The user sends a prompt: the agent produces output again while still in the
+	// foreground. The pane has to go back to working.
+	if !sess.reconcileAgentOnOutput(ptyID, running, agent.isAgent) {
+		t.Fatal("output from a resumed agent did not change the pane's state")
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Fatalf("state after the agent resumed = %q, want working", got)
+	}
+
+	// A detection poll must not undo the resume.
+	if n := sess.applyAgentDetection(running, agent.isAgent); n != 0 {
+		t.Fatalf("detection poll after resume changed %d windows, want 0", n)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Fatalf("state after a poll following resume = %q, want working", got)
+	}
+}
+
+// TestAgentResumeRespectsHigherSource proves the resume never overwrites a state
+// a harness reported for itself: a pane that reported needs_input keeps saying
+// needs_input however much output it produces, since a report outranks the
+// detector.
+func TestAgentResumeRespectsHigherSource(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
+
+	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
+		t.Fatalf("promotion changed %d windows, want 1", n)
+	}
+	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "approve?"); err != nil {
+		t.Fatalf("SetDaemonWindowAgentState: %v", err)
+	}
+	if sess.reconcileAgentOnOutput(ptyID, running, agent.isAgent) {
+		t.Fatal("output overwrote a reported needs_input")
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
+		t.Fatalf("reported state after output = %q, want needs_input", got)
 	}
 }
 
@@ -271,8 +339,8 @@ func TestClearExitedAgentRespectsManual(t *testing.T) {
 	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "waiting"); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
-	if sess.clearExitedAgent(ptyID, shell, agent.isAgent) {
-		t.Fatal("clearExitedAgent cleared a manual state")
+	if sess.reconcileAgentOnOutput(ptyID, shell, agent.isAgent) {
+		t.Fatal("reconcileAgentOnOutput cleared a manual state")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
 		t.Fatalf("manual state after probe = %q, want needs_input", got)

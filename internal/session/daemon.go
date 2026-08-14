@@ -225,7 +225,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// next detection poll. Throttled per PTY so a busy pane pays no cost.
 		if ev.Type == EventOutput && d.agentDetectInterval > 0 {
 			if pty := s.GetPTY(ev.PTYID); pty != nil && pty.probeAgentExitDue(time.Now().UnixNano()) {
-				s.clearExitedAgent(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.isAgent)
+				s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.isAgent)
 			}
 		}
 		d.events.publish(streamEvent{

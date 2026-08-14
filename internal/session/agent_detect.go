@@ -351,17 +351,26 @@ func (s *Session) applyAgentDetection(
 	return changed
 }
 
-// clearExitedAgent clears the auto-detected agent state of the window backed by
-// ptyID the moment its foreground process is no longer an agent, so the sidebar
-// glyph disappears when the agent quits instead of lingering until the next
-// detection poll. It is driven by the pane's own output (the shell prompt
-// returning), not a timer, so it adds no idle cost.
+// reconcileAgentOnOutput settles the agent state of the window backed by ptyID
+// against what the pane is actually running, driven by the pane's own output
+// rather than a timer, so it adds no idle cost. Output is the one moment both
+// answers it gives are known to be fresh.
+//
+// It resolves two cases:
+//
+//   - The foreground is no longer an agent: the agent quit and the shell prompt
+//     is what produced this output, so the state clears at once instead of
+//     lingering until the next detection poll.
+//   - The foreground is still the agent: the agent is producing output, so it is
+//     working. This is the only path back out of the idle the silence timer
+//     assigns, and without it a pane latched to idle for the rest of its life
+//     however hard the agent then worked.
 //
 // It obeys the same precedence as applyAgentDetection: it only ever touches a
-// window the auto-detector owns and only ever clears it, so a manual
-// set-agent-state and a still-running agent are both left alone. It reports
-// whether it changed state.
-func (s *Session) clearExitedAgent(
+// window the auto-detector owns, and it only resumes one whose state is the idle
+// a source no stronger than the detector left behind, so a harness reporting for
+// itself is never overwritten. It reports whether it changed state.
+func (s *Session) reconcileAgentOnOutput(
 	ptyID string,
 	resolve func(ptyID string) (comm string, argv []string, running bool),
 	isAgent func(comm string, argv []string) bool,
@@ -382,11 +391,26 @@ func (s *Session) clearExitedAgent(
 			if w.PTYID != ptyID {
 				continue
 			}
-			if !s.agentClaims[w.ID].auto {
+			claim := s.agentClaims[w.ID]
+			if !claim.auto {
 				return errNoAgentDetectChange
 			}
 			if comm, argv, running := resolve(ptyID); running && isAgent(comm, argv) {
-				return errNoAgentDetectChange
+				// Still the agent, and it just spoke. Only the idle left by the
+				// silence timer (or by the detector itself) may be taken back:
+				// anything a stronger source said outranks output activity, which
+				// cannot tell working from a redraw while waiting for the user.
+				if w.AgentState != AgentStateIdle || claim.source.rank() > AgentSourceDetect.rank() {
+					return errNoAgentDetectChange
+				}
+				w.AgentState = AgentStateWorking
+				w.AgentMessage = ""
+				w.AgentHarness = ""
+				w.AgentStateAt = time.Now().UnixNano()
+				claim.source = AgentSourceDetect
+				s.setAgentClaim(w.ID, claim)
+				changed = true
+				return nil
 			}
 			delete(s.agentClaims, w.ID)
 			w.AgentState = AgentStateNone
@@ -403,7 +427,7 @@ func (s *Session) clearExitedAgent(
 
 // ownsAutoAgent reports whether the auto-detector currently owns the window
 // backed by ptyID. It reads under the state read lock, the fast-path gate that
-// keeps clearExitedAgent off the write lock for panes it would never touch.
+// keeps reconcileAgentOnOutput off the write lock for panes it would never touch.
 func (s *Session) ownsAutoAgent(ptyID string) bool {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
