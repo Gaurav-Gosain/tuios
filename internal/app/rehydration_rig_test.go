@@ -41,6 +41,9 @@ type rig struct {
 	ctl     *session.TUIClient
 	session string
 	other   string
+	// rebuiltWindows records whether the route under test closes and rebuilds
+	// the window set, which decides what client-local view state can survive.
+	rebuiltWindows bool
 }
 
 // ownSocket gives this test its own daemon socket. The whole binary already

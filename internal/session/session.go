@@ -1777,6 +1777,14 @@ func (p *PTY) broadcast(data []byte, seq int64) {
 
 	debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(data), len(p.subscribers))
 	for clientID, sub := range p.subscribers {
+		// A chunk appended between a subscriber's catch-up being copied and this
+		// broadcast running is in both, because Subscribe blocks the broadcast
+		// rather than the append. Delivering it again paints it twice at the
+		// seam, which is one duplicated line every time a pane is shown while it
+		// is producing.
+		if sub.sent.Load() >= seq {
+			continue
+		}
 		select {
 		case sub.ch <- data:
 			// Only a chunk that was taken counts as reached: a client dropped

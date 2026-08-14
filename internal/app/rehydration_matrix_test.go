@@ -41,6 +41,10 @@ type paneShape struct {
 type routeCase struct {
 	name string
 	run  func(r *rig, away func())
+	// rebuilds marks a route that closes every window and builds the session's
+	// panes again, which is what decides whether client-local view state can
+	// survive it at all.
+	rebuilds bool
 }
 
 var rehydrationShapes = []paneShape{
@@ -65,6 +69,23 @@ var rehydrationShapes = []paneShape{
 		},
 		check: func(t *testing.T, r *rig, ptyID string) {
 			w := r.winByPTY(ptyID)
+			if r.rebuiltWindows {
+				// Where the pane is scrolled to is this viewer's state, not the
+				// pane's: it is not on the wire, and a second client watching
+				// the same pane must not be dragged to where this one scrolled.
+				// A route that closes every window therefore loses it, and the
+				// pane comes back at the tail. Asserted rather than skipped so
+				// the loss is a decision on the record: restoring the raw
+				// offset after the pane produced more output would put the user
+				// somewhere they never were, so recovering this means anchoring
+				// to a scrollback line rather than to a distance from the
+				// bottom. See docs/REHYDRATION.md.
+				if w.InCopyMode() || w.ScrollbackOffset != 0 {
+					t.Errorf("a route that rebuilds windows came back at offset %d (copy mode %v), want the tail",
+						w.ScrollbackOffset, w.InCopyMode())
+				}
+				return
+			}
 			if !w.InCopyMode() || w.ScrollbackOffset != 10 {
 				t.Errorf("the pane came back at offset %d (copy mode %v), want offset 10: coming back to a pane you had scrolled up in and finding it at the tail loses the place the user chose",
 					w.ScrollbackOffset, w.InCopyMode())
@@ -172,7 +193,8 @@ var rehydrationShapes = []paneShape{
 
 var rehydrationRoutes = []routeCase{
 	{
-		name: "reattach",
+		name:     "reattach",
+		rebuilds: true,
 		run: func(r *rig, away func()) {
 			r.detach()
 			away()
@@ -180,7 +202,8 @@ var rehydrationRoutes = []routeCase{
 		},
 	},
 	{
-		name: "session-switch",
+		name:     "session-switch",
+		rebuilds: true,
 		run: func(r *rig, away func()) {
 			other := r.otherSession()
 			if err := r.m.SwitchToSession(other); err != nil {
@@ -207,6 +230,7 @@ func TestRehydrationMatrix(t *testing.T) {
 		for _, shape := range rehydrationShapes {
 			t.Run(rt.name+"/"+shape.name, func(t *testing.T) {
 				r := newRig(t, 1)
+				r.rebuiltWindows = rt.rebuilds
 				ptyID := r.win(0).PTYID
 
 				shape.arrange(r, ptyID)
