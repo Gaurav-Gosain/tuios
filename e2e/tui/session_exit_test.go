@@ -65,17 +65,21 @@ func waitExit(t *testing.T, term *tuitest.Terminal, what string) int {
 	return -1
 }
 
+// sessionListed reports whether a daemon is holding the named session. Rows
+// marked saved are skipped: with no daemon the listing shows what is on disk,
+// and a session that only exists there is not one anybody can talk to.
 func sessionListed(t *testing.T, base, name string) bool {
 	t.Helper()
 	out, _ := tuiosCLI(t, base, "ls", "--json")
 	var sessions []struct {
-		Name string `json:"name"`
+		Name  string `json:"name"`
+		Saved bool   `json:"saved"`
 	}
 	if err := json.Unmarshal([]byte(out), &sessions); err != nil {
 		t.Fatalf("parse ls --json: %v\noutput:\n%s", err, out)
 	}
 	for _, s := range sessions {
-		if s.Name == name {
+		if s.Name == name && !s.Saved {
 			return true
 		}
 	}
