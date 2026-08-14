@@ -514,7 +514,12 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 	}
 	// Compared cell for cell like the screen, not as text. History that came
 	// back in the wrong colours read the same as history that came back right.
+	// The whole extent is scanned before anything is reported. The first
+	// differing line alone cannot tell a one-line seam from two windows offset
+	// against each other for their entire length, and those are different bugs.
 	base := dn - cn
+	first, last, ndiff := -1, -1, 0
+	firstCol, firstGot, firstWant := 0, "", ""
 	for i := range cn {
 		line := term.ScrollbackLine(i)
 		row := st.Scrollback[base+i]
@@ -527,12 +532,23 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 				want = stateCellSig(row[x])
 			}
 			if got != want {
-				t.Errorf("scrollback line %d of %d (daemon line %d), column %d:\n  client %s\n  daemon %s\n  client line %q\n  daemon line %q",
-					i, cn, base+i, x, got, want,
-					strings.TrimRight(line.String(), " "), stateRow(row))
-				return
+				if first < 0 {
+					first, firstCol, firstGot, firstWant = i, x, got, want
+				}
+				last = i
+				ndiff++
+				break
 			}
 		}
+	}
+	if first >= 0 {
+		show := func(i int) string {
+			return fmt.Sprintf("  [%d] client %q\n      daemon %q", i,
+				strings.TrimRight(term.ScrollbackLine(i).String(), " "), stateRow(st.Scrollback[base+i]))
+		}
+		t.Errorf("scrollback differs on %d of %d lines, first %d last %d, first at column %d:\n  client %s\n  daemon %s\n%s\n%s",
+			ndiff, cn, first, last, firstCol, firstGot, firstWant,
+			show(first), show(last))
 	}
 }
 

@@ -49,6 +49,9 @@ type outputChunk struct {
 	// rather than when the layout asked for it is what keeps this emulator
 	// wrapping every line where the daemon wrapped it.
 	width, height int
+	// drained, when set, is closed once everything queued in front of it has
+	// been applied to the emulator. See DrainPendingOutput.
+	drained chan struct{}
 }
 
 func (c outputChunk) isResize() bool { return c.width > 0 && c.height > 0 }
@@ -109,12 +112,19 @@ func (w *Window) outputWriter() {
 		// batch is written. Folding it into the bytes either side would lay
 		// one of them out at a width the daemon never used them at.
 		var resize outputChunk
+		// A drain sentinel is answered whatever its epoch: it asks about queue
+		// position, not about whether the bytes around it are still wanted.
+		var drained chan struct{}
 		select {
 		case <-w.outputDone:
 			return
 		case chunk, ok := <-w.outputChan:
 			if !ok {
 				return
+			}
+			if chunk.drained != nil {
+				close(chunk.drained)
+				continue
 			}
 			if chunk.epoch != w.outputEpoch.Load() {
 				continue
@@ -131,6 +141,10 @@ func (w *Window) outputWriter() {
 			select {
 			case more, ok := <-w.outputChan:
 				if !ok {
+					goto write
+				}
+				if more.drained != nil {
+					drained = more.drained
 					goto write
 				}
 				if more.epoch != epoch {
@@ -188,6 +202,9 @@ func (w *Window) outputWriter() {
 
 		if resize.isResize() {
 			w.applyStreamResize(resize)
+		}
+		if drained != nil {
+			close(drained)
 		}
 
 		if t != nil {
@@ -331,6 +348,30 @@ func (w *Window) WriteOutputAsync(data []byte) {
 		// Successfully queued
 	default:
 		// Channel full - drop data (shouldn't happen with large buffer)
+	}
+}
+
+// DrainPendingOutput blocks until everything queued for the emulator ahead of
+// this call has been applied to it. A pane about to be primed is unsubscribed,
+// so the queue is finite and this returns once the writer works through it.
+//
+// It exists because throwing the queue away instead loses history: the
+// snapshot that follows is newer than anything queued, but it carries a
+// bounded scrollback window, and the queue of a pane that outpaced its client
+// can hold far more scrollback than the snapshot brings back.
+func (w *Window) DrainPendingOutput() {
+	if w.outputChan == nil || w.closed.Load() {
+		return
+	}
+	done := make(chan struct{})
+	select {
+	case w.outputChan <- outputChunk{drained: done}:
+	case <-w.outputDone:
+		return
+	}
+	select {
+	case <-done:
+	case <-w.outputDone:
 	}
 }
 
