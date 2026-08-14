@@ -66,6 +66,18 @@ func (m *OS) resizeDeferralActive() bool {
 	return false
 }
 
+// PendingViewportResize reports the generation of the terminal resize still in
+// flight, and whether there is one. It is a pure read, unlike
+// resizeDeferralActive above, which ends a stale deferral as it answers.
+//
+// Exported for the out-of-process fuzz target (internal/fuzz/apptarget), which
+// needs both halves: the generation to hand back a ViewportResizeSettledMsg,
+// since nothing there runs the command that would carry it, and the flag to know
+// that a stale announcement is deferred on purpose rather than wrong.
+func (m *OS) PendingViewportResize() (uint64, bool) {
+	return m.viewportResizeGen, m.viewportResizing
+}
+
 // endResizeDeferral finishes a deferred resize now: the recorded sizes are
 // pushed through to the emulators, the PTYs and the daemon, and the next retile
 // lays panes out for real.

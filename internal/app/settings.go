@@ -86,6 +86,13 @@ func (m *OS) applyAppearanceLive(retile bool) {
 	}
 }
 
+// ApplyAppearanceLive is applyAppearanceLive for callers outside the package.
+// The out-of-process fuzz target (internal/fuzz/apptarget) flips the same
+// appearance globals the settings page does and has to land them the same way;
+// open-coding the two calls there would be a copy that drifts the moment this
+// one grows a third.
+func (m *OS) ApplyAppearanceLive(retile bool) { m.applyAppearanceLive(retile) }
+
 // applyTheme switches the active terminal theme at runtime and repaints. The
 // sentinel "none" disables theming and restores standard terminal colors.
 func (m *OS) applyTheme(name string) {
