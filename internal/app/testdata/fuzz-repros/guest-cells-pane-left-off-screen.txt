@@ -1,0 +1,8 @@
+# seed 162. With auto-tiling off the panes keep the rectangles they were given,
+# and the host shrinks under them until one sits past the right edge entirely.
+# The rule read the cell at its content origin without asking whether the frame
+# has that cell at all.
+tiling
+workspace 0
+resize 60 20
+focus 0

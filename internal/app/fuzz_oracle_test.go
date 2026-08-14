@@ -461,6 +461,9 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 		if m.InDockBand(y) || bandCovers(m, x, y, n) {
 			continue
 		}
+		if !paneCellsAreOnScreen(m, x, y, n) {
+			continue
+		}
 		// A pane the user stacked another one on top of. With auto-tiling off the
 		// panes are free-floating windows that may be deliberately overlapped, so
 		// whichever draws later owns the cell and the marker underneath it is
@@ -479,6 +482,22 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 		}
 	}
 	return nil
+}
+
+// paneCellsAreOnScreen reports whether the n cells starting at (x,y) are cells
+// the frame has at all.
+//
+// With auto-tiling off a pane keeps the rectangle it was given, and a host that
+// shrank under it can leave that rectangle past the edge; ClampWindowsToView
+// only guarantees a corner stays in the content region. There is no frame cell
+// to read there, so the rule has nothing to say.
+//
+// Measured against the render size rather than against the length of the row,
+// because a short row is the frame having trimmed the blanks off a pane that is
+// on screen and painted nothing, and that is a violation the rule still has to
+// report.
+func paneCellsAreOnScreen(m *OS, x, y, n int) bool {
+	return x >= 0 && y >= 0 && x+n <= m.GetRenderWidth() && y < m.GetRenderHeight()
 }
 
 // bandCovers reports whether the sidebar's reserved band takes any of the n

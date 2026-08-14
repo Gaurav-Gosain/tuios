@@ -95,6 +95,40 @@ func TestPaneDrawOrderMatchesTheCompositor(t *testing.T) {
 	}
 }
 
+// TestGuestCellsStillReadsAPaneThatIsOnScreen guards the off-screen escape. A
+// pane the host shrank out from under has no frame cell to read, but a pane
+// whose cells are on the screen must still be read even when the frame trimmed
+// the blanks off its row, which is what a pane painting nothing looks like.
+func TestGuestCellsStillReadsAPaneThatIsOnScreen(t *testing.T) {
+	tgt, err := newFuzzTarget(fuzzScratch(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := tgt.(*fuzzOS)
+	t.Cleanup(f.Close)
+	if err := f.Reset(); err != nil {
+		t.Fatal(err)
+	}
+	m := f.m
+	w, h, n := m.GetRenderWidth(), m.GetRenderHeight(), len(paneMarker(0))
+	for _, tc := range []struct {
+		name     string
+		x, y     int
+		onScreen bool
+	}{
+		{"the top left cell", 0, 0, true},
+		{"the last cell the marker fits in", w - n, h - 1, true},
+		{"one column past the edge", w - n + 1, 0, false},
+		{"one row past the bottom", 0, h, false},
+		{"a rectangle the host shrank out from under", w + 15, 1, false},
+		{"a negative origin", -1, 0, false},
+	} {
+		if got := paneCellsAreOnScreen(m, tc.x, tc.y, n); got != tc.onScreen {
+			t.Errorf("%s (%d,%d): on screen=%v, want %v", tc.name, tc.x, tc.y, got, tc.onScreen)
+		}
+	}
+}
+
 // TestSpuriousWinchStillCatchesAnAnnouncementForNothing guards the excursion
 // escape. A pane whose drawable never moved at all and was told anyway is the
 // bug the rule is for, and recording excursions must not have excused it.
