@@ -60,7 +60,29 @@
 //  2. tuios boots into window-management mode, where plain characters are
 //     window-manager commands rather than shell input, and for 150ms after
 //     entering terminal mode it deliberately swallows unmodified single-character
-//     keys. enterTerminalMode handles both.
+//     keys. enterTerminalMode handles both. An *attached* client is the other way
+//     round and boots into terminal mode; windowManagementMode is the fix.
+//
+//  3. tuitest's own emulator panics on a scroll region wider than the screen,
+//     which takes the whole test binary with it. Three lines reproduce it:
+//
+//     term := tuitest.StartT(t, []string{"/bin/sh"}, tuitest.WithSize(80, 24))
+//     term.Resize(80, 10)
+//     term.SendKeys(`printf '\033[1;24r\033[3S'`, tuitest.Enter)
+//
+//     internal/vt/screen.go setVerticalMargins stores DECSTBM's bottom margin
+//     without clamping it to the buffer, and ultraviolet's DeleteLineArea limits
+//     the delete count against the region but then indexes b.Lines[src] without
+//     limiting it against the buffer, so the next scroll up runs off the end.
+//     A real terminal clamps DECSTBM to the screen.
+//
+//     This is not exotic. A client renders a frame for the size it last knew
+//     about, the PTY shrinks, and the frame lands afterwards; tuios is entitled
+//     to emit that and every real terminal tolerates it. It killed an 850 second
+//     fuzz campaign and took every finding in it, because a panic in the pump
+//     goroutine cannot be recovered by the test. Until tuitest clamps, a long
+//     campaign has to be run in seed batches so one crash costs one batch: see
+//     TUIOS_FUZZ_FIRST on TestFuzzPTY.
 package tuie2e
 
 import (

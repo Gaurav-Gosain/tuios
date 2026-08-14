@@ -1010,12 +1010,25 @@ func ptyWeights() []int {
 //
 //	TUIOS_E2E=1 TUIOS_FUZZ_SEEDS=200 TUIOS_FUZZ_STEPS=120 \
 //	  go test -count=1 -run TestFuzzPTY -timeout 4h ./...
+//
+// TUIOS_FUZZ_FIRST moves the starting seed, which is what makes a wide campaign
+// survivable. tuitest panics on a scroll region wider than the screen (see the
+// third footgun in harness_test.go) and a panic in its pump goroutine takes the
+// test binary down with every finding it had not yet printed. Batches of ten
+// cost one batch when that happens instead of the whole run:
+//
+//	for f in 0 10 20 30; do
+//	  TUIOS_E2E=1 TUIOS_FUZZ_FIRST=$f TUIOS_FUZZ_SEEDS=10 \
+//	    go test -count=1 -run TestFuzzPTY -timeout 1h ./...
+//	done
 func TestFuzzPTY(t *testing.T) {
+	first := uint64(ptyEnvInt(t, "TUIOS_FUZZ_FIRST", 0))
 	seeds := ptyEnvInt(t, "TUIOS_FUZZ_SEEDS", 2)
 	steps := ptyEnvInt(t, "TUIOS_FUZZ_STEPS", 40)
 	shrink := os.Getenv("TUIOS_FUZZ_SHRINK") != ""
 
-	for seed := range uint64(seeds) {
+	for i := range uint64(seeds) {
+		seed := first + i
 		res, err := fuzz.Run(newPTYTarget(t), fuzz.Config{
 			Seed: seed, Steps: steps,
 			MinWidth: 40, MinHeight: 12,
