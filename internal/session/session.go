@@ -1229,6 +1229,11 @@ type ptySubscriber struct {
 	sent atomic.Int64
 }
 
+// resyncPrefix homes the cursor and clears the screen and the scrollback. It
+// goes in front of a catch-up the client cannot splice onto what it already
+// holds.
+var resyncPrefix = []byte("\x1b[H\x1b[2J\x1b[3J")
+
 // Subscribe adds a subscriber to receive PTY output, resuming it at fromSeq: the
 // stream position a previous subscription for this client reached, as returned
 // by Unsubscribe. Zero means the client has seen nothing of this PTY and gets
@@ -1257,14 +1262,26 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan []byte {
 	p.outputMu.RLock()
 	// A client that fell further behind than the buffer reaches cannot be
 	// resumed exactly, so it gets everything still held rather than a gap.
+	bufStart := p.outputSeq - int64(p.outputPos)
 	start := 0
-	if bufStart := p.outputSeq - int64(p.outputPos); fromSeq > bufStart {
+	rolled := fromSeq > 0 && fromSeq < bufStart
+	if fromSeq > bufStart {
 		start = min(int(fromSeq-bufStart), p.outputPos)
 	}
 	if n := p.outputPos - start; n > 0 {
 		debugLog("[DEBUG] PTY %s: sending %d buffered bytes to new subscriber", p.ID[:8], n)
-		bufCopy := make([]byte, n)
-		copy(bufCopy, p.outputBuffer[start:p.outputPos])
+		bufCopy := make([]byte, 0, n+len(resyncPrefix))
+		if rolled {
+			// The client still holds the screen it drew up to fromSeq, and the
+			// bytes between there and the buffer's start are gone. Appending the
+			// tail to that screen splices two halves of the stream that never
+			// met: the missing bytes carried the cursor moves and the modes the
+			// tail is written against, so the guest's output lands wherever the
+			// old screen had left off. Clear first, so the tail repaints from a
+			// known state instead of over a stale one.
+			bufCopy = append(bufCopy, resyncPrefix...)
+		}
+		bufCopy = append(bufCopy, p.outputBuffer[start:p.outputPos]...)
 		select {
 		case sub.ch <- bufCopy:
 			debugLog("[DEBUG] PTY %s: buffered output sent", p.ID[:8])

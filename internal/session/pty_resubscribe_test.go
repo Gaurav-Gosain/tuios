@@ -123,8 +123,49 @@ func TestResubscribeFallsBackWhenTheBufferRolled(t *testing.T) {
 	p.appendAndBroadcast(bytes.Repeat([]byte("x"), 96*1024))
 
 	got := drain(p.Subscribe("client-1", resume))
-	if len(got) != 64*1024 {
-		t.Errorf("rolled-buffer resubscribe replayed %d bytes, want the whole %d-byte buffer", len(got), 64*1024)
+	if want := 64*1024 + len(resyncPrefix); len(got) != want {
+		t.Errorf("rolled-buffer resubscribe replayed %d bytes, want the whole %d-byte buffer behind a resync", len(got), want)
+	}
+	if !bytes.HasPrefix(got, resyncPrefix) {
+		t.Error("a catch-up the client cannot splice onto its screen arrived without a resync in front of it")
+	}
+}
+
+// TestRolledBufferRepaintsInsteadOfSplicing is the regression test for the
+// artifacts a workspace switch left behind.
+//
+// A pane that produced more than the catch-up buffer holds while it was hidden
+// cannot be resumed: the bytes between where the client stopped and where the
+// buffer now starts are gone. Handing it the tail alone appends the second half
+// of the stream to a screen drawn from the first, so the guest's output lands
+// against cursor positions and modes set by bytes that never arrived, and the
+// pane comes back showing text from two different moments at once.
+//
+// The assertion is on the guest's screen, because the byte count was already
+// right while the screen was wrong.
+func TestRolledBufferRepaintsInsteadOfSplicing(t *testing.T) {
+	p := newBufferedPTY(t)
+
+	term := vt.NewEmulator(80, 24)
+	_, _ = term.Write(drain(p.Subscribe("client-1", 0)))
+	if !strings.Contains(emulatorText(term), "Welcome to fish") {
+		t.Fatal("the fixture did not put the banner on the client's screen")
+	}
+	resume := p.Unsubscribe("client-1")
+
+	// More than the buffer holds, and all of it addressed at one row, so the
+	// rows the client had drawn before the gap are still standing underneath
+	// unless something clears them.
+	p.appendAndBroadcast([]byte(strings.Repeat("\x1b[11;1Hsecond moment\r", 6000)))
+
+	_, _ = term.Write(drain(p.Subscribe("client-1", resume)))
+
+	screen := emulatorText(term)
+	if !strings.Contains(screen, "second moment") {
+		t.Errorf("the pane came back without the output it produced while hidden:\n%s", screen)
+	}
+	if strings.Contains(screen, "Welcome to fish") {
+		t.Errorf("the pane came back showing what it held before the gap as well as after it:\n%s", screen)
 	}
 }
 
