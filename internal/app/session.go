@@ -1291,12 +1291,30 @@ func (m *OS) primePaneFromDaemon(window *terminal.Window) {
 		return
 	}
 
-	var fromSeq int64
-	if state, err := m.DaemonClient.GetTerminalState(window.PTYID, 0); err == nil && state != nil {
-		m.restoreTerminalContent(window, state)
-		fromSeq = state.Seq
+	state, err := m.DaemonClient.GetTerminalState(window.PTYID, 0)
+	if err != nil || state == nil {
+		m.subscribeToPTY(window, 0)
+		return
 	}
-	m.subscribeToPTY(window, fromSeq)
+
+	// The pane may have been resized while it was hidden, by another client or
+	// by the daemon. Window.Resize measures against what this client last
+	// announced, which still says the size this client gave the pane, so it
+	// sees nothing to do and the pane comes back at a size the daemon is not
+	// at. The snapshot carries what the daemon actually is, so seed the record
+	// from that and let the resize happen before the snapshot is taken for
+	// real: reconciling after would blit cells laid out at one width into an
+	// emulator about to reflow at another.
+	if state.Width != window.ContentWidth() || state.Height != window.ContentHeight() {
+		window.SeedAnnouncedSize(state.Width, state.Height)
+		window.Resize(window.Width, window.Height)
+		if fresh, err := m.DaemonClient.GetTerminalState(window.PTYID, 0); err == nil && fresh != nil {
+			state = fresh
+		}
+	}
+
+	m.restoreTerminalContent(window, state)
+	m.subscribeToPTY(window, state.Seq)
 }
 
 // subscribeToPTY subscribes to PTY output for a window. fromSeq is the stream
