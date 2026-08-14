@@ -1142,10 +1142,25 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 		// that builds it on a new emulator. The daemon has always sent these
 		// rows and nothing has ever read them, so the history a pane came back
 		// with was whatever the catch-up replay happened to redraw.
+		//
+		// A pane whose emulator survived keeps the history it already holds and
+		// is only handed the lines that scrolled off while it was away. The
+		// daemon sends a bounded window of its scrollback and a client keeps far
+		// more than that, so replacing the whole buffer would cut a long history
+		// down to the size of the window on every workspace switch.
 		sb := t.Scrollback()
-		sb.Clear()
-		for _, row := range state.Scrollback {
-			sb.PushLine(stateToLine(row))
+		if have := sb.Len(); have == 0 {
+			for _, row := range state.Scrollback {
+				sb.PushLine(stateToLine(row))
+			}
+		} else if missing := state.ScrollbackLen - have; missing > 0 {
+			rows := state.Scrollback
+			if missing < len(rows) {
+				rows = rows[len(rows)-missing:]
+			}
+			for _, row := range rows {
+				sb.PushLine(stateToLine(row))
+			}
 		}
 
 		// The alternate screen is restored the same way as the normal one. It
