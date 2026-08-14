@@ -85,6 +85,13 @@ type ptyTarget struct {
 	// tail is the highest witness number the daemon has been seen holding for
 	// each pane. Scrollback is allowed to grow and never to forget its end.
 	tail map[string]int
+	// screenSwitched names the panes whose screen this run has moved, by an
+	// altscreen action or by a guest write that changes screens. Their history is
+	// no longer a question this oracle can ask: output written while a pane was
+	// on the alternate screen is discarded when it leaves, so a run that switches
+	// screens across a burst leaves a hole the pane really does have and that
+	// says nothing about whether any history was lost.
+	screenSwitched map[string]bool
 	// alt names the panes the daemon has confirmed are on the alternate screen.
 	// Entries are added only once confirmed, so the rule is "an alternate screen
 	// that existed survives" rather than "an alternate screen was reached",
@@ -123,7 +130,7 @@ func (p *ptyTarget) Reset() error {
 	p.maxRows = ptyRows
 	p.detached, p.probe, p.pending = false, true, nil
 	p.emitted, p.tail = map[string]int{}, map[string]int{}
-	p.alt = map[string]bool{}
+	p.alt, p.screenSwitched = map[string]bool{}, map[string]bool{}
 	p.wins, p.focused = nil, ""
 	p.current = p.session
 
@@ -350,6 +357,7 @@ func (p *ptyTarget) applyAltScreen(a fuzz.Action) {
 		return
 	}
 	enter := a.A%2 == 1
+	p.screenSwitched[w.ID] = true
 	if err := paneSend(p.base, p.current, w.ID, paneAltCmd(w.tag(), enter)); err != nil {
 		return
 	}
@@ -383,9 +391,11 @@ func (p *ptyTarget) applyGuest(a fuzz.Action) {
 	if !ok {
 		return
 	}
-	// A guest write can switch screens by itself, so any recorded expectation
-	// about this pane's alternate screen is no longer this run's to hold.
+	// A guest write can switch screens by itself, and the pool is full of writes
+	// that do. Any expectation about this pane's alternate screen is no longer
+	// this run's to hold, and neither is any question about its history.
 	delete(p.alt, w.ID)
+	p.screenSwitched[w.ID] = true
 	_ = paneSend(p.base, p.current, w.ID, paneEmitCmd(a.S))
 }
 
@@ -717,6 +727,12 @@ func (p *ptyTarget) checkScrollback(w daemonWindow, grid []string) []fuzz.Violat
 	// one, and the honest move is to decline rather than to guess: it reported
 	// two seeds as losing history when all they had done was switch screens.
 	if _, _, any := seqRange(grid, w.tag()); !any {
+		return nil
+	}
+	// And not for a pane whose screen this run has moved. See screenSwitched:
+	// output written to a pane on the alternate screen goes away with it, so a
+	// burst that straddles a switch leaves a hole the pane genuinely has.
+	if p.screenSwitched[w.ID] {
 		return nil
 	}
 	hist, err := daemonScrollback(p.base, p.current, w.ID, scrollTail)
