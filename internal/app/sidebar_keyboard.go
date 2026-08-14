@@ -254,26 +254,56 @@ func (m *OS) SidebarJumpToSession(n int) {
 }
 
 // SidebarOpenCursorMenu opens the context menu for the cursor row, reusing the
-// mouse path so the rows are identical. sessionOnly forces the session menu even
-// when the cursor sits on a window row, which is what the kill action wants (no
-// silent destruction: the menu opens with its Kill rows).
-func (m *OS) SidebarOpenCursorMenu(sessionOnly bool) {
+// mouse path so a key and a right-click on the same row open the same menu.
+//
+// It targets the row the cursor is on and nothing else, which is the rule every
+// other cursor key in the rail already follows. The kill key used to force the
+// kind to session before handing it over, so pressing it on a terminal opened
+// the session's menu instead of the pane's, and pressing it on a footer control
+// opened the attached session's menu; a key that acts on something other than
+// the row under the cursor is a key the user cannot aim.
+//
+// destructive is what is left of that key's intent, now that the row decides
+// the menu: it lands the selection on the row's own destructive action, so the
+// kill key still opens on Kill for a session and on Close for a pane. Nothing
+// is destroyed without a second keypress either way.
+//
+// A row that names no target of its own (the footer's toggle, the agents
+// header's tokens) says so rather than quietly borrowing a session.
+func (m *OS) SidebarOpenCursorMenu(destructive bool) {
 	row, ok := m.sidebarCursorRow()
 	if !ok {
 		return
 	}
-	hit := sidebarRowHit{
+	if !sidebarRowHasMenu(row) {
+		m.ShowNotification("Nothing on this row to act on", "info", config.NotificationDuration)
+		return
+	}
+	x, y := m.sidebarCursorAnchor(row)
+	m.openSidebarContextMenu(sidebarRowHit{
 		Kind:        row.Kind,
 		SessionID:   row.SessionID,
 		WindowID:    row.WindowID,
 		WindowIndex: row.WindowIndex,
+	}, x, y)
+	if destructive {
+		m.ContextMenu.selectWarn()
 	}
-	if sessionOnly {
-		hit.Kind = sidebarRowSession
-		hit.WindowIndex = -1
+}
+
+// sidebarRowHasMenu reports whether a row points at something a context menu
+// can be about: a session, or a pane in either of the two sections that list
+// panes. The rail's controls point at the rail itself, which the right-click on
+// blank rail already covers.
+func sidebarRowHasMenu(row sidebarNavRow) bool {
+	switch row.Kind {
+	case sidebarRowSession:
+		return row.SessionID != ""
+	case sidebarRowWindow, sidebarRowAgent:
+		return row.WindowID != "" || row.WindowIndex >= 0
+	default:
+		return false
 	}
-	x, y := m.sidebarCursorAnchor(row)
-	m.openSidebarContextMenu(hit, x, y)
 }
 
 // sidebarCursorAnchor is where a cursor-opened menu anchors: the top-left of the

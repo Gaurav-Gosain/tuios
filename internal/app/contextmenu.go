@@ -133,6 +133,19 @@ func (cm *ContextMenu) Move(dir int) {
 	cm.Selected = cm.Next(dir)
 }
 
+// selectWarn lands the selection on the menu's first destructive row, for the
+// callers whose whole intent is that row (the rail's kill key). A menu with no
+// destructive row, or whose only one is dimmed, keeps the selection it opened
+// with rather than jumping somewhere arbitrary.
+func (cm *ContextMenu) selectWarn() {
+	for i, it := range cm.Items {
+		if it.Warn && cm.selectable(i) {
+			cm.Selected = i
+			return
+		}
+	}
+}
+
 // HitTest returns the row index at screen (x, y), or -1 when the point is not
 // on a runnable row: outside the menu, on its chrome, or on a separator or
 // dimmed row. Coordinates are absolute screen cells.

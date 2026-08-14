@@ -92,7 +92,7 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case sidebarActWiden:
 		o.SidebarSetCollapsed(false)
 	case sidebarActKill:
-		o.SidebarOpenCursorMenu(true) // session menu, Kill among its rows
+		o.SidebarOpenCursorMenu(true) // the cursor row's menu, opened on its destructive row
 	case sidebarActMenu:
 		o.SidebarOpenCursorMenu(false)
 	case sidebarActHelp:

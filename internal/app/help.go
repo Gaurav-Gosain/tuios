@@ -295,7 +295,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		row("narrow", "Collapse the rail to its glyph strip"),
 		row("widen", "Expand the rail back to its width"),
 		row("menu", "Open the menu for the row under the cursor"),
-		row("kill", "Open the session menu, which is where Kill lives"),
+		row("kill", "Open that row's menu on its Close or Kill row"),
 		row("rename", "Rename the window under the cursor"),
 		row("accent", "Recolor the window under the cursor"),
 		row("help", "Show this list of the rail's keys"),
