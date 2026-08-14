@@ -94,6 +94,16 @@ of the comparison.
 `e2e/tui/session_switch_fidelity_test.go` is the third rung: a real client in a
 real terminal, switched away and back, read for what it actually painted.
 
+Two targeted tests sit beside the matrix, for the seams its shapes structurally
+cannot hold. `TestResizeSeamStaysClosed` resizes a pane that produces little
+enough that every row it ever made is still held on both sides, so a line laid
+out at a width the other side never had is a row the comparison reads rather
+than one it lost to eviction; the resized-while-producing shape floods too many
+rows to keep its own seam. `TestSaturatedSwitchNoResize` takes a pane already
+at its scrollback cap through a workspace switch with no resize anywhere,
+which is the shape that found the restore discarding more history than the
+snapshot carries.
+
 ## The routes
 
 Seven routes reach a pane. They collapse into exactly two client-side
@@ -167,9 +177,16 @@ Two things had to be true for that rule to hold, and neither was:
   between a snapshot being taken and the subscribe that follows it.
 - A client emulator that has been through `Close()` holds nothing, and no resume
   position may be claimed for it.
-- Output already queued for a client's emulator belongs to the subscription it
-  came from. A restore discards it, because it is older than the snapshot and
-  applying it afterwards paints it twice.
+- Output already queued for a client's emulator is applied before the pane is
+  primed (`Window.DrainPendingOutput`), not discarded. It is older than the
+  snapshot, but the snapshot carries a bounded scrollback window, and the queue
+  of a pane that outpaced its client holds history the snapshot does not bring
+  back: discarding it froze the client's scrollback at wherever its emulator
+  had got to, with a silent hole from there to the snapshot's window. The pane
+  is unsubscribed by the time it is primed, so the queue is finite and the
+  drain returns. The restore's epoch bump still discards anything that races
+  in after the drain, which is what keeps the blit from painting over live
+  output.
 
 ## What the wire carries, and who reads it
 
@@ -288,9 +305,17 @@ recoverable from the stream the way bytes are:
   the only route back down for a streamed pane, since the layout no longer
   resizes it.
 
-A subscriber whose channel is full still drops one, the way it drops output, and
-there is no stream position to resume a resize from. The pane keeps the width it
-had until something primes it, which is the one hole left in this.
+The ring holds bytes only, so a catch-up used to be one flat replay laid out at
+one width even when the daemon had changed width inside the span. Every resize
+now leaves a mark at its stream position (`resizeMarks`), pruned with the ring,
+and a catch-up is cut at each mark inside it with the resize sent between the
+segments, so the client lays each segment out at the width the daemon laid it
+out at. A rolled client is started at the newest mark behind the ring, which is
+the width the ring's first byte was laid out at.
+
+A subscriber whose channel is full still drops one, the way it drops output.
+A re-subscribe heals it now, because the catch-up carries the marks; until
+then the pane keeps the width it had, which is the hole left in this.
 
 A resize to the size an emulator already has is not a no-op inside it: it resets
 the scroll region and the tab stops, which are the guest's. Both sides skip it.
@@ -315,6 +340,15 @@ also disagree about a resize they saw in different orders. Reproducing it needs 
 guest that does not repaint, which is why it is stated here rather than asserted
 in the matrix: the shape that provokes it cannot tell that bug from ordinary
 resize semantics.
+
+`ApplyTerminalState` seeds a surviving emulator with the lines that scrolled
+off while it was away, counted as the daemon's scrollback length minus the
+client's. Both lengths saturate at the cap, so a pane already full on both
+sides that produced while the client was away computes zero missing rows and
+seeds nothing, and what scrolled off while it was away is absent from the
+client's history. Counting cannot say more once either side is at its cap;
+doing it right needs the wire to carry how many rows scrolled off since a
+stream position.
 
 ## What the wire still does not carry
 

@@ -1216,6 +1216,16 @@ func (m *OS) primePaneFromDaemon(window *terminal.Window) {
 		return
 	}
 
+	// Everything already queued for this emulator is applied before the
+	// snapshot is fetched, not thrown away. The pane is unsubscribed by the
+	// time it is primed, so the queue is finite and this returns. Discarding
+	// it looked safe because the snapshot is newer than anything queued, but a
+	// snapshot carries a bounded scrollback window and the queue can hold far
+	// more than that: a pane that outpaced its client came back with its
+	// history frozen at wherever the client had got to, a hole down to the
+	// snapshot's window, and the screen at the end.
+	window.DrainPendingOutput()
+
 	state, err := m.DaemonClient.GetTerminalState(window.PTYID, 0)
 	if err != nil || state == nil {
 		m.subscribeToPTY(window, 0)
