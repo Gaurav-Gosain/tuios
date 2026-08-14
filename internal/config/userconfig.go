@@ -346,14 +346,10 @@ func DefaultConfig() *UserConfig {
 				// and are not directly configurable as keybindings
 			},
 			Navigation: map[string][]string{
-				"nav_up":       {"up"},
-				"nav_down":     {"down"},
-				"nav_left":     {"left"},
-				"nav_right":    {"right"},
-				"extend_up":    {"shift+up"},
-				"extend_down":  {"shift+down"},
-				"extend_left":  {"shift+left"},
-				"extend_right": {"shift+right"},
+				"nav_up":    {"up"},
+				"nav_down":  {"down"},
+				"nav_left":  {"left"},
+				"nav_right": {"right"},
 			},
 			RestoreMinimized: map[string][]string{
 				"restore_minimized_1": {"shift+1", "!"},

@@ -151,11 +151,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		!o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
 		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {
-		fw := o.GetFocusedWindow()
-		if fw == nil || !fw.IsSelecting {
-			if idx := findClickedWindow(mouse.X, mouse.Y, o); idx >= 0 && idx != o.FocusedWindow {
-				o.FocusWindow(idx)
-			}
+		if idx := findClickedWindow(mouse.X, mouse.Y, o); idx >= 0 && idx != o.FocusedWindow {
+			o.FocusWindow(idx)
 		}
 	}
 
@@ -210,49 +207,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			if scrollDir == 0 {
 				o.AutoScrollActive = false
 			}
-			return o, nil
-		}
-	}
-
-	// Handle text selection motion with auto-scroll
-	{
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsSelecting {
-			terminalX, terminalY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
-
-			if inContent {
-				focusedWindow.SelectionEnd.X = terminalX
-				focusedWindow.SelectionEnd.Y = terminalY
-			} else {
-				// Auto-scroll when dragging above or below the content area
-				borderOff := focusedWindow.BorderOffset()
-				contentTop := focusedWindow.Y + borderOff
-				contentBottom := focusedWindow.Y + borderOff + focusedWindow.ContentHeight()
-
-				if mouse.Y < contentTop {
-					// Dragging above  - enter copy mode and scroll up
-					if !focusedWindow.InCopyMode() {
-						focusedWindow.EnterCopyModeImplicit()
-					}
-					if focusedWindow.CopyMode != nil {
-						for range 3 {
-							MoveUp(focusedWindow.CopyMode, focusedWindow)
-						}
-					}
-					focusedWindow.SelectionEnd.Y = 0
-					focusedWindow.SelectionEnd.X = max(terminalX, 0)
-				} else if mouse.Y >= contentBottom {
-					// Dragging below  - scroll down (or exit copy mode if at bottom)
-					if focusedWindow.CopyMode != nil && focusedWindow.CopyMode.Active {
-						for range 3 {
-							MoveDown(focusedWindow.CopyMode, focusedWindow)
-						}
-					}
-					focusedWindow.SelectionEnd.Y = focusedWindow.ContentHeight() - 1
-					focusedWindow.SelectionEnd.X = max(terminalX, 0)
-				}
-			}
-			focusedWindow.InvalidateCache()
 			return o, nil
 		}
 	}

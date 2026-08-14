@@ -100,25 +100,13 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Handle scrollback in terminal mode or selection mode
-	if o.Mode == app.TerminalMode || o.SelectionMode {
+	// Handle scrollback in terminal mode
+	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				if o.SelectionMode {
-					// In selection mode, scroll without entering scrollback mode
-					if focusedWindow.Terminal != nil {
-						scrollbackLen := focusedWindow.ScrollbackLen()
-						if scrollbackLen > 0 && focusedWindow.ScrollbackOffset < scrollbackLen {
-							focusedWindow.ScrollbackOffset += config.ScrollLines
-							if focusedWindow.ScrollbackOffset > scrollbackLen {
-								focusedWindow.ScrollbackOffset = scrollbackLen
-							}
-							focusedWindow.InvalidateCache()
-						}
-					}
-				} else if focusedWindow.InCopyMode() {
+				if focusedWindow.InCopyMode() {
 					// Already in copy mode  - scroll up
 					scrollCopyModeUp(focusedWindow)
 				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen() && focusedWindow.ScrollbackLen() > 0 {
@@ -133,16 +121,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 				return o, nil
 			case tea.MouseWheelDown:
-				if o.SelectionMode {
-					// In selection mode, scroll without entering scrollback mode
-					if focusedWindow.ScrollbackOffset > 0 {
-						focusedWindow.ScrollbackOffset -= config.ScrollLines
-						if focusedWindow.ScrollbackOffset < 0 {
-							focusedWindow.ScrollbackOffset = 0
-						}
-						focusedWindow.InvalidateCache()
-					}
-				} else if focusedWindow.InCopyMode() {
+				if focusedWindow.InCopyMode() {
 					// In copy mode, scroll down
 					scrollCopyModeDown(focusedWindow)
 					leaveCopyModeAtBottom(focusedWindow)

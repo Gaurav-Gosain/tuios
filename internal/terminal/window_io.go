@@ -654,7 +654,6 @@ func (w *Window) Close() {
 	// Clear caches to free memory
 	w.CachedContent = ""
 	w.CachedLayer = nil
-	w.SelectedText = ""
 
 	// Clear copy mode to free memory
 	if w.CopyMode != nil {

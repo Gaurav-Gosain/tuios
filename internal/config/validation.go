@@ -340,7 +340,7 @@ func findConflicts(cfg *UserConfig, normalizer *KeyNormalizer) map[string][]stri
 	}
 
 	selectionModeActions := []string{
-		"toggle_selection", "toggle_selection_term", "copy_selection", "paste_clipboard", "clear_selection",
+		"copy_selection", "paste_clipboard", "clear_selection",
 	}
 
 	// Create sets for quick lookup

@@ -202,9 +202,6 @@ func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 		return nil
 	}
 
-	// Deliberately not stored on window.SelectedText: that field drives the
-	// older, coordinate-based selection highlight, whose bounds this path never
-	// sets, so filling it would paint a stray highlight at the origin.
 	if o.SelectionDragged || window.ClickCount < 2 {
 		return o.CopyToClipboard(text)
 	}

@@ -170,12 +170,6 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("nav_left", handleLeftKey)
 	d.Register("nav_right", handleRightKey)
 
-	// Selection extension (shift+arrow keys)
-	d.Register("extend_up", handleShiftUpKey)
-	d.Register("extend_down", handleShiftDownKey)
-	d.Register("extend_left", handleShiftLeftKey)
-	d.Register("extend_right", handleShiftRightKey)
-
 	// Restore minimized by index (shift+1-9)
 	for i := range 9 {
 		d.Register("restore_minimized_"+string(rune('1'+i)), makeRestoreMinimizedHandler(i))
@@ -566,12 +560,6 @@ func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.LogInfo("Entering terminal mode for window: %s", focusedWindow.Title())
 		}
 		o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
-		// Clear selection state when entering terminal mode
-		if focusedWindow != nil {
-			focusedWindow.SelectedText = ""
-			focusedWindow.IsSelecting = false
-			focusedWindow.InvalidateCache()
-		}
 		// Enter terminal mode and start raw input reader
 		return o, o.EnterTerminalMode()
 	}
@@ -602,18 +590,6 @@ func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Close help if showing
 	if o.ShowHelp {
 		o.ShowHelp = false
-		return o, nil
-	}
-	// Exit selection mode if active
-	if o.SelectionMode {
-		o.SelectionMode = false
-		o.ShowNotification("Selection Mode Exited", "info", config.NotificationDuration)
-		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-			focusedWindow.SelectedText = ""
-			focusedWindow.IsSelecting = false
-			focusedWindow.ScrollbackOffset = 0
-			focusedWindow.InvalidateCache()
-		}
 		return o, nil
 	}
 	return requestQuit(o)
@@ -684,8 +660,6 @@ func handleClearSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if w == nil {
 		return o, nil
 	}
-	w.SelectedText = ""
-	w.IsSelecting = false
 	if w.InCopyMode() {
 		w.ExitCopyMode()
 	}

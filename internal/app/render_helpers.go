@@ -708,33 +708,6 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 	return strings.Join(visibleLines, "\n"), finalX, finalY
 }
 
-func (m *OS) isPositionInSelection(window *terminal.Window, x, y int) bool {
-	if !window.IsSelecting && window.SelectedText == "" {
-		return false
-	}
-
-	startX, startY := window.SelectionStart.X, window.SelectionStart.Y
-	endX, endY := window.SelectionEnd.X, window.SelectionEnd.Y
-
-	if startY > endY || (startY == endY && startX > endX) {
-		startX, endX = endX, startX
-		startY, endY = endY, startY
-	}
-
-	if y < startY || y > endY {
-		return false
-	}
-	if y == startY && y == endY {
-		return x >= startX && x <= endX
-	} else if y == startY {
-		return x >= startX
-	} else if y == endY {
-		return x <= endX
-	} else {
-		return true
-	}
-}
-
 // workspacePosition returns the window's 1-based place among the windows of its
 // workspace, the same number the leader-digit shortcuts address it by. Returns
 // 0 for a window that is not in the list, which the title format renders as-is.
