@@ -37,13 +37,12 @@ import (
 //
 // # Why it is worth a maintainer's attention anyway
 //
-// capture-pane is not only used for state. It is the documented way for an agent
-// in a pane to read another pane (skills/tuios/SKILL.md, "Reading another
-// pane"), and wait-for window-output matches its patterns against the same
-// content. Under that reading the daemon's emulator is a rendering source of
-// truth, for a reader that has no client and no other way to see the pane. An
-// agent tailing a build that prints quickly can be handed a log with holes in
-// it and no indication that anything was dropped.
+// State queries are one caller. The other is the documented way for an agent in
+// a pane to read another pane (skills/tuios/SKILL.md, "Reading another pane"),
+// and wait-for window-output matches its patterns against the same content. For
+// that reader the daemon's emulator is the rendering source of truth, because it
+// has no client and no other way to see the pane. An agent tailing a build that
+// prints quickly can be handed a log with holes in it and nothing to tell it so.
 //
 // The cheap options if it is worth fixing are a blocking send with a deadline
 // instead of a default arm, or a dropped-bytes counter the capture verb can
@@ -70,11 +69,12 @@ func TestKnownDaemonCaptureLosesFastOutput(t *testing.T) {
 
 	const lines = 1200
 	control := t.TempDir() + "/control.txt"
-	// tee is the control and not part of what is being measured: the same bytes
-	// reach a file and the terminal from one write, so a line in the file and not
-	// in the daemon was lost after the shell was done with it.
+	// The control goes through tee, so one write reaches both a file and the
+	// terminal. A complete file puts the emitter beyond suspicion: printf, seq
+	// and the shell all produced every line, so anything missing downstream went
+	// missing after they were done.
 	cmd := paneWitnessCmd(tag, 1, lines)
-	cmd = strings.TrimSuffix(cmd, "\n") + " > " + control + "\n"
+	cmd = strings.TrimSuffix(cmd, "\n") + " | tee " + control + "\n"
 	if err := paneSend(base, "capture-loss", w.ID, cmd); err != nil {
 		t.Fatalf("seed the control: %v", err)
 	}

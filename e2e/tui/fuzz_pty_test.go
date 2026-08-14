@@ -103,7 +103,7 @@ type ptyTarget struct {
 	// alt names the panes the daemon has confirmed are on the alternate screen.
 	// Entries are added only once confirmed, so the rule is "an alternate screen
 	// that existed survives" rather than "an alternate screen was reached",
-	// which is a liveness question and is asked in fuzz_liveness_test.go.
+	// which is a liveness question and is asked in liveness_test.go.
 	alt map[string]bool
 
 	// wins and focused are the last structure read from the daemon.
@@ -301,7 +301,6 @@ func (p *ptyTarget) applyToClient(a fuzz.Action) error {
 		if err := t.SendKeys(tuitest.Alt("N")); err != nil {
 			return err
 		}
-		time.Sleep(400 * time.Millisecond)
 		p.current = attachedSession(p.base, p.current)
 		return nil
 	case fuzz.ToggleTiling:
@@ -853,24 +852,47 @@ func (p *ptyTarget) windowMode() {
 	time.Sleep(insertGuard)
 }
 
-// attachedSession reports which session currently has a client, falling back to
-// the caller's last answer. It is how the target follows a session switch
-// without assuming the walk order, which belongs to the daemon.
-func attachedSession(base, fallback string) string {
+// attachedSession reports which session the client is now showing, by asking the
+// daemon which one has a client on it. It is how the target follows a session
+// switch without assuming the walk order, which belongs to the daemon.
+//
+// Getting this wrong is worse than a missed switch: every later rule would
+// compare the client's screen against a different session's state and report the
+// mismatch as a finding. So it polls until the answer moves, and it prefers the
+// session it was already on whenever that one is still attached, because during
+// a switch both ends can briefly claim a client.
+func attachedSession(base, current string) string {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		// One session claiming the client is the settled answer, whether it is
+		// the one the run was already on or the one it walked to. Two claiming it
+		// is mid-switch, and none is between a client leaving and arriving.
+		if attached := attachedSessions(base); len(attached) == 1 {
+			return attached[0]
+		}
+		if !time.Now().Before(deadline) {
+			return current
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func attachedSessions(base string) []string {
 	var sessions []struct {
 		Name     string `json:"name"`
 		Attached bool   `json:"attached"`
 	}
 	out, err := tuiosOut(base, "ls", "--json")
 	if err != nil || json.Unmarshal([]byte(out), &sessions) != nil {
-		return fallback
+		return nil
 	}
+	var names []string
 	for _, s := range sessions {
 		if s.Attached {
-			return s.Name
+			names = append(names, s.Name)
 		}
 	}
-	return fallback
+	return names
 }
 
 func (p *ptyTarget) mouse(a fuzz.Action, action tuitest.MouseAction) tuitest.MouseEvent {

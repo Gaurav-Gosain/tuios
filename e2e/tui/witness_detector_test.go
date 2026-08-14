@@ -87,6 +87,47 @@ func TestSpliceDetector(t *testing.T) {
 	}
 }
 
+// TestSpliceDetectorSeesTheClientScreen is the same rule fired through the whole
+// path it runs on during a campaign: a real pane, a real daemon, a real PTY, and
+// the client's own rendered grid read back through tuitest.
+//
+// The hole is genuine and the pane really printed it. One printf emits 1 2 3 and
+// then 200 201 202, so six adjacent rows carry a jump that no clip, overlay or
+// covering pane could produce, and the detector is right to fire. That is the
+// point: what is under test here is not tuios but whether the rule can see a
+// hole at all once it is reading a composited screen through an emulator instead
+// of a slice of strings the test built itself.
+//
+// Without it, the table above proves a function and the campaign proves nothing:
+// a rule that silently read the wrong rows, or read them after the pattern had
+// been broken by a border, would pass every green run for the same reason it
+// would miss every real splice.
+func TestSpliceDetectorSeesTheClientScreen(t *testing.T) {
+	term, base := livenessSession(t, "splice-plumbing")
+	w := firstWindow(t, base, "splice-plumbing")
+	tag := w.tag()
+
+	// One command, so the rows are adjacent: a second command would put a prompt
+	// and an echoed command line between the two runs, and the rule would
+	// correctly decline to compare across them.
+	if err := paneSend(base, "splice-plumbing", w.ID,
+		"printf 'MK"+tag+"-%d\\n' 1 2 3 200 201 202\n"); err != nil {
+		t.Fatalf("seed the pane: %v", err)
+	}
+	if err := term.WaitForText("MK"+tag+"-202", shellTimeout); err != nil {
+		t.Fatalf("the pane never printed its last line: %v\n%s", err, term.Snapshot())
+	}
+
+	a, b, found := spliceIn(screenLines(term.Screen()))
+	if !found {
+		t.Fatalf("the rule read a client screen carrying a %d to %d jump and saw nothing\n%s",
+			3, 200, term.Snapshot())
+	}
+	if a.seq != 3 || b.seq != 200 || a.tag != tag {
+		t.Fatalf("the rule fired on %s %d -> %d, want %s 3 -> 200", a.tag, a.seq, b.seq, tag)
+	}
+}
+
 // TestWitnessTagIsStable pins the tag derivation, because every rule keyed on it
 // silently stops comparing anything if it changes shape: a tag the pattern does
 // not match makes every pane look like it printed nothing, and a rule that
