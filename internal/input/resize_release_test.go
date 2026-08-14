@@ -99,8 +99,9 @@ func TestReleaseEndsResizeWhoeverClaimsIt(t *testing.T) {
 			o.ScrollbarDragWindowIndex = 0
 		}},
 		{"text selection", func(o *app.OS, win *terminal.Window) {
-			o.SelectionMode = true
-			win.IsSelecting = true
+			win.EnterCopyModeImplicit()
+			o.Dragging = true
+			o.DraggedWindowIndex = 0
 		}},
 		{"mode change", func(o *app.OS, _ *terminal.Window) {
 			o.Mode = app.WindowManagementMode

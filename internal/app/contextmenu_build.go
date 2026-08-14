@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // Row glyphs. These are Nerd Font codepoints, written as escapes so the source
@@ -236,9 +237,15 @@ func separator() ContextMenuItem { return ContextMenuItem{Sep: true} }
 // menu. See the note on the target constants for why the title row stopped
 // being a target of its own.
 func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
-	win := m.GetFocusedWindow()
+	// The pane the menu was opened on, not the focused one. Every caller focuses
+	// the target before building, so the two agree today; asking the target
+	// directly is what keeps them agreeing when a caller stops doing that.
+	var win *terminal.Window
+	if windowIndex >= 0 && windowIndex < len(m.Windows) {
+		win = m.Windows[windowIndex]
+	}
 
-	hasSelection := win != nil && win.SelectedText != ""
+	hasSelection := win.HasSelection()
 	// Pasting reaches the shell only from terminal mode; the clipboard reply is
 	// dropped in every other mode. Dimming says so rather than letting the row
 	// look live and do nothing.

@@ -77,7 +77,6 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 		{
 			Title: "Selection",
 			Actions: []string{
-				"toggle_selection", "toggle_selection_term",
 				"copy_selection", "paste_clipboard", "clear_selection",
 			},
 		},

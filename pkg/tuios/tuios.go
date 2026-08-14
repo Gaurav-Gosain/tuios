@@ -360,14 +360,6 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
-	// Allow motion events during text selection
-	if os.SelectionMode {
-		focusedWindow := os.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsSelecting {
-			return msg
-		}
-	}
-
 	// Allow motion events when in terminal mode with alt screen apps
 	if os.Mode == TerminalMode {
 		focusedWindow := os.GetFocusedWindow()

@@ -244,32 +244,27 @@ type Window struct {
 	//   Two windows' ioMu are never held simultaneously, so there is no
 	//   window-to-window ordering to respect.
 	ioMu                   sync.RWMutex
-	Minimized              bool               // True when window is minimized to dock
-	Minimizing             bool               // True when window is being minimized (animation playing)
-	MinimizeHighlightUntil time.Time          // Highlight dock tab until this time
-	MinimizeOrder          int64              // Unix nano timestamp when minimized (for dock ordering)
-	PreMinimizeX           int                // Store position before minimizing
-	PreMinimizeY           int                // Store position before minimizing
-	PreMinimizeWidth       int                // Store size before minimizing
-	PreMinimizeHeight      int                // Store size before minimizing
-	Workspace              int                // Workspace this window belongs to
-	Zoomed                 bool               // True when window is zoomed (fullscreen)
-	PreZoomX               int                // Store position before zooming
-	PreZoomY               int                // Store position before zooming
-	PreZoomWidth           int                // Store size before zooming
-	PreZoomHeight          int                // Store size before zooming
-	SelectionStart         struct{ X, Y int } // Selection start position
-	SelectionEnd           struct{ X, Y int } // Selection end position
-	IsSelecting            bool               // True when selecting text
-	SelectedText           string             // Currently selected text
-	SelectionCursor        struct{ X, Y int } // Current cursor position in selection mode
-	processExited          atomic.Bool        // Written on PTY/monitor goroutine, read on UI goroutine
-	// Enhanced text selection support
-	SelectionMode int // 0 = character, 1 = word, 2 = line
+	Minimized              bool        // True when window is minimized to dock
+	Minimizing             bool        // True when window is being minimized (animation playing)
+	MinimizeHighlightUntil time.Time   // Highlight dock tab until this time
+	MinimizeOrder          int64       // Unix nano timestamp when minimized (for dock ordering)
+	PreMinimizeX           int         // Store position before minimizing
+	PreMinimizeY           int         // Store position before minimizing
+	PreMinimizeWidth       int         // Store size before minimizing
+	PreMinimizeHeight      int         // Store size before minimizing
+	Workspace              int         // Workspace this window belongs to
+	Zoomed                 bool        // True when window is zoomed (fullscreen)
+	PreZoomX               int         // Store position before zooming
+	PreZoomY               int         // Store position before zooming
+	PreZoomWidth           int         // Store size before zooming
+	PreZoomHeight          int         // Store size before zooming
+	processExited          atomic.Bool // Written on PTY/monitor goroutine, read on UI goroutine
+	// Multi-click tracking. What a press selects is decided by how many clicks
+	// it makes; the selection itself is copy mode's, see CopyMode below.
 	LastClickTime time.Time
 	LastClickX    int
 	LastClickY    int
-	ClickCount    int // Track number of consecutive clicks for word/line selection
+	ClickCount    int
 	// Scrollback mode support
 	ScrollbackMode   bool // True when viewing scrollback history
 	ScrollbackOffset int  // Number of lines scrolled back (0 = at bottom, viewing live output)

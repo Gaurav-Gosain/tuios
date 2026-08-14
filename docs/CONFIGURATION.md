@@ -173,11 +173,12 @@ System-level controls. This section is currently empty as debug commands have be
 **Note:** Debug commands (logs, cache stats) are accessible via `Ctrl+B D` submenu and are not directly configurable as keybindings. See the `debug_prefix` section below.
 
 ### navigation
-Arrow key navigation for window movement and selection extension.
+Arrow key navigation.
 
 **Available actions:**
 - `nav_up`, `nav_down`, `nav_left`, `nav_right` - Arrow key navigation
-- `extend_up`, `extend_down`, `extend_left`, `extend_right` - Shift + arrow keys for selection extension
+
+Text selection is copy mode's: select with the mouse, or enter copy mode and use `v`/`V`.
 
 ### restore_minimized
 Individual minimized window restoration by number.

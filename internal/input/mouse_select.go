@@ -197,25 +197,31 @@ func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 		return nil
 	}
 
-	var text string
-	func() {
-		window.RLockIO()
-		defer window.RUnlockIO()
-		if window.Terminal != nil {
-			text = extractVisualText(cm, window)
-		}
-	}()
+	text := selectionText(window)
 	if text == "" {
 		return nil
 	}
 
-	// Deliberately not stored on window.SelectedText: that field drives the
-	// older, coordinate-based selection highlight, whose bounds this path never
-	// sets, so filling it would paint a stray highlight at the origin.
 	if o.SelectionDragged || window.ClickCount < 2 {
 		return o.CopyToClipboard(text)
 	}
 	return o.DeferCopyToClipboard(text, remainingClickWindow(window))
+}
+
+// selectionText is the text of a pane's current selection, or "" when it holds
+// none. It is the read half of Window.HasSelection: whoever offered the action
+// asked that question, and whoever runs it gets the text from here, so the two
+// cannot disagree about whether there was anything to copy.
+func selectionText(window *terminal.Window) string {
+	if !window.HasSelection() {
+		return ""
+	}
+	window.RLockIO()
+	defer window.RUnlockIO()
+	if window.Terminal == nil {
+		return ""
+	}
+	return extractVisualText(window.CopyMode, window)
 }
 
 // remainingClickWindow is how much of the multi-click window is left, measured

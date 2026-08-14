@@ -700,3 +700,51 @@ func TestClickInPaneDoesNotFreezeOutput(t *testing.T) {
 	runInShell(t, term, "echo FREEZE-AFTER-$((3*3))", "FREEZE-AFTER-9", shellTimeout)
 	alive(t, term, "after clicking inside a pane")
 }
+
+// TestMenuCopiesADragSelection is the whole reported bug in one test: drag over
+// a line of output, right-click on the highlight, and take "Copy selection".
+//
+// Nothing here could have failed for want of a selection: the drag copies on
+// release, so the clipboard already holds the text before the menu is opened.
+// The baseline is taken after that write, so what is asserted is only what the
+// menu row itself produced. That is what nothing tested. Copy-on-select was
+// covered end to end, and the row beside it was greyed out over a plainly
+// visible highlight for anyone who reached for the menu instead.
+func TestMenuCopiesADragSelection(t *testing.T) {
+	out := &lockedBuffer{}
+	term, _ := start(t, startOpts{out: out})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+
+	const marker = "MENUCOPY-alpha-bravo"
+	runInShell(t, term, "echo "+marker, marker, shellTimeout)
+	row, col := findText(t, term, marker)
+
+	dragSelect(t, term, col, col+len(marker)-1, row)
+	waitClipboardSequence(t, term, out, 0, marker)
+
+	// Everything from here is the menu's doing.
+	from := len(clipboardWrites(out))
+
+	// Shift+right-click rather than a plain one so the menu opens over a pane
+	// still in terminal mode, which is the pane menu rather than the small
+	// selection menu, and the row that was dimmed.
+	shiftRightClick(t, term, col+2, row)
+	waitMenu(t, term, "pane with a selection", "Copy selection", "Close pane")
+
+	// The row has to be reachable, not merely present: arrow navigation skips
+	// dimmed rows, so landing the marker on it is the enablement assertion.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(markedRow(s), "Copy selection")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the menu opened on a drag-selected pane with \"Copy selection\" out of reach, "+
+			"so the row is dimmed over a live selection: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("enter: %v", err)
+	}
+
+	waitClipboardSequence(t, term, out, from, marker)
+	alive(t, term, "after copying a selection from the context menu")
+}

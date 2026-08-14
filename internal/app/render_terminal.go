@@ -166,7 +166,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// Fast path for unfocused windows: use the emulator's built-in Render()
 	// which is faster than cell-by-cell iteration. The focused window uses
 	// the slow path for cursor overlay and selection highlighting.
-	if !isFocused && window.CopyMode == nil && !window.IsSelecting && window.SelectedText == "" && window.ScrollbackOffset == 0 {
+	if !isFocused && window.CopyMode == nil && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
 		cacheRender(window, rendered)
 		if renderTraceEnabled {
@@ -327,7 +327,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	var currentStyleCached bool
 	var currentPrefix, currentSuffix string
 	var prevCell *uv.Cell
-	var prevIsCursor, prevIsSelected, prevIsSelectionCursor bool
+	var prevIsCursor bool
 
 	flushBatch := func() {
 		if batchBuilder.Len() > 0 {
@@ -366,16 +366,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return ar == br && ag == bg && ab == bb && aa == ba
 	}
 
-	styleMatches := func(cell *uv.Cell, isCursorPos, isSelected, isSelectionCursor bool) bool {
+	styleMatches := func(cell *uv.Cell, isCursorPos bool) bool {
 		if prevCell == nil && cell == nil {
-			return prevIsCursor == isCursorPos && prevIsSelected == isSelected && prevIsSelectionCursor == isSelectionCursor
+			return prevIsCursor == isCursorPos
 		}
 		if prevCell == nil || cell == nil {
 			return false
 		}
 		return prevIsCursor == isCursorPos &&
-			prevIsSelected == isSelected &&
-			prevIsSelectionCursor == isSelectionCursor &&
 			safeColorEquals(prevCell.Style.Fg, cell.Style.Fg) &&
 			safeColorEquals(prevCell.Style.Bg, cell.Style.Bg) &&
 			prevCell.Style.Attrs == cell.Style.Attrs
@@ -480,8 +478,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 				prevCell = nil
 				prevIsCursor = false
-				prevIsSelected = false
-				prevIsSelectionCursor = false
 
 				x += charWidth
 				continue
@@ -517,8 +513,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				builder.WriteString(renderStyledText(visualSelectionStyle, char))
 				prevCell = cell
 				prevIsCursor = false
-				prevIsSelected = false
-				prevIsSelectionCursor = false
 				cellWidth := 1
 				if cell != nil && cell.Width > 1 {
 					cellWidth = cell.Width
@@ -534,8 +528,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					builder.WriteString(renderStyledText(currentMatchStyle, char))
 					prevCell = cell
 					prevIsCursor = false
-					prevIsSelected = false
-					prevIsSelectionCursor = false
 					cellWidth := 1
 					if cell != nil && cell.Width > 1 {
 						cellWidth = cell.Width
@@ -550,8 +542,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					builder.WriteString(renderStyledText(searchMatchStyle, char))
 					prevCell = cell
 					prevIsCursor = false
-					prevIsSelected = false
-					prevIsSelectionCursor = false
 					cellWidth := 1
 					if cell != nil && cell.Width > 1 {
 						cellWidth = cell.Width
@@ -561,62 +551,32 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				}
 			}
 
-			isSelected := (window.IsSelecting || window.SelectedText != "") && m.isPositionInSelection(window, x, y)
 			// Only render fake cursor when real terminal cursor is not being
 			// used. Suppressing the real one during a resize must not hand the
 			// job to this path instead: the gesture draws no cursor either way.
 			isCursorPos := !useRealCursor && !m.Resizing && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
 
-			isSelectionCursor := m.SelectionMode && !inTerminalMode && isFocused &&
-				x == window.SelectionCursor.X && y == window.SelectionCursor.Y
+			needsStyling := shouldApplyStyle(cell) || isCursorPos
 
-			needsStyling := shouldApplyStyle(cell) || isCursorPos || isSelected || isSelectionCursor
-
-			if x > 0 && !styleMatches(cell, isCursorPos, isSelected, isSelectionCursor) {
+			if x > 0 && !styleMatches(cell, isCursorPos) {
 				flushBatch()
 			}
 
-			if needsStyling {
-				if batchBuilder.Len() == 0 {
-					if isSelected || isSelectionCursor {
-						if useOptimizedRendering {
-							currentStyle = buildOptimizedCellStyleCached(cell)
-						} else {
-							currentStyle = buildCellStyleCached(cell, isCursorPos)
-						}
-
-						if isSelected {
-							currentStyle = currentStyle.Background(lipgloss.Color("62")).Foreground(lipgloss.Color("15"))
-						}
-
-						if isSelectionCursor {
-							currentStyle = currentStyle.Background(lipgloss.Color("208")).Foreground(lipgloss.Color("0"))
-						}
-						// The style was modified after the cache lookup, so the
-						// cached escape no longer matches it; flush via styleToANSI.
-						currentStyleCached = false
-					} else {
-						// Pure cached style: reuse the cached ANSI escape so
-						// flushBatch skips styleToANSI.
-						if useOptimizedRendering {
-							currentStyle, currentPrefix, currentSuffix = buildOptimizedCellStyleCachedANSI(cell)
-						} else {
-							currentStyle, currentPrefix, currentSuffix = buildCellStyleCachedANSI(cell, isCursorPos)
-						}
-						currentStyleCached = true
-					}
-					batchHasStyle = true
+			if needsStyling && batchBuilder.Len() == 0 {
+				// Pure cached style: reuse the cached ANSI escape so flushBatch
+				// skips styleToANSI.
+				if useOptimizedRendering {
+					currentStyle, currentPrefix, currentSuffix = buildOptimizedCellStyleCachedANSI(cell)
+				} else {
+					currentStyle, currentPrefix, currentSuffix = buildCellStyleCachedANSI(cell, isCursorPos)
 				}
-
-				batchBuilder.WriteString(char)
-			} else {
-				batchBuilder.WriteString(char)
+				currentStyleCached = true
+				batchHasStyle = true
 			}
+			batchBuilder.WriteString(char)
 
 			prevCell = cell
 			prevIsCursor = isCursorPos
-			prevIsSelected = isSelected
-			prevIsSelectionCursor = isSelectionCursor
 
 			cellWidth := 1
 			if cell != nil && cell.Width > 1 {

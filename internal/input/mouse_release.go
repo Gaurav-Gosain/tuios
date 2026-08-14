@@ -1,8 +1,6 @@
 package input
 
 import (
-	"fmt"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -152,21 +150,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.AutoScrollActive = false
 			o.AutoScrollDir = 0
 			return o, cmd
-		}
-	}
-
-	// Handle text selection completion
-	if o.SelectionMode {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsSelecting {
-			// Extract selected text from terminal
-			selectedText := extractSelectedText(focusedWindow, o)
-			if selectedText != "" {
-				focusedWindow.SelectedText = selectedText
-				o.ShowNotification(fmt.Sprintf("Selected %d chars - Press 'c' to copy", len(selectedText)), "success", config.NotificationDuration)
-			}
-			focusedWindow.IsSelecting = false
-			return o, nil
 		}
 	}
 

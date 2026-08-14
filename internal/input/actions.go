@@ -1,7 +1,6 @@
 package input
 
 import (
-	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -170,12 +169,6 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("nav_down", handleDownKey)
 	d.Register("nav_left", handleLeftKey)
 	d.Register("nav_right", handleRightKey)
-
-	// Selection extension (shift+arrow keys)
-	d.Register("extend_up", handleShiftUpKey)
-	d.Register("extend_down", handleShiftDownKey)
-	d.Register("extend_left", handleShiftLeftKey)
-	d.Register("extend_right", handleShiftRightKey)
 
 	// Restore minimized by index (shift+1-9)
 	for i := range 9 {
@@ -567,12 +560,6 @@ func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.LogInfo("Entering terminal mode for window: %s", focusedWindow.Title())
 		}
 		o.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
-		// Clear selection state when entering terminal mode
-		if focusedWindow != nil {
-			focusedWindow.SelectedText = ""
-			focusedWindow.IsSelecting = false
-			focusedWindow.InvalidateCache()
-		}
 		// Enter terminal mode and start raw input reader
 		return o, o.EnterTerminalMode()
 	}
@@ -605,18 +592,6 @@ func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ShowHelp = false
 		return o, nil
 	}
-	// Exit selection mode if active
-	if o.SelectionMode {
-		o.SelectionMode = false
-		o.ShowNotification("Selection Mode Exited", "info", config.NotificationDuration)
-		if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
-			focusedWindow.SelectedText = ""
-			focusedWindow.IsSelecting = false
-			focusedWindow.ScrollbackOffset = 0
-			focusedWindow.InvalidateCache()
-		}
-		return o, nil
-	}
 	return requestQuit(o)
 }
 
@@ -646,24 +621,24 @@ func handleToggleCacheStats(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleCopySelection copies the focused pane's mouse selection to the system
+// handleCopySelection copies the focused pane's selection to the system
 // clipboard.
 //
-// The selection text is already extracted and stored on the window when the
-// selection is made, so this only has to hand it to the terminal; it does not
-// re-derive the region and cannot disagree with what is highlighted on screen.
+// The text is derived from the selection now rather than read from a field
+// filled in earlier, so it is whatever is highlighted on screen at the moment
+// the user asks for it. It went the other way once, off Window.SelectedText,
+// and that field belonged to a selection system the mouse stopped using: a
+// drag-selected pane offered a copy that silently did nothing.
 //
-// This closes a gap the release handler had been advertising: finishing a
-// selection tells the user to "Press 'c' to copy", and until now nothing was
-// listening for it.
+// The write goes through CopyToClipboard, which is also what a drag release
+// uses, so a copy asked for by menu or key and a copy-on-select land the same
+// way and say the same thing.
 func handleCopySelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	focusedWindow := o.GetFocusedWindow()
-	if focusedWindow == nil || focusedWindow.SelectedText == "" {
+	if focusedWindow == nil {
 		return o, nil
 	}
-	text := focusedWindow.SelectedText
-	o.ShowNotification(fmt.Sprintf("Copied %d characters", len(text)), "success", config.NotificationDuration)
-	return o, tea.SetClipboard(text)
+	return o, o.CopyToClipboard(selectionText(focusedWindow))
 }
 
 func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -685,8 +660,6 @@ func handleClearSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if w == nil {
 		return o, nil
 	}
-	w.SelectedText = ""
-	w.IsSelecting = false
 	if w.InCopyMode() {
 		w.ExitCopyMode()
 	}

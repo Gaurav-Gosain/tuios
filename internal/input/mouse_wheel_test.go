@@ -40,7 +40,6 @@ func TestMouseWheelUsesConfiguredScrollLines(t *testing.T) {
 			win := windowWithScrollback(t)
 			o := &app.OS{
 				Mode:          app.TerminalMode,
-				SelectionMode: true,
 				FocusedWindow: 0,
 				Windows:       []*terminal.Window{win},
 			}
@@ -67,7 +66,6 @@ func TestMouseWheelClampsAtScrollbackBounds(t *testing.T) {
 	win := windowWithScrollback(t)
 	o := &app.OS{
 		Mode:          app.TerminalMode,
-		SelectionMode: true,
 		FocusedWindow: 0,
 		Windows:       []*terminal.Window{win},
 	}

@@ -54,20 +54,13 @@ func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// The arrow keys belong to whatever overlay is up. Help scrolling is handled in
+// HandleTerminalModeKey and HandleWindowManagementModeKey, so what is left here
+// is the log viewer and the help's category strip.
 func handleUpKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Note: help menu scrolling is handled in HandleTerminalModeKey and HandleWindowManagementModeKey
-	// This function is only for selection mode and logs when NOT in help mode
 	if o.ShowLogs {
 		if o.LogScrollOffset > 0 {
 			o.LogScrollOffset--
-		}
-		return o, nil
-	}
-	// Keyboard-based text selection in selection mode
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.MoveSelectionCursor(focusedWindow, 0, -1, false)
 		}
 		return o, nil
 	}
@@ -75,18 +68,8 @@ func handleUpKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleDownKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Note: help menu scrolling is handled in HandleTerminalModeKey and HandleWindowManagementModeKey
-	// This function is only for selection mode and logs when NOT in help mode
 	if o.ShowLogs {
 		o.LogScrollOffset++
-		return o, nil
-	}
-	// Keyboard-based text selection in selection mode
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.MoveSelectionCursor(focusedWindow, 0, 1, false)
-		}
 		return o, nil
 	}
 	return o, nil
@@ -100,16 +83,6 @@ func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-
-	// Keyboard-based text selection in selection mode
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.MoveSelectionCursor(focusedWindow, -1, 0, false)
-		}
-		return o, nil
-	}
-
 	return o, nil
 }
 
@@ -119,60 +92,6 @@ func handleRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		categories := app.GetHelpCategories(o.KeybindRegistry)
 		if o.HelpCategory < len(categories)-1 {
 			o.HelpCategory++
-		}
-		return o, nil
-	}
-
-	// Keyboard-based text selection in selection mode
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.MoveSelectionCursor(focusedWindow, 1, 0, false)
-		}
-		return o, nil
-	}
-
-	return o, nil
-}
-
-func handleShiftUpKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.MoveSelectionCursor(focusedWindow, 0, -1, true) // true = extending selection
-		}
-		return o, nil
-	}
-	return o, nil
-}
-
-func handleShiftDownKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.MoveSelectionCursor(focusedWindow, 0, 1, true) // true = extending selection
-		}
-		return o, nil
-	}
-	return o, nil
-}
-
-func handleShiftLeftKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.MoveSelectionCursor(focusedWindow, -1, 0, true) // true = extending selection
-		}
-		return o, nil
-	}
-	return o, nil
-}
-
-func handleShiftRightKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.SelectionMode && o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
-		focusedWindow := o.GetFocusedWindow()
-		if focusedWindow != nil {
-			o.MoveSelectionCursor(focusedWindow, 1, 0, true) // true = extending selection
 		}
 		return o, nil
 	}

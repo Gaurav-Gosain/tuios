@@ -3,7 +3,6 @@ package input
 import (
 	"fmt"
 	"os"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -228,8 +227,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// and mouse-mode apps still get it.
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode &&
 		msg.Button == tea.MouseRight && msg.Mod == 0 {
-		win := o.Windows[clickedWindowIndex]
-		if win.SelectedText != "" || win.IsSelecting {
+		if o.Windows[clickedWindowIndex].HasSelection() {
 			o.OpenSelectionMenu(X, Y, clickedWindowIndex)
 			return o, nil
 		}
@@ -391,7 +389,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// (handleMouseRelease), so clicking a pane is enough to start typing.
 	// Title bar and border presses never arm it, so they stay pure drag
 	// handles, and the press itself still sets up the drag below.
-	if mouse.Button == tea.MouseLeft && o.Mode == app.WindowManagementMode && !o.SelectionMode {
+	if mouse.Button == tea.MouseLeft && o.Mode == app.WindowManagementMode {
 		if _, _, inContent := clickedWindow.ScreenToTerminal(X, Y); inContent {
 			o.ClickToTypePending = true
 			o.DragStartX = mouse.X
@@ -467,55 +465,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 
 	case tea.MouseLeft:
-		// Check if we're in selection mode
-		if o.SelectionMode {
-			// Calculate terminal coordinates relative to window content
-			terminalX, terminalY, inContent := clickedWindow.ScreenToTerminal(X, Y)
-
-			// Start text selection
-			if inContent {
-				// Track consecutive clicks for double/triple-click selection
-				now := time.Now()
-				timeSinceLastClick := now.Sub(clickedWindow.LastClickTime)
-				samePosition := clickedWindow.LastClickX == terminalX && clickedWindow.LastClickY == terminalY
-
-				// Reset click count if too much time has passed or different position
-				if timeSinceLastClick > 500*time.Millisecond || !samePosition {
-					clickedWindow.ClickCount = 1
-				} else {
-					clickedWindow.ClickCount++
-				}
-
-				clickedWindow.LastClickTime = now
-				clickedWindow.LastClickX = terminalX
-				clickedWindow.LastClickY = terminalY
-
-				// Handle different selection modes based on click count
-				switch clickedWindow.ClickCount {
-				case 1:
-					// Single click - character selection
-					clickedWindow.IsSelecting = true
-					clickedWindow.SelectionStart.X = terminalX
-					clickedWindow.SelectionStart.Y = terminalY
-					clickedWindow.SelectionEnd = clickedWindow.SelectionStart
-					clickedWindow.SelectionMode = 0 // Character mode
-				case 2:
-					// Double click - word selection
-					selectWord(clickedWindow, terminalX, terminalY, o)
-					clickedWindow.SelectionMode = 1 // Word mode
-				case 3:
-					// Triple click - line selection
-					selectLine(clickedWindow, terminalY)
-					clickedWindow.SelectionMode = 2 // Line mode
-					// Reset click count after triple click
-					clickedWindow.ClickCount = 0
-				}
-
-				o.InteractionMode = false
-				return o, nil
-			}
-		}
-
 		beginWindowDrag(o, clickedWindowIndex, mouse.X, mouse.Y)
 	}
 	return o, nil
@@ -565,67 +514,4 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 func finalizeCtrlDrag(o *app.OS, x, y int) (*app.OS, tea.Cmd) {
 	o.CtrlDragging = false
 	return handleMouseRelease(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
-}
-
-// selectWord selects the word at the given position
-func selectWord(window *terminal.Window, x, y int, o *app.OS) {
-	if window.Terminal == nil {
-		return
-	}
-
-	screen := window.Terminal
-	maxX := window.ContentWidth()
-
-	// Find the start of the word (move left until we hit a non-word character)
-	startX := x
-	for startX > 0 {
-		cell := screen.CellAt(startX-1, y)
-		if cell == nil || cell.Content == "" || !isWordChar(rune(cell.Content[0])) {
-			break
-		}
-		startX--
-	}
-
-	// Find the end of the word (move right until we hit a non-word character)
-	endX := x
-	for endX < maxX-1 {
-		cell := screen.CellAt(endX+1, y)
-		if cell == nil || cell.Content == "" || !isWordChar(rune(cell.Content[0])) {
-			break
-		}
-		endX++
-	}
-
-	// Set the selection
-	window.IsSelecting = true
-	window.SelectionStart.X = startX
-	window.SelectionStart.Y = y
-	window.SelectionEnd.X = endX
-	window.SelectionEnd.Y = y
-
-	// Extract the selected text
-	window.SelectedText = extractSelectedText(window, o)
-	window.InvalidateCache()
-}
-
-// selectLine selects the entire line at the given Y position
-func selectLine(window *terminal.Window, y int) {
-	maxX := window.ContentWidth()
-
-	// Select the entire line
-	window.IsSelecting = true
-	window.SelectionStart.X = 0
-	window.SelectionStart.Y = y
-	window.SelectionEnd.X = maxX - 1
-	window.SelectionEnd.Y = y
-
-	window.InvalidateCache()
-}
-
-// isWordChar returns true if the rune is part of a word (alphanumeric or underscore)
-func isWordChar(r rune) bool {
-	return (r >= 'a' && r <= 'z') ||
-		(r >= 'A' && r <= 'Z') ||
-		(r >= '0' && r <= '9') ||
-		r == '_' || r == '-' || r == '.'
 }

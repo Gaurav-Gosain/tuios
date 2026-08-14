@@ -148,13 +148,6 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
-	if os.SelectionMode {
-		focusedWindow := os.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsSelecting {
-			return msg
-		}
-	}
-
 	if os.Mode == app.TerminalMode {
 		focusedWindow := os.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.Terminal != nil {
