@@ -27,6 +27,11 @@ twice.
 The two are not interchangeable and they are not additive. That is the whole
 subject.
 
+A snapshot carries the stream position it was taken at (`TerminalState.Seq`),
+and a subscribe names the position the client has been restored to
+(`SubscribePTYPayload.FromSeq`). That pairing is what keeps them from
+overlapping.
+
 ## The invariant
 
 For every route, once the route has completed and the pane is quiet:
@@ -44,6 +49,14 @@ For every route, once the route has completed and the pane is quiet:
 Invariant 5 is not implied by 1-4 read loosely; it is the one the known bugs all
 broke, so it is stated separately.
 
+`TestRehydrationMatrix` in `internal/app/rehydration_matrix_test.go` asserts all
+five, for every route below crossed with every shape a pane can be in: at the
+live tail, scrolled back, in the alternate screen, holding wide runes, still
+producing, having outrun the ring while hidden, having outrun it inside the
+alternate screen, and having been resized while hidden. It runs a real daemon in
+process and compares the client's emulator against the daemon's own, cell for
+cell and scrollback line for line.
+
 ## The routes
 
 Seven routes reach a pane. They collapse into exactly two client-side
@@ -58,89 +71,110 @@ route that reaches M2 has been through `handleDetach`, which clears `ptyResume`
 whole, so every subscribe here resumes from 0 and is answered with the entire
 ring.
 
-| Route | Client emulator | Mechanism | Resume position | What the client is sent |
-|---|---|---|---|---|
-| First attach | fresh | M2 | 0 | snapshot + whole ring |
-| Reattach after detach | fresh | M2 | 0 | snapshot + whole ring |
-| Session switch | fresh | M2 | 0 | snapshot + whole ring |
-| Daemon restart with restore | fresh | M2 | 0 | snapshot + whole ring (ring is empty for a respawned shell) |
-| Workspace switch | **surviving** | M1 | last seen | snapshot + bytes produced while hidden |
-| Pane created by another client | fresh | M1 | 0 (never subscribed) | snapshot + whole ring |
-| Second client attaching to a live session | fresh | M2 | 0 | snapshot + whole ring |
+| Route | Client emulator | Mechanism | Resume position |
+|---|---|---|---|
+| First attach | fresh | M2 | the snapshot's `Seq` |
+| Reattach after detach | fresh | M2 | the snapshot's `Seq` |
+| Session switch | fresh | M2 | the snapshot's `Seq` |
+| Daemon restart with restore | fresh | M2 | the snapshot's `Seq`, and a respawned shell has no history to carry |
+| Workspace switch | **surviving** | M1 | the snapshot's `Seq` |
+| Pane created by another client | fresh | M1 | the snapshot's `Seq` |
+| Second client attaching to a live session | fresh | M2 | the snapshot's `Seq` |
 
-The maintainer's expectation was that the invariant is the same for all routes
-and only the implementations differ. That is half right. The invariant is the
-same. But the implementations do not merely differ in spelling: **both
-mechanisms apply the snapshot and the stream to the same emulator**, and the
-stream they apply is history the snapshot has already accounted for. The routes
-differ only in how much history gets double-applied.
+The expectation going in was that the invariant is the same for all routes and
+only the implementations differ. That was half right. The invariant is the same,
+but the two implementations were not merely spelled differently: **both applied
+the snapshot and then the stream to the same emulator**, and the stream they
+applied was history the snapshot had already accounted for. The routes differed
+only in how much history got painted twice.
 
 ## Why the snapshot and the stream cannot both be applied
 
 The snapshot is the daemon emulator's state after consuming bytes `0..S`. The
-ring replay hands the client bytes `R..S` for some `R <= S`. Writing those bytes
-into an emulator that already holds the state at `S` re-runs output the client
-already has.
+ring replay used to hand the client bytes `R..S` for some `R <= S`. Writing those
+bytes into an emulator that already holds the state at `S` re-runs output the
+client already has.
 
-The failure is not cosmetic overdraw, because the snapshot restores cells
-without restoring the cursor. `restoreTerminalContent` calls `SetCell` in a loop
-and never applies `state.CursorX`/`state.CursorY`. So after the blit the client's
-cursor is wherever its own emulator last left it, and the replayed bytes are
-written from there. On a fresh emulator that is (0,0); on a surviving one it is
-the position the pane had when it was hidden.
+The failure was not cosmetic overdraw, because the snapshot restored cells
+without restoring the cursor: the replayed bytes were written from wherever the
+client's own emulator had been left. Three shapes followed, and the matrix in
+`internal/app/rehydration_matrix_test.go` reproduced all three:
 
-Three shapes follow:
-
-- `R == S` (pane idle while hidden): nothing is replayed, the blit is the whole
-  answer, and the cursor is left stale. Grid holds, cursor does not.
-- `R < S` (pane produced while hidden): the delta is painted a second time, from
-  a stale cursor. This is the stacked-prompt symptom, and it survives the resume
+- `R == S` (pane idle while hidden): nothing replayed, the blit was the whole
+  answer, and the cursor was left stale.
+- `R < S` (pane produced while hidden): the delta was painted a second time from
+  a stale cursor. This is the stacked-prompt symptom, and it survived the resume
   fix because that fix only shrank the replay from the whole ring to the delta.
-- `R == 0` with a non-empty ring (every M2 route): the whole ring is replayed
-  over the blit. The replay ends at `S`, so the *final* grid tends to come out
-  right by accident, but the scrollback gains up to 64KB of duplicated history
-  and the pane visibly repaints.
+- `R == 0` with a non-empty ring (every M2 route): the whole ring was replayed
+  over the blit, so the scrollback gained up to 64KB of duplicated history.
+
+The rule now is that a route uses the snapshot, and the stream resumes where the
+snapshot ends. Nothing is applied twice because nothing overlaps.
+
+Two things had to be true for that rule to hold, and neither was:
+
+- The daemon's emulator dropped a chunk whenever its feed queue was full, on the
+  grounds that the client's emulator was what rendered. It is the authority on
+  every route here, so it now blocks instead.
+- A chunk appended between a subscriber's catch-up being copied and the
+  broadcast that was waiting on the subscriber lock landed in both, so a pane
+  shown while it was producing came back with the line at the seam duplicated.
+  A subscriber the chunk is already behind is now skipped.
 
 ## What is authoritative
 
-Stated as the code should behave, not as it does:
-
 - The **daemon emulator** is authoritative for grid, cursor, modes and
-  scrollback. It is the only thing that has seen every byte.
-- The **ring** is authoritative for nothing. It is a latency device: it lets a
-  client that never let go of a pane resume without a round trip.
+  scrollback. It is the only thing that has seen every byte, which is why its
+  feed blocks rather than dropping a chunk when it falls behind.
+- The **ring** is authoritative for nothing. Its only job is to bridge the gap
+  between a snapshot being taken and the subscribe that follows it.
 - A client emulator that has been through `Close()` holds nothing, and no resume
   position may be claimed for it.
+- Output already queued for a client's emulator belongs to the subscription it
+  came from. A restore discards it, because it is older than the snapshot and
+  applying it afterwards paints it twice.
 
-The rule that follows: **a route uses the snapshot or the stream, never both.**
-Use the stream when the client provably holds the pane at a known position
-(`R > 0`, and `R` was recorded by this same client for this same emulator).
-Otherwise use the snapshot, and subscribe from the position the snapshot was
-taken at.
+## What the wire carries, and who reads it
 
-## Known gaps in the wire format
-
-- **`TerminalState.Scrollback` has no reader.** The daemon serializes up to 1000
-  rows of `CellState` per pane per state fetch and `restoreTerminalContent` never
-  dereferences the field. `ScrollbackLen` is read once, into a log line.
-  `GetTerminalStatePayload.IncludeScrollback` is written by the client and never
-  read by the daemon; `MaxScrollbackLines` is never written and never read.
-- **Cursor position is serialized and never applied.**
-- **Scroll position is not on the wire at all.** `Window.ScrollbackOffset` and
-  `CopyMode.ScrollOffset` are client-local. They survive a workspace switch by
-  accident, because the window object survives, and are lost by construction on
-  every route that rebuilds windows.
-- **Alt-screen content is deliberately not restored.** When `IsAltScreen` is set,
-  `restoreTerminalContent` skips the cell blit entirely and relies on a SIGWINCH
-  from `TriggerAltScreenRedraws` to make the guest repaint. That makes the pane's
-  correctness depend on the guest cooperating, and on a resize actually being
-  announced.
+- **`TerminalState.Scrollback` is what carries a pane's history.** It had no
+  reader at all: up to 1000 rows of `CellState` per pane per fetch, serialized by
+  the daemon and dropped by the client, while the history a pane came back with
+  was whatever the ring replay happened to redraw. It is now seeded into the
+  client's emulator, which is what makes history survive a route that builds the
+  pane on a new emulator.
+- **The cursor is restored.** It was serialized and never applied.
+- **The request's own fields are honoured.** `IncludeScrollback` was written by
+  the client and never read; `MaxScrollbackLines` was never written or read; and
+  the 1000-row cap kept the *oldest* rows, so a pane with a long history would
+  have been handed its most ancient screenfuls had anyone read them.
+- **Scroll position is not on the wire, by design.** `Window.ScrollbackOffset`
+  and `CopyMode.ScrollOffset` are where *this viewer* is looking, not properties
+  of the pane; putting them on the wire would drag a second client watching the
+  same pane to wherever the first one scrolled. They survive a workspace switch,
+  where the window object survives, and are lost on every route that rebuilds
+  windows. Recovering that means anchoring to a scrollback line rather than to a
+  distance from the bottom, because a pane that produced output while the client
+  was away has moved under the offset.
+- **Alt-screen content is restored like any other.** It used to be skipped, on
+  the grounds that a resize would make vim or htop repaint itself. That asks the
+  guest to do the client's job, and it only ever looked correct because the ring
+  replay was redrawing the pane underneath it.
 
 ## Sizes
 
-A pane whose size changed while hidden is rehydrated from a snapshot taken at
-the daemon's size, into an emulator at the client's size, and then resized. The
-snapshot carries `Width`/`Height` and `RestoreTerminalStates` seeds them with
-`SeedAnnouncedSize` so a same-size retile does not re-announce. Nothing checks
-that the snapshot's size is the size the client's emulator is at when the blit
-happens.
+A pane can be resized while it is hidden, by another client or by the daemon.
+`Window.Resize` measures against what this client last announced, so it cannot
+see that, and the pane came back with the client's emulator at one size and the
+shell at another. The snapshot carries the daemon's real size, so priming a pane
+seeds the announcement record from it and reconciles before the snapshot it will
+restore from is taken.
+
+## The ring's size
+
+64KB, unchanged, but it is now sized for a different job. It used to have to
+cover a whole workspace switch, which is why a pane that outran it left a hole
+and needed the screen cleared in front of the catch-up. It now only has to cover
+the gap between a snapshot being read and the subscribe that follows, which is
+one round trip on a unix socket. A pane would have to sustain tens of megabytes
+a second to outrun it. There is no reason to grow it, and shrinking it buys back
+64KB per pane for no benefit worth the churn.
