@@ -625,9 +625,12 @@ type OS struct {
 	// Sidebar keyboard focus scope (the rail). While SidebarFocused the rail owns
 	// the keyboard: pane and window bindings do not fire, and the cursor row is
 	// SidebarNav[SidebarCursor]. SidebarNav is the ordered list of interactive
-	// rows the last frame rendered (sessions, terminals, agents, then the footer
-	// controls), the keyboard equivalent of SidebarHits, so keyboard navigation
-	// lands on exactly the rows a click would. SidebarRevealedForFocus records that entering the
+	// rows the last frame rendered, in drawn order, the keyboard equivalent of
+	// SidebarHits, so keyboard navigation lands on exactly the rows a click
+	// would. Every control the renderer records a rectangle for is in it, its own
+	// key or not: the walk is the one route that depends on no binding but the
+	// cursor keys, and the section keys are the way past the controls for anyone
+	// who does not want to step on them. SidebarRevealedForFocus records that entering the
 	// scope had to turn the sidebar on, so exiting turns it back off.
 	SidebarFocused          bool
 	SidebarCursor           int

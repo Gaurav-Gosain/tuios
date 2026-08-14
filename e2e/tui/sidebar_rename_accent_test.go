@@ -31,11 +31,15 @@ func TestRailRenamesAndAccentsAWindow(t *testing.T) {
 		t.Fatalf("sidebar did not open: %v\n%s", err, term.Snapshot())
 	}
 
-	// Focus the rail and step onto the window row under the session row.
+	// Focus the rail and step onto the first window row. l is the rail's own
+	// "into the next section" key, which lands on the first row of the terminals
+	// list: the section's header carries an add control that the j walk steps
+	// onto on the way past, and a test about renaming should not be spelling out
+	// that arithmetic to reach the row it is about.
 	if err := term.SendKeys("s"); err != nil {
 		t.Fatalf("focus the rail: %v", err)
 	}
-	if err := term.SendKeys("j"); err != nil {
+	if err := term.SendKeys("l"); err != nil {
 		t.Fatalf("move the rail cursor: %v", err)
 	}
 	time.Sleep(insertGuard)
