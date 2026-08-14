@@ -321,6 +321,17 @@ func explainMissingSession(name string, available []string) error {
 		What: fmt.Sprintf("Session %q was not found.", name),
 	}
 
+	// A daemon started with --no-restore holds nothing while the sessions are
+	// still on disk, so the name can be real and absent at the same time. That
+	// is the one case where the answer is neither "create it" nor "you typed it
+	// wrong".
+	if info, ok := savedSession(name); ok {
+		e.Cause = "the daemon is running but has not restored it."
+		e.Extra = append(e.Extra, fmt.Sprintf("It has saved state (%d window(s)) and can be brought back.", info.WindowCount))
+		e.Fix = fmt.Sprintf("run 'tuios resurrect %s' to restore it and attach.", name)
+		return e
+	}
+
 	sorted := append([]string(nil), available...)
 	sort.Strings(sorted)
 
@@ -337,6 +348,20 @@ func explainMissingSession(name string, available []string) error {
 		e.Fix = fmt.Sprintf("run 'tuios ls' to list sessions, or 'tuios new %s' to create this one.", name)
 	}
 	return e
+}
+
+// savedSession looks up one name in the saved state on disk.
+func savedSession(name string) (session.ResurrectableInfo, bool) {
+	infos, err := session.ListResurrectableInfos()
+	if err != nil {
+		return session.ResurrectableInfo{}, false
+	}
+	for _, info := range infos {
+		if info.Name == name {
+			return info, true
+		}
+	}
+	return session.ResurrectableInfo{}, false
 }
 
 // closestName is the CLI-side spelling suggestion, matching the policy the

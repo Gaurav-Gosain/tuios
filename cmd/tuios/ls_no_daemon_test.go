@@ -87,6 +87,20 @@ func TestLsJSONDistinguishesNoDaemonFromNoSessions(t *testing.T) {
 	}
 }
 
+// TestMissingSessionNamesTheRestoreWhenItIsOnlySaved covers the daemon started
+// with --no-restore: the name is real, the daemon just has not brought it back,
+// and neither "create it" nor "you typed it wrong" is the answer.
+func TestMissingSessionNamesTheRestoreWhenItIsOnlySaved(t *testing.T) {
+	seedSavedSessions(t, "work")
+
+	msg := explainMissingSession("work", []string{"notes"}).Error()
+	for _, want := range []string{"has not restored it", "1 window(s)", "tuios resurrect work"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message missing %q:\n%s", want, msg)
+		}
+	}
+}
+
 // TestLsWithNoDaemonAndNothingSavedSaysSo covers the other half: no daemon and
 // genuinely no sessions must still be told apart from a daemon holding none.
 func TestLsWithNoDaemonAndNothingSavedSaysSo(t *testing.T) {
