@@ -1422,11 +1422,18 @@ func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *Terminal
 		Scrollback:    make([][]CellState, 0),
 	}
 
-	// The pen is not recoverable from the cells: it is what the guest set and
-	// has not reset, and it paints the output that has not arrived yet.
+	// None of these is recoverable from the cells. They are what the guest set
+	// and has not reset, and they decide how the output that has not arrived
+	// yet is painted, where it lands, and which glyphs it draws.
 	pen, link := t.CursorPen()
 	ps := styleToWire(pen, link)
 	state.Pen = &ps
+
+	m := t.ScrollRegion()
+	state.Margins = []int{m.Min.X, m.Min.Y, m.Dx(), m.Dy()}
+
+	ids, gl, gr := t.Charsets()
+	state.Charsets = []int{int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]), gl, gr}
 
 	// Capture visible screen with full styling
 	for y := 0; y < height; y++ {
@@ -1518,6 +1525,16 @@ func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
 	// content, which is why it looked random.
 	if state.Pen != nil {
 		t.RestoreCursorPen(styleFromWire(t, *state.Pen))
+	}
+	if len(state.Margins) == 4 {
+		t.RestoreScrollRegion(uv.Rect(state.Margins[0], state.Margins[1], state.Margins[2], state.Margins[3]))
+	}
+	if len(state.Charsets) == 6 {
+		ids := [4]byte{
+			byte(state.Charsets[0]), byte(state.Charsets[1]),
+			byte(state.Charsets[2]), byte(state.Charsets[3]),
+		}
+		t.RestoreCharsets(ids, state.Charsets[4], state.Charsets[5])
 	}
 
 	// The scrollback goes back first, and it is the main screen's either way:
@@ -1647,14 +1664,23 @@ type TerminalState struct {
 	// has consumed exactly the first Seq bytes the pane ever produced. A client
 	// restoring this state subscribes from Seq, so it receives what came after
 	// the snapshot and not what the snapshot already shows.
-	Seq           int64         `json:"seq,omitempty"`
-	Width         int           `json:"width"`
-	Height        int           `json:"height"`
-	CursorX       int           `json:"cursor_x"`
-	CursorY       int           `json:"cursor_y"`
-	ScrollbackLen int           `json:"scrollback_len"`
-	IsAltScreen   bool          `json:"is_alt_screen,omitempty"`   // Alternate screen buffer active (for mouse event forwarding)
-	Pen           *StyleState   `json:"pen,omitempty"`             // Graphic rendition in force: what the guest's next output is painted with
+	Seq           int64       `json:"seq,omitempty"`
+	Width         int         `json:"width"`
+	Height        int         `json:"height"`
+	CursorX       int         `json:"cursor_x"`
+	CursorY       int         `json:"cursor_y"`
+	ScrollbackLen int         `json:"scrollback_len"`
+	IsAltScreen   bool        `json:"is_alt_screen,omitempty"` // Alternate screen buffer active (for mouse event forwarding)
+	Pen           *StyleState `json:"pen,omitempty"`           // Graphic rendition in force: what the guest's next output is painted with
+	// Margins is the scroll region, as x, y, width, height. A guest sets it
+	// once to hold a header or a status line out of the scrolling part of the
+	// screen.
+	Margins []int `json:"margins,omitempty"`
+	// Charsets names the character set selected into each of G0 to G3 by its
+	// designator byte, followed by the GL and GR slots. A program that draws
+	// boxes selects the DEC line-drawing set once and then sends the box
+	// characters as plain letters.
+	Charsets      []int         `json:"charsets,omitempty"`
 	Modes         map[int]bool  `json:"modes,omitempty"`           // Terminal modes (mouse tracking, bracketed paste, etc.)
 	KittyKbdStack []int         `json:"kitty_kbd_stack,omitempty"` // Kitty keyboard protocol flag stack, base entry first
 	Screen        [][]CellState `json:"screen"`

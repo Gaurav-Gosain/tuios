@@ -94,7 +94,7 @@ var wireShapes = []struct {
 		// that comes back with G0 at ASCII draws qqqq where the guest drew a
 		// horizontal rule.
 		name: "line-drawing-charset",
-		out:  "\x1b(0lqqqk\r\nx   x\r\nmqqqj\x1b(B\r\n",
+		out:  "\x1b(0lqqqk\r\nx   x\r\nmqqqj\r\n",
 	},
 	{
 		name: "wide-runes",
@@ -192,6 +192,15 @@ func compareEmulators(t *testing.T, want, got *vt.Emulator) {
 	}
 	if g, w := penSig(got), penSig(want); g != w {
 		t.Errorf("pen:\n  daemon %s\n  client %s\nthe next thing this pane prints is painted with it", w, g)
+	}
+	if g, w := got.ScrollRegion(), want.ScrollRegion(); g != w {
+		t.Errorf("scroll region: client %v, daemon %v: the next line this pane scrolls takes the wrong rows with it", g, w)
+	}
+	gi, ggl, ggr := got.Charsets()
+	wi, wgl, wgr := want.Charsets()
+	if gi != wi || ggl != wgl || ggr != wgr {
+		t.Errorf("charsets: client %q gl=%d gr=%d, daemon %q gl=%d gr=%d: the next box the guest draws comes out as letters",
+			gi, ggl, ggr, wi, wgl, wgr)
 	}
 
 	var diffs []string

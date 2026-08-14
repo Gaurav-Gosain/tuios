@@ -30,8 +30,11 @@ type Emulator struct {
 	scrs [2]Screen
 	scr  *Screen
 
-	// Character sets
-	charsets [4]CharSet
+	// Character sets, and the designator byte each was selected by. The sets
+	// themselves are maps and cannot be compared back to the set they came
+	// from, so a snapshot names them from here.
+	charsets   [4]CharSet
+	charsetIDs [4]byte
 
 	// log is the logger to use.
 	logger Logger
@@ -166,6 +169,7 @@ func NewEmulator(w, h int) *Emulator {
 	})
 	t.pipe = newBufPipe()
 	t.resetModes()
+	t.charsetIDs = defaultCharsetIDs
 	t.tabstops = uv.DefaultTabStops(w)
 
 	// Initialize handler maps upfront to avoid nil checks during registration
@@ -521,6 +525,58 @@ func (e *Emulator) RestoreAltScreenMode(enabled bool) {
 // effects would undo the restore.
 func (e *Emulator) RestoreCursorPosition(x, y int) {
 	e.setCursor(x, y)
+}
+
+// defaultCharsetIDs is US ASCII in all four slots, which is what an emulator
+// that has been sent no SCS sequence is using.
+var defaultCharsetIDs = [4]byte{'B', 'B', 'B', 'B'}
+
+// ScrollRegion returns the margins scrolling is confined to, as the rectangle
+// of the active screen they cover.
+func (e *Emulator) ScrollRegion() uv.Rectangle {
+	return e.scr.ScrollRegion()
+}
+
+// RestoreScrollRegion puts back the margins a guest set with DECSTBM or DECSLRM.
+// A guest sets them once to hold a header or a status line out of the scrolling
+// part of the screen, so a client that comes back without them scrolls the whole
+// screen and takes the fixed rows with it.
+func (e *Emulator) RestoreScrollRegion(r uv.Rectangle) {
+	if r.Empty() {
+		return
+	}
+	e.scr.scroll = r.Intersect(e.scr.Bounds())
+}
+
+// Charsets returns the designator byte of the character set selected into each
+// of G0 to G3, and which of them GL and GR are pointing at.
+func (e *Emulator) Charsets() (ids [4]byte, gl, gr int) {
+	return e.charsetIDs, e.gl, e.gr
+}
+
+// RestoreCharsets puts back a character set selection. A program that draws
+// boxes selects the DEC line-drawing set once and then sends the box characters
+// as plain letters, so a client that comes back with G0 at US ASCII draws qqqq
+// where the guest drew a horizontal rule.
+func (e *Emulator) RestoreCharsets(ids [4]byte, gl, gr int) {
+	for i, id := range ids {
+		switch id {
+		case 'A':
+			e.charsets[i] = UK
+		case '0':
+			e.charsets[i] = SpecialDrawing
+		default:
+			e.charsets[i] = nil
+			id = 'B'
+		}
+		e.charsetIDs[i] = id
+	}
+	if gl >= 0 && gl < 4 {
+		e.gl = gl
+	}
+	if gr >= 0 && gr < 4 {
+		e.gr = gr
+	}
 }
 
 // CursorPen returns the graphic rendition in force: the style and hyperlink
