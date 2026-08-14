@@ -1370,9 +1370,19 @@ func (p *PTY) Resize(width, height int) error {
 	return nil
 }
 
+// DefaultStateScrollback is how many scrollback lines a state request carries
+// when it does not ask for a number.
+const DefaultStateScrollback = 1000
+
 // GetTerminalState returns the current terminal screen state for restore.
 // Returns the visible screen content as a 2D array of cells.
-func (p *PTY) GetTerminalState() *TerminalState {
+//
+// maxScrollback bounds the scrollback rows included: zero means
+// DefaultStateScrollback and a negative number means none. The rows returned
+// are the newest ones. Taking them from the front instead, which is what this
+// did, handed a pane with a long history its most ancient screenfuls and
+// dropped everything the user had actually been looking at.
+func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
 
@@ -1404,14 +1414,18 @@ func (p *PTY) GetTerminalState() *TerminalState {
 		}
 	}
 
-	// Capture scrollback (up to a reasonable limit)
+	if maxScrollback == 0 {
+		maxScrollback = DefaultStateScrollback
+	}
 	scrollbackLen := p.terminal.ScrollbackLen()
-	maxScrollback := 1000 // Limit for initial sync
-	if scrollbackLen > maxScrollback {
-		scrollbackLen = maxScrollback
+	first := 0
+	if maxScrollback < 0 {
+		first = scrollbackLen
+	} else if scrollbackLen > maxScrollback {
+		first = scrollbackLen - maxScrollback
 	}
 
-	for i := 0; i < scrollbackLen; i++ {
+	for i := first; i < scrollbackLen; i++ {
 		line := p.terminal.ScrollbackLine(i)
 		if line != nil {
 			row := make([]CellState, len(line))
@@ -1655,16 +1669,22 @@ func (p *PTY) readOutput() {
 			copy(data, buf[:n])
 
 			// VT emulator: feed via a dedicated single goroutine to
-			// avoid unbounded goroutine growth at high FPS. The VT is
-			// only used for state queries (GetTerminalState) and kitty
-			// query responses, so it's OK if it falls slightly behind.
+			// avoid unbounded goroutine growth at high FPS.
+			//
+			// This send blocks rather than dropping. Falling behind is fine;
+			// skipping a chunk is not. Every route a client takes into a pane
+			// rehydrates it from this emulator, so a chunk dropped here is
+			// output that no client will ever see again: the screen it is
+			// handed is missing the cursor moves and modes the rest of the
+			// stream is written against. Blocking applies backpressure to the
+			// shell, which is what a terminal does when a program outputs
+			// faster than the terminal can take it. vtWriter only ever holds
+			// the leaf terminal lock and never waits on this loop, so there is
+			// nothing here to deadlock against.
 			select {
 			case p.vtWriteChan <- data:
 			case <-p.ctx.Done():
 				return
-			default:
-				// VT writer can't keep up  - acceptable for state tracking.
-				// The client's own VT is the rendering source of truth.
 			}
 
 			// Store in ring buffer for reconnection
