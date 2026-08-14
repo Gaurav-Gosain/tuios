@@ -274,6 +274,22 @@ func tiledRects(m *app.OS) []*terminal.Window {
 	return out
 }
 
+// Screen is the frame the app would hand its host right now, for a display that
+// wants to show the thing being tested rather than only the instruments
+// measuring it.
+//
+// It is a pull, and it has to be pulled on the goroutine driving the target: the
+// model is not safe to render from a second one. A display therefore asks for a
+// frame and gets the last one taken, rather than reaching into the model itself.
+// The frame is the app's own output, colours and all, because a harness that
+// restyled what it was testing would be showing software that does not exist.
+func (t *Target) Screen() string {
+	if t.m == nil {
+		return ""
+	}
+	return strings.Join(t.frameRows(), "\n")
+}
+
 // frameRows composes the frame the host would receive. The rows are left styled,
 // because ansi.StringWidth counts cells rather than bytes and a stripping pass
 // of its own would be one more thing that can be wrong.
