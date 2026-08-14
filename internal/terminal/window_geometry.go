@@ -158,16 +158,24 @@ func (w *Window) Resize(width, height int) {
 	sizeChanged := termWidth != w.announcedW || termHeight != w.announcedH
 	w.announcedW, w.announcedH = termWidth, termHeight
 
-	// ioMu serializes the emulator buffer reallocation against the render
-	// reader (RLockIO) and the PTY writers; Terminal has no lock of its own.
-	// TriggerRedraw below takes ioMu.RLock, so the lock is scoped to the resize.
-	w.ioMu.Lock()
-	// Re-check under the lock: the guard at the top of Resize runs unlocked
-	// and Close() nils Terminal while holding this lock.
-	if w.Terminal != nil {
-		w.Terminal.Resize(termWidth, termHeight)
+	// A pane fed by a daemon subscription is sized by that stream, so the grid
+	// changes width at the byte the daemon's own emulator changed width at.
+	// Resizing it here instead laid out everything the guest produced between
+	// this client asking and the daemon hearing at a width the daemon never
+	// used, and a line that wrapped differently stays in the scrollback.
+	// See docs/REHYDRATION.md.
+	if !w.streamOwnsSize.Load() {
+		// ioMu serializes the emulator buffer reallocation against the render
+		// reader (RLockIO) and the PTY writers; Terminal has no lock of its own.
+		// TriggerRedraw below takes ioMu.RLock, so the lock is scoped to the resize.
+		w.ioMu.Lock()
+		// Re-check under the lock: the guard at the top of Resize runs unlocked
+		// and Close() nils Terminal while holding this lock.
+		if w.Terminal != nil {
+			w.Terminal.Resize(termWidth, termHeight)
+		}
+		w.ioMu.Unlock()
 	}
-	w.ioMu.Unlock()
 	if sizeChanged && !w.announceHeld {
 		w.tellGuest(termWidth, termHeight)
 	}

@@ -319,6 +319,10 @@ type Window struct {
 	// avoids having output from before the snapshot applied on top of it.
 	outputEpoch atomic.Uint64
 
+	// streamOwnsSize is set while a daemon subscription feeds this emulator,
+	// which is when the stream is what resizes it. See SetStreamOwnsSize.
+	streamOwnsSize atomic.Bool
+
 	// lastScrollbackLen is the most recent scrollback length ScrollbackLenSync
 	// managed to read. It answers that call when the I/O lock is busy, so the
 	// compositor never waits on a bursting pane just to size a scrollbar.

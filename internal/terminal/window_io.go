@@ -44,7 +44,14 @@ const (
 type outputChunk struct {
 	data  []byte
 	epoch uint64
+	// width and height, both set, mark the size the daemon's emulator took at
+	// this point in the stream instead of bytes to write. Applying it here
+	// rather than when the layout asked for it is what keeps this emulator
+	// wrapping every line where the daemon wrapped it.
+	width, height int
 }
+
+func (c outputChunk) isResize() bool { return c.width > 0 && c.height > 0 }
 
 // DiscardPendingOutput throws away output queued for the emulator but not yet
 // applied to it.
@@ -56,6 +63,24 @@ type outputChunk struct {
 // is already holding as well as the ones still queued.
 func (w *Window) DiscardPendingOutput() {
 	w.outputEpoch.Add(1)
+}
+
+// applyStreamResize takes the emulator to the size the daemon's emulator took
+// at this point in the stream. Dropped when the epoch has moved, because a
+// restore has since put a whole snapshot in, and that snapshot's size is newer
+// than this.
+func (w *Window) applyStreamResize(chunk outputChunk) {
+	w.ioMu.Lock()
+	// Re-checked under the lock the restore also takes, for the same reason
+	// the batch write below re-checks it.
+	if w.Terminal != nil && w.outputEpoch.Load() == chunk.epoch {
+		w.Terminal.Resize(chunk.width, chunk.height)
+	}
+	w.ioMu.Unlock()
+	// Dirty flags belong to the UI goroutine; these two are what the write
+	// path signals from here, and MarkTerminalsWithNewContent does the rest.
+	w.HasNewOutput.Store(true)
+	w.coalesceSignal.Store(true)
 }
 
 func (w *Window) outputWriter() {
@@ -73,6 +98,10 @@ func (w *Window) outputWriter() {
 
 	for {
 		var epoch uint64
+		// A resize ends the batch in front of it and is applied after that
+		// batch is written. Folding it into the bytes either side would lay
+		// one of them out at a width the daemon never used them at.
+		var resize outputChunk
 		select {
 		case <-w.outputDone:
 			return
@@ -84,6 +113,10 @@ func (w *Window) outputWriter() {
 				continue
 			}
 			epoch = chunk.epoch
+			if chunk.isResize() {
+				w.applyStreamResize(chunk)
+				continue
+			}
 			batch = append(batch[:0], chunk.data...)
 		}
 
@@ -95,6 +128,10 @@ func (w *Window) outputWriter() {
 				}
 				if more.epoch != epoch {
 					continue
+				}
+				if more.isResize() {
+					resize = more
+					goto write
 				}
 				batch = append(batch, more.data...)
 			default:
@@ -140,6 +177,10 @@ func (w *Window) outputWriter() {
 			if t == nil {
 				break
 			}
+		}
+
+		if resize.isResize() {
+			w.applyStreamResize(resize)
 		}
 
 		if t != nil {
@@ -285,6 +326,34 @@ func (w *Window) WriteOutputAsync(data []byte) {
 		// Channel full - drop data (shouldn't happen with large buffer)
 	}
 }
+
+// ResizeFromStream queues the size the daemon's emulator took, to be applied in
+// the order it arrived among the bytes around it. StreamOwnsSize says whether
+// this is the pane's only route to a new grid size.
+func (w *Window) ResizeFromStream(width, height int) {
+	if w.outputChan == nil || w.closed.Load() || width <= 0 || height <= 0 {
+		return
+	}
+	chunk := outputChunk{epoch: w.outputEpoch.Load(), width: width, height: height}
+	select {
+	case <-w.outputDone:
+	case w.outputChan <- chunk:
+	default:
+	}
+}
+
+// SetStreamOwnsSize records whether this pane's emulator is sized by its daemon
+// output stream. It is true exactly while a subscription is feeding the pane:
+// the daemon then announces every size change at the byte it made it, and a
+// layout that resized this emulator itself would lay out whatever the guest
+// produced before the daemon heard at a width the daemon never used.
+//
+// A pane with no subscription has no stream to be ordered against, so it is
+// sized by the layout as before, and by the snapshot when it is primed.
+func (w *Window) SetStreamOwnsSize(v bool) { w.streamOwnsSize.Store(v) }
+
+// StreamOwnsSize reports whether the daemon output stream sizes this emulator.
+func (w *Window) StreamOwnsSize() bool { return w.streamOwnsSize.Load() }
 
 func (w *Window) handleIOOperations() {
 	ctx, cancel := context.WithCancel(context.Background())

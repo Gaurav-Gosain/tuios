@@ -150,6 +150,7 @@ func init() {
 	gob.Register(InputPayload{})
 	gob.Register(PTYOutputPayload{})
 	gob.Register(ResizePTYPayload{})
+	gob.Register(PTYResizedPayload{})
 	gob.Register(SubscribePTYPayload{})
 	gob.Register(GetTerminalStatePayload{})
 	gob.Register(TerminalStatePayload{})

@@ -1392,6 +1392,12 @@ func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
 // being heard one width narrower than the daemon did, and a line that wrapped
 // differently is in the scrollback for good.
 func (p *PTY) Resize(width, height int) error {
+	// The pane's size is what a client announced for it, so it is recorded as
+	// soon as it is announced. Only the emulator's grid waits for the stream.
+	p.terminalMu.Lock()
+	p.width, p.height = width, height
+	p.terminalMu.Unlock()
+
 	p.streamMu.Lock()
 	if !p.vtClosed {
 		p.broadcast(ptyChunk{width: width, height: height}, 0)
@@ -1430,7 +1436,11 @@ func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
 		return nil
 	}
 
-	state := TerminalStateOf(p.terminal, p.width, p.height, maxScrollback)
+	// The emulator's own size, not the pane's announced one. They differ only
+	// while a resize is still behind output in the stream, and a snapshot has
+	// to describe the grid it is serializing: reporting the size the pane is
+	// about to be handed one row of cells short.
+	state := TerminalStateOf(p.terminal, p.terminal.Width(), p.terminal.Height(), maxScrollback)
 	state.Seq = p.vtSeq
 	return state
 }
@@ -2028,7 +2038,6 @@ func (p *PTY) vtWriter() {
 			if p.terminal != nil {
 				p.terminal.Resize(chunk.width, chunk.height)
 			}
-			p.width, p.height = chunk.width, chunk.height
 			p.terminalMu.Unlock()
 			continue
 		}
