@@ -524,6 +524,21 @@ func (p *ptyTarget) checkClient() []fuzz.Violation {
 		return nil
 	}
 	if code, exited := t.ExitCode(); exited {
+		// A clean exit is the run having pressed something that ends a client,
+		// and the chord pool has several: ctrl+b d detaches, ctrl+b q quits, and
+		// closing the last pane can take the session with it. Enumerating them
+		// would be a table that goes stale the next time a binding is added, and
+		// the exit code already draws the line the rule wants: zero is tuios
+		// deciding to stop, anything else is tuios being stopped. Two seeds were
+		// reported as pty-exit for pressing detach.
+		//
+		// The client is gone either way, so the target records that. The daemon
+		// rules keep running against a session with nobody watching it, which is
+		// the more interesting half of the step, and an Attach brings it back.
+		if code == 0 {
+			p.term, p.detached = nil, true
+			return nil
+		}
 		return one("pty-exit", "tuios exited with code %d after %s", code, p.last)
 	}
 	s := t.Screen()
