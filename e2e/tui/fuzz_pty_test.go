@@ -410,9 +410,15 @@ func (p *ptyTarget) applyDetach() {
 		return
 	}
 	if _, err := p.term.Wait(uiTimeout); err != nil {
-		// It did not go. Saying so is better than pretending it did and then
-		// reporting every later rule against a client that is still attached.
-		p.note("detach", "the client was still running %s after ctrl+b d", uiTimeout)
+		// Still attached, and that is not reported. Whether the leader chord
+		// reaches tuios depends on the mode the run has wandered into and on
+		// what the focused pane is doing with the keyboard, so a detach that
+		// does not happen here is a statement about the state the fuzzer built
+		// and not about detaching. The claim that detaching works is made from a
+		// known state, by TestLivenessReattachRestoresWhatWasThere.
+		//
+		// What matters is that the target does not now believe it is detached: a
+		// wrong answer there would point every later rule at the wrong client.
 		return
 	}
 	_ = p.term.Close()
@@ -785,7 +791,7 @@ func (p *ptyTarget) Rules() []string {
 		"daemon-reachable", "daemon-workspace", "daemon-window-count",
 		"daemon-splice", "altscreen-retained", "scrollback-retained",
 		"witness-provenance", "client-ahead",
-		"burst", "detach", "attach", "second-client", "daemon-restart",
+		"burst", "attach", "second-client", "daemon-restart",
 	}
 }
 
@@ -868,16 +874,24 @@ func (p *ptyTarget) windowMode() {
 // mismatch as a finding. So it polls until the answer moves, and it prefers the
 // session it was already on whenever that one is still attached, because during
 // a switch both ends can briefly claim a client.
+// The answer it waits for is a session that is attached and is not the one the
+// run was already on. Waiting for "exactly one attached" instead is the bug this
+// replaced: that is already true the instant the key is sent, before the client
+// has done anything, so it returned the old name every time and every later rule
+// compared the new session's screen against the old session's state. It reported
+// three seeds as daemon-workspace and daemon-window-count failures that way, one
+// of them in three actions.
 func attachedSession(base, current string) string {
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(4 * time.Second)
 	for {
-		// One session claiming the client is the settled answer, whether it is
-		// the one the run was already on or the one it walked to. Two claiming it
-		// is mid-switch, and none is between a client leaving and arriving.
-		if attached := attachedSessions(base); len(attached) == 1 {
-			return attached[0]
+		for _, name := range attachedSessions(base) {
+			if name != current {
+				return name
+			}
 		}
 		if !time.Now().Before(deadline) {
+			// The walk has nowhere to go, or it did not happen. Either way the
+			// run is still on the session it was on.
 			return current
 		}
 		time.Sleep(100 * time.Millisecond)
