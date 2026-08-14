@@ -24,7 +24,10 @@ package tuie2e
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -339,5 +342,115 @@ func TestPerfTypeWhileFlooding(t *testing.T) {
 			enterTerminalMode(t, term)
 			typeLatency(t, term).report(t, fmt.Sprintf("input latency/%d panes flooding", floods))
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Memory
+
+// perfBase makes an isolation root with its XDG directories already in place,
+// for the tests that drive the CLI without ever starting a TUI client.
+func perfBase(t *testing.T) string {
+	t.Helper()
+	base := t.TempDir()
+	for _, key := range xdgKeys {
+		if err := os.MkdirAll(filepath.Join(base, key), 0o700); err != nil {
+			t.Fatalf("mkdir %s: %v", key, err)
+		}
+	}
+	killDaemon(t, base)
+	return base
+}
+
+// daemonRSS reads the resident set size of the daemon rooted at base, in KiB.
+// The daemon is the process worth watching: it owns every pane's PTY, VT
+// emulator and scrollback ring, so both pane count and pane output land here
+// rather than in the client.
+func daemonRSS(t *testing.T, base string) int {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(base, "XDG_RUNTIME_DIR", "tuios", "tuios.sock.pid"))
+	if err != nil {
+		t.Fatalf("read daemon pid: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		t.Fatalf("parse daemon pid %q: %v", raw, err)
+	}
+	status, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		t.Fatalf("read daemon status: %v", err)
+	}
+	for line := range strings.SplitSeq(string(status), "\n") {
+		if !strings.HasPrefix(line, "VmRSS:") {
+			continue
+		}
+		if fields := strings.Fields(line); len(fields) >= 2 {
+			kib, err := strconv.Atoi(fields[1])
+			if err == nil {
+				return kib
+			}
+		}
+		break
+	}
+	t.Fatalf("no VmRSS in daemon status")
+	return 0
+}
+
+// TestPerfMemoryPanes reports daemon resident size as panes are added, which is
+// what decides whether a session with a lot of panes open is a problem.
+//
+// Panes are created headlessly through the CLI, so no TUI client's own memory
+// is in the figure and the growth per pane is the honest marginal cost.
+func TestPerfMemoryPanes(t *testing.T) {
+	perfGate(t)
+	base := perfBase(t)
+	if out, err := tuiosCLI(t, base, "new", "mem", "--detach"); err != nil {
+		t.Fatalf("create session: %v: %s", err, out)
+	}
+
+	// A detached session starts with one window, so the pane count runs one
+	// ahead of the number of new-window calls made.
+	panes := 1
+	report := func() {
+		// Panes are forked shells; give them a beat to finish starting before
+		// their pages are counted, or the reading is of a half-built pane.
+		time.Sleep(750 * time.Millisecond)
+		rss := daemonRSS(t, base)
+		t.Logf("PERF memory/daemon %2d panes: %6d KiB resident, %4d KiB/pane", panes, rss, rss/panes)
+	}
+	report()
+
+	for _, target := range []int{8, 32} {
+		for panes < target {
+			if out, err := tuiosCLI(t, base, "new-window", "-s", "mem"); err != nil {
+				t.Fatalf("new-window: %v: %s", err, out)
+			}
+			panes++
+		}
+		report()
+	}
+}
+
+// TestPerfMemorySoak asks whether a pane producing a great deal of output
+// settles or keeps growing. Scrollback is capped by config, so a bounded
+// emulator reaches a plateau and stays there; a resident size still climbing
+// after the ring is full is a leak rather than a buffer filling up.
+func TestPerfMemorySoak(t *testing.T) {
+	perfGate(t)
+	base := perfBase(t)
+	if out, err := tuiosCLI(t, base, "new", "soak", "--detach"); err != nil {
+		t.Fatalf("create session: %v: %s", err, out)
+	}
+	time.Sleep(750 * time.Millisecond)
+	t.Logf("PERF memory/soak round 0 (idle): %6d KiB resident", daemonRSS(t, base))
+
+	// Each round is well past the default 10000-line scrollback cap, so the
+	// ring is full from the first round on and later growth is not it filling.
+	for round := 1; round <= 4; round++ {
+		if out, err := tuiosCLI(t, base, "send-text", "-s", "soak", "seq 1 40000\n"); err != nil {
+			t.Fatalf("round %d: %v: %s", round, err, out)
+		}
+		time.Sleep(4 * time.Second)
+		t.Logf("PERF memory/soak round %d (40k lines): %6d KiB resident", round, daemonRSS(t, base))
 	}
 }
