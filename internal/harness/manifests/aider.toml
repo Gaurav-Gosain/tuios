@@ -1,0 +1,12 @@
+schema_version = 1
+id             = "aider"
+display_name   = "Aider"
+priority       = 50
+
+[detect]
+comm      = ["aider"]
+argv0     = ["aider"]
+argv_path = ["/aider/"]
+
+[screen]
+enabled = false

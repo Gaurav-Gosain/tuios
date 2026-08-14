@@ -1,0 +1,225 @@
+package harness
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// TestBundledManifestsLoad checks every manifest compiled into the binary is
+// valid, since a broken one would otherwise only be noticed when a harness
+// stopped being recognised.
+func TestBundledManifestsLoad(t *testing.T) {
+	r, errs := Load()
+	for _, e := range errs {
+		t.Errorf("bundled manifest %s failed to load: %v", e.Source, e.Err)
+	}
+	if len(r.IDs()) == 0 {
+		t.Fatal("no bundled manifests loaded")
+	}
+	if r.Lookup("claude-code") == nil {
+		t.Error("claude-code is not in the bundled registry")
+	}
+}
+
+// TestBundledScreenRulesAreOff is the policy check: reading another program's UI
+// is a maintenance treadmill, so nothing ships with it turned on. A manifest that
+// arrives later with rules enabled by default should fail here and be argued for
+// on purpose.
+func TestBundledScreenRulesAreOff(t *testing.T) {
+	r, _ := Load()
+	for _, id := range r.IDs() {
+		if m := r.Lookup(id); m.Screen.Enabled {
+			t.Errorf("bundled manifest %q ships with screen rules enabled", id)
+		}
+	}
+}
+
+// TestIdentify checks the shapes a harness launches in resolve to the right id,
+// and that unrelated programs resolve to none.
+func TestIdentify(t *testing.T) {
+	r, _ := Load()
+	cases := []struct {
+		name string
+		comm string
+		argv []string
+		exe  string
+		want string
+	}{
+		{"native claude", "claude", []string{"claude"}, "", "claude-code"},
+		{
+			"claude renamed over a versioned binary",
+			"2.1.222", []string{"claude", "--resume"},
+			"/home/u/.local/share/claude/versions/2.1.222",
+			"claude-code",
+		},
+		{
+			"claude from npm",
+			"node", []string{"node", "/n/node_modules/@anthropic-ai/claude-code/cli.js"}, "",
+			"claude-code",
+		},
+		{"codex native", "codex", []string{"codex"}, "", "codex"},
+		{
+			"codex from the npm shim",
+			"node", []string{"node", "/n/node_modules/@openai/codex/bin/codex.js"}, "",
+			"codex",
+		},
+		{"gemini", "gemini", []string{"gemini"}, "", "gemini-cli"},
+		{"opencode", "opencode", []string{"opencode"}, "", "opencode"},
+		{"droid via platform package", "droid", []string{"droid"}, "", "droid"},
+		{"plain shell", "bash", []string{"-bash"}, "/usr/bin/bash", ""},
+		{"unrelated tool", "htop", []string{"htop"}, "/usr/bin/htop", ""},
+		{"nothing at all", "", nil, "", ""},
+	}
+	for _, c := range cases {
+		got, ok := r.Identify(c.comm, c.argv, c.exe)
+		if c.want == "" {
+			if ok {
+				t.Errorf("%s: identified as %q, want no harness", c.name, got)
+			}
+			continue
+		}
+		if !ok || got != c.want {
+			t.Errorf("%s: identified as %q (%v), want %q", c.name, got, ok, c.want)
+		}
+	}
+}
+
+// TestUserManifestLoadsWithoutRebuild is the point of the whole package: a
+// harness that did not exist when tuios was built is recognised because a file
+// appeared in the user's directory.
+func TestUserManifestLoadsWithoutRebuild(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "brandnew.toml", `
+schema_version = 1
+id             = "brandnew"
+display_name   = "Brand New Agent"
+
+[detect]
+comm      = ["brandnew"]
+argv0     = ["brandnew"]
+argv_path = ["@vendor/brandnew"]
+`)
+
+	r, errs := Load(dir)
+	if len(errs) != 0 {
+		t.Fatalf("load errors: %v", errs)
+	}
+	if got, ok := r.Identify("brandnew", []string{"brandnew"}, ""); !ok || got != "brandnew" {
+		t.Fatalf("user manifest not used: identified %q (%v)", got, ok)
+	}
+	// And the bundled ones still work.
+	if got, _ := r.Identify("claude", []string{"claude"}, ""); got != "claude-code" {
+		t.Errorf("user manifest displaced the bundled ones: claude identified as %q", got)
+	}
+}
+
+// TestUserManifestReplacesBundled checks a user file wins over the bundled
+// manifest with the same id, whole file rather than merged.
+func TestUserManifestReplacesBundled(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "claude-code.toml", `
+schema_version = 1
+id             = "claude-code"
+display_name   = "My Claude"
+
+[detect]
+comm  = ["mysteryclaude"]
+argv0 = ["mysteryclaude"]
+`)
+
+	r, errs := Load(dir)
+	if len(errs) != 0 {
+		t.Fatalf("load errors: %v", errs)
+	}
+	if m := r.Lookup("claude-code"); m == nil || m.DisplayName != "My Claude" {
+		t.Fatalf("bundled claude-code was not replaced: %+v", m)
+	}
+	if got, ok := r.Identify("mysteryclaude", []string{"mysteryclaude"}, ""); !ok || got != "claude-code" {
+		t.Errorf("replacement manifest does not match: %q (%v)", got, ok)
+	}
+	// The replaced predicates are gone, not merged with the bundled ones.
+	if _, ok := r.Identify("claude", []string{"claude"}, ""); ok {
+		t.Error("replacement merged with the bundled manifest instead of replacing it")
+	}
+}
+
+// TestBadManifestIsReportedNotSkipped checks a broken file is named in an error
+// and does not take the rest of the registry down with it.
+func TestBadManifestIsReportedNotSkipped(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "wrongversion.toml", `
+schema_version = 99
+id             = "wrongversion"
+[detect]
+comm = ["wrongversion"]
+`)
+	write(t, dir, "generic.toml", `
+schema_version = 1
+id             = "generic"
+[detect]
+comm = ["pi"]
+`)
+	write(t, dir, "empty.toml", `
+schema_version = 1
+id             = "empty"
+[detect]
+`)
+	write(t, dir, "badstate.toml", `
+schema_version = 1
+id             = "badstate"
+[detect]
+comm = ["badstate"]
+[[screen.rule]]
+state = "confused"
+any   = ["what"]
+`)
+	write(t, dir, "fine.toml", `
+schema_version = 1
+id             = "fine"
+[detect]
+comm = ["finetool"]
+`)
+
+	r, errs := Load(dir)
+	if len(errs) != 4 {
+		t.Fatalf("got %d load errors, want 4: %v", len(errs), errs)
+	}
+	joined := ""
+	for _, e := range errs {
+		joined += e.Source + ": " + e.Err.Error() + "\n"
+	}
+	for _, want := range []string{"schema_version", "generic name", "matches nothing", "unknown state"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("errors do not mention %q:\n%s", want, joined)
+		}
+	}
+	// The good file in the same directory still loaded.
+	if r.Lookup("fine") == nil {
+		t.Error("a valid manifest was lost because a sibling was broken")
+	}
+	if r.Lookup("claude-code") == nil {
+		t.Error("bundled manifests were lost because a user file was broken")
+	}
+}
+
+// TestUserDirFollowsXDG checks the directory a user drops manifests into.
+func TestUserDirFollowsXDG(t *testing.T) {
+	t.Setenv("TUIOS_HARNESS_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+	if got, want := UserDir(), filepath.Join("/xdg", "tuios", "harnesses"); got != want {
+		t.Errorf("UserDir = %q, want %q", got, want)
+	}
+	t.Setenv("TUIOS_HARNESS_DIR", "/override")
+	if got := UserDir(); got != "/override" {
+		t.Errorf("UserDir with an override = %q, want /override", got)
+	}
+}
+
+func write(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+}

@@ -23,7 +23,8 @@ func TestForegroundCommandLabels(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := foregroundCommand(c.comm, c.argv, c.running, c.shell); got != c.want {
+			info := foregroundInfo{comm: c.comm, argv: c.argv}
+			if got := foregroundCommand(info, c.running, c.shell); got != c.want {
 				t.Errorf("foregroundCommand(%q, %v, %v, %q) = %q, want %q",
 					c.comm, c.argv, c.running, c.shell, got, c.want)
 			}

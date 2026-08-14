@@ -75,4 +75,8 @@ type Callbacks struct {
 	// Notify callback. Called when a guest app requests a desktop notification
 	// via OSC 9, OSC 777, or OSC 99.
 	Notify func(title, body string)
+
+	// Progress callback. Called when a guest app reports its progress via the
+	// OSC 9;4 sequence. percent is 0 for the states that carry no percentage.
+	Progress func(state ProgressState, percent int)
 }

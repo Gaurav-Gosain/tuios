@@ -1,0 +1,12 @@
+schema_version = 1
+id             = "opencode"
+display_name   = "opencode"
+priority       = 50
+
+[detect]
+comm      = ["opencode"]
+argv0     = ["opencode"]
+argv_path = ["opencode-ai", "/opencode/"]
+
+[screen]
+enabled = false

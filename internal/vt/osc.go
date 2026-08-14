@@ -324,8 +324,13 @@ func (e *Emulator) handleNotify9(data []byte) bool {
 		return true
 	}
 	msg := parts[1]
-	// OSC 9;4 is the ConEmu progress-report sequence, not a notification.
-	if strings.HasPrefix(msg, "4;") || strings.HasPrefix(msg, "4\a") {
+	// OSC 9;4 is the ConEmu progress-report sequence, not a notification: the
+	// program is describing its own progress rather than asking for a desktop
+	// alert, so it goes to the progress callback and never to Notify.
+	if isProgressPayload(msg) {
+		if state, percent, ok := parseProgress(msg); ok && e.cb.Progress != nil {
+			e.cb.Progress(state, percent)
+		}
 		return true
 	}
 	if e.cb.Notify != nil {
