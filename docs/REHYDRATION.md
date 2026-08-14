@@ -241,6 +241,18 @@ Two things had to be true for that rule to hold, and neither was:
   and everything the pane printed next scrolled into the alternate screen's
   scrollback, which is switched off.
 
+## Known and not fixed
+
+`TUIClient.ResizePTY` is fire-and-forget. `primePaneFromDaemon` announces a
+pane's size and re-fetches the snapshot immediately, and its comment says the
+resize happens before the snapshot is taken for real; nothing makes that true.
+A pane resized while hidden, whose guest does not redraw on SIGWINCH, can come
+back holding the pre-resize screen. Shrinking an alternate screen destroys its
+bottom rows on both sides, so the two copies can also disagree about a resize
+they saw in different orders. Reproducing it needs a guest that does not repaint,
+which is why it is stated here rather than asserted in the matrix: the shape that
+provokes it cannot tell that bug from ordinary resize semantics.
+
 ## What the wire still does not carry
 
 Known and deliberate, so the next person does not have to rediscover them: the
@@ -251,6 +263,19 @@ mode (IRM) and reverse video (DECSCNM) are in that last group and are not
 implemented by the emulator at all, so nothing is lost by not carrying them.
 
 ## Sizes
+
+**A snapshot is applied whole.** The emulator is grown to fit what it is given,
+because writing a cell outside a grid is a no-op and half a snapshot is never
+right. A window's emulator is built at `height - 2`, a border allowance
+hardcoded while the window is not yet marked tiled; the tiler then marks it
+tiled and takes that allowance back out of the content height, so the snapshot
+arrives two rows taller than the grid. Those two rows were dropped silently, and
+the resize that grows the grid back is silent too, because the announced size was
+seeded from the daemon and so nothing tells the guest to redraw. An editor came
+back without its last line or its status line and stayed that way. It is grown
+and never shrunk: how much room a pane has is the client's layout to decide and
+it resizes the emulator on the next pass regardless, so growing is transient
+where dropping content is permanent.
 
 A pane can be resized while it is hidden, by another client or by the daemon.
 `Window.Resize` measures against what this client last announced, so it cannot
