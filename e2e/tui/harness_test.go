@@ -245,6 +245,66 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	)
 }
 
+// attachIn starts a client attached to an existing daemon session and returns
+// once it has rehydrated and settled in window-management mode.
+//
+// It exists because every daemon-backed test in this package had to know two
+// things nothing here wrote down. The first is the argv: the session name is a
+// positional argument to `attach`, not a `-s` flag, and plain `tuios` with no
+// arguments is not a client at all but the standalone TUI, so a test that used
+// it was testing a tuios with no daemon behind it. The second is the mode, which
+// windowManagementMode explains.
+func attachIn(t *testing.T, base, session string, o startOpts) *tuitest.Terminal {
+	t.Helper()
+	o.args = append(append([]string{}, o.args...), "attach", session)
+	term := startIn(t, base, o)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) >= 0
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never rehydrated session %q: %v\n%s", session, err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	return term
+}
+
+// windowManagementMode settles a client in window-management mode.
+//
+// An attached client boots into terminal mode, where a plain character is input
+// to the shell. Every bare-key helper in this file is a window-manager command:
+// newWindow presses 'n', enableTiling presses 't', renameWindow presses 'r'. A
+// test that attaches and then calls one of them is reading its own keystroke
+// back out of a shell, and the failure looks like the binding not working.
+//
+// Nothing on screen announces which mode a fresh client is in, so this is not
+// something a reader can be expected to notice.
+func windowManagementMode(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatalf("normalise to window management mode: %v", err)
+	}
+	if err := term.WaitForText("Window Management Mode", uiTimeout); err != nil {
+		t.Fatalf("never settled in window management mode: %v\n%s", err, term.Snapshot())
+	}
+	// The mode switch re-arms input handling; give it the same beat a mode
+	// change gets everywhere else.
+	time.Sleep(insertGuard)
+}
+
+// killDaemonNow shuts the daemon under base down immediately rather than at the
+// end of the test.
+//
+// killDaemon registers a cleanup, which is right for a test that starts one
+// daemon and wrong for anything that starts hundreds: a fuzz campaign builds a
+// fresh isolation root per replay, and leaving every one of them to t.Cleanup
+// means every daemon and every shell it forked is alive at once until the test
+// ends. The registered cleanup still runs afterwards and finds nothing to do.
+func killDaemonNow(t *testing.T, base string) {
+	t.Helper()
+	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		t.Logf("kill-server under %s (best effort): %v: %s", base, err, strings.TrimSpace(out))
+	}
+}
+
 // waitBoot blocks until the welcome screen is up.
 func waitBoot(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()

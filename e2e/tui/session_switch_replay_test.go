@@ -35,13 +35,7 @@ func twoSessionClient(t *testing.T) *tuitest.Terminal {
 	// An attached client boots straight into terminal mode, so settle it in
 	// window-management mode first and enter terminal mode from there: that is
 	// the transition enterTerminalMode knows how to wait on.
-	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
-		t.Fatalf("normalise to window mode: %v", err)
-	}
-	if err := term.WaitForText("Window Management Mode", uiTimeout); err != nil {
-		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
-	}
-	time.Sleep(insertGuard)
+	windowManagementMode(t, term)
 	enterTerminalMode(t, term)
 	return term
 }

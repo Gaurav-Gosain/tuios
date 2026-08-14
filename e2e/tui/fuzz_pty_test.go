@@ -195,7 +195,7 @@ func (p *ptyTarget) Close() {
 		p.term = nil
 	}
 	if p.base != "" {
-		_, _ = tuiosCLI(p.t, p.base, "kill-server")
+		killDaemonNow(p.t, p.base)
 	}
 }
 
