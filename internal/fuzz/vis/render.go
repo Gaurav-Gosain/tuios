@@ -45,16 +45,17 @@ func Render(s Snapshot, o Options) string {
 // the funnel takes the stream's rows, because generation has stopped and replay
 // is what is happening.
 func renderLeft(s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
+	// The stream is budgeted first. The fuzzer resizes the app under test, and
+	// it will happily resize it larger than the terminal doing the recording; a
+	// viewport that took what it wanted then left the tape two rows turned the
+	// best thing in the run into a sliver. The app is shown in whatever is left,
+	// and says so when that is less than all of it.
+	streamH := min(tapeRows+1, h)
 	var top []string
 	if o.Screen != nil {
-		top = renderViewport(s, o, pal, w)
+		top = renderViewport(s, o, pal, w, h-streamH)
 	}
-	// The stream keeps at least three rows; below that it says nothing.
-	streamH := h - len(top)
-	if streamH < 3 {
-		top = top[:max(len(top)+streamH-3, 0)]
-		streamH = h - len(top)
-	}
+	streamH = h - len(top)
 
 	var stream []string
 	if s.Phase == PhaseGenerating {
@@ -73,9 +74,9 @@ func renderLeft(s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
 // The border and its title are the harness speaking, so they carry the phase.
 // When a rule breaks they go Cherry, which says the harness found something
 // rather than that the app drew something red.
-func renderViewport(s Snapshot, o Options, pal overlay.Palette, w int) []string {
+func renderViewport(s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
 	screen := o.Screen()
-	if screen == "" {
+	if screen == "" || h < 3 {
 		return nil
 	}
 	g := glyphs()
@@ -97,11 +98,20 @@ func renderViewport(s Snapshot, o Options, pal overlay.Palette, w int) []string 
 	if s.Violated {
 		edge = pal.Warn
 	}
+	// Rows are budgeted the same way columns are: the frame shows what it has
+	// room for, from the top.
+	rows := h - 2
+	if len(body) > rows {
+		body = body[:max(rows, 0)]
+	}
+
 	size := itoa(appW) + g.times + itoa(appH)
-	if inner < appW {
-		// Saying the app is 80 wide while showing 60 of it is the kind of quiet
-		// lie this display exists to avoid.
-		size += " " + g.sep + " clipped"
+	if inner < appW || len(body) < appH {
+		// Saying the app is 178 wide while showing 79 of it is the kind of quiet
+		// lie this display exists to avoid. The fuzzer resizes the app past the
+		// recording terminal often enough that this is the common case, not an
+		// edge one.
+		size += " " + g.sep + " showing " + itoa(inner) + g.times + itoa(len(body))
 	}
 	title := " under test " + g.sep + " " + size + " "
 	title = overlay.Truncate(title, max(inner-2, 1))

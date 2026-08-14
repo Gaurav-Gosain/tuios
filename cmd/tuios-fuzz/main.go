@@ -52,6 +52,8 @@ type options struct {
 	height  int
 	replay  string
 	hold    bool
+	floorW  int
+	floorH  int
 }
 
 func parse() (options, error) {
@@ -70,6 +72,8 @@ func parse() (options, error) {
 	flag.IntVar(&o.height, "height", 0, "frame height (default: the terminal's)")
 	flag.StringVar(&o.replay, "replay", "", "replay a saved repro script instead of generating")
 	flag.BoolVar(&o.hold, "hold", true, "hold the end card until a key, so a recording ends on it")
+	flag.IntVar(&o.floorW, "floor-width", floorW, "smallest host width the generator picks; 0 hunts the clamped-layout class")
+	flag.IntVar(&o.floorH, "floor-height", floorH, "smallest host height the generator picks; 0 hunts the clamped-layout class")
 	flag.Parse()
 
 	if seed != "" {
@@ -162,7 +166,7 @@ func campaign(o options, dir string, seed uint64, actions []fuzz.Action) (fuzz.R
 
 	cfg := fuzz.Config{
 		Seed: seed, Steps: o.steps, Actions: actions,
-		MinWidth: floorW, MinHeight: floorH,
+		MinWidth: o.floorW, MinHeight: o.floorH,
 	}
 
 	if o.display == "off" {
@@ -225,10 +229,12 @@ func cadenceBatch(o options) int {
 	return 0
 }
 
-// floorW and floorH keep the generator above the host size where every pane
+// floorW and floorH default the generator above the host size where every pane
 // clamps and stacks. Every finding below that floor belongs to one class, and a
 // run with no floor reports that class within two actions and never reaches
-// anything else. They match the in-package campaign's floor.
+// anything else, so the floor is what lets a campaign step over a class it has
+// already reported. Setting it to zero is how that class gets hunted on purpose.
+// The defaults match the in-package campaign's.
 const (
 	floorW = 60
 	floorH = 20
