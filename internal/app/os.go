@@ -341,6 +341,9 @@ type OS struct {
 	// from its current state apart from one built before a mutation of its own.
 	DaemonStateVersion int
 	SubscribedPTYs     map[string]bool // Tracks which PTY IDs are currently subscribed (for visibility optimization)
+	// RestoredStreamSeq is the stream position each pane's snapshot was taken
+	// at, from the restore that precedes the subscribe on the attach path.
+	RestoredStreamSeq map[string]int64
 	// ExitReason records why the program stopped, for the caller to report and
 	// to pick an exit status. Empty means the user quit or detached normally.
 	// It is written only on the Bubble Tea goroutine, in Update.

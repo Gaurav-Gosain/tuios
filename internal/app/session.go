@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
@@ -661,7 +662,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 		// interactive resize drag (which syncs sizes rapidly) never pays for a
 		// per-motion round-trip.
 		if m.ScriptMode && w.DaemonMode && w.PTYID != "" && m.DaemonClient != nil {
-			if state, err := m.DaemonClient.GetTerminalState(w.PTYID, true); err == nil && state != nil {
+			if state, err := m.DaemonClient.GetTerminalState(w.PTYID, 0); err == nil && state != nil {
 				m.restoreTerminalContent(w, state)
 			}
 			w.HasNewOutput.Store(true)
@@ -983,7 +984,7 @@ func (m *OS) RestoreTerminalStates() error {
 
 	for _, w := range m.Windows {
 		if w.DaemonMode && w.PTYID != "" {
-			state, err := m.DaemonClient.GetTerminalState(w.PTYID, true)
+			state, err := m.DaemonClient.GetTerminalState(w.PTYID, 0)
 			if err != nil {
 				m.LogError("Failed to get terminal state for PTY %s: %v", shortID(w.PTYID), err)
 				continue
@@ -992,6 +993,15 @@ func (m *OS) RestoreTerminalStates() error {
 			if state != nil && w.Terminal != nil {
 				// Restore IsAltScreen flag and emulator state
 				m.restoreTerminalContent(w, state)
+				// Remembered for the subscribe that SetupPTYOutputHandlers is
+				// about to make, so the stream resumes where this snapshot
+				// ends. The two halves are in different functions because the
+				// attach sequence restores every window before wiring any of
+				// them, and the position has to survive the gap.
+				if m.RestoredStreamSeq == nil {
+					m.RestoredStreamSeq = make(map[string]int64)
+				}
+				m.RestoredStreamSeq[w.PTYID] = state.Seq
 				m.LogInfo("Restored terminal state for window %s (%dx%d, %d scrollback lines)",
 					shortID(w.ID), state.Width, state.Height, state.ScrollbackLen)
 
@@ -1094,6 +1104,13 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 
 	restoredModes, cellsRestored := 0, 0
 
+	// Anything still queued for this pane's emulator was produced before the
+	// snapshot about to be applied, so applying it afterwards paints it twice.
+	// A pane coming back from a workspace switch had a batch in flight from the
+	// subscription it had already left, and the line at the seam came back
+	// duplicated.
+	w.DiscardPendingOutput()
+
 	w.LockIO()
 	// Re-check under the lock; Close() nils Terminal while holding it.
 	if t := w.Terminal; t != nil {
@@ -1119,11 +1136,41 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 		// negotiated the protocol.
 		t.RestoreKittyKeyboardState(state.KittyKbdStack)
 
-		// For alt screen apps (vim, htop, etc.), DON'T restore cell content manually.
-		// Instead, rely on SIGWINCH (triggered by resize in RestoreTerminalStates) to make
-		// the app redraw itself. This is cleaner and avoids ANSI leakage issues.
-		// Only restore cell content for non-alt-screen terminals (normal shell).
-		if !state.IsAltScreen && len(state.Screen) > 0 {
+		// The scrollback goes back first, and it is the main screen's either
+		// way: the alternate screen keeps none, and both sides read the same
+		// buffer. Seeding it is what makes a pane's history survive a route
+		// that builds it on a new emulator. The daemon has always sent these
+		// rows and nothing has ever read them, so the history a pane came back
+		// with was whatever the catch-up replay happened to redraw.
+		//
+		// A pane whose emulator survived keeps the history it already holds and
+		// is only handed the lines that scrolled off while it was away. The
+		// daemon sends a bounded window of its scrollback and a client keeps far
+		// more than that, so replacing the whole buffer would cut a long history
+		// down to the size of the window on every workspace switch.
+		sb := t.Scrollback()
+		if have := sb.Len(); have == 0 {
+			for _, row := range state.Scrollback {
+				sb.PushLine(stateToLine(row))
+			}
+		} else if missing := state.ScrollbackLen - have; missing > 0 {
+			rows := state.Scrollback
+			if missing < len(rows) {
+				rows = rows[len(rows)-missing:]
+			}
+			for _, row := range rows {
+				sb.PushLine(stateToLine(row))
+			}
+		}
+
+		// The alternate screen is restored the same way as the normal one. It
+		// used to be skipped, on the grounds that a resize would make vim or
+		// htop repaint itself, which asks the guest to do the client's job: a
+		// program that does not redraw on SIGWINCH, or one that is between
+		// frames, leaves the pane blank. RestoreAltScreenMode above has already
+		// pointed the emulator at the alternate buffer, so these cells land in
+		// it and a later repaint just writes the same thing again.
+		if len(state.Screen) > 0 {
 			for y := 0; y < len(state.Screen) && y < state.Height; y++ {
 				if state.Screen[y] == nil {
 					continue
@@ -1140,6 +1187,10 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 					}
 				}
 			}
+			// The cursor was serialized and thrown away. Whatever came next was
+			// written from wherever this client's emulator happened to be left,
+			// which on a pane rebuilt from nothing is the top left corner.
+			t.RestoreCursorPosition(state.CursorX, state.CursorY)
 		}
 	}
 	w.UnlockIO()
@@ -1211,7 +1262,7 @@ func (m *OS) SetupPTYOutputHandlers() error {
 			// Only subscribe to PTYs for windows in the current workspace
 			// Windows in other workspaces will be subscribed when switching to them
 			if w.Workspace == m.CurrentWorkspace {
-				m.subscribeToPTY(window)
+				m.subscribeToPTY(window, m.RestoredStreamSeq[ptyID])
 			}
 
 			// Register handler for when PTY process exits
@@ -1225,6 +1276,17 @@ func (m *OS) SetupPTYOutputHandlers() error {
 	}
 
 	return nil
+}
+
+// stateToLine converts one serialized scrollback row to an emulator line.
+func stateToLine(row []session.CellState) uv.Line {
+	line := make(uv.Line, len(row))
+	for x, cs := range row {
+		if cell := session.StateToCell(cs); cell != nil {
+			line[x] = *cell
+		}
+	}
+	return line
 }
 
 // primePaneFromDaemon fills a pane's local emulator with the daemon's copy of
@@ -1244,15 +1306,37 @@ func (m *OS) primePaneFromDaemon(window *terminal.Window) {
 		return
 	}
 
-	if state, err := m.DaemonClient.GetTerminalState(window.PTYID, true); err == nil && state != nil {
-		m.restoreTerminalContent(window, state)
+	state, err := m.DaemonClient.GetTerminalState(window.PTYID, 0)
+	if err != nil || state == nil {
+		m.subscribeToPTY(window, 0)
+		return
 	}
-	m.subscribeToPTY(window)
+
+	// The pane may have been resized while it was hidden, by another client or
+	// by the daemon. Window.Resize measures against what this client last
+	// announced, which still says the size this client gave the pane, so it
+	// sees nothing to do and the pane comes back at a size the daemon is not
+	// at. The snapshot carries what the daemon actually is, so seed the record
+	// from that and let the resize happen before the snapshot is taken for
+	// real: reconciling after would blit cells laid out at one width into an
+	// emulator about to reflow at another.
+	if state.Width != window.ContentWidth() || state.Height != window.ContentHeight() {
+		window.SeedAnnouncedSize(state.Width, state.Height)
+		window.Resize(window.Width, window.Height)
+		if fresh, err := m.DaemonClient.GetTerminalState(window.PTYID, 0); err == nil && fresh != nil {
+			state = fresh
+		}
+	}
+
+	m.restoreTerminalContent(window, state)
+	m.subscribeToPTY(window, state.Seq)
 }
 
-// subscribeToPTY subscribes to PTY output for a window.
+// subscribeToPTY subscribes to PTY output for a window. fromSeq is the stream
+// position the window's emulator has just been restored to, so the daemon sends
+// what came after the snapshot rather than history the snapshot already shows.
 // Safe to call multiple times - will not double-subscribe.
-func (m *OS) subscribeToPTY(window *terminal.Window) {
+func (m *OS) subscribeToPTY(window *terminal.Window, fromSeq int64) {
 	if m.DaemonClient == nil || window.PTYID == "" {
 		return
 	}
@@ -1265,7 +1349,7 @@ func (m *OS) subscribeToPTY(window *terminal.Window) {
 	}
 
 	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", shortID(ptyID), shortID(window.ID))
-	err := m.DaemonClient.SubscribePTY(ptyID, func(data []byte) {
+	err := m.DaemonClient.SubscribePTY(ptyID, fromSeq, func(data []byte) {
 		passThroughCursorStyle(data)
 		window.WriteOutputAsync(data)
 	})
