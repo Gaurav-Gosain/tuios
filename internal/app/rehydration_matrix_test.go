@@ -230,6 +230,18 @@ var rehydrationRoutes = []routeCase{
 			r.m.SwitchToWorkspace(1)
 		},
 	},
+	{
+		// The first client stays attached and subscribed throughout, so this is
+		// a second client arriving at a live session rather than the same one
+		// coming back. It is also the mechanism a first attach uses, on a client
+		// that has never seen the pane.
+		name:     "second-client",
+		rebuilds: true,
+		run: func(r *rig, away func()) {
+			away()
+			r.attach()
+		},
+	},
 }
 
 func TestRehydrationMatrix(t *testing.T) {

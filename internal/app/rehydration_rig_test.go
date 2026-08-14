@@ -106,25 +106,26 @@ func newRig(t *testing.T, panes int) *rig {
 		}
 		return false
 	})
-	if err := boot.Detach(); err != nil {
-		t.Fatalf("bootstrap detach: %v", err)
-	}
-	_ = boot.Close()
-
+	// The control connection attaches while the bootstrap one is still here, and
+	// starts reading straight after. Every client joining or leaving this
+	// session is announced to it, and an announcement is only told apart from a
+	// reply once the read loop is running: attaching after the bootstrap client
+	// had already left let its client-left notification be read as the attach's
+	// own answer.
 	ctl := session.NewTUIClient()
 	if err := ctl.Connect("test", rigCols, rigRows); err != nil {
 		t.Fatalf("control connect: %v", err)
 	}
-	// The read loop goes first here, unlike the client under test, which
-	// mirrors production by attaching first. This connection is the test's
-	// instrument: with the loop already running, replies are demuxed by type
-	// rather than read positionally, so an unsolicited push landing between the
-	// request and its answer cannot be mistaken for the answer.
-	ctl.StartReadLoop()
 	if _, err := ctl.AttachSession(name, false, rigCols, rigRows); err != nil {
 		t.Fatalf("control attach: %v", err)
 	}
+	ctl.StartReadLoop()
 	t.Cleanup(func() { _ = ctl.Close() })
+
+	if err := boot.Detach(); err != nil {
+		t.Fatalf("bootstrap detach: %v", err)
+	}
+	_ = boot.Close()
 
 	r := &rig{t: t, daemon: d, ctl: ctl, session: name}
 	r.attach()
