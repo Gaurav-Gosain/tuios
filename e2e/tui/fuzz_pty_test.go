@@ -74,6 +74,9 @@ const (
 	// structureSettle is how long the client is given to agree with the daemon
 	// about the shape of the session before the disagreement is a finding.
 	structureSettle = 2 * time.Second
+	// spliceSettle is how long a hole in a pane has to survive before it is a
+	// splice rather than a frame caught mid-repaint.
+	spliceSettle = 1 * time.Second
 )
 
 // ptyTarget drives one tuios client against one daemon.
@@ -543,11 +546,38 @@ func (p *ptyTarget) checkClient() []fuzz.Violation {
 		return one("pty-size", "the grid is %dx%d, the PTY is %dx%d", cols, rows, p.cols, p.rows)
 	}
 	if a, b, found := spliceIn(screenLines(s)); found {
-		return one("client-splice",
-			"pane %s shows line %d directly above line %d after %s, so the client "+
-				"replayed a stream across a hole", a.tag, a.seq, b.seq, p.last)
+		// Confirmed over a beat, because a frame caught halfway through a
+		// repaint has the same shape: old rows above new ones with the middle
+		// not yet drawn. That is worth knowing and is not this rule, which is
+		// about a pane that comes back wrong and stays wrong. A hole still there
+		// a second later is not a frame in progress.
+		if a2, b2, still := p.spliceHolds(); still {
+			return one("client-splice",
+				"pane %s shows line %d directly above line %d, still there after %s, "+
+					"so the client replayed a stream across a hole rather than "+
+					"catching a repaint mid-frame; first seen as %d above %d after %s",
+				a2.tag, a2.seq, b2.seq, spliceSettle, a.seq, b.seq, p.last)
+		}
 	}
 	return nil
+}
+
+// spliceHolds re-reads the client's screen until a splice goes away or the
+// budget runs out.
+func (p *ptyTarget) spliceHolds() (witness, witness, bool) {
+	deadline := time.Now().Add(spliceSettle)
+	var a, b witness
+	for {
+		x, y, found := spliceIn(screenLines(p.term.Screen()))
+		if !found {
+			return witness{}, witness{}, false
+		}
+		a, b = x, y
+		if !time.Now().Before(deadline) {
+			return a, b, true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (p *ptyTarget) checkDaemon() []fuzz.Violation {
@@ -847,6 +877,11 @@ func (p *ptyTarget) burst(w daemonWindow, n int) error {
 	if n > vtSafeBurst {
 		p.flooded[w.ID] = true
 	}
+	// Output written to a pane that is on the alternate screen lands on the
+	// alternate screen, so the pane now carries witness lines there and the
+	// alternate-screen rule can no longer tell it apart from a pane that fell
+	// back to the main one. The expectation is retired rather than reported.
+	delete(p.alt, w.ID)
 	lo := p.emitted[w.ID] + 1
 	hi := lo + n - 1
 	p.emitted[w.ID] = hi
