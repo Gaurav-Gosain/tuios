@@ -133,7 +133,7 @@ func TestStripRestsAsABandWithASpine(t *testing.T) {
 	}
 	rule := config.GetWindowBorderLeft()
 	want := []string{
-		"  " + rule, // pad: no badge, and no hole reserved for one
+		" +" + rule, // the add stands in the head's pad: no badge, no hole for one
 		"▎·" + rule, // the attached session
 		"  " + rule,
 		" ·" + rule,
@@ -146,9 +146,9 @@ func TestStripRestsAsABandWithASpine(t *testing.T) {
 		}
 	}
 	// The fixture has one pane working, so the bottom group carries it: the rule,
-	// the mark, the blank that holds the group off the controls, then the toggle
-	// and the rail's last pad.
-	tail := []string{"──" + rule, " ●" + rule, "  " + rule, " +" + rule, " »" + rule, "  " + rule}
+	// the mark, the blank that holds the group off the control, then the toggle
+	// and the rail's last pad. The add is not down here: it belongs to the spine.
+	tail := []string{"──" + rule, " ●" + rule, "  " + rule, " »" + rule, "  " + rule}
 	for i, w := range tail {
 		if got := lines[len(lines)-len(tail)+i]; got != w {
 			t.Errorf("tail line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
@@ -262,8 +262,11 @@ func TestStripBadgeLeadsTheSpine(t *testing.T) {
 	if want := "2" + agentStateIndicator("errored") + rule; lines[1] != want {
 		t.Errorf("line 1 = %q, want the badge %q", lines[1], want)
 	}
-	if lines[2] != "  "+rule {
-		t.Errorf("line 2 = %q, want a pad under the badge", lines[2])
+	// The add stands in the pad under the badge and does its job: the alarm is
+	// held off the list by the line that says what the list is for, and the spine
+	// starts exactly where it did before there was a control on the strip at all.
+	if lines[2] != " +"+rule {
+		t.Errorf("line 2 = %q, want the add between the badge and the spine", lines[2])
 	}
 	if lines[3] != "▎·"+rule {
 		t.Errorf("line 3 = %q, want the spine to start under the badge's pad", lines[3])
@@ -327,11 +330,15 @@ func TestStripSpineKeepsOneShapeAtOneInterval(t *testing.T) {
 		}
 	}
 
+	// The head's add is a control standing in a pad, not a mark: what is under
+	// test is the rhythm the session marks keep under it.
 	var marks []int
 	for i, l := range spine {
-		if strings.TrimSpace(l[:len(l)-len(config.GetWindowBorderLeft())]) != "" {
-			marks = append(marks, i)
+		body := l[:len(l)-len(config.GetWindowBorderLeft())]
+		if strings.TrimSpace(body) == "" || strings.Contains(body, sidebarAddGlyph) {
+			continue
 		}
+		marks = append(marks, i)
 	}
 	if len(marks) != 3 {
 		t.Fatalf("the spine drew %d marks, want one per session:\n%s", len(marks), strings.Join(lines, "\n"))
@@ -382,11 +389,11 @@ func TestStripPacksThenSaysWhatItCut(t *testing.T) {
 	rule := config.GetWindowBorderLeft()
 
 	want := []string{
-		"  " + rule,
+		" +" + rule, // the add, standing in the head's pad rather than on a line
 		"▎·" + rule,
 		" ·" + rule,
-		" ⋮" + rule, // the six it had no line for
-		" +" + rule,
+		" ·" + rule,
+		" ⋮" + rule, // the five it had no line for
 		" »" + rule,
 		"  " + rule,
 	}

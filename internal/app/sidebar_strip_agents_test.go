@@ -89,7 +89,7 @@ func TestStripStaysSilentWithNoAgents(t *testing.T) {
 	rule := config.GetWindowBorderLeft()
 
 	want := []string{
-		"  " + rule, // pad: nothing is blocked, so no badge
+		" +" + rule, // the add, on the head line the spine starts under
 		"▎·" + rule,
 		"  " + rule,
 		" ·" + rule,
@@ -101,8 +101,8 @@ func TestStripStaysSilentWithNoAgents(t *testing.T) {
 			t.Errorf("line %d = %q, want %q\n%s", i, lines[i], w, strings.Join(lines, "\n"))
 		}
 	}
-	// Nothing between the spine and the two controls at the bottom.
-	tail := []string{" +" + rule, " »" + rule, "  " + rule}
+	// Nothing between the spine and the way out at the bottom.
+	tail := []string{" »" + rule, "  " + rule}
 	for i, w := range tail {
 		if got := lines[len(lines)-len(tail)+i]; got != w {
 			t.Errorf("tail line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
@@ -171,14 +171,14 @@ func TestStripGroupSitsUnderARuleAtTheBottom(t *testing.T) {
 	rule := config.GetWindowBorderLeft()
 
 	// Four agents, spaced like the spine, over the blank that holds the group off
-	// the controls, then the toggle.
+	// the control, then the toggle. Nothing else stands between the group and the
+	// way out: a control under this list would read as belonging to it.
 	tail := []string{
 		"──" + rule,
 		" ×" + rule, "  " + rule,
 		" ▲" + rule, "  " + rule,
 		"▎●" + rule, "  " + rule, // the working pane is the focused one
 		" ■" + rule, "  " + rule,
-		" +" + rule,
 		" »" + rule,
 		"  " + rule,
 	}

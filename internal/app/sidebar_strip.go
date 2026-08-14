@@ -202,9 +202,10 @@ func sidebarStripPlan(region, sessions int) (shown, interval int, more bool) {
 }
 
 // sidebarStripLines draws the collapsed rail: a Panel band the full height of
-// the rail, carrying the attention badge under a pad, the session spine
-// top-pinned below it, the agents group pinned to the bottom under its rule, and
-// the expand toggle on the rail's last line but one.
+// the rail, carrying the attention badge under a pad, the add control on the
+// line the session spine starts under, the spine top-pinned below it, the agents
+// group pinned to the bottom under its rule, and the expand toggle on the rail's
+// last line but one.
 func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMargin, sidebarX int,
 	pal overlay.Palette, edgeLeft bool,
 ) ([]string, int) {
@@ -226,23 +227,26 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 		newH = 1
 	}
 
-	// The head is a pad, the badge, and a pad under it; the tail is the two
-	// controls and a pad below them. A rail with no room for all of it plus a mark
-	// gives up the new-session control first, then the badge, then the pads: the
-	// spine is the only thing the strip cannot say any other way, the way out has
-	// to survive everything, and making a session is the one thing that can wait
-	// for the rail to be reopened.
-	headH, tailH := 1+2*badgeH, toggleH+newH+1
+	// The head is a pad, the badge and a pad under it; the tail is the way out and
+	// a pad below it. The add control is drawn on the head's last line rather than
+	// on one of its own, so it costs the spine nothing and the spine sits where it
+	// always has. A rail with no room for all of it plus a mark gives up the
+	// badge, then the pads: the spine is the only thing the strip cannot say any
+	// other way, and the way out has to survive everything.
+	headH, tailH := 1+2*badgeH, toggleH+1
 	switch {
 	case height >= headH+tailH+1:
-	case height >= headH+toggleH+2:
-		newH, tailH = 0, toggleH+1
 	case height >= toggleH+3:
-		badgeH, headH, newH, tailH = 0, 1, 0, toggleH+1
+		badgeH, headH = 0, 1
 	case height >= toggleH+1:
-		badgeH, headH, newH, tailH = 0, 0, 0, toggleH
+		badgeH, headH, tailH = 0, 0, toggleH
 	default:
-		badgeH, headH, newH, tailH, toggleH = 0, 0, 0, 0, 0
+		badgeH, headH, toggleH, tailH = 0, 0, 0, 0
+	}
+	// No head line left to stand on, and a rail this short has already given up
+	// its pads.
+	if headH == 0 {
+		newH = 0
 	}
 
 	agents := m.sidebarStripAgents(sessions)
@@ -271,9 +275,13 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 		ruleH = 0
 	}
 
+	// The add takes the head's last line, which is the pad the spine starts
+	// under: a control standing there holds the badge off the list exactly as the
+	// blank did, and it sits on the list it adds to with nothing in between,
+	// which is what the expanded rail's section header does with the same glyph.
 	badgeY, moreY := 1, stackTop+shown*interval
-	newY := height - tailH
-	toggleY := newY + newH
+	newY := headH - 1
+	toggleY := height - tailH
 
 	// The band is the target made visible, so it covers the slot the pointer is
 	// in and exactly the slot: every row of it, including the blank the mark's
@@ -336,6 +344,31 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 				bg, edgeFg = agentGlyphColor(badge.State, pal), pal.Canvas
 			}
 			lines = append(lines, m.sidebarStripBand(sidebarStripBadgeCell(badge, cw, pal), cw, edgeLeft, bg, edgeFg, pal))
+		case newH > 0 && i == newY:
+			// The add sits at the head of the spine, on the line the first session
+			// mark starts under, because that is what binds a control to the list it
+			// adds to. It used to stack above the expand toggle at the strip's bottom
+			// edge, which is where the expanded rail's "+ new" used to be and was
+			// moved from for this reason: pinned to the bottom it sat directly under
+			// the agents group and read as a control for that list, which is not a
+			// thing the rail can make. Standing in the head's pad it costs no line,
+			// so the spine is one mark longer than it was as well.
+			//
+			// This is the sessions add and only that, the same thing the expanded
+			// rail's sessions header means by the same glyph: a control that means
+			// one thing folded and another unfolded is its own bug. The terminals
+			// add has no counterpart here on purpose. The strip lists sessions and
+			// the panes wanting a human; it has no terminals section, so a control
+			// making a pane would point at a list that is not on the screen, and
+			// the two "+" marks would then be telling the user the width decides
+			// what the key means.
+			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
+				Kind: sidebarStripNew, Y0: y, Y1: y + 1, Label: sidebarAddWords(sidebarRowNewSession),
+			})
+			record(sidebarRowNewSession, "", "", y, 1)
+			bg := stripRowBg(hovered(i), pal)
+			lines = append(lines, m.sidebarStripBand(
+				sidebarStripControlCell(sidebarAddGlyph, cw, edgeLeft, hovered(i), bg, pal), cw, edgeLeft, bg, nil, pal))
 		case i >= stackTop && i < spineEnd && (i-stackTop)%interval == 0:
 			s := sessions[(i-stackTop)/interval]
 			rows := min(interval, spineEnd-i)
@@ -382,28 +415,6 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 			record(sidebarRowCollapse, "", "", y, 1)
 			bg := stripRowBg(hovered(i), pal)
 			lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal, bg, hovered(i)), cw, edgeLeft, bg, nil, pal))
-		case newH > 0 && i == newY:
-			// The two controls stack rather than share a line: two content cells
-			// shared out give each of them one cell, which is the target this round
-			// exists to stop drawing, and the ASCII toggle is two cells wide and
-			// would leave no room at all. Stacked, they also sit in the column every
-			// other mark on the strip is already in.
-			//
-			// This is the sessions add and only that, the same thing the expanded
-			// rail's sessions header means by the same glyph: a control that means
-			// one thing folded and another unfolded is its own bug. The terminals
-			// add has no counterpart here on purpose. The strip lists sessions and
-			// the panes wanting a human; it has no terminals section, so a control
-			// making a pane would point at a list that is not on the screen, and
-			// the two "+" marks would then be telling the user the width decides
-			// what the key means.
-			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
-				Kind: sidebarStripNew, Y0: y, Y1: y + 1, Label: sidebarAddWords(sidebarRowNewSession),
-			})
-			record(sidebarRowNewSession, "", "", y, 1)
-			bg := stripRowBg(hovered(i), pal)
-			lines = append(lines, m.sidebarStripBand(
-				sidebarStripControlCell(sidebarAddGlyph, cw, edgeLeft, hovered(i), bg, pal), cw, edgeLeft, bg, nil, pal))
 		case toggleH > 0 && i == toggleY:
 			// The glyph hugs the pane-facing column, the edge the pointer arrives
 			// from, but the zone is the whole band: the only control the user has
