@@ -990,6 +990,6 @@ func awaitDaemonShutdown(pid int, socketPath string) error {
 	}
 }
 
-// startDaemonBackground is defined in platform-specific files:
+// killDaemonProcess is defined in platform-specific files:
 // - session_commands_unix.go for Unix/Linux/macOS
 // - session_commands_windows.go for Windows
