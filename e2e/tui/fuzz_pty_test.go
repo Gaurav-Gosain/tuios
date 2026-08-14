@@ -51,23 +51,6 @@ const (
 	// more than a burst leaves on the visible screen, so the rule is about the
 	// scrollback rather than about the grid.
 	scrollTail = 400
-	// vtSafeBurst is the largest burst after which the daemon's own emulator is
-	// still believed to hold everything the pane printed.
-	//
-	// Above it, it does not, and that is deliberate in the product rather than a
-	// bug this oracle found: the read loop offers each chunk to the emulator's
-	// feeding goroutine and drops it if that goroutine is behind
-	// (internal/session/session.go:1662, the default arm), on the stated grounds
-	// that the emulator is for state queries and the client's own emulator is the
-	// rendering source of truth. A fast pane arrives as hundreds of small reads,
-	// the queue is 256 deep, and lines are simply gone.
-	//
-	// So capture-pane is a witness to content only for a pane that has not
-	// flooded, and every rule that reads the daemon's grid as ground truth is
-	// scoped to those panes. The rules that matter most are unaffected: the
-	// client's own screen is fed by the broadcast stream, which is not lossy in
-	// this way, and it is the client that the splice bug corrupted.
-	vtSafeBurst = 200
 	// settle is the beat between an action and the assertion. The screen is
 	// asynchronous, so without it a check reads the frame from before the action.
 	settle = 12 * time.Millisecond
@@ -102,10 +85,6 @@ type ptyTarget struct {
 	// tail is the highest witness number the daemon has been seen holding for
 	// each pane. Scrollback is allowed to grow and never to forget its end.
 	tail map[string]int
-	// flooded names the panes that have been given more than vtSafeBurst lines at
-	// once, and whose daemon-side grid is therefore no longer a complete record
-	// of what they printed.
-	flooded map[string]bool
 	// alt names the panes the daemon has confirmed are on the alternate screen.
 	// Entries are added only once confirmed, so the rule is "an alternate screen
 	// that existed survives" rather than "an alternate screen was reached",
@@ -144,7 +123,7 @@ func (p *ptyTarget) Reset() error {
 	p.maxRows = ptyRows
 	p.detached, p.probe, p.pending = false, true, nil
 	p.emitted, p.tail = map[string]int{}, map[string]int{}
-	p.alt, p.flooded = map[string]bool{}, map[string]bool{}
+	p.alt = map[string]bool{}
 	p.wins, p.focused = nil, ""
 	p.current = p.session
 
@@ -675,13 +654,11 @@ func (p *ptyTarget) checkPanes() []fuzz.Violation {
 			// reading, not a finding about tuios.
 			continue
 		}
-		if !p.flooded[w.ID] {
-			if a, b, found := spliceIn(grid); found {
-				return one("daemon-splice",
-					"the daemon's own grid for pane %s has line %d directly above line %d "+
-						"after %s, and the pane never flooded, so the hole is in the daemon "+
-						"rather than in the client", a.tag, a.seq, b.seq, p.last)
-			}
+		if a, b, found := spliceIn(grid); found {
+			return one("daemon-splice",
+				"the daemon's own grid for pane %s has line %d directly above line %d "+
+					"after %s, so the hole is in the daemon rather than in the client",
+				a.tag, a.seq, b.seq, p.last)
 		}
 		if vs := p.checkAlt(w, grid); len(vs) > 0 {
 			return vs
@@ -746,12 +723,10 @@ func (p *ptyTarget) checkScrollback(w daemonWindow, grid []string) []fuzz.Violat
 	if err != nil {
 		return nil
 	}
-	if !p.flooded[w.ID] {
-		if a, b, found := spliceIn(hist); found {
-			return one("scrollback-retained",
-				"pane %s has line %d directly above line %d in its history after %s",
-				a.tag, a.seq, b.seq, p.last)
-		}
+	if a, b, found := spliceIn(hist); found {
+		return one("scrollback-retained",
+			"pane %s has line %d directly above line %d in its history after %s",
+			a.tag, a.seq, b.seq, p.last)
 	}
 	_, hi, any := seqRange(hist, w.tag())
 	if !any {
@@ -800,12 +775,6 @@ func (p *ptyTarget) checkProvenance() []fuzz.Violation {
 			return one("witness-provenance",
 				"the client shows pane %s at line %d and only %d were ever written, after %s",
 				tag, clientHi, p.emitted[w.ID], p.last)
-		}
-		if p.flooded[w.ID] {
-			// The daemon's grid is allowed to be missing lines for this pane, so
-			// it cannot bound the client's. The provenance bound above still
-			// holds, because that one is against what this run wrote.
-			continue
 		}
 		grid, err := daemonPane(p.base, p.current, w.ID)
 		if err != nil {
@@ -894,9 +863,6 @@ func (p *ptyTarget) focusedWindow() (daemonWindow, bool) {
 // rule keeps meaning the same thing for the whole run.
 func (p *ptyTarget) burst(w daemonWindow, n int) error {
 	n = min(max(n, 1), 5000)
-	if n > vtSafeBurst {
-		p.flooded[w.ID] = true
-	}
 	// Output written to a pane that is on the alternate screen lands on the
 	// alternate screen, so the pane now carries witness lines there and the
 	// alternate-screen rule can no longer tell it apart from a pane that fell

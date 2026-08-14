@@ -24,24 +24,51 @@ import (
 // therefore asking the copy whether it agrees with itself, and a copy always
 // does.
 //
-// That split is where the worst bug of the week lived. The catch-up ring is
-// 64KB (internal/session/session.go:635); a subscriber whose channel is full has
-// its chunk dropped without its resume position advancing
-// (internal/session/session.go:1732), so on the next subscribe it is handed a
-// stream with a hole and no resync in front of it. What reaches the screen is
-// the far side of the gap painted onto the near side: two stretches of one
-// pane's output, minutes apart, adjacent. Nothing a client-only check looks at
-// is wrong in that state. The process is alive, the grid is the right size,
-// every pane holds plausible text, and the pane is a lie.
+// That split is where the worst bugs of the month lived, and docs/REHYDRATION.md
+// is the audit of them. What reaches the screen when a route gets it wrong is
+// two stretches of one pane's output, far apart in time, adjacent on the glass:
+// a stream replayed across a hole, or the same lines painted twice at a seam.
+// Nothing a client-only check looks at is wrong in that state. The process is
+// alive, the grid is the right size, every pane holds plausible text, and the
+// pane is a lie.
 //
 // # What the witness is
 //
 // The daemon's own answer to the same question, read through the verbs a user
 // already has: capture-pane for a pane's grid and its scrollback, list-windows
 // and session-info for the structure. The daemon renders those from its own
-// emulator and never from an attached client
-// (internal/session/daemon_command.go:154), so it is an independent observer of
-// the same state rather than a second look at the same buffer.
+// emulator and never from an attached client, so it is an independent observer
+// of the same state rather than a second look at the same buffer.
+//
+// docs/REHYDRATION.md names that emulator the authority for grid, cursor, modes
+// and scrollback, on the grounds that it is the only thing that has seen every
+// byte, and its feed now blocks rather than dropping a chunk when it falls
+// behind. That is what makes it usable as a witness for content and not only for
+// structure, and it is why the rules below read it as ground truth.
+//
+// # Which of that document's invariants these rules cover
+//
+// The contract states five, and this file is a partial oracle for three of them,
+// asserted continuously under an arbitrary action stream rather than at the end
+// of one named route:
+//
+//	2. Scrollback. The client may never hold history the daemon does not have.
+//	   witness-provenance and client-ahead are that, bounded from both sides.
+//	4. Modes. The alternate-screen flag matches. altscreen-retained is that.
+//	5. No duplication. Content produced once appears once. The adjacency rule
+//	   fires on a repeated number as readily as on a missing run, so a line
+//	   painted twice at a seam breaks it.
+//
+// Invariant 1, cell-for-cell grid equality, and invariant 3, the cursor, are
+// asserted far better by TestRehydrationMatrix in internal/app, which runs a
+// daemon in process and compares emulators directly. Restating them here against
+// a screen scrape would be slower and less certain about the same property. What
+// this file adds is that its three run after every action of a fuzz stream,
+// through a real PTY and the real binding table, in states nobody chose.
+//
+// Scroll position is deliberately absent. The contract says it is where a viewer
+// is looking rather than a property of the pane, and that it is not preserved on
+// the routes that rebuild windows. A rule about it here would report the design.
 //
 // # Witness lines
 //
