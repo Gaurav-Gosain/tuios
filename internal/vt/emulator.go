@@ -938,6 +938,24 @@ func (e *Emulator) IndexedColor(i int) color.Color {
 	return c
 }
 
+// PaletteColor resolves one of the sixteen ANSI palette slots the way handleSgr
+// resolves SGR 30-37 and 90-97: through the user's theme when one is set, and
+// as a plain palette entry otherwise.
+//
+// A cell rebuilt from a snapshot has to be coloured by the same rule as a cell
+// the guest writes live, or a pane comes back in one palette and carries on in
+// another.
+func (e *Emulator) PaletteColor(i int) color.Color {
+	if i < 0 || i > 15 {
+		return nil
+	}
+	if !e.hasThemeColors() {
+		// #nosec G115 - i is validated to be in [0, 15] above
+		return ansi.BasicColor(uint8(i))
+	}
+	return e.IndexedColor(i)
+}
+
 // SetIndexedColor sets a terminal's indexed color.
 // The index must be between 0 and 255.
 func (e *Emulator) SetIndexedColor(i int, c color.Color) {

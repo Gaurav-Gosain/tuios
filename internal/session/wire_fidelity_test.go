@@ -1,0 +1,222 @@
+package session
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	uv "github.com/charmbracelet/ultraviolet"
+)
+
+// The wire's fidelity, asked about directly.
+//
+// TestRehydrationMatrix in internal/app compares the two sides by reading the
+// daemon's through this wire, so it can only ever see what the wire can say. A
+// snapshot that restores a pane's characters while losing what colour they were
+// passes every case in it and is obviously wrong on screen, which is the shape
+// of the bugs it was still leaving behind.
+//
+// This test asks the question the other way round: feed a guest's output to one
+// emulator, take it through TerminalStateOf and ApplyTerminalState into a
+// second, and compare the two emulators to each other. Anything the wire cannot
+// carry shows up here as a difference between the two, with no wire in the
+// middle of the comparison to hide it.
+
+const (
+	fidelityCols = 40
+	fidelityRows = 8
+)
+
+// wireShapes are guests the wire has to be able to describe. Each is the bytes
+// a program would produce; what matters is the state the emulator is left in.
+var wireShapes = []struct {
+	name string
+	out  string
+}{
+	{
+		// The 16-colour palette, which is what ls, grep and a shell prompt use.
+		// These follow the user's terminal theme, so flattening them to the RGB
+		// they happen to resolve to is visible as a colour change.
+		name: "ansi-palette",
+		out: "\x1b[31mred\x1b[32mgreen\x1b[33myellow\x1b[m plain\r\n" +
+			"\x1b[91mbright\x1b[97mwhite\x1b[m\r\n" +
+			"\x1b[44;37mon-blue\x1b[m\r\n",
+	},
+	{
+		name: "256-colour",
+		out:  "\x1b[38;5;33mindexed\x1b[48;5;226m on-yellow\x1b[m\r\n",
+	},
+	{
+		name: "truecolour",
+		out:  "\x1b[38;2;12;34;56mrgb\x1b[48;2;200;100;50m on-rgb\x1b[m\r\n",
+	},
+	{
+		// Every attribute bit at once, and then each on its own, because they
+		// share one byte and a mask that drops a bit drops it everywhere.
+		name: "attributes",
+		out: "\x1b[1mbold\x1b[2mfaint\x1b[3mitalic\x1b[m\r\n" +
+			"\x1b[5mblink\x1b[7mreverse\x1b[8mconceal\x1b[9mstruck\x1b[m\r\n",
+	},
+	{
+		// Curly and coloured underlines are how a compiler's output and an
+		// editor's diagnostics mark a span. Collapsing them to a plain
+		// underline loses which kind of thing was being marked.
+		name: "underline-styles",
+		out: "\x1b[4:1msingle\x1b[4:2mdouble\x1b[4:3mcurly\x1b[m\r\n" +
+			"\x1b[4:4mdotted\x1b[4:5mdashed\x1b[m\r\n" +
+			"\x1b[4:3;58;5;196mcurly-red\x1b[59m\x1b[m\r\n",
+	},
+	{
+		name: "hyperlink",
+		out:  "plain \x1b]8;;https://example.com\x07linked\x1b]8;;\x07 plain\r\n",
+	},
+	{
+		// A guest that set a rendition and left it in force. Everything written
+		// next is painted with it, including output that arrives after a client
+		// has rehydrated, so the pen has to survive the snapshot too.
+		name: "pen-left-set",
+		out:  "\x1b[1;38;5;208;48;2;20;20;20;4:3mstill in force",
+	},
+	{
+		// A status line held out of the scrolling region, which is what a
+		// full-screen program does when it keeps a header or footer fixed.
+		name: "scroll-region",
+		out:  "\x1b[HHEADER\r\n\x1b[3;7r\x1b[3;1Hbody one\r\nbody two\r\n",
+	},
+	{
+		name: "origin-mode",
+		out:  "\x1b[2;6r\x1b[?6h\x1b[1;1Hinside the margins\r\n",
+	},
+	{
+		// ESC ( 0 selects the DEC line-drawing set once, and every box character
+		// after it is an ASCII letter mapped through that selection. A client
+		// that comes back with G0 at ASCII draws qqqq where the guest drew a
+		// horizontal rule.
+		name: "line-drawing-charset",
+		out:  "\x1b(0lqqqk\r\nx   x\r\nmqqqj\x1b(B\r\n",
+	},
+	{
+		name: "wide-runes",
+		out:  "\x1b[35m日本語\x1b[m ascii\r\n",
+	},
+	{
+		// A full-screen program mid-draw: in the alternate screen, with the
+		// shell's screen still underneath it. Quitting the program reveals that
+		// screen, so it is state the client needs even while it is not visible.
+		name: "alt-screen-over-shell",
+		out: "$ ls\r\n\x1b[34mdir\x1b[m  file\r\n$ vim\r\n" +
+			"\x1b[?1049h\x1b[H\x1b[2J\x1b[7m~ EDITOR \x1b[m\r\nline of text\r\n\x1b[?25l",
+	},
+	{
+		// Long enough to push lines into the scrollback, coloured so the
+		// scrollback carries style and not only characters.
+		name: "coloured-scrollback",
+		out:  colouredLines(30),
+	},
+}
+
+func colouredLines(n int) string {
+	var b strings.Builder
+	for i := range n {
+		fmt.Fprintf(&b, "\x1b[3%dm%02d line with colour\x1b[m\r\n", i%8, i)
+	}
+	return b.String()
+}
+
+func TestWireCarriesTheWholeCell(t *testing.T) {
+	for _, shape := range wireShapes {
+		t.Run(shape.name, func(t *testing.T) {
+			daemon := vt.NewEmulator(fidelityCols, fidelityRows)
+			defer func() { _ = daemon.Close() }()
+			if _, err := daemon.Write([]byte(shape.out)); err != nil {
+				t.Fatalf("feed the daemon emulator: %v", err)
+			}
+
+			client := vt.NewEmulator(fidelityCols, fidelityRows)
+			defer func() { _ = client.Close() }()
+			ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 20000))
+
+			compareEmulators(t, daemon, client)
+		})
+	}
+}
+
+// compareEmulators reports every way the two copies of a pane differ.
+func compareEmulators(t *testing.T, want, got *vt.Emulator) {
+	t.Helper()
+
+	if got.IsAltScreen() != want.IsAltScreen() {
+		t.Errorf("alternate screen: client %v, daemon %v", got.IsAltScreen(), want.IsAltScreen())
+	}
+	if g, w := got.CursorPosition(), want.CursorPosition(); g != w {
+		t.Errorf("cursor: client %v, daemon %v", g, w)
+	}
+	if got.IsCursorHidden() != want.IsCursorHidden() {
+		t.Errorf("cursor hidden: client %v, daemon %v", got.IsCursorHidden(), want.IsCursorHidden())
+	}
+
+	var diffs []string
+	for y := range want.Height() {
+		for x := range want.Width() {
+			w, g := cellSig(want.CellAt(x, y)), cellSig(got.CellAt(x, y))
+			if w != g {
+				diffs = append(diffs, fmt.Sprintf("  screen (%d,%d)\n    daemon %s\n    client %s", x, y, w, g))
+			}
+		}
+	}
+
+	if wn, gn := want.ScrollbackLen(), got.ScrollbackLen(); wn != gn {
+		t.Errorf("scrollback: client holds %d lines, daemon holds %d", gn, wn)
+	} else {
+		for i := range wn {
+			wl, gl := want.ScrollbackLine(i), got.ScrollbackLine(i)
+			for x := range max(len(wl), len(gl)) {
+				w, g := lineCellSig(wl, x), lineCellSig(gl, x)
+				if w != g {
+					diffs = append(diffs, fmt.Sprintf("  scrollback line %d col %d\n    daemon %s\n    client %s", i, x, w, g))
+				}
+			}
+		}
+	}
+
+	if len(diffs) > 0 {
+		if len(diffs) > 8 {
+			diffs = append(diffs[:8], fmt.Sprintf("  ... and %d more", len(diffs)-8))
+		}
+		t.Errorf("the client's copy differs from the daemon's in %d places:\n%s",
+			len(diffs), strings.Join(diffs, "\n"))
+	}
+}
+
+func lineCellSig(line uv.Line, x int) string {
+	if x >= len(line) {
+		return "-"
+	}
+	return cellSig(&line[x])
+}
+
+// cellSig describes a cell whole. Colours carry their concrete type because a
+// palette entry and the RGB it resolves to look the same to RGBA() and different
+// on screen: the first follows the user's terminal theme and the second does
+// not.
+func cellSig(c *uv.Cell) string {
+	if c == nil {
+		return "<nil>"
+	}
+	content := c.Content
+	if content == "" {
+		content = " "
+	}
+	return fmt.Sprintf("%q w=%d fg=%s bg=%s ul=%d ulc=%s attrs=%08b link=%q/%q",
+		content, c.Width, colorSig(c.Style.Fg), colorSig(c.Style.Bg),
+		c.Style.Underline, colorSig(c.Style.UnderlineColor), c.Style.Attrs,
+		c.Link.URL, c.Link.Params)
+}
+
+func colorSig(c any) string {
+	if c == nil {
+		return "default"
+	}
+	return fmt.Sprintf("%T(%v)", c, c)
+}

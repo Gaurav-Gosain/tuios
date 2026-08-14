@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"image/color"
 
 	"log"
 	"maps"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1394,27 +1396,39 @@ func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
 		return nil
 	}
 
+	state := TerminalStateOf(p.terminal, p.width, p.height, maxScrollback)
+	state.Seq = p.vtSeq
+	return state
+}
+
+// TerminalStateOf serializes everything a client needs to arrive at the picture
+// this emulator holds. It is one half of the wire contract; ApplyTerminalState
+// is the other, and the two are kept in this file so a field added to one is
+// read by the other. docs/REHYDRATION.md states the contract.
+//
+// Width and height are the pane's, which the caller knows; the emulator's own
+// size lags a resize the shell has not acknowledged yet.
+func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *TerminalState {
 	state := &TerminalState{
-		Seq:           p.vtSeq,
-		Width:         p.width,
-		Height:        p.height,
-		CursorX:       p.terminal.CursorPosition().X,
-		CursorY:       p.terminal.CursorPosition().Y,
-		ScrollbackLen: p.terminal.ScrollbackLen(),
-		IsAltScreen:   p.terminal.IsAltScreen(),        // Capture alt screen state for mouse event forwarding
-		Modes:         p.terminal.GetModes(),           // Capture terminal modes (mouse tracking, bracketed paste, etc.)
-		KittyKbdStack: p.terminal.KittyKeyboardStack(), // Capture kitty keyboard protocol flag stack
-		Screen:        make([][]CellState, p.height),
+		Width:         width,
+		Height:        height,
+		CursorX:       t.CursorPosition().X,
+		CursorY:       t.CursorPosition().Y,
+		ScrollbackLen: t.ScrollbackLen(),
+		IsAltScreen:   t.IsAltScreen(),        // Capture alt screen state for mouse event forwarding
+		Modes:         t.GetModes(),           // Capture terminal modes (mouse tracking, bracketed paste, etc.)
+		KittyKbdStack: t.KittyKeyboardStack(), // Capture kitty keyboard protocol flag stack
+		Screen:        make([][]CellState, height),
 		Scrollback:    make([][]CellState, 0),
 	}
 
 	// Capture visible screen with full styling
-	for y := 0; y < p.height; y++ {
-		state.Screen[y] = make([]CellState, p.width)
-		for x := 0; x < p.width; x++ {
-			cell := p.terminal.CellAt(x, y)
+	for y := 0; y < height; y++ {
+		state.Screen[y] = make([]CellState, width)
+		for x := 0; x < width; x++ {
+			cell := t.CellAt(x, y)
 			if cell != nil {
-				state.Screen[y][x] = cellToState(cell)
+				state.Screen[y][x] = CellStateOf(cell)
 			}
 		}
 	}
@@ -1422,7 +1436,7 @@ func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
 	if maxScrollback == 0 {
 		maxScrollback = DefaultStateScrollback
 	}
-	scrollbackLen := p.terminal.ScrollbackLen()
+	scrollbackLen := t.ScrollbackLen()
 	first := 0
 	if maxScrollback < 0 {
 		first = scrollbackLen
@@ -1431,17 +1445,109 @@ func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
 	}
 
 	for i := first; i < scrollbackLen; i++ {
-		line := p.terminal.ScrollbackLine(i)
+		line := t.ScrollbackLine(i)
 		if line != nil {
 			row := make([]CellState, len(line))
 			for x, cell := range line {
-				row[x] = cellToState(&cell)
+				row[x] = CellStateOf(&cell)
 			}
 			state.Scrollback = append(state.Scrollback, row)
 		}
 	}
 
 	return state
+}
+
+// ApplyTerminalState brings an emulator to the state a snapshot describes. It
+// is the reading half of the wire contract TerminalStateOf writes, and it is
+// the whole of what rehydration does to an emulator: the caller owns the
+// locking, the window-level flags and the stream that resumes afterwards.
+//
+// The emulator may be fresh or may be one that survived a workspace switch and
+// already holds most of this, so every step is written to be idempotent.
+func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
+	if t == nil || state == nil {
+		return
+	}
+
+	// Sending ESC[?1049h instead would clear the buffer it is switching to.
+	if state.IsAltScreen {
+		t.RestoreAltScreenMode(true)
+	}
+
+	// Modes come after the screen switch so the map lands on top of it. They
+	// are what apps like vim and htop need to receive mouse events at all, and
+	// the guest set them once, long out of the output buffer's reach.
+	if len(state.Modes) > 0 {
+		t.RestoreModes(state.Modes)
+	}
+
+	// Kitty keyboard flags travel outside the DEC mode map and are set once by
+	// the guest (CSI > u / CSI = u), so like the modes above they cannot be
+	// recovered from the bounded output buffer. Without this a reattached
+	// client encodes keys in legacy form for a pane that negotiated the
+	// protocol.
+	t.RestoreKittyKeyboardState(state.KittyKbdStack)
+
+	// The scrollback goes back first, and it is the main screen's either way:
+	// the alternate screen keeps none, and both sides read the same buffer.
+	// Seeding it is what makes a pane's history survive a route that builds it
+	// on a new emulator.
+	//
+	// A pane whose emulator survived keeps the history it already holds and is
+	// only handed the lines that scrolled off while it was away. The daemon
+	// sends a bounded window of its scrollback and a client keeps far more than
+	// that, so replacing the whole buffer would cut a long history down to the
+	// size of the window on every workspace switch.
+	sb := t.Scrollback()
+	if have := sb.Len(); have == 0 {
+		for _, row := range state.Scrollback {
+			sb.PushLine(stateToLine(t, row))
+		}
+	} else if missing := state.ScrollbackLen - have; missing > 0 {
+		rows := state.Scrollback
+		if missing < len(rows) {
+			rows = rows[len(rows)-missing:]
+		}
+		for _, row := range rows {
+			sb.PushLine(stateToLine(t, row))
+		}
+	}
+
+	// The alternate screen is restored the same way as the normal one. It used
+	// to be skipped, on the grounds that a resize would make vim or htop
+	// repaint itself, which asks the guest to do the client's job: a program
+	// that does not redraw on SIGWINCH, or one that is between frames, leaves
+	// the pane blank.
+	if len(state.Screen) > 0 {
+		for y := 0; y < len(state.Screen) && y < state.Height; y++ {
+			if state.Screen[y] == nil {
+				continue
+			}
+			for x := 0; x < len(state.Screen[y]) && x < state.Width; x++ {
+				cellState := state.Screen[y][x]
+				// A wide rune's continuation column is empty and is written by
+				// SetCell from the lead cell's width, so skipping it is right.
+				if cellState.Content == "" {
+					continue
+				}
+				t.SetCell(x, y, stateToCell(t, cellState))
+			}
+		}
+		// The cursor was serialized and thrown away. Whatever came next was
+		// written from wherever this client's emulator happened to be left,
+		// which on a pane rebuilt from nothing is the top left corner.
+		t.RestoreCursorPosition(state.CursorX, state.CursorY)
+	}
+}
+
+// stateToLine converts one serialized scrollback row to a line for t.
+func stateToLine(t *vt.Emulator, row []CellState) uv.Line {
+	line := make(uv.Line, len(row))
+	for x, cs := range row {
+		line[x] = *stateToCell(t, cs)
+	}
+	return line
 }
 
 // CaptureContent renders the PTY's current screen (and optionally its
@@ -1510,91 +1616,105 @@ type TerminalState struct {
 }
 
 // CellState represents a single terminal cell with full styling information.
+//
+// The attributes travel as the emulator's own bitmask rather than as a bool per
+// attribute. Spelling them out one at a time is what left blink, conceal and
+// strikethrough off the wire entirely, and collapsed the five underline styles
+// into one.
 type CellState struct {
-	Content   string `json:"c,omitempty"`  // Cell content (character or grapheme)
-	Width     int    `json:"w,omitempty"`  // Cell width (1 for normal, 2 for wide chars, 0 for continuation)
-	FgColor   string `json:"fg,omitempty"` // Foreground color (hex format like "#ff0000" or empty for default)
-	BgColor   string `json:"bg,omitempty"` // Background color (hex format or empty)
-	Bold      bool   `json:"b,omitempty"`  // Bold attribute
-	Italic    bool   `json:"i,omitempty"`  // Italic attribute
-	Underline bool   `json:"u,omitempty"`  // Underline attribute
-	Reverse   bool   `json:"r,omitempty"`  // Reverse video attribute
-	Blink     bool   `json:"bl,omitempty"` // Blink attribute
-	Faint     bool   `json:"f,omitempty"`  // Faint/dim attribute
+	Content    string `json:"c,omitempty"`  // Cell content (character or grapheme)
+	Width      int    `json:"w,omitempty"`  // Cell width (1 for normal, 2 for wide chars, 0 for continuation)
+	FgColor    string `json:"fg,omitempty"` // Foreground color, encoded by colorToWire
+	BgColor    string `json:"bg,omitempty"` // Background color
+	UlColor    string `json:"uc,omitempty"` // Underline color (SGR 58)
+	Attrs      uint8  `json:"a,omitempty"`  // uv.Attr* bitmask: bold, faint, italic, blink, reverse, conceal, strikethrough
+	Underline  uint8  `json:"u,omitempty"`  // ansi.Underline style: none, single, double, curly, dotted, dashed
+	LinkURL    string `json:"l,omitempty"`  // OSC 8 hyperlink target
+	LinkParams string `json:"lp,omitempty"` // OSC 8 hyperlink parameters
 }
 
-// cellToState converts a VT cell to a serializable CellState.
-func cellToState(cell *uv.Cell) CellState {
+// colorToWire encodes a cell color so the client gets back the kind of color the
+// guest asked for, not merely the shade it resolves to.
+//
+// A palette entry follows the user's terminal theme and the RGB it happens to
+// resolve to does not. Flattening every color to hex meant a pane came back
+// repainted in whichever shades the default palette gives: `31m` red became a
+// fixed maroon, and a theme's own red was gone. That is the whole of the
+// "colours randomly changing after a switch" report, and it was invisible to a
+// comparison that read both sides through RGBA().
+func colorToWire(c color.Color) string {
+	switch v := c.(type) {
+	case nil:
+		return ""
+	case ansi.BasicColor:
+		return "a" + strconv.Itoa(int(v))
+	case ansi.IndexedColor:
+		return "i" + strconv.Itoa(int(v))
+	}
+	r, g, b, _ := c.RGBA()
+	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
+}
+
+// colorFromWire is colorToWire read back. Palette entries are resolved through
+// the emulator that will hold them, so a restored cell is colored by the same
+// rule as a cell the guest writes live into that emulator.
+func colorFromWire(t *vt.Emulator, s string) color.Color {
+	if s == "" {
+		return nil
+	}
+	if s[0] == '#' {
+		var r, g, b uint8
+		if _, err := fmt.Sscanf(s, "#%02x%02x%02x", &r, &g, &b); err != nil {
+			return nil
+		}
+		return color.RGBA{R: r, G: g, B: b, A: 0xff}
+	}
+	n, err := strconv.Atoi(s[1:])
+	if err != nil {
+		return nil
+	}
+	switch s[0] {
+	case 'a':
+		return t.PaletteColor(n)
+	case 'i':
+		return t.IndexedColor(n)
+	}
+	return nil
+}
+
+// CellStateOf converts a VT cell to a serializable CellState.
+func CellStateOf(cell *uv.Cell) CellState {
 	if cell == nil {
 		return CellState{}
 	}
 
-	cs := CellState{
-		Content: cell.Content,
-		Width:   cell.Width,
+	return CellState{
+		Content:    cell.Content,
+		Width:      cell.Width,
+		FgColor:    colorToWire(cell.Style.Fg),
+		BgColor:    colorToWire(cell.Style.Bg),
+		UlColor:    colorToWire(cell.Style.UnderlineColor),
+		Attrs:      cell.Style.Attrs,
+		Underline:  uint8(cell.Style.Underline),
+		LinkURL:    cell.Link.URL,
+		LinkParams: cell.Link.Params,
 	}
-
-	// Convert colors to hex strings for JSON serialization
-	if cell.Style.Fg != nil {
-		r, g, b, _ := cell.Style.Fg.RGBA()
-		cs.FgColor = fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
-	}
-	if cell.Style.Bg != nil {
-		r, g, b, _ := cell.Style.Bg.RGBA()
-		cs.BgColor = fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
-	}
-
-	// Copy style attributes from bitmask
-	// Attrs bitmask using uv.Attr* constants
-	cs.Bold = cell.Style.Attrs&uv.AttrBold != 0
-	cs.Faint = cell.Style.Attrs&uv.AttrFaint != 0
-	cs.Italic = cell.Style.Attrs&uv.AttrItalic != 0
-	cs.Reverse = cell.Style.Attrs&uv.AttrReverse != 0
-	cs.Underline = cell.Style.Underline != ansi.UnderlineNone // Any underline style (single, double, curly, etc.)
-	// Note: Blink not commonly used in modern terminals, omitting for now
-
-	return cs
 }
 
-// StateToCell converts a CellState back to a VT cell for restoration.
-func StateToCell(cs CellState) *uv.Cell {
-	cell := &uv.Cell{
+// stateToCell converts a CellState back to a VT cell for restoration into t.
+func stateToCell(t *vt.Emulator, cs CellState) *uv.Cell {
+	return &uv.Cell{
 		Content: cs.Content,
 		Width:   cs.Width,
+		Style: uv.Style{
+			Fg:             colorFromWire(t, cs.FgColor),
+			Bg:             colorFromWire(t, cs.BgColor),
+			UnderlineColor: colorFromWire(t, cs.UlColor),
+			Underline:      ansi.Underline(cs.Underline),
+			Attrs:          cs.Attrs,
+		},
+		Link: uv.Link{URL: cs.LinkURL, Params: cs.LinkParams},
 	}
-
-	// Parse color strings back to color.Color using ansi.RGBColor
-	if cs.FgColor != "" {
-		var r, g, b uint8
-		if _, err := fmt.Sscanf(cs.FgColor, "#%02x%02x%02x", &r, &g, &b); err == nil {
-			cell.Style.Fg = ansi.RGBColor{R: r, G: g, B: b}
-		}
-	}
-	if cs.BgColor != "" {
-		var r, g, b uint8
-		if _, err := fmt.Sscanf(cs.BgColor, "#%02x%02x%02x", &r, &g, &b); err == nil {
-			cell.Style.Bg = ansi.RGBColor{R: r, G: g, B: b}
-		}
-	}
-
-	// Restore style attributes using direct field assignment
-	if cs.Bold {
-		cell.Style.Attrs |= uv.AttrBold
-	}
-	if cs.Faint {
-		cell.Style.Attrs |= uv.AttrFaint
-	}
-	if cs.Italic {
-		cell.Style.Attrs |= uv.AttrItalic
-	}
-	if cs.Reverse {
-		cell.Style.Attrs |= uv.AttrReverse
-	}
-	if cs.Underline {
-		cell.Style.Underline = ansi.UnderlineSingle
-	}
-
-	return cell
 }
 
 // Close terminates the PTY.

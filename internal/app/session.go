@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
-	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
@@ -1083,7 +1082,10 @@ func (m *OS) TriggerAltScreenRedraws() {
 	m.MarkAllDirty()
 }
 
-// restoreTerminalContent populates a window's terminal with content from daemon state.
+// restoreTerminalContent populates a window's terminal with content from daemon
+// state. What it does to the emulator is session.ApplyTerminalState, which is
+// the reading half of the wire contract and lives beside the writing half; what
+// is left here is the window around it.
 //
 // Everything it does to the emulator happens under the window's I/O lock. The
 // emulator has no lock of its own; the daemon outputWriter goroutine writes its
@@ -1102,8 +1104,6 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 		return
 	}
 
-	restoredModes, cellsRestored := 0, 0
-
 	// Anything still queued for this pane's emulator was produced before the
 	// snapshot about to be applied, so applying it afterwards paints it twice.
 	// A pane coming back from a workspace switch had a batch in flight from the
@@ -1113,93 +1113,14 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 
 	w.LockIO()
 	// Re-check under the lock; Close() nils Terminal while holding it.
-	if t := w.Terminal; t != nil {
-		// CRITICAL FIX: Use RestoreAltScreenMode instead of sending escape sequences
-		// Sending ESC[?1049h triggers setAltScreenMode() which CLEARS the screen buffer!
-		// RestoreAltScreenMode() just switches the buffer pointer without clearing.
-		if state.IsAltScreen {
-			t.RestoreAltScreenMode(true)
-		}
-
-		// CRITICAL: Restore terminal modes (mouse tracking, bracketed paste, etc.)
-		// This must happen AFTER RestoreAltScreenMode so the modes map is properly updated
-		// These modes are essential for apps like vim/htop to receive mouse events
-		if len(state.Modes) > 0 {
-			t.RestoreModes(state.Modes)
-			restoredModes = len(state.Modes)
-		}
-
-		// Kitty keyboard flags travel outside the DEC mode map and are set
-		// once by the guest (CSI > u / CSI = u), so like the modes above they
-		// cannot be recovered from the bounded output buffer. Without this a
-		// reattached client encodes keys in legacy form for a pane that
-		// negotiated the protocol.
-		t.RestoreKittyKeyboardState(state.KittyKbdStack)
-
-		// The scrollback goes back first, and it is the main screen's either
-		// way: the alternate screen keeps none, and both sides read the same
-		// buffer. Seeding it is what makes a pane's history survive a route
-		// that builds it on a new emulator. The daemon has always sent these
-		// rows and nothing has ever read them, so the history a pane came back
-		// with was whatever the catch-up replay happened to redraw.
-		//
-		// A pane whose emulator survived keeps the history it already holds and
-		// is only handed the lines that scrolled off while it was away. The
-		// daemon sends a bounded window of its scrollback and a client keeps far
-		// more than that, so replacing the whole buffer would cut a long history
-		// down to the size of the window on every workspace switch.
-		sb := t.Scrollback()
-		if have := sb.Len(); have == 0 {
-			for _, row := range state.Scrollback {
-				sb.PushLine(stateToLine(row))
-			}
-		} else if missing := state.ScrollbackLen - have; missing > 0 {
-			rows := state.Scrollback
-			if missing < len(rows) {
-				rows = rows[len(rows)-missing:]
-			}
-			for _, row := range rows {
-				sb.PushLine(stateToLine(row))
-			}
-		}
-
-		// The alternate screen is restored the same way as the normal one. It
-		// used to be skipped, on the grounds that a resize would make vim or
-		// htop repaint itself, which asks the guest to do the client's job: a
-		// program that does not redraw on SIGWINCH, or one that is between
-		// frames, leaves the pane blank. RestoreAltScreenMode above has already
-		// pointed the emulator at the alternate buffer, so these cells land in
-		// it and a later repaint just writes the same thing again.
-		if len(state.Screen) > 0 {
-			for y := 0; y < len(state.Screen) && y < state.Height; y++ {
-				if state.Screen[y] == nil {
-					continue
-				}
-				for x := 0; x < len(state.Screen[y]) && x < state.Width; x++ {
-					cellState := state.Screen[y][x]
-					// Only restore non-empty cells
-					if cellState.Content != "" {
-						cell := session.StateToCell(cellState)
-						if cell != nil {
-							t.SetCell(x, y, cell)
-							cellsRestored++
-						}
-					}
-				}
-			}
-			// The cursor was serialized and thrown away. Whatever came next was
-			// written from wherever this client's emulator happened to be left,
-			// which on a pane rebuilt from nothing is the top left corner.
-			t.RestoreCursorPosition(state.CursorX, state.CursorY)
-		}
-	}
+	session.ApplyTerminalState(w.Terminal, state)
 	w.UnlockIO()
 
 	if state.IsAltScreen {
 		m.LogInfo("Restored alt screen mode for window %s", shortID(w.ID))
 	}
-	if restoredModes > 0 {
-		m.LogInfo("Restored %d terminal modes for window %s", restoredModes, shortID(w.ID))
+	if len(state.Modes) > 0 {
+		m.LogInfo("Restored %d terminal modes for window %s", len(state.Modes), shortID(w.ID))
 	}
 
 	// Set the window's IsAltScreen flag for mouse event forwarding
@@ -1212,10 +1133,6 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 			note = "restore: RestoreAltScreenMode(true) + SetAltScreen"
 		}
 		traceSync(w, state.IsAltScreen, false, state.Width, state.Height, note)
-	}
-
-	if cellsRestored > 0 {
-		m.LogInfo("Restored %d cells for window %s", cellsRestored, shortID(w.ID))
 	}
 
 	// Mark content as dirty to trigger rendering
@@ -1276,17 +1193,6 @@ func (m *OS) SetupPTYOutputHandlers() error {
 	}
 
 	return nil
-}
-
-// stateToLine converts one serialized scrollback row to an emulator line.
-func stateToLine(row []session.CellState) uv.Line {
-	line := make(uv.Line, len(row))
-	for x, cs := range row {
-		if cell := session.StateToCell(cs); cell != nil {
-			line[x] = *cell
-		}
-	}
-	return line
 }
 
 // primePaneFromDaemon fills a pane's local emulator with the daemon's copy of
