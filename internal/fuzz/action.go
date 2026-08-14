@@ -57,8 +57,8 @@ const (
 	Setting                     // A selects a runtime setting, B its new value
 	Tick                        // one maintenance tick
 	Guest                       // S is written to the focused pane's emulator
-	AltScreen                   // A odd enters the alternate screen, even leaves it
-	Burst                       // A lines out of the focused pane, to outrun a buffer
+	AltScreen                   // A odd enters the alternate screen, B picks the pane
+	Burst                       // A lines out of the pane B picks, to outrun a buffer
 	SecondClient                // a second client attaches to the same live session
 	DaemonRestart               // the daemon goes away and its sessions come back
 	kindCount
@@ -112,10 +112,10 @@ func (a Action) String() string {
 		fmt.Fprintf(&b, " %q", a.S)
 	case MousePress, MouseMotion, MouseRelease, MouseWheel:
 		fmt.Fprintf(&b, " %d %d %d", a.A, a.B, a.C)
-	case Resize, Setting:
+	case Resize, Setting, AltScreen, Burst:
 		fmt.Fprintf(&b, " %d %d", a.A, a.B)
 	case ClosePane, FocusPane, MovePane, SwitchWorkspace, SwitchSession,
-		LayoutMode, SidebarPosition, OpenOverlay, AltScreen, Burst:
+		LayoutMode, SidebarPosition, OpenOverlay:
 		fmt.Fprintf(&b, " %d", a.A)
 	}
 	return b.String()

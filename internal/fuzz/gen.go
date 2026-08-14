@@ -243,9 +243,9 @@ func (g *Generator) one() Action {
 	case Guest:
 		a.S = g.pick(guestWrites)
 	case AltScreen:
-		a.A = g.u(2)
+		a.A, a.B = g.u(2), g.u(8)
 	case Burst:
-		a.A = burstLines[g.u(len(burstLines))]
+		a.A, a.B = burstLines[g.u(len(burstLines))], g.u(8)
 	}
 	return a
 }
@@ -377,9 +377,9 @@ func (g *Generator) pattern() []Action {
 		return []Action{
 			{Kind: NewPane},
 			{Kind: SwitchWorkspace, A: here},
-			{Kind: Burst, A: burstLines[g.u(len(burstLines))]},
+			{Kind: Burst, A: burstLines[g.u(len(burstLines))], B: g.u(8)},
 			{Kind: SwitchWorkspace, A: away},
-			{Kind: Burst, A: burstLines[g.u(len(burstLines))]},
+			{Kind: Burst, A: burstLines[g.u(len(burstLines))], B: g.u(8)},
 			{Kind: SwitchWorkspace, A: here},
 			{Kind: Tick},
 		}
@@ -392,7 +392,7 @@ func (g *Generator) pattern() []Action {
 		}
 	case 10: // A session switch, which rebuilds every pane on a fresh emulator.
 		return []Action{
-			{Kind: Burst, A: 60 + g.u(400)},
+			{Kind: Burst, A: 60 + g.u(400), B: g.u(8)},
 			{Kind: SwitchSession, A: g.u(8)},
 			{Kind: Tick},
 			{Kind: SwitchSession, A: g.u(8)},
@@ -401,7 +401,7 @@ func (g *Generator) pattern() []Action {
 	case 11: // A detach and reattach over a pane that kept printing meanwhile.
 		return []Action{
 			{Kind: Detach},
-			{Kind: Burst, A: burstLines[g.u(len(burstLines))]},
+			{Kind: Burst, A: burstLines[g.u(len(burstLines))], B: g.u(8)},
 			{Kind: Attach},
 			{Kind: Tick},
 		}
@@ -417,8 +417,8 @@ func (g *Generator) pattern() []Action {
 	case 13: // A daemon restart with content the restore has to bring back.
 		return []Action{
 			{Kind: NewPane},
-			{Kind: Burst, A: 60 + g.u(400)},
-			{Kind: AltScreen, A: 1},
+			{Kind: Burst, A: 60 + g.u(400), B: g.u(8)},
+			{Kind: AltScreen, A: 1, B: g.u(8)},
 			{Kind: DaemonRestart},
 			{Kind: Tick},
 		}
