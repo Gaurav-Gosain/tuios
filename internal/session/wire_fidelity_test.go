@@ -177,6 +177,48 @@ func TestWireLeavesTheAlternateScreen(t *testing.T) {
 	compareEmulators(t, daemon, client)
 }
 
+// TestWireFillsAClientOfADifferentSize is the reported shape: an editor comes
+// back from a session switch with the bottom rows of its screen blank, the last
+// line of the file and the whole status line gone, everything above them
+// untouched.
+//
+// A client's emulator is sized by that client's own layout, and the snapshot
+// describes the size the daemon has the pane at. When the two disagree the blit
+// used to be taken silently, because writing a cell outside the buffer is a
+// no-op: the rows that did not fit were dropped. The alternate screen keeps no
+// scrollback, and the guest is not going to redraw rows whose size it was never
+// told changed, so those rows stay blank for the rest of the pane's life.
+func TestWireFillsAClientOfADifferentSize(t *testing.T) {
+	for _, short := range []int{1, 2, 5} {
+		t.Run(fmt.Sprintf("client-%d-rows-shorter", short), func(t *testing.T) {
+			daemon := vt.NewEmulator(fidelityCols, fidelityRows)
+			defer func() { _ = daemon.Close() }()
+
+			// A full-screen program using every row it has, with its status
+			// line on the last one.
+			var b strings.Builder
+			b.WriteString("\x1b[?1049h\x1b[H\x1b[2J")
+			for row := 1; row < fidelityRows; row++ {
+				fmt.Fprintf(&b, "\x1b[%d;1Hrow %d of the editor", row, row)
+			}
+			fmt.Fprintf(&b, "\x1b[%d;1H\x1b[7m NORMAL  main  the status line \x1b[m", fidelityRows)
+			if _, err := daemon.Write([]byte(b.String())); err != nil {
+				t.Fatalf("feed the daemon emulator: %v", err)
+			}
+
+			client := vt.NewEmulator(fidelityCols, fidelityRows-short)
+			defer func() { _ = client.Close() }()
+			ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0))
+
+			if client.Height() != fidelityRows {
+				t.Fatalf("the client is %d rows to the daemon's %d: the snapshot describes a screen of a given size and the daemon is authoritative for it",
+					client.Height(), fidelityRows)
+			}
+			compareEmulators(t, daemon, client)
+		})
+	}
+}
+
 // compareEmulators reports every way the two copies of a pane differ.
 func compareEmulators(t *testing.T, want, got *vt.Emulator) {
 	t.Helper()

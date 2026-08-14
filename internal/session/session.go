@@ -1499,6 +1499,21 @@ func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
 		return
 	}
 
+	// A snapshot too big for the emulator it is going into used to be taken
+	// silently, because writing a cell outside the buffer is a no-op: every row
+	// past the client's own height was dropped and the pane came back with its
+	// bottom blank. An editor came back without the last line of the file or
+	// its status line, which is the shape this was reported in, and it stayed
+	// that way: the alternate screen keeps no scrollback to recover those rows
+	// from, and the guest does not redraw a size it was never told changed.
+	//
+	// Grown to fit and never shrunk. How much room a pane has is the client's
+	// layout to decide and it resizes this emulator on the next pass either
+	// way, so growing is transient; dropping the content is not.
+	if state.Width > t.Width() || state.Height > t.Height() {
+		t.Resize(max(state.Width, t.Width()), max(state.Height, t.Height()))
+	}
+
 	// Sending ESC[?1049h instead would clear the buffer it is switching to.
 	//
 	// Applied in both directions. Only entering was applied, so an emulator

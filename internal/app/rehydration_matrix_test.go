@@ -196,6 +196,32 @@ var rehydrationShapes = []paneShape{
 		},
 	},
 	{
+		// A full-screen program using every row it has, with something on the
+		// last one, which is where an editor keeps its status line. The
+		// alternate screen has no scrollback, so a row lost off the bottom
+		// here is lost for good: the guest will not redraw it unless its own
+		// size changes, and a client resizing its local emulator does not
+		// change it.
+		name: "alt-screen-full-height",
+		arrange: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `H=$(stty size | cut -d' ' -f1); printf '\033[?1049h\033[H\033[2J'; `+
+				`i=1; while [ $i -lt $H ]; do printf '\033[%d;1HAFROW-%d' $i $i; i=$((i+1)); done; `+
+				`printf '\033[%d;1HAFLASTROW-END' $H`, "AFLASTROW-END")
+		},
+		check: func(t *testing.T, r *rig, ptyID string) {
+			st, err := r.ctl.GetTerminalState(ptyID, -1)
+			if err != nil || st == nil {
+				t.Fatalf("read the daemon's copy: %v", err)
+			}
+			if !strings.Contains(stateText(st), "AFLASTROW-END") {
+				t.Fatalf("the daemon lost the last row, so the route cannot be blamed for the client")
+			}
+			if w := r.winByPTY(ptyID); !strings.Contains(clientText(w), "AFLASTROW-END") {
+				t.Errorf("the bottom row of the full-screen program is gone: an editor taken through this route comes back without its status line")
+			}
+		},
+	},
+	{
 		// A full-screen program caught between frames: in the alternate
 		// screen, drawing a box out of the DEC line-drawing set, with that set
 		// still selected and a colour still in force.

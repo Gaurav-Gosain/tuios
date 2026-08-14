@@ -21,6 +21,33 @@ import (
 // user never chose, even though it is the same shade on the developer's own
 // default theme.
 
+// twoSessionClientIn is twoSessionClient with extra flags on the client, for
+// the tests whose bug only shows under a particular border setting.
+func twoSessionClientIn(t *testing.T, flags ...string) *tuitest.Terminal {
+	t.Helper()
+	base := t.TempDir()
+	killDaemon(t, base)
+
+	for _, name := range []string{"alpha", "bravo"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v: %s", name, err, out)
+		}
+	}
+
+	term := startIn(t, base, startOpts{
+		cols: 120, rows: 40,
+		args: append([]string{"attach", "alpha"}, flags...),
+	})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached to alpha: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	enterTerminalMode(t, term)
+	return term
+}
+
 // paintedLine is the row a marker is on, described cell by cell.
 func paintedLine(t *testing.T, term *tuitest.Terminal, marker string) []string {
 	t.Helper()
@@ -133,6 +160,57 @@ func TestSessionSwitchKeepsThePen(t *testing.T) {
 		return out
 	}
 	diffPainted(t, "the line printed after the switch", styleOnly(want), styleOnly(got))
+}
+
+// TestSessionSwitchKeepsTheBottomOfAFullScreenTUI is the reported shape: nvim
+// open in a pane, switch away, switch back, and the bottom two rows of the
+// editor are blank. The last line of the file and the whole status line are
+// gone, everything above them is untouched, and the pane is still the same
+// height, so the rows were not pushed off: they were emptied.
+//
+// The guest asks the terminal how tall it is and then writes to every row it
+// was told it has, so the marker on the last row is on the last row the pane
+// actually has, whatever the dock and the borders leave it.
+func TestSessionSwitchKeepsTheBottomOfAFullScreenTUI(t *testing.T) {
+	// Shared borders is what the pane this was reported on was running under,
+	// and it is load-bearing: it makes the tiler mark the pane Tiled, which
+	// takes the border allowance out of the content height. The window's
+	// emulator is built with that allowance still subtracted, so the snapshot
+	// is two rows taller than the grid it is blitted into.
+	term := twoSessionClientIn(t, "--shared-borders")
+	windowManagementMode(t, term)
+	enableTiling(t, term)
+	enterTerminalMode(t, term)
+
+	// A full-screen program that fills its whole height and puts something
+	// recognisable on the last two rows, which is where nvim keeps the last
+	// line of the file and its status line.
+	runInShell(t, term,
+		`H=$(stty size | cut -d' ' -f1); printf '\033[?1049h\033[H\033[2J'; `+
+			`i=1; while [ $i -le $H ]; do printf '\033[%d;1HFILLROW-%d' $i $i; i=$((i+1)); done; `+
+			`printf '\033[%d;1HLASTROW-9902\033[%d;1HNEXTTOLAST-9902' $H $((H-1))`,
+		"LASTROW-9902", shellTimeout)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the alternate screen never settled: %v", err)
+	}
+	before := term.Screen().Text()
+	if !strings.Contains(before, "NEXTTOLAST-9902") {
+		t.Fatalf("the guest never drew its second-to-last row, so the case is not set up:\n%s", term.Snapshot())
+	}
+
+	switchSession(t, term, "bravo")
+	switchSession(t, term, "alpha")
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled after the switches: %v", err)
+	}
+
+	after := term.Screen().Text()
+	for _, want := range []string{"LASTROW-9902", "NEXTTOLAST-9902"} {
+		if !strings.Contains(after, want) {
+			t.Errorf("the bottom of the full-screen program came back blank: %q is gone after the round trip\n--- before ---\n%s\n--- after ---\n%s",
+				want, before, after)
+		}
+	}
 }
 
 // TestSessionSwitchKeepsTheScreenUnderAltScreen is the cells-going-missing half.
