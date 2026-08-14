@@ -49,10 +49,17 @@ func (m *OS) EnterSidebarFocus() {
 	}
 	m.SidebarFocused = true
 	m.beginSidebarReturn()
-	// Revealing a hidden rail builds its nav rows only on the next render, so
-	// sidebarCurrentSessionNavIndex has nothing to match yet and would land the
-	// cursor on row 0. Follow the current session by identity so the next render
-	// anchors the cursor on it once the rows exist.
+	// The rail comes back to the row it was left on, which is most of the point
+	// of leaving by activating one: enter on a terminal row goes to that pane,
+	// and returning used to start over at the attached session's row.
+	if m.restoreSidebarRow() {
+		return
+	}
+	// Nothing to come back to, or the row is gone. Revealing a hidden rail builds
+	// its nav rows only on the next render, so sidebarCurrentSessionNavIndex has
+	// nothing to match yet and would land the cursor on row 0. Follow the current
+	// session by identity so the next render anchors the cursor on it once the
+	// rows exist.
 	m.sidebarFollowSession = m.sidebarCurrentSessionID()
 	m.sidebarSetCursor(m.sidebarCurrentSessionNavIndex())
 }
@@ -77,6 +84,7 @@ func (m *OS) ExitSidebarFocus() {
 		return
 	}
 	m.SidebarFocused = false
+	m.recordSidebarRow()
 	m.sidebarClearPeek()
 	m.endSidebarReturn()
 	if m.SidebarRevealedForFocus {
