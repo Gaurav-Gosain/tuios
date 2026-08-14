@@ -1,0 +1,11 @@
+# seed 100. A guest writes double-width runes, then a new pane makes the tiler
+# narrow the pane holding them. The resize drops the continuation half of the
+# rune on the edge and leaves the lead in the last column, so the pane renders a
+# row one cell wider than its own box.
+new-pane
+overlay-open 0
+resize 60 20
+tick
+new-pane
+guest "世世世\r\n"
+new-pane

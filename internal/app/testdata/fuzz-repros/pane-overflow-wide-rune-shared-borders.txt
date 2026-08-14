@@ -1,0 +1,12 @@
+# seed 152. The same cut rune, reached under shared borders, where a pane's
+# content runs edge to edge and an over-wide row has no border of its own to
+# absorb it.
+zoom
+new-pane
+new-pane
+shared-borders
+shared-borders
+new-pane
+new-pane
+guest "世世世\r\n"
+new-pane

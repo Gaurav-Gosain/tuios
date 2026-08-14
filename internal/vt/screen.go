@@ -69,7 +69,30 @@ func (s *Screen) Resize(width int, height int) {
 	if h := s.buf.Height(); len(s.buf.Touched) != h {
 		s.buf.Touched = make([]*uv.LineData, h)
 	}
+	s.blankWideRunesCutByTheEdge()
 	s.scroll = s.buf.Bounds()
+}
+
+// blankWideRunesCutByTheEdge clears a double-width rune left sitting in the
+// last column by a narrowing resize.
+//
+// Dropping columns takes away the continuation cell a wide rune needs without
+// touching the lead, so the grid comes out holding a rune two cells wide in a
+// column one cell from the edge. Every reader then draws it whole and produces
+// a row one cell wider than the screen it came from, which the compositor
+// places over the pane next door: the guest's text appears somewhere it was
+// never written. Blanking the half left standing is what the insert and delete
+// paths already do to a rune they cut, and what ghostty does.
+func (s *Screen) blankWideRunesCutByTheEdge() {
+	x := s.buf.Width() - 1
+	if x < 0 {
+		return
+	}
+	for y := range s.buf.Height() {
+		if c := s.buf.CellAt(x, y); c != nil && c.Width > 1 {
+			s.buf.SetCell(x, y, nil)
+		}
+	}
 }
 
 // Width returns the width of the screen.
