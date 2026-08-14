@@ -579,7 +579,13 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	cs.mu.Unlock()
 
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
-	go d.streamPTYOutput(cs, pty, resume)
+	// Registered here rather than inside the goroutine, so that anything this
+	// connection asks for next is answered to a subscriber that already exists.
+	// A resize sent straight after a subscribe used to be broadcast to nobody,
+	// and the pane it belonged to kept the size it had before, on a client that
+	// was by then waiting to be told.
+	outputCh := pty.Subscribe(cs.clientID, resume)
+	go d.streamPTYOutput(cs, pty, outputCh)
 
 	return nil
 }

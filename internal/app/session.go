@@ -1238,6 +1238,13 @@ func (m *OS) primePaneFromDaemon(window *terminal.Window) {
 		}
 	}
 
+	// The snapshot's own bounds, before any of it is written. The reconcile
+	// above only fires when the daemon disagrees with this client's layout; an
+	// emulator can be at a third size, because a resize the stream carried is
+	// dropped along with the output a restore discards, and nothing else brings
+	// a streamed pane's grid back down.
+	window.ResizeEmulatorToSnapshot(state.Width, state.Height)
+
 	m.restoreTerminalContent(window, state)
 	m.subscribeToPTY(window, state.Seq)
 }

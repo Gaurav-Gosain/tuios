@@ -1322,6 +1322,21 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 	sub.sent.Store(p.outputSeq)
 	p.outputMu.RUnlock()
 
+	// The size the emulator is at now, behind the catch-up. A resize is only
+	// broadcast to the subscribers of the moment, so one that landed between a
+	// client's snapshot and its subscribe reaches nobody; this states the
+	// answer on every subscribe instead of leaving the pane at whatever width
+	// the client last heard about. It is a no-op whenever nothing was missed.
+	p.terminalMu.RLock()
+	if p.terminal != nil {
+		w, h := p.terminal.Width(), p.terminal.Height()
+		select {
+		case sub.ch <- ptyChunk{width: w, height: h}:
+		default:
+		}
+	}
+	p.terminalMu.RUnlock()
+
 	return sub.ch
 }
 

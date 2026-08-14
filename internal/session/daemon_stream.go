@@ -10,9 +10,7 @@ import (
 // Multiple channel reads are coalesced into a single connection write to
 // reduce syscall overhead (30K+ reads/sec at 500fps doom fire → one large
 // write per batch instead of one per read).
-func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, resume int64) {
-	outputCh := pty.Subscribe(cs.clientID, resume)
-
+func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChunk) {
 	// On any exit, stop receiving from the PTY and drop the subscription entry so
 	// the connState is left coherent: a later re-subscribe must not be blocked by
 	// a stale "already subscribed" guard (daemon_handlers.go), and no PTY keeps

@@ -342,6 +342,25 @@ func (w *Window) ResizeFromStream(width, height int) {
 	}
 }
 
+// ResizeEmulatorToSnapshot takes the emulator to the size a daemon snapshot was
+// serialized at, whatever owns the size otherwise. A snapshot is a grid as much
+// as it is contents, and the stream resumes at the position it was taken at, so
+// everything that lands next is written against these bounds. It is the only
+// way back for a pane whose emulator was left at another size, by a resize
+// announced while it was hidden or by one the stream carried and a restore then
+// discarded.
+func (w *Window) ResizeEmulatorToSnapshot(width, height int) {
+	if width <= 0 || height <= 0 {
+		return
+	}
+	w.ioMu.Lock()
+	// Re-check under the lock; Close() nils Terminal while holding it.
+	if w.Terminal != nil && (w.Terminal.Width() != width || w.Terminal.Height() != height) {
+		w.Terminal.Resize(width, height)
+	}
+	w.ioMu.Unlock()
+}
+
 // SetStreamOwnsSize records whether this pane's emulator is sized by its daemon
 // output stream. It is true exactly while a subscription is feeding the pane:
 // the daemon then announces every size change at the byte it made it, and a
