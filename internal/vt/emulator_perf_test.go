@@ -64,6 +64,42 @@ func BenchmarkEmulatorWriteHeavyOutput(b *testing.B) {
 	}
 }
 
+// BenchmarkEmulatorShortLineScroll is the flood case, and the one that decides
+// how a multiplexer feels while a pane is dumping output.
+//
+// It differs from BenchmarkEmulatorScrollThroughput only in line length, and
+// that is the whole point: a long line amortises the scroll over the printing,
+// a short one does not. `yes`, a build log and a test runner all print a dozen
+// characters and a newline, so the screen scrolls once every few graphemes and
+// the per-scroll cost, rather than the per-character cost, is what the pane is
+// paying. A CPU profile of the real client with three panes flooding put half
+// of all time in the scroll path, which the long-line benchmark cannot see.
+func BenchmarkEmulatorShortLineScroll(b *testing.B) {
+	line := []byte("tuiosflood\r\n")
+
+	b.Run("with-scrollback", func(b *testing.B) {
+		emu := vt.NewEmulator(perfCols, perfRows)
+		emu.SetScrollbackMaxLines(10000)
+		b.ReportAllocs()
+		b.SetBytes(int64(len(line)))
+		b.ResetTimer()
+		for b.Loop() {
+			_, _ = emu.Write(line)
+		}
+	})
+
+	b.Run("alt-screen-no-scrollback", func(b *testing.B) {
+		emu := vt.NewEmulator(perfCols, perfRows)
+		_, _ = emu.Write([]byte("\x1b[?1049h"))
+		b.ReportAllocs()
+		b.SetBytes(int64(len(line)))
+		b.ResetTimer()
+		for b.Loop() {
+			_, _ = emu.Write(line)
+		}
+	})
+}
+
 // BenchmarkEmulatorScrollThroughput measures sustained scrolling, where every
 // line written pushes one into scrollback. Scrollback retention is what makes
 // this different from a plain write: the cost per line includes moving a line
