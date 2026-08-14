@@ -93,11 +93,8 @@ func DetectHostCapabilities() *HostCapabilities {
 	// Query terminal size (cols/rows)
 	queryTerminalSize(caps)
 
-	// Query terminal for dimensions (fast, well-supported)
-	queryPixelDimensions(caps)
-
-	// Query graphics support - use fast method with fallback
-	queryGraphicsSupport(caps)
+	// Pixel geometry and graphics support, in one round trip
+	probeTerminal(caps)
 
 	// Apply environment overrides
 	applyEnvironmentOverrides(caps)
@@ -170,20 +167,49 @@ func detectTrueColor(caps *HostCapabilities) {
 	}
 }
 
-func queryGraphicsSupport(caps *HostCapabilities) {
+// probeTimeout is the backstop for the capability probe. It is only ever spent
+// in full by a host that answers nothing at all, since the probe stops on the
+// DA1 reply rather than on the clock.
+const probeTimeout = 300 * time.Millisecond
+
+// da1Response matches a primary device attributes reply.
+//
+// The probe stops on this rather than on a count of terminator bytes. Byte
+// counting cost a fixed half second on every start: the XTWINOPS replies
+// contain neither of the bytes that were being counted, so both of their reads
+// always ran to the timeout, and a terminal without kitty graphics never sent
+// the kitty terminators the graphics read was waiting for either.
+var da1Response = regexp.MustCompile(`\x1b\[\?[0-9;]*c`)
+
+// probeTerminal asks the host terminal what it can do, in one round trip.
+//
+// Every query goes out in a single write with DA1 last. A terminal answers in
+// the order it was asked, so the DA1 reply arriving is proof that everything
+// written before it has already been answered or ignored, which is what lets
+// one read collect all of them and stop as soon as the host is done. DA1 is
+// universally implemented, so in practice this costs a round trip rather than
+// the timeout.
+//
+// Both sets of answers are parsed out of the one buffer: graphics support from
+// the DA1 parameters and the kitty replies, and pixel geometry from the
+// XTWINOPS replies.
+func probeTerminal(caps *HostCapabilities) {
 	if !isTerminal(os.Stdin.Fd()) {
+		setDefaultCellSize(caps)
 		return
 	}
 
 	// Open /dev/tty for queries to avoid messing with stdin
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
+		setDefaultCellSize(caps)
 		return
 	}
 	defer func() { _ = tty.Close() }()
 
 	oldState, err := makeRaw(tty.Fd())
 	if err != nil {
+		setDefaultCellSize(caps)
 		return
 	}
 	defer restoreTerminal(tty.Fd(), oldState)
@@ -196,20 +222,27 @@ func queryGraphicsSupport(caps *HostCapabilities) {
 		defer func() { _ = os.Remove(probeFile) }()
 	}
 
-	terminators := 2                                                    // DA1 'c' plus the direct probe's ST
-	_, _ = tty.WriteString("\x1b[c")                                    // DA1 for sixel
-	_, _ = tty.WriteString("\x1b_Gi=1,a=q,t=d,f=24,s=1,v=1;AAAA\x1b\\") // Kitty graphics query
+	var q strings.Builder
+	q.WriteString("\x1b[14t")                                  // window size in pixels
+	q.WriteString("\x1b[16t")                                  // cell size in pixels
+	q.WriteString("\x1b_Gi=1,a=q,t=d,f=24,s=1,v=1;AAAA\x1b\\") // kitty direct transmission
 	if probeFileErr == nil {
 		// t=f rather than t=t: a terminal that honours a temp-file
 		// transmission deletes the file, and this one is ours to clean up.
-		_, _ = fmt.Fprintf(tty, "\x1b_Gi=2,a=q,t=f,f=24,s=1,v=1;%s\x1b\\",
+		fmt.Fprintf(&q, "\x1b_Gi=2,a=q,t=f,f=24,s=1,v=1;%s\x1b\\",
 			base64.StdEncoding.EncodeToString([]byte(probeFile)))
-		terminators++
 	}
+	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
+	_, _ = tty.WriteString(q.String())
 
-	// Read response with timeout (300ms to account for slower terminals)
-	response := readTTYResponse(tty, 300*time.Millisecond, terminators)
+	response := readTTYResponse(tty, probeTimeout, da1Response.MatchString)
 
+	parsePixelGeometry(caps, response)
+	parseGraphicsSupport(caps, response, probeFileErr == nil)
+}
+
+// parseGraphicsSupport reads kitty and sixel support out of a probe response.
+func parseGraphicsSupport(caps *HostCapabilities, response string, probedFile bool) {
 	// Parse DA1 response for sixel (look for "4" in params)
 	da1Re := regexp.MustCompile(`\x1b\[\?([0-9;]+)c`)
 	if matches := da1Re.FindStringSubmatch(response); len(matches) >= 2 {
@@ -227,7 +260,7 @@ func queryGraphicsSupport(caps *HostCapabilities) {
 	// error leaves this false, and the passthrough re-encodes file
 	// transmissions as direct ones. That costs a copy but always renders;
 	// guessing the other way renders nothing at all.
-	caps.KittyFileTransfer = probeFileErr == nil && kittyProbeOK(response, 2)
+	caps.KittyFileTransfer = probedFile && kittyProbeOK(response, 2)
 }
 
 // kittyProbeOK reports whether the host answered "OK" to the a=q probe sent
@@ -264,14 +297,20 @@ func writeGraphicsProbeFile() (string, error) {
 	return name, nil
 }
 
-// readTTYResponse reads from tty with a timeout using poll-based I/O
-func readTTYResponse(tty *os.File, timeout time.Duration, wantTerminators int) string {
+// readTTYResponse reads from tty with poll-based I/O until done reports the
+// reply is complete, or the timeout expires.
+//
+// done is given the whole response so far rather than each byte, so a caller
+// can recognise the shape of the answer it is waiting for. Matching the reply
+// itself is what keeps the timeout a backstop: a byte that merely tends to end
+// a reply also appears inside other replies, and a reply the host was never
+// going to send makes a counting reader wait out the clock every time.
+func readTTYResponse(tty *os.File, timeout time.Duration, done func(string) bool) string {
 	buf := make([]byte, 512)
 	var result strings.Builder
-	terminators := 0
 	deadline := time.Now().Add(timeout)
 
-	for terminators < wantTerminators {
+	for {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			break
@@ -289,10 +328,8 @@ func readTTYResponse(tty *os.File, timeout time.Duration, wantTerminators int) s
 		}
 		if n > 0 {
 			result.Write(buf[:n])
-			for i := range n {
-				if buf[i] == 'c' || buf[i] == '\\' {
-					terminators++
-				}
+			if done(result.String()) {
+				break
 			}
 		}
 	}
@@ -316,45 +353,24 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 	}
 }
 
-func queryPixelDimensions(caps *HostCapabilities) {
-	if !isTerminal(os.Stdin.Fd()) {
-		setDefaultCellSize(caps)
-		return
-	}
+// windowPixels and cellPixels match the two XTWINOPS replies the probe asks
+// for: the window's size in pixels and one cell's, both height before width.
+var (
+	windowPixels = regexp.MustCompile(`\x1b\[4;(\d+);(\d+)t`)
+	cellPixels   = regexp.MustCompile(`\x1b\[6;(\d+);(\d+)t`)
+)
 
-	// Use /dev/tty for queries
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err != nil {
-		setDefaultCellSize(caps)
-		return
+// parsePixelGeometry reads the window and cell pixel sizes out of a probe
+// response, falling back to a derived or default cell size when the host
+// answered with neither.
+func parsePixelGeometry(caps *HostCapabilities, response string) {
+	if matches := windowPixels.FindStringSubmatch(response); len(matches) == 3 {
+		caps.PixelHeight, _ = strconv.Atoi(matches[1])
+		caps.PixelWidth, _ = strconv.Atoi(matches[2])
 	}
-	defer func() { _ = tty.Close() }()
-
-	oldState, err := makeRaw(tty.Fd())
-	if err != nil {
-		setDefaultCellSize(caps)
-		return
-	}
-	defer restoreTerminal(tty.Fd(), oldState)
-
-	// Query window size in pixels
-	_, _ = tty.WriteString("\x1b[14t")
-	response := readTTYResponse(tty, 100*time.Millisecond, 2)
-	if re := regexp.MustCompile(`\x1b\[4;(\d+);(\d+)t`); response != "" {
-		if matches := re.FindStringSubmatch(response); len(matches) == 3 {
-			caps.PixelHeight, _ = strconv.Atoi(matches[1])
-			caps.PixelWidth, _ = strconv.Atoi(matches[2])
-		}
-	}
-
-	// Query cell size
-	_, _ = tty.WriteString("\x1b[16t")
-	response = readTTYResponse(tty, 100*time.Millisecond, 2)
-	if re := regexp.MustCompile(`\x1b\[6;(\d+);(\d+)t`); response != "" {
-		if matches := re.FindStringSubmatch(response); len(matches) == 3 {
-			caps.CellHeight, _ = strconv.Atoi(matches[1])
-			caps.CellWidth, _ = strconv.Atoi(matches[2])
-		}
+	if matches := cellPixels.FindStringSubmatch(response); len(matches) == 3 {
+		caps.CellHeight, _ = strconv.Atoi(matches[1])
+		caps.CellWidth, _ = strconv.Atoi(matches[2])
 	}
 
 	// Calculate cell size from pixel dimensions if needed

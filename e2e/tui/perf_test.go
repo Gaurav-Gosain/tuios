@@ -139,6 +139,71 @@ func TestPerfStartupCold(t *testing.T) {
 	boot.report(t, "startup/cold: exec -> first frame")
 }
 
+// da1Query is the primary device attributes request tuios ends its capability
+// probe with, and da1Reply is what a terminal supporting sixel answers.
+const (
+	da1Query = "\x1b[c"
+	da1Reply = "\x1b[?62;4c"
+)
+
+// da1Watcher spots the capability probe in the PTY stream and says so, once.
+// The harness mirrors both directions of the PTY through this writer, which is
+// the only place a test can see a query that never reaches the grid.
+type da1Watcher struct {
+	seen chan struct{}
+}
+
+func (w *da1Watcher) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), da1Query) {
+		select {
+		case w.seen <- struct{}{}:
+		default:
+		}
+	}
+	return len(p), nil
+}
+
+// TestPerfStartupAnsweringHost is the startup number for a terminal that
+// answers, which is every real one: DA1 is universally implemented.
+//
+// The other startup tests measure the opposite extreme, because the harness's
+// emulator replies to nothing, so what they report is the probe's backstop
+// rather than its cost. This one plays the part of a real terminal by watching
+// for the probe on the wire and answering it, which is the difference between
+// measuring a timeout and measuring a round trip.
+func TestPerfStartupAnsweringHost(t *testing.T) {
+	perfGate(t)
+	var boot dist
+	for i := range perfStartRuns {
+		t.Run(fmt.Sprintf("run%d", i), func(t *testing.T) {
+			// Buffered, so a probe that goes out before the terminal handle
+			// exists is remembered rather than dropped.
+			watcher := &da1Watcher{seen: make(chan struct{}, 1)}
+			t0 := time.Now()
+			term, _ := start(t, startOpts{
+				cols: perfCols, rows: perfRows,
+				args: []string{"new", fmt.Sprintf("answer%d", i)},
+				env:  perfEnvVars(),
+				out:  watcher,
+			})
+
+			replied := make(chan struct{})
+			go func() {
+				defer close(replied)
+				select {
+				case <-watcher.seen:
+					_ = term.Type(da1Reply)
+				case <-time.After(bootTimeout):
+				}
+			}()
+
+			boot = append(boot, waitTextAt(t, term, t0, welcomeText, bootTimeout))
+			<-replied
+		})
+	}
+	boot.report(t, "startup/answering host: exec -> first frame")
+}
+
 // TestPerfStartupWarm measures the same thing against a daemon that is already
 // up, which is every launch after the first. The gap between this and the cold
 // number is what starting the daemon costs.
