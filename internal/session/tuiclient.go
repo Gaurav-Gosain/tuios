@@ -81,6 +81,12 @@ type TUIClient struct {
 	ptyClosedHandlers   map[string]func()
 	ptyClosedHandlersMu sync.RWMutex
 
+	// ptyResizeHandlers is told the size the daemon's emulator took, at the
+	// point in the output stream it took it. Registered alongside the output
+	// handler because the two are one stream and their order is the contract.
+	ptyResizeHandlers   map[string]func(width, height int)
+	ptyResizeHandlersMu sync.RWMutex
+
 	// Remote command handler - called when a remote command is received
 	remoteCommandHandler RemoteCommandHandler
 	remoteCommandMu      sync.RWMutex
@@ -129,6 +135,7 @@ func NewTUIClient() *TUIClient {
 		codec:             DefaultCodec(), // gob by default
 		ptyHandlers:       make(map[string]func([]byte)),
 		ptyClosedHandlers: make(map[string]func()),
+		ptyResizeHandlers: make(map[string]func(int, int)),
 		pendingResponses:  make(map[MessageType]chan *Message),
 		done:              make(chan struct{}),
 	}
@@ -429,12 +436,26 @@ func (c *TUIClient) UnsubscribePTY(ptyID string) {
 	delete(c.ptyHandlers, ptyID)
 	c.ptyHandlersMu.Unlock()
 
+	c.ptyResizeHandlersMu.Lock()
+	delete(c.ptyResizeHandlers, ptyID)
+	c.ptyResizeHandlersMu.Unlock()
+
 	// Send unsubscribe message to daemon to stop streaming
 	msg, err := NewMessageWithCodec(MsgUnsubscribePTY, &UnsubscribePTYPayload{PTYID: ptyID}, c.codec)
 	if err != nil {
 		return // Silent failure - handler already removed locally
 	}
 	_ = c.send(msg)
+}
+
+// OnPTYResized registers a handler for the size the daemon's emulator took.
+// It is called on the read loop, in the same order as the output handler, so a
+// caller that applies both in the order it is told them lays out every byte at
+// the width the daemon laid it out at.
+func (c *TUIClient) OnPTYResized(ptyID string, handler func(width, height int)) {
+	c.ptyResizeHandlersMu.Lock()
+	c.ptyResizeHandlers[ptyID] = handler
+	c.ptyResizeHandlersMu.Unlock()
 }
 
 // OnPTYClosed registers a handler to be called when the PTY process exits.
@@ -821,6 +842,18 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			handler(data)
 		}
 
+	case MsgPTYResized:
+		var payload PTYResizedPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			return
+		}
+		c.ptyResizeHandlersMu.RLock()
+		resized := c.ptyResizeHandlers[payload.PTYID]
+		c.ptyResizeHandlersMu.RUnlock()
+		if resized != nil {
+			resized(payload.Width, payload.Height)
+		}
+
 	case MsgPTYClosed:
 		var payload ClosePTYPayload
 		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
@@ -839,6 +872,10 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		c.ptyClosedHandlersMu.Lock()
 		delete(c.ptyClosedHandlers, payload.PTYID)
 		c.ptyClosedHandlersMu.Unlock()
+
+		c.ptyResizeHandlersMu.Lock()
+		delete(c.ptyResizeHandlers, payload.PTYID)
+		c.ptyResizeHandlersMu.Unlock()
 
 		// Call the closed handler to notify window
 		if closedHandler != nil {

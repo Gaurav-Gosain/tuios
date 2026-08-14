@@ -1052,7 +1052,11 @@ func (m *OS) syncDaemonPTYDimensions() {
 			// Ensure local VT emulator dimensions also match. Same rule as
 			// updateWindowFromState: the emulator buffer is shared with the
 			// output goroutine and the renderer, so a resize needs ioMu.
-			if w.Terminal != nil {
+			//
+			// A subscribed pane is sized by its stream instead, so that the
+			// bytes the daemon produced before it heard this are laid out at
+			// the width the daemon laid them out at. See Window.Resize.
+			if w.Terminal != nil && !w.StreamOwnsSize() {
 				w.LockIO()
 				// Re-check under the lock; Close() nils Terminal while holding it.
 				if w.Terminal != nil {
@@ -1234,6 +1238,13 @@ func (m *OS) primePaneFromDaemon(window *terminal.Window) {
 		}
 	}
 
+	// The snapshot's own bounds, before any of it is written. The reconcile
+	// above only fires when the daemon disagrees with this client's layout; an
+	// emulator can be at a third size, because a resize the stream carried is
+	// dropped along with the output a restore discards, and nothing else brings
+	// a streamed pane's grid back down.
+	window.ResizeEmulatorToSnapshot(state.Width, state.Height)
+
 	m.restoreTerminalContent(window, state)
 	m.subscribeToPTY(window, state.Seq)
 }
@@ -1255,11 +1266,16 @@ func (m *OS) subscribeToPTY(window *terminal.Window, fromSeq int64) {
 	}
 
 	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", shortID(ptyID), shortID(window.ID))
+	// Registered before the subscribe, so the first resize the daemon announces
+	// cannot arrive with nothing listening for it.
+	m.DaemonClient.OnPTYResized(ptyID, window.ResizeFromStream)
+	window.SetStreamOwnsSize(true)
 	err := m.DaemonClient.SubscribePTY(ptyID, fromSeq, func(data []byte) {
 		passThroughCursorStyle(data)
 		window.WriteOutputAsync(data)
 	})
 	if err != nil {
+		window.SetStreamOwnsSize(false)
 		m.LogError("Failed to subscribe to PTY %s: %v", shortID(ptyID), err)
 	} else {
 		m.SubscribedPTYs[ptyID] = true
@@ -1284,6 +1300,9 @@ func (m *OS) unsubscribeFromPTY(window *terminal.Window) {
 	m.LogInfo("[UNSUBSCRIBE] Unsubscribing from PTY %s for window %s", shortID(ptyID), shortID(window.ID))
 	m.DaemonClient.UnsubscribePTY(ptyID)
 	delete(m.SubscribedPTYs, ptyID)
+	// With no stream to be ordered against, the layout sizes the pane again, as
+	// it does for a pane that has never been subscribed.
+	window.SetStreamOwnsSize(false)
 }
 
 // SubscribeWorkspaceWindows subscribes to PTY output for all windows in the specified workspace.

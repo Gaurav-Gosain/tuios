@@ -60,7 +60,7 @@ func TestStreamPTYOutputDropsOnWriteError(t *testing.T) {
 	cs := newFailingConnState(t)
 	cs.ptySubscriptions[pty.ID] = struct{}{}
 
-	go d.streamPTYOutput(cs, pty, 0)
+	go d.streamPTYOutput(cs, pty, pty.Subscribe(cs.clientID, 0))
 
 	select {
 	case <-cs.done:

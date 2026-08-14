@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -261,6 +263,65 @@ var rehydrationShapes = []paneShape{
 		},
 	},
 	{
+		// A pane resized while it is producing. Where a line wraps is decided
+		// by the width the emulator had when it consumed the bytes, so the two
+		// copies agree only if they change width at the same byte. A line that
+		// wrapped on one side and not the other is in the scrollback for good:
+		// nothing lays a scrollback line out again, on either side.
+		//
+		// This is the seam the client used to lose. It resized its own emulator
+		// the moment the layout asked and told the daemon over a message that
+		// was not waited for, so everything the guest produced in between was
+		// laid out one width apart.
+		name: "resized-while-producing",
+		arrange: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `printf 'RP-READY\n'`, "RP-READY")
+			w := r.winByPTY(ptyID)
+			// Lines longer than the pane at every width it is taken through, so
+			// each one is a wrap decision, and started rather than waited for so
+			// the resizes below land among them.
+			r.startPTY(ptyID, `A=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; `+
+				`i=1; while [ $i -le 20000 ]; do echo "RP-$i-$A$A$A$A-END"; i=$((i+1)); done`)
+			// Resized only once the pane is known to be producing. A resize
+			// that lands before the guest has said anything settles on both
+			// sides before the first byte and tests nothing.
+			//
+			// Cut to a third of the width, so a line that took four rows takes
+			// ten: a seam laid out at the wrong width is a different number of
+			// scrollback lines, not only different content in them.
+			// Gated on any produced line rather than a numbered one. These
+			// lines wrap to about three rows each at this width, so the run
+			// fills more rows than the emulator keeps, and a line numbered low
+			// enough to prove the guest has only just started is also the first
+			// to be evicted. Waiting for one that is already gone spends the
+			// whole deadline and reports a timeout instead of a divergence.
+			r.waitDaemonShows(ptyID, "RP-")
+			// Resized repeatedly, the way dragging a border over a pane that is
+			// producing does. One resize settles on both sides in about the time
+			// it takes the daemon to read a message; a run of them keeps the
+			// daemon a width behind for as long as the drag lasts, which is the
+			// state the two copies can disagree in.
+			full := w.Width
+			for range 40 {
+				w.Resize(max(full/3, 6), w.Height)
+				time.Sleep(2 * time.Millisecond)
+				w.Resize(full, w.Height)
+				time.Sleep(2 * time.Millisecond)
+			}
+			// The seam only exists while the guest is producing. If it got all
+			// the way to the end first, the resizes landed on output that was
+			// already laid out and settled, and the case proves nothing. That
+			// is worth a failure rather than a pass, because the pass would be
+			// indistinguishable from a real one.
+			if r.daemonShows(ptyID, "RP-20000-") {
+				r.t.Fatal("the guest finished before the resizes landed, so this run never reached the seam")
+			}
+		},
+		finish: func(r *rig, ptyID string) {
+			r.waitDaemonShows(ptyID, "RP-20000-")
+		},
+	},
+	{
 		name: "resized-while-away",
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `printf 'RESIZE-READY\n'`, "RESIZE-READY")
@@ -442,7 +503,13 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 	// and never a line the daemon does not have at that offset.
 	dn, cn := len(st.Scrollback), term.ScrollbackLen()
 	if cn > dn {
-		t.Errorf("scrollback: client holds %d lines, daemon holds %d", cn, dn)
+		// Counts alone say nothing about which side is wrong. Read from the
+		// oldest line down, the first line the two disagree on is where the
+		// extra one came from: a client line that is a prefix of the daemon's
+		// is the same output wrapped at a narrower width, which is a size the
+		// two applied at different points in the stream, not a duplicate.
+		t.Errorf("scrollback: client holds %d lines, daemon holds %d\n%s",
+			cn, dn, scrollbackSeam(st, term))
 		return
 	}
 	// Compared cell for cell like the screen, not as text. History that came
@@ -467,6 +534,29 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 			}
 		}
 	}
+}
+
+// scrollbackSeam reports the oldest scrollback line the two sides disagree on,
+// as text, with the lines either side of it for context.
+func scrollbackSeam(st *session.TerminalState, term *vt.Emulator) string {
+	daemon := func(i int) string { return stateRow(st.Scrollback[i]) }
+	client := func(i int) string { return strings.TrimRight(term.ScrollbackLine(i).String(), " ") }
+
+	n := min(len(st.Scrollback), term.ScrollbackLen())
+	seam := n
+	for i := range n {
+		if client(i) != daemon(i) {
+			seam = i
+			break
+		}
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "the two agree on lines 0..%d and part company at %d:\n", seam-1, seam)
+	for i := max(seam-1, 0); i < min(seam+2, n); i++ {
+		fmt.Fprintf(&b, "  [%d] client %q\n      daemon %q\n", i, client(i), daemon(i))
+	}
+	return b.String()
 }
 
 // penSig describes a serialized pen the way stateCellSig describes a cell, so

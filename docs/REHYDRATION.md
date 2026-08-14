@@ -78,8 +78,8 @@ below crossed with every shape a pane can be in: at the live tail, scrolled back
 in the alternate screen, holding wide runes, under heavy SGR, in 256-colour and
 truecolour, with a colour left in force, with a scroll region, in origin mode,
 with a full-screen program caught mid-draw, still producing, having outrun the
-ring while hidden, having outrun it inside the alternate screen, and having been
-resized while hidden.
+ring while hidden, having outrun it inside the alternate screen, having been
+resized while hidden, and being resized while producing.
 
 `TestWireCarriesTheWholeCell` (`internal/session/wire_fidelity_test.go`) proves
 the *wire*, and it exists because the matrix structurally cannot. The matrix
@@ -241,17 +241,80 @@ Two things had to be true for that rule to hold, and neither was:
   and everything the pane printed next scrolled into the alternate screen's
   scrollback, which is switched off.
 
+## A resize is a point in the stream
+
+Where a line wraps is not a property of the line. It is decided once, by the
+width the emulator had when it consumed the bytes, and never revisited: nothing
+lays a scrollback line out again on either side. So two emulators fed the same
+bytes hold the same history only if they change width at the same byte.
+
+They did not. A client resized its own emulator the moment its layout asked, and
+told the daemon over `TUIClient.ResizePTY`, which is fire-and-forget. Everything
+the guest produced between the two was laid out by the client at the new width
+and by the daemon at the old one. A line long enough to wrap at one width and not
+the other went into the client's scrollback as two lines and the daemon's as one,
+and stayed that way: `TestRehydrationMatrix/workspace-switch/scrolled-back` saw a
+client holding 54 lines against the daemon's 53, and the extra line was the
+second half of a wrapped command echo rather than a duplicate of anything.
+
+A pane with a live subscription is now sized by that subscription:
+
+- `PTY.Resize` does not touch the daemon's emulator. It queues the resize on
+  `vtWriteChan`, behind the bytes already read, and broadcasts it to every
+  subscriber under the same lock `readOutput` appends and broadcasts under. One
+  lock is what puts it at one byte in both streams.
+- The real PTY is resized straight away regardless, so the guest's SIGWINCH does
+  not wait for the emulator to work through a backlog.
+- The daemon announces it as `MsgPTYResized`, which ends the output batch in
+  front of it and travels on its own. Coalescing it into the bytes either side
+  would put the client's emulator at the wrong width for one of them.
+- The client queues it into the same channel its output goes through
+  (`Window.ResizeFromStream`), so it is applied in the order it arrived.
+- `Window.Resize` stays the one choke point for the announcement, `announcedW/H`
+  and SIGWINCH. Only the emulator grid moved, and only while `StreamOwnsSize` is
+  set. A pane with no subscription has no stream to be ordered against and is
+  sized by the layout, as before.
+
+Three ways a resize could go missing, all closed, because a resize is not
+recoverable from the stream the way bytes are:
+
+- `Subscribe` registered the subscriber inside the streaming goroutine, so a
+  resize sent straight after a subscribe was broadcast to nobody. It is
+  registered in the handler now, where the connection's message order decides.
+- A subscribe states the size the emulator is at, behind the catch-up, for a
+  resize that landed between a client's snapshot and its subscribe.
+- A restore discards queued output, and a queued resize with it, so
+  `primePaneFromDaemon` takes the emulator to the snapshot's own bounds. That is
+  the only route back down for a streamed pane, since the layout no longer
+  resizes it.
+
+A subscriber whose channel is full still drops one, the way it drops output, and
+there is no stream position to resume a resize from. The pane keeps the width it
+had until something primes it, which is the one hole left in this.
+
+A resize to the size an emulator already has is not a no-op inside it: it resets
+the scroll region and the tab stops, which are the guest's. Both sides skip it.
+
+`GetTerminalState` reports the emulator's own size rather than the pane's
+announced one. They differ only while a resize is still behind output in the
+stream, and a snapshot has to describe the grid it is serializing.
+
 ## Known and not fixed
 
-`TUIClient.ResizePTY` is fire-and-forget. `primePaneFromDaemon` announces a
-pane's size and re-fetches the snapshot immediately, and its comment says the
-resize happens before the snapshot is taken for real; nothing makes that true.
-A pane resized while hidden, whose guest does not redraw on SIGWINCH, can come
-back holding the pre-resize screen. Shrinking an alternate screen destroys its
-bottom rows on both sides, so the two copies can also disagree about a resize
-they saw in different orders. Reproducing it needs a guest that does not repaint,
-which is why it is stated here rather than asserted in the matrix: the shape that
-provokes it cannot tell that bug from ordinary resize semantics.
+`Window.ResizeVisual` still resizes a streamed pane's emulator directly. It is
+the drag path: the PTY resize is deferred to the end of the drag, so ordering it
+against the stream would leave the grid at its pre-drag size for the whole drag.
+Output produced during a drag is laid out at a width the daemon never had.
+
+`primePaneFromDaemon` announces a pane's size and re-fetches the snapshot
+immediately, and its comment says the resize happens before the snapshot is taken
+for real; nothing makes that true. A pane resized while hidden, whose guest does
+not redraw on SIGWINCH, can come back holding the pre-resize screen. Shrinking an
+alternate screen destroys its bottom rows on both sides, so the two copies can
+also disagree about a resize they saw in different orders. Reproducing it needs a
+guest that does not repaint, which is why it is stated here rather than asserted
+in the matrix: the shape that provokes it cannot tell that bug from ordinary
+resize semantics.
 
 ## What the wire still does not carry
 

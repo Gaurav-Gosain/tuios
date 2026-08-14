@@ -303,12 +303,19 @@ func (r *rig) feed(w *terminal.Window, command, want string) {
 func (r *rig) waitDaemonShows(ptyID, want string) {
 	r.t.Helper()
 	rigWaitUntil(r.t, "the daemon to show "+want, func() bool {
-		st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle)
-		if err != nil || st == nil {
-			return false
-		}
-		return strings.Contains(stateText(st), want)
+		return r.daemonShows(ptyID, want)
 	})
+}
+
+// daemonShows asks once instead of waiting, for the cases that need to know
+// whether the guest has got somewhere yet rather than to block until it does.
+func (r *rig) daemonShows(ptyID, want string) bool {
+	r.t.Helper()
+	st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle)
+	if err != nil || st == nil {
+		return false
+	}
+	return strings.Contains(stateText(st), want)
 }
 
 // converge waits for the two copies of a pane to agree, or gives up and lets

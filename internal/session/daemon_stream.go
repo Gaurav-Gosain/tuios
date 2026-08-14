@@ -10,9 +10,7 @@ import (
 // Multiple channel reads are coalesced into a single connection write to
 // reduce syscall overhead (30K+ reads/sec at 500fps doom fire → one large
 // write per batch instead of one per read).
-func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, resume int64) {
-	outputCh := pty.Subscribe(cs.clientID, resume)
-
+func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChunk) {
 	// On any exit, stop receiving from the PTY and drop the subscription entry so
 	// the connState is left coherent: a later re-subscribe must not be blocked by
 	// a stale "already subscribed" guard (daemon_handlers.go), and no PTY keeps
@@ -33,34 +31,59 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, resume int64) {
 			return
 		case <-d.ctx.Done():
 			return
-		case data, ok := <-outputCh:
+		case chunk, ok := <-outputCh:
 			if !ok {
 				return
 			}
-			batch = append(batch[:0], data...)
-			for len(batch) < maxBatch {
-				select {
-				case more, ok := <-outputCh:
-					if !ok {
+			// A resize marks the byte the daemon's emulator changed width at,
+			// so it ends the batch in front of it and is sent on its own.
+			// Coalescing it into the bytes either side would put the client's
+			// emulator at the wrong width for one of them.
+			var resize *ptyChunk
+			if chunk.isResize() {
+				resize = &chunk
+				batch = batch[:0]
+			} else {
+				batch = append(batch[:0], chunk.data...)
+				for len(batch) < maxBatch {
+					select {
+					case more, ok := <-outputCh:
+						if !ok {
+							goto send
+						}
+						if more.isResize() {
+							resize = &more
+							goto send
+						}
+						batch = append(batch, more.data...)
+					default:
 						goto send
 					}
-					batch = append(batch, more...)
-				default:
-					goto send
 				}
 			}
 		send:
-			cs.sendMu.Lock()
-			_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			err := WritePTYOutput(cs.conn, pty.ID, batch)
-			cs.sendMu.Unlock()
-			if err != nil {
-				// The write failed mid-frame (a slow/stuck client hitting the 5s
-				// deadline): the wire now carries a partial frame and every later
-				// send would append onto a desynced stream. Tear the whole client
-				// down rather than leaving it half-subscribed and desynced.
-				cs.drop()
-				return
+			if len(batch) > 0 {
+				cs.sendMu.Lock()
+				_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				err := WritePTYOutput(cs.conn, pty.ID, batch)
+				cs.sendMu.Unlock()
+				if err != nil {
+					// The write failed mid-frame (a slow/stuck client hitting the 5s
+					// deadline): the wire now carries a partial frame and every later
+					// send would append onto a desynced stream. Tear the whole client
+					// down rather than leaving it half-subscribed and desynced.
+					cs.drop()
+					return
+				}
+			}
+			if resize != nil {
+				if err := d.sendMessage(cs, MsgPTYResized, &PTYResizedPayload{
+					PTYID:  pty.ID,
+					Width:  resize.width,
+					Height: resize.height,
+				}); err != nil {
+					return
+				}
 			}
 		}
 	}

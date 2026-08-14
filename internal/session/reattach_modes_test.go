@@ -88,7 +88,8 @@ func TestReattachRestoresModesScrolledOutOfBuffer(t *testing.T) {
 
 	var replay []byte
 	select {
-	case replay = <-ch:
+	case chunk := <-ch:
+		replay = chunk.data
 	case <-time.After(5 * time.Second):
 		t.Fatal("no buffered replay for the new subscriber")
 	}

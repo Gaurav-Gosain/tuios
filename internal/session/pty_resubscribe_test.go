@@ -34,19 +34,19 @@ func (p *PTY) appendAndBroadcast(data []byte) {
 	p.outputMu.Lock()
 	seq := p.appendToBuffer(data)
 	p.outputMu.Unlock()
-	p.broadcast(data, seq)
+	p.broadcast(ptyChunk{data: data}, seq)
 }
 
 // drain collects everything queued on a subscriber channel without blocking.
-func drain(ch <-chan []byte) []byte {
+func drain(ch <-chan ptyChunk) []byte {
 	var out []byte
 	for {
 		select {
-		case data, ok := <-ch:
+		case chunk, ok := <-ch:
 			if !ok {
 				return out
 			}
-			out = append(out, data...)
+			out = append(out, chunk.data...)
 		default:
 			return out
 		}
