@@ -56,7 +56,7 @@ func TestReattachRestoresModesScrolledOutOfBuffer(t *testing.T) {
 	}
 
 	waitFor("guest to enable mouse modes", func() bool {
-		st := pty.GetTerminalState()
+		st := pty.GetTerminalState(0)
 		return st != nil && st.Modes[1003]
 	})
 
@@ -99,7 +99,7 @@ func TestReattachRestoresModesScrolledOutOfBuffer(t *testing.T) {
 		t.Skip("replay carries DEC mode traffic in this environment; the browser-pane condition (no mode traffic after the flood) was not reproduced")
 	}
 
-	state := pty.GetTerminalState()
+	state := pty.GetTerminalState(0)
 	if state == nil {
 		t.Fatal("GetTerminalState returned nil")
 	}

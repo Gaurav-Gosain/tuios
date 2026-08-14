@@ -115,10 +115,15 @@ func newRig(t *testing.T, panes int) *rig {
 	if err := ctl.Connect("test", rigCols, rigRows); err != nil {
 		t.Fatalf("control connect: %v", err)
 	}
+	// The read loop goes first here, unlike the client under test, which
+	// mirrors production by attaching first. This connection is the test's
+	// instrument: with the loop already running, replies are demuxed by type
+	// rather than read positionally, so an unsolicited push landing between the
+	// request and its answer cannot be mistaken for the answer.
+	ctl.StartReadLoop()
 	if _, err := ctl.AttachSession(name, false, rigCols, rigRows); err != nil {
 		t.Fatalf("control attach: %v", err)
 	}
-	ctl.StartReadLoop()
 	t.Cleanup(func() { _ = ctl.Close() })
 
 	r := &rig{t: t, daemon: d, ctl: ctl, session: name}

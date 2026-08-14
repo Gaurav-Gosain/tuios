@@ -187,6 +187,13 @@ var rehydrationShapes = []paneShape{
 			if err := r.ctl.ResizePTY(ptyID, w-4, h-2); err != nil {
 				r.t.Fatalf("resize while away: %v", err)
 			}
+			// Waited for, so the shape is a pane that was resized while it was
+			// hidden rather than one whose resize is still in flight as it comes
+			// back. The latter is a different question and this row is not it.
+			rigWaitUntil(r.t, "the daemon to apply the resize", func() bool {
+				gw, gh := r.ptySize(ptyID)
+				return gw == w-4 && gh == h-2
+			})
 		},
 	},
 }

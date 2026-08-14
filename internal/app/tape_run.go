@@ -48,7 +48,7 @@ func (m *OS) refreshAllPanesAfterTape() {
 			continue
 		}
 		w.Resize(w.Width, w.Height)
-		if state, err := m.DaemonClient.GetTerminalState(w.PTYID, true); err == nil && state != nil {
+		if state, err := m.DaemonClient.GetTerminalState(w.PTYID, 0); err == nil && state != nil {
 			m.restoreTerminalContent(w, state)
 		}
 		w.InvalidateCache()
