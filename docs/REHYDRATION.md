@@ -10,11 +10,19 @@ records where the implementations differ.
 
 ## The two sources a client can be filled from
 
-**The snapshot.** `PTY.GetTerminalState` (`internal/session/session.go`) serializes
-the daemon emulator's visible grid, cursor position, DEC modes, kitty keyboard
-stack, the alternate-screen flag and up to 1000 scrollback rows. The client
-applies it in `OS.restoreTerminalContent` (`internal/app/session.go`). It is a
-snapshot of *now*: applying it is idempotent and carries no history.
+**The snapshot.** `TerminalStateOf` (`internal/session/session.go`) serializes the
+daemon emulator's visible grid, the normal screen underneath it when the
+alternate one is active, cursor position, the pen, DEC modes, the scroll region,
+the character set selection, the kitty keyboard stack, the alternate-screen flag
+and up to 1000 scrollback rows. `ApplyTerminalState` reads it back, and
+`OS.restoreTerminalContent` (`internal/app/session.go`) is the window around
+that. It is a snapshot of *now*: applying it is idempotent and carries no
+history.
+
+The two halves live next to each other on purpose. Serializing lived here and
+restoring lived in `internal/app`, which is how they came to disagree about which
+fields exist: `Scrollback` was written and never read, and the cursor was
+serialized and thrown away.
 
 **The stream.** Every PTY keeps a 64KB ring of the bytes it has produced
 (`PTY.appendToBuffer`) and a monotonic `outputSeq` counting every byte ever
@@ -37,25 +45,54 @@ overlapping.
 For every route, once the route has completed and the pane is quiet:
 
 1. **Grid.** The client emulator's visible cells equal the daemon emulator's
-   visible cells, for the same size.
+   visible cells, for the same size. A cell is equal when it holds the same
+   thing *and is painted the same way*: the same foreground and background down
+   to the encoding, the same underline style and colour, the same attribute bits
+   and the same hyperlink.
 2. **Scrollback.** The client emulator's scrollback lines are a suffix of the
-   daemon's, and every line they share is equal. A client may hold less history
-   than the daemon; it may never hold history the daemon does not have, and it
-   may never hold a line the daemon does not have at that offset.
+   daemon's, and every line they share is equal, by the same definition of a
+   cell. A client may hold less history than the daemon; it may never hold
+   history the daemon does not have, and it may never hold a line the daemon
+   does not have at that offset.
 3. **Cursor.** The client's cursor is at the daemon's cursor.
 4. **Modes.** Alternate-screen flag, DEC modes and the kitty keyboard stack match.
 5. **No duplication.** Content the pane produced once appears once.
+6. **What paints the next byte.** The pen, the scroll region and the character
+   set selection match. None of these can be read back off the cells, and each
+   decides how output that has not arrived yet is painted, where it lands and
+   which glyphs it draws.
+7. **The screen underneath.** While the alternate screen is active, the normal
+   screen matches too. It is what quitting the guest's program puts back on
+   display.
 
-Invariant 5 is not implied by 1-4 read loosely; it is the one the known bugs all
-broke, so it is stated separately.
+Invariant 5 is not implied by 1-4 read loosely; it is the one the first round of
+known bugs all broke, so it is stated separately. Invariants 6 and 7 are the
+second round: a pane can satisfy 1-5 exactly and still be wrong the moment it
+prints its next line or the guest quits.
 
-`TestRehydrationMatrix` in `internal/app/rehydration_matrix_test.go` asserts all
-five, for every route below crossed with every shape a pane can be in: at the
-live tail, scrolled back, in the alternate screen, holding wide runes, still
-producing, having outrun the ring while hidden, having outrun it inside the
-alternate screen, and having been resized while hidden. It runs a real daemon in
-process and compares the client's emulator against the daemon's own, cell for
-cell and scrollback line for line.
+Two tests assert this, and they are not redundant.
+
+`TestRehydrationMatrix` (`internal/app/rehydration_matrix_test.go`) proves a
+*route*. It runs a real daemon in process and takes a pane through every route
+below crossed with every shape a pane can be in: at the live tail, scrolled back,
+in the alternate screen, holding wide runes, under heavy SGR, in 256-colour and
+truecolour, with a colour left in force, with a scroll region, in origin mode,
+with a full-screen program caught mid-draw, still producing, having outrun the
+ring while hidden, having outrun it inside the alternate screen, and having been
+resized while hidden.
+
+`TestWireCarriesTheWholeCell` (`internal/session/wire_fidelity_test.go`) proves
+the *wire*, and it exists because the matrix structurally cannot. The matrix
+reads the daemon through the same serialization it checks the client against, so
+anything that serialization cannot express is lost identically on both sides and
+compares equal. That is exactly how a snapshot that turned every palette colour
+into a fixed RGB passed all 32 cases while repainting the user's screen. This
+test feeds a guest's output to one emulator, takes it through the wire into a
+second, and compares the two emulators to each other, with no wire in the middle
+of the comparison.
+
+`e2e/tui/session_switch_fidelity_test.go` is the third rung: a real client in a
+real terminal, switched away and back, read for what it actually painted.
 
 ## The routes
 
@@ -123,9 +160,9 @@ Two things had to be true for that rule to hold, and neither was:
 
 ## What is authoritative
 
-- The **daemon emulator** is authoritative for grid, cursor, modes and
-  scrollback. It is the only thing that has seen every byte, which is why its
-  feed blocks rather than dropping a chunk when it falls behind.
+- The **daemon emulator** is authoritative for grid, cursor, pen, modes, margins,
+  character sets and scrollback. It is the only thing that has seen every byte,
+  which is why its feed blocks rather than dropping a chunk when it falls behind.
 - The **ring** is authoritative for nothing. Its only job is to bridge the gap
   between a snapshot being taken and the subscribe that follows it.
 - A client emulator that has been through `Close()` holds nothing, and no resume
@@ -162,6 +199,56 @@ Two things had to be true for that rule to hold, and neither was:
   the grounds that a resize would make vim or htop repaint itself. That asks the
   guest to do the client's job, and it only ever looked correct because the ring
   replay was redrawing the pane underneath it.
+- **A colour keeps its encoding.** `CellState` flattened every colour through
+  `RGBA()` into a hex string and read it back as a fixed RGB. The render path
+  branches on exactly that: a palette entry is re-emitted as a palette entry and
+  follows the user's terminal theme, and an RGB does not. So `31m` red arrived as
+  the maroon the default palette resolves red to, and a pane came back repainted
+  in shades the user never chose. `colorToWire` keeps the three encodings apart,
+  and `colorFromWire` resolves a palette entry through the emulator that will
+  hold it, so a restored cell is coloured by the same rule as a cell the guest
+  writes live into that emulator.
+- **A cell's attributes travel as the emulator's own bitmask.** Spelling them out
+  one bool at a time is what left blink, conceal and strikethrough off the wire
+  entirely, collapsed the five underline styles into a plain underline, and
+  dropped the underline colour and the OSC 8 hyperlink.
+- **The pen is carried.** A guest sets a rendition and everything written next
+  inherits it. Without it the stream resuming on top of a restore was painted in
+  whatever the client's emulator was left holding: default on a pane rebuilt from
+  nothing, stale on one that survived a workspace switch. This is the half of the
+  colour report that shows up on new output rather than on restored content,
+  which is why it looked random.
+- **The scroll region is carried, and only when a guest set one.** A region that
+  is simply the whole screen says nothing, and sending it pinned a pane that had
+  been resized since to whatever size the daemon was when the snapshot was taken.
+  When none is on the wire the client resets to its own bounds, so a pane that
+  had margins before the route does not keep them after it.
+- **The character set selection is carried.** `ESC ( 0` selects the DEC
+  line-drawing set once and every box character after it travels as an ASCII
+  letter, so a client that came back with G0 at US ASCII drew `qqqq` where the
+  guest drew a horizontal rule. The sets are maps and cannot be compared back to
+  the set they came from, so the emulator records the designator byte each was
+  selected by.
+- **The normal screen is carried while the alternate one is active.** It is the
+  shell's screen under a running full-screen program. Only the screen the guest
+  was drawing into was sent, so a pane with vim open across a route came back
+  correct and went blank the moment vim exited. The alternate screen needs no
+  equivalent: entering it clears it, so what it held before is never seen again.
+- **Leaving the alternate screen is applied like entering it.** Only entering
+  was, so a pane whose emulator survived a workspace switch and whose guest quit
+  while the pane was hidden stayed pointed at the alternate buffer while its
+  modes said it had left. The blit landed in the buffer nobody was looking at,
+  and everything the pane printed next scrolled into the alternate screen's
+  scrollback, which is switched off.
+
+## What the wire still does not carry
+
+Known and deliberate, so the next person does not have to rediscover them: the
+saved cursor (DECSC), tab stops, the window title, the guest's OSC 4/10/11/12
+colour overrides, the pending-wrap latch, and the ANSI (non-DEC) modes, which
+`GetModes` drops because they share an int keyspace with the DEC modes. Insert
+mode (IRM) and reverse video (DECSCNM) are in that last group and are not
+implemented by the emulator at all, so nothing is lost by not carrying them.
 
 ## Sizes
 
