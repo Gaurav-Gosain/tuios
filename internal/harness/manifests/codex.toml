@@ -1,0 +1,13 @@
+schema_version = 1
+id             = "codex"
+display_name   = "Codex"
+priority       = 50
+
+[detect]
+comm      = ["codex"]
+argv0     = ["codex"]
+argv_path = ["@openai/codex"]
+exe_glob  = ["*/vendor/*/bin/codex", "*/codex"]
+
+[screen]
+enabled = false

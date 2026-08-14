@@ -1,0 +1,12 @@
+schema_version = 1
+id             = "droid"
+display_name   = "Droid"
+priority       = 50
+
+[detect]
+comm      = ["droid"]
+argv0     = ["droid"]
+argv_path = ["@factory/cli"]
+
+[screen]
+enabled = false

@@ -1,0 +1,12 @@
+schema_version = 1
+id             = "crush"
+display_name   = "Crush"
+priority       = 50
+
+[detect]
+comm      = ["crush"]
+argv0     = ["crush"]
+argv_path = ["/crush/"]
+
+[screen]
+enabled = false

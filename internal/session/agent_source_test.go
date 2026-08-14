@@ -174,7 +174,7 @@ func TestReportOutranksTheDetector(t *testing.T) {
 	agent := newAgentMatcher(nil)
 	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
-	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
+	if n := sess.applyAgentDetection(running, agent.identify); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
 	if src := sess.agentClaimFor(id).source; src != AgentSourceDetect {
@@ -196,7 +196,7 @@ func TestReportOutranksTheDetector(t *testing.T) {
 
 	// The detector still owns the pane's lifecycle and clears it on exit.
 	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
-	if n := sess.applyAgentDetection(shell, agent.isAgent); n != 1 {
+	if n := sess.applyAgentDetection(shell, agent.identify); n != 1 {
 		t.Fatalf("agent exit changed %d windows, want 1", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNone {

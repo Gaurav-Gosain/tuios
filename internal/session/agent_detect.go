@@ -1,12 +1,15 @@
 package session
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // defaultAgentBinaries is the built-in set of AI-agent CLI binary names the
@@ -61,11 +64,19 @@ var scriptExtensions = []string{".js", ".mjs", ".cjs", ".ts", ".py"}
 // holds the resolved set of agent names (defaults merged with user additions),
 // lowercased for case-insensitive matching.
 type agentMatcher struct {
-	names map[string]struct{}
+	names    map[string]struct{}
+	registry *harness.Registry
 }
 
-// newAgentMatcher builds a matcher from the built-in defaults plus any extra
-// names. Extra names are trimmed and lowercased; blanks are ignored.
+// newAgentMatcher builds a matcher from the manifest registry plus the built-in
+// defaults and any extra names. Extra names are trimmed and lowercased; blanks
+// are ignored.
+//
+// The registry and the name list are both consulted, and neither replaces the
+// other. The registry is what a user extends without a rebuild and is what can
+// name the harness it matched; the flat name list is what TUIOS_AGENT_BINARIES
+// and daemon.agent_binaries have always fed, and those configs have to keep
+// working exactly as they did.
 func newAgentMatcher(extra []string) agentMatcher {
 	names := make(map[string]struct{}, len(defaultAgentBinaries)+len(extra))
 	for _, n := range defaultAgentBinaries {
@@ -76,7 +87,26 @@ func newAgentMatcher(extra []string) agentMatcher {
 			names[n] = struct{}{}
 		}
 	}
-	return agentMatcher{names: names}
+	registry, errs := harness.Load(harness.UserDir())
+	for _, e := range errs {
+		// Named and logged rather than dropped: a manifest a user wrote and that
+		// silently does nothing is the failure mode this registry exists to avoid.
+		log.Printf("harness manifest %s: %v", e.Source, e.Err)
+	}
+	return agentMatcher{names: names, registry: registry}
+}
+
+// identify names the harness a pane's foreground process is running, reporting
+// whether it is an agent at all. The manifest registry answers first because it
+// can name what it matched; the built-in and user-configured name list is the
+// fallback and yields an unnamed match.
+func (m agentMatcher) identify(info foregroundInfo) (string, bool) {
+	if m.registry != nil {
+		if id, ok := m.registry.Identify(info.comm, info.argv, info.exe); ok {
+			return id, true
+		}
+	}
+	return "", m.isAgent(info)
 }
 
 // isAgent reports whether a pane's foreground process is a known agent. It reads
@@ -327,11 +357,12 @@ func readCmdline(pid int) []string {
 }
 
 // applyAgentDetection reconciles each window's agent state with the foreground
-// process of its pane, using the injected resolve and isAgent so it is testable
+// process of its pane, using the injected resolve and identify so it is testable
 // without a real /proc or a real agent. It returns how many windows it changed.
 //
-// resolve reports the foreground process (comm, argv) for a PTY and whether that
-// process is running; isAgent decides whether that process is an agent.
+// resolve reports the foreground process for a PTY and whether it is running;
+// identify decides whether that process is an agent and names which harness it
+// is, empty when it matched a bare name rather than a manifest.
 //
 // Precedence (auto-detection is deliberately subordinate to explicit reports):
 //
@@ -351,7 +382,7 @@ func readCmdline(pid int) []string {
 // or idle, so it does not pretend to.
 func (s *Session) applyAgentDetection(
 	resolve func(ptyID string) (foregroundInfo, bool),
-	isAgent func(foregroundInfo) bool,
+	identify func(foregroundInfo) (harnessID string, ok bool),
 ) int {
 	changed := 0
 	shell := agentBaseName(s.getShell())
@@ -377,7 +408,8 @@ func (s *Session) applyAgentDetection(
 				w.ForegroundCmd = cmd
 				labels++
 			}
-			detected := running && isAgent(info)
+			harnessID, isAgent := identify(info)
+			detected := running && isAgent
 			owned := s.agentClaims[w.ID].auto
 			switch {
 			case detected && !owned:
@@ -385,9 +417,9 @@ func (s *Session) applyAgentDetection(
 				if w.AgentState == AgentStateNone {
 					w.AgentState = AgentStateWorking
 					w.AgentMessage = ""
-					w.AgentHarness = ""
+					w.AgentHarness = harnessID
 					w.AgentStateAt = now
-					s.setAgentClaim(w.ID, agentClaim{source: AgentSourceDetect, auto: true})
+					s.setAgentClaim(w.ID, agentClaim{source: AgentSourceDetect, harness: harnessID, auto: true})
 					changed++
 				}
 			case !detected && owned:
@@ -444,7 +476,7 @@ func (s *Session) applyAgentDetection(
 func (s *Session) reconcileAgentOnOutput(
 	ptyID string,
 	resolve func(ptyID string) (foregroundInfo, bool),
-	isAgent func(foregroundInfo) bool,
+	identify func(foregroundInfo) (harnessID string, ok bool),
 ) bool {
 	// Almost every output event is from a pane the auto-detector never promoted.
 	// Rule those out under the read lock so a busy non-agent pane does not take the
@@ -466,7 +498,9 @@ func (s *Session) reconcileAgentOnOutput(
 			if !claim.auto {
 				return errNoAgentDetectChange
 			}
-			if info, running := resolve(ptyID); running && isAgent(info) {
+			info, running := resolve(ptyID)
+			_, stillAgent := identify(info)
+			if running && stillAgent {
 				// Still the agent, and it just spoke. Only the idle left by the
 				// silence timer (or by the detector itself) may be taken back:
 				// anything a stronger source said outranks output activity, which

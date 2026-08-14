@@ -233,7 +233,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 					s.applyAgentProgress(ev.Window, state)
 				}
 				if d.agentDetectInterval > 0 && pty.probeAgentExitDue(time.Now().UnixNano()) {
-					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.isAgent)
+					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identify)
 				}
 			}
 		}
@@ -747,7 +747,7 @@ func (d *Daemon) agentMonitor() {
 			return
 		case <-ticker.C:
 			for _, sess := range d.manager.AllSessions() {
-				sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.isAgent)
+				sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identify)
 			}
 		}
 	}

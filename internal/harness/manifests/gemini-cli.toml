@@ -1,0 +1,12 @@
+schema_version = 1
+id             = "gemini-cli"
+display_name   = "Gemini CLI"
+priority       = 50
+
+[detect]
+comm      = ["gemini"]
+argv0     = ["gemini"]
+argv_path = ["@google/gemini-cli"]
+
+[screen]
+enabled = false

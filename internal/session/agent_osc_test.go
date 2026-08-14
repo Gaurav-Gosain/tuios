@@ -72,7 +72,7 @@ func TestAgentProgressOutranksDetectorAndYieldsToReport(t *testing.T) {
 	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
 	// The detector owns the pane; a progress report outranks it.
-	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
+	if n := sess.applyAgentDetection(running, agent.identify); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
 	sess.applyAgentProgress(id, vt.ProgressWarning)

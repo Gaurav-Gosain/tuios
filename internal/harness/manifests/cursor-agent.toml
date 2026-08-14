@@ -1,0 +1,14 @@
+schema_version = 1
+id             = "cursor-agent"
+display_name   = "Cursor Agent"
+priority       = 50
+
+[detect]
+comm  = ["cursor-agent"]
+argv0 = ["cursor-agent"]
+# "agent" is the newer entrypoint and far too generic to match on its own, so it
+# is only ever accepted together with the install path.
+exe_glob = ["*/.cursor/*/agent", "*/cursor-agent"]
+
+[screen]
+enabled = false
