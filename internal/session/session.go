@@ -265,6 +265,18 @@ type PTY struct {
 	// vtWriter's range terminates.
 	vtWriteChan chan vtChunk
 
+	// streamMu puts a resize at one position in the pane's stream. readOutput
+	// holds it across appending a chunk, broadcasting it and queueing it for
+	// the emulator, so a resize taken under it lands between the same two
+	// bytes on the daemon's emulator and on every subscriber's. Without that
+	// the two sides change width at different bytes and disagree for good
+	// about where the line in between wrapped.
+	streamMu sync.Mutex
+	// vtClosed records that readOutput has closed vtWriteChan, so a resize
+	// arriving during teardown does not send on a closed channel. Guarded by
+	// streamMu, which readOutput also holds to close.
+	vtClosed bool
+
 	// vtSeq is the stream position the emulator has consumed, guarded by
 	// terminalMu. It trails outputSeq by whatever is still queued.
 	vtSeq int64
@@ -1231,9 +1243,19 @@ func restoredBanner(cwd string) string {
 // the last chunk this subscriber was handed, which is where the client is
 // resumed if it comes back.
 type ptySubscriber struct {
-	ch   chan []byte
+	ch   chan ptyChunk
 	sent atomic.Int64
 }
+
+// ptyChunk is one item on a subscriber's stream: output bytes, or the size the
+// daemon's emulator took at exactly this point. A resize carries no bytes and
+// so does not move the stream position.
+type ptyChunk struct {
+	data          []byte
+	width, height int // both > 0 marks a resize rather than output
+}
+
+func (c ptyChunk) isResize() bool { return c.width > 0 && c.height > 0 }
 
 // resyncPrefix homes the cursor and clears the screen and the scrollback. It
 // goes in front of a catch-up the client cannot splice onto what it already
@@ -1250,7 +1272,7 @@ var resyncPrefix = []byte("\x1b[H\x1b[2J\x1b[3J")
 // the pane's screen; replaying the buffer from the top painted the pane's whole
 // history a second time below the paint already there, which is the stacked
 // prompts a workspace switch used to leave behind.
-func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan []byte {
+func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
 
@@ -1260,7 +1282,7 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan []byte {
 		return existing.ch
 	}
 
-	sub := &ptySubscriber{ch: make(chan []byte, 16384)} // Large buffer matching client-side outputChan capacity
+	sub := &ptySubscriber{ch: make(chan ptyChunk, 16384)} // Large buffer matching client-side outputChan capacity
 	p.subscribers[clientID] = sub
 	debugLog("[DEBUG] PTY %s: added subscriber %s (total: %d)", p.ID[:8], clientID, len(p.subscribers))
 
@@ -1289,7 +1311,7 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan []byte {
 		}
 		bufCopy = append(bufCopy, p.outputBuffer[start:p.outputPos]...)
 		select {
-		case sub.ch <- bufCopy:
+		case sub.ch <- ptyChunk{data: bufCopy}:
 			debugLog("[DEBUG] PTY %s: buffered output sent", p.ID[:8])
 		default:
 			debugLog("[DEBUG] PTY %s: failed to send buffered output (channel full)", p.ID[:8])
@@ -1359,17 +1381,29 @@ func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
 }
 
 // Resize changes the PTY and terminal emulator size.
+//
+// The emulator is not resized here. A resize is a point in the pane's output
+// stream, not an event outside it: the guest has already produced bytes this
+// pane has not laid out yet, and which width they are laid out at decides where
+// they wrap. Queueing the resize behind them puts it at one byte, tells every
+// subscriber the same byte, and leaves the daemon and its clients agreeing on
+// the line at the seam. Resizing the emulator here instead let a client that
+// had already resized itself lay out everything produced between asking and
+// being heard one width narrower than the daemon did, and a line that wrapped
+// differently is in the scrollback for good.
 func (p *PTY) Resize(width, height int) error {
-	// Resize VT emulator
-	p.terminalMu.Lock()
-	if p.terminal != nil {
-		p.terminal.Resize(width, height)
+	p.streamMu.Lock()
+	if !p.vtClosed {
+		p.broadcast(ptyChunk{width: width, height: height}, 0)
+		select {
+		case p.vtWriteChan <- vtChunk{width: width, height: height}:
+		case <-p.ctx.Done():
+		}
 	}
-	p.width = width
-	p.height = height
-	p.terminalMu.Unlock()
+	p.streamMu.Unlock()
 
-	// Resize PTY
+	// The real PTY is resized now regardless, so the guest gets its SIGWINCH
+	// without waiting for the emulator to catch up with the backlog.
 	if p.pty != nil {
 		return p.pty.Resize(width, height)
 	}
@@ -1897,9 +1931,15 @@ func (p *PTY) IsExited() bool {
 }
 
 func (p *PTY) readOutput() {
-	// readOutput is the sole sender on vtWriteChan; closing it here lets
-	// vtWriter's range terminate when the read loop exits.
-	defer close(p.vtWriteChan)
+	// Closing vtWriteChan lets vtWriter's range terminate when the read loop
+	// exits. Resize sends on it too, so the close is taken under the lock it
+	// sends under and leaves the flag that stops it trying.
+	defer func() {
+		p.streamMu.Lock()
+		p.vtClosed = true
+		close(p.vtWriteChan)
+		p.streamMu.Unlock()
+	}()
 
 	buf := make([]byte, 16*1024) // 16KB: matches typical PTY pipe buffer
 	for {
@@ -1918,13 +1958,18 @@ func (p *PTY) readOutput() {
 			data := make([]byte, n)
 			copy(data, buf[:n])
 
+			// Held across all three steps so a resize taken under the same
+			// lock cannot land between two of them: the daemon's emulator and
+			// every subscriber must change width at the same byte.
+			p.streamMu.Lock()
+
 			// Store in ring buffer for reconnection
 			p.outputMu.Lock()
 			seq := p.appendToBuffer(data)
 			p.outputMu.Unlock()
 
 			// Broadcast to subscribers
-			p.broadcast(data, seq)
+			p.broadcast(ptyChunk{data: data}, seq)
 
 			// VT emulator: feed via a dedicated single goroutine to
 			// avoid unbounded goroutine growth at high FPS.
@@ -1942,8 +1987,10 @@ func (p *PTY) readOutput() {
 			select {
 			case p.vtWriteChan <- vtChunk{data: data, seq: seq}:
 			case <-p.ctx.Done():
+				p.streamMu.Unlock()
 				return
 			}
+			p.streamMu.Unlock()
 
 			// Record the activity time for the agent-state stall heuristic before
 			// anything that can block, so a demotion decision is made against when
@@ -1961,10 +2008,12 @@ func (p *PTY) readOutput() {
 	}
 }
 
-// vtChunk is one chunk of PTY output and the stream position it ends at.
+// vtChunk is one chunk of PTY output and the stream position it ends at, or a
+// resize to apply between the chunks either side of it.
 type vtChunk struct {
-	data []byte
-	seq  int64
+	data          []byte
+	seq           int64
+	width, height int // both > 0 marks a resize rather than output
 }
 
 // vtWriter is a single persistent goroutine that feeds the daemon's VT
@@ -1972,6 +2021,17 @@ type vtChunk struct {
 // read) prevents unbounded goroutine growth at high FPS.
 func (p *PTY) vtWriter() {
 	for chunk := range p.vtWriteChan {
+		if chunk.width > 0 && chunk.height > 0 {
+			// The pane's size and its emulator move together, so a snapshot
+			// can never report a width the grid it serializes is not at.
+			p.terminalMu.Lock()
+			if p.terminal != nil {
+				p.terminal.Resize(chunk.width, chunk.height)
+			}
+			p.width, p.height = chunk.width, chunk.height
+			p.terminalMu.Unlock()
+			continue
+		}
 		p.terminalMu.Lock()
 		if p.terminal != nil {
 			_, _ = p.terminal.Write(chunk.data)
@@ -2011,22 +2071,25 @@ func (p *PTY) appendToBuffer(data []byte) int64 {
 }
 
 // broadcast hands a chunk ending at stream position seq to every subscriber.
-func (p *PTY) broadcast(data []byte, seq int64) {
+func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 	p.subscribersMu.RLock()
 	defer p.subscribersMu.RUnlock()
 
-	debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(data), len(p.subscribers))
+	debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(chunk.data), len(p.subscribers))
 	for clientID, sub := range p.subscribers {
 		// A chunk appended between a subscriber's catch-up being copied and this
 		// broadcast running is in both, because Subscribe blocks the broadcast
 		// rather than the append. Delivering it again paints it twice at the
 		// seam, which is one duplicated line every time a pane is shown while it
 		// is producing.
-		if sub.sent.Load() >= seq {
+		//
+		// A resize carries no bytes, so there is no position for it to be
+		// behind and nothing to skip it against: it goes to every subscriber.
+		if !chunk.isResize() && sub.sent.Load() >= seq {
 			continue
 		}
 		select {
-		case sub.ch <- data:
+		case sub.ch <- chunk:
 			// Only a chunk that was taken counts as reached: a client dropped
 			// here resumes from the gap rather than past it.
 			sub.sent.Store(seq)

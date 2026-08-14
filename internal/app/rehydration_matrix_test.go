@@ -442,7 +442,15 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 	// and never a line the daemon does not have at that offset.
 	dn, cn := len(st.Scrollback), term.ScrollbackLen()
 	if cn > dn {
-		t.Errorf("scrollback: client holds %d lines, daemon holds %d", cn, dn)
+		var cb, db strings.Builder
+		for i := range cn {
+			fmt.Fprintf(&cb, "  c[%d] %q\n", i, strings.TrimRight(term.ScrollbackLine(i).String(), " "))
+		}
+		for i := range dn {
+			fmt.Fprintf(&db, "  d[%d] %q\n", i, stateRow(st.Scrollback[i]))
+		}
+		t.Errorf("scrollback: client holds %d lines, daemon holds %d\nclient:\n%sdaemon:\n%sscreen:\n%s",
+			cn, dn, cb.String(), db.String(), sideBySide(st, w))
 		return
 	}
 	// Compared cell for cell like the screen, not as text. History that came

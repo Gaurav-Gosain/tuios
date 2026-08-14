@@ -74,7 +74,8 @@ const (
 
 	// Appended after all existing types to keep every value above stable for
 	// older clients that share this iota order.
-	MsgResurrect // Restore a saved session on demand (cold-start restore)
+	MsgResurrect  // Restore a saved session on demand (cold-start restore)
+	MsgPTYResized // A pane's emulator changed size at this point in its output stream
 )
 
 // Message is the base protocol message structure.
@@ -304,6 +305,16 @@ type ResizePTYPayload struct {
 type SubscribePTYPayload struct {
 	PTYID   string `json:"pty_id"`
 	FromSeq int64  `json:"from_seq,omitempty"`
+}
+
+// PTYResizedPayload announces the size the daemon's emulator took, delivered in
+// the pane's output stream at the byte it took it. Two emulators fed the same
+// bytes only agree on where a line wrapped if they change width at the same
+// byte, so a client applies this where it arrives rather than when it asked.
+type PTYResizedPayload struct {
+	PTYID  string `json:"pty_id"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 
 // UnsubscribePTYPayload requests unsubscribing from PTY output.
