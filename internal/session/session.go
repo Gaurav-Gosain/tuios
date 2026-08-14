@@ -1422,6 +1422,12 @@ func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *Terminal
 		Scrollback:    make([][]CellState, 0),
 	}
 
+	// The pen is not recoverable from the cells: it is what the guest set and
+	// has not reset, and it paints the output that has not arrived yet.
+	pen, link := t.CursorPen()
+	ps := styleToWire(pen, link)
+	state.Pen = &ps
+
 	// Capture visible screen with full styling
 	for y := 0; y < height; y++ {
 		state.Screen[y] = make([]CellState, width)
@@ -1488,6 +1494,16 @@ func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
 	// client encodes keys in legacy form for a pane that negotiated the
 	// protocol.
 	t.RestoreKittyKeyboardState(state.KittyKbdStack)
+
+	// The rendition the guest left in force, which paints everything that
+	// arrives after this snapshot. Without it the stream resuming on top of a
+	// restore was written in whatever colour this emulator happened to be left
+	// in: default on a pane rebuilt from nothing, and stale on one that
+	// survived. That is corruption on new output rather than on restored
+	// content, which is why it looked random.
+	if state.Pen != nil {
+		t.RestoreCursorPen(styleFromWire(t, *state.Pen))
+	}
 
 	// The scrollback goes back first, and it is the main screen's either way:
 	// the alternate screen keeps none, and both sides read the same buffer.
@@ -1609,6 +1625,7 @@ type TerminalState struct {
 	CursorY       int           `json:"cursor_y"`
 	ScrollbackLen int           `json:"scrollback_len"`
 	IsAltScreen   bool          `json:"is_alt_screen,omitempty"`   // Alternate screen buffer active (for mouse event forwarding)
+	Pen           *StyleState   `json:"pen,omitempty"`             // Graphic rendition in force: what the guest's next output is painted with
 	Modes         map[int]bool  `json:"modes,omitempty"`           // Terminal modes (mouse tracking, bracketed paste, etc.)
 	KittyKbdStack []int         `json:"kitty_kbd_stack,omitempty"` // Kitty keyboard protocol flag stack, base entry first
 	Screen        [][]CellState `json:"screen"`
@@ -1622,8 +1639,15 @@ type TerminalState struct {
 // strikethrough off the wire entirely, and collapsed the five underline styles
 // into one.
 type CellState struct {
-	Content    string `json:"c,omitempty"`  // Cell content (character or grapheme)
-	Width      int    `json:"w,omitempty"`  // Cell width (1 for normal, 2 for wide chars, 0 for continuation)
+	Content string `json:"c,omitempty"` // Cell content (character or grapheme)
+	Width   int    `json:"w,omitempty"` // Cell width (1 for normal, 2 for wide chars, 0 for continuation)
+	StyleState
+}
+
+// StyleState is a graphic rendition on the wire: how something is painted,
+// separate from what it holds. It describes both a cell and the pen, which are
+// the same rendition seen at two moments.
+type StyleState struct {
 	FgColor    string `json:"fg,omitempty"` // Foreground color, encoded by colorToWire
 	BgColor    string `json:"bg,omitempty"` // Background color
 	UlColor    string `json:"uc,omitempty"` // Underline color (SGR 58)
@@ -1631,6 +1655,33 @@ type CellState struct {
 	Underline  uint8  `json:"u,omitempty"`  // ansi.Underline style: none, single, double, curly, dotted, dashed
 	LinkURL    string `json:"l,omitempty"`  // OSC 8 hyperlink target
 	LinkParams string `json:"lp,omitempty"` // OSC 8 hyperlink parameters
+}
+
+// styleToWire encodes a graphic rendition and the hyperlink that travels with it.
+func styleToWire(s uv.Style, link uv.Link) StyleState {
+	return StyleState{
+		FgColor:    colorToWire(s.Fg),
+		BgColor:    colorToWire(s.Bg),
+		UlColor:    colorToWire(s.UnderlineColor),
+		Attrs:      s.Attrs,
+		Underline:  uint8(s.Underline),
+		LinkURL:    link.URL,
+		LinkParams: link.Params,
+	}
+}
+
+// styleFromWire is styleToWire read back into the emulator that will hold it.
+func styleFromWire(t *vt.Emulator, ss StyleState) (uv.Style, uv.Link) {
+	return uv.Style{
+			Fg:             colorFromWire(t, ss.FgColor),
+			Bg:             colorFromWire(t, ss.BgColor),
+			UnderlineColor: colorFromWire(t, ss.UlColor),
+			Underline:      ansi.Underline(ss.Underline),
+			Attrs:          ss.Attrs,
+		}, uv.Link{
+			URL:    ss.LinkURL,
+			Params: ss.LinkParams,
+		}
 }
 
 // colorToWire encodes a cell color so the client gets back the kind of color the
@@ -1691,30 +1742,14 @@ func CellStateOf(cell *uv.Cell) CellState {
 	return CellState{
 		Content:    cell.Content,
 		Width:      cell.Width,
-		FgColor:    colorToWire(cell.Style.Fg),
-		BgColor:    colorToWire(cell.Style.Bg),
-		UlColor:    colorToWire(cell.Style.UnderlineColor),
-		Attrs:      cell.Style.Attrs,
-		Underline:  uint8(cell.Style.Underline),
-		LinkURL:    cell.Link.URL,
-		LinkParams: cell.Link.Params,
+		StyleState: styleToWire(cell.Style, cell.Link),
 	}
 }
 
 // stateToCell converts a CellState back to a VT cell for restoration into t.
 func stateToCell(t *vt.Emulator, cs CellState) *uv.Cell {
-	return &uv.Cell{
-		Content: cs.Content,
-		Width:   cs.Width,
-		Style: uv.Style{
-			Fg:             colorFromWire(t, cs.FgColor),
-			Bg:             colorFromWire(t, cs.BgColor),
-			UnderlineColor: colorFromWire(t, cs.UlColor),
-			Underline:      ansi.Underline(cs.Underline),
-			Attrs:          cs.Attrs,
-		},
-		Link: uv.Link{URL: cs.LinkURL, Params: cs.LinkParams},
-	}
+	style, link := styleFromWire(t, cs.StyleState)
+	return &uv.Cell{Content: cs.Content, Width: cs.Width, Style: style, Link: link}
 }
 
 // Close terminates the PTY.

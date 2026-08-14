@@ -155,6 +155,9 @@ func compareEmulators(t *testing.T, want, got *vt.Emulator) {
 	if got.IsCursorHidden() != want.IsCursorHidden() {
 		t.Errorf("cursor hidden: client %v, daemon %v", got.IsCursorHidden(), want.IsCursorHidden())
 	}
+	if g, w := penSig(got), penSig(want); g != w {
+		t.Errorf("pen:\n  daemon %s\n  client %s\nthe next thing this pane prints is painted with it", w, g)
+	}
 
 	var diffs []string
 	for y := range want.Height() {
@@ -212,6 +215,11 @@ func cellSig(c *uv.Cell) string {
 		content, c.Width, colorSig(c.Style.Fg), colorSig(c.Style.Bg),
 		c.Style.Underline, colorSig(c.Style.UnderlineColor), c.Style.Attrs,
 		c.Link.URL, c.Link.Params)
+}
+
+func penSig(e *vt.Emulator) string {
+	pen, link := e.CursorPen()
+	return cellSig(&uv.Cell{Content: " ", Width: 1, Style: pen, Link: link})
 }
 
 func colorSig(c any) string {

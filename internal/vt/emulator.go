@@ -510,6 +510,23 @@ func (e *Emulator) RestoreCursorPosition(x, y int) {
 	e.setCursor(x, y)
 }
 
+// CursorPen returns the graphic rendition in force: the style and hyperlink
+// everything written next will be painted with. A guest sets it once with an
+// SGR sequence and every character until the next one inherits it, so it is
+// state a snapshot has to carry and not something the cells can be read back
+// from.
+func (e *Emulator) CursorPen() (uv.Style, uv.Link) {
+	return e.scr.cursorPen(), e.scr.cursorLink()
+}
+
+// RestoreCursorPen puts back the rendition a snapshot was taken under, so the
+// output that arrives after the snapshot is painted the colour the guest set
+// rather than whatever this emulator was left in.
+func (e *Emulator) RestoreCursorPen(pen uv.Style, link uv.Link) {
+	e.scr.cur.Pen = pen
+	e.scr.cur.Link = link
+}
+
 // GetModes returns a copy of the current terminal DEC private modes.
 // This is used for session state serialization to preserve terminal modes
 // across reconnections (mouse tracking, bracketed paste, etc.).
