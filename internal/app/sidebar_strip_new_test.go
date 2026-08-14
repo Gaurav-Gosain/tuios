@@ -9,8 +9,15 @@ import (
 )
 
 // A strip with no way to make a session is not a state of the rail, it is a
-// state you have to leave to do anything. The control lives at the bottom with
-// the other one, on its own line, in the column every other mark is in.
+// state you have to leave to do anything. The control lives at the head of the
+// session spine, on the line the first mark starts under, in the column every
+// other mark is in.
+//
+// It used to stack above the expand toggle at the strip's bottom edge, which is
+// the placement the expanded rail's "+ new" was moved out of: down there it sat
+// directly under the agents group and read as a control for that list. The head
+// binds it to the list it actually adds to, and it is the same binding the
+// expanded rail's sessions header makes with the same glyph.
 
 // stripControl is the recorded slot of one of the strip's controls.
 func stripControl(m *OS, kind sidebarStripRowKind) sidebarStripRow {
@@ -22,10 +29,12 @@ func stripControl(m *OS, kind sidebarStripRowKind) sidebarStripRow {
 	return sidebarStripRow{}
 }
 
-// TestStripNewSessionSitsAboveTheToggle: the two controls stack at the bottom,
-// the toggle stays on the rail's last line but one where it has always been, and
-// both sit in the pane-facing column with the spine's marks.
-func TestStripNewSessionSitsAboveTheToggle(t *testing.T) {
+// TestStripAddLeadsTheListItAddsTo: the control is on the line the first session
+// mark starts under, in the pane-facing column with the spine's marks, and it
+// says which of the two things the rail can make it makes. The toggle stays on
+// the rail's last line but one where it has always been, with nothing between it
+// and the agents group above it.
+func TestStripAddLeadsTheListItAddsTo(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, tree := noAgentStripOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
@@ -33,18 +42,31 @@ func TestStripNewSessionSitsAboveTheToggle(t *testing.T) {
 		lines := railPlain(t, m, tree)
 		rule := config.GetWindowBorderLeft()
 
-		want := []string{" +", " »", "  "}
+		// The head, then the spine under it.
+		head := []string{" +", "▎·"}
+		tail := []string{" »", "  "}
 		if pos == "right" {
 			// Mirrored: the pane-facing column is the other one, and the arrow
 			// points the other way, exactly as the expanded rail's does.
-			want = []string{"+ ", "« ", "  "}
+			// The control hugs the pane-facing column, which is the other one on
+			// this side; the session cell's own two marks never mirror.
+			head, tail = []string{"+ ", "▎·"}, []string{"« ", "  "}
 		}
-		for i, w := range want {
+		for i, w := range head {
 			line := w + rule
 			if pos == "right" {
 				line = rule + w
 			}
-			if got := lines[len(lines)-len(want)+i]; got != line {
+			if lines[i] != line {
+				t.Errorf("%s: head line %d = %q, want %q\n%s", pos, i, lines[i], line, strings.Join(lines, "\n"))
+			}
+		}
+		for i, w := range tail {
+			line := w + rule
+			if pos == "right" {
+				line = rule + w
+			}
+			if got := lines[len(lines)-len(tail)+i]; got != line {
 				t.Errorf("%s: tail line %d = %q, want %q\n%s", pos, i, got, line, strings.Join(lines, "\n"))
 			}
 		}
@@ -53,13 +75,46 @@ func TestStripNewSessionSitsAboveTheToggle(t *testing.T) {
 		if newRow.Y1 == 0 || toggle.Y1 == 0 {
 			t.Fatalf("%s: the strip drew %v controls", pos, m.sidebarStripRows)
 		}
+		spine := stripControl(m, sidebarStripSession)
+		if newRow.Y1 != spine.Y0 {
+			t.Errorf("%s: the add ends at %d and the spine starts at %d; they must touch", pos, newRow.Y1, spine.Y0)
+		}
 		if newRow.Y0 >= toggle.Y0 {
-			t.Errorf("%s: the new-session control is at %d, want it above the toggle at %d", pos, newRow.Y0, toggle.Y0)
+			t.Errorf("%s: the add is at %d, want it well above the toggle at %d", pos, newRow.Y0, toggle.Y0)
 		}
 		if newRow.Label != "new session" {
 			t.Errorf("%s: the control's label is %q", pos, newRow.Label)
 		}
 	}
+}
+
+// TestStripAddCostsTheSpineNothing: the control stands in a line the head was
+// already spending on a pad, so folding the rail does not cost a session mark.
+func TestStripAddCostsTheSpineNothing(t *testing.T) {
+	for _, h := range []int{20, 14, 9, 7, 6, 5} {
+		with, tree := noAgentStripOS(t, 120, h)
+		withMarks := len(stripMarkRows(railPlain(t, with, tree)))
+
+		without, wtree := noAgentStripOS(t, 120, h)
+		without.DaemonClient = nil // no session to make, so no control
+		withoutMarks := len(stripMarkRows(railPlain(t, without, wtree)))
+
+		if withMarks != withoutMarks {
+			t.Errorf("h=%d: the strip shows %d marks with the add and %d without", h, withMarks, withoutMarks)
+		}
+	}
+}
+
+// stripMarkRows is the drawn lines carrying a spine or group mark, which is what
+// a control competing for rows would take away.
+func stripMarkRows(lines []string) []string {
+	var out []string
+	for _, ln := range lines {
+		if strings.ContainsAny(ln, "·×▲■●⋮.") {
+			out = append(out, ln)
+		}
+	}
+	return out
 }
 
 // TestStripNewSessionIsClickableAcrossItsWholeRow: same rule as everything else
@@ -121,8 +176,18 @@ func TestStripNewSessionKeepsHitsAndNavIndexForIndex(t *testing.T) {
 	if m.SidebarHits[idx].Kind != sidebarRowNewSession {
 		t.Errorf("hit %d is %v, want the control", idx, m.SidebarHits[idx].Kind)
 	}
-	if idx != len(m.SidebarNav)-2 {
-		t.Errorf("the control is nav row %d of %d, want it above the toggle at the end", idx, len(m.SidebarNav))
+	// And it is where the expanded rail puts it: the slot before the first
+	// session row, so the cursor walks the folded rail in the order it walks the
+	// open one.
+	first := -1
+	for i, n := range m.SidebarNav {
+		if n.Kind == sidebarRowSession {
+			first = i
+			break
+		}
+	}
+	if first != idx+1 {
+		t.Errorf("the control is nav row %d and the first session is %d; want it immediately above", idx, first)
 	}
 }
 
@@ -170,12 +235,12 @@ func TestStripNewSessionASCIIAndMonochrome(t *testing.T) {
 
 	m, tree := noAgentStripOS(t, 120, 20)
 	lines := railPlain(t, m, tree)
-	// The ASCII toggle is two cells wide, which is the other reason the two
-	// controls never share a line.
+	// The ASCII toggle is two cells wide, which is why it keeps a line of its
+	// own at the rail's foot rather than sharing one with anything.
 	if got := lines[len(lines)-2]; got != ">>"+config.GetWindowBorderLeft() {
 		t.Errorf("the ASCII toggle line is %q", got)
 	}
-	if got := lines[len(lines)-3]; got != " +"+config.GetWindowBorderLeft() {
+	if got := lines[0]; got != " +"+config.GetWindowBorderLeft() {
 		t.Errorf("the ASCII control line is %q", got)
 	}
 }

@@ -69,12 +69,25 @@ func (m *OS) NextSessionName() string {
 	return others[0]
 }
 
-// otherSessionNames lists the daemon sessions this client is not attached to.
+// otherSessionNames lists the daemon sessions this client is not attached to,
+// by identity, from the listing this client already caches.
+//
+// It used to collect the display title of a freshly fetched listing, and both
+// halves of that were wrong. The title is the display name once a session has
+// one, so the kill-and-go-next row switched to a name that addresses nothing,
+// and switching to a name no session answers to makes one. The fetch was a
+// blocking daemon round trip on the Update goroutine, taken to open a menu; the
+// cache is what the rail's own rows are drawn from and is refreshed off that
+// goroutine, so reading it is both cheaper and in agreement with the screen.
 func (m *OS) otherSessionNames() []string {
+	if m.DaemonClient == nil {
+		return nil
+	}
+	current := m.sidebarCurrentSessionID()
 	var out []string
-	for _, n := range m.RefreshSessionList() {
-		if !n.IsCurrent {
-			out = append(out, n.Title)
+	for _, name := range m.DaemonClient.AvailableSessionNames() {
+		if name != current {
+			out = append(out, name)
 		}
 	}
 	return out
@@ -189,6 +202,9 @@ func (m *OS) DetachClient() tea.Cmd {
 // session outright, which quits.
 func (m *OS) KillSessionGoNext(next string) tea.Cmd {
 	old := m.SessionName
+	// Read while it is still this client's own session: afterwards the label
+	// belongs to the session switched to.
+	oldLabel := m.SessionLabel(old)
 	if next == "" || m.SwitchToSession(next) != nil {
 		m.QuitSession()
 		return tea.Quit
@@ -199,6 +215,6 @@ func (m *OS) KillSessionGoNext(next string) tea.Cmd {
 			return nil
 		}
 	}
-	m.ShowNotification("Killed session: "+old, "success", config.NotificationDuration)
+	m.ShowNotification("Killed session: "+oldLabel, "success", config.NotificationDuration)
 	return nil
 }

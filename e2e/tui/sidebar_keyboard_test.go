@@ -55,8 +55,9 @@ func TestSidebarKeyboardSwitchAndExit(t *testing.T) {
 	}
 
 	// Entering the rail lands the cursor on the attached session, so one j is
-	// the row below it: bravo, the first row of a sessions section that now
-	// leads the rail.
+	// the row below it: bravo, the next session row. The sessions header's add
+	// control takes the nav slot above the first session row, not between two of
+	// them, so it does not stand in this step's way.
 	if err := term.SendKeys("j"); err != nil {
 		t.Fatalf("move cursor: %v", err)
 	}

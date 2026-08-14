@@ -23,7 +23,7 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	width := overlay.DialogFitWidth(sessionCloseInnerWidth, m.GetRenderWidth())
 	m.SessionCloseSelected = clampInt(m.SessionCloseSelected, 0, sessionCloseRowCount-1)
 
-	toll := m.sessionToll()
+	toll := m.SessionTollFor(m.SessionCloseTarget)
 	// The toll is warn-coloured only when an agent is in it. Colouring it always
 	// would spend the one loud thing in the dialog on "three shells are open",
 	// and then have nothing left for the case that matters.

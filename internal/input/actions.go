@@ -153,6 +153,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	// Session lifecycle actions (context menu rows; the quit menu's kill rows
 	// route through the same OS methods, so the two cannot drift apart)
 	d.Register("settings_sidebar", handleSettingsSidebar)
+	d.Register("kill_session", handleKillSession)
 	d.Register("kill_session_next", handleKillSessionNext)
 	d.Register("kill_session_quit", handleKillSessionQuit)
 
@@ -684,6 +685,17 @@ func handlePrevSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // rail's context menu lands on the rows it is about.
 func handleSettingsSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenSettingsAt("Sidebar")
+	return o, nil
+}
+
+// handleKillSession kills the session whose row the menu was opened on, after
+// the confirmation names it. Reached by key rather than from a menu it means
+// the attached session, which is the only session a key can be about.
+//
+// The other two kill rows say what becomes of this client and so can only mean
+// the session it is in; this one is the row every other session's menu carries.
+func handleKillSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenSessionCloseFor(o.TakeMenuSession())
 	return o, nil
 }
 

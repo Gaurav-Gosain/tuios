@@ -477,8 +477,13 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 }
 
 // sidebarFocusWindow focuses the window a window row points at, switching session
-// first when it lives in another session.
-func (m *OS) sidebarFocusWindow(hit sidebarRowHit) {
+// first when it lives in another session. It returns the pane it landed on and
+// whether it landed at all: a switch can fail, and a pane of a session whose
+// windows have not arrived yet cannot be resolved, and on both of those the
+// focus is still wherever it was. A caller building anything about "the pane"
+// afterwards has to ask, or it is building it about the pane the user was on
+// before they pointed at this row.
+func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (int, bool) {
 	m.clearSidebarReturn() // picking a pane is the whole point; esc must not undo it
 	// Resolve by ID, never by the index the row was drawn with. A pane closing
 	// between that render and this click shifts every later index, so the index
@@ -487,24 +492,26 @@ func (m *OS) sidebarFocusWindow(hit sidebarRowHit) {
 	if hit.WindowID != "" {
 		if idx := m.windowIndexByID(hit.WindowID); idx >= 0 {
 			m.FocusWindow(idx)
-			return
+			return idx, true
 		}
 	}
 	// WindowIndex still answers for a row with no ID to match on.
 	if hit.WindowID == "" && hit.WindowIndex >= 0 && hit.WindowIndex < len(m.Windows) {
 		m.FocusWindow(hit.WindowIndex)
-		return
+		return hit.WindowIndex, true
 	}
 	// Window of another session: switch first, then focus by ID.
 	if hit.SessionID != "" && hit.SessionID != m.sidebarCurrentSessionID() {
 		if err := m.SwitchToSession(hit.SessionID); err != nil {
 			m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
-			return
+			return -1, false
 		}
 	}
 	if idx := m.windowIndexByID(hit.WindowID); idx >= 0 {
 		m.FocusWindow(idx)
+		return idx, true
 	}
+	return -1, false
 }
 
 // openSidebarContextMenu opens the context menu for a sidebar row, reusing the
@@ -520,10 +527,19 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 
 	switch hit.Kind {
 	case sidebarRowWindow, sidebarRowAgent:
-		m.sidebarFocusWindow(hit)
+		// The menu is about the pane the focus actually landed on, and when it
+		// landed nowhere there is no menu to open: reading the focused pane back
+		// out of the model would have offered the previous pane's rows under the
+		// title of the row that was clicked, and its close row would have closed
+		// that one. The failure has already said what happened.
+		idx, ok := m.sidebarFocusWindow(hit)
+		if !ok {
+			m.CloseContextMenu()
+			return
+		}
 		cm.Target = CtxTargetPane
-		cm.WindowIndex = m.FocusedWindow
-		cm.Title, cm.Items = m.paneMenu(m.FocusedWindow)
+		cm.WindowIndex = idx
+		cm.Title, cm.Items = m.paneMenu(idx)
 	default:
 		cm.Target = CtxTargetDesktop
 		cm.WindowIndex = -1

@@ -58,6 +58,34 @@ func (m *OS) sessionToll() sessionToll {
 	return t
 }
 
+// SessionTollFor counts any session by identity. Another session's panes are
+// read from the daemon listing this client already caches, which is the same
+// read the rail's rows for that session are drawn from: a dialog that has to
+// ask the daemon what it is about would block the Update goroutine to say what
+// it is destroying.
+//
+// A session whose windows have not reached the cache yet counts zero panes,
+// and the line the dialog turns on says so rather than inventing a number.
+func (m *OS) SessionTollFor(sessionID string) sessionToll {
+	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
+		return m.sessionToll()
+	}
+	var t sessionToll
+	if m.DaemonClient == nil {
+		return t
+	}
+	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
+		t.Panes++
+		switch w.AgentState {
+		case string(session.AgentStateWorking):
+			t.Working++
+		case string(session.AgentStateNeedsInput):
+			t.Blocked++
+		}
+	}
+	return t
+}
+
 // Line reads the toll back as the sentence the dialog turns on.
 func (t sessionToll) Line() string {
 	parts := []string{countOf(t.Panes, "pane")}
@@ -91,16 +119,42 @@ func countOf(n int, noun string) string {
 }
 
 // sessionCloseQuestion is the dialog's first line, naming the session where
-// there is a name to use.
+// there is a name to use. It is the session's label rather than its identity,
+// because the question is being asked of a person: a session renamed to
+// "Payments API" is not recognisable by the name it is addressed by.
 func (m *OS) sessionCloseQuestion() string {
-	if m.SessionName == "" {
+	name := m.sessionCloseTarget()
+	if name == "" {
 		return "Close this session?"
 	}
-	return "Close " + printableTitle(m.SessionName) + "?"
+	return "Close " + printableTitle(m.SessionLabel(name)) + "?"
 }
 
-// OpenSessionClose raises the close confirmation.
-func (m *OS) OpenSessionClose() {
+// sessionCloseTarget is the session the open dialog is about, resolved: the one
+// it was raised on, or the attached one when it was raised without a target.
+func (m *OS) sessionCloseTarget() string {
+	if m.SessionCloseTarget != "" {
+		return m.SessionCloseTarget
+	}
+	return m.SessionName
+}
+
+// OpenSessionClose raises the close confirmation for the attached session.
+func (m *OS) OpenSessionClose() { m.OpenSessionCloseFor("") }
+
+// OpenSessionCloseFor raises it for any session, named by identity. One dialog
+// answers for all of them: it is the only place that counts what a close would
+// take down, and a second one built for other sessions would be the same
+// question asked with less information.
+//
+// The attached session resolves back to the empty target, so the path that
+// quits this client is chosen by what the session IS rather than by which
+// surface raised the dialog.
+func (m *OS) OpenSessionCloseFor(sessionID string) {
+	if sessionID == m.sidebarCurrentSessionID() {
+		sessionID = ""
+	}
+	m.SessionCloseTarget = sessionID
 	m.SessionCloseSelected = SessionCloseRowCancel
 	m.ShowSessionClose = true
 }
@@ -108,6 +162,7 @@ func (m *OS) OpenSessionClose() {
 // CloseSessionClose dismisses the confirmation, changing nothing.
 func (m *OS) CloseSessionClose() {
 	m.ShowSessionClose = false
+	m.SessionCloseTarget = ""
 	m.SessionCloseSelected = SessionCloseRowCancel
 }
 
@@ -117,14 +172,49 @@ func (m *OS) SessionCloseMove(delta int) {
 }
 
 // SessionCloseActivate runs the row at idx and dismisses the dialog. Closing
-// goes through QuitSession, which is the one implementation of ending a
-// session: it kills the daemon-side session where there is one and cleans up
-// where there is not.
+// the attached session goes through QuitSession, which is the one
+// implementation of ending the session this client is in: it kills the
+// daemon-side session where there is one and cleans up where there is not.
+//
+// Any other session is killed where it stands. Nothing about this client
+// changes: it stays attached to what it was attached to, and the rail loses a
+// row when the daemon's next listing says so.
 func (m *OS) SessionCloseActivate(idx int) tea.Cmd {
+	target := m.SessionCloseTarget
 	m.CloseSessionClose()
 	if idx != SessionCloseRowClose {
 		return nil
 	}
+	if target != "" {
+		m.KillOtherSession(target)
+		return nil
+	}
 	m.QuitSession()
 	return tea.Quit
+}
+
+// KillOtherSession ends a session this client is not attached to, by identity.
+//
+// The kill is a daemon round trip that waits for the post-kill listing, so it
+// runs off the Update goroutine: doing it inline parks input, rendering and
+// socket draining for as long as the daemon takes. The outcome comes back as a
+// SessionKilledMsg, which is where it is reported, since that is the goroutine
+// that owns notifications.
+func (m *OS) KillOtherSession(sessionID string) {
+	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() || m.DaemonClient == nil {
+		return
+	}
+	label, client, ch := m.SessionLabel(sessionID), m.DaemonClient, m.sessionKillChan()
+	go func() {
+		ch <- SessionKilledMsg{Label: label, Err: client.KillSessionByName(sessionID)}
+	}()
+}
+
+// sessionKillChan is the buffered channel carrying kill results back to Update,
+// made on first use so a client that never kills another session pays nothing.
+func (m *OS) sessionKillChan() chan SessionKilledMsg {
+	if m.PendingSessionKill == nil {
+		m.PendingSessionKill = make(chan SessionKilledMsg, 4)
+	}
+	return m.PendingSessionKill
 }

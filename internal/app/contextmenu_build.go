@@ -333,10 +333,17 @@ func (m *OS) desktopMenu() (string, []ContextMenuItem) {
 // session lifecycle actions, dispatched through the same registry actions the
 // keybindings use, so the menu and the quit menu cannot drift apart.
 //
-// The lifecycle rows act on the session this client is attached to and can only
-// mean that, so they are dimmed on any other session's row rather than left
-// looking like they would kill the row they are under. The accent belongs to the
-// row's own session and is offered on every one of them.
+// Killing is offered on every row, the row's own session and no other. The two
+// attached-session rows say what becomes of this client afterwards, which is a
+// question only that session raises: killing any other one leaves this client
+// where it is, so it is one row that names what it kills. They used to be the
+// same two rows on every session, dimmed everywhere but the attached one,
+// because the actions behind them address the attached session whatever row
+// they were reached from.
+//
+// Detaching stays attached-only for the same reason it always was: there is
+// nothing to detach from a session this client is not in. The accent belongs to
+// the row's own session and is offered on every one of them.
 func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 	if sessionID == "" {
 		sessionID = m.SessionName
@@ -344,10 +351,15 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 	attached := sessionID == m.SessionName
 	hasOthers := len(m.otherSessionNames()) > 0
 
-	killNext := m.item(glyphClose, "Kill session, go to next", "kill_session_next", !attached || !hasOthers)
-	killNext.Warn = true
-	killQuit := m.item(glyphClose, "Kill session and quit", "kill_session_quit", !attached)
-	killQuit.Warn = true
+	kill := []ContextMenuItem{m.item(glyphClose, "Kill session", "kill_session", false)}
+	if attached {
+		killNext := m.item(glyphClose, "Kill session, go to next", "kill_session_next", !hasOthers)
+		killQuit := m.item(glyphClose, "Kill session and quit", "kill_session_quit", false)
+		kill = []ContextMenuItem{killNext, killQuit}
+	}
+	for i := range kill {
+		kill[i].Warn = true
+	}
 
 	// The menu heads with what the session is called, which is its display name
 	// once it has one.
@@ -355,15 +367,18 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 	if title == "" {
 		title = "Session"
 	}
-	return title, []ContextMenuItem{
+	return title, append([]ContextMenuItem{
 		m.item(glyphPalette, "Session color", "set_session_accent", false),
 		m.item(glyphDetach, "Detach", "prefix_detach", !attached),
 		m.item(glyphSwitch, "Switch session...", "prefix_session_switcher", false),
-		m.item(glyphSwitch, "Switch workspace...", "prefix_workspace_switcher", false),
+		// Dimmed off the attached session for the same reason detach is: the
+		// workspace switcher steers the session this client is in, and there is
+		// only one of those. Offered live on another session's row it read as
+		// "this session's workspaces" and opened the attached session's,
+		// which is a row naming one session and acting on another.
+		m.item(glyphSwitch, "Switch workspace...", "prefix_workspace_switcher", !attached),
 		separator(),
-		killNext,
-		killQuit,
-	}
+	}, kill...)
 }
 
 // OpenSelectionMenu opens the small terminal-mode selection menu: what you can

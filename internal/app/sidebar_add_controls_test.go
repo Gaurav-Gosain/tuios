@@ -131,6 +131,50 @@ func TestAddControlsAreReachableByKeyboard(t *testing.T) {
 	}
 }
 
+// TestTheWalkStepsOntoTheAddControlAndTheSectionKeyStepsOverIt is the settled
+// answer to whether a control that already has a key of its own belongs in the
+// j/k sequence.
+//
+// It does. The walk is the rail's one route that depends on no binding but j
+// and k, so a control left out of it is reachable only through the key it
+// happens to be bound to: rebind that key away and the affordance is
+// mouse-only. Its slot is not free to move either, since the hits are recorded
+// as the renderer draws and the cursor walks them in that order, so a control
+// drawn on a header sits above that section's rows or the two lists disagree.
+//
+// What that costs is one step crossing from the sessions into the terminals,
+// and the rail already sells the way round it: the section keys land on the
+// first row of the next list and step over every control on the way.
+func TestTheWalkStepsOntoTheAddControlAndTheSectionKeyStepsOverIt(t *testing.T) {
+	m, _ := railOS(t)
+
+	lastSession := -1
+	for i, r := range m.SidebarNav {
+		if r.Kind == sidebarRowSession {
+			lastSession = i
+		}
+	}
+	if lastSession < 0 {
+		t.Fatal("the rail published no session rows")
+	}
+
+	m.SidebarCursor = lastSession
+	m.SidebarCursorMove(1)
+	if row, ok := m.sidebarCursorRow(); !ok || row.Kind != sidebarRowNewWindow {
+		t.Fatalf("j off the last session row landed on %+v, want the terminals +", row)
+	}
+	m.SidebarCursorMove(1)
+	if row, ok := m.sidebarCursorRow(); !ok || row.Kind != sidebarRowWindow {
+		t.Fatalf("j off the terminals + landed on %+v, want the first pane row", row)
+	}
+
+	m.SidebarCursor = lastSession
+	m.SidebarCursorExpand()
+	if row, ok := m.sidebarCursorRow(); !ok || row.Kind != sidebarRowWindow {
+		t.Fatalf("the section key landed on %+v, want the first pane row", row)
+	}
+}
+
 // TestAddControlsHaveTooltips: they are the only thing on the expanded rail
 // drawn as a bare glyph, which is exactly the condition for a label.
 func TestAddControlsHaveTooltips(t *testing.T) {

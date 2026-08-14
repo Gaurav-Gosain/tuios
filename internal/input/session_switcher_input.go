@@ -16,19 +16,13 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	if o.SessionSwitcherConfirmDelete != "" {
 		switch keyStr {
 		case "y", "Y", "enter":
+			// The identity, which is what the row carried and what the daemon
+			// answers to. The kill is a round trip that waits for the post-kill
+			// listing, so it runs off this goroutine and reports when it lands,
+			// which is also what refreshes the rows behind this dialog.
 			name := o.SessionSwitcherConfirmDelete
 			o.SessionSwitcherConfirmDelete = ""
-			if o.DaemonClient != nil {
-				if err := o.DaemonClient.KillSessionByName(name); err != nil {
-					o.ShowNotification("Delete failed: "+err.Error(), "error", config.NotificationDuration*2)
-				} else {
-					o.ShowNotification("Deleted session: "+name, "success", config.NotificationDuration)
-					o.SessionSwitcherItems = o.BuildSessionTree().Sessions
-					if o.SessionSwitcherSelected >= len(o.SessionSwitcherItems) && o.SessionSwitcherSelected > 0 {
-						o.SessionSwitcherSelected--
-					}
-				}
-			}
+			o.KillOtherSession(name)
 			return o, nil
 		case "n", "N", "esc":
 			o.SessionSwitcherConfirmDelete = ""

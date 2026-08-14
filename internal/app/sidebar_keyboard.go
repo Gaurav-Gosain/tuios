@@ -298,7 +298,9 @@ func (m *OS) SidebarOpenCursorMenu(destructive bool) {
 		WindowID:    row.WindowID,
 		WindowIndex: row.WindowIndex,
 	}, x, y)
-	if destructive {
+	// A row whose pane could not be reached opens no menu at all, and there is
+	// then nothing to land the selection on.
+	if destructive && m.ContextMenu != nil {
 		m.ContextMenu.selectWarn()
 	}
 }
