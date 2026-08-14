@@ -502,6 +502,14 @@ func (e *Emulator) RestoreAltScreenMode(enabled bool) {
 	// The modes will be updated naturally when PTY output is processed.
 }
 
+// RestoreCursorPosition puts the cursor back where a restored snapshot had it.
+// It is the counterpart of CursorPosition and, like RestoreAltScreenMode, it
+// exists so reconnecting does not have to re-send escape sequences whose side
+// effects would undo the restore.
+func (e *Emulator) RestoreCursorPosition(x, y int) {
+	e.setCursor(x, y)
+}
+
 // GetModes returns a copy of the current terminal DEC private modes.
 // This is used for session state serialization to preserve terminal modes
 // across reconnections (mouse tracking, bracketed paste, etc.).

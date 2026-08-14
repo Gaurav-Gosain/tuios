@@ -408,13 +408,15 @@ func (c *TUIClient) ClosePTY(ptyID string) error {
 }
 
 // SubscribePTY subscribes to PTY output and registers a handler.
-// The handler receives raw byte streams (MsgPTYOutput).
-func (c *TUIClient) SubscribePTY(ptyID string, handler func([]byte)) error {
+// The handler receives raw byte streams (MsgPTYOutput). fromSeq is the stream
+// position the caller's emulator has been restored to, so the daemon replays
+// only what came after it; zero leaves the resume position to the daemon.
+func (c *TUIClient) SubscribePTY(ptyID string, fromSeq int64, handler func([]byte)) error {
 	c.ptyHandlersMu.Lock()
 	c.ptyHandlers[ptyID] = handler
 	c.ptyHandlersMu.Unlock()
 
-	msg, err := NewMessageWithCodec(MsgSubscribePTY, &SubscribePTYPayload{PTYID: ptyID}, c.codec)
+	msg, err := NewMessageWithCodec(MsgSubscribePTY, &SubscribePTYPayload{PTYID: ptyID, FromSeq: fromSeq}, c.codec)
 	if err != nil {
 		return err
 	}
@@ -689,12 +691,14 @@ func (c *TUIClient) KillSessionByName(name string) error {
 	return nil
 }
 
-// GetTerminalState retrieves the terminal state for a PTY (screen + scrollback).
-// This is used when attaching to restore terminal content.
-func (c *TUIClient) GetTerminalState(ptyID string, includeScrollback bool) (*TerminalState, error) {
+// GetTerminalState retrieves the terminal state for a PTY. maxScrollback bounds
+// the scrollback rows the daemon includes: negative for none, zero for the
+// default, or a count. This is used when attaching to restore terminal content.
+func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback int) (*TerminalState, error) {
 	msg, err := NewMessageWithCodec(MsgGetTerminalState, &GetTerminalStatePayload{
-		PTYID:             ptyID,
-		IncludeScrollback: includeScrollback,
+		PTYID:              ptyID,
+		IncludeScrollback:  maxScrollback >= 0,
+		MaxScrollbackLines: max(maxScrollback, 0),
 	}, c.codec)
 	if err != nil {
 		return nil, err

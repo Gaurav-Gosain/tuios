@@ -296,9 +296,14 @@ type ResizePTYPayload struct {
 	Height int    `json:"height"`
 }
 
-// SubscribePTYPayload requests subscribing to PTY output.
+// SubscribePTYPayload requests subscribing to PTY output. FromSeq, when
+// positive, is the stream position the client's emulator has been restored to,
+// so the daemon replays only what came after it. Zero means the client has no
+// claim to make and the daemon uses whatever position it recorded for this
+// connection, which is what an older client sends.
 type SubscribePTYPayload struct {
-	PTYID string `json:"pty_id"`
+	PTYID   string `json:"pty_id"`
+	FromSeq int64  `json:"from_seq,omitempty"`
 }
 
 // UnsubscribePTYPayload requests unsubscribing from PTY output.

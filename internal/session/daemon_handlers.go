@@ -568,7 +568,14 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 		return nil
 	}
 	cs.ptySubscriptions[payload.PTYID] = struct{}{}
+	// A client that restored a snapshot names the position that snapshot ends
+	// at, and that beats anything recorded here: the recorded position is where
+	// this connection's stream last got to, which is older than the snapshot and
+	// would replay output the snapshot already shows.
 	resume := cs.ptyResume[payload.PTYID]
+	if payload.FromSeq > 0 {
+		resume = payload.FromSeq
+	}
 	cs.mu.Unlock()
 
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
@@ -636,7 +643,13 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 		return d.sendError(cs, ErrCodePTYNotFound, fmt.Sprintf("PTY %s not found", payload.PTYID))
 	}
 
-	state := pty.GetTerminalState()
+	// Both request fields were parsed and then ignored, so every state request
+	// carried a thousand scrollback rows whether or not the caller wanted any.
+	maxScrollback := -1
+	if payload.IncludeScrollback {
+		maxScrollback = payload.MaxScrollbackLines
+	}
+	state := pty.GetTerminalState(maxScrollback)
 	return d.sendMessage(cs, MsgTerminalState, &TerminalStatePayload{
 		PTYID: payload.PTYID,
 		State: state,
