@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -227,6 +229,15 @@ func listRowMarker(selected bool) string {
 // are not one colour each, such as a label followed by a dimmer identity.
 func listRowSpans(width int, marker, left, right string, bg color.Color, pal overlay.Palette) string {
 	m := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker)
+	// The label yields to the trailing segment, which is the row's facts: a
+	// workspace's pane count, a session's state. Clamping the gap alone left the
+	// row over-wide and the panel's backstop then took those facts off the right
+	// end, so a named workspace showed its name and nothing else.
+	ell := overlay.Style(bg).Foreground(pal.FgMute).Render(overlay.Ellipsis())
+	avail := width - lipgloss.Width(m) - lipgloss.Width(right) - 1
+	if lipgloss.Width(left) > avail {
+		left = ansi.Truncate(left, max(avail-lipgloss.Width(ell), 0), "") + ell
+	}
 	gap := max(width-lipgloss.Width(m)-lipgloss.Width(left)-lipgloss.Width(right), 1)
 	return m + left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + right
 }
