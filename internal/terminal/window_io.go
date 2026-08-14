@@ -73,7 +73,14 @@ func (w *Window) applyStreamResize(chunk outputChunk) {
 	w.ioMu.Lock()
 	// Re-checked under the lock the restore also takes, for the same reason
 	// the batch write below re-checks it.
-	if w.Terminal != nil && w.outputEpoch.Load() == chunk.epoch {
+	//
+	// A resize to the size the emulator already has is not a no-op inside the
+	// emulator: it resets the scroll region and the tab stops, which the guest
+	// set and the daemon has not been told to forget. A subscribe states the
+	// pane's size whether or not the client has it already, so this is the
+	// common case rather than an odd one.
+	if w.Terminal != nil && w.outputEpoch.Load() == chunk.epoch &&
+		(w.Terminal.Width() != chunk.width || w.Terminal.Height() != chunk.height) {
 		w.Terminal.Resize(chunk.width, chunk.height)
 	}
 	w.ioMu.Unlock()
