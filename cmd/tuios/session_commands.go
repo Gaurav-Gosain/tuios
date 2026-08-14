@@ -28,21 +28,23 @@ func runAttach(sessionName string, createIfMissing bool) error {
 		return err
 	}
 
-	diag := session.DiagnoseDaemon()
-	if !diag.Running() {
-		if !createIfMissing {
-			return explainAttachWithoutDaemon(sessionName, diag)
+	// A daemon restores every saved session as it starts, so the sessions the
+	// user is asking for are one process away. Refusing here and naming a
+	// command that would create a different session is what made attach look
+	// like it had lost them.
+	if !session.IsDaemonRunning() {
+		// Said before the daemon starts, because afterwards the sessions simply
+		// exist and the user is left to work out where they came from.
+		if reportSavedSessionsBeforeStart() == 0 && sessionName == "" {
+			// An unnamed attach against an empty daemon opens a new session:
+			// that is what the daemon has always done, and it is the only thing
+			// left that gets the user to a terminal. Say so rather than let a
+			// session appear unannounced.
+			fmt.Println("No saved sessions to restore; opening a new one.")
 		}
-		fmt.Println("Starting TUIOS daemon...")
-		if err := startDaemonBackground(); err != nil {
-			return &diagnosticError{
-				What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
-				Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
-				Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
-				Err:   err,
-			}
+		if err := ensureDaemon(); err != nil {
+			return err
 		}
-		time.Sleep(500 * time.Millisecond)
 	}
 
 	if err := ensureAttachTarget(sessionName, createIfMissing); err != nil {
@@ -52,27 +54,26 @@ func runAttach(sessionName string, createIfMissing bool) error {
 	return runDaemonSession(sessionName, createIfMissing)
 }
 
-// explainAttachWithoutDaemon reports that attach found no daemon, and adds the
-// one thing a user in that state most wants to know: whether the session they
-// asked for is saved and can be brought back.
-func explainAttachWithoutDaemon(sessionName string, diag session.DaemonDiagnosis) error {
-	e := &diagnosticError{What: diag.Explain(), Err: diag.Err}
-
-	if sessionName == "" {
-		return e
-	}
+// reportSavedSessionsBeforeStart says what is about to be brought back, and
+// returns how many. It is said before the daemon starts because afterwards the
+// sessions simply exist, and the user is left to guess where they came from.
+func reportSavedSessionsBeforeStart() int {
 	infos, err := session.ListResurrectableInfos()
-	if err != nil {
-		return e
+	if err != nil || len(infos) == 0 {
+		return 0
 	}
+
+	names := make([]string, 0, len(infos))
 	for _, info := range infos {
-		if info.Name == sessionName {
-			e.Extra = append(e.Extra, fmt.Sprintf("Session %q has saved state (%d window(s)) and can be restored.", sessionName, info.WindowCount))
-			e.Fix = fmt.Sprintf("run 'tuios resurrect %s' to restore it and attach.", sessionName)
-			return e
-		}
+		names = append(names, info.Name)
 	}
-	return e
+	noun := "sessions"
+	if len(names) == 1 {
+		noun = "session"
+	}
+	fmt.Printf("Restoring %d saved %s: %s.\n", len(names), noun, strings.Join(truncateList(names, 12), ", "))
+	fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
+	return len(names)
 }
 
 // ensureAttachTarget verifies the named session exists before the TUI starts,
@@ -136,17 +137,8 @@ func listSessionInfos(client *session.VerbClient) ([]session.SessionInfo, error)
 }
 
 func runNewSession(sessionName string) error {
-	if !session.IsDaemonRunning() {
-		fmt.Println("Starting TUIOS daemon...")
-		if err := startDaemonBackground(); err != nil {
-			return &diagnosticError{
-				What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
-				Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
-				Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
-				Err:   err,
-			}
-		}
-		time.Sleep(500 * time.Millisecond)
+	if err := ensureDaemon(); err != nil {
+		return err
 	}
 
 	if sessionName == "" {
@@ -169,17 +161,8 @@ func runNewSession(sessionName string) error {
 // without launching the TUI. The session holds an initial window, is usable by
 // control verbs immediately, and can be attached later with 'tuios attach'.
 func runNewSessionDetached(sessionName string) error {
-	if !session.IsDaemonRunning() {
-		fmt.Println("Starting TUIOS daemon...")
-		if err := startDaemonBackground(); err != nil {
-			return &diagnosticError{
-				What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
-				Cause: "the tuios binary could not be re-executed, or the socket directory is not writable.",
-				Fix:   "run 'tuios daemon' in another terminal to see why it fails to start.",
-				Err:   err,
-			}
-		}
-		time.Sleep(500 * time.Millisecond)
+	if err := ensureDaemon(); err != nil {
+		return err
 	}
 
 	client := session.NewClient(&session.ClientConfig{Version: version})
@@ -664,12 +647,8 @@ func runResurrect(sessionName string) error {
 	}
 
 	// Ensure the daemon is running so it can hold the restored session.
-	if !session.IsDaemonRunning() {
-		fmt.Println("Starting TUIOS daemon...")
-		if err := startDaemonBackground(); err != nil {
-			return fmt.Errorf("failed to start daemon: %w", err)
-		}
-		time.Sleep(500 * time.Millisecond)
+	if err := ensureDaemon(); err != nil {
+		return err
 	}
 
 	// Ask the daemon to restore the session from saved state. This is a no-op if

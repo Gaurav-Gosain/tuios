@@ -378,9 +378,11 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 		Long: `Attach to an existing TUIOS session.
 
 If no session name is provided, attaches to the most recent session.
-The session must already exist (use 'tuios new' to create one).
 
-This requires the TUIOS daemon to be running.`,
+The daemon is started if it is not running, which restores every session
+saved on disk; attach then opens one of those. With nothing saved and no
+name given, a new session is opened instead. A name that matches no session
+is reported rather than created, unless -c is given.`,
 		Example: `  # Attach to the most recent session
   tuios attach
 

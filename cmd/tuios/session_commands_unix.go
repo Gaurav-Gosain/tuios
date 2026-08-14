@@ -5,43 +5,13 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"syscall"
-	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// startDaemonBackground starts the daemon as a background process on Unix systems.
-func startDaemonBackground() error {
-	executable, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
-	}
-
-	cmd := exec.Command(executable, "daemon")
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-
-	// Detach from parent process group (Unix-specific)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true,
-	}
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start daemon: %w", err)
-	}
-
-	// Wait for daemon to be ready
-	for range 20 {
-		time.Sleep(100 * time.Millisecond)
-		if session.IsDaemonRunning() {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("daemon did not start within timeout")
+// daemonSysProcAttr detaches the spawned daemon from this process group so it
+// outlives the client that started it.
+func daemonSysProcAttr() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{Setsid: true}
 }
 
 // killDaemonProcess sends SIGTERM to the daemon process on Unix.
