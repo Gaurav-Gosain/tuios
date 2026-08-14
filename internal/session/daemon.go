@@ -223,9 +223,18 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// leaves the foreground the shell prompt returns as output, so probe that
 		// pane and clear an auto-detected glyph at once rather than waiting for the
 		// next detection poll. Throttled per PTY so a busy pane pays no cost.
-		if ev.Type == EventOutput && d.agentDetectInterval > 0 {
-			if pty := s.GetPTY(ev.PTYID); pty != nil && pty.probeAgentExitDue(time.Now().UnixNano()) {
-				s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.isAgent)
+		if ev.Type == EventOutput {
+			if pty := s.GetPTY(ev.PTYID); pty != nil {
+				// An OSC 9;4 the emulator parked while writing these same bytes. It
+				// is applied before the probe and is not throttled: the sequence
+				// only arrives when the harness has something to say, and it is a
+				// better answer than anything the probe can work out.
+				if state, ok := pty.takeAgentProgress(); ok {
+					s.applyAgentProgress(ev.Window, state)
+				}
+				if d.agentDetectInterval > 0 && pty.probeAgentExitDue(time.Now().UnixNano()) {
+					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.isAgent)
+				}
 			}
 		}
 		d.events.publish(streamEvent{

@@ -281,6 +281,13 @@ type PTY struct {
 	// re-check its foreground on every output chunk.
 	lastAgentProbe atomic.Int64
 
+	// agentProgress parks the most recent OSC 9;4 progress state the emulator
+	// saw, as the state plus one so zero means none pending. The VT callback runs
+	// on the vtWriter goroutine with the terminal lock held, where mutating
+	// session state would re-enter that lock, so it only stores here and the PTY
+	// read goroutine applies it on the output event that carried the sequence.
+	agentProgress atomic.Int64
+
 	// title is the last title this PTY's application set. The daemon reads every
 	// byte of every window, so this is the freshest title anyone holds: a client
 	// only sees the windows it is subscribed to, and its copy of the title stops
@@ -319,6 +326,24 @@ func (p *PTY) probeAgentExitDue(now int64) bool {
 	}
 	p.lastAgentProbe.Store(now)
 	return true
+}
+
+// storeAgentProgress parks an OSC 9;4 progress state for the read goroutine to
+// apply. Called from the VT callback under the terminal lock, so it must stay a
+// single atomic store and nothing more.
+func (p *PTY) storeAgentProgress(state vt.ProgressState) {
+	p.agentProgress.Store(int64(state) + 1)
+}
+
+// takeAgentProgress returns the parked OSC 9;4 progress state and clears it,
+// reporting whether one was pending. A burst that parked several states between
+// two output events collapses to the newest, which is the only one still true.
+func (p *PTY) takeAgentProgress() (vt.ProgressState, bool) {
+	v := p.agentProgress.Swap(0)
+	if v == 0 {
+		return 0, false
+	}
+	return vt.ProgressState(v - 1), true
 }
 
 // Session represents a persistent TUIOS session.
@@ -627,6 +652,12 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 		},
 		AltScreen: func(on bool) {
 			pty.emit(SessionEvent{Type: EventModeChanged, Mode: "alt-screen", Enabled: on})
+		},
+		// Parked rather than applied: this fires with the terminal lock held, and
+		// applying it mutates session state. The read goroutine picks it up on the
+		// output event carrying these same bytes.
+		Progress: func(state vt.ProgressState, _ int) {
+			pty.storeAgentProgress(state)
 		},
 	})
 
