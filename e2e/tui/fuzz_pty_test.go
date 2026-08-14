@@ -227,7 +227,14 @@ func (p *ptyTarget) Apply(a fuzz.Action) error {
 		p.applyDaemonRestart()
 	default:
 		if err := p.applyToClient(a); err != nil {
-			return err
+			// A write that fails because the client is gone is not a broken
+			// harness, it is the finding: the alphabet contains quit chords, and
+			// returning the error here would abort the whole campaign on the
+			// first seed that pressed one instead of letting pty-exit report it
+			// with the script that caused it.
+			if _, exited := p.term.ExitCode(); !exited {
+				return err
+			}
 		}
 	}
 	if p.probe {
