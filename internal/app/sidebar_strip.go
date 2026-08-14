@@ -388,12 +388,22 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 			// exists to stop drawing, and the ASCII toggle is two cells wide and
 			// would leave no room at all. Stacked, they also sit in the column every
 			// other mark on the strip is already in.
+			//
+			// This is the sessions add and only that, the same thing the expanded
+			// rail's sessions header means by the same glyph: a control that means
+			// one thing folded and another unfolded is its own bug. The terminals
+			// add has no counterpart here on purpose. The strip lists sessions and
+			// the panes wanting a human; it has no terminals section, so a control
+			// making a pane would point at a list that is not on the screen, and
+			// the two "+" marks would then be telling the user the width decides
+			// what the key means.
 			m.sidebarStripRows = append(m.sidebarStripRows, sidebarStripRow{
-				Kind: sidebarStripNew, Y0: y, Y1: y + 1, Label: "new session",
+				Kind: sidebarStripNew, Y0: y, Y1: y + 1, Label: sidebarAddWords(sidebarRowNewSession),
 			})
 			record(sidebarRowNewSession, "", "", y, 1)
 			bg := stripRowBg(hovered(i), pal)
-			lines = append(lines, m.sidebarStripBand(sidebarStripControlCell("+", cw, edgeLeft, hovered(i), bg, pal), cw, edgeLeft, bg, nil, pal))
+			lines = append(lines, m.sidebarStripBand(
+				sidebarStripControlCell(sidebarAddGlyph, cw, edgeLeft, hovered(i), bg, pal), cw, edgeLeft, bg, nil, pal))
 		case toggleH > 0 && i == toggleY:
 			// The glyph hugs the pane-facing column, the edge the pointer arrives
 			// from, but the zone is the whole band: the only control the user has

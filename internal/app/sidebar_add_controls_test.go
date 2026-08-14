@@ -239,6 +239,12 @@ func TestStripAndRailAgreeOnWhatPlusMeans(t *testing.T) {
 		if h.Kind == sidebarRowNewSession {
 			stripHit = true
 		}
+		// The strip has no terminals section, so a control making a pane would
+		// point at a list that is not on the screen; the glyph would then mean
+		// one thing folded and another unfolded.
+		if h.Kind == sidebarRowNewWindow {
+			t.Error("the collapsed strip recorded a new-terminal control")
+		}
 	}
 	if !stripHit {
 		t.Error("the strip's + does not record a new-session target")
