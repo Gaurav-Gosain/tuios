@@ -43,6 +43,11 @@ type Daemon struct {
 	// shutdownOnce makes shutdown idempotent (Run and Stop can both call it).
 	shutdownOnce sync.Once
 
+	// startLock is the exclusive lock that serialises daemon startup. It is held
+	// open for the daemon's life, since releasing it early would let a second
+	// starter reach the stale-socket recovery while this one is still listening.
+	startLock *os.File
+
 	// Configuration
 	version string
 
@@ -263,6 +268,19 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 func (d *Daemon) Start() error {
 	socketPath := d.manager.SocketPath()
 
+	// Held until shutdown so the stale-socket recovery below can never run
+	// against a daemon that is itself between bind and listen.
+	startLock, err := acquireStartLock()
+	if err != nil {
+		return err
+	}
+	d.startLock = startLock
+	defer func() {
+		if d.listener == nil {
+			d.releaseStartLock()
+		}
+	}()
+
 	if _, err := os.Stat(socketPath); err == nil {
 		if isDaemonRunningAt(socketPath) {
 			return fmt.Errorf("daemon already running at %s", socketPath)
@@ -391,6 +409,10 @@ func (d *Daemon) shutdown() error {
 		}
 
 		_ = os.Remove(d.manager.SocketPath())
+
+		// After the socket is gone, so the next daemon can only take the lock
+		// once there is nothing left of this one to race.
+		d.releaseStartLock()
 
 		log.Println("Daemon shutdown complete")
 	})
