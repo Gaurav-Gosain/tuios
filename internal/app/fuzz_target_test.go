@@ -343,14 +343,47 @@ func (f *fuzzOS) Apply(a fuzz.Action) error {
 		}
 		f.send(TickerMsg(fuzzClock()))
 	case fuzz.Guest:
-		if w := m.GetFocusedWindow(); w != nil && w.Terminal != nil {
-			w.LockIO()
-			_, _ = w.Terminal.Write([]byte(a.S))
-			w.UnlockIO()
-			w.MarkContentDirty()
+		f.guestWrite(a.S)
+	case fuzz.AltScreen:
+		if a.A%2 == 1 {
+			f.guestWrite("\x1b[?1049h\x1b[2J\x1b[H")
+		} else {
+			f.guestWrite("\x1b[?1049l")
 		}
+	case fuzz.Burst:
+		f.guestWrite(burstText(a.A))
+	case fuzz.SecondClient, fuzz.DaemonRestart:
+		// Both need a daemon on the far end of a socket, and in process there
+		// is none: the model owns its panes directly. They are carried in the
+		// shared alphabet so a PTY finding replays here as far as it can, and
+		// the PTY target is where they do their work.
 	}
 	return nil
+}
+
+// guestWrite feeds bytes to the focused pane's emulator the way its own program
+// would.
+func (f *fuzzOS) guestWrite(s string) {
+	w := f.m.GetFocusedWindow()
+	if w == nil || w.Terminal == nil {
+		return
+	}
+	w.LockIO()
+	_, _ = w.Terminal.Write([]byte(s))
+	w.UnlockIO()
+	w.MarkContentDirty()
+}
+
+// burstText is n numbered lines. The number makes a line identifiable, which is
+// what lets the PTY oracle notice a pane rendering two stretches of a stream
+// with the middle missing; in process it is a cheap way to fill the scrollback.
+func burstText(n int) string {
+	n = min(max(n, 0), 5000)
+	var b strings.Builder
+	for i := range n {
+		fmt.Fprintf(&b, "burst %d\r\n", i)
+	}
+	return b.String()
 }
 
 // clampFuzzWorkspace keeps the index inside the model's own range, since the

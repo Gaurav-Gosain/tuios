@@ -77,6 +77,10 @@ type Config struct {
 	// how a campaign steps over a bug class it has already reported in order to
 	// reach the rest of the space.
 	MinWidth, MinHeight int
+	// Weights overrides the generator's action weights, indexed by Kind. A
+	// target that can express actions the other cannot spends its budget there
+	// rather than on the alphabet the cheaper target already covers exhaustively.
+	Weights []int
 	// Actions overrides generation, which is how the coverage-guided entry
 	// point and a saved repro both drive the same loop.
 	Actions []Action
@@ -131,7 +135,10 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 	}
 	actions := cfg.Actions
 	if len(actions) == 0 {
-		actions = GenerateFloor(cfg.Seed, cfg.Steps, cfg.MinWidth, cfg.MinHeight)
+		actions = NewGenerator(cfg.Seed).
+			Floor(cfg.MinWidth, cfg.MinHeight).
+			Bias(cfg.Weights).
+			Take(cfg.Steps)
 	}
 	res := Result{Seed: cfg.Seed, Actions: actions}
 	obs.Start(cfg.Seed, len(actions))

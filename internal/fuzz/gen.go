@@ -103,6 +103,11 @@ func newGenerator(src source) *Generator {
 // actually broken here are layout transitions under a held mouse button, so
 // mouse, resize, and the tiling and border toggles carry most of the weight.
 // Panes are created far more often than closed so a run does not empty out.
+//
+// SecondClient and DaemonRestart sit at zero. They need a daemon on the far end
+// of a socket to mean anything, so in process they are dead steps; the PTY
+// target, which is the only one that has that daemon, weights them up through
+// Config.Weights.
 var defaultWeights = [kindCount]int{
 	Key: 90, Chord: 110, Text: 12,
 	MousePress: 70, MouseMotion: 110, MouseRelease: 70, MouseWheel: 25,
@@ -112,6 +117,33 @@ var defaultWeights = [kindCount]int{
 	ToggleSidebar: 26, SidebarCollapse: 26, SidebarPosition: 22,
 	OpenOverlay: 30, CloseOverlay: 24, Rename: 20,
 	Detach: 6, Attach: 6, Setting: 26, Tick: 60, Guest: 30,
+	AltScreen: 16, Burst: 14, SecondClient: 0, DaemonRestart: 0,
+}
+
+// Bias replaces the action weights, indexed by Kind. A short slice leaves the
+// kinds past its end at their default, so a caller names only what it wants to
+// move. Nil keeps the defaults, which is what makes it safe to wire straight
+// through from a Config field that most callers never set.
+func (g *Generator) Bias(w []int) *Generator {
+	if len(w) == 0 {
+		return g
+	}
+	merged := defaultWeights
+	copy(merged[:], w[:min(len(w), len(merged))])
+	g.weights, g.weightsSum = merged[:], 0
+	for _, v := range g.weights {
+		g.weightsSum += v
+	}
+	return g
+}
+
+// Take draws n actions.
+func (g *Generator) Take(n int) []Action {
+	out := make([]Action, 0, n)
+	for range n {
+		out = append(out, g.Next())
+	}
+	return out
 }
 
 func (g *Generator) u(n int) int {
@@ -149,12 +181,7 @@ func Generate(seed uint64, n int) []Action { return GenerateFloor(seed, n, 0, 0)
 
 // GenerateFloor is Generate with a lower bound on the host sizes it picks.
 func GenerateFloor(seed uint64, n, minW, minH int) []Action {
-	g := NewGenerator(seed).Floor(minW, minH)
-	out := make([]Action, 0, n)
-	for range n {
-		out = append(out, g.Next())
-	}
-	return out
+	return NewGenerator(seed).Floor(minW, minH).Take(n)
 }
 
 // GenerateBytes is Generate for a coverage-guided input.
@@ -162,12 +189,7 @@ func GenerateBytes(b []byte, n int) []Action { return GenerateBytesFloor(b, n, 0
 
 // GenerateBytesFloor is GenerateBytes with a host-size floor.
 func GenerateBytesFloor(b []byte, n, minW, minH int) []Action {
-	g := NewByteGenerator(b).Floor(minW, minH)
-	out := make([]Action, 0, n)
-	for range n {
-		out = append(out, g.Next())
-	}
-	return out
+	return NewByteGenerator(b).Floor(minW, minH).Take(n)
 }
 
 func (g *Generator) one() Action {
@@ -220,9 +242,18 @@ func (g *Generator) one() Action {
 		a.A, a.B = g.u(settingCount), g.u(settingValues)
 	case Guest:
 		a.S = g.pick(guestWrites)
+	case AltScreen:
+		a.A = g.u(2)
+	case Burst:
+		a.A = burstLines[g.u(len(burstLines))]
 	}
 	return a
 }
+
+// burstLines are how much a pane prints in one go. The large entries are chosen
+// to sit either side of whatever the daemon's catch-up buffer holds, because the
+// interesting case is a pane that outruns it while nobody is rendering it.
+var burstLines = []int{1, 8, 60, 300, 1200, 5000}
 
 func (g *Generator) weighted() Kind {
 	n := g.u(g.weightsSum)
@@ -281,7 +312,7 @@ func (g *Generator) pattern() []Action {
 	x, y := g.cell()
 	x2, y2 := g.cell()
 	w, h := g.size()
-	switch g.u(9) {
+	switch g.u(14) {
 	case 0: // A drag that ends outside every target.
 		g.held = ButtonNone
 		return []Action{
@@ -340,6 +371,56 @@ func (g *Generator) pattern() []Action {
 			{Kind: Resize, A: max(degenerateW[g.u(len(degenerateW))], g.minW), B: max(degenerateH[g.u(len(degenerateH))], g.minH)},
 			{Kind: Tick},
 			{Kind: Resize, A: 120, B: 40},
+		}
+	case 8: // A pane printing past the catch-up buffer while nobody renders it.
+		here, away := 1+g.u(9), 1+g.u(9)
+		return []Action{
+			{Kind: NewPane},
+			{Kind: SwitchWorkspace, A: here},
+			{Kind: Burst, A: burstLines[g.u(len(burstLines))]},
+			{Kind: SwitchWorkspace, A: away},
+			{Kind: Burst, A: burstLines[g.u(len(burstLines))]},
+			{Kind: SwitchWorkspace, A: here},
+			{Kind: Tick},
+		}
+	case 9: // Wide runes meeting a width that has to cut one of them in half.
+		return []Action{
+			{Kind: Guest, S: "\xe4\xb8\x96\xe4\xb8\x96\xe4\xb8\x96\xe4\xb8\x96\xe4\xb8\x96\r\n"},
+			{Kind: Resize, A: max(1+2*g.u(20), g.minW), B: max(h, g.minH)},
+			{Kind: Tick},
+			{Kind: Resize, A: max(w, g.minW), B: max(h, g.minH)},
+		}
+	case 10: // A session switch, which rebuilds every pane on a fresh emulator.
+		return []Action{
+			{Kind: Burst, A: 60 + g.u(400)},
+			{Kind: SwitchSession, A: g.u(8)},
+			{Kind: Tick},
+			{Kind: SwitchSession, A: g.u(8)},
+			{Kind: Tick},
+		}
+	case 11: // A detach and reattach over a pane that kept printing meanwhile.
+		return []Action{
+			{Kind: Detach},
+			{Kind: Burst, A: burstLines[g.u(len(burstLines))]},
+			{Kind: Attach},
+			{Kind: Tick},
+		}
+	case 12: // A second client arriving while the first is mid-gesture.
+		g.held = ButtonNone
+		return []Action{
+			{Kind: MousePress, A: x, B: y, C: ButtonLeft},
+			{Kind: SecondClient},
+			{Kind: MouseMotion, A: x2, B: y2, C: ButtonLeft},
+			{Kind: MouseRelease, A: x2, B: y2, C: ButtonLeft},
+			{Kind: Tick},
+		}
+	case 13: // A daemon restart with content the restore has to bring back.
+		return []Action{
+			{Kind: NewPane},
+			{Kind: Burst, A: 60 + g.u(400)},
+			{Kind: AltScreen, A: 1},
+			{Kind: DaemonRestart},
+			{Kind: Tick},
 		}
 	default: // The sidebar moving under a gesture that started over a pane.
 		g.held = ButtonNone

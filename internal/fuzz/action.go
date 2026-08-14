@@ -57,6 +57,10 @@ const (
 	Setting                     // A selects a runtime setting, B its new value
 	Tick                        // one maintenance tick
 	Guest                       // S is written to the focused pane's emulator
+	AltScreen                   // A odd enters the alternate screen, even leaves it
+	Burst                       // A lines out of the focused pane, to outrun a buffer
+	SecondClient                // a second client attaches to the same live session
+	DaemonRestart               // the daemon goes away and its sessions come back
 	kindCount
 )
 
@@ -69,6 +73,8 @@ var kindNames = [kindCount]string{
 	ToggleSidebar: "sidebar", SidebarCollapse: "sidebar-collapse", SidebarPosition: "sidebar-pos",
 	OpenOverlay: "overlay-open", CloseOverlay: "overlay-close", Rename: "rename",
 	Detach: "detach", Attach: "attach", Setting: "setting", Tick: "tick", Guest: "guest",
+	AltScreen: "altscreen", Burst: "burst",
+	SecondClient: "second-client", DaemonRestart: "daemon-restart",
 }
 
 func (k Kind) String() string {
@@ -109,7 +115,7 @@ func (a Action) String() string {
 	case Resize, Setting:
 		fmt.Fprintf(&b, " %d %d", a.A, a.B)
 	case ClosePane, FocusPane, MovePane, SwitchWorkspace, SwitchSession,
-		LayoutMode, SidebarPosition, OpenOverlay:
+		LayoutMode, SidebarPosition, OpenOverlay, AltScreen, Burst:
 		fmt.Fprintf(&b, " %d", a.A)
 	}
 	return b.String()
