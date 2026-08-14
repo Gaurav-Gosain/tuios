@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -297,8 +296,6 @@ func TestFunnelBarsAreProportional(t *testing.T) {
 
 	const figure, cells = 6, 40
 	for _, a := range s.Runs {
-		drawn := lipgloss.Width(ansi.Strip(funnelRow(a, s, palette(false), figure, cells, false)))
-		_ = drawn
 		bar := barCells(funnelRow(a, s, palette(false), figure, cells, false))
 		want := float64(a.Size) / float64(s.InitialLen) * cells
 		if diff := float64(bar) - want; diff > 1 || diff < -1 {

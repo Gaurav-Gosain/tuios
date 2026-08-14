@@ -1,7 +1,6 @@
 package vis
 
 import (
-	"image/color"
 	"strings"
 	"testing"
 
@@ -39,17 +38,4 @@ func assertASCII(t *testing.T, frame string) {
 			t.Fatalf("ASCII frame carries %q (U+%04X) at byte %d", r, r, i)
 		}
 	}
-}
-
-// assertNoWarn is how the rest frame proves it is quiet. A resting frame that
-// already carries the alarm ink has nothing left to escalate to.
-func assertNoWarn(t *testing.T, frame string, c color.Color) {
-	t.Helper()
-	if strings.Contains(frame, ansiOf(c)) {
-		t.Error("the resting frame carries the alarm ink")
-	}
-}
-
-func ansiOf(c color.Color) string {
-	return lipgloss.NewStyle().Foreground(c).Render("x")
 }
