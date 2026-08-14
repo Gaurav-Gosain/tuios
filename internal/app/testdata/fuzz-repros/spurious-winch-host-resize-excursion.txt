@@ -1,0 +1,9 @@
+# seed 137. The host resizes away and back with a structural action in the
+# middle. The pane really had the size it was told each time; comparing only the
+# two settled endpoints saw no change at all and charged both as spurious.
+resize 60 20
+tick
+resize 60 40
+new-pane
+resize 60 20
+tick

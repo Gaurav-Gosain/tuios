@@ -1,0 +1,9 @@
+# seed 12. Seven panes in a 60x20 host with the rail up: the master-stack tiler
+# raises every cell to the floor it clamps at and the raised tiles overlap. The
+# escape named a constant no tiler uses, so it could never fire for its own clamp.
+new-pane
+new-pane
+layout 1
+new-pane
+resize 60 20
+new-pane

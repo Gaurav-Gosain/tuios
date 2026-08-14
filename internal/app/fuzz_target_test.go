@@ -43,7 +43,10 @@ type fuzzOS struct {
 	// settledDrawable and settledCalls are the baseline the no-spurious-winch
 	// rule compares against: the last state with no resize in flight.
 	settledDrawable map[string][2]int
-	settledCalls    map[string]int
+	// movedSinceSettled records the panes whose drawable size left the baseline
+	// at any point since it was taken, including while a resize was in flight.
+	movedSinceSettled map[string]bool
+	settledCalls      map[string]int
 	// prevStateDir is the sidebar state directory to put back on Close. See Reset.
 	prevStateDir func() string
 	closed       bool
@@ -139,6 +142,12 @@ func (f *fuzzOS) Reset() error {
 	m.AutoTiling = true
 	m.UseBSPLayout = true
 	m.CurrentWorkspace = 1
+	// The rail's collapsed state is persisted, and every seed and every shrink
+	// replay shares one state directory, so a run that collapsed the rail left
+	// the next one starting with it collapsed. That made a shrunk script wrong:
+	// the shrinker kept verifying against a rail it had inherited, so it dropped
+	// the action that collapsed it and printed a repro that no longer reproduced.
+	m.SidebarCollapsed = false
 
 	f.m, f.told = m, map[string]*toldSize{}
 	f.seq = 0
@@ -151,6 +160,7 @@ func (f *fuzzOS) Reset() error {
 	m.TileAllWindows()
 	f.drawable, f.calls = drawableSizes(m), callCounts(f.told)
 	f.settledDrawable, f.settledCalls = drawableSizes(m), callCounts(f.told)
+	f.movedSinceSettled = map[string]bool{}
 	f.prevSignature, f.prevRail = "", ""
 	f.closed = false
 	return nil

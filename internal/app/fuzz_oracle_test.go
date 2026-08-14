@@ -180,14 +180,24 @@ func checkPaneSizeAgreement(f *fuzzOS) []fuzz.Violation {
 // that drain to whichever action happened to trigger it would report the drain
 // as spurious every time, which is the opposite of what the rule is for.
 func checkNoSpuriousResize(f *fuzzOS) []fuzz.Violation {
+	now := drawableSizes(f.m)
+	// Watched on every action, deferral or not. A host resize away and back
+	// leaves the pane the size it started at, and the announcements it took in
+	// between were each for a size it really had; comparing only the two settled
+	// endpoints sees no change at all and charges both as spurious. Recording the
+	// excursion as it happens is what tells the two apart.
+	for id, size := range now {
+		if before, ok := f.settledDrawable[id]; ok && size != before {
+			f.movedSinceSettled[id] = true
+		}
+	}
 	if f.deferring() {
 		return nil
 	}
-	now := drawableSizes(f.m)
 	var bad []fuzz.Violation
 	for id, before := range f.settledDrawable {
 		after, still := now[id]
-		if !still || after != before {
+		if !still || after != before || f.movedSinceSettled[id] {
 			continue
 		}
 		if got, was := f.told[id], f.settledCalls[id]; got != nil && got.calls > was {
@@ -197,6 +207,7 @@ func checkNoSpuriousResize(f *fuzzOS) []fuzz.Violation {
 		}
 	}
 	f.settledDrawable, f.settledCalls = now, callCounts(f.told)
+	f.movedSinceSettled = map[string]bool{}
 	return bad
 }
 
@@ -222,7 +233,11 @@ func checkLayoutIsDisjoint(f *fuzzOS) []fuzz.Violation {
 		// A pane clamped to the floor is the layout saying the region cannot
 		// hold this many panes. Overlap is the documented consequence of the
 		// clamp, so there is no partition to assert until the region grows.
-		if w.Width <= config.MinWindowWidth || w.Height <= config.MinWindowHeight {
+		// The floor is the size both tilers actually clamp to, in
+		// internal/layout/tiling.go and internal/layout/bsp.go. Naming
+		// MinWindowWidth here instead asked about a size the clamp raises panes
+		// off, so the escape could never fire for the clamp it was written for.
+		if w.Width <= config.DefaultWindowWidth || w.Height <= config.DefaultWindowHeight {
 			return nil
 		}
 	}

@@ -95,6 +95,70 @@ func TestPaneDrawOrderMatchesTheCompositor(t *testing.T) {
 	}
 }
 
+// TestSpuriousWinchStillCatchesAnAnnouncementForNothing guards the excursion
+// escape. A pane whose drawable never moved at all and was told anyway is the
+// bug the rule is for, and recording excursions must not have excused it.
+func TestSpuriousWinchStillCatchesAnAnnouncementForNothing(t *testing.T) {
+	tgt, err := newFuzzTarget(fuzzScratch(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := tgt.(*fuzzOS)
+	t.Cleanup(f.Close)
+	if err := f.Reset(); err != nil {
+		t.Fatal(err)
+	}
+	if vs := checkNoSpuriousResize(f); len(vs) > 0 {
+		t.Fatalf("the settled fixture already reports %s", vs[0].Detail)
+	}
+
+	// An announcement with nothing behind it: no action, no size change.
+	for _, rec := range f.told {
+		rec.calls++
+		break
+	}
+	vs := checkNoSpuriousResize(f)
+	if len(vs) == 0 {
+		t.Fatal("a pane told its size with no size change at all is not reported")
+	}
+	if vs[0].Rule != "spurious-winch" {
+		t.Errorf("reported %s, want spurious-winch", vs[0].Rule)
+	}
+}
+
+// TestOverlapEscapeTracksTheFloorTheTilersUse guards the other end of the
+// layout-overlap escape: it excuses panes the tiler clamped to its floor, and
+// nothing roomier than that.
+func TestOverlapEscapeTracksTheFloorTheTilersUse(t *testing.T) {
+	if config.DefaultWindowWidth <= config.MinWindowWidth {
+		t.Fatalf("the floor the tilers clamp to (%d) is not above MinWindowWidth (%d); the escape would be pointless",
+			config.DefaultWindowWidth, config.MinWindowWidth)
+	}
+	for _, tc := range []struct {
+		name        string
+		w, h        int
+		wantExcused bool
+	}{
+		{"at the floor width", config.DefaultWindowWidth, config.DefaultWindowHeight + 10, true},
+		{"at the floor height", config.DefaultWindowWidth + 10, config.DefaultWindowHeight, true},
+		{"room to spare", config.DefaultWindowWidth + 10, config.DefaultWindowHeight + 10, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := gapTestOS(t, 2)
+			m.AutoTiling = true
+			a, b := m.Windows[0], m.Windows[1]
+			a.X, a.Y, a.Width, a.Height = 0, 0, tc.w, tc.h
+			b.X, b.Y, b.Width, b.Height = tc.w/2, 0, tc.w, tc.h
+			a.Tiled, b.Tiled = true, true
+
+			f := &fuzzOS{m: m}
+			if got := len(checkLayoutIsDisjoint(f)) == 0; got != tc.wantExcused {
+				t.Errorf("two overlapping %dx%d panes: excused=%v, want %v", tc.w, tc.h, got, tc.wantExcused)
+			}
+		})
+	}
+}
+
 // TestGuestCellsStillHoldsForATiledSession replays the rule itself over the
 // arrangement it protects, so the escape cannot have turned it off wholesale.
 func TestGuestCellsStillHoldsForATiledSession(t *testing.T) {
