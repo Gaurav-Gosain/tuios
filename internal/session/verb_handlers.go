@@ -92,7 +92,7 @@ func mapResolveErr(err error, sess *Session) *verbError {
 			Param:   "window",
 			Verb:    "list-windows",
 			Command: "tuios list-windows --json",
-			Detail:  "the window target matched no window. A window is addressable by its id, a unique id prefix, or its exact name.",
+			Detail:  "the window target matched no window. A window is addressable by its id, a unique id prefix, the index list-windows prints, or its exact name.",
 		}
 		if sess != nil {
 			hint.Available = windowTargets(sess.GetState())

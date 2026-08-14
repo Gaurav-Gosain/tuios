@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -114,7 +115,10 @@ func (m *OS) GetFocusedWindowID() string {
 
 // resolveWindowTarget resolves a window target string to a window ID.
 // If target is empty, returns the focused window ID.
-// Matching order: exact ID, ID prefix (first 8+ chars), window name (CustomName then Title).
+// Matching order: exact ID, the position list-windows prints (all-digit
+// targets), a unique ID prefix, window name (CustomName then Title). The
+// order matches the daemon-side findWindowStateIndex so a target means the
+// same thing whether or not a client is attached.
 func (m *OS) resolveWindowTarget(target string) (string, error) {
 	if target == "" {
 		windowID := m.GetFocusedWindowID()
@@ -131,22 +135,25 @@ func (m *OS) resolveWindowTarget(target string) (string, error) {
 		}
 	}
 
-	// Try ID prefix match (at least 8 characters for safety)
-	if len(target) >= 8 {
-		var prefixMatch *terminal.Window
-		prefixCount := 0
-		for _, w := range m.Windows {
-			if strings.HasPrefix(w.ID, target) {
-				prefixMatch = w
-				prefixCount++
-			}
+	// The index list-windows prints, which is the position in m.Windows.
+	if idx, ok := session.WindowIndexTarget(target, len(m.Windows)); ok {
+		return m.Windows[idx].ID, nil
+	}
+
+	// Try unique ID prefix match
+	var prefixMatch *terminal.Window
+	prefixCount := 0
+	for _, w := range m.Windows {
+		if strings.HasPrefix(w.ID, target) {
+			prefixMatch = w
+			prefixCount++
 		}
-		if prefixCount == 1 {
-			return prefixMatch.ID, nil
-		}
-		if prefixCount > 1 {
-			return "", fmt.Errorf("ambiguous window ID prefix %q matches %d windows", target, prefixCount)
-		}
+	}
+	if prefixCount == 1 {
+		return prefixMatch.ID, nil
+	}
+	if prefixCount > 1 {
+		return "", fmt.Errorf("ambiguous window ID prefix %q matches %d windows", target, prefixCount)
 	}
 
 	// Try window name match (CustomName first, then Title)

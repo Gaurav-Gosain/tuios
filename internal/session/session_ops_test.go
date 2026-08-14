@@ -203,3 +203,33 @@ func TestFindWindowStateIndexAmbiguity(t *testing.T) {
 		t.Error("expected no-match error")
 	}
 }
+
+func TestFindWindowStateIndexByPosition(t *testing.T) {
+	windows := []WindowState{
+		{ID: "aaa-x", Title: "first"},
+		{ID: "17b2c3d4-aaaa", Title: "second"},
+		{ID: "ccc-z", Title: "third"},
+	}
+
+	// An all-digit target in range is the position list-windows prints, and it
+	// wins over a digit-only id prefix.
+	if idx, err := findWindowStateIndex(windows, "1"); err != nil || idx != 1 {
+		t.Errorf("index target 1: idx=%d err=%v", idx, err)
+	}
+	if idx, err := findWindowStateIndex(windows, "0"); err != nil || idx != 0 {
+		t.Errorf("index target 0: idx=%d err=%v", idx, err)
+	}
+	// Out of range falls through to prefix matching.
+	if idx, err := findWindowStateIndex(windows, "17"); err != nil || idx != 1 {
+		t.Errorf("digit prefix 17: idx=%d err=%v", idx, err)
+	}
+	// Out of range and no prefix match is a plain no-match.
+	if _, err := findWindowStateIndex(windows, "9"); err == nil {
+		t.Error("expected no-match error for out-of-range index")
+	}
+	// A window named like a digit loses to the position; the exact id always wins.
+	named := []WindowState{{ID: "aaa", CustomName: "1"}, {ID: "bbb"}}
+	if idx, err := findWindowStateIndex(named, "1"); err != nil || idx != 1 {
+		t.Errorf("index beats digit name: idx=%d err=%v", idx, err)
+	}
+}

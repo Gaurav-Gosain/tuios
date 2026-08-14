@@ -37,9 +37,10 @@ func (s *SessionState) workspaceBound() int {
 // and identically on both paths.
 
 // findWindowStateIndex resolves a window target string to an index into
-// state.Windows. It matches, in order: an exact window ID, a unique window ID
-// prefix, an exact CustomName, then an exact Title. It returns -1 when there is
-// no match, and an error when a prefix or name is ambiguous.
+// state.Windows. It matches, in order: an exact window ID, the position that
+// list-windows prints when the target is all digits and in range, a unique
+// window ID prefix, an exact CustomName, then an exact Title. It returns -1
+// when there is no match, and an error when a prefix or name is ambiguous.
 func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 	if target == "" {
 		return -1, fmt.Errorf("empty window target")
@@ -50,6 +51,13 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 		if windows[i].ID == target {
 			return i, nil
 		}
+	}
+
+	// The index list-windows prints. It is the position in the slice, so it is
+	// what a caller reading that output will reach for first. An out-of-range
+	// number falls through: a long digit run can still be a valid id prefix.
+	if idx, ok := WindowIndexTarget(target, len(windows)); ok {
+		return idx, nil
 	}
 
 	// Unique ID prefix.
@@ -83,6 +91,26 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 	}
 
 	return -1, fmt.Errorf("no window found matching %q", target)
+}
+
+// WindowIndexTarget reports whether a window target is an all-digit position
+// into a window list of the given length, and which position. Both resolvers
+// share it so an index means the same thing attached and detached.
+func WindowIndexTarget(target string, count int) (int, bool) {
+	if target == "" || len(target) > 4 {
+		return -1, false
+	}
+	idx := 0
+	for _, r := range target {
+		if r < '0' || r > '9' {
+			return -1, false
+		}
+		idx = idx*10 + int(r-'0')
+	}
+	if idx >= count {
+		return -1, false
+	}
+	return idx, true
 }
 
 // firstVisibleOnWorkspace returns the ID of the first window in slice order that
