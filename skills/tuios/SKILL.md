@@ -46,14 +46,18 @@ are live. Inside a pane, prefer `-s "$TUIOS_SESSION"`.
 Windows are addressed by `-w` and accept, in order:
 
 - the full uuid
-- a unique id prefix of 8 or more characters (`98db8226`)
+- the index that `list-windows` prints, when the target is all digits
+- a unique id prefix (`98db8226`, or any shorter prefix that matches one window)
 - the exact window name, checking a name you gave it first and its shell's title
   second
 
-Omit `-w` and the session's focused window is used. The index column in
-`list-windows` output is a position, not an address; do not pass it to `-w`.
+An ambiguous prefix or name is an error rather than a guess. The index is a
+position: it shifts when a window earlier in the list closes, so it is handy at
+the keyboard and wrong in a script that holds on to it. Store the id or the name
+instead.
 
-Workspaces are 1-based integers.
+A session's display name and accent are labels for humans; addressing always
+uses the session name. Workspaces are 1-based integers.
 
 ## Seeing what is there
 
@@ -74,7 +78,8 @@ tuios list-windows -s work
 3 window(s). * marks the focused one.
 ```
 
-Every read command takes `--json` when you want to parse rather than read:
+The listing and info commands all take `--json` when you want to parse rather
+than read. `capture-pane` is the exception: its output is the pane text itself.
 
 ```sh
 tuios list-windows -s work --json | jq -r '.windows[] | "\(.window_id) \(.display_name)"'
@@ -96,6 +101,35 @@ size           183x42
 attached       true
 named          2=review
 ```
+
+## When the daemon is not running
+
+`tuios ls` tells a script exactly which situation it is in through its exit
+code: 0 is a running daemon (even one holding no sessions), 3 is no daemon, and
+1 is a failure. With no daemon, sessions saved on disk are listed anyway, marked
+`saved`:
+
+```
+│ work │ 2       │ saved  │ -       │ 2 min ago   │
+
+1 session(s)
+saved: on disk only, with no daemon running to hold it.
+```
+
+`tuios attach` starts the daemon when none is running and restores the saved
+sessions before attaching. From a script, `tuios start-server` does the same
+restore without taking over the terminal. A restored session keeps its name,
+display name, accent, workspace names, window ids and window names, and is
+marked `restored` in the listing:
+
+```
+restored: layout came back from saved state; the shells are new.
+```
+
+The shells are new. Scrollback is empty, whatever was running is gone, and each
+restored pane opens on a banner saying so. A marker you were waiting for and any
+agent state you reported died with the old daemon, so treat a `restored` session
+as panes to be started over, addressed by the ids and names you already know.
 
 ## Reading another pane
 
@@ -138,6 +172,15 @@ tuios send-keys -s work -w build 'ctrl+b,n'      # a tuios leader chord
 bindings to the interface. Use `--literal --raw` to push characters through to
 the pane instead, though `send-text` is the simpler way to do that.
 
+The bindings live in the attached client's interface. On a session with nobody
+attached, a leader chord is accepted, exits 0, and does nothing. For window
+management that works attached or detached, use `run-command`:
+
+```sh
+tuios run-command -s work SwitchWorkspace 2
+tuios run-command --list
+```
+
 Sending input to a pane that is running an interactive agent will be read by that
 agent as if a human typed it. Do not answer another agent's prompts on its behalf
 unless you were asked to.
@@ -167,6 +210,10 @@ Close it when the work is done:
 ```sh
 tuios run-command -s work CloseWindow "$id"
 ```
+
+On a detached session, a window whose shell has exited stays in the list until
+something closes it, and `capture-pane` still reads its final screen. Close what
+you open, or a loop that opens a window per run quietly accumulates dead ones.
 
 ## Waiting instead of polling
 
@@ -205,22 +252,28 @@ tuios send-text -s work -w build 'sleep 4; echo DONE_MARKER
 tuios wait-for window-output -s work -w build --pattern DONE_MARKER   # returns in 8ms
 ```
 
-A marker from an earlier run is still in the scrollback, so the same wait in the
-same pane matches instantly the second time.
+And a marker from an earlier run is still in the scrollback, so a fixed marker
+works exactly once per pane: the same wait in the same pane matches the old
+output instantly the second time. Both were measured at around 5ms.
 
-Two patterns avoid both. Build the marker so the literal exists only in the
-output, never in the command line:
+One recipe avoids both. Make the marker fresh for this run, and let the pane
+assemble it so the literal never appears in the command line:
 
 ```sh
-tuios send-text -s work -w build 'go test ./... ; printf "TESTS_%s %s\n" DONE "$?"
-'
-tuios wait-for window-output -s work -w build --pattern 'TESTS_DONE' --timeout 300000
+n=$(date +%s)
+tuios send-text -s work -w build "go test ./... ; printf 'tests_done_%s\n' $n
+"
+tuios wait-for window-output -s work -w build --pattern "tests_done_$n" --timeout 300000
 tuios capture-pane -s work -w build --scrollback --lines 60
 ```
 
+The echo shows `printf 'tests_done_%s\n' 1786700000`, which the pattern does not
+match; the output shows `tests_done_1786700000`, which it does. The timestamp
+makes the previous run's marker a different string.
+
 Or run the work in a window that exits, and wait for the exit. Nothing has to be
 matched at all, so nothing can match early. Send the output somewhere you can
-read after the pane is gone:
+read it afterwards:
 
 ```sh
 tuios new-window -s work build
@@ -245,33 +298,52 @@ tuios set-agent-state none                  # clear it
 
 The states are `none`, `working`, `needs_input`, `idle`, `done`, `errored`. With
 no `-w` the report lands on the focused window, which is wrong when you are not
-the focused pane. From inside a pane, always name yourself:
+the focused pane. From inside a pane, always name yourself, and name your harness
+so anything reading the state knows what reported it:
 
 ```sh
-tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" -m "building"
+tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --harness claude-code -m "building"
 ```
 
-Name your harness so anything reading the state knows what reported it:
+### Wire it to your harness once
 
-```sh
-tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --harness claude-code
-```
+If your harness has a hooks system, map its lifecycle events to these calls once
+instead of remembering to call them by hand. `integrations/claude-code/` in the
+tuios repo is a working shim: session start and prompt submit report `working`,
+a notification reports `needs_input` with the notification's message, stop
+reports `done`, and every path exits 0 untouched when `TUIOS_ENV` is unset, so
+it is safe to leave wired up outside tuios. The same mapping fits any harness
+that can run a command on its lifecycle events.
 
-`--source` says where the state came from and decides who wins when two things
+A harness that emits OSC 9;4 progress reports needs no wiring at all: tuios
+reads them from the pane. Setting a bar maps to `working`, clearing it to
+`idle`, the error state to `errored`, and the warning state to `needs_input`.
+
+Without either, tuios recognises common agents (claude-code, codex, gemini-cli,
+cursor-agent, droid, aider, crush, opencode) by their foreground process and
+marks the pane `working` while one runs. That is a coarse fallback: it can never
+say `needs_input`, which is the state a human actually acts on. Your own report
+always outranks it.
+
+### Who wins when reports disagree
+
+`--source` says where a state came from and decides who wins when two things
 report on the same pane. The ranks are `report` (highest), `osc`, `screen`, then
 tuios's own process detection, then `stall` (lowest). A source cannot overwrite a
-claim from a higher-ranked one, and a report that loses is refused rather than
-applied:
+claim from a higher-ranked one. Leave `--source` alone unless you are writing a
+detector: reporting for yourself is `report`, the default and the highest rank.
+
+`set-agent-state` prints nothing when the report is applied. A report that loses
+is refused, still exits 0, and says so on stderr:
 
 ```
 Not applied: a higher-ranked source owns this pane; it still reports working.
 ```
 
-Leave `--source` alone unless you are writing a detector. Reporting for yourself
-is `report`, the default and the highest rank, which is correct: you know what you
-are doing and nothing watching from outside does.
+A script that must know whether its report took should match that line, since
+the exit code will not say.
 
-Read it back, yours or another pane's:
+Read the state back, yours or another pane's:
 
 ```sh
 tuios get-agent-state -s work -w build
@@ -289,11 +361,6 @@ tuios get-agent-state -s work -w build --json
   "success": true
 }
 ```
-
-If your harness has a hooks system, wire these calls to its lifecycle events once
-instead of calling them by hand. `integrations/claude-code/` in the tuios repo is
-a working example: a shim that maps session start to `working`, a notification to
-`needs_input`, and stop to `done`, and no-ops when `TUIOS_ENV` is unset.
 
 ## Noticing that something finished
 
@@ -326,10 +393,12 @@ Failures name the cause and the fix. A bad window target lists the windows that
 do exist; a bad session name suggests the closest live one; a wait that times out
 tells you to capture the pane. Read the whole error before retrying.
 
-Stable error codes, for when you are matching on them rather than reading them:
-`invalid_request`, `unknown_verb`, `invalid_params`, `session_not_found`,
-`window_not_found`, `no_windows`, `pty_not_found`, `needs_client`,
-`option_not_found`, `command_failed`, `timeout`, `protocol_mismatch`, `internal`.
+Over the socket, every failure carries a stable code in the error envelope, for
+when you are matching rather than reading: `invalid_request`, `unknown_verb`,
+`invalid_params`, `session_not_found`, `window_not_found`, `no_windows`,
+`pty_not_found`, `needs_client`, `option_not_found`, `command_failed`,
+`timeout`, `protocol_mismatch`, `internal`. The CLI folds the same information
+into its messages.
 
 `needs_client` means the operation needs a rendered interface and the session has
 nobody attached. Reading, writing and waiting never need one.
@@ -361,16 +430,13 @@ for line in s.makefile():
 
 ```
 {"id":1,"result":{"seq":133,"type":"subscribed"}}
-{"seq":134,"type":"window-created","session":"work","window":"86e5e19f-...","title":"Terminal 86e5e19f","time":1786611217427984525}
+{"seq":134,"type":"window-created","session":"work","window":"86e5e19f-...","pty_id":"b158e731-...","title":"Terminal 86e5e19f","time":1786611217427984525}
 ```
 
 Events arrive from the moment you subscribe, with no backfill, so subscribe
 before you start the thing you want to watch. `wait-for` is the same machinery
 with the bookkeeping done for you; reach for `subscribe` only when you need to
 watch several things at once.
-
-`tuios run-command --list` shows the window-management commands (focus, move,
-minimize, switch workspace, close) that are not verbs.
 
 ## Habits worth having
 
@@ -380,4 +446,7 @@ minimize, switch workspace, close) that are not verbs.
 - Wait on a condition; never sleep and capture in a loop.
 - Report `working` when you start and `done` or `needs_input` when you stop. The
   indicator is the only thing telling a human which pane wants them.
-- Give a window a name when you create it, and address it by that name.
+- Give a window a name when you create it, and address it by that name. An index
+  is fine at the keyboard and stale the moment an earlier window closes.
+- Check `tuios ls` exit 3 before assuming a session is gone: it may be saved on
+  disk, one `tuios start-server` away from being back.

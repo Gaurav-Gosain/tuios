@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/skills"
 )
 
@@ -89,16 +90,50 @@ func TestSkillCommandsResolve(t *testing.T) {
 }
 
 // TestSkillDocumentsTheReportingPath keeps the one thing the skill exists to
-// make happen from being edited away: a pane telling tuios what it is doing.
+// make happen from being edited away: a pane telling tuios what it is doing,
+// through a hook shim, an OSC 9;4 progress report, or a call by hand.
 func TestSkillDocumentsTheReportingPath(t *testing.T) {
 	for _, want := range []string{
 		"tuios set-agent-state working",
 		"$TUIOS_PANE_ID",
 		"--harness",
 		"TUIOS_ENV",
+		"integrations/claude-code/",
+		"OSC 9;4",
+		"--source",
+		"Not applied: a higher-ranked source owns this pane",
 	} {
 		if !strings.Contains(skills.TUIOS, want) {
 			t.Errorf("the skill no longer mentions %q", want)
+		}
+	}
+}
+
+// TestSkillDocumentsTheDiskLifecycle holds the skill to the daemon lifecycle
+// contract a scripted caller depends on: the ls exit code that distinguishes a
+// stopped daemon, the saved and restored markers with the wording the code
+// prints, and the command that restores without attaching.
+func TestSkillDocumentsTheDiskLifecycle(t *testing.T) {
+	for _, want := range []string{
+		"exit",
+		session.SavedNote,
+		session.RestoredNote,
+		"tuios start-server",
+		"tuios attach",
+	} {
+		if !strings.Contains(skills.TUIOS, want) {
+			t.Errorf("the skill no longer mentions %q", want)
+		}
+	}
+}
+
+// TestSkillInlineCommandsResolve resolves the commands the skill names in prose
+// rather than in a fence, so a rename cannot strand them.
+func TestSkillInlineCommandsResolve(t *testing.T) {
+	for _, name := range []string{"start-server", "attach", "run-command"} {
+		root := newRootCommand()
+		if _, _, err := root.Find([]string{name}); err != nil {
+			t.Errorf("the skill names %q, which the tree does not have: %v", name, err)
 		}
 	}
 }
