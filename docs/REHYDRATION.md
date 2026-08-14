@@ -141,7 +141,10 @@ Two things had to be true for that rule to hold, and neither was:
   the daemon and dropped by the client, while the history a pane came back with
   was whatever the ring replay happened to redraw. It is now seeded into the
   client's emulator, which is what makes history survive a route that builds the
-  pane on a new emulator.
+  pane on a new emulator. A pane whose emulator survived keeps what it holds and
+  is handed only the lines that scrolled off while it was away: the daemon sends
+  a bounded window and a client keeps far more, so replacing the buffer would cut
+  a long history down to the size of that window on every workspace switch.
 - **The cursor is restored.** It was serialized and never applied.
 - **The request's own fields are honoured.** `IncludeScrollback` was written by
   the client and never read; `MaxScrollbackLines` was never written or read; and
