@@ -414,6 +414,13 @@ type Session struct {
 	// now. Read and written under stateMu, so it needs no lock of its own.
 	agentClaims map[string]agentClaim
 
+	// agentHolds records, by window ID, a quieter agent state waiting out the
+	// anti-flicker window before it is published (see holdQuieterState). It has a
+	// lock of its own rather than riding stateMu because it is read and written
+	// around ApplyAgentReport, which takes stateMu itself.
+	agentHolds  map[string]agentHold
+	agentHoldMu sync.Mutex
+
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
 	// terminal identity the guest's image tools recognise.

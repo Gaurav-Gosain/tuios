@@ -1,6 +1,10 @@
 package session
 
-import "github.com/Gaurav-Gosain/tuios/internal/vt"
+import (
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
+)
 
 // agentStateForProgress maps an OSC 9;4 progress report onto an agent state.
 //
@@ -38,8 +42,24 @@ func agentStateForProgress(state vt.ProgressState) (AgentState, bool) {
 // the harness reporting for itself. A state the sequence cannot name is ignored
 // rather than guessed at.
 func (s *Session) applyAgentProgress(windowID string, state vt.ProgressState) {
+	s.applyAgentProgressAt(windowID, state, time.Now())
+}
+
+// applyAgentProgressAt is applyAgentProgress with the clock passed in, so the
+// anti-flicker window is testable without sleeping.
+func (s *Session) applyAgentProgressAt(windowID string, state vt.ProgressState, now time.Time) {
 	agent, ok := agentStateForProgress(state)
 	if !ok {
+		return
+	}
+	current, exists := s.windowAgentState(windowID)
+	if !exists {
+		return
+	}
+	// A harness that clears its progress bar between two steps of one task would
+	// otherwise blink the pane through idle and back, so a quieter state waits to
+	// see whether it stays true.
+	if !s.holdQuieterState(windowID, agent, current, AgentSourceOSC, now) {
 		return
 	}
 	// A refused report is the ordinary case when a harness reports for itself, so

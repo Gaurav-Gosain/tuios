@@ -408,6 +408,9 @@ func (s *Session) applyAgentDetection(
 		for id := range s.agentClaims {
 			if _, ok := live[id]; !ok {
 				delete(s.agentClaims, id)
+				// A window that went away must not leave a held state behind for
+				// the settle sweep to publish against nothing.
+				s.dropAgentHold(id)
 			}
 		}
 		if changed == 0 && labels == 0 {

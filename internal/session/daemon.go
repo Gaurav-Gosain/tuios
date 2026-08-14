@@ -789,6 +789,9 @@ func (d *Daemon) stallMonitor() {
 		case <-ticker.C:
 			now := time.Now()
 			for _, sess := range d.manager.AllSessions() {
+				// Publish any anti-flicker hold whose window elapsed while its
+				// source stayed silent, so a held state cannot wait forever.
+				sess.settleAgentHolds(now)
 				sess.applyStallHeuristic(now, d.agentStallTimeout, func(ptyID string) int64 {
 					if pty := sess.GetPTY(ptyID); pty != nil {
 						return pty.LastOutput()

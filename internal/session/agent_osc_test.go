@@ -2,6 +2,7 @@ package session
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -34,24 +35,28 @@ func TestAgentStateForProgress(t *testing.T) {
 // sequence: it is a state feed the harness emits about itself.
 func TestAgentProgressDrivesState(t *testing.T) {
 	sess, id := bareSessionWithWindow(t)
+	now := time.Now()
 
-	sess.applyAgentProgress(id, vt.ProgressIndeterminate)
+	sess.applyAgentProgressAt(id, vt.ProgressIndeterminate, now)
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
 		t.Fatalf("state after an indeterminate progress report = %q, want working", got)
 	}
 
-	sess.applyAgentProgress(id, vt.ProgressWarning)
+	sess.applyAgentProgressAt(id, vt.ProgressWarning, now)
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
 		t.Fatalf("state after a warning progress report = %q, want needs_input", got)
 	}
 
-	sess.applyAgentProgress(id, vt.ProgressClear)
+	// Clearing is quieter than needs_input, so it lands once it has stood for the
+	// anti-flicker window rather than the instant it arrives.
+	sess.applyAgentProgressAt(id, vt.ProgressClear, now)
+	sess.applyAgentProgressAt(id, vt.ProgressClear, now.Add(agentHoldWindow+time.Millisecond))
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
 		t.Fatalf("state after a cleared progress report = %q, want idle", got)
 	}
 
 	// A state the sequence cannot name leaves the pane where it was.
-	sess.applyAgentProgress(id, vt.ProgressState(9))
+	sess.applyAgentProgressAt(id, vt.ProgressState(9), now)
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
 		t.Fatalf("state after an unknown progress state = %q, want idle (unchanged)", got)
 	}
