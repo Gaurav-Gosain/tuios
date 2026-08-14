@@ -57,11 +57,11 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Shortcut: "prefix+r",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				if config.WindowTitlePosition != "hidden" {
-					if focused := m.GetFocusedWindow(); focused != nil {
-						m.Mode = WindowManagementMode
-						m.BeginRenameWindow(focused)
-					}
+				// The editor is a centred dialog, so hidden titles are no reason
+				// for the palette to offer a row that does nothing.
+				if focused := m.GetFocusedWindow(); focused != nil {
+					m.Mode = WindowManagementMode
+					m.BeginRenameWindow(focused)
 				}
 				return m, nil
 			},

@@ -244,9 +244,6 @@ func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 	// look live and do nothing.
 	canPaste := m.Mode == TerminalMode
 	canSplit := m.AutoTiling
-	// Renaming needs somewhere for the new name to show up: a title bar, or the
-	// rail, which draws the editor on the window's own row.
-	canRename := config.WindowTitlePosition != "hidden" || m.SidebarActive()
 
 	closeItem := m.item(glyphClose, "Close pane", "close_window", false)
 	closeItem.Warn = true
@@ -258,7 +255,9 @@ func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 		m.item(glyphSplitV, "Split right", "split_vertical", !canSplit),
 		m.item(glyphSplitH, "Split down", "split_horizontal", !canSplit),
 		separator(),
-		m.item(glyphRename, "Rename", "rename_window", !canRename),
+		// Never dimmed for a hidden title bar: the editor is a centred dialog and
+		// draws its own frame wherever the name happens to show.
+		m.item(glyphRename, "Rename", "rename_window", false),
 		// An accent shows on the rail, so there is nothing to set without one.
 		m.item(glyphPalette, "Accent color", "set_accent", !m.SidebarActive()),
 		m.item(glyphZoom, "Zoom", "toggle_zoom", false),
