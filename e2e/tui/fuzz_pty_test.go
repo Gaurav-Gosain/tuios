@@ -87,10 +87,13 @@ type ptyTarget struct {
 	session    string // the session the run starts on
 	current    string // the session the client is showing now
 	cols, rows int
-	last       fuzz.Action
-	step       int
-	held       int
-	detached   bool
+	// maxRows is the tallest the host has been during this run, which is what
+	// bounds how much of a pane's output an erase can hide. See checkScrollback.
+	maxRows  int
+	last     fuzz.Action
+	step     int
+	held     int
+	detached bool
 
 	// emitted is the highest witness number written into each pane. It is the
 	// upper bound the provenance rule uses: a daemon holding a number nobody
@@ -138,6 +141,7 @@ func newPTYTarget(t *testing.T) func() (fuzz.Target, error) {
 // of the shapes that has actually broken here.
 func (p *ptyTarget) Reset() error {
 	p.cols, p.rows, p.held, p.step = ptyCols, ptyRows, 0, 0
+	p.maxRows = ptyRows
 	p.detached, p.probe, p.pending = false, true, nil
 	p.emitted, p.tail = map[string]int{}, map[string]int{}
 	p.alt, p.flooded = map[string]bool{}, map[string]bool{}
@@ -291,6 +295,7 @@ func (p *ptyTarget) applyToClient(a fuzz.Action) error {
 		// the in-process target's to hunt; here the floor keeps the run exploring
 		// instead of wedging on an ioctl error.
 		p.cols, p.rows = max(a.A, 20), max(a.B, 6)
+		p.maxRows = max(p.maxRows, p.rows)
 		return t.Resize(p.cols, p.rows)
 	case fuzz.NewPane:
 		return t.SendKeys(tuitest.Ctrl('b'), "c")
@@ -742,7 +747,12 @@ func (p *ptyTarget) checkScrollback(w daemonWindow) []fuzz.Violation {
 	if !any {
 		return nil
 	}
-	screenful := w.Height
+	// The screenful of slack is the largest this pane has ever been, not the
+	// size it is now. A run that fills a 64 row pane, hides its screen and then
+	// shrinks to 12 rows has legitimately taken 64 rows off the end of the
+	// answer, and sizing the tolerance from the current height reported that as
+	// lost history twice.
+	screenful := max(w.Height, p.maxRows)
 	if screenful <= 0 {
 		screenful = p.rows
 	}
