@@ -44,6 +44,29 @@ type SessionCreatedMsg struct {
 	Err  error
 }
 
+// SessionKilledMsg carries the result of killing a session this client is not
+// attached to, off the Update goroutine. Label is what the session was called
+// on screen, captured before the kill, since afterwards there is nothing left
+// to look the name up from.
+type SessionKilledMsg struct {
+	Label string
+	Err   error
+}
+
+// ListenForSessionKill waits for a kill of another session to finish.
+func ListenForSessionKill(ch chan SessionKilledMsg) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		res, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return res
+	}
+}
+
 // ListenForSessionCreate waits for a detached-session creation to finish.
 func ListenForSessionCreate(ch chan SessionCreatedMsg) tea.Cmd {
 	if ch == nil {
@@ -258,6 +281,7 @@ func (m *OS) Init() tea.Cmd {
 		ListenForPTYData(m.PTYDataChan),
 		ListenForClipboardSet(m.PendingClipboardSet),
 		ListenForSessionCreate(m.sessionCreateChan()),
+		ListenForSessionKill(m.sessionKillChan()),
 		ListenForNotification(m.ensureNotificationChan()),
 		ListenForCwdChange(m.ensureCwdChangeChan()),
 	}
@@ -880,6 +904,23 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// follow it by name so the cursor lands on it rather than on whatever
 		// took its index.
 		m.sidebarFollowSession = msg.Name
+		return m, cmd
+
+	case SessionKilledMsg:
+		cmd := ListenForSessionKill(m.sessionKillChan())
+		if msg.Err != nil {
+			m.ShowNotification("Kill failed: "+msg.Err.Error(), "error", config.NotificationDuration*2)
+			return m, cmd
+		}
+		m.ShowNotification("Killed session: "+msg.Label, "success", config.NotificationDuration)
+		// The switcher lists a snapshot, so the row of a session that no longer
+		// exists would sit there until the overlay was reopened.
+		if m.ShowSessionSwitcher {
+			m.SessionSwitcherItems = m.BuildSessionTree().Sessions
+			if m.SessionSwitcherSelected >= len(m.SessionSwitcherItems) && m.SessionSwitcherSelected > 0 {
+				m.SessionSwitcherSelected--
+			}
+		}
 		return m, cmd
 
 	case ClipboardSetMsg:

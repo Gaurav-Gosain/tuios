@@ -236,7 +236,11 @@ type OS struct {
 	// Close-session confirmation, the micro-dialog the dock's recessed control
 	// and ctrl+b X both raise. Its rows are fixed, so only the selection is
 	// state; what it says about the session is counted as it draws.
+	// SessionCloseTarget is the session it was raised on, by identity, or "" for
+	// the attached one: closing that quits this client, closing any other leaves
+	// this client where it is.
 	ShowSessionClose     bool
+	SessionCloseTarget   string
 	SessionCloseSelected int
 	// Pending resize tracking for debouncing PTY resize during mouse drag
 	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
@@ -422,6 +426,10 @@ type OS struct {
 	// contends with the background session poll for the client's round-trip lock,
 	// and blocking here stops input, rendering and socket draining.
 	PendingSessionCreate chan SessionCreatedMsg
+	// PendingSessionKill receives the outcome of killing another session, which
+	// waits for the daemon's post-kill listing and so cannot run on the Update
+	// goroutine either.
+	PendingSessionKill chan SessionKilledMsg
 	// PendingNotification receives guest desktop notifications and bells (OSC 9/777/99, BEL).
 	// The notification callbacks fire on a window's PTY writer goroutine, so they cannot
 	// touch OS notification state directly (the render goroutine reads m.Notifications).
