@@ -10,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // This is the rig the rehydration matrix runs on: a real daemon in this
@@ -372,53 +371,31 @@ func rigWaitUntil(t *testing.T, what string, cond func() bool) {
 
 // --- reading the two sides ---------------------------------------------------
 
-// cellSig describes a cell to the fidelity the wire can carry, which is the
-// fidelity a comparison across it can ask about.
-func cellSig(content string, width int, fg, bg string, bold, faint, italic, reverse, underline bool) string {
-	if content == "" || content == " " {
+// stateCellSig describes a cell whole: what it holds, and every part of how it
+// is painted. Comparing only the characters is what let a route that restored a
+// pane's text while losing its colours pass every case in the matrix and be
+// obviously wrong on screen.
+//
+// Both sides are read as a CellState so the comparison is over one description
+// and cannot drift from what the wire carries.
+func stateCellSig(cs session.CellState) string {
+	if (cs.Content == "" || cs.Content == " ") && cs.FgColor == "" && cs.BgColor == "" &&
+		cs.UlColor == "" && cs.Attrs == 0 && cs.Underline == 0 && cs.LinkURL == "" {
 		// A blank is a blank however it was produced: an unwritten cell and a
-		// cell holding a space differ in the emulator and not on screen.
-		if !reverse && bg == "" {
-			return " "
-		}
-		content = " "
+		// cell holding an unstyled space differ in the emulator and not on
+		// screen.
+		return " "
 	}
-	return fmt.Sprintf("%s|%d|%s|%s|%t%t%t%t%t", content, width, fg, bg, bold, faint, italic, reverse, underline)
-}
-
-func hexOf(c any) string {
-	col, ok := c.(interface {
-		RGBA() (uint32, uint32, uint32, uint32)
-	})
-	if !ok || c == nil {
-		return ""
-	}
-	r, g, b, _ := col.RGBA()
-	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
+	return fmt.Sprintf("%q|%d|%s|%s|%s|%08b|%d|%s",
+		cs.Content, cs.Width, cs.FgColor, cs.BgColor, cs.UlColor,
+		cs.Attrs, cs.Underline, cs.LinkURL)
 }
 
 func uvCellSig(cell *uv.Cell) string {
 	if cell == nil {
 		return " "
 	}
-	fg, bg := "", ""
-	if cell.Style.Fg != nil {
-		fg = hexOf(cell.Style.Fg)
-	}
-	if cell.Style.Bg != nil {
-		bg = hexOf(cell.Style.Bg)
-	}
-	return cellSig(cell.Content, cell.Width, fg, bg,
-		cell.Style.Attrs&uv.AttrBold != 0,
-		cell.Style.Attrs&uv.AttrFaint != 0,
-		cell.Style.Attrs&uv.AttrItalic != 0,
-		cell.Style.Attrs&uv.AttrReverse != 0,
-		cell.Style.Underline != ansi.UnderlineNone)
-}
-
-func stateCellSig(cs session.CellState) string {
-	return cellSig(cs.Content, cs.Width, cs.FgColor, cs.BgColor,
-		cs.Bold, cs.Faint, cs.Italic, cs.Reverse, cs.Underline)
+	return stateCellSig(session.CellStateOf(cell))
 }
 
 // stateRow renders one wire row as plain text.

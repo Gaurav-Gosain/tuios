@@ -30,8 +30,11 @@ type Emulator struct {
 	scrs [2]Screen
 	scr  *Screen
 
-	// Character sets
-	charsets [4]CharSet
+	// Character sets, and the designator byte each was selected by. The sets
+	// themselves are maps and cannot be compared back to the set they came
+	// from, so a snapshot names them from here.
+	charsets   [4]CharSet
+	charsetIDs [4]byte
 
 	// log is the logger to use.
 	logger Logger
@@ -166,6 +169,7 @@ func NewEmulator(w, h int) *Emulator {
 	})
 	t.pipe = newBufPipe()
 	t.resetModes()
+	t.charsetIDs = defaultCharsetIDs
 	t.tabstops = uv.DefaultTabStops(w)
 
 	// Initialize handler maps upfront to avoid nil checks during registration
@@ -260,6 +264,19 @@ func (e *Emulator) CellAt(x, y int) *uv.Cell {
 // SetCell sets the current focused screen cell at the given x, y position.
 func (e *Emulator) SetCell(x, y int, c *uv.Cell) {
 	e.scr.SetCell(x, y, c)
+}
+
+// MainCellAt reads a cell from the normal screen whether or not the alternate
+// one is active. It is what the guest is not looking at while a full-screen
+// program is running, and what quitting that program reveals.
+func (e *Emulator) MainCellAt(x, y int) *uv.Cell {
+	return e.scrs[0].CellAt(x, y)
+}
+
+// SetMainCell writes a cell into the normal screen whether or not the alternate
+// one is active.
+func (e *Emulator) SetMainCell(x, y int, c *uv.Cell) {
+	e.scrs[0].SetCell(x, y, c)
 }
 
 // Scrollback returns the scrollback buffer of the main screen.
@@ -508,6 +525,81 @@ func (e *Emulator) RestoreAltScreenMode(enabled bool) {
 // effects would undo the restore.
 func (e *Emulator) RestoreCursorPosition(x, y int) {
 	e.setCursor(x, y)
+}
+
+// defaultCharsetIDs is US ASCII in all four slots, which is what an emulator
+// that has been sent no SCS sequence is using.
+var defaultCharsetIDs = [4]byte{'B', 'B', 'B', 'B'}
+
+// ScrollRegion returns the margins scrolling is confined to, as the rectangle
+// of the active screen they cover.
+func (e *Emulator) ScrollRegion() uv.Rectangle {
+	return e.scr.ScrollRegion()
+}
+
+// RestoreScrollRegion puts back the margins a guest set with DECSTBM or DECSLRM.
+// A guest sets them once to hold a header or a status line out of the scrolling
+// part of the screen, so a client that comes back without them scrolls the whole
+// screen and takes the fixed rows with it.
+func (e *Emulator) RestoreScrollRegion(r uv.Rectangle) {
+	if r.Empty() {
+		return
+	}
+	e.scr.scroll = r.Intersect(e.scr.Bounds())
+}
+
+// ResetScrollRegion puts scrolling back to the whole screen, which is where a
+// pane whose guest has set no margins scrolls.
+func (e *Emulator) ResetScrollRegion() {
+	e.scr.scroll = e.scr.Bounds()
+}
+
+// Charsets returns the designator byte of the character set selected into each
+// of G0 to G3, and which of them GL and GR are pointing at.
+func (e *Emulator) Charsets() (ids [4]byte, gl, gr int) {
+	return e.charsetIDs, e.gl, e.gr
+}
+
+// RestoreCharsets puts back a character set selection. A program that draws
+// boxes selects the DEC line-drawing set once and then sends the box characters
+// as plain letters, so a client that comes back with G0 at US ASCII draws qqqq
+// where the guest drew a horizontal rule.
+func (e *Emulator) RestoreCharsets(ids [4]byte, gl, gr int) {
+	for i, id := range ids {
+		switch id {
+		case 'A':
+			e.charsets[i] = UK
+		case '0':
+			e.charsets[i] = SpecialDrawing
+		default:
+			e.charsets[i] = nil
+			id = 'B'
+		}
+		e.charsetIDs[i] = id
+	}
+	if gl >= 0 && gl < 4 {
+		e.gl = gl
+	}
+	if gr >= 0 && gr < 4 {
+		e.gr = gr
+	}
+}
+
+// CursorPen returns the graphic rendition in force: the style and hyperlink
+// everything written next will be painted with. A guest sets it once with an
+// SGR sequence and every character until the next one inherits it, so it is
+// state a snapshot has to carry and not something the cells can be read back
+// from.
+func (e *Emulator) CursorPen() (uv.Style, uv.Link) {
+	return e.scr.cursorPen(), e.scr.cursorLink()
+}
+
+// RestoreCursorPen puts back the rendition a snapshot was taken under, so the
+// output that arrives after the snapshot is painted the colour the guest set
+// rather than whatever this emulator was left in.
+func (e *Emulator) RestoreCursorPen(pen uv.Style, link uv.Link) {
+	e.scr.cur.Pen = pen
+	e.scr.cur.Link = link
 }
 
 // GetModes returns a copy of the current terminal DEC private modes.
@@ -936,6 +1028,24 @@ func (e *Emulator) IndexedColor(i int) color.Color {
 	}
 
 	return c
+}
+
+// PaletteColor resolves one of the sixteen ANSI palette slots the way handleSgr
+// resolves SGR 30-37 and 90-97: through the user's theme when one is set, and
+// as a plain palette entry otherwise.
+//
+// A cell rebuilt from a snapshot has to be coloured by the same rule as a cell
+// the guest writes live, or a pane comes back in one palette and carries on in
+// another.
+func (e *Emulator) PaletteColor(i int) color.Color {
+	if i < 0 || i > 15 {
+		return nil
+	}
+	if !e.hasThemeColors() {
+		// #nosec G115 - i is validated to be in [0, 15] above
+		return ansi.BasicColor(uint8(i))
+	}
+	return e.IndexedColor(i)
 }
 
 // SetIndexedColor sets a terminal's indexed color.

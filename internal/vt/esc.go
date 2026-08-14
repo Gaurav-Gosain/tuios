@@ -32,6 +32,7 @@ func (e *Emulator) fullReset() {
 	e.gl, e.gr = 0, 1
 	e.gsingle = 0
 	e.charsets = [4]CharSet{}
+	e.charsetIDs = defaultCharsetIDs
 	e.atPhantom = false
 	e.grapheme = e.grapheme[:0]
 	e.openGrapheme = openGrapheme{}

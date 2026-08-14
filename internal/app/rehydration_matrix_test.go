@@ -7,6 +7,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // The matrix. Every route a client takes into a pane, crossed with every shape
@@ -149,6 +150,88 @@ var rehydrationShapes = []paneShape{
 		name: "wide-runes",
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `printf '\346\227\245\346\234\254\350\252\236 WIDE-END\n'`, "WIDE-END")
+		},
+	},
+	{
+		// The 16-colour palette with attributes on top, which is what ls,
+		// grep and a prompt put on screen. These follow the user's terminal
+		// theme, so a route that brings them back as the RGB they resolve to
+		// repaints the pane in shades the user never chose.
+		name: "heavy-sgr",
+		arrange: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `printf '\033[1;31mBOLD-RED\033[m \033[4;32mUNDER-GREEN\033[m \033[7mREVERSED\033[m \033[3;9mSTRUCK\033[m SGR-END\n'`, "SGR-END")
+		},
+	},
+	{
+		name: "256-and-truecolour",
+		arrange: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `printf '\033[38;5;33mINDEXED\033[48;5;226m ON-YELLOW\033[m \033[38;2;200;100;50mTRUECOLOUR\033[m TC-END\n'`, "TC-END")
+		},
+	},
+	{
+		// A guest that set a rendition and left it in force. What matters is
+		// not the text already on screen but the line printed after the route
+		// has finished: it arrives on the live stream and is painted with
+		// whatever pen the client's emulator is holding.
+		name: "colour-still-in-force",
+		arrange: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `printf '\033[35;1mPEN-LEFT-SET\n'`, "PEN-LEFT-SET")
+		},
+		finish: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `printf 'PAINTED-AFTER-RESTORE\n'`, "PAINTED-AFTER-RESTORE")
+		},
+	},
+	{
+		// A status line held out of the scrolling part of the screen, and
+		// enough output afterwards to make the pane scroll inside it.
+		name: "scroll-region",
+		arrange: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `printf '\033[H\033[2JHEADER\033[3;9r\033[3;1H'; i=1; while [ $i -le 12 ]; do echo "SR-$i-END"; i=$((i+1)); done`, "SR-12-END")
+		},
+	},
+	{
+		name: "origin-mode",
+		arrange: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `printf '\033[2;8r\033[?6h\033[1;1HORIGIN-BODY-END\n'`, "ORIGIN-BODY-END")
+		},
+	},
+	{
+		// A full-screen program using every row it has, with something on the
+		// last one, which is where an editor keeps its status line. The
+		// alternate screen has no scrollback, so a row lost off the bottom
+		// here is lost for good: the guest will not redraw it unless its own
+		// size changes, and a client resizing its local emulator does not
+		// change it.
+		name: "alt-screen-full-height",
+		arrange: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `H=$(stty size | cut -d' ' -f1); printf '\033[?1049h\033[H\033[2J'; `+
+				`i=1; while [ $i -lt $H ]; do printf '\033[%d;1HAFROW-%d' $i $i; i=$((i+1)); done; `+
+				`printf '\033[%d;1HAFLASTROW-END' $H`, "AFLASTROW-END")
+		},
+		check: func(t *testing.T, r *rig, ptyID string) {
+			st, err := r.ctl.GetTerminalState(ptyID, -1)
+			if err != nil || st == nil {
+				t.Fatalf("read the daemon's copy: %v", err)
+			}
+			if !strings.Contains(stateText(st), "AFLASTROW-END") {
+				t.Fatalf("the daemon lost the last row, so the route cannot be blamed for the client")
+			}
+			if w := r.winByPTY(ptyID); !strings.Contains(clientText(w), "AFLASTROW-END") {
+				t.Errorf("the bottom row of the full-screen program is gone: an editor taken through this route comes back without its status line")
+			}
+		},
+	},
+	{
+		// A full-screen program caught between frames: in the alternate
+		// screen, drawing a box out of the DEC line-drawing set, with that set
+		// still selected and a colour still in force.
+		name: "tui-mid-draw",
+		arrange: func(r *rig, ptyID string) {
+			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2J\033[1;34m\033(0lqqqk\r\nx  x\r\nmqqqj\r\nTUI-MID-DRAW\r\n'`, "TUI-MID-DRAW")
+			st, err := r.ctl.GetTerminalState(ptyID, -1)
+			if err != nil || st == nil || !st.IsAltScreen {
+				r.t.Fatalf("the pane never entered the alternate screen (err %v, state %v)", err, st)
+			}
 		},
 	},
 	{
@@ -307,6 +390,32 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 		t.Errorf("cursor: client %d,%d, daemon %d,%d", pos.X, pos.Y, st.CursorX, st.CursorY)
 	}
 
+	// What the pane holds is only half of it. These three decide how the output
+	// that has not arrived yet is painted, where it lands, and which glyphs it
+	// draws, and none of them can be read back off the cells.
+	pen, link := term.CursorPen()
+	if got, want := stateCellSig(session.CellStateOf(&uv.Cell{Content: " ", Width: 1, Style: pen, Link: link})),
+		penSig(st.Pen); got != want {
+		t.Errorf("pen: client %s, daemon %s: the next thing this pane prints is painted with it", got, want)
+	}
+	// A pane whose guest set no margins carries none, and scrolls its whole
+	// screen at whatever size this client has it at.
+	m := term.ScrollRegion()
+	want := []int{0, 0, term.Width(), term.Height()}
+	if len(st.Margins) == 4 {
+		want = st.Margins
+	}
+	if m.Min.X != want[0] || m.Min.Y != want[1] || m.Dx() != want[2] || m.Dy() != want[3] {
+		t.Errorf("scroll region: client %v of %dx%d, want %v: the next line this pane scrolls takes the wrong rows with it",
+			m, term.Width(), term.Height(), want)
+	}
+	if ids, gl, gr := term.Charsets(); len(st.Charsets) == 6 &&
+		(int(ids[0]) != st.Charsets[0] || int(ids[1]) != st.Charsets[1] ||
+			int(ids[2]) != st.Charsets[2] || int(ids[3]) != st.Charsets[3] ||
+			gl != st.Charsets[4] || gr != st.Charsets[5]) {
+		t.Errorf("charsets: client %q gl=%d gr=%d, daemon %v: the next box the guest draws comes out as letters", ids, gl, gr, st.Charsets)
+	}
+
 	// Grid, cell for cell.
 	var diffs []string
 	for y := range st.Height {
@@ -336,16 +445,37 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 		t.Errorf("scrollback: client holds %d lines, daemon holds %d", cn, dn)
 		return
 	}
+	// Compared cell for cell like the screen, not as text. History that came
+	// back in the wrong colours read the same as history that came back right.
 	base := dn - cn
 	for i := range cn {
-		got := strings.TrimRight(term.ScrollbackLine(i).String(), " ")
-		want := stateRow(st.Scrollback[base+i])
-		if got != want {
-			t.Errorf("scrollback line %d of %d (daemon line %d):\n  client %q\n  daemon %q",
-				i, cn, base+i, got, want)
-			return
+		line := term.ScrollbackLine(i)
+		row := st.Scrollback[base+i]
+		for x := range max(len(line), len(row)) {
+			got, want := " ", " "
+			if x < len(line) {
+				got = uvCellSig(&line[x])
+			}
+			if x < len(row) {
+				want = stateCellSig(row[x])
+			}
+			if got != want {
+				t.Errorf("scrollback line %d of %d (daemon line %d), column %d:\n  client %s\n  daemon %s\n  client line %q\n  daemon line %q",
+					i, cn, base+i, x, got, want,
+					strings.TrimRight(line.String(), " "), stateRow(row))
+				return
+			}
 		}
 	}
+}
+
+// penSig describes a serialized pen the way stateCellSig describes a cell, so
+// the two sides of the comparison read the same.
+func penSig(ps *session.StyleState) string {
+	if ps == nil {
+		return "<absent>"
+	}
+	return stateCellSig(session.CellState{Content: " ", Width: 1, StyleState: *ps})
 }
 
 // sideBySide renders both copies of a pane for a failure message.

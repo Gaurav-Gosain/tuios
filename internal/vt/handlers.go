@@ -425,6 +425,10 @@ func (e *Emulator) registerDefaultEscHandlers() {
 			default:
 				return false
 			}
+			// Recorded alongside, because a CharSet is a map and cannot be
+			// compared back to the set it came from. A snapshot has to name
+			// which set is selected, not carry the mapping.
+			e.charsetIDs[set] = byte(c.Final())
 			return true
 		})
 	}
