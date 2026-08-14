@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -276,14 +277,34 @@ var rehydrationShapes = []paneShape{
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `printf 'RP-READY\n'`, "RP-READY")
 			w := r.winByPTY(ptyID)
-			// Lines longer than the pane at either width, so every one of them
-			// is a wrap decision, and started rather than waited for so the
-			// resize below lands in the middle of them.
-			r.startPTY(ptyID, `i=1; while [ $i -le 300 ]; do echo "RP-$i-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-END"; i=$((i+1)); done`)
-			w.Resize(w.Width-6, w.Height)
+			// Lines longer than the pane at every width it is taken through, so
+			// each one is a wrap decision, and started rather than waited for so
+			// the resizes below land among them.
+			r.startPTY(ptyID, `A=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; `+
+				`i=1; while [ $i -le 3000 ]; do echo "RP-$i-$A$A$A$A-END"; i=$((i+1)); done`)
+			// Resized only once the pane is known to be producing. A resize
+			// that lands before the guest has said anything settles on both
+			// sides before the first byte and tests nothing.
+			//
+			// Cut to a third of the width, so a line that took four rows takes
+			// ten: a seam laid out at the wrong width is a different number of
+			// scrollback lines, not only different content in them.
+			r.waitDaemonShows(ptyID, "RP-4-")
+			// Resized repeatedly, the way dragging a border over a pane that is
+			// producing does. One resize settles on both sides in about the time
+			// it takes the daemon to read a message; a run of them keeps the
+			// daemon a width behind for as long as the drag lasts, which is the
+			// state the two copies can disagree in.
+			full := w.Width
+			for range 40 {
+				w.Resize(max(full/3, 6), w.Height)
+				time.Sleep(2 * time.Millisecond)
+				w.Resize(full, w.Height)
+				time.Sleep(2 * time.Millisecond)
+			}
 		},
 		finish: func(r *rig, ptyID string) {
-			r.waitDaemonShows(ptyID, "RP-300-")
+			r.waitDaemonShows(ptyID, "RP-3000-")
 		},
 	},
 	{
