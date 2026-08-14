@@ -50,11 +50,28 @@ type Observer interface {
 	Done(r Result)
 }
 
+// RuleInfo describes one invariant. Name is what a Violation carries, so a
+// display can map a failure onto the exact rule that produced it; Family groups
+// related rules for presentation; Doc is the one line a display shows to say
+// what went wrong in words rather than in an identifier.
+//
+// Family is a field rather than a prefix on Name because a prefix is a parsing
+// convention nothing enforces: a typo makes a phantom group that looks
+// deliberate. A field is checked by the compiler and listed in one place.
+type RuleInfo struct {
+	Name   string
+	Family string
+	Doc    string
+}
+
 // RuleLister is an optional Target capability. A target that can name its rules
 // gets per-rule results reported to the Observer; one that cannot still gets
 // Step, carrying whichever rules actually broke. It is optional so the oracle
 // never has to know an observer exists.
-type RuleLister interface{ Rules() []string }
+//
+// The names must be the ones Violations carry, and in the order Check applies
+// them, because that is what makes "everything after the break went unrun" true.
+type RuleLister interface{ Rules() []RuleInfo }
 
 // NopObserver is the default. Embed it to implement only the methods a display
 // cares about.
@@ -154,6 +171,14 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 		if err := t.Reset(); err != nil {
 			return -1, nil, err
 		}
+		// Hoisted: the registry is fixed for the life of a target, and asking for
+		// it per action allocated a slice per action on the hot path.
+		var rules []RuleInfo
+		if watch {
+			if lister, ok := t.(RuleLister); ok {
+				rules = lister.Rules()
+			}
+		}
 		for i, a := range as {
 			if err := t.Apply(a); err != nil {
 				return -1, nil, fmt.Errorf("step %d %s: %w", i, a, err)
@@ -165,16 +190,14 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 				// rather than only the rule that broke. Check stops at the
 				// first failure, so every rule after it is reported as unrun by
 				// omission rather than as passing.
-				if lister, ok := t.(RuleLister); ok {
-					broke := ""
-					if len(vs) > 0 {
-						broke = vs[0].Rule
-					}
-					for _, name := range lister.Rules() {
-						obs.Rule(i, name, name != broke)
-						if name == broke {
-							break
-						}
+				broke := ""
+				if len(vs) > 0 {
+					broke = vs[0].Rule
+				}
+				for _, r := range rules {
+					obs.Rule(i, r.Name, r.Name != broke)
+					if r.Name == broke {
+						break
 					}
 				}
 			}

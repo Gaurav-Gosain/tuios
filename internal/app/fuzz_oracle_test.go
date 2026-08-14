@@ -42,33 +42,89 @@ func vio(rule, format string, args ...any) []fuzz.Violation {
 
 // fuzzRules is the oracle, in the order Check runs it: cheapest first, so the
 // common case where nothing is wrong stays off the expensive render.
+//
+// rules lists every Violation a check can raise, in the order it raises them.
+// One function often decides several distinct properties, and it is the
+// property, not the function, that a report names and a shrinker holds fixed,
+// so the registry enumerates properties. Getting that wrong is not cosmetic: an
+// attached display matches a Violation's Rule against these names, and a name
+// no violation ever carries is a rule that reads as passing while it fails.
 var fuzzRules = []struct {
-	name  string
+	rules []fuzz.RuleInfo
 	check func(*fuzzOS) []fuzz.Violation
 }{
-	{"panic", checkNoRecoveredPanic},
-	{"model-indexes", checkModelIndexes},
-	{"pane-size", checkPaneSizeAgreement},
-	{"spurious-winch", checkNoSpuriousResize},
-	{"layout-overlap", checkLayoutIsDisjoint},
-	{"stuck-gesture", checkGestureNeedsAButton},
-	{"scrollbar-column", checkScrollbarColumn},
-	{"frame-size", checkFrameFitsTheHost},
-	{"rail-addressing", checkRailAddressing},
-	{"rail-signature", checkRailSignatureFollowsTheRail},
-	{"guest-cells", checkGuestCellsAreNotPaintedOver},
-	{"divider-glyph", checkDividersUseTheirOwnGlyphs},
+	{[]fuzz.RuleInfo{
+		{Name: "panic", Family: "process", Doc: "Update swallowed a panic, so a frame did nothing and said nothing"},
+	}, checkNoRecoveredPanic},
+
+	{[]fuzz.RuleInfo{
+		{Name: "focus-index", Family: "model", Doc: "the focused pane index is outside the pane slice"},
+		{Name: "workspace-range", Family: "model", Doc: "a workspace number is outside the configured range"},
+		{Name: "nil-pane", Family: "model", Doc: "the pane slice holds a nil"},
+	}, checkModelIndexes},
+
+	{[]fuzz.RuleInfo{
+		{Name: "pane-size", Family: "geometry", Doc: "a guest was told a size its emulator does not hold"},
+		{Name: "pane-overflow", Family: "geometry", Doc: "a pane rendered a frame larger than the box it is clipped to"},
+	}, checkPaneSizeAgreement},
+
+	{[]fuzz.RuleInfo{
+		{Name: "spurious-winch", Family: "geometry", Doc: "a pane whose drawable size did not move was resized anyway"},
+	}, checkNoSpuriousResize},
+
+	{[]fuzz.RuleInfo{
+		{Name: "layout-overlap", Family: "layout", Doc: "two tiled panes claim the same cell"},
+	}, checkLayoutIsDisjoint},
+
+	{[]fuzz.RuleInfo{
+		{Name: "stuck-gesture", Family: "input", Doc: "a drag is live with no button held, so the pane stops taking input"},
+	}, checkGestureNeedsAButton},
+
+	{[]fuzz.RuleInfo{
+		{Name: "scrollbar-column", Family: "render", Doc: "a scrollbar sits outside its own pane's last column"},
+	}, checkScrollbarColumn},
+
+	{[]fuzz.RuleInfo{
+		{Name: "frame-size", Family: "layout", Doc: "the frame handed to the host is wider or taller than the host"},
+	}, checkFrameFitsTheHost},
+
+	{[]fuzz.RuleInfo{
+		{Name: "rail-hits-nav", Family: "rail", Doc: "a rail hit target lands on a row the rail does not own"},
+		{Name: "rail-hit-band", Family: "rail", Doc: "a rail hit target leaves the rail's own column band"},
+		{Name: "rail-hit-cells", Family: "rail", Doc: "a rail hit rectangle does not cover the cells it was painted on"},
+		{Name: "rail-cursor", Family: "rail", Doc: "the rail's cursor points at a row that is not selectable"},
+	}, checkRailAddressing},
+
+	{[]fuzz.RuleInfo{
+		{Name: "rail-signature", Family: "rail", Doc: "the rail's drawn output moved and its cache signature did not"},
+	}, checkRailSignatureFollowsTheRail},
+
+	{[]fuzz.RuleInfo{
+		{Name: "guest-cells", Family: "render", Doc: "something painted into a cell a pane's guest owns"},
+	}, checkGuestCellsAreNotPaintedOver},
+
+	{[]fuzz.RuleInfo{
+		{Name: "divider-glyph", Family: "render", Doc: "a divider cell holds a glyph from outside the active border style"},
+	}, checkDividersUseTheirOwnGlyphs},
+}
+
+// fuzzCheckRules belong to Check itself rather than to any one check function.
+// A panic escaping a rule can surface at any point in the sweep, so it sits at
+// the end of the registry where it cannot claim that the rules before it were
+// skipped.
+var fuzzCheckRules = []fuzz.RuleInfo{
+	{Name: "render-panic", Family: "process", Doc: "a rule panicked composing a frame, which in the real render loop kills the process"},
 }
 
 // Rules names the oracle for an attached display. It is the optional half of
 // the observer seam: without it a display still sees actions and failures, with
 // it the display can show every rule and how it fared.
-func (f *fuzzOS) Rules() []string {
-	names := make([]string, len(fuzzRules))
-	for i, r := range fuzzRules {
-		names[i] = r.name
+func (f *fuzzOS) Rules() []fuzz.RuleInfo {
+	out := make([]fuzz.RuleInfo, 0, len(fuzzRules)+len(fuzzCheckRules))
+	for _, r := range fuzzRules {
+		out = append(out, r.rules...)
 	}
-	return names
+	return append(out, fuzzCheckRules...)
 }
 
 // Check runs the oracle against the current model.
@@ -86,8 +142,8 @@ func (f *fuzzOS) Check() (found []fuzz.Violation) {
 		}
 	}()
 	m := f.m
-	for _, rule := range fuzzRules {
-		if vs := rule.check(f); len(vs) > 0 {
+	for _, entry := range fuzzRules {
+		if vs := entry.check(f); len(vs) > 0 {
 			for i := range vs {
 				vs[i].Detail += fmt.Sprintf(" [after %s, %d panes, %dx%d]",
 					f.lastAction, len(m.Windows), m.Width, m.Height)

@@ -834,14 +834,26 @@ func (p *ptyTarget) checkProvenance() []fuzz.Violation {
 	return nil
 }
 
-// Rules names this target's oracle, in the order Check applies them.
-func (p *ptyTarget) Rules() []string {
-	return []string{
-		"pty-exit", "pty-panic", "pty-size", "client-splice",
-		"daemon-reachable", "daemon-workspace", "daemon-window-count",
-		"daemon-splice", "altscreen-retained", "scrollback-retained",
-		"witness-provenance", "client-ahead",
-		"burst", "attach", "second-client", "daemon-restart",
+// Rules names this target's oracle, in the order Check applies them, with the
+// family a display groups them under and the line it shows when one goes red.
+func (p *ptyTarget) Rules() []fuzz.RuleInfo {
+	return []fuzz.RuleInfo{
+		{Name: "pty-exit", Family: "process", Doc: "the client under test exited on its own"},
+		{Name: "pty-panic", Family: "process", Doc: "the client printed a panic to its own screen"},
+		{Name: "pty-size", Family: "geometry", Doc: "the client's grid and its PTY disagree about the size"},
+		{Name: "client-splice", Family: "client", Doc: "the client shows two output lines with the middle missing"},
+		{Name: "daemon-reachable", Family: "daemon", Doc: "the daemon stopped answering while a client was attached"},
+		{Name: "daemon-workspace", Family: "daemon", Doc: "the dock and the daemon disagree about the current workspace"},
+		{Name: "daemon-window-count", Family: "daemon", Doc: "the dock and the daemon disagree about how many panes exist"},
+		{Name: "daemon-splice", Family: "daemon", Doc: "the daemon's own grid has a gap in a pane's output"},
+		{Name: "altscreen-retained", Family: "scrollback", Doc: "a pane left the alternate screen behind without being told to"},
+		{Name: "scrollback-retained", Family: "scrollback", Doc: "history a pane held has gone missing"},
+		{Name: "witness-provenance", Family: "client", Doc: "the client shows a line further than anything ever written"},
+		{Name: "client-ahead", Family: "client", Doc: "the client shows output the daemon never produced"},
+		{Name: "burst", Family: "session", Doc: "a pane dropped lines from a burst it was sent"},
+		{Name: "attach", Family: "session", Doc: "a reattached client never rehydrated its panes"},
+		{Name: "second-client", Family: "session", Doc: "a second client on the same session never rehydrated"},
+		{Name: "daemon-restart", Family: "session", Doc: "sessions did not come back after the daemon restarted"},
 	}
 }
 
