@@ -142,6 +142,41 @@ func TestWireCarriesTheWholeCell(t *testing.T) {
 	}
 }
 
+// TestWireLeavesTheAlternateScreen covers the pane whose emulator survives a
+// workspace switch. Its guest quit a full-screen program while the pane was
+// hidden, so the snapshot it comes back to is of the shell's screen while the
+// emulator holding it is still pointed at the alternate buffer.
+func TestWireLeavesTheAlternateScreen(t *testing.T) {
+	daemon := vt.NewEmulator(fidelityCols, fidelityRows)
+	defer func() { _ = daemon.Close() }()
+	client := vt.NewEmulator(fidelityCols, fidelityRows)
+	defer func() { _ = client.Close() }()
+
+	// Both sides watch a program run in the alternate screen.
+	if _, err := daemon.Write([]byte("$ prompt\r\n\x1b[?1049h\x1b[H\x1b[2JEDITOR")); err != nil {
+		t.Fatalf("feed the daemon emulator: %v", err)
+	}
+	ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0))
+	if !client.ActiveScreenIsAlt() {
+		t.Fatal("the client never entered the alternate screen, so the case is not set up")
+	}
+
+	// The guest quits while this client is not subscribed, and the client is
+	// handed the snapshot that follows.
+	if _, err := daemon.Write([]byte("\x1b[?1049l")); err != nil {
+		t.Fatalf("leave the alternate screen: %v", err)
+	}
+	ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0))
+
+	// The mode map and the buffer pointer are separate, and the modes came back
+	// saying the alternate screen is off. Asked of the pointer, which is what
+	// decides where the next byte lands and which scrollback it scrolls into.
+	if client.ActiveScreenIsAlt() {
+		t.Fatal("the client is still writing into the alternate buffer while its modes say it left: the shell's screen was blitted into the buffer nobody is looking at, and everything the pane prints next scrolls into a scrollback that is switched off")
+	}
+	compareEmulators(t, daemon, client)
+}
+
 // compareEmulators reports every way the two copies of a pane differ.
 func compareEmulators(t *testing.T, want, got *vt.Emulator) {
 	t.Helper()
@@ -165,6 +200,17 @@ func compareEmulators(t *testing.T, want, got *vt.Emulator) {
 			w, g := cellSig(want.CellAt(x, y)), cellSig(got.CellAt(x, y))
 			if w != g {
 				diffs = append(diffs, fmt.Sprintf("  screen (%d,%d)\n    daemon %s\n    client %s", x, y, w, g))
+			}
+			// The screen under a full-screen program, which quitting it
+			// reveals. Asked about only while the alternate screen is active,
+			// because that is the only time the wire carries it: entering the
+			// alternate screen clears it, so what it held before is never seen.
+			if !want.IsAltScreen() {
+				continue
+			}
+			w, g = cellSig(want.MainCellAt(x, y)), cellSig(got.MainCellAt(x, y))
+			if w != g {
+				diffs = append(diffs, fmt.Sprintf("  screen underneath (%d,%d)\n    daemon %s\n    client %s", x, y, w, g))
 			}
 		}
 	}

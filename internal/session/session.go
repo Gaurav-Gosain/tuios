@@ -1439,6 +1439,18 @@ func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *Terminal
 		}
 	}
 
+	if state.IsAltScreen {
+		state.MainScreen = make([][]CellState, height)
+		for y := 0; y < height; y++ {
+			state.MainScreen[y] = make([]CellState, width)
+			for x := 0; x < width; x++ {
+				if cell := t.MainCellAt(x, y); cell != nil {
+					state.MainScreen[y][x] = CellStateOf(cell)
+				}
+			}
+		}
+	}
+
 	if maxScrollback == 0 {
 		maxScrollback = DefaultStateScrollback
 	}
@@ -1477,9 +1489,12 @@ func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
 	}
 
 	// Sending ESC[?1049h instead would clear the buffer it is switching to.
-	if state.IsAltScreen {
-		t.RestoreAltScreenMode(true)
-	}
+	//
+	// Applied in both directions. Only entering was applied, so an emulator
+	// that survived a workspace switch and whose guest had quit its full-screen
+	// program while the pane was hidden stayed pointed at the alternate buffer,
+	// and the shell's screen was blitted into the wrong one.
+	t.RestoreAltScreenMode(state.IsAltScreen)
 
 	// Modes come after the screen switch so the map lands on top of it. They
 	// are what apps like vim and htop need to receive mouse events at all, and
@@ -1554,6 +1569,20 @@ func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
 		// written from wherever this client's emulator happened to be left,
 		// which on a pane rebuilt from nothing is the top left corner.
 		t.RestoreCursorPosition(state.CursorX, state.CursorY)
+	}
+
+	// The shell's screen under a running full-screen program. Quitting the
+	// program reveals it, and the client had never been sent it: a pane where
+	// vim was open across a switch came back correct and went blank the moment
+	// vim exited, because the buffer underneath had nothing in it.
+	for y := 0; y < len(state.MainScreen) && y < state.Height; y++ {
+		for x := 0; x < len(state.MainScreen[y]) && x < state.Width; x++ {
+			cs := state.MainScreen[y][x]
+			if cs.Content == "" {
+				continue
+			}
+			t.SetMainCell(x, y, stateToCell(t, cs))
+		}
 	}
 }
 
@@ -1630,6 +1659,12 @@ type TerminalState struct {
 	KittyKbdStack []int         `json:"kitty_kbd_stack,omitempty"` // Kitty keyboard protocol flag stack, base entry first
 	Screen        [][]CellState `json:"screen"`
 	Scrollback    [][]CellState `json:"scrollback,omitempty"`
+	// MainScreen is the normal screen, carried only while the alternate one is
+	// active. It is the shell's screen underneath a full-screen program, which
+	// quitting that program puts back on display. The alternate screen needs no
+	// such treatment: entering it clears it, so what it held before is never
+	// seen again.
+	MainScreen [][]CellState `json:"main_screen,omitempty"`
 }
 
 // CellState represents a single terminal cell with full styling information.

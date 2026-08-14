@@ -262,6 +262,19 @@ func (e *Emulator) SetCell(x, y int, c *uv.Cell) {
 	e.scr.SetCell(x, y, c)
 }
 
+// MainCellAt reads a cell from the normal screen whether or not the alternate
+// one is active. It is what the guest is not looking at while a full-screen
+// program is running, and what quitting that program reveals.
+func (e *Emulator) MainCellAt(x, y int) *uv.Cell {
+	return e.scrs[0].CellAt(x, y)
+}
+
+// SetMainCell writes a cell into the normal screen whether or not the alternate
+// one is active.
+func (e *Emulator) SetMainCell(x, y int, c *uv.Cell) {
+	e.scrs[0].SetCell(x, y, c)
+}
+
 // Scrollback returns the scrollback buffer of the main screen.
 // Note: The alternate screen does not maintain scrollback.
 func (e *Emulator) Scrollback() *Scrollback {
