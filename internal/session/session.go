@@ -252,6 +252,11 @@ type PTY struct {
 	outputBuffer []byte
 	outputPos    int
 	outputSeq    int64
+	// resizeMarks are the stream positions resizes took effect at, oldest
+	// first, kept while the ring still holds bytes either side of them plus
+	// the newest one behind the ring, which is the width the ring's first
+	// byte was laid out at.
+	resizeMarks []resizeMark
 
 	// Subscribers for raw output streaming.
 	subscribers   map[string]*ptySubscriber
@@ -1255,6 +1260,15 @@ type ptyChunk struct {
 	width, height int // both > 0 marks a resize rather than output
 }
 
+// resizeMark records the stream position a resize took effect at. The ring
+// holds bytes only, so without the marks a subscriber resumed across a resize
+// was handed the whole span at one width and laid out at that width lines the
+// daemon had wrapped at another. Guarded by outputMu and pruned with the ring.
+type resizeMark struct {
+	seq           int64
+	width, height int
+}
+
 func (c ptyChunk) isResize() bool { return c.width > 0 && c.height > 0 }
 
 // resyncPrefix homes the cursor and clears the screen and the scrollback. It
@@ -1298,7 +1312,29 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 	}
 	if n := p.outputPos - start; n > 0 {
 		debugLog("[DEBUG] PTY %s: sending %d buffered bytes to new subscriber", p.ID[:8], n)
-		bufCopy := make([]byte, 0, n+len(resyncPrefix))
+		send := func(c ptyChunk) {
+			select {
+			case sub.ch <- c:
+			default:
+				debugLog("[DEBUG] PTY %s: failed to send catch-up chunk (channel full)", p.ID[:8])
+			}
+		}
+		// The replay is cut at every resize mark inside it and the resize sent
+		// between the two segments, so the client lays each segment out at the
+		// width the daemon laid it out at. One flat replay put the whole span
+		// at one width, and a catch-up that crossed a resize came back with
+		// every line after it wrapped where the daemon had not wrapped it.
+		startSeq := bufStart + int64(start)
+		// The width the replay begins at. A client resumed here is usually at
+		// it already and skips it; a rolled client, whose screen the resync
+		// below clears, is not.
+		for i := len(p.resizeMarks) - 1; i >= 0; i-- {
+			if m := p.resizeMarks[i]; m.seq <= startSeq {
+				send(ptyChunk{width: m.width, height: m.height})
+				break
+			}
+		}
+		var prefix []byte
 		if rolled {
 			// The client still holds the screen it drew up to fromSeq, and the
 			// bytes between there and the buffer's start are gone. Appending the
@@ -1307,15 +1343,28 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 			// tail is written against, so the guest's output lands wherever the
 			// old screen had left off. Clear first, so the tail repaints from a
 			// known state instead of over a stale one.
-			bufCopy = append(bufCopy, resyncPrefix...)
+			prefix = resyncPrefix
 		}
-		bufCopy = append(bufCopy, p.outputBuffer[start:p.outputPos]...)
-		select {
-		case sub.ch <- ptyChunk{data: bufCopy}:
-			debugLog("[DEBUG] PTY %s: buffered output sent", p.ID[:8])
-		default:
-			debugLog("[DEBUG] PTY %s: failed to send buffered output (channel full)", p.ID[:8])
+		segStart := start
+		cut := func(end int) {
+			if end == segStart && prefix == nil {
+				return
+			}
+			seg := make([]byte, 0, len(prefix)+end-segStart)
+			seg = append(seg, prefix...)
+			prefix = nil
+			seg = append(seg, p.outputBuffer[segStart:end]...)
+			send(ptyChunk{data: seg})
+			segStart = end
 		}
+		for _, m := range p.resizeMarks {
+			if m.seq <= startSeq {
+				continue
+			}
+			cut(int(m.seq - bufStart))
+			send(ptyChunk{width: m.width, height: m.height})
+		}
+		cut(p.outputPos)
 	} else {
 		debugLog("[DEBUG] PTY %s: no buffered output to send", p.ID[:8])
 	}
@@ -1415,6 +1464,12 @@ func (p *PTY) Resize(width, height int) error {
 
 	p.streamMu.Lock()
 	if !p.vtClosed {
+		// Recorded against the ring before it is broadcast, so a catch-up cut
+		// from the ring later replays it between the same two bytes every
+		// subscriber of this moment saw it between.
+		p.outputMu.Lock()
+		p.resizeMarks = append(p.resizeMarks, resizeMark{seq: p.outputSeq, width: width, height: height})
+		p.outputMu.Unlock()
 		p.broadcast(ptyChunk{width: width, height: height}, 0)
 		select {
 		case p.vtWriteChan <- vtChunk{width: width, height: height}:
@@ -2049,8 +2104,14 @@ func (p *PTY) vtWriter() {
 		if chunk.width > 0 && chunk.height > 0 {
 			// The pane's size and its emulator move together, so a snapshot
 			// can never report a width the grid it serializes is not at.
+			//
+			// Skipped at the size the emulator already has, exactly as the
+			// client skips it (applyStreamResize): a same-size resize resets
+			// the scroll region and the tab stops, and one side doing that
+			// while the other declines is a divergence the guest never asked
+			// for.
 			p.terminalMu.Lock()
-			if p.terminal != nil {
+			if p.terminal != nil && (p.terminal.Width() != chunk.width || p.terminal.Height() != chunk.height) {
 				p.terminal.Resize(chunk.width, chunk.height)
 			}
 			p.terminalMu.Unlock()
@@ -2073,6 +2134,13 @@ func (p *PTY) vtWriter() {
 // position it ends at.
 func (p *PTY) appendToBuffer(data []byte) int64 {
 	p.outputSeq += int64(len(data))
+	// Marks the ring has rolled past stop being split points, but the newest
+	// of them is still the width the ring's first byte was laid out at, so a
+	// catch-up can start a rolled client at it.
+	bufStart := p.outputSeq - int64(len(p.outputBuffer))
+	for len(p.resizeMarks) > 1 && p.resizeMarks[1].seq <= bufStart {
+		p.resizeMarks = p.resizeMarks[1:]
+	}
 	bufLen := len(p.outputBuffer)
 	// If data is bigger than the buffer, keep only the tail
 	if len(data) >= bufLen {
