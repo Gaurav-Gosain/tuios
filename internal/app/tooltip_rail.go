@@ -15,16 +15,73 @@ import (
 // and not enough to read. The shared tooltip in tooltip.go fills that gap for
 // the pointer only; this is the rail's half of it, the words and where they go.
 
-// sidebarTooltipTrack records the pointer landing on a strip row. Called from
-// the motion handler, which is the only thing that knows the pointer moved.
-func (m *OS) sidebarTooltipTrack(y int) {
+// sidebarTooltipTrack records the pointer landing on something in the rail that
+// talks: a strip row, or one of the expanded rail's one-cell add controls.
+// Called from the motion handler, which is the only thing that knows the
+// pointer moved.
+func (m *OS) sidebarTooltipTrack(x, y int) {
 	for _, r := range m.sidebarStripRows {
 		if r.contains(y) {
 			m.tooltipTrack(tooltipRailStrip, y)
 			return
 		}
 	}
+	// Keyed by the control's kind rather than by its row, since there is one of
+	// each and their headers move with the section budget.
+	if h, ok := m.sidebarRowAt(x, y); ok && sidebarAddKind(h.Kind) {
+		m.tooltipTrack(tooltipRailAdd, int(h.Kind))
+		return
+	}
 	m.tooltipClear()
+}
+
+// sidebarAddKind reports whether a row kind is one of the header add controls.
+func sidebarAddKind(k sidebarRowKind) bool {
+	return k == sidebarRowNewSession || k == sidebarRowNewWindow
+}
+
+// sidebarAddWords is what an add control says when it is asked. The words match
+// the actions elsewhere in the app, so the label and the palette never invent
+// two names for one thing.
+func sidebarAddWords(k sidebarRowKind) string {
+	if k == sidebarRowNewWindow {
+		return "new terminal"
+	}
+	return "new session"
+}
+
+// renderRailAddTooltip composes the label for the add control under the
+// pointer. It anchors on the control's own line and opens away from the rail,
+// exactly as the strip's label does, so the two read as one behaviour at two
+// widths.
+func (m *OS) renderRailAddTooltip() *lipgloss.Layer {
+	if !m.tooltipVisible(tooltipRailAdd) {
+		return nil
+	}
+	// Latched here rather than at the end, so a control whose row has since gone
+	// still closes the tick gate instead of holding it open.
+	m.Tooltip.Shown = true
+
+	kind := sidebarRowKind(m.Tooltip.Key)
+	row := -1
+	for _, h := range m.SidebarHits {
+		if h.Kind == kind && sidebarAddKind(h.Kind) {
+			row = h.Y0
+			break
+		}
+	}
+	if row < 0 {
+		return nil
+	}
+
+	railW, renderW := m.GetSidebarWidth(), m.GetRenderWidth()
+	label := tooltipLabel(sidebarAddWords(kind), max(renderW-railW-1, 1), theme.UI())
+
+	x := railW
+	if config.SidebarPosition == "right" {
+		x = renderW - railW - lipgloss.Width(label)
+	}
+	return tooltipLayer(label, x, row, renderW, "sidebar-tooltip")
 }
 
 // sidebarTooltipBadgeLabel is what the alarm badge says in words. Empty when

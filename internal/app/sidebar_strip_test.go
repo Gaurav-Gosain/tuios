@@ -553,7 +553,7 @@ func TestStripTooltipsStillPopAndStayOnScreen(t *testing.T) {
 		if row.Label == "" {
 			t.Fatalf("%s: no session row carries a tooltip label", pos)
 		}
-		m.sidebarTooltipTrack(row.Y0)
+		m.sidebarTooltipTrack(1, row.Y0)
 		m.Tooltip.At = m.Tooltip.At.Add(-2 * tooltipDelay)
 		layer := m.renderRailTooltip()
 		if layer == nil {

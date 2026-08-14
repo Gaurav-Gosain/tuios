@@ -187,6 +187,10 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.SidebarCycleAgentsSort()
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
+	case sidebarRowNewWindow:
+		// The new pane is the request, so the rail hands the keyboard back to it.
+		m.SidebarNewWindow(row.SessionID)
+		return true
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowSession:
@@ -447,6 +451,25 @@ func (m *OS) SidebarNewSession() {
 	go func() {
 		ch <- SessionCreatedMsg{Name: name, Err: client.CreateDetachedSession(name, w, h)}
 	}()
+}
+
+// SidebarNewWindow makes a pane in the session the terminals section is
+// listing, which is what its header's "+" means. It is the terminals half of
+// the add affordance: the sessions header makes another session, this makes
+// another terminal in one.
+//
+// The section only ever lists the attached session's panes when this is
+// reachable: a peek is the pointer's own transient state and is dropped the
+// moment the pointer or the cursor leaves the session rows, which is what
+// moving to this control does. The guard is here anyway, because a control that
+// silently acts on the wrong session is worse than one that says it cannot.
+func (m *OS) SidebarNewWindow(sessionID string) {
+	if sessionID != "" && sessionID != m.sidebarCurrentSessionID() {
+		m.ShowNotification("Attach to that session first", "info", config.NotificationDuration)
+		return
+	}
+	m.clearSidebarReturn() // the new pane is where the user asked to end up
+	m.AddWindow("")
 }
 
 // sessionCreateChan is the buffered channel carrying creation results back to

@@ -265,7 +265,7 @@ func TestStripGroupTooltipNamesTheAgent(t *testing.T) {
 	// Anywhere in the slot, not only on the mark's own line.
 	for y := row.Y0; y < row.Y1; y++ {
 		m.tooltipClear()
-		m.sidebarTooltipTrack(y)
+		m.sidebarTooltipTrack(1, y)
 		m.Tooltip.At = m.Tooltip.At.Add(-2 * tooltipDelay)
 		if m.renderRailTooltip() == nil {
 			t.Errorf("hovering row %d of the agent's slot popped no tooltip", y)

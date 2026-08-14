@@ -192,6 +192,8 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		m.SidebarCycleAgentsSort()
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
+	case sidebarRowNewWindow:
+		m.SidebarNewWindow(hit.SessionID)
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowSession:
@@ -306,6 +308,8 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.SidebarCycleAgentsSort()
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
+	case sidebarRowNewWindow:
+		m.SidebarNewWindow(hit.SessionID)
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowSession:
@@ -422,7 +426,7 @@ func (m *OS) SidebarMotion(x, y int) bool {
 	m.SidebarHoverActive = true
 	m.SidebarHoverX, m.SidebarHoverY = x, y
 	m.sidebarPeekAt(x, y)
-	m.sidebarTooltipTrack(y)
+	m.sidebarTooltipTrack(x, y)
 	return true
 }
 

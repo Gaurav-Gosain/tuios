@@ -59,13 +59,46 @@ const (
 	// controls these two are narrower than their line, so they carry their own
 	// columns rather than claiming the whole header.
 	sidebarRowAgentSort
-	// sidebarRowNewSession is the "+ new" control in the rail's footer. It
-	// targets nothing that exists yet.
+	// sidebarRowNewSession is the "+" in the sessions header, and the same
+	// control on the collapsed strip. It targets nothing that exists yet.
 	sidebarRowNewSession
-	// sidebarRowCollapse is the footer's collapse toggle. Like the footer's
-	// other control it is narrower than its line, so it carries its own columns.
+	// sidebarRowNewWindow is the "+" in the terminals header: a new pane in the
+	// session that section is listing.
+	sidebarRowNewWindow
+	// sidebarRowCollapse is the footer's collapse toggle. Like the header's
+	// controls it is narrower than its line, so it carries its own columns.
 	sidebarRowCollapse
 )
+
+// sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
+// header no rows and no name: a "+ new" wide enough to read would have pushed
+// the label out of a narrow rail.
+const sidebarAddGlyph = "+"
+
+// sidebarHeaderAdd places a section header's add control: right-aligned on the
+// same spine every other trailing figure lands on, one cell in from the rail's
+// edge. It returns the styled token and the content-relative columns it took,
+// or ok false when the header has no room for it beside its own label, since
+// half a control is half a click target.
+//
+// The control lives in the header rather than in the footer because that is
+// what binds it to a section. One "+ new" pinned to the rail's bottom edge sat
+// directly under the agents block and read as "new agent", which is not a thing
+// the rail can do; the same glyph on the sessions header cannot be read as
+// anything but "another one of these".
+func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, hoverX int, cursor bool) (string, sidebarTokenSpan, bool) {
+	gw := lipgloss.Width(sidebarAddGlyph)
+	x0 := cw - 1 - gw
+	if x0 < labelW+1 {
+		return "", sidebarTokenSpan{}, false
+	}
+	span := sidebarTokenSpan{Kind: kind, X0: x0, X1: x0 + gw}
+	ink := pal.FgMute
+	if cursor || (hoverX >= span.X0 && hoverX < span.X1) {
+		ink = pal.Fg
+	}
+	return sidebarStyle(nil, ink).Render(sidebarAddGlyph), span, true
+}
 
 // sidebarSection identifies one of the rail's three stacked lists. Each owns
 // its own scroll offset and its own band of screen lines, so the wheel scrolls
@@ -464,9 +497,9 @@ func sidebarHeaderRow(label, right string, cw int, pal overlay.Palette) string {
 	return sidebarFit(row, cw, nil)
 }
 
-// sidebarAgentsHeaderW is the columns the "agents" label occupies, its leading
-// inset included. The header's controls refuse to draw over it.
-const sidebarAgentsHeaderW = 7
+// sidebarHeaderLabelW is the columns a section's label occupies, its leading
+// inset included. A header's controls refuse to draw over it.
+func sidebarHeaderLabelW(label string) int { return 1 + lipgloss.Width(label) }
 
 // sidebarTokenSpan is one clickable token inside a header row, in
 // content-relative columns. Several share a line, so the header hit-tests per
@@ -757,7 +790,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 
 	canCreate := m.SidebarCanCreateSession()
 	footerCursor := func(kind sidebarRowKind) bool { return isCursor(kind, "", "") }
-	footerLines, footerZones := m.sidebarFooter(variant, cw, pal, canCreate, -1, -1, footerCursor)
+	footerLines, footerZones := m.sidebarFooter(variant, cw, pal, -1, -1, footerCursor)
 	footerH := len(footerLines)
 	// A rail with no room for both gives its lines to the list: the footer holds
 	// controls that have keys, while the rows are the only thing the rail cannot
@@ -826,17 +859,27 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		hoverRow[s] = -1
 	}
 	footerHoverLine, footerHoverX := -1, -1
-	// The agents header carries two click targets of its own, so the pointer's
-	// column on that one line matters as well as which line it is on.
-	agentsHeaderHoverX := -1
+	// Every header now carries click targets of its own (the add controls, and
+	// the agents section's filter and sort), so the pointer's column on a header
+	// line matters as well as which line it is on.
+	var headerHoverX [sidebarSectionCount]int
+	for s := range headerHoverX {
+		headerHoverX[s] = -1
+	}
 	if !m.SidebarDrag.Dragging && m.SidebarHoverActive && m.SidebarBandContains(m.SidebarHoverX, m.SidebarHoverY) {
 		delta := m.SidebarHoverY - topMargin
 		footerTop := height - footerH
+		onHeader := -1
+		for s := range place {
+			if place[s].header >= 0 && delta == place[s].header {
+				onHeader = s
+			}
+		}
 		switch {
 		case footerH > 0 && delta >= footerTop && delta < height:
 			footerHoverLine, footerHoverX = delta-footerTop, m.SidebarHoverX-contentX0
-		case nA > 0 && delta == place[sidebarSectionAgents].header:
-			agentsHeaderHoverX = m.SidebarHoverX - contentX0
+		case onHeader >= 0:
+			headerHoverX[onHeader] = m.SidebarHoverX - contentX0
 		default:
 			for s := range place {
 				if d := delta - place[s].top; d >= 0 && d < count[s] {
@@ -848,7 +891,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// Re-rendered now the pointer is resolved; the first pass only measured how
 	// many lines the footer takes so the sections could be sized.
 	if footerH > 0 {
-		footerLines, footerZones = m.sidebarFooter(variant, cw, pal, canCreate, footerHoverLine, footerHoverX, footerCursor)
+		footerLines, footerZones = m.sidebarFooter(variant, cw, pal, footerHoverLine, footerHoverX, footerCursor)
 	}
 
 	nav := make([]sidebarNavRow, 0, nS+nT+nA+2)
@@ -874,9 +917,31 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol)+
 			sidebarStyle(nil, pal.FgMute).Render(more), cw, nil))
 	}
+	// recordToken publishes a header control's rectangle and its nav row, the
+	// column-scoped sibling of recordHit. Called before the header line is
+	// appended, so the y it computes is that line's.
+	recordToken := func(tk sidebarTokenSpan, sessionID string) {
+		y := topMargin + len(lines)
+		m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
+			X0: contentX0 + tk.X0, X1: contentX0 + tk.X1,
+			Y0: y, Y1: y + 1,
+			Kind:        tk.Kind,
+			SessionID:   sessionID,
+			WindowIndex: -1,
+		})
+		nav = append(nav, sidebarNavRow{Kind: tk.Kind, SessionID: sessionID, WindowIndex: -1})
+	}
 
 	// sessions
-	lines = append(lines, compose(sidebarHeaderRow("sessions", "", cw, pal)))
+	sessionsAdd := ""
+	if canCreate {
+		if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW("sessions"),
+			pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", "")); ok {
+			sessionsAdd = tok
+			recordToken(span, "")
+		}
+	}
+	lines = append(lines, compose(sidebarHeaderRow("sessions", sessionsAdd, cw, pal)))
 	for i := range count[sidebarSectionSessions] {
 		idx := start[sidebarSectionSessions] + i
 		s := sessions[idx]
@@ -891,7 +956,14 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 
 	// terminals
 	if nT > 0 {
-		right := ""
+		// The add control takes the spine's last cell, and the peek label sits in
+		// front of it. A peek is the pointer's own transient state and cannot
+		// coexist with a pointer on this header, so the two never compete for the
+		// same cells in practice; the arithmetic holds either way.
+		termAdd, termSpan, hasTermAdd := sidebarHeaderAdd(sidebarRowNewWindow, cw,
+			sidebarHeaderLabelW("terminals"), pal, headerHoverX[sidebarSectionTerminals],
+			isCursor(sidebarRowNewWindow, shown, ""))
+		right := termAdd
 		if peeking {
 			// Whose panes these are, since they are not the attached session's,
 			// in that session's own colour: the row the pointer is on is marked
@@ -901,7 +973,22 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			if tint := m.sessionTint(shown, theme.TerminalBg()); tint != nil {
 				ink = tint
 			}
-			right = sidebarStyle(nil, ink).Render(overlay.Truncate(printableTitle(shown), max(cw/2, 1)))
+			// The label gives way to the control, never the other way round: a
+			// readout that pushes a click target off its own cells is worse than a
+			// readout cut one word shorter. The control keeps the spine's last cell,
+			// so its recorded columns hold whether or not a label precedes it.
+			room := max(cw/2, 1)
+			if hasTermAdd {
+				room = max(room-lipgloss.Width(sidebarAddGlyph)-1, 1)
+			}
+			name := sidebarStyle(nil, ink).Render(overlay.Truncate(printableTitle(shown), room))
+			right = name + sidebarStyle(nil, nil).Render(" ") + termAdd
+			if !hasTermAdd {
+				right = name
+			}
+		}
+		if hasTermAdd {
+			recordToken(termSpan, shown)
 		}
 		lines = append(lines, compose(sidebarHeaderRow("terminals", right, cw, pal)))
 		if emptyPeek {
@@ -931,16 +1018,14 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// agents, pinned to the bottom by the slack above them
 	if nA > 0 {
 		lines = append(lines, blank)
-		controls, tokens := m.sidebarAgentsControls(cw, sidebarAgentsHeaderW, pal, agentsHeaderHoverX)
+		// No add control here, and the asymmetry is the honest answer: an agent is
+		// a pane running an agent CLI, which is exactly what the terminals section
+		// makes. A "+" on this header would be a second name for new-terminal
+		// pointing at a list the rail only observes.
+		controls, tokens := m.sidebarAgentsControls(cw, sidebarHeaderLabelW("agents"), pal,
+			headerHoverX[sidebarSectionAgents])
 		for _, tk := range tokens {
-			y := topMargin + len(lines)
-			m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
-				X0: contentX0 + tk.X0, X1: contentX0 + tk.X1,
-				Y0: y, Y1: y + 1,
-				Kind:        tk.Kind,
-				WindowIndex: -1,
-			})
-			nav = append(nav, sidebarNavRow{Kind: tk.Kind, WindowIndex: -1})
+			recordToken(tk, "")
 		}
 		lines = append(lines, compose(sidebarHeaderRow("agents", controls, cw, pal)))
 		switch {
@@ -1197,70 +1282,42 @@ func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
 	return collapse, true
 }
 
-// sidebarFooter renders the expanded rail's pinned bottom rows: the
-// new-session control on the outer end and the collapse toggle on the
-// pane-facing one, both meta voice on the bare canvas. Controls live down here
-// rather than among the rows because they are not things the rail is listing,
-// and a control dressed as a session row read as one. They share a line
-// wherever both fit. The collapsed strip draws its own single control; see
-// sidebar_strip.go.
-func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette, canCreate bool,
+// sidebarFooter renders the expanded rail's pinned bottom row: the collapse
+// toggle, hugging the pane-facing corner in meta voice on the bare canvas.
+//
+// It used to carry "+ new" as well, on the outer end. That was the rail's only
+// add affordance, and pinning it to the bottom edge put it directly under the
+// agents block, where it read as "new agent" rather than "new session". The add
+// controls moved into the section headers, which is what binds each one to what
+// it makes; leaving a duplicate down here would have been two affordances for
+// one action, which is worse than one in the wrong place.
+//
+// The collapsed strip draws its own controls; see sidebar_strip.go.
+func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	hoverLine, hoverX int, isCursor func(sidebarRowKind) bool,
 ) ([]string, []sidebarFooterZone) {
 	stepGlyph, canStep := m.sidebarCollapseGlyph(variant)
-	if !canCreate && !canStep {
+	if !canStep {
 		return nil, nil
 	}
 
-	const newLabel = "+ new"
-	newW, stepW := lipgloss.Width(newLabel), lipgloss.Width(stepGlyph)
-
-	// One line when both fit with a cell of air between them, otherwise one
-	// line each.
-	oneLine := !canCreate || !canStep || 1+newW+1+stepW+1 <= cw
+	stepW := lipgloss.Width(stepGlyph)
 
 	type placed struct {
 		zone  sidebarFooterZone
 		label string
 	}
-	// The control hugs the pane-facing corner and "+ new" holds the outer end,
-	// which swaps with the rail's side: the toggle is always the thing nearest
-	// the panes, where the pointer arrives from.
-	outer, facing := 1, max(cw-1-stepW, 1)
+	// The toggle is always the thing nearest the panes, where the pointer
+	// arrives from, so its corner swaps with the rail's side.
+	facing := max(cw-1-stepW, 1)
 	if config.SidebarPosition == "right" {
-		outer, facing = max(cw-1-newW, 1), 1
+		facing = 1
 	}
-
-	var items []placed
 	line := 0
-	if canCreate {
-		items = append(items, placed{sidebarFooterZone{Kind: sidebarRowNewSession, Line: line, X0: outer, X1: outer + newW}, newLabel})
-		if !oneLine {
-			line++
-		}
-	}
-	if canStep {
-		x0 := facing
-		if !oneLine {
-			x0 = 1
-		}
-		items = append(items, placed{sidebarFooterZone{Kind: sidebarRowCollapse, Line: line, X0: x0, X1: x0 + stepW}, stepGlyph})
-	}
+	items := []placed{{sidebarFooterZone{Kind: sidebarRowCollapse, Line: line, X0: facing, X1: facing + stepW}, stepGlyph}}
 
-	// Published in screen order, which is not the order they were placed in: on
-	// a right rail the toggle is the leftmost of the two. The hit rectangles and
-	// the nav rows both come off this slice, and every consumer of them assumes
-	// a frame reads left to right and top to bottom.
-	sort.SliceStable(items, func(a, b int) bool {
-		if items[a].zone.Line != items[b].zone.Line {
-			return items[a].zone.Line < items[b].zone.Line
-		}
-		return items[a].zone.X0 < items[b].zone.X0
-	})
-
-	// Cell-addressed rather than spliced into a rendered string: two zones share
-	// a line, and the first one's escape sequences would make byte offsets lie
-	// to the second.
+	// Cell-addressed rather than spliced into a rendered string: a zone's escape
+	// sequences would make byte offsets lie to any zone after it.
 	cells := make([][]string, line+1)
 	for i := range cells {
 		cells[i] = make([]string, cw)

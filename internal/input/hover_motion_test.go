@@ -109,7 +109,9 @@ func TestMotionPaintsHoverOnTheNextFrame(t *testing.T) {
 		name  string
 		label string
 	}{
-		{"footer new-session control", "+ new"},
+		// The add control is a "+" on the sessions header now, so the row the
+		// pointer lands on is that header rather than the footer.
+		{"sessions header add control", "+"},
 		{"rail window row", "editor"},
 	}
 	modes := []struct {
@@ -185,7 +187,9 @@ func TestViewAlwaysRequestsAllMotion(t *testing.T) {
 // paint the row the pointer passed through instead.
 func TestTrailingMotionIsNotDropped(t *testing.T) {
 	direct := hoverOS(t)
-	x, y := railCell(t, frameLines(direct), "+ new")
+	// The footer's toggle, which is the rail's bottom line: far enough down that
+	// the sweep to it crosses most of the rail.
+	x, y := railCell(t, frameLines(direct), "«")
 	want := frameLines(motion(direct, x, y))
 
 	swept := hoverOS(t)
