@@ -154,30 +154,13 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
 	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "Write CPU profile to file")
 	rootCmd.PersistentFlags().StringVar(&pprofAddr, "pprof", "", "Serve net/http/pprof on this address for live profiling (e.g. localhost:6060)")
-	rootCmd.PersistentFlags().BoolVar(&asciiOnly, "ascii-only", false, "Use ASCII characters instead of Nerd Font icons")
-	rootCmd.PersistentFlags().StringVar(&themeName, "theme", "", "Color theme to use (e.g., dracula, nord, tokyonight). Leave empty to use standard terminal colors without theming")
-	rootCmd.PersistentFlags().BoolVar(&listThemes, "list-themes", false, "List all available themes and exit")
-	rootCmd.PersistentFlags().StringVar(&previewTheme, "preview-theme", "", "Preview a theme's 16 ANSI colors")
-	rootCmd.PersistentFlags().StringVar(&borderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)")
-	rootCmd.PersistentFlags().StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden (default: from config or bottom)")
-	rootCmd.PersistentFlags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
-	rootCmd.PersistentFlags().BoolVar(&hideScrollbar, "hide-scrollbar", false, "Hide the window scrollbar thumb on the border")
-	rootCmd.PersistentFlags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
-	rootCmd.PersistentFlags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
-	rootCmd.PersistentFlags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
-	rootCmd.PersistentFlags().BoolVar(&confirmQuit, "confirm-quit", false, "Always show quit confirmation dialog")
-	rootCmd.PersistentFlags().StringVar(&windowTitlePosition, "window-title-position", "", "Window title position: bottom, top, hidden (default: from config or bottom)")
-	rootCmd.PersistentFlags().BoolVar(&hideClock, "hide-clock", false, "Hide the clock overlay (deprecated, clock is hidden by default)")
-	rootCmd.PersistentFlags().BoolVar(&showClock, "show-clock", false, "Show the clock overlay")
-	rootCmd.PersistentFlags().BoolVar(&showCPU, "show-cpu", false, "Show CPU graph in the dock")
-	rootCmd.PersistentFlags().BoolVar(&showRAM, "show-ram", false, "Show RAM usage in the dock")
-	rootCmd.PersistentFlags().BoolVar(&sharedBorders, "shared-borders", false, "Share borders between adjacent tiled windows")
 
-	rootCmd.PersistentFlags().IntVar(&zoomMaxWidth, "zoom-max-width", 0, "Max width in cells for zoom mode (0 = fullscreen, e.g. 120)")
-
-	// Local to the root command: the skill describes tuios as a whole, so
-	// offering it on every subcommand would only add noise to their help.
+	// Local to the root command: the skill describes tuios as a whole, and the
+	// theme listing and preview are root-level actions that print and exit, so
+	// offering them on every subcommand would only add noise to their help.
 	rootCmd.Flags().BoolVar(&printSkill, "skill", false, "Print the agent skill for driving tuios from a pane and exit")
+	rootCmd.Flags().BoolVar(&listThemes, "list-themes", false, "List all available themes and exit")
+	rootCmd.Flags().StringVar(&previewTheme, "preview-theme", "", "Preview a theme's 16 ANSI colors")
 
 	var sshPort, sshHost, sshKeyPath, sshDefaultSession string
 	var sshEphemeral bool
@@ -1289,6 +1272,11 @@ Name a verb to describe only that verb.`,
 	}
 	layoutCmd.AddCommand(layoutListCmd, layoutDeleteCmd, layoutDirCmd, layoutExportCmd)
 
+	// The interface flags ride only the commands that draw the interface. They
+	// were persistent on the root once, which buried a read command's few real
+	// flags under twenty appearance ones in its help.
+	registerInterfaceFlags(rootCmd, attachCmd, newCmd, sshCmd, tapePlayCmd)
+
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
@@ -1299,4 +1287,32 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd)
 
 	return rootCmd
+}
+
+// registerInterfaceFlags registers the appearance and interface flags on each
+// command that renders the TUI: the bare root, attach, new, ssh, and tape
+// playback. Every registration binds the same globals, so the run paths keep
+// reading one set of values while commands that only talk to the daemon stop
+// inheriting flags that mean nothing to them.
+func registerInterfaceFlags(cmds ...*cobra.Command) {
+	for _, cmd := range cmds {
+		f := cmd.Flags()
+		f.BoolVar(&asciiOnly, "ascii-only", false, "Use ASCII characters instead of Nerd Font icons")
+		f.StringVar(&themeName, "theme", "", "Color theme to use (e.g., dracula, nord, tokyonight). Leave empty to use standard terminal colors without theming")
+		f.StringVar(&borderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)")
+		f.StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden (default: from config or bottom)")
+		f.BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
+		f.BoolVar(&hideScrollbar, "hide-scrollbar", false, "Hide the window scrollbar thumb on the border")
+		f.IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
+		f.BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
+		f.BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
+		f.BoolVar(&confirmQuit, "confirm-quit", false, "Always show quit confirmation dialog")
+		f.StringVar(&windowTitlePosition, "window-title-position", "", "Window title position: bottom, top, hidden (default: from config or bottom)")
+		f.BoolVar(&hideClock, "hide-clock", false, "Hide the clock overlay (deprecated, clock is hidden by default)")
+		f.BoolVar(&showClock, "show-clock", false, "Show the clock overlay")
+		f.BoolVar(&showCPU, "show-cpu", false, "Show CPU graph in the dock")
+		f.BoolVar(&showRAM, "show-ram", false, "Show RAM usage in the dock")
+		f.BoolVar(&sharedBorders, "shared-borders", false, "Share borders between adjacent tiled windows")
+		f.IntVar(&zoomMaxWidth, "zoom-max-width", 0, "Max width in cells for zoom mode (0 = fullscreen, e.g. 120)")
+	}
 }
