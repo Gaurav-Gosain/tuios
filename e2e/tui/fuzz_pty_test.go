@@ -686,7 +686,7 @@ func (p *ptyTarget) checkPanes() []fuzz.Violation {
 		if vs := p.checkAlt(w, grid); len(vs) > 0 {
 			return vs
 		}
-		if vs := p.checkScrollback(w); len(vs) > 0 {
+		if vs := p.checkScrollback(w, grid); len(vs) > 0 {
 			return vs
 		}
 	}
@@ -728,8 +728,18 @@ func (p *ptyTarget) checkAlt(w daemonWindow, grid []string) []fuzz.Violation {
 // alternate screen, both of which the guest pool generates - legitimately takes
 // the last screenful off the end of the answer. Losing more than a screen is
 // losing history, and that is the thing worth reporting.
-func (p *ptyTarget) checkScrollback(w daemonWindow) []fuzz.Violation {
+func (p *ptyTarget) checkScrollback(w daemonWindow, grid []string) []fuzz.Violation {
 	if p.emitted[w.ID] == 0 {
+		return nil
+	}
+	// Only while the pane is showing its main screen. The alternate screen has
+	// no scrollback of its own, so a capture taken there answers with the
+	// alternate screen's empty history and not with the main screen's, and the
+	// rule cannot tell that apart from history genuinely thrown away. A pane
+	// with none of its own output on screen is in that state or an equivalent
+	// one, and the honest move is to decline rather than to guess: it reported
+	// two seeds as losing history when all they had done was switch screens.
+	if _, _, any := seqRange(grid, w.tag()); !any {
 		return nil
 	}
 	hist, err := daemonScrollback(p.base, p.current, w.ID, scrollTail)
