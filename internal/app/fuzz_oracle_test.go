@@ -433,22 +433,85 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 	g := f.renderGrid()
 	for i, w := range panes {
 		x, y := w.X+w.BorderOffset(), w.Y+w.BorderOffset()
+		n := len([]rune(marks[i]))
 		// The sidebar and the dock are reserved bands, drawn above the panes by
 		// design, and with auto-tiling off a pane may sit under one: floating
 		// panes keep the rectangle the user gave them, and ClampWindowsToView only
 		// guarantees a corner of each stays in the content region. The chrome owns
 		// those cells, so the question this rule asks does not apply there. Same
 		// reasoning as the overlap rule's own escape for free-floating panes.
-		if m.SidebarBandContains(x, y) || m.InDockBand(y) {
+		// The whole marker is tested, not just the cell it starts in: a marker
+		// beginning outside the band and running into it is the same arrangement,
+		// and checking the first cell alone reported it as a violation.
+		if m.InDockBand(y) || bandCovers(m, x, y, n) {
 			continue
 		}
-		got := runesAt(g, x, y, len([]rune(marks[i])))
+		// A pane the user stacked another one on top of. With auto-tiling off the
+		// panes are free-floating windows that may be deliberately overlapped, so
+		// whichever draws later owns the cell and the marker underneath it is
+		// meant to be hidden. This is the escape the overlap rule already makes
+		// for the same arrangement. Under tiling the rectangles partition the
+		// region, so nothing covers anything and the rule keeps its full strength
+		// there; what it is for, chrome reaching into a pane, is untouched either
+		// way, because the dividers, toasts, tooltips and scrollbar are not panes.
+		if coveredByAPaneAbove(m, panes, i, x, y, n) {
+			continue
+		}
+		got := runesAt(g, x, y, n)
 		if got != marks[i] {
 			return vio("guest-cells", "%s owns (%d,%d) and wrote %q, the frame shows %q",
 				w.ID, x, y, marks[i], got)
 		}
 	}
 	return nil
+}
+
+// bandCovers reports whether the sidebar's reserved band takes any of the n
+// cells starting at (x,y).
+func bandCovers(m *OS, x, y, n int) bool {
+	for c := x; c < x+n; c++ {
+		if m.SidebarBandContains(c, y) {
+			return true
+		}
+	}
+	return false
+}
+
+// coveredByAPaneAbove reports whether another visible pane draws over any of the
+// n cells starting at (x,y), in front of the pane that owns them.
+//
+// The compositor gives each pane a layer at its own Z, floating panes above the
+// separators, and settles a tie by the order the layers were appended, which is
+// the order of m.Windows. That is the order reproduced here.
+func coveredByAPaneAbove(m *OS, panes []*terminal.Window, i, x, y, n int) bool {
+	w := panes[i]
+	for j, v := range panes {
+		if j == i || !fuzzPaneDrawsAbove(v, j, w, i) {
+			continue
+		}
+		if y < v.Y || y >= v.Y+v.Height {
+			continue
+		}
+		if x < v.X+v.Width && x+n > v.X {
+			return true
+		}
+	}
+	return false
+}
+
+func fuzzPaneDrawsAbove(a *terminal.Window, ai int, b *terminal.Window, bi int) bool {
+	az, bz := fuzzPaneZ(a), fuzzPaneZ(b)
+	if az != bz {
+		return az > bz
+	}
+	return ai > bi
+}
+
+func fuzzPaneZ(w *terminal.Window) int {
+	if w.IsFloating {
+		return config.ZIndexSeparators + 1 + w.Z
+	}
+	return w.Z
 }
 
 // deferring reports whether a resize is still in flight, which is the one state

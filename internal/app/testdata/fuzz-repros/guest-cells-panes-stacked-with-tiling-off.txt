@@ -1,0 +1,7 @@
+# seed 59. Auto-tiling off leaves the panes free-floating on the rectangles they
+# were given, and two of them land on the same one. The pane in front owns the
+# cell, which the overlap rule already excuses for this arrangement and the
+# guest-cells rule did not.
+new-pane
+tiling
+resize 60 20

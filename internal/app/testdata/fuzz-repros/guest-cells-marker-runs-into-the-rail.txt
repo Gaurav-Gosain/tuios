@@ -1,0 +1,6 @@
+# seed 138. The rail moves to the right-hand side over panes that are no longer
+# retiled, so a pane's marker starts outside the reserved band and runs into it.
+# The band escape tested only the cell the marker starts in.
+resize 60 20
+tiling
+sidebar-pos 1
