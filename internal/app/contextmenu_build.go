@@ -364,7 +364,12 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 		m.item(glyphPalette, "Session color", "set_session_accent", false),
 		m.item(glyphDetach, "Detach", "prefix_detach", !attached),
 		m.item(glyphSwitch, "Switch session...", "prefix_session_switcher", false),
-		m.item(glyphSwitch, "Switch workspace...", "prefix_workspace_switcher", false),
+		// Dimmed off the attached session for the same reason detach is: the
+		// workspace switcher steers the session this client is in, and there is
+		// only one of those. Offered live on another session's row it read as
+		// "this session's workspaces" and opened the attached session's,
+		// which is a row naming one session and acting on another.
+		m.item(glyphSwitch, "Switch workspace...", "prefix_workspace_switcher", !attached),
 		separator(),
 	}, kill...)
 }
