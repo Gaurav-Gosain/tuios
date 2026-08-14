@@ -1429,8 +1429,12 @@ func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *Terminal
 	ps := styleToWire(pen, link)
 	state.Pen = &ps
 
-	m := t.ScrollRegion()
-	state.Margins = []int{m.Min.X, m.Min.Y, m.Dx(), m.Dy()}
+	// Carried only when the guest set one. A region that is simply the whole
+	// screen says nothing, and sending it pins a client that has been resized
+	// since to whatever size this pane was when the snapshot was taken.
+	if m := t.ScrollRegion(); m != t.Bounds() {
+		state.Margins = []int{m.Min.X, m.Min.Y, m.Dx(), m.Dy()}
+	}
 
 	ids, gl, gr := t.Charsets()
 	state.Charsets = []int{int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]), gl, gr}
@@ -1528,6 +1532,11 @@ func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
 	}
 	if len(state.Margins) == 4 {
 		t.RestoreScrollRegion(uv.Rect(state.Margins[0], state.Margins[1], state.Margins[2], state.Margins[3]))
+	} else {
+		// No margins on the wire means the guest set none, so this emulator
+		// scrolls its whole screen. Left alone, a pane that had margins before
+		// the route would keep them after it.
+		t.ResetScrollRegion()
 	}
 	if len(state.Charsets) == 6 {
 		ids := [4]byte{

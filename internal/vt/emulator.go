@@ -548,6 +548,12 @@ func (e *Emulator) RestoreScrollRegion(r uv.Rectangle) {
 	e.scr.scroll = r.Intersect(e.scr.Bounds())
 }
 
+// ResetScrollRegion puts scrolling back to the whole screen, which is where a
+// pane whose guest has set no margins scrolls.
+func (e *Emulator) ResetScrollRegion() {
+	e.scr.scroll = e.scr.Bounds()
+}
+
 // Charsets returns the designator byte of the character set selected into each
 // of G0 to G3, and which of them GL and GR are pointing at.
 func (e *Emulator) Charsets() (ids [4]byte, gl, gr int) {
