@@ -28,6 +28,9 @@ type paneShape struct {
 	// subscribed to the pane. Nil when the shape is about the pane itself
 	// rather than about what happened behind the client's back.
 	whileAway func(r *rig, ptyID string)
+	// finish runs after the route and before the comparison, for a shape that
+	// leaves the pane still producing.
+	finish func(r *rig, ptyID string)
 	// check adds what this shape alone is about, on top of the comparison every
 	// shape gets.
 	check func(t *testing.T, r *rig, ptyID string)
@@ -138,10 +141,8 @@ var rehydrationShapes = []paneShape{
 			// the one whose replay lands in the middle of a line.
 			r.startPTY(ptyID, `i=1; while [ $i -le 400 ]; do echo "MID-$i-END"; i=$((i+1)); done`)
 		},
-		check: func(t *testing.T, r *rig, ptyID string) {
+		finish: func(r *rig, ptyID string) {
 			r.waitDaemonShows(ptyID, "MID-400-END")
-			r.settle()
-			compareSides(t, r, ptyID)
 		},
 	},
 	{
@@ -217,7 +218,11 @@ func TestRehydrationMatrix(t *testing.T) {
 					}
 				})
 
+				if shape.finish != nil {
+					shape.finish(r, ptyID)
+				}
 				r.settle()
+				r.converge(ptyID)
 				compareSides(t, r, ptyID)
 				if shape.check != nil {
 					shape.check(t, r, ptyID)

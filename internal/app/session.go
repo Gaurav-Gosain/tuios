@@ -1104,6 +1104,13 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 
 	restoredModes, cellsRestored := 0, 0
 
+	// Anything still queued for this pane's emulator was produced before the
+	// snapshot about to be applied, so applying it afterwards paints it twice.
+	// A pane coming back from a workspace switch had a batch in flight from the
+	// subscription it had already left, and the line at the seam came back
+	// duplicated.
+	w.DiscardPendingOutput()
+
 	w.LockIO()
 	// Re-check under the lock; Close() nils Terminal while holding it.
 	if t := w.Terminal; t != nil {

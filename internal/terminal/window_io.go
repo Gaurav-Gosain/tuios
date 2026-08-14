@@ -39,6 +39,25 @@ const (
 // (~120fps) and only signals when there's actually new output. This is
 // the same technique prise uses (8ms render timer) to eliminate flicker
 // from fast-updating TUIs.
+// outputChunk is one queued batch of daemon output and the epoch it was queued
+// under. See Window.outputEpoch.
+type outputChunk struct {
+	data  []byte
+	epoch uint64
+}
+
+// DiscardPendingOutput throws away output queued for the emulator but not yet
+// applied to it.
+//
+// Unsubscribing from a pane stops the daemon sending, but bytes already queued
+// here are older than any snapshot the pane is about to be restored from, and
+// applying them afterwards paints them a second time. Bumping the epoch before
+// the restore takes the I/O lock is what makes the drop cover a batch the writer
+// is already holding as well as the ones still queued.
+func (w *Window) DiscardPendingOutput() {
+	w.outputEpoch.Add(1)
+}
+
 func (w *Window) outputWriter() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -53,14 +72,19 @@ func (w *Window) outputWriter() {
 	batch := make([]byte, 0, maxBatch)
 
 	for {
+		var epoch uint64
 		select {
 		case <-w.outputDone:
 			return
-		case data, ok := <-w.outputChan:
+		case chunk, ok := <-w.outputChan:
 			if !ok {
 				return
 			}
-			batch = append(batch[:0], data...)
+			if chunk.epoch != w.outputEpoch.Load() {
+				continue
+			}
+			epoch = chunk.epoch
+			batch = append(batch[:0], chunk.data...)
 		}
 
 		for len(batch) < maxBatch {
@@ -69,7 +93,10 @@ func (w *Window) outputWriter() {
 				if !ok {
 					goto write
 				}
-				batch = append(batch, more...)
+				if more.epoch != epoch {
+					continue
+				}
+				batch = append(batch, more.data...)
 			default:
 				goto write
 			}
@@ -99,6 +126,13 @@ func (w *Window) outputWriter() {
 			end := min(off+maxVTChunk, len(batch))
 			w.ioMu.Lock()
 			t = w.Terminal
+			// Re-checked under the lock the restore also takes, so a batch that
+			// was already in hand when the epoch moved is dropped rather than
+			// written over what the restore just put there.
+			if w.outputEpoch.Load() != epoch {
+				w.ioMu.Unlock()
+				break
+			}
 			if t != nil {
 				_, _ = t.Write(batch[off:end])
 			}
@@ -239,12 +273,13 @@ func (w *Window) WriteOutputAsync(data []byte) {
 	// Copy data since the caller's buffer may be reused
 	dataCopy := make([]byte, len(data))
 	copy(dataCopy, data)
+	chunk := outputChunk{data: dataCopy, epoch: w.outputEpoch.Load()}
 
 	// Queue to channel - non-blocking with buffered channel
 	select {
 	case <-w.outputDone:
 		// Writer goroutine has stopped, drop data
-	case w.outputChan <- dataCopy:
+	case w.outputChan <- chunk:
 		// Successfully queued
 	default:
 		// Channel full - drop data (shouldn't happen with large buffer)

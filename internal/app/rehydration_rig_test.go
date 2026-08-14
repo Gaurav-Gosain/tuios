@@ -303,6 +303,27 @@ func (r *rig) waitDaemonShows(ptyID, want string) {
 	})
 }
 
+// converge waits for the two copies of a pane to agree, or gives up and lets
+// the comparison report how they differ.
+//
+// The daemon broadcasts a chunk to its subscribers before feeding its own
+// emulator, so a client can be a chunk ahead of the daemon rather than behind
+// it. That is a moment, not a state: waiting it out is what makes the
+// comparison about rehydration instead of about scheduling.
+func (r *rig) converge(ptyID string) {
+	r.t.Helper()
+	deadline := time.Now().Add(rigWait)
+	for time.Now().Before(deadline) {
+		st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle)
+		if err == nil && st != nil {
+			if clientText(r.winByPTY(ptyID)) == stateText(st) {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // settle waits for the client to stop changing, so a comparison is taken after
 // every byte in flight has been applied on both sides. The client emulator is
 // fed by a goroutine, so there is no synchronous point to wait on.

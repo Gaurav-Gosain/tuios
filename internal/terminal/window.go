@@ -300,7 +300,7 @@ type Window struct {
 	NotifyFunc        func(title, body string) // Callback for guest desktop notifications (OSC 9/777/99)
 	BellFunc          func()                   // Callback for guest bell (BEL)
 	CwdFunc           func(cwd string)         // Callback for the shell's working directory changing (OSC 7)
-	outputChan        chan []byte              // Channel for serializing daemon PTY output writes
+	outputChan        chan outputChunk         // Channel for serializing daemon PTY output writes
 	outputDone        chan struct{}            // Signal to stop output writer goroutine
 	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
 	closed            atomic.Bool              // Set by Close() so the external outputChan sender (WriteOutputAsync) stops before teardown
@@ -317,6 +317,12 @@ type Window struct {
 	// This keeps window model fields (Dirty/ContentDirty/CachedContent) off the
 	// background goroutine, which otherwise races the renderer and Close().
 	coalesceSignal atomic.Bool
+
+	// outputEpoch stamps every chunk queued for the emulator. DiscardPendingOutput
+	// bumps it, and outputWriter throws away anything stamped with an older one,
+	// which is how a pane that has just been restored from a daemon snapshot
+	// avoids having output from before the snapshot applied on top of it.
+	outputEpoch atomic.Uint64
 
 	// lastScrollbackLen is the most recent scrollback length ScrollbackLenSync
 	// managed to read. It answers that call when the I/O lock is busy, so the
@@ -691,7 +697,7 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 		IsBeingManipulated: false,
 		PTYID:              ptyID,
 		DaemonMode:         true,
-		outputChan:         make(chan []byte, 16384), // Large buffer: kitty images can be 250+ chunks
+		outputChan:         make(chan outputChunk, 16384), // Large buffer: kitty images can be 250+ chunks
 		outputDone:         make(chan struct{}),
 		// suppressCallbacks defaults to false (zero value)
 	}
