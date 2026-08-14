@@ -11,8 +11,8 @@ import (
 
 // The matrix. Every route a client takes into a pane, crossed with every shape
 // a pane can be in when it takes it, asserting the one contract they all share:
-// the client ends up holding what the daemon holds. See docs/REHYDRATION.md for
-// the contract itself and for which of these the code is known to break.
+// the client ends up holding what the daemon holds. docs/REHYDRATION.md states
+// the contract and why the routes collapse into two implementations of it.
 //
 // The oracle is the daemon's own emulator, read over the wire the client reads
 // it over. Grid, scrollback, cursor and the alternate-screen flag are all
