@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/adrg/xdg"
 )
 
@@ -57,6 +58,14 @@ type sidebarStateFile struct {
 	// Collapsed is the rail folded to its glyph strip. Absent means expanded,
 	// which is what every file written before the toggle existed says.
 	Collapsed bool `json:"collapsed,omitempty"`
+	// Socket is the daemon socket the window IDs in this file were written
+	// against. Window IDs are only unique within one daemon, and this file is
+	// keyed by the XDG state directory, so two daemons on different sockets
+	// sharing one state directory each hold IDs the other cannot account for.
+	// Pruning is what makes that dangerous: without this, each would read the
+	// other's live panes as dead and delete their colours. An empty or
+	// mismatched value means this file is not ours to prune.
+	Socket string `json:"socket,omitempty"`
 }
 
 // loadSidebarState reads the persisted sidebar preferences. Any failure leaves
@@ -82,6 +91,7 @@ func (m *OS) loadSidebarState() {
 	}
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
 	m.SidebarCollapsed = st.Collapsed
+	m.sidebarStateSocket = st.Socket
 	// A stored drag width wins over the config default; GetSidebarWidth still
 	// folds it against the breakpoints and pane floor, so an out-of-range value
 	// cannot starve the panes.
@@ -108,6 +118,7 @@ func (m *OS) saveSidebarState() {
 		AgentsFilter: m.SidebarAgentFilter,
 		AgentsSort:   m.SidebarAgentSort,
 		Collapsed:    m.SidebarCollapsed,
+		Socket:       m.sidebarStateSocket,
 	})
 	if err != nil {
 		return
@@ -120,6 +131,24 @@ func (m *OS) saveSidebarState() {
 // closed pane leaves behind outlives the pane in the state file and is reloaded
 // every start; the rail's signature folds every unread bit on every frame, so
 // the map's size is also a per-frame cost.
+// ownsSidebarState reports whether the state file's window IDs were written by
+// the daemon this client is talking to, which is the only case where an ID
+// missing from the listing means the pane is gone rather than that it belongs
+// to somebody else. A file with no socket recorded is claimed on the spot,
+// since a file this client is about to write is one it may as well own.
+func (m *OS) ownsSidebarState() bool {
+	socket, err := session.GetSocketPath()
+	if err != nil || socket == "" {
+		return false
+	}
+	if m.sidebarStateSocket == "" {
+		m.sidebarStateSocket = socket
+		m.saveSidebarState()
+		return true
+	}
+	return m.sidebarStateSocket == socket
+}
+
 func (m *OS) pruneWindowKeyedState() {
 	if len(m.SidebarAccents) == 0 && len(m.SidebarAgentSeen) == 0 {
 		return
@@ -158,7 +187,7 @@ func (m *OS) pruneWindowKeyedState() {
 // switch looks like. Pruning against a listing that cannot say what exists
 // would take live panes' colours with it, so the caller stands down instead.
 func (m *OS) knownWindowIDs() (map[string]bool, bool) {
-	if m.DaemonClient == nil {
+	if m.DaemonClient == nil || !m.ownsSidebarState() {
 		return nil, false
 	}
 	known := make(map[string]bool, len(m.Windows))

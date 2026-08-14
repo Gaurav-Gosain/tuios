@@ -580,6 +580,10 @@ type OS struct {
 	// looked at a pane is that client's business, not the daemon's, so it lives
 	// beside the accents rather than in session state.
 	SidebarAgentSeen map[string]bool
+	// sidebarStateSocket is the daemon socket the persisted window-keyed maps
+	// were written against, and the guard on pruning them: window IDs mean
+	// nothing outside the daemon that issued them.
+	sidebarStateSocket string
 	// pendingAgentAlerts holds agent alerts waiting out their settle window, by
 	// window ID. A non-empty map is the only thing that keeps the maintenance
 	// tick awake for them, so an idle session with nothing parked pays nothing.

@@ -186,6 +186,45 @@ func benchSignatureOS(stale int) *OS {
 	return m
 }
 
+// TestPruneRefusesAnotherDaemonsState is the guard on the one configuration
+// where pruning would destroy user data rather than tidy it.
+//
+// Window IDs are unique within a daemon, and the state file is keyed by the XDG
+// state directory, so two daemons on different sockets sharing one state
+// directory each hold IDs the other's listing cannot account for. Without the
+// socket check each would read the other's live panes as dead and delete their
+// colours, which is worse than the leak the prune exists to fix.
+func TestPruneRefusesAnotherDaemonsState(t *testing.T) {
+	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+
+	m := &OS{
+		Windows:      []*terminal.Window{{ID: "w1", CustomName: "one"}},
+		Width:        120,
+		Height:       40,
+		SessionName:  "s",
+		DaemonClient: listingOf("s", "w1"),
+		SidebarAccents: map[string]Accent{
+			"w1":      SlotAccent(2),
+			"foreign": SlotAccent(3),
+		},
+		SidebarAgentSeen: map[string]bool{"foreign": true},
+		// A socket no run of this test could be talking to.
+		sidebarStateSocket: "/nonexistent/other-daemon.sock",
+	}
+
+	m.pruneWindowKeyedState()
+
+	if _, ok := m.SidebarAccents["foreign"]; !ok {
+		t.Error("prune deleted an accent belonging to another daemon's window")
+	}
+	if !m.SidebarAgentSeen["foreign"] {
+		t.Error("prune deleted an unread bit belonging to another daemon's window")
+	}
+	if _, ok := m.SidebarAccents["w1"]; !ok {
+		t.Error("prune deleted a live window's accent")
+	}
+}
+
 // BenchmarkSidebarSignatureStaleSeen measures what an unpruned unread map costs
 // the rail every frame: the fold runs over every entry, live or not, so the
 // per-frame cost grows with the map rather than with the windows on screen.
