@@ -489,15 +489,19 @@ func reportSessionExit(sessionName string, reason app.ExitReason, killed bool) e
 	}
 }
 
+// lsEntry is a row of 'tuios ls --json'. It is the wire type plus the one fact
+// the wire cannot carry: a session that exists only on disk, because no daemon
+// is holding it. The flag is omitted for live sessions, so a listing from a
+// running daemon is unchanged.
+type lsEntry struct {
+	session.SessionInfo
+	Saved bool `json:"saved,omitempty"`
+}
+
 func runListSessions(jsonOutput bool) error {
 	diag := session.DiagnoseDaemon()
 	if !diag.Running() {
-		if jsonOutput {
-			fmt.Println("[]")
-		} else {
-			fmt.Println(diag.Explain())
-		}
-		return nil
+		return listSavedSessions(diag, jsonOutput)
 	}
 
 	client, err := dialVerb()
@@ -519,12 +523,11 @@ func runListSessions(jsonOutput bool) error {
 	sessions := listed.Sessions
 
 	if jsonOutput {
-		data, err := json.MarshalIndent(sessions, "", "  ")
-		if err != nil {
-			return err
+		entries := make([]lsEntry, 0, len(sessions))
+		for _, s := range sessions {
+			entries = append(entries, lsEntry{SessionInfo: s})
 		}
-		fmt.Println(string(data))
-		return nil
+		return printJSON(entries)
 	}
 
 	if len(sessions) == 0 {
@@ -555,7 +558,86 @@ func runListSessions(jsonOutput bool) error {
 		})
 	}
 
-	t := table.New().
+	fmt.Println(renderSessionTable(rows))
+	fmt.Printf("\n%d session(s)\n", len(sessions))
+	if anyRestored {
+		fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
+	}
+	return nil
+}
+
+// listSavedSessions is 'tuios ls' with no daemon listening. The sessions are on
+// disk and a daemon brings them back, so listing them is the truth; printing an
+// empty list was what made attach's refusal incomprehensible.
+//
+// It reports the no-daemon status, which is what lets a script tell this apart
+// from a daemon that is running and holds nothing.
+func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
+	infos, err := session.ListResurrectableInfos()
+	if err != nil {
+		return err
+	}
+
+	if jsonOutput {
+		entries := make([]lsEntry, 0, len(infos))
+		for _, info := range infos {
+			entries = append(entries, lsEntry{
+				SessionInfo: session.SessionInfo{
+					Name:        info.Name,
+					WindowCount: info.WindowCount,
+					LastActive:  savedUnix(info.SavedAt),
+				},
+				Saved: true,
+			})
+		}
+		if err := printJSON(entries); err != nil {
+			return err
+		}
+		return &statusError{code: noDaemonStatus}
+	}
+
+	if len(infos) > 0 {
+		rows := make([][]string, 0, len(infos))
+		for _, info := range infos {
+			rows = append(rows, []string{
+				info.Name,
+				fmt.Sprintf("%d", info.WindowCount),
+				session.SavedTag,
+				"-",
+				formatTimeAgo(savedUnix(info.SavedAt)),
+			})
+		}
+		fmt.Println(renderSessionTable(rows))
+		fmt.Printf("\n%d session(s)\n", len(infos))
+		fmt.Printf("%s: %s.\n\n", session.SavedTag, session.SavedNote)
+	}
+
+	fmt.Println(diag.Explain())
+	return &statusError{code: noDaemonStatus}
+}
+
+// savedUnix converts a save time to the epoch seconds the listing formats,
+// keeping zero as "unknown" rather than turning it into 1970.
+func savedUnix(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
+func printJSON(v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+// renderSessionTable draws the session listing. Both listings use it so a
+// session reads the same whether a daemon is holding it or a disk is.
+func renderSessionTable(rows [][]string) string {
+	return table.New().
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
 		Headers("NAME", "WINDOWS", "STATUS", "CREATED", "LAST ACTIVE").
@@ -580,14 +662,7 @@ func runListSessions(jsonOutput bool) error {
 			default:
 				return baseStyle
 			}
-		})
-
-	fmt.Println(t.Render())
-	fmt.Printf("\n%d session(s)\n", len(sessions))
-	if anyRestored {
-		fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
-	}
-	return nil
+		}).Render()
 }
 
 func formatTimeAgo(unixTime int64) string {

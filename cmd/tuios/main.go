@@ -71,8 +71,8 @@ func main() {
 	); err != nil {
 		os.Exit(1)
 	}
-	if reportCommandError(cmdErr) {
-		os.Exit(1)
+	if code := exitStatus(cmdErr); code != 0 {
+		os.Exit(code)
 	}
 }
 
@@ -446,7 +446,13 @@ with 'tuios attach'.`,
 		Long: `List all active TUIOS sessions.
 
 Shows session names, window counts, and whether clients are attached.
-Use --json for machine-readable output.`,
+
+With no daemon running, the sessions saved on disk are listed instead,
+marked "saved", and the command exits 3. That status is what tells a
+script a stopped daemon from a running one holding no sessions, which
+exits 0 with an empty list.
+
+Use --json for machine-readable output; saved rows carry "saved": true.`,
 		Example: `  tuios ls
   tuios ls --json`,
 		Aliases: []string{"list-sessions"},
