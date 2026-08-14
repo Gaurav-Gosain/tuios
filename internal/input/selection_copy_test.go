@@ -191,6 +191,52 @@ func TestMenuReadsTheSelectionOfThePaneItWasOpenedOn(t *testing.T) {
 	}
 }
 
+// TestPaneMenuPasteRowFollowsTheMode pins the other dimmed row in the report.
+//
+// Paste is gated on terminal mode because that is the only mode the clipboard
+// reply is applied in (handler.go). The worry was that opening the menu changed
+// the mode first, which would leave the row dimmed always and the gate a lie.
+// It does not: a right press only borrows window management from a path that
+// terminal mode cannot reach, and the chord that opens the menu from terminal
+// mode leaves the mode alone.
+func TestPaneMenuPasteRowFollowsTheMode(t *testing.T) {
+	pasteDim := func(t *testing.T, o *app.OS) bool {
+		t.Helper()
+		if !o.ContextMenuActive() {
+			t.Fatal("no menu opened")
+		}
+		for _, it := range o.ContextMenu.Items {
+			if it.Action == "paste_clipboard" {
+				return it.Dim
+			}
+		}
+		t.Fatal("pane menu has no paste row")
+		return false
+	}
+
+	t.Run("terminal mode offers paste", func(t *testing.T) {
+		o, _ := selectPane(t, "alpha bravo charlie")
+		handleMouseClick(tea.MouseClickMsg{
+			X: 5, Y: 5, Button: tea.MouseRight, Mod: tea.ModCtrl,
+		}, o)
+		if pasteDim(t, o) {
+			t.Error("paste is dimmed on a menu opened from terminal mode, " +
+				"where a paste does reach the shell")
+		}
+	})
+
+	t.Run("window management mode dims it", func(t *testing.T) {
+		o, _ := selectPane(t, "alpha bravo charlie")
+		o.Mode = app.WindowManagementMode
+		handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		handleMouseRelease(tea.MouseReleaseMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		if !pasteDim(t, o) {
+			t.Error("paste is offered from window management mode, " +
+				"where the clipboard reply is dropped")
+		}
+	})
+}
+
 // selectTwoPanes builds two side-by-side panes, each with a line of text, in
 // terminal mode. Pane 0 is focused.
 func selectTwoPanes(t *testing.T, left, right string) (*app.OS, []*terminal.Window) {
