@@ -48,7 +48,15 @@ func TestDegradedStateMessages(t *testing.T) {
 		{
 			name: "daemon never started",
 			err:  &diagnosticError{What: session.DaemonDiagnosis{State: session.DaemonAbsent}.Explain()},
-			want: []string{"is not running", "tuios new"},
+			want: []string{"is not running", "no sessions are saved", "tuios new"},
+		},
+		{
+			name: "daemon down with sessions saved on disk",
+			err: &diagnosticError{What: session.DaemonDiagnosis{
+				State:      session.DaemonAbsent,
+				Restorable: 2,
+			}.Explain()},
+			want: []string{"is not running", "2 saved sessions", "restored automatically", "tuios attach"},
 		},
 		{
 			name: "stale socket left by a crash",
@@ -101,6 +109,21 @@ func TestDegradedStateMessages(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			requireLines(t, tc.name, tc.err, tc.want...)
 		})
+	}
+}
+
+// TestNoDaemonMessageNeverMisnamesTheFix pins the bug this message was reported
+// for: with sessions saved on disk it told the user to run 'tuios new', which
+// makes a new session instead of bringing back the ones they had.
+func TestNoDaemonMessageNeverMisnamesTheFix(t *testing.T) {
+	for _, state := range []session.DaemonState{session.DaemonAbsent, session.DaemonStaleSocket} {
+		msg := session.DaemonDiagnosis{State: state, Restorable: 3}.Explain()
+		if strings.Contains(msg, "tuios new") {
+			t.Errorf("message points at 'tuios new' while 3 sessions are saved:\n%s", msg)
+		}
+		if !strings.Contains(msg, "3 saved sessions") {
+			t.Errorf("message does not say how many sessions are saved:\n%s", msg)
+		}
 	}
 }
 
