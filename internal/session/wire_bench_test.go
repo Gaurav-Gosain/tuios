@@ -62,7 +62,7 @@ func BenchmarkWireTerminalState(b *testing.B) {
 	for _, depth := range []int{0, 100, 1000} {
 		b.Run(fmt.Sprintf("scrollback-%d", depth), func(b *testing.B) {
 			pty := wirePTY(b, benchWireCols, benchWireRows, depth)
-			data, err := codec.Encode(&TerminalStatePayload{PTYID: pty.ID, State: pty.GetTerminalState()})
+			data, err := codec.Encode(&TerminalStatePayload{PTYID: pty.ID, State: pty.GetTerminalState(depth)})
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -70,7 +70,7 @@ func BenchmarkWireTerminalState(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				if _, err := codec.Encode(&TerminalStatePayload{
-					PTYID: pty.ID, State: pty.GetTerminalState(),
+					PTYID: pty.ID, State: pty.GetTerminalState(depth),
 				}); err != nil {
 					b.Fatal(err)
 				}
