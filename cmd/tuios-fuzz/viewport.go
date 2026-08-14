@@ -44,6 +44,10 @@ func (w *watched) Close() {
 // the other.
 type current struct {
 	want atomic.Bool
+	// captures counts the app renders this display cost. It is the figure the
+	// cost gate is stated over, because the regression worth catching is
+	// structural: capturing per action rather than per frame.
+	captures atomic.Int64
 
 	mu     sync.Mutex
 	frame  string
@@ -71,6 +75,7 @@ func (c *current) capture(t *apptarget.Target) {
 	if !c.want.Swap(false) {
 		return
 	}
+	c.captures.Add(1)
 	f := t.Screen()
 	c.mu.Lock()
 	c.frame = f

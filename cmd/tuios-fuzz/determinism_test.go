@@ -54,6 +54,7 @@ type trace struct {
 	failed   bool
 	rule     string
 	elapsed  time.Duration
+	captures int64
 }
 
 func runArm(t *testing.T, seed uint64, steps int, cadence string) trace {
@@ -118,6 +119,7 @@ func runArm(t *testing.T, seed uint64, steps int, cadence string) trace {
 		hash: last.h, applied: last.applied,
 		executed: res.Executed, replays: res.Replays,
 		failed: res.Failed, elapsed: elapsed,
+		captures: live.captures.Load(),
 	}
 	if res.Failed {
 		out.rule = res.Violations[0].Rule
@@ -154,12 +156,18 @@ func TestDisplayDoesNotChangeTheRun(t *testing.T) {
 	}
 }
 
-// The throughput gate. It is stated as a ceiling on the cost rather than the
-// 5% the design asked for, because on this target an action is a full frame
-// composition through the oracle and the measurement's own noise is wider than
-// 5%. A ceiling that a real regression would blow through is worth more than a
-// tight bound that fails on a busy machine.
-func TestDisplayCostsLittleThroughput(t *testing.T) {
+// The cost gate. It is stated over the work the display causes rather than over
+// wall-clock throughput, because throughput measured twice in sequence on a
+// machine running the rest of the suite in parallel swings by more than the
+// effect being measured: the same pair reads 6% idle and 34% under load, and a
+// gate that reports the machine's mood is not a gate.
+//
+// The regression actually worth catching is structural and exactly countable:
+// the viewport rendering the app once per action instead of once per drawn
+// frame, which is the difference between a display costing a few percent and one
+// that doubles the run. The wall-clock figure is still measured and logged,
+// since it is the number a human wants, but it only fails on a gross change.
+func TestDisplayCostsLittleWork(t *testing.T) {
 	if testing.Short() {
 		t.Skip("the fuzzer composes a frame per action")
 	}
@@ -167,13 +175,26 @@ func TestDisplayCostsLittleThroughput(t *testing.T) {
 	off := runArm(t, 3, steps, "off")
 	on := runArm(t, 3, steps, "batch")
 
+	if off.captures != 0 {
+		t.Errorf("a run with no display rendered the app %d times for the viewport", off.captures)
+	}
+	// One capture per drawn frame, and a frame is drawn every -batch actions.
+	// The slack covers the phase-change frames and the final one.
+	ceiling := int64(on.applied/vis.DefaultBatch) + 8
+	if on.captures > ceiling {
+		t.Errorf("the viewport rendered the app %d times over %d actions drawing every %d; at most %d is per-frame, more is per-action",
+			on.captures, on.applied, vis.DefaultBatch, ceiling)
+	}
+	if on.captures == 0 {
+		t.Error("the viewport never rendered the app, so this gate is measuring nothing")
+	}
+
 	offRate := float64(off.applied) / off.elapsed.Seconds()
 	onRate := float64(on.applied) / on.elapsed.Seconds()
 	overhead := (offRate - onRate) / offRate * 100
-	t.Logf("%.0f actions/s with no display, %.0f drawing every %d actions (%.1f%% slower)",
-		offRate, onRate, vis.DefaultBatch, overhead)
-
-	if overhead > 25 {
-		t.Errorf("the display cost %.1f%% of throughput, which is enough to change what a timed campaign reaches", overhead)
+	t.Logf("%d app renders over %d actions (one per %d); %.0f actions/s undrawn, %.0f drawn (%.1f%% slower, machine-dependent)",
+		on.captures, on.applied, vis.DefaultBatch, offRate, onRate, overhead)
+	if overhead > 60 {
+		t.Errorf("the display cost %.1f%% of throughput, which is past anything the frame budget explains", overhead)
 	}
 }
