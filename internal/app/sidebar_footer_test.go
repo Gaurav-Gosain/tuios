@@ -26,8 +26,10 @@ func TestRailRendersTheThreeWidths(t *testing.T) {
 		collapsed bool
 		want      []string
 	}{
-		{"full", config.SidebarDefaultWidth, false, []string{" agents", " sessions", " + new", "«"}},
-		{"narrow", config.SidebarNarrowWidth, false, []string{" agents", " sessions", " + new", "«"}},
+		// The add control is a "+" on the sessions and terminals headers now, so
+		// the header lines are what carry it; the footer is the toggle alone.
+		{"full", config.SidebarDefaultWidth, false, []string{" agents", " sessions", "+", "«"}},
+		{"narrow", config.SidebarNarrowWidth, false, []string{" agents", " sessions", "+", "«"}},
 		{"glyph", config.SidebarDefaultWidth, true, []string{"»"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -115,39 +117,48 @@ func TestRailCollapseIsBinaryAndIdempotent(t *testing.T) {
 	}
 }
 
-// Mouse and keyboard reach the footer's controls the same way: the hit rect the
-// renderer recorded and the nav row it published point at the same thing.
-func TestRailFooterHitsAndNavStayParallel(t *testing.T) {
+// Mouse and keyboard reach the rail's controls the same way: the hit rect the
+// renderer recorded and the nav row it published point at the same thing, in
+// the same order.
+func TestRailControlHitsAndNavStayParallel(t *testing.T) {
 	m := daemonRailOS(t, 120, 14)
 	m.SidebarFocused = true
 	railFrame(t, m)
 
-	var footerHits []sidebarRowHit
+	var controls []sidebarRowHit
 	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowNewSession || h.Kind == sidebarRowCollapse {
-			footerHits = append(footerHits, h)
+		switch h.Kind {
+		case sidebarRowNewSession, sidebarRowNewWindow, sidebarRowCollapse:
+			controls = append(controls, h)
 		}
 	}
-	if len(footerHits) != 2 {
-		t.Fatalf("the footer recorded %d hits, want the new-session control and the stepper", len(footerHits))
+	// Two add controls in the headers, and the footer's toggle.
+	if len(controls) != 3 {
+		t.Fatalf("the rail recorded %d controls, want the two adds and the toggle", len(controls))
+	}
+	if controls[len(controls)-1].Kind != sidebarRowCollapse {
+		t.Errorf("the last control drawn is %v, want the footer's toggle", controls[len(controls)-1].Kind)
 	}
 
-	navTail := m.SidebarNav[len(m.SidebarNav)-2:]
-	for i, h := range footerHits {
-		if navTail[i].Kind != h.Kind {
-			t.Errorf("footer hit %d is %v but nav row %d is %v: the two are not parallel",
-				i, h.Kind, i, navTail[i].Kind)
+	// Each control's own columns hit-test back to it, and its nav row exists.
+	for _, h := range controls {
+		row, ok := m.sidebarRowAt(h.X0, h.Y0)
+		if !ok || row.Kind != h.Kind {
+			t.Errorf("%v's own columns hit-test to %+v (ok=%v)", h.Kind, row, ok)
+		}
+		found := false
+		for _, n := range m.SidebarNav {
+			if sidebarNavRowsEqual(n, navRowOf(h)) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%v has a hit rect but no nav row: the keyboard cannot reach it", h.Kind)
 		}
 	}
 
-	// A click inside the stepper's columns narrows the rail, exactly as the
-	// cursor on its nav row does.
-	step := footerHits[1]
 	before := config.SidebarWidth
 	t.Cleanup(func() { config.SidebarWidth = before })
-	if row, ok := m.sidebarRowAt(step.X0, step.Y0); !ok || row.Kind != sidebarRowCollapse {
-		t.Fatalf("the stepper's own columns do not hit-test to it: %+v ok=%v", row, ok)
-	}
 }
 
 // Every glyph the footer adds needs an ASCII answer.

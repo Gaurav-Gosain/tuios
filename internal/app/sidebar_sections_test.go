@@ -88,7 +88,7 @@ func TestRailDrawsThreeSectionsInOrder(t *testing.T) {
 			last = h.Y0 - m.GetTopMargin()
 		}
 	}
-	footer := lineOf(lines, "+ new")
+	footer := lineOf(lines, "«")
 	if last < 0 || footer < 0 {
 		t.Fatalf("no agent rows or no footer:\n%s", strings.Join(lines, "\n"))
 	}

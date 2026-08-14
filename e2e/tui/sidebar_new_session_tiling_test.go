@@ -39,9 +39,12 @@ func TestRailNewSessionComesUpTiled(t *testing.T) {
 		t.Fatalf("rail never listed the attached session: %v\n%s", err, term.Snapshot())
 	}
 
-	// The footer's own control, which is the route the user took.
-	col, row := findOnScreen(t, term, "+ new")
-	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	// The sessions header's own "+", which is the route the user took. The line
+	// is found by its label and the control by its column, since a bare "+" turns
+	// up elsewhere on the screen; it sits on the rail's figure spine, one cell in
+	// from the edge rule.
+	_, row := findOnScreen(t, term, "sessions")
+	mouseClick(t, term, sidebarBand-3, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Session: session-0", uiTimeout); err != nil {
 		t.Fatalf("the rail's new-session control did not create and switch: %v\n%s", err, term.Snapshot())
 	}

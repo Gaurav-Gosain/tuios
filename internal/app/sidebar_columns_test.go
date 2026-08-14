@@ -85,25 +85,22 @@ func TestSidebarRowsShareOneNameSpine(t *testing.T) {
 	}
 }
 
-// The new-session control moved to the rail's footer, where it reads as a
-// control rather than as a row dressed like the sessions it is not one of. What
-// it must keep is agreement between the columns it is drawn on and the columns
-// its hit zone claims.
+// The footer is down to the collapse toggle: the add control moved into the
+// section headers, where it is bound to what it makes. What the toggle must
+// keep is agreement between the columns it is drawn on and the columns its hit
+// zone claims.
 func TestSidebarFooterZonesMatchWhatIsDrawn(t *testing.T) {
 	m := daemonRailOS(t, 120, 40)
-	lines, zones := m.sidebarFooter(sidebarVariantFull, 30, theme.UI(), true, -1, -1,
+	lines, zones := m.sidebarFooter(sidebarVariantFull, 30, theme.UI(), -1, -1,
 		func(sidebarRowKind) bool { return false })
 	if len(lines) != 1 {
-		t.Fatalf("the full-width footer took %d lines, want both controls on one", len(lines))
+		t.Fatalf("the footer took %d lines, want one", len(lines))
+	}
+	if len(zones) != 1 || zones[0].Kind != sidebarRowCollapse {
+		t.Fatalf("footer zones = %+v, want the collapse toggle alone", zones)
 	}
 	row := ansi.Strip(lines[0])
-	for _, z := range zones {
-		want := "+ new"
-		if z.Kind == sidebarRowCollapse {
-			want = "«"
-		}
-		if got := rowColumn(row, want); got != z.X0 {
-			t.Errorf("%q is drawn at column %d but its hit zone starts at %d: %q", want, got, z.X0, row)
-		}
+	if got := rowColumn(row, "«"); got != zones[0].X0 {
+		t.Errorf("the toggle is drawn at column %d but its hit zone starts at %d: %q", got, zones[0].X0, row)
 	}
 }

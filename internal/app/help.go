@@ -267,8 +267,6 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		}
 	}
 
-	// new_session and new_window are bound in the rail's scope but only notify
-	// that they are not available yet, so listing them would be a lie.
 	bindings = append(bindings,
 		row("exit", "Leave the rail, back to the panes"),
 		row("cursor_down", "Move the cursor down a row"),
@@ -294,8 +292,10 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		row("agents_sort", "Agents: by priority, or by recency"),
 		row("narrow", "Collapse the rail to its glyph strip"),
 		row("widen", "Expand the rail back to its width"),
+		row("new_session", "New session, the sessions header's +"),
+		row("new_window", "New terminal, the terminals header's +"),
 		row("menu", "Open the menu for the row under the cursor"),
-		row("kill", "Open the session menu, which is where Kill lives"),
+		row("kill", "Open that row's menu on its Close or Kill row"),
 		row("rename", "Rename the window under the cursor"),
 		row("accent", "Recolor the window under the cursor"),
 		row("help", "Show this list of the rail's keys"),
@@ -315,6 +315,8 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		HelpBinding{Keys: []string{"hover a session"}, Description: "Preview its panes in the terminals section", Category: cat},
 		HelpBinding{Keys: []string{"drag a session"}, Description: "Reorder the sessions", Category: cat},
 		HelpBinding{Keys: []string{"right-click a row"}, Description: "Open that row's menu", Category: cat},
+		HelpBinding{Keys: []string{"click a header's +"}, Description: "New session, or new terminal in the one shown", Category: cat},
+		HelpBinding{Keys: []string{"click blank rail"}, Description: "Give the rail the keyboard", Category: cat},
 		HelpBinding{Keys: []string{"drag the rail edge"}, Description: "Resize the rail", Category: cat},
 		HelpBinding{Keys: []string{"hover a clipped row"}, Description: "Scroll its text past the edge to read the rest", Category: cat},
 		HelpBinding{Keys: []string{"wheel"}, Description: "Scroll the rail", Category: cat},

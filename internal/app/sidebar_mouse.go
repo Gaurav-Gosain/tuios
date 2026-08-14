@@ -161,8 +161,15 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	if !ok {
 		if right {
 			m.openRailSettingsMenu(x, y)
+			return true
 		}
-		return true // consumed a click on a blank sidebar row
+		// A left click on blank rail is still a click at the rail: the user aimed
+		// at it, and the band is mostly blank on any rail taller than its rows, so
+		// "nothing happens here" made the rail look inert. It takes the keyboard
+		// and leaves the cursor alone, because the click named no row to move it
+		// to and moving it would lose the row the user was already on.
+		m.EnterSidebarFocus()
+		return true
 	}
 
 	if right {
@@ -185,6 +192,8 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		m.SidebarCycleAgentsSort()
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
+	case sidebarRowNewWindow:
+		m.SidebarNewWindow(hit.SessionID)
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowSession:
@@ -299,6 +308,8 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.SidebarCycleAgentsSort()
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
+	case sidebarRowNewWindow:
+		m.SidebarNewWindow(hit.SessionID)
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowSession:
@@ -415,7 +426,7 @@ func (m *OS) SidebarMotion(x, y int) bool {
 	m.SidebarHoverActive = true
 	m.SidebarHoverX, m.SidebarHoverY = x, y
 	m.sidebarPeekAt(x, y)
-	m.sidebarTooltipTrack(y)
+	m.sidebarTooltipTrack(x, y)
 	return true
 }
 

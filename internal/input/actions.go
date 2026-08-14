@@ -243,13 +243,8 @@ func handleRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Renaming needs somewhere to show the editor: the title bar, or the rail,
-	// which draws it on the window's own row.
-	if config.WindowTitlePosition == "hidden" && !o.SidebarActive() {
-		return o, nil
-	}
-
-	// Otherwise, rename window
+	// The editor is a centred dialog, so it carries its own frame and needs
+	// neither a title bar nor a rail row to land on.
 	o.BeginRenameWindow(o.GetFocusedWindow())
 	return o, nil
 }

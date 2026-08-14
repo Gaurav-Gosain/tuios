@@ -53,29 +53,23 @@ func TestMirrorArrowsPointWhereTheRailWillGo(t *testing.T) {
 	}
 }
 
-// TestMirrorFooterCornersSwap: the toggle hugs the pane-facing corner and
-// "+ new" holds the outer end, so the control the pointer reaches for is always
-// the one nearest the panes.
-func TestMirrorFooterCornersSwap(t *testing.T) {
+// TestMirrorFooterCornerSwaps: the toggle hugs the pane-facing corner, which is
+// the right of a left rail and the left of a right one, so the control the
+// pointer reaches for is always the one nearest the panes.
+func TestMirrorFooterCornerSwaps(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m := daemonRailOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
 		railFrame(t, m)
 
-		var newHit, toggle sidebarRowHit
+		var toggle sidebarRowHit
 		for _, h := range m.SidebarHits {
-			switch h.Kind {
-			case sidebarRowNewSession:
-				newHit = h
-			case sidebarRowCollapse:
+			if h.Kind == sidebarRowCollapse {
 				toggle = h
 			}
 		}
-		if newHit.X1 == 0 || toggle.X1 == 0 {
-			t.Fatalf("%s: the footer drew %d/%d of its two controls", pos, newHit.X1, toggle.X1)
-		}
-		if newHit.Y0 != toggle.Y0 {
-			t.Fatalf("%s: the two footer controls are on different lines", pos)
+		if toggle.X1 == 0 {
+			t.Fatalf("%s: the footer drew no toggle", pos)
 		}
 
 		w := m.GetSidebarWidth()
@@ -83,18 +77,54 @@ func TestMirrorFooterCornersSwap(t *testing.T) {
 		if pos == "right" {
 			railX0 = m.GetRenderWidth() - w
 		}
-		// The pane-facing side is the right of a left rail and the left of a
-		// right one; the toggle is on it and "+ new" is on the other.
-		if pos == "left" && !(toggle.X0 > newHit.X0) {
-			t.Errorf("left rail: the toggle at %d is not past + new at %d", toggle.X0, newHit.X0)
+		mid := railX0 + w/2
+		if pos == "left" && toggle.X0 < mid {
+			t.Errorf("left rail: the toggle at %d is not on the pane-facing half (past %d)", toggle.X0, mid)
 		}
-		if pos == "right" && !(toggle.X0 < newHit.X0) {
-			t.Errorf("right rail: the toggle at %d is not before + new at %d", toggle.X0, newHit.X0)
+		if pos == "right" && toggle.X0 >= mid {
+			t.Errorf("right rail: the toggle at %d is not on the pane-facing half (before %d)", toggle.X0, mid)
 		}
-		for _, h := range []sidebarRowHit{newHit, toggle} {
-			if h.X0 < railX0 || h.X1 > railX0+w {
-				t.Errorf("%s: a footer zone [%d,%d) escapes the band [%d,%d)", pos, h.X0, h.X1, railX0, railX0+w)
+		if toggle.X0 < railX0 || toggle.X1 > railX0+w {
+			t.Errorf("%s: the footer zone [%d,%d) escapes the band [%d,%d)", pos, toggle.X0, toggle.X1, railX0, railX0+w)
+		}
+	}
+}
+
+// TestMirrorHeaderAddControlsStayOnTheSpine: the add controls are trailing
+// figures, so they mirror the way every other trailing figure does, one cell in
+// from the rail's own edge rather than from the screen's.
+func TestMirrorHeaderAddControlsStayOnTheSpine(t *testing.T) {
+	for _, pos := range []string{"left", "right"} {
+		m := daemonRailOS(t, 120, 20)
+		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		railFrame(t, m)
+
+		w := m.GetSidebarWidth()
+		railX0 := 0
+		if pos == "right" {
+			railX0 = m.GetRenderWidth() - w
+		}
+		found := 0
+		for _, h := range m.SidebarHits {
+			if !sidebarAddKind(h.Kind) {
+				continue
 			}
+			found++
+			if h.X0 < railX0 || h.X1 > railX0+w {
+				t.Errorf("%s: an add control [%d,%d) escapes the band [%d,%d)", pos, h.X0, h.X1, railX0, railX0+w)
+			}
+			// The spine's last cell: the content ends one cell in from the rail's
+			// own edge, which is the outer edge for a right rail.
+			wantX1 := railX0 + w - 2
+			if pos == "right" {
+				wantX1 = railX0 + w - 1
+			}
+			if h.X1 != wantX1 {
+				t.Errorf("%s: add control %v ends at %d, want the spine's last cell %d", pos, h.Kind, h.X1, wantX1)
+			}
+		}
+		if found != 2 {
+			t.Errorf("%s: drew %d add controls, want the sessions and terminals headers", pos, found)
 		}
 	}
 }

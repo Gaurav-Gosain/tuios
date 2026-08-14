@@ -634,10 +634,15 @@ type OS struct {
 	SidebarNav              []sidebarNavRow
 	SidebarRevealedForFocus bool
 	// sidebarReturn* record where the keyboard came from when the rail took it,
-	// so leaving the rail can hand that back. See sidebar_return.go.
+	// so leaving the rail can hand that back. sidebarLastRow is the same bargain
+	// pointing the other way: the row the rail was left on, so re-entering starts
+	// where it stopped rather than back at the attached session. See
+	// sidebar_return.go.
 	sidebarReturnArmed  bool
 	sidebarReturnMode   Mode
 	sidebarReturnWindow string
+	sidebarLastRow      sidebarNavRow
+	sidebarLastRowSet   bool
 	// sidebarFollowSession, when set, tells the next nav build to place the
 	// cursor on that session's row after it rebuilds. It is how a reorder or a
 	// switch keeps the cursor on the session it moved once the tree relaid out,

@@ -196,8 +196,13 @@ func handlePrefixCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // startRename puts the focused window into rename mode. Renaming is a
 // window-management activity, so terminal mode is left first; the caller in
 // window-management mode is already there.
+//
+// Hidden titles are no longer a reason to refuse. The editor is a centred
+// dialog with its own frame, so it has somewhere to draw whatever the title bar
+// is doing; the old guard dated from when rename edited the bar in place, and it
+// left the only rename key silently dead for anyone running without titles.
 func startRename(o *app.OS) {
-	if config.WindowTitlePosition == "hidden" || len(o.Windows) == 0 || o.FocusedWindow < 0 {
+	if len(o.Windows) == 0 || o.FocusedWindow < 0 {
 		return
 	}
 	focused := o.GetFocusedWindow()

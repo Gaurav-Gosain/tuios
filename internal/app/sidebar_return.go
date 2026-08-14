@@ -20,6 +20,37 @@ func (m *OS) beginSidebarReturn() {
 	}
 }
 
+// The rail remembers its own place the same way, and for the same reason. Enter
+// on a terminal row hands the keyboard to that pane, and coming back landed the
+// cursor on the attached session's row: the user was three rows into the
+// terminals section, went to a pane, came back, and had to walk down again. The
+// row the rail was left on is part of what the rail borrowed.
+
+// recordSidebarRow saves the row the cursor was on as the rail gives the
+// keyboard back.
+func (m *OS) recordSidebarRow() {
+	m.sidebarLastRow, m.sidebarLastRowSet = m.sidebarCursorRow()
+}
+
+// restoreSidebarRow puts the cursor back on the row the rail was last left on,
+// and reports whether it could. It refuses on a row the current frame no longer
+// draws (a pane closed, a session gone, the agents filter changed under it), so
+// the caller can fall back to landing on the attached session.
+func (m *OS) restoreSidebarRow() bool {
+	if !m.sidebarLastRowSet {
+		return false
+	}
+	for i, r := range m.SidebarNav {
+		if sidebarNavRowsEqual(r, m.sidebarLastRow) {
+			// The next render re-anchors by identity off the cursor, so setting the
+			// index is enough; no follow request of its own is needed.
+			m.sidebarSetCursor(i)
+			return true
+		}
+	}
+	return false
+}
+
 // clearSidebarReturn drops the record, leaving the user where the rail put them.
 func (m *OS) clearSidebarReturn() {
 	m.sidebarReturnArmed = false

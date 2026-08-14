@@ -6,7 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // handleFocusSidebar enters the rail's keyboard scope. Bound to "s" in window
@@ -92,7 +91,7 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case sidebarActWiden:
 		o.SidebarSetCollapsed(false)
 	case sidebarActKill:
-		o.SidebarOpenCursorMenu(true) // session menu, Kill among its rows
+		o.SidebarOpenCursorMenu(true) // the cursor row's menu, opened on its destructive row
 	case sidebarActMenu:
 		o.SidebarOpenCursorMenu(false)
 	case sidebarActHelp:
@@ -104,9 +103,11 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case sidebarActNewSession:
 		o.SidebarNewSession()
 	case sidebarActNewWindow:
-		// Registered now, real behavior arrives in M6. A hint keeps the key from
-		// feeling dead without pretending it did something.
-		o.ShowNotification("Not available yet", "info", config.NotificationDuration)
+		// The keyboard reach for the terminals header's "+". It makes the pane in
+		// the attached session, which is the only one that section ever lists
+		// while the rail holds the keyboard.
+		o.SidebarNewWindow("")
+		o.ExitSidebarFocus() // the new pane is what was asked for
 	case sidebarActExit:
 		o.ExitSidebarFocus()
 	}

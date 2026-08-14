@@ -49,10 +49,17 @@ func (m *OS) EnterSidebarFocus() {
 	}
 	m.SidebarFocused = true
 	m.beginSidebarReturn()
-	// Revealing a hidden rail builds its nav rows only on the next render, so
-	// sidebarCurrentSessionNavIndex has nothing to match yet and would land the
-	// cursor on row 0. Follow the current session by identity so the next render
-	// anchors the cursor on it once the rows exist.
+	// The rail comes back to the row it was left on, which is most of the point
+	// of leaving by activating one: enter on a terminal row goes to that pane,
+	// and returning used to start over at the attached session's row.
+	if m.restoreSidebarRow() {
+		return
+	}
+	// Nothing to come back to, or the row is gone. Revealing a hidden rail builds
+	// its nav rows only on the next render, so sidebarCurrentSessionNavIndex has
+	// nothing to match yet and would land the cursor on row 0. Follow the current
+	// session by identity so the next render anchors the cursor on it once the
+	// rows exist.
 	m.sidebarFollowSession = m.sidebarCurrentSessionID()
 	m.sidebarSetCursor(m.sidebarCurrentSessionNavIndex())
 }
@@ -77,6 +84,7 @@ func (m *OS) ExitSidebarFocus() {
 		return
 	}
 	m.SidebarFocused = false
+	m.recordSidebarRow()
 	m.sidebarClearPeek()
 	m.endSidebarReturn()
 	if m.SidebarRevealedForFocus {
@@ -179,6 +187,10 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.SidebarCycleAgentsSort()
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
+	case sidebarRowNewWindow:
+		// The new pane is the request, so the rail hands the keyboard back to it.
+		m.SidebarNewWindow(row.SessionID)
+		return true
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowSession:
@@ -254,26 +266,56 @@ func (m *OS) SidebarJumpToSession(n int) {
 }
 
 // SidebarOpenCursorMenu opens the context menu for the cursor row, reusing the
-// mouse path so the rows are identical. sessionOnly forces the session menu even
-// when the cursor sits on a window row, which is what the kill action wants (no
-// silent destruction: the menu opens with its Kill rows).
-func (m *OS) SidebarOpenCursorMenu(sessionOnly bool) {
+// mouse path so a key and a right-click on the same row open the same menu.
+//
+// It targets the row the cursor is on and nothing else, which is the rule every
+// other cursor key in the rail already follows. The kill key used to force the
+// kind to session before handing it over, so pressing it on a terminal opened
+// the session's menu instead of the pane's, and pressing it on a footer control
+// opened the attached session's menu; a key that acts on something other than
+// the row under the cursor is a key the user cannot aim.
+//
+// destructive is what is left of that key's intent, now that the row decides
+// the menu: it lands the selection on the row's own destructive action, so the
+// kill key still opens on Kill for a session and on Close for a pane. Nothing
+// is destroyed without a second keypress either way.
+//
+// A row that names no target of its own (the footer's toggle, the agents
+// header's tokens) says so rather than quietly borrowing a session.
+func (m *OS) SidebarOpenCursorMenu(destructive bool) {
 	row, ok := m.sidebarCursorRow()
 	if !ok {
 		return
 	}
-	hit := sidebarRowHit{
+	if !sidebarRowHasMenu(row) {
+		m.ShowNotification("Nothing on this row to act on", "info", config.NotificationDuration)
+		return
+	}
+	x, y := m.sidebarCursorAnchor(row)
+	m.openSidebarContextMenu(sidebarRowHit{
 		Kind:        row.Kind,
 		SessionID:   row.SessionID,
 		WindowID:    row.WindowID,
 		WindowIndex: row.WindowIndex,
+	}, x, y)
+	if destructive {
+		m.ContextMenu.selectWarn()
 	}
-	if sessionOnly {
-		hit.Kind = sidebarRowSession
-		hit.WindowIndex = -1
+}
+
+// sidebarRowHasMenu reports whether a row points at something a context menu
+// can be about: a session, or a pane in either of the two sections that list
+// panes. The rail's controls point at the rail itself, which the right-click on
+// blank rail already covers.
+func sidebarRowHasMenu(row sidebarNavRow) bool {
+	switch row.Kind {
+	case sidebarRowSession:
+		return row.SessionID != ""
+	case sidebarRowWindow, sidebarRowAgent:
+		return row.WindowID != "" || row.WindowIndex >= 0
+	default:
+		return false
 	}
-	x, y := m.sidebarCursorAnchor(row)
-	m.openSidebarContextMenu(hit, x, y)
 }
 
 // sidebarCursorAnchor is where a cursor-opened menu anchors: the top-left of the
@@ -409,6 +451,25 @@ func (m *OS) SidebarNewSession() {
 	go func() {
 		ch <- SessionCreatedMsg{Name: name, Err: client.CreateDetachedSession(name, w, h)}
 	}()
+}
+
+// SidebarNewWindow makes a pane in the session the terminals section is
+// listing, which is what its header's "+" means. It is the terminals half of
+// the add affordance: the sessions header makes another session, this makes
+// another terminal in one.
+//
+// The section only ever lists the attached session's panes when this is
+// reachable: a peek is the pointer's own transient state and is dropped the
+// moment the pointer or the cursor leaves the session rows, which is what
+// moving to this control does. The guard is here anyway, because a control that
+// silently acts on the wrong session is worse than one that says it cannot.
+func (m *OS) SidebarNewWindow(sessionID string) {
+	if sessionID != "" && sessionID != m.sidebarCurrentSessionID() {
+		m.ShowNotification("Attach to that session first", "info", config.NotificationDuration)
+		return
+	}
+	m.clearSidebarReturn() // the new pane is where the user asked to end up
+	m.AddWindow("")
 }
 
 // sessionCreateChan is the buffered channel carrying creation results back to

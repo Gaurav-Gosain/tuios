@@ -41,17 +41,18 @@ func TestNewSessionPillIsHiddenInStandalone(t *testing.T) {
 	}
 }
 
-// TestNewSessionSitsInThePinnedFooter puts the control where controls live: the
-// rail's last lines, below everything it is not a member of. The collapsed
-// strip stacks it above its own toggle instead; its own test covers that.
-func TestNewSessionSitsInThePinnedFooter(t *testing.T) {
+// TestNewSessionSitsOnTheSessionsHeader puts the control on the section it
+// makes another of. It used to be a "+ new" pinned to the rail's bottom edge,
+// which put it directly under the agents block and read as "new agent". The
+// collapsed strip stacks its own "+" above its toggle instead; its own test
+// covers that.
+func TestNewSessionSitsOnTheSessionsHeader(t *testing.T) {
 	for _, size := range []struct {
-		name  string
-		w, h  int
-		label string
+		name string
+		w, h int
 	}{
-		{"full", 120, 40, "+ new"},
-		{"narrow", 80, 24, "+ new"},
+		{"full", 120, 40},
+		{"narrow", 80, 24},
 	} {
 		t.Run(size.name, func(t *testing.T) {
 			m := daemonRailOS(t, size.w, size.h)
@@ -62,34 +63,62 @@ func TestNewSessionSitsInThePinnedFooter(t *testing.T) {
 				t.Fatal("no new-session control with a daemon attached")
 			}
 			row := hit.Y0 - m.GetTopMargin()
-			if got := ansi.Strip(lines[row]); !strings.Contains(got, size.label) {
-				t.Errorf("row reads %q, want it to carry %q", got, size.label)
+			drawn := ansi.Strip(lines[row])
+			if !strings.Contains(drawn, "sessions") {
+				t.Errorf("the control is on row %d, %q; want the sessions header", row, drawn)
 			}
-			// Pinned: nothing but the rest of the footer is drawn below it.
-			if row < len(lines)-2 {
-				t.Errorf("the control is on row %d of %d, want the footer at the bottom", row, len(lines))
+			if !strings.Contains(drawn, sidebarAddGlyph) {
+				t.Errorf("the sessions header reads %q, want it to carry the add glyph", drawn)
 			}
-			for _, h := range m.SidebarHits {
-				if h.Kind != sidebarRowNewSession && h.Kind != sidebarRowCollapse && h.Y0 >= hit.Y0 {
-					t.Errorf("a %v row at y=%d sits at or below the footer at y=%d", h.Kind, h.Y0, hit.Y0)
-				}
+			// The header is the rail's first line, so the control is above every
+			// row it could be mistaken for a member of.
+			if row != 0 {
+				t.Errorf("the sessions header is on row %d, want the rail's first", row)
 			}
 
-			// And the cursor can reach it: the footer's rows close the nav list.
-			var kinds []sidebarRowKind
-			for _, n := range m.SidebarNav[max(len(m.SidebarNav)-2, 0):] {
-				kinds = append(kinds, n.Kind)
-			}
-			found := false
-			for _, k := range kinds {
-				if k == sidebarRowNewSession {
-					found = true
-				}
-			}
-			if !found {
-				t.Errorf("the nav list ends with %v, want the new-session control among them", kinds)
+			// And the cursor can reach it: it is the nav list's first row, drawn
+			// before the sessions beneath it.
+			if len(m.SidebarNav) == 0 || m.SidebarNav[0].Kind != sidebarRowNewSession {
+				t.Errorf("the nav list opens with %+v, want the add control", m.SidebarNav)
 			}
 		})
+	}
+}
+
+// TestNewTerminalSitsOnTheTerminalsHeader is the same rule for the other
+// section: the "+" that makes a pane is on the list of panes.
+func TestNewTerminalSitsOnTheTerminalsHeader(t *testing.T) {
+	m := daemonRailOS(t, 120, 40)
+	lines, _ := m.sidebarPanelLines()
+
+	var hit sidebarRowHit
+	for _, h := range m.SidebarHits {
+		if h.Kind == sidebarRowNewWindow {
+			hit = h
+		}
+	}
+	if hit.X1 == 0 {
+		t.Fatal("the terminals header drew no add control")
+	}
+	drawn := ansi.Strip(lines[hit.Y0-m.GetTopMargin()])
+	if !strings.Contains(drawn, "terminals") || !strings.Contains(drawn, sidebarAddGlyph) {
+		t.Errorf("the control is on %q, want the terminals header carrying the add glyph", drawn)
+	}
+}
+
+// TestFooterKeepsOnlyTheToggle: two affordances for one action is worse than
+// one in the wrong place, so the footer's copy went rather than being kept.
+func TestFooterKeepsOnlyTheToggle(t *testing.T) {
+	m := daemonRailOS(t, 120, 40)
+	lines, _ := m.sidebarPanelLines()
+
+	if got := ansi.Strip(lines[len(lines)-1]); strings.Contains(got, "new") {
+		t.Errorf("the footer still reads %q", got)
+	}
+	hit, _ := newSessionHit(m)
+	last := m.GetTopMargin() + len(lines) - 1
+	if hit.Y0 == last {
+		t.Error("the add control is still on the rail's bottom line")
 	}
 }
 

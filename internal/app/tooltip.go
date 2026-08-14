@@ -48,6 +48,11 @@ const (
 	tooltipNone tooltipSource = iota
 	// tooltipRailStrip is a row of the collapsed rail.
 	tooltipRailStrip
+	// tooltipRailAdd is a section header's add control on the expanded rail. The
+	// rest of that rail spells itself out in words and so says nothing here; a
+	// one-cell "+" is the exception, since a glyph that has given up its words is
+	// exactly what a label is for.
+	tooltipRailAdd
 	// tooltipDockSession is one of the dock's session controls.
 	tooltipDockSession
 	// tooltipDockWorkspace is a workspace pill on the dock strip whose name did
@@ -81,6 +86,11 @@ func (m *OS) tooltipsEnabled(src tooltipSource) bool {
 		// The expanded rail says all of it in words already, so a label over it
 		// would only repeat what is on the screen.
 		return sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph
+	}
+	if src == tooltipRailAdd {
+		// The mirror of the rule above: these controls only exist on the expanded
+		// rail, and they are the one thing on it drawn as a bare glyph.
+		return sidebarVariant(m.GetSidebarWidth()) != sidebarVariantGlyph
 	}
 	if src == tooltipDockWorkspace {
 		return config.DockWorkspaceTooltip
@@ -148,6 +158,8 @@ func (m *OS) renderTooltip() *lipgloss.Layer {
 	switch m.Tooltip.Source {
 	case tooltipRailStrip:
 		return m.renderRailTooltip()
+	case tooltipRailAdd:
+		return m.renderRailAddTooltip()
 	case tooltipDockSession:
 		return m.renderDockSessionTooltip()
 	case tooltipDockWorkspace:
