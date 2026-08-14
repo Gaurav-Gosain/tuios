@@ -281,7 +281,7 @@ var rehydrationShapes = []paneShape{
 			// each one is a wrap decision, and started rather than waited for so
 			// the resizes below land among them.
 			r.startPTY(ptyID, `A=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; `+
-				`i=1; while [ $i -le 3000 ]; do echo "RP-$i-$A$A$A$A-END"; i=$((i+1)); done`)
+				`i=1; while [ $i -le 20000 ]; do echo "RP-$i-$A$A$A$A-END"; i=$((i+1)); done`)
 			// Resized only once the pane is known to be producing. A resize
 			// that lands before the guest has said anything settles on both
 			// sides before the first byte and tests nothing.
@@ -289,7 +289,13 @@ var rehydrationShapes = []paneShape{
 			// Cut to a third of the width, so a line that took four rows takes
 			// ten: a seam laid out at the wrong width is a different number of
 			// scrollback lines, not only different content in them.
-			r.waitDaemonShows(ptyID, "RP-4-")
+			// Gated on any produced line rather than a numbered one. These
+			// lines wrap to about three rows each at this width, so the run
+			// fills more rows than the emulator keeps, and a line numbered low
+			// enough to prove the guest has only just started is also the first
+			// to be evicted. Waiting for one that is already gone spends the
+			// whole deadline and reports a timeout instead of a divergence.
+			r.waitDaemonShows(ptyID, "RP-")
 			// Resized repeatedly, the way dragging a border over a pane that is
 			// producing does. One resize settles on both sides in about the time
 			// it takes the daemon to read a message; a run of them keeps the
@@ -302,9 +308,17 @@ var rehydrationShapes = []paneShape{
 				w.Resize(full, w.Height)
 				time.Sleep(2 * time.Millisecond)
 			}
+			// The seam only exists while the guest is producing. If it got all
+			// the way to the end first, the resizes landed on output that was
+			// already laid out and settled, and the case proves nothing. That
+			// is worth a failure rather than a pass, because the pass would be
+			// indistinguishable from a real one.
+			if r.daemonShows(ptyID, "RP-20000-") {
+				r.t.Fatal("the guest finished before the resizes landed, so this run never reached the seam")
+			}
 		},
 		finish: func(r *rig, ptyID string) {
-			r.waitDaemonShows(ptyID, "RP-3000-")
+			r.waitDaemonShows(ptyID, "RP-20000-")
 		},
 	},
 	{
