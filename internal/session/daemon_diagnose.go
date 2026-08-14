@@ -176,7 +176,9 @@ func (d DaemonDiagnosis) Explain() string {
 			return "The TUIOS daemon is not running.\n" +
 				"Most likely cause: the daemon was shut down or the machine restarted. TUIOS has " +
 				d.savedSessionsPhrase() + " on disk, restored automatically when a daemon starts.\n" +
-				"Fix: run 'tuios attach' to start the daemon and reopen them."
+				// Both routes, because this message is also what a scripted
+				// caller sees, and 'tuios attach' takes over its terminal.
+				"Fix: run 'tuios attach' to start the daemon and reopen them, or 'tuios start-server' to bring them back without attaching."
 		}
 		return "The TUIOS daemon is not running, and no sessions are saved on disk.\n" +
 			"Most likely cause: no session has been started yet.\n" +
