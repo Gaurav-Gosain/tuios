@@ -1,7 +1,6 @@
 package input
 
 import (
-	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -646,24 +645,24 @@ func handleToggleCacheStats(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleCopySelection copies the focused pane's mouse selection to the system
+// handleCopySelection copies the focused pane's selection to the system
 // clipboard.
 //
-// The selection text is already extracted and stored on the window when the
-// selection is made, so this only has to hand it to the terminal; it does not
-// re-derive the region and cannot disagree with what is highlighted on screen.
+// The text is derived from the selection now rather than read from a field
+// filled in earlier, so it is whatever is highlighted on screen at the moment
+// the user asks for it. It went the other way once, off Window.SelectedText,
+// and that field belonged to a selection system the mouse stopped using: a
+// drag-selected pane offered a copy that silently did nothing.
 //
-// This closes a gap the release handler had been advertising: finishing a
-// selection tells the user to "Press 'c' to copy", and until now nothing was
-// listening for it.
+// The write goes through CopyToClipboard, which is also what a drag release
+// uses, so a copy asked for by menu or key and a copy-on-select land the same
+// way and say the same thing.
 func handleCopySelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	focusedWindow := o.GetFocusedWindow()
-	if focusedWindow == nil || focusedWindow.SelectedText == "" {
+	if focusedWindow == nil {
 		return o, nil
 	}
-	text := focusedWindow.SelectedText
-	o.ShowNotification(fmt.Sprintf("Copied %d characters", len(text)), "success", config.NotificationDuration)
-	return o, tea.SetClipboard(text)
+	return o, o.CopyToClipboard(selectionText(focusedWindow))
 }
 
 func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

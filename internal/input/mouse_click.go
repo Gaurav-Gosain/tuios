@@ -228,8 +228,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// and mouse-mode apps still get it.
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode &&
 		msg.Button == tea.MouseRight && msg.Mod == 0 {
-		win := o.Windows[clickedWindowIndex]
-		if win.SelectedText != "" || win.IsSelecting {
+		if o.Windows[clickedWindowIndex].HasSelection() {
 			o.OpenSelectionMenu(X, Y, clickedWindowIndex)
 			return o, nil
 		}

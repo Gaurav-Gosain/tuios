@@ -162,6 +162,20 @@ func (w *Window) InImplicitCopyMode() bool {
 	return w.InCopyMode() && w.CopyMode.Implicit
 }
 
+// HasSelection reports whether the pane is holding text a copy action could act
+// on. A visual selection is copy mode's whole representation of one, whether it
+// came from v/V or from a mouse gesture, so this is the single question every
+// consumer asks: the context menu deciding whether to offer "Copy selection",
+// the right-click that opens the selection menu, and the copy action itself.
+//
+// It exists because the answer used to be read off Window.SelectedText, a field
+// the mouse path deliberately never wrote, so a plainly visible selection
+// presented as no selection at all.
+func (w *Window) HasSelection() bool {
+	return w.InCopyMode() &&
+		(w.CopyMode.State == CopyModeVisualChar || w.CopyMode.State == CopyModeVisualLine)
+}
+
 // ExitCopyMode exits copy mode and returns to normal terminal mode.
 func (w *Window) ExitCopyMode() {
 	if w.CopyMode != nil {

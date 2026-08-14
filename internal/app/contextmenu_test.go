@@ -23,6 +23,16 @@ func ctxMenuOS(t *testing.T, w, h int) *OS {
 	return m
 }
 
+// selectInPane leaves a pane holding the kind of selection a mouse drag leaves:
+// an implicit copy-mode session in visual-character state. Menus and the copy
+// action are asked about this and nothing else.
+func selectInPane(win *terminal.Window) {
+	win.EnterCopyModeImplicit()
+	win.CopyMode.State = terminal.CopyModeVisualChar
+	win.CopyMode.VisualStart = terminal.Position{X: 0, Y: 0}
+	win.CopyMode.VisualEnd = terminal.Position{X: 4, Y: 0}
+}
+
 // ctxAnchors are one anchor per target, plus the screen corners, which is where
 // placement has to flip rather than draw off the edge.
 func ctxAnchors(m *OS, w, h int) []struct {
@@ -508,7 +518,6 @@ func TestContextMenuDimsUnavailableActions(t *testing.T) {
 	m := ctxMenuOS(t, 120, 40)
 	m.AutoTiling = false
 	m.Mode = WindowManagementMode
-	m.Windows[0].SelectedText = ""
 
 	m.OpenContextMenu(2, 2) // pane content
 	dim := map[string]bool{}
@@ -526,10 +535,13 @@ func TestContextMenuDimsUnavailableActions(t *testing.T) {
 		t.Error("zoom and close always apply to a pane and must not be dimmed")
 	}
 
-	// With a selection and tiling on, the same rows come alive.
+	// With a selection and tiling on, the same rows come alive. The selection is
+	// a copy-mode visual one because that is the only kind the mouse makes; a
+	// test that filled SelectedText instead passed for months while every real
+	// drag left the row dimmed.
 	m.CloseContextMenu()
 	m.AutoTiling = true
-	m.Windows[0].SelectedText = "hello"
+	selectInPane(m.Windows[0])
 	m.OpenContextMenu(2, 2)
 	for _, it := range m.ContextMenu.Items {
 		if it.Action == "copy_selection" && it.Dim {
@@ -537,6 +549,43 @@ func TestContextMenuDimsUnavailableActions(t *testing.T) {
 		}
 		if it.Action == "split_vertical" && it.Dim {
 			t.Error("split is dimmed even though tiling is on")
+		}
+	}
+}
+
+// TestPaneMenuReadsItsOwnTargetsSelection pins the menu to the pane it was
+// built for. Every caller focuses that pane first, so focus and target agree
+// today and the builder reading either one looks the same from outside; this
+// asserts the property directly so a caller that stops focusing first cannot
+// quietly start offering one pane's copy over another pane's contents.
+func TestPaneMenuReadsItsOwnTargetsSelection(t *testing.T) {
+	m := ctxMenuOS(t, 120, 40)
+	m.AutoTiling = true
+	m.Windows = []*terminal.Window{
+		{ID: "a", CustomName: "left", X: 0, Y: 0, Width: 50, Height: 30, Workspace: 1, Z: 1},
+		{ID: "b", CustomName: "right", X: 60, Y: 0, Width: 50, Height: 30, Workspace: 1, Z: 2},
+	}
+	m.CurrentWorkspace, m.FocusedWindow = 1, 0
+	selectInPane(m.Windows[1]) // the selection is on the pane that is NOT focused
+
+	title, items := m.paneMenu(1)
+	if title != "right" {
+		t.Fatalf("menu title = %q, want the target pane %q", title, "right")
+	}
+	for _, it := range items {
+		if it.Action == "copy_selection" && it.Dim {
+			t.Error("copy is dimmed although the pane the menu targets holds a selection")
+		}
+	}
+
+	// And the converse: the target has none, so the row dims even though the
+	// focused pane does have one.
+	selectInPane(m.Windows[0])
+	m.Windows[1].ExitCopyMode()
+	_, items = m.paneMenu(1)
+	for _, it := range items {
+		if it.Action == "copy_selection" && !it.Dim {
+			t.Error("copy is live on a pane with no selection, reading the focused pane's")
 		}
 	}
 }

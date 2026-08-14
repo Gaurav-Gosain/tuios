@@ -81,10 +81,16 @@ func TestTitleBarClickStaysInWindowMode(t *testing.T) {
 // TestTerminalModeRightClickWithSelectionOpensMenu checks the terminal-mode
 // right button: with an active selection it opens the selection menu; without
 // one it opens nothing and never starts a resize under the shell.
+//
+// The selection is made with the mouse rather than by filling a field. Filling
+// Window.SelectedText is what this test used to do, and that field is written
+// by nothing a user can reach, so it stood in for a selection the pane could
+// never actually be in.
 func TestTerminalModeRightClickWithSelectionOpensMenu(t *testing.T) {
-	o := twoPaneOS(t)
-	o.Mode = app.TerminalMode
-	o.Windows[0].SelectedText = "some text"
+	o, _ := selectPane(t, "alpha bravo charlie")
+	pressAt(o, 0, 0)
+	dragTo(o, 10, 0)
+	release(o, 10, 0)
 
 	o, _ = handleMouseClick(tea.MouseClickMsg{X: 10, Y: 10, Button: tea.MouseRight}, o)
 	if !o.ContextMenuActive() {
