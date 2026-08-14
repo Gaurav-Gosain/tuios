@@ -51,9 +51,29 @@ const (
 	// more than a burst leaves on the visible screen, so the rule is about the
 	// scrollback rather than about the grid.
 	scrollTail = 400
+	// vtSafeBurst is the largest burst after which the daemon's own emulator is
+	// still believed to hold everything the pane printed.
+	//
+	// Above it, it does not, and that is deliberate in the product rather than a
+	// bug this oracle found: the read loop offers each chunk to the emulator's
+	// feeding goroutine and drops it if that goroutine is behind
+	// (internal/session/session.go:1662, the default arm), on the stated grounds
+	// that the emulator is for state queries and the client's own emulator is the
+	// rendering source of truth. A fast pane arrives as hundreds of small reads,
+	// the queue is 256 deep, and lines are simply gone.
+	//
+	// So capture-pane is a witness to content only for a pane that has not
+	// flooded, and every rule that reads the daemon's grid as ground truth is
+	// scoped to those panes. The rules that matter most are unaffected: the
+	// client's own screen is fed by the broadcast stream, which is not lossy in
+	// this way, and it is the client that the splice bug corrupted.
+	vtSafeBurst = 200
 	// settle is the beat between an action and the assertion. The screen is
 	// asynchronous, so without it a check reads the frame from before the action.
 	settle = 12 * time.Millisecond
+	// structureSettle is how long the client is given to agree with the daemon
+	// about the shape of the session before the disagreement is a finding.
+	structureSettle = 2 * time.Second
 )
 
 // ptyTarget drives one tuios client against one daemon.
@@ -76,6 +96,10 @@ type ptyTarget struct {
 	// tail is the highest witness number the daemon has been seen holding for
 	// each pane. Scrollback is allowed to grow and never to forget its end.
 	tail map[string]int
+	// flooded names the panes that have been given more than vtSafeBurst lines at
+	// once, and whose daemon-side grid is therefore no longer a complete record
+	// of what they printed.
+	flooded map[string]bool
 	// alt names the panes the daemon has confirmed are on the alternate screen.
 	// Entries are added only once confirmed, so the rule is "an alternate screen
 	// that existed survives" rather than "an alternate screen was reached",
@@ -112,7 +136,8 @@ func newPTYTarget(t *testing.T) func() (fuzz.Target, error) {
 func (p *ptyTarget) Reset() error {
 	p.cols, p.rows, p.held, p.step = ptyCols, ptyRows, 0, 0
 	p.detached, p.probe, p.pending = false, true, nil
-	p.emitted, p.tail, p.alt = map[string]int{}, map[string]int{}, map[string]bool{}
+	p.emitted, p.tail = map[string]int{}, map[string]int{}
+	p.alt, p.flooded = map[string]bool{}, map[string]bool{}
 	p.wins, p.focused = nil, ""
 	p.current = p.session
 
@@ -514,8 +539,7 @@ func (p *ptyTarget) checkClient() []fuzz.Violation {
 }
 
 func (p *ptyTarget) checkDaemon() []fuzz.Violation {
-	info, err := daemonInfo(p.base, p.current)
-	if err != nil {
+	if _, err := daemonInfo(p.base, p.current); err != nil {
 		return one("daemon-reachable", "session-info for %q failed after %s: %v",
 			p.current, p.last, err)
 	}
@@ -526,7 +550,7 @@ func (p *ptyTarget) checkDaemon() []fuzz.Violation {
 	}
 	p.wins, p.focused = wl.Windows, wl.FocusedWindowID
 
-	if vs := p.checkStructure(info, wl); len(vs) > 0 {
+	if vs := p.checkStructure(); len(vs) > 0 {
 		return vs
 	}
 	if vs := p.checkPanes(); len(vs) > 0 {
@@ -537,34 +561,62 @@ func (p *ptyTarget) checkDaemon() []fuzz.Violation {
 
 // checkStructure compares the two numbers the client puts in its dock against
 // the daemon's own answer for the same two. It is the cheapest true client
-// against daemon comparison there is, and it is skipped while detached or while
-// the dock is off screen, because a comparison with nothing is not a pass.
-func (p *ptyTarget) checkStructure(info daemonSessionInfo, wl daemonWindowList) []fuzz.Violation {
+// against daemon comparison there is.
+//
+// It is stated as convergence rather than as an instant. The client repaints on
+// its own schedule and the daemon answers immediately, so a snapshot comparison
+// reports every frame of lag as a disagreement; what is actually being claimed
+// is that the client ends up agreeing, and a client that never does is the
+// finding. Both sides are re-read each round, because both move.
+//
+// Two things make it decline to compare rather than fail. A dock that is not on
+// screen gives -1, and a workspace number outside the session's own range is the
+// status regex having matched something else: at 40x12 the dock is squeezed to
+// nothing and any "n:m" in a pane's output can win the row. A comparison against
+// a misread is not a pass, and it is not a failure either.
+func (p *ptyTarget) checkStructure() []fuzz.Violation {
 	if p.term == nil {
 		return nil
 	}
-	s := p.term.Screen()
-	dockWins, dockWS := countWindows(s), dockWorkspace(s)
-	if dockWins < 0 || dockWS < 0 {
-		return nil
-	}
-	if dockWS != info.CurrentWorkspace {
-		return one("daemon-workspace",
-			"the dock says workspace %d, the daemon says %d, after %s",
-			dockWS, info.CurrentWorkspace, p.last)
-	}
-	onWS := 0
-	for _, w := range wl.Windows {
-		if w.Workspace == info.CurrentWorkspace {
-			onWS++
+	deadline := time.Now().Add(structureSettle)
+	var wantWS, gotWS, wantWins, gotWins int
+	for {
+		s := p.term.Screen()
+		gotWins, gotWS = countWindows(s), dockWorkspace(s)
+		info, err := daemonInfo(p.base, p.current)
+		if err != nil {
+			return nil
 		}
+		wantWS = info.CurrentWorkspace
+		if gotWins < 0 || gotWS < 1 || gotWS > max(info.NumWorkspaces, 1) {
+			return nil
+		}
+		wl, err := daemonWindows(p.base, p.current)
+		if err != nil {
+			return nil
+		}
+		wantWins = 0
+		for _, w := range wl.Windows {
+			if w.Workspace == wantWS {
+				wantWins++
+			}
+		}
+		if gotWS == wantWS && gotWins == wantWins {
+			return nil
+		}
+		if !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(120 * time.Millisecond)
 	}
-	if dockWins != onWS {
-		return one("daemon-window-count",
-			"the dock counts %d windows on workspace %d, the daemon lists %d, after %s",
-			dockWins, info.CurrentWorkspace, onWS, p.last)
+	if gotWS != wantWS {
+		return one("daemon-workspace",
+			"the dock still says workspace %d after %s and the daemon says %d, following %s",
+			gotWS, structureSettle, wantWS, p.last)
 	}
-	return nil
+	return one("daemon-window-count",
+		"the dock still counts %d windows on workspace %d after %s and the daemon "+
+			"lists %d, following %s", gotWins, wantWS, structureSettle, wantWins, p.last)
 }
 
 // checkPanes asks the daemon what each pane holds.
@@ -576,11 +628,13 @@ func (p *ptyTarget) checkPanes() []fuzz.Violation {
 			// reading, not a finding about tuios.
 			continue
 		}
-		if a, b, found := spliceIn(grid); found {
-			return one("daemon-splice",
-				"the daemon's own grid for pane %s has line %d directly above line %d "+
-					"after %s, so the hole is in the daemon rather than in the client",
-				a.tag, a.seq, b.seq, p.last)
+		if !p.flooded[w.ID] {
+			if a, b, found := spliceIn(grid); found {
+				return one("daemon-splice",
+					"the daemon's own grid for pane %s has line %d directly above line %d "+
+						"after %s, and the pane never flooded, so the hole is in the daemon "+
+						"rather than in the client", a.tag, a.seq, b.seq, p.last)
+			}
 		}
 		if vs := p.checkAlt(w, grid); len(vs) > 0 {
 			return vs
@@ -614,12 +668,19 @@ func (p *ptyTarget) checkAlt(w daemonWindow, grid []string) []fuzz.Violation {
 }
 
 // checkScrollback holds the daemon's history to two rules: its end never moves
-// backwards, and it is adjacent to itself.
+// far backwards, and it is adjacent to itself.
 //
 // The first is what a session switch, a detach and a workspace change are
 // allowed to do to a pane, which is nothing. The second is the same splice rule
 // applied to history rather than to the visible grid, which is where a hole ends
 // up once the pane has scrolled past it.
+//
+// "Far" is one screen, and that slack is not a hedge. A scrollback capture is
+// the history plus whatever is on the screen right now, so anything that empties
+// the screen without touching the history - an erase, or a switch to the
+// alternate screen, both of which the guest pool generates - legitimately takes
+// the last screenful off the end of the answer. Losing more than a screen is
+// losing history, and that is the thing worth reporting.
 func (p *ptyTarget) checkScrollback(w daemonWindow) []fuzz.Violation {
 	if p.emitted[w.ID] == 0 {
 		return nil
@@ -628,21 +689,30 @@ func (p *ptyTarget) checkScrollback(w daemonWindow) []fuzz.Violation {
 	if err != nil {
 		return nil
 	}
-	if a, b, found := spliceIn(hist); found {
-		return one("scrollback-retained",
-			"pane %s has line %d directly above line %d in its history after %s",
-			a.tag, a.seq, b.seq, p.last)
+	if !p.flooded[w.ID] {
+		if a, b, found := spliceIn(hist); found {
+			return one("scrollback-retained",
+				"pane %s has line %d directly above line %d in its history after %s",
+				a.tag, a.seq, b.seq, p.last)
+		}
 	}
 	_, hi, any := seqRange(hist, w.tag())
 	if !any {
 		return nil
 	}
-	if hi < p.tail[w.ID] {
+	screenful := w.Height
+	if screenful <= 0 {
+		screenful = p.rows
+	}
+	if hi < p.tail[w.ID]-screenful-2 {
 		return one("scrollback-retained",
-			"pane %s held history up to line %d and now ends at %d after %s",
+			"pane %s held history up to line %d and now ends at %d after %s, "+
+				"which is more than the screenful an erase could account for",
 			w.tag(), p.tail[w.ID], hi, p.last)
 	}
-	p.tail[w.ID] = hi
+	if hi > p.tail[w.ID] {
+		p.tail[w.ID] = hi
+	}
 	return nil
 }
 
@@ -660,7 +730,7 @@ func (p *ptyTarget) checkProvenance() []fuzz.Violation {
 	client := screenLines(p.term.Screen())
 	for _, w := range p.wins {
 		tag := w.tag()
-		clientLo, clientHi, any := seqRange(client, tag)
+		_, clientHi, any := seqRange(client, tag)
 		if !any {
 			continue
 		}
@@ -669,36 +739,38 @@ func (p *ptyTarget) checkProvenance() []fuzz.Violation {
 				"the client shows pane %s at line %d and only %d were ever written, after %s",
 				tag, clientHi, p.emitted[w.ID], p.last)
 		}
+		if p.flooded[w.ID] {
+			// The daemon's grid is allowed to be missing lines for this pane, so
+			// it cannot bound the client's. The provenance bound above still
+			// holds, because that one is against what this run wrote.
+			continue
+		}
 		grid, err := daemonPane(p.base, p.current, w.ID)
 		if err != nil {
 			continue
 		}
-		daemonLo, daemonHi, ok := seqRange(grid, tag)
+		_, daemonHi, ok := seqRange(grid, tag)
 		if !ok {
 			continue
 		}
 		// The daemon is read after the client, so it leads: it may be ahead and
 		// never behind. Being behind means the client painted something the
 		// daemon does not have.
+		//
+		// The mirror of this, a client whose lowest line is older than the
+		// daemon's, is deliberately not a rule. A client that is merely a few
+		// frames behind on a scrolling pane produces exactly that signature, so
+		// it would report lag as corruption. The splice rule is what catches the
+		// stale case, and it catches it without needing to know how far behind
+		// the client is entitled to be.
 		if clientHi > daemonHi {
 			return one("client-ahead",
 				"the client shows pane %s up to line %d, the daemon's grid ends at %d, after %s",
 				tag, clientHi, daemonHi, p.last)
 		}
-		if clientLo < daemonLo && !p.altAnywhere() {
-			return one("client-stale",
-				"the client shows pane %s from line %d, the daemon's grid starts at %d, after %s",
-				tag, clientLo, daemonLo, p.last)
-		}
 	}
 	return nil
 }
-
-// altAnywhere reports whether any pane is on the alternate screen. While one is,
-// the client can legitimately be showing the scrollback browser or a pane whose
-// main screen the daemon's visible capture no longer describes, so the rule that
-// compares the two windows of history steps aside.
-func (p *ptyTarget) altAnywhere() bool { return len(p.alt) > 0 }
 
 // Rules names this target's oracle, in the order Check applies them.
 func (p *ptyTarget) Rules() []string {
@@ -706,7 +778,7 @@ func (p *ptyTarget) Rules() []string {
 		"pty-exit", "pty-panic", "pty-size", "client-splice",
 		"daemon-reachable", "daemon-workspace", "daemon-window-count",
 		"daemon-splice", "altscreen-retained", "scrollback-retained",
-		"witness-provenance", "client-ahead", "client-stale",
+		"witness-provenance", "client-ahead",
 		"burst", "detach", "attach", "second-client", "daemon-restart",
 	}
 }
@@ -760,6 +832,9 @@ func (p *ptyTarget) focusedWindow() (daemonWindow, bool) {
 // rule keeps meaning the same thing for the whole run.
 func (p *ptyTarget) burst(w daemonWindow, n int) error {
 	n = min(max(n, 1), 5000)
+	if n > vtSafeBurst {
+		p.flooded[w.ID] = true
+	}
 	lo := p.emitted[w.ID] + 1
 	hi := lo + n - 1
 	p.emitted[w.ID] = hi
