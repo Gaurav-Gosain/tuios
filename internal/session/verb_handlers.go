@@ -128,7 +128,7 @@ type commonParams struct {
 func (d *Daemon) verbListSessions(_ *connState, _ json.RawMessage) (any, *verbError) {
 	return map[string]any{
 		"type":     "session_list",
-		"sessions": d.manager.ListSessions(),
+		"sessions": d.listSessions(),
 	}, nil
 }
 

@@ -253,7 +253,7 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 }
 
 func (d *Daemon) handleList(cs *connState) error {
-	sessions := d.manager.ListSessions()
+	sessions := d.listSessions()
 	return d.sendMessage(cs, MsgSessionList, &SessionListPayload{
 		Sessions: sessions,
 	})
