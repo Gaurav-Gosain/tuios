@@ -24,14 +24,23 @@ const (
 	rigCols = 80
 	rigRows = 24
 	rigWait = 10 * time.Second
+	// rigScrollbackOracle asks for more history than any case here produces, so
+	// the comparison is never limited by what the wire chose to carry.
+	rigScrollbackOracle = 20000
 )
 
 type rig struct {
-	t       *testing.T
-	daemon  *session.Daemon
-	client  *session.TUIClient
-	m       *OS
+	t      *testing.T
+	daemon *session.Daemon
+	client *session.TUIClient
+	m      *OS
+	// ctl is attached for the whole test and never subscribes to a pane. It is
+	// how the test reads the daemon's copy and types at a shell across a route
+	// that closes the client under test's connection. Not subscribing keeps it
+	// out of the ring's bookkeeping, which is the thing under test.
+	ctl     *session.TUIClient
 	session string
+	other   string
 }
 
 // ownSocket gives this test its own daemon socket. The whole binary already
@@ -99,9 +108,33 @@ func newRig(t *testing.T, panes int) *rig {
 	}
 	_ = boot.Close()
 
-	r := &rig{t: t, daemon: d, session: name}
+	ctl := session.NewTUIClient()
+	if err := ctl.Connect("test", rigCols, rigRows); err != nil {
+		t.Fatalf("control connect: %v", err)
+	}
+	if _, err := ctl.AttachSession(name, false, rigCols, rigRows); err != nil {
+		t.Fatalf("control attach: %v", err)
+	}
+	ctl.StartReadLoop()
+	t.Cleanup(func() { _ = ctl.Close() })
+
+	r := &rig{t: t, daemon: d, ctl: ctl, session: name}
 	r.attach()
 	return r
+}
+
+// otherSession creates and names a second session for the session-switch route
+// to travel through.
+func (r *rig) otherSession() string {
+	r.t.Helper()
+	if r.other != "" {
+		return r.other
+	}
+	r.other = "elsewhere"
+	if err := r.ctl.CreateDetachedSession(r.other, rigCols, rigRows); err != nil {
+		r.t.Fatalf("create second session: %v", err)
+	}
+	return r.other
 }
 
 // attach runs the client-side attach sequence cmd/tuios runs: connect, attach,
@@ -203,12 +236,55 @@ func (r *rig) win(i int) *terminal.Window {
 	return r.m.Windows[i]
 }
 
+// winByPTY finds the window a pane is showing in now. A route that rebuilds the
+// window set hands back a different pointer for the same PTY, so nothing may
+// hold a window across a route.
+func (r *rig) winByPTY(ptyID string) *terminal.Window {
+	r.t.Helper()
+	for _, w := range r.m.Windows {
+		if w.PTYID == ptyID {
+			return w
+		}
+	}
+	r.t.Fatalf("no window for PTY %s among %d windows", ptyID, len(r.m.Windows))
+	return nil
+}
+
+// ptySize reports the size the daemon has the pane at.
+func (r *rig) ptySize(ptyID string) (int, int) {
+	r.t.Helper()
+	st, err := r.ctl.GetTerminalState(ptyID, -1)
+	if err != nil || st == nil {
+		r.t.Fatalf("read pane size: %v", err)
+	}
+	return st.Width, st.Height
+}
+
+// startPTY types a command at a pane and returns without waiting for it, so the
+// pane is still producing while the caller goes on.
+func (r *rig) startPTY(ptyID, command string) {
+	r.t.Helper()
+	if err := r.ctl.WritePTY(ptyID, []byte(command+"\n")); err != nil {
+		r.t.Fatalf("write pty: %v", err)
+	}
+}
+
+// feedPTY is feed addressed by PTY, for the shapes that run while the client
+// holds no window for the pane at all.
+func (r *rig) feedPTY(ptyID, command, want string) {
+	r.t.Helper()
+	if err := r.ctl.WritePTY(ptyID, []byte(command+"\n")); err != nil {
+		r.t.Fatalf("write pty: %v", err)
+	}
+	r.waitDaemonShows(ptyID, want)
+}
+
 // feed writes a shell command to a pane and waits for want to appear in the
 // daemon's own copy of the screen, so the pane is settled on the authoritative
 // side before anything is compared.
 func (r *rig) feed(w *terminal.Window, command, want string) {
 	r.t.Helper()
-	if err := r.client.WritePTY(w.PTYID, []byte(command+"\n")); err != nil {
+	if err := r.ctl.WritePTY(w.PTYID, []byte(command+"\n")); err != nil {
 		r.t.Fatalf("write pty: %v", err)
 	}
 	r.waitDaemonShows(w.PTYID, want)
@@ -219,7 +295,7 @@ func (r *rig) feed(w *terminal.Window, command, want string) {
 func (r *rig) waitDaemonShows(ptyID, want string) {
 	r.t.Helper()
 	rigWaitUntil(r.t, "the daemon to show "+want, func() bool {
-		st, err := r.client.GetTerminalState(ptyID, true)
+		st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle)
 		if err != nil || st == nil {
 			return false
 		}
