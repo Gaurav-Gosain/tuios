@@ -756,11 +756,11 @@ func (d *Daemon) agentMonitor() {
 // foregroundResolver returns the resolve function the agent detector and the
 // output-driven exit probe share: the foreground process of a pane's controlling
 // terminal, or not-running when the PTY is gone or has exited.
-func (d *Daemon) foregroundResolver(sess *Session) func(ptyID string) (string, []string, bool) {
-	return func(ptyID string) (string, []string, bool) {
+func (d *Daemon) foregroundResolver(sess *Session) func(ptyID string) (foregroundInfo, bool) {
+	return func(ptyID string) (foregroundInfo, bool) {
 		pty := sess.GetPTY(ptyID)
 		if pty == nil || pty.IsExited() {
-			return "", nil, false
+			return foregroundInfo{}, false
 		}
 		return foregroundProcess(pty.ShellPID())
 	}

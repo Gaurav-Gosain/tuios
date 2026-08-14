@@ -172,7 +172,7 @@ func TestReportOutranksTheDetector(t *testing.T) {
 	sess, id := bareSessionWithWindow(t)
 	ptyID := ptyIDOfWindow(t, sess, id)
 	agent := newAgentMatcher(nil)
-	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
 	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
@@ -195,7 +195,7 @@ func TestReportOutranksTheDetector(t *testing.T) {
 	}
 
 	// The detector still owns the pane's lifecycle and clears it on exit.
-	shell := fakeResolver(map[string]fakeProc{ptyID: {"bash", []string{"-bash"}, true}})
+	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
 	if n := sess.applyAgentDetection(shell, agent.isAgent); n != 1 {
 		t.Fatalf("agent exit changed %d windows, want 1", n)
 	}

@@ -29,6 +29,16 @@ var defaultAgentBinaries = []string{
 	"crush",
 	"gemini",
 	"amp",
+	// Names distinctive enough to match on their own. Harnesses whose command is
+	// a common English word (agent, pi, cn, forge) are deliberately absent: a
+	// false positive labels an unrelated pane as an agent, which is worse than
+	// missing one, and a user who wants them can add them by name.
+	"droid",
+	"cline",
+	"kilocode",
+	"auggie",
+	"octofriend",
+	"qwen",
 }
 
 // wrapperInterpreters are interpreters and launchers that run an agent as a
@@ -69,32 +79,61 @@ func newAgentMatcher(extra []string) agentMatcher {
 	return agentMatcher{names: names}
 }
 
-// isAgent reports whether the foreground process named by comm (its /proc/comm)
-// and argv (its full command line) is a known agent. comm is checked first; if it
-// names an interpreter, argv is scanned so a wrapped agent is still caught.
-func (m agentMatcher) isAgent(comm string, argv []string) bool {
-	base := agentBaseName(comm)
-	if base == "" {
-		// comm can be empty when only argv is available; fall through to argv.
-	} else {
-		if _, ok := m.names[base]; ok {
-			return true
-		}
-		if _, wrapper := wrapperInterpreters[base]; !wrapper {
-			// Not an interpreter, and comm did not match: trust comm and stop,
-			// rather than risk a false positive from an incidental argument.
-			//
-			// The one exception is when comm is empty above; there we still scan
-			// argv because comm told us nothing.
-			return false
-		}
+// isAgent reports whether a pane's foreground process is a known agent. It reads
+// three descriptions of the same process, because no one of them is reliable on
+// its own:
+//
+//   - comm, which the kernel truncates at 15 characters and which a program can
+//     rename to anything (Claude Code renames itself to "claude");
+//   - exe, the real binary behind it, which survives that renaming but is a
+//     version number rather than a name for installers that keep one binary per
+//     release;
+//   - argv, which names the script an interpreter is running.
+//
+// Any of them naming a known agent is enough. When none does and comm is not an
+// interpreter, it stops rather than risk a false positive from an incidental
+// argument, since mislabelling an unrelated pane is worse than missing an agent.
+func (m agentMatcher) isAgent(info foregroundInfo) bool {
+	if m.named(agentBaseName(info.comm)) || m.named(agentBaseName(info.exe)) {
+		return true
+	}
+	// The install path names the harness even when the binary does not: Claude
+	// Code's real executable is ".../share/claude/versions/2.1.222", whose own
+	// name is a version and whose parent is the agent.
+	if info.exe != "" && m.argNamesAgent(info.exe) {
+		return true
+	}
+	// An interpreter is a stand-in for the script it runs, so its arguments are
+	// worth reading. Either name can be the interpreter: a wrapper script sets
+	// comm while exe stays "node", and a renamed process does the reverse. An
+	// unreadable exe is silence, not agreement, so it cannot rescue a comm that
+	// already named something that is not an interpreter.
+	commBase, exeBase := agentBaseName(info.comm), agentBaseName(info.exe)
+	if !(commBase == "" || isWrapperName(commBase)) && !(exeBase != "" && isWrapperName(exeBase)) {
+		return false
 	}
 	// A wrapped agent is named somewhere inside the interpreter's arguments, most
 	// often as a path component of the script it runs (for example
 	// ".../node_modules/@anthropic-ai/claude-code/cli.js", or "/usr/bin/claude").
 	// Scan each argument's path components, not just its base name, so the script
 	// file being cli.js does not hide the agent named by its directory.
-	return slices.ContainsFunc(argv, m.argNamesAgent)
+	return slices.ContainsFunc(info.argv, m.argNamesAgent)
+}
+
+// named reports whether a base name is one of the known agent names.
+func (m agentMatcher) named(base string) bool {
+	if base == "" {
+		return false
+	}
+	_, ok := m.names[base]
+	return ok
+}
+
+// isWrapperName reports whether a base name is an interpreter or launcher that
+// runs an agent rather than being one.
+func isWrapperName(base string) bool {
+	_, ok := wrapperInterpreters[base]
+	return ok
 }
 
 // argNamesAgent reports whether any path component of a single argv token, once
@@ -148,19 +187,34 @@ var loginShells = map[string]bool{
 	"elvish": true, "pwsh": true, "powershell": true, "cmd": true,
 }
 
+// foregroundInfo describes a pane's foreground process. The three fields are
+// three different answers to "what is this", and the detector needs all of them;
+// see agentMatcher.isAgent for why none of them is enough alone.
+type foregroundInfo struct {
+	// comm is /proc/<pid>/comm: the process name, truncated at 15 characters and
+	// rewritable by the process itself.
+	comm string
+	// argv is the full command line.
+	argv []string
+	// exe is the resolved /proc/<pid>/exe, empty when it cannot be read. A
+	// process with no permission to read its own target, or a deleted binary,
+	// both yield empty rather than an error.
+	exe string
+}
+
 // foregroundCommand is the label a pane earns from what it is running: the base
 // name of the foreground process, or empty when that is just a shell. argv[0]
 // is preferred over comm because the kernel truncates comm at 15 characters.
-func foregroundCommand(comm string, argv []string, running bool, shell string) string {
+func foregroundCommand(info foregroundInfo, running bool, shell string) string {
 	if !running {
 		return ""
 	}
 	name := ""
-	if len(argv) > 0 {
-		name = agentBaseName(argv[0])
+	if len(info.argv) > 0 {
+		name = agentBaseName(info.argv[0])
 	}
 	if name == "" {
-		name = agentBaseName(comm)
+		name = agentBaseName(info.comm)
 	}
 	if name == "" || name == shell || loginShells[name] {
 		return ""
@@ -180,22 +234,36 @@ func foregroundCommand(comm string, argv []string, running bool, shell string) s
 // and argv are read from the same /proc entry so a pid reused between the two
 // reads yields at worst a stale-but-consistent name for one tick; the detector
 // re-resolves every tick and only acts on a change.
-func foregroundProcess(shellPid int) (comm string, argv []string, running bool) {
+func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 	if shellPid <= 0 {
-		return "", nil, false
+		return foregroundInfo{}, false
 	}
 	tpgid, ok := readForegroundPGID(shellPid)
 	if !ok || tpgid <= 0 {
-		return "", nil, false
+		return foregroundInfo{}, false
 	}
-	comm = readComm(tpgid)
-	argv = readCmdline(tpgid)
-	if comm == "" && len(argv) == 0 {
+	info := foregroundInfo{
+		comm: readComm(tpgid),
+		argv: readCmdline(tpgid),
+		exe:  readExe(tpgid),
+	}
+	if info.comm == "" && len(info.argv) == 0 {
 		// The foreground group leader vanished between reads, or procfs is
 		// unavailable: report not-running rather than guess.
-		return "", nil, false
+		return foregroundInfo{}, false
 	}
-	return comm, argv, true
+	return info, true
+}
+
+// readExe resolves /proc/<pid>/exe, the real binary behind a process whatever it
+// renamed itself to, or "" when it cannot be read. A deleted binary resolves to a
+// path with a " (deleted)" suffix, which is stripped so the name still matches.
+func readExe(pid int) string {
+	target, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(target, " (deleted)")
 }
 
 // readForegroundPGID reads field 8 (tpgid) of /proc/<pid>/stat, the foreground
@@ -282,8 +350,8 @@ func readCmdline(pid int) []string {
 // disappearance): a process name cannot honestly distinguish working from waiting
 // or idle, so it does not pretend to.
 func (s *Session) applyAgentDetection(
-	resolve func(ptyID string) (comm string, argv []string, running bool),
-	isAgent func(comm string, argv []string) bool,
+	resolve func(ptyID string) (foregroundInfo, bool),
+	isAgent func(foregroundInfo) bool,
 ) int {
 	changed := 0
 	shell := agentBaseName(s.getShell())
@@ -302,14 +370,14 @@ func (s *Session) applyAgentDetection(
 			if w.PTYID == "" {
 				continue
 			}
-			comm, argv, running := resolve(w.PTYID)
+			info, running := resolve(w.PTYID)
 			// The row label rides this poll rather than one of its own: the
 			// process was read for the agent check either way.
-			if cmd := foregroundCommand(comm, argv, running, shell); cmd != w.ForegroundCmd {
+			if cmd := foregroundCommand(info, running, shell); cmd != w.ForegroundCmd {
 				w.ForegroundCmd = cmd
 				labels++
 			}
-			detected := running && isAgent(comm, argv)
+			detected := running && isAgent(info)
 			owned := s.agentClaims[w.ID].auto
 			switch {
 			case detected && !owned:
@@ -372,8 +440,8 @@ func (s *Session) applyAgentDetection(
 // itself is never overwritten. It reports whether it changed state.
 func (s *Session) reconcileAgentOnOutput(
 	ptyID string,
-	resolve func(ptyID string) (comm string, argv []string, running bool),
-	isAgent func(comm string, argv []string) bool,
+	resolve func(ptyID string) (foregroundInfo, bool),
+	isAgent func(foregroundInfo) bool,
 ) bool {
 	// Almost every output event is from a pane the auto-detector never promoted.
 	// Rule those out under the read lock so a busy non-agent pane does not take the
@@ -395,7 +463,7 @@ func (s *Session) reconcileAgentOnOutput(
 			if !claim.auto {
 				return errNoAgentDetectChange
 			}
-			if comm, argv, running := resolve(ptyID); running && isAgent(comm, argv) {
+			if info, running := resolve(ptyID); running && isAgent(info) {
 				// Still the agent, and it just spoke. Only the idle left by the
 				// silence timer (or by the detector itself) may be taken back:
 				// anything a stronger source said outranks output activity, which

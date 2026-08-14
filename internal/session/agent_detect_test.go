@@ -1,6 +1,9 @@
 package session
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -27,36 +30,112 @@ func TestAgentBaseName(t *testing.T) {
 	}
 }
 
-// TestAgentMatcher checks the detection decision: known agent names match, a
-// plain shell or unrelated tool does not, a wrapped agent (node running claude)
-// matches through its argv, and a user-added name matches.
+// TestAgentMatcher checks the detection decision across the shapes a harness
+// actually launches in: a native binary, a versioned binary behind a renamed
+// process, the interpreter wrappers npm and pip installs produce, and the
+// non-agent cases that must keep reading as non-agents.
 func TestAgentMatcher(t *testing.T) {
 	m := newAgentMatcher([]string{"mycli", "  Spaced-Agent "})
 	cases := []struct {
 		name string
-		comm string
-		argv []string
+		info foregroundInfo
 		want bool
 	}{
-		{"bare claude", "claude", []string{"claude"}, true},
-		{"path claude", "claude", []string{"/usr/bin/claude", "--resume"}, true},
-		{"codex", "codex", []string{"codex"}, true},
-		{"cursor-agent", "cursor-agent", []string{"cursor-agent"}, true},
-		{"plain shell", "bash", []string{"-bash"}, false},
-		{"unrelated tool", "vim", []string{"vim", "notes.md"}, false},
-		{"node wrapper running claude", "node", []string{"node", "/home/u/.npm/claude/cli.js"}, true},
-		{"npx opencode", "npx", []string{"npx", "opencode"}, true},
-		{"node without agent arg", "node", []string{"node", "server.js"}, false},
-		{"user-added name", "mycli", []string{"mycli"}, true},
-		{"user-added name case-insensitive", "spaced-agent", []string{"spaced-agent"}, true},
+		{"bare claude", foregroundInfo{comm: "claude", argv: []string{"claude"}}, true},
+		{"path claude", foregroundInfo{comm: "claude", argv: []string{"/usr/bin/claude", "--resume"}}, true},
+		{"codex", foregroundInfo{comm: "codex", argv: []string{"codex"}}, true},
+		{"cursor-agent", foregroundInfo{comm: "cursor-agent", argv: []string{"cursor-agent"}}, true},
+		{"plain shell", foregroundInfo{comm: "bash", argv: []string{"-bash"}}, false},
+		{"unrelated tool", foregroundInfo{comm: "vim", argv: []string{"vim", "notes.md"}}, false},
+		{"node wrapper running claude", foregroundInfo{comm: "node", argv: []string{"node", "/home/u/.npm/claude/cli.js"}}, true},
+		{"npx opencode", foregroundInfo{comm: "npx", argv: []string{"npx", "opencode"}}, true},
+		{"node without agent arg", foregroundInfo{comm: "node", argv: []string{"node", "server.js"}}, false},
+		{"user-added name", foregroundInfo{comm: "mycli", argv: []string{"mycli"}}, true},
+		{"user-added name case-insensitive", foregroundInfo{comm: "spaced-agent", argv: []string{"spaced-agent"}}, true},
 		// A non-interpreter comm that does not match must not be rescued by an
 		// incidental argument that happens to share an agent's name.
-		{"non-interpreter with agent-like arg", "grep", []string{"grep", "claude", "log.txt"}, false},
+		{"non-interpreter with agent-like arg", foregroundInfo{comm: "grep", argv: []string{"grep", "claude", "log.txt"}}, false},
+
+		// The native installer keeps one binary per release, so the real
+		// executable is a version number and only its directory names the agent.
+		{
+			"versioned binary named only by its directory",
+			foregroundInfo{
+				comm: "2.1.222",
+				argv: []string{"claude", "--resume"},
+				exe:  "/home/u/.local/share/claude/versions/2.1.222",
+			},
+			true,
+		},
+		// comm is the kernel's 15-character truncation, so a longer name is cut.
+		{
+			"comm truncated at fifteen characters",
+			foregroundInfo{comm: "octofriend-cli-", argv: []string{"octofriend"}, exe: "/usr/local/bin/octofriend"},
+			true,
+		},
+		// The esbuild-style npm shim spawns a native child from a platform package.
+		{
+			"platform package binary",
+			foregroundInfo{
+				comm: "droid",
+				argv: []string{"droid"},
+				exe:  "/home/u/n/node_modules/@factory/cli-linux-x64/bin/droid",
+			},
+			true,
+		},
+		// A python-installed agent runs as the interpreter.
+		{
+			"python running aider",
+			foregroundInfo{comm: "python3", argv: []string{"python3", "/usr/lib/py/site-packages/aider/main.py"}, exe: "/usr/bin/python3.13"},
+			true,
+		},
+		{
+			"bun running an agent script",
+			foregroundInfo{comm: "bun", argv: []string{"bun", "/home/u/.bun/install/global/node_modules/opencode/index.ts"}, exe: "/home/u/.bun/bin/bun"},
+			true,
+		},
+		// A wrapper script renames the process while the binary stays the shell.
+		{
+			"renamed wrapper over a shell",
+			foregroundInfo{comm: "my-launcher", argv: []string{"my-launcher", "codex"}, exe: "/usr/bin/bash"},
+			true,
+		},
+		// An unrelated python program stays unrelated.
+		{
+			"python running something else",
+			foregroundInfo{comm: "python3", argv: []string{"python3", "manage.py", "runserver"}, exe: "/usr/bin/python3.13"},
+			false,
+		},
+		// A binary that merely lives near an agent-named directory it is not.
+		{
+			"unrelated binary with a clean path",
+			foregroundInfo{comm: "htop", argv: []string{"htop"}, exe: "/usr/bin/htop"},
+			false,
+		},
 	}
 	for _, c := range cases {
-		if got := m.isAgent(c.comm, c.argv); got != c.want {
-			t.Errorf("%s: isAgent(%q, %v) = %v, want %v", c.name, c.comm, c.argv, got, c.want)
+		if got := m.isAgent(c.info); got != c.want {
+			t.Errorf("%s: isAgent(%+v) = %v, want %v", c.name, c.info, got, c.want)
 		}
+	}
+}
+
+// TestReadExe checks the real binary is resolved from procfs, using this test
+// process as the one process guaranteed to be there. It is the read that lets the
+// detector see past a process that renamed itself.
+func TestReadExe(t *testing.T) {
+	got := readExe(os.Getpid())
+	if got == "" {
+		t.Fatal("readExe returned nothing for the running test process")
+	}
+	if !filepath.IsAbs(got) {
+		t.Errorf("readExe = %q, want an absolute path", got)
+	}
+	if strings.HasSuffix(got, " (deleted)") {
+		t.Errorf("readExe = %q, want the deleted marker stripped", got)
+	}
+	if readExe(-1) != "" {
+		t.Error("readExe returned a path for an impossible pid")
 	}
 }
 
@@ -81,18 +160,17 @@ func TestParseStatTPGID(t *testing.T) {
 // fakeResolver returns a resolve function backed by a per-PTY table, so agent
 // detection can be exercised without a real /proc or a real agent process.
 type fakeProc struct {
-	comm    string
-	argv    []string
+	info    foregroundInfo
 	running bool
 }
 
-func fakeResolver(table map[string]fakeProc) func(string) (string, []string, bool) {
-	return func(ptyID string) (string, []string, bool) {
+func fakeResolver(table map[string]fakeProc) func(string) (foregroundInfo, bool) {
+	return func(ptyID string) (foregroundInfo, bool) {
 		p, ok := table[ptyID]
 		if !ok {
-			return "", nil, false
+			return foregroundInfo{}, false
 		}
-		return p.comm, p.argv, p.running
+		return p.info, p.running
 	}
 }
 
@@ -116,7 +194,7 @@ func TestAgentDetectionPromotesAndClears(t *testing.T) {
 	agent := newAgentMatcher(nil)
 
 	// Foreground is the shell: nothing happens.
-	shell := fakeResolver(map[string]fakeProc{ptyID: {"bash", []string{"-bash"}, true}})
+	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
 	if n := sess.applyAgentDetection(shell, agent.isAgent); n != 0 {
 		t.Fatalf("shell foreground changed %d windows, want 0", n)
 	}
@@ -125,7 +203,7 @@ func TestAgentDetectionPromotesAndClears(t *testing.T) {
 	}
 
 	// An agent appears: the pane is promoted to working.
-	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
 		t.Fatalf("agent appearance changed %d windows, want 1", n)
 	}
@@ -165,7 +243,7 @@ func TestAgentDetectionNeverClobbersManual(t *testing.T) {
 
 	// An agent is in the foreground, but the pane already has a manual state: the
 	// detector must not take ownership or overwrite it.
-	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 	if n := sess.applyAgentDetection(running, agent.isAgent); n != 0 {
 		t.Fatalf("detection over a manual state changed %d windows, want 0", n)
 	}
@@ -175,7 +253,7 @@ func TestAgentDetectionNeverClobbersManual(t *testing.T) {
 
 	// The agent then exits: since the detector never owned the window, it leaves
 	// the manual state alone.
-	shell := fakeResolver(map[string]fakeProc{ptyID: {"bash", []string{"-bash"}, true}})
+	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
 	if n := sess.applyAgentDetection(shell, agent.isAgent); n != 0 {
 		t.Fatalf("agent exit over a manual state changed %d windows, want 0", n)
 	}
@@ -191,7 +269,7 @@ func TestAgentDetectionYieldsToExplicitWhileOwned(t *testing.T) {
 	sess, id := bareSessionWithWindow(t)
 	ptyID := ptyIDOfWindow(t, sess, id)
 	agent := newAgentMatcher(nil)
-	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
 	// Detector promotes the pane to working (takes ownership).
 	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
@@ -213,7 +291,7 @@ func TestAgentDetectionYieldsToExplicitWhileOwned(t *testing.T) {
 	}
 
 	// When the agent exits, ownership is released and the window clears to none.
-	shell := fakeResolver(map[string]fakeProc{ptyID: {"bash", []string{"-bash"}, true}})
+	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
 	if n := sess.applyAgentDetection(shell, agent.isAgent); n != 1 {
 		t.Fatalf("agent exit changed %d windows, want 1", n)
 	}
@@ -230,8 +308,8 @@ func TestClearExitedAgent(t *testing.T) {
 	sess, id := bareSessionWithWindow(t)
 	ptyID := ptyIDOfWindow(t, sess, id)
 	agent := newAgentMatcher(nil)
-	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
-	shell := fakeResolver(map[string]fakeProc{ptyID: {"bash", []string{"-bash"}, true}})
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
+	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
 
 	// Unowned: an output probe must not touch a window the detector never claimed.
 	if sess.reconcileAgentOnOutput(ptyID, shell, agent.isAgent) {
@@ -270,7 +348,7 @@ func TestAgentResumesAfterStall(t *testing.T) {
 	sess, id := bareSessionWithWindow(t)
 	ptyID := ptyIDOfWindow(t, sess, id)
 	agent := newAgentMatcher(nil)
-	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
 	// The detector finds the agent and promotes the pane.
 	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
@@ -312,7 +390,7 @@ func TestAgentResumeRespectsHigherSource(t *testing.T) {
 	sess, id := bareSessionWithWindow(t)
 	ptyID := ptyIDOfWindow(t, sess, id)
 	agent := newAgentMatcher(nil)
-	running := fakeResolver(map[string]fakeProc{ptyID: {"claude", []string{"claude"}, true}})
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
 	if n := sess.applyAgentDetection(running, agent.isAgent); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
@@ -334,7 +412,7 @@ func TestClearExitedAgentRespectsManual(t *testing.T) {
 	sess, id := bareSessionWithWindow(t)
 	ptyID := ptyIDOfWindow(t, sess, id)
 	agent := newAgentMatcher(nil)
-	shell := fakeResolver(map[string]fakeProc{ptyID: {"bash", []string{"-bash"}, true}})
+	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
 
 	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "waiting"); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
@@ -409,7 +487,7 @@ func TestResolveAgentBinaries(t *testing.T) {
 	}
 	// The merged matcher must recognise a config-added name.
 	m := newAgentMatcher(got)
-	if !m.isAgent("cfg1", []string{"cfg1"}) {
+	if !m.isAgent(foregroundInfo{comm: "cfg1", argv: []string{"cfg1"}}) {
 		t.Error("matcher did not recognise config-added name cfg1")
 	}
 }
