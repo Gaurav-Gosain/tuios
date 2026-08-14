@@ -128,6 +128,14 @@ func (m *OS) toggleZoom() {
 		return
 	}
 
+	// Zooming is structural, the same way switching tiling mode is: the
+	// rectangle it lands on is final, not a step on the way to a size the user
+	// is still choosing. A resize recorded before the zoom and drained after it
+	// was replayed over the zoomed rectangle, so the pane shrank back to its
+	// tile a tick later with the rest of the region left blank, and the guest
+	// took a second announcement for a size it never had.
+	m.requireRealLayout()
+
 	// Zoom sets the pane's rectangle directly, and a snap still in flight owns
 	// that rectangle: zooming while the scrolling strip was mid-slide put the
 	// pane back in its column one tick later, with the emulator still at the

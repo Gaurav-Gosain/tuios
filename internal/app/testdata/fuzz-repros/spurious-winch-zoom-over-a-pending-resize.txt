@@ -1,0 +1,9 @@
+# seed 68. A host resize defers what each pane is to be told, zoom then sets the
+# focused pane's rectangle directly, and the tick drains the deferred entry over
+# the zoomed rectangle: the pane shrinks back to its tile with the rest of the
+# region blank, and the guest is told a size it never had.
+resize 60 20
+layout 1
+resize 60 20
+zoom
+tick
