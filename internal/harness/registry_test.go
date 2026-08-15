@@ -23,15 +23,43 @@ func TestBundledManifestsLoad(t *testing.T) {
 	}
 }
 
-// TestBundledScreenRulesAreOff is the policy check: reading another program's UI
-// is a maintenance treadmill, so nothing ships with it turned on. A manifest that
-// arrives later with rules enabled by default should fail here and be argued for
-// on purpose.
-func TestBundledScreenRulesAreOff(t *testing.T) {
+// TestBundledScreenRulesShipOnlyForNeedsInput is the policy check, narrowed from
+// "nothing ships enabled" and argued for on purpose.
+//
+// The old rule cost more than it saved. Reading another program's UI is a
+// maintenance treadmill, but a harness waiting on a human was measured emitting
+// nothing at all: no output, no title, no progress sequence. With rules off, the
+// pane goes quiet, the stall timer calls it idle and the alert policy ignores
+// idle, so the state a user most needs to be told about was the one state
+// nothing could reach. Off-by-default made that unreachable for everyone who had
+// not hand-written rules, which is everyone.
+//
+// What the treadmill actually costs is bounded in the safe direction: a rule
+// that rots stops matching, classification returns no opinion, and the pane
+// behaves exactly as it did before the rule existed. The expensive direction is a
+// rule matching something it should not, so bundled rules carry several strings
+// together rather than any one of them.
+//
+// working stays off, and that is the part still worth policing. It is already
+// carried by OSC 9;4 and by output arriving at all, so a screen rule for it buys
+// nothing and would be keyed on a spinner glyph, which is the first thing to
+// change in a patch release.
+func TestBundledScreenRulesShipOnlyForNeedsInput(t *testing.T) {
 	r, _ := Load()
 	for _, id := range r.IDs() {
-		if m := r.Lookup(id); m.Screen.Enabled {
-			t.Errorf("bundled manifest %q ships with screen rules enabled", id)
+		m := r.Lookup(id)
+		if !m.Screen.Enabled {
+			continue
+		}
+		for i, rule := range m.Screen.Rule {
+			if rule.State != "needs_input" {
+				t.Errorf("bundled manifest %q ships rule %d enabled for state %q; only needs_input may ship on",
+					id, i, rule.State)
+			}
+			if len(rule.All) == 0 && len(rule.Any) < 2 {
+				t.Errorf("bundled manifest %q rule %d rests on a single string; a bundled rule needs corroboration",
+					id, i)
+			}
 		}
 	}
 }

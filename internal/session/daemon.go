@@ -240,6 +240,19 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				if d.agentDetectInterval > 0 && pty.probeAgentExitDue(time.Now().UnixNano()) {
 					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identify)
 				}
+				// The screen tier. Throttled like the probe, and armed to run once
+				// more after the pane goes quiet: a harness waiting on a human
+				// paints the prompt in its last chunk and then says nothing at
+				// all, so the scan the throttle swallowed is the only one that
+				// would have seen it.
+				reg := d.agentMatcher.registry
+				if reg != nil {
+					ptyID := ev.PTYID
+					if pty.screenScanDue(time.Now().UnixNano()) {
+						s.scanScreenForAgent(ptyID, reg)
+					}
+					pty.armScreenSettle(func() { s.scanScreenForAgent(ptyID, reg) })
+				}
 			}
 		}
 		d.events.publish(streamEvent{

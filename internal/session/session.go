@@ -304,6 +304,16 @@ type PTY struct {
 	// re-check its foreground on every output chunk.
 	lastAgentProbe atomic.Int64
 
+	// lastScreenScan is the unix-nano time of the last output-driven screen scan,
+	// throttling it the same way.
+	lastScreenScan atomic.Int64
+
+	// screenSettle is the one-shot that scans the screen after a pane goes quiet.
+	// It is a timer rather than a ticker so a silent pane costs nothing, which is
+	// the rule the whole daemon is built to.
+	screenSettleMu sync.Mutex
+	screenSettle   *time.Timer
+
 	// agentProgress parks the most recent OSC 9;4 progress state the emulator
 	// saw, as the state plus one so zero means none pending. The VT callback runs
 	// on the vtWriter goroutine with the terminal lock held, where mutating

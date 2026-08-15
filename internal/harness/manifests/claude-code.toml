@@ -13,6 +13,33 @@ exe_glob  = ["*/share/claude/versions/*", "*/claude"]
 
 # Claude Code reports its own state through the hook shim in integrations/, and
 # emits OSC 9;4 when terminalProgressBarEnabled is set. Both beat reading its
-# screen, so no screen rules ship for it.
+# screen when they are set up.
+#
+# Neither covers the state that matters most. A session sitting on a permission
+# prompt was measured emitting nothing at all: no further output, no title, and
+# no progress sequence. With no rule here the pane goes quiet, the stall timer
+# calls it idle, and the alert policy ignores idle, so the one moment a human is
+# being waited for is the one moment nothing says so.
+#
+# Only needs_input ships. Working is already carried by OSC 9;4 and by output
+# arriving at all, and a rule keyed on a spinner glyph is what breaks first when
+# an agent's TUI changes in a patch release.
+#
+# A rule that stops matching costs nothing: classification returns no opinion and
+# the pane behaves exactly as it did before this block existed. A rule that
+# matches something it should not is the expensive direction, which is why these
+# require several strings together rather than any one of them.
 [screen]
-enabled = false
+enabled = true
+lines   = 8
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 20
+all      = ["Do you want"]
+any      = ["1. Yes", "❯ 1.", "2. No"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 10
+any      = ["Allow this tool", "Grant permission", "approve this"]
