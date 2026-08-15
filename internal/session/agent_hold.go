@@ -154,6 +154,18 @@ func (s *Session) settleAgentHolds(now time.Time) int {
 	return settled
 }
 
+// stopAgentHoldTimer disarms the backstop and forgets what it was waiting to
+// say, for a session being stopped.
+func (s *Session) stopAgentHoldTimer() {
+	s.agentHoldMu.Lock()
+	defer s.agentHoldMu.Unlock()
+	if s.agentHoldTimer != nil {
+		s.agentHoldTimer.Stop()
+		s.agentHoldTimer = nil
+	}
+	clear(s.agentHolds)
+}
+
 // dropAgentHold forgets any hold on a window, so a window that goes away or whose
 // state a stronger source took over does not leave one behind to be published
 // later.

@@ -1076,6 +1076,10 @@ func (s *Session) Stop() {
 		LogError("Final resurrection save for session %q failed, it will not come back: %v", s.Name, err)
 	}
 
+	// Before the panes go, so a hold cannot publish a state against a session
+	// that has already saved and stopped.
+	s.stopAgentHoldTimer()
+
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
