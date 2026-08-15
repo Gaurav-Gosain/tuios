@@ -33,13 +33,34 @@ exe_glob  = ["*/share/claude/versions/*", "*/claude"]
 enabled = true
 lines   = 8
 
+# The permission prompt. Claude Code asks with a question line and then a
+# numbered list whose first entry is Yes, so the two together are the signature:
+#
+#   Do you want to proceed?
+#   ❯ 1. Yes
+#     2. Yes, and don't ask again for similar commands
+#     3. No, and tell Claude what to do differently (esc)
+#
+# The question varies by tool ("Do you want to make this edit to main.go?",
+# "Do you want to create config.toml?"), so the rule keys on the stem plus the
+# list rather than on any one sentence.
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+all      = ["Do you want"]
+any      = ["1. Yes", "❯ 1."]
+
+# Trusting a directory, asked once when a session starts somewhere new. It
+# blocks before the agent will do anything at all, and it is the prompt most
+# likely to be sitting unnoticed in a pane the user opened and walked away from.
 [[screen.rule]]
 state    = "needs_input"
 priority = 20
-all      = ["Do you want"]
-any      = ["1. Yes", "❯ 1.", "2. No"]
+all      = ["Do you trust the files in this folder"]
 
+# Plan mode, where the agent has stopped and is waiting on approval to act.
 [[screen.rule]]
 state    = "needs_input"
 priority = 10
-any      = ["Allow this tool", "Grant permission", "approve this"]
+all      = ["Would you like to proceed"]
+any      = ["1. Yes", "❯ 1."]

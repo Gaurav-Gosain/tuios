@@ -1,6 +1,9 @@
 package harness
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // The screen tier is the only channel carrying "this pane is waiting for a
 // human" for a harness that paints its prompt and then goes silent. These are
@@ -90,4 +93,47 @@ func testRegistry(t *testing.T) *Registry {
 		t.Fatal("no registry")
 	}
 	return r
+}
+
+// The three prompts Claude Code actually blocks on, written as they render.
+// This is the fixture most likely to be wrong, so it is spelled out in full
+// rather than reduced to the substring the rule happens to key on.
+func TestClassifyCoversEveryClaudeBlocker(t *testing.T) {
+	r := testRegistry(t)
+	for _, tc := range []struct {
+		name string
+		tail []string
+	}{
+		{"tool permission", []string{
+			"Bash(go test ./...)",
+			"Do you want to proceed?",
+			"❯ 1. Yes",
+			"  2. Yes, and don't ask again for similar commands",
+			"  3. No, and tell Claude what to do differently (esc)",
+		}},
+		{"edit permission", []string{
+			"Do you want to make this edit to main.go?",
+			"❯ 1. Yes",
+			"  2. No, and tell Claude what to do differently (esc)",
+		}},
+		{"folder trust", []string{
+			"Do you trust the files in this folder?",
+			"/home/gaurav/dev/tuios",
+		}},
+		{"plan approval", []string{
+			"Would you like to proceed?",
+			"❯ 1. Yes, and auto-accept edits",
+			"  2. Yes, and manually approve edits",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state, _, ok := r.Classify("claude-code", tc.tail)
+			if !ok {
+				t.Fatalf("no rule matched a real blocking prompt:\n%s", strings.Join(tc.tail, "\n"))
+			}
+			if state != "needs_input" {
+				t.Errorf("classified as %q, want needs_input", state)
+			}
+		})
+	}
 }
