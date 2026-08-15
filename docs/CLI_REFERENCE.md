@@ -1318,6 +1318,9 @@ tuios-web [flags]
 - `--port <string>` - Web server port (default: "7681")
 - `--read-only` - Disable input from clients (view only mode)
 - `--max-connections <int>` - Maximum concurrent connections (default: 0 = unlimited)
+- `--cert <path>` - TLS certificate in PEM form (serves HTTPS; required to bind a non-loopback host)
+- `--key <path>` - TLS private key in PEM form (required with `--cert`)
+- `--insecure` - Serve a non-loopback host over plain HTTP, unencrypted (trusted networks only)
 - `--default-session <string>` - Default session name for all connections (creates shared session)
 - `--ephemeral` - Disable daemon mode (sessions don't persist)
 - `--theme <name>` - Color theme forwarded to TUIOS instances
@@ -1350,8 +1353,14 @@ tuios-web
 # Start on custom port
 tuios-web --port 8080
 
-# Bind to all interfaces for remote access
-tuios-web --host 0.0.0.0 --port 7681
+# Reach the server from a phone on the same network, over TLS
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -subj "/CN=192.168.1.31" -addext "subjectAltName=IP:192.168.1.31" \
+  -keyout tuios-key.pem -out tuios-cert.pem
+tuios-web --host 0.0.0.0 --port 7681 --cert tuios-cert.pem --key tuios-key.pem
+
+# Same, on a network you trust, with nothing encrypted
+tuios-web --host 0.0.0.0 --port 7681 --insecure
 
 # Start in read-only mode (view only)
 tuios-web --read-only

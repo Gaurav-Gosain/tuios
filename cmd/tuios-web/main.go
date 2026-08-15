@@ -4,8 +4,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -37,6 +39,9 @@ var (
 	webHost           string
 	webReadOnly       bool
 	webMaxConnections int
+	webTLSCert        string
+	webTLSKey         string
+	webInsecure       bool
 	// TUIOS forwarded flags
 	debugMode         bool
 	asciiOnly         bool
@@ -72,6 +77,8 @@ Server features:
   - Dual protocol support: WebTransport (HTTP/3 over QUIC) for low latency
     with automatic WebSocket fallback for broader compatibility
   - Self-signed TLS certificate generation for development
+  - HTTPS from your own certificate (--cert/--key), which a bind to a
+    LAN address requires unless you opt into clear text with --insecure
   - Configurable host, port, read-only mode, and connection limits
   - All TUIOS flags forwarded to spawned instances (theme, show-keys, etc.)
   - Structured logging with charmbracelet/log
@@ -90,8 +97,11 @@ Client features:
   # Start on custom port
   tuios-web --port 8080
 
-  # Bind to all interfaces for remote access
-  tuios-web --host 0.0.0.0
+  # Reach the server from a phone on the same network, over TLS
+  tuios-web --host 0.0.0.0 --cert cert.pem --key key.pem
+
+  # Same, on a network you trust, with nothing encrypted
+  tuios-web --host 0.0.0.0 --insecure
 
   # Start with show-keys overlay
   tuios-web --show-keys
@@ -122,6 +132,9 @@ Client features:
 	rootCmd.Flags().StringVar(&webHost, "host", "localhost", "Web server host")
 	rootCmd.Flags().BoolVar(&webReadOnly, "read-only", false, "Disable input from clients (view only)")
 	rootCmd.Flags().IntVar(&webMaxConnections, "max-connections", 0, "Maximum concurrent connections (0 = unlimited)")
+	rootCmd.Flags().StringVar(&webTLSCert, "cert", "", "Path to a TLS certificate in PEM form (serves HTTPS; required to bind a non-loopback host)")
+	rootCmd.Flags().StringVar(&webTLSKey, "key", "", "Path to the TLS private key in PEM form (required with --cert)")
+	rootCmd.Flags().BoolVar(&webInsecure, "insecure", false, "Serve a non-loopback host over plain HTTP, sending every keystroke unencrypted (trusted networks only)")
 
 	// Daemon mode flags
 	rootCmd.Flags().StringVar(&defaultSession, "default-session", "", "Default session name for all connections (creates shared session)")
@@ -149,6 +162,12 @@ Client features:
 }
 
 func runWebServer() error {
+	// Refuse an unencrypted LAN bind before anything is started, so the user
+	// gets the answer instead of a daemon and a half-open port.
+	if err := checkTransportSecurity(); err != nil {
+		return err
+	}
+
 	// CRITICAL: Force lipgloss to use TrueColor BEFORE any styles are created.
 	// By default, lipgloss detects color profile from os.Stdout, which isn't a TTY
 	// when running as a web server. This causes all colors to be stripped.
@@ -229,6 +248,9 @@ func runWebServer() error {
 	sipConfig.ReadOnly = webReadOnly
 	sipConfig.MaxConnections = webMaxConnections
 	sipConfig.Debug = debugMode
+	sipConfig.TLSCert = webTLSCert
+	sipConfig.TLSKey = webTLSKey
+	sipConfig.AllowInsecureNoTLS = webInsecure
 
 	server := sip.NewServer(sipConfig)
 
@@ -237,10 +259,120 @@ func runWebServer() error {
 	if webServerConfig.ephemeral {
 		mode = "ephemeral"
 	}
-	log.Printf("Starting web server on %s:%s (mode: %s)", webHost, webPort, mode)
+	log.Printf("Starting web server on %s (mode: %s)", serverURL(), mode)
+	if webInsecure && !isLoopbackHost(webHost) {
+		log.Printf("Insecure: %s is served over plain HTTP, so anyone on this network can read what you type", serverURL())
+	}
 
 	// Serve TUIOS using sip
 	return server.Serve(ctx, createTUIOSHandler)
+}
+
+// isLoopbackHost reports whether a bind address keeps traffic inside this
+// machine. It mirrors the check sip makes when it decides whether TLS is
+// mandatory, so the two agree on which binds need a certificate.
+func isLoopbackHost(host string) bool {
+	if host == "" || host == "localhost" {
+		return true
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// certSubject is the name a generated certificate should carry for a bind
+// address, and the kind of subjectAltName that name needs. A wildcard bind
+// answers on an address only the user knows, so what they get back is a
+// template to fill in with it.
+func certSubject(host string) (subject, sanKind string) {
+	ip := net.ParseIP(host)
+	if host == "" || (ip != nil && ip.IsUnspecified()) {
+		return "YOUR-LAN-IP", "IP"
+	}
+	if ip != nil {
+		return host, "IP"
+	}
+	return host, "DNS"
+}
+
+// serverURL is the address to open, so a startup line can be pasted or
+// tapped rather than assembled by the reader. A wildcard bind answers on
+// every address this machine has, and localhost is the one that always
+// works from here.
+func serverURL() string {
+	scheme := "http"
+	if webTLSCert != "" {
+		scheme = "https"
+	}
+	host := webHost
+	if ip := net.ParseIP(host); ip != nil && ip.IsUnspecified() {
+		host = "localhost"
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	return fmt.Sprintf("%s://%s", scheme, net.JoinHostPort(host, webPort))
+}
+
+// checkTransportSecurity stops a bind that would carry keystrokes in clear
+// text over a network, and answers with the commands that fix it.
+//
+// sip enforces the same rule, but it states the escape hatch as
+// AllowInsecureNoTLS, a Go field of its config that nobody holding this
+// binary can reach. Deciding here means the message can name the flags this
+// command actually has, filled in with the address the user typed.
+func checkTransportSecurity() error {
+	if (webTLSCert == "") != (webTLSKey == "") {
+		// Leading with a flag name would come out capitalized by fang's
+		// error rendering.
+		return errors.New("pass both --cert and --key, or neither: a certificate is no use without its key")
+	}
+	if webTLSCert != "" || webInsecure || isLoopbackHost(webHost) {
+		return nil
+	}
+
+	subject, sanKind := certSubject(webHost)
+
+	// Printed here rather than carried in the error: fang reflows an error
+	// into a paragraph, which would run the commands together and leave
+	// nothing to copy.
+	fmt.Fprintf(os.Stderr, `
+  %s is not this machine, and without TLS every keystroke you send it, and
+  everything a shell prints back, crosses the network in clear text. So pick
+  how you want to reach it:
+
+  1. Over HTTPS, which is what you want on a network you share.
+
+       openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+         -subj "/CN=%s" -addext "subjectAltName=%s:%s" \
+         -keyout tuios-key.pem -out tuios-cert.pem
+
+       tuios-web --host %s --port %s --cert tuios-cert.pem --key tuios-key.pem
+
+     A self-signed certificate warns once per device and you accept it there.
+     One from your own CA, or a real one, never warns.
+
+  2. In clear text, on a network you trust and on no other.
+
+       tuios-web --host %s --port %s --insecure
+
+  3. Left on this machine, reached through SSH. No certificate involved.
+
+       ssh -L %s:localhost:%s <this-machine>
+
+     then open http://localhost:%s at the far end.
+
+`,
+		webHost,
+		subject, sanKind, subject,
+		webHost, webPort,
+		webHost, webPort,
+		webPort, webPort,
+		webPort)
+
+	return fmt.Errorf("refusing to serve %s in clear text: pass --cert and --key, or --insecure to accept it", webHost)
 }
 
 // createTUIOSHandler creates a TUIOS instance for each web session.
