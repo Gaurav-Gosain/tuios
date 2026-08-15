@@ -252,6 +252,14 @@ func runWebServer() error {
 	sipConfig.TLSKey = webTLSKey
 	sipConfig.AllowInsecureNoTLS = webInsecure
 
+	// The touch key bar is server-wide while the leader it carries is a user
+	// setting, so the config is read once here instead of per session.
+	leader := config.LeaderKey
+	if userConfig, err := config.LoadUserConfig(); err == nil && userConfig.Keybindings.LeaderKey != "" {
+		leader = userConfig.Keybindings.LeaderKey
+	}
+	sipConfig.MobileKeys = mobileKeys(leader)
+
 	server := sip.NewServer(sipConfig)
 
 	// Log startup mode
