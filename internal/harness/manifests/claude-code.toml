@@ -13,6 +13,54 @@ exe_glob  = ["*/share/claude/versions/*", "*/claude"]
 
 # Claude Code reports its own state through the hook shim in integrations/, and
 # emits OSC 9;4 when terminalProgressBarEnabled is set. Both beat reading its
-# screen, so no screen rules ship for it.
+# screen when they are set up.
+#
+# Neither covers the state that matters most. A session sitting on a permission
+# prompt was measured emitting nothing at all: no further output, no title, and
+# no progress sequence. With no rule here the pane goes quiet, the stall timer
+# calls it idle, and the alert policy ignores idle, so the one moment a human is
+# being waited for is the one moment nothing says so.
+#
+# Only needs_input ships. Working is already carried by OSC 9;4 and by output
+# arriving at all, and a rule keyed on a spinner glyph is what breaks first when
+# an agent's TUI changes in a patch release.
+#
+# A rule that stops matching costs nothing: classification returns no opinion and
+# the pane behaves exactly as it did before this block existed. A rule that
+# matches something it should not is the expensive direction, which is why these
+# require several strings together rather than any one of them.
 [screen]
-enabled = false
+enabled = true
+lines   = 8
+
+# The permission prompt. Claude Code asks with a question line and then a
+# numbered list whose first entry is Yes, so the two together are the signature:
+#
+#   Do you want to proceed?
+#   ❯ 1. Yes
+#     2. Yes, and don't ask again for similar commands
+#     3. No, and tell Claude what to do differently (esc)
+#
+# The question varies by tool ("Do you want to make this edit to main.go?",
+# "Do you want to create config.toml?"), so the rule keys on the stem plus the
+# list rather than on any one sentence.
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+all      = ["Do you want"]
+any      = ["1. Yes", "❯ 1."]
+
+# Trusting a directory, asked once when a session starts somewhere new. It
+# blocks before the agent will do anything at all, and it is the prompt most
+# likely to be sitting unnoticed in a pane the user opened and walked away from.
+[[screen.rule]]
+state    = "needs_input"
+priority = 20
+all      = ["Do you trust the files in this folder"]
+
+# Plan mode, where the agent has stopped and is waiting on approval to act.
+[[screen.rule]]
+state    = "needs_input"
+priority = 10
+all      = ["Would you like to proceed"]
+any      = ["1. Yes", "❯ 1."]

@@ -221,6 +221,21 @@ func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 			Message: fmt.Sprintf("%v; ignored, so alerts are never silenced by the clock", err),
 		})
 	}
+	if _, ok := ParseAgentSoundMode(agent.SoundMode); !ok {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "notifications.agent",
+			Key:   "sound_mode",
+			Message: fmt.Sprintf("%q is not one of %s; falling back to %q",
+				agent.SoundMode, strings.Join(AgentSoundModeNames, ", "), defaultAgentSoundMode),
+		})
+	}
+	if agent.SoundCooldownSeconds != nil && *agent.SoundCooldownSeconds < 0 {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "notifications.agent",
+			Key:     "sound_cooldown_seconds",
+			Message: "a negative gap is not a thing; falling back to the default",
+		})
+	}
 	if agent.SettleSeconds != nil && *agent.SettleSeconds < 0 {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "notifications.agent",

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/sound"
 	"github.com/adrg/xdg"
 )
 
@@ -97,6 +98,12 @@ func stillRedirected(tmp string) error {
 // tests expect to find, so they read the fixture rather than whatever the
 // developer happens to have.
 func RunIsolated(m *testing.M, setup ...func(dir string)) int {
+	// A test run must not reach the developer's speakers any more than it may
+	// reach their config. The alert path plays a cue through a system audio
+	// player, and a package that exercises it would otherwise make noise on
+	// every `go test`, and spawn processes on a CI box that has no device.
+	os.Setenv(sound.DisableEnv, "1") //nolint:errcheck,gosec // a failure here only means the tests are audible
+
 	dir, check := isolateXDG()
 	for _, fn := range setup {
 		fn(dir)

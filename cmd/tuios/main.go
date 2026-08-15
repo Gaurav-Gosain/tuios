@@ -827,6 +827,38 @@ daemon socket; the reference Claude Code shim does exactly that.`,
 	getAgentStateCmd.Flags().BoolVar(&getAgentStateJSON, "json", false, "Output result as JSON")
 	_ = getAgentStateCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var explainScreenSession string
+	var explainScreenWindow string
+	var explainScreenHarness string
+	var explainScreenLines int
+	var explainScreenJSON bool
+	explainAgentScreenCmd := &cobra.Command{
+		Use:   "explain-agent-screen",
+		Short: "Show what a harness's screen rules make of a pane",
+		Long: `Print a pane's screen tail exactly as the harness screen rules read it, then
+what every rule made of it and which one fired.
+
+This is the tool for writing a screen rule. The text is matched inside the
+daemon against a pane that has moved on by the time anyone looks, and a rule
+that fails otherwise says nothing about which of its strings was the reason.`,
+		Example: `  # What do claude-code's rules make of the focused pane right now?
+  tuios explain-agent-screen
+
+  # Try another harness's rules against a pane nothing has claimed yet
+  tuios explain-agent-screen -w build --harness codex --lines 20`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runExplainAgentScreen(explainScreenSession, explainScreenWindow,
+				explainScreenHarness, explainScreenLines, explainScreenJSON)
+		},
+	}
+	explainAgentScreenCmd.Flags().StringVarP(&explainScreenSession, "session", "s", "", "Target session (default: most recently active)")
+	explainAgentScreenCmd.Flags().StringVarP(&explainScreenWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	explainAgentScreenCmd.Flags().StringVar(&explainScreenHarness, "harness", "", "Run this harness's rules instead of the one the pane is attributed to")
+	explainAgentScreenCmd.Flags().IntVar(&explainScreenLines, "lines", 0, "Read this many lines from the bottom instead of the manifest's")
+	explainAgentScreenCmd.Flags().BoolVar(&explainScreenJSON, "json", false, "Output result as JSON")
+	_ = explainAgentScreenCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var sendTextSession string
 	var sendTextWindow string
 	sendTextCmd := &cobra.Command{
@@ -1281,7 +1313,7 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd)
-	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd)
+	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd)
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd)

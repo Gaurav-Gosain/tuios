@@ -304,6 +304,16 @@ type PTY struct {
 	// re-check its foreground on every output chunk.
 	lastAgentProbe atomic.Int64
 
+	// lastScreenScan is the unix-nano time of the last output-driven screen scan,
+	// throttling it the same way.
+	lastScreenScan atomic.Int64
+
+	// screenSettle is the one-shot that scans the screen after a pane goes quiet.
+	// It is a timer rather than a ticker so a silent pane costs nothing, which is
+	// the rule the whole daemon is built to.
+	screenSettleMu sync.Mutex
+	screenSettle   *time.Timer
+
 	// agentProgress parks the most recent OSC 9;4 progress state the emulator
 	// saw, as the state plus one so zero means none pending. The VT callback runs
 	// on the vtWriter goroutine with the terminal lock held, where mutating
@@ -441,8 +451,11 @@ type Session struct {
 	// anti-flicker window before it is published (see holdQuieterState). It has a
 	// lock of its own rather than riding stateMu because it is read and written
 	// around ApplyAgentReport, which takes stateMu itself.
-	agentHolds  map[string]agentHold
-	agentHoldMu sync.Mutex
+	agentHolds map[string]agentHold
+	// agentHoldTimer is the one-shot that publishes a hold whose source then
+	// went silent. Nil when nothing is waiting. Guarded by agentHoldMu.
+	agentHoldTimer *time.Timer
+	agentHoldMu    sync.Mutex
 
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
@@ -1062,6 +1075,10 @@ func (s *Session) Stop() {
 	if err := SaveSessionForResurrection(s.ResurrectionState()); err != nil {
 		LogError("Final resurrection save for session %q failed, it will not come back: %v", s.Name, err)
 	}
+
+	// Before the panes go, so a hold cannot publish a state against a session
+	// that has already saved and stopped.
+	s.stopAgentHoldTimer()
 
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
@@ -1954,6 +1971,10 @@ func stateToCell(t *vt.Emulator, cs CellState) *uv.Cell {
 // Close terminates the PTY.
 func (p *PTY) Close() error {
 	p.cancel()
+
+	// Before anything else, so a settle scan already armed cannot fire against a
+	// pane whose emulator is about to be closed.
+	p.stopScreenSettle()
 
 	// Close all subscriber channels
 	p.subscribersMu.Lock()

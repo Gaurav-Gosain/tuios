@@ -215,7 +215,7 @@ func TestStallHeuristicStillDemotesAReport(t *testing.T) {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
 	now := time.Now()
-	if n := sess.applyStallHeuristic(now.Add(time.Hour), time.Minute, func(string) int64 { return 0 }); n != 1 {
+	if n := sess.applyStallHeuristic(now.Add(time.Hour), time.Minute, func(string) int64 { return 0 }, nil); n != 1 {
 		t.Fatalf("stall demoted %d windows, want 1", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {

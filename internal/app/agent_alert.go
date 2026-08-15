@@ -5,6 +5,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/sound"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -146,10 +147,23 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 	if policy.Notify {
 		seq = hostNotifySequence(text, detectOuterMultiplexer())
 	}
-	if policy.Sound {
+	if policy.PlaysBell() {
 		seq = append(seq, 0x07)
 	}
 	m.writeHostSequence(seq)
+
+	// The cue plays from the client, which is the process with a human in front
+	// of it. Under `tuios ssh` that is the laptop rather than the host the
+	// session runs on, and it falls out of where alerts already live rather than
+	// needing a wire message. Play returns before anything is spawned, so the
+	// Update goroutine this runs on is not waiting on an audio device.
+	if policy.PlaysAudio() {
+		cue := sound.CueDone
+		if policy.AttentionCue(to) {
+			cue = sound.CueAttention
+		}
+		sound.Play(sound.Request{Cue: cue, File: policy.CueFile(to), Cooldown: policy.SoundCooldown})
+	}
 
 	m.FireHookContext(hooks.AfterAgentState, hooks.Context{
 		WindowID:       w.ID,

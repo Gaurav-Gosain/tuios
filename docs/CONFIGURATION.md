@@ -590,12 +590,18 @@ and `enabled = false` turns off all of them at once.
 [notifications.agent]
 enabled = true          # master switch for everything below
 notify = true           # in-band notification to the terminal you are attached to
-sound = false           # a BEL alongside it; your terminal decides what that means
+sound = false           # make the alert audible
+sound_mode = "audio"    # "audio" plays a cue, "bell" writes a BEL, "both" does each
+sound_cooldown_seconds = 3  # shortest gap between two cues, across every pane
 dock = true             # the clickable message in tuios's own dock
 settle_seconds = 2      # hold an alert this long, drop it if the pane moves on
 suppress_focused = true # say nothing about the pane you are already looking at
 quiet_hours = ""        # "22:00-08:00" local time; empty means never quiet
 command = ""            # shell command to run on an alert
+
+[notifications.agent.sounds]
+done = ""               # replaces the built-in "agent stopped" cue
+needs_input = ""        # replaces the built-in "agent wants you" cue
 
 [notifications.agent.states]
 needs_input = true      # blocked on you
@@ -617,9 +623,42 @@ is in front of you, including over `tuios ssh` and inside tmux (which needs
 raised by tuios itself: with `tuios ssh` the interface runs on the *remote* host,
 where such a notification would pop on a machine nobody is sitting at.
 
-`sound` writes a BEL. Your terminal already has a preference for what a bell
-does - a sound, a flash, a mark in the tab, nothing - and that preference wins.
-tuios ships no audio files and runs no media player.
+`sound` makes the alert audible, and `sound_mode` says how.
+
+- `"audio"` (the default) plays one of two short cues through whatever audio
+  player the machine already has: `paplay`, `pw-play`, `aplay`, `ffplay` or
+  `mpv` on Linux, `afplay` on macOS, PowerShell's `SoundPlayer` on Windows.
+  There are two cues rather than five: one for the agent wanting you
+  (`needs_input`, `errored`) and one for the agent having stopped (`done`,
+  `idle`). They are meant to be told apart by ear without looking.
+- `"bell"` writes a BEL and lets your terminal decide what that means - a
+  sound, a flash, a mark in the tab, or nothing. This is what `sound` did
+  before the cues existed.
+- `"both"` does each, for a setup where either alone might be missed.
+
+The cue is played by the client, which is the process with a human in front of
+it. Over `tuios ssh` that means it comes out of your laptop, not the host the
+session is running on.
+
+**When there is no audio.** A machine with no player on `PATH`, or no device
+behind it - a container, a CI job, an SSH session with no forwarding - goes
+quiet. Nothing is printed and nothing is retried: the player list is resolved
+once, and a short run of failed plays switches audio off for the life of the
+process rather than spawning five doomed players per alert. If you want to be
+sure of hearing *something* on such a machine, set `sound_mode = "both"`.
+
+`sound_cooldown_seconds` is the shortest gap between two cues, counted across
+every pane, so a workspace where six agents finish together makes one sound
+rather than six overlapping ones. Set it to `0` to hear every alert. It does not
+apply to the bell.
+
+`[notifications.agent.sounds]` replaces a cue with a file of your own. Any format
+your system player reads will do; WAV is the safest, since `aplay` and `paplay`
+decode nothing else. A path that does not exist falls back to the built-in cue,
+so a typo costs you the custom sound rather than all sound.
+
+Setting `TUIOS_NO_SOUND` in the environment silences the cues however tuios is
+configured, which is the right lever for a recording or a shared machine.
 
 `dock` is the in-app message. It is the only one you can click: clicking it (or
 pressing the notification-jump binding) focuses the pane that raised it,
