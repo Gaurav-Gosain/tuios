@@ -1,0 +1,69 @@
+// Browser tests for tuios-web, run against a real server on a phone viewport.
+//
+// The browser is the system chromium, so nothing is downloaded. Everything
+// here asserts what reached the wire or what the terminal buffer says, never a
+// frame rate and never a pixel: the headless GL is software rasterization.
+
+import { defineConfig } from '@playwright/test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const CHROMIUM = process.env.TUIOS_CHROMIUM ?? '/usr/bin/chromium';
+export const PORT = process.env.TUIOS_TEST_PORT ?? '7791';
+export const BASE_URL = `http://127.0.0.1:${PORT}`;
+
+// A throwaway XDG tree per run. tuios-web reads the user's config for the
+// leader key and writes session state, and a test must not touch either.
+const home = mkdtempSync(join(tmpdir(), 'tuios-clienttests-'));
+const isolated = {
+  XDG_CONFIG_HOME: join(home, 'config'),
+  XDG_DATA_HOME: join(home, 'data'),
+  XDG_STATE_HOME: join(home, 'state'),
+  XDG_CACHE_HOME: join(home, 'cache'),
+  TUIOS_SOCKET: join(home, 'tuios.sock'),
+};
+
+export default defineConfig({
+  testDir: '.',
+  testMatch: /.*\.spec\.mjs/,
+  fullyParallel: false,
+  workers: 1,
+  timeout: 90_000,
+  reporter: [['list']],
+  projects: [
+    {
+      name: 'phone',
+      use: {
+        baseURL: BASE_URL,
+        hasTouch: true,
+        isMobile: true,
+        viewport: { width: 390, height: 844 },
+        deviceScaleFactor: 1,
+        launchOptions: {
+          executablePath: CHROMIUM,
+          args: [
+            '--use-gl=angle',
+            '--use-angle=swiftshader',
+            '--enable-unsafe-swiftshader',
+            '--disable-lcd-text',
+            '--force-device-scale-factor=1',
+          ],
+        },
+      },
+    },
+  ],
+  webServer: {
+    command: `go run ./cmd/tuios-web --host 127.0.0.1 --port ${PORT}`,
+    cwd: '..',
+    url: BASE_URL,
+    env: isolated,
+    // Never reuse a server. The key bar is built in Go and handed to the page
+    // in the HTML, so a server left over from an earlier build serves the old
+    // bar while the source on disk says otherwise, and nothing reports it.
+    reuseExistingServer: false,
+    timeout: 180_000,
+    stdout: 'ignore',
+    stderr: 'pipe',
+  },
+});
