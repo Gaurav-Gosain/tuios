@@ -144,6 +144,9 @@ tuios-web --theme dracula --show-keys
 | `--host` | `localhost` | Server bind address |
 | `--read-only` | `false` | Disable client input |
 | `--max-connections` | `0` | Max concurrent sessions (0=unlimited) |
+| `--cert` | | TLS certificate (PEM); serves HTTPS |
+| `--key` | | TLS private key (PEM); required with `--cert` |
+| `--insecure` | `false` | Serve a non-loopback host unencrypted |
 | `--default-session` | | Default session name for all connections |
 | `--ephemeral` | `false` | Disable daemon mode (sessions don't persist) |
 
@@ -274,6 +277,27 @@ For development, TUIOS generates a self-signed ECDSA P-256 certificate:
 - Valid for 10 days (Chrome WebTransport requirement)
 - Hash provided via `/cert-hash` endpoint
 - No browser certificate warning needed for WebTransport
+
+### Binding a LAN address (reaching the server from a phone)
+
+`--host localhost` keeps traffic inside the machine, so it needs no
+certificate. Any other host is on a network, where an unencrypted terminal
+means every keystroke is readable by anyone else on it, so `tuios-web`
+refuses that bind until you say which way you want it:
+
+```bash
+# Over HTTPS. A self-signed certificate warns once per device.
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -subj "/CN=192.168.1.31" -addext "subjectAltName=IP:192.168.1.31" \
+  -keyout tuios-key.pem -out tuios-cert.pem
+tuios-web --host 192.168.1.31 --cert tuios-cert.pem --key tuios-key.pem
+
+# In clear text, on a network you trust and no other
+tuios-web --host 192.168.1.31 --insecure
+```
+
+WebTransport needs a certificate, so the `--insecure` route runs over the
+WebSocket fallback alone.
 
 ### Production Recommendations
 
