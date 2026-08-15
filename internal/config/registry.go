@@ -354,6 +354,7 @@ var ActionDescriptions = map[string]string{
 	// Mode Control
 	"enter_terminal_mode": "Enter terminal mode",
 	"enter_window_mode":   "Enter window management mode",
+	"hold_window_mode":    "Hold for window management mode",
 	"toggle_help":         "Toggle help",
 	"quit":                "Quit",
 	"focus_sidebar":       "Focus sidebar",

@@ -411,8 +411,13 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 		}
 	}
 
-	// Valid special keys
+	// Valid special keys. The left/right modifier names are keys in their own
+	// right only under the Kitty keyboard protocol; they are accepted so a
+	// held-key binding (hold_window_mode) can name one.
 	validSpecialKeys := map[string]bool{
+		"leftalt": true, "rightalt": true, "leftctrl": true, "rightctrl": true,
+		"leftshift": true, "rightshift": true, "leftsuper": true, "rightsuper": true,
+		"leftmeta": true, "rightmeta": true, "lefthyper": true, "righthyper": true,
 		"enter": true, "return": true, "esc": true, "escape": true,
 		"tab": true, "space": true, "backspace": true, "delete": true,
 		"up": true, "down": true, "left": true, "right": true,

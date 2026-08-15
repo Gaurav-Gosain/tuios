@@ -340,6 +340,12 @@ func DefaultConfig() *UserConfig {
 				"enter_window_mode":   {"esc"},
 				"toggle_help":         {"?"},
 				"quit":                {"q"},
+				// Unbound by default. Holding a modifier key is only reportable
+				// under the Kitty keyboard protocol's report-all-keys mode, which
+				// turns every keystroke in the session into an escape code, so it
+				// is opt-in rather than something everyone pays for. See the
+				// config header for what to set it to.
+				"hold_window_mode": {},
 			},
 			System: map[string][]string{
 				// Debug commands (logs, cache stats) are accessed via Ctrl+B D submenu

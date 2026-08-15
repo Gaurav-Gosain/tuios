@@ -1,6 +1,7 @@
 package input
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -162,6 +163,63 @@ func TestMacOptionGlyphsAreUnambiguous(t *testing.T) {
 		got, ok := config.MacOSOptionChord(glyph)
 		if !ok || got != want {
 			t.Errorf("%c resolved to %q (found %v), want %q", glyph, got, ok, want)
+		}
+	}
+}
+
+// A chord that only worked because tuios translated a composed glyph proves the
+// Option key is not being sent as Alt, and the user is told once what to turn
+// on. Once is the point: it is advice, not an error.
+func TestComposedChordAdvisesOnceWhatToTurnOn(t *testing.T) {
+	onDarwin(t)
+	o := twoWindowOS(t)
+
+	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: '˜', Text: "˜"}, o)
+	before := len(o.Notifications)
+	if before == 0 {
+		t.Fatal("a composed Option chord said nothing about why it had to be translated")
+	}
+	if !strings.Contains(o.Notifications[before-1].Message, "Option") {
+		t.Errorf("the advice does not mention Option: %q", o.Notifications[before-1].Message)
+	}
+
+	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'π', Text: "π"}, o)
+	if len(o.Notifications) != before {
+		t.Errorf("the advice repeated itself (%d notifications, want %d)", len(o.Notifications), before)
+	}
+}
+
+// An Option glyph nobody bound anything to is just a character, and advising
+// about it would be noise.
+func TestUnboundComposedGlyphSaysNothing(t *testing.T) {
+	onDarwin(t)
+	o := twoWindowOS(t)
+
+	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'ß', Text: "ß"}, o)
+	if len(o.Notifications) != 0 {
+		t.Errorf("an unbound glyph raised %d notifications", len(o.Notifications))
+	}
+}
+
+// The advice has to name the terminal the user is actually in and the chord that
+// failed, or it is not advice.
+func TestAdviceNamesTheHostTerminal(t *testing.T) {
+	for host, want := range map[config.HostTerminal]string{
+		config.HostAppleTerminal: "Use Option as Meta Key",
+		config.HostITerm2:        "Esc+",
+		config.HostGhostty:       "macos-option-as-alt",
+		config.HostKitty:         "macos_option_as_alt",
+		config.HostWezTerm:       "send_composed_key_when_left_alt_is_pressed",
+		config.HostAlacritty:     "option_as_alt",
+		config.HostVSCode:        "macOptionIsMeta",
+		config.HostUnknown:       "Option as Meta/Alt",
+	} {
+		advice := config.MacOptionAdvice(host, "alt+n")
+		if !strings.Contains(advice, want) {
+			t.Errorf("%s advice %q does not mention %q", host, advice, want)
+		}
+		if !strings.Contains(advice, "alt+n") {
+			t.Errorf("%s advice does not name the chord that failed: %q", host, advice)
 		}
 	}
 }
