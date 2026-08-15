@@ -1,22 +1,43 @@
 package main
 
-import "testing"
+import (
+	"testing"
 
-// The leader button is the one key on the bar derived from configuration, so
-// a rebound leader has to reach the phone as the key the user rebound it to.
-func TestLeaderMobileKey(t *testing.T) {
+	"github.com/Gaurav-Gosain/sip"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
+
+// defaultRegistry is the keybind registry a user who has changed nothing gets.
+func defaultRegistry(t *testing.T) *config.KeybindRegistry {
+	t.Helper()
+	return config.NewKeybindRegistry(config.DefaultConfig())
+}
+
+// findKey returns the button with a given label.
+func findKey(keys []sip.MobileKey, label string) (sip.MobileKey, bool) {
+	for _, k := range keys {
+		if k.Label == label {
+			return k, true
+		}
+	}
+	return sip.MobileKey{}, false
+}
+
+// The leader is the one chord every other button hangs off, so a rebound
+// leader has to reach the phone as the key the user rebound it to.
+func TestLeaderPrefix(t *testing.T) {
 	tests := []struct {
 		leader           string
 		ok               bool
-		key              string
+		key, code        string
 		ctrl, alt, shift bool
 	}{
-		{leader: "ctrl+b", ok: true, key: "b", ctrl: true},
-		{leader: "ctrl+a", ok: true, key: "a", ctrl: true},
-		{leader: "alt+shift+w", ok: true, key: "w", alt: true, shift: true},
-		{leader: "ctrl+space", ok: true, key: " ", ctrl: true},
-		{leader: "esc", ok: true, key: "Escape"},
-		// sip's client has no encoding for a function key, and a button that
+		{leader: "ctrl+b", ok: true, key: "b", code: "KeyB", ctrl: true},
+		{leader: "ctrl+a", ok: true, key: "a", code: "KeyA", ctrl: true},
+		{leader: "alt+shift+w", ok: true, key: "w", code: "KeyW", alt: true, shift: true},
+		{leader: "ctrl+space", ok: true, key: " ", code: "Space", ctrl: true},
+		{leader: "esc", ok: true, key: "Escape", code: "Escape"},
+		// sip's client has no encoding for a function key, and a chord that
 		// sends nothing is worse than one that is absent.
 		{leader: "f1"},
 		{leader: "ctrl+f5"},
@@ -25,60 +46,165 @@ func TestLeaderMobileKey(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, ok := leaderMobileKey(tt.leader)
+		got, ok := leaderPrefix(tt.leader)
 		if ok != tt.ok {
-			t.Errorf("leaderMobileKey(%q) ok = %v, want %v", tt.leader, ok, tt.ok)
+			t.Errorf("leaderPrefix(%q) ok = %v, want %v", tt.leader, ok, tt.ok)
 			continue
 		}
 		if !tt.ok {
+			if !got.IsZero() {
+				t.Errorf("leaderPrefix(%q) refused but still returned %+v", tt.leader, got)
+			}
 			continue
 		}
-		if got.Key != tt.key || got.Ctrl != tt.ctrl || got.Alt != tt.alt || got.Shift != tt.shift {
-			t.Errorf("leaderMobileKey(%q) = {Key:%q Ctrl:%v Alt:%v Shift:%v}, want {Key:%q Ctrl:%v Alt:%v Shift:%v}",
-				tt.leader, got.Key, got.Ctrl, got.Alt, got.Shift,
-				tt.key, tt.ctrl, tt.alt, tt.shift)
-		}
-		if got.Mod != "" {
-			t.Errorf("leaderMobileKey(%q) set Mod = %q; the leader is a keystroke, not a sticky modifier", tt.leader, got.Mod)
+		want := sip.MobilePrefix{Key: tt.key, Code: tt.code, Ctrl: tt.ctrl, Alt: tt.alt, Shift: tt.shift}
+		if got != want {
+			t.Errorf("leaderPrefix(%q) = %+v, want %+v", tt.leader, got, want)
 		}
 	}
 }
 
-// A narrow phone shows the head of the bar without scrolling, and the leader
-// is the key it should find there.
-func TestMobileKeysLeadWithPrefix(t *testing.T) {
-	keys := mobileKeys("ctrl+b")
-	if len(keys) == 0 {
-		t.Fatal("mobileKeys returned no keys")
+// The bar is two rows: the chords, folded away by whoever only types, over the
+// typing keys a phone keyboard does not have.
+func TestMobileBarRows(t *testing.T) {
+	prefix, rows := mobileBar(defaultRegistry(t), "ctrl+b")
+	if prefix.IsZero() {
+		t.Fatal("ctrl+b produced no prefix")
 	}
-	if keys[0].Label != "pfx" {
-		t.Errorf("first key = %q, want the prefix", keys[0].Label)
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2", len(rows))
 	}
+	if !rows[0].Collapsible {
+		t.Error("the chord row does not fold away")
+	}
+	if rows[1].Collapsible {
+		t.Error("the typing row folds away; it is why the bar exists")
+	}
+	if len(rows[1].Keys) != len(sip.DefaultMobileKeys()) {
+		t.Errorf("typing row has %d keys, want sip's %d", len(rows[1].Keys), len(sip.DefaultMobileKeys()))
+	}
+	if rows[0].Keys[0].Label != "pfx" || !rows[0].Keys[0].Prefix {
+		t.Errorf("chord row leads with %+v, want the prefix latch", rows[0].Keys[0])
+	}
+}
 
-	// An unusable leader drops its button and leaves the rest intact.
-	fallback := mobileKeys("f1")
-	if len(fallback) != len(keys)-1 {
-		t.Errorf("unencodable leader gave %d keys, want %d", len(fallback), len(keys)-1)
+// Every command in the row is one tap: the leader and the bound key, together.
+func TestMobileBarChords(t *testing.T) {
+	_, rows := mobileBar(defaultRegistry(t), "ctrl+b")
+	keys := rows[0].Keys
+
+	want := map[string]struct {
+		key   string
+		shift bool
+	}{
+		"new":    {key: "c"},
+		"close":  {key: "x"},
+		"tile":   {key: " "},
+		"prev":   {key: "p"},
+		"next":   {key: "n"},
+		"zoom":   {key: "z"},
+		"vsplit": {key: "|", shift: true},
+		"hsplit": {key: "-"},
+		"cmds":   {key: "P", shift: true},
+		"config": {key: ","},
+		"help":   {key: "?", shift: true},
 	}
-	for _, k := range fallback {
-		if k.Label == "pfx" {
-			t.Error("unencodable leader still produced a prefix button")
+	if len(keys) != len(want)+1 {
+		t.Errorf("chord row has %d buttons, want %d and the latch", len(keys), len(want))
+	}
+	for label, w := range want {
+		got, ok := findKey(keys, label)
+		if !ok {
+			t.Errorf("no %q button", label)
+			continue
+		}
+		if got.Key != w.key || got.Shift != w.shift {
+			t.Errorf("%q sends {Key:%q Shift:%v}, want {Key:%q Shift:%v}", label, got.Key, got.Shift, w.key, w.shift)
+		}
+		if !got.Prefixed {
+			t.Errorf("%q is not prefixed, so it types its key into the pane", label)
+		}
+		if got.Ctrl || got.Alt {
+			t.Errorf("%q carries its own modifiers %+v; the chord is the leader then a bare key", label, got)
 		}
 	}
 }
 
-// Every button has to be one of the three shapes sip's client understands: a
-// sticky modifier, or a key, and a labelled one either way.
-func TestMobileKeysWellFormed(t *testing.T) {
-	for _, k := range mobileKeys("ctrl+b") {
-		if k.Label == "" {
-			t.Errorf("unlabelled button: %+v", k)
+// A rebound command moves its button with it. Anyone who swapped the keys
+// around has to get buttons that still do what they say.
+func TestMobileBarFollowsRebinds(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Keybindings.PrefixMode["prefix_new_window"] = []string{"w"}
+	cfg.Keybindings.PrefixMode["prefix_close_window"] = []string{"f4"}
+	cfg.Keybindings.PrefixMode["prefix_command_palette"] = []string{"ctrl+p"}
+
+	_, rows := mobileBar(config.NewKeybindRegistry(cfg), "ctrl+a")
+	keys := rows[0].Keys
+
+	newWindow, ok := findKey(keys, "new")
+	if !ok {
+		t.Fatal("no new button")
+	}
+	if newWindow.Key != "w" {
+		t.Errorf("new sends %q, want the rebound w", newWindow.Key)
+	}
+	// A key sip cannot encode drops its button instead of shipping a dead one.
+	if _, ok := findKey(keys, "close"); ok {
+		t.Error("close kept a button for f4, which sip's client cannot send")
+	}
+	// sip strips Ctrl and Alt from a prefixed key, so ctrl+p behind the leader
+	// would arrive as a bare p and run whatever that is bound to.
+	if _, ok := findKey(keys, "cmds"); ok {
+		t.Error("cmds kept a button for ctrl+p, which arrives as a bare p")
+	}
+}
+
+// An action bound to several keys takes the first one the browser can send.
+func TestMobileBarPicksFirstSendableBinding(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Keybindings.PrefixMode["prefix_next_window"] = []string{"f9", "tab"}
+
+	_, rows := mobileBar(config.NewKeybindRegistry(cfg), "ctrl+b")
+	next, ok := findKey(rows[0].Keys, "next")
+	if !ok {
+		t.Fatal("no next button")
+	}
+	if next.Key != "Tab" {
+		t.Errorf("next sends %q, want Tab, the first binding sip can encode", next.Key)
+	}
+}
+
+// Without a leader every chord button would type its key into a pane, so the
+// row goes rather than shipping eleven buttons that misfire.
+func TestMobileBarWithoutUsableLeader(t *testing.T) {
+	prefix, rows := mobileBar(defaultRegistry(t), "f1")
+	if !prefix.IsZero() {
+		t.Errorf("unencodable leader still produced prefix %+v", prefix)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want only the typing row", len(rows))
+	}
+	for _, k := range rows[0].Keys {
+		if k.Prefix || k.Prefixed {
+			t.Errorf("typing row carries chord button %+v with no leader to send", k)
 		}
-		if k.Mod == "" && k.Key == "" {
-			t.Errorf("button %q sends nothing", k.Label)
-		}
-		if k.Mod != "" && k.Mod != "ctrl" && k.Mod != "alt" {
-			t.Errorf("button %q has modifier %q; sip sticks only ctrl and alt", k.Label, k.Mod)
+	}
+}
+
+// Every button has to be one of the shapes sip's client understands.
+func TestMobileBarWellFormed(t *testing.T) {
+	_, rows := mobileBar(defaultRegistry(t), "ctrl+b")
+	for _, row := range rows {
+		for _, k := range row.Keys {
+			if k.Label == "" {
+				t.Errorf("unlabelled button: %+v", k)
+			}
+			if k.Mod == "" && k.Key == "" && !k.Prefix {
+				t.Errorf("button %q sends nothing", k.Label)
+			}
+			if k.Mod != "" && k.Mod != "ctrl" && k.Mod != "alt" {
+				t.Errorf("button %q has modifier %q; sip sticks only ctrl and alt", k.Label, k.Mod)
+			}
 		}
 	}
 }
