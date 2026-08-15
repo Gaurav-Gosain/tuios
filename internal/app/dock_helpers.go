@@ -523,6 +523,12 @@ func (m *OS) buildDockLeftText() (modeLabel, trail string, width int, modeInfo M
 		// input" indicator, so it says so in accent, outranking the pane mode.
 		modeInfo.Color = theme.ColorToString(theme.UI().Accent)
 		modeLabel = "SIDEBAR"
+	case m.HoldModeActive():
+		// A momentary mode has to read differently from the mode it borrows.
+		// Window mode entered by holding a key ends the moment the key is let
+		// go, and the pill is the only place that says so.
+		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
+		modeLabel = config.GetDockModeIconWindow() + " HOLD"
 	case m.Mode == TerminalMode:
 		if focusedWindow.CopyModeVisible() {
 			// Copy mode

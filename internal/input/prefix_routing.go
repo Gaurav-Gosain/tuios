@@ -35,7 +35,8 @@ func runPrefix(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) (*app.OS, t
 	if o.KeybindRegistry == nil {
 		return o, nil
 	}
-	m, cmd, _ := dispatchAction(lookup(o.KeybindRegistry, msg.String()), msg, o)
+	action := lookupAction(msg, func(key string) string { return lookup(o.KeybindRegistry, key) })
+	m, cmd, _ := dispatchAction(action, msg, o)
 	return m, cmd
 }
 
@@ -47,7 +48,7 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.PrefixActive = false
 
 	if o.KeybindRegistry != nil {
-		action := o.KeybindRegistry.GetPrefixAction(msg.String())
+		action := lookupAction(msg, o.KeybindRegistry.GetPrefixAction)
 		if m, cmd, ok := dispatchAction(action, msg, o); ok {
 			return m, cmd
 		}
@@ -137,9 +138,7 @@ func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
 	if o.KeybindRegistry == nil {
 		return false
 	}
-	key := msg.String()
-
-	if _, _, ok := dispatchAction(o.KeybindRegistry.GetTerminalModeAction(key), msg, o); ok {
+	if _, _, ok := dispatchAction(lookupAction(msg, o.KeybindRegistry.GetTerminalModeAction), msg, o); ok {
 		return true
 	}
 
@@ -151,7 +150,7 @@ func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
 	if !isReservedTerminalChord(msg) {
 		return false
 	}
-	action := o.KeybindRegistry.GetAction(key)
+	action := lookupAction(msg, o.KeybindRegistry.GetAction)
 	if !isTerminalSafeAction(action) {
 		return false
 	}
@@ -167,22 +166,9 @@ func isReservedTerminalChord(msg tea.KeyPressMsg) bool {
 	}
 	// macOS delivers Option chords as their composed glyph with no modifier
 	// set. Those glyphs are ordinary typed characters on other layouts, so this
-	// only applies on darwin.
-	if !runtimeIsDarwin() {
-		return false
-	}
-	key := msg.String()
-	if key == "" {
-		return false
-	}
-	first := []rune(key)[0]
-	if _, ok := IsMacOSOptionKey(first); ok {
-		return true
-	}
-	if _, ok := IsMacOSOptionShiftKey(first); ok {
-		return true
-	}
-	return IsMacOSOptionTab(first) != ""
+	// only applies on darwin (macOptionChord enforces that).
+	_, ok := macOptionChord(msg)
+	return ok
 }
 
 // isTerminalSafeAction reports whether a main-section action may be triggered

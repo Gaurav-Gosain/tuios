@@ -21,8 +21,12 @@ import (
 // so treating them as workspace/window shortcuts on other platforms hijacks
 // real input before it reaches the shell.
 func runtimeIsDarwin() bool {
-	return runtime.GOOS == "darwin"
+	return darwinHost
 }
+
+// darwinHost is the answer runtimeIsDarwin gives. A variable so a test can put
+// the macOS-only paths under test on the machine that runs CI.
+var darwinHost = runtime.GOOS == "darwin"
 
 // Ctrl key combinations mapping
 // Maps the character code to its control code equivalent

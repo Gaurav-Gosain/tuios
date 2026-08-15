@@ -516,6 +516,7 @@ func (m *OS) View() tea.View {
 
 	view.ReportFocus = true
 	view.DisableBracketedPasteMode = false
+	view.KeyboardEnhancements = m.keyboardEnhancements()
 	view.Cursor = m.getRealCursor()
 
 	// Flush graphics AFTER setting view content. bubbletea will render the

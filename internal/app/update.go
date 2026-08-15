@@ -1023,7 +1023,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.MarkAllDirty()
 		return m, nil
 
-	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseMotionMsg,
+	case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.MouseClickMsg, tea.MouseMotionMsg,
 		tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.ClipboardMsg,
 		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
 		// Reset idle counter on any user input to restore full tick rate
@@ -1236,16 +1236,23 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case tea.BlurMsg:
-		// Terminal lost focus
-		// Could be used to pause expensive operations
+		// Terminal lost focus. A key held when the window went away will never
+		// report its release, so the hold ends here rather than outliving it.
+		m.EndHold()
 		return m, nil
 
 	case tea.KeyboardEnhancementsMsg:
-		// Keyboard enhancements enabled - terminal supports Kitty protocol
-		// This enables better key disambiguation and international keyboard support
-		m.KeyboardEnhancementsEnabled = msg.SupportsKeyDisambiguation()
-		if m.KeyboardEnhancementsEnabled {
+		// The host answered the Kitty keyboard protocol query, so tuios now knows
+		// which of the things it asked for it actually got.
+		first := m.KeyboardFlags == 0
+		m.NoteKeyboardEnhancements(msg)
+		if m.KeyboardEnhancementsEnabled && first {
 			m.ShowNotification("Keyboard enhancements enabled", "info", config.NotificationDuration)
+		}
+		// A hold key that the terminal cannot support has to say so rather than
+		// leave the user pressing a key that does nothing.
+		if reason := m.HoldModeUnsupportedReason(); reason != "" && first {
+			m.ShowNotification(reason, "warning", config.NotificationDuration)
 		}
 		return m, nil
 

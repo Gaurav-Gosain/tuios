@@ -364,6 +364,14 @@ type OS struct {
 	EffectiveHeight int // Effective height for rendering (min of all clients, 0 = use terminal size)
 	// Keyboard enhancement support (Kitty protocol)
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
+	// KeyboardFlags is the flag set the host answered the enhancement query
+	// with, so tuios knows what it actually got rather than what it asked for.
+	// Zero means the terminal never answered, which is not the same as a refusal.
+	KeyboardFlags int
+	// hold is the momentary window-management mode (see hold_mode.go).
+	hold holdMode
+	// optionAdviceShown keeps the macOS Option advice to once per run.
+	optionAdviceShown bool
 	// Keybind registry for user-configurable keybindings
 	KeybindRegistry *config.KeybindRegistry
 	// ConfigWarnings holds the problems found in the loaded config, reported to

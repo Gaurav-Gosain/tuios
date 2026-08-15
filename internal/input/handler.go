@@ -23,6 +23,15 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		result, cmd = HandleKeyPress(msg, o)
+	case tea.KeyReleaseMsg:
+		// Releases only arrive once the host has been asked for event types, and
+		// the only thing tuios does with one is end a hold. Everything else
+		// deliberately ignores them: acting on a release as well as a press would
+		// run every binding twice.
+		if !o.ReleaseHoldKey(tea.KeyPressMsg(msg.Key())) {
+			return o, nil
+		}
+		result, cmd = o, nil
 	case tea.PasteStartMsg:
 		return o, nil
 	case tea.PasteEndMsg:
@@ -153,6 +162,21 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// window-management and terminal mode. It only observes; it never consumes.
 	if o.ShowKeys {
 		o.CaptureKeyEvent(msg)
+	}
+
+	// Hold-to-window-mode. The trigger is consumed here, before any mode routing,
+	// so holding it cannot type anything into a pane; every other key struck
+	// while it is held loses the trigger's own modifier, so holding Option and
+	// tapping n runs the window-mode action bound to n.
+	if o.PressHoldKey(msg) {
+		return o, nil
+	}
+	msg = o.StripHoldModifier(msg)
+
+	// A chord that only resolved because tuios recognised the character macOS
+	// composed out of it is proof the Option key is not being sent as Alt.
+	if chord, ok := macOptionChord(msg); ok && chord != msg.Keystroke() {
+		o.NoteComposedOptionChord(chord)
 	}
 
 	// esc takes a message off the dock, in every mode, without consuming the key.
