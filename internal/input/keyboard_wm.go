@@ -183,7 +183,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 
 	// Try config-based dispatch first (if registry is available)
 	if o.KeybindRegistry != nil {
-		action := o.KeybindRegistry.GetAction(key)
+		action := lookupAction(msg, o.KeybindRegistry.GetAction)
 		if action != "" {
 			dispatcher := GetDispatcher()
 			if dispatcher.HasAction(action) {

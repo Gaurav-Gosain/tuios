@@ -90,6 +90,104 @@ var macOptionTabMap = map[string]string{
 	"opt+shift+tab": "⇤", "option+shift+tab": "⇤",
 }
 
+// macOptionLetters is the character a US macOS layout produces for Option+letter
+// while the terminal composes instead of sending Alt (the default in Terminal.app,
+// iTerm2, Ghostty and kitty). tuios never sees a modifier for those chords, only
+// the composed glyph, so a binding written as alt+n has to answer to it as well.
+//
+// The four dead keys (e, i, n, u) emit their accent only once a second key ends
+// the composition, so the glyph below is what arrives after that; a terminal that
+// swallows the dead key entirely gives tuios nothing to match, which is what
+// macOptionAdvice exists to explain.
+var macOptionLetters = map[string]string{
+	"a": "å", "b": "∫", "c": "ç", "d": "∂", "e": "´", "f": "ƒ", "g": "©",
+	"h": "˙", "i": "ˆ", "j": "∆", "k": "˚", "l": "¬", "m": "µ", "n": "˜",
+	"o": "ø", "p": "π", "q": "œ", "r": "®", "s": "ß", "t": "†", "u": "¨",
+	"v": "√", "w": "∑", "x": "≈", "y": "¥", "z": "Ω",
+}
+
+// macOptionShiftLetters is macOptionLetters for Option+Shift. The e, i, n and u
+// entries are deliberately absent: their Option+Shift glyphs are the same
+// codepoints the dead keys spill (´ ˆ ˜ ¨), and those are far more likely to be
+// meant as the unshifted chord, which is the one this bug was reported against.
+var macOptionShiftLetters = map[string]string{
+	"a": "Å", "b": "ı", "c": "Ç", "d": "Î", "f": "Ï", "g": "˝",
+	"h": "Ó", "j": "Ô", "k": "", "l": "Ò", "m": "Â",
+	"o": "Ø", "p": "∏", "q": "Œ", "r": "‰", "s": "Í", "t": "ˇ",
+	"v": "◊", "w": "„", "x": "˛", "y": "Á", "z": "¸",
+}
+
+// macOptionChords reverses every Option table: composed glyph → the chord it
+// stands for. Built once, so the input path can ask what an unmodified glyph
+// meant without walking four maps.
+var macOptionChords = func() map[rune]string {
+	chords := make(map[rune]string, 64)
+	add := func(glyph, chord string) {
+		r, size := utf8.DecodeRuneInString(glyph)
+		if size == 0 || len(glyph) != size {
+			return
+		}
+		if _, taken := chords[r]; !taken {
+			chords[r] = chord
+		}
+	}
+	for chord, glyph := range macOptionNumberMap {
+		if strings.HasPrefix(chord, "opt+") {
+			add(glyph, optionToAltReplacer.Replace(chord))
+		}
+	}
+	for chord, glyph := range macOptionShiftNumberMap {
+		if strings.HasPrefix(chord, "opt+") {
+			add(glyph, optionToAltReplacer.Replace(chord))
+		}
+	}
+	for chord, glyph := range macOptionTabMap {
+		if strings.HasPrefix(chord, "opt+") {
+			add(glyph, optionToAltReplacer.Replace(chord))
+		}
+	}
+	for letter, glyph := range macOptionLetters {
+		add(glyph, "alt+"+letter)
+	}
+	for letter, glyph := range macOptionShiftLetters {
+		add(glyph, "alt+shift+"+letter)
+	}
+	return chords
+}()
+
+// MacOSOptionChord returns the alt+ chord a composed macOS Option glyph stands
+// for, and whether r is such a glyph. Only meaningful on darwin: these glyphs are
+// ordinary typed characters elsewhere.
+func MacOSOptionChord(r rune) (string, bool) {
+	chord, ok := macOptionChords[r]
+	return chord, ok
+}
+
+// macOptionLetterGlyph returns the composed glyph for an "opt+x"/"alt+x" chord
+// spelled in lower case, or "" when the chord is not an Option+letter one.
+func macOptionLetterGlyph(keyLower string) string {
+	base, ok := cutOptionPrefix(keyLower)
+	if !ok {
+		return ""
+	}
+	if shifted, ok := strings.CutPrefix(base, "shift+"); ok {
+		return macOptionShiftLetters[shifted]
+	}
+	return macOptionLetters[base]
+}
+
+// cutOptionPrefix strips a leading alt+/opt+/option+ and reports whether one was
+// there. Only that single modifier counts: ctrl+alt+n is not a chord macOS
+// composes a character for.
+func cutOptionPrefix(keyLower string) (string, bool) {
+	for _, prefix := range []string{"alt+", "opt+", "option+"} {
+		if base, ok := strings.CutPrefix(keyLower, prefix); ok {
+			return base, true
+		}
+	}
+	return "", false
+}
+
 // shiftedDigits maps a digit to the character a US layout produces when it is
 // typed with Shift. Terminals disagree about which of the two spellings they
 // report for the same physical chord: some send the shifted character ("!"),
@@ -203,6 +301,10 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 			// Add the unicode character for opt+tab variants
 			result = append(result, unicode)
 			// Also map to alt+tab variant
+			result = append(result, optionToAltReplacer.Replace(keyLower))
+		} else if glyph := macOptionLetterGlyph(keyLower); glyph != "" {
+			// Case is preserved: å (opt+a) and Å (opt+shift+a) are different keys.
+			result = append(result, glyph)
 			result = append(result, optionToAltReplacer.Replace(keyLower))
 		}
 

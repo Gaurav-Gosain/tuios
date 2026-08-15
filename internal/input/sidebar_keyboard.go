@@ -46,7 +46,7 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ExitSidebarFocus()
 		return o, nil
 	}
-	action := o.KeybindRegistry.GetSidebarAction(key)
+	action := lookupAction(msg, o.KeybindRegistry.GetSidebarAction)
 	if action == "" {
 		return o, nil // consumed: the rail owns the keyboard
 	}
