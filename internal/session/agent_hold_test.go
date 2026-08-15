@@ -121,6 +121,38 @@ func TestAgentHoldSettlesWhenTheSourceGoesSilent(t *testing.T) {
 	}
 }
 
+// TestAgentHoldPublishesItselfWithNoOneToCallIt is the regression test for a
+// hold that could wait forever.
+//
+// settleAgentHolds had exactly one caller, the stall monitor, which returns
+// immediately when the silence timer is disabled. So a user who turned the
+// silence timer off also turned off the thing that publishes a held state, and
+// a harness that cleared its progress bar once and then went quiet left its pane
+// reading working until something unrelated happened to it. The hold now carries
+// its own timer, which no other setting can switch off.
+//
+// It uses real time on purpose: the defect was the absence of a caller, and a
+// test that passes the clock in cannot see that.
+func TestAgentHoldPublishesItselfWithNoOneToCallIt(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+
+	sess.applyAgentProgress(id, vt.ProgressIndeterminate)
+	sess.applyAgentProgress(id, vt.ProgressClear)
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Fatalf("state during the hold = %q, want working", got)
+	}
+
+	// Nothing else touches the session: no stall monitor, no further progress
+	// report, no client. The hold has to publish itself or never publish at all.
+	deadline := time.Now().Add(5 * time.Second)
+	for agentStateOf(t, sess, id) != AgentStateIdle {
+		if time.Now().After(deadline) {
+			t.Fatal("the held idle state was never published; the hold has no backstop of its own")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // TestAgentHoldNeverDelaysAStateThatWantsAHuman is the asymmetry: needs_input and
 // errored are published the instant they are seen, however quiet the pane was,
 // because a late "the agent is waiting on you" is the expensive mistake.

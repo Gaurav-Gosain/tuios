@@ -157,8 +157,21 @@ func (agentClaimHeld) Error() string { return "agent state is held by a higher-r
 // least stall into AgentStateIdle, and reports how many it moved. It is the
 // fallback for agents that do not report their own state: a pane that reported
 // working but has produced no output for the stall window has most likely gone
-// idle or is waiting on the user, so it is demoted to idle rather than left
-// looking busy forever.
+// idle, so it is demoted rather than left looking busy forever.
+//
+// Silence on its own is not evidence of finishing, and that is why look exists.
+// A harness waiting on a human paints its question and then emits nothing at
+// all, no title and no progress sequence, which is byte for byte the same
+// silence as a harness that finished. Demoting on the timer alone therefore
+// prints idle over a pane that is blocked, and idle reads as "fine and done" and
+// raises no alert, so the user is told the opposite of the truth at exactly the
+// moment the feature exists to serve.
+//
+// look is given each stalled pane's PTY and reports whether the screen tier
+// found a rule matching it. A pane whose screen answers is left alone: the
+// answer came from looking, and looking beats a timer. A nil look, or a harness
+// with no screen rules, restores the timer-only behaviour, which is still the
+// best available when there is nothing to read.
 //
 // It is deliberately conservative and strictly secondary to explicit reporting:
 //
@@ -181,32 +194,59 @@ func (agentClaimHeld) Error() string { return "agent state is held by a higher-r
 // now and stall are passed in, and lastOutput returns the unix-nano time of a
 // PTY's most recent output (0 when unknown), so the whole rule is deterministic
 // and unit-testable without real timers. A stall <= 0 disables the heuristic.
-func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOutput func(ptyID string) int64) int {
+func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOutput func(ptyID string) int64, look func(ptyID string) bool) int {
 	if stall <= 0 {
 		return 0
 	}
 	cutoff := now.Add(-stall).UnixNano()
-	flipped := 0
-	_ = s.mutateState(func(st *SessionState) error {
-		for i := range st.Windows {
-			w := &st.Windows[i]
-			if w.AgentState != AgentStateWorking {
+
+	// Candidates are collected before anything is written, because look reads a
+	// pane's screen and may publish a state of its own, and that goes through
+	// ApplyAgentReport, which takes the lock mutateState is holding.
+	type candidate struct{ windowID, ptyID string }
+	var pending []candidate
+	s.stateMu.RLock()
+	for i := range s.state.Windows {
+		w := &s.state.Windows[i]
+		if w.AgentState == AgentStateWorking && stalledAt(w.AgentStateAt, w.PTYID, cutoff, lastOutput) {
+			pending = append(pending, candidate{w.ID, w.PTYID})
+		}
+	}
+	s.stateMu.RUnlock()
+	if len(pending) == 0 {
+		return 0
+	}
+
+	if look != nil {
+		kept := pending[:0]
+		for _, c := range pending {
+			if c.ptyID != "" && look(c.ptyID) {
 				continue
 			}
-			lastActivity := w.AgentStateAt
-			if w.PTYID != "" {
-				if out := lastOutput(w.PTYID); out > lastActivity {
-					lastActivity = out
-				}
+			kept = append(kept, c)
+		}
+		pending = kept
+	}
+
+	flipped := 0
+	_ = s.mutateState(func(st *SessionState) error {
+		for _, c := range pending {
+			idx, err := findWindowStateIndex(st.Windows, c.windowID)
+			if err != nil {
+				continue
 			}
-			if lastActivity <= cutoff {
-				w.AgentState = AgentStateIdle
-				w.AgentStateAt = now.UnixNano()
-				claim := s.agentClaims[w.ID]
-				claim.source = AgentSourceStall
-				s.setAgentClaim(w.ID, claim)
-				flipped++
+			w := &st.Windows[idx]
+			// Re-checked because look ran between the two passes and may have
+			// moved the pane out of working, which is the whole point of it.
+			if w.AgentState != AgentStateWorking || !stalledAt(w.AgentStateAt, w.PTYID, cutoff, lastOutput) {
+				continue
 			}
+			w.AgentState = AgentStateIdle
+			w.AgentStateAt = now.UnixNano()
+			claim := s.agentClaims[w.ID]
+			claim.source = AgentSourceStall
+			s.setAgentClaim(w.ID, claim)
+			flipped++
 		}
 		if flipped == 0 {
 			// Returning an error makes mutateState skip the version bump and the
@@ -216,6 +256,17 @@ func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOu
 		return nil
 	})
 	return flipped
+}
+
+// stalledAt reports whether a window has been silent since cutoff, taking the
+// later of when its working state was set and when its pane last wrote.
+func stalledAt(stateAt int64, ptyID string, cutoff int64, lastOutput func(ptyID string) int64) bool {
+	if ptyID != "" {
+		if out := lastOutput(ptyID); out > stateAt {
+			stateAt = out
+		}
+	}
+	return stateAt <= cutoff
 }
 
 // errNoStallChange is a sentinel used by applyStallHeuristic to tell mutateState

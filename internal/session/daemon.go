@@ -803,10 +803,10 @@ func (d *Daemon) foregroundResolver(sess *Session) func(ptyID string) (foregroun
 
 // stallMonitor periodically applies the agent-state output-stall heuristic to
 // every live session, demoting panes that reported working but have gone quiet
-// to idle. It is the fallback for agents that never report their own state and is
-// strictly secondary to explicit reports (see Session.applyStallHeuristic). It
-// exits when the daemon context is cancelled, and does nothing at all when the
-// heuristic is disabled.
+// to idle after the screen tier has had a last look at them. It is the fallback
+// for agents that never report their own state and is strictly secondary to
+// explicit reports (see Session.applyStallHeuristic). It exits when the daemon
+// context is cancelled, and does nothing at all when the heuristic is disabled.
 func (d *Daemon) stallMonitor() {
 	if d.agentStallTimeout <= 0 {
 		return
@@ -823,15 +823,18 @@ func (d *Daemon) stallMonitor() {
 			return
 		case <-ticker.C:
 			now := time.Now()
+			reg := d.agentMatcher.registry
 			for _, sess := range d.manager.AllSessions() {
-				// Publish any anti-flicker hold whose window elapsed while its
-				// source stayed silent, so a held state cannot wait forever.
-				sess.settleAgentHolds(now)
 				sess.applyStallHeuristic(now, d.agentStallTimeout, func(ptyID string) int64 {
 					if pty := sess.GetPTY(ptyID); pty != nil {
 						return pty.LastOutput()
 					}
 					return 0
+				}, func(ptyID string) bool {
+					// The last look before the pane is called idle. A stalled pane
+					// emits nothing, so the scan the output path would have run is
+					// the one that never happens.
+					return sess.scanScreenForAgent(ptyID, reg)
 				})
 			}
 		}

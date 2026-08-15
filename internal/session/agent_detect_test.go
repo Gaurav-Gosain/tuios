@@ -416,7 +416,7 @@ func TestAgentResumesAfterStall(t *testing.T) {
 
 	// The pane goes quiet and the silence timer demotes it to idle.
 	const stall = 30 * time.Second
-	if n := sess.applyStallHeuristic(time.Now().Add(stall+time.Second), stall, func(string) int64 { return 0 }); n != 1 {
+	if n := sess.applyStallHeuristic(time.Now().Add(stall+time.Second), stall, func(string) int64 { return 0 }, nil); n != 1 {
 		t.Fatalf("stall heuristic demoted %d windows, want 1", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {

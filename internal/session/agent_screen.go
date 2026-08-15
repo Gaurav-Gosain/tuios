@@ -29,37 +29,43 @@ const screenSettleDelay = 400 * time.Millisecond
 // sitting on a blocking prompt paints it once and then emits nothing at all, no
 // title and no progress sequence, so the screen is the only channel carrying the
 // fact that a human is being waited for.
-func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) {
+//
+// It reports whether a rule matched, which is a different question from whether
+// the report was accepted: a matching rule means the screen carries an answer
+// even when a higher-ranked source owns the window, and the silence timer needs
+// that fact to know it must not call the pane idle.
+func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) bool {
 	if reg == nil {
-		return
+		return false
 	}
 	pty := s.GetPTY(ptyID)
 	if pty == nil {
-		return
+		return false
 	}
 
 	winID, hid := s.agentHarnessOf(ptyID)
 	if hid == "" {
-		return
+		return false
 	}
 	lines := reg.ScreenLines(hid)
 	if lines <= 0 {
-		return
+		return false
 	}
 
 	tail := pty.tailText(lines)
 	if len(tail) == 0 {
-		return
+		return false
 	}
 	state, _, ok := reg.Classify(hid, tail)
 	if !ok {
-		return
+		return false
 	}
 	s.ApplyAgentReport(winID, AgentReport{
 		State:   AgentState(state),
 		Source:  AgentSourceScreen,
 		Harness: hid,
 	})
+	return true
 }
 
 // agentHarnessOf names the window backed by ptyID and the harness running in it,

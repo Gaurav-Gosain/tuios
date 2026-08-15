@@ -151,7 +151,7 @@ func TestStallHeuristicDemotesQuietWorking(t *testing.T) {
 
 	// Well within the window: no demotion.
 	now := time.Now()
-	if n := sess.applyStallHeuristic(now.Add(10*time.Second), stall, quiet); n != 0 {
+	if n := sess.applyStallHeuristic(now.Add(10*time.Second), stall, quiet, nil); n != 0 {
 		t.Fatalf("demoted %d windows inside the stall window, want 0", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
@@ -159,7 +159,7 @@ func TestStallHeuristicDemotesQuietWorking(t *testing.T) {
 	}
 
 	// Past the window: demoted to idle.
-	if n := sess.applyStallHeuristic(now.Add(stall+time.Second), stall, quiet); n != 1 {
+	if n := sess.applyStallHeuristic(now.Add(stall+time.Second), stall, quiet, nil); n != 1 {
 		t.Fatalf("demoted %d windows past the stall window, want 1", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
@@ -180,7 +180,7 @@ func TestStallHeuristicRespectsRecentOutput(t *testing.T) {
 	// last output stays fresh relative to now even though it has worked a while.
 	evalAt := time.Now().Add(5 * stall)
 	recent := func(string) int64 { return evalAt.Add(-time.Second).UnixNano() }
-	if n := sess.applyStallHeuristic(evalAt, stall, recent); n != 0 {
+	if n := sess.applyStallHeuristic(evalAt, stall, recent, nil); n != 0 {
 		t.Fatalf("demoted %d windows with recent output, want 0", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
@@ -201,7 +201,7 @@ func TestStallHeuristicNeverOverridesExplicit(t *testing.T) {
 		if err := sess.SetDaemonWindowAgentState(id, state, ""); err != nil {
 			t.Fatalf("SetDaemonWindowAgentState(%q): %v", state, err)
 		}
-		if n := sess.applyStallHeuristic(long, stall, quiet); n != 0 {
+		if n := sess.applyStallHeuristic(long, stall, quiet, nil); n != 0 {
 			t.Fatalf("heuristic changed %d windows in state %q, want 0", n, state)
 		}
 		if got := agentStateOf(t, sess, id); got != state {
@@ -217,7 +217,7 @@ func TestStallHeuristicDisabled(t *testing.T) {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
 	quiet := func(string) int64 { return 0 }
-	if n := sess.applyStallHeuristic(time.Now().Add(time.Hour), 0, quiet); n != 0 {
+	if n := sess.applyStallHeuristic(time.Now().Add(time.Hour), 0, quiet, nil); n != 0 {
 		t.Fatalf("disabled heuristic demoted %d windows, want 0", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {

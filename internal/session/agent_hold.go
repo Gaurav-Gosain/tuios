@@ -68,6 +68,7 @@ func (s *Session) holdQuieterState(windowID string, next, current AgentState, so
 			s.agentHolds = make(map[string]agentHold)
 		}
 		s.agentHolds[windowID] = agentHold{state: next, source: source, since: now}
+		s.scheduleHoldSettleLocked(now)
 		return false
 	}
 	if now.Sub(held.since) < agentHoldWindow {
@@ -77,10 +78,53 @@ func (s *Session) holdQuieterState(windowID string, next, current AgentState, so
 	return true
 }
 
+// scheduleHoldSettleLocked arms the one-shot that publishes the earliest hold
+// once its window elapses. Called with agentHoldMu held.
+//
+// The hold has to carry its own backstop. It used to rely on the stall monitor
+// calling settleAgentHolds on its tick, which meant turning the silence timer
+// off also stopped anything from ever publishing a held state: a harness that
+// cleared its progress bar once and then went quiet stayed working forever. A
+// timer belonging to the hold cannot be switched off by an unrelated setting.
+//
+// A pending timer is left alone rather than re-armed. Holds are recorded with
+// since = now, so the earliest deadline never moves closer, and a timer that
+// fires with nothing due simply re-arms for what is left.
+func (s *Session) scheduleHoldSettleLocked(now time.Time) {
+	if s.agentHoldTimer != nil || len(s.agentHolds) == 0 {
+		return
+	}
+	earliest := now
+	for _, h := range s.agentHolds {
+		if h.since.Before(earliest) {
+			earliest = h.since
+		}
+	}
+	s.agentHoldTimer = time.AfterFunc(max(agentHoldWindow-now.Sub(earliest), time.Millisecond),
+		s.settleHeldStates)
+}
+
+// settleHeldStates is what the hold timer runs: publish whatever is due and arm
+// again for anything still waiting. It is the only path that fires the timer, so
+// clearing the field first is what lets the next hold arm a fresh one.
+func (s *Session) settleHeldStates() {
+	s.agentHoldMu.Lock()
+	s.agentHoldTimer = nil
+	s.agentHoldMu.Unlock()
+
+	now := time.Now()
+	s.settleAgentHolds(now)
+
+	s.agentHoldMu.Lock()
+	s.scheduleHoldSettleLocked(now)
+	s.agentHoldMu.Unlock()
+}
+
 // settleAgentHolds publishes every held state whose window has elapsed and
 // reports how many it published. It is the backstop for a source that says
 // something quieter once and then goes silent: without it that state would wait
-// for an event that never comes.
+// for an event that never comes. Its caller is the hold's own timer, so no
+// unrelated setting can switch the backstop off.
 //
 // The reports are applied after the lock is dropped, since ApplyAgentReport takes
 // stateMu and holding two locks across it buys nothing.

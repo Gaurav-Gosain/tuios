@@ -451,8 +451,11 @@ type Session struct {
 	// anti-flicker window before it is published (see holdQuieterState). It has a
 	// lock of its own rather than riding stateMu because it is read and written
 	// around ApplyAgentReport, which takes stateMu itself.
-	agentHolds  map[string]agentHold
-	agentHoldMu sync.Mutex
+	agentHolds map[string]agentHold
+	// agentHoldTimer is the one-shot that publishes a hold whose source then
+	// went silent. Nil when nothing is waiting. Guarded by agentHoldMu.
+	agentHoldTimer *time.Timer
+	agentHoldMu    sync.Mutex
 
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
@@ -1964,6 +1967,10 @@ func stateToCell(t *vt.Emulator, cs CellState) *uv.Cell {
 // Close terminates the PTY.
 func (p *PTY) Close() error {
 	p.cancel()
+
+	// Before anything else, so a settle scan already armed cannot fire against a
+	// pane whose emulator is about to be closed.
+	p.stopScreenSettle()
 
 	// Close all subscriber channels
 	p.subscribersMu.Lock()
