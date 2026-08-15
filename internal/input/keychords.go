@@ -1,6 +1,8 @@
 package input
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
@@ -30,6 +32,18 @@ func bindingKeys(msg tea.KeyPressMsg) []string {
 		keys = append(keys, stroke)
 	}
 	if chord, ok := macOptionChord(msg); ok && chord != key {
+		// Four of the Option+letter chords (e, i, n, u) compose the same
+		// character shifted as unshifted, because unshifted they are dead keys
+		// whose accent only lands once a second key ends the composition. When
+		// the terminal reports the Shift bit the two are still tellable apart,
+		// and the shifted reading is the more specific one: alt+shift+n walks
+		// sessions while alt+n walks windows.
+		if msg.Mod&tea.ModShift != 0 {
+			if shifted := strings.Replace(chord, "alt+", "alt+shift+", 1); shifted != chord &&
+				!strings.Contains(chord, "shift+") {
+				keys = append(keys, shifted)
+			}
+		}
 		keys = append(keys, chord)
 	}
 	return keys

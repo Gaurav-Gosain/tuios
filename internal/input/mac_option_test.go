@@ -101,6 +101,25 @@ func TestMacOptionChordsReachTheirBinding(t *testing.T) {
 	}
 }
 
+// Option+Shift+n composes the same tilde as the Option+n dead key. When the
+// terminal reports the Shift bit they are still tellable apart, and the two are
+// bound to different things.
+func TestShiftedOptionChordPrefersTheShiftedBinding(t *testing.T) {
+	onDarwin(t)
+	registry := config.NewKeybindRegistry(config.DefaultConfig())
+
+	shifted := tea.KeyPressMsg{Code: '˜', Mod: tea.ModAlt | tea.ModShift}
+	if got := lookupAction(shifted, registry.GetAction); got != "next_session" {
+		t.Errorf("opt+shift+n resolved to %q, want next_session", got)
+	}
+	// Without the Shift bit there is nothing to tell them apart, and the
+	// unshifted reading is the one that keeps working.
+	bare := tea.KeyPressMsg{Code: '˜', Mod: tea.ModAlt}
+	if got := lookupAction(bare, registry.GetTerminalModeAction); got != "terminal_next_window" {
+		t.Errorf("opt+n resolved to %q, want terminal_next_window", got)
+	}
+}
+
 // The chord has to move the focus through the real terminal-mode handler, not
 // just resolve to an action name, and it must not be typed into the pane.
 func TestMacOptionChordSwitchesPaneInTerminalMode(t *testing.T) {
