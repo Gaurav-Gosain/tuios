@@ -27,9 +27,26 @@ type AgentAlertsConfig struct {
 	// is attached to. Default: true.
 	Notify *bool `toml:"notify"`
 
-	// Sound writes a BEL to the same terminal, which decides for itself whether
-	// that is audible, a flash, or nothing. Default: false.
+	// Sound makes the alert audible. What that means is SoundMode's job.
+	// Default: false.
 	Sound *bool `toml:"sound"`
+
+	// SoundMode chooses how Sound makes a noise: "audio" plays one of tuios's
+	// two cues through whatever audio player the machine has, "bell" writes a
+	// BEL and lets the terminal decide what that means, and "both" does each.
+	// An unrecognised value is reported as a config warning and read as the
+	// default. Default: "audio".
+	SoundMode string `toml:"sound_mode"`
+
+	// SoundCooldownSeconds is the shortest gap between two audible cues,
+	// counted across every pane. It exists because a workspace where six agents
+	// finish together should make one sound rather than six. It does not apply
+	// to the bell, which the terminal rate-limits or does not, as it prefers.
+	// Default: 3.
+	SoundCooldownSeconds *int `toml:"sound_cooldown_seconds"`
+
+	// Sounds replaces the built-in cues with files of the user's own.
+	Sounds AgentAlertSounds `toml:"sounds"`
 
 	// Dock shows the message in tuios's own dock, where it is clickable and
 	// jumps to the pane that raised it. Default: true.
@@ -74,6 +91,69 @@ type AgentAlertStates struct {
 	Working *bool `toml:"working"`
 }
 
+// AgentAlertSounds is the [notifications.agent.sounds] table: a path per cue.
+//
+// There are two cues rather than five states, because a pair has to be told
+// apart by ear in under half a second and a third would only be guessed at.
+// needs_input and errored share the attention cue; done and idle share the
+// other. A path that does not exist falls back to the built-in cue, so a typo
+// costs the custom sound rather than all sound.
+type AgentAlertSounds struct {
+	// Done is the cue for an agent that stopped. Default: built in.
+	Done string `toml:"done"`
+	// NeedsInput is the cue for an agent waiting on a human, or one that
+	// failed. Default: built in.
+	NeedsInput string `toml:"needs_input"`
+}
+
+// AgentSoundMode is how an audible alert is made audible.
+type AgentSoundMode string
+
+const (
+	// AgentSoundAudio plays a cue through a system audio player.
+	AgentSoundAudio AgentSoundMode = "audio"
+	// AgentSoundBell writes a BEL and lets the terminal decide.
+	AgentSoundBell AgentSoundMode = "bell"
+	// AgentSoundBoth does each, for a machine where either might be missed.
+	AgentSoundBoth AgentSoundMode = "both"
+)
+
+// AgentSoundModeNames lists the accepted sound_mode values, in the order they
+// are documented.
+var AgentSoundModeNames = []string{
+	string(AgentSoundAudio), string(AgentSoundBell), string(AgentSoundBoth),
+}
+
+// ParseAgentSoundMode resolves a config value, reporting whether it was one of
+// the accepted names. An empty value is accepted as the default.
+func ParseAgentSoundMode(s string) (AgentSoundMode, bool) {
+	switch AgentSoundMode(strings.TrimSpace(s)) {
+	case "":
+		return defaultAgentSoundMode, true
+	case AgentSoundAudio:
+		return AgentSoundAudio, true
+	case AgentSoundBell:
+		return AgentSoundBell, true
+	case AgentSoundBoth:
+		return AgentSoundBoth, true
+	default:
+		return defaultAgentSoundMode, false
+	}
+}
+
+// defaultAgentSoundMode is what sound = true means when nothing says otherwise.
+//
+// It is audio rather than bell because a BEL on a modern terminal with default
+// settings is usually nothing at all, and a user who asked for sound and got
+// silence has been told the feature works when it does not. "bell" restores the
+// old behaviour in one line.
+const defaultAgentSoundMode = AgentSoundAudio
+
+// defaultAgentSoundCooldown is the gap between two audible cues. Long enough
+// that a workspace finishing at once makes one sound, short enough that two
+// genuinely separate events a few seconds apart are both heard.
+const defaultAgentSoundCooldown = 3 * time.Second
+
 // AgentAlertPolicy is AgentAlertsConfig with every default resolved and the
 // quiet-hours string parsed, so the hot path is field reads and integer
 // comparisons. Build it with ResolveAgentAlerts.
@@ -81,6 +161,10 @@ type AgentAlertPolicy struct {
 	Enabled         bool
 	Notify          bool
 	Sound           bool
+	SoundMode       AgentSoundMode
+	SoundCooldown   time.Duration
+	SoundDone       string
+	SoundNeedsInput string
 	Dock            bool
 	SuppressFocused bool
 	Settle          time.Duration
@@ -107,6 +191,8 @@ func ResolveAgentAlerts(c *AgentAlertsConfig) AgentAlertPolicy {
 		Enabled:         true,
 		Notify:          true,
 		Sound:           false,
+		SoundMode:       defaultAgentSoundMode,
+		SoundCooldown:   defaultAgentSoundCooldown,
 		Dock:            true,
 		SuppressFocused: true,
 		Settle:          2 * time.Second,
@@ -137,6 +223,14 @@ func ResolveAgentAlerts(c *AgentAlertsConfig) AgentAlertPolicy {
 	p.states["done"] = boolOr(c.States.Done, p.states["done"])
 	p.states["idle"] = boolOr(c.States.Idle, p.states["idle"])
 	p.states["working"] = boolOr(c.States.Working, p.states["working"])
+	if mode, ok := ParseAgentSoundMode(c.SoundMode); ok {
+		p.SoundMode = mode
+	}
+	if c.SoundCooldownSeconds != nil && *c.SoundCooldownSeconds >= 0 {
+		p.SoundCooldown = time.Duration(*c.SoundCooldownSeconds) * time.Second
+	}
+	p.SoundDone = strings.TrimSpace(c.Sounds.Done)
+	p.SoundNeedsInput = strings.TrimSpace(c.Sounds.NeedsInput)
 	if c.SettleSeconds != nil && *c.SettleSeconds >= 0 {
 		p.Settle = time.Duration(*c.SettleSeconds) * time.Second
 	}
@@ -150,6 +244,33 @@ func ResolveAgentAlerts(c *AgentAlertsConfig) AgentAlertPolicy {
 // about. It is the only place the state toggles are read.
 func (p AgentAlertPolicy) Alerts(state string) bool {
 	return p.Enabled && p.states[state]
+}
+
+// PlaysAudio reports whether an alert should play a cue through an audio
+// player.
+func (p AgentAlertPolicy) PlaysAudio() bool {
+	return p.Sound && (p.SoundMode == AgentSoundAudio || p.SoundMode == AgentSoundBoth)
+}
+
+// PlaysBell reports whether an alert should write a BEL to the terminal.
+func (p AgentAlertPolicy) PlaysBell() bool {
+	return p.Sound && (p.SoundMode == AgentSoundBell || p.SoundMode == AgentSoundBoth)
+}
+
+// AttentionCue reports whether a transition into state should use the cue that
+// asks for a human rather than the one that reports the machine stopped. It is
+// the state-to-cue map, kept here so the two callers cannot disagree.
+func (p AgentAlertPolicy) AttentionCue(state string) bool {
+	return state == "needs_input" || state == "errored"
+}
+
+// CueFile is the user's replacement for the cue a transition into state uses,
+// or empty for the built-in one.
+func (p AgentAlertPolicy) CueFile(state string) string {
+	if p.AttentionCue(state) {
+		return p.SoundNeedsInput
+	}
+	return p.SoundDone
 }
 
 // Quiet reports whether now falls inside the configured quiet-hours window. A

@@ -132,6 +132,7 @@ func TestAgentAlertPerSinkTogglesAreIndependent(t *testing.T) {
 	on, off := true, false
 	cfg := zeroSettle()
 	cfg.Notify, cfg.Dock, cfg.Sound = &off, &off, &on
+	cfg.SoundMode = string(config.AgentSoundBell)
 	m := alertOS(t, cfg)
 	host := captureHost(t, m)
 
@@ -142,6 +143,40 @@ func TestAgentAlertPerSinkTogglesAreIndependent(t *testing.T) {
 	}
 	if got := host.b.String(); !strings.Contains(got, "\x07") || strings.Contains(got, "\x1b]9;") {
 		t.Errorf("sound-only wrote %q, want a bell and no notification", got)
+	}
+}
+
+// TestAgentAlertAudioModeWritesNoBell is the difference between the two sound
+// modes, and it matters because the bell is not free: a terminal configured to
+// flash on BEL would flash alongside a cue the user asked to hear instead of it.
+func TestAgentAlertAudioModeWritesNoBell(t *testing.T) {
+	on, off := true, false
+	cfg := zeroSettle()
+	cfg.Notify, cfg.Dock, cfg.Sound = &off, &off, &on
+	cfg.SoundMode = string(config.AgentSoundAudio)
+	m := alertOS(t, cfg)
+	host := captureHost(t, m)
+
+	m.noteAgentState(m.Windows[0], "needs_input")
+
+	if got := host.b.String(); strings.Contains(got, "\x07") {
+		t.Errorf("audio mode wrote a bell as well: %q", got)
+	}
+}
+
+// TestAgentAlertSoundOffMakesNoNoiseEitherWay keeps the master switch master.
+func TestAgentAlertSoundOffMakesNoNoiseEitherWay(t *testing.T) {
+	for _, mode := range config.AgentSoundModeNames {
+		t.Run(mode, func(t *testing.T) {
+			off := false
+			cfg := zeroSettle()
+			cfg.Sound, cfg.SoundMode = &off, mode
+			policy := config.ResolveAgentAlerts(&cfg)
+			if policy.PlaysAudio() || policy.PlaysBell() {
+				t.Errorf("sound=false with mode %q plays audio=%v bell=%v",
+					mode, policy.PlaysAudio(), policy.PlaysBell())
+			}
+		})
 	}
 }
 
