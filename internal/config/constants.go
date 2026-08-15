@@ -696,6 +696,22 @@ var FocusFollowsMouseInTerminal = false
 // Set via appearance.alt_drag config.
 var AltDrag = true
 
+// ClickToType decides what a left click on a pane's content does while the
+// keyboard is driving the window manager. "single" enters terminal mode on the
+// release, which is what a newcomer expects a click to do and so the default.
+// "double" focuses on one click and enters on two, for a user who arranges
+// panes with the mouse and does not want a stray click to take the window
+// manager's keys away. "off" never changes mode from a click: the way in stays
+// the enter_terminal_mode binding.
+//
+// The mode decides who owns the mouse, here as everywhere else: a pane whose
+// app asked for mouse tracking is only forwarded to in terminal mode, so under
+// "off" the mouse alone cannot reach that app. "double" is the setting for
+// someone who lives in mouse-mode apps and still wants the mouse to be a
+// pointer first.
+// Set via appearance.click_to_type config.
+var ClickToType = ClickToTypeSingle
+
 // WordCharacters lists the punctuation that counts as part of a word when a
 // double-click selects one, on top of letters and digits, which always do.
 //

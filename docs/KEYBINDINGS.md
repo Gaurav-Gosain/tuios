@@ -366,7 +366,7 @@ Access debug and development tools:
 - **Double Click**: Select the word under the pointer (`word_characters` decides what a word is)
 - **Triple Click**: Select the whole line. The highlight is immediate, but a multi-click copies about a third of a second after the last click, so a triple-click never puts the word on the clipboard on its way to the line
 - **Left Drag Above/Below a pane**: Continues the selection and scrolls
-- **Left Click**: Focus window
+- **Left Click**: Focus window. On a pane's content in window management mode it also enters terminal mode, so the pane is ready to type in. Set `click_to_type = "double"` under `[appearance]` to need two clicks for that, or `"off"` to keep the click to focusing alone
 - **Left Drag on the title bar**: Move window (non-tiling) or swap windows (tiling). In window management mode the whole window is a drag handle
 - **Right Drag**: Resize window (non-tiling only)
 - **Alt+Left Drag**: Move the window, from anywhere on it, including while you are typing in it. This is the usual desktop window-manager gesture, and it is what a plain left drag over a pane's content cannot be, since that selects text. Typing resumes in the pane when the window lands. Set `alt_drag = false` under `[appearance]` to hand the gesture back to the pane

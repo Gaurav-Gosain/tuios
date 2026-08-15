@@ -130,6 +130,7 @@ type AppearanceConfig struct {
 	FocusFollowsMouse           *bool   `toml:"focus_follows_mouse"`             // Focus the pane under the cursor as the mouse moves (default: false)
 	FocusFollowsMouseInTerminal *bool   `toml:"focus_follows_mouse_in_terminal"` // Also hover-focus while in terminal mode (default: false)
 	AltDrag                     *bool   `toml:"alt_drag"`                        // Alt + left-drag moves a pane (default: true)
+	ClickToType                 string  `toml:"click_to_type"`                   // What a click on a pane's content does in window-management mode: single, double, off (default: single)
 	WordCharacters              *string `toml:"word_characters"`                 // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
 	DockbarPosition             string  `toml:"dockbar_position"`                // Dockbar position: bottom, top, hidden
 	PreferredShell              string  `toml:"preferred_shell"`                 // Preferred shell: if empty, auto-detect based on platform.
@@ -172,6 +173,22 @@ type AppearanceConfig struct {
 	Scrollbar ScrollbarConfig `toml:"scrollbar"`
 	Sidebar   SidebarConfig   `toml:"sidebar"`
 }
+
+// Click-to-type policies. See AppearanceConfig.ClickToType.
+const (
+	// ClickToTypeSingle enters terminal mode when a click on a pane's content
+	// is released without a drag.
+	ClickToTypeSingle = "single"
+	// ClickToTypeDouble focuses on a single click and enters terminal mode only
+	// on the second click of a double click.
+	ClickToTypeDouble = "double"
+	// ClickToTypeOff never changes mode from a click: the pane takes focus and
+	// the keyboard stays with the window manager.
+	ClickToTypeOff = "off"
+)
+
+// ClickToTypeModes lists the valid values for appearance.click_to_type.
+var ClickToTypeModes = []string{ClickToTypeSingle, ClickToTypeDouble, ClickToTypeOff}
 
 // Scrollbar styles. See ScrollbarConfig.Style.
 const (
@@ -281,6 +298,7 @@ func DefaultConfig() *UserConfig {
 			ScrollLines:       3,
 			DockbarPosition:   "bottom",
 			PreferredShell:    "",
+			ClickToType:       ClickToTypeSingle,
 			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintBorder},
 			Sidebar: SidebarConfig{
 				Position: "left",
@@ -753,6 +771,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.Sidebar.Width <= 0 {
 		cfg.Appearance.Sidebar.Width = defaultCfg.Appearance.Sidebar.Width
 	}
+	if cfg.Appearance.ClickToType == "" {
+		cfg.Appearance.ClickToType = defaultCfg.Appearance.ClickToType
+	}
 	if cfg.Appearance.Scrollbar.Style == "" {
 		cfg.Appearance.Scrollbar.Style = defaultCfg.Appearance.Scrollbar.Style
 	}
@@ -960,6 +981,14 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// survives the default being on.
 	if cfg.Appearance.AltDrag != nil {
 		AltDrag = *cfg.Appearance.AltDrag
+	}
+
+	// ClickToType only takes one of its three values, so a typo in the config
+	// lands on the default the validator warned it would fall back to.
+	if slices.Contains(ClickToTypeModes, cfg.Appearance.ClickToType) {
+		ClickToType = cfg.Appearance.ClickToType
+	} else if cfg.Appearance.ClickToType != "" {
+		ClickToType = ClickToTypeSingle
 	}
 
 	// WordCharacters is a pointer so an explicitly empty string can mean "no

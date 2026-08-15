@@ -389,11 +389,33 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// (handleMouseRelease), so clicking a pane is enough to start typing.
 	// Title bar and border presses never arm it, so they stay pure drag
 	// handles, and the press itself still sets up the drag below.
-	if mouse.Button == tea.MouseLeft && o.Mode == app.WindowManagementMode {
-		if _, _, inContent := clickedWindow.ScreenToTerminal(X, Y); inContent {
-			o.ClickToTypePending = true
-			o.DragStartX = mouse.X
-			o.DragStartY = mouse.Y
+	//
+	// How many clicks that takes, or whether a click changes mode at all, is
+	// appearance.click_to_type. Only the arming moves: the drag threshold, the
+	// release and the mode switch itself are the same for every policy, so a
+	// click that does not arm is an ordinary window-management click.
+	//
+	// "double" reads its second click from the counter word and line selection
+	// already keep, so a double click means one thing everywhere. Arming spends
+	// the count, leaving the first press in the terminal mode it opened to
+	// start a fresh selection instead of landing as a third click on a line.
+	// The clicks that changed mode select nothing themselves: entering a mode
+	// is not a request to put a word on the clipboard.
+	if mouse.Button == tea.MouseLeft && o.Mode == app.WindowManagementMode &&
+		config.ClickToType != config.ClickToTypeOff {
+		if termX, termY, inContent := clickedWindow.ScreenToTerminal(X, Y); inContent {
+			arm := true
+			if config.ClickToType == config.ClickToTypeDouble {
+				arm = registerClick(clickedWindow, termX, termY) >= 2
+				if arm {
+					clickedWindow.ClickCount = 0
+				}
+			}
+			if arm {
+				o.ClickToTypePending = true
+				o.DragStartX = mouse.X
+				o.DragStartY = mouse.Y
+			}
 		}
 	}
 
