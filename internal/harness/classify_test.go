@@ -68,17 +68,17 @@ func TestClassifyIsSilentForAHarnessWithRulesOff(t *testing.T) {
 // paints, which is a rule that says the pane is always blocked.
 func TestRuleWithNoPredicatesMatchesNothing(t *testing.T) {
 	rl := &ScreenRule{State: "needs_input"}
-	if ruleMatches(rl, "anything at all") {
+	if checkRule(rl, "anything at all", nil) {
 		t.Fatal("a rule with no predicates matched; it would claim every pane")
 	}
 }
 
 func TestNotPredicateVetoesAMatch(t *testing.T) {
 	rl := &ScreenRule{State: "needs_input", Any: []string{"Do you want"}, Not: []string{"(auto-approved)"}}
-	if !ruleMatches(rl, "Do you want to proceed?") {
+	if !checkRule(rl, "Do you want to proceed?", nil) {
 		t.Fatal("the any predicate did not match on its own")
 	}
-	if ruleMatches(rl, "Do you want to proceed? (auto-approved)") {
+	if checkRule(rl, "Do you want to proceed? (auto-approved)", nil) {
 		t.Fatal("the not predicate failed to veto")
 	}
 }

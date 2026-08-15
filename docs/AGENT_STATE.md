@@ -14,6 +14,7 @@ alongside the rest of the pane-driving surface.
 - [States](#states)
 - [Reporting state](#reporting-state)
 - [Sources and precedence](#sources-and-precedence)
+- [Screen rules](#screen-rules)
 - [The stall heuristic](#the-stall-heuristic)
 - [Indicator](#indicator)
 - [Claude Code integration](#claude-code-integration)
@@ -89,12 +90,57 @@ as it always has. `get-agent-state` reports the winning `source` and, when one
 was named, the `harness_id`, so a surprising indicator can be traced to the thing
 that set it.
 
+## Screen rules
+
+An agent waiting on a human is the state that matters most and the hardest one
+to hear about. Measured under a real PTY, Claude Code sitting on a permission
+prompt paints the question once and then emits nothing at all: no further
+output, no title, and no progress sequence. Every contractual channel carries
+silence, so the only place the fact exists is the painted screen.
+
+A harness manifest may therefore carry screen rules, matched against the bottom
+of the pane. They report as `source: screen`, below both a harness reporting for
+itself and an escape sequence it emitted, and a rule that stops matching returns
+no opinion rather than falling back to a state. Only `needs_input` rules ship
+enabled: `working` is already carried by output arriving at all, and a rule keyed
+on a spinner glyph is the first thing to break when an agent's TUI changes in a
+patch release.
+
+Rules run when a pane writes, throttled, plus once more shortly after it goes
+quiet, because the prompt is painted by the last chunk before the silence. A pane
+that stays silent costs nothing: there is no ticker.
+
+### Seeing what a rule would match
+
+Writing a rule against text nobody can see is guesswork, so there is a command
+for it:
+
+```
+tuios explain-agent-screen                              # the focused pane
+tuios explain-agent-screen -w build --harness codex     # try another harness's rules
+tuios explain-agent-screen --lines 20 --json            # look further up
+```
+
+It prints the pane's tail exactly as the classifier reads it, then every rule of
+the harness, which one fired, and for each rule that refused, which of its
+strings was the reason. `--harness` runs a harness's rules against a pane nothing
+has claimed, which is the case when the rule being written is the one that would
+attribute it.
+
 ## The stall heuristic
 
 Agents that do not report get a conservative fallback. If a pane reported
 `working` but then produces no output for a while, the daemon demotes it to
-`idle`, on the assumption that a genuinely busy agent produces output. The
-fallback is strictly secondary to explicit reporting:
+`idle`, on the assumption that a genuinely busy agent produces output.
+
+Silence alone is not enough to act on, because an agent that finished and an
+agent waiting on a human produce exactly the same silence, and `idle` reads as
+"finished and fine". So before demoting a pane, the daemon hands it to the screen
+tier for a last look, and leaves alone any pane whose screen answers. A look that
+finds nothing still demotes: the screen was read and said nothing, which is as
+much evidence as there is going to be.
+
+The fallback is strictly secondary to explicit reporting:
 
 - It only ever moves a pane out of `working`, and only ever into `idle`. Any
   other state (`needs_input`, `done`, `errored`) is never touched, so an explicit
@@ -148,9 +194,9 @@ wired up outside tuios.
 
 ## Alerts
 
-A state change can raise a notification, a bell, a clickable dock message, and a
-shell command of your choosing. What fires, for which transitions, and when it is
-held back is the `[notifications.agent]` table; see
+A state change can raise a notification, an audible cue or a bell, a clickable
+dock message, and a shell command of your choosing. What fires, for which
+transitions, and when it is held back is the `[notifications.agent]` table; see
 [CONFIGURATION.md](CONFIGURATION.md#the-notificationsagent-table) for the keys
 and [HOOKS.md](HOOKS.md) for the command contract.
 
@@ -158,6 +204,8 @@ Two things are worth knowing here rather than there. The notification is an
 in-band escape sequence written into the same stream the interface is drawn
 through, so it reaches whatever terminal is in front of you even when the session
 is on another machine; a desktop notification raised by tuios would appear on the
-host running the daemon, which under `tuios ssh` is not where you are. And alerts
-are raised by an attached client, so a detached session tracks state without
-announcing it.
+host running the daemon, which under `tuios ssh` is not where you are. The same
+is true of the audio cue, which is played by the client through a system audio
+player, so over `tuios ssh` it comes out of your laptop rather than the host. And
+alerts are raised by an attached client, so a detached session tracks state
+without announcing it.

@@ -3,15 +3,18 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"os/signal"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/google/uuid"
@@ -724,6 +727,128 @@ func runGetAgentState(sessionName, windowTarget string, jsonOutput bool) error {
 	}
 	fmt.Println(res.State)
 	return nil
+}
+
+// screenExplanation is the explain-agent-screen result, decoded for printing.
+type screenExplanation struct {
+	WindowID  string               `json:"window_id"`
+	HarnessID string               `json:"harness_id"`
+	State     string               `json:"state"`
+	Source    string               `json:"source"`
+	Enabled   bool                 `json:"enabled"`
+	Lines     int                  `json:"lines"`
+	Tail      []string             `json:"tail"`
+	Matched   bool                 `json:"matched"`
+	Rule      int                  `json:"rule"`
+	RuleState string               `json:"rule_state"`
+	Rules     []harness.RuleReport `json:"rules"`
+}
+
+// runExplainAgentScreen prints what a harness's screen rules make of a pane.
+func runExplainAgentScreen(sessionName, windowTarget, harnessID string, lines int, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("explain-agent-screen", map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+		"harness": harnessID,
+		"lines":   lines,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("explain-agent-screen", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res screenExplanation
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	printScreenExplanation(os.Stdout, res)
+	return nil
+}
+
+// printScreenExplanation writes the human form: what the pane is, what the
+// classifier read, and what each rule did with it.
+func printScreenExplanation(w io.Writer, res screenExplanation) {
+	harnessName := res.HarnessID
+	if harnessName == "" {
+		harnessName = "none"
+	}
+	fmt.Fprintf(w, "pane %s  state %s (%s)\nharness %s", res.WindowID, res.State, res.Source, harnessName)
+	if res.HarnessID != "" {
+		if res.Enabled {
+			fmt.Fprintf(w, "  screen rules on, reading %d lines", res.Lines)
+		} else {
+			fmt.Fprint(w, "  screen rules off in the manifest")
+		}
+	}
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "\ntail, as the classifier sees it:")
+	if len(res.Tail) == 0 {
+		fmt.Fprintln(w, "  (nothing; the pane's visible screen is empty)")
+	}
+	for i, line := range res.Tail {
+		fmt.Fprintf(w, "  %2d | %s\n", i+1, line)
+	}
+
+	if res.HarnessID == "" {
+		fmt.Fprintln(w, "\nno harness is attributed to this pane, so no rules ran.")
+		fmt.Fprintln(w, "pass --harness to try one's rules against the tail above.")
+		return
+	}
+	if len(res.Rules) == 0 {
+		fmt.Fprintf(w, "\n%s declares no screen rules.\n", res.HarnessID)
+		return
+	}
+	fmt.Fprintln(w, "\nrules:")
+	for _, r := range res.Rules {
+		mark := " "
+		if r.Matched {
+			mark = "*"
+			if r.Index == res.Rule {
+				mark = ">"
+			}
+		}
+		fmt.Fprintf(w, " %s rule %d  %s  priority %d\n", mark, r.Index, r.State, r.Priority)
+		for _, why := range ruleRefusals(r) {
+			fmt.Fprintf(w, "     %s\n", why)
+		}
+	}
+	// The leading mark is only readable next to what it means.
+	fmt.Fprintln(w, "\n  > the rule that decided, * matched but outranked")
+	if res.Matched {
+		fmt.Fprintf(w, "  rule %d would report %s\n", res.Rule, res.RuleState)
+	} else {
+		fmt.Fprintln(w, "  nothing matched, so the screen tier reports no opinion")
+	}
+}
+
+// ruleRefusals turns a rule's report into the lines saying why it refused.
+func ruleRefusals(r harness.RuleReport) []string {
+	var out []string
+	if r.Empty {
+		out = append(out, "names no strings, so it is refused rather than matching every pane")
+	}
+	for _, s := range r.Missing {
+		out = append(out, "all: "+strconv.Quote(s)+" is not on the screen")
+	}
+	if len(r.NoneOf) > 0 {
+		quoted := make([]string, 0, len(r.NoneOf))
+		for _, s := range r.NoneOf {
+			quoted = append(quoted, strconv.Quote(s))
+		}
+		out = append(out, "any: none of "+strings.Join(quoted, ", ")+" is on the screen")
+	}
+	for _, s := range r.Blocked {
+		out = append(out, "not: "+strconv.Quote(s)+" is on the screen and vetoes the rule")
+	}
+	return out
 }
 
 // runTapeExec executes a tape file in a running TUIOS session.

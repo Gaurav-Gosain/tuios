@@ -342,6 +342,20 @@ func init() {
 			examples:    []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
 			handler:     (*Daemon).verbGetAgentState,
 		},
+		"explain-agent-screen": {
+			description: "Dump a pane's screen tail exactly as the harness screen rules read it, with what every rule made of it and which one fired. This is the tool for writing a rule: it says what the classifier saw and, for each rule that refused, which strings were the reason.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "harness", Type: "string", Description: "Run this harness's rules instead of the one the pane is attributed to, for trying a rule against a pane nothing has claimed yet."},
+				{Name: "lines", Type: "int", Description: "Read this many lines from the bottom instead of the manifest's, for checking whether a rule needs to see further up."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"explain-agent-screen","params":{"session":"work","window":"build"}}`,
+				`{"id":1,"verb":"explain-agent-screen","params":{"session":"work","harness":"codex","lines":20}}`,
+			},
+			handler: (*Daemon).verbExplainAgentScreen,
+		},
 		"wait-for": {
 			description: "Block until a condition matches, or fail with the timeout code.",
 			params: []verbParam{

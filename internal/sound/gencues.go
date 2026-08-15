@@ -39,7 +39,7 @@ func main() {
 	// done: a rising fifth, soft and short. It says the machine stopped, which
 	// is information rather than a request, so it stays out of the way.
 	write("assets/done.wav", []note{
-		{0, 130, 659.26, 0.30},  // E5
+		{0, 130, 659.26, 0.30},   // E5
 		{110, 170, 987.77, 0.26}, // B5
 	})
 
@@ -48,8 +48,8 @@ func main() {
 	// question from across a room; the two cues have to be told apart in under
 	// half a second and by ear alone.
 	write("assets/needs-input.wav", []note{
-		{0, 90, 1046.50, 0.42},   // C6
-		{120, 90, 1046.50, 0.42}, // C6
+		{0, 90, 1046.50, 0.42},    // C6
+		{120, 90, 1046.50, 0.42},  // C6
 		{240, 180, 1396.91, 0.46}, // F6
 	})
 }

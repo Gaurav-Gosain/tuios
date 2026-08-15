@@ -1,6 +1,7 @@
 package session
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -80,6 +81,111 @@ func TestStallTimerLooksAtTheScreenBeforeCallingAPaneIdle(t *testing.T) {
 			t.Fatalf("state = %q, want needs_input", got)
 		}
 	})
+}
+
+// TestIdlePaneArmsNoTimers is the idle-cost guard for both timers the agent
+// tiers added.
+//
+// Neither is a ticker, and that is the whole design: the screen tier's settle
+// timer is armed by output and the hold's backstop by a held state, so a session
+// where nothing is happening holds neither and wakes for neither. A regression
+// that armed either one unconditionally would not show up as a failure anywhere
+// else, because everything would still be correct, only awake.
+func TestIdlePaneArmsNoTimers(t *testing.T) {
+	sess, _, ptyID := agentPaneWithHarness(t, "claude-code", AgentStateWorking)
+	pty := sess.GetPTY(ptyID)
+
+	// Long enough that a timer armed at session start would have fired and
+	// re-armed by now, had one existed.
+	time.Sleep(2 * screenSettleDelay)
+
+	pty.screenSettleMu.Lock()
+	settle := pty.screenSettle
+	pty.screenSettleMu.Unlock()
+	if settle != nil {
+		t.Error("a pane that has produced no output armed the screen settle timer")
+	}
+
+	sess.agentHoldMu.Lock()
+	held, timer := len(sess.agentHolds), sess.agentHoldTimer
+	sess.agentHoldMu.Unlock()
+	if held != 0 || timer != nil {
+		t.Errorf("a session with nothing held has %d holds and timer=%v", held, timer != nil)
+	}
+}
+
+// TestExplainAgentScreenVerbShowsWhatTheClassifierSaw drives the diagnostic over
+// the real socket. Writing a screen rule is otherwise guesswork twice over: the
+// text is matched inside the daemon against a pane that has moved on by the time
+// anyone looks, and a rule that fails says nothing about which of its strings was
+// the reason.
+func TestExplainAgentScreenVerbShowsWhatTheClassifierSaw(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "work")
+	ids := sess.ListPTYIDs()
+	feedVT(t, sess.GetPTY(ids[0]), claudePermissionPrompt)
+
+	c := dialVerb(t, sp)
+	res := result(t, c.call(t,
+		`{"id":1,"verb":"explain-agent-screen","params":{"session":"work","window":"Window","harness":"claude-code"}}`))
+
+	if res["matched"] != true {
+		t.Fatalf("the prompt on the screen did not match: %v", res)
+	}
+	if res["rule_state"] != "needs_input" {
+		t.Fatalf("rule_state = %v, want needs_input", res["rule_state"])
+	}
+
+	tail, ok := res["tail"].([]any)
+	if !ok || len(tail) == 0 {
+		t.Fatalf("tail = %v, want the pane's screen lines", res["tail"])
+	}
+	var joined string
+	for _, line := range tail {
+		joined += line.(string) + "\n"
+	}
+	if !strings.Contains(joined, "Do you want to proceed?") {
+		t.Fatalf("the dumped tail is not what the classifier matched:\n%s", joined)
+	}
+
+	// Every rule is reported, matching or not, and a refusal names the strings
+	// that caused it. That is the half that makes a failing rule fixable.
+	rules, ok := res["rules"].([]any)
+	if !ok || len(rules) < 2 {
+		t.Fatalf("rules = %v, want one entry per declared rule", res["rules"])
+	}
+	refused := 0
+	for _, r := range rules {
+		m := r.(map[string]any)
+		if m["matched"] == true {
+			continue
+		}
+		refused++
+		if m["missing"] == nil && m["none_of"] == nil && m["blocked"] == nil && m["empty"] == nil {
+			t.Errorf("rule %v refused without saying why: %v", m["index"], m)
+		}
+	}
+	if refused == 0 {
+		t.Fatal("no rule refused, so the reason-reporting half is untested")
+	}
+}
+
+// TestExplainAgentScreenVerbAnswersForAPaneWithNoHarness keeps the diagnostic
+// usable on the pane a user actually has open. Most panes are not agents, and
+// saying so is the answer rather than an error.
+func TestExplainAgentScreenVerbAnswersForAPaneWithNoHarness(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "work")
+
+	c := dialVerb(t, sp)
+	res := result(t, c.call(t,
+		`{"id":1,"verb":"explain-agent-screen","params":{"session":"work","window":"Window"}}`))
+	if res["harness_id"] != "" {
+		t.Fatalf("harness_id = %v, want empty", res["harness_id"])
+	}
+	if res["matched"] != false {
+		t.Fatalf("matched = %v, want false", res["matched"])
+	}
 }
 
 // TestStallTimerStillDemotesAPaneWithNothingOnItsScreen keeps the fallback the

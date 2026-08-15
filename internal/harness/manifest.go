@@ -85,6 +85,11 @@ type ScreenRule struct {
 // what the agent did rather than what it is doing.
 const defaultScreenLines = 6
 
+// DefaultScreenLines is defaultScreenLines for callers outside the package. The
+// diagnostic dumps a pane's tail before it knows whether a harness has been
+// named at all, so it needs an answer no manifest can give it.
+const DefaultScreenLines = defaultScreenLines
+
 // genericNameLimit is the length below which a bare name is too generic to
 // identify a harness on its own. Names like "pi", "cn" and "amp" are plausible
 // commands for unrelated software, and a false positive labels an innocent pane

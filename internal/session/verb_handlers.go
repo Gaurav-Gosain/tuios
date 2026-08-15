@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/google/uuid"
 )
 
@@ -637,6 +638,114 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		"source":     claim.source.Name(),
 		"harness_id": claim.harness,
 	}, nil
+}
+
+// verbExplainAgentScreen dumps a pane's tail exactly as the screen tier reads
+// it, with what every rule of its harness made of it.
+//
+// Writing a screen rule was otherwise guesswork in both directions: the text is
+// matched inside the daemon against a pane that has moved on by the time anyone
+// looks, and a rule that fails says nothing about which of its strings was the
+// reason. This answers both, so adding a harness is an edit and a re-run rather
+// than an experiment.
+func (d *Daemon) verbExplainAgentScreen(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		commonParams
+		Harness string `json:"harness"`
+		Lines   int    `json:"lines"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+
+	state := sess.GetState()
+	target := p.Window
+	if target == "" {
+		id, err := focusedWindowID(state)
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		target = id
+	}
+	idx, err := findWindowStateIndex(state.Windows, target)
+	if err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	w := state.Windows[idx]
+	claim := sess.agentClaimFor(w.ID)
+
+	// A harness named on the call rather than on the pane is how a rule is tried
+	// against a pane the detector has not attributed yet, which is every pane
+	// while the rule that would attribute it is still being written.
+	hid := strings.TrimSpace(p.Harness)
+	if hid == "" {
+		hid = w.AgentHarness
+	}
+
+	reg := d.agentMatcher.registry
+	var m *harness.Manifest
+	if reg != nil && hid != "" {
+		if m = reg.Lookup(hid); m == nil {
+			return nil, hintedVerbError(ErrVerbInvalidParams, "unknown harness "+echoName(hid), &VerbHint{
+				Param:      "harness",
+				DidYouMean: closestMatch(hid, reg.IDs()),
+				Available:  reg.IDs(),
+				Detail:     "harness names a manifest in the registry; drop a file in the user manifest directory to add one.",
+			})
+		}
+	}
+
+	// How far up the rules would read, so what is dumped is what would be
+	// matched. An explicit lines wins, for checking whether a rule needs to see
+	// further up than its manifest lets it.
+	lines := p.Lines
+	if lines <= 0 && m != nil {
+		lines = m.Screen.Lines
+	}
+	if lines <= 0 {
+		lines = harness.DefaultScreenLines
+	}
+
+	// The tail is read whether or not a harness was resolved. Writing the first
+	// rule for a harness tuios does not know yet means looking at a pane nothing
+	// has claimed, so refusing to dump it there would withhold the diagnostic
+	// from the case it is most needed in.
+	var tail []string
+	if w.PTYID != "" {
+		if pty := sess.GetPTY(w.PTYID); pty != nil {
+			tail = pty.tailText(lines)
+		}
+	}
+
+	out := map[string]any{
+		"type":       "agent_screen",
+		"window_id":  w.ID,
+		"harness_id": hid,
+		"state":      w.AgentState.Name(),
+		"source":     claim.source.Name(),
+		"lines":      lines,
+		"tail":       tail,
+		"rules":      []harness.RuleReport{},
+		"matched":    false,
+		"rule":       -1,
+	}
+	if m == nil {
+		// No harness means no rules to run, which is a fact worth returning
+		// rather than an error: it is the answer for most panes.
+		return out, nil
+	}
+	out["enabled"] = m.Screen.Enabled
+
+	matchedState, rule, reports := reg.Explain(hid, tail)
+	out["rules"] = reports
+	out["rule"] = rule
+	out["matched"] = rule >= 0
+	out["rule_state"] = matchedState
+	return out, nil
 }
 
 // sliceCaptureLines applies the optional region/lines selection to captured
