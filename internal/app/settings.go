@@ -205,6 +205,7 @@ var (
 	fpsOptions             = []string{"30", "60", "90", "120", "144", "unlimited"}
 	sidebarPositionOptions = []string{"left", "right", "hidden"}
 	scrollbarStyleOptions  = config.ScrollbarStyles
+	clickToTypeOptions     = config.ClickToTypeModes
 )
 
 // boolPtr returns a pointer to b, for the *bool config fields.
@@ -547,6 +548,13 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v bool) {
 					config.FocusFollowsMouse = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = boolPtr(v) })
+				}),
+			enumItem("Click to type", "Clicking a pane: single starts typing, double needs two clicks, off only focuses",
+				clickToTypeOptions,
+				func() string { return config.ClickToType },
+				func(m *OS, v string) {
+					config.ClickToType = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.ClickToType = v })
 				}),
 			boolItem("Reverse scroll", "Reverse scroll in the scrolling layout",
 				func() bool { return config.NiriReverseScroll },

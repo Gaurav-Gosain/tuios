@@ -274,6 +274,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 			Message: "no longer used: panes name their own workspace, and switching lives on the dock and alt+1..9",
 		})
 	}
+	checkEnum("click_to_type", cfg.Appearance.ClickToType, ClickToTypeModes)
 	checkEnum("scrollbar.style", cfg.Appearance.Scrollbar.Style, ScrollbarStyles)
 	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition,
 		[]string{"bottom-right", "bottom-left", "top-right", "top-left", "center"})

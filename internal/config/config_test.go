@@ -696,12 +696,14 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		clock, cpu, ram, revScr bool
 		scrollback, fps         int
 		leader                  string
+		clickToType             string
 	}{
 		config.BorderStyle, config.DockbarPosition,
 		config.HideWindowButtons, config.HideScrollbar,
 		config.ShowClock, config.ShowCPU, config.ShowRAM, config.NiriReverseScroll,
 		config.ScrollbackLines, config.NormalFPS,
 		config.LeaderKey,
+		config.ClickToType,
 	}
 	defer func() {
 		config.BorderStyle, config.DockbarPosition = orig.border, orig.dock
@@ -710,6 +712,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		config.NiriReverseScroll = orig.revScr
 		config.ScrollbackLines, config.NormalFPS = orig.scrollback, orig.fps
 		config.LeaderKey = orig.leader
+		config.ClickToType = orig.clickToType
 	}()
 
 	cfg := config.DefaultConfig()
@@ -724,6 +727,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 	cfg.Appearance.ScrollbackLines = 12345
 	cfg.Appearance.MaxFPS = 30
 	cfg.Keybindings.LeaderKey = "ctrl+a"
+	cfg.Appearance.ClickToType = config.ClickToTypeDouble
 
 	config.ApplyAppearanceConfig(cfg)
 
@@ -743,6 +747,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		{"ScrollbackLines", config.ScrollbackLines, 12345},
 		{"NormalFPS", config.NormalFPS, 30},
 		{"LeaderKey", config.LeaderKey, "ctrl+a"},
+		{"ClickToType", config.ClickToType, config.ClickToTypeDouble},
 	}
 	for _, c := range checks {
 		if c.got != c.want {

@@ -322,6 +322,26 @@ Alt + right-drag resizes a pane from the nearest corner whatever this is set to.
 
 **Note:** With this on, Alt + left-drag is taken from a pane running an application that asked for the mouse (vim, less, htop), the same way Ctrl + left-drag already is. Set it to `false` to hand the gesture back to such an application; the pane then treats Alt + left-drag as ordinary text selection.
 
+### click_to_type
+
+Controls what a left click on a pane's content does while you are in window management mode, where the keyboard drives the window manager.
+
+By default a click focuses the pane and enters terminal mode, so clicking a pane is enough to start typing in it. That is a mode change you did not ask for when all you wanted was to select a pane or click something else next, which is what the other two values are for.
+
+**Valid values:**
+
+- `"single"` - A click focuses the pane and enters terminal mode (default)
+- `"double"` - A click focuses the pane; a double click enters terminal mode
+- `"off"` - A click only focuses the pane, and never changes mode
+
+**Default:** `"single"`
+
+A double click here is the same gesture as the one that selects a word: the same two clicks, close together on the same cell. The clicks that change mode select nothing themselves, and the next click in the pane starts a fresh selection rather than counting as a third.
+
+Nothing else about the mouse changes. Dragging a title bar or a border, Alt + left-drag, the context menu, the dock, the rail and the overlays all behave the same under every value, and a click in terminal mode is untouched.
+
+**Note:** A pane running an application that asked for the mouse (vim, less, htop) is only sent mouse events in terminal mode, which is true today as well. Under `"double"` the second click gets you in; under `"off"` the way in is the key bound to `enter_terminal_mode` (Enter by default). Pick `"double"` if you live in such applications. Also settable from the in-app settings page (Behavior, "Click to type").
+
 ### word_characters
 
 The punctuation that counts as part of a word when a double-click selects one. Letters and digits always count and do not need listing.
