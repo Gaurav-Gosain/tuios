@@ -111,6 +111,14 @@ func (m *OS) sidebarSignature() uint64 {
 	mixI(m.SidebarScrollS)
 	mixI(m.SidebarScrollT)
 	mixI(m.SidebarScrollA)
+	// The agents offset is derived from the anchor on any frame whose sort has
+	// moved, so the anchor picks the rows that are drawn just as directly as the
+	// offset does, and a frame drawn under one anchor cannot be served from an
+	// entry keyed on another.
+	mixB(m.sidebarAgentAnchor.Valid)
+	mixI(m.sidebarAgentAnchor.Offset)
+	mixS(m.sidebarAgentAnchor.SessionID)
+	mixS(m.sidebarAgentAnchor.WindowID)
 	mixI(m.FocusedWindow)
 	mixB(m.SidebarHoverActive)
 	mixI(m.SidebarHoverX)

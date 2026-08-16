@@ -764,6 +764,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	terminals := m.sidebarTerminals(sessions, shown)
 	agents, agentsTotal := m.sidebarFilterAgents(m.sidebarAgents(sessions))
 	m.sidebarSortAgents(agents)
+	// The one section whose order moves on its own, so the one whose viewport is
+	// anchored to a row rather than to an index. Before the cursor's auto-scroll
+	// below, which gets the last word on what is on screen.
+	m.sidebarReanchorAgents(agents)
 	// A filter that hides everything leaves one row saying so and offering the
 	// way back, because a section that vanished on a control the user set two
 	// days ago reads as "no agents anywhere", which is the opposite of the truth.
@@ -854,6 +858,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		start[s], count[s], hidden[s] = sidebarWindowSection(*scroll[s], rowsIn[s], place[s].lines)
 		*scroll[s] = start[s]
 	}
+	m.sidebarRecordAgentAnchor(agents, start[sidebarSectionAgents], count[sidebarSectionAgents])
 
 	// Hover, derived from the last motion seen inside the band, resolved against
 	// the placement above. Hover yields entirely to a drag.
