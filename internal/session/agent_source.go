@@ -24,6 +24,17 @@ const (
 	// for itself. It is the default for a caller that names no source, so every
 	// caller written before sources existed keeps its authority.
 	AgentSourceReport AgentSource = "report"
+	// AgentSourceTranscript is the record file the harness writes as it runs,
+	// read by the daemon. It is the agent's own account of its turn rather than
+	// a reading of its screen, so it does not rot when the harness restyles its
+	// TUI, which is what makes it worth outranking everything below it.
+	//
+	// It sits below AgentSourceReport because of latency, not trust: records
+	// land at message boundaries, so a live hook is speaking about now while the
+	// file can be a turn behind. It is daemon-internal for the same reason
+	// AgentSourceDetect is: only the daemon's own reader sets it, and a caller
+	// naming it over the socket has read nothing.
+	AgentSourceTranscript AgentSource = "transcript"
 	// AgentSourceOSC is an in-band escape sequence the pane emitted.
 	AgentSourceOSC AgentSource = "osc"
 	// AgentSourceScreen is a rule matched against the pane's rendered text.
@@ -38,9 +49,11 @@ const (
 
 // AgentSourceNames lists the source values set-agent-state accepts, in rank
 // order, for the verb's schema and for input validation. It is part of the
-// public protocol surface; keep the values stable. AgentSourceDetect is absent
-// deliberately: it is what the daemon's own detector claims, not something a
-// caller reports.
+// public protocol surface; keep the values stable. AgentSourceDetect and
+// AgentSourceTranscript are absent deliberately: both are what the daemon
+// worked out by looking at the machine, and a caller naming either over the
+// socket has looked at nothing. Both are still reported by get-agent-state, so
+// a user can see which tier is answering for a pane.
 var AgentSourceNames = []string{"report", "osc", "screen", "stall"}
 
 // agentSourceByName maps every accepted wire value to its AgentSource.
@@ -78,6 +91,8 @@ func (a AgentSource) Name() string {
 // claim at all is a separate case, and is open to any source.
 func (a AgentSource) rank() int {
 	switch a {
+	case AgentSourceTranscript:
+		return 35
 	case AgentSourceOSC:
 		return 30
 	case AgentSourceScreen:
@@ -137,4 +152,41 @@ func (s *Session) agentClaimFor(windowID string) agentClaim {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 	return s.agentClaims[windowID]
+}
+
+// yieldAgentClaim drops a claim held by source, leaving the window's displayed
+// state exactly where it is and reporting whether it dropped anything.
+//
+// It is the way out of a problem the ranking creates on its own. A ranked claim
+// is held until something ranked at least as high replaces it, which is right
+// while the source can still speak, and wrong the moment it cannot: a source
+// reading a file whose agent has died holds the pane against every weaker tier
+// forever, and the pane's last known state becomes permanent. Yielding says "I
+// have nothing further to say about this window" without asserting anything in
+// place of what it said, so the screen tier and the silence timer take over as
+// if the source had never been there.
+//
+// The state is deliberately left alone rather than cleared. What was last read
+// is still the best answer anyone has; it just stops being defended.
+//
+// The auto bit survives, because it is a lifecycle fact about the detector
+// rather than a precedence one: the pane still clears when the agent exits. A
+// window carrying it goes back to AgentSourceDetect rather than to the zero
+// claim, because the zero claim's empty source ranks as a report, and handing a
+// window back at the highest rank is the opposite of yielding it.
+func (s *Session) yieldAgentClaim(windowID string, source AgentSource) bool {
+	yielded := false
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if claim, held := s.agentClaims[windowID]; held && claim.source == source {
+		if claim.auto {
+			s.agentClaims[windowID] = agentClaim{
+				source: AgentSourceDetect, harness: claim.harness, auto: true,
+			}
+		} else {
+			delete(s.agentClaims, windowID)
+		}
+		yielded = true
+	}
+	return yielded
 }
