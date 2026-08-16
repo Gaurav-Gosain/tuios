@@ -73,6 +73,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			AgentState: w.AgentState,
 			DoneSeen:   m.agentSeen(w.ID),
 			StateAt:    w.AgentStateAt,
+			Harness:    w.AgentHarness,
 			Focused:    i == m.FocusedWindow,
 			Workspace:  w.Workspace,
 		})
@@ -111,6 +112,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 			AgentState: w.AgentState,
 			DoneSeen:   m.agentSeen(w.ID),
 			StateAt:    w.AgentStateAt,
+			Harness:    w.AgentHarness,
 			Workspace:  w.Workspace,
 		})
 	}

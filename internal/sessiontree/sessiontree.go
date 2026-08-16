@@ -40,6 +40,11 @@ type Node struct {
 	// or 0 when unknown. The rail reads it to show how long a pane has been in
 	// its state, which is what tells a waiting agent from a busy one.
 	StateAt int64
+	// Harness is which agent is running in a window node, as the detecting
+	// manifest or the reporting source named it ("claude-code", "codex"), empty
+	// when nothing named one. Never rolled up: a session runs no agent, its
+	// panes do.
+	Harness string
 	// Workspace is the workspace a window node sits on, or 0 when unknown. On a
 	// session node it is the workspace that session is showing, which is what
 	// decides which of its panes count as "here".
@@ -78,6 +83,8 @@ type WindowInput struct {
 	DoneSeen bool
 	// StateAt is when the pane entered AgentState (Unix nanoseconds), 0 if unknown.
 	StateAt int64
+	// Harness names the agent running in the pane, empty when nothing named one.
+	Harness string
 	// Focused marks the currently focused window in its session.
 	Focused bool
 	// Workspace is the workspace the pane sits on, or 0 when the caller does
@@ -184,6 +191,7 @@ func BuildSession(s SessionInput) Node {
 			AgentState: w.AgentState,
 			DoneSeen:   w.DoneSeen,
 			StateAt:    w.StateAt,
+			Harness:    w.Harness,
 			IsCurrent:  w.Focused,
 			Workspace:  w.Workspace,
 		})
