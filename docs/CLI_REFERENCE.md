@@ -731,6 +731,15 @@ same-rank case and is always allowed.
 | `screen` | | A rule matched against the pane's rendered text |
 | `stall` | lowest | The output-stall heuristic |
 
+There is one exception, for the case ranking alone gets wrong: a `screen` rule
+that matched a blocking prompt may write over a higher-ranked claim that has
+gone stale, meaning the pane has painted since that claim was stamped and the
+claim has stood unrefreshed for two seconds. The displaced claim is put back the
+moment a later look finds the prompt gone. It applies only to the daemon's own
+screen tier, which has actually read the pane; passing `--source screen` here
+never overrides anything. See
+[Agent state](AGENT_STATE.md#the-one-exception-a-visible-blocker).
+
 `report` is the default, so a caller written before sources existed keeps its
 authority. A report the daemon declines prints to stderr and leaves the state
 alone:
