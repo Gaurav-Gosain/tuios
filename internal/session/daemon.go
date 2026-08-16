@@ -71,6 +71,12 @@ type Daemon struct {
 	// agentMatcher decides whether a pane's foreground process is a known agent
 	// CLI. It merges the built-in agent binary names with any the user added.
 	agentMatcher agentMatcher
+
+	// transcriptWatcher is the one filesystem notification the transcript source
+	// runs on, shared by every session. Nil when the kernel would not give the
+	// daemon one, in which case every join reads on its pane's own output
+	// instead and nothing else changes.
+	transcriptWatcher *TranscriptWatcher
 }
 
 // defaultAgentStallTimeout is the conservative default silence window before a
@@ -199,6 +205,14 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	}
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 
+	// A daemon with no watcher is a working daemon: every transcript join falls
+	// back to reading on its pane's own output. So the error is dropped rather
+	// than reported, and it is dropped rather than logged because the only thing
+	// fsnotify would say is which path it failed on.
+	if w, err := NewTranscriptWatcher(); err == nil {
+		d.transcriptWatcher = w
+	}
+
 	if cfg.SocketPath != "" {
 		d.manager.SetSocketPath(cfg.SocketPath)
 	}
@@ -220,6 +234,9 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	// made it knowing a client exists. Source is empty because the daemon, not a
 	// client, is the origin: every attached client needs to hear it.
 	sessionID := s.ID
+	if d.transcriptWatcher != nil {
+		s.SetTranscriptWatcher(d.transcriptWatcher)
+	}
 	s.SetStateSink(func(state *SessionState) {
 		d.broadcastStateSync(sessionID, state, "update", "")
 	})
@@ -248,10 +265,20 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				reg := d.agentMatcher.registry
 				if reg != nil {
 					ptyID := ev.PTYID
-					if pty.screenScanDue(time.Now().UnixNano()) {
+					// The transcript read goes first so the screen gets the last
+					// word in a single pass: the file can only say working or
+					// done, and a rule that can see a prompt on the pane right
+					// now must be able to write over that. Running them the
+					// other way round would let a read of a file the agent wrote
+					// a moment ago undo a blocker the screen just matched.
+					look := func() {
+						s.readTranscriptOnOutput(ptyID)
 						s.scanScreenForAgent(ptyID, reg)
 					}
-					pty.armScreenSettle(func() { s.scanScreenForAgent(ptyID, reg) })
+					if pty.screenScanDue(time.Now().UnixNano()) {
+						look()
+					}
+					pty.armScreenSettle(look)
 				}
 			}
 		}
@@ -390,6 +417,11 @@ func (d *Daemon) shutdown() error {
 		if d.listener != nil {
 			_ = d.listener.Close()
 		}
+
+		// Closing the watcher ends its goroutine and returns every inotify watch
+		// to the kernel, which matters on a machine where several daemons have
+		// come and gone.
+		_ = d.transcriptWatcher.Close()
 
 		d.clientsMu.Lock()
 		for _, cs := range d.clients {
@@ -781,10 +813,31 @@ func (d *Daemon) agentMonitor() {
 		case <-d.ctx.Done():
 			return
 		case <-ticker.C:
+			reg := d.agentMatcher.registry
 			for _, sess := range d.manager.AllSessions() {
 				sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identify)
+				// The transcript joins ride this tick rather than one of their
+				// own. It runs only for a pane already known to be running a
+				// harness that has a transcript and that has no join yet, so a
+				// session that is fully joined, or that runs no agent at all,
+				// does nothing here.
+				sess.maintainAgentTranscripts(reg, d.paneAgentIdentifier(sess))
 			}
 		}
+	}
+}
+
+// paneAgentIdentifier reports the working directory and build version of the
+// agent in a pane, which is what a searched transcript candidate is checked
+// against before it is believed.
+func (d *Daemon) paneAgentIdentifier(sess *Session) func(ptyID string) (string, string) {
+	resolve := d.foregroundResolver(sess)
+	return func(ptyID string) (string, string) {
+		info, running := resolve(ptyID)
+		if !running {
+			return "", ""
+		}
+		return paneAgentIdentity(info)
 	}
 }
 
