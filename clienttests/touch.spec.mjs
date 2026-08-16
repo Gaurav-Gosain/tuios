@@ -149,15 +149,13 @@ test.describe('the touch key bar', () => {
   });
 });
 
-// The terminal surface itself. These are written as what a phone should get
-// and marked failing, because sip's client has no touch layer on the terminal:
-// xterm.js cancels every touch over it, so no mouse event is ever synthesized,
-// and the tap it recognizes internally is dispatched to an element that does
-// not listen for it. Drop the test.fail() when sip grows the layer; these then
-// become the regression tests for it.
+// The terminal surface itself. These were expected failures: xterm.js cancels
+// every touch over it, so no mouse event was ever synthesized and the tap it
+// recognizes internally was dispatched to an element that does not listen for
+// it. sip v0.7.0's touch layer picks those events up, so these are the
+// regression tests for it now.
 test.describe('the terminal surface', () => {
   test('a tap puts a mouse report on the wire', async ({ page }) => {
-    test.fail();
     await boot(page);
     const cdp = await page.context().newCDPSession(page);
     const box = await page.evaluate(() => {
@@ -174,7 +172,6 @@ test.describe('the terminal surface', () => {
   });
 
   test('a fling scrolls without typing into the pane', async ({ page }) => {
-    test.fail();
     await boot(page);
     const cdp = await page.context().newCDPSession(page);
     const box = await page.evaluate(() => {
