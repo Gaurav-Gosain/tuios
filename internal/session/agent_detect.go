@@ -499,7 +499,7 @@ func (s *Session) reconcileAgentOnOutput(
 				return errNoAgentDetectChange
 			}
 			info, running := resolve(ptyID)
-			_, stillAgent := identify(info)
+			harnessID, stillAgent := identify(info)
 			if running && stillAgent {
 				// Still the agent, and it just spoke. Only the idle left by the
 				// silence timer (or by the detector itself) may be taken back:
@@ -510,8 +510,13 @@ func (s *Session) reconcileAgentOnOutput(
 				}
 				w.AgentState = AgentStateWorking
 				w.AgentMessage = ""
-				w.AgentHarness = ""
+				// Re-stated rather than cleared: the process just identified is the
+				// same one the detector attributed, and a pane with no harness on it
+				// has no screen rules to run, so clearing here blinded the very pane
+				// that had just proved an agent is alive in it.
+				w.AgentHarness = harnessID
 				w.AgentStateAt = time.Now().UnixNano()
+				claim.harness = harnessID
 				claim.source = AgentSourceDetect
 				s.setAgentClaim(w.ID, claim)
 				changed = true

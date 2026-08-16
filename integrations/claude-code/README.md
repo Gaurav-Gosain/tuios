@@ -21,7 +21,12 @@ ignored, so a Task-tool subagent finishing cannot reset the pane's displayed
 state while the main turn is still running.
 
 The state is set with `tuios set-agent-state`, the same verb any process can call
-to report its own state. tuios draws a per-window indicator for it:
+to report its own state. The shim also passes `--harness claude-code`, which is
+how tuios knows whose screen rules to match against the pane: those rules are
+what covers the prompts these four events do not, such as a permission request
+mid-turn. A tuios too old for the flag is reported to without it.
+
+tuios draws a per-window indicator for it:
 
 | State         | Indicator |
 | ------------- | --------- |

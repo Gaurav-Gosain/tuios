@@ -33,9 +33,12 @@ hook_input="$(cat 2>/dev/null || true)"
 
 # Derive the state from the hook event, filtering out subagent turns. Prints an
 # empty line (and the script then exits) for any event that does not map.
-state="$(printf '%s' "$hook_input" | python3 - <<'PY'
-import json
-import sys
+#
+# The program goes in -c rather than on stdin: "python3 -" reads it from stdin,
+# which is where the payload has to be, and a heredoc feeding the program wins
+# over the pipe, so every event parsed as empty and the shim reported nothing at
+# all.
+state="$(printf '%s' "$hook_input" | python3 -c 'import json, sys
 
 try:
     data = json.load(sys.stdin)
@@ -44,8 +47,8 @@ except Exception:
 
 event = str(data.get("hook_event_name") or "")
 
-# A subagent turn must never drive the pane's state: agent_id marks a subagent
-# event, and SubagentStop is a subagent completion.
+# A subagent turn must never drive the state of the pane: agent_id marks a
+# subagent event, and SubagentStop is a subagent completion.
 if data.get("agent_id") or event == "SubagentStop":
     sys.exit(0)
 
@@ -57,9 +60,7 @@ mapping = {
 }
 state = mapping.get(event, "")
 if state:
-    print(state)
-PY
-)"
+    print(state)' 2>/dev/null || true)"
 
 [ -n "$state" ] || exit 0
 
@@ -75,12 +76,24 @@ except Exception:
 print(str(d.get("message") or ""))' 2>/dev/null || true)"
 fi
 
-# Report best-effort: a failed report must never fail the hook and interrupt the
-# agent. The window is the pane id tuios exported; the session scopes the lookup.
+# The window is the pane id tuios exported; the session scopes the lookup.
+report() {
+	tuios set-agent-state "$state" -s "${TUIOS_SESSION:-}" -w "$TUIOS_PANE_ID" "$@" >/dev/null 2>&1
+}
+
 if [ -n "$message" ]; then
-	tuios set-agent-state "$state" -s "${TUIOS_SESSION:-}" -w "$TUIOS_PANE_ID" -m "$message" >/dev/null 2>&1 || true
+	set -- -m "$message"
 else
-	tuios set-agent-state "$state" -s "${TUIOS_SESSION:-}" -w "$TUIOS_PANE_ID" >/dev/null 2>&1 || true
+	set --
 fi
+
+# --harness names which harness the state is about. A hook is the one reporter
+# that knows that for certain, and tuios matches its screen rules by that id, so
+# naming it here covers the prompts these four events do not. A tuios too old for
+# the flag rejects the whole call, hence the retry without it.
+#
+# Report best-effort either way: a failed report must never fail the hook and
+# interrupt the agent.
+report --harness claude-code "$@" || report "$@" || true
 
 exit 0

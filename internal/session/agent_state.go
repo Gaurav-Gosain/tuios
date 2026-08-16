@@ -134,7 +134,7 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 			}
 			override = true
 		}
-		next := agentClaim{source: r.Source, harness: r.Harness, auto: claim.auto}
+		next := agentClaim{source: r.Source, harness: harnessAfterReport(w, r), auto: claim.auto}
 		switch {
 		case override:
 			next.blocker = true
@@ -147,7 +147,7 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		}
 		w.AgentState = r.State
 		w.AgentMessage = r.Message
-		w.AgentHarness = r.Harness
+		w.AgentHarness = next.harness
 		w.AgentStateAt = time.Now().UnixNano()
 		// auto is carried over: it says the detector will clear this pane when the
 		// agent exits, which a report taking the state over does not change.
@@ -163,6 +163,31 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		return effective, false, err
 	}
 	return effective, applied, nil
+}
+
+// harnessAfterReport decides what a window is attributed to once r is applied.
+//
+// Attribution and state answer different questions, and the harness id is the
+// one the foreground-process detector owns: it names the harness when it sees
+// the binary and clears it when the agent leaves the foreground, which is the
+// only event that can honestly say a pane is no longer running one. A report
+// says what the agent is doing, and most reporters have no idea what tuios calls
+// the program they run inside: the shipped hook shim, an OSC 9;4 sequence and a
+// settled hold all name a state and no harness. Writing their empty id over the
+// detector's answer erased the pane's attribution, and the screen tier keys on
+// it to know whose rules to run, so one hook event left the pane unable to see
+// any prompt on it ever again.
+//
+// So a report that names no harness is silent about attribution rather than
+// denying it, and a reporter that does name one is refining what the detector
+// guessed, which is how a harness behind a wrapper gets attributed at all. The
+// one report that clears it is none, since that is the caller saying in as many
+// words that the pane is not running an agent.
+func harnessAfterReport(w *WindowState, r AgentReport) string {
+	if r.Harness != "" || r.State == AgentStateNone {
+		return r.Harness
+	}
+	return w.AgentHarness
 }
 
 // agentBlockerOverrideGrace is how long a higher-ranked claim must have stood
