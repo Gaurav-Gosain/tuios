@@ -44,6 +44,7 @@ var (
 	webTLSKey         string
 	webAutoTLS        bool
 	webInsecure       bool
+	webTouch          string
 	// TUIOS forwarded flags
 	debugMode         bool
 	asciiOnly         bool
@@ -142,6 +143,7 @@ Client features:
 	rootCmd.Flags().BoolVar(&webAutoTLS, "auto-tls", false, "Serve HTTPS from a self-signed certificate tuios-web generates and keeps (see `tuios-web cert`)")
 	rootCmd.Flags().BoolVar(&webInsecure, "insecure", false, "Serve a non-loopback host over plain HTTP, sending every keystroke unencrypted (trusted networks only)")
 	registerCertFlags(rootCmd)
+	rootCmd.Flags().StringVar(&webTouch, "touch", "auto", "Whether a client is driven by a finger, which widens the gestures aimed at a single cell: auto, on, off")
 
 	// Daemon mode flags
 	rootCmd.Flags().StringVar(&defaultSession, "default-session", "", "Default session name for all connections (creates shared session)")
@@ -279,6 +281,15 @@ func runWebServer() error {
 		leader = userConfig.Keybindings.LeaderKey
 	}
 	sipConfig.MobilePrefix, sipConfig.MobileRows = mobileBar(config.NewKeybindRegistry(userConfig), leader)
+
+	// Whether the far end is a finger is decided once, at the handshake, and
+	// carried into the session on its context. See touch.go for why the
+	// handshake is the only place left to ask.
+	touch, ok := parseTouchMode(webTouch)
+	if !ok {
+		return fmt.Errorf("--touch is %q: it takes auto, on or off", webTouch)
+	}
+	sipConfig.ConnectMiddleware = append(sipConfig.ConnectMiddleware, touchMiddleware(touch))
 
 	server := sip.NewServer(sipConfig)
 
@@ -434,20 +445,21 @@ func checkTransportSecurity(w io.Writer) error {
 func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 	pty := sess.Pty()
 	graphicsOut := sess.PtySlave()
+	touch := sessionIsTouch(sess.Context())
 
 	// Determine session name
 	sessionName := webServerConfig.defaultSession
 
 	// If ephemeral mode or daemon not available, use old behavior
 	if webServerConfig.ephemeral {
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut)
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch)
 	}
 
 	// Try to connect to daemon
-	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, graphicsOut)
+	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, graphicsOut, touch)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut)
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch)
 	}
 
 	// Close the daemon client when the web session ends, otherwise the client
@@ -472,7 +484,7 @@ func shortID(id string) string {
 }
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.Model, []tea.ProgramOption) {
+func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch bool) (tea.Model, []tea.ProgramOption) {
 	// Load user configuration
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -498,6 +510,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.
 		EnableGraphicsPassthrough: true,
 		ForceGraphicsEnabled:      true,
 		GraphicsOutput:            graphicsOut,
+		TouchClient:               touch,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -506,7 +519,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.
 }
 
 // createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
-func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOut *os.File) (tea.Model, []tea.ProgramOption, error) {
+func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOut *os.File, touch bool) (tea.Model, []tea.ProgramOption, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	v := webServerConfig.version
@@ -579,6 +592,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 		EnableGraphicsPassthrough: true,
 		ForceGraphicsEnabled:      true,
 		GraphicsOutput:            graphicsOut,
+		TouchClient:               touch,
 	})
 
 	// Restore state from daemon if available

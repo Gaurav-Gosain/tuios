@@ -57,6 +57,12 @@ export default defineConfig({
         hasTouch: true,
         isMobile: true,
         viewport: { width: 390, height: 844 },
+        // A real phone's, because tuios-web reads the handshake's user agent to
+        // decide whether the pointer is a finger. Headless Chromium's own says
+        // X11 and Linux, so without this the server would size its hit targets
+        // for a mouse while the test drives it with one.
+        userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 '
+          + '(KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36',
         deviceScaleFactor: 1,
         launchOptions: {
           executablePath: CHROMIUM,
