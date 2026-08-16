@@ -336,6 +336,33 @@ test.describe('a finger on tuios itself', () => {
     expect(text, 'the menu that opened is not the pane menu').toContain('Close pane');
   });
 
+  // Turning the phone is the one gesture that is not a touch at all, and it was
+  // the one that did nothing. tuios kept drawing the portrait width: the daemon
+  // recalculated the session size and said so, and the message sat in a channel
+  // whose listener the previous resize had failed to re-arm. Height appeared to
+  // follow only because the render size is the minimum of the two, and 16 rows
+  // is less than the 42 it was stuck on while 105 columns is more than 48.
+  test('turning the phone sideways gives tuios the columns', async ({ page }) => {
+    await boot(page);
+    // The widest line tuios drew is how wide it thinks it is. Asked of the
+    // buffer, because a session that resized but did not redraw has not
+    // resized as far as anyone holding the phone is concerned.
+    const drawn = async () => Math.max(...(await screen(page)).map((l) => l.length));
+
+    const portrait = await drawn();
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.waitForTimeout(2500);
+
+    const cols = await page.evaluate(() => window.sipTerm.term.cols);
+    expect(cols, 'the browser did not give the terminal a landscape width').toBeGreaterThan(portrait);
+    expect(await drawn(), 'tuios kept drawing at the portrait width').toBe(cols);
+
+    // And back, which is the direction that always worked and must keep doing so.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(2500);
+    expect(await drawn()).toBe(portrait);
+  });
+
   test('press, hold and drag moves a pane', async ({ page }) => {
     await boot(page);
     const cdp = await page.context().newCDPSession(page);
