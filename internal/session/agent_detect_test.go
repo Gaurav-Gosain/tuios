@@ -431,6 +431,11 @@ func TestAgentResumesAfterStall(t *testing.T) {
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
 		t.Fatalf("state after the agent resumed = %q, want working", got)
 	}
+	// The pane is still running the harness the detector named, and the screen
+	// tier reads that id to know whose rules to run against it.
+	if got := agentHarnessIDOf(t, sess, id); got != "claude-code" {
+		t.Fatalf("harness after the agent resumed = %q, want claude-code", got)
+	}
 
 	// A detection poll must not undo the resume.
 	if n := sess.applyAgentDetection(running, agent.identify); n != 0 {

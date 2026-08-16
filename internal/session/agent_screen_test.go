@@ -165,6 +165,66 @@ func TestAVisibleBlockerBeatsAClaimThatWentQuiet(t *testing.T) {
 	}
 }
 
+// TestAReportThatNamesNoHarnessLeavesTheAttributionAlone is the regression test
+// for a pane going blind between two things that were both working correctly.
+//
+// The shipped hook shim reports a state and nothing else, because a hook knows
+// what its turn is doing and has no reason to know what tuios calls the program
+// it runs inside. That report used to write its empty harness id over the one
+// the foreground-process detector had worked out, and the screen tier keys on
+// that id to know whose rules to run: after one hook event the pane had no rules
+// left, so no prompt on it could ever be seen again.
+func TestAReportThatNamesNoHarnessLeavesTheAttributionAlone(t *testing.T) {
+	reg, errs := harness.Load()
+	if len(errs) != 0 {
+		t.Fatalf("loading the bundled manifests: %v", errs)
+	}
+	sess, winID := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, winID)
+	matcher := newAgentMatcher(nil)
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{
+		comm: "claude",
+		argv: []string{"claude"},
+		exe:  "/home/u/.local/share/claude/versions/2.1.222",
+	}, true}})
+	if n := sess.applyAgentDetection(running, matcher.identify); n != 1 {
+		t.Fatalf("detection promoted %d windows, want 1", n)
+	}
+
+	// The shim's UserPromptSubmit hook, which is the no-source, no-harness path
+	// every caller predating the harness registry takes.
+	if err := sess.SetDaemonWindowAgentState(winID, AgentStateWorking, ""); err != nil {
+		t.Fatalf("SetDaemonWindowAgentState: %v", err)
+	}
+	if got := agentHarnessIDOf(t, sess, winID); got != "claude-code" {
+		t.Fatalf("harness = %q after a report that named none, want the detector's claude-code", got)
+	}
+
+	// The turn then stops on a permission prompt the hooks do not cover, which is
+	// the case the screen tier and the visible-blocker override exist for.
+	backdateAgentClaim(t, sess, winID, agentBlockerOverrideGrace+time.Second)
+	paintPane(t, sess.GetPTY(ptyID), claudePermissionPrompt)
+
+	if !sess.scanScreenForAgent(ptyID, reg) {
+		t.Fatal("the screen tier found no rules to run, so the pane's attribution is gone")
+	}
+	if got := agentStateOf(t, sess, winID); got != AgentStateNeedsInput {
+		t.Fatalf("state = %q, want needs_input: the prompt is on the screen", got)
+	}
+}
+
+// agentHarnessIDOf reads the harness a window is attributed to.
+func agentHarnessIDOf(t *testing.T, sess *Session, windowID string) string {
+	t.Helper()
+	for _, w := range sess.GetState().Windows {
+		if w.ID == windowID {
+			return w.AgentHarness
+		}
+	}
+	t.Fatalf("window %s not found", windowID)
+	return ""
+}
+
 // TestTheOverrideIsHandedBackWhenThePromptLeaves is the other half, and the
 // reason the exception is safe to cut into the ranking at all.
 //

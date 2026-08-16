@@ -90,6 +90,21 @@ as it always has. `get-agent-state` reports the winning `source` and, when one
 was named, the `harness_id`, so a surprising indicator can be traced to the thing
 that set it.
 
+### Attribution outlives a report
+
+`harness_id` answers a different question from the state: which harness the pane
+is running, which is what tells the screen tier whose rules to match against it.
+The foreground-process detector owns it. It names the harness when it sees the
+binary and clears it when the agent leaves the foreground, which is the only
+event that can say a pane is no longer running one.
+
+A report may name a `harness` to attribute a pane the detector could not, for
+instance one running behind a wrapper. A report that names none is silent about
+attribution and leaves it standing, so a hook that reports only a state does not
+cost its pane the screen rules that cover the prompts its hooks do not. The one
+report that clears attribution is `none`, which says outright that the pane is
+not running an agent.
+
 ### The one exception: a visible blocker
 
 Ranking alone has a hole in it. A harness that reports `working` for itself and
