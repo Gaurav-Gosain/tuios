@@ -290,6 +290,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		row("section", "Cycle the sessions, terminals and agents sections"),
 		row("agents_filter", "Agents: all sessions, or this one"),
 		row("agents_sort", "Agents: by priority, or by recency"),
+		row("palette", "Find a pane in any session, or filter by @state"),
 		row("narrow", "Collapse the rail to its glyph strip"),
 		row("widen", "Expand the rail back to its width"),
 		row("new_session", "New session, the sessions header's +"),
