@@ -80,6 +80,11 @@ type AgentReport struct {
 	Message string
 	Source  AgentSource
 	Harness string // optional harness id, reported back by get-agent-state
+	// paneWroteAt is the unix-nano time the pane last produced output, as the
+	// source read it at the moment it looked. Only the screen tier sets it, and
+	// only blockerOverridesClaim reads it: it is how a claim is shown to be
+	// describing a screen the pane has since painted over.
+	paneWroteAt int64
 }
 
 // SetDaemonWindowAgentState records an explicit report on the window matching
@@ -101,7 +106,7 @@ func (s *Session) SetDaemonWindowAgentState(target string, state AgentState, mes
 // refused, and refusing is not an error: a screen rule guessing at a pane whose
 // harness reports for itself is the ordinary case, and the weaker guess has to
 // leave the better answer alone. A refused report changes nothing, so it neither
-// bumps the version nor pushes.
+// bumps the version nor pushes. The one exception is blockerOverridesClaim.
 //
 // The output-stall heuristic is deliberately not routed through here; see
 // applyStallHeuristic for why.
@@ -118,11 +123,27 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		}
 		w := &st.Windows[idx]
 		claim, held := s.agentClaims[w.ID]
+		prev := w.AgentState
+		override := false
 		// held, not the zero claim's rank: a window nobody has claimed is open to
 		// any source, including the weakest.
 		if held && r.Source.rank() < claim.source.rank() {
-			effective = w.AgentState
-			return errAgentClaimHeld
+			if !blockerOverridesClaim(w, r, time.Now()) {
+				effective = w.AgentState
+				return errAgentClaimHeld
+			}
+			override = true
+		}
+		next := agentClaim{source: r.Source, harness: r.Harness, auto: claim.auto}
+		switch {
+		case override:
+			next.blocker = true
+			next.prior = agentPriorClaim{source: claim.source, state: prev, harness: w.AgentHarness}
+		case claim.blocker && r.Source == claim.source && r.State == prev:
+			// The same rule matching the same prompt again is the standing
+			// override, not a fresh claim. Forgetting what it displaced here
+			// would leave nothing to hand back, and the pane would stick.
+			next.blocker, next.prior = true, claim.prior
 		}
 		w.AgentState = r.State
 		w.AgentMessage = r.Message
@@ -130,7 +151,7 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		w.AgentStateAt = time.Now().UnixNano()
 		// auto is carried over: it says the detector will clear this pane when the
 		// agent exits, which a report taking the state over does not change.
-		s.setAgentClaim(w.ID, agentClaim{source: r.Source, harness: r.Harness, auto: claim.auto})
+		s.setAgentClaim(w.ID, next)
 		effective = r.State
 		applied = true
 		return nil
@@ -143,6 +164,109 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 	}
 	return effective, applied, nil
 }
+
+// agentBlockerOverrideGrace is how long a higher-ranked claim must have stood
+// without being refreshed before a visible blocker may write over it.
+//
+// It is the fair-chance window. A harness that paints a permission prompt and
+// has a hook reports the prompt itself within a socket round trip, and that
+// answer is better than any rule, so the rule waits this long for it. Two
+// seconds is far longer than a shim takes to spawn and dial, and far shorter
+// than the silence timer, which is the only other thing that would ever notice.
+const agentBlockerOverrideGrace = 2 * time.Second
+
+// agentStateBlocks reports whether a state means a human is being waited for.
+//
+// Only such a state may take the exception. A rule claiming working or idle is
+// guessing at what a pane is doing from how it looks, and a guess must never
+// outrank a source that was told; a rule matching a prompt is reading a question
+// addressed to the user, which is a fact about the screen rather than an
+// inference about the process.
+func agentStateBlocks(state AgentState) bool {
+	return state == AgentStateNeedsInput
+}
+
+// blockerOverridesClaim is the one hole in the source ranking: a screen rule
+// that can see a blocking prompt may write over a source ranked above it when
+// that source has gone stale.
+//
+// The case it exists for is a harness that reported working for itself, then
+// stopped and painted a permission prompt without saying anything further.
+// Ranking alone pins such a pane on working forever, and the user is never told
+// they are being waited for, which is the one thing the whole feature is for.
+//
+// Stale has to mean something the code can check, so it means both halves of it:
+//
+//   - The pane has written since the claim was stamped, so the claim is
+//     describing a screen that has been painted over. An older claim about the
+//     current screen is not stale, it is just old.
+//   - The claim has stood unrefreshed for agentBlockerOverrideGrace, so a source
+//     that is actively reporting has had its chance to describe the new screen
+//     first and has not taken it.
+//
+// The rest is scope: only the screen tier, only a blocking state, and never over
+// a claim already saying it, so a harness that reports needs_input properly
+// keeps its own claim rather than having it taken by a rule agreeing with it.
+//
+// paneWroteAt is what confines the exception to the daemon's own tier. A caller
+// naming source=screen over the socket has not looked at anything, sends no
+// observation, and so fails the first half of staleness every time.
+func blockerOverridesClaim(w *WindowState, r AgentReport, now time.Time) bool {
+	if r.Source != AgentSourceScreen || !agentStateBlocks(r.State) || w.AgentState == r.State {
+		return false
+	}
+	if r.paneWroteAt <= w.AgentStateAt {
+		return false
+	}
+	return now.UnixNano()-w.AgentStateAt >= int64(agentBlockerOverrideGrace)
+}
+
+// releaseAgentBlockerOverride puts back the claim a visible blocker displaced,
+// and reports whether it had one to put back. Its caller is the screen tier,
+// running a look that found no rule matching: the prompt the exception was
+// granted for is off the screen, so the exception ends with it.
+//
+// This is the half that keeps the hole from being a trap. The screen tier
+// asserts needs_input and nothing else, so without a release nothing on the pane
+// could ever move it off again and it would stick on needs_input exactly the way
+// it used to stick on working. The displaced source and state go back as they
+// were, which puts the pane back under whichever tier was already handling it,
+// silence timer included.
+func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
+	released := false
+	_ = s.mutateState(func(st *SessionState) error {
+		idx, err := findWindowStateIndex(st.Windows, windowID)
+		if err != nil {
+			return err
+		}
+		w := &st.Windows[idx]
+		claim, held := s.agentClaims[w.ID]
+		if !held || !claim.blocker {
+			return errNoBlockerRelease
+		}
+		w.AgentState = claim.prior.state
+		w.AgentMessage = ""
+		w.AgentHarness = claim.prior.harness
+		w.AgentStateAt = time.Now().UnixNano()
+		s.setAgentClaim(w.ID, agentClaim{
+			source:  claim.prior.source,
+			harness: claim.prior.harness,
+			auto:    claim.auto,
+		})
+		released = true
+		return nil
+	})
+	return released
+}
+
+// errNoBlockerRelease tells mutateState the window was not holding an override,
+// so a look that found nothing on an ordinary pane neither bumps the version nor
+// pushes state. It never leaves the package.
+var errNoBlockerRelease = blockerNoRelease{}
+
+type blockerNoRelease struct{}
+
+func (blockerNoRelease) Error() string { return "no visible-blocker override to release" }
 
 // errAgentClaimHeld tells mutateState that a higher-ranked source owns the
 // window, so the refused report neither bumps the version nor pushes state. It

@@ -90,6 +90,38 @@ as it always has. `get-agent-state` reports the winning `source` and, when one
 was named, the `harness_id`, so a surprising indicator can be traced to the thing
 that set it.
 
+### The one exception: a visible blocker
+
+Ranking alone has a hole in it. A harness that reports `working` for itself and
+then stops on a permission prompt without saying anything further keeps its
+claim, and the screen rule that can read the prompt ranks below it, so the pane
+shows `working` for as long as the user is being waited for.
+
+So a screen rule that matched a **blocking** state may write over a higher-ranked
+claim that has gone stale. Stale is checked, not assumed, and all of this has to
+hold:
+
+- The rule's state is `needs_input`. A rule claiming `working` or `idle` is
+  guessing at a process from how it looks and never overrides anything.
+- The claim does not already say `needs_input`, so a harness reporting the prompt
+  properly keeps its own claim.
+- The pane has produced output since the claim was stamped, so the claim is
+  describing a screen that has been painted over rather than merely being old.
+- The claim has stood unrefreshed for two seconds, which is the fair-chance
+  window: a harness with a hook reports the prompt itself in far less than that,
+  and it is the better answer.
+
+The override is a loan. It records the claim it displaced, and the next look that
+finds no rule matching puts that claim back exactly as it was, source and state
+together. A prompt can only leave a screen by being painted over, and painting
+runs a look, so the pane returns to the ordinary tiers as soon as the prompt is
+gone rather than sticking on `needs_input`.
+
+`get-agent-state` reports `screen` as the source while the override stands, so
+this is visible rather than magic. Only the daemon's own screen tier can take the
+exception, because only it has read the pane: a caller passing `source: screen`
+to `set-agent-state` carries no observation and is refused as before.
+
 ## Screen rules
 
 An agent waiting on a human is the state that matters most and the hardest one
@@ -100,7 +132,9 @@ silence, so the only place the fact exists is the painted screen.
 
 A harness manifest may therefore carry screen rules, matched against the bottom
 of the pane. They report as `source: screen`, below both a harness reporting for
-itself and an escape sequence it emitted, and a rule that stops matching returns
+itself and an escape sequence it emitted (except when one of them has gone stale
+with a prompt on the pane, see [the one exception](#the-one-exception-a-visible-blocker)),
+and a rule that stops matching returns
 no opinion rather than falling back to a state. Only `needs_input` rules ship
 enabled: `working` is already carried by output arriving at all, and a rule keyed
 on a spinner glyph is the first thing to break when an agent's TUI changes in a
