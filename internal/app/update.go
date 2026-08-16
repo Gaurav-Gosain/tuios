@@ -350,6 +350,12 @@ func ListenForStateSync(syncChan chan *session.SessionState) tea.Cmd {
 
 // ListenForClientEvents creates a command that listens for client join/leave events.
 // It safely reads from the event channel and converts events to messages for the update loop.
+//
+// It reads one event and stops, so every one of the four messages it can produce
+// has to re-arm it. Two of them did not, and since all four share this one
+// channel, the first session resize or force refresh stopped the others as well:
+// a phone turned sideways got the columns it had before, because the effective
+// size the daemon recalculated was sitting in a channel nobody was reading.
 func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 	if eventChan == nil {
 		return nil
@@ -1340,12 +1346,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.SyncDaemonPTYDimensions()
 			m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
 		}
-		return m, nil
+		// Continue listening for more client events
+		return m, ListenForClientEvents(m.ClientEventChan)
 
 	case ForceRefreshMsg:
 		// Force re-render
 		m.MarkAllDirty()
-		return m, nil
+		// Continue listening for more client events
+		return m, ListenForClientEvents(m.ClientEventChan)
 
 	case DaemonDisconnectedMsg:
 		// The daemon connection was lost and cannot be recovered; quit cleanly

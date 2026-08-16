@@ -6,6 +6,32 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
+// touchBorderSlop is how many cells either side of a division a finger may land
+// on and still grab it.
+//
+// A cell on a phone is about 8px across and 18px tall, so the single column a
+// mouse aims at is an 8px target where both mobile platforms ask for 44. One
+// cell of slop makes a vertical division 24px wide and a horizontal one three
+// rows tall, which is what a grid this coarse gives without taking a content
+// column away from the panes on both sides of every division. It does not reach
+// 44px and is not meant to: the finger-sized route to the same pane is the menu
+// a long press opens.
+//
+// A pointer keeps the exact cell. It does not need the help, and the cells the
+// slop claims are cells of somebody's shell.
+const touchBorderSlop = 1
+
+// borderSlop is the grab margin this session's pointer gets.
+func borderSlop(o *app.OS) int {
+	if o.TouchClient {
+		return touchBorderSlop
+	}
+	return 0
+}
+
+// within reports whether v is no more than slop cells from target.
+func within(v, target, slop int) bool { return abs(v-target) <= slop }
+
 // armBorderResize starts a pane-border resize when a left press lands on a
 // border cell. Reports whether it consumed the press.
 //
@@ -46,6 +72,7 @@ func armTiledBorderResize(x, y int, o *app.OS) bool {
 	contentLeft, contentTop := o.GetLeftMargin(), o.GetTopMargin()
 	contentRight := contentLeft + o.GetContentWidth()
 	contentBottom := contentTop + o.GetUsableHeight()
+	slop := borderSlop(o)
 
 	for i := range o.Windows {
 		w := o.Windows[i]
@@ -56,13 +83,13 @@ func armTiledBorderResize(x, y int, o *app.OS) bool {
 		// Interior divisions only. A pane edge lying on the content boundary is
 		// the screen's own, with no neighbour behind it to give space to.
 		switch {
-		case y >= w.Y && y < w.Y+w.Height && x == w.X+w.Width-off && w.X+w.Width < contentRight:
+		case y >= w.Y && y < w.Y+w.Height && within(x, w.X+w.Width-off, slop) && w.X+w.Width < contentRight:
 			beginBorderResize(o, i, app.BorderEdgeRight)
-		case y >= w.Y && y < w.Y+w.Height && off > 0 && x == w.X && w.X > contentLeft:
+		case y >= w.Y && y < w.Y+w.Height && off > 0 && within(x, w.X, slop) && w.X > contentLeft:
 			// The neighbour's own border is the other half of the same drawn
 			// division, so grabbing it has to work too.
 			beginBorderResize(o, i, app.BorderEdgeLeft)
-		case x >= w.X && x < w.X+w.Width && y == w.Y+w.Height-off && w.Y+w.Height < contentBottom:
+		case x >= w.X && x < w.X+w.Width && within(y, w.Y+w.Height-off, slop) && w.Y+w.Height < contentBottom:
 			beginBorderResize(o, i, app.BorderEdgeBottom)
 		default:
 			continue
@@ -75,6 +102,12 @@ func armTiledBorderResize(x, y int, o *app.OS) bool {
 // armFloatingBorderResize grabs a floating pane's own frame. The top row is the
 // title bar and stays a drag handle, so only the left, right, and bottom edges
 // resize.
+//
+// A touch client's slop reaches inwards only. The cells outside a floating pane
+// are usually empty desktop and would be the cheapest ones to claim, but a tap
+// on the desktop a cell away from a pane would then resize it instead of doing
+// what a tap on the desktop does, and a corner outside the frame has no edge to
+// pick.
 func armFloatingBorderResize(x, y int, o *app.OS) bool {
 	idx := findClickedWindow(x, y, o)
 	if idx < 0 {
@@ -84,9 +117,10 @@ func armFloatingBorderResize(x, y int, o *app.OS) bool {
 	if w.Zoomed {
 		return false
 	}
-	onLeft := x == w.X
-	onRight := x == w.X+w.Width-1
-	onBottom := y == w.Y+w.Height-1
+	slop := borderSlop(o)
+	onLeft := x-w.X <= slop
+	onRight := (w.X+w.Width-1)-x <= slop
+	onBottom := (w.Y+w.Height-1)-y <= slop
 	onTop := y == w.Y
 
 	switch {
