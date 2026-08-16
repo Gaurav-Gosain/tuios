@@ -146,16 +146,17 @@ type AppearanceConfig struct {
 	Theme                       string  `toml:"theme"`                           // Color theme name (e.g., dracula, nord, my-custom-theme)
 	SharedBorders               *bool   `toml:"shared_borders"`                  // Share borders between adjacent tiled windows (default: false)
 	// Customization
-	BorderFocusedColor   string `toml:"border_focused_color"`   // Hex color for focused pane border (e.g., "#89b4fa")
-	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
-	WindowTitleFormat    string `toml:"window_title_format"`    // Format string for window titles: {title}, {index}, {cwd}
-	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
-	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
-	MaxFPS               int    `toml:"max_fps"`                // Maximum render FPS (default: 60, max: 120)
-	DockWorkspaceTabs    *bool  `toml:"dock_workspace_tabs"`    // Clickable workspace strip in the dock (default: true)
-	DockWorkspaceTooltip *bool  `toml:"dock_workspace_tooltip"` // Pop a truncated workspace name in full on hover (default: true)
-	DockPillCaps         *bool  `toml:"dock_pill_caps"`         // Powerline caps on the dock's pills (default: false, flat)
-	SessionColors        *bool  `toml:"session_colors"`         // Give each session its own colour on the rail and the switcher (default: true)
+	BorderFocusedColor     string `toml:"border_focused_color"`      // Hex color for focused pane border (e.g., "#89b4fa")
+	BorderUnfocusedColor   string `toml:"border_unfocused_color"`    // Hex color for unfocused pane border (e.g., "#585b70")
+	WindowTitleFormat      string `toml:"window_title_format"`       // Format string for window titles: {title}, {index}, {cwd}
+	ZoomMaxWidth           int    `toml:"zoom_max_width"`            // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
+	NiriReverseScroll      bool   `toml:"niri_reverse_scroll"`       // Reverse mouse scroll direction in niri scrolling mode (default: false)
+	MaxFPS                 int    `toml:"max_fps"`                   // Maximum render FPS (default: 60, max: 120)
+	DockWorkspaceTabs      *bool  `toml:"dock_workspace_tabs"`       // Clickable workspace strip in the dock (default: true)
+	DockWorkspaceTabFormat string `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
+	DockWorkspaceTooltip   *bool  `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
+	DockPillCaps           *bool  `toml:"dock_pill_caps"`            // Powerline caps on the dock's pills (default: false, flat)
+	SessionColors          *bool  `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 
 	// Legacy flat sidebar keys, superseded by the [appearance.sidebar] table.
 	// migrateLegacySidebar folds them into it and clears them, so they are read
@@ -875,6 +876,9 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	if cfg.Appearance.DockWorkspaceTabs != nil {
 		DockWorkspaceTabs = *cfg.Appearance.DockWorkspaceTabs
 	}
+	// DockWorkspaceTabFormat is assigned unconditionally: an empty string is the
+	// "{name}" default, and clearing it on reload has to be possible too.
+	DockWorkspaceTabFormat = cfg.Appearance.DockWorkspaceTabFormat
 	if cfg.Appearance.DockWorkspaceTooltip != nil {
 		DockWorkspaceTooltip = *cfg.Appearance.DockWorkspaceTooltip
 	}
