@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"os"
 	"runtime/debug"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -288,6 +289,36 @@ func fitToContentBox(content string, w, h int) string {
 	return lipgloss.NewStyle().MaxWidth(w).MaxHeight(h).Render(content)
 }
 
+// zenModeMouseIdleTimeout is how long the pointer may sit still before zen mode
+// (mouse) hides the borders again.
+const zenModeMouseIdleTimeout = 2 * time.Second
+
+// zenBordersHidden reports whether zen mode wants the border of a window with
+// the given focus state hidden. The focused window always keeps its frame so
+// the user retains an anchor; zen mode melts the unfocused frames away.
+func (m *OS) zenBordersHidden(isFocused bool) bool {
+	switch config.ZenMode {
+	case config.ZenModeAlways:
+		return !isFocused
+	case config.ZenModeMouse:
+		// A moving pointer reveals every border so the user can see what they
+		// can grab; once the pointer sits still, only the focused window keeps
+		// its frame.
+		if m.pointerRecentlyMoved() {
+			return false
+		}
+		return !isFocused
+	default:
+		return false
+	}
+}
+
+// pointerRecentlyMoved reports whether a mouse event arrived within the zen
+// mode reveal window.
+func (m *OS) pointerRecentlyMoved() bool {
+	return !m.lastPointerAt.IsZero() && time.Since(m.lastPointerAt) <= zenModeMouseIdleTimeout
+}
+
 // rendersBorderless reports whether window is drawn with no border box of its
 // own, so its rectangle is guest output from edge to edge and nothing may be
 // painted on its perimeter.
@@ -321,7 +352,7 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		m.renderTerminal(window, isFocused, m.Mode == TerminalMode),
 		window.ContentWidth(), window.ContentHeight(),
 	)
-	if rendersBorderless(window) {
+	if rendersBorderless(window) || m.zenBordersHidden(isFocused) {
 		return content
 	}
 	box := lipgloss.NewStyle().
@@ -495,6 +526,7 @@ func (m *OS) View() tea.View {
 		m.FlushPendingBSPSync()
 		content := m.composeFrame()
 		m.cachedViewContent = content
+		m.zenHidden = m.zenBordersHidden(false)
 		view.SetContent(content)
 	}
 

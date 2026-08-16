@@ -245,6 +245,23 @@ Controls the style of window borders.
 
 **CLI override:** `--border-style <style>`
 
+### zen_mode
+
+Controls when window borders are hidden, for distraction-free focus.
+
+**Valid values:**
+- `"disabled"` - Borders always visible (default)
+- `"always"` - Hide the borders of every unfocused window; the focused window keeps its frame so you always know where your keystrokes land
+- `"mouse"` - Borders are revealed while the mouse is moving and melt away ~2s after it stops; the focused window keeps its frame
+
+**Default:** `"disabled"`
+
+**Example:**
+```toml
+[appearance]
+zen_mode = "mouse"
+```
+
 ### dockbar_position
 
 Controls the position of the dockbar.

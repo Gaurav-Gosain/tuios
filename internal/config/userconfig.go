@@ -122,6 +122,7 @@ type DaemonConfig struct {
 // AppearanceConfig holds appearance-related settings
 type AppearanceConfig struct {
 	BorderStyle                 string  `toml:"border_style"`                    // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
+	ZenMode                     string  `toml:"zen_mode"`                        // Zen mode: disabled, always, mouse (default: disabled)
 	HideWindowButtons           bool    `toml:"hide_window_buttons"`             // Hide window control buttons (minimize, maximize, close)
 	HideScrollbar               bool    `toml:"hide_scrollbar"`                  // Hide the window scrollbar thumb on the border
 	ScrollbackLines             int     `toml:"scrollback_lines"`                // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
@@ -189,6 +190,20 @@ const (
 
 // ClickToTypeModes lists the valid values for appearance.click_to_type.
 var ClickToTypeModes = []string{ClickToTypeSingle, ClickToTypeDouble, ClickToTypeOff}
+
+// Zen-mode policies. See AppearanceConfig.ZenMode.
+const (
+	// ZenModeDisabled keeps window borders always visible (default).
+	ZenModeDisabled = "disabled"
+	// ZenModeAlways hides window borders at all times.
+	ZenModeAlways = "always"
+	// ZenModeMouse hides window borders while the mouse is idle, revealing
+	// them while the pointer is moving or any mouse button is held.
+	ZenModeMouse = "mouse"
+)
+
+// ZenModeModes lists the valid values for appearance.zen_mode.
+var ZenModeModes = []string{ZenModeDisabled, ZenModeAlways, ZenModeMouse}
 
 // Scrollbar styles. See ScrollbarConfig.Style.
 const (
@@ -293,6 +308,7 @@ func DefaultConfig() *UserConfig {
 	cfg := &UserConfig{
 		Appearance: AppearanceConfig{
 			BorderStyle:       "rounded",
+			ZenMode:           ZenModeDisabled,
 			HideWindowButtons: false,
 			ScrollbackLines:   10000,
 			ScrollLines:       3,
@@ -768,6 +784,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.BorderStyle = defaultCfg.Appearance.BorderStyle
 	}
 
+	if cfg.Appearance.ZenMode == "" {
+		cfg.Appearance.ZenMode = defaultCfg.Appearance.ZenMode
+	}
+
 	if cfg.Appearance.DockbarPosition == "" {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
 	}
@@ -829,6 +849,14 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// current value (a flag, or the default) stands.
 	if cfg.Appearance.BorderStyle != "" {
 		BorderStyle = cfg.Appearance.BorderStyle
+	}
+
+	// ZenMode only takes one of its three values, so a typo in the config lands
+	// on the default the validator warned it would fall back to.
+	if slices.Contains(ZenModeModes, cfg.Appearance.ZenMode) {
+		ZenMode = cfg.Appearance.ZenMode
+	} else if cfg.Appearance.ZenMode != "" {
+		ZenMode = ZenModeDisabled
 	}
 
 	// DockbarPosition defaults to bottom.

@@ -408,6 +408,13 @@ func (m *OS) tickNeedsWork() bool {
 		len(m.pendingAgentAlerts) > 0 {
 		return true
 	}
+	// Zen mode (mouse): the borders melt away once the pointer sits still past
+	// the reveal window, and come back the instant it moves again. The motion
+	// event forces its own frame, but the timeout crossing has no event, so a
+	// work tick that lands on the far side of the threshold must repaint.
+	if config.ZenMode == config.ZenModeMouse && m.zenHidden != m.zenBordersHidden(false) {
+		return true
+	}
 	// A moved daemon listing can carry a new title for a window this client
 	// stopped watching. The per-window drift check below cannot see that, because
 	// the local title it compares against is the one that froze. One atomic load.
