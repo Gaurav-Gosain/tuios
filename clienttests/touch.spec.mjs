@@ -56,11 +56,28 @@ const screen = (page) => page.evaluate(() => {
   return Array.from({ length: t.rows }, (_, i) => b.getLine(b.viewportY + i)?.translateToString(true) ?? '');
 });
 
-/** The centre of a bar button, by its label. */
+/**
+ * The centre of a bar button, by its label.
+ *
+ * The strip is wider than the phone and clips what it cannot show, so a button
+ * behind a pan has a box that is off the visible strip and a tap at its centre
+ * silently reaches nothing. Refuse that here: a test that means to pan should
+ * say so, and a reordering that pushes a button off the screen should fail
+ * loudly rather than assert against an empty wire.
+ */
 async function buttonCentre(page, label) {
-  const box = await page.locator('#sip-keybar button', { hasText: new RegExp(`^${label}$`) }).first().boundingBox();
+  const btn = page.locator('#sip-keybar button', { hasText: new RegExp(`^${label}$`) }).first();
+  const box = await btn.boundingBox();
   if (!box) throw new Error(`no bar button labelled ${label}`);
-  return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
+  const centre = { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
+  const strip = await page.evaluate(() => {
+    const s = document.querySelector('#sip-keybar .sip-keybar-scroll').getBoundingClientRect();
+    return { left: s.left, right: s.right };
+  });
+  if (centre.x < strip.left || centre.x > strip.right) {
+    throw new Error(`the ${label} button is behind a pan (centre ${centre.x}, strip ${strip.left}-${strip.right})`);
+  }
+  return centre;
 }
 
 /** A tap through the gesture recognizer, which is the path a finger takes. */
@@ -221,10 +238,13 @@ test.describe('the touch key bar', () => {
     expect(boxes.screenBottom).toBeLessThanOrEqual(boxes.barTop + 1);
 
     await clearWire(page);
-    const { x, y } = await buttonCentre(page, 'tile');
+    // A chord button that is on screen without panning, since what is being
+    // proved here is that the bar still sends with the keyboard up, not which
+    // buttons the strip happens to show.
+    const { x, y } = await buttonCentre(page, 'zoom');
     await tap(cdp, x, y);
     await page.waitForTimeout(600);
-    expect((await wire(page)).join('')).toBe('\\x02 ');
+    expect((await wire(page)).join('')).toBe('\\x02z');
   });
 });
 
