@@ -69,6 +69,11 @@ type OSOptions struct {
 	// transmissions are re-encoded as direct data. See
 	// KittyPassthroughOptions.RemoteClient.
 	GraphicsRemoteClient bool
+
+	// TouchClient says the pointer driving this session is a finger, which
+	// widens the gestures that are aimed at a single cell. Only tuios-web can
+	// know this, and only from the browser that connected.
+	TouchClient bool
 }
 
 // NewOS creates a new OS instance with the given options.
@@ -114,6 +119,7 @@ func NewOS(opts OSOptions) *OS {
 		IsDaemonSession: opts.IsDaemonSession,
 		IsSSHMode:       opts.IsSSHMode,
 		SSHSession:      opts.SSHSession,
+		TouchClient:     opts.TouchClient,
 
 		// Daemon connection
 		DaemonClient: opts.DaemonClient,

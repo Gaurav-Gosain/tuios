@@ -171,6 +171,10 @@ type OS struct {
 	LastRAMUpdate      time.Time                  // Last time RAM was updated
 	AutoTiling         bool                       // Automatic tiling mode enabled
 	MasterRatio        float64                    // Master window width ratio for tiling (0.3-0.7)
+	// TouchClient marks a session whose pointer is a finger. It is per session
+	// rather than a config global because one server holds several at once and
+	// a phone attaching must not change what the desktop beside it can hit.
+	TouchClient bool
 	// BSP tiling state
 	WorkspaceTrees      map[int]*layout.BSPTree // BSP tree per workspace
 	PreselectionDir     layout.PreselectionDir  // Pending preselection direction (0 = none)

@@ -263,6 +263,15 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// start a window resize underneath the user's shell.
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode &&
 		msg.Button == tea.MouseRight && msg.Mod == 0 {
+		// A finger has no ctrl and no shift, so a long press is the only right
+		// click a phone can make, and dropping it here left the pane menu
+		// unreachable from the mode a user spends their time in. The menu is
+		// also the only finger-sized way to close, zoom or split a pane, since
+		// the title bar's own buttons are one row tall. A pointer keeps the old
+		// contract: it reaches the same menu with ctrl or shift held.
+		if o.TouchClient {
+			o.OpenContextMenu(X, Y)
+		}
 		return o, nil
 	}
 
