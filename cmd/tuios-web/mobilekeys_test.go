@@ -88,6 +88,19 @@ func TestMobileBarRows(t *testing.T) {
 	}
 }
 
+// The strip is twice as wide as a 390px phone, so it pans and the order decides
+// what a thumb sees without panning. These six are the ones that earn it.
+func TestMobileBarLeadsWithWhatAThumbNeeds(t *testing.T) {
+	_, rows := mobileBar(defaultRegistry(t), "ctrl+b")
+
+	want := []string{"pfx", "new", "close", "next", "prev", "zoom", "cmds"}
+	for i, label := range want {
+		if rows[0].Keys[i].Label != label {
+			t.Errorf("button %d is %q, want %q", i, rows[0].Keys[i].Label, label)
+		}
+	}
+}
+
 // Every command in the row is one tap: the leader and the bound key, together.
 func TestMobileBarChords(t *testing.T) {
 	_, rows := mobileBar(defaultRegistry(t), "ctrl+b")

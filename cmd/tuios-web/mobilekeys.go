@@ -15,16 +15,25 @@ import (
 // rebinds one gets a button that sends what they bound. The set is the work a
 // phone actually does: make a window, get rid of it, move between them, change
 // how they are laid out, and reach the two overlays that hold everything else.
+//
+// The order is the design. Eleven buttons and the latch are 620px of strip
+// against the 331px a 390px phone has, so the row pans and the first seven are
+// what a thumb sees on arrival. They are the seven a thumb wants: make and
+// close a pane, move between them, zoom, which is the only way a second pane is
+// usable on a screen this narrow, and the command palette, which is the way to
+// everything that did not fit. The layout commands and the two overlays are
+// behind a pan, which is the right place for what a phone reaches for once a
+// session rather than once a minute.
 var mobileCommands = []struct{ label, action string }{
 	{"new", "prefix_new_window"},
 	{"close", "prefix_close_window"},
-	{"tile", "prefix_toggle_tiling"},
-	{"prev", "prefix_prev_window"},
 	{"next", "prefix_next_window"},
+	{"prev", "prefix_prev_window"},
 	{"zoom", "prefix_fullscreen"},
+	{"cmds", "prefix_command_palette"},
+	{"tile", "prefix_toggle_tiling"},
 	{"vsplit", "prefix_split_vertical"},
 	{"hsplit", "prefix_split_horizontal"},
-	{"cmds", "prefix_command_palette"},
 	{"config", "prefix_settings"},
 	{"help", "prefix_help"},
 }
