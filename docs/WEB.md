@@ -151,6 +151,7 @@ tuios-web --theme dracula --show-keys
 | `--cert-host` | | Extra DNS name or IP in the `--auto-tls` certificate (repeatable) |
 | `--cert-days` | `0` | Days an `--auto-tls` certificate is valid for (0 = 365) |
 | `--insecure` | `false` | Serve a non-loopback host unencrypted |
+| `--touch` | `auto` | Whether a client is driven by a finger: `auto`, `on`, `off` |
 | `--default-session` | | Default session name for all connections |
 | `--ephemeral` | `false` | Disable daemon mode (sessions don't persist) |
 
@@ -207,6 +208,27 @@ Click the ⚙ button in the browser to access:
 - **Font Size**: 10-24px
 
 Settings are persisted in localStorage.
+
+### On a phone
+
+A touch device gets sip's key bar, carrying the TUIOS chord row over the keys a
+phone keyboard does not have, and sip's touch layer on the terminal: a tap is a
+click, a long press is a right click, and a press, hold and drag is a drag.
+
+TUIOS widens two gestures for a finger, because a cell is about 8px across and
+18px tall:
+
+- **A pane division** can be grabbed from the columns either side of it, not
+  just the one it is drawn in.
+- **A long press on a pane** opens the pane menu even while you are typing in
+  it. That menu is the finger-sized way to close, zoom, rename or split, since
+  the title bar's own buttons are one row tall. A pointer reaches the same menu
+  with ctrl or shift held, as before.
+
+Neither changes anything for a pointer. Whether a client is a finger is decided
+from the connection's user agent, which is a guess: sip does not put the answer
+on the wire, and Safari on an iPad asking for the desktop site has no answer at
+all. `--touch on` and `--touch off` settle it by hand.
 
 ## Transport Protocols
 
