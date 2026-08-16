@@ -125,7 +125,7 @@ func TestMobileBarChords(t *testing.T) {
 			t.Errorf("%q is not prefixed, so it types its key into the pane", label)
 		}
 		if got.Ctrl || got.Alt {
-			t.Errorf("%q carries its own modifiers %+v; the chord is the leader then a bare key", label, got)
+			t.Errorf("%q carries %+v; none of the default bindings is modified", label, got)
 		}
 	}
 }
@@ -152,10 +152,33 @@ func TestMobileBarFollowsRebinds(t *testing.T) {
 	if _, ok := findKey(keys, "close"); ok {
 		t.Error("close kept a button for f4, which sip's client cannot send")
 	}
-	// sip strips Ctrl and Alt from a prefixed key, so ctrl+p behind the leader
-	// would arrive as a bare p and run whatever that is bound to.
-	if _, ok := findKey(keys, "cmds"); ok {
-		t.Error("cmds kept a button for ctrl+p, which arrives as a bare p")
+	// A modified second half is still one button: the leader, then Ctrl+P.
+	cmds, ok := findKey(keys, "cmds")
+	if !ok {
+		t.Fatal("no cmds button for the ctrl+p binding")
+	}
+	if cmds.Key != "p" || !cmds.Ctrl || cmds.Alt || !cmds.Prefixed {
+		t.Errorf("cmds sends %+v, want a prefixed ctrl+p", cmds)
+	}
+}
+
+// A chord whose second half is itself modified is the case sip v0.7.0 fixed,
+// and it is what the maintainer's own ctrl+p command palette needs.
+func TestMobileBarKeepsAModifiedChord(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Keybindings.PrefixMode["prefix_split_vertical"] = []string{"alt+shift+v"}
+
+	_, rows := mobileBar(config.NewKeybindRegistry(cfg), "ctrl+b")
+	vsplit, ok := findKey(rows[0].Keys, "vsplit")
+	if !ok {
+		t.Fatal("no vsplit button for the alt+shift+v binding")
+	}
+	want := sip.MobileKey{
+		Label: "vsplit", Title: vsplit.Title,
+		Key: "v", Code: "KeyV", Alt: true, Shift: true, Prefixed: true,
+	}
+	if vsplit != want {
+		t.Errorf("vsplit sends %+v, want %+v", vsplit, want)
 	}
 }
 

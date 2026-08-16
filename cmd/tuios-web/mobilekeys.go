@@ -82,16 +82,15 @@ func commandKeys(reg *config.KeybindRegistry, leader string) []sip.MobileKey {
 // An action can be bound to several keys and only the first the browser can
 // send is wanted: prefix_next_window is n and Tab, and Tab after the leader is
 // the same command through a key the bar already has.
+//
+// The binding's own Ctrl and Alt ride along, because sip v0.7.0 sends a
+// prefixed key with the modifiers the button declares. A command bound to
+// ctrl+p behind the leader used to arrive as a bare p, which is why every such
+// binding was dropped here instead.
 func commandKey(reg *config.KeybindRegistry, label, action, leader string) (sip.MobileKey, bool) {
 	for _, bound := range reg.GetKeys(action) {
 		spec, ok := resolveKey(bound)
 		if !ok {
-			continue
-		}
-		// sip sends a prefixed key bare, dropping Ctrl and Alt on the way, so
-		// a command bound to ctrl+p behind the leader would arrive as p and
-		// do something else entirely. Skip it and try the next binding.
-		if spec.ctrl || spec.alt {
 			continue
 		}
 		title := config.ActionDescriptions[action]
