@@ -185,6 +185,16 @@ func TestTheOverrideIsHandedBackWhenThePromptLeaves(t *testing.T) {
 		t.Fatalf("state = %q, want needs_input before the prompt leaves", got)
 	}
 
+	// The prompt is still up, so the next look matches the same rule again. That
+	// is the standing override rather than a fresh claim, and it has to keep
+	// hold of what it displaced or there would be nothing left to hand back.
+	if !sess.scanScreenForAgent(ptyID, reg) {
+		t.Fatal("the prompt did not match while it is still on the screen")
+	}
+	if prior := sess.agentClaimFor(winID).prior; prior.source != AgentSourceReport {
+		t.Fatalf("prior = %+v, want the displaced claim still held", prior)
+	}
+
 	// The user answered: the pane repaints over the question, which is the only
 	// way a prompt can ever leave a screen, and that repaint is what runs the
 	// look that ends the override.
