@@ -1102,8 +1102,9 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		oldWidth, oldHeight := m.Width, m.Height
-		m.Width = msg.Width
-		m.Height = msg.Height
+		// Clamp our widths and heights to 1, as to avoid any unforseen 'resolution' errors
+		m.Width = max(1, msg.Width)
+		m.Height = max(1, msg.Height)
 		m.MarkAllDirty()
 		// A resize is drawn immediately and finished later. Everything below
 		// lays the panes out at the new size; the expensive half - resizing each

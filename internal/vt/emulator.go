@@ -790,6 +790,14 @@ func (e *Emulator) EncodeMouseEvent(m Mouse) string {
 
 // Resize resizes the terminal.
 func (e *Emulator) Resize(width int, height int) {
+	// Guard against 0 or negative terminal dimensions (e.g., laptop lid close or display disconnect)
+	if width < 1 {
+		width = 1
+	}
+	if height < 1 {
+		height = 1
+	}
+
 	// A resize reflows and reclamps, so the cell an open cluster was drawn into
 	// no longer identifies that cluster. Close it.
 	e.openGrapheme = openGrapheme{}
