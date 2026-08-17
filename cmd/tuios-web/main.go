@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -41,7 +42,9 @@ var (
 	webMaxConnections int
 	webTLSCert        string
 	webTLSKey         string
+	webAutoTLS        bool
 	webInsecure       bool
+	webTouch          string
 	// TUIOS forwarded flags
 	debugMode         bool
 	asciiOnly         bool
@@ -76,9 +79,9 @@ Powered by sip (github.com/Gaurav-Gosain/sip).
 Server features:
   - Dual protocol support: WebTransport (HTTP/3 over QUIC) for low latency
     with automatic WebSocket fallback for broader compatibility
-  - Self-signed TLS certificate generation for development
-  - HTTPS from your own certificate (--cert/--key), which a bind to a
-    LAN address requires unless you opt into clear text with --insecure
+  - HTTPS from a self-signed certificate tuios-web generates and keeps
+    (--auto-tls), or from your own (--cert/--key). A bind to a LAN address
+    requires one of them unless you opt into clear text with --insecure
   - Configurable host, port, read-only mode, and connection limits
   - All TUIOS flags forwarded to spawned instances (theme, show-keys, etc.)
   - Structured logging with charmbracelet/log
@@ -98,6 +101,9 @@ Client features:
   tuios-web --port 8080
 
   # Reach the server from a phone on the same network, over TLS
+  tuios-web --host 0.0.0.0 --auto-tls
+
+  # Same, from a certificate you already have
   tuios-web --host 0.0.0.0 --cert cert.pem --key key.pem
 
   # Same, on a network you trust, with nothing encrypted
@@ -134,7 +140,10 @@ Client features:
 	rootCmd.Flags().IntVar(&webMaxConnections, "max-connections", 0, "Maximum concurrent connections (0 = unlimited)")
 	rootCmd.Flags().StringVar(&webTLSCert, "cert", "", "Path to a TLS certificate in PEM form (serves HTTPS; required to bind a non-loopback host)")
 	rootCmd.Flags().StringVar(&webTLSKey, "key", "", "Path to the TLS private key in PEM form (required with --cert)")
+	rootCmd.Flags().BoolVar(&webAutoTLS, "auto-tls", false, "Serve HTTPS from a self-signed certificate tuios-web generates and keeps (see `tuios-web cert`)")
 	rootCmd.Flags().BoolVar(&webInsecure, "insecure", false, "Serve a non-loopback host over plain HTTP, sending every keystroke unencrypted (trusted networks only)")
+	registerCertFlags(rootCmd)
+	rootCmd.Flags().StringVar(&webTouch, "touch", "auto", "Whether a client is driven by a finger, which widens the gestures aimed at a single cell: auto, on, off")
 
 	// Daemon mode flags
 	rootCmd.Flags().StringVar(&defaultSession, "default-session", "", "Default session name for all connections (creates shared session)")
@@ -151,6 +160,8 @@ Client features:
 	rootCmd.Flags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
 	rootCmd.Flags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
 
+	rootCmd.AddCommand(newCertCmd())
+
 	// Execute with fang
 	if err := fang.Execute(
 		context.Background(),
@@ -164,7 +175,14 @@ Client features:
 func runWebServer() error {
 	// Refuse an unencrypted LAN bind before anything is started, so the user
 	// gets the answer instead of a daemon and a half-open port.
-	if err := checkTransportSecurity(); err != nil {
+	if err := checkTransportSecurity(os.Stderr); err != nil {
+		return err
+	}
+
+	// Settle the keypair here too, for the same reason: generating it can
+	// fail, and a failure should not leave a daemon running behind it.
+	tlsCert, tlsKey, err := resolveTLSFiles(os.Stderr)
+	if err != nil {
 		return err
 	}
 
@@ -248,8 +266,8 @@ func runWebServer() error {
 	sipConfig.ReadOnly = webReadOnly
 	sipConfig.MaxConnections = webMaxConnections
 	sipConfig.Debug = debugMode
-	sipConfig.TLSCert = webTLSCert
-	sipConfig.TLSKey = webTLSKey
+	sipConfig.TLSCert = tlsCert
+	sipConfig.TLSKey = tlsKey
 	sipConfig.AllowInsecureNoTLS = webInsecure
 
 	// The touch key bar is server-wide while the keys it carries are user
@@ -263,6 +281,15 @@ func runWebServer() error {
 		leader = userConfig.Keybindings.LeaderKey
 	}
 	sipConfig.MobilePrefix, sipConfig.MobileRows = mobileBar(config.NewKeybindRegistry(userConfig), leader)
+
+	// Whether the far end is a finger is decided once, at the handshake, and
+	// carried into the session on its context. See touch.go for why the
+	// handshake is the only place left to ask.
+	touch, ok := parseTouchMode(webTouch)
+	if !ok {
+		return fmt.Errorf("--touch is %q: it takes auto, on or off", webTouch)
+	}
+	sipConfig.ConnectMiddleware = append(sipConfig.ConnectMiddleware, touchMiddleware(touch))
 
 	server := sip.NewServer(sipConfig)
 
@@ -294,19 +321,33 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// certSubject is the name a generated certificate should carry for a bind
-// address, and the kind of subjectAltName that name needs. A wildcard bind
-// answers on an address only the user knows, so what they get back is a
-// template to fill in with it.
-func certSubject(host string) (subject, sanKind string) {
-	ip := net.ParseIP(host)
-	if host == "" || (ip != nil && ip.IsUnspecified()) {
-		return "YOUR-LAN-IP", "IP"
+// resolveTLSFiles decides which keypair the server serves from, generating
+// sip's managed one when --auto-tls asked for it and there is none, or the one
+// on disk has expired or stopped covering the address being bound.
+//
+// An explicit --cert wins: sip's own resolveAutoTLS defers to a configured
+// keypair, and deferring the same way here keeps the two from disagreeing
+// about which certificate is in use.
+func resolveTLSFiles(w io.Writer) (certFile, keyFile string, err error) {
+	if !webAutoTLS || webTLSCert != "" {
+		return webTLSCert, webTLSKey, nil
 	}
-	if ip != nil {
-		return host, "IP"
+	cert, created, err := sip.EnsureManagedCert(sip.CertOptions{
+		Dir:      webCertDir,
+		Hosts:    webCertHosts,
+		BindHost: webHost,
+		Validity: certValidity(),
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("auto TLS: %w", err)
 	}
-	return host, "DNS"
+	// Said before the browser says it. An unexplained "Your connection is not
+	// private" on a tool that just reported success reads as the tool being
+	// broken, and the next move is usually --insecure forever.
+	if created {
+		fmt.Fprintf(w, "\nGenerated a TLS certificate: %s\n\n%s\n\n", cert.CertFile, sip.SelfSignedWarning)
+	}
+	return cert.CertFile, cert.KeyFile, nil
 }
 
 // serverURL is the address to open, so a startup line can be pasted or
@@ -315,7 +356,7 @@ func certSubject(host string) (subject, sanKind string) {
 // works from here.
 func serverURL() string {
 	scheme := "http"
-	if webTLSCert != "" {
+	if webTLSCert != "" || webAutoTLS {
 		scheme = "https"
 	}
 	host := webHost
@@ -335,40 +376,41 @@ func serverURL() string {
 // AllowInsecureNoTLS, a Go field of its config that nobody holding this
 // binary can reach. Deciding here means the message can name the flags this
 // command actually has, filled in with the address the user typed.
-func checkTransportSecurity() error {
+//
+// Nothing here asks a question first. A prompt would make the same command do
+// different things depending on whether stdout is a terminal, and tuios-web is
+// started by unit files at least as often as by hand. What everyone gets is
+// the refusal, and the flag that answers it.
+func checkTransportSecurity(w io.Writer) error {
 	if (webTLSCert == "") != (webTLSKey == "") {
 		// Leading with a flag name would come out capitalized by fang's
 		// error rendering.
 		return errors.New("pass both --cert and --key, or neither: a certificate is no use without its key")
 	}
-	if webTLSCert != "" || webInsecure || isLoopbackHost(webHost) {
+	if webTLSCert != "" || webAutoTLS || webInsecure || isLoopbackHost(webHost) {
 		return nil
 	}
-
-	subject, sanKind := certSubject(webHost)
 
 	// Printed here rather than carried in the error: fang reflows an error
 	// into a paragraph, which would run the commands together and leave
 	// nothing to copy.
-	fmt.Fprintf(os.Stderr, `
+	fmt.Fprintf(w, `
   %s is not this machine, and without TLS every keystroke you send it, and
   everything a shell prints back, crosses the network in clear text. So pick
   how you want to reach it:
 
-  1. Over HTTPS, which is what you want on a network you share.
+  1. Over HTTPS, from a certificate tuios-web generates and keeps.
 
-       openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-         -subj "/CN=%s" -addext "subjectAltName=%s:%s" \
-         -keyout tuios-key.pem -out tuios-cert.pem
+       tuios-web --host %s --port %s --auto-tls
 
-       tuios-web --host %s --port %s --cert tuios-cert.pem --key tuios-key.pem
+     It signs for itself, so every browser warns once per device and you
+     accept it there. `+"`tuios-web cert info`"+` says what the warning looks
+     like and how to stop seeing it.
 
-     A self-signed certificate warns once per device and you accept it there.
-     One from your own CA, or a real one, never warns.
+  2. Over HTTPS, from a certificate you already have. One from your own CA,
+     or a real one, never warns.
 
-  2. In clear text, on a network you trust and on no other.
-
-       tuios-web --host %s --port %s --insecure
+       tuios-web --host %s --port %s --cert cert.pem --key key.pem
 
   3. Left on this machine, reached through SSH. No certificate involved.
 
@@ -376,15 +418,19 @@ func checkTransportSecurity() error {
 
      then open http://localhost:%s at the far end.
 
+  4. In clear text, on a network you trust and on no other.
+
+       tuios-web --host %s --port %s --insecure
+
 `,
 		webHost,
-		subject, sanKind, subject,
 		webHost, webPort,
 		webHost, webPort,
 		webPort, webPort,
-		webPort)
+		webPort,
+		webHost, webPort)
 
-	return fmt.Errorf("refusing to serve %s in clear text: pass --cert and --key, or --insecure to accept it", webHost)
+	return fmt.Errorf("refusing to serve %s in clear text: pass --auto-tls, or --cert and --key, or --insecure to accept it", webHost)
 }
 
 // createTUIOSHandler creates a TUIOS instance for each web session.
@@ -399,20 +445,21 @@ func checkTransportSecurity() error {
 func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 	pty := sess.Pty()
 	graphicsOut := sess.PtySlave()
+	touch := sessionIsTouch(sess.Context())
 
 	// Determine session name
 	sessionName := webServerConfig.defaultSession
 
 	// If ephemeral mode or daemon not available, use old behavior
 	if webServerConfig.ephemeral {
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut)
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch)
 	}
 
 	// Try to connect to daemon
-	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, graphicsOut)
+	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, graphicsOut, touch)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut)
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch)
 	}
 
 	// Close the daemon client when the web session ends, otherwise the client
@@ -437,7 +484,7 @@ func shortID(id string) string {
 }
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.Model, []tea.ProgramOption) {
+func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch bool) (tea.Model, []tea.ProgramOption) {
 	// Load user configuration
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -463,6 +510,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.
 		EnableGraphicsPassthrough: true,
 		ForceGraphicsEnabled:      true,
 		GraphicsOutput:            graphicsOut,
+		TouchClient:               touch,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -471,7 +519,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File) (tea.
 }
 
 // createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
-func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOut *os.File) (tea.Model, []tea.ProgramOption, error) {
+func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOut *os.File, touch bool) (tea.Model, []tea.ProgramOption, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	v := webServerConfig.version
@@ -544,6 +592,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 		EnableGraphicsPassthrough: true,
 		ForceGraphicsEnabled:      true,
 		GraphicsOutput:            graphicsOut,
+		TouchClient:               touch,
 	})
 
 	// Restore state from daemon if available

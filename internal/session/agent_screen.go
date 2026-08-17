@@ -23,12 +23,18 @@ const screenSettleDelay = 400 * time.Millisecond
 // scanScreenForAgent matches the harness's screen rules against the bottom of a
 // pane and reports what they say.
 //
-// It is the last-resort tier and reports as AgentSourceScreen, so it can never
+// It is the last-resort tier and reports as AgentSourceScreen, so it does not
 // write over a harness reporting for itself or an escape sequence the pane
 // emitted. What it can do is see a state those two never mention: a harness
 // sitting on a blocking prompt paints it once and then emits nothing at all, no
 // title and no progress sequence, so the screen is the only channel carrying the
 // fact that a human is being waited for.
+//
+// That is also why it carries the one exception to the ranking. A source that
+// has gone quiet while the pane painted a prompt over it is stale rather than
+// authoritative, so a matched blocker may take its claim; see
+// blockerOverridesClaim. The claim goes back the moment a later look finds the
+// prompt gone.
 //
 // It reports whether a rule matched, which is a different question from whether
 // the report was accepted: a matching rule means the screen carries an answer
@@ -58,12 +64,18 @@ func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) bool {
 	}
 	state, _, ok := reg.Classify(hid, tail)
 	if !ok {
+		// Nothing on the screen now, so any claim a blocker took here is given
+		// back. This look is the only thing that runs when the prompt goes away,
+		// and a prompt can only go away by being painted over, which is what
+		// brought us here.
+		s.releaseAgentBlockerOverride(winID)
 		return false
 	}
 	s.ApplyAgentReport(winID, AgentReport{
-		State:   AgentState(state),
-		Source:  AgentSourceScreen,
-		Harness: hid,
+		State:       AgentState(state),
+		Source:      AgentSourceScreen,
+		Harness:     hid,
+		paneWroteAt: pty.LastOutput(),
 	})
 	return true
 }

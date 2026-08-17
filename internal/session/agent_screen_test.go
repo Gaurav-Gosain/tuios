@@ -1,6 +1,8 @@
 package session
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +83,306 @@ func TestStallTimerLooksAtTheScreenBeforeCallingAPaneIdle(t *testing.T) {
 			t.Fatalf("state = %q, want needs_input", got)
 		}
 	})
+}
+
+// paintPane writes to the pane's emulator and records that the pane wrote, which
+// is one event in the daemon and two calls here because the test bypasses the
+// read loop that would otherwise do both.
+func paintPane(t *testing.T, p *PTY, data string) {
+	t.Helper()
+	feedVT(t, p, data)
+	p.lastOutput.Store(time.Now().UnixNano())
+}
+
+// backdateAgentClaim moves a window's claim timestamp into the past, standing in
+// for the seconds a harness spends working between reporting that it started and
+// stopping on a prompt.
+func backdateAgentClaim(t *testing.T, sess *Session, windowID string, by time.Duration) {
+	t.Helper()
+	sess.stateMu.Lock()
+	defer sess.stateMu.Unlock()
+	for i := range sess.state.Windows {
+		if sess.state.Windows[i].ID == windowID {
+			sess.state.Windows[i].AgentStateAt = time.Now().Add(-by).UnixNano()
+			return
+		}
+	}
+	t.Fatalf("window %s not found", windowID)
+}
+
+// blockedPaneClaimedByItsHarness is the defect's setup: a pane whose harness
+// reported working for itself at report rank, then stopped and painted a
+// permission prompt without saying anything further.
+func blockedPaneClaimedByItsHarness(t *testing.T) (*Session, string, string) {
+	t.Helper()
+	sess, winID := bareSessionWithWindow(t)
+	report := AgentReport{State: AgentStateWorking, Source: AgentSourceReport, Harness: "claude-code"}
+	if _, _, err := sess.ApplyAgentReport(winID, report); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	ids := sess.ListPTYIDs()
+	if len(ids) != 1 {
+		t.Fatalf("session has %d PTYs, want 1", len(ids))
+	}
+	backdateAgentClaim(t, sess, winID, 4*time.Second)
+	paintPane(t, sess.GetPTY(ids[0]), claudePermissionPrompt)
+	return sess, winID, ids[0]
+}
+
+// TestAVisibleBlockerBeatsAClaimThatWentQuiet is the regression test for the hole
+// the source ranking left open.
+//
+// A harness with a hook reports working when its turn starts. If it then hits a
+// prompt the hook does not cover, it stops and paints the question and says
+// nothing more. The screen tier can read that question, but it reports below the
+// harness, so the ranking refused it and the pane stayed working forever: the
+// silence timer will not touch a pane whose screen answers, and no other tier
+// asserts needs_input. The user was never told they were being waited for, which
+// is the one thing the feature exists to do.
+func TestAVisibleBlockerBeatsAClaimThatWentQuiet(t *testing.T) {
+	reg, errs := harness.Load()
+	if len(errs) != 0 {
+		t.Fatalf("loading the bundled manifests: %v", errs)
+	}
+	sess, winID, _ := blockedPaneClaimedByItsHarness(t)
+
+	const stall = 30 * time.Second
+	look := func(id string) bool { return sess.scanScreenForAgent(id, reg) }
+	quiet := func(string) int64 { return 0 }
+	if n := sess.applyStallHeuristic(time.Now().Add(stall+time.Second), stall, quiet, look); n != 0 {
+		t.Fatalf("demoted %d panes that are visibly waiting on a human, want 0", n)
+	}
+
+	if got := agentStateOf(t, sess, winID); got != AgentStateNeedsInput {
+		t.Fatalf("state = %q, want needs_input: the prompt is on the screen and the harness has gone silent", got)
+	}
+	claim := sess.agentClaimFor(winID)
+	if claim.source != AgentSourceScreen || !claim.blocker {
+		t.Fatalf("claim = %+v, want the screen holding it as an override", claim)
+	}
+	if claim.prior.source != AgentSourceReport || claim.prior.state != AgentStateWorking {
+		t.Fatalf("prior = %+v, want the report's working claim kept for handing back", claim.prior)
+	}
+}
+
+// TestAReportThatNamesNoHarnessLeavesTheAttributionAlone is the regression test
+// for a pane going blind between two things that were both working correctly.
+//
+// The shipped hook shim reports a state and nothing else, because a hook knows
+// what its turn is doing and has no reason to know what tuios calls the program
+// it runs inside. That report used to write its empty harness id over the one
+// the foreground-process detector had worked out, and the screen tier keys on
+// that id to know whose rules to run: after one hook event the pane had no rules
+// left, so no prompt on it could ever be seen again.
+func TestAReportThatNamesNoHarnessLeavesTheAttributionAlone(t *testing.T) {
+	reg, errs := harness.Load()
+	if len(errs) != 0 {
+		t.Fatalf("loading the bundled manifests: %v", errs)
+	}
+	sess, winID := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, winID)
+	matcher := newAgentMatcher(nil)
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{
+		comm: "claude",
+		argv: []string{"claude"},
+		exe:  "/home/u/.local/share/claude/versions/2.1.222",
+	}, true}})
+	if n := sess.applyAgentDetection(running, matcher.identify); n != 1 {
+		t.Fatalf("detection promoted %d windows, want 1", n)
+	}
+
+	// The shim's UserPromptSubmit hook, which is the no-source, no-harness path
+	// every caller predating the harness registry takes.
+	if err := sess.SetDaemonWindowAgentState(winID, AgentStateWorking, ""); err != nil {
+		t.Fatalf("SetDaemonWindowAgentState: %v", err)
+	}
+	if got := agentHarnessIDOf(t, sess, winID); got != "claude-code" {
+		t.Fatalf("harness = %q after a report that named none, want the detector's claude-code", got)
+	}
+
+	// The turn then stops on a permission prompt the hooks do not cover, which is
+	// the case the screen tier and the visible-blocker override exist for.
+	backdateAgentClaim(t, sess, winID, agentBlockerOverrideGrace+time.Second)
+	paintPane(t, sess.GetPTY(ptyID), claudePermissionPrompt)
+
+	if !sess.scanScreenForAgent(ptyID, reg) {
+		t.Fatal("the screen tier found no rules to run, so the pane's attribution is gone")
+	}
+	if got := agentStateOf(t, sess, winID); got != AgentStateNeedsInput {
+		t.Fatalf("state = %q, want needs_input: the prompt is on the screen", got)
+	}
+}
+
+// agentHarnessIDOf reads the harness a window is attributed to.
+func agentHarnessIDOf(t *testing.T, sess *Session, windowID string) string {
+	t.Helper()
+	for _, w := range sess.GetState().Windows {
+		if w.ID == windowID {
+			return w.AgentHarness
+		}
+	}
+	t.Fatalf("window %s not found", windowID)
+	return ""
+}
+
+// TestTheOverrideIsHandedBackWhenThePromptLeaves is the other half, and the
+// reason the exception is safe to cut into the ranking at all.
+//
+// The screen tier asserts needs_input and nothing else, so a pane it took over
+// has no other way off that state: it would stick on needs_input exactly the way
+// it used to stick on working, which is the same bug wearing a different glyph.
+// A look that finds no rule matching therefore puts the displaced claim back.
+func TestTheOverrideIsHandedBackWhenThePromptLeaves(t *testing.T) {
+	reg, errs := harness.Load()
+	if len(errs) != 0 {
+		t.Fatalf("loading the bundled manifests: %v", errs)
+	}
+	sess, winID, ptyID := blockedPaneClaimedByItsHarness(t)
+	if !sess.scanScreenForAgent(ptyID, reg) {
+		t.Fatal("the prompt on the screen did not match")
+	}
+	if got := agentStateOf(t, sess, winID); got != AgentStateNeedsInput {
+		t.Fatalf("state = %q, want needs_input before the prompt leaves", got)
+	}
+
+	// The prompt is still up, so the next look matches the same rule again. That
+	// is the standing override rather than a fresh claim, and it has to keep
+	// hold of what it displaced or there would be nothing left to hand back.
+	if !sess.scanScreenForAgent(ptyID, reg) {
+		t.Fatal("the prompt did not match while it is still on the screen")
+	}
+	if prior := sess.agentClaimFor(winID).prior; prior.source != AgentSourceReport {
+		t.Fatalf("prior = %+v, want the displaced claim still held", prior)
+	}
+
+	// The user answered: the pane repaints over the question, which is the only
+	// way a prompt can ever leave a screen, and that repaint is what runs the
+	// look that ends the override.
+	paintPane(t, sess.GetPTY(ptyID), "\x1b[2J\x1b[H"+"Running tests...\r\n")
+	if sess.scanScreenForAgent(ptyID, reg) {
+		t.Fatal("a screen with no prompt on it still matched a rule")
+	}
+
+	if got := agentStateOf(t, sess, winID); got != AgentStateWorking {
+		t.Fatalf("state = %q, want the working the override displaced", got)
+	}
+	claim := sess.agentClaimFor(winID)
+	if claim.source != AgentSourceReport || claim.blocker {
+		t.Fatalf("claim = %+v, want the report's claim back and the override gone", claim)
+	}
+
+	// And the restored claim is an ordinary one again, so the silence timer can
+	// demote it the way it always could. Nothing is stuck.
+	const stall = 30 * time.Second
+	backdateAgentClaim(t, sess, winID, stall+time.Second)
+	look := func(id string) bool { return sess.scanScreenForAgent(id, reg) }
+	if n := sess.applyStallHeuristic(time.Now(), stall, func(string) int64 { return 0 }, look); n != 1 {
+		t.Fatalf("demoted %d panes, want 1: the restored claim is not stuck", n)
+	}
+}
+
+// TestAFreshReportIsNotSecondGuessedByARule keeps the exception about staleness
+// rather than about the ranking being wrong. A harness that is reporting for
+// itself right now is the better source even when a rule can see something, and
+// the grace window is what gives its hook time to describe the screen it just
+// painted before a rule speaks over it.
+func TestAFreshReportIsNotSecondGuessedByARule(t *testing.T) {
+	reg, errs := harness.Load()
+	if len(errs) != 0 {
+		t.Fatalf("loading the bundled manifests: %v", errs)
+	}
+	sess, winID := bareSessionWithWindow(t)
+	report := AgentReport{State: AgentStateWorking, Source: AgentSourceReport, Harness: "claude-code"}
+	if _, _, err := sess.ApplyAgentReport(winID, report); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	ptyID := sess.ListPTYIDs()[0]
+	paintPane(t, sess.GetPTY(ptyID), claudePermissionPrompt)
+
+	if !sess.scanScreenForAgent(ptyID, reg) {
+		t.Fatal("the prompt on the screen did not match")
+	}
+	if got := agentStateOf(t, sess, winID); got != AgentStateWorking {
+		t.Fatalf("state = %q, want working: the report is seconds old and outranks the rule", got)
+	}
+
+	// The same screen, once the report has stood unrefreshed past the grace.
+	backdateAgentClaim(t, sess, winID, agentBlockerOverrideGrace+time.Second)
+	if !sess.scanScreenForAgent(ptyID, reg) {
+		t.Fatal("the prompt on the screen did not match the second time")
+	}
+	if got := agentStateOf(t, sess, winID); got != AgentStateNeedsInput {
+		t.Fatalf("state = %q, want needs_input once the report has gone quiet", got)
+	}
+}
+
+// TestAClaimTheScreenHasNotPaintedOverIsNotStale is the other staleness half.
+// A report is only describing a screen that is gone if the pane has painted
+// since, and a pane that has written nothing since the report has not.
+func TestAClaimTheScreenHasNotPaintedOverIsNotStale(t *testing.T) {
+	sess, winID, _ := blockedPaneClaimedByItsHarness(t)
+
+	// The prompt was already on the screen when the harness reported working, so
+	// the report is old without having been painted over. The report goes
+	// straight to the gate because a live PTY's shell writes on its own schedule
+	// and would otherwise supply an output time the test did not choose.
+	stale := time.Now().Add(-10 * time.Second).UnixNano()
+	if _, _, err := sess.ApplyAgentReport(winID, AgentReport{
+		State:       AgentStateNeedsInput,
+		Source:      AgentSourceScreen,
+		Harness:     "claude-code",
+		paneWroteAt: stale,
+	}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	if got := agentStateOf(t, sess, winID); got != AgentStateWorking {
+		t.Fatalf("state = %q, want working: the pane has not painted since the report", got)
+	}
+}
+
+// TestOnlyABlockingRuleMayOverride keeps the hole the size it was cut. A screen
+// rule asserting working or idle is guessing at a process from how it looks, and
+// a guess must never outrank a source that was told.
+func TestOnlyABlockingRuleMayOverride(t *testing.T) {
+	dir := t.TempDir()
+	manifest := `schema_version = 1
+id = "spinner-harness"
+display_name = "Spinner"
+
+[detect]
+argv0 = ["spinner-harness"]
+
+[screen]
+enabled = true
+lines = 8
+
+[[screen.rule]]
+state = "working"
+all = ["Do you want"]
+`
+	if err := os.WriteFile(filepath.Join(dir, "spinner-harness.toml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("writing the manifest: %v", err)
+	}
+	reg, errs := harness.Load(dir)
+	if len(errs) != 0 {
+		t.Fatalf("loading the manifests: %v", errs)
+	}
+
+	sess, winID := bareSessionWithWindow(t)
+	report := AgentReport{State: AgentStateIdle, Source: AgentSourceReport, Harness: "spinner-harness"}
+	if _, _, err := sess.ApplyAgentReport(winID, report); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	ptyID := sess.ListPTYIDs()[0]
+	backdateAgentClaim(t, sess, winID, 4*time.Second)
+	paintPane(t, sess.GetPTY(ptyID), claudePermissionPrompt)
+
+	if !sess.scanScreenForAgent(ptyID, reg) {
+		t.Fatal("the rule did not match")
+	}
+	if got := agentStateOf(t, sess, winID); got != AgentStateIdle {
+		t.Fatalf("state = %q, want idle: a working rule may not override a report", got)
+	}
 }
 
 // TestIdlePaneArmsNoTimers is the idle-cost guard for both timers the agent

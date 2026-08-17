@@ -11,6 +11,12 @@ package session
 // own, and never over one ranked above it. A source updating its own claim is
 // the same-rank case and is always allowed, so a harness can move a pane from
 // working to needs_input without having to relinquish anything first.
+//
+// There is exactly one exception, and it is about staleness rather than about
+// the ranking being wrong: a screen rule that can see a blocking prompt on the
+// pane right now may write over a higher-ranked claim that has gone quiet while
+// the pane painted over it. See blockerOverridesClaim for the conditions and
+// releaseAgentBlockerOverride for how it is given back.
 type AgentSource string
 
 const (
@@ -97,6 +103,22 @@ type agentClaim struct {
 	// higher-ranked source taking the state over: an explicit report during the
 	// agent's run wins, and the pane still clears when the agent exits.
 	auto bool
+	// blocker marks a claim taken through the visible-blocker exception, and
+	// prior is the claim it displaced. They are kept together because the
+	// exception is a loan: the moment a later look finds the prompt gone, prior
+	// goes back exactly as it was.
+	blocker bool
+	prior   agentPriorClaim
+}
+
+// agentPriorClaim is what a visible-blocker override displaced, held so the
+// override can be undone rather than only outranked. Without it the pane would
+// have no way back off needs_input: the screen tier asserts that state and no
+// other, so nothing else on the pane would ever move it.
+type agentPriorClaim struct {
+	source  AgentSource
+	state   AgentState
+	harness string
 }
 
 // setAgentClaim records a claim, allocating the map on first use. It is called

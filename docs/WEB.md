@@ -146,7 +146,12 @@ tuios-web --theme dracula --show-keys
 | `--max-connections` | `0` | Max concurrent sessions (0=unlimited) |
 | `--cert` | | TLS certificate (PEM); serves HTTPS |
 | `--key` | | TLS private key (PEM); required with `--cert` |
+| `--auto-tls` | `false` | Serve HTTPS from a self-signed certificate `tuios-web` generates and keeps |
+| `--cert-dir` | | Where `--auto-tls` keeps its keypair (default: `sip` in your user config dir) |
+| `--cert-host` | | Extra DNS name or IP in the `--auto-tls` certificate (repeatable) |
+| `--cert-days` | `0` | Days an `--auto-tls` certificate is valid for (0 = 365) |
 | `--insecure` | `false` | Serve a non-loopback host unencrypted |
+| `--touch` | `auto` | Whether a client is driven by a finger: `auto`, `on`, `off` |
 | `--default-session` | | Default session name for all connections |
 | `--ephemeral` | `false` | Disable daemon mode (sessions don't persist) |
 
@@ -203,6 +208,27 @@ Click the ⚙ button in the browser to access:
 - **Font Size**: 10-24px
 
 Settings are persisted in localStorage.
+
+### On a phone
+
+A touch device gets sip's key bar, carrying the TUIOS chord row over the keys a
+phone keyboard does not have, and sip's touch layer on the terminal: a tap is a
+click, a long press is a right click, and a press, hold and drag is a drag.
+
+TUIOS widens two gestures for a finger, because a cell is about 8px across and
+18px tall:
+
+- **A pane division** can be grabbed from the columns either side of it, not
+  just the one it is drawn in.
+- **A long press on a pane** opens the pane menu even while you are typing in
+  it. That menu is the finger-sized way to close, zoom, rename or split, since
+  the title bar's own buttons are one row tall. A pointer reaches the same menu
+  with ctrl or shift held, as before.
+
+Neither changes anything for a pointer. Whether a client is a finger is decided
+from the connection's user agent, which is a guess: sip does not put the answer
+on the wire, and Safari on an iPad asking for the desktop site has no answer at
+all. `--touch on` and `--touch off` settle it by hand.
 
 ## Transport Protocols
 
@@ -286,18 +312,55 @@ means every keystroke is readable by anyone else on it, so `tuios-web`
 refuses that bind until you say which way you want it:
 
 ```bash
-# Over HTTPS. A self-signed certificate warns once per device.
-openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-  -subj "/CN=192.168.1.31" -addext "subjectAltName=IP:192.168.1.31" \
-  -keyout tuios-key.pem -out tuios-cert.pem
-tuios-web --host 192.168.1.31 --cert tuios-cert.pem --key tuios-key.pem
+# Over HTTPS, from a certificate tuios-web generates on first use and keeps
+tuios-web --host 192.168.1.31 --auto-tls
+
+# Over HTTPS, from a certificate you already have
+tuios-web --host 192.168.1.31 --cert cert.pem --key key.pem
 
 # In clear text, on a network you trust and no other
 tuios-web --host 192.168.1.31 --insecure
 ```
 
+`--auto-tls` uses the keypair [sip](https://github.com/Gaurav-Gosain/sip)
+manages for this user, in `sip` inside your user config directory. It signs for
+`localhost`, this machine's hostname and `hostname.local`, and every
+non-loopback address on every interface, so the LAN address you actually type
+works. `--cert-host` adds names only your router's DNS knows. A certificate
+that stops covering the address being bound, which is what a moved DHCP lease
+looks like, is regenerated rather than served into a name mismatch the browser
+will not let you click through.
+
+The certificate signs for itself, so **the first visit from any browser shows a
+warning**: "Your connection is not private", `NET::ERR_CERT_AUTHORITY_INVALID`,
+or "Potential Security Risk Ahead". That is expected. Choose Advanced, then
+Proceed. The connection is encrypted either way; what the browser cannot do is
+vouch for who is on the other end. To stop seeing it, copy the `.crt` to the
+device and install it as a trusted certificate: on Android under Settings,
+Encryption & credentials, Install a certificate, CA certificate; on iOS open
+the file, install the profile, then enable it under About, Certificate Trust
+Settings. `tuios-web` prints all of this the first time it generates one.
+
+```bash
+tuios-web cert            # where it is, what it covers, when it expires, its fingerprint
+tuios-web cert new        # generate one (--force to replace an existing one)
+tuios-web cert rm --force # delete it
+tuios-web cert path       # just the path, for a unit file (--key for the key's)
+```
+
+No command in this group asks a question, and neither does the refusal above,
+so a systemd unit or a container gets the same behaviour and the same exit code
+as a shell does.
+
+The private key is written `0600` inside a `0700` directory, and its path is
+printed by `tuios-web cert path --key` and nowhere else.
+
 WebTransport needs a certificate, so the `--insecure` route runs over the
-WebSocket fallback alone.
+WebSocket fallback alone. Chrome accepts a self-signed certificate for
+WebTransport only when it is valid for under 14 days, so `--auto-tls`'s
+year-long default keeps `--auto-tls` deployments on the WebSocket fallback too.
+`--cert-days 10` trades re-accepting the browser warning every ten days for
+getting WebTransport back.
 
 ### Production Recommendations
 
