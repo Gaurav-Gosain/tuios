@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -352,20 +351,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
-	safeColorEquals := func(a, b color.Color) bool {
-		// Adjacent cells almost always share the same color interface value, so
-		// compare identity before falling back to the four RGBA computations.
-		if a == b {
-			return true
-		}
-		if a == nil || b == nil {
-			return false
-		}
-		ar, ag, ab, aa := a.RGBA()
-		br, bg, bb, ba := b.RGBA()
-		return ar == br && ag == bg && ab == bb && aa == ba
-	}
-
+	// safeColorEquals is defined at package scope (color_nil.go) so it can guard
+	// against wrapped-nil colors and be exercised directly by tests.
 	styleMatches := func(cell *uv.Cell, isCursorPos bool) bool {
 		if prevCell == nil && cell == nil {
 			return prevIsCursor == isCursorPos

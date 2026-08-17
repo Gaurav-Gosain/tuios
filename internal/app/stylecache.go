@@ -86,7 +86,7 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool, isOptimized bo
 	_ = h.WriteByte(byte(attrs >> 56))
 
 	// Hash foreground color
-	if cell.Style.Fg != nil {
+	if !isNilColor(cell.Style.Fg) {
 		if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
 			_ = h.WriteByte(1)
 			_ = h.WriteByte(byte(ansiColor))
@@ -104,7 +104,7 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool, isOptimized bo
 	}
 
 	// Hash background color
-	if cell.Style.Bg != nil {
+	if !isNilColor(cell.Style.Bg) {
 		if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
 			_ = h.WriteByte(1)
 			_ = h.WriteByte(byte(ansiColor))
