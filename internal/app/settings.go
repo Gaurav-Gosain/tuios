@@ -218,6 +218,7 @@ var (
 	sidebarPositionOptions = []string{"left", "right", "hidden"}
 	scrollbarStyleOptions  = config.ScrollbarStyles
 	windowButtonOptions    = config.WindowButtonStyles
+	windowButtonPosOptions = config.WindowButtonPositions
 	scrollbarTintOptions   = config.ScrollbarTints
 	clickToTypeOptions     = config.ClickToTypeModes
 )
@@ -358,6 +359,14 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v string) {
 					config.WindowButtonStyle = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowButtonStyle = v })
+					m.applyAppearanceLive(false)
+				}),
+			enumItem("Window button position", "Which end of the title bar the controls sit on. macOS puts them left",
+				windowButtonPosOptions,
+				func() string { return config.WindowButtonPosition },
+				func(m *OS, v string) {
+					config.WindowButtonPosition = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowButtonPosition = v })
 					m.applyAppearanceLive(false)
 				}),
 			boolItem("Scrollbar", "Show where a scrolled-back pane is in its history",

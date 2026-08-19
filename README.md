@@ -203,7 +203,7 @@ tuios config edit            # Edit config in $EDITOR
 tuios keybinds list          # View all keybindings
 ```
 
-See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show_clock`, `show_cpu`, `show_ram`, `shared_borders`, `window_button_style`, custom themes, and keybinding customization.
+See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show_clock`, `show_cpu`, `show_ram`, `shared_borders`, `window_button_style`, `window_button_position`, custom themes, and keybinding customization.
 
 ## What's New in v0.7.0
 

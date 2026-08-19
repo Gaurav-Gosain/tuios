@@ -29,30 +29,31 @@ var (
 
 // Global flags
 var (
-	debugMode           bool
-	cpuProfile          string
-	pprofAddr           string
-	asciiOnly           bool
-	themeName           string
-	listThemes          bool
-	previewTheme        string
-	borderStyle         string
-	dockbarPosition     string
-	hideWindowButtons   bool
-	windowButtonStyle   string
-	hideScrollbar       bool
-	scrollbackLines     int
-	showKeys            bool
-	noAnimations        bool
-	confirmQuit         bool
-	windowTitlePosition string
-	hideClock           bool
-	showClock           bool
-	showCPU             bool
-	showRAM             bool
-	sharedBorders       bool
-	zoomMaxWidth        int
-	printSkill          bool
+	debugMode            bool
+	cpuProfile           string
+	pprofAddr            string
+	asciiOnly            bool
+	themeName            string
+	listThemes           bool
+	previewTheme         string
+	borderStyle          string
+	dockbarPosition      string
+	hideWindowButtons    bool
+	windowButtonStyle    string
+	windowButtonPosition string
+	hideScrollbar        bool
+	scrollbackLines      int
+	showKeys             bool
+	noAnimations         bool
+	confirmQuit          bool
+	windowTitlePosition  string
+	hideClock            bool
+	showClock            bool
+	showCPU              bool
+	showRAM              bool
+	sharedBorders        bool
+	zoomMaxWidth         int
+	printSkill           bool
 )
 
 func main() {
@@ -1364,6 +1365,7 @@ func registerInterfaceFlags(cmds ...*cobra.Command) {
 		f.StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden (default: from config or bottom)")
 		f.BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
 		f.StringVar(&windowButtonStyle, "window-button-style", "", "Window control style: pill, dots (default: from config or pill)")
+		f.StringVar(&windowButtonPosition, "window-button-position", "", "Which end of the title bar the window controls sit on: right, left (default: from config or right)")
 		f.BoolVar(&hideScrollbar, "hide-scrollbar", false, "Hide the window scrollbar thumb on the border")
 		f.IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
 		f.BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")

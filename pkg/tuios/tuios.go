@@ -89,6 +89,10 @@ type Options struct {
 	// HideWindowButtons hides the minimize/maximize/close buttons.
 	HideWindowButtons bool
 
+	// WindowButtonPosition selects which end of the title bar the window
+	// controls sit on: "right" or "left". Empty means the config's value.
+	WindowButtonPosition string
+
 	// WindowButtonStyle selects how the window controls are drawn: "pill" or
 	// "dots". Empty keeps the configured default.
 	WindowButtonStyle string
@@ -179,6 +183,14 @@ func WithHideWindowButtons(hide bool) Option {
 func WithWindowButtonStyle(style string) Option {
 	return func(o *Options) {
 		o.WindowButtonStyle = style
+	}
+}
+
+// WithWindowButtonPosition selects which end of the title bar the window
+// controls sit on: "right" (the default) or "left", the way macOS does it.
+func WithWindowButtonPosition(position string) Option {
+	return func(o *Options) {
+		o.WindowButtonPosition = position
 	}
 }
 
@@ -300,6 +312,9 @@ func newModel(options Options) *Model {
 	}
 	if options.WindowButtonStyle != "" {
 		config.WindowButtonStyle = options.WindowButtonStyle
+	}
+	if options.WindowButtonPosition != "" {
+		config.WindowButtonPosition = options.WindowButtonPosition
 	}
 	if options.ScrollbackLines > 0 {
 		config.ScrollbackLines = options.ScrollbackLines

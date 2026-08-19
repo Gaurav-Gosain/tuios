@@ -27,6 +27,9 @@ type Overrides struct {
 	// WindowButtonStyle overrides how the window controls are drawn
 	WindowButtonStyle string
 
+	// WindowButtonPosition overrides which end of the title bar they sit on
+	WindowButtonPosition string
+
 	// WindowTitlePosition overrides the window title position
 	WindowTitlePosition string
 
@@ -103,6 +106,13 @@ func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 		WindowButtonStyle = overrides.WindowButtonStyle
 	} else if userConfig != nil && userConfig.Appearance.WindowButtonStyle != "" {
 		WindowButtonStyle = userConfig.Appearance.WindowButtonStyle
+	}
+
+	// Window Button Position - CLI flag takes precedence, otherwise use user config
+	if overrides.WindowButtonPosition != "" {
+		WindowButtonPosition = overrides.WindowButtonPosition
+	} else if userConfig != nil && userConfig.Appearance.WindowButtonPosition != "" {
+		WindowButtonPosition = userConfig.Appearance.WindowButtonPosition
 	}
 
 	// Hide Scrollbar - OR of CLI flag and user config

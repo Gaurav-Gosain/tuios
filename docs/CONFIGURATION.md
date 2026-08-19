@@ -87,6 +87,7 @@ border_style = "rounded"
 dockbar_position = "bottom"
 hide_window_buttons = false
 window_button_style = "pill"
+window_button_position = "right"
 scrollback_lines = 10000
 
 [notifications]
@@ -225,6 +226,7 @@ border_style = "rounded"
 dockbar_position = "bottom"
 hide_window_buttons = false
 window_button_style = "pill"
+window_button_position = "right"
 scrollback_lines = 10000
 ```
 
@@ -330,6 +332,40 @@ revealed symbols become `X`, `-` and `O`.
 
 Also settable at runtime with `tuios set-config window_button_style dots`, and
 from the in-app settings page (Appearance, "Window button style").
+
+### window_button_position
+
+Which end of the title bar the window controls sit on.
+
+**Valid values:**
+
+- `"right"` (default) - against the bar's trailing corner, where Windows and
+  most Linux desktops put them.
+- `"left"` - against the leading corner, the way macOS does.
+
+The window title, when `window_title_position = "top"` puts it on the same bar,
+takes the end the controls did not, so the two are always at opposite corners.
+A bar too narrow to hold both drops the title and keeps the controls, at
+whichever end this names: the title is still readable from the dock, a control
+nobody can press is not.
+
+This is independent of `window_button_style`. Setting the style to `"dots"`
+does not move them: a default that changes because a different key changed is
+hard to predict and harder to undo. Pair the two yourself for the full macOS
+arrangement:
+
+```toml
+[appearance]
+window_button_style = "dots"
+window_button_position = "left"
+```
+
+**Default:** `"right"`
+
+**CLI override:** `--window-button-position <position>`
+
+Also settable at runtime with `tuios set-config window_button_position left`,
+and from the in-app settings page (Appearance, "Window button position").
 
 ### scrollback_lines
 

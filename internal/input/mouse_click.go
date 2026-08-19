@@ -310,11 +310,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Window controls come first, before mode switching or focus changes.
 	//
 	// The cells are whichever ones the renderer recorded as it drew the pill:
-	// the styles differ in glyph, width and order, and the pill is right-aligned
-	// against a corner glyph that is itself configurable. The offsets this used
-	// to measure from the window rectangle had drifted a column off the drawn
-	// pill, so a press on the corner closed the window and a press on the
-	// minimize glyph's own leading pad did nothing.
+	// the styles differ in glyph, width and order, the pill goes to whichever
+	// end appearance.window_button_position names, and the corner glyph it
+	// stops short of is itself configurable. The offsets this used to measure
+	// from the window rectangle had drifted a column off the drawn pill, so a
+	// press on the corner closed the window and a press on the minimize glyph's
+	// own leading pad did nothing.
 	if mouse.Button == tea.MouseLeft {
 		if action, ok := o.WindowButtonIn(clickedWindow.ID, X, Y); ok {
 			switch action {

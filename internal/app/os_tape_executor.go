@@ -822,7 +822,7 @@ func (m *OS) ToggleAnimations() error {
 // SetConfig sets a configuration option at runtime.
 // Supported paths: appearance.dockbar_position, appearance.border_style,
 // appearance.animations_enabled, appearance.hide_window_buttons,
-// appearance.window_button_style
+// appearance.window_button_style, appearance.window_button_position
 func (m *OS) SetConfig(path, value string) error {
 	switch path {
 	case "appearance.dockbar_position", "dockbar_position":
@@ -853,6 +853,14 @@ func (m *OS) SetConfig(path, value string) error {
 				value, strings.Join(config.WindowButtonStyles, " or "))
 		}
 		config.WindowButtonStyle = value
+		m.MarkAllDirty()
+		return nil
+	case "appearance.window_button_position", "window_button_position":
+		if !slices.Contains(config.WindowButtonPositions, value) {
+			return fmt.Errorf("unknown window button position: %s (want %s)",
+				value, strings.Join(config.WindowButtonPositions, " or "))
+		}
+		config.WindowButtonPosition = value
 		m.MarkAllDirty()
 		return nil
 	default:

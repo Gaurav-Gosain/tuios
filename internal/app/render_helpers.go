@@ -100,20 +100,78 @@ func getNormalBorder() lipgloss.Border {
 	return getBorder()
 }
 
-// RightString returns a right-aligned string with decorative borders.
-func RightString(str string, width int, color color.Color) string {
-	spaces := width - lipgloss.Width(str)
+// borderRowGlyphs returns the fill character and the two corners a top or a
+// bottom border row is drawn from.
+func borderRowGlyphs(isTop bool) (fill, cornerLeft, cornerRight string) {
+	if isTop {
+		return config.GetWindowBorderTop(), config.GetWindowBorderTopLeft(), config.GetWindowBorderTopRight()
+	}
+	return config.GetWindowBorderBottom(), config.GetWindowBorderBottomLeft(), config.GetWindowBorderBottomRight()
+}
+
+// windowTitleBadge wraps a window's name in the pill caps the title bar shows
+// it in.
+func windowTitleBadge(windowName, agentState string, col color.Color) string {
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
-	fg := style.Foreground(color)
+	render := style.Foreground(col).Render
+	return render(config.GetWindowPillLeft()) +
+		titleBadgeText(windowName, agentState, col) +
+		render(config.GetWindowPillRight())
+}
 
-	if spaces < 0 {
-		return ""
+// buttonBorderRow is a drawn title-bar row together with the column its control
+// pill landed on. The two come back as one value because they are one decision:
+// layoutBorderRow picks the end the pill goes on, draws it there, and reports
+// that same column for the hit rectangles. Nothing measures the finished row
+// back, which is what stops the drawn pill and the pressable cells disagreeing
+// when the pill moves to the other end.
+type buttonBorderRow struct {
+	text string
+	// pillStart is the pill's offset from the row's first cell, or -1 when the
+	// row carries no pill.
+	pillStart int
+}
+
+// layoutBorderRow draws one border row of the given inner width carrying the
+// control pill, and the title badge when there is one and it fits.
+//
+// The badge sits at the end the pill does not, so the two stay as far apart as
+// the bar allows and a press aimed at one is never near the other. When they do
+// not both fit the badge is dropped rather than the pill: a name the bar cannot
+// show is still readable from the dock, while a close button nobody can press
+// is simply gone.
+func layoutBorderRow(badge, pill string, width int, col color.Color, isTop bool) buttonBorderRow {
+	style := pool.GetStyle()
+	defer pool.PutStyle(style)
+	render := style.Foreground(col).Render
+
+	fill, cornerLeft, cornerRight := borderRowGlyphs(isTop)
+
+	pillWidth := lipgloss.Width(pill)
+	padding := width - lipgloss.Width(badge) - pillWidth
+	if padding < 0 {
+		badge, padding = "", width-pillWidth
+	}
+	if padding < 0 {
+		// Not even the controls fit. The row comes back empty, which is how a
+		// bar that could not be drawn has always been reported.
+		return buttonBorderRow{pillStart: -1}
 	}
 
-	return fg.Render(config.GetWindowBorderTopLeft()+strings.Repeat(config.GetWindowBorderTop(), spaces)) +
-		str +
-		fg.Render(config.GetWindowBorderTopRight())
+	middle := render(strings.Repeat(fill, padding))
+	// A bar with no controls leaves the badge where it has always been, since
+	// there is nothing for it to make room for.
+	if pill != "" && config.WindowButtonPosition == config.WindowButtonPositionLeft {
+		return buttonBorderRow{
+			text:      render(cornerLeft) + pill + middle + badge + render(cornerRight),
+			pillStart: 1,
+		}
+	}
+	return buttonBorderRow{
+		text:      render(cornerLeft) + badge + middle + pill + render(cornerRight),
+		pillStart: 1 + lipgloss.Width(badge) + padding,
+	}
 }
 
 func makeRounded(content string, color color.Color) string {
@@ -217,18 +275,16 @@ func (m *OS) addToBorder(content string, color color.Color, window *terminal.Win
 
 	borderStyle := style.Foreground(color)
 
-	// Build top border. Either path right-aligns the pill against the corner, so
-	// the recorded columns are the same for both; what differs is whether the
-	// pill fits at all, and neither path draws it when it does not.
-	var topBorder string
+	// Build the top border. The titled and the bare bar go through one layout,
+	// so the end the pill sits on is decided once and the columns it reports
+	// are the ones it drew on.
+	badge := ""
 	if titlePos == "top" && windowName != "" {
-		// Title on top with buttons on the right
-		topBorder = renderTitleWithButtons(windowName, window.AgentState, buttons, width, color, true)
-	} else {
-		// Normal top border with buttons on right
-		topBorder = RightString(buttons, width, color)
+		badge = windowTitleBadge(windowName, window.AgentState, color)
 	}
-	m.recordWindowButtons(window.ID, placeWindowButtons(hits, window, topBorder, buttons))
+	row := layoutBorderRow(badge, buttons, width, color, true)
+	topBorder := row.text
+	m.recordWindowButtons(window.ID, placeWindowButtons(hits, window, row.pillStart))
 
 	// Build bottom border with optional scrollback position indicator
 	var bottomBorder string
@@ -265,72 +321,19 @@ func (m *OS) addToBorder(content string, color color.Color, window *terminal.Win
 	return topBorder + "\n" + strings.Join(lines, "\n")
 }
 
-// renderTitleWithButtons renders a top/bottom border with a title badge and buttons.
-func renderTitleWithButtons(windowName, agentState string, buttons string, width int, color color.Color, isTop bool) string {
-	style := pool.GetStyle()
-	defer pool.PutStyle(style)
-	borderStyle := style.Foreground(color)
-
-	var borderChar, cornerLeft, cornerRight string
-	if isTop {
-		borderChar = config.GetWindowBorderTop()
-		cornerLeft = config.GetWindowBorderTopLeft()
-		cornerRight = config.GetWindowBorderTopRight()
-	} else {
-		borderChar = config.GetWindowBorderBottom()
-		cornerLeft = config.GetWindowBorderBottomLeft()
-		cornerRight = config.GetWindowBorderBottomRight()
-	}
-
-	// Build name badge
-	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
-	nameText := titleBadgeText(windowName, agentState, color)
-	rightCircle := borderStyle.Render(config.GetWindowPillRight())
-	nameBadge := leftCircle + nameText + rightCircle
-
-	nameBadgeWidth := lipgloss.Width(nameBadge)
-	buttonsWidth := lipgloss.Width(buttons)
-
-	// Calculate padding between title and buttons
-	middlePadding := width - nameBadgeWidth - buttonsWidth
-	if middlePadding < 0 {
-		// Not enough space, just show buttons
-		return RightString(buttons, width, color)
-	}
-
-	return borderStyle.Render(cornerLeft) +
-		nameBadge +
-		borderStyle.Render(strings.Repeat(borderChar, middlePadding)) +
-		buttons +
-		borderStyle.Render(cornerRight)
-}
-
 // renderTitleBadge renders a border with a centered title badge.
 func renderTitleBadge(windowName, agentState string, width int, color color.Color, isTop bool) string {
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
 	borderStyle := style.Foreground(color)
 
-	var borderChar, cornerLeft, cornerRight string
-	if isTop {
-		borderChar = config.GetWindowBorderTop()
-		cornerLeft = config.GetWindowBorderTopLeft()
-		cornerRight = config.GetWindowBorderTopRight()
-	} else {
-		borderChar = config.GetWindowBorderBottom()
-		cornerLeft = config.GetWindowBorderBottomLeft()
-		cornerRight = config.GetWindowBorderBottomRight()
-	}
+	borderChar, cornerLeft, cornerRight := borderRowGlyphs(isTop)
 
 	if windowName == "" {
 		return borderStyle.Render(cornerLeft + strings.Repeat(borderChar, width) + cornerRight)
 	}
 
-	leftCircle := borderStyle.Render(config.GetWindowPillLeft())
-	nameText := titleBadgeText(windowName, agentState, color)
-	rightCircle := borderStyle.Render(config.GetWindowPillRight())
-	nameBadge := leftCircle + nameText + rightCircle
-
+	nameBadge := windowTitleBadge(windowName, agentState, color)
 	badgeWidth := lipgloss.Width(nameBadge)
 	totalPadding := width - badgeWidth
 

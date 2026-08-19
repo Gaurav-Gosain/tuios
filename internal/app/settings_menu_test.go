@@ -75,7 +75,7 @@ func useTempConfig(t *testing.T) string {
 func TestSettingsCoverage(t *testing.T) {
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 	want := map[string][]string{
-		"Appearance": {"Focused border color", "Unfocused border color", "Window title format"},
+		"Appearance": {"Focused border color", "Unfocused border color", "Window title format", "Window button position"},
 		"Behavior":   {"Preferred shell", "Click to type"},
 		"Daemon":     {"Log level"},
 		"Dock":       {"Workspace tab format"},
