@@ -114,3 +114,54 @@ func TestThemeOffLeavesThePaletteToTheTerminal(t *testing.T) {
 		t.Errorf("after the theme was removed, SGR 31 reached the host as %+v, want palette index 1 back", got)
 	}
 }
+
+// TestPickerShowsTheUsersOwnSixteen is the picker half of the same rule. With
+// no theme loaded the row of sixteen at the top of the accent picker is the
+// user's terminal palette, so every swatch has to be painted with an index and
+// left for the host to resolve. Painted from a table of xterm defaults instead,
+// as it was, the row shows sixteen colours the user may not have.
+func TestPickerShowsTheUsersOwnSixteen(t *testing.T) {
+	term, _ := start(t, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+
+	toggleSidebarViaPalette(t, term)
+	if err := term.WaitForText(sidebarHeader, uiTimeout); err != nil {
+		t.Fatalf("sidebar did not open: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("s"); err != nil {
+		t.Fatalf("focus the rail: %v", err)
+	}
+	if err := term.SendKeys("l"); err != nil {
+		t.Fatalf("move the rail cursor: %v", err)
+	}
+	time.Sleep(insertGuard)
+	if err := term.SendKeys("c"); err != nil {
+		t.Fatalf("open the accent picker: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "accent") && strings.Contains(text, "hex")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the accent picker did not open: %v\n%s", err, term.Snapshot())
+	}
+
+	// The sixteen are the only cells in the dialog whose backgrounds are palette
+	// indices, which is the whole claim: found by that property rather than by
+	// counting rows, so the layout can move without the test lying.
+	s := term.Screen()
+	cols, rows := s.Size()
+	seen := map[uint8]bool{}
+	for row := range rows {
+		for col := range cols {
+			if bg := s.Cell(col, row).Bg; bg.Kind == tuitest.ColorIndexed && bg.Index < 16 {
+				seen[bg.Index] = true
+			}
+		}
+	}
+	// Bright black has no normal twin in the picker's grid, so fifteen of the
+	// sixteen slots are on offer.
+	if len(seen) < 15 {
+		t.Errorf("the picker painted %d of the terminal's own palette slots, want 15\n%s", len(seen), term.Snapshot())
+	}
+}
