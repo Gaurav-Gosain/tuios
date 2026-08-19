@@ -575,6 +575,16 @@ func (s *Screen) DeleteLine(n int) bool {
 	return true
 }
 
+// withBlankPen runs fn with the pen background cleared, so any erase or scroll
+// it performs leaves default-background cells behind instead of inheriting the
+// guest's colour. For screen edits tuios synthesises rather than replays.
+func (s *Screen) withBlankPen(fn func()) {
+	bg := s.cur.Pen.Bg
+	s.cur.Pen.Bg = nil
+	defer func() { s.cur.Pen.Bg = bg }()
+	fn()
+}
+
 // blankCell returns the cursor blank cell with the background color set to the
 // current pen background color. If the pen background color is nil, the return
 // value is nil.

@@ -488,9 +488,19 @@ func (e *Emulator) ReserveImageSpace(rows, cols int) {
 		// clamp: rows beyond the viewport cannot be shown, and a hostile r=
 		// could otherwise drive ~1e9 ScrollUp calls while holding the IO lock.
 		scrollCount = min(endY-height, height)
-		for range scrollCount {
-			e.scr.ScrollUp(1)
-		}
+		// Scroll with a blank pen. ScrollUp fills the rows it exposes with the
+		// pen background (background-colour erase), which is right for a scroll
+		// the guest caused by printing, but this one is ours: the guest emitted
+		// a graphics command and no text at all. Leaving the pen alone paints
+		// every reserved row full width in whatever colour the guest happened
+		// to have set, and the image only covers its own columns, so an app
+		// that transmits with a background set (a shell with a coloured prompt
+		// segment, a TUI mid-draw) gets a solid block around its image.
+		e.scr.withBlankPen(func() {
+			for range scrollCount {
+				e.scr.ScrollUp(1)
+			}
+		})
 	}
 
 	// Final cursor position accounts for scrolling
