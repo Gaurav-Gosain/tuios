@@ -86,6 +86,50 @@ func TestPrintingScrollStillPaintsPenBackground(t *testing.T) {
 	}
 }
 
+// The same thing from the bytes a guest actually emits: a background left set
+// in the pen, then a sixel, which reserves its rows inside the emulator.
+func TestSixelReservationLeavesBlankRows(t *testing.T) {
+	const (
+		cols       = 20
+		rows       = 8
+		cellW      = 10
+		cellH      = 20
+		imagePxH   = 120 // six rows at cellH
+		imageRows  = imagePxH / cellH
+		scrolledIn = imageRows - 1 // the cursor is already on the last row
+	)
+
+	emu := vt.NewEmulator(cols, rows)
+	emu.SetCellSize(cellW, cellH)
+
+	if _, err := emu.WriteString("\x1b[41m"); err != nil {
+		t.Fatalf("set pen: %v", err)
+	}
+	for range rows {
+		if _, err := emu.WriteString("text\r\n"); err != nil {
+			t.Fatalf("print: %v", err)
+		}
+	}
+
+	// A sixel 40px wide and 120px tall, so it needs imageRows rows.
+	if _, err := emu.WriteString("\x1bPq\"1;1;40;120#0;2;0;0;100#0~~~~\x1b\\"); err != nil {
+		t.Fatalf("sixel: %v", err)
+	}
+
+	for y := rows - scrolledIn; y < rows; y++ {
+		for x := range cols {
+			c := emu.CellAt(x, y)
+			if c == nil {
+				continue
+			}
+			if c.Style.Bg != nil {
+				t.Fatalf("cell (%d,%d) reserved for the sixel has background %v, want none",
+					x, y, c.Style.Bg)
+			}
+		}
+	}
+}
+
 // A reservation that fits on screen scrolls nothing, so nothing is repainted
 // and the guest's existing rows are left exactly as they were.
 func TestReserveImageSpaceWithoutScrollLeavesRowsAlone(t *testing.T) {
