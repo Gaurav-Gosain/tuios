@@ -473,6 +473,15 @@ func (e *Emulator) registerDefaultEscHandlers() {
 		return true
 	})
 
+	e.RegisterEscHandler('\\', func() bool {
+		// String Terminator [ansi.ST]. A parser that has already closed the
+		// string it belonged to sees this on its own, and it means nothing
+		// there. Recognising it keeps a legitimate terminator out of the log of
+		// sequences the emulator did not understand, which is a signal worth
+		// keeping clean.
+		return true
+	})
+
 	e.RegisterEscHandler('c', func() bool {
 		// Reset Initial State [ansi.RIS]
 		e.fullReset()

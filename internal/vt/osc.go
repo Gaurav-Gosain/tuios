@@ -306,15 +306,25 @@ func (e *Emulator) handleClipboard(data []byte) {
 	}
 }
 
+// handleHyperlink handles OSC 8: "8;<params>;<uri>".
+//
+// The parameters come first and the URI second, which is the opposite of what
+// this used to store: every hyperlink came out with its parameters in the URL
+// field, so a plain link, which has no parameters, got an empty URL and a link
+// carrying an id got the id as its address.
+//
+// The split is limited to three parts because a URI may contain semicolons, in
+// a query string or a matrix parameter. Splitting on all of them made any such
+// link parse to four parts and be dropped.
 func (e *Emulator) handleHyperlink(cmd int, data []byte) {
-	parts := bytes.Split(data, []byte{';'})
+	parts := bytes.SplitN(data, []byte{';'}, 3)
 	if len(parts) != 3 || cmd != 8 {
 		// Invalid, ignore
 		return
 	}
 
-	e.scr.cur.Link.URL = string(parts[1])
-	e.scr.cur.Link.Params = string(parts[2])
+	e.scr.cur.Link.Params = string(parts[1])
+	e.scr.cur.Link.URL = string(parts[2])
 }
 
 // handleNotify9 handles OSC 9 (iTerm2 desktop notification): "9;<msg>".
