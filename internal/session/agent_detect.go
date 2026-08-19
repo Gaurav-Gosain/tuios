@@ -2,10 +2,6 @@ package session
 
 import (
 	"log"
-	"os"
-	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -43,22 +39,6 @@ var defaultAgentBinaries = []string{
 	"octofriend",
 	"qwen",
 }
-
-// wrapperInterpreters are interpreters and launchers that run an agent as a
-// script rather than being the agent themselves. When the foreground process is
-// one of these, the detector also inspects the command line arguments so a
-// wrapped agent (for example "node .../claude" or "npx opencode") is still
-// recognised. argv0 alone would name only the interpreter.
-var wrapperInterpreters = map[string]struct{}{
-	"node": {}, "nodejs": {}, "deno": {}, "bun": {},
-	"python": {}, "python2": {}, "python3": {}, "uv": {}, "uvx": {},
-	"npx": {}, "pnpm": {}, "yarn": {}, "bunx": {},
-	"sh": {}, "bash": {}, "zsh": {}, "fish": {}, "env": {},
-}
-
-// scriptExtensions are stripped from an argv base name before matching, so a
-// script argument such as "claude.js" matches the agent name "claude".
-var scriptExtensions = []string{".js", ".mjs", ".cjs", ".ts", ".py"}
 
 // agentMatcher decides whether a foreground process is a known AI-agent CLI. It
 // holds the resolved set of agent names (defaults merged with user additions),
@@ -101,12 +81,24 @@ func newAgentMatcher(extra []string) agentMatcher {
 // can name what it matched; the built-in and user-configured name list is the
 // fallback and yields an unnamed match.
 func (m agentMatcher) identify(info foregroundInfo) (string, bool) {
+	id, _, ok := m.identifyDetail(info)
+	return id, ok
+}
+
+// identifyDetail is identify with the predicate that decided it, so the
+// explain-agent-detect diagnostic can quote a manifest rule or say which of the
+// name-list signals fired. The empty rule with ok false is "nothing matched".
+func (m agentMatcher) identifyDetail(info foregroundInfo) (id, rule string, ok bool) {
+	p := info.proc()
 	if m.registry != nil {
-		if id, ok := m.registry.Identify(info.comm, info.argv, info.exe); ok {
-			return id, true
+		if id, rule, ok := m.registry.IdentifyDetail(p); ok {
+			return id, rule, true
 		}
 	}
-	return "", m.isAgent(info)
+	if rule, ok := m.nameRule(p); ok {
+		return "", rule, true
+	}
+	return "", "", false
 }
 
 // isAgent reports whether a pane's foreground process is a known agent. It reads
@@ -124,30 +116,33 @@ func (m agentMatcher) identify(info foregroundInfo) (string, bool) {
 // interpreter, it stops rather than risk a false positive from an incidental
 // argument, since mislabelling an unrelated pane is worse than missing an agent.
 func (m agentMatcher) isAgent(info foregroundInfo) bool {
-	if m.named(agentBaseName(info.comm)) || m.named(agentBaseName(info.exe)) {
-		return true
+	_, ok := m.nameRule(info.proc())
+	return ok
+}
+
+// nameRule is isAgent with the signal that decided it.
+func (m agentMatcher) nameRule(p harness.ProcInfo) (string, bool) {
+	if comm := p.CommBase(); m.named(comm) {
+		return "name comm=" + comm, true
+	}
+	if exe := p.ExeBase(); m.named(exe) {
+		return "name exe=" + exe, true
 	}
 	// The install path names the harness even when the binary does not: Claude
 	// Code's real executable is ".../share/claude/versions/2.1.222", whose own
 	// name is a version and whose parent is the agent.
-	if info.exe != "" && m.argNamesAgent(info.exe) {
-		return true
+	if p.Exe != "" && m.argNamesAgent(p.Exe) {
+		return "name exe path=" + p.Exe, true
 	}
-	// An interpreter is a stand-in for the script it runs, so its arguments are
-	// worth reading. Either name can be the interpreter: a wrapper script sets
-	// comm while exe stays "node", and a renamed process does the reverse. An
-	// unreadable exe is silence, not agreement, so it cannot rescue a comm that
-	// already named something that is not an interpreter.
-	commBase, exeBase := agentBaseName(info.comm), agentBaseName(info.exe)
-	if !(commBase == "" || isWrapperName(commBase)) && !(exeBase != "" && isWrapperName(exeBase)) {
-		return false
+	// The one token an interpreter was asked to run, and nothing else on the
+	// command line. Scan its path components rather than only its base name, so
+	// the script file being cli.js does not hide the agent named by its directory.
+	// RunToken is empty for a process that is not an interpreter, which is what
+	// keeps an incidental argument from naming an agent.
+	if run := p.RunToken(); run != "" && m.argNamesAgent(run) {
+		return "name run token=" + run, true
 	}
-	// A wrapped agent is named somewhere inside the interpreter's arguments, most
-	// often as a path component of the script it runs (for example
-	// ".../node_modules/@anthropic-ai/claude-code/cli.js", or "/usr/bin/claude").
-	// Scan each argument's path components, not just its base name, so the script
-	// file being cli.js does not hide the agent named by its directory.
-	return slices.ContainsFunc(info.argv, m.argNamesAgent)
+	return "", false
 }
 
 // named reports whether a base name is one of the known agent names.
@@ -156,13 +151,6 @@ func (m agentMatcher) named(base string) bool {
 		return false
 	}
 	_, ok := m.names[base]
-	return ok
-}
-
-// isWrapperName reports whether a base name is an interpreter or launcher that
-// runs an agent rather than being one.
-func isWrapperName(base string) bool {
-	_, ok := wrapperInterpreters[base]
 	return ok
 }
 
@@ -187,24 +175,9 @@ func (m agentMatcher) argNamesAgent(arg string) bool {
 }
 
 // agentBaseName reduces a comm value or an argv token to the base name used for
-// matching: it drops any directory, a trailing NUL, surrounding whitespace, and a
-// known script extension, and lowercases the result. A leading '-' (a login
-// shell's argv0, e.g. "-bash") is stripped too.
-func agentBaseName(s string) string {
-	s = strings.TrimSpace(strings.TrimRight(s, "\x00"))
-	if s == "" {
-		return ""
-	}
-	s = filepath.Base(s)
-	s = strings.TrimPrefix(s, "-")
-	lower := strings.ToLower(s)
-	for _, ext := range scriptExtensions {
-		if before, ok := strings.CutSuffix(lower, ext); ok {
-			return before
-		}
-	}
-	return lower
-}
+// matching. It is harness.BaseName, shared so the name list and the manifest
+// registry cannot drift apart on what a process is called.
+func agentBaseName(s string) string { return harness.BaseName(s) }
 
 // loginShells are the shells a pane sits at when it is running nothing. Their
 // names are noise in a row label: every idle pane in a session reports the same
@@ -235,6 +208,11 @@ type foregroundInfo struct {
 	pid int
 }
 
+// proc is the process in the shape both matchers read it in.
+func (i foregroundInfo) proc() harness.ProcInfo {
+	return harness.ProcInfo{Comm: i.comm, Argv: i.argv, Exe: i.exe}
+}
+
 // foregroundCommand is the label a pane earns from what it is running: the base
 // name of the foreground process, or empty when that is just a shell. argv[0]
 // is preferred over comm because the kernel truncates comm at 15 characters.
@@ -256,17 +234,16 @@ func foregroundCommand(info foregroundInfo, running bool, shell string) string {
 }
 
 // foregroundProcess resolves the foreground process group leader of the
-// controlling terminal of the shell with the given pid, returning its comm and
-// full argv. It is the honest signal for "what is this pane actually running":
-// the shell's /proc/<pid>/stat carries the tty's foreground process group id
-// (tpgid), and the process whose pid equals that id is the program in the
+// controlling terminal of the shell with the given pid. It is the honest signal
+// for "what is this pane actually running": the tty carries a foreground process
+// group id, and the process whose pid equals that id is the program in the
 // foreground, or the shell itself when nothing else is running.
 //
-// It is Linux-only (procfs). On any other platform, or when the process is gone,
-// running is false and the caller treats the pane as running no agent. The comm
-// and argv are read from the same /proc entry so a pid reused between the two
-// reads yields at worst a stale-but-consistent name for one tick; the detector
-// re-resolves every tick and only acts on a change.
+// Both readings are per-platform. Linux takes them from procfs, darwin from
+// kern.proc.pid and kern.procargs2; a platform with neither reports nothing and
+// the caller treats the pane as running no agent. When the process is gone the
+// answer is the same. The detector re-resolves every tick and only acts on a
+// change, so a pid reused between two reads costs at worst one stale tick.
 func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 	if shellPid <= 0 {
 		return foregroundInfo{}, false
@@ -275,89 +252,14 @@ func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 	if !ok || tpgid <= 0 {
 		return foregroundInfo{}, false
 	}
-	info := foregroundInfo{
-		comm: readComm(tpgid),
-		argv: readCmdline(tpgid),
-		exe:  readExe(tpgid),
-		pid:  tpgid,
-	}
+	info := readProcessInfo(tpgid)
+	info.pid = tpgid
 	if info.comm == "" && len(info.argv) == 0 {
-		// The foreground group leader vanished between reads, or procfs is
-		// unavailable: report not-running rather than guess.
+		// The foreground group leader vanished between reads, or this platform
+		// cannot see it: report not-running rather than guess.
 		return foregroundInfo{}, false
 	}
 	return info, true
-}
-
-// readExe resolves /proc/<pid>/exe, the real binary behind a process whatever it
-// renamed itself to, or "" when it cannot be read. A deleted binary resolves to a
-// path with a " (deleted)" suffix, which is stripped so the name still matches.
-func readExe(pid int) string {
-	target, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSuffix(target, " (deleted)")
-}
-
-// readForegroundPGID reads field 8 (tpgid) of /proc/<pid>/stat, the foreground
-// process group id of the process's controlling terminal. The comm field (2) is
-// wrapped in parentheses and may itself contain spaces or parentheses, so the
-// numeric fields are parsed from after the final ')'.
-func readForegroundPGID(pid int) (int, bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err != nil {
-		return 0, false
-	}
-	return parseStatTPGID(string(data))
-}
-
-// parseStatTPGID extracts the tpgid (foreground process group id, field 8) from
-// the contents of a /proc/<pid>/stat line. The comm field (2) is wrapped in
-// parentheses and may itself contain spaces or parentheses, so the numeric fields
-// are parsed from after the final ')'.
-func parseStatTPGID(s string) (int, bool) {
-	rparen := strings.LastIndex(s, ")")
-	if rparen < 0 || rparen+2 >= len(s) {
-		return 0, false
-	}
-	// Fields after "(comm) ": state(3) ppid(4) pgrp(5) session(6) tty_nr(7)
-	// tpgid(8). Splitting the remainder gives tpgid at index 5 (state at 0).
-	fields := strings.Fields(s[rparen+1:])
-	if len(fields) < 6 {
-		return 0, false
-	}
-	tpgid, err := strconv.Atoi(fields[5])
-	if err != nil {
-		return 0, false
-	}
-	return tpgid, true
-}
-
-// readComm returns the trimmed contents of /proc/<pid>/comm, or "" on error.
-func readComm(pid int) string {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/comm")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
-// readCmdline returns the NUL-separated arguments of /proc/<pid>/cmdline as a
-// slice, or nil on error or for a kernel thread (empty cmdline).
-func readCmdline(pid int) []string {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
-	if err != nil || len(data) == 0 {
-		return nil
-	}
-	parts := strings.Split(strings.TrimRight(string(data), "\x00"), "\x00")
-	out := parts[:0]
-	for _, p := range parts {
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // applyAgentDetection reconciles each window's agent state with the foreground

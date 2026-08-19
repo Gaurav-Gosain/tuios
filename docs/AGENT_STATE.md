@@ -14,6 +14,7 @@ alongside the rest of the pane-driving surface.
 - [States](#states)
 - [Reporting state](#reporting-state)
 - [Sources and precedence](#sources-and-precedence)
+- [Recognising a harness](#recognising-a-harness)
 - [Screen rules](#screen-rules)
 - [The stall heuristic](#the-stall-heuristic)
 - [Indicator](#indicator)
@@ -78,6 +79,7 @@ decide which opinion wins:
 | `osc`    | An escape sequence the pane emitted              |
 | `screen` | A rule matched against the pane's rendered text  |
 | `stall`  | The silence timer                                |
+| `detect` | The foreground process of the pane               |
 
 A source may write over a claim ranked at or below its own and never over one
 ranked above it, so a screen rule cannot overwrite what an agent reported for
@@ -136,6 +138,89 @@ gone rather than sticking on `needs_input`.
 this is visible rather than magic. Only the daemon's own screen tier can take the
 exception, because only it has read the pane: a caller passing `source: screen`
 to `set-agent-state` carries no observation and is refused as before.
+
+## Recognising a harness
+
+Before anything can report on a pane, something has to decide the pane is running
+an agent at all. The daemon resolves the foreground process group of each pane's
+terminal and reads three descriptions of the process, because no one of them is
+reliable alone:
+
+| Reading | What it is | How it lies |
+| ------- | ---------- | ----------- |
+| `comm`  | the name the kernel reports | truncated at 15 bytes, and rewritable by the process (Gemini CLI reports `MainThread`) |
+| `argv`  | the command line | names an interpreter, not the agent, whenever one is used |
+| `exe`   | the resolved executable | a version number rather than a name for installers that keep one binary per release |
+
+A manifest in `internal/harness/manifests` matches on any of them. `comm` and
+`argv0` match a base name, `exe_glob` matches the executable path, and
+`argv_path` matches path components of the command line.
+
+### argv is read only for an interpreter, and only one token of it
+
+`argv_path` is the one predicate that reads the command line, so it is the one
+predicate that is gated. A process that names itself is described by its own
+name; only a stand-in for another program has any reason for its arguments to be
+treated as identity. So `argv_path` is consulted only when `comm` or `exe` is a
+known interpreter (`node`, `python3`, `npx`, `bun`, a shell, and so on), and even
+then it sees a single token: the first non-flag argument, skipping a runner
+subcommand so `bun run x` names `x`.
+
+Anything looser mislabels panes. Scanning every argument for the substring
+`/opencode/` makes `tail -f ~/dev/opencode/main.go` an agent, and
+`python3 -m pytest tests/aider/test_x.py` is a test run in aider's own repository,
+not aider. Mislabelling an unrelated pane is worse than missing a real agent, so
+the token an interpreter was actually handed is the only place a name in `argv`
+is taken to mean anything.
+
+`argv_path` compares path components rather than substrings, so `/opencode/` does
+not match `opencode-legacy`. Its last component also accepts a version pin, so
+`npx opencode@latest` still resolves.
+
+### exe_glob matches components
+
+`*` and `?` stay inside one path component, `**` spans any number, and a pattern
+that does not start with `/` matches any suffix of the path. So `**/claude` and
+`*/claude` both match `/usr/bin/claude`.
+
+### Corroborating a short name
+
+A name is not always enough to act on. `pi` is a coding agent, and also a
+plotting tool, a pi calculator and a plausible alias. A manifest can demand
+evidence beyond the name with a `[detect.require]` block, which constrains
+`comm` and `argv0` only:
+
+```toml
+[detect.require]
+exe_base = ["node", "nodejs", "bun", "deno"]
+exe_glob = ["**/pi-coding-agent/**"]
+```
+
+pi runs as `comm=pi`, `argv=["pi"]`, `exe=.../node/bin/node`, so the Node runtime
+behind the name is what distinguishes it. A process whose executable cannot be
+read fails the requirement: silence is not evidence. Any manifest matching on a
+name shorter than five characters must carry such a block.
+
+### Platform support
+
+Linux reads all of this from procfs. macOS reads it from two sysctls,
+`kern.proc.pid` for the terminal's foreground process group and `kern.procargs2`
+for the executable path and arguments; both are readable by an ordinary user for
+their own processes, and neither needs cgo or a subprocess. Platforms with
+neither report no foreground process, so auto-detection simply has no opinion and
+a harness reporting for itself still works.
+
+### Seeing what the detector saw
+
+```
+tuios explain-agent-detect                 # the focused pane
+tuios explain-agent-detect -w build --json
+```
+
+It prints the `comm`, `argv` and `exe` the daemon read, whether the process
+counted as an interpreter and which token was eligible to name an agent, then
+every manifest in lookup order: which one matched and on which predicate, and for
+each that refused, what it was comparing against.
 
 ## Screen rules
 

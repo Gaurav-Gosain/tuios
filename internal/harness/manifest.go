@@ -11,8 +11,6 @@ package harness
 
 import (
 	"fmt"
-	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -41,17 +39,74 @@ type Manifest struct {
 // matching is enough; they are alternatives, not requirements, because the same
 // harness looks different installed from npm, from pip, or as a native binary.
 type Detect struct {
-	// Comm matches the base name of /proc/<pid>/comm.
+	// Comm matches the base name of the process name the kernel reports.
 	Comm []string `toml:"comm"`
-	// Argv0 matches the base name of argv[0], with a script extension stripped.
+	// Argv0 matches the base name of argv[0], with a script extension stripped,
+	// and the base name of the token an interpreter was asked to run. Both are
+	// "the name of the program this process is": a Gemini CLI launched from a bun
+	// shim runs as "node /home/u/.bun/bin/gemini" with comm rewritten to
+	// "MainThread", and the only place it says gemini is that second token.
 	Argv0 []string `toml:"argv0"`
-	// ArgvPath matches a substring of any argv token. It is how an npm package
-	// name identifies a harness whose entry point is a generic cli.js.
+	// ArgvPath matches path components of the token an interpreter was asked to
+	// run. It is how an npm package name identifies a harness whose entry point
+	// is a generic cli.js. It is the one predicate that reads argv, so it is the
+	// one predicate that is gated: see ProcInfo.RunToken for why.
 	ArgvPath []string `toml:"argv_path"`
-	// ExeGlob matches the resolved /proc/<pid>/exe against a shell glob. It is
-	// how an installer that names its binary after the release is recognised by
-	// the directory it installs into.
+	// ExeGlob matches the resolved executable path against a component-wise glob.
+	// It is how an installer that names its binary after the release is
+	// recognised by the directory it installs into. "*" and "?" stay inside one
+	// component, "**" spans any number, and a pattern that does not start with
+	// "/" matches any suffix of the path.
 	ExeGlob []string `toml:"exe_glob"`
+	// Require is corroboration a bare-name match must have. See Require.
+	Require Require `toml:"require"`
+
+	// argvSegments is ArgvPath pre-split into components, filled by normalize.
+	argvSegments [][]string
+}
+
+// Require is the evidence a name match needs beyond the name itself.
+//
+// It exists because a name is not always enough to be worth acting on. "pi" is a
+// coding agent and also a plotting tool, a pi calculator and a plausible alias;
+// matching every process called pi mislabels panes, and refusing to match any
+// leaves a real harness undetectable. Corroboration is the way out: pi is a
+// Node program, so a process called pi whose executable is a node runtime is pi,
+// and one called pi that is a static binary somebody wrote is not.
+//
+// It constrains only the bare-name predicates, Comm and Argv0. ArgvPath and
+// ExeGlob already name a specific install layout and carry their own evidence.
+// An empty Require constrains nothing, which is what almost every manifest wants.
+type Require struct {
+	// ExeBase matches the base name of the resolved executable.
+	ExeBase []string `toml:"exe_base"`
+	// ExeGlob matches the resolved executable path, with the same component-wise
+	// glob syntax as Detect.ExeGlob.
+	ExeGlob []string `toml:"exe_glob"`
+}
+
+// any reports whether any corroboration is demanded at all.
+func (r *Require) any() bool { return len(r.ExeBase)+len(r.ExeGlob) > 0 }
+
+// satisfied reports whether a process carries the corroboration. An unreadable
+// executable fails it: silence is not evidence, and a name that needed backing up
+// and did not get it must not match.
+func (r *Require) satisfied(p ProcInfo) bool {
+	if !r.any() {
+		return true
+	}
+	if p.Exe == "" {
+		return false
+	}
+	if contains(r.ExeBase, p.ExeBase()) {
+		return true
+	}
+	for _, pattern := range r.ExeGlob {
+		if matchExeGlob(pattern, p.Exe) {
+			return true
+		}
+	}
+	return false
 }
 
 // Screen holds optional rules matched against a pane's rendered text.
@@ -160,6 +215,12 @@ func (d *Detect) normalize() {
 		}
 		*list = out
 	}
+	// Kept index-aligned with ArgvPath so a match can name the pattern it was
+	// written as, which is the string the manifest author will search for.
+	d.argvSegments = make([][]string, len(d.ArgvPath))
+	for i, want := range d.ArgvPath {
+		d.argvSegments[i] = segments(want)
+	}
 }
 
 // any reports whether the manifest carries any predicate at all.
@@ -167,54 +228,63 @@ func (d *Detect) any() bool {
 	return len(d.Comm)+len(d.Argv0)+len(d.ArgvPath)+len(d.ExeGlob) > 0
 }
 
-// checkGenericNames enforces the collision policy: a manifest identified only by
-// a short bare name must also carry a path or glob predicate to go with it.
+// checkGenericNames enforces the collision policy: a short bare name may only
+// match with corroboration.
+//
+// The check used to accept any other predicate standing alongside the name, which
+// was no check at all: predicates are alternatives, so an argv_path sitting next
+// to comm = ["pi"] never constrained the comm match and every process called pi
+// still matched. Only [detect.require] constrains a name, so only that satisfies
+// this.
 func (d *Detect) checkGenericNames(file, id string) error {
-	if len(d.ArgvPath) > 0 || len(d.ExeGlob) > 0 {
+	if d.Require.any() {
 		return nil
 	}
 	for _, n := range append(append([]string{}, d.Comm...), d.Argv0...) {
 		if len(n) < genericNameLimit {
 			return fmt.Errorf(
-				"%s: manifest %q matches on the generic name %q alone; add argv_path or exe_glob",
+				"%s: manifest %q matches on the generic name %q alone; add a [detect.require] block",
 				file, id, n)
 		}
 	}
 	return nil
 }
 
-// matches reports whether a process is this harness. comm, argv0 and exe are
-// expected already reduced to lowercase base names where that applies; argv is
-// the raw command line and exe the raw resolved path, since those two are matched
-// as paths rather than names.
-func (d *Detect) matches(comm, argv0 string, argv []string, exe string) bool {
-	if contains(d.Comm, comm) || contains(d.Argv0, argv0) {
-		return true
-	}
-	for _, want := range d.ArgvPath {
-		for _, arg := range argv {
-			if strings.Contains(strings.ToLower(arg), want) {
-				return true
-			}
+// matches reports whether a process is this harness, and names the predicate
+// that decided it so a diagnostic can quote the rule rather than the verdict.
+//
+// The predicates are ordered by how much of the process's own identity they read.
+// comm, argv0 and exe describe what the process is; argv describes what it was
+// handed, and only an interpreter's argv stands in for its identity, which is why
+// run is empty for everything else.
+func (d *Detect) matches(p ProcInfo, run string) (string, bool) {
+	if d.Require.satisfied(p) {
+		if comm := p.CommBase(); contains(d.Comm, comm) {
+			return "comm=" + comm, true
+		}
+		if argv0 := p.Argv0Base(); contains(d.Argv0, argv0) {
+			return "argv0=" + argv0, true
+		}
+		if runName := BaseName(run); run != "" && contains(d.Argv0, runName) {
+			return "argv0=" + runName + " (run token)", true
 		}
 	}
-	if exe != "" {
-		lower := strings.ToLower(exe)
+	if p.Exe != "" {
 		for _, pattern := range d.ExeGlob {
-			// path.Match, not filepath.Match: the separator is always "/" here
-			// because these are procfs paths, and matching must not change with
-			// the host's separator.
-			if ok, err := path.Match(pattern, lower); err == nil && ok {
-				return true
-			}
-			// A bare directory name is the common case ("*/claude/*"), so also
-			// try the pattern against each path element's parent join.
-			if ok, err := filepath.Match(pattern, lower); err == nil && ok {
-				return true
+			if matchExeGlob(pattern, p.Exe) {
+				return "exe_glob=" + pattern, true
 			}
 		}
 	}
-	return false
+	if run != "" {
+		have := segments(run)
+		for i, want := range d.argvSegments {
+			if containsSegments(have, want) {
+				return "argv_path=" + d.ArgvPath[i], true
+			}
+		}
+	}
+	return "", false
 }
 
 func contains(list []string, v string) bool {

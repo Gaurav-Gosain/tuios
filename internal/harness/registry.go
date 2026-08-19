@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 )
 
 //go:embed manifests/*.toml
@@ -137,37 +136,20 @@ func (r *Registry) Lookup(id string) *Manifest {
 // /proc/<pid>/exe. Any of the three may be empty; a predicate that needs a
 // missing input simply does not match.
 func (r *Registry) Identify(comm string, argv []string, exe string) (string, bool) {
-	commBase := baseName(comm)
-	argv0 := ""
-	if len(argv) > 0 {
-		argv0 = baseName(argv[0])
-	}
-	for _, m := range r.manifests {
-		if m.Detect.matches(commBase, argv0, argv, exe) {
-			return m.ID, true
-		}
-	}
-	return "", false
+	id, _, ok := r.IdentifyDetail(ProcInfo{Comm: comm, Argv: argv, Exe: exe})
+	return id, ok
 }
 
-// scriptExtensions are stripped from a base name before matching, so a script
-// argument such as "claude.js" matches the name "claude".
-var scriptExtensions = []string{".js", ".mjs", ".cjs", ".ts", ".py"}
-
-// baseName reduces a comm value or an argv token to the name used for matching:
-// no directory, no trailing NUL, no login-shell "-" prefix, no script extension,
-// lowercased.
-func baseName(s string) string {
-	s = strings.TrimSpace(strings.TrimRight(s, "\x00"))
-	if s == "" {
-		return ""
-	}
-	s = strings.TrimPrefix(filepath.Base(s), "-")
-	lower := strings.ToLower(s)
-	for _, ext := range scriptExtensions {
-		if before, ok := strings.CutSuffix(lower, ext); ok {
-			return before
+// IdentifyDetail is Identify with the predicate that decided it, for the
+// diagnostic. The rule reads as it appears in the manifest ("comm=claude",
+// "exe_glob=**/claude"), so what fired can be found in the file by searching for
+// it.
+func (r *Registry) IdentifyDetail(p ProcInfo) (id, rule string, ok bool) {
+	run := p.RunToken()
+	for _, m := range r.manifests {
+		if rule, ok := m.Detect.matches(p, run); ok {
+			return m.ID, rule, true
 		}
 	}
-	return lower
+	return "", "", false
 }
