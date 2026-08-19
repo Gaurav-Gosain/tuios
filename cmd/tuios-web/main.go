@@ -248,7 +248,36 @@ func runWebServer() error {
 	_ = os.Setenv("COLORTERM", "truecolor")
 	_ = os.Setenv("TERM_PROGRAM", "tuios-web")
 
-	// Apply global config options (CLI flags only, no user config at server level)
+	// Who owns which half of the configuration, for this process:
+	//
+	// The appearance globals in internal/config are the SERVER's. They are read
+	// by every served session's render loop, so they are written once, here, on
+	// the startup goroutine, from the config file as it stands at startup. A
+	// later connection never rewrites them; that would change the picture under
+	// sessions that are already drawing. The same rule, for the same reason, is
+	// what internal/server/ssh.go's applyAppearanceOnce enforces.
+	//
+	// The *UserConfig handed to each session is the SESSION's. Every session
+	// loads its own copy (see createDaemonTUIOSInstance), so the settings page
+	// can mutate it without touching another client's, and it is never written
+	// back to the operator's file. See app.OSOptions.ConfigReadOnly.
+	//
+	// This call used to pass nil, which is what made a served session ignore
+	// the file: everything reaching the client through a package global (theme,
+	// borders, dock, sidebar, scrollbar, which-key, notification timings) fell
+	// back to the built-in default, and the handful of settings that ride on
+	// *UserConfig (startup, hooks, agent alerts, keybindings) applied. Half the
+	// config arriving looked more like a rendering bug than a missing load.
+	userConfig, err := config.LoadUserConfig()
+	if err != nil {
+		log.Printf("Warning: Failed to load config, using defaults: %v", err)
+		userConfig = config.DefaultConfig()
+	}
+
+	// The file is the baseline; CLI flags win. Order matters: ApplyOverrides
+	// layers the flags on top of what this leaves behind.
+	config.ApplyAppearanceConfig(userConfig)
+
 	config.ApplyOverrides(config.Overrides{
 		ASCIIOnly:         asciiOnly,
 		BorderStyle:       borderStyle,
@@ -257,7 +286,7 @@ func runWebServer() error {
 		ScrollbackLines:   scrollbackLines,
 		NoAnimations:      noAnimations,
 		ThemeName:         themeName,
-	}, nil)
+	}, userConfig)
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()
@@ -271,11 +300,8 @@ func runWebServer() error {
 	sipConfig.AllowInsecureNoTLS = webInsecure
 
 	// The touch key bar is server-wide while the keys it carries are user
-	// settings, so the config is read once here instead of per session.
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		userConfig = config.DefaultConfig()
-	}
+	// settings, so it is built from the startup config read above rather than
+	// from a second load that could disagree with the globals.
 	leader := config.LeaderKey
 	if userConfig.Keybindings.LeaderKey != "" {
 		leader = userConfig.Keybindings.LeaderKey
