@@ -594,19 +594,24 @@ func TestScrollbarTintFollowsTheFocusedPane(t *testing.T) {
 }
 
 // A derived tint has to be legible on the ground it lands on. Dark blue is the
-// measured failure: 1.74:1 on the canvas the thin bar floats over and 1.21:1 on
+// measured failure: 1.02:1 on the canvas the thin bar floats over and 1.41:1 on
 // the track style's surface, which is a bar that is present and invisible.
+//
+// With no theme loaded a slot is the user terminal's colour, and the numbers
+// here are what the index resolves to in this process. They are a stand-in for
+// a palette only the terminal knows, which is why the floor is checked against
+// them rather than trusted as the shade on screen.
 func TestScrollbarTintFloorRejectsAnUnreadableAccent(t *testing.T) {
 	scrollbarDefaults(t)
 	const darkBlueAccent = 11 // accentNames: ..., blue(4), magenta, cyan, white, dark red, dark green, dark yellow, dark blue
 	accent := accentColor(darkBlueAccent)
 	pal := theme.UI()
 
-	if got := theme.ContrastRatio(accent, pal.Canvas); math.Abs(got-1.74) > 0.05 {
-		t.Errorf("dark blue on the canvas measures %.2f:1, want the documented 1.74:1", got)
+	if got := theme.ContrastRatio(accent, pal.Canvas); math.Abs(got-1.02) > 0.05 {
+		t.Errorf("dark blue on the canvas measures %.2f:1, want the documented 1.02:1", got)
 	}
-	if got := theme.ContrastRatio(accent, pal.Surface); math.Abs(got-1.21) > 0.05 {
-		t.Errorf("dark blue on the surface measures %.2f:1, want the documented 1.21:1", got)
+	if got := theme.ContrastRatio(accent, pal.Surface); math.Abs(got-1.41) > 0.05 {
+		t.Errorf("dark blue on the surface measures %.2f:1, want the documented 1.41:1", got)
 	}
 
 	win := newTestWindow(t, "sbfloor-0001", 60, 20)

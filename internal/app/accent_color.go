@@ -54,10 +54,40 @@ func (a Accent) RGB() color.RGBA {
 // Color is the accent as something lipgloss can paint with, already stepped
 // down to what the terminal can show so the swatch and the hex beside it are
 // the same colour.
-func (a Accent) Color() color.Color { return accentShown(a.RGB()) }
+//
+// A slot with no theme loaded is the user terminal's own colour and travels as
+// an index, so the host paints it from the user's palette. Resolving it to RGB
+// here would show a colour off the xterm default table instead of the red the
+// user actually has.
+func (a Accent) Color() color.Color {
+	if c, ok := a.slotIndex(); ok {
+		return c
+	}
+	return accentShown(a.RGB())
+}
+
+// slotIndex returns the palette index a slot accent stands for, and whether it
+// is one that should travel as an index rather than as RGB.
+func (a Accent) slotIndex() (color.Color, bool) {
+	if !a.IsSlot() || theme.IsEnabled() {
+		return nil, false
+	}
+	c, ok := accentColor(a.Slot).(ansi.BasicColor)
+	return c, ok
+}
 
 // Hex is the accent's colour as #rrggbb.
 func (a Accent) Hex() string { return hexString(a.RGB()) }
+
+// Label is what a readout prints beside the accent's swatch. A slot the user's
+// terminal owns is named rather than given a hex, because the hex would be the
+// xterm default's and not the colour on screen.
+func (a Accent) Label() string {
+	if _, ok := a.slotIndex(); ok {
+		return accentSlotNames[clampInt(a.Slot, 0, accentSwatchCount-1)]
+	}
+	return a.Hex()
+}
 
 // fold packs the accent into one value for the rail's render signature. A slot
 // and an RGB value can never collide because a slot lands in the low byte with

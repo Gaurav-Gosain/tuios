@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
@@ -80,17 +81,26 @@ func Current() *tint.Tint {
 }
 
 // GetANSIPalette returns the 16 ANSI colors (0-15) from the current theme.
-// These are injected into the terminal emulator.
+//
+// With no theme the sixteen are the user's terminal's, and tuios does not know
+// what they are. It returns the indices themselves rather than a guess: painted
+// with one of these, a swatch leaves as SGR 31 or 91 and the host fills it in
+// from the user's own palette, so the row really is the user's sixteen. The
+// xterm defaults that used to stand here made the picker show colours nobody
+// had chosen.
+//
+// A caller that needs channel values gets whatever RGBA the index resolves to
+// in this process, which is the xterm default. That is a guess, and only the
+// terminal can settle it.
 func GetANSIPalette() [16]color.Color {
 	t := Current()
 	if t == nil {
-		// Fallback to default xterm colors
-		return [16]color.Color{
-			lipgloss.Color("#000000"), lipgloss.Color("#cd0000"), lipgloss.Color("#00cd00"), lipgloss.Color("#cdcd00"),
-			lipgloss.Color("#0000ee"), lipgloss.Color("#cd00cd"), lipgloss.Color("#00cdcd"), lipgloss.Color("#e5e5e5"),
-			lipgloss.Color("#7f7f7f"), lipgloss.Color("#ff0000"), lipgloss.Color("#00ff00"), lipgloss.Color("#ffff00"),
-			lipgloss.Color("#5c5cff"), lipgloss.Color("#ff00ff"), lipgloss.Color("#00ffff"), lipgloss.Color("#ffffff"),
+		var pal [16]color.Color
+		for i := range pal {
+			// #nosec G115 - i is a loop index over [0, 16)
+			pal[i] = ansi.BasicColor(uint8(i))
 		}
+		return pal
 	}
 	return [16]color.Color{
 		t.Black,        // 0

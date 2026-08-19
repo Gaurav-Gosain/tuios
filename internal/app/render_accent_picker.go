@@ -92,16 +92,28 @@ func accentFocusMark(on bool, bg color.Color, pal overlay.Palette) string {
 	return overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.SigilMark())
 }
 
-// swatch paints n cells of a colour, stepped down to what the terminal can
-// actually show so the block and the hex printed beside it agree.
-func accentSwatch(c color.RGBA, n int) string {
-	return overlay.Style(accentShown(c)).Render(strings.Repeat(" ", n))
+// accentPaint is what a swatch is filled with. A literal colour is stepped down
+// to what the terminal can show, so the block and the hex printed beside it
+// agree. A palette index is left alone: it is the user terminal's colour and
+// the host is the only thing that knows what it looks like.
+func accentPaint(c color.Color) color.Color {
+	if rgba, ok := c.(color.RGBA); ok {
+		return accentShown(rgba)
+	}
+	return c
+}
+
+// swatch paints n cells of a colour.
+func accentSwatch(c color.Color, n int) string {
+	return overlay.Style(accentPaint(c)).Render(strings.Repeat(" ", n))
 }
 
 // accentCursorSwatch paints the same n cells with the cursor mark centred in
-// them, in a colour picked to read against that swatch.
-func accentCursorSwatch(c color.RGBA, n int) string {
-	return overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).
+// them, in a colour picked to read against that swatch. For a palette index the
+// choice is made against the index's usual shade, which is the closest tuios
+// can get without asking the terminal.
+func accentCursorSwatch(c color.Color, n int) string {
+	return overlay.Style(accentPaint(c)).Foreground(accentContrast(toRGBA(c))).Bold(true).
 		Render(accentCentred(accentCursorGlyph(), n))
 }
 
@@ -404,10 +416,10 @@ func (m *OS) accentSlotLines(width, y int, pal overlay.Palette) []string {
 		line := accentFocusMark(first == 0 && focused, bg, pal) +
 			overlay.Style(bg).Render(strings.Repeat(" ", indent*accentSlotWidth))
 		for i := first; i < first+count; i++ {
-			c := SlotAccent(i).RGB()
+			c := SlotAccent(i).Color()
 			x := lipgloss.Width(line)
 			if i == s.Slot {
-				line += overlay.Style(accentShown(c)).Foreground(accentContrast(c)).Bold(true).Render(accentCursorGlyph()) +
+				line += overlay.Style(accentPaint(c)).Foreground(accentContrast(toRGBA(c))).Bold(true).Render(accentCursorGlyph()) +
 					accentSwatch(c, accentSlotWidth-1)
 			} else {
 				line += accentSwatch(c, accentSlotWidth)
@@ -452,11 +464,11 @@ func (m *OS) accentNowLine(width, y int, pal overlay.Palette) string {
 		if s.Src == accentSourceAuto {
 			word = " auto"
 		}
-		line += accentSwatch(s.Prev.RGB(), 2) +
+		line += accentSwatch(s.Prev.Color(), 2) +
 			overlay.Style(bg).Foreground(pal.FgDim).Render(word)
 	case s.HadPrev:
-		line += accentSwatch(s.Prev.RGB(), 2) +
-			overlay.Style(bg).Foreground(pal.FgDim).Render(" "+s.Prev.Hex())
+		line += accentSwatch(s.Prev.Color(), 2) +
+			overlay.Style(bg).Foreground(pal.FgDim).Render(" "+s.Prev.Label())
 	default:
 		line += overlay.Style(bg).Foreground(pal.FgMute).Render(accentClearGlyph() + " none")
 	}
