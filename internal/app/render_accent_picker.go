@@ -89,7 +89,9 @@ func accentFocusMark(on bool, bg color.Color, pal overlay.Palette) string {
 	if !on {
 		return overlay.Style(bg).Render(" ")
 	}
-	return overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.SigilMark())
+	// The mark says which control has the keyboard, so it is measured against
+	// the dialog rather than trusted: unlifted it read 3.30:1 with no theme.
+	return overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render(overlay.SigilMark())
 }
 
 // accentPaint is what a swatch is filled with. A literal colour is stepped down

@@ -59,6 +59,29 @@ func TestNotificationInkHoldsAcrossThemes(t *testing.T) {
 	_ = Initialize("")
 }
 
+// A window's border is drawn on the pane it frames, and both come from the same
+// theme, so nothing guarantees they differ until something measures them.
+func TestBordersStayVisibleOnTheirPane(t *testing.T) {
+	for _, name := range []string{"", "catppuccin_mocha", "builtin_solarized_light", "unikitty"} {
+		_ = Initialize(name)
+		bg := TerminalBg()
+		for _, b := range []struct {
+			what string
+			ink  color.Color
+		}{
+			{"unfocused", BorderUnfocused()},
+			{"window-mode focused", BorderFocusedWindow()},
+			{"terminal-mode focused", BorderFocusedTerminal()},
+		} {
+			if got := ContrastRatio(b.ink, bg); got < MarkFloor {
+				t.Errorf("theme %q: the %s border measures %.2f:1 on its pane, want at least %.1f:1",
+					name, b.what, got, MarkFloor)
+			}
+		}
+	}
+	_ = Initialize("")
+}
+
 // The dock hairline is drawn straight onto the user's terminal background,
 // which tuios never paints, so it has to survive both ends of the range.
 func TestDockHairlineSurvivesEitherGround(t *testing.T) {

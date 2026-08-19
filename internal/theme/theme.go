@@ -149,8 +149,19 @@ func TerminalCursor() color.Color {
 	return t.Cursor
 }
 
+// borderInk measures a theme-derived border against the pane it frames. A
+// border and the pane's background come from the same theme and nothing was
+// checking that they differ: 72 of the registry's tints put an unfocused border
+// under 3:1 on its own pane, the worst at 1.19:1, which is a window with no
+// visible edge. A border is a shape, so the mark floor is what it has to clear.
+func borderInk(c color.Color) color.Color {
+	return ReadableAt(c, TerminalBg(), MarkFloor)
+}
+
 // BorderUnfocused returns the color for unfocused window borders.
 func BorderUnfocused() color.Color {
+	// A configured colour is returned as chosen: measurement was overridden on
+	// purpose, the same way the scrollbar treats a configured tint.
 	if borderUnfocusedOverride != nil {
 		return borderUnfocusedOverride
 	}
@@ -160,7 +171,7 @@ func BorderUnfocused() color.Color {
 	}
 	// Light pinkish red - use theme's red (or bright red depending on theme)
 	// Using regular Red gives a softer, more muted tone for unfocused windows
-	return t.Red
+	return borderInk(t.Red)
 }
 
 // BorderFocusedWindow returns the color for focused window borders in window management mode.
@@ -173,7 +184,7 @@ func BorderFocusedWindow() color.Color {
 		return lipgloss.Color("#AFFFFF")
 	}
 	// Light cyan for window mode - use bright cyan
-	return t.BrightCyan
+	return borderInk(t.BrightCyan)
 }
 
 // BorderFocusedTerminal returns the color for focused window borders in terminal mode.
@@ -186,7 +197,7 @@ func BorderFocusedTerminal() color.Color {
 		return lipgloss.Color("#AAFFAA")
 	}
 	// Light green for terminal mode - use bright green
-	return t.BrightGreen
+	return borderInk(t.BrightGreen)
 }
 
 // DockColorWindow returns the dock indicator color for window management mode.
