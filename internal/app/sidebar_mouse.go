@@ -111,9 +111,14 @@ func (m *OS) sidebarClearPeek() {
 // terminal row while the peek is still on screen.
 func (m *OS) sidebarPeekAt(x, y int) {
 	if sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph {
-		// The strip has no terminals section to preview into, so a peek there
-		// would be invisible state churning the render cache once per motion
-		// event. The strip's own tooltip is what a hover means at this width.
+		// The strip does now have a terminals list to preview into, and the one
+		// thing it cannot do is say whose panes it is showing: the open rail
+		// prints the peeked session's name in that session's colour on the
+		// section header, and two cells have no room for it. A list that swapped
+		// under the pointer with nothing saying so is worse than one that holds
+		// still, so the strip's hover means its tooltip and nothing else. Giving
+		// the folded rail a peek is a change to what the group's header can say,
+		// not to this handler.
 		m.sidebarClearPeek()
 		return
 	}
