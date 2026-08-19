@@ -284,9 +284,9 @@ same three controls and `hide_window_buttons` still hides either.
 - `"pill"` (default) - the controls as glyphs on a filled pill in the border's
   colour, capped with powerline half circles: minimize, zoom, close.
 - `"dots"` - macOS traffic lights. Three unlabelled discs in red, yellow and
-  green sitting straight on the border, close first. Hovering any of them
-  reveals all three symbols at once, drawn dark on their own disc, the way
-  macOS does; the discs are unlabelled and the hover is what names them.
+  green sitting straight on the border, close first. The discs carry no glyph,
+  so hovering any of them reveals all three symbols at once, drawn dark on
+  their own disc, the way macOS does. That is what names them.
 
 A tiled window has no zoom control, so it draws two of either.
 
@@ -296,8 +296,8 @@ a control that carries its meaning as a shape). On a dark pane they are
 untouched; on a near-white one the yellow is the one that has to give up some
 brightness.
 
-Under `--ascii-only` the disc becomes `o`, one cell like the disc, so the
-traffic light keeps its layout and its colours and loses only its roundness. The
+Under `--ascii-only` the disc becomes `o`, still one cell, so the traffic light
+keeps its layout and its colours and loses only its roundness. The
 revealed symbols become `X`, `-` and `O`.
 
 **Default:** `"pill"`
