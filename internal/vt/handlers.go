@@ -439,6 +439,15 @@ func (e *Emulator) registerDefaultEscHandlers() {
 		return true
 	})
 
+	e.RegisterEscHandler('E', func() bool {
+		// Next Line [ansi.NEL]. terminfo names it `nel`, so it reaches the
+		// emulator from anything that moves down a line through terminfo rather
+		// than by writing CR LF itself.
+		e.index()
+		e.carriageReturn()
+		return true
+	})
+
 	e.RegisterEscHandler('H', func() bool {
 		// Horizontal Tab Set [ansi.HTS]
 		e.horizontalTabSet()
@@ -448,6 +457,14 @@ func (e *Emulator) registerDefaultEscHandlers() {
 	e.RegisterEscHandler('M', func() bool {
 		// Reverse Index [ansi.RI]
 		e.reverseIndex()
+		return true
+	})
+
+	e.RegisterEscHandler(ansi.Command(0, '#', '8'), func() bool {
+		// Screen Alignment Pattern [ansi.DECALN]. vttest opens with it, and a
+		// terminal that ignores it reports a blank screen for every alignment
+		// check that follows.
+		e.screenAlignmentPattern()
 		return true
 	})
 

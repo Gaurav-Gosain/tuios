@@ -97,6 +97,14 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 			e.saveCursor()
 		}
 		e.setAltScreenMode(setting.IsSet())
+	case ansi.ModeOrigin:
+		// DECOM changes what a cursor address means, so DEC has it home the
+		// cursor on the way in and on the way out. Leaving the cursor where it
+		// was lets a program that sets origin mode and then writes without
+		// addressing first put its output on whatever row it happened to be
+		// on, which is a different row for every guest.
+		e.atPhantom = false
+		e.setCursorPosition(0, 0)
 	case ansi.ModeInBandResize:
 		if setting.IsSet() {
 			_, _ = io.WriteString(e.pipe, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
