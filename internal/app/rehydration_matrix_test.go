@@ -104,13 +104,13 @@ var rehydrationShapes = []paneShape{
 			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2JALT-SCREEN-BODY\r\n'`, "ALT-SCREEN-BODY")
 			// A shape that quietly failed to arrange itself would make every
 			// alt-screen row of the matrix pass by testing nothing.
-			st, err := r.ctl.GetTerminalState(ptyID, -1)
+			st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
 			if err != nil || st == nil || !st.IsAltScreen {
 				r.t.Fatalf("the pane never entered the alternate screen (err %v, state %v)", err, st)
 			}
 		},
 		check: func(t *testing.T, r *rig, ptyID string) {
-			st, err := r.ctl.GetTerminalState(ptyID, -1)
+			st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
 			if err != nil {
 				t.Fatalf("read the daemon's copy: %v", err)
 			}
@@ -136,7 +136,7 @@ var rehydrationShapes = []paneShape{
 			r.feedPTY(ptyID, `i=1; while [ $i -le 2000 ]; do echo "AO-$i-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"; i=$((i+1)); done`, "AO-2000-")
 		},
 		check: func(t *testing.T, r *rig, ptyID string) {
-			st, err := r.ctl.GetTerminalState(ptyID, -1)
+			st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
 			if err != nil {
 				t.Fatalf("read the daemon's copy: %v", err)
 			}
@@ -211,7 +211,7 @@ var rehydrationShapes = []paneShape{
 				`printf '\033[%d;1HAFLASTROW-END' $H`, "AFLASTROW-END")
 		},
 		check: func(t *testing.T, r *rig, ptyID string) {
-			st, err := r.ctl.GetTerminalState(ptyID, -1)
+			st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
 			if err != nil || st == nil {
 				t.Fatalf("read the daemon's copy: %v", err)
 			}
@@ -230,7 +230,7 @@ var rehydrationShapes = []paneShape{
 		name: "tui-mid-draw",
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2J\033[1;34m\033(0lqqqk\r\nx  x\r\nmqqqj\r\nTUI-MID-DRAW\r\n'`, "TUI-MID-DRAW")
-			st, err := r.ctl.GetTerminalState(ptyID, -1)
+			st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
 			if err != nil || st == nil || !st.IsAltScreen {
 				r.t.Fatalf("the pane never entered the alternate screen (err %v, state %v)", err, st)
 			}
@@ -424,7 +424,7 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 	t.Helper()
 
 	w := r.winByPTY(ptyID)
-	st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle)
+	st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle, 0)
 	if err != nil {
 		t.Fatalf("read the daemon's copy: %v", err)
 	}

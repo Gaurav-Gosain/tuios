@@ -135,7 +135,7 @@ func TestWireCarriesTheWholeCell(t *testing.T) {
 
 			client := vt.NewEmulator(fidelityCols, fidelityRows)
 			defer func() { _ = client.Close() }()
-			ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 20000))
+			ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 20000, 0))
 
 			compareEmulators(t, daemon, client)
 		})
@@ -156,7 +156,7 @@ func TestWireLeavesTheAlternateScreen(t *testing.T) {
 	if _, err := daemon.Write([]byte("$ prompt\r\n\x1b[?1049h\x1b[H\x1b[2JEDITOR")); err != nil {
 		t.Fatalf("feed the daemon emulator: %v", err)
 	}
-	ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0))
+	ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0, 0))
 	if !client.ActiveScreenIsAlt() {
 		t.Fatal("the client never entered the alternate screen, so the case is not set up")
 	}
@@ -166,7 +166,7 @@ func TestWireLeavesTheAlternateScreen(t *testing.T) {
 	if _, err := daemon.Write([]byte("\x1b[?1049l")); err != nil {
 		t.Fatalf("leave the alternate screen: %v", err)
 	}
-	ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0))
+	ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0, 0))
 
 	// The mode map and the buffer pointer are separate, and the modes came back
 	// saying the alternate screen is off. Asked of the pointer, which is what
@@ -208,7 +208,7 @@ func TestWireFillsAClientOfADifferentSize(t *testing.T) {
 
 			client := vt.NewEmulator(fidelityCols, fidelityRows-short)
 			defer func() { _ = client.Close() }()
-			ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0))
+			ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0, 0))
 
 			if client.Height() != fidelityRows {
 				t.Fatalf("the client is %d rows to the daemon's %d: the snapshot describes a screen of a given size and the daemon is authoritative for it",

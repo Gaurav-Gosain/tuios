@@ -42,6 +42,30 @@ func BenchmarkSidebarPanelLinesCached(b *testing.B) {
 	}
 }
 
+// BenchmarkSidebarPanelCached is the same steady state as
+// BenchmarkSidebarPanelLinesCached, but through the call the compositor
+// actually makes. renderSidebar needs the rail as one string, and joining the
+// rows there rebuilt the whole rail on every composed frame, including the
+// frames the row cache had just declared unchanged.
+func BenchmarkSidebarPanelCached(b *testing.B) {
+	config.SidebarEnabled = true
+	config.SidebarPosition = "left"
+	config.SidebarWidth = config.SidebarDefaultWidth
+	defer func() { config.SidebarEnabled = false }()
+
+	wins := make([]*terminal.Window, 0, 6)
+	for i := range 6 {
+		wins = append(wins, &terminal.Window{ID: "w" + string(rune('a'+i)), CustomName: "window"})
+	}
+	m := &OS{Windows: wins, Width: 120, Height: 40, SessionName: "s"}
+	m.sidebarPanel() // prime the cache
+
+	b.ReportAllocs()
+	for b.Loop() {
+		m.sidebarPanel()
+	}
+}
+
 // TestSidebarCacheServesAndInvalidates is the stale-row regression guard. The
 // rail is cached between frames, so the danger is serving a row that no longer
 // matches state. This walks the cases that must invalidate: a renamed window, a

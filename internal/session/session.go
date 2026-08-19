@@ -262,6 +262,14 @@ type PTY struct {
 	subscribers   map[string]*ptySubscriber
 	subscribersMu sync.RWMutex
 
+	// debug mirrors TUIOS_DEBUG_INTERNAL, read once when the PTY is built.
+	// broadcast runs per chunk per subscriber, and a debugLog there costs an
+	// os.Getenv (which takes the process-wide environment lock) plus a boxed
+	// argument slice on every call, whether or not the flag is set. The env var
+	// is set from the --debug flag before any PTY exists, so a value read here
+	// is the value the run was started with.
+	debug bool
+
 	exited   bool
 	exitedMu sync.RWMutex
 	exitCode int
@@ -311,8 +319,14 @@ type PTY struct {
 	// screenSettle is the one-shot that scans the screen after a pane goes quiet.
 	// It is a timer rather than a ticker so a silent pane costs nothing, which is
 	// the rule the whole daemon is built to.
+	//
+	// The timer is built once and re-armed with Reset. Arming happens on every
+	// chunk a pane emits, and a fresh time.AfterFunc there allocated a runtime
+	// timer per chunk. screenLook is what it runs, held separately so the caller
+	// does not have to build a closure per chunk either.
 	screenSettleMu sync.Mutex
 	screenSettle   *time.Timer
+	screenLook     func()
 
 	// agentProgress parks the most recent OSC 9;4 progress state the emulator
 	// saw, as the state plus one so zero means none pending. The VT callback runs
@@ -679,6 +693,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 		subscribers:  make(map[string]*ptySubscriber),
 		vtWriteChan:  make(chan vtChunk, 256),
 		onExit:       onExit,
+		debug:        debugEnabled(),
 	}
 
 	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
@@ -1523,7 +1538,12 @@ const DefaultStateScrollback = 1000
 // are the newest ones. Taking them from the front instead, which is what this
 // did, handed a pane with a long history its most ancient screenfuls and
 // dropped everything the user had actually been looking at.
-func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
+//
+// have is how many rows the caller's own emulator already holds, and bounds the
+// reply the same way maxScrollback does: only the rows past it can be used, so
+// only those are sent. ScrollbackLen in the reply is always the true length, so
+// the caller's own arithmetic against it is unaffected by either bound.
+func (p *PTY) GetTerminalState(maxScrollback, have int) *TerminalState {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
 
@@ -1535,7 +1555,7 @@ func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
 	// while a resize is still behind output in the stream, and a snapshot has
 	// to describe the grid it is serializing: reporting the size the pane is
 	// about to be handed one row of cells short.
-	state := TerminalStateOf(p.terminal, p.terminal.Width(), p.terminal.Height(), maxScrollback)
+	state := TerminalStateOf(p.terminal, p.terminal.Width(), p.terminal.Height(), maxScrollback, have)
 	state.Seq = p.vtSeq
 	return state
 }
@@ -1547,7 +1567,11 @@ func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
 //
 // Width and height are the pane's, which the caller knows; the emulator's own
 // size lags a resize the shell has not acknowledged yet.
-func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *TerminalState {
+//
+// have is how many scrollback rows the receiving emulator already holds; only
+// the rows past it are serialized, because only those can be used. See
+// GetTerminalState.
+func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback, have int) *TerminalState {
 	state := &TerminalState{
 		Width:         width,
 		Height:        height,
@@ -1605,6 +1629,18 @@ func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *Terminal
 		maxScrollback = DefaultStateScrollback
 	}
 	scrollbackLen := t.ScrollbackLen()
+	// Rows the caller already holds are rows it will discard on arrival: it
+	// keeps its own history and merges only what scrolled off while it was
+	// away. Sending them anyway is what made a workspace switch move megabytes
+	// per pane to be thrown away at the far end. state.ScrollbackLen below is
+	// still the true length, which is what the caller subtracts against.
+	want := scrollbackLen - have
+	if want < 0 {
+		want = 0
+	}
+	if maxScrollback >= 0 && want < maxScrollback {
+		maxScrollback = want
+	}
 	first := 0
 	if maxScrollback < 0 {
 		first = scrollbackLen
@@ -2196,7 +2232,9 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 	p.subscribersMu.RLock()
 	defer p.subscribersMu.RUnlock()
 
-	debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(chunk.data), len(p.subscribers))
+	if p.debug {
+		debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(chunk.data), len(p.subscribers))
+	}
 	for clientID, sub := range p.subscribers {
 		// A chunk appended between a subscriber's catch-up being copied and this
 		// broadcast running is in both, because Subscribe blocks the broadcast
@@ -2214,9 +2252,13 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 			// Only a chunk that was taken counts as reached: a client dropped
 			// here resumes from the gap rather than past it.
 			sub.sent.Store(seq)
-			debugLog("[DEBUG] PTY %s: sent to %s", p.ID[:8], clientID)
+			if p.debug {
+				debugLog("[DEBUG] PTY %s: sent to %s", p.ID[:8], clientID)
+			}
 		default:
-			debugLog("[DEBUG] PTY %s: channel full for %s, dropped", p.ID[:8], clientID)
+			if p.debug {
+				debugLog("[DEBUG] PTY %s: channel full for %s, dropped", p.ID[:8], clientID)
+			}
 		}
 	}
 }

@@ -333,6 +333,16 @@ type GetTerminalStatePayload struct {
 	PTYID              string `json:"pty_id"`
 	IncludeScrollback  bool   `json:"include_scrollback,omitempty"`
 	MaxScrollbackLines int    `json:"max_scrollback_lines,omitempty"` // 0 = default (1000)
+	// HaveScrollback is how many scrollback rows the caller's own emulator
+	// already holds. The daemon sends only the rows beyond it, because that is
+	// all the caller can use: a client whose emulator survived keeps its own
+	// history and merges just the lines that scrolled off while it was away.
+	// Zero means none, which is a fresh emulator and the whole window.
+	//
+	// A daemon that predates this field ignores it and sends the whole window,
+	// which is what the caller already handles, so the two directions of
+	// version skew are both safe.
+	HaveScrollback int `json:"have_scrollback,omitempty"`
 }
 
 // TerminalStatePayload contains the terminal state response.

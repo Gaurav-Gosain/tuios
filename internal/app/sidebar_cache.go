@@ -1,6 +1,10 @@
 package app
 
-import "github.com/Gaurav-Gosain/tuios/internal/config"
+import (
+	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
 
 // sidebarRenderCache holds a fully styled rail so a frame composed for an
 // unrelated reason can reuse it. It is keyed by sidebarSignature, a cheap fold
@@ -12,6 +16,7 @@ type sidebarRenderCache struct {
 	valid      bool
 	sig        uint64
 	lines      []string
+	panel      string
 	w          int
 	hits       []sidebarRowHit
 	sessionIDs []string
@@ -23,6 +28,28 @@ type sidebarRenderCache struct {
 // invalidate drops the cached rail, forcing the next frame to rebuild. Called
 // from MarkAllDirty so a theme swap, config reload, or full repaint restyles.
 func (c *sidebarRenderCache) invalidate() { c.valid = false }
+
+// sidebarPanel is the rail as the one string the layer takes. The join is
+// cached alongside the rows because renderSidebar runs on every composed frame,
+// and joining the rows there rebuilt the whole rail on frames the cache had just
+// declared unchanged, which is the one thing a render cache exists to stop.
+//
+// An animating rail is not cached (see sidebarPanelLines), so it joins every
+// frame, which is correct: its rows are different every frame.
+func (m *OS) sidebarPanel() (string, int) {
+	lines, w := m.sidebarPanelLines()
+	if lines == nil {
+		return "", w
+	}
+	if m.sidebarCache.valid && m.sidebarCache.panel != "" {
+		return m.sidebarCache.panel, w
+	}
+	panel := strings.Join(lines, "\n")
+	if m.sidebarCache.valid {
+		m.sidebarCache.panel = panel
+	}
+	return panel, w
+}
 
 // sidebarPanelLines builds the sidebar's rows, reusing the cached rail when
 // nothing that affects it has changed since the last frame. A scrolling marquee

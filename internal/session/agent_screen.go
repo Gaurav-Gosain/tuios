@@ -116,16 +116,57 @@ func (p *PTY) screenScanDue(now int64) bool {
 	return true
 }
 
+// hasScreenLook reports whether the look has been installed, so the caller can
+// skip building the closure that installs it. The check is worth having because
+// the caller runs per chunk and the install runs once.
+func (p *PTY) hasScreenLook() bool {
+	p.screenSettleMu.Lock()
+	defer p.screenSettleMu.Unlock()
+	return p.screenLook != nil
+}
+
+// setScreenLook installs the look this pane runs, both on the throttled path
+// and when it settles. Both callers run it through runScreenLook, so the
+// closure is built once per pane rather than once per chunk.
+func (p *PTY) setScreenLook(f func()) {
+	p.screenSettleMu.Lock()
+	defer p.screenSettleMu.Unlock()
+	p.screenLook = f
+}
+
 // armScreenSettle schedules the one scan that runs after a pane goes quiet.
 // Re-arming while output is still flowing pushes the scan out, so a busy pane
 // runs it once when it finally stops rather than once per chunk.
-func (p *PTY) armScreenSettle(f func()) {
+//
+// The timer is created on the first arm and reset afterwards. Building a fresh
+// time.AfterFunc per arm allocated a runtime timer on every chunk a flooding
+// pane emitted, for a scan that by design runs only once, after the flood ends.
+// A Reset that races the fire simply runs the scan twice, and the scan reads the
+// screen and reports what it finds, so a second look costs a scan and decides
+// the same thing.
+func (p *PTY) armScreenSettle() {
 	p.screenSettleMu.Lock()
 	defer p.screenSettleMu.Unlock()
-	if p.screenSettle != nil {
-		p.screenSettle.Stop()
+	if p.screenLook == nil {
+		return
 	}
-	p.screenSettle = time.AfterFunc(screenSettleDelay, f)
+	if p.screenSettle == nil {
+		p.screenSettle = time.AfterFunc(screenSettleDelay, p.runScreenLook)
+		return
+	}
+	p.screenSettle.Reset(screenSettleDelay)
+}
+
+// runScreenLook runs the installed look. It is also what the timer fires, and it
+// reads the look under the lock rather than closing over it, so the timer built
+// on the first arm is never holding a stale callback.
+func (p *PTY) runScreenLook() {
+	p.screenSettleMu.Lock()
+	f := p.screenLook
+	p.screenSettleMu.Unlock()
+	if f != nil {
+		f()
+	}
 }
 
 // stopScreenSettle disarms the settle timer, for a pane being closed.
