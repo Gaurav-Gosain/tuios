@@ -19,7 +19,7 @@ func pillColumns(t *testing.T, tiling bool, width int) []rune {
 	t.Helper()
 
 	buttonColor := lipgloss.Color("#7dd3fc")
-	buttonStyle := baseButtonStyle.Background(buttonColor)
+	buttonStyle := badgeStyle(buttonColor)
 	cross := buttonStyle.Render(config.GetWindowButtonClose())
 	dash := buttonStyle.Render("  - ")
 
@@ -55,7 +55,7 @@ func TestControlPillWidths(t *testing.T) {
 	const floatingPillWidth = 12
 
 	buttonColor := lipgloss.Color("#7dd3fc")
-	buttonStyle := baseButtonStyle.Background(buttonColor)
+	buttonStyle := badgeStyle(buttonColor)
 	cross := buttonStyle.Render(config.GetWindowButtonClose())
 	dash := buttonStyle.Render("  - ")
 	square := buttonStyle.Render(" □ ")

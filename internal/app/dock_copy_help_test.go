@@ -39,9 +39,11 @@ func TestCopyModeHelpUsesTheChipFormat(t *testing.T) {
 			t.Errorf("w=%d: the help line lost its keys: %q", width, plain)
 		}
 
-		// The key carries the footer's ink, which is what makes it read as a key.
+		// The key carries the footer's ink, which is what makes it read as a
+		// key. The footer measures that ink against the ground it writes on, so
+		// the expectation is measured the same way rather than taken raw.
 		fg, _ := inkBefore(t, dock, "hjkl")
-		if want := theme.UI().AccentBright; !sameColor(fg, want) {
+		if want := theme.Readable(theme.UI().AccentBright, theme.UI().Panel); !sameColor(fg, want) {
 			t.Errorf("w=%d: the key is drawn %v, the footers draw keys %v", width, fg, want)
 		}
 	}

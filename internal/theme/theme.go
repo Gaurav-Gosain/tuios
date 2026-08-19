@@ -350,35 +350,36 @@ func NotificationInfo() color.Color {
 	return t.Blue
 }
 
-// NotificationBg returns the background color for the message block: the dark
-// body the weighted severity cap opens.
+// NotificationBg returns the background color for the message block: the body
+// the weighted severity cap opens.
 //
-// With theming off this is the dock's own help background rather than black, so
-// a message sitting in the dock's right-hand block is made of the same material
-// as the copy-mode help line that shares the row. Black would read as a hole
-// punched in the bar.
+// It is the chrome's own raised surface, not the terminal theme's background.
+// A message is a piece of the dock, and taking its ground from the theme made
+// it a slab of the pane's colour dropped into a bar of chrome colour: under a
+// light theme, a near-white rectangle punched into a dark dock. That is the
+// whole of the "notifications look weird with color themes on" report. What
+// the severity says still follows the theme, because that is the part carrying
+// the message.
 func NotificationBg() color.Color {
-	t := Current()
-	if t == nil {
-		return lipgloss.Color("#1a1a2e")
-	}
-	return t.Bg
+	return UI().Surface
 }
 
-// NotificationFg returns the foreground color for notification message text.
+// NotificationFg returns the foreground color for notification message text,
+// on the same constant ramp as the ground it is drawn on.
 func NotificationFg() color.Color {
-	t := Current()
-	if t == nil {
-		return lipgloss.Color("#e5e5e5")
-	}
-	return t.Fg
+	return UI().Fg
 }
 
 // NotificationRule returns the color of the dock hairline that a message has
 // not lit: the unburnt remainder of the rule, and the whole rule when nothing
 // is on screen. It matches the separator the dock already draws.
+//
+// The hairline is drawn straight onto the user's terminal background, which
+// tuios never paints and cannot know, so it takes the mid grey of the chrome
+// ramp. The near-black it used to be measured 1.6:1 on a dark terminal, which
+// is a separator nobody could see on the terminals most people use.
 func NotificationRule() color.Color {
-	return lipgloss.Color("#303040")
+	return UI().FgMute
 }
 
 // NotificationSeverity maps a notification type string to its color. The type
@@ -396,40 +397,6 @@ func NotificationSeverity(notifType string) color.Color {
 	default:
 		return NotificationInfo()
 	}
-}
-
-// DockBg returns the background color for the dock.
-func DockBg() color.Color {
-	return lipgloss.Color("#2a2a3e")
-}
-
-// DockFg returns the foreground color for the dock.
-func DockFg() color.Color {
-	return lipgloss.Color("#a0a0a8")
-}
-
-// DockHighlight returns the highlight color for the dock.
-func DockHighlight() color.Color {
-	t := Current()
-	if t == nil {
-		return lipgloss.Color("#00ff00")
-	}
-	return t.BrightGreen
-}
-
-// DockDimmed returns the dimmed color for the dock.
-func DockDimmed() color.Color {
-	return lipgloss.Color("#808090")
-}
-
-// DockAccent returns the accent color for the dock.
-func DockAccent() color.Color {
-	return lipgloss.Color("#a0a0b0")
-}
-
-// DockSeparator returns the separator color for the dock.
-func DockSeparator() color.Color {
-	return lipgloss.Color("#303040")
 }
 
 // HelpKeyBadge returns the color for key badges in help menu.

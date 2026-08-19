@@ -59,9 +59,13 @@ func agentStateIndicator(state string) string {
 	}
 }
 
-var (
-	baseButtonStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000"))
-)
+// badgeStyle is the ink a window's title badge is written in. The colour is
+// picked against the badge's own fill rather than fixed at black: the fill is
+// the border colour, which follows the theme, and black on a theme's dark red
+// measured 1.40:1 on the worst of them.
+func badgeStyle(badgeBg color.Color) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(theme.ContrastText(badgeBg)).Background(badgeBg)
+}
 
 // titleBadgeText renders the text segment of a window title badge, coloring a
 // leading agent-state glyph with the state's palette color while keeping the
@@ -70,15 +74,20 @@ var (
 // stays the state carrier (agentStateIndicator); the color is reinforcement,
 // exactly as in the sidebar and the palette rows.
 func titleBadgeText(windowName, agentState string, badgeBg color.Color) string {
-	nameStyle := baseButtonStyle.Background(badgeBg)
+	nameStyle := badgeStyle(badgeBg)
 	glyph := agentStateIndicator(agentState)
 	if glyph == "" || !strings.HasPrefix(windowName, glyph) {
 		return nameStyle.Render(" " + windowName + " ")
 	}
 	rest := strings.TrimPrefix(windowName, glyph)
+	// The badge's fill is the border colour and the glyph's colour is the
+	// state's, both drawn from the same theme: a done agent on a focused pane
+	// was bright green on bright green, the same colour on every theme in the
+	// registry. The shape carries the state, so the glyph is lifted only to the
+	// mark floor and keeps as much of its hue as it can.
 	glyphStyle := lipgloss.NewStyle().
 		Background(badgeBg).
-		Foreground(agentGlyphColor(agentState, theme.UI())).
+		Foreground(theme.ReadableAt(agentGlyphColor(agentState, theme.UI()), badgeBg, theme.MarkFloor)).
 		Bold(true)
 	return nameStyle.Render(" ") + glyphStyle.Render(glyph) + nameStyle.Render(rest+" ")
 }
@@ -193,7 +202,7 @@ func addToBorder(content string, color color.Color, window *terminal.Window, pos
 		buttons = ""
 		buttonsWidth = 0
 	} else {
-		buttonStyle := baseButtonStyle.Background(color)
+		buttonStyle := badgeStyle(color)
 		cross := buttonStyle.Render(config.GetWindowButtonClose())
 		dash := buttonStyle.Render("  - ")
 

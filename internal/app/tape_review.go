@@ -302,7 +302,7 @@ func (m *OS) RenderTapeReview() string {
 		code := pal.Card
 		if end <= start {
 			lines = append(lines, overlay.Fill(
-				overlay.Style(code).Foreground(pal.FgMute).Italic(true).Render(" (empty)"), width, code))
+				overlay.Style(code).Foreground(theme.Readable(pal.FgMute, code)).Italic(true).Render(" (empty)"), width, code))
 		}
 		for i := start; i < end; i++ {
 			lines = append(lines, overlay.Fill(

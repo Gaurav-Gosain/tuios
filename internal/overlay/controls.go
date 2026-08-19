@@ -54,10 +54,15 @@ func Chip(label string, bg, fg color.Color) string {
 
 // KeyBadge renders a single key combo as a subtle card-backed chip. The chip
 // carries its own background so it reads on any row.
+//
+// The accent follows the terminal theme and the card does not, so the key is
+// measured against the card before it is written on it. Unmeasured it read
+// 2.45:1 with no theme at all, and this badge is what the splash, every panel
+// footer and every dialog tell the user to press.
 func KeyBadge(key string, pal Palette) string {
 	return lipgloss.NewStyle().
 		Background(pal.Card).
-		Foreground(pal.AccentBright).
+		Foreground(Readable(pal.AccentBright, pal.Card)).
 		Bold(true).
 		Padding(0, 1).
 		Render(key)
