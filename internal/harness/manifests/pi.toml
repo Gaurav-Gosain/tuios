@@ -1,0 +1,28 @@
+schema_version = 1
+id             = "pi"
+display_name   = "Pi"
+priority       = 50
+
+# Measured on a real install: pi launched from its bun shim runs as comm "pi",
+# argv ["pi"], exe ".../node/24.19.0/bin/node". Node's process.title rewrites both
+# the name and argv[0], so the script path is gone by the time anything can look
+# at it and the two-letter name is the only thing left. argv_path is kept for the
+# launches that do keep a path (npx, bun run, an unstripped node invocation), and
+# it is the only predicate that can name which of pi's two published packages this
+# is.
+[detect]
+comm      = ["pi"]
+argv0     = ["pi"]
+argv_path = ["@mariozechner/pi-coding-agent", "@earendil-works/pi-coding-agent", "pi-coding-agent"]
+
+# The corroboration a two-letter name needs. "pi" is also a plotting tool, a pi
+# calculator and a plausible personal alias; what makes this one the coding agent
+# is that it is a Node program. A static binary somebody wrote and called pi does
+# not match, and neither does a pane where the executable cannot be read at all.
+[detect.require]
+exe_base = ["node", "nodejs", "bun", "deno"]
+exe_glob = ["**/pi-coding-agent/**"]
+
+[screen]
+enabled = false
+lines   = 8

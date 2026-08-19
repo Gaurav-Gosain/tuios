@@ -125,6 +125,59 @@ func TestIdentifyGatesArgv(t *testing.T) {
 		{"claude under node", ProcInfo{Comm: "node", Exe: "/usr/bin/node",
 			Argv: []string{"node", "/u/n_m/@anthropic-ai/claude-code/cli.js"}}, "claude-code"},
 	}
+	runIdentifyCases(t, r, tests)
+}
+
+// TestIdentifyMeasuredLaunches pins the five harnesses the project treats as
+// first class against the process identities measured on a real machine, rather
+// than against shapes invented to suit the matcher. Each case names how it was
+// obtained.
+func TestIdentifyMeasuredLaunches(t *testing.T) {
+	r, errs := Load()
+	if len(errs) > 0 {
+		t.Fatalf("bundled manifests failed to load: %v", errs)
+	}
+	tests := []struct {
+		name string
+		proc ProcInfo
+		want string
+	}{
+		// Measured: pi 0.x from its bun shim. process.title rewrites comm and
+		// argv[0] to "pi" and the script path is gone; the executable is node.
+		{"pi", ProcInfo{Comm: "pi", Argv: []string{"pi"},
+			Exe: "/home/u/.vite-plus/js_runtime/node/24.19.0/bin/node"}, "pi"},
+		// The same name with no Node behind it is not the coding agent.
+		{"a static binary called pi", ProcInfo{Comm: "pi", Argv: []string{"pi"},
+			Exe: "/usr/local/bin/pi"}, ""},
+		{"pi with no readable executable", ProcInfo{Comm: "pi", Argv: []string{"pi"}}, ""},
+		// Measured: crush and opencode are native binaries and say so plainly.
+		{"crush", ProcInfo{Comm: "crush", Argv: []string{"crush"}, Exe: "/usr/bin/crush"}, "crush"},
+		{"opencode", ProcInfo{Comm: "opencode", Argv: []string{"opencode"}, Exe: "/usr/bin/opencode"}, "opencode"},
+		// Measured: Claude Code's native install symlinks a version-named binary.
+		{"claude", ProcInfo{Comm: "claude", Argv: []string{"claude", "-c"},
+			Exe: "/home/u/.local/share/claude/versions/2.1.235"}, "claude-code"},
+		// Measured: gemini from a bun shim runs under node with comm rewritten to
+		// "MainThread". The only place it says gemini is the token node was run
+		// with, which is why argv0 reads that token too.
+		{"gemini under node", ProcInfo{Comm: "MainThread",
+			Argv: []string{"/home/u/node/bin/node", "/home/u/.bun/bin/gemini"},
+			Exe:  "/home/u/node/bin/node"}, "gemini-cli"},
+		// Not installed here, so this is the documented layout rather than a
+		// measurement: codex ships a native binary and an npm package.
+		{"codex native", ProcInfo{Comm: "codex", Argv: []string{"codex"}, Exe: "/usr/local/bin/codex"}, "codex"},
+		{"codex from npm", ProcInfo{Comm: "node", Exe: "/usr/bin/node",
+			Argv: []string{"node", "/u/n_m/@openai/codex/bin/codex.js"}}, "codex"},
+	}
+	runIdentifyCases(t, r, tests)
+}
+
+func runIdentifyCases(t *testing.T, r *Registry, tests []struct {
+	name string
+	proc ProcInfo
+	want string
+},
+) {
+	t.Helper()
 	for _, tt := range tests {
 		got, _, ok := r.IdentifyDetail(tt.proc)
 		if tt.want == "" && ok {
