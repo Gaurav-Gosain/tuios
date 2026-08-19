@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/charmbracelet/ssh"
+	"charm.land/ssh"
 )
 
 func TestBuildClientCapabilities_KittyFromTerm(t *testing.T) {

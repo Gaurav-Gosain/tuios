@@ -4,11 +4,11 @@ import (
 	"io"
 	"strings"
 
+	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/charmbracelet/ssh"
 )
 
 // OSOptions configures the creation of an OS instance.
