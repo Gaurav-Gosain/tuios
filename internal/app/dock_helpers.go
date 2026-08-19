@@ -130,15 +130,19 @@ func (m *OS) workspacePillName(n int) string {
 	return label
 }
 
-// workspacePillLabel is what a pill prints: the name, capped.
+// workspacePillLabel is what a pill prints: the name through the configured
+// tab format (so {index} and {name} can be combined), capped.
 func (m *OS) workspacePillLabel(n int) string {
-	return overlay.Truncate(m.workspacePillName(n), workspacePillLabelMax)
+	label := config.FormatWorkspaceTab(m.workspacePillName(n), n)
+	return overlay.Truncate(label, workspacePillLabelMax)
 }
 
-// workspacePillClipped reports whether the pill had to cut n's name short, which
-// is the only case with anything left to reveal.
+// workspacePillClipped reports whether the pill had to cut its label short,
+// which is the only case with anything left to reveal. The label is measured
+// through the tab format, because that is what the pill draws: a short name can
+// still be clipped once the format lengthens it.
 func (m *OS) workspacePillClipped(n int) bool {
-	return lipgloss.Width(m.workspacePillName(n)) > workspacePillLabelMax
+	return lipgloss.Width(config.FormatWorkspaceTab(m.workspacePillName(n), n)) > workspacePillLabelMax
 }
 
 // occupiedWorkspaces lists the workspaces worth showing, in order: those
