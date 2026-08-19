@@ -92,3 +92,18 @@ func BenchmarkPTYBroadcast(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkScreenSettleArm is the settle timer re-armed the way a flooding pane
+// arms it: once per chunk, for a scan that by design runs once, after the flood
+// ends. The arm is on the output path, so its cost is paid per chunk whether or
+// not the scan it schedules ever runs.
+func BenchmarkScreenSettleArm(b *testing.B) {
+	p := benchPTY(0, 1)
+	p.setScreenLook(func() {})
+	b.Cleanup(p.stopScreenSettle)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		p.armScreenSettle()
+	}
+}

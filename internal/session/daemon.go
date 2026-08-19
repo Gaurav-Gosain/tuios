@@ -271,14 +271,22 @@ func (d *Daemon) onSessionCreated(s *Session) {
 					// now must be able to write over that. Running them the
 					// other way round would let a read of a file the agent wrote
 					// a moment ago undo a blocker the screen just matched.
-					look := func() {
-						s.readTranscriptOnOutput(ptyID)
-						s.scanScreenForAgent(ptyID, reg)
+					// Installed on first use, not at construction: the registry
+					// belongs to the daemon and a PTY is built before the daemon
+					// wires this sink. Guarded so a flooding pane does not build
+					// an identical closure again on every chunk just to store it;
+					// the matcher is fixed for the daemon's life, so the first
+					// one stays correct.
+					if !pty.hasScreenLook() {
+						pty.setScreenLook(func() {
+							s.readTranscriptOnOutput(ptyID)
+							s.scanScreenForAgent(ptyID, reg)
+						})
 					}
 					if pty.screenScanDue(time.Now().UnixNano()) {
-						look()
+						pty.runScreenLook()
 					}
-					pty.armScreenSettle(look)
+					pty.armScreenSettle()
 				}
 			}
 		}

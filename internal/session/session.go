@@ -319,8 +319,14 @@ type PTY struct {
 	// screenSettle is the one-shot that scans the screen after a pane goes quiet.
 	// It is a timer rather than a ticker so a silent pane costs nothing, which is
 	// the rule the whole daemon is built to.
+	//
+	// The timer is built once and re-armed with Reset. Arming happens on every
+	// chunk a pane emits, and a fresh time.AfterFunc there allocated a runtime
+	// timer per chunk. screenLook is what it runs, held separately so the caller
+	// does not have to build a closure per chunk either.
 	screenSettleMu sync.Mutex
 	screenSettle   *time.Timer
+	screenLook     func()
 
 	// agentProgress parks the most recent OSC 9;4 progress state the emulator
 	// saw, as the state plus one so zero means none pending. The VT callback runs
