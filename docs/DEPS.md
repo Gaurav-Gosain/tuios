@@ -172,8 +172,8 @@ click 52 href "https://godoc.org/charm.land/log/v2"
 52 --> 9
 52 --> 53
 
-18[github.com/charmbracelet/ssh]
-click 18 href "https://godoc.org/github.com/charmbracelet/ssh"
+18[charm.land/ssh]
+click 18 href "https://godoc.org/charm.land/ssh"
 18 --> 37
 18 --> 54
 18 --> 55

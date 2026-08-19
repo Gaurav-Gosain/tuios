@@ -1,18 +1,18 @@
 module github.com/Gaurav-Gosain/tuios
 
-go 1.25.9
+go 1.25.12
 
 require (
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/lipgloss/v2 v2.0.5
-	charm.land/wish/v2 v2.0.1
+	charm.land/ssh v0.4.3
+	charm.land/wish/v2 v2.0.3
 	github.com/Gaurav-Gosain/sip v0.7.0
 	github.com/adrg/xdg v0.5.3
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/fang v1.0.0
-	github.com/charmbracelet/ssh v0.0.0-20250826160808-ebfa259c7309
 	github.com/charmbracelet/ultraviolet v0.0.0-20260703014108-f5a850f9c2b7
-	github.com/charmbracelet/x/xpty v0.1.3
+	github.com/charmbracelet/x/xpty v0.1.4
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/lrstanley/bubbletint/v2 v2.0.2
@@ -27,6 +27,7 @@ require (
 require (
 	github.com/bits-and-blooms/bitset v1.25.0 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
+	github.com/pires/go-proxyproto v0.12.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 )
 
