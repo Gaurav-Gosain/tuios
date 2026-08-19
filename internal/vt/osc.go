@@ -243,14 +243,10 @@ func (e *Emulator) handlePaletteColor(data []byte) {
 		return
 	}
 
-	// Parse color index
-	idx := 0
-	for _, b := range parts[1] {
-		if b >= '0' && b <= '9' {
-			idx = idx*10 + int(b-'0')
-		}
-	}
-	if idx < 0 || idx > 255 {
+	// Parse color index. A malformed one is dropped rather than rounded down
+	// to slot 0, which would have the guest repaint black by accident.
+	idx, ok := parsePaletteIndex(parts[1])
+	if !ok {
 		return
 	}
 
@@ -268,6 +264,45 @@ func (e *Emulator) handlePaletteColor(data []byte) {
 		// Set: update the palette entry
 		e.SetIndexedColor(idx, c)
 	}
+}
+
+// handleResetPaletteColor handles OSC 104, which puts palette slots back to
+// what they were before the guest touched them. Bare OSC 104 resets all of
+// them.
+//
+// What "before" means is the user's terminal, or the user's tuios theme when
+// one is active, so the reset clears the guest layer and leaves the theme
+// layer standing.
+func (e *Emulator) handleResetPaletteColor(data []byte) {
+	parts := bytes.Split(data, []byte{';'})
+	if len(parts) < 2 {
+		e.colors = [256]color.Color{}
+		return
+	}
+	for _, p := range parts[1:] {
+		if idx, ok := parsePaletteIndex(p); ok {
+			e.colors[idx] = nil
+		}
+	}
+}
+
+// parsePaletteIndex reads a palette index, rejecting anything that is not a
+// plain number in range rather than silently landing on slot 0.
+func parsePaletteIndex(b []byte) (int, bool) {
+	if len(b) == 0 || len(b) > 3 {
+		return 0, false
+	}
+	idx := 0
+	for _, c := range b {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		idx = idx*10 + int(c-'0')
+	}
+	if idx > 255 {
+		return 0, false
+	}
+	return idx, true
 }
 
 func (e *Emulator) handleClipboard(data []byte) {
