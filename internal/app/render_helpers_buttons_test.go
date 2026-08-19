@@ -31,9 +31,9 @@ func pillColumns(t *testing.T, tiling bool, width int) []rune {
 		buttons = makeRounded(dash+square+cross, buttonColor)
 	}
 
-	border := RightString(buttons, width, buttonColor)
+	border := layoutBorderRow("", buttons, width, buttonColor, true).text
 	if border == "" {
-		t.Fatalf("RightString returned nothing for width %d", width)
+		t.Fatalf("layoutBorderRow drew nothing for width %d", width)
 	}
 	return []rune(ansi.Strip(border))
 }

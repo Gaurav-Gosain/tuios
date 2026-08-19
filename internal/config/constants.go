@@ -603,6 +603,10 @@ var HideWindowButtons = false
 // appearance.window_button_style.
 var WindowButtonStyle = WindowButtonStylePill
 
+// WindowButtonPosition selects which end of the title bar the window controls
+// sit on. See appearance.window_button_position.
+var WindowButtonPosition = WindowButtonPositionRight
+
 // ScrollbarStyle selects how a scrolled-back pane draws its position. See
 // appearance.scrollbar.style.
 var ScrollbarStyle = ScrollbarStyleThin

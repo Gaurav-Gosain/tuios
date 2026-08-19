@@ -236,21 +236,17 @@ func (m *OS) windowDotPieces(col color.Color, window *terminal.Window, isTiling 
 	return pieces
 }
 
-// placeWindowButtons turns pill-relative spans into screen rectangles. The pill
-// is right-aligned against the border's top-right corner on every path that
-// draws it, and a border row that could not fit the pill is returned empty, so
-// an empty row records nothing at all.
-func placeWindowButtons(hits []WindowButtonRect, window *terminal.Window, topBorder, pill string) []WindowButtonRect {
-	if len(hits) == 0 || topBorder == "" || pill == "" {
+// placeWindowButtons turns pill-relative spans into screen rectangles.
+//
+// pillStart is the column the row's layout put the pill on, reported by the
+// same call that drew it, so left and right placement need no arithmetic here
+// and cannot drift apart from what is on screen. A row that could not fit the
+// pill reports -1 and records nothing at all.
+func placeWindowButtons(hits []WindowButtonRect, window *terminal.Window, pillStart int) []WindowButtonRect {
+	if len(hits) == 0 || pillStart < 0 {
 		return nil
 	}
-	rowWidth := lipgloss.Width(topBorder)
-	if rowWidth < lipgloss.Width(pill) {
-		return nil
-	}
-	// One cell in from the row's end is the corner glyph, which the pill stops
-	// short of.
-	start := window.X + rowWidth - 1 - lipgloss.Width(pill)
+	start := window.X + pillStart
 	out := make([]WindowButtonRect, len(hits))
 	for i, h := range hits {
 		out[i] = WindowButtonRect{Action: h.Action, X: start + h.X, W: h.W, Y: window.Y}

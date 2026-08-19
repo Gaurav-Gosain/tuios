@@ -125,6 +125,7 @@ type AppearanceConfig struct {
 	ZenMode                     string  `toml:"zen_mode"`                        // Zen mode: disabled, always, mouse (default: disabled)
 	HideWindowButtons           bool    `toml:"hide_window_buttons"`             // Hide window control buttons (minimize, maximize, close)
 	WindowButtonStyle           string  `toml:"window_button_style"`             // Window control style: pill, dots (default: pill)
+	WindowButtonPosition        string  `toml:"window_button_position"`          // Which end of the title bar the window controls sit on: right, left (default: right)
 	HideScrollbar               bool    `toml:"hide_scrollbar"`                  // Hide the window scrollbar thumb on the border
 	ScrollbackLines             int     `toml:"scrollback_lines"`                // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 	ScrollLines                 int     `toml:"scroll_lines"`                    // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
@@ -220,6 +221,21 @@ const (
 
 // WindowButtonStyles lists the valid values for appearance.window_button_style.
 var WindowButtonStyles = []string{WindowButtonStylePill, WindowButtonStyleDots}
+
+// Which end of the title bar the controls sit on. See
+// AppearanceConfig.WindowButtonPosition.
+const (
+	// WindowButtonPositionRight puts them against the border's trailing corner,
+	// which is where Windows and most Linux desktops put them.
+	WindowButtonPositionRight = "right"
+	// WindowButtonPositionLeft puts them against the leading corner, the way
+	// macOS does.
+	WindowButtonPositionLeft = "left"
+)
+
+// WindowButtonPositions lists the valid values for
+// appearance.window_button_position.
+var WindowButtonPositions = []string{WindowButtonPositionRight, WindowButtonPositionLeft}
 
 // Scrollbar styles. See ScrollbarConfig.Style.
 const (
@@ -327,16 +343,17 @@ type KeybindingsConfig struct {
 func DefaultConfig() *UserConfig {
 	cfg := &UserConfig{
 		Appearance: AppearanceConfig{
-			BorderStyle:       "rounded",
-			ZenMode:           ZenModeDisabled,
-			HideWindowButtons: false,
-			WindowButtonStyle: WindowButtonStylePill,
-			ScrollbackLines:   10000,
-			ScrollLines:       3,
-			DockbarPosition:   "bottom",
-			PreferredShell:    "",
-			ClickToType:       ClickToTypeSingle,
-			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
+			BorderStyle:          "rounded",
+			ZenMode:              ZenModeDisabled,
+			HideWindowButtons:    false,
+			WindowButtonStyle:    WindowButtonStylePill,
+			WindowButtonPosition: WindowButtonPositionRight,
+			ScrollbackLines:      10000,
+			ScrollLines:          3,
+			DockbarPosition:      "bottom",
+			PreferredShell:       "",
+			ClickToType:          ClickToTypeSingle,
+			Scrollbar:            ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Sidebar: SidebarConfig{
 				Position: "left",
 				Width:    SidebarDefaultWidth,
@@ -820,6 +837,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.WindowButtonStyle = defaultCfg.Appearance.WindowButtonStyle
 	}
 
+	if cfg.Appearance.WindowButtonPosition == "" {
+		cfg.Appearance.WindowButtonPosition = defaultCfg.Appearance.WindowButtonPosition
+	}
+
 	if cfg.Appearance.Sidebar.Position == "" {
 		cfg.Appearance.Sidebar.Position = defaultCfg.Appearance.Sidebar.Position
 	}
@@ -960,6 +981,9 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	HideWindowButtons = cfg.Appearance.HideWindowButtons
 	if cfg.Appearance.WindowButtonStyle != "" {
 		WindowButtonStyle = cfg.Appearance.WindowButtonStyle
+	}
+	if cfg.Appearance.WindowButtonPosition != "" {
+		WindowButtonPosition = cfg.Appearance.WindowButtonPosition
 	}
 	HideScrollbar = cfg.Appearance.HideScrollbar
 	ShowClock = cfg.Appearance.ShowClock
