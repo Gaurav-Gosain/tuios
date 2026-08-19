@@ -569,7 +569,6 @@ func (w *Window) handleIOOperations() {
 				// Context cancelled, exit gracefully
 				return
 			default:
-				// Set a reasonable timeout for read operations
 				terminal := w.terminalRef()
 				if terminal == nil {
 					return
