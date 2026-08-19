@@ -28,22 +28,25 @@ func TestConform_DECSTBM(t *testing.T) {
 		{
 			// esctest: a region whose top equals its bottom is rejected and
 			// leaves the margins as they were.
-			name:   "top equal to bottom is rejected",
-			in:     "\x1b[3;3r",
-			want:   "",
-			region: "0,0-6,4",
+			name:      "top equal to bottom is rejected",
+			in:        "\x1b[3;3r",
+			want:      "",
+			region:    "0,0-6,4",
+			unhandled: true,
 		},
 		{
-			name:   "top equal to bottom does not disturb an existing region",
-			in:     "\x1b[2;3r\x1b[3;3r",
-			want:   "",
-			region: "0,1-6,3",
+			name:      "top equal to bottom does not disturb an existing region",
+			in:        "\x1b[2;3r\x1b[3;3r",
+			want:      "",
+			region:    "0,1-6,3",
+			unhandled: true,
 		},
 		{
-			name:   "top greater than bottom is rejected",
-			in:     "\x1b[3;2r",
-			want:   "",
-			region: "0,0-6,4",
+			name:      "top greater than bottom is rejected",
+			in:        "\x1b[3;2r",
+			want:      "",
+			region:    "0,0-6,4",
+			unhandled: true,
 		},
 		{
 			// esctest: a bottom past the last row clamps to the screen. This is
@@ -56,10 +59,11 @@ func TestConform_DECSTBM(t *testing.T) {
 			region: "0,0-6,4",
 		},
 		{
-			name:   "top past the screen is rejected",
-			in:     "\x1b[9;12r",
-			want:   "",
-			region: "0,0-6,4",
+			name:      "top past the screen is rejected",
+			in:        "\x1b[9;12r",
+			want:      "",
+			region:    "0,0-6,4",
+			unhandled: true,
 		},
 		{
 			name:   "no parameters resets to the whole screen",
@@ -248,7 +252,7 @@ func TestConform_DECALN(t *testing.T) {
 			name: "ignores the scroll region",
 			cols: 4,
 			rows: 3,
-			in:   "\x1b[2;2r\x1b#8",
+			in:   "\x1b[2;3r\x1b#8",
 			want: "EEEE\nEEEE\nEEEE",
 		},
 		{
@@ -271,7 +275,7 @@ func TestConform_MarginsSurviveAResize(t *testing.T) {
 		rows: 8,
 		in:   "a\r\nb\r\nc\r\nd",
 	}
-	emu := newConformEmulator(t, tc)
+	emu, _ := newConformEmulator(t, tc)
 	emu.Resize(6, 4)
 	if _, err := emu.WriteString("\x1b[1;8r\x1b[1S"); err != nil {
 		t.Fatalf("write: %v", err)

@@ -51,8 +51,37 @@ type conformCase struct {
 	// cells asserts style or content on individual cells.
 	cells []cellWant
 
+	// unhandled, when true, says this case expects the emulator to log the
+	// input as an unrecognised sequence. Every other case expects it not to.
+	//
+	// That check is here because of what it caught: NEL and DECALN were not
+	// implemented at all, and a case asserting the screen after them passed,
+	// because a sequence the emulator ignores leaves a screen that looks
+	// exactly like one it handled by doing nothing. Reading the emulator's own
+	// "unhandled sequence" log is the difference between testing behaviour and
+	// testing silence.
+	unhandled bool
+
+	// knownBug, when set, records a divergence that is not fixed. The case is
+	// expected to fail; if it starts passing the test says so, so a bug that
+	// gets fixed cannot sit on the list pretending to still be one.
+	knownBug string
+
 	// skip, when set, is the reason this case does not run.
 	skip string
+}
+
+// unhandledLog collects the emulator's complaints about sequences it did not
+// recognise.
+type unhandledLog struct {
+	lines []string
+}
+
+func (u *unhandledLog) Printf(format string, v ...any) {
+	msg := fmt.Sprintf(format, v...)
+	if strings.HasPrefix(msg, "unhandled sequence") {
+		u.lines = append(u.lines, msg)
+	}
 }
 
 // cellWant asserts one cell. Only the fields set are compared, so a case that
@@ -132,13 +161,24 @@ func runConform(t *testing.T, cases []conformCase) {
 			if tc.skip != "" {
 				t.Skip(tc.skip)
 			}
-			emu := newConformEmulator(t, tc)
-			checkConform(t, emu, tc)
+			emu, log := newConformEmulator(t, tc)
+			problems := conformProblems(emu, log, tc)
+
+			if tc.knownBug == "" {
+				for _, p := range problems {
+					t.Error(p)
+				}
+				return
+			}
+			if len(problems) == 0 {
+				t.Errorf("this case is marked as a known bug (%s) but passed; "+
+					"delete the knownBug field", tc.knownBug)
+			}
 		})
 	}
 }
 
-func newConformEmulator(t *testing.T, tc conformCase) *vt.Emulator {
+func newConformEmulator(t *testing.T, tc conformCase) (*vt.Emulator, *unhandledLog) {
 	t.Helper()
 	cols, rows := tc.cols, tc.rows
 	if cols == 0 {
@@ -148,6 +188,8 @@ func newConformEmulator(t *testing.T, tc conformCase) *vt.Emulator {
 		rows = 4
 	}
 	emu := vt.NewEmulator(cols, rows)
+	log := &unhandledLog{}
+	emu.SetLogger(log)
 	writes := tc.split
 	if writes == nil {
 		writes = []string{tc.in}
@@ -157,20 +199,26 @@ func newConformEmulator(t *testing.T, tc conformCase) *vt.Emulator {
 			t.Fatalf("write %q: %v", w, err)
 		}
 	}
-	return emu
+	return emu, log
 }
 
-func checkConform(t *testing.T, emu *vt.Emulator, tc conformCase) {
-	t.Helper()
+// conformProblems returns everything wrong with the emulator's state, as
+// messages. It collects rather than reporting so that a case marked knownBug
+// can be checked for still failing.
+func conformProblems(emu *vt.Emulator, log *unhandledLog, tc conformCase) []string {
+	var problems []string
+	add := func(format string, v ...any) {
+		problems = append(problems, fmt.Sprintf(format, v...))
+	}
 
 	if got, want := dumpScreen(emu), normalizeWant(tc.want); got != want {
-		t.Errorf("screen mismatch\n--- got ---\n%s\n--- want ---\n%s\n--- end ---", boxed(got), boxed(want))
+		add("screen mismatch\n--- got ---\n%s\n--- want ---\n%s\n--- end ---", boxed(got), boxed(want))
 	}
 
 	if tc.cursor != "" {
 		p := emu.CursorPosition()
 		if got := fmt.Sprintf("%d,%d", p.X, p.Y); got != tc.cursor {
-			t.Errorf("cursor = %s, want %s", got, tc.cursor)
+			add("cursor = %s, want %s", got, tc.cursor)
 		}
 	}
 
@@ -178,46 +226,60 @@ func checkConform(t *testing.T, emu *vt.Emulator, tc conformCase) {
 		r := emu.ScrollRegion()
 		got := fmt.Sprintf("%d,%d-%d,%d", r.Min.X, r.Min.Y, r.Max.X, r.Max.Y)
 		if got != tc.region {
-			t.Errorf("scroll region = %s, want %s", got, tc.region)
+			add("scroll region = %s, want %s", got, tc.region)
 		}
 	}
 
-	for _, cw := range tc.cells {
-		checkCell(t, emu, cw)
+	switch {
+	case tc.unhandled && len(log.lines) == 0:
+		add("expected the emulator to reject this input, but it recognised all of it")
+	case !tc.unhandled && len(log.lines) > 0:
+		add("the emulator did not recognise part of this input, so whatever the "+
+			"screen shows is what ignoring it looks like: %s", strings.Join(log.lines, "; "))
 	}
+
+	for _, cw := range tc.cells {
+		problems = append(problems, cellProblems(emu, cw)...)
+	}
+	return problems
 }
 
-func checkCell(t *testing.T, emu *vt.Emulator, cw cellWant) {
-	t.Helper()
+func cellProblems(emu *vt.Emulator, cw cellWant) []string {
+	var problems []string
+	add := func(format string, v ...any) {
+		problems = append(problems, fmt.Sprintf(format, v...))
+	}
+
 	c := emu.CellAt(cw.x, cw.y)
 	if c == nil {
-		t.Errorf("cell(%d,%d) is out of bounds", cw.x, cw.y)
-		return
+		add("cell(%d,%d) is out of bounds", cw.x, cw.y)
+		return problems
 	}
 	if cw.content != "" && c.Content != cw.content {
-		t.Errorf("cell(%d,%d).Content = %q, want %q", cw.x, cw.y, c.Content, cw.content)
+		add("cell(%d,%d).Content = %q, want %q", cw.x, cw.y, c.Content, cw.content)
 	}
 	if cw.width != 0 && c.Width != cw.width {
-		t.Errorf("cell(%d,%d).Width = %d, want %d", cw.x, cw.y, c.Width, cw.width)
+		add("cell(%d,%d).Width = %d, want %d", cw.x, cw.y, c.Width, cw.width)
 	}
 	if cw.fg != nil && !sameColor(c.Style.Fg, cw.fg) {
-		t.Errorf("cell(%d,%d).Fg = %v, want %v", cw.x, cw.y, c.Style.Fg, cw.fg)
+		add("cell(%d,%d).Fg = %v, want %v", cw.x, cw.y, c.Style.Fg, cw.fg)
 	}
 	if cw.bg != nil && !sameColor(c.Style.Bg, cw.bg) {
-		t.Errorf("cell(%d,%d).Bg = %v, want %v", cw.x, cw.y, c.Style.Bg, cw.bg)
+		add("cell(%d,%d).Bg = %v, want %v", cw.x, cw.y, c.Style.Bg, cw.bg)
 	}
 	if cw.ul != nil && !sameColor(c.Style.UnderlineColor, cw.ul) {
-		t.Errorf("cell(%d,%d).UnderlineColor = %v, want %v", cw.x, cw.y, c.Style.UnderlineColor, cw.ul)
+		add("cell(%d,%d).UnderlineColor = %v, want %v", cw.x, cw.y, c.Style.UnderlineColor, cw.ul)
 	}
 	if cw.underline != nil && c.Style.Underline != *cw.underline {
-		t.Errorf("cell(%d,%d).Underline = %v, want %v", cw.x, cw.y, c.Style.Underline, *cw.underline)
+		add("cell(%d,%d).Underline = %v, want %v", cw.x, cw.y, c.Style.Underline, *cw.underline)
 	}
 	if cw.attrs != nil && c.Style.Attrs != *cw.attrs {
-		t.Errorf("cell(%d,%d).Attrs = %#b, want %#b", cw.x, cw.y, c.Style.Attrs, *cw.attrs)
+		add("cell(%d,%d).Attrs = %08b, want %08b", cw.x, cw.y, c.Style.Attrs, *cw.attrs)
 	}
 	if cw.link != nil && c.Link.URL != *cw.link {
-		t.Errorf("cell(%d,%d).Link.URL = %q, want %q", cw.x, cw.y, c.Link.URL, *cw.link)
+		add("cell(%d,%d).Link.URL = %q, want %q", cw.x, cw.y, c.Link.URL, *cw.link)
 	}
+	return problems
 }
 
 // sameColor compares by RGBA so an indexed colour and the same colour written
