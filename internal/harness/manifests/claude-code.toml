@@ -9,7 +9,7 @@ argv0     = ["claude", "claude-code"]
 argv_path = ["@anthropic-ai/claude-code"]
 # The native installer keeps one binary per release, so the executable is named
 # after the version and only the directory names the agent.
-exe_glob  = ["*/share/claude/versions/*", "*/claude"]
+exe_glob  = ["**/share/claude/versions/*", "**/claude"]
 
 # Claude Code reports its own state through the hook shim in integrations/, and
 # emits OSC 9;4 when terminalProgressBarEnabled is set. Both beat reading its

@@ -11,8 +11,6 @@ package harness
 
 import (
 	"fmt"
-	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -45,13 +43,20 @@ type Detect struct {
 	Comm []string `toml:"comm"`
 	// Argv0 matches the base name of argv[0], with a script extension stripped.
 	Argv0 []string `toml:"argv0"`
-	// ArgvPath matches a substring of any argv token. It is how an npm package
-	// name identifies a harness whose entry point is a generic cli.js.
+	// ArgvPath matches path components of the token an interpreter was asked to
+	// run. It is how an npm package name identifies a harness whose entry point
+	// is a generic cli.js. It is the one predicate that reads argv, so it is the
+	// one predicate that is gated: see ProcInfo.RunToken for why.
 	ArgvPath []string `toml:"argv_path"`
-	// ExeGlob matches the resolved /proc/<pid>/exe against a shell glob. It is
-	// how an installer that names its binary after the release is recognised by
-	// the directory it installs into.
+	// ExeGlob matches the resolved executable path against a component-wise glob.
+	// It is how an installer that names its binary after the release is
+	// recognised by the directory it installs into. "*" and "?" stay inside one
+	// component, "**" spans any number, and a pattern that does not start with
+	// "/" matches any suffix of the path.
 	ExeGlob []string `toml:"exe_glob"`
+
+	// argvSegments is ArgvPath pre-split into components, filled by normalize.
+	argvSegments [][]string
 }
 
 // Screen holds optional rules matched against a pane's rendered text.
@@ -160,6 +165,12 @@ func (d *Detect) normalize() {
 		}
 		*list = out
 	}
+	// Kept index-aligned with ArgvPath so a match can name the pattern it was
+	// written as, which is the string the manifest author will search for.
+	d.argvSegments = make([][]string, len(d.ArgvPath))
+	for i, want := range d.ArgvPath {
+		d.argvSegments[i] = segments(want)
+	}
 }
 
 // any reports whether the manifest carries any predicate at all.
@@ -183,38 +194,36 @@ func (d *Detect) checkGenericNames(file, id string) error {
 	return nil
 }
 
-// matches reports whether a process is this harness. comm, argv0 and exe are
-// expected already reduced to lowercase base names where that applies; argv is
-// the raw command line and exe the raw resolved path, since those two are matched
-// as paths rather than names.
-func (d *Detect) matches(comm, argv0 string, argv []string, exe string) bool {
-	if contains(d.Comm, comm) || contains(d.Argv0, argv0) {
-		return true
+// matches reports whether a process is this harness, and names the predicate
+// that decided it so a diagnostic can quote the rule rather than the verdict.
+//
+// The predicates are ordered by how much of the process's own identity they read.
+// comm, argv0 and exe describe what the process is; argv describes what it was
+// handed, and only an interpreter's argv stands in for its identity, which is why
+// run is empty for everything else.
+func (d *Detect) matches(p ProcInfo, run string) (string, bool) {
+	if comm := p.CommBase(); contains(d.Comm, comm) {
+		return "comm=" + comm, true
 	}
-	for _, want := range d.ArgvPath {
-		for _, arg := range argv {
-			if strings.Contains(strings.ToLower(arg), want) {
-				return true
-			}
-		}
+	if argv0 := p.Argv0Base(); contains(d.Argv0, argv0) {
+		return "argv0=" + argv0, true
 	}
-	if exe != "" {
-		lower := strings.ToLower(exe)
+	if p.Exe != "" {
 		for _, pattern := range d.ExeGlob {
-			// path.Match, not filepath.Match: the separator is always "/" here
-			// because these are procfs paths, and matching must not change with
-			// the host's separator.
-			if ok, err := path.Match(pattern, lower); err == nil && ok {
-				return true
-			}
-			// A bare directory name is the common case ("*/claude/*"), so also
-			// try the pattern against each path element's parent join.
-			if ok, err := filepath.Match(pattern, lower); err == nil && ok {
-				return true
+			if matchExeGlob(pattern, p.Exe) {
+				return "exe_glob=" + pattern, true
 			}
 		}
 	}
-	return false
+	if run != "" {
+		have := segments(run)
+		for i, want := range d.argvSegments {
+			if containsSegments(have, want) {
+				return "argv_path=" + d.ArgvPath[i], true
+			}
+		}
+	}
+	return "", false
 }
 
 func contains(list []string, v string) bool {
