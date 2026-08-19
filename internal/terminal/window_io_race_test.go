@@ -68,3 +68,51 @@ func TestDaemonWindowCloseUnderOutputFlood(t *testing.T) {
 	w.WriteOutputAsync(payload)
 	w.WriteOutput(payload)
 }
+
+// TestDaemonResponseReaderRacesClose pins the ownership rule for w.Terminal:
+// Close() owns the field, and the daemon response reader may only reach the
+// emulator through terminalRef, which takes the same ioMu Close() writes under.
+// Starting the reader concurrently with Close() is the window SwitchToSession
+// opens, where the UI goroutine closes every window while the readers it just
+// started are still coming up. Before the fix this failed under -race on the
+// reader's unlocked field read against Close()'s write; the loop count is what
+// makes it fire on the first run rather than occasionally.
+func TestDaemonResponseReaderRacesClose(t *testing.T) {
+	for range 200 {
+		ptyDataChan := make(chan struct{}, 1)
+		w := NewDaemonWindow("reader-race-0001", "reader-race", 0, 0, 80, 24, 0, "pty-reader-race", ptyDataChan)
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			w.StartDaemonResponseReader()
+		}()
+		go func() {
+			defer wg.Done()
+			w.Close()
+		}()
+		wg.Wait()
+	}
+}
+
+// TestTerminalRefAfterClose pins the other half of the rule: once Close() has
+// run the emulator is no longer observable, so a reader starting late gets nil
+// rather than a live pointer or a panic.
+func TestTerminalRefAfterClose(t *testing.T) {
+	ptyDataChan := make(chan struct{}, 1)
+	w := NewDaemonWindow("ref-after-close-01", "ref", 0, 0, 80, 24, 0, "pty-ref", ptyDataChan)
+
+	if w.terminalRef() == nil {
+		t.Fatal("terminalRef returned nil before Close")
+	}
+
+	w.Close()
+
+	if got := w.terminalRef(); got != nil {
+		t.Fatalf("terminalRef returned %p after Close, want nil", got)
+	}
+
+	// Starting the reader against a closed window must be a no-op, not a panic.
+	w.StartDaemonResponseReader()
+}

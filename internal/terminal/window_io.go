@@ -251,15 +251,35 @@ func (w *Window) renderCoalescer() {
 	}
 }
 
+// terminalRef returns the emulator, or nil once Close() has taken it away.
+//
+// Close() owns w.Terminal: it closes the emulator and nils the field under
+// ioMu, and nobody may observe the field after that without the same lock.
+// Every reader outside Close() therefore goes through ioMu, and a goroutine
+// that has to block on the emulator takes one reference here and then uses
+// that reference rather than the field, so the lock is never held across a
+// blocking call and cannot deadlock against Close()'s own wait for the I/O
+// goroutines. A reference outliving Close() is safe: Terminal.Close() unblocks
+// a pending Read with an error, so a late reader observes a closed emulator
+// instead of a nil one. This mirrors the snapshot discipline the w.Pty readers
+// already use.
+func (w *Window) terminalRef() *vt.Emulator {
+	w.ioMu.RLock()
+	defer w.ioMu.RUnlock()
+	return w.Terminal
+}
+
 // StartDaemonResponseReader starts a goroutine to read and DRAIN responses from
 // the terminal emulator. We don't forward these to the PTY because:
 //  1. Responses were appearing as visible escape sequences in the output
 //  2. Applications in daemon mode receive queries from the daemon's VT emulator
 //     and don't need responses from client emulators
 //
-// This must be called after the Terminal is set up.
+// This must be called after the Terminal is set up. DaemonMode is set at
+// construction and never written again, so reading it here needs no lock;
+// w.Terminal does, and is read inside the goroutine via terminalRef.
 func (w *Window) StartDaemonResponseReader() {
-	if !w.DaemonMode || w.Terminal == nil {
+	if !w.DaemonMode {
 		return
 	}
 
@@ -270,11 +290,13 @@ func (w *Window) StartDaemonResponseReader() {
 			}
 		}()
 
-		// Snapshot Terminal once. Re-reading w.Terminal each iteration would
-		// race Close(), which nils the field under ioMu and dereferences nil.
-		// Terminal.Close() unblocks the pending Read with EOF, so the loop
-		// still exits promptly on teardown.
-		term := w.Terminal
+		// One reference, taken under the lock Close() writes the field under.
+		// Reading w.Terminal unlocked raced Close() even as a single snapshot,
+		// and re-reading it per iteration would dereference the nil Close()
+		// leaves behind. Terminal.Close() unblocks the pending Read with an
+		// error, so a reader holding a stale reference sees the emulator as
+		// closed and exits promptly.
+		term := w.terminalRef()
 		if term == nil {
 			return
 		}
@@ -548,11 +570,7 @@ func (w *Window) handleIOOperations() {
 				return
 			default:
 				// Set a reasonable timeout for read operations
-				// Use lock to synchronize with Close() which may set w.Terminal = nil
-				w.ioMu.RLock()
-				terminal := w.Terminal
-				w.ioMu.RUnlock()
-
+				terminal := w.terminalRef()
 				if terminal == nil {
 					return
 				}
