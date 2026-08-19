@@ -16,6 +16,26 @@ func (m *OS) MarkAllDirty() {
 	m.sidebarCache.invalidate()
 }
 
+// markZenDirty marks the windows whose zen-mode border visibility is about to
+// change as dirty, so their CachedLayer is rebuilt with (or without) the
+// frame. The focused window always keeps its border, so only the unfocused
+// windows need the repaint. Marking them dirty is also what makes View()
+// compose a fresh frame instead of serving the cached one; without it the
+// melt/reveal would never be drawn even when the tick knows it crossed the
+// idle threshold.
+func (m *OS) markZenDirty() {
+	m.terminalMu.Lock()
+	defer m.terminalMu.Unlock()
+	for i := range m.Windows {
+		w := m.Windows[i]
+		if w == nil || i == m.FocusedWindow {
+			continue
+		}
+		w.MarkContentDirty()
+	}
+	m.cachedViewContent = "" // Invalidate view cache so View() re-composes
+}
+
 // MarkTerminalsWithNewContent marks terminals that have new content as dirty.
 func (m *OS) MarkTerminalsWithNewContent() bool {
 	// Fast path: no windows

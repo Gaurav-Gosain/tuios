@@ -388,6 +388,14 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowTitleFormat = v })
 					m.applyAppearanceLive(false)
 				}),
+			enumItem("Zen mode", "Hide borders of unfocused windows: disabled, always, or mouse (reveal while moving)",
+				config.ZenModeModes,
+				func() string { return config.ZenMode },
+				func(m *OS, v string) {
+					config.ZenMode = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.ZenMode = v })
+					m.applyAppearanceLive(true)
+				}),
 		},
 	}
 

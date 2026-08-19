@@ -4,6 +4,8 @@ import (
 	"image/color"
 	"os"
 	"runtime/debug"
+	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -288,6 +290,36 @@ func fitToContentBox(content string, w, h int) string {
 	return lipgloss.NewStyle().MaxWidth(w).MaxHeight(h).Render(content)
 }
 
+// zenModeMouseIdleTimeout is how long the pointer may sit still before zen mode
+// (mouse) hides the borders again.
+const zenModeMouseIdleTimeout = 2 * time.Second
+
+// zenBordersHidden reports whether zen mode wants the border of a window with
+// the given focus state hidden. The focused window always keeps its frame so
+// the user retains an anchor; zen mode melts the unfocused frames away.
+func (m *OS) zenBordersHidden(isFocused bool) bool {
+	switch config.ZenMode {
+	case config.ZenModeAlways:
+		return !isFocused
+	case config.ZenModeMouse:
+		// A moving pointer reveals every border so the user can see what they
+		// can grab; once the pointer sits still, only the focused window keeps
+		// its frame.
+		if m.pointerRecentlyMoved() {
+			return false
+		}
+		return !isFocused
+	default:
+		return false
+	}
+}
+
+// pointerRecentlyMoved reports whether a mouse event arrived within the zen
+// mode reveal window.
+func (m *OS) pointerRecentlyMoved() bool {
+	return !m.lastPointerAt.IsZero() && time.Since(m.lastPointerAt) <= zenModeMouseIdleTimeout
+}
+
 // rendersBorderless reports whether window is drawn with no border box of its
 // own, so its rectangle is guest output from edge to edge and nothing may be
 // painted on its perimeter.
@@ -324,6 +356,15 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 	if rendersBorderless(window) {
 		return content
 	}
+	// Zen mode: the frame melts away but the cells stay reserved. A window that
+	// owns its border draws its content at Width-2 by Height-2 placed at the
+	// window origin, so returning the bare content would jump the text one cell
+	// up-left when the border melts and back when it returns. Keep the frame
+	// cells and draw them in a blank style so only the frame fades and the
+	// layout holds still.
+	if m.zenBordersHidden(isFocused) {
+		return m.renderWindowBoxZen(window, content)
+	}
 	box := lipgloss.NewStyle().
 		Align(lipgloss.Left).
 		AlignVertical(lipgloss.Top).
@@ -342,6 +383,28 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		m.workspacePosition(window),
 		m.AutoTiling,
 	)
+}
+
+// renderWindowBoxZen renders a window whose zen-mode state hides the frame.
+// The frame cells stay reserved (blank border + blank title row) so the content
+// keeps its exact position; only the chrome fades away. The bordered path draws
+// a Width by Height box (title row + body with left/right/bottom frame); this
+// mirrors that geometry with HiddenBorder (which reserves one cell per edge with
+// spaces) and a blank title row of the same width, so the guest's content never
+// shifts a cell.
+func (m *OS) renderWindowBoxZen(window *terminal.Window, content string) string {
+	box := lipgloss.NewStyle().
+		Align(lipgloss.Left).
+		AlignVertical(lipgloss.Top).
+		Border(lipgloss.HiddenBorder()).
+		BorderTop(false)
+	// The box reserves the left/right/bottom frame cells; prepend the blank
+	// title row the bordered path would have drawn, so the total is the same
+	// Height and the content sits at the same offset.
+	return strings.Repeat(" ", window.Width) + "\n" +
+		box.Width(window.Width).
+			Height(window.Height-1).
+			Render(content)
 }
 
 // fastPathDisabled turns the fullscreen fast path off (TUIOS_NO_FASTPATH=1) so it
@@ -495,6 +558,7 @@ func (m *OS) View() tea.View {
 		m.FlushPendingBSPSync()
 		content := m.composeFrame()
 		m.cachedViewContent = content
+		m.zenHidden = m.zenBordersHidden(false)
 		view.SetContent(content)
 	}
 
