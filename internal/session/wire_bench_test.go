@@ -62,7 +62,7 @@ func BenchmarkWireTerminalState(b *testing.B) {
 	for _, depth := range []int{0, 100, 1000} {
 		b.Run(fmt.Sprintf("scrollback-%d", depth), func(b *testing.B) {
 			pty := wirePTY(b, benchWireCols, benchWireRows, depth)
-			data, err := codec.Encode(&TerminalStatePayload{PTYID: pty.ID, State: pty.GetTerminalState(depth)})
+			data, err := codec.Encode(&TerminalStatePayload{PTYID: pty.ID, State: pty.GetTerminalState(depth, 0)})
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -70,7 +70,48 @@ func BenchmarkWireTerminalState(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				if _, err := codec.Encode(&TerminalStatePayload{
-					PTYID: pty.ID, State: pty.GetTerminalState(depth),
+					PTYID: pty.ID, State: pty.GetTerminalState(depth, 0),
+				}); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StopTimer()
+			b.ReportMetric(float64(len(data)), "wire-bytes")
+		})
+	}
+}
+
+// BenchmarkWireTerminalStateCaughtUp is the same message on the path that
+// actually dominates: a workspace switch, where the client's own emulator
+// survived and already holds the pane's history.
+//
+// The client merges only the rows that scrolled off while it was away, so rows
+// it already has are decoded and thrown away on arrival. "behind-N" is a client
+// missing the newest N rows of a 1000-row daemon buffer; "caught-up" is one
+// missing none, which is the common case for a pane the user switches back to
+// without it having printed anything meanwhile.
+func BenchmarkWireTerminalStateCaughtUp(b *testing.B) {
+	codec := GetCodec(CodecGob)
+	const depth = 1000
+	for _, behind := range []int{0, 50, 1000} {
+		name := fmt.Sprintf("behind-%d", behind)
+		if behind == 0 {
+			name = "caught-up"
+		}
+		b.Run(name, func(b *testing.B) {
+			pty := wirePTY(b, benchWireCols, benchWireRows, depth)
+			have := depth - behind
+			data, err := codec.Encode(&TerminalStatePayload{
+				PTYID: pty.ID, State: pty.GetTerminalState(depth, have),
+			})
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				if _, err := codec.Encode(&TerminalStatePayload{
+					PTYID: pty.ID, State: pty.GetTerminalState(depth, have),
 				}); err != nil {
 					b.Fatal(err)
 				}

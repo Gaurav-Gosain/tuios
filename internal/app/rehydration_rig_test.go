@@ -261,7 +261,7 @@ func (r *rig) winByPTY(ptyID string) *terminal.Window {
 // ptySize reports the size the daemon has the pane at.
 func (r *rig) ptySize(ptyID string) (int, int) {
 	r.t.Helper()
-	st, err := r.ctl.GetTerminalState(ptyID, -1)
+	st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
 	if err != nil || st == nil {
 		r.t.Fatalf("read pane size: %v", err)
 	}
@@ -311,7 +311,7 @@ func (r *rig) waitDaemonShows(ptyID, want string) {
 // whether the guest has got somewhere yet rather than to block until it does.
 func (r *rig) daemonShows(ptyID, want string) bool {
 	r.t.Helper()
-	st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle)
+	st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle, 0)
 	if err != nil || st == nil {
 		return false
 	}
@@ -329,7 +329,7 @@ func (r *rig) converge(ptyID string) {
 	r.t.Helper()
 	deadline := time.Now().Add(rigWait)
 	for time.Now().Before(deadline) {
-		st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle)
+		st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle, 0)
 		if err == nil && st != nil {
 			if clientText(r.winByPTY(ptyID)) == stateText(st) {
 				return

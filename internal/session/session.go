@@ -1538,7 +1538,12 @@ const DefaultStateScrollback = 1000
 // are the newest ones. Taking them from the front instead, which is what this
 // did, handed a pane with a long history its most ancient screenfuls and
 // dropped everything the user had actually been looking at.
-func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
+//
+// have is how many rows the caller's own emulator already holds, and bounds the
+// reply the same way maxScrollback does: only the rows past it can be used, so
+// only those are sent. ScrollbackLen in the reply is always the true length, so
+// the caller's own arithmetic against it is unaffected by either bound.
+func (p *PTY) GetTerminalState(maxScrollback, have int) *TerminalState {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
 
@@ -1550,7 +1555,7 @@ func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
 	// while a resize is still behind output in the stream, and a snapshot has
 	// to describe the grid it is serializing: reporting the size the pane is
 	// about to be handed one row of cells short.
-	state := TerminalStateOf(p.terminal, p.terminal.Width(), p.terminal.Height(), maxScrollback)
+	state := TerminalStateOf(p.terminal, p.terminal.Width(), p.terminal.Height(), maxScrollback, have)
 	state.Seq = p.vtSeq
 	return state
 }
@@ -1562,7 +1567,11 @@ func (p *PTY) GetTerminalState(maxScrollback int) *TerminalState {
 //
 // Width and height are the pane's, which the caller knows; the emulator's own
 // size lags a resize the shell has not acknowledged yet.
-func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *TerminalState {
+//
+// have is how many scrollback rows the receiving emulator already holds; only
+// the rows past it are serialized, because only those can be used. See
+// GetTerminalState.
+func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback, have int) *TerminalState {
 	state := &TerminalState{
 		Width:         width,
 		Height:        height,
@@ -1620,6 +1629,18 @@ func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *Terminal
 		maxScrollback = DefaultStateScrollback
 	}
 	scrollbackLen := t.ScrollbackLen()
+	// Rows the caller already holds are rows it will discard on arrival: it
+	// keeps its own history and merges only what scrolled off while it was
+	// away. Sending them anyway is what made a workspace switch move megabytes
+	// per pane to be thrown away at the far end. state.ScrollbackLen below is
+	// still the true length, which is what the caller subtracts against.
+	want := scrollbackLen - have
+	if want < 0 {
+		want = 0
+	}
+	if maxScrollback >= 0 && want < maxScrollback {
+		maxScrollback = want
+	}
 	first := 0
 	if maxScrollback < 0 {
 		first = scrollbackLen

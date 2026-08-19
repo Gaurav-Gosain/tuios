@@ -715,11 +715,17 @@ func (c *TUIClient) KillSessionByName(name string) error {
 // GetTerminalState retrieves the terminal state for a PTY. maxScrollback bounds
 // the scrollback rows the daemon includes: negative for none, zero for the
 // default, or a count. This is used when attaching to restore terminal content.
-func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback int) (*TerminalState, error) {
+//
+// have is how many scrollback rows this client's emulator already holds for the
+// pane. The daemon sends only the rows past it, which is all this client can
+// use: an emulator that survived keeps its own history and merges just what
+// scrolled off while it was away. Pass zero for a fresh emulator.
+func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback, have int) (*TerminalState, error) {
 	msg, err := NewMessageWithCodec(MsgGetTerminalState, &GetTerminalStatePayload{
 		PTYID:              ptyID,
 		IncludeScrollback:  maxScrollback >= 0,
 		MaxScrollbackLines: max(maxScrollback, 0),
+		HaveScrollback:     max(have, 0),
 	}, c.codec)
 	if err != nil {
 		return nil, err
