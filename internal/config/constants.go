@@ -594,6 +594,10 @@ var DockPillCaps = false
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config
 var HideWindowButtons = false
 
+// WindowButtonStyle selects how the window controls are drawn. See
+// appearance.window_button_style.
+var WindowButtonStyle = WindowButtonStylePill
+
 // ScrollbarStyle selects how a scrolled-back pane draws its position. See
 // appearance.scrollbar.style.
 var ScrollbarStyle = ScrollbarStyleThin
@@ -956,6 +960,13 @@ const (
 	WindowButtonClose = " ✕ " // Close/kill window
 	// WindowButtonMaximize is the maximize window button character.
 	WindowButtonMaximize = " □ " // U+25A1
+	// WindowButtonDot is the disc the dots style draws each control as.
+	//
+	// U+25CF BLACK CIRCLE, which JetBrainsMono Nerd Font covers and draws at an
+	// advance of exactly one cell. U+23FA BLACK CIRCLE FOR RECORD would have
+	// been the closer shape and is not in the font at all, which is the defect
+	// the close button's comment above records.
+	WindowButtonDot = "●" // U+25CF
 	// WindowSeparatorChar is the separator character for window elements.
 	WindowSeparatorChar = "─" // U+2500
 )
@@ -980,6 +991,10 @@ const (
 	// fallback). Three cells like the close button, so the pill keeps its width
 	// and the hit-test offsets below still hold.
 	WindowButtonMaximizeASCII = " O "
+	// WindowButtonDotASCII is the dots style's disc in ASCII. One cell like the
+	// disc it stands in for, so the traffic light keeps its layout and its
+	// colours, and only loses the roundness.
+	WindowButtonDotASCII = "o"
 	// WindowPillLeftASCII is the left pill-style character for window decorations (ASCII fallback).
 	WindowPillLeftASCII = "["
 	// WindowPillRightASCII is the right pill-style character for window decorations (ASCII fallback).
@@ -1191,6 +1206,14 @@ func GetWindowButtonMaximize() string {
 		return WindowButtonMaximizeASCII
 	}
 	return WindowButtonMaximize
+}
+
+// GetWindowButtonDot returns the appropriate dots-style disc character
+func GetWindowButtonDot() string {
+	if UseASCIIOnly {
+		return WindowButtonDotASCII
+	}
+	return WindowButtonDot
 }
 
 // GetWindowPillLeft returns the appropriate pill left character

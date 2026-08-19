@@ -138,6 +138,16 @@ Hide the minimize/maximize/close buttons in window title bars.
 tuios.WithHideWindowButtons(true)
 ```
 
+### WithWindowButtonStyle(style string)
+
+How the window controls are drawn: `"pill"` (glyphs on a filled pill) or
+`"dots"` (macOS traffic lights, which name themselves on hover). See
+[CONFIGURATION.md](CONFIGURATION.md#window_button_style).
+
+```go
+tuios.WithWindowButtonStyle("dots")
+```
+
 ### WithScrollbackLines(lines int)
 
 Set the scrollback buffer size (100-1000000).

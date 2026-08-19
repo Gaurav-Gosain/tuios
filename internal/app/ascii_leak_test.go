@@ -53,15 +53,25 @@ func TestASCIIModeIsRightOnTheFirstFrame(t *testing.T) {
 
 // TestWindowControlsPillIsASCIISafe covers the one unguarded glyph left on the
 // pane frame: the maximize button drew a literal U+25A1 while the close button
-// beside it had a fallback.
+// beside it had a fallback. Every control style is checked, because each brings
+// glyphs of its own and the dots style's disc is the newest of them.
 func TestWindowControlsPillIsASCIISafe(t *testing.T) {
 	withASCII(t)
-	win := &terminal.Window{ID: "w", CustomName: "pane", X: 0, Y: 0, Width: 40, Height: 12, Workspace: 1}
-	border := addToBorder(strings.Repeat(" ", 40), lipgloss.Color("#ffffff"), win, 1, false)
-	for _, r := range ansi.Strip(border) {
-		if r > 127 {
-			t.Fatalf("the window controls pill drew %q in ASCII mode: %q", r, ansi.Strip(border))
-		}
+	for _, style := range config.WindowButtonStyles {
+		t.Run(style, func(t *testing.T) {
+			prev := config.WindowButtonStyle
+			config.WindowButtonStyle = style
+			t.Cleanup(func() { config.WindowButtonStyle = prev })
+
+			win := &terminal.Window{ID: "w", CustomName: "pane", X: 0, Y: 0, Width: 40, Height: 12, Workspace: 1}
+			m := &OS{}
+			border := m.addToBorder(strings.Repeat(" ", 40), lipgloss.Color("#ffffff"), win, 1, false)
+			for _, r := range ansi.Strip(border) {
+				if r > 127 {
+					t.Fatalf("the window controls pill drew %q in ASCII mode: %q", r, ansi.Strip(border))
+				}
+			}
+		})
 	}
 }
 

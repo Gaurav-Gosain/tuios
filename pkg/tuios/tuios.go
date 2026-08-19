@@ -89,6 +89,10 @@ type Options struct {
 	// HideWindowButtons hides the minimize/maximize/close buttons.
 	HideWindowButtons bool
 
+	// WindowButtonStyle selects how the window controls are drawn: "pill" or
+	// "dots". Empty keeps the configured default.
+	WindowButtonStyle string
+
 	// ScrollbackLines is the number of lines in scrollback buffer.
 	// Default is 10000, min 100, max 1000000.
 	ScrollbackLines int
@@ -167,6 +171,14 @@ func WithDockbarPosition(position string) Option {
 func WithHideWindowButtons(hide bool) Option {
 	return func(o *Options) {
 		o.HideWindowButtons = hide
+	}
+}
+
+// WithWindowButtonStyle selects how the window controls are drawn: "pill"
+// (glyphs on a filled pill) or "dots" (macOS traffic lights).
+func WithWindowButtonStyle(style string) Option {
+	return func(o *Options) {
+		o.WindowButtonStyle = style
 	}
 }
 
@@ -285,6 +297,9 @@ func newModel(options Options) *Model {
 	}
 	if options.HideWindowButtons {
 		config.HideWindowButtons = true
+	}
+	if options.WindowButtonStyle != "" {
+		config.WindowButtonStyle = options.WindowButtonStyle
 	}
 	if options.ScrollbackLines > 0 {
 		config.ScrollbackLines = options.ScrollbackLines

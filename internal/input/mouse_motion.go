@@ -115,6 +115,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// each call clears only its own surface's hover.
 	o.DockWorkspaceHoverAt(mouse.X, mouse.Y)
 
+	// The window controls track the pointer for the same reason: the dots style
+	// draws three unlabelled discs, and hovering them is what names them. Like
+	// the dock's, the motion is not consumed, and clearing the reveal on the way
+	// out is the same call. It marks only the windows whose bar changed, so a
+	// pointer crossing a title bar does not redraw the frame.
+	o.WindowButtonHoverAt(mouse.X, mouse.Y)
+
 	// Ctrl-drag: an armed grab commits to a move once the pointer passes the
 	// drag threshold, then rides the same path as a title-bar drag (the block
 	// below moves the now-focused window). Ctrl let go before the grab commits

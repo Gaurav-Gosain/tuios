@@ -157,6 +157,20 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// The dots window-control style draws three unlabelled discs and names them
+	// by revealing their symbols under the pointer, so that style is dead
+	// without its motion. Like the sidebar's, one more event is let through
+	// after the pointer leaves the controls, and that is the event that clears
+	// the reveal.
+	if mm, ok := msg.(tea.MouseMotionMsg); ok && os.WindowButtonHoverActive() {
+		return msg
+	} else if ok && config.WindowButtonStyle == config.WindowButtonStyleDots && !config.HideWindowButtons {
+		mouse := mm.Mouse()
+		if os.WindowButtonContains(mouse.X, mouse.Y) {
+			return msg
+		}
+	}
+
 	if os.Mode == app.TerminalMode {
 		focusedWindow := os.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.Terminal != nil {
@@ -199,6 +213,7 @@ func loadAndApplyConfig() *config.UserConfig {
 		BorderStyle:         borderStyle,
 		DockbarPosition:     dockbarPosition,
 		HideWindowButtons:   hideWindowButtons,
+		WindowButtonStyle:   windowButtonStyle,
 		HideScrollbar:       hideScrollbar,
 		WindowTitlePosition: windowTitlePosition,
 		HideClock:           hideClock,

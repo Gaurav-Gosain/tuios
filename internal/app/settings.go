@@ -217,6 +217,7 @@ var (
 	fpsOptions             = []string{"30", "60", "90", "120", "144", "unlimited"}
 	sidebarPositionOptions = []string{"left", "right", "hidden"}
 	scrollbarStyleOptions  = config.ScrollbarStyles
+	windowButtonOptions    = config.WindowButtonStyles
 	scrollbarTintOptions   = config.ScrollbarTints
 	clickToTypeOptions     = config.ClickToTypeModes
 )
@@ -349,6 +350,14 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v bool) {
 					config.HideWindowButtons = !v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.HideWindowButtons = !v })
+					m.applyAppearanceLive(false)
+				}),
+			enumItem("Window button style", "pill: glyphs on a filled pill. dots: macOS traffic lights, labelled on hover",
+				windowButtonOptions,
+				func() string { return config.WindowButtonStyle },
+				func(m *OS, v string) {
+					config.WindowButtonStyle = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowButtonStyle = v })
 					m.applyAppearanceLive(false)
 				}),
 			boolItem("Scrollbar", "Show where a scrolled-back pane is in its history",

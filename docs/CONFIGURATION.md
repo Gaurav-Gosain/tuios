@@ -86,6 +86,7 @@ snap_left = ["h"]
 border_style = "rounded"
 dockbar_position = "bottom"
 hide_window_buttons = false
+window_button_style = "pill"
 scrollback_lines = 10000
 
 [notifications]
@@ -223,6 +224,7 @@ The `[appearance]` section controls the visual presentation of TUIOS.
 border_style = "rounded"
 dockbar_position = "bottom"
 hide_window_buttons = false
+window_button_style = "pill"
 scrollback_lines = 10000
 ```
 
@@ -271,6 +273,39 @@ Controls whether window control buttons (minimize, maximize, close) are displaye
 **Note:** Window buttons are automatically hidden when `border_style = "hidden"` regardless of this setting.
 
 **CLI override:** `--hide-window-buttons`
+
+### window_button_style
+
+How the window controls are drawn. This is a style, not a switch: both draw the
+same three controls and `hide_window_buttons` still hides either.
+
+**Valid values:**
+
+- `"pill"` (default) - the controls as glyphs on a filled pill in the border's
+  colour, capped with powerline half circles: minimize, zoom, close.
+- `"dots"` - macOS traffic lights. Three unlabelled discs in red, yellow and
+  green sitting straight on the border, close first. Hovering any of them
+  reveals all three symbols at once, drawn dark on their own disc, the way
+  macOS does; the discs are unlabelled and the hover is what names them.
+
+A tiled window has no zoom control, so it draws two of either.
+
+The traffic-light colours are carried toward the pane's own text colour if they
+would otherwise measure below 3:1 against it (WCAG 2.1 SC 1.4.11, the floor for
+a control that carries its meaning as a shape). On a dark pane they are
+untouched; on a near-white one the yellow is the one that has to give up some
+brightness.
+
+Under `--ascii-only` the disc becomes `o`, one cell like the disc, so the
+traffic light keeps its layout and its colours and loses only its roundness. The
+revealed symbols become `X`, `-` and `O`.
+
+**Default:** `"pill"`
+
+**CLI override:** `--window-button-style <style>`
+
+Also settable at runtime with `tuios set-config window_button_style dots`, and
+from the in-app settings page (Appearance, "Window button style").
 
 ### scrollback_lines
 

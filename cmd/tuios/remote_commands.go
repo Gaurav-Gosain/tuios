@@ -1357,6 +1357,7 @@ func getConfigPathCompletions(toComplete string) []string {
 		"border_style\tWindow border style",
 		"animations\tEnable/disable animations (true/false/toggle)",
 		"hide_window_buttons\tHide window buttons (true/false)",
+		"window_button_style\tWindow control style (pill/dots)",
 	}
 
 	var filtered []string
@@ -1380,6 +1381,8 @@ func getConfigValueCompletions(path, _ string) []string {
 		return []string{"true", "false", "toggle", "on", "off"}
 	case "hide_window_buttons", "appearance.hide_window_buttons":
 		return []string{"true", "false"}
+	case "window_button_style", "appearance.window_button_style":
+		return []string{"pill", "dots"}
 	}
 	return nil
 }

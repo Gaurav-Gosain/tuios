@@ -123,6 +123,7 @@ type DaemonConfig struct {
 type AppearanceConfig struct {
 	BorderStyle                 string  `toml:"border_style"`                    // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
 	HideWindowButtons           bool    `toml:"hide_window_buttons"`             // Hide window control buttons (minimize, maximize, close)
+	WindowButtonStyle           string  `toml:"window_button_style"`             // Window control style: pill, dots (default: pill)
 	HideScrollbar               bool    `toml:"hide_scrollbar"`                  // Hide the window scrollbar thumb on the border
 	ScrollbackLines             int     `toml:"scrollback_lines"`                // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 	ScrollLines                 int     `toml:"scroll_lines"`                    // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
@@ -190,6 +191,20 @@ const (
 
 // ClickToTypeModes lists the valid values for appearance.click_to_type.
 var ClickToTypeModes = []string{ClickToTypeSingle, ClickToTypeDouble, ClickToTypeOff}
+
+// Window control styles. See AppearanceConfig.WindowButtonStyle.
+const (
+	// WindowButtonStylePill draws the controls as black glyphs on a filled pill
+	// in the border's colour, capped with powerline half circles.
+	WindowButtonStylePill = "pill"
+	// WindowButtonStyleDots draws them as macOS traffic lights: three unlabelled
+	// discs in red, yellow and green, sitting straight on the border, showing
+	// their symbols while the pointer is on them.
+	WindowButtonStyleDots = "dots"
+)
+
+// WindowButtonStyles lists the valid values for appearance.window_button_style.
+var WindowButtonStyles = []string{WindowButtonStylePill, WindowButtonStyleDots}
 
 // Scrollbar styles. See ScrollbarConfig.Style.
 const (
@@ -299,6 +314,7 @@ func DefaultConfig() *UserConfig {
 		Appearance: AppearanceConfig{
 			BorderStyle:       "rounded",
 			HideWindowButtons: false,
+			WindowButtonStyle: WindowButtonStylePill,
 			ScrollbackLines:   10000,
 			ScrollLines:       3,
 			DockbarPosition:   "bottom",
@@ -780,6 +796,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
 	}
 
+	if cfg.Appearance.WindowButtonStyle == "" {
+		cfg.Appearance.WindowButtonStyle = defaultCfg.Appearance.WindowButtonStyle
+	}
+
 	if cfg.Appearance.Sidebar.Position == "" {
 		cfg.Appearance.Sidebar.Position = defaultCfg.Appearance.Sidebar.Position
 	}
@@ -910,6 +930,9 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// assigned unconditionally: turning one off in the settings page has to
 	// survive a reload just as turning it on does.
 	HideWindowButtons = cfg.Appearance.HideWindowButtons
+	if cfg.Appearance.WindowButtonStyle != "" {
+		WindowButtonStyle = cfg.Appearance.WindowButtonStyle
+	}
 	HideScrollbar = cfg.Appearance.HideScrollbar
 	ShowClock = cfg.Appearance.ShowClock
 	ShowCPU = cfg.Appearance.ShowCPU

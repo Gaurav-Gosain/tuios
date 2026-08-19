@@ -303,6 +303,14 @@ type OS struct {
 	// scrollbarRects is where each pane's scrollbar was drawn on the last frame,
 	// keyed by window ID. Recorded by the renderer, read by input.
 	scrollbarRects map[string]ScrollbarRect
+	// windowButtonRects is where each window's title-bar controls were drawn,
+	// keyed by window ID. Recorded by the renderer, read by input. Unlike the
+	// scrollbar's it is not cleared per frame: a window composed from its cached
+	// layer still has its controls on screen. See pruneWindowButtonRects.
+	windowButtonRects map[string][]WindowButtonRect
+	// windowButtonHover is the window whose controls the pointer is on, empty
+	// for none. The dots style reveals its symbols on it.
+	windowButtonHover string
 	// Reused per-frame scratch for graphics placement refresh (avoids per-frame allocs)
 	kittyPosMap     map[string]*WindowPositionInfo // Reused map for kitty placement refresh
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values

@@ -52,6 +52,7 @@ var (
 	borderStyle       string
 	dockbarPosition   string
 	hideWindowButtons bool
+	windowButtonStyle string
 	scrollbackLines   int
 	showKeys          bool
 	noAnimations      bool
@@ -156,6 +157,7 @@ Client features:
 	rootCmd.Flags().StringVar(&borderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block")
 	rootCmd.Flags().StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden")
 	rootCmd.Flags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
+	rootCmd.Flags().StringVar(&windowButtonStyle, "window-button-style", "", "Window control style: pill, dots (default: from config or pill)")
 	rootCmd.Flags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)")
 	rootCmd.Flags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
 	rootCmd.Flags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
@@ -294,6 +296,7 @@ func runWebServer() error {
 		BorderStyle:       borderStyle,
 		DockbarPosition:   dockbarPosition,
 		HideWindowButtons: hideWindowButtons,
+		WindowButtonStyle: windowButtonStyle,
 		ScrollbackLines:   scrollbackLines,
 		NoAnimations:      noAnimations,
 		ThemeName:         themeName,

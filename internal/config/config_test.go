@@ -697,6 +697,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		scrollback, fps         int
 		leader                  string
 		clickToType             string
+		buttonStyle             string
 	}{
 		config.BorderStyle, config.DockbarPosition,
 		config.HideWindowButtons, config.HideScrollbar,
@@ -704,6 +705,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		config.ScrollbackLines, config.NormalFPS,
 		config.LeaderKey,
 		config.ClickToType,
+		config.WindowButtonStyle,
 	}
 	defer func() {
 		config.BorderStyle, config.DockbarPosition = orig.border, orig.dock
@@ -713,6 +715,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		config.ScrollbackLines, config.NormalFPS = orig.scrollback, orig.fps
 		config.LeaderKey = orig.leader
 		config.ClickToType = orig.clickToType
+		config.WindowButtonStyle = orig.buttonStyle
 	}()
 
 	cfg := config.DefaultConfig()
@@ -728,6 +731,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 	cfg.Appearance.MaxFPS = 30
 	cfg.Keybindings.LeaderKey = "ctrl+a"
 	cfg.Appearance.ClickToType = config.ClickToTypeDouble
+	cfg.Appearance.WindowButtonStyle = config.WindowButtonStyleDots
 
 	config.ApplyAppearanceConfig(cfg)
 
@@ -748,6 +752,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		{"NormalFPS", config.NormalFPS, 30},
 		{"LeaderKey", config.LeaderKey, "ctrl+a"},
 		{"ClickToType", config.ClickToType, config.ClickToTypeDouble},
+		{"WindowButtonStyle", config.WindowButtonStyle, config.WindowButtonStyleDots},
 	}
 	for _, c := range checks {
 		if c.got != c.want {

@@ -42,6 +42,10 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	// previous frame's go first: a bar that has returned to the live tail or
 	// slid under the rail must stop being grabbable with it.
 	m.resetScrollbarRects()
+	// The controls are recorded per window rather than per frame, because a
+	// window composed from its cached layer is not redrawn and still has them on
+	// screen. What has to go is a closed window's.
+	m.pruneWindowButtonRects()
 
 	topMargin := m.GetTopMargin()
 	viewportHeight := m.GetUsableHeight()
@@ -322,6 +326,11 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		window.ContentWidth(), window.ContentHeight(),
 	)
 	if rendersBorderless(window) {
+		// No border means no title bar and so no controls. Recorded as an empty
+		// set rather than left alone, because the set outlives a frame: a pane
+		// that had a bar before shared borders were turned on would otherwise
+		// keep the cells it drew them on pressable.
+		m.recordWindowButtons(window.ID, nil)
 		return content
 	}
 	box := lipgloss.NewStyle().
@@ -332,7 +341,7 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 	// The title bar keeps showing the name the window still has while a rename
 	// is in flight: the dialog owns the new one, so the two together are the
 	// old-vs-new comparison.
-	return addToBorder(
+	return m.addToBorder(
 		box.Width(window.Width).
 			Height(window.Height-1).
 			BorderForeground(borderColorObj).
@@ -436,6 +445,7 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 	// This path is only taken when no pane wants a bar, so nothing on the frame
 	// it builds is grabbable.
 	m.resetScrollbarRects()
+	m.pruneWindowButtonRects()
 
 	isFocused := m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == window
 	var borderColorObj color.Color
