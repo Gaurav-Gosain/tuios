@@ -107,3 +107,30 @@ func BenchmarkScreenSettleArm(b *testing.B) {
 		p.armScreenSettle()
 	}
 }
+
+// BenchmarkEventPublishNoSubs is the control-plane publish every chunk of PTY
+// output raises, with nobody listening, which is the normal case: the event
+// stream exists for the events verb and the wait verbs, and most of the time no
+// client has one open. The hub is shared by every pane in the daemon, so the
+// parallel case is the question that matters: whether several flooding panes
+// serialize against each other on one lock.
+func BenchmarkEventPublishNoSubs(b *testing.B) {
+	h := newEventHub()
+	ev := streamEvent{Type: EventOutput, Session: "bench", PTYID: "pty", Bytes: 16384}
+
+	b.Run("serial", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			h.publish(ev)
+		}
+	})
+	b.Run("parallel-4-panes", func(b *testing.B) {
+		b.SetParallelism(4)
+		b.ReportAllocs()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				h.publish(ev)
+			}
+		})
+	})
+}
