@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // depDiffOut is the directory a dependency-bump differential run writes its
@@ -215,4 +217,148 @@ func TestDepDiffWrap(t *testing.T) {
 		}
 	}
 	writeDump(t, "wrap.txt", b.String())
+}
+
+// TestDepDiffStyle dumps composed frames with their styling intact. frame.txt
+// strips escape sequences, which is what width evidence wants and exactly
+// wrong for a bump that moves a colour: the palette modules and the terminfo
+// lookup decide the bytes that carry it, and a stripped frame cannot see them.
+func TestDepDiffStyle(t *testing.T) {
+	origShared := config.SharedBorders
+	t.Cleanup(func() { config.SharedBorders = origShared })
+
+	var b strings.Builder
+	for _, shared := range []bool{false, true} {
+		config.SharedBorders = shared
+		for _, panes := range []int{2, 4} {
+			for _, text := range []string{"PANEEDGE", "世世世", "👋👋"} {
+				m := gapTestOS(t, panes)
+				for i, w := range m.Windows {
+					w.SetTitle(fmt.Sprintf("%s-%d", text, i))
+					w.LockIO()
+					_, _ = w.Terminal.Write([]byte(text))
+					w.UnlockIO()
+					w.MarkContentDirty()
+				}
+				m.TileAllWindows()
+				out := lipgloss.Sprint(m.GetCanvas(true).Render())
+				fmt.Fprintf(&b, "### shared=%v panes=%d text=%s\n", shared, panes, text)
+				for i, row := range strings.Split(out, "\n") {
+					fmt.Fprintf(&b, "%3d %q\n", i, row)
+				}
+				b.WriteString("\n")
+			}
+		}
+	}
+	writeDump(t, "style.txt", b.String())
+}
+
+// hexOf renders a colour the way a diff can read it. A theme can hand back a
+// typed nil pointer in a non-nil interface, which only shows up when RGBA is
+// called, so this recovers rather than letting one unset colour end the dump.
+func hexOf(c color.Color) (s string) {
+	if c == nil {
+		return "nil"
+	}
+	defer func() {
+		if recover() != nil {
+			s = "unset"
+		}
+	}()
+	r, g, bl, a := c.RGBA()
+	return fmt.Sprintf("#%02x%02x%02x/%04x", r>>8, g>>8, bl>>8, a)
+}
+
+// TestDepDiffPalette dumps every colour the theme layer resolves, for every
+// registered theme, so a palette bump shows up as a diff rather than as a
+// surprise on screen.
+func TestDepDiffPalette(t *testing.T) {
+	theme.EnsureRegistry()
+	names := theme.AvailableThemes()
+	sort.Strings(names)
+
+	accessors := []struct {
+		name string
+		fn   func() color.Color
+	}{
+		{"TerminalFg", theme.TerminalFg},
+		{"TerminalBg", theme.TerminalBg},
+		{"TerminalCursor", theme.TerminalCursor},
+		{"BorderUnfocused", theme.BorderUnfocused},
+		{"BorderFocusedWindow", theme.BorderFocusedWindow},
+		{"BorderFocusedTerminal", theme.BorderFocusedTerminal},
+		{"DockColorWindow", theme.DockColorWindow},
+		{"DockColorTerminal", theme.DockColorTerminal},
+		{"DockColorCopy", theme.DockColorCopy},
+		{"ButtonFg", theme.ButtonFg},
+		{"WelcomeTitle", theme.WelcomeTitle},
+		{"WelcomeSubtitle", theme.WelcomeSubtitle},
+		{"WelcomeText", theme.WelcomeText},
+		{"LogViewerBg", theme.LogViewerBg},
+		{"NotificationError", theme.NotificationError},
+		{"NotificationWarning", theme.NotificationWarning},
+		{"NotificationSuccess", theme.NotificationSuccess},
+	}
+
+	var b strings.Builder
+	for _, n := range names {
+		if err := theme.Initialize(n); err != nil {
+			fmt.Fprintf(&b, "### %s -> init error %v\n", n, err)
+			continue
+		}
+		fmt.Fprintf(&b, "### %s\n", n)
+		for i, c := range theme.GetANSIPalette() {
+			fmt.Fprintf(&b, "  ansi[%02d]\t%s\n", i, hexOf(c))
+		}
+		for _, a := range accessors {
+			fmt.Fprintf(&b, "  %s\t%s\n", a.name, hexOf(a.fn()))
+		}
+		p := theme.UI()
+		fmt.Fprintf(&b, "  ui.Canvas\t%s\n", hexOf(p.Canvas))
+		fmt.Fprintf(&b, "  ui.Panel\t%s\n", hexOf(p.Panel))
+		fmt.Fprintf(&b, "  ui.Surface\t%s\n", hexOf(p.Surface))
+		fmt.Fprintf(&b, "  ui.RowSel\t%s\n", hexOf(p.RowSel))
+		fmt.Fprintf(&b, "  ui.Card\t%s\n", hexOf(p.Card))
+		fmt.Fprintf(&b, "  ui.Selected\t%s\n", hexOf(p.Selected))
+		fmt.Fprintf(&b, "  ui.Fg\t%s\n", hexOf(p.Fg))
+		fmt.Fprintf(&b, "  ui.FgDim\t%s\n", hexOf(p.FgDim))
+		fmt.Fprintf(&b, "  ui.FgMute\t%s\n", hexOf(p.FgMute))
+		fmt.Fprintf(&b, "  ui.Accent\t%s\n", hexOf(p.Accent))
+		fmt.Fprintf(&b, "  ui.AccentBright\t%s\n", hexOf(p.AccentBright))
+		fmt.Fprintf(&b, "  ui.PillFg\t%s\n", hexOf(p.PillFg))
+		fmt.Fprintf(&b, "  ui.Warn\t%s\n", hexOf(p.Warn))
+		fmt.Fprintf(&b, "  ui.Success\t%s\n", hexOf(p.Success))
+		fmt.Fprintf(&b, "  ui.Info\t%s\n", hexOf(p.Info))
+		fmt.Fprintf(&b, "  ui.Warning\t%s\n", hexOf(p.Warning))
+		for _, sw := range theme.ThemeSwatch(n) {
+			fmt.Fprintf(&b, "  swatch\t%s\n", hexOf(sw))
+		}
+	}
+	writeDump(t, "palette.txt", b.String())
+}
+
+// TestDepDiffContrast sweeps the contrast maths over a colour grid. These are
+// the functions that reach go-colorful, and they pick the foreground drawn on
+// every panel, so a change in the colour space shows up here first.
+func TestDepDiffContrast(t *testing.T) {
+	step := 0x33
+	var grid []color.Color
+	for r := 0; r <= 0xff; r += step {
+		for g := 0; g <= 0xff; g += step {
+			for bl := 0; bl <= 0xff; bl += step {
+				grid = append(grid, color.RGBA{R: uint8(r), G: uint8(g), B: uint8(bl), A: 0xff})
+			}
+		}
+	}
+
+	var b strings.Builder
+	for _, bg := range grid {
+		fmt.Fprintf(&b, "%s\tcontrastText=%s\n", hexOf(bg), hexOf(theme.ContrastText(bg)))
+	}
+	for i, fg := range grid {
+		bg := grid[len(grid)-1-i]
+		fmt.Fprintf(&b, "%s on %s\tratio=%.6f\treadable=%s\n",
+			hexOf(fg), hexOf(bg), theme.ContrastRatio(fg, bg), hexOf(theme.Readable(fg, bg)))
+	}
+	writeDump(t, "contrast.txt", b.String())
 }
