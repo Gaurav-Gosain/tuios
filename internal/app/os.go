@@ -220,6 +220,7 @@ type OS struct {
 	dockWorkspaceScroll    int                     // index of the first workspace pill the strip draws
 	dockWorkspaceScrollFor int                     // the workspace that offset was last pulled into view for
 	dockWorkspaceScrollAt  int                     // the viewport width it was pulled into view at
+	dockWorkspaceDrag      dockWorkspaceDragState  // the click-or-drag gesture on a workspace pill
 	dockItemHits           []dockItemHit           // where the dock's minimized entries were drawn last frame
 	dockOverflowHit        dockOverflowHit         // where the entries' overflow marker was drawn last frame
 	dockSessionHits        []dockSessionHit        // where the dock's session controls were drawn last frame
@@ -341,7 +342,11 @@ type OS struct {
 	// WorkspaceNames maps a workspace number to its daemon-owned label. The
 	// number stays the workspace's identity and is what an unnamed workspace
 	// shows, so an absent entry is not a missing label but the normal case.
-	WorkspaceNames    map[int]string
+	WorkspaceNames map[int]string
+	// WorkspaceOrder is the daemon-owned order the workspaces are shown in. It
+	// arranges and never addresses: the number stays the identity, so nothing
+	// keyed by one moves when this does. Empty is the plain ascending order.
+	WorkspaceOrder    []int
 	RestoredFromState bool // True after RestoreFromState, cleared after first resize
 	// DaemonStateVersion is the daemon state version this client last saw. It is
 	// echoed back on every state sync so the daemon can tell a snapshot built

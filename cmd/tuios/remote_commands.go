@@ -459,6 +459,7 @@ func printSessionInfo(raw json.RawMessage) error {
 		CurrentWorkspace int            `json:"current_workspace"`
 		NumWorkspaces    int            `json:"num_workspaces"`
 		WorkspaceNames   map[string]any `json:"workspace_names"`
+		WorkspaceOrder   []int          `json:"workspace_order"`
 		WindowCount      int            `json:"window_count"`
 		TilingMode       string         `json:"tiling_mode"`
 		Width            int            `json:"width"`
@@ -496,6 +497,16 @@ func printSessionInfo(raw json.RawMessage) error {
 		}
 		sort.Strings(named)
 		fmt.Printf("%-14s %s\n", "named", strings.Join(named, " "))
+	}
+	// Only a rearranged session prints a row here. The order is presentation, so
+	// the workspaces keep the numbers everything else addresses them by whatever
+	// this says.
+	if len(res.WorkspaceOrder) > 0 {
+		shown := make([]string, 0, len(res.WorkspaceOrder))
+		for _, ws := range res.WorkspaceOrder {
+			shown = append(shown, strconv.Itoa(ws))
+		}
+		fmt.Printf("%-14s %s\n", "order", strings.Join(shown, " "))
 	}
 	return nil
 }

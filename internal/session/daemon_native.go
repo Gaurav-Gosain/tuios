@@ -443,12 +443,15 @@ func buildSessionInfoData(sess *Session, state *SessionState, hasClient bool) ma
 		"current_workspace": state.CurrentWorkspace,
 		"num_workspaces":    state.workspaceBound(),
 		"workspace_names":   workspaceNames,
-		"layout_mode":       layoutMode,
-		"window_count":      len(state.Windows),
-		"tiling_mode":       tilingMode,
-		"master_ratio":      state.MasterRatio,
-		"width":             state.Width,
-		"height":            state.Height,
-		"tui_attached":      hasClient,
+		// Empty when the workspaces are in their plain ascending order, which is
+		// what a session that has never been rearranged reports.
+		"workspace_order": state.WorkspaceOrder,
+		"layout_mode":     layoutMode,
+		"window_count":    len(state.Windows),
+		"tiling_mode":     tilingMode,
+		"master_ratio":    state.MasterRatio,
+		"width":           state.Width,
+		"height":          state.Height,
+		"tui_attached":    hasClient,
 	}
 }

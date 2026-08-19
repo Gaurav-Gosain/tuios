@@ -47,7 +47,12 @@ type dockWorkspaceTab struct {
 	Workspace int
 	Label     string
 	Active    bool
-	Width     int
+	// Dragged is the pill the pointer has picked up. The strip lifts it onto the
+	// hover ground for as long as the gesture runs, because a reorder with no
+	// mark on the thing being reordered leaves the user watching pills swap with
+	// no way to tell which one they are holding.
+	Dragged bool
+	Width   int
 	// Add marks the trailing "+" tab, which opens the next free workspace rather
 	// than switching to an existing one.
 	Add bool
@@ -145,10 +150,10 @@ func (m *OS) workspacePillClipped(n int) bool {
 	return lipgloss.Width(config.FormatWorkspaceTab(m.workspacePillName(n), n)) > workspacePillLabelMax
 }
 
-// occupiedWorkspaces lists the workspaces worth showing, in order: those
-// holding a window, plus the current one even when it is empty. Shared by the
-// dock strip and the rail band so the two name the same set.
-func (m *OS) occupiedWorkspaces() []int {
+// occupiedWorkspaceNumbers lists the workspaces worth showing: those holding a
+// window, plus the current one even when it is empty. It answers which, in
+// numeric order, and occupiedWorkspaces answers where.
+func (m *OS) occupiedWorkspaceNumbers() []int {
 	ws := make([]int, 0, m.NumWorkspaces)
 	for i := 1; i <= m.NumWorkspaces; i++ {
 		if i == m.CurrentWorkspace || m.GetWorkspaceWindowCount(i) > 0 {
@@ -156,6 +161,13 @@ func (m *OS) occupiedWorkspaces() []int {
 		}
 	}
 	return ws
+}
+
+// occupiedWorkspaces lists the workspaces worth showing, arranged the way the
+// session shows them. Shared by the dock strip and the rail band so the two name
+// the same set in the same order.
+func (m *OS) occupiedWorkspaces() []int {
+	return m.workspaceDisplayOrder(m.occupiedWorkspaceNumbers())
 }
 
 // buildDockWorkspaceTabs returns the dock's workspace strip: every occupied
@@ -173,6 +185,7 @@ func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
 			Workspace: n,
 			Label:     label,
 			Active:    n == m.CurrentWorkspace,
+			Dragged:   m.dockWorkspaceDrag.Dragging && n == m.dockWorkspaceDrag.Workspace,
 			Width:     workspacePillWidth(label),
 		})
 	}

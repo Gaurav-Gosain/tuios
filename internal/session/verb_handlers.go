@@ -531,6 +531,30 @@ func (d *Daemon) verbSetWorkspaceName(_ *connState, params json.RawMessage) (any
 	return map[string]any{"type": "workspace_name_set", "workspace": p.Workspace, "name": name}, nil
 }
 
+func (d *Daemon) verbSetWorkspaceOrder(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session string `json:"session"`
+		Order   []int  `json:"order"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if len(p.Order) == 0 {
+		return nil, invalidParam("order", "order is required and is the workspace numbers in the order to show them, e.g. [3,1,2]")
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	if err := sess.SetDaemonWorkspaceOrder(p.Order); err != nil {
+		return nil, invalidParam("order", err.Error())
+	}
+	// The stored order is what was kept after sanitising, which is what the
+	// caller has to see: a drag that named a workspace this session no longer
+	// has should read back without it rather than as accepted verbatim.
+	return map[string]any{"type": "workspace_order_set", "workspace_order": sess.GetState().WorkspaceOrder}, nil
+}
+
 func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`

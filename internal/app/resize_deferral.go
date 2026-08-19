@@ -195,6 +195,7 @@ func (m *OS) EndPointerGrabs() {
 	m.accentDragging = false
 	m.accentDrag = accentHitNone
 	m.SidebarDrag = sidebarDragState{}
+	m.dockWorkspaceDrag = dockWorkspaceDragState{}
 	m.CtrlDragPending = false
 	if m.SidebarEdge.Active {
 		m.SidebarEdge = sidebarEdgeState{}

@@ -218,7 +218,7 @@ func TestActiveWorkspacePillReadsAsActive(t *testing.T) {
 	dock, _ := m.renderDockString()
 
 	pal := theme.UI()
-	active := workspacePill("review", true, pal)
+	active := workspacePill("review", true, false, pal)
 	if !strings.Contains(dock, active) {
 		t.Errorf("the dock does not draw workspace 2's pill as the active one: %q", active)
 	}
@@ -226,7 +226,7 @@ func TestActiveWorkspacePillReadsAsActive(t *testing.T) {
 		t.Error("the active pill lost the underline, which is the whole of its emphasis")
 	}
 	// The resting pills carry the fill but not the emphasis.
-	resting := workspacePill("1", false, pal)
+	resting := workspacePill("1", false, false, pal)
 	if !strings.Contains(dock, resting) {
 		t.Errorf("the dock does not draw workspace 1's pill at rest: %q", resting)
 	}

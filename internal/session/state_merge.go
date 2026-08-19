@@ -42,6 +42,13 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.WorkspaceNames == nil {
 		incoming.WorkspaceNames = canonical.WorkspaceNames
 	}
+	// The order is daemon-owned for the same reason the names are, and an
+	// ordinary client sync omits it, so a nil incoming means "not sent" rather
+	// than "cleared". Without this a client that has never reordered anything
+	// would flatten the arrangement every other client is looking at.
+	if incoming.WorkspaceOrder == nil {
+		incoming.WorkspaceOrder = canonical.WorkspaceOrder
+	}
 	if incoming.ResurrectionVersion == 0 {
 		incoming.ResurrectionVersion = canonical.ResurrectionVersion
 	}

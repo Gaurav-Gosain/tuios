@@ -27,18 +27,23 @@ func (w WorkspaceItem) Label() string {
 // buildWorkspaceItems lists the workspaces worth switching to: the ones
 // holding a pane, the current one, and any the user has named. A named but
 // empty workspace is listed because naming it is what says it is wanted.
+//
+// The rows are in the order the dock's pills are in. A switcher listing the same
+// workspaces in a different order would be a second arrangement for the user to
+// hold in their head, which is the thing one display order exists to prevent.
 func (m *OS) buildWorkspaceItems() []WorkspaceItem {
-	items := make([]WorkspaceItem, 0, m.NumWorkspaces)
+	worth := make([]int, 0, m.NumWorkspaces)
 	for n := 1; n <= m.NumWorkspaces; n++ {
-		panes := m.GetWorkspaceWindowCount(n)
-		name := m.WorkspaceNames[n]
-		if panes == 0 && name == "" && n != m.CurrentWorkspace {
-			continue
+		if m.GetWorkspaceWindowCount(n) > 0 || m.WorkspaceNames[n] != "" || n == m.CurrentWorkspace {
+			worth = append(worth, n)
 		}
+	}
+	items := make([]WorkspaceItem, 0, len(worth))
+	for _, n := range m.workspaceDisplayOrder(worth) {
 		items = append(items, WorkspaceItem{
 			Number:    n,
-			Name:      name,
-			Panes:     panes,
+			Name:      m.WorkspaceNames[n],
+			Panes:     m.GetWorkspaceWindowCount(n),
 			IsCurrent: n == m.CurrentWorkspace,
 		})
 	}

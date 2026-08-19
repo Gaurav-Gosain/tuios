@@ -1184,7 +1184,13 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 		}
 		out = append(out, e)
 	}
-	sort.SliceStable(out, func(a, b int) bool { return out[a].workspace < out[b].workspace })
+	// Ordered by where the workspaces are shown rather than by their numbers, so
+	// dragging a pill in the dock rearranges the panes under it here too. Two
+	// surfaces grouping the same panes into a different sequence would be the one
+	// disagreement a single display order exists to rule out.
+	sort.SliceStable(out, func(a, b int) bool {
+		return m.workspaceRank(out[a].workspace) < m.workspaceRank(out[b].workspace)
+	})
 	return out
 }
 

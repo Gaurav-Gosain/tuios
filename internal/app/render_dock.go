@@ -51,8 +51,16 @@ func dockStripArrowFg(pal overlay.Palette) color.Color {
 // The label is passed in rather than derived: the tab that carries it also
 // carries the width the hit rectangle was cut to, and the two must be the same
 // string.
-func workspacePill(label string, active bool, pal overlay.Palette) string {
-	body := sidebarStyle(pal.Panel, workspacePillFg(active, pal))
+func workspacePill(label string, active, dragged bool, pal overlay.Palette) string {
+	// A picked-up pill comes up onto Surface, the same step the rail lifts a
+	// dragged row onto, so the gesture reads the same wherever it is made. It is
+	// a ground change and not an ink one, which leaves the accent free to go on
+	// saying which workspace is current while it is the one being moved.
+	ground := pal.Panel
+	if dragged {
+		ground = pal.Surface
+	}
+	body := sidebarStyle(ground, workspacePillFg(active, pal))
 	if active {
 		body = body.Bold(true).Underline(true)
 	}
@@ -65,7 +73,7 @@ func workspacePill(label string, active bool, pal overlay.Palette) string {
 	if lc == "" && rc == "" {
 		return pill
 	}
-	caps := lipgloss.NewStyle().Foreground(pal.Panel)
+	caps := lipgloss.NewStyle().Foreground(ground)
 	return caps.Render(lc) + pill + caps.Render(rc)
 }
 
@@ -115,7 +123,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 			b.WriteString(strings.Repeat(" ", dockWorkspacePillGap))
 			x, drawn = x+dockWorkspacePillGap, drawn+dockWorkspacePillGap
 		}
-		b.WriteString(workspacePill(t.Label, t.Active, pal))
+		b.WriteString(workspacePill(t.Label, t.Active, t.Dragged, pal))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
 		})
@@ -135,7 +143,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 			b.WriteString(strings.Repeat(" ", dockWorkspacePillGap))
 			x += dockWorkspacePillGap
 		}
-		b.WriteString(workspacePill(s.Add.Label, false, pal))
+		b.WriteString(workspacePill(s.Add.Label, false, false, pal))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + s.Add.Width, Y: y, Workspace: 0,
 		})
