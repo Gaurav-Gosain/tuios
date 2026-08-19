@@ -19,31 +19,22 @@ func handleAggregateViewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 		return o, nil
 
 	case "enter":
-		if len(filtered) > 0 && o.AggregateViewSelected < len(filtered) {
-			item := filtered[o.AggregateViewSelected]
-			o.JumpToAggregateViewItem(item)
-			o.AggregateViewQuery = ""
-			o.AggregateViewSelected = 0
-			o.AggregateViewScroll = 0
-		}
+		o.AggregateViewJump(o.AggregateViewSelected)
 		return o, nil
 
+	// The selection moves and the renderer scrolls to keep it in view, which is
+	// how every other list overlay works. This used to carry a hardcoded twelve
+	// rows of its own, so on any screen not showing twelve the list scrolled at
+	// the wrong time or not at all.
 	case "up", "ctrl+p":
 		if o.AggregateViewSelected > 0 {
 			o.AggregateViewSelected--
-			if o.AggregateViewSelected < o.AggregateViewScroll {
-				o.AggregateViewScroll = o.AggregateViewSelected
-			}
 		}
 		return o, nil
 
 	case "down", "ctrl+n":
 		if o.AggregateViewSelected < len(filtered)-1 {
 			o.AggregateViewSelected++
-			maxVisible := 12
-			if o.AggregateViewSelected >= o.AggregateViewScroll+maxVisible {
-				o.AggregateViewScroll = o.AggregateViewSelected - maxVisible + 1
-			}
 		}
 		return o, nil
 

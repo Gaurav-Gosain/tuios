@@ -19,6 +19,10 @@ import (
 // same number. The stored value was right and the label added one to it, so the
 // panel showed workspace 1's windows under "Workspace 2" and offered no
 // "Workspace 1" at all.
+//
+// The panel no longer groups under headers; each row carries the workspace tag
+// the rail uses, so the same off-by-one now shows as a row tagged w2 for a
+// window in workspace 1. The invariant is unchanged and so is what would fail.
 func TestAggregateViewNamesTheWorkspaceTheWindowsAreIn(t *testing.T) {
 	m := &OS{
 		WorkspaceFocus:   map[int]int{},
@@ -38,13 +42,13 @@ func TestAggregateViewNamesTheWorkspaceTheWindowsAreIn(t *testing.T) {
 	frame := ansi.Strip(lipgloss.Sprint(m.GetCanvas(true).Render()))
 
 	for _, ws := range []int{1, 3} {
-		if !strings.Contains(frame, fmt.Sprintf("Workspace %d:", ws)) {
-			t.Errorf("no group labelled %q; the panel names a workspace its windows are not in", fmt.Sprintf("Workspace %d:", ws))
+		if !strings.Contains(frame, fmt.Sprintf("w%d", ws)) {
+			t.Errorf("no row tagged %q; the panel names a workspace its windows are not in", fmt.Sprintf("w%d", ws))
 		}
 	}
 	for _, ws := range []int{2, 4} {
-		if strings.Contains(frame, fmt.Sprintf("Workspace %d:", ws)) {
-			t.Errorf("panel shows a group for empty workspace %d", ws)
+		if strings.Contains(frame, fmt.Sprintf("w%d", ws)) {
+			t.Errorf("panel tags a row with empty workspace %d", ws)
 		}
 	}
 }
