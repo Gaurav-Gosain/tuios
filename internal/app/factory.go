@@ -23,6 +23,14 @@ type OSOptions struct {
 	// and/or ApplyAppearanceConfig) before constructing the OS.
 	UserConfig *config.UserConfig
 
+	// ConfigReadOnly makes the settings page apply changes to this session only
+	// and never write the config file. Set it wherever the person driving the
+	// session is not the person whose config file it is: tuios-web serves a
+	// network client, and several of them at once, each holding the snapshot it
+	// loaded when it connected, so a save would write one client's stale view
+	// of the whole file over the operator's and over every other client's.
+	ConfigReadOnly bool
+
 	// ShowKeys enables the key display overlay.
 	ShowKeys bool
 
@@ -107,6 +115,7 @@ func NewOS(opts OSOptions) *OS {
 
 		// Keybindings
 		KeybindRegistry:   opts.KeybindRegistry,
+		ConfigReadOnly:    opts.ConfigReadOnly,
 		ShowKeys:          opts.ShowKeys,
 		RecentKeys:        []KeyEvent{},
 		KeyHistoryMaxSize: 5,

@@ -530,6 +530,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
 		UserConfig:                userConfig,
+		ConfigReadOnly:            true,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,
@@ -609,6 +610,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
 		UserConfig:                userConfig,
+		ConfigReadOnly:            true,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,
