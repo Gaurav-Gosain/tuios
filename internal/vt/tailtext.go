@@ -28,7 +28,7 @@ func (e *Emulator) TailText(n int) []string {
 	var b strings.Builder
 	for y := h - 1; y >= 0 && len(out) < n; y-- {
 		b.Reset()
-		for x := 0; x < w; x++ {
+		for x := range w {
 			if c := e.CellAt(x, y); c != nil {
 				b.WriteString(c.Content)
 			}

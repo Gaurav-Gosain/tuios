@@ -1579,9 +1579,9 @@ func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *Terminal
 	state.Charsets = []int{int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]), gl, gr}
 
 	// Capture visible screen with full styling
-	for y := 0; y < height; y++ {
+	for y := range height {
 		state.Screen[y] = make([]CellState, width)
-		for x := 0; x < width; x++ {
+		for x := range width {
 			cell := t.CellAt(x, y)
 			if cell != nil {
 				state.Screen[y][x] = CellStateOf(cell)
@@ -1591,9 +1591,9 @@ func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback int) *Terminal
 
 	if state.IsAltScreen {
 		state.MainScreen = make([][]CellState, height)
-		for y := 0; y < height; y++ {
+		for y := range height {
 			state.MainScreen[y] = make([]CellState, width)
-			for x := 0; x < width; x++ {
+			for x := range width {
 				if cell := t.MainCellAt(x, y); cell != nil {
 					state.MainScreen[y][x] = CellStateOf(cell)
 				}

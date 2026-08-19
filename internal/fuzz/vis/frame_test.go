@@ -394,7 +394,7 @@ func firstLines(s string, n int) string {
 // left out would be drawn under whichever letter the fallback happened to be.
 func TestClassesPartitionTheAlphabet(t *testing.T) {
 	classes := DefaultClasses()
-	for k := fuzz.Kind(0); k < 200; k++ {
+	for k := range fuzz.Kind(200) {
 		name := k.String()
 		if strings.HasPrefix(name, "kind") {
 			// Past the end of the alphabet.

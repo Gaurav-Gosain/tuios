@@ -50,7 +50,7 @@ func depsOf(t *testing.T, pkg string) map[string]bool {
 		t.Fatalf("go list -deps %s: %v", pkg, err)
 	}
 	deps := map[string]bool{}
-	for _, l := range strings.Split(string(out), "\n") {
+	for l := range strings.SplitSeq(string(out), "\n") {
 		deps[strings.TrimSpace(l)] = true
 	}
 	return deps
@@ -67,12 +67,12 @@ func why(t *testing.T, bad string) string {
 		return ""
 	}
 	var hits []string
-	for _, l := range strings.Split(string(out), "\n") {
+	for l := range strings.SplitSeq(string(out), "\n") {
 		path, imports, ok := strings.Cut(l, " imports ")
 		if !ok || strings.HasPrefix(path, "github.com/Gaurav-Gosain/tuios/cmd/tuios-fuzz") {
 			continue
 		}
-		for _, imp := range strings.Fields(imports) {
+		for imp := range strings.FieldsSeq(imports) {
 			if imp == bad {
 				hits = append(hits, "  "+path)
 			}

@@ -442,12 +442,12 @@ func TestExplainAgentScreenVerbShowsWhatTheClassifierSaw(t *testing.T) {
 	if !ok || len(tail) == 0 {
 		t.Fatalf("tail = %v, want the pane's screen lines", res["tail"])
 	}
-	var joined string
+	var joined strings.Builder
 	for _, line := range tail {
-		joined += line.(string) + "\n"
+		joined.WriteString(line.(string) + "\n")
 	}
-	if !strings.Contains(joined, "Do you want to proceed?") {
-		t.Fatalf("the dumped tail is not what the classifier matched:\n%s", joined)
+	if !strings.Contains(joined.String(), "Do you want to proceed?") {
+		t.Fatalf("the dumped tail is not what the classifier matched:\n%s", joined.String())
 	}
 
 	// Every rule is reported, matching or not, and a refusal names the strings

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"sort"
 	"strings"
 )
@@ -49,11 +50,9 @@ func (r *KeybindRegistry) buildMappings() {
 // sections still override earlier ones, which is how the section order in
 // buildMappings decides a cross-section clash.
 func (r *KeybindRegistry) addSection(section map[string][]string) {
-	for key, action := range r.sectionKeyMap(section) {
-		// Store keys exactly as normalized (preserves case for single letters)
-		// Don't lowercase here - we need case sensitivity for M vs m, etc.
-		r.keyToAction[key] = action
-	}
+	// Store keys exactly as normalized (preserves case for single letters)
+	// Don't lowercase here - we need case sensitivity for M vs m, etc.
+	maps.Copy(r.keyToAction, r.sectionKeyMap(section))
 }
 
 // sectionKeyMap is the key→action map for one section, with the normalizer's

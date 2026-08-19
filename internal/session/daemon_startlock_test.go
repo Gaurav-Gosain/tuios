@@ -26,9 +26,7 @@ func TestConcurrentStartsProduceOneDaemon(t *testing.T) {
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	for i := range starters {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
 			<-start
 			if err := d.Start(); err != nil {
@@ -36,7 +34,7 @@ func TestConcurrentStartsProduceOneDaemon(t *testing.T) {
 				return
 			}
 			daemons[i] = d
-		}()
+		})
 	}
 	close(start)
 	wg.Wait()

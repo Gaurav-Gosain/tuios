@@ -1,5 +1,7 @@
 package vis
 
+import "slices"
+
 import "github.com/Gaurav-Gosain/tuios/internal/fuzz"
 
 // The tape shows one cell per action and the cell has one glyph, so the
@@ -25,12 +27,7 @@ type Class struct {
 
 // Holds reports whether k belongs to this class.
 func (c Class) Holds(k fuzz.Kind) bool {
-	for _, want := range c.Kinds {
-		if want == k {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Kinds, k)
 }
 
 // DefaultClasses partitions the action alphabet. Order is the order the mix

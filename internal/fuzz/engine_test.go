@@ -215,7 +215,7 @@ func TestGeneratorReachesEveryWeightedKind(t *testing.T) {
 			seen[a.Kind]++
 		}
 	}
-	for k := Kind(0); k < kindCount; k++ {
+	for k := range kindCount {
 		if defaultWeights[k] > 0 && seen[k] == 0 {
 			t.Errorf("%s carries weight %d but was never generated", k, defaultWeights[k])
 		}

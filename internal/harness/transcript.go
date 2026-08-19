@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -57,12 +58,7 @@ func (t Transcript) Enabled() bool {
 
 // Verifies reports whether field is one this manifest asks to be checked.
 func (t Transcript) Verifies(field string) bool {
-	for _, f := range t.Verify {
-		if f == field {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(t.Verify, field)
 }
 
 // checkTranscript validates the block, treating a half-written one as an error.

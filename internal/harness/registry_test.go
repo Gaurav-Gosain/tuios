@@ -214,13 +214,13 @@ comm = ["finetool"]
 	if len(errs) != 4 {
 		t.Fatalf("got %d load errors, want 4: %v", len(errs), errs)
 	}
-	joined := ""
+	var joined strings.Builder
 	for _, e := range errs {
-		joined += e.Source + ": " + e.Err.Error() + "\n"
+		joined.WriteString(e.Source + ": " + e.Err.Error() + "\n")
 	}
 	for _, want := range []string{"schema_version", "generic name", "matches nothing", "unknown state"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("errors do not mention %q:\n%s", want, joined)
+		if !strings.Contains(joined.String(), want) {
+			t.Errorf("errors do not mention %q:\n%s", want, joined.String())
 		}
 	}
 	// The good file in the same directory still loaded.

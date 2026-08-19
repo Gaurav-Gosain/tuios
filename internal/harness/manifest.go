@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -220,10 +221,5 @@ func contains(list []string, v string) bool {
 	if v == "" {
 		return false
 	}
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, v)
 }

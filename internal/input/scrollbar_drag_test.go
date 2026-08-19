@@ -18,7 +18,7 @@ func scrolledBackPane(t *testing.T) (*OS2, *terminal.Window, app.ScrollbarRect) 
 
 	win.LockIO()
 	for i := range 400 {
-		_, _ = win.Terminal.Write([]byte(fmt.Sprintf("history line %d\r\n", i)))
+		_, _ = win.Terminal.Write(fmt.Appendf(nil, "history line %d\r\n", i))
 	}
 	win.UnlockIO()
 	win.MarkContentDirty()
