@@ -98,6 +98,11 @@ type Emulator struct {
 	// (under the window IO lock), so writes must never block. bufPipe buffers.
 	pipe *bufPipe
 
+	// The character set selection saved by DECSC, restored by DECRC.
+	savedCharsets    [4]CharSet
+	savedCharsetIDs  [4]byte
+	savedGL, savedGR int
+
 	// The GL and GR character set identifiers.
 	gl, gr  int
 	gsingle int // temporarily select GL or GR
@@ -374,11 +379,22 @@ func (e *Emulator) SetScrollbackMaxLines(maxLines int) {
 }
 
 // WidthMethod returns the width method used by the terminal.
+//
+// It is always grapheme width, because that is what handleGrapheme measures
+// every printed cluster with, whatever DEC mode 2027 says. This is not a free
+// choice: ultraviolet asks a uv.Screen which method it uses before building a
+// cell to write into it, so answering wcwidth here while placing by grapheme
+// width had ultraviolet build a cell one column narrower than the emulator
+// would have written for the same text. That happens for exactly two classes,
+// a base with an emoji presentation selector and a regional indicator pair,
+// and one column is the whole bug: everything after the cluster shifts along
+// the row, and in a multiplexer it shifts into the pane next door.
+//
+// Reporting the method actually in use is the fix. Honouring mode 2027 would
+// mean changing placement to match, which is a different and much larger
+// change than making the answer true.
 func (e *Emulator) WidthMethod() uv.WidthMethod {
-	if e.isModeSet(ansi.ModeUnicodeCore) {
-		return ansi.GraphemeWidth
-	}
-	return ansi.WcWidth
+	return ansi.GraphemeWidth
 }
 
 // Draw implements the [uv.Drawable] interface.

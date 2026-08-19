@@ -200,6 +200,61 @@ go test -v ./internal/config/...
 go test -bench=. ./internal/app/...
 ```
 
+### Terminal Emulator Conformance
+
+`internal/vt/` carries a table-driven conformance corpus: an input byte
+sequence, and the screen it should produce, on a screen small enough that a
+diff is readable. It runs with the ordinary suite.
+
+```bash
+# The corpus, the unicode sweeps and the generated-input sweep
+go test ./internal/vt/
+
+# Skips the exhaustive write-boundary sweep, which is the slow part
+go test -short ./internal/vt/
+```
+
+Three things in it are worth knowing about before adding a case:
+
+- A case that leaves `unhandled` false asserts the emulator recognised every
+  sequence in its input. A sequence the emulator ignores leaves a screen
+  indistinguishable from one it handled by doing nothing, which is how NEL and
+  DECALN stayed missing under green tests.
+- A case marked `knownBug` is expected to fail, and the test complains if it
+  starts passing, so a fixed bug cannot sit on the list pretending to still be
+  one.
+- The unicode sweeps are driven by pinned UCD data files under
+  `internal/vt/testdata/unicode/`, with provenance and licence in the README
+  there.
+
+### Terminal Emulator Fuzzing
+
+`internal/fuzz/vtgen` generates terminal input by grammar rather than by byte,
+so the parser reaches the code past its ground state. A failing run reduces by
+delta debugging to a script of named sequences a person can read.
+
+```bash
+# Deterministic seeds, part of the ordinary suite
+go test ./internal/vt/ -run TestVTGen
+
+# Coverage-guided, for a real campaign
+go test ./internal/vt/ -run XXX -fuzz FuzzEmulatorScript -fuzztime 10m
+```
+
+### Differential Testing Against tmux
+
+An independent implementation catches what a hand-written expectation cannot,
+because a test can be wrong in the same way the code is. Needs the `tmux` binary
+and spawns processes, so it is behind a build tag.
+
+```bash
+go test -tags differential ./internal/vt/ -run TestDifferential -v
+```
+
+Cases where tmux is the one diverging are listed in `tmuxDiffers` with the
+reasoning. The test fails if one of them starts agreeing, so the list cannot
+rot.
+
 ### Manual Testing Checklist
 
 When testing UI/UX changes:

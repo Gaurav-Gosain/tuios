@@ -386,14 +386,19 @@ func (e *Emulator) registerDefaultEscHandlers() {
 	})
 
 	e.RegisterEscHandler('7', func() bool {
-		// Save Cursor [ansi.DECSC]
+		// Save Cursor [ansi.DECSC]. The saved state is the cursor, its pen, and
+		// the character set selection: a program that designates the
+		// line-drawing set, saves, prints text elsewhere and restores expects
+		// to be drawing lines again, and DEC specifies it that way.
 		e.scr.SaveCursor()
+		e.saveCharsets()
 		return true
 	})
 
 	e.RegisterEscHandler('8', func() bool {
 		// Restore Cursor [ansi.DECRC]
 		e.scr.RestoreCursor()
+		e.restoreCharsets()
 		return true
 	})
 
@@ -439,6 +444,15 @@ func (e *Emulator) registerDefaultEscHandlers() {
 		return true
 	})
 
+	e.RegisterEscHandler('E', func() bool {
+		// Next Line [ansi.NEL]. terminfo names it `nel`, so it reaches the
+		// emulator from anything that moves down a line through terminfo rather
+		// than by writing CR LF itself.
+		e.index()
+		e.carriageReturn()
+		return true
+	})
+
 	e.RegisterEscHandler('H', func() bool {
 		// Horizontal Tab Set [ansi.HTS]
 		e.horizontalTabSet()
@@ -448,6 +462,23 @@ func (e *Emulator) registerDefaultEscHandlers() {
 	e.RegisterEscHandler('M', func() bool {
 		// Reverse Index [ansi.RI]
 		e.reverseIndex()
+		return true
+	})
+
+	e.RegisterEscHandler(ansi.Command(0, '#', '8'), func() bool {
+		// Screen Alignment Pattern [ansi.DECALN]. vttest opens with it, and a
+		// terminal that ignores it reports a blank screen for every alignment
+		// check that follows.
+		e.screenAlignmentPattern()
+		return true
+	})
+
+	e.RegisterEscHandler('\\', func() bool {
+		// String Terminator [ansi.ST]. A parser that has already closed the
+		// string it belonged to sees this on its own, and it means nothing
+		// there. Recognising it keeps a legitimate terminator out of the log of
+		// sequences the emulator did not understand, which is a signal worth
+		// keeping clean.
 		return true
 	})
 
@@ -488,46 +519,62 @@ func (e *Emulator) registerDefaultEscHandlers() {
 	})
 }
 
+// csiCount reads a CSI parameter whose default and minimum are both one.
+//
+// Reading it with a default of 1 is not enough. A missing parameter comes back
+// as the default, but an explicit zero comes back as zero, and every one of
+// these operations treats a zero as a one: a program that computes a count and
+// gets zero still means "once" as far as xterm and everything that followed it
+// is concerned. Letting the zero through instead makes the operation do
+// nothing, which is how `CSI 0 C` stopped moving the cursor.
+func csiCount(params ansi.Params, i int) int {
+	n, _, _ := params.Param(i, 1)
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
 // registerDefaultCsiHandlers registers the default CSI escape sequence handlers.
 func (e *Emulator) registerDefaultCsiHandlers() {
 	e.RegisterCsiHandler('@', func(params ansi.Params) bool {
 		// Insert Character [ansi.ICH]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.scr.InsertCell(n)
 		return true
 	})
 
 	e.RegisterCsiHandler('A', func(params ansi.Params) bool {
 		// Cursor Up [ansi.CUU]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.moveCursor(0, -n)
 		return true
 	})
 
 	e.RegisterCsiHandler('B', func(params ansi.Params) bool {
 		// Cursor Down [ansi.CUD]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.moveCursor(0, n)
 		return true
 	})
 
 	e.RegisterCsiHandler('C', func(params ansi.Params) bool {
 		// Cursor Forward [ansi.CUF]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.moveCursor(n, 0)
 		return true
 	})
 
 	e.RegisterCsiHandler('D', func(params ansi.Params) bool {
 		// Cursor Backward [ansi.CUB]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.moveCursor(-n, 0)
 		return true
 	})
 
 	e.RegisterCsiHandler('E', func(params ansi.Params) bool {
 		// Cursor Next Line [ansi.CNL]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.moveCursor(0, n)
 		e.carriageReturn()
 		return true
@@ -535,7 +582,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('F', func(params ansi.Params) bool {
 		// Cursor Previous Line [ansi.CPL]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.moveCursor(0, -n)
 		e.carriageReturn()
 		return true
@@ -543,7 +590,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('G', func(params ansi.Params) bool {
 		// Cursor Horizontal Absolute [ansi.CHA]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		_, y := e.scr.CursorPosition()
 		e.setCursor(n-1, y)
 		return true
@@ -568,7 +615,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('I', func(params ansi.Params) bool {
 		// Cursor Horizontal Tabulation [ansi.CHT]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.nextTab(n)
 		return true
 	})
@@ -590,8 +637,15 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 				e.cb.ScreenClear()
 			}
 		case 1: // Erase screen above (including cursor)
-			rect := uv.Rect(0, 0, width, y+1)
-			e.scr.FillArea(e.scr.blankCell(), rect)
+			// The cursor's own row is erased only as far as the cursor, the
+			// way EL 1 does it. Clearing the whole row instead takes out text
+			// to the right of the cursor that the guest still expects to be
+			// there, which shows up as the top of a redrawn screen losing its
+			// last line.
+			if y > 0 {
+				e.scr.FillArea(e.scr.blankCell(), uv.Rect(0, 0, width, y))
+			}
+			e.scr.FillArea(e.scr.blankCell(), uv.Rect(0, y, min(x+1, width), 1))
 			// Don't clear images for ED 1 - commonly used by apps
 		case 2: // erase screen (clear command)
 			e.scr.Clear()
@@ -645,7 +699,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('L', func(params ansi.Params) bool {
 		// Insert Line [ansi.IL]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		if e.scr.InsertLine(n) {
 			// Move to the left margin, keeping the current absolute row. Using
 			// setCursorX(0,true) would re-add the top margin to the absolute
@@ -660,7 +714,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('M', func(params ansi.Params) bool {
 		// Delete Line [ansi.DL]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		if e.scr.DeleteLine(n) {
 			// Move to the left margin, keeping the current absolute row. See
 			// the IL handler above for why margins=true would jump the row.
@@ -673,21 +727,21 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('P', func(params ansi.Params) bool {
 		// Delete Character [ansi.DCH]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.scr.DeleteCell(n)
 		return true
 	})
 
 	e.RegisterCsiHandler('S', func(params ansi.Params) bool {
 		// Scroll Up [ansi.SU]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.scr.ScrollUp(n)
 		return true
 	})
 
 	e.RegisterCsiHandler('T', func(params ansi.Params) bool {
 		// Scroll Down [ansi.SD]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.scr.ScrollDown(n)
 		return true
 	})
@@ -703,21 +757,21 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('X', func(params ansi.Params) bool {
 		// Erase Character [ansi.ECH]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.eraseCharacter(n)
 		return true
 	})
 
 	e.RegisterCsiHandler('Z', func(params ansi.Params) bool {
 		// Cursor Backward Tabulation [ansi.CBT]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.prevTab(n)
 		return true
 	})
 
 	e.RegisterCsiHandler('`', func(params ansi.Params) bool {
 		// Horizontal Position Absolute [ansi.HPA]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		width := e.Width()
 		_, y := e.scr.CursorPosition()
 		e.setCursorPosition(min(width-1, n-1), y)
@@ -726,7 +780,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('a', func(params ansi.Params) bool {
 		// Horizontal Position Relative [ansi.HPR]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		width := e.Width()
 		x, y := e.scr.CursorPosition()
 		e.setCursorPosition(min(width-1, x+n), y)
@@ -735,7 +789,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('b', func(params ansi.Params) bool {
 		// Repeat Previous Character [ansi.REP]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		e.repeatPreviousCharacter(n)
 		return true
 	})
@@ -778,7 +832,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('d', func(params ansi.Params) bool {
 		// Vertical Position Absolute [ansi.VPA]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		height := e.Height()
 		x, _ := e.scr.CursorPosition()
 		e.setCursorPosition(x, min(height-1, n-1))
@@ -787,7 +841,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('e', func(params ansi.Params) bool {
 		// Vertical Position Relative [ansi.VPR]
-		n, _, _ := params.Param(0, 1)
+		n := csiCount(params, 0)
 		height := e.Height()
 		x, y := e.scr.CursorPosition()
 		e.setCursorPosition(x, min(height-1, y+n))
@@ -890,6 +944,21 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		return true
 	})
 
+	e.RegisterCsiHandler('u', func(ansi.Params) bool {
+		// Restore Current Cursor Position [ansi.SCORC]. The save half has
+		// always been here, in the 's' handler behind DECLRMM; without this
+		// the restore was silently dropped and the cursor stayed where the
+		// program had moved it.
+		e.scr.RestoreCursor()
+		return true
+	})
+
+	e.RegisterCsiHandler(ansi.Command(0, '!', 'p'), func(ansi.Params) bool {
+		// Soft Terminal Reset [ansi.DECSTR]
+		e.softReset()
+		return true
+	})
+
 	e.RegisterCsiHandler('t', func(params ansi.Params) bool {
 		// XTWINOPS - Window Manipulation
 		// See: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
@@ -973,15 +1042,28 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('r', func(params ansi.Params) bool {
 		// Set Top and Bottom Margins [ansi.DECSTBM]
+		height := e.Height()
+
 		top, _, _ := params.Param(0, 1)
 		if top < 1 {
 			top = 1
 		}
 
-		height := e.Height()
-		bottom, _ := e.parser.Param(1, height)
+		bottom, _, _ := params.Param(1, height)
 		if bottom < 1 {
 			bottom = height
+		}
+
+		// A guest is free to name a row the screen does not have, and one does
+		// whenever it sizes its region before it learns it was resized smaller.
+		// Every row here becomes a slice index in ScrollUp and friends, so an
+		// unclamped bottom is an out-of-range panic in the PTY reader: the
+		// whole daemon, not one pane. xterm clamps to the screen instead.
+		if bottom > height {
+			bottom = height
+		}
+		if top > height {
+			top = height
 		}
 
 		if top >= bottom {
@@ -1015,6 +1097,15 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			right, _, _ := params.Param(1, width)
 			if right < 1 {
 				right = width
+			}
+
+			// Same reasoning as DECSTBM above: a column past the edge becomes
+			// an out-of-range index the first time anything scrolls.
+			if right > width {
+				right = width
+			}
+			if left > width {
+				left = width
 			}
 
 			if left >= right {
