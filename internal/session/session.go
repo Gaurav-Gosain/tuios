@@ -447,6 +447,13 @@ type Session struct {
 	// now. Read and written under stateMu, so it needs no lock of its own.
 	agentClaims map[string]agentClaim
 
+	// transcripts binds windows to the record files their harnesses write. It is
+	// held here rather than in SessionState because none of it is state: a
+	// transcript path names a project directory and a session, so it is kept in
+	// daemon memory and never serialised, never versioned, and never pushed to a
+	// client. Only the AgentState derived from it is.
+	transcripts agentTranscriptState
+
 	// agentHolds records, by window ID, a quieter agent state waiting out the
 	// anti-flicker window before it is published (see holdQuieterState). It has a
 	// lock of its own rather than riding stateMu because it is read and written

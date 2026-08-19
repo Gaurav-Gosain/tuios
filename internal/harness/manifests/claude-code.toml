@@ -64,3 +64,24 @@ state    = "needs_input"
 priority = 10
 all      = ["Would you like to proceed"]
 any      = ["1. Yes", "❯ 1."]
+
+# Claude Code writes one JSON-per-line record file per session under
+# ~/.claude/projects/<cwd with every "/" turned into "-">/<session-uuid>.jsonl,
+# and appends a record at every message boundary. That file is the agent's own
+# account of its turn, so it answers "has this turn finished" without depending
+# on how the TUI happened to look in this release, which is the one weakness the
+# screen rules above cannot fix.
+#
+# It is a precision upgrade rather than a zero-config one. The exact join comes
+# from the SessionStart hook in integrations/claude-code/, which hands the daemon
+# the transcript path Claude Code already puts in every hook payload. Without the
+# hook the daemon searches this directory and believes a file only when the
+# fields named in verify match the pane, refusing when two files both match.
+#
+# The reader takes stop_reason and nothing else. See internal/transcript for why
+# that is a property of the types rather than a promise.
+[transcript]
+reader = "claude-code-jsonl"
+dir    = "{home}/.claude/projects/{cwd:dashes}"
+glob   = "*.jsonl"
+verify = ["cwd", "version"]

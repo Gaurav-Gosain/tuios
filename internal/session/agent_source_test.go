@@ -20,8 +20,11 @@ func TestParseAgentSource(t *testing.T) {
 		"stall":  {AgentSourceStall, true},
 		"bogus":  {"", false},
 		// The detector's own source is daemon-internal, not something a caller
-		// reports, so it is not accepted from the wire.
-		"detect": {"", false},
+		// reports, so it is not accepted from the wire. Nor is the transcript
+		// reader's, for the same reason: both are the daemon looking at the
+		// machine, and a caller naming one has looked at nothing.
+		"detect":     {"", false},
+		"transcript": {"", false},
 	}
 	for in, want := range cases {
 		got, ok := ParseAgentSource(in)
@@ -38,7 +41,10 @@ func TestParseAgentSource(t *testing.T) {
 // table rather than a set of assertions on the numbers, because only the
 // ordering is contractual.
 func TestAgentSourceRanking(t *testing.T) {
-	ordered := []AgentSource{AgentSourceStall, AgentSourceDetect, AgentSourceScreen, AgentSourceOSC, AgentSourceReport}
+	ordered := []AgentSource{
+		AgentSourceStall, AgentSourceDetect, AgentSourceScreen,
+		AgentSourceOSC, AgentSourceTranscript, AgentSourceReport,
+	}
 	for i := 1; i < len(ordered); i++ {
 		if ordered[i-1].rank() >= ordered[i].rank() {
 			t.Errorf("%s does not rank below %s", ordered[i-1], ordered[i])

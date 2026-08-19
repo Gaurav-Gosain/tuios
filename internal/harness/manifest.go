@@ -30,9 +30,10 @@ type Manifest struct {
 	DisplayName   string `toml:"display_name"`
 	// Priority breaks a tie when two manifests match the same process. Higher
 	// wins; equal priorities fall back to the id so the answer is stable.
-	Priority int    `toml:"priority"`
-	Detect   Detect `toml:"detect"`
-	Screen   Screen `toml:"screen"`
+	Priority   int        `toml:"priority"`
+	Detect     Detect     `toml:"detect"`
+	Screen     Screen     `toml:"screen"`
+	Transcript Transcript `toml:"transcript"`
 }
 
 // Detect is how a process is recognised as this harness. Any one predicate
@@ -126,6 +127,9 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	}
 	if m.Screen.Lines <= 0 {
 		m.Screen.Lines = defaultScreenLines
+	}
+	if err := checkTranscript(name, m.ID, &m.Transcript); err != nil {
+		return nil, err
 	}
 	if m.DisplayName == "" {
 		m.DisplayName = m.ID

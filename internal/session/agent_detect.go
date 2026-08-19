@@ -230,6 +230,9 @@ type foregroundInfo struct {
 	// process with no permission to read its own target, or a deleted binary,
 	// both yield empty rather than an error.
 	exe string
+	// pid is the foreground process itself, kept so the transcript source can
+	// read its working directory. Zero when the process could not be resolved.
+	pid int
 }
 
 // foregroundCommand is the label a pane earns from what it is running: the base
@@ -276,6 +279,7 @@ func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 		comm: readComm(tpgid),
 		argv: readCmdline(tpgid),
 		exe:  readExe(tpgid),
+		pid:  tpgid,
 	}
 	if info.comm == "" && len(info.argv) == 0 {
 		// The foreground group leader vanished between reads, or procfs is
