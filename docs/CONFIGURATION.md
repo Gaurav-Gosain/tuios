@@ -443,6 +443,28 @@ Controls whether windows share borders when tiling (reducing visual clutter).
 
 **CLI override:** `--shared-borders`
 
+### dock_workspace_tab_format
+
+Controls how each workspace tab in the dock strip is labelled. The format string supports two placeholders:
+
+- `{index}` - The workspace number (e.g. `2`)
+- `{name}` - The workspace name, or its number when it has no name
+
+**Default:** empty, which is the same as `{name}` (a named workspace shows its name, an unnamed one shows its number).
+
+**Examples:**
+
+```toml
+[appearance]
+# Show the index and the name: "2: dev", "3: prod"
+dock_workspace_tab_format = "{index}: {name}"
+
+# Show the name with the index in parens: "dev (2)"
+dock_workspace_tab_format = "{name} ({index})"
+```
+
+**Note:** Labels are still capped to fit the dock strip; a long name is truncated as usual.
+
 ### whichkey_enabled
 
 Controls the which-key popup: a panel listing the keys available in the current

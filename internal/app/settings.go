@@ -417,6 +417,13 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.DockWorkspaceTabs = boolPtr(v) })
 					m.applyAppearanceLive(false)
 				}),
+			stringItem("Workspace tab format", "Template for each workspace tab: {index}, {name}", "{index}: {name}", "(name only)",
+				func(m *OS) string { return config.DockWorkspaceTabFormat },
+				func(m *OS, v string) {
+					config.DockWorkspaceTabFormat = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.DockWorkspaceTabFormat = v })
+					m.applyAppearanceLive(false)
+				}),
 			boolItem("Workspace name on hover", "Pop a workspace's full name when its pill cut it short",
 				func() bool { return config.DockWorkspaceTooltip },
 				func(m *OS, v bool) {

@@ -574,6 +574,12 @@ var SessionColors = true
 // dock exactly as it was before the strip existed.
 var DockWorkspaceTabs = true
 
+// DockWorkspaceTabFormat is the format string for each workspace tab in the
+// dock strip. Placeholders: {index} (the workspace number) and {name} (the
+// workspace name, or its number when it has no name). Empty means "{name}",
+// the historic rendering.
+var DockWorkspaceTabFormat = ""
+
 // DockWorkspaceTooltip pops the whole name of a workspace whose pill had to cut
 // it short. Off, a long name stays truncated with no way to read the rest.
 var DockWorkspaceTooltip = true
@@ -636,6 +642,20 @@ func FormatWindowTitle(title string, index int, cwd string) string {
 		"{index}", strconv.Itoa(index),
 		"{cwd}", cwd,
 	).Replace(WindowTitleFormat)
+}
+
+// FormatWorkspaceTab renders a dock workspace tab label from the configured
+// DockWorkspaceTabFormat. Placeholders are {index} (the workspace number) and
+// {name} (the workspace's name, or its number when unnamed). An empty format
+// returns the name unchanged, which is the historic rendering.
+func FormatWorkspaceTab(name string, index int) string {
+	if DockWorkspaceTabFormat == "" {
+		return name
+	}
+	return strings.NewReplacer(
+		"{name}", name,
+		"{index}", strconv.Itoa(index),
+	).Replace(DockWorkspaceTabFormat)
 }
 
 // HideClock controls whether the clock overlay is hidden

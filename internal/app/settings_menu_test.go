@@ -78,6 +78,7 @@ func TestSettingsCoverage(t *testing.T) {
 		"Appearance": {"Focused border color", "Unfocused border color", "Window title format"},
 		"Behavior":   {"Preferred shell", "Click to type"},
 		"Daemon":     {"Log level"},
+		"Dock":       {"Workspace tab format"},
 	}
 	for category, labels := range want {
 		for _, label := range labels {
