@@ -25,7 +25,11 @@ func TestConfigReadOnlySessionAppliesWithoutWriting(t *testing.T) {
 		t.Fatalf("read seeded config: %v", err)
 	}
 
+	// Both globals the panel is driven through, restored afterwards: a
+	// read-only session still applies its change, so without this the second
+	// toggle below leaks out of the test.
 	swapBool(t, &config.SidebarShowAgents, true)
+	swapBool(t, &config.SidebarMarquee, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig(), ConfigReadOnly: true})
 
 	focusSetting(t, m, "Sidebar", "Agents section")
