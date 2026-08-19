@@ -640,6 +640,89 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 	}, nil
 }
 
+// verbExplainAgentDetect says what the foreground-process detector sees in a
+// pane and what every manifest makes of it.
+//
+// Detection was unfalsifiable from outside. A pane was an agent or it was not,
+// with no way to ask which of comm, argv0, argv_path or exe_glob decided it, or
+// even what the daemon had read. That is why a registry in which every exe_glob
+// matched nothing shipped, and why a rule that matched any process with an
+// agent's name anywhere in its arguments went unnoticed until users found
+// unrelated panes turning into agents. This is the counterpart to
+// explain-agent-screen: that one explains a state, this one explains the name.
+func (d *Daemon) verbExplainAgentDetect(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p commonParams
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+
+	state := sess.GetState()
+	target := p.Window
+	if target == "" {
+		id, err := focusedWindowID(state)
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		target = id
+	}
+	idx, err := findWindowStateIndex(state.Windows, target)
+	if err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	w := state.Windows[idx]
+	claim := sess.agentClaimFor(w.ID)
+
+	out := map[string]any{
+		"type":          "agent_detect",
+		"window_id":     w.ID,
+		"state":         w.AgentState.Name(),
+		"source":        claim.source.Name(),
+		"harness_id":    w.AgentHarness,
+		"auto_detected": claim.auto,
+		"running":       false,
+		"matched":       false,
+	}
+
+	// Read the process now rather than reporting what the last poll happened to
+	// see. A diagnostic that shows a cached answer cannot be used to check a rule
+	// against a pane the user is looking at.
+	info, running := d.foregroundResolver(sess)(w.PTYID)
+	out["running"] = running
+	if !running {
+		// Not an error: a pane sitting at its shell prompt with nothing running is
+		// the ordinary case, and saying so is the answer.
+		out["reason"] = "no foreground process could be read for this pane"
+		return out, nil
+	}
+
+	proc := info.proc()
+	out["process"] = harness.Describe(proc)
+	if reg := d.agentMatcher.registry; reg != nil {
+		out["manifests"] = reg.ExplainDetect(proc)
+	}
+	if rule, ok := d.agentMatcher.nameRule(proc); ok {
+		out["name_list"] = rule
+	}
+	if id, rule, ok := d.agentMatcher.identifyDetail(info); ok {
+		out["matched"] = true
+		out["matched_rule"] = rule
+		if id != "" {
+			out["matched_harness"] = id
+		} else {
+			// The flat name list matched. It names no harness, so the pane gets no
+			// screen rules, which is worth stating rather than leaving to be
+			// inferred from an empty field.
+			out["matched_harness"] = ""
+			out["note"] = "matched the built-in name list, not a manifest: no harness is named, so no screen rules run"
+		}
+	}
+	return out, nil
+}
+
 // verbExplainAgentScreen dumps a pane's tail exactly as the screen tier reads
 // it, with what every rule of its harness made of it.
 //

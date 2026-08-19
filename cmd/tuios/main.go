@@ -827,6 +827,34 @@ daemon socket; the reference Claude Code shim does exactly that.`,
 	getAgentStateCmd.Flags().BoolVar(&getAgentStateJSON, "json", false, "Output result as JSON")
 	_ = getAgentStateCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var explainDetectSession string
+	var explainDetectWindow string
+	var explainDetectJSON bool
+	explainAgentDetectCmd := &cobra.Command{
+		Use:   "explain-agent-detect",
+		Short: "Show what the agent detector sees in a pane",
+		Long: `Print what the foreground-process detector read for a pane, and what every
+harness manifest made of it.
+
+Detection is otherwise unfalsifiable from outside: a pane is an agent or it is
+not, with nothing said about which of comm, argv0, argv_path or exe_glob decided
+it, and no way to see what the daemon actually read. This says both, and for
+every manifest that refused, what it was comparing against.`,
+		Example: `  # Why is the focused pane not being seen as an agent?
+  tuios explain-agent-detect
+
+  # The same for a named window, as JSON
+  tuios explain-agent-detect -w build --json`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runExplainAgentDetect(explainDetectSession, explainDetectWindow, explainDetectJSON)
+		},
+	}
+	explainAgentDetectCmd.Flags().StringVarP(&explainDetectSession, "session", "s", "", "Target session (default: most recently active)")
+	explainAgentDetectCmd.Flags().StringVarP(&explainDetectWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	explainAgentDetectCmd.Flags().BoolVar(&explainDetectJSON, "json", false, "Output result as JSON")
+	_ = explainAgentDetectCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var explainScreenSession string
 	var explainScreenWindow string
 	var explainScreenHarness string
@@ -1313,7 +1341,7 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd)
-	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd, explainAgentScreenCmd)
+	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd)
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd)

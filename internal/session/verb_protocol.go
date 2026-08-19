@@ -342,6 +342,14 @@ func init() {
 			examples:    []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
 			handler:     (*Daemon).verbGetAgentState,
 		},
+		"explain-agent-detect": {
+			description: "Show what the foreground-process detector sees in a pane and what every harness manifest makes of it: the comm, argv and executable it read, which manifest matched and on which predicate, and for each that refused, what it was comparing against.",
+			params:      []verbParam{sessionParam, windowParam},
+			examples: []string{
+				`{"id":1,"verb":"explain-agent-detect","params":{"session":"work","window":"build"}}`,
+			},
+			handler: (*Daemon).verbExplainAgentDetect,
+		},
 		"explain-agent-screen": {
 			description: "Dump a pane's screen tail exactly as the harness screen rules read it, with what every rule made of it and which one fired. This is the tool for writing a rule: it says what the classifier saw and, for each rule that refused, which strings were the reason.",
 			params: []verbParam{

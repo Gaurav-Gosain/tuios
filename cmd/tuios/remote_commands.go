@@ -729,6 +729,117 @@ func runGetAgentState(sessionName, windowTarget string, jsonOutput bool) error {
 	return nil
 }
 
+// detectExplanation is the explain-agent-detect result, decoded for printing.
+type detectExplanation struct {
+	WindowID       string                 `json:"window_id"`
+	State          string                 `json:"state"`
+	Source         string                 `json:"source"`
+	HarnessID      string                 `json:"harness_id"`
+	AutoDetected   bool                   `json:"auto_detected"`
+	Running        bool                   `json:"running"`
+	Reason         string                 `json:"reason"`
+	Process        harness.ProcReport     `json:"process"`
+	Manifests      []harness.DetectReport `json:"manifests"`
+	NameList       string                 `json:"name_list"`
+	Matched        bool                   `json:"matched"`
+	MatchedHarness string                 `json:"matched_harness"`
+	MatchedRule    string                 `json:"matched_rule"`
+	Note           string                 `json:"note"`
+}
+
+// runExplainAgentDetect prints what the detector saw in a pane and what every
+// manifest made of it.
+func runExplainAgentDetect(sessionName, windowTarget string, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("explain-agent-detect", map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("explain-agent-detect", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res detectExplanation
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	printDetectExplanation(os.Stdout, res)
+	return nil
+}
+
+// printDetectExplanation writes the human form: what the pane is attributed to,
+// what the detector read, and what each manifest did with it.
+func printDetectExplanation(w io.Writer, res detectExplanation) {
+	harnessName := res.HarnessID
+	if harnessName == "" {
+		harnessName = "none"
+	}
+	fmt.Fprintf(w, "pane %s  state %s (%s)\nharness %s", res.WindowID, res.State, res.Source, harnessName)
+	if res.AutoDetected {
+		fmt.Fprint(w, "  held by auto-detection")
+	}
+	fmt.Fprintln(w)
+
+	if !res.Running {
+		fmt.Fprintf(w, "\n%s\n", res.Reason)
+		return
+	}
+
+	p := res.Process
+	fmt.Fprintln(w, "\nwhat the detector read:")
+	fmt.Fprintf(w, "  comm   %s\n", orNone(p.Comm))
+	fmt.Fprintf(w, "  argv   %s\n", orNone(strings.Join(p.Argv, " ")))
+	fmt.Fprintf(w, "  exe    %s\n", orNone(p.Exe))
+	fmt.Fprintf(w, "  argv0  %s\n", orNone(p.Argv0))
+	switch {
+	case p.RunToken != "":
+		fmt.Fprintf(w, "  run    %s  (an interpreter, so this one token may name an agent)\n", p.RunToken)
+	case p.Interpreter:
+		fmt.Fprintln(w, "  run    (none; an interpreter, but it was given nothing to run)")
+	default:
+		fmt.Fprintln(w, "  run    (none; not an interpreter, so no argument is read as identity)")
+	}
+
+	fmt.Fprintln(w, "\nmanifests, in lookup order:")
+	for _, m := range res.Manifests {
+		if m.Matched {
+			fmt.Fprintf(w, "  * %-14s matched on %s\n", m.ID, m.Rule)
+			continue
+		}
+		fmt.Fprintf(w, "    %-14s %s\n", m.ID, m.Reason)
+	}
+
+	fmt.Fprintln(w)
+	switch {
+	case res.Matched && res.MatchedHarness != "":
+		fmt.Fprintf(w, "result: %s, on %s\n", res.MatchedHarness, res.MatchedRule)
+	case res.Matched:
+		fmt.Fprintf(w, "result: an agent, on %s\n", res.MatchedRule)
+		if res.Note != "" {
+			fmt.Fprintf(w, "        %s\n", res.Note)
+		}
+	default:
+		fmt.Fprintln(w, "result: not an agent")
+		if res.NameList != "" {
+			fmt.Fprintf(w, "        the name list would have said otherwise: %s\n", res.NameList)
+		}
+	}
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "(none)"
+	}
+	return s
+}
+
 // screenExplanation is the explain-agent-screen result, decoded for printing.
 type screenExplanation struct {
 	WindowID  string               `json:"window_id"`
