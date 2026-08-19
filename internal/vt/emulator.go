@@ -98,6 +98,11 @@ type Emulator struct {
 	// (under the window IO lock), so writes must never block. bufPipe buffers.
 	pipe *bufPipe
 
+	// The character set selection saved by DECSC, restored by DECRC.
+	savedCharsets    [4]CharSet
+	savedCharsetIDs  [4]byte
+	savedGL, savedGR int
+
 	// The GL and GR character set identifiers.
 	gl, gr  int
 	gsingle int // temporarily select GL or GR

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -307,3 +308,11 @@ func boxed(s string) string {
 
 // ptr is a shorthand for the optional fields of cellWant.
 func ptr[T any](v T) *T { return &v }
+
+// underlineNone names the zero underline so a case can assert its absence
+// rather than leaving the field unset, which means "do not compare".
+var underlineNone = ansi.UnderlineNone
+
+// indexed names one of the terminal's own palette entries, so a case can say
+// "SGR 31" without hard-coding whatever red the active theme resolved to.
+func indexed(i int) color.Color { return vt.NewEmulator(1, 1).IndexedColor(i) }
