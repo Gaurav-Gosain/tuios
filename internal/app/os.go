@@ -287,6 +287,11 @@ type OS struct {
 	// pointer leaves the surface the events come from.
 	viewportResizeAt time.Time
 	lastPointerAt    time.Time
+
+	// zenHidden records the zen-mode border visibility of the last composed
+	// frame, so the idle tick can detect the mouse-mode timeout crossing and
+	// force a repaint (borders must reappear or melt away exactly once).
+	zenHidden bool
 	// pointerDown tracks whether a mouse button is held, so a gesture cannot
 	// outlive the button that started it even when no further event arrives.
 	pointerDown bool

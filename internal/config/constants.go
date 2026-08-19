@@ -522,6 +522,11 @@ var SharedBorders = false
 // Set via --border-style flag or appearance.border_style config
 var BorderStyle = "rounded"
 
+// ZenMode controls when window borders are hidden. Valid values are the
+// ZenMode* constants: disabled (always visible), always (always hidden) or
+// mouse (hidden while the pointer is idle). Set via appearance.zen_mode.
+var ZenMode = ZenModeDisabled
+
 // DockbarPosition controls the position of the dockbar
 // Set via --dockbar-position flag or appearance.dockbar_position config
 var DockbarPosition = "bottom"

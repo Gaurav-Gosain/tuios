@@ -245,6 +245,30 @@ Controls the style of window borders.
 
 **CLI override:** `--border-style <style>`
 
+### zen_mode
+
+Controls when window borders are hidden, for distraction-free focus.
+
+**Valid values:**
+- `"disabled"` - Borders always visible (default)
+- `"always"` - Hide the borders of every unfocused window; the focused window keeps its frame so you always know where your keystrokes land
+- `"mouse"` - Borders are revealed while the mouse is moving and melt away ~2s after it stops; the focused window keeps its frame
+
+**Default:** `"disabled"`
+
+**Scope:** Tiled panes already render borderless when `shared_borders` is on
+(the separators between them are a compositor overlay, not per-pane chrome),
+so zen mode mainly affects floating panes and tiled panes without shared
+borders. In `mouse` mode the border melt and reveal are repaints, not layout
+changes: the frame cells stay reserved, so content never shifts when a border
+appears or disappears.
+
+**Example:**
+```toml
+[appearance]
+zen_mode = "mouse"
+```
+
 ### dockbar_position
 
 Controls the position of the dockbar.
