@@ -1251,13 +1251,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case tea.KeyboardEnhancementsMsg:
 		// The host answered the Kitty keyboard protocol query, so tuios now knows
 		// which of the things it asked for it actually got.
+		//
+		// Success is silent. A protocol handshake succeeding is not news to the
+		// person using the terminal, and a notification for it spends the one
+		// channel that exists for things they have to act on.
 		first := m.KeyboardFlags == 0
 		m.NoteKeyboardEnhancements(msg)
-		if m.KeyboardEnhancementsEnabled && first {
-			m.ShowNotification("Keyboard enhancements enabled", "info", config.NotificationDuration)
-		}
-		// A hold key that the terminal cannot support has to say so rather than
-		// leave the user pressing a key that does nothing.
+		// A hold key the terminal cannot support does have to say so, or the user
+		// presses a key that does nothing and has no way to find out why.
 		if reason := m.HoldModeUnsupportedReason(); reason != "" && first {
 			m.ShowNotification(reason, "warning", config.NotificationDuration)
 		}
