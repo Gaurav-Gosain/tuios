@@ -277,6 +277,7 @@ func (e *Emulator) handleResetPaletteColor(data []byte) {
 	parts := bytes.Split(data, []byte{';'})
 	if len(parts) < 2 {
 		e.colors = [256]color.Color{}
+		e.refreshPaletteClaims()
 		return
 	}
 	for _, p := range parts[1:] {
@@ -284,6 +285,7 @@ func (e *Emulator) handleResetPaletteColor(data []byte) {
 			e.colors[idx] = nil
 		}
 	}
+	e.refreshPaletteClaims()
 }
 
 // parsePaletteIndex reads a palette index, rejecting anything that is not a

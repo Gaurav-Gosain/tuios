@@ -139,6 +139,7 @@ func (e *Emulator) fullReset() {
 	// RIS puts the palette back, as xterm's does. Only the guest's own OSC 4
 	// layer goes: the user's theme is not the guest's to reset.
 	e.colors = [256]color.Color{}
+	e.refreshPaletteClaims()
 
 	e.gl, e.gr = 0, 1
 	e.gsingle = 0

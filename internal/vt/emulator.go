@@ -35,6 +35,9 @@ type Emulator struct {
 	// internal/session.
 	colors   [256]color.Color
 	themePal [16]color.Color
+	// paletteClaimed is whether either layer has claimed any of the sixteen,
+	// which is what decides whether SGR reads through the palette at all.
+	paletteClaimed bool
 
 	// Both main and alt screens and a pointer to the currently active screen.
 	scrs [2]Screen
@@ -1105,6 +1108,20 @@ func (e *Emulator) SetIndexedColor(i int, c color.Color) {
 	}
 
 	e.colors[i] = c
+	e.refreshPaletteClaims()
+}
+
+// refreshPaletteClaims records whether any of the sixteen is spoken for. It is
+// kept as a flag rather than recounted because the SGR handler asks on every
+// escape the guest writes, which is the hottest path the emulator has.
+func (e *Emulator) refreshPaletteClaims() {
+	e.paletteClaimed = false
+	for i := range 16 {
+		if e.colors[i] != nil || e.themePal[i] != nil {
+			e.paletteClaimed = true
+			return
+		}
+	}
 }
 
 // SetThemeColors sets the terminal's color palette from a theme.
@@ -1122,21 +1139,17 @@ func (e *Emulator) SetThemeColors(fg, bg, cur color.Color, ansiPalette [16]color
 
 	if fg == nil && bg == nil {
 		e.themePal = [16]color.Color{}
-		return
+	} else {
+		e.themePal = ansiPalette
 	}
-	e.themePal = ansiPalette
+	e.refreshPaletteClaims()
 }
 
 // hasThemeColors reports whether anything has claimed one of the sixteen
 // palette slots, from a theme or from the guest's own OSC 4. When nothing has,
 // SGR indices are left alone so they reach the host as indices.
 func (e *Emulator) hasThemeColors() bool {
-	for i := range 16 {
-		if e.paletteEntry(i) != nil {
-			return true
-		}
-	}
-	return false
+	return e.paletteClaimed
 }
 
 // resetTabStops resets the terminal tab stops to the default set.
