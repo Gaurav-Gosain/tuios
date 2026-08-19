@@ -59,8 +59,8 @@ func cardPanel(s Snapshot, o Options, pal overlay.Palette, w int) overlay.Panel 
 			line(value.Render(l))
 		}
 	} else {
-		// FgMute measures 1.81:1 on Surface, which is the exact failure the
-		// polish pass caught, so card text never uses it.
+		// FgMute is the furniture tier and measured 1.81:1 on Surface when the
+		// polish pass caught it, so card text never uses it.
 		line(bold(bg, pal.Success).Render(g.pass + " " + itoa(len(s.Rules)) + " invariants held"))
 	}
 	line("")

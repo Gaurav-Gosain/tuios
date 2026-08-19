@@ -586,7 +586,7 @@ func sidebarStripMoreCell(cw int, pal overlay.Palette, bg color.Color, lit bool)
 	if overlay.UseASCII() {
 		mark = ":"
 	}
-	// Measured rather than picked. Raw FgMute is the separator token and reads
+	// Measured rather than picked. Raw FgMute is the separator token and read
 	// 2.19:1 on the band, which is where the workspace pills were when a pill you
 	// could switch to looked absent. This mark is the only thing that says the
 	// spine is cut, so a strip with more sessions than lines looked like a strip
@@ -607,9 +607,10 @@ func sidebarStripMoreCell(cw int, pal overlay.Palette, bg color.Color, lit bool)
 // inwards, so the two-cell ASCII form still lands against it.
 func sidebarStripControlCell(glyph string, cw int, edgeLeft, lit bool, bg color.Color, pal overlay.Palette) string {
 	// These two are the only things on the collapsed rail a click can act on, and
-	// at raw FgMute they measured 2.19:1 against the band: the strip's controls
-	// were its least visible marks. Lifted to 4.88:1 for the same reason the tail
-	// mark is, and by the same call.
+	// at raw FgMute they measured 2.19:1 against the band, 3.71:1 since the quiet
+	// tier moved up a step: the strip's controls were its least visible marks.
+	// Lifted to the text floor for the same reason the tail mark is, and by the
+	// same call.
 	fg := theme.Readable(pal.FgMute, bg)
 	if lit {
 		fg = pal.Fg
