@@ -237,34 +237,34 @@ func TestStripHoverBandSurvivesASeverityMark(t *testing.T) {
 	}
 }
 
-// TestStripTooltipAnchorsOnTheSlotsFirstRow: the label and the band are drawn on
+// TestStripTooltipAnchorsOnTheRowItNames: the label and the band are drawn on
 // the same ground, so they read as one object only if they start on the same
-// line. Anchored on the pointer instead, the label slid a row down inside a
-// two-row slot and read as a second thing that happened to be nearby.
-func TestStripTooltipAnchorsOnTheSlotsFirstRow(t *testing.T) {
-	m, tree := quietStripOS(t, 120, 20)
+// line. Every list on the strip is worth a label, and each has to land level
+// with its own row.
+func TestStripTooltipAnchorsOnTheRowItNames(t *testing.T) {
+	m, tree := stripOS(t, 120, 24)
 	m.SidebarCollapsed = true
 	m.sidebarPanelLinesForTree(tree)
 
-	var slot sidebarStripRow
+	seen := map[sidebarStripRowKind]bool{}
 	for _, r := range m.sidebarStripRows {
-		if r.Kind == sidebarStripSession && r.Y1-r.Y0 == 2 {
-			slot = r
-			break
+		if r.Label == "" {
+			t.Errorf("the %v row at %d says nothing", r.Kind, r.Y0)
+			continue
 		}
-	}
-	if slot.Y1 == 0 {
-		t.Fatal("no two-row session slot on the strip")
-	}
-
-	for _, y := range []int{slot.Y0, slot.Y0 + 1} {
-		m.Tooltip = tooltipState{Source: tooltipRailStrip, Key: y, Shown: true}
+		seen[r.Kind] = true
+		m.Tooltip = tooltipState{Source: tooltipRailStrip, Key: r.Y0, Shown: true}
 		layer := m.renderRailTooltip()
 		if layer == nil {
-			t.Fatalf("hovering row %d of the slot showed no label", y)
+			t.Fatalf("hovering the %v row at %d showed no label", r.Kind, r.Y0)
 		}
-		if got := layer.GetY(); got != slot.Y0 {
-			t.Errorf("hovering row %d put the label on row %d, want the slot's first row %d", y, got, slot.Y0)
+		if got := layer.GetY(); got != r.Y0 {
+			t.Errorf("the %v row's label sits on row %d, want its own row %d", r.Kind, got, r.Y0)
+		}
+	}
+	for _, kind := range []sidebarStripRowKind{sidebarStripSession, sidebarStripTerminal, sidebarStripAgent} {
+		if !seen[kind] {
+			t.Errorf("no %v row was recorded, so nothing names it under the pointer", kind)
 		}
 	}
 }

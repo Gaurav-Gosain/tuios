@@ -268,31 +268,37 @@ func TestStripAndRailAgreeOnWhatPlusMeans(t *testing.T) {
 
 	m.SidebarCollapsed = true
 	m.sidebarPanelLines()
-	var strip sidebarStripRow
-	for _, r := range m.sidebarStripRows {
-		if r.Kind == sidebarStripNew {
-			strip = r
+	// Both controls are on the strip, because both lists are: a "+" at the head
+	// of the sessions list makes a session and a "+" at the head of the
+	// terminals list makes a pane, exactly as they do open. The strip used to
+	// carry only the first, on the argument that a second one would point at a
+	// list that was not on the screen; the list is on the screen now.
+	for _, kind := range []sidebarRowKind{sidebarRowNewSession, sidebarRowNewWindow} {
+		hit, ok := sidebarHitOfKind(m, kind)
+		if !ok {
+			t.Errorf("the collapsed strip records no %v target", kind)
+			continue
+		}
+		label := ""
+		for _, r := range m.sidebarStripRows {
+			if r.Y0 == hit.Y0 {
+				label = r.Label
+			}
+		}
+		if label != sidebarAddWords(kind) {
+			t.Errorf("the strip's %v says %q and the rail's says %q", kind, label, sidebarAddWords(kind))
 		}
 	}
-	if strip.Label != sidebarAddWords(sidebarRowNewSession) {
-		t.Errorf("the strip's + says %q and the rail's says %q", strip.Label, sidebarAddWords(sidebarRowNewSession))
-	}
-	// And it routes to the same OS mutation.
-	stripHit := false
+}
+
+// sidebarHitOfKind is the first recorded rectangle of a given kind.
+func sidebarHitOfKind(m *OS, kind sidebarRowKind) (sidebarRowHit, bool) {
 	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowNewSession {
-			stripHit = true
-		}
-		// The strip has no terminals section, so a control making a pane would
-		// point at a list that is not on the screen; the glyph would then mean
-		// one thing folded and another unfolded.
-		if h.Kind == sidebarRowNewWindow {
-			t.Error("the collapsed strip recorded a new-terminal control")
+		if h.Kind == kind {
+			return h, true
 		}
 	}
-	if !stripHit {
-		t.Error("the strip's + does not record a new-session target")
-	}
+	return sidebarRowHit{}, false
 }
 
 func safeRune(row []rune, i int) string {

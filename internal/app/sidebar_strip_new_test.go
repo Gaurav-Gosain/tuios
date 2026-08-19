@@ -9,15 +9,13 @@ import (
 )
 
 // A strip with no way to make a session is not a state of the rail, it is a
-// state you have to leave to do anything. The control lives at the head of the
-// session spine, on the line the first mark starts under, in the column every
-// other mark is in.
+// state you have to leave to do anything. Each add control sits on its own
+// list's header, beside the letter naming that list, which is the same binding
+// the expanded rail's section headers make with the same glyph.
 //
 // It used to stack above the expand toggle at the strip's bottom edge, which is
 // the placement the expanded rail's "+ new" was moved out of: down there it sat
-// directly under the agents group and read as a control for that list. The head
-// binds it to the list it actually adds to, and it is the same binding the
-// expanded rail's sessions header makes with the same glyph.
+// directly under the agents group and read as a control for that list.
 
 // stripControl is the recorded slot of one of the strip's controls.
 func stripControl(m *OS, kind sidebarStripRowKind) sidebarStripRow {
@@ -29,11 +27,11 @@ func stripControl(m *OS, kind sidebarStripRowKind) sidebarStripRow {
 	return sidebarStripRow{}
 }
 
-// TestStripAddLeadsTheListItAddsTo: the control is on the line the first session
-// mark starts under, in the pane-facing column with the spine's marks, and it
-// says which of the two things the rail can make it makes. The toggle stays on
-// the rail's last line but one where it has always been, with nothing between it
-// and the agents group above it.
+// TestStripAddLeadsTheListItAddsTo: each control sits on its list's header,
+// beside the letter naming that list, and says which of the two things the rail
+// can make it makes. Neither the letter nor the glyph mirrors, because the
+// strip's content columns never do. The toggle stays on the rail's last line
+// but one where it has always been.
 func TestStripAddLeadsTheListItAddsTo(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, tree := noAgentStripOS(t, 120, 20)
@@ -42,15 +40,12 @@ func TestStripAddLeadsTheListItAddsTo(t *testing.T) {
 		lines := railPlain(t, m, tree)
 		rule := config.GetWindowBorderLeft()
 
-		// The head, then the spine under it.
-		head := []string{" +", "▎·"}
+		// The pad, the sessions header, then the list under it.
+		head := []string{"  ", "+s", "▎·"}
 		tail := []string{" »", "  "}
 		if pos == "right" {
-			// Mirrored: the pane-facing column is the other one, and the arrow
-			// points the other way, exactly as the expanded rail's does.
-			// The control hugs the pane-facing column, which is the other one on
-			// this side; the session cell's own two marks never mirror.
-			head, tail = []string{"+ ", "▎·"}, []string{"« ", "  "}
+			// Only the arrow mirrors: it points where the rail will go.
+			tail = []string{"« ", "  "}
 		}
 		for i, w := range head {
 			line := w + rule
@@ -71,19 +66,34 @@ func TestStripAddLeadsTheListItAddsTo(t *testing.T) {
 			}
 		}
 
-		newRow, toggle := stripControl(m, sidebarStripNew), stripControl(m, sidebarStripToggle)
-		if newRow.Y1 == 0 || toggle.Y1 == 0 {
+		toggle := stripControl(m, sidebarStripToggle)
+		if toggle.Y1 == 0 {
 			t.Fatalf("%s: the strip drew %v controls", pos, m.sidebarStripRows)
 		}
-		spine := stripControl(m, sidebarStripSession)
-		if newRow.Y1 != spine.Y0 {
-			t.Errorf("%s: the add ends at %d and the spine starts at %d; they must touch", pos, newRow.Y1, spine.Y0)
-		}
-		if newRow.Y0 >= toggle.Y0 {
-			t.Errorf("%s: the add is at %d, want it well above the toggle at %d", pos, newRow.Y0, toggle.Y0)
-		}
-		if newRow.Label != "new session" {
-			t.Errorf("%s: the control's label is %q", pos, newRow.Label)
+		for _, tc := range []struct {
+			words string
+			list  sidebarStripRowKind
+		}{
+			{"new session", sidebarStripSession},
+			{"new terminal", sidebarStripTerminal},
+		} {
+			var header sidebarStripRow
+			for _, r := range m.sidebarStripRows {
+				if r.Kind == sidebarStripHeader && r.Label == tc.words {
+					header = r
+				}
+			}
+			if header.Y1 == 0 {
+				t.Fatalf("%s: no header says %q: %v", pos, tc.words, m.sidebarStripRows)
+			}
+			first := stripControl(m, tc.list)
+			if header.Y1 != first.Y0 {
+				t.Errorf("%s: %q ends at %d and its list starts at %d; they must touch",
+					pos, tc.words, header.Y1, first.Y0)
+			}
+			if header.Y0 >= toggle.Y0 {
+				t.Errorf("%s: %q is at %d, want it well above the toggle at %d", pos, tc.words, header.Y0, toggle.Y0)
+			}
 		}
 	}
 }
@@ -128,7 +138,7 @@ func TestStripNewSessionIsClickableAcrossItsWholeRow(t *testing.T) {
 			m.SidebarCollapsed = true
 			m.sidebarPanelLinesForTree(tree)
 
-			row := stripControl(m, sidebarStripNew)
+			row := stripControl(m, sidebarStripHeader)
 			railX0 := 0
 			if pos == "right" {
 				railX0 = m.GetRenderWidth() - m.GetSidebarWidth()
@@ -213,12 +223,17 @@ func TestStripNewSessionYieldsFirstOnAShortRail(t *testing.T) {
 		}
 	}
 
-	// With no daemon there is no session to make, so the control is absent
-	// rather than drawn dead.
+	// With no daemon there is no session to make, so that control is absent
+	// rather than drawn dead. Panes are still local, so the terminals list keeps
+	// its own.
 	m, tree := noAgentStripOS(t, 120, 20)
 	m.DaemonClient = nil
-	if strings.Contains(strings.Join(railPlain(t, m, tree), ""), "+") {
+	m.sidebarPanelLinesForTree(tree)
+	if _, ok := sidebarHitOfKind(m, sidebarRowNewSession); ok {
 		t.Error("a client that cannot create sessions still drew the control")
+	}
+	if _, ok := sidebarHitOfKind(m, sidebarRowNewWindow); !ok {
+		t.Error("the terminals list lost its control along with the daemon")
 	}
 }
 
@@ -240,7 +255,7 @@ func TestStripNewSessionASCIIAndMonochrome(t *testing.T) {
 	if got := lines[len(lines)-2]; got != ">>"+config.GetWindowBorderLeft() {
 		t.Errorf("the ASCII toggle line is %q", got)
 	}
-	if got := lines[0]; got != " +"+config.GetWindowBorderLeft() {
-		t.Errorf("the ASCII control line is %q", got)
+	if got := lines[1]; got != "+s"+config.GetWindowBorderLeft() {
+		t.Errorf("the ASCII sessions header is %q", got)
 	}
 }

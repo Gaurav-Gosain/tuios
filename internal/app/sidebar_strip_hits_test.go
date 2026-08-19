@@ -68,44 +68,57 @@ func TestStripTargetsOwnEveryCellOfTheirSlot(t *testing.T) {
 	}
 }
 
-// TestStripSessionSlotIsTwoRowsTall: the mark and the blank row under it are one
-// object, because the interval is what the eye reads as the row. A rectangle
-// covering only the glyph's line is the mismatch that made the rail fiddly.
-func TestStripSessionSlotIsTwoRowsTall(t *testing.T) {
-	// A rail with a row to spare. With none, the last slot gives its trailing
-	// blank to whatever is drawn directly under it, which is the one case where a
-	// slot is shorter than the interval.
+// TestStripSlotsTileTheirLists: every list on the strip draws one row per item
+// and claims exactly that row, so the rectangles tile each list with nothing
+// unclaimed between them. The strip used to draw at an interval of two and
+// claim only the glyph's line, which asked the user to hit half the object they
+// could see.
+func TestStripSlotsTileTheirLists(t *testing.T) {
 	m := stripHits(t, "left", 24)
-	sessions := 0
+	counts := map[sidebarRowKind]int{}
+	prev := map[sidebarRowKind]int{}
 	for _, h := range m.SidebarHits {
-		if h.Kind != sidebarRowSession {
+		switch h.Kind {
+		case sidebarRowSession, sidebarRowWindow, sidebarRowAgent:
+		default:
 			continue
 		}
-		sessions++
-		if h.Y1-h.Y0 != 2 {
-			t.Errorf("session %q claims %d rows, want the interval it is drawn at", h.SessionID, h.Y1-h.Y0)
+		if h.Kind == sidebarRowAgent && counts[h.Kind] == 0 {
+			// The badge addresses a pane too and stands above the stack.
+			prev[h.Kind] = h.Y1
+			continue
 		}
+		counts[h.Kind]++
+		if h.Y1-h.Y0 != 1 {
+			t.Errorf("%v %q claims %d rows, want the one it is drawn on", h.Kind, h.SessionID, h.Y1-h.Y0)
+		}
+		if p, ok := prev[h.Kind]; ok && h.Y0 != p {
+			t.Errorf("a %v slot starts at %d, leaving row %d unclaimed", h.Kind, h.Y0, p)
+		}
+		prev[h.Kind] = h.Y1
 	}
-	if sessions != 3 {
-		t.Fatalf("%d session targets, want one per session", sessions)
+	if counts[sidebarRowSession] != 3 {
+		t.Errorf("%d session targets, want one per session", counts[sidebarRowSession])
+	}
+	if counts[sidebarRowWindow] == 0 {
+		t.Error("the strip recorded no terminal targets")
 	}
 
-	// Packed (a rail too short to space the marks), a slot is one row, and the
-	// rectangles still tile the spine with no gap between them.
+	// A rail too short for the whole list still tiles what it drew.
 	short, tree := manySessionsOS(t, 120, 9)
 	short.sidebarPanelLinesForTree(tree)
-	prev := -1
+	last := -1
 	for _, h := range short.SidebarHits {
 		if h.Kind != sidebarRowSession {
 			continue
 		}
 		if h.Y1-h.Y0 != 1 {
-			t.Errorf("a packed session claims %d rows, want 1", h.Y1-h.Y0)
+			t.Errorf("a short-rail session claims %d rows, want 1", h.Y1-h.Y0)
 		}
-		if prev >= 0 && h.Y0 != prev {
-			t.Errorf("a packed slot starts at %d, leaving row %d unclaimed", h.Y0, prev)
+		if last >= 0 && h.Y0 != last {
+			t.Errorf("a slot starts at %d, leaving row %d unclaimed", h.Y0, last)
 		}
-		prev = h.Y1
+		last = h.Y1
 	}
 }
 
@@ -272,8 +285,8 @@ func TestStripMoreMarkExpandsTheRail(t *testing.T) {
 }
 
 // TestStripHoverPaintsTheWholeSlot: the highlight is the target made visible, so
-// it has to cover the blank row the slot owns. A highlight one row tall under a
-// two-row target teaches the wrong hitbox.
+// it has to cover every column of the row the pointer is on and stop there. A
+// band wider or taller than its rectangle teaches the wrong hitbox.
 func TestStripHoverPaintsTheWholeSlot(t *testing.T) {
 	m, tree := quietStripOS(t, 120, 20)
 	m.sidebarPanelLinesForTree(tree)
@@ -283,8 +296,8 @@ func TestStripHoverPaintsTheWholeSlot(t *testing.T) {
 			slot = h
 		}
 	}
-	if slot.Y1-slot.Y0 != 2 {
-		t.Fatalf("the api slot is %d rows, want 2", slot.Y1-slot.Y0)
+	if slot.Y1-slot.Y0 != 1 {
+		t.Fatalf("the api slot is %d rows, want the one it is drawn on", slot.Y1-slot.Y0)
 	}
 
 	m.SidebarHoverActive = true
@@ -293,17 +306,17 @@ func TestStripHoverPaintsTheWholeSlot(t *testing.T) {
 
 	panel := panelSGR(t)
 	top := m.GetTopMargin()
-	for y := slot.Y0; y < slot.Y1; y++ {
-		for x, cell := range stripCells(lines[y-top]) {
-			if bgOf(cell) == panel {
-				t.Errorf("cell (%d,%d) of the hovered slot is unhighlighted", x, y-top)
-			}
+	for x, cell := range stripCells(lines[slot.Y0-top]) {
+		if bgOf(cell) == panel {
+			t.Errorf("cell (%d,%d) of the hovered slot is unhighlighted", x, slot.Y0-top)
 		}
 	}
-	// The row under the slot is nobody's, and must stay quiet.
-	for x, cell := range stripCells(lines[slot.Y1-top]) {
-		if bg := bgOf(cell); bg != panel {
-			t.Errorf("cell (%d,%d) below the hovered slot picked up a fill %q", x, slot.Y1-top, bg)
+	// The rows either side of it are somebody else's, and must stay quiet.
+	for _, y := range []int{slot.Y0 - 1, slot.Y1} {
+		for x, cell := range stripCells(lines[y-top]) {
+			if bg := bgOf(cell); bg != panel {
+				t.Errorf("cell (%d,%d) beside the hovered slot picked up a fill %q", x, y-top, bg)
+			}
 		}
 	}
 }
