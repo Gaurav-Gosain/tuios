@@ -256,6 +256,13 @@ Controls when window borders are hidden, for distraction-free focus.
 
 **Default:** `"disabled"`
 
+**Scope:** Tiled panes already render borderless when `shared_borders` is on
+(the separators between them are a compositor overlay, not per-pane chrome),
+so zen mode mainly affects floating panes and tiled panes without shared
+borders. In `mouse` mode the border melt and reveal are repaints, not layout
+changes: the frame cells stay reserved, so content never shifts when a border
+appears or disappears.
+
 **Example:**
 ```toml
 [appearance]

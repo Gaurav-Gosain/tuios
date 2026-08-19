@@ -1,6 +1,10 @@
 package app
 
-import "time"
+import (
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
 
 // The deferred half of a resize, and the rule that it can never outlive the
 // gesture that asked for it.
@@ -106,6 +110,14 @@ func (m *OS) noteResizeStep(at time.Time) {
 // notePointerEvent records that a mouse event just arrived. A resize drag is
 // only live while the pointer is still reporting.
 func (m *OS) notePointerEvent(at time.Time) {
+	// Zen mode (mouse): a pointer event re-opens the reveal window, so borders
+	// that the idle melt hid must come back. The event forces its own frame,
+	// but each window's CachedLayer still holds the borderless render and is
+	// reused until the window is dirty, so the reveal must mark the affected
+	// windows dirty here - otherwise the borders would never be drawn again.
+	if config.ZenMode == config.ZenModeMouse && m.zenHidden && !m.pointerRecentlyMoved() {
+		m.markZenDirty()
+	}
 	m.lastPointerAt = at
 }
 

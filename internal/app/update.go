@@ -866,10 +866,24 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// the throttling logic, ensuring they eventually render.
 		hasBackgroundChanges := m.MarkTerminalsWithNewContent()
 
+		// Zen mode (mouse): the borders melt once the pointer sits still past
+		// the reveal window. tickNeedsWork already wakes this tick for the
+		// crossing, but needsRender below has no zen term, so without this the
+		// frame would be marked skippable and View() would serve the cached
+		// frame with the borders still painted: zenHidden would never converge
+		// and the tick would keep doing work at 10fps forever with nothing
+		// visible to show for it. Marking the affected windows dirty also
+		// rebuilds their CachedLayer, which still holds the bordered render
+		// and is reused until the window is dirty.
+		zenCrossed := config.ZenMode == config.ZenModeMouse && m.zenHidden != m.zenBordersHidden(false)
+		if zenCrossed {
+			m.markZenDirty()
+		}
+
 		// Render on tick if something periodic needs visual updates OR background windows changed
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
 			needsDockTick || hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode ||
-			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged
+			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged || zenCrossed
 		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {

@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"os"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -352,8 +353,17 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		m.renderTerminal(window, isFocused, m.Mode == TerminalMode),
 		window.ContentWidth(), window.ContentHeight(),
 	)
-	if rendersBorderless(window) || m.zenBordersHidden(isFocused) {
+	if rendersBorderless(window) {
 		return content
+	}
+	// Zen mode: the frame melts away but the cells stay reserved. A window that
+	// owns its border draws its content at Width-2 by Height-2 placed at the
+	// window origin, so returning the bare content would jump the text one cell
+	// up-left when the border melts and back when it returns. Keep the frame
+	// cells and draw them in a blank style so only the frame fades and the
+	// layout holds still.
+	if m.zenBordersHidden(isFocused) {
+		return m.renderWindowBoxZen(window, content)
 	}
 	box := lipgloss.NewStyle().
 		Align(lipgloss.Left).
@@ -373,6 +383,28 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		m.workspacePosition(window),
 		m.AutoTiling,
 	)
+}
+
+// renderWindowBoxZen renders a window whose zen-mode state hides the frame.
+// The frame cells stay reserved (blank border + blank title row) so the content
+// keeps its exact position; only the chrome fades away. The bordered path draws
+// a Width by Height box (title row + body with left/right/bottom frame); this
+// mirrors that geometry with HiddenBorder (which reserves one cell per edge with
+// spaces) and a blank title row of the same width, so the guest's content never
+// shifts a cell.
+func (m *OS) renderWindowBoxZen(window *terminal.Window, content string) string {
+	box := lipgloss.NewStyle().
+		Align(lipgloss.Left).
+		AlignVertical(lipgloss.Top).
+		Border(lipgloss.HiddenBorder()).
+		BorderTop(false)
+	// The box reserves the left/right/bottom frame cells; prepend the blank
+	// title row the bordered path would have drawn, so the total is the same
+	// Height and the content sits at the same offset.
+	return strings.Repeat(" ", window.Width) + "\n" +
+		box.Width(window.Width).
+			Height(window.Height-1).
+			Render(content)
 }
 
 // fastPathDisabled turns the fullscreen fast path off (TUIOS_NO_FASTPATH=1) so it
