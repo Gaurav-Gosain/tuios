@@ -46,16 +46,17 @@ var (
 	webInsecure       bool
 	webTouch          string
 	// TUIOS forwarded flags
-	debugMode         bool
-	asciiOnly         bool
-	themeName         string
-	borderStyle       string
-	dockbarPosition   string
-	hideWindowButtons bool
-	windowButtonStyle string
-	scrollbackLines   int
-	showKeys          bool
-	noAnimations      bool
+	debugMode            bool
+	asciiOnly            bool
+	themeName            string
+	borderStyle          string
+	dockbarPosition      string
+	hideWindowButtons    bool
+	windowButtonStyle    string
+	windowButtonPosition string
+	scrollbackLines      int
+	showKeys             bool
+	noAnimations         bool
 	// Daemon mode flags
 	defaultSession string
 	ephemeralMode  bool
@@ -158,6 +159,7 @@ Client features:
 	rootCmd.Flags().StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden")
 	rootCmd.Flags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
 	rootCmd.Flags().StringVar(&windowButtonStyle, "window-button-style", "", "Window control style: pill, dots (default: from config or pill)")
+	rootCmd.Flags().StringVar(&windowButtonPosition, "window-button-position", "", "Which end of the title bar the window controls sit on: right, left (default: from config or right)")
 	rootCmd.Flags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)")
 	rootCmd.Flags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
 	rootCmd.Flags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
@@ -292,14 +294,15 @@ func runWebServer() error {
 	config.ApplyAppearanceConfig(userConfig)
 
 	config.ApplyOverrides(config.Overrides{
-		ASCIIOnly:         asciiOnly,
-		BorderStyle:       borderStyle,
-		DockbarPosition:   dockbarPosition,
-		HideWindowButtons: hideWindowButtons,
-		WindowButtonStyle: windowButtonStyle,
-		ScrollbackLines:   scrollbackLines,
-		NoAnimations:      noAnimations,
-		ThemeName:         themeName,
+		ASCIIOnly:            asciiOnly,
+		BorderStyle:          borderStyle,
+		DockbarPosition:      dockbarPosition,
+		HideWindowButtons:    hideWindowButtons,
+		WindowButtonStyle:    windowButtonStyle,
+		WindowButtonPosition: windowButtonPosition,
+		ScrollbackLines:      scrollbackLines,
+		NoAnimations:         noAnimations,
+		ThemeName:            themeName,
 	}, userConfig)
 
 	// Create sip server

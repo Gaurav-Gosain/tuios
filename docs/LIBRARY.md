@@ -148,6 +148,16 @@ How the window controls are drawn: `"pill"` (glyphs on a filled pill) or
 tuios.WithWindowButtonStyle("dots")
 ```
 
+### WithWindowButtonPosition(position string)
+
+Which end of the title bar the window controls sit on: `"right"` (default) or
+`"left"`, the way macOS does it. See
+[CONFIGURATION.md](CONFIGURATION.md#window_button_position).
+
+```go
+tuios.WithWindowButtonPosition("left")
+```
+
 ### WithScrollbackLines(lines int)
 
 Set the scrollback buffer size (100-1000000).

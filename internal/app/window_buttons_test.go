@@ -27,6 +27,16 @@ func withButtonStyle(t *testing.T, style string, fn func()) {
 	fn()
 }
 
+// withButtonPosition runs fn with the controls on one end of the bar and
+// restores the global.
+func withButtonPosition(t *testing.T, position string, fn func()) {
+	t.Helper()
+	prev := config.WindowButtonPosition
+	config.WindowButtonPosition = position
+	defer func() { config.WindowButtonPosition = prev }()
+	fn()
+}
+
 // drawTopBorder renders a window's frame and returns the visible cells of its
 // top row, with the recorded controls.
 func drawTopBorder(t *testing.T, m *OS, win *terminal.Window, tiling bool) ([]rune, []WindowButtonRect) {
@@ -39,57 +49,107 @@ func drawTopBorder(t *testing.T, m *OS, win *terminal.Window, tiling bool) ([]ru
 
 func TestWindowButtonRectsCoverTheGlyphsTheyWereDrawnFor(t *testing.T) {
 	for _, style := range config.WindowButtonStyles {
-		for _, tiling := range []bool{false, true} {
-			for _, width := range []int{20, 40, 78, 200} {
-				for _, originX := range []int{0, 7, 133} {
+		for _, position := range config.WindowButtonPositions {
+			for _, tiling := range []bool{false, true} {
+				for _, width := range []int{20, 40, 78, 200} {
+					for _, originX := range []int{0, 7, 133} {
+						withButtonPosition(t, position, func() {
+							withButtonStyle(t, style, func() {
+								win := &terminal.Window{ID: "w", X: originX, Y: 4, Width: width, Height: 10, Workspace: 1}
+								m := &OS{Windows: []*terminal.Window{win}}
+								cols, rects := drawTopBorder(t, m, win, tiling)
+
+								wantControls := 3
+								if tiling {
+									wantControls = 2
+								}
+								if len(rects) != wantControls {
+									t.Fatalf("%s/%s tiling=%v width=%d: recorded %d controls, want %d",
+										style, position, tiling, width, len(rects), wantControls)
+								}
+
+								seen := map[WindowButtonAction]bool{}
+								for _, r := range rects {
+									if seen[r.Action] {
+										t.Fatalf("%s/%s: action %v recorded twice", style, position, r.Action)
+									}
+									seen[r.Action] = true
+									if r.Y != win.Y {
+										t.Errorf("%s/%s: %v recorded on row %d, want the title row %d",
+											style, position, r.Action, r.Y, win.Y)
+									}
+									// Every recorded column has to exist in the
+									// row that was drawn, and both corner cells
+									// are border glyphs no control may claim.
+									first, last := win.X+1, win.X+len(cols)-1
+									if r.X < first || r.X+r.W > last {
+										t.Errorf("%s/%s tiling=%v width=%d: %v spans [%d,%d), outside the drawn row [%d,%d)",
+											style, position, tiling, width, r.Action, r.X, r.X+r.W, first, last)
+										return
+									}
+									// And it has to contain the glyph it stands
+									// for: a span of nothing but padding is a
+									// control the user cannot see but can press.
+									ink := false
+									for x := r.X; x < r.X+r.W; x++ {
+										if cols[x-win.X] != ' ' {
+											ink = true
+										}
+									}
+									if !ink {
+										t.Errorf("%s/%s tiling=%v width=%d: %v spans [%d,%d), which is blank",
+											style, position, tiling, width, r.Action, r.X, r.X+r.W)
+									}
+								}
+							})
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+// The pill goes flush against the corner at whichever end the setting names,
+// and the hit rectangles go with it.
+//
+// The expected columns are worked out here from the pill's own width rather
+// than read back off the drawn row, so a drift that moved the ink and the
+// rectangles together by the same amount still fails. That is the one thing the
+// agreement checks above cannot see.
+func TestWindowButtonsSitAgainstTheEndTheyWereAskedFor(t *testing.T) {
+	for _, style := range config.WindowButtonStyles {
+		for _, position := range config.WindowButtonPositions {
+			for _, tiling := range []bool{false, true} {
+				withButtonPosition(t, position, func() {
 					withButtonStyle(t, style, func() {
-						win := &terminal.Window{ID: "w", X: originX, Y: 4, Width: width, Height: 10, Workspace: 1}
+						win := &terminal.Window{ID: "w", X: 12, Y: 3, Width: 50, Height: 10, Workspace: 1}
 						m := &OS{Windows: []*terminal.Window{win}}
+						pill, pillHits := m.buildWindowButtons(lipgloss.Color("#7dd3fc"), win, tiling)
+						pillWidth := lipgloss.Width(pill)
+
 						cols, rects := drawTopBorder(t, m, win, tiling)
 
-						wantControls := 3
-						if tiling {
-							wantControls = 2
-						}
-						if len(rects) != wantControls {
-							t.Fatalf("%s tiling=%v width=%d: recorded %d controls, want %d",
-								style, tiling, width, len(rects), wantControls)
+						// One cell of corner at each end of the row.
+						want := win.X + 1
+						if position == config.WindowButtonPositionRight {
+							want = win.X + len(cols) - 1 - pillWidth
 						}
 
-						seen := map[WindowButtonAction]bool{}
-						for _, r := range rects {
-							if seen[r.Action] {
-								t.Fatalf("%s: action %v recorded twice", style, r.Action)
-							}
-							seen[r.Action] = true
-							if r.Y != win.Y {
-								t.Errorf("%s: %v recorded on row %d, want the title row %d", style, r.Action, r.Y, win.Y)
-							}
-							// Every recorded column has to exist in the row that
-							// was drawn, and the row's last cell is the corner
-							// glyph, which no control may claim.
-							last := win.X + len(cols) - 1
-							if r.X < win.X || r.X+r.W > last {
-								t.Errorf("%s tiling=%v width=%d: %v spans [%d,%d), outside the drawn row [%d,%d)",
-									style, tiling, width, r.Action, r.X, r.X+r.W, win.X, last)
-								return
-							}
-							// And it has to contain the glyph it stands for:
-							// a span of nothing but padding is a control the
-							// user cannot see but can press.
-							ink := false
-							for x := r.X; x < r.X+r.W; x++ {
-								if cols[x-win.X] != ' ' {
-									ink = true
-								}
-							}
-							if !ink {
-								t.Errorf("%s tiling=%v width=%d: %v spans [%d,%d), which is blank",
-									style, tiling, width, r.Action, r.X, r.X+r.W)
+						if len(rects) != len(pillHits) {
+							t.Fatalf("%s/%s tiling=%v: drew %d controls but recorded %d",
+								style, position, tiling, len(pillHits), len(rects))
+						}
+						for i, h := range pillHits {
+							got := rects[i]
+							if got.Action != h.Action || got.X != want+h.X || got.W != h.W {
+								t.Errorf("%s/%s tiling=%v: %v recorded at column %d width %d, want %v at %d width %d",
+									style, position, tiling, got.Action, got.X, got.W,
+									h.Action, want+h.X, h.W)
 							}
 						}
 					})
-				}
+				})
 			}
 		}
 	}
@@ -98,19 +158,23 @@ func TestWindowButtonRectsCoverTheGlyphsTheyWereDrawnFor(t *testing.T) {
 // The controls may not overlap, because a press has to resolve to one of them.
 func TestWindowButtonRectsDoNotOverlap(t *testing.T) {
 	for _, style := range config.WindowButtonStyles {
-		withButtonStyle(t, style, func() {
-			win := &terminal.Window{ID: "w", X: 3, Y: 1, Width: 60, Height: 10, Workspace: 1}
-			m := &OS{Windows: []*terminal.Window{win}}
-			_, rects := drawTopBorder(t, m, win, false)
-			for i, a := range rects {
-				for _, b := range rects[i+1:] {
-					if a.X < b.X+b.W && b.X < a.X+a.W {
-						t.Errorf("%s: %v [%d,%d) overlaps %v [%d,%d)",
-							style, a.Action, a.X, a.X+a.W, b.Action, b.X, b.X+b.W)
+		for _, position := range config.WindowButtonPositions {
+			withButtonPosition(t, position, func() {
+				withButtonStyle(t, style, func() {
+					win := &terminal.Window{ID: "w", X: 3, Y: 1, Width: 60, Height: 10, Workspace: 1}
+					m := &OS{Windows: []*terminal.Window{win}}
+					_, rects := drawTopBorder(t, m, win, false)
+					for i, a := range rects {
+						for _, b := range rects[i+1:] {
+							if a.X < b.X+b.W && b.X < a.X+a.W {
+								t.Errorf("%s/%s: %v [%d,%d) overlaps %v [%d,%d)",
+									style, position, a.Action, a.X, a.X+a.W, b.Action, b.X, b.X+b.W)
+							}
+						}
 					}
-				}
-			}
-		})
+				})
+			})
+		}
 	}
 }
 

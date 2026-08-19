@@ -698,6 +698,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		leader                  string
 		clickToType             string
 		buttonStyle             string
+		buttonPos               string
 	}{
 		config.BorderStyle, config.DockbarPosition,
 		config.HideWindowButtons, config.HideScrollbar,
@@ -706,6 +707,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		config.LeaderKey,
 		config.ClickToType,
 		config.WindowButtonStyle,
+		config.WindowButtonPosition,
 	}
 	defer func() {
 		config.BorderStyle, config.DockbarPosition = orig.border, orig.dock
@@ -716,6 +718,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		config.LeaderKey = orig.leader
 		config.ClickToType = orig.clickToType
 		config.WindowButtonStyle = orig.buttonStyle
+		config.WindowButtonPosition = orig.buttonPos
 	}()
 
 	cfg := config.DefaultConfig()
@@ -732,6 +735,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 	cfg.Keybindings.LeaderKey = "ctrl+a"
 	cfg.Appearance.ClickToType = config.ClickToTypeDouble
 	cfg.Appearance.WindowButtonStyle = config.WindowButtonStyleDots
+	cfg.Appearance.WindowButtonPosition = config.WindowButtonPositionLeft
 
 	config.ApplyAppearanceConfig(cfg)
 
@@ -753,6 +757,7 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		{"LeaderKey", config.LeaderKey, "ctrl+a"},
 		{"ClickToType", config.ClickToType, config.ClickToTypeDouble},
 		{"WindowButtonStyle", config.WindowButtonStyle, config.WindowButtonStyleDots},
+		{"WindowButtonPosition", config.WindowButtonPosition, config.WindowButtonPositionLeft},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
