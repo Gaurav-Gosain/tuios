@@ -124,6 +124,7 @@ type AppearanceConfig struct {
 	BorderStyle                 string  `toml:"border_style"`                    // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
 	ZenMode                     string  `toml:"zen_mode"`                        // Zen mode: disabled, always, mouse (default: disabled)
 	HideWindowButtons           bool    `toml:"hide_window_buttons"`             // Hide window control buttons (minimize, maximize, close)
+	WindowButtonStyle           string  `toml:"window_button_style"`             // Window control style: pill, dots (default: pill)
 	HideScrollbar               bool    `toml:"hide_scrollbar"`                  // Hide the window scrollbar thumb on the border
 	ScrollbackLines             int     `toml:"scrollback_lines"`                // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 	ScrollLines                 int     `toml:"scroll_lines"`                    // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
@@ -206,6 +207,20 @@ const (
 // ZenModeModes lists the valid values for appearance.zen_mode.
 var ZenModeModes = []string{ZenModeDisabled, ZenModeAlways, ZenModeMouse}
 
+// Window control styles. See AppearanceConfig.WindowButtonStyle.
+const (
+	// WindowButtonStylePill draws the controls as black glyphs on a filled pill
+	// in the border's colour, capped with powerline half circles.
+	WindowButtonStylePill = "pill"
+	// WindowButtonStyleDots draws them as macOS traffic lights: three unlabelled
+	// discs in red, yellow and green, sitting straight on the border, showing
+	// their symbols while the pointer is on them.
+	WindowButtonStyleDots = "dots"
+)
+
+// WindowButtonStyles lists the valid values for appearance.window_button_style.
+var WindowButtonStyles = []string{WindowButtonStylePill, WindowButtonStyleDots}
+
 // Scrollbar styles. See ScrollbarConfig.Style.
 const (
 	// ScrollbarStyleThin floats a hairline thumb over the pane's last content
@@ -221,6 +236,10 @@ var ScrollbarStyles = []string{ScrollbarStyleThin, ScrollbarStyleTrack}
 
 // Scrollbar tints. See ScrollbarConfig.Tint.
 const (
+	// ScrollbarTintQuiet draws the bar in the pane's own ink dimmed toward the
+	// pane's own background: a mid-grey thumb on a dark theme, a mid-grey thumb
+	// on a light one, and no hue of its own either way.
+	ScrollbarTintQuiet = "quiet"
 	// ScrollbarTintBorder draws the focused pane's bar in the colour its border
 	// is drawn in, or in its accent when it has one.
 	ScrollbarTintBorder = "border"
@@ -230,7 +249,7 @@ const (
 
 // ScrollbarTints lists the keyword values for appearance.scrollbar.tint; a
 // #RRGGBB literal is also accepted.
-var ScrollbarTints = []string{ScrollbarTintBorder, ScrollbarTintMuted}
+var ScrollbarTints = []string{ScrollbarTintQuiet, ScrollbarTintBorder, ScrollbarTintMuted}
 
 // ScrollbarTrackNone is the track value that draws no track at all, which is
 // what the thin style looked like before it grew one.
@@ -311,12 +330,13 @@ func DefaultConfig() *UserConfig {
 			BorderStyle:       "rounded",
 			ZenMode:           ZenModeDisabled,
 			HideWindowButtons: false,
+			WindowButtonStyle: WindowButtonStylePill,
 			ScrollbackLines:   10000,
 			ScrollLines:       3,
 			DockbarPosition:   "bottom",
 			PreferredShell:    "",
 			ClickToType:       ClickToTypeSingle,
-			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintBorder},
+			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Sidebar: SidebarConfig{
 				Position: "left",
 				Width:    SidebarDefaultWidth,
@@ -796,6 +816,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
 	}
 
+	if cfg.Appearance.WindowButtonStyle == "" {
+		cfg.Appearance.WindowButtonStyle = defaultCfg.Appearance.WindowButtonStyle
+	}
+
 	if cfg.Appearance.Sidebar.Position == "" {
 		cfg.Appearance.Sidebar.Position = defaultCfg.Appearance.Sidebar.Position
 	}
@@ -934,6 +958,9 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// assigned unconditionally: turning one off in the settings page has to
 	// survive a reload just as turning it on does.
 	HideWindowButtons = cfg.Appearance.HideWindowButtons
+	if cfg.Appearance.WindowButtonStyle != "" {
+		WindowButtonStyle = cfg.Appearance.WindowButtonStyle
+	}
 	HideScrollbar = cfg.Appearance.HideScrollbar
 	ShowClock = cfg.Appearance.ShowClock
 	ShowCPU = cfg.Appearance.ShowCPU

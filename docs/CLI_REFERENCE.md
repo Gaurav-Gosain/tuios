@@ -112,6 +112,7 @@ tuios
 - `--border-style <style>` - Window border style (rounded, normal, thick, double, hidden, block, ascii)
 - `--dockbar-position <pos>` - Dockbar position (bottom, top, hidden)
 - `--hide-window-buttons` - Hide window control buttons (minimize, maximize, close)
+- `--window-button-style <style>` - How the window controls are drawn: `pill` (default) or `dots` (macOS traffic lights)
 - `--scrollback-lines <num>` - Number of lines in scrollback buffer (100-1000000)
 - `--window-title-position <pos>` - Window title position (bottom, top, hidden)
 - `--hide-clock` - Hide the clock overlay
@@ -617,6 +618,7 @@ tuios set-config <path> <value> [flags]
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `hidden`, `block`, `ascii` | Border style |
 | `animations` | `true`, `false`, `toggle` | Enable/disable animations |
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
+| `window_button_style` | `pill`, `dots` | How the window controls are drawn |
 
 **Examples:**
 ```bash
@@ -631,6 +633,7 @@ tuios set-config animations toggle
 
 # Hide window buttons
 tuios set-config hide_window_buttons true
+tuios set-config window_button_style dots
 
 # Target a specific session
 tuios set-config -s mysession dockbar_position bottom
@@ -1338,6 +1341,7 @@ tuios-web [flags]
 - `--border-style <style>` - Window border style
 - `--dockbar-position <pos>` - Dockbar position
 - `--hide-window-buttons` - Hide window control buttons
+- `--window-button-style <style>` - Window control style: `pill`, `dots`
 - `--scrollback-lines <int>` - Scrollback buffer size
 - `--debug` - Enable debug logging
 

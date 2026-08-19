@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -820,7 +821,8 @@ func (m *OS) ToggleAnimations() error {
 
 // SetConfig sets a configuration option at runtime.
 // Supported paths: appearance.dockbar_position, appearance.border_style,
-// appearance.animations_enabled, appearance.hide_window_buttons
+// appearance.animations_enabled, appearance.hide_window_buttons,
+// appearance.window_button_style
 func (m *OS) SetConfig(path, value string) error {
 	switch path {
 	case "appearance.dockbar_position", "dockbar_position":
@@ -843,6 +845,14 @@ func (m *OS) SetConfig(path, value string) error {
 		case "false", "off", "0":
 			config.HideWindowButtons = false
 		}
+		m.MarkAllDirty()
+		return nil
+	case "appearance.window_button_style", "window_button_style":
+		if !slices.Contains(config.WindowButtonStyles, value) {
+			return fmt.Errorf("unknown window button style: %s (want %s)",
+				value, strings.Join(config.WindowButtonStyles, " or "))
+		}
+		config.WindowButtonStyle = value
 		m.MarkAllDirty()
 		return nil
 	default:

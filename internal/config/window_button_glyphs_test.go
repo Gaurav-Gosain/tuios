@@ -33,6 +33,7 @@ func windowChromeRunes(t *testing.T) map[rune]string {
 	add("WindowButtonClose", WindowButtonClose)
 	add("WindowButtonMinimize", "-")
 	add("WindowButtonMaximize", "□")
+	add("WindowButtonDot", WindowButtonDot)
 	add("WindowPillLeft", WindowPillLeft)
 	add("WindowPillRight", WindowPillRight)
 	add("WindowBorderTopLeft", WindowBorderTopLeft)
@@ -58,6 +59,43 @@ func TestWindowChromeRunesAreSingleWidth(t *testing.T) {
 	}
 	if w := ansi.StringWidth(WindowButtonCloseASCII); w != 3 {
 		t.Errorf("WindowButtonCloseASCII measures %d cells, want 3", w)
+	}
+
+	// The dots style lays three discs and their gaps out cell by cell, so a
+	// disc that measured two would slide the other two under the corner.
+	for name, glyph := range map[string]string{
+		"WindowButtonDot":      WindowButtonDot,
+		"WindowButtonDotASCII": WindowButtonDotASCII,
+	} {
+		if w := ansi.StringWidth(glyph); w != 1 {
+			t.Errorf("%s measures %d cells, want 1", name, w)
+		}
+	}
+}
+
+// TestWindowButtonStyleIsValidated pins that an unknown style warns rather than
+// drawing nothing, and that both shipped styles pass.
+func TestWindowButtonStyleIsValidated(t *testing.T) {
+	for _, style := range append([]string{""}, WindowButtonStyles...) {
+		cfg := DefaultConfig()
+		cfg.Appearance.WindowButtonStyle = style
+		for _, w := range ValidateConfig(cfg).Warnings {
+			if w.Key == "window_button_style" {
+				t.Errorf("style %q warned: %s", style, w.Message)
+			}
+		}
+	}
+
+	cfg := DefaultConfig()
+	cfg.Appearance.WindowButtonStyle = "traffic-lights"
+	warned := 0
+	for _, w := range ValidateConfig(cfg).Warnings {
+		if w.Key == "window_button_style" {
+			warned++
+		}
+	}
+	if warned != 1 {
+		t.Errorf("an unknown style raised %d warnings, want exactly one", warned)
 	}
 }
 

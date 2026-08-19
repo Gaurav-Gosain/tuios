@@ -203,7 +203,7 @@ tuios config edit            # Edit config in $EDITOR
 tuios keybinds list          # View all keybindings
 ```
 
-See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show_clock`, `show_cpu`, `show_ram`, `shared_borders`, custom themes, and keybinding customization.
+See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show_clock`, `show_cpu`, `show_ram`, `shared_borders`, `window_button_style`, custom themes, and keybinding customization.
 
 ## What's New in v0.7.0
 
@@ -226,7 +226,7 @@ See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show
 - **Layout templates** - Save/load window arrangements with CWD, startup commands, BSP tree, proportional scaling.
 - **Shared borders** (`--shared-borders`) - tmux-style thin separator lines between tiled panes.
 - **Smart auto-split** - Aspect-ratio-aware BSP splitting (opt-in via command palette).
-- **Interactive scrollbar** - Click/drag the right border to scroll, theme-aware colors.
+- **Interactive scrollbar** - Click/drag the right border to scroll. One box-drawing stroke at two weights, drawn in the pane's own ink dimmed to a measured contrast, so it recedes until it is looked for. Glyphs and tint are configurable ([`[appearance.scrollbar]`](docs/CONFIGURATION.md#the-appearancescrollbar-table)).
 - **Mouse wheel scrollback** - The wheel scrolls, with no mode entered and nothing announced. Typing or reaching the bottom returns to live output.
 - **Selection auto-scroll** - Drag selection above/below pane to scroll during visual mode.
 - **Dock stats opt-in** - Clock, CPU, RAM hidden by default (`--show-clock`, `--show-cpu`, `--show-ram`).

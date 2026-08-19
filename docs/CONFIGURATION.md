@@ -86,6 +86,7 @@ snap_left = ["h"]
 border_style = "rounded"
 dockbar_position = "bottom"
 hide_window_buttons = false
+window_button_style = "pill"
 scrollback_lines = 10000
 
 [notifications]
@@ -223,6 +224,7 @@ The `[appearance]` section controls the visual presentation of TUIOS.
 border_style = "rounded"
 dockbar_position = "bottom"
 hide_window_buttons = false
+window_button_style = "pill"
 scrollback_lines = 10000
 ```
 
@@ -295,6 +297,39 @@ Controls whether window control buttons (minimize, maximize, close) are displaye
 **Note:** Window buttons are automatically hidden when `border_style = "hidden"` regardless of this setting.
 
 **CLI override:** `--hide-window-buttons`
+
+### window_button_style
+
+How the window controls are drawn. This is a style, not a switch: both draw the
+same three controls and `hide_window_buttons` still hides either.
+
+**Valid values:**
+
+- `"pill"` (default) - the controls as glyphs on a filled pill in the border's
+  colour, capped with powerline half circles: minimize, zoom, close.
+- `"dots"` - macOS traffic lights. Three unlabelled discs in red, yellow and
+  green sitting straight on the border, close first. The discs carry no glyph,
+  so hovering any of them reveals all three symbols at once, drawn dark on
+  their own disc, the way macOS does. That is what names them.
+
+A tiled window has no zoom control, so it draws two of either.
+
+The traffic-light colours are carried toward the pane's own text colour if they
+would otherwise measure below 3:1 against it (WCAG 2.1 SC 1.4.11, the floor for
+a control that carries its meaning as a shape). On a dark pane they are
+untouched; on a near-white one the yellow is the one that has to give up some
+brightness.
+
+Under `--ascii-only` the disc becomes `o`, still one cell, so the traffic light
+keeps its layout and its colours and loses only its roundness. The
+revealed symbols become `X`, `-` and `O`.
+
+**Default:** `"pill"`
+
+**CLI override:** `--window-button-style <style>`
+
+Also settable at runtime with `tuios set-config window_button_style dots`, and
+from the in-app settings page (Appearance, "Window button style").
 
 ### scrollback_lines
 
@@ -574,6 +609,53 @@ whose pane is in another session. Those rows also name that session in words.
 - `false` - Renders exactly as it did before the colours existed
 
 **Default:** `true`
+
+### The `[appearance.scrollbar]` table
+
+The bar a pane draws while it is scrolled back into its history. It appears only
+when there is a position to report: a pane sitting at the live tail draws
+nothing. `hide_scrollbar` (or `--hide-scrollbar`) turns it off entirely and
+predates this table, so it stays in `[appearance]` itself.
+
+```toml
+[appearance.scrollbar]
+style = "thin"
+thumb = "┃"
+track = "│"
+tint  = "quiet"
+```
+
+Every key is optional, and an absent one takes the style's own default, so a
+config written before the table existed renders the documented defaults.
+
+**`style`** — `"thin"` (default) floats the bar over the pane's last content
+column. `"track"` paints that column with a surface fill and positions a block
+thumb on it to the half cell.
+
+**`thumb`** and **`track`** — the glyphs, each exactly one cell wide. The thin
+style defaults to one box-drawing vertical at two weights, `┃` over `│`, so the
+bar reads as a single stroke that thickens where the viewport is. The track
+style defaults to `█` over its surface fill. `track = "none"` draws no track at
+all, leaving a lone thumb. A glyph that does not measure one cell is refused
+with a warning and the default is drawn instead, and a non-ASCII glyph is
+ignored under `ascii_only`, which draws `|` with no track.
+
+**`tint`** — the colour.
+
+- `"quiet"` (default) draws both glyphs in the pane's own ink carried back
+  toward the pane's own background, to a measured 4.5:1 for the thumb and 2.0:1
+  for the track. It has no hue of its own and inverts correctly on a light
+  theme, where the focused-border colour of `"border"` can measure as little as
+  1.17:1 and all but disappear.
+- `"border"` draws the focused pane's thumb in its accent, or failing that in
+  the very colour its border is drawn in, and every other pane's in the
+  unfocused border colour. The track stays neutral.
+- `"muted"` draws every thumb in the unfocused border colour.
+- A `#RRGGBB` literal draws every thumb in that colour, with no contrast floor
+  applied: naming a colour overrides the measurement.
+
+Also settable from the in-app settings page (Appearance, "Scrollbar style" and
+"Scrollbar tint").
 
 ### theme
 

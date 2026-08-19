@@ -599,6 +599,10 @@ var DockPillCaps = false
 // Set via --hide-window-buttons flag or appearance.hide_window_buttons config
 var HideWindowButtons = false
 
+// WindowButtonStyle selects how the window controls are drawn. See
+// appearance.window_button_style.
+var WindowButtonStyle = WindowButtonStylePill
+
 // ScrollbarStyle selects how a scrolled-back pane draws its position. See
 // appearance.scrollbar.style.
 var ScrollbarStyle = ScrollbarStyleThin
@@ -610,7 +614,7 @@ var ScrollbarStyle = ScrollbarStyleThin
 var (
 	ScrollbarThumb = ""
 	ScrollbarTrack = ""
-	ScrollbarTint  = ScrollbarTintBorder
+	ScrollbarTint  = ScrollbarTintQuiet
 )
 
 // HideScrollbar controls whether the window scrollbar is hidden.
@@ -961,6 +965,13 @@ const (
 	WindowButtonClose = " ✕ " // Close/kill window
 	// WindowButtonMaximize is the maximize window button character.
 	WindowButtonMaximize = " □ " // U+25A1
+	// WindowButtonDot is the disc the dots style draws each control as.
+	//
+	// U+25CF BLACK CIRCLE, which JetBrainsMono Nerd Font covers and draws at an
+	// advance of exactly one cell. U+23FA BLACK CIRCLE FOR RECORD would have
+	// been the closer shape and is not in the font at all, which is the defect
+	// the close button's comment above records.
+	WindowButtonDot = "●" // U+25CF
 	// WindowSeparatorChar is the separator character for window elements.
 	WindowSeparatorChar = "─" // U+2500
 )
@@ -985,6 +996,10 @@ const (
 	// fallback). Three cells like the close button, so the pill keeps its width
 	// and the hit-test offsets below still hold.
 	WindowButtonMaximizeASCII = " O "
+	// WindowButtonDotASCII is the dots style's disc in ASCII. One cell like the
+	// disc it stands in for, so the traffic light keeps its layout and its
+	// colours, and only loses the roundness.
+	WindowButtonDotASCII = "o"
 	// WindowPillLeftASCII is the left pill-style character for window decorations (ASCII fallback).
 	WindowPillLeftASCII = "["
 	// WindowPillRightASCII is the right pill-style character for window decorations (ASCII fallback).
@@ -1046,14 +1061,20 @@ func GetBorderForStyle() lipgloss.Border {
 	}
 }
 
-// Per-style scrollbar glyphs. Both of the thin style's hug the right side of
-// the cell they float over, so the bar reads as an edge rather than blanking a
-// column of content: the thumb takes half a cell, the track an eighth. The
-// track style fills its column instead, so its thumb is a whole block and its
-// track is the surface fill behind it rather than a glyph.
+// Per-style scrollbar glyphs. The thin style's pair is one stroke at two
+// weights: the same box-drawing vertical, light for the track and heavy for the
+// thumb, so the bar reads as a single line that thickens where the viewport is
+// rather than as two different shapes stacked in a column. Box-drawing
+// verticals are drawn cell-height, so the track is an unbroken hairline, and
+// they sit centred in the cell, which keeps the bar clear of the pane border
+// instead of thickening it - the half and eighth blocks it replaced hugged the
+// right edge and read as part of the frame.
+//
+// The track style fills its column instead, so its thumb is a whole block and
+// its track is the surface fill behind it rather than a glyph.
 const (
-	scrollbarThinThumb  = "▐" // U+2590 RIGHT HALF BLOCK
-	scrollbarThinTrack  = "▕" // U+2595 RIGHT ONE EIGHTH BLOCK
+	scrollbarThinThumb  = "┃" // U+2503 BOX DRAWINGS HEAVY VERTICAL
+	scrollbarThinTrack  = "│" // U+2502 BOX DRAWINGS LIGHT VERTICAL
 	scrollbarTrackThumb = "█"
 	scrollbarASCIIThumb = "|"
 )
@@ -1190,6 +1211,14 @@ func GetWindowButtonMaximize() string {
 		return WindowButtonMaximizeASCII
 	}
 	return WindowButtonMaximize
+}
+
+// GetWindowButtonDot returns the appropriate dots-style disc character
+func GetWindowButtonDot() string {
+	if UseASCIIOnly {
+		return WindowButtonDotASCII
+	}
+	return WindowButtonDot
 }
 
 // GetWindowPillLeft returns the appropriate pill left character

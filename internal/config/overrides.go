@@ -24,6 +24,9 @@ type Overrides struct {
 	// HideScrollbar overrides hiding the scrollbar thumb
 	HideScrollbar bool
 
+	// WindowButtonStyle overrides how the window controls are drawn
+	WindowButtonStyle string
+
 	// WindowTitlePosition overrides the window title position
 	WindowTitlePosition string
 
@@ -93,6 +96,13 @@ func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
 		HideWindowButtons = overrides.HideWindowButtons || userConfig.Appearance.HideWindowButtons
 	} else {
 		HideWindowButtons = overrides.HideWindowButtons
+	}
+
+	// Window Button Style - CLI flag takes precedence, otherwise use user config
+	if overrides.WindowButtonStyle != "" {
+		WindowButtonStyle = overrides.WindowButtonStyle
+	} else if userConfig != nil && userConfig.Appearance.WindowButtonStyle != "" {
+		WindowButtonStyle = userConfig.Appearance.WindowButtonStyle
 	}
 
 	// Hide Scrollbar - OR of CLI flag and user config

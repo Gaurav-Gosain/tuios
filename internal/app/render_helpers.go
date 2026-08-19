@@ -188,32 +188,18 @@ func getWindowTitle(window *terminal.Window, position int, maxWidth int) string 
 	return windowName
 }
 
-func addToBorder(content string, color color.Color, window *terminal.Window, position int, isTiling bool) string {
+func (m *OS) addToBorder(content string, color color.Color, window *terminal.Window, position int, isTiling bool) string {
 	width := max(lipgloss.Width(content)-2, 0)
 	titlePos := config.WindowTitlePosition
 
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
 
-	// Build window buttons first so we know their width
-	var buttons string
-	var buttonsWidth int
-	if config.HideWindowButtons {
-		buttons = ""
-		buttonsWidth = 0
-	} else {
-		buttonStyle := badgeStyle(color)
-		cross := buttonStyle.Render(config.GetWindowButtonClose())
-		dash := buttonStyle.Render("  - ")
-
-		if isTiling {
-			buttons = makeRounded(dash+cross, color)
-		} else {
-			square := buttonStyle.Render(config.GetWindowButtonMaximize())
-			buttons = makeRounded(dash+square+cross, color)
-		}
-		buttonsWidth = lipgloss.Width(buttons)
-	}
+	// Build window buttons first so we know their width, and record where each
+	// one landed as the pill is assembled rather than measuring it back
+	// afterwards.
+	buttons, hits := m.buildWindowButtons(color, window, isTiling)
+	buttonsWidth := lipgloss.Width(buttons)
 
 	// Calculate available width for title based on position
 	var titleMaxWidth int
@@ -231,7 +217,9 @@ func addToBorder(content string, color color.Color, window *terminal.Window, pos
 
 	borderStyle := style.Foreground(color)
 
-	// Build top border
+	// Build top border. Either path right-aligns the pill against the corner, so
+	// the recorded columns are the same for both; what differs is whether the
+	// pill fits at all, and neither path draws it when it does not.
 	var topBorder string
 	if titlePos == "top" && windowName != "" {
 		// Title on top with buttons on the right
@@ -240,6 +228,7 @@ func addToBorder(content string, color color.Color, window *terminal.Window, pos
 		// Normal top border with buttons on right
 		topBorder = RightString(buttons, width, color)
 	}
+	m.recordWindowButtons(window.ID, placeWindowButtons(hits, window, topBorder, buttons))
 
 	// Build bottom border with optional scrollback position indicator
 	var bottomBorder string
