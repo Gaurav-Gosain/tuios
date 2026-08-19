@@ -5,7 +5,7 @@
 // frame rate and never a pixel: the headless GL is software rasterization.
 
 import { defineConfig } from '@playwright/test';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -39,6 +39,35 @@ const isolated = {
 };
 mkdirSync(isolated.XDG_RUNTIME_DIR, { recursive: true, mode: 0o700 });
 
+// The config every run is served with. Written before the server starts because
+// tuios-web reads it once, at startup, for the whole process.
+//
+// Every value here is deliberately not a default, so a served session that
+// shows the default is showing that the file never reached it. They are also
+// all readable off the terminal buffer: a box-drawing glyph, a row position, a
+// pane of text down one side.
+export const SEEDED_CONFIG = `[appearance]
+border_style = "double"
+dockbar_position = "top"
+show_clock = true
+window_title_format = "seeded {title}"
+
+[appearance.sidebar]
+enabled = true
+position = "left"
+width = 24
+show_agents = false
+
+[startup]
+open_default_window = true
+
+[keybindings]
+leader_key = "ctrl+a"
+`;
+
+mkdirSync(join(isolated.XDG_CONFIG_HOME, 'tuios'), { recursive: true });
+writeFileSync(join(isolated.XDG_CONFIG_HOME, 'tuios', 'config.toml'), SEEDED_CONFIG);
+
 export const ISOLATED_HOME = home;
 
 export default defineConfig({
@@ -52,6 +81,7 @@ export default defineConfig({
   projects: [
     {
       name: 'phone',
+      testMatch: /touch\.spec\.mjs/,
       use: {
         baseURL: BASE_URL,
         hasTouch: true,
@@ -63,6 +93,29 @@ export default defineConfig({
         // for a mouse while the test drives it with one.
         userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 '
           + '(KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36',
+        deviceScaleFactor: 1,
+        launchOptions: {
+          executablePath: CHROMIUM,
+          args: [
+            '--use-gl=angle',
+            '--use-angle=swiftshader',
+            '--enable-unsafe-swiftshader',
+            '--disable-lcd-text',
+            '--force-device-scale-factor=1',
+          ],
+        },
+      },
+    },
+    {
+      // The config tests need columns: the rail and the dock both collapse on a
+      // phone, and a collapsed thing cannot be told apart from a missing one.
+      name: 'desktop',
+      testMatch: /config\.spec\.mjs/,
+      use: {
+        baseURL: BASE_URL,
+        hasTouch: false,
+        isMobile: false,
+        viewport: { width: 1400, height: 900 },
         deviceScaleFactor: 1,
         launchOptions: {
           executablePath: CHROMIUM,
