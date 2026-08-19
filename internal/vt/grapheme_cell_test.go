@@ -173,6 +173,22 @@ func TestGrapheme_ASCIIBaseKeepsCombiningMarks(t *testing.T) {
 			in:   "e\x1b[1;4H́",
 			want: "e/1  /1  /1 ́/0  /1  /1",
 		},
+		{
+			// A designated character set maps the byte to something else, and
+			// rebuilding the cell from the byte the guest sent would undo the
+			// mapping. With a set designated the cluster is closed rather than
+			// left open, so the glyph survives even though the mark does not
+			// join it. A combining mark on a line-drawing glyph means nothing
+			// anyway; losing the glyph would be visible.
+			name: "a designated character set is not undone by a mark",
+			in:   "\x1b(0q́",
+			want: "─/1 ́/0  /1  /1  /1  /1",
+		},
+		{
+			name: "reselecting ASCII lets marks join again",
+			in:   "\x1b(0q\x1b(Bq́",
+			want: "─/1 q́/1  /1  /1  /1  /1",
+		},
 	}
 
 	for _, tc := range tests {

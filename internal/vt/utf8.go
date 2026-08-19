@@ -100,7 +100,16 @@ func (e *Emulator) handlePrint(r rune) {
 		// cell, where the following character overwrote them, so the accent
 		// silently disappeared. Re-arming here also retires whatever cluster
 		// was open before, which is why the flush above stays conditional.
-		e.openGrapheme.arm(e.lastCellX, e.lastCellY, 1, byte(r), "")
+		//
+		// A designated character set maps the byte to something else, and the
+		// mapped text is what a combining mark would have to attach to.
+		// Rebuilding the cell from the byte the guest sent would undo the
+		// mapping, so with a set designated the cluster is closed instead.
+		if e.charsets[e.gl] == nil && e.gsingle == 0 {
+			e.openGrapheme.arm(e.lastCellX, e.lastCellY, 1, byte(r), "")
+		} else {
+			e.openGrapheme.disarm()
+		}
 	} else {
 		if e.openGrapheme.active && len(e.grapheme) == 0 {
 			e.grapheme = append(e.grapheme[:0], []rune(e.openGrapheme.baseCluster())...)
