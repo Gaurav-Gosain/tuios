@@ -316,7 +316,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// pill, so a press on the corner closed the window and a press on the
 	// minimize glyph's own leading pad did nothing.
 	if mouse.Button == tea.MouseLeft {
-		if id, action, ok := o.WindowButtonAt(X, Y); ok && id == clickedWindow.ID {
+		if action, ok := o.WindowButtonIn(clickedWindow.ID, X, Y); ok {
 			switch action {
 			case app.WindowButtonClose:
 				o.DeleteWindow(clickedWindowIndex)

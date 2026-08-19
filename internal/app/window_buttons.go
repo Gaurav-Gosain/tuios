@@ -77,14 +77,27 @@ func (m *OS) pruneWindowButtonRects() {
 	}
 }
 
+// WindowButtonIn returns the control one window drew at (x, y) on the last
+// frame. The click handler asks by window because the click has already been
+// resolved to one: floating panes overlap, so one pane's title bar can sit over
+// another pane's controls, and the press belongs to whichever pane the frame
+// put on top.
+func (m *OS) WindowButtonIn(windowID string, x, y int) (WindowButtonAction, bool) {
+	for _, r := range m.windowButtonRects[windowID] {
+		if r.Contains(x, y) {
+			return r.Action, true
+		}
+	}
+	return WindowButtonNone, false
+}
+
 // WindowButtonAt returns the control drawn at (x, y) on the last frame, and
-// which window owns it.
+// which window owns it. Windows are walked in their own order rather than the
+// map's, so an overlap resolves the same way twice running.
 func (m *OS) WindowButtonAt(x, y int) (windowID string, action WindowButtonAction, ok bool) {
-	for id, rects := range m.windowButtonRects {
-		for _, r := range rects {
-			if r.Contains(x, y) {
-				return id, r.Action, true
-			}
+	for _, w := range m.Windows {
+		if action, ok := m.WindowButtonIn(w.ID, x, y); ok {
+			return w.ID, action, true
 		}
 	}
 	return "", WindowButtonNone, false

@@ -225,6 +225,31 @@ func TestWindowButtonRectsFollowTheWindow(t *testing.T) {
 	})
 }
 
+// Floating panes overlap, so one pane's title bar can land on another pane's
+// controls. The press belongs to the pane the click resolved to, and asking by
+// window is what keeps that from depending on which entry a map handed back
+// first.
+func TestOverlappingControlsResolveToTheirOwnWindow(t *testing.T) {
+	withButtonStyle(t, config.WindowButtonStyleDots, func() {
+		under := &terminal.Window{ID: "under", X: 0, Y: 5, Width: 40, Height: 8, Workspace: 1}
+		over := &terminal.Window{ID: "over", X: 0, Y: 5, Width: 40, Height: 8, Workspace: 1}
+		m := &OS{Windows: []*terminal.Window{under, over}}
+		_, underRects := drawTopBorder(t, m, under, false)
+		drawTopBorder(t, m, over, false)
+
+		hit := underRects[0]
+		if _, ok := m.WindowButtonIn("over", hit.X, hit.Y); !ok {
+			t.Fatal("the pane on top does not own the cell its own control was drawn on")
+		}
+		if _, ok := m.WindowButtonIn("under", hit.X, hit.Y); !ok {
+			t.Fatal("the pane underneath lost the control it drew")
+		}
+		if _, ok := m.WindowButtonIn("nosuchwindow", hit.X, hit.Y); ok {
+			t.Error("a window that drew nothing was handed another window's control")
+		}
+	})
+}
+
 // The dots are unlabelled, so hovering them is what says what they do. All
 // three reveal together, the way macOS does, and the reveal costs no width.
 func TestDotsRevealTheirSymbolsOnHover(t *testing.T) {
