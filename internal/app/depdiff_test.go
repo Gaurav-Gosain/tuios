@@ -101,6 +101,7 @@ var depDiffStrings = []struct{ name, s string }{
 // corpus and over the whole codepoint space, so a dependency bump can be
 // diffed rather than trusted.
 func TestDepDiffWidth(t *testing.T) {
+	depDiffOut(t)
 	var b strings.Builder
 
 	b.WriteString("## corpus\n")
@@ -138,9 +139,7 @@ func TestDepDiffWidth(t *testing.T) {
 // width change: shared borders, wide runes in pane content, and wide runes in
 // a window name.
 func TestDepDiffFrame(t *testing.T) {
-	dir := depDiffOut(t)
-	_ = dir
-
+	depDiffOut(t)
 	origShared := config.SharedBorders
 	t.Cleanup(func() { config.SharedBorders = origShared })
 
@@ -195,6 +194,7 @@ func depDiffFrame(t *testing.T, panes int, text string) string {
 // TestDepDiffWrap dumps the wrapping and truncation helpers, which decide
 // where text is cut and are measured with the same tables.
 func TestDepDiffWrap(t *testing.T) {
+	depDiffOut(t)
 	var b strings.Builder
 	widths := []int{1, 2, 3, 5, 8, 13}
 	names := make([]string, 0, len(depDiffStrings))
@@ -224,6 +224,7 @@ func TestDepDiffWrap(t *testing.T) {
 // wrong for a bump that moves a colour: the palette modules and the terminfo
 // lookup decide the bytes that carry it, and a stripped frame cannot see them.
 func TestDepDiffStyle(t *testing.T) {
+	depDiffOut(t)
 	origShared := config.SharedBorders
 	t.Cleanup(func() { config.SharedBorders = origShared })
 
@@ -273,6 +274,11 @@ func hexOf(c color.Color) (s string) {
 // registered theme, so a palette bump shows up as a diff rather than as a
 // surprise on screen.
 func TestDepDiffPalette(t *testing.T) {
+	depDiffOut(t)
+	// Initialize below mutates process-wide theme state, so restore whatever
+	// the suite was using; a skipped dump must leave no trace either way.
+	orig := theme.CurrentThemeID()
+	t.Cleanup(func() { _ = theme.Initialize(orig) })
 	theme.EnsureRegistry()
 	names := theme.AvailableThemes()
 	sort.Strings(names)
@@ -341,6 +347,7 @@ func TestDepDiffPalette(t *testing.T) {
 // the functions that reach go-colorful, and they pick the foreground drawn on
 // every panel, so a change in the colour space shows up here first.
 func TestDepDiffContrast(t *testing.T) {
+	depDiffOut(t)
 	step := 0x33
 	var grid []color.Color
 	for r := 0; r <= 0xff; r += step {
