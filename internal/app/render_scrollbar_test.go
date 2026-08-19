@@ -381,9 +381,9 @@ func TestScrollbarPinsToTheEndsOfItsTravel(t *testing.T) {
 	}
 }
 
-// The thin style's new look: a half block hanging on a hairline track, both
-// hugging the right edge of the cells they float over.
-func TestScrollbarThinStyleIsAHalfBlockOnAHairline(t *testing.T) {
+// The thin style's look: one box-drawing vertical at two weights, heavy where
+// the viewport is and light everywhere else.
+func TestScrollbarThinStyleIsAHeavyStrokeOnAHairline(t *testing.T) {
 	scrollbarDefaults(t)
 	win := newTestWindow(t, "sbthin-0001", 60, 20)
 	win.X, win.Y = 3, 1
@@ -396,11 +396,11 @@ func TestScrollbarThinStyleIsAHalfBlockOnAHairline(t *testing.T) {
 		thumbRows := 0
 		for i, glyph := range glyphs {
 			switch glyph {
-			case "▐":
+			case "┃":
 				thumbRows++
-			case "▕":
+			case "│":
 			default:
-				t.Fatalf("row %d of the thin bar drew %q, want the ▐ thumb or the ▕ track", i, glyph)
+				t.Fatalf("row %d of the thin bar drew %q, want the ┃ thumb or the │ track", i, glyph)
 			}
 		}
 		if thumbRows == 0 || thumbRows >= len(glyphs) {

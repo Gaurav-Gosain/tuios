@@ -22,19 +22,20 @@ func withScrollbarGlobals(t *testing.T) {
 }
 
 // The glyphs are the default look, so they are what an unconfigured install
-// gets: a half block hanging on a hairline in the thin style, a whole block on
-// the surface fill in the track style, and a pipe with no track in ASCII.
+// gets: one box-drawing vertical at two weights in the thin style, a whole
+// block on the surface fill in the track style, and a pipe with no track in
+// ASCII.
 func TestScrollbarGlyphDefaultsPerStyle(t *testing.T) {
 	withScrollbarGlobals(t)
 	config.ScrollbarThumb, config.ScrollbarTrack = "", ""
 	config.UseASCIIOnly, config.BorderStyle = false, "rounded"
 
 	config.ScrollbarStyle = config.ScrollbarStyleThin
-	if got := config.GetScrollbarThumbChar(); got != "▐" {
-		t.Errorf("thin thumb = %q, want ▐", got)
+	if got := config.GetScrollbarThumbChar(); got != "┃" {
+		t.Errorf("thin thumb = %q, want ┃", got)
 	}
-	if got := config.GetScrollbarTrackChar(); got != "▕" {
-		t.Errorf("thin track = %q, want ▕", got)
+	if got := config.GetScrollbarTrackChar(); got != "│" {
+		t.Errorf("thin track = %q, want │", got)
 	}
 
 	config.ScrollbarStyle = config.ScrollbarStyleTrack
@@ -103,17 +104,17 @@ func TestScrollbarGlyphMustMeasureOneCell(t *testing.T) {
 	}
 
 	config.ApplyAppearanceConfig(cfg)
-	if got := config.GetScrollbarThumbChar(); got != "▐" {
-		t.Errorf("a two-cell thumb was drawn as %q, want the default ▐", got)
+	if got := config.GetScrollbarThumbChar(); got != "┃" {
+		t.Errorf("a two-cell thumb was drawn as %q, want the default ┃", got)
 	}
-	if got := config.GetScrollbarTrackChar(); got != "▕" {
-		t.Errorf("a two-cell track was drawn as %q, want the default ▕", got)
+	if got := config.GetScrollbarTrackChar(); got != "│" {
+		t.Errorf("a two-cell track was drawn as %q, want the default │", got)
 	}
 }
 
-// The tint takes two keywords and a hex literal; anything else warns.
+// The tint takes three keywords and a hex literal; anything else warns.
 func TestScrollbarTintValidation(t *testing.T) {
-	for _, tint := range []string{"", "border", "muted", "#6B50FF", "#0000ee"} {
+	for _, tint := range []string{"", "quiet", "border", "muted", "#6B50FF", "#0000ee"} {
 		cfg := config.DefaultConfig()
 		cfg.Appearance.Scrollbar.Tint = tint
 		for _, w := range config.ValidateConfig(cfg).Warnings {
@@ -184,11 +185,11 @@ func TestScrollbarKeysAbsentFromAnOlderConfig(t *testing.T) {
 
 	config.UseASCIIOnly, config.BorderStyle = false, "rounded"
 	config.ApplyAppearanceConfig(cfg)
-	if config.ScrollbarStyle != config.ScrollbarStyleThin || config.ScrollbarTint != config.ScrollbarTintBorder {
-		t.Errorf("older config resolved to style %q tint %q, want thin/border",
+	if config.ScrollbarStyle != config.ScrollbarStyleThin || config.ScrollbarTint != config.ScrollbarTintQuiet {
+		t.Errorf("older config resolved to style %q tint %q, want thin/quiet",
 			config.ScrollbarStyle, config.ScrollbarTint)
 	}
-	if thumb, track := config.GetScrollbarThumbChar(), config.GetScrollbarTrackChar(); thumb != "▐" || track != "▕" {
-		t.Errorf("older config drew thumb %q track %q, want ▐ on ▕", thumb, track)
+	if thumb, track := config.GetScrollbarThumbChar(), config.GetScrollbarTrackChar(); thumb != "┃" || track != "│" {
+		t.Errorf("older config drew thumb %q track %q, want ┃ on │", thumb, track)
 	}
 }

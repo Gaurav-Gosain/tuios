@@ -605,7 +605,7 @@ var ScrollbarStyle = ScrollbarStyleThin
 var (
 	ScrollbarThumb = ""
 	ScrollbarTrack = ""
-	ScrollbarTint  = ScrollbarTintBorder
+	ScrollbarTint  = ScrollbarTintQuiet
 )
 
 // HideScrollbar controls whether the window scrollbar is hidden.
@@ -1041,14 +1041,20 @@ func GetBorderForStyle() lipgloss.Border {
 	}
 }
 
-// Per-style scrollbar glyphs. Both of the thin style's hug the right side of
-// the cell they float over, so the bar reads as an edge rather than blanking a
-// column of content: the thumb takes half a cell, the track an eighth. The
-// track style fills its column instead, so its thumb is a whole block and its
-// track is the surface fill behind it rather than a glyph.
+// Per-style scrollbar glyphs. The thin style's pair is one stroke at two
+// weights: the same box-drawing vertical, light for the track and heavy for the
+// thumb, so the bar reads as a single line that thickens where the viewport is
+// rather than as two different shapes stacked in a column. Box-drawing
+// verticals are drawn cell-height, so the track is an unbroken hairline, and
+// they sit centred in the cell, which keeps the bar clear of the pane border
+// instead of thickening it - the half and eighth blocks it replaced hugged the
+// right edge and read as part of the frame.
+//
+// The track style fills its column instead, so its thumb is a whole block and
+// its track is the surface fill behind it rather than a glyph.
 const (
-	scrollbarThinThumb  = "▐" // U+2590 RIGHT HALF BLOCK
-	scrollbarThinTrack  = "▕" // U+2595 RIGHT ONE EIGHTH BLOCK
+	scrollbarThinThumb  = "┃" // U+2503 BOX DRAWINGS HEAVY VERTICAL
+	scrollbarThinTrack  = "│" // U+2502 BOX DRAWINGS LIGHT VERTICAL
 	scrollbarTrackThumb = "█"
 	scrollbarASCIIThumb = "|"
 )

@@ -217,6 +217,7 @@ var (
 	fpsOptions             = []string{"30", "60", "90", "120", "144", "unlimited"}
 	sidebarPositionOptions = []string{"left", "right", "hidden"}
 	scrollbarStyleOptions  = config.ScrollbarStyles
+	scrollbarTintOptions   = config.ScrollbarTints
 	clickToTypeOptions     = config.ClickToTypeModes
 )
 
@@ -363,6 +364,16 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v string) {
 					config.ScrollbarStyle = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.Scrollbar.Style = v })
+					m.applyAppearanceLive(false)
+				}),
+			// The hex literal the tint also accepts is not offered here: this
+			// control cycles a list, and a colour is not something to cycle to.
+			enumItem("Scrollbar tint", "quiet: the pane's own ink, dimmed. border: the focused pane's accent. muted: one grey",
+				scrollbarTintOptions,
+				func() string { return config.ScrollbarTint },
+				func(m *OS, v string) {
+					config.ScrollbarTint = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Scrollbar.Tint = v })
 					m.applyAppearanceLive(false)
 				}),
 			stringItem("Focused border color", "Hex color for the focused pane border", "#89b4fa", "(theme)",

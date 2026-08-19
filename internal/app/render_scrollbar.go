@@ -222,10 +222,63 @@ func scrollbarRows(contentH, scrollbackLen, offset int) (rows []string, thumbTop
 // label: it has to be seen, not read.
 const scrollbarMinContrast = 2.5
 
-// scrollbarInk resolves the colour the thumb is drawn in. The rule is the
-// owner's: the bar matches the highlighted terminal, so the focused pane's is
-// drawn in its accent, or failing that in the very colour its border is drawn
-// in, and every other pane keeps the quiet grey the unfocused frames use.
+// The ratios the quiet tint aims its two inks at, against whatever the bar is
+// drawn on. The thumb is the readout and clears theme.ContrastFloor; the track
+// is a guide rail for it and sits barely above the ground, which is what lets
+// the pair recede until it is looked for.
+const (
+	scrollbarQuietThumbContrast = 4.5
+	scrollbarQuietTrackContrast = 2.0
+)
+
+// blendColors mixes a toward b by t in 0..1.
+func blendColors(a, b color.Color, t float64) color.Color {
+	ar, ag, ab, _ := a.RGBA()
+	br, bg, bb, _ := b.RGBA()
+	mix := func(x, y uint32) uint8 {
+		return uint8((float64(x)*(1-t) + float64(y)*t) / 257)
+	}
+	return color.RGBA{R: mix(ar, br), G: mix(ag, bg), B: mix(ab, bb), A: 0xFF}
+}
+
+// scrollbarQuietInk returns the ground's own high-contrast ink carried back
+// toward the ground until it measures about want:1 against it.
+//
+// It aims at a measured ratio rather than at a fixed blend because sRGB is not
+// linear: the same blend fraction lands near 4.3:1 on a black pane and near
+// 2.5:1 on a white one, so a fixed fraction would give a light theme a visibly
+// fainter bar than a dark one for the same setting. The scan is over the frames
+// a scrolled-back pane produces only, and there is at most one bar per pane.
+func scrollbarQuietInk(ground color.Color, want float64) color.Color {
+	ink := theme.ContrastText(ground)
+	if theme.ContrastRatio(ink, ground) <= want {
+		return ink
+	}
+	const steps = 32
+	for i := 1; i <= steps; i++ {
+		mixed := blendColors(ink, ground, float64(i)/steps)
+		if theme.ContrastRatio(mixed, ground) <= want {
+			return mixed
+		}
+	}
+	return ink
+}
+
+// scrollbarInk resolves the colours the thumb and the track are drawn in.
+//
+// The default rule is restraint: the quiet tint draws both in the pane's own
+// ground dimmed back to a measured ratio, so the bar is one stroke at two
+// weights and carries no hue of its own. The bar is a position readout on a
+// pane the user is already looking at, and only one pane can be scrolled back
+// at a time, so colouring it by focus was telling the user something they could
+// already see, in the loudest ink on screen: the focus cyan measures 18.6:1 on
+// a black pane.
+//
+// The tint that did that is still here under `tint = "border"`: the focused
+// pane's bar is drawn in its accent, or failing that in the very colour its
+// border is drawn in, and every other pane keeps the unfocused border colour.
+// It stays a thumb-only rule, because tinting the track as well doubles the ink
+// the bar spends to say one thing.
 //
 // This is a tint rule only. A pane with scrollback still draws its bar whether
 // or not it holds focus, because the bar reports a scroll position and hiding
@@ -235,15 +288,20 @@ const scrollbarMinContrast = 2.5
 // lands on or it falls back to the mode's focus colour, which turns an
 // invisible bar into one that still matches the border family. A configured hex
 // skips the floor: measurement was overridden on purpose.
-func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Color) color.Color {
-	if config.ScrollbarTint == config.ScrollbarTintMuted {
-		return theme.BorderUnfocused()
+func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Color) (thumb, track color.Color) {
+	track = theme.UI().FgMute
+	switch {
+	case config.ScrollbarTint == config.ScrollbarTintQuiet:
+		return scrollbarQuietInk(ground, scrollbarQuietThumbContrast),
+			scrollbarQuietInk(ground, scrollbarQuietTrackContrast)
+	case config.ScrollbarTint == config.ScrollbarTintMuted:
+		return theme.BorderUnfocused(), track
 	}
 	if hex, ok := config.ScrollbarTintHex(); ok {
-		return lipgloss.Color(hex)
+		return lipgloss.Color(hex), track
 	}
 	if !focused {
-		return theme.BorderUnfocused()
+		return theme.BorderUnfocused(), track
 	}
 	focus := theme.BorderFocusedWindow()
 	if m.Mode == TerminalMode {
@@ -251,13 +309,13 @@ func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Co
 	}
 	acc, ok := m.WindowAccent(window.ID)
 	if !ok {
-		return focus
+		return focus, track
 	}
 	accent := acc.Color()
 	if theme.ContrastRatio(accent, ground) < scrollbarMinContrast {
-		return focus
+		return focus, track
 	}
-	return accent
+	return accent, track
 }
 
 // renderScrollbarLayer creates a 1-column layer floating the bar over the
@@ -279,14 +337,20 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 	top := window.Y + window.BorderOffset()
 	rows, thumbTop, thumbRows := scrollbarRows(contentH, scrollbackLen, scrollbarViewOffset(window))
 
+	// The ground is what the bar's cells actually land on, which is what every
+	// ratio below is measured against. The thin style floats over the pane's own
+	// content, so that is the terminal's background and not the chrome's canvas;
+	// the track style paints its column, so it is the fill it paints.
 	pal := theme.UI()
-	ground := pal.Canvas
-	trackInk := lipgloss.NewStyle().Foreground(pal.FgMute)
+	ground := theme.TerminalBg()
+	base := lipgloss.NewStyle()
 	if config.ScrollbarStyle == config.ScrollbarStyleTrack {
 		ground = pal.Surface
-		trackInk = trackInk.Background(pal.Surface)
+		base = base.Background(pal.Surface)
 	}
-	thumbInk := trackInk.Foreground(m.scrollbarInk(window, focused, ground))
+	thumbColor, trackColor := m.scrollbarInk(window, focused, ground)
+	trackInk := base.Foreground(trackColor)
+	thumbInk := base.Foreground(thumbColor)
 
 	// Without a track the untouched rows stay the guest's: a blank there would
 	// paint over a column of content to say nothing.

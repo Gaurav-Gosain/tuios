@@ -206,6 +206,10 @@ var ScrollbarStyles = []string{ScrollbarStyleThin, ScrollbarStyleTrack}
 
 // Scrollbar tints. See ScrollbarConfig.Tint.
 const (
+	// ScrollbarTintQuiet draws the bar in the pane's own ink dimmed toward the
+	// pane's own background: a mid-grey thumb on a dark theme, a mid-grey thumb
+	// on a light one, and no hue of its own either way.
+	ScrollbarTintQuiet = "quiet"
 	// ScrollbarTintBorder draws the focused pane's bar in the colour its border
 	// is drawn in, or in its accent when it has one.
 	ScrollbarTintBorder = "border"
@@ -215,7 +219,7 @@ const (
 
 // ScrollbarTints lists the keyword values for appearance.scrollbar.tint; a
 // #RRGGBB literal is also accepted.
-var ScrollbarTints = []string{ScrollbarTintBorder, ScrollbarTintMuted}
+var ScrollbarTints = []string{ScrollbarTintQuiet, ScrollbarTintBorder, ScrollbarTintMuted}
 
 // ScrollbarTrackNone is the track value that draws no track at all, which is
 // what the thin style looked like before it grew one.
@@ -300,7 +304,7 @@ func DefaultConfig() *UserConfig {
 			DockbarPosition:   "bottom",
 			PreferredShell:    "",
 			ClickToType:       ClickToTypeSingle,
-			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintBorder},
+			Scrollbar:         ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Sidebar: SidebarConfig{
 				Position: "left",
 				Width:    SidebarDefaultWidth,
