@@ -51,6 +51,16 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A workspace pill gesture resolves here too: commit the arrangement the
+	// pointer built, or deliver the switch the press deferred.
+	if o.DockWorkspaceDragActive() {
+		mouse := msg.Mouse()
+		if _, cmd := o.DockWorkspaceDragRelease(mouse.X, mouse.Y); cmd != nil {
+			return o, cmd
+		}
+		return o, nil
+	}
+
 	// A ctrl+left press that never passed the drag threshold was a stray grab, not
 	// a move; clear it and stop. Multi-select lives on ctrl+shift+click, handled on
 	// press. A committed ctrl-drag falls through to the normal window-drop below.

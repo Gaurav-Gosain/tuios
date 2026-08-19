@@ -110,6 +110,15 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// The workspace strip owns its columns in the left region, ahead of the
 		// dock items: the two never overlap, but the strip is tested first so a
 		// tab stays a tab whatever the item layout does.
+		//
+		// A press on a pill only arms the gesture. The switch it might be is
+		// delivered on a release that never left the pill, because switching
+		// retiles the panes and moves the strip, so a press that switched would
+		// pull the pill out from under a drag that had just started. The "+" is
+		// not a workspace and cannot be dragged, so it takes its press directly.
+		if o.BeginDockWorkspaceDrag(X, Y) {
+			return o, nil
+		}
 		if ws := o.DockWorkspaceAt(X, Y); ws > 0 {
 			o.SwitchToWorkspace(ws)
 			return o, nil

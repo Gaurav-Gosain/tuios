@@ -2,6 +2,7 @@ package app
 
 import (
 	"maps"
+	"slices"
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -15,6 +16,12 @@ func (m *OS) adoptSessionLabels(state *session.SessionState) {
 	m.SessionDisplayName = state.DisplayName
 	m.SessionAccent = state.Accent
 	m.SessionRestored = state.Restored
+	// A drag in flight owns the arrangement until the pointer comes up. Adopting
+	// mid-drag would snap the pills back under the pointer on any push that
+	// happened to land, and the push that matters is this client's own.
+	if !m.dockWorkspaceDrag.Dragging {
+		m.WorkspaceOrder = slices.Clone(state.WorkspaceOrder)
+	}
 	if len(state.WorkspaceNames) == 0 {
 		m.WorkspaceNames = nil
 		return

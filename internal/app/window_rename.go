@@ -155,9 +155,17 @@ func (m *OS) RenameTarget() *terminal.Window {
 
 // RenameDialogTitle names what the open editor is renaming, so the dialog says
 // which of the three it is about to change.
+//
+// A session is named as well as typed, the way a workspace already was. The
+// editor is reachable from any session's rail row, so a title that said only
+// "rename session" left the user to work out whether it had landed on the row
+// they pointed at or on the session they happen to be attached to.
 func (m *OS) RenameDialogTitle() string {
 	switch m.RenameKind {
 	case RenameSession:
+		if label := m.SessionLabel(m.RenameTargetID); label != "" {
+			return "rename session " + label
+		}
 		return "rename session"
 	case RenameWorkspace:
 		return "rename workspace " + m.RenameTargetID

@@ -154,6 +154,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	// Session lifecycle actions (context menu rows; the quit menu's kill rows
 	// route through the same OS methods, so the two cannot drift apart)
 	d.Register("settings_sidebar", handleSettingsSidebar)
+	d.Register("rename_session", handleRenameSession)
 	d.Register("kill_session", handleKillSession)
 	d.Register("kill_session_next", handleKillSessionNext)
 	d.Register("kill_session_quit", handleKillSessionQuit)
@@ -697,6 +698,18 @@ func handleSettingsSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // the session it is in; this one is the row every other session's menu carries.
 func handleKillSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenSessionCloseFor(o.TakeMenuSession())
+	return o, nil
+}
+
+// handleRenameSession opens the rename editor on the session whose row the menu
+// was opened on, the same carry the accent and kill rows use. Reached by key it
+// means the attached session, because a key names no row.
+func handleRenameSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	name := o.TakeMenuSession()
+	if name == "" {
+		name = o.SessionName
+	}
+	o.BeginRenameSession(name)
 	return o, nil
 }
 

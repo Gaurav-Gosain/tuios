@@ -70,6 +70,15 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A pressed or dragged workspace pill owns the pointer until release, for
+	// the same reason a rail row does: the motion is what turns the press into a
+	// reorder, and a pill dragged across the dock must not also be hovering the
+	// controls it passes over.
+	if o.DockWorkspaceDragActive() {
+		o.DockWorkspaceDragMotion(mouse.X, mouse.Y)
+		return o, nil
+	}
+
 	// Overlay panels: keep dragging a grabbed panel, or highlight the row under
 	// the cursor so hover tracks the pointer in every overlay. Either way the
 	// motion is consumed; a pane behind an overlay panel never sees it. The

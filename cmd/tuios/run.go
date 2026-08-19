@@ -127,6 +127,15 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A workspace pill drag rides motion for the same reason a sidebar drag
+	// does, and is whitelisted here for the same reason: the filter drops every
+	// motion event it does not recognise, so the reorder would never see the
+	// pointer leave the pill it was pressed on and every drag would arrive as a
+	// plain click.
+	if os.DockWorkspaceDragActive() {
+		return msg
+	}
+
 	// A sidebar session drag rides motion the same way an overlay drag does,
 	// and hover in the sidebar band needs motion to track the row under the
 	// pointer. HoverActive keeps one more event flowing after the pointer

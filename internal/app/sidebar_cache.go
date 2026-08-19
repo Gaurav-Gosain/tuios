@@ -171,6 +171,17 @@ func (m *OS) sidebarSignature() uint64 {
 	// names print in the tag, so renaming a workspace has to restyle the rows on
 	// it. Order-independent, so map iteration order does not matter.
 	mixI(m.CurrentWorkspace)
+	// The order arranges the rail's terminals section and the dock's pills both,
+	// and a draft one is live for the length of a drag, so it is drawn state and
+	// belongs in here.
+	for _, ws := range m.WorkspaceOrder {
+		mixI(ws)
+	}
+	mixB(m.dockWorkspaceDrag.Dragging)
+	for _, ws := range m.dockWorkspaceDrag.Order {
+		mixI(ws)
+	}
+
 	var wsFold uint64
 	for ws, name := range m.WorkspaceNames {
 		e := uint64(1469598103934665603) ^ uint64(ws)

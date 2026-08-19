@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -165,7 +166,16 @@ type SessionState struct {
 	// workspace with no entry here is unnamed and renders as its number, exactly
 	// as every workspace did before this existed. Naming one is a daemon-owned
 	// change so it survives a reattach and every attached client sees it.
-	WorkspaceNames  map[int]string             `json:"workspace_names,omitempty"`
+	WorkspaceNames map[int]string `json:"workspace_names,omitempty"`
+	// WorkspaceOrder is the order the workspaces are shown in, and only that.
+	// The number stays the identity, so the window's Workspace field,
+	// WorkspaceFocus, WorkspaceTrees, the verbs and TUIOS_WORKSPACE all keep
+	// addressing by number and none of them moves when this does. It sits beside
+	// the names because it is the same kind of thing: a presentation choice the
+	// daemon owns so it survives a reattach and every attached client sees the
+	// one arrangement. Absent means the plain ascending order, which is what
+	// every session had before this existed.
+	WorkspaceOrder  []int                      `json:"workspace_order,omitempty"`
 	WorkspaceTrees  map[int]*SerializedBSPTree `json:"workspace_trees,omitempty"`  // BSP tree per workspace
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`
@@ -858,6 +868,9 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	if s.state.WorkspaceNames != nil {
 		stateCopy.WorkspaceNames = make(map[int]string, len(s.state.WorkspaceNames))
 		maps.Copy(stateCopy.WorkspaceNames, s.state.WorkspaceNames)
+	}
+	if s.state.WorkspaceOrder != nil {
+		stateCopy.WorkspaceOrder = slices.Clone(s.state.WorkspaceOrder)
 	}
 	return &stateCopy
 }

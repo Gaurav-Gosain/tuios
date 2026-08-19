@@ -470,7 +470,14 @@ func (m *OS) sidebarStripBand(content string, cw int, edgeLeft bool, bg, edgeFg 
 	case m.SidebarFocused:
 		rule = pal.Accent
 	default:
-		rule = theme.NotificationRule()
+		// FgMute, the token this codebase gives separators, rather than the
+		// notification rule this used to borrow. That rule measured 1.06:1 on the
+		// band, so the boundary the comment above calls "the only edge left" was
+		// not on screen at all whenever the rail was not focused, which is nearly
+		// always. FgMute puts it at 2.19:1: furniture, and furniture you can see.
+		// The text floor deliberately does not apply here; a hairline held to
+		// 4.5:1 would be louder than the marks it frames.
+		rule = pal.FgMute
 	}
 	edge := lipgloss.NewStyle().Background(bg).Foreground(rule).Render(config.GetWindowBorderLeft())
 	body := sidebarFit(content, cw, bg)
@@ -498,7 +505,10 @@ func sidebarStripRuleCell(cw int, pal overlay.Palette) string {
 	if overlay.UseASCII() {
 		mark = "-"
 	}
-	return sidebarFit(sidebarStyle(pal.Panel, theme.NotificationRule()).Render(strings.Repeat(mark, cw)), cw, pal.Panel)
+	// Same correction as the band's hairline, and for the same reason: at 1.06:1
+	// the divider that is supposed to stop the agents group reading as more
+	// sessions could not be seen, so the group did read as more sessions.
+	return sidebarFit(sidebarStyle(pal.Panel, pal.FgMute).Render(strings.Repeat(mark, cw)), cw, pal.Panel)
 }
 
 // sidebarStripAgentCell is one pane of the bottom group in two cells: the gutter
@@ -573,7 +583,14 @@ func sidebarStripMoreCell(cw int, pal overlay.Palette, bg color.Color, lit bool)
 	if overlay.UseASCII() {
 		mark = ":"
 	}
-	fg := color.Color(pal.FgMute)
+	// Measured rather than picked. Raw FgMute is the separator token and reads
+	// 2.19:1 on the band, which is where the workspace pills were when a pill you
+	// could switch to looked absent. This mark is the only thing that says the
+	// spine is cut, so a strip with more sessions than lines looked like a strip
+	// with exactly as many sessions as lines. Readable lifts it to 4.88:1 and
+	// leaves it under the resting dots' 7.37:1, so it clears the floor without
+	// becoming another session.
+	fg := theme.Readable(pal.FgMute, bg)
 	if lit {
 		fg = pal.Fg
 	}
@@ -586,7 +603,11 @@ func sidebarStripMoreCell(cw int, pal overlay.Palette, bg color.Color, lit bool)
 // every other mark on the strip already sits in. It is measured from that edge
 // inwards, so the two-cell ASCII form still lands against it.
 func sidebarStripControlCell(glyph string, cw int, edgeLeft, lit bool, bg color.Color, pal overlay.Palette) string {
-	fg := color.Color(pal.FgMute)
+	// These two are the only things on the collapsed rail a click can act on, and
+	// at raw FgMute they measured 2.19:1 against the band: the strip's controls
+	// were its least visible marks. Lifted to 4.88:1 for the same reason the tail
+	// mark is, and by the same call.
+	fg := theme.Readable(pal.FgMute, bg)
 	if lit {
 		fg = pal.Fg
 	}
@@ -611,6 +632,14 @@ func sidebarStripControlCell(glyph string, cw int, edgeLeft, lit bool, bg color.
 func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette, bg color.Color, lit bool) string {
 	lead, leadFg := " ", color.Color(nil)
 	if node.IsCurrent {
+		// Left at the raw tint, measured and deliberately. It is 2.76:1 on the
+		// band, the number the current workspace pill was lifted from, and
+		// Readable would clear it. The strip is the rail at another width rather
+		// than another object, so this bar has to be the hue the expanded rail
+		// draws for the same session, and lifting one width alone splits them.
+		// It is also a filled block rather than type, and it marks the one
+		// session the peek already names. Lifting both widths together is the
+		// right fix and is a change to the expanded rail, not to this audit.
 		lead, leadFg = "▎", railFocusTint(m.sessionTint(node.ID, bg), pal)
 		if overlay.UseASCII() {
 			lead = ">"
@@ -624,7 +653,12 @@ func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette
 	if config.SidebarShowGlyphs {
 		switch {
 		case sidebarAttention(node.AgentState):
-			mark, markFg = agentStateIndicator(node.AgentState), sidebarSeverityColor(node.AgentState, pal)
+			// Held to the floor against the band it is drawn on. errored measured
+			// 4.06:1 raw, so the one state that means something broke was the
+			// least legible mark the spine could show; needs_input already cleared
+			// at 6.49:1 and Readable leaves it alone.
+			mark = agentStateIndicator(node.AgentState)
+			markFg = theme.Readable(sidebarSeverityColor(node.AgentState, pal), bg)
 		case node.AgentState == "done" && !node.DoneSeen:
 			mark, markFg = agentStateIndicator(node.AgentState), pal.Success
 		}

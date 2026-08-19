@@ -320,6 +320,15 @@ func init() {
 			examples: []string{`{"id":1,"verb":"set-workspace-name","params":{"session":"work","workspace":2,"name":"review"}}`},
 			handler:  (*Daemon).verbSetWorkspaceName,
 		},
+		"set-workspace-order": {
+			description: "Arrange the workspaces. This is the order they are shown in and nothing else: every workspace keeps its number, which is what the verbs, the keys and each window go on addressing it by.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "order", Type: "[]int", Required: true, Description: "Workspace numbers in the order to show them. Numbers outside the session's range and repeats of one already placed are dropped; any workspace the list omits keeps its place after the ones it names. An ascending order clears the arrangement."},
+			},
+			examples: []string{`{"id":1,"verb":"set-workspace-order","params":{"session":"work","order":[3,1,2]}}`},
+			handler:  (*Daemon).verbSetWorkspaceOrder,
+		},
 		"set-agent-state": {
 			description: "Set the agent state a window's pane reports (working, needs_input, idle, done, errored, or none to clear). A pane reports its own state by calling this against the daemon socket.",
 			params: []verbParam{

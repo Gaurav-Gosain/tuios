@@ -1,215 +1,178 @@
 package app
 
 import (
-	"fmt"
+	"image/color"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// renderAggregateView renders the all-windows tree + live preview overlay. It
-// keeps its two-pane layout (the preview shows raw window output) but is themed
-// with the shared palette and returns geometry so it can be dragged and
-// dismissed like the other overlays.
+// The all-windows overlay is a jump-to-window picker, so it is drawn as one:
+// the same search-and-list panel the command palette, the session switcher and
+// the workspace switcher use, on the same grammar, with the same keys.
+//
+// It used to be a bespoke two-pane layout sized to fixed fractions of the
+// screen, four fifths wide by three quarters tall whatever it held. A session
+// with one window got a modal covering most of the terminal and almost entirely
+// empty, and the right-hand pane showed the selected pane's raw output with no
+// framing, which on a pane full of compiler diagnostics read as a wall of noise
+// beside the list rather than as information about it. It also returned no hit
+// rows, so the one overlay whose whole purpose is picking something could not be
+// clicked.
+//
+// The preview is gone rather than fixed. The question this overlay answers is
+// "which of my windows do I want", and the last few lines of a pane's scrollback
+// answer it far worse than the pane's name, where it is, what it is doing and
+// what directory it is in, all of which fit on the row itself. Dropping it also
+// stops the list rebuilding a preview string for every window, under the pane's
+// IO lock, on every keystroke.
+
+const (
+	// Wide enough for a name, a directory and a workspace tag on one row, and
+	// the same order of width as the session switcher beside it.
+	aggregateViewWidth = 62
+	// Where a list stops being scannable and starts being scrolled. The panel
+	// takes the smaller of this and what it actually holds, so one window gets a
+	// one-row panel, and panelBody trims it again on a short screen.
+	aggregateViewMaxRows = 12
+	// A directory is context for the name, never the thing being read, so it is
+	// held to a tag's worth of width.
+	aggregateViewCWDMax = 18
+)
+
+// renderAggregateView renders the all-windows picker and returns the panel, its
+// geometry and its hit rows.
 func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
-	pal := theme.UI()
 	items := m.GetAggregateViewItems()
 	filtered := FilterAggregateViewItems(items, m.AggregateViewQuery)
-	groups := GetAggregateWorkspaceGroups(filtered, m.CurrentWorkspace)
-
-	totalWidth := m.GetRenderWidth() * 4 / 5
-	if totalWidth < 80 {
-		totalWidth = min(m.GetRenderWidth()-4, 80)
-	}
-	treeWidth := totalWidth*2/5 - 2
-	previewWidth := totalWidth - treeWidth - 5
-	// Two panes need room for two panes. On a narrow screen the tree column comes
-	// out around sixteen cells, which wraps every row it holds and shows a preview
-	// too narrow to read, so the preview is dropped and the tree takes the lot.
-	showPreview := previewWidth >= 24 && treeWidth >= 24
-	if !showPreview {
-		treeWidth = totalWidth - 4 // the box's own border and padding
-		previewWidth = 0
-	}
-	totalHeight := m.GetRenderHeight() * 3 / 4
-	if totalHeight < 15 {
-		totalHeight = min(m.GetRenderHeight()-4, 15)
+	if len(filtered) > 0 {
+		m.AggregateViewSelected = clampInt(m.AggregateViewSelected, 0, len(filtered)-1)
 	}
 
-	selectedFlatIdx := m.AggregateViewSelected
-	maxTreeLines := max(totalHeight-3, 5)
-	if selectedFlatIdx < m.AggregateViewScroll {
-		m.AggregateViewScroll = selectedFlatIdx
-	}
-	if selectedFlatIdx >= m.AggregateViewScroll+maxTreeLines {
-		m.AggregateViewScroll = selectedFlatIdx - maxTreeLines + 1
+	empty := "No windows"
+	if m.AggregateViewQuery != "" {
+		empty = "No window matches that"
 	}
 
-	type treeRow struct {
-		text     string
-		selected bool
-	}
-	var treeRows []treeRow
-	var selectedItem *AggregateViewItem
-	flatIdx := 0
+	return m.renderListOverlay(listOverlay{
+		Glyph:      "\uf009", // grid of panes
+		Title:      "Windows",
+		Width:      aggregateViewWidth,
+		MaxVisible: min(max(len(filtered), 1), aggregateViewMaxRows),
+		Search:     true,
+		Query:      m.AggregateViewQuery,
+		Count:      len(filtered),
+		Selected:   m.AggregateViewSelected,
+		Scroll:     &m.AggregateViewScroll,
+		EmptyMsg:   empty,
+		Hints: []overlay.Hint{
+			{Key: "⏎", Label: "jump"},
+			{Key: "esc", Label: "close"},
+		},
+		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
+			return m.aggregateViewRow(filtered[i], selected, rowBg, pal, width)
+		},
+	})
+}
 
-	for gi := range groups {
-		g := &groups[gi]
-		attached := ""
-		if g.IsCurrent {
-			attached = " (attached)"
+// aggregateViewRow draws one window: what it is called, what its agent is doing,
+// where it is, and which directory it is in.
+//
+// The order is the order the question gets asked in. The name is what the user
+// is looking for, so it leads and gets whatever width is left over; the agent
+// glyph rides in front of it in the rail's own colours, because a pane waiting
+// on an answer is the usual reason for opening this list at all; and the
+// workspace tag anchors the right edge, because "where is it" is the thing the
+// jump is about to act on.
+//
+// The pane's pixel dimensions used to sit on every row. They are the same number
+// for every tiled pane in a session, so the column said nothing and cost the
+// name eleven cells.
+func (m *OS) aggregateViewRow(item AggregateViewItem, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
+	// Right cluster first: it is fixed-width, so the name gets the remainder.
+	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(m.workspaceTag(item.Workspace))
+	if flag := aggregateRowFlag(item); flag != "" {
+		right = overlay.Style(rowBg).Foreground(pal.FgMute).Render(flag+"  ") + right
+	}
+	if dir := aggregateShortCWD(item.CWD); dir != "" {
+		right = overlay.Style(rowBg).Foreground(pal.FgDim).Render(dir+"  ") + right
+	}
+
+	// The focused pane is marked in the accent rather than with the asterisk it
+	// used to wear jammed against its name, which read as part of the name.
+	mark, markW := "  ", 2
+	if state := item.Window.AgentState; agentStateIndicator(state) != "" {
+		mark = overlay.Style(rowBg).Foreground(agentGlyphColor(state, pal)).
+			Bold(sidebarAttention(state)).Render(agentStateIndicator(state)) + " "
+	} else if item.IsFocused {
+		mark = overlay.Style(rowBg).Foreground(pal.Accent).Render(accentMark()) + " "
+	}
+
+	avail := max(width-lipgloss.Width(right)-markW-3, 1)
+	nameColor := pal.FgDim
+	if selected {
+		nameColor = pal.Fg
+	}
+	left := mark + overlay.Style(rowBg).Foreground(nameColor).Bold(selected).
+		Render(overlay.Truncate(item.Title, avail))
+
+	gap := max(width-lipgloss.Width(left)-lipgloss.Width(right)-1, 1)
+	return " " + left + overlay.Style(rowBg).Render(strings.Repeat(" ", gap)) + right
+}
+
+// aggregateRowFlag names a window that is not simply sitting in its layout.
+// Minimized wins over floating: a minimized pane is not on screen at all, which
+// is the more surprising of the two to find in a list of windows.
+func aggregateRowFlag(item AggregateViewItem) string {
+	switch {
+	case item.IsMinimized:
+		return "min"
+	case item.IsFloating:
+		return "float"
+	default:
+		return ""
+	}
+}
+
+// aggregateShortCWD is the tail of a working directory, which is the part that
+// tells two shells apart. The home directory reads as "~" the way every shell
+// prompt writes it, and an unknown cwd (every platform but Linux) is no column
+// at all rather than an empty one.
+func aggregateShortCWD(cwd string) string {
+	if cwd == "" {
+		return ""
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if cwd == home {
+			return "~"
 		}
-		treeRows = append(treeRows, treeRow{text: fmt.Sprintf("Workspace %d: %d windows%s", g.Workspace, g.WindowCount, attached)})
-
-		for ii := range g.Items {
-			item := &g.Items[ii]
-			selected := flatIdx == selectedFlatIdx
-			if selected {
-				selectedItem = item
-			}
-
-			// Cells, not bytes: a byte cut lands inside a multi-byte rune.
-			title := overlay.Truncate(item.Title, max(treeWidth-18, 10))
-			mark := " "
-			if item.IsFocused {
-				mark = "*"
-			}
-			flags := ""
-			if item.IsMinimized {
-				flags = " [min]"
-			}
-			if item.IsFloating {
-				flags += " [float]"
-			}
-			dims := fmt.Sprintf("[%dx%d]", item.Width, item.Height)
-			line := fmt.Sprintf("  %d: %s%s %s%s", item.WindowIndex, title, mark, dims, flags)
-			treeRows = append(treeRows, treeRow{text: line, selected: selected})
-			flatIdx++
+		if rest, ok := strings.CutPrefix(cwd, home+string(filepath.Separator)); ok {
+			cwd = "~" + string(filepath.Separator) + rest
 		}
 	}
-
-	if selectedItem == nil && selectedFlatIdx >= 0 && selectedFlatIdx < len(filtered) {
-		selectedItem = &filtered[selectedFlatIdx]
+	if lipgloss.Width(cwd) <= aggregateViewCWDMax {
+		return cwd
 	}
-
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(pal.Accent)
-	selectedStyle := lipgloss.NewStyle().Background(pal.RowSel).Foreground(pal.Fg).Bold(true)
-	normalStyle := lipgloss.NewStyle().Foreground(pal.FgDim)
-	dimStyle := lipgloss.NewStyle().Foreground(pal.FgMute)
-
-	var treeContent strings.Builder
-	if query := m.AggregateViewQuery; query != "" {
-		treeContent.WriteString(lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true).Render("Filter ") +
-			normalStyle.Render(truncateString(query, max(treeWidth-7, 1))) + "\n")
-	} else {
-		header := fmt.Sprintf("Choose window (%d total)", len(items))
-		if treeWidth < lipgloss.Width(header) {
-			header = fmt.Sprintf("%d windows", len(items))
-		}
-		treeContent.WriteString(lipgloss.NewStyle().Bold(true).Foreground(pal.Fg).Render(truncateString(header, treeWidth)) + "\n")
-	}
-	if len(filtered) == 0 {
-		treeContent.WriteString(dimStyle.Italic(true).Render(truncateString("(no matching windows)", treeWidth)) + "\n")
-	}
-
-	startRow := 0
-	windowRowIdx := 0
-	for ri, r := range treeRows {
-		if !r.selected && windowRowIdx < m.AggregateViewScroll && !strings.HasPrefix(r.text, "Workspace") {
-			windowRowIdx++
-			continue
-		}
-		if strings.HasPrefix(r.text, "Workspace") {
-			continue
-		}
-		if windowRowIdx >= m.AggregateViewScroll {
-			for si := ri; si >= 0; si-- {
-				if strings.HasPrefix(treeRows[si].text, "Workspace") {
-					startRow = si
-					break
-				}
-			}
+	// Cut from the left, and cut at a separator. The leaf is what identifies the
+	// directory and the ellipsis says the path goes on above it, but a cut taken
+	// mid-segment lands in the middle of whatever the segment is called, and on a
+	// path with a hash in it that is a row of noise where the context should be.
+	segs := strings.Split(cwd, string(filepath.Separator))
+	tail := ""
+	for i := len(segs) - 1; i >= 0; i-- {
+		next := string(filepath.Separator) + segs[i] + tail
+		if lipgloss.Width(next)+1 > aggregateViewCWDMax {
 			break
 		}
-		windowRowIdx++
+		tail = next
 	}
-
-	linesRendered := 0
-	for ri := startRow; ri < len(treeRows) && linesRendered < maxTreeLines; ri++ {
-		r := treeRows[ri]
-		// The tree is a fixed-width column: a row longer than it would be
-		// wrapped by lipgloss onto a second line, pushing the pane and the box
-		// around it past the height they were given.
-		text := truncateString(r.text, treeWidth)
-		switch {
-		case strings.HasPrefix(r.text, "Workspace"):
-			treeContent.WriteString(headerStyle.Render(text) + "\n")
-		case r.selected:
-			treeContent.WriteString(selectedStyle.Render(text) + "\n")
-		default:
-			treeContent.WriteString(normalStyle.Render(text) + "\n")
-		}
-		linesRendered++
+	if tail == "" {
+		// One segment on its own is longer than the column, so there is no
+		// separator to cut at and the leaf itself has to give.
+		return "…" + overlay.Truncate(segs[len(segs)-1], aggregateViewCWDMax-1)
 	}
-
-	var previewContent strings.Builder
-	if selectedItem != nil && selectedItem.Window != nil && selectedItem.Window.Terminal != nil {
-		w := selectedItem.Window
-		w.RLockIO()
-		raw := w.Terminal.String()
-		w.RUnlockIO()
-
-		previewContent.WriteString(lipgloss.NewStyle().Bold(true).Foreground(pal.Fg).Render(truncateString(selectedItem.Title, max(previewWidth-12, 4))) +
-			dimStyle.Render(fmt.Sprintf(" [%dx%d]", w.Width, w.Height)) + "\n")
-		previewContent.WriteString(dimStyle.Render(strings.Repeat("─", previewWidth)) + "\n")
-
-		lines := strings.Split(raw, "\n")
-		previewLines := max(totalHeight-4, 3)
-		start := 0
-		if len(lines) > previewLines {
-			start = len(lines) - previewLines
-		}
-		for i := start; i < len(lines) && i < start+previewLines; i++ {
-			// Live window output, measured in cells rather than bytes: a row
-			// wider than the pane wraps and grows the box past its own height.
-			previewContent.WriteString(truncateToWidth(lines[i], previewWidth) + "\n")
-		}
-	} else if selectedItem != nil {
-		previewContent.WriteString(lipgloss.NewStyle().Bold(true).Foreground(pal.Fg).Render(truncateString(selectedItem.Title, previewWidth)) + "\n")
-		previewContent.WriteString(dimStyle.Render("(no content)") + "\n")
-	}
-
-	hintText := "↑↓ navigate   ⏎ jump   esc close"
-	if treeWidth < lipgloss.Width(hintText) {
-		hintText = "↑↓ ⏎ esc"
-	}
-	hint := dimStyle.Render(truncateString(hintText, treeWidth))
-	treeContent.WriteString(hint)
-
-	treePane := lipgloss.NewStyle().Width(treeWidth).Height(totalHeight).Render(treeContent.String())
-	combined := treePane
-	if showPreview {
-		previewPane := lipgloss.NewStyle().
-			Width(previewWidth).Height(totalHeight).
-			BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(pal.FgMute).
-			PaddingLeft(1).Render(previewContent.String())
-		combined = lipgloss.JoinHorizontal(lipgloss.Top, treePane, previewPane)
-	}
-
-	// A solid lipgloss box (whose Background lipgloss keeps intact across the
-	// inner fg-only styles) rather than the manual-fill panel, so the tree/live
-	// preview do not develop transparent holes.
-	box := lipgloss.NewStyle().
-		Width(totalWidth).
-		Border(getBorder()).
-		BorderForeground(pal.Accent).
-		Background(pal.Surface).
-		Padding(0, 1).
-		Render(combined)
-
-	w, h := lipgloss.Width(box), lipgloss.Height(box)
-	geo := overlay.Geometry{Width: w, Height: h, TitleBar: overlay.Rect{X0: 0, Y0: 0, X1: w, Y1: 1}}
-	return box, geo, nil
+	return "…" + tail
 }

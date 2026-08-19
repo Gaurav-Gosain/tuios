@@ -181,6 +181,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.SessionSwitcherSelected = idx
 	case "workspace":
 		m.WorkspaceSwitcherSelected = idx
+	case "aggregate":
+		m.AggregateViewSelected = idx
 	case "layout":
 		m.LayoutPickerSelected = idx
 	case "quit":
@@ -321,6 +323,12 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "workspace":
 		m.WorkspaceSwitcherSelected = row.Idx
 		m.workspaceSwitcherActivate(row.Idx)
+	case "aggregate":
+		// The picker used to return no hit rows at all, so the one overlay whose
+		// entire purpose is choosing a window was the one that could not be
+		// clicked.
+		m.AggregateViewSelected = row.Idx
+		m.AggregateViewJump(row.Idx)
 	case "layout":
 		m.LayoutPickerSelected = row.Idx
 		m.layoutPickerActivate(row.Idx)
