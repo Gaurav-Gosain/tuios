@@ -9,11 +9,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// The strip carries a second list under the spine: the agents group, pinned to
-// the bottom above the controls and fenced off by a rule. These pin what it
-// lists, in what order, what it looks like when there is nothing to list (the
-// usual case, which has to stay silent), and what it does when there are more
-// agents than lines.
+// The strip carries a third list under the sessions and the terminals: the
+// agents group, headed by its own name and listing what wants a human somewhere
+// the two lists above it are not already showing. These pin what it lists, in
+// what order, what it looks like when there is nothing to list (the usual case,
+// which has to stay silent), and what it does when there are more agents than
+// lines.
 
 // agentStripOS is a collapsed rail over one agent of every rank: an errored and
 // a blocked pane in another session, one working and one finished-unread in the
@@ -81,27 +82,29 @@ func stripNavWindows(m *OS, kind sidebarRowKind) []string {
 }
 
 // TestStripStaysSilentWithNoAgents is the state the group is judged on, because
-// it is the usual one: no rule, no rows, no reserved hole. The strip is exactly
-// the spine it was before the group existed.
+// it is the usual one: no header, no rows, no reserved hole. The strip is
+// exactly the two lists it carries when nothing wants anything.
 func TestStripStaysSilentWithNoAgents(t *testing.T) {
 	m, tree := noAgentStripOS(t, 120, 20)
 	lines := railPlain(t, m, tree)
 	rule := config.GetWindowBorderLeft()
 
 	want := []string{
-		" +" + rule, // the add, on the head line the spine starts under
+		"  " + rule,
+		"+s" + rule,
 		"▎·" + rule,
-		"  " + rule,
 		" ·" + rule,
-		"  " + rule,
 		" ·" + rule,
+		"+t" + rule,
+		"▎·" + rule,
+		" ■" + rule, // the finished pane the group itself drops
 	}
 	for i, w := range want {
 		if lines[i] != w {
 			t.Errorf("line %d = %q, want %q\n%s", i, lines[i], w, strings.Join(lines, "\n"))
 		}
 	}
-	// Nothing between the spine and the way out at the bottom.
+	// Nothing between the stack and the way out at the bottom.
 	tail := []string{" »" + rule, "  " + rule}
 	for i, w := range tail {
 		if got := lines[len(lines)-len(tail)+i]; got != w {
@@ -113,8 +116,8 @@ func TestStripStaysSilentWithNoAgents(t *testing.T) {
 			t.Errorf("line %d = %q, want empty band all the way to the controls", i, lines[i])
 		}
 	}
-	if joined := strings.Join(lines, "\n"); strings.Contains(joined, "─") {
-		t.Errorf("the quiet strip drew the group's rule with no group behind it:\n%s", joined)
+	if joined := strings.Join(lines, "\n"); strings.Contains(joined, " a") {
+		t.Errorf("the quiet strip drew the group's header with no group behind it:\n%s", joined)
 	}
 	for _, n := range m.SidebarNav {
 		if n.Kind == sidebarRowAgent {
@@ -125,8 +128,9 @@ func TestStripStaysSilentWithNoAgents(t *testing.T) {
 
 // TestStripGroupListsWhatWantsAHumanInTheRailsOwnOrder: the group is the
 // expanded agents section folded, so it cannot rank two panes differently from
-// the open rail, and it drops the two ranks that would stand a permanent group
-// under the spine saying nothing.
+// the open rail. It drops the two ranks that would stand a permanent group
+// under the others saying nothing, and the panes the terminals list above it is
+// already drawing.
 func TestStripGroupListsWhatWantsAHumanInTheRailsOwnOrder(t *testing.T) {
 	m, tree := agentStripOS(t, 120, 40)
 	m.sidebarPanelLinesForTree(tree)
@@ -135,9 +139,9 @@ func TestStripGroupListsWhatWantsAHumanInTheRailsOwnOrder(t *testing.T) {
 		strip = append(strip, r.WindowID)
 	}
 
-	want := []string{"eeeeeeee5555", "dddddddd4444", "aaaaaaaa1111", "bbbbbbbb2222"}
+	want := []string{"eeeeeeee5555", "dddddddd4444"}
 	if strings.Join(strip, ",") != strings.Join(want, ",") {
-		t.Errorf("the group lists %v, want blocked, then working, then done-unread", strip)
+		t.Errorf("the group lists %v, want the errored pane elsewhere, then the blocked one", strip)
 	}
 
 	// The same list the expanded rail publishes, minus the ranks the strip drops,
@@ -160,35 +164,42 @@ func TestStripGroupListsWhatWantsAHumanInTheRailsOwnOrder(t *testing.T) {
 			t.Errorf("the group kept %q; a reviewed or idle agent has nothing to say at two columns", id)
 		}
 	}
+	for _, id := range []string{"aaaaaaaa1111", "bbbbbbbb2222"} {
+		if strings.Contains(strings.Join(strip, ","), id) {
+			t.Errorf("the group repeated %q; the terminals list above it already draws that pane", id)
+		}
+	}
 }
 
-// TestStripGroupSitsUnderARuleAtTheBottom: the group is told apart from the
-// spine by a drawn boundary and by where it is anchored, not by a second
-// interval, because one interval is what makes the whole strip scan as lists.
-func TestStripGroupSitsUnderARuleAtTheBottom(t *testing.T) {
+// TestStripGroupSitsUnderItsOwnHeader: the group is told apart from the two
+// lists above it by the header naming it, not by a second interval, because one
+// interval is what makes the whole strip scan as lists. It follows the
+// terminals list directly, with no gap and no control between them.
+func TestStripGroupSitsUnderItsOwnHeader(t *testing.T) {
 	m, tree := agentStripOS(t, 120, 24)
 	lines := railPlain(t, m, tree)
 	rule := config.GetWindowBorderLeft()
 
-	// Four agents, spaced like the spine, over the blank that holds the group off
-	// the control, then the toggle. Nothing else stands between the group and the
-	// way out: a control under this list would read as belonging to it.
-	tail := []string{
-		"──" + rule,
-		" ×" + rule, "  " + rule,
-		" ▲" + rule, "  " + rule,
-		"▎●" + rule, "  " + rule, // the working pane is the focused one
-		" ■" + rule, "  " + rule,
-		" »" + rule,
-		"  " + rule,
+	want := []string{
+		" a" + rule, // the section's own name, cut to the strip's one column
+		" ×" + rule, // the errored pane in the other session
+		" ▲" + rule, // the blocked one under it
 	}
-	for i, w := range tail {
-		if got := lines[len(lines)-len(tail)+i]; got != w {
-			t.Errorf("tail line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
+	at := lineOf(lines, " a")
+	if at < 0 {
+		t.Fatalf("the strip drew no agents header:\n%s", strings.Join(lines, "\n"))
+	}
+	for i, w := range want {
+		if got := lines[at+i]; got != w {
+			t.Errorf("group line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
 		}
 	}
-	// The rule is furniture, so it takes no target; every mark under it does.
-	if got := len(stripGroupRows(m)); got != 4 {
+	if got := lines[at+len(want)]; got != "  "+rule {
+		t.Errorf("the line after the group is %q, want the rail below the stack", got)
+	}
+	// The header carries no control, so it takes no target; every mark under it
+	// does.
+	if got := len(stripGroupRows(m)); got != 2 {
 		t.Errorf("%d agent rows recorded, want one per mark drawn", got)
 	}
 }
@@ -210,8 +221,8 @@ func TestStripGroupTargetsOwnTheirSlots(t *testing.T) {
 			railX0 = m.GetRenderWidth() - w
 		}
 		rows := stripGroupRows(m)
-		if len(rows) != 4 {
-			t.Fatalf("%s: %d agent rows, want 4", pos, len(rows))
+		if len(rows) != 2 {
+			t.Fatalf("%s: %d agent rows, want 2", pos, len(rows))
 		}
 		for _, r := range rows {
 			h, ok := m.sidebarRowAt(railX0, r.Y0)
@@ -279,27 +290,49 @@ func TestStripGroupTooltipNamesTheAgent(t *testing.T) {
 func TestStripGroupYieldsToTheSpineWhenShort(t *testing.T) {
 	for _, tc := range []struct {
 		region, sessions, agents int
-		spine, group, rule       int
+		wantSessions, wantAgents int
+		wantGroups               int
 	}{
-		{20, 3, 2, 15, 4, 1}, // room to spare: the spine keeps the slack
-		{9, 3, 2, 4, 4, 1},   // exactly both
-		{6, 3, 2, 3, 2, 1},   // tight: the group takes half and no more
-		{4, 3, 4, 2, 1, 1},   // one line of group left
-		{3, 3, 4, 3, 0, 0},   // no room for a rule and a mark: spine alone
-		{20, 3, 0, 20, 0, 0}, // no agents: no rule, no hole
+		{20, 3, 2, 3, 2, 2}, // room to spare: both lists whole
+		{8, 3, 2, 3, 2, 2},  // exactly both, headers included
+		{6, 3, 2, 1, 2, 2},  // tight: the longer list gives the row back
+		{5, 3, 2, 3, 0, 1},  // no room for a header and two marks: sessions alone
+		{20, 3, 0, 3, 0, 1}, // no agents: no group, no hole
 	} {
-		spine, group, rule := sidebarStripSplit(tc.region, tc.sessions, tc.agents)
-		if spine != tc.spine || group != tc.group || rule != tc.rule {
-			t.Errorf("split(region=%d s=%d a=%d) = %d/%d/%d, want %d/%d/%d",
-				tc.region, tc.sessions, tc.agents, spine, group, rule, tc.spine, tc.group, tc.rule)
+		groups := []sidebarStripGroup{
+			{kind: sidebarStripSession, noun: "session", total: tc.sessions},
 		}
-		if spine+group+rule > tc.region {
-			t.Errorf("split(region=%d s=%d a=%d) claims %d rows", tc.region, tc.sessions, tc.agents, spine+group+rule)
+		if tc.agents > 0 {
+			groups = append(groups, sidebarStripGroup{kind: sidebarStripAgent, noun: "agent", total: tc.agents})
+		}
+		placed := sidebarStripPlace(groups, 0, tc.region)
+		if len(placed) != tc.wantGroups {
+			t.Errorf("place(region=%d s=%d a=%d) kept %d groups, want %d",
+				tc.region, tc.sessions, tc.agents, len(placed), tc.wantGroups)
+			continue
+		}
+		got := map[sidebarStripRowKind]int{}
+		last := 0
+		for _, g := range placed {
+			got[g.kind] = g.shown()
+			last = max(last, g.end)
+			if g.moreY >= 0 {
+				last = max(last, g.moreY+1)
+			}
+		}
+		if got[sidebarStripSession] != tc.wantSessions || got[sidebarStripAgent] != tc.wantAgents {
+			t.Errorf("place(region=%d s=%d a=%d) drew %d sessions and %d agents, want %d and %d",
+				tc.region, tc.sessions, tc.agents, got[sidebarStripSession], got[sidebarStripAgent],
+				tc.wantSessions, tc.wantAgents)
+		}
+		if last > tc.region {
+			t.Errorf("place(region=%d s=%d a=%d) claims %d rows", tc.region, tc.sessions, tc.agents, last)
 		}
 	}
 
-	// Off the frame: eight agents on a rail with room for two of them keeps the
-	// sessions, packs what it can, and ends on the tail mark.
+	// Off the frame: eight agents in another session, on a rail with room for a
+	// few of them. The sessions and the terminals keep their rows, the group
+	// packs what it can, and it ends on the tail mark.
 	m, _ := sectionsTestOS(t, 120, 16)
 	m.SidebarCollapsed = true
 	var wins []sessiontree.WindowInput
@@ -307,16 +340,18 @@ func TestStripGroupYieldsToTheSpineWhenShort(t *testing.T) {
 		wins = append(wins, sessiontree.WindowInput{ID: string(rune('a'+i)) + "gent", AgentState: "working"})
 	}
 	tree := sessiontree.Build([]sessiontree.SessionInput{
-		{Name: "main", Attached: true, IsCurrent: true, Windows: wins},
-		{Name: "api"},
+		{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
+			{ID: "here1111", Title: "shell", Focused: true},
+		}},
+		{Name: "api", Windows: wins},
 	})
 	lines := railPlain(t, m, tree)
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, "⋮") {
 		t.Errorf("the overflowing group drew no tail mark:\n%s", joined)
 	}
-	if n := strings.Count(joined, "·"); n != 2 {
-		t.Errorf("the spine lost a session to the group: %d dots, want 2\n%s", n, joined)
+	if n := strings.Count(joined, "·"); n != 3 {
+		t.Errorf("a list lost a row to the group: %d dots, want the two sessions and the one pane\n%s", n, joined)
 	}
 	var tail sidebarStripRow
 	for _, r := range m.sidebarStripRows {
@@ -333,8 +368,9 @@ func TestStripGroupYieldsToTheSpineWhenShort(t *testing.T) {
 	}
 }
 
-// TestStripGroupASCIIAndMonochrome: the rule and the marks both have to survive
-// a terminal with no box drawing and one with no colour, because the group's
+// TestStripGroupASCIIAndMonochrome: the header and the marks both have to
+// survive a terminal with no box drawing and one with no colour, because the
+// group's
 // whole job is to be readable at a glance.
 func TestStripGroupASCIIAndMonochrome(t *testing.T) {
 	t.Run("ascii", func(t *testing.T) {
@@ -348,8 +384,8 @@ func TestStripGroupASCIIAndMonochrome(t *testing.T) {
 
 		m, tree := agentStripOS(t, 120, 24)
 		joined := strings.Join(railPlain(t, m, tree), "\n")
-		if strings.Contains(joined, "─") || !strings.Contains(joined, "--") {
-			t.Errorf("the ASCII group's rule is missing:\n%s", joined)
+		if !strings.Contains(joined, "a") {
+			t.Errorf("the ASCII group lost the name that tells it apart:\n%s", joined)
 		}
 		for _, glyph := range []string{"×", "▲", "●", "■", "▎"} {
 			if strings.Contains(joined, glyph) {
@@ -360,10 +396,10 @@ func TestStripGroupASCIIAndMonochrome(t *testing.T) {
 
 	t.Run("monochrome", func(t *testing.T) {
 		// Monochrome is the frame with every colour dropped: the marks differ by
-		// shape, the rule by being a glyph rather than a fill.
+		// shape, and the group by the name over it.
 		m, tree := agentStripOS(t, 120, 24)
 		joined := strings.Join(railPlain(t, m, tree), "\n")
-		for _, want := range []string{"──", "×", "▲", "●", "■"} {
+		for _, want := range []string{" a", "×", "▲", "●", "■"} {
 			if !strings.Contains(joined, want) {
 				t.Errorf("monochrome loses %q:\n%s", want, joined)
 			}

@@ -113,6 +113,28 @@ func sidebarTooltipSessionLabel(s sessiontree.Node) string {
 	return label
 }
 
+// sidebarTooltipTerminalLabel is what one row of the strip's terminals group
+// says in words: which pane it is, the workspace it went to when that is not
+// this one, and what it is doing if it is doing anything. The two cells carry
+// the focus mark and the state, so the name is the part only words can give.
+func sidebarTooltipTerminalLabel(e sidebarTerminalEntry) string {
+	sep := " · "
+	if overlay.UseASCII() {
+		sep = " - "
+	}
+	label := printableTitle(e.Title)
+	if label == "" {
+		label = "shell"
+	}
+	if e.Tag != "" {
+		label += sep + e.Tag
+	}
+	if e.State != "" {
+		label += sep + sidebarStateWords(e.State)
+	}
+	return label
+}
+
 // sidebarTooltipAgentLabel is what one row of the strip's agents group says in
 // words: which pane it is, whose session it is in when that is not this one,
 // which agent is running in it, what it is doing and for how long. The group's

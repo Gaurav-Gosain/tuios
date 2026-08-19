@@ -29,8 +29,11 @@ func TestStripMarksClearTheContrastFloor(t *testing.T) {
 		// more sessions than it has lines looked like a strip with exactly as
 		// many sessions as lines.
 		{"the tail mark", theme.Readable(pal.FgMute, pal.Panel), pal.Panel, 2.19},
-		// The strip's only two clickable things were its least visible marks.
+		// The strip's clickable things were its least visible marks.
 		{"a control at rest", theme.Readable(pal.FgMute, pal.Panel), pal.Panel, 2.19},
+		// The letter naming a list is what tells the three of them apart, so it
+		// is held to the same floor the "+" beside it is.
+		{"a group's name", theme.Readable(pal.FgMute, pal.Panel), pal.Panel, 2.19},
 		{"a control on a hovered row", theme.Readable(pal.FgMute, pal.Surface), pal.Surface, 1.81},
 		// A pane that has errored is the loudest thing the spine can say and was
 		// the least readable severity it could draw.
@@ -70,9 +73,10 @@ func TestTheAttachedSessionBarIsDeliberatelyUnderTheFloor(t *testing.T) {
 	}
 }
 
-// TestStripMarksKeepTheirHierarchy: the floor is a floor, not a flattening. A
-// control and a tail mark are quieter than a session, and lifting them to be
-// legible must not make them read as more sessions.
+// TestStripMarksKeepTheirHierarchy: the floor is a floor rather than a
+// flattening. A control, a group's name and a tail mark are all quieter than a
+// session, and lifting them to be legible must not make them read as more
+// sessions.
 func TestStripMarksKeepTheirHierarchy(t *testing.T) {
 	pal := theme.UI()
 	quiet := theme.ContrastRatio(theme.Readable(pal.FgMute, pal.Panel), pal.Panel)
@@ -85,10 +89,9 @@ func TestStripMarksKeepTheirHierarchy(t *testing.T) {
 
 // TestStripRulesAreVisibleFurniture. The text floor deliberately does not apply
 // to a hairline: a rule held to 4.5:1 would be louder than the marks it frames.
-// It still has to be on the screen, and at the notification rule's 1.06:1
-// neither of these was. The band's edge is called the only boundary that
-// survives a terminal with no background to give, and the group's divider is
-// the whole reason the agents group does not read as more sessions.
+// It still has to be on the screen, and at the notification rule's 1.06:1 it was
+// not. The band's edge is called the only boundary that survives a terminal with
+// no background to give, so it is the one that has to hold.
 func TestStripRulesAreVisibleFurniture(t *testing.T) {
 	pal := theme.UI()
 	// A rule has to beat the ground it is on by more than the ground beats the
@@ -99,7 +102,6 @@ func TestStripRulesAreVisibleFurniture(t *testing.T) {
 		fg, bg color.Color
 	}{
 		{"the band's edge", pal.FgMute, pal.Panel},
-		{"the agents divider", pal.FgMute, pal.Panel},
 	} {
 		got := theme.ContrastRatio(tc.fg, tc.bg)
 		if got <= band {

@@ -120,11 +120,12 @@ func panelSGR(t *testing.T) string {
 	return bgOf(lipgloss.NewStyle().Background(theme.UI().Panel).Render(" "))
 }
 
-// TestStripRestsAsABandWithASpine is the state that matters, because it is the
-// usual one: a Panel band the full height of the rail, the accent bar and a dim
-// dot for the attached session, one dot per other session at a fixed interval,
-// and the expand control. No badge, no digits, no fills.
-func TestStripRestsAsABandWithASpine(t *testing.T) {
+// TestStripRestsAsAStackOfNamedLists is the state that matters, because it is
+// the usual one: a Panel band the full height of the rail carrying one
+// contiguous stack under a pad. Each list is headed by its own name cut to one
+// column with its add control beside it, and the rail below the stack is empty
+// band. No badge, no digits, no fills, and no holes inside the stack.
+func TestStripRestsAsAStackOfNamedLists(t *testing.T) {
 	m, tree := quietStripOS(t, 120, 20)
 	lines := railPlain(t, m, tree)
 
@@ -133,22 +134,24 @@ func TestStripRestsAsABandWithASpine(t *testing.T) {
 	}
 	rule := config.GetWindowBorderLeft()
 	want := []string{
-		" +" + rule, // the add stands in the head's pad: no badge, no hole for one
+		"  " + rule, // the pad above the stack: no badge, no hole for one
+		"+s" + rule, // sessions, and the control that makes one
 		"▎·" + rule, // the attached session
-		"  " + rule,
 		" ·" + rule,
-		"  " + rule,
 		" ·" + rule,
+		"+t" + rule, // the shown session's panes, and the control that makes one
+		"▎·" + rule, // the focused pane
+		" ●" + rule, // the pane running something
 	}
 	for i, w := range want {
 		if lines[i] != w {
 			t.Errorf("resting line %d = %q, want %q\n%s", i, lines[i], w, strings.Join(lines, "\n"))
 		}
 	}
-	// The fixture has one pane working, so the bottom group carries it: the rule,
-	// the mark, the blank that holds the group off the control, then the toggle
-	// and the rail's last pad. The add is not down here: it belongs to the spine.
-	tail := []string{"──" + rule, " ●" + rule, "  " + rule, " »" + rule, "  " + rule}
+	// The only pane with anything to say is in the session the terminals list is
+	// already showing, so there is no agents group: the strip never draws one
+	// pane twice.
+	tail := []string{" »" + rule, "  " + rule}
 	for i, w := range tail {
 		if got := lines[len(lines)-len(tail)+i]; got != w {
 			t.Errorf("tail line %d = %q, want %q\n%s", i, got, w, strings.Join(lines, "\n"))
@@ -156,13 +159,48 @@ func TestStripRestsAsABandWithASpine(t *testing.T) {
 	}
 	for i := len(want); i < len(lines)-len(tail); i++ {
 		if lines[i] != "  "+rule {
-			t.Errorf("line %d = %q, want the slack between the spine and the group to be empty band", i, lines[i])
+			t.Errorf("line %d = %q, want the rail under the stack to be empty band", i, lines[i])
 		}
 	}
 	// The digits are gone: at three columns a window count is trivia, and it was
 	// the main source of the mixed vocabulary that stopped the marks scanning.
 	if got := strings.Join(lines, ""); strings.ContainsAny(got, "0123456789") {
 		t.Errorf("the resting strip prints a digit:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+// TestStripStackHasNoHolesInIt is the complaint this round answers, stated as
+// the rule it broke: every drawn row of the strip's stack is adjacent to the
+// next one. Marks spread down a tall column with blank rows between them read
+// as a broken rail rather than as a sparse one.
+func TestStripStackHasNoHolesInIt(t *testing.T) {
+	for _, h := range []int{45, 30, 20, 12} {
+		m, tree := stripOS(t, 120, h)
+		lines := railPlain(t, m, tree)
+
+		marked := func(i int) bool {
+			return strings.TrimSpace(strings.TrimSuffix(lines[i], config.GetWindowBorderLeft())) != ""
+		}
+		first := 0
+		for first < len(lines) && !marked(first) {
+			first++
+		}
+		end := first
+		for end < len(lines) && marked(end) {
+			end++
+		}
+		// The toggle is pinned to the rail's foot, so it is the one mark allowed
+		// to stand apart from the stack. Anything else below it is a row the
+		// stack left a hole above.
+		glyph, _ := m.sidebarCollapseGlyph(sidebarVariantGlyph)
+		for i := end; i < len(lines); i++ {
+			if marked(i) && !strings.Contains(lines[i], glyph) {
+				t.Errorf("h=%d: line %d stands below the stack with a hole above it:\n%s", h, i, strings.Join(lines, "\n"))
+			}
+		}
+		if !strings.Contains(strings.Join(lines, "\n"), glyph) {
+			t.Errorf("h=%d: the strip drew no toggle:\n%s", h, strings.Join(lines, "\n"))
+		}
 	}
 }
 
@@ -262,19 +300,19 @@ func TestStripBadgeLeadsTheSpine(t *testing.T) {
 	if want := "2" + agentStateIndicator("errored") + rule; lines[1] != want {
 		t.Errorf("line 1 = %q, want the badge %q", lines[1], want)
 	}
-	// The add stands in the pad under the badge and does its job: the alarm is
-	// held off the list by the line that says what the list is for, and the spine
-	// starts exactly where it did before there was a control on the strip at all.
-	if lines[2] != " +"+rule {
-		t.Errorf("line 2 = %q, want the add between the badge and the spine", lines[2])
+	// The stack starts directly under the alarm, headed by the list it is a
+	// header for: the header is what holds the badge off the marks, so the alarm
+	// costs the stack no line of its own.
+	if lines[2] != "+s"+rule {
+		t.Errorf("line 2 = %q, want the sessions header under the badge", lines[2])
 	}
 	if lines[3] != "▎·"+rule {
-		t.Errorf("line 3 = %q, want the spine to start under the badge's pad", lines[3])
+		t.Errorf("line 3 = %q, want the sessions list to start under its header", lines[3])
 	}
 
 	quiet, qtree := quietStripOS(t, 120, 20)
-	if got := railPlain(t, quiet, qtree)[1]; got != "▎·"+rule {
-		t.Errorf("with nothing blocked line 1 = %q, want the spine, not a reserved hole", got)
+	if got := railPlain(t, quiet, qtree)[1]; got != "+s"+rule {
+		t.Errorf("with nothing blocked line 1 = %q, want the stack, not a reserved hole", got)
 	}
 }
 
@@ -312,40 +350,31 @@ func TestStripBadgeRollsUpTheWorstSeverity(t *testing.T) {
 	}
 }
 
-// TestStripSpineKeepsOneShapeAtOneInterval: one glyph per session, always the
-// same column, one blank row between marks. The interval is what makes a column
-// of marks read as a list rather than as scattered debris, which was the
-// complaint.
-func TestStripSpineKeepsOneShapeAtOneInterval(t *testing.T) {
+// TestStripListsKeepOneShapeAtOneInterval: one glyph per item, always the same
+// column, one row each with nothing between them. One interval across every
+// list is what makes the stack read as one object rather than as scattered
+// debris, which was the complaint.
+func TestStripListsKeepOneShapeAtOneInterval(t *testing.T) {
 	m, tree := quietStripOS(t, 120, 20)
 	lines := railPlain(t, m, tree)
 
-	// The spine is everything above the group's rule, which is the boundary the
-	// two lists are told apart by.
-	spine := lines
-	for i, l := range lines {
-		if strings.Contains(l, "──") {
-			spine = lines[:i]
-			break
-		}
+	// The sessions list is the rows between its own header and the next one.
+	head := lineOf(lines, "+s")
+	next := lineOf(lines, "+t")
+	if head < 0 || next < 0 {
+		t.Fatalf("the strip drew no headers:\n%s", strings.Join(lines, "\n"))
 	}
-
-	// The head's add is a control standing in a pad, not a mark: what is under
-	// test is the rhythm the session marks keep under it.
-	var marks []int
-	for i, l := range spine {
-		body := l[:len(l)-len(config.GetWindowBorderLeft())]
-		if strings.TrimSpace(body) == "" || strings.Contains(body, sidebarAddGlyph) {
-			continue
-		}
-		marks = append(marks, i)
-	}
+	marks := lines[head+1 : next]
 	if len(marks) != 3 {
-		t.Fatalf("the spine drew %d marks, want one per session:\n%s", len(marks), strings.Join(lines, "\n"))
+		t.Fatalf("the sessions list drew %d marks, want one per session:\n%s", len(marks), strings.Join(lines, "\n"))
 	}
-	for i := 1; i < len(marks); i++ {
-		if marks[i]-marks[i-1] != 2 {
-			t.Errorf("marks %d and %d are %d rows apart, want the fixed interval of 2", i-1, i, marks[i]-marks[i-1])
+	for i, l := range marks {
+		body := strings.TrimSuffix(l, config.GetWindowBorderLeft())
+		if strings.TrimSpace(body) == "" {
+			t.Errorf("session mark %d is a blank row: %q", i, l)
+		}
+		if len([]rune(body)) != 2 {
+			t.Errorf("session mark %d is %d cells wide, want the strip's two", i, len([]rune(body)))
 		}
 	}
 }
@@ -355,27 +384,28 @@ func TestStripSpineKeepsOneShapeAtOneInterval(t *testing.T) {
 // says so with a tail mark only once even packed rows have run out.
 func TestStripSpacingCollapsesBeforeMarksDrop(t *testing.T) {
 	for _, tc := range []struct {
-		region, sessions int
-		shown, interval  int
-		more             bool
+		rows, total int
+		shown       int
+		more        bool
 	}{
-		{20, 3, 3, 2, false}, // room to spare: spaced
-		{5, 3, 3, 2, false},  // exactly the spaced height
-		{4, 3, 3, 1, false},  // one short: packed, nothing lost
-		{3, 3, 3, 1, false},  // packed exactly
-		{2, 3, 1, 1, true},   // out of room: one mark and a tail
-		{0, 3, 0, 1, false},  // no region at all
-		{5, 0, 0, 1, false},  // no sessions
+		{20, 3, 3, false}, // room to spare
+		{3, 3, 3, false},  // exactly the list's height
+		{2, 3, 1, true},   // out of room: one mark and a tail
+		{1, 3, 0, true},   // a row that can only say it was cut
+		{0, 3, 0, false},  // no rows at all
+		{5, 0, 0, false},  // nothing in the list
 	} {
-		shown, interval, more := sidebarStripPlan(tc.region, tc.sessions)
-		if shown != tc.shown || interval != tc.interval || more != tc.more {
-			t.Errorf("plan(region=%d sessions=%d) = %d/%d/%v, want %d/%d/%v",
-				tc.region, tc.sessions, shown, interval, more, tc.shown, tc.interval, tc.more)
+		shown, more := sidebarStripPlan(tc.rows, tc.total)
+		if shown != tc.shown || more != tc.more {
+			t.Errorf("plan(rows=%d total=%d) = %d/%v, want %d/%v",
+				tc.rows, tc.total, shown, more, tc.shown, tc.more)
 		}
-		// The last mark spends no trailing blank, so the spine's own span is one
-		// interval short of the naive product.
-		if span := max(shown*interval-(interval-1), 0); span > tc.region {
-			t.Errorf("plan(region=%d sessions=%d) spans %d rows", tc.region, tc.sessions, span)
+		span := shown
+		if more {
+			span++
+		}
+		if span > tc.rows {
+			t.Errorf("plan(rows=%d total=%d) spans %d rows", tc.rows, tc.total, span)
 		}
 	}
 }
@@ -389,11 +419,11 @@ func TestStripPacksThenSaysWhatItCut(t *testing.T) {
 	rule := config.GetWindowBorderLeft()
 
 	want := []string{
-		" +" + rule, // the add, standing in the head's pad rather than on a line
+		"  " + rule,
+		"+s" + rule,
 		"▎·" + rule,
 		" ·" + rule,
-		" ·" + rule,
-		" ⋮" + rule, // the five it had no line for
+		" ⋮" + rule, // the six it had no line for
 		" »" + rule,
 		"  " + rule,
 	}
