@@ -238,11 +238,12 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// focus) could never toggle it back off. Both are left to fall through to the
 	// mode handlers below, which already route the whole chord; PrefixActive
 	// stays set for sub-prefixes too, so ctrl+b w 2 works from the rail as well.
-	// The help overlay is the other exception, for the same reason as the modals
-	// above: the rail's own help key opens it, and the rail swallows what it does
-	// not bind, so leaving it in front would strand the overlay's scroll, search
-	// and close keys behind an esc that also drops the rail's focus.
-	if o.SidebarFocused && !o.ShowHelp && !o.PrefixActive && !isLeaderKey(msg) {
+	// The help overlay and the command palette are the other exceptions, for the
+	// same reason as the modals above: the rail's own keys open both, and the rail
+	// swallows what it does not bind, so leaving it in front would strand the
+	// overlay's scroll, search and close keys (and every character of a palette
+	// query) behind an esc that also drops the rail's focus.
+	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.PrefixActive && !isLeaderKey(msg) {
 		return HandleSidebarKey(msg, o)
 	}
 

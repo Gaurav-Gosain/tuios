@@ -550,11 +550,15 @@ type OS struct {
 	// the wheel scrolls the one under the pointer and no header can be scrolled
 	// away; sidebarSectionY is where each section was drawn, which is how a
 	// wheel event finds its section. Scrolls are clamped by the next render.
-	SidebarHits     []sidebarRowHit
-	SidebarScrollS  int
-	SidebarScrollT  int
-	SidebarScrollA  int
-	sidebarSectionY [sidebarSectionCount][2]int
+	SidebarHits    []sidebarRowHit
+	SidebarScrollS int
+	SidebarScrollT int
+	SidebarScrollA int
+	// sidebarAgentAnchor keeps the agents section's viewport on the row it was
+	// left on rather than on the index that row happened to have, since that
+	// section resorts itself on live agent state. See sidebar_anchor.go.
+	sidebarAgentAnchor sidebarScrollAnchor
+	sidebarSectionY    [sidebarSectionCount][2]int
 	// sidebarStripRows is what the collapsed strip drew on each of its lines,
 	// recorded by the renderer as it draws. The hover tooltip reads it to name
 	// what is under the pointer, including the badge, which is a readout rather

@@ -82,6 +82,12 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarReorderCursor(-1)
 	case sidebarActSection:
 		o.SidebarCycleSection()
+	case sidebarActPalette:
+		// The rail lists what exists; the palette finds it by name across every
+		// session and filters it by who needs a human. Rail focus is kept, so
+		// closing the palette comes back to the row the cursor was on; a row that
+		// actually relocates the user drops it on the way out.
+		o.OpenCommandPalette()
 	case sidebarActAgentFilter:
 		o.SidebarCycleAgentsFilter()
 	case sidebarActAgentSort:

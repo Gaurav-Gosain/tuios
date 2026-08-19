@@ -290,6 +290,9 @@ type sidebarAgentEntry struct {
 	DoneSeen    bool
 	StateAt     int64
 	WindowIndex int
+	// Harness is which agent is running in the pane, as the detecting manifest
+	// or the reporting source named it, empty when nothing named one.
+	Harness string
 	// SessionLabel is what to print for SessionID: the session's display name
 	// when it has one. Identity keys the row, the label only fronts it.
 	SessionLabel string
@@ -761,6 +764,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	terminals := m.sidebarTerminals(sessions, shown)
 	agents, agentsTotal := m.sidebarFilterAgents(m.sidebarAgents(sessions))
 	m.sidebarSortAgents(agents)
+	// The one section whose order moves on its own, so the one whose viewport is
+	// anchored to a row rather than to an index. Before the cursor's auto-scroll
+	// below, which gets the last word on what is on screen.
+	m.sidebarReanchorAgents(agents)
 	// A filter that hides everything leaves one row saying so and offering the
 	// way back, because a section that vanished on a control the user set two
 	// days ago reads as "no agents anywhere", which is the opposite of the truth.
@@ -851,6 +858,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		start[s], count[s], hidden[s] = sidebarWindowSection(*scroll[s], rowsIn[s], place[s].lines)
 		*scroll[s] = start[s]
 	}
+	m.sidebarRecordAgentAnchor(agents, start[sidebarSectionAgents], count[sidebarSectionAgents])
 
 	// Hover, derived from the last motion seen inside the band, resolved against
 	// the placement above. Hover yields entirely to a drag.
@@ -1206,6 +1214,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				State:        win.AgentState,
 				DoneSeen:     win.DoneSeen,
 				StateAt:      win.StateAt,
+				Harness:      win.Harness,
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,
 			})
@@ -1537,9 +1546,52 @@ func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, hovered b
 		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, sidebarNameAvail(cw, 0))), cw, rowBg)
 }
 
-// sidebarAgentRow renders one row of the agents section: state glyph, pane name
-// (session-qualified when the pane lives in another session), and, in the full
-// variant, how long it has been in its state, right-aligned.
+// sidebarHarnessMax caps a harness label so the agent it names can never crowd
+// out the pane the row is actually about.
+const sidebarHarnessMax = 8
+
+// sidebarHarnessLabel is the short form of a harness id, for a row that has one
+// name's worth of room and two names to put in it. The bundled manifests spell
+// the product out ("claude-code", "gemini-cli", "cursor-agent"); the first
+// segment is the agent's identity and the rest is the shape it ships in, which
+// is not a distinction anyone is drawing on a 28-column rail.
+func sidebarHarnessLabel(harness string) string {
+	id, _, _ := strings.Cut(printableTitle(harness), "-")
+	return overlay.Truncate(strings.ToLower(id), sidebarHarnessMax)
+}
+
+// sidebarAgentPrefix is the muted context in front of an agent row's name: which
+// session the pane is in when it is not this one, and which agent is running in
+// it. It returns what fits, including the trailing separator, or "".
+//
+// Two facts compete for the same cells, so they yield in order. The session goes
+// first because the row's gutter already carries a tint for a pane that is
+// somewhere else, while nothing else on the row says which agent it is. Whatever
+// survives that is still dropped whole before a single cell of the pane name
+// goes, which is the rule the session prefix has always followed.
+func sidebarAgentPrefix(session, harness, name string, avail int) string {
+	var parts []string
+	if session != "" {
+		parts = append(parts, session)
+	}
+	// A pane running an agent is usually already labelled with its command, so a
+	// row reading "claude/claude" would spend half its width saying one thing
+	// twice. The prefix earns its cells only when it adds a name.
+	if h := sidebarHarnessLabel(harness); h != "" && !strings.EqualFold(h, name) {
+		parts = append(parts, h)
+	}
+	for len(parts) > 0 {
+		if s := strings.Join(parts, "/") + "/"; lipgloss.Width(s)+2 <= avail {
+			return s
+		}
+		parts = parts[1:]
+	}
+	return ""
+}
+
+// sidebarAgentRow renders one row of the agents section: state glyph, the agent
+// and pane it names (session-qualified when the pane lives in another session),
+// and, in the full variant, how long it has been in its state, right-aligned.
 func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, hovered bool) string {
 	var rowBg color.Color
 	fg := pal.FgDim
@@ -1558,11 +1610,9 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// A pane in another session carries that session as a prefix. It is context,
 	// not the answer, so it renders muted against the full-strength pane name and
 	// gives its cells up first when the row runs out of room.
-	prefix := ""
+	session := ""
 	if e.Foreign {
-		if s := printableTitle(e.SessionLabel); s != "" {
-			prefix = s + "/"
-		}
+		session = printableTitle(e.SessionLabel)
 	}
 
 	// How long the pane has been in this state, in place of a state word: the
@@ -1584,12 +1634,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		nameStyle = nameStyle.Bold(true)
 		timeFg = sidebarStateColor(e.State, e.DoneSeen, pal)
 	}
-	// The prefix yields before the name does: with room for both it is drawn in
-	// full, and it is dropped entirely before a single cell of the pane name goes.
-	shown := prefix
-	if lipgloss.Width(shown)+2 > avail {
-		shown = ""
-	}
+	shown := sidebarAgentPrefix(session, e.Harness, name, avail)
 	right := ""
 	if label != "" {
 		right = sidebarStyle(rowBg, timeFg).Render(label)

@@ -1186,6 +1186,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			Title:         title,
 			AgentState:    string(w.AgentState),
 			AgentStateAt:  w.AgentStateAt,
+			AgentHarness:  w.AgentHarness,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
 		})

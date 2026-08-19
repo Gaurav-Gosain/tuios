@@ -155,6 +155,12 @@ type WindowSummary struct {
 	// AgentStateAt is when the pane entered AgentState (Unix nanoseconds).
 	// Additive and omitted when zero, so an older peer just reads no elapsed time.
 	AgentStateAt int64 `json:"agent_state_at,omitempty"`
+	// AgentHarness is which agent is running in the pane, as the detecting
+	// manifest or the reporting source named it. Without it a rail watching
+	// eight agents cannot say which of them is Claude. Additive and omitted when
+	// empty, which is what an older peer sends and what every client reads as
+	// "the agent did not say".
+	AgentHarness string `json:"agent_harness,omitempty"`
 	// ForegroundCmd is what the pane is running, for a row that would otherwise
 	// repeat the title its siblings carry. Empty for a shell and for a pane the
 	// user has named, whose name is already the answer. Additive and omitted

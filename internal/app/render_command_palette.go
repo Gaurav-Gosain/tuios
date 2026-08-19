@@ -27,6 +27,9 @@ const (
 var paletteHints = []overlay.Hint{
 	{Key: "↑↓", Label: "move"},
 	{Key: "⏎", Label: "run"},
+	// The state filter is a token typed into the search field rather than a key,
+	// so the footer is the only place it can announce itself.
+	{Key: "@", Label: "state"},
 	{Key: "esc", Label: "close"},
 }
 

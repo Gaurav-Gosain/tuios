@@ -18,8 +18,12 @@ type ConfigReloadedMsg struct {
 
 // CommandPaletteItem represents a single command in the command palette.
 type CommandPaletteItem struct {
-	Name     string // Display name: "Split Horizontal"
-	Shortcut string // Key hint: "prefix+v"
+	Name string // Display name: "Split Horizontal"
+	// Shortcut is the row's right-hand meta slot, in muted ink. For a command it
+	// is the key that runs it ("prefix+v"); for a row whose consequence is
+	// heavier than the palette's usual jump it is that consequence in words
+	// ("switches session"), since a row with no key still owes the user a warning.
+	Shortcut string
 	Category string // "Window", "Layout", "Session", "Navigation"
 	// AgentState marks a session/window entry whose Name carries an agent-state
 	// glyph (sessionPaletteLabel), so the renderer can color the glyph without
@@ -647,9 +651,86 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 	}
 }
 
+// paletteStateTokens are the states a leading "@" token narrows the palette to.
+// Resolved by prefix in this order, so "@a" is attention, "@w" working, "@n"
+// needs input, "@d" done, "@i" idle and "@e" errored: one keystroke past the
+// "@", which is what makes "who needs me" worth typing at all.
+//
+// attention is first and is the reason the mechanism exists. It is the rail's
+// own definition of a state that wants a human (sidebarAttention), so the
+// palette and the rail's gutter mark can never come to mean different things.
+var paletteStateTokens = []struct {
+	name   string
+	states []string
+}{
+	{"attention", []string{"needs_input", "errored"}},
+	{"working", []string{"working"}},
+	{"needs_input", []string{"needs_input"}},
+	{"done", []string{"done"}},
+	{"idle", []string{"idle"}},
+	{"errored", []string{"errored"}},
+}
+
+// splitPaletteQuery pulls a leading "@state" token off a query and reports the
+// states it admits, whether one was present at all, and the text left to match
+// on. A bare "@" names no state and admits every entry that carries one, which
+// is the halfway house the user is in while typing the next character.
+//
+// An "@" naming nothing (a typo, or a state this build does not have) admits
+// nothing: a filter the user typed and that quietly did not apply is worse than
+// an empty list, which at least says so.
+func splitPaletteQuery(query string) (states []string, filtered bool, rest string) {
+	tok, after, _ := strings.Cut(strings.TrimSpace(query), " ")
+	if !strings.HasPrefix(tok, "@") {
+		return nil, false, query
+	}
+	rest = strings.TrimSpace(after)
+	name := strings.ToLower(tok[1:])
+	if name == "" {
+		return nil, true, rest
+	}
+	for _, t := range paletteStateTokens {
+		if strings.HasPrefix(t.name, name) {
+			return t.states, true, rest
+		}
+	}
+	return []string{}, true, rest
+}
+
+// paletteStateMatches reports whether an entry survives a state filter. Only the
+// session and window entries carry a state, so filtering by one is also what
+// drops every static command: "@attention" is a question about panes.
+func paletteStateMatches(item CommandPaletteItem, states []string) bool {
+	if item.AgentState == "" {
+		return false
+	}
+	if states == nil {
+		return true // a bare "@": anything running an agent
+	}
+	for _, s := range states {
+		if item.AgentState == s {
+			return true
+		}
+	}
+	return false
+}
+
 // FilterCommandPalette filters command palette items by a query string.
-// It performs case-insensitive substring matching on both Name and Category.
+// It performs case-insensitive substring matching on both Name and Category,
+// after an optional leading "@state" token narrows the list to the panes in
+// that state (see splitPaletteQuery).
 func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPaletteItem {
+	if states, filtered, rest := splitPaletteQuery(query); filtered {
+		kept := make([]CommandPaletteItem, 0, len(items))
+		for _, item := range items {
+			if paletteStateMatches(item, states) {
+				kept = append(kept, item)
+			}
+		}
+		// The scored matcher runs over what is left, so "@a server" still ranks a
+		// prefix hit above a mid-word one.
+		return FilterCommandPalette(kept, rest)
+	}
 	if query == "" {
 		return items
 	}

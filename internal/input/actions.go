@@ -32,6 +32,7 @@ const (
 	sidebarActAgentSort   = "agents_sort"
 	sidebarActNarrow      = "narrow"
 	sidebarActWiden       = "widen"
+	sidebarActPalette     = "palette"
 	sidebarActNewSession  = "new_session"
 	sidebarActNewWindow   = "new_window"
 	sidebarActRename      = "rename"

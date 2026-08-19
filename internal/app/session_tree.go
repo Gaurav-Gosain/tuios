@@ -73,6 +73,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			AgentState: w.AgentState,
 			DoneSeen:   m.agentSeen(w.ID),
 			StateAt:    w.AgentStateAt,
+			Harness:    w.AgentHarness,
 			Focused:    i == m.FocusedWindow,
 			Workspace:  w.Workspace,
 		})
@@ -111,6 +112,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 			AgentState: w.AgentState,
 			DoneSeen:   m.agentSeen(w.ID),
 			StateAt:    w.AgentStateAt,
+			Harness:    w.AgentHarness,
 			Workspace:  w.Workspace,
 		})
 	}
@@ -207,12 +209,18 @@ func sessionPaletteLabel(prefix, name, agentState string) string {
 	return prefix + name
 }
 
-// getSessionPaletteItems walks the unified session tree and returns one
-// palette entry per session plus, for the attached session, one entry per its
-// windows. This is what lets the palette jump straight to a session or a
-// window by name instead of going through the session switcher first; the
-// sidebar, the switcher, and this list all read the same tree so they can
-// never disagree about what exists or which one is current.
+// getSessionPaletteItems walks the unified session tree and returns one palette
+// entry per session and one per window of every session, not only the attached
+// one. This is what lets the palette jump straight to a session or a pane by
+// name instead of going through the session switcher first; the sidebar, the
+// switcher, and this list all read the same tree so they can never disagree
+// about what exists or which one is current.
+//
+// A pane of a session this client is not attached to costs a session switch to
+// reach, which is a heavier thing than the palette usually does: it tears down
+// every PTY subscription and rebuilds the layout. So the row says so, in the
+// slot a row's key hint would otherwise use, and the label carries the session
+// it is in. The palette never performs it silently.
 //
 // Built once when the palette opens (see OpenCommandPalette), not on every
 // render. BuildSessionTree is non-blocking (live state plus cached session
@@ -233,6 +241,7 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 					m.ShowNotification("Already on this session", "info", config.NotificationDuration)
 					return m, nil
 				}
+				m.sidebarLeaveForJump()
 				if err := m.SwitchToSession(sessionName); err != nil {
 					m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
 				}
@@ -240,26 +249,53 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 			},
 		})
 
-		if !s.IsCurrent {
-			continue
-		}
 		for _, w := range s.Children {
-			windowID := w.ID
+			windowID, label, warn := w.ID, w.Title, ""
+			if !isCurrent {
+				// Qualified by session, the way the rail's own agent rows qualify a
+				// pane that lives elsewhere, and marked with what selecting it costs.
+				label, warn = sessionName+"/"+w.Title, "switches session"
+			}
 			items = append(items, CommandPaletteItem{
-				Name:       sessionPaletteLabel("Window: ", w.Title, w.AgentState),
+				Name:       sessionPaletteLabel("Window: ", label, w.AgentState),
+				Shortcut:   warn,
 				Category:   "Sessions",
 				AgentState: w.AgentState,
 				Action: func(m *OS) (*OS, tea.Cmd) {
-					for i, win := range m.Windows {
-						if win != nil && win.ID == windowID {
-							m.FocusWindow(i)
-							break
+					m.sidebarLeaveForJump()
+					if !isCurrent {
+						if err := m.SwitchToSession(sessionName); err != nil {
+							m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+							return m, nil
 						}
 					}
+					m.focusWindowByID(windowID)
 					return m, nil
 				},
 			})
 		}
 	}
 	return items
+}
+
+// focusWindowByID focuses the pane with the given ID among the windows this
+// client holds, and says nothing when it holds none: after a session switch the
+// daemon's listing can name a pane the restored state no longer has.
+func (m *OS) focusWindowByID(id string) {
+	if i := m.windowIndexByID(id); i >= 0 {
+		m.FocusWindow(i)
+	}
+}
+
+// sidebarLeaveForJump hands the keyboard back to the panes when a palette row
+// opened from the rail is about to relocate the user. Attaching to a session and
+// focusing a pane are the two things the rail already treats as "this is where I
+// asked to end up" rather than as a browse, so the return record is dropped
+// first: restoring the pane the rail borrowed from would undo the jump.
+func (m *OS) sidebarLeaveForJump() {
+	if !m.SidebarFocused {
+		return
+	}
+	m.clearSidebarReturn()
+	m.ExitSidebarFocus()
 }

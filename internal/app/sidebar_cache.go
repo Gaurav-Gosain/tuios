@@ -111,6 +111,14 @@ func (m *OS) sidebarSignature() uint64 {
 	mixI(m.SidebarScrollS)
 	mixI(m.SidebarScrollT)
 	mixI(m.SidebarScrollA)
+	// The agents offset is derived from the anchor on any frame whose sort has
+	// moved, so the anchor picks the rows that are drawn just as directly as the
+	// offset does, and a frame drawn under one anchor cannot be served from an
+	// entry keyed on another.
+	mixB(m.sidebarAgentAnchor.Valid)
+	mixI(m.sidebarAgentAnchor.Offset)
+	mixS(m.sidebarAgentAnchor.SessionID)
+	mixS(m.sidebarAgentAnchor.WindowID)
 	mixI(m.FocusedWindow)
 	mixB(m.SidebarHoverActive)
 	mixI(m.SidebarHoverX)
@@ -190,7 +198,8 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(m.SessionAccent)
 	}
 
-	// Live windows in row order: id, label, agent state, workspace, accent.
+	// Live windows in row order: id, label, agent state, harness, workspace,
+	// accent.
 	for _, w := range m.Windows {
 		if w == nil {
 			continue
@@ -198,6 +207,9 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(w.ID)
 		mixS(m.railTitleShown(w))
 		mixS(w.AgentState)
+		// The agents section prints which agent a row is running, so a pane that
+		// swaps harness redraws even when its state and title hold still.
+		mixS(w.AgentHarness)
 		// The agents section prints the age of the state, so the row changes on a
 		// minute boundary with no other input moving. Folding the whole timestamp
 		// would rebuild the rail on every frame; the minute bucket rebuilds it at

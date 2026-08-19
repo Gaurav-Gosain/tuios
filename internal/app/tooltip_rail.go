@@ -2,6 +2,7 @@ package app
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
@@ -114,23 +115,31 @@ func sidebarTooltipSessionLabel(s sessiontree.Node) string {
 
 // sidebarTooltipAgentLabel is what one row of the strip's agents group says in
 // words: which pane it is, whose session it is in when that is not this one,
-// what it is doing and for how long. The group's two cells carry the state and
-// nothing else, so the name only exists here.
+// which agent is running in it, what it is doing and for how long. The group's
+// two cells carry the state and nothing else, so this is where everything the
+// strip cannot draw lives, and the harness is the newest thing on that list.
 func sidebarTooltipAgentLabel(e sidebarAgentEntry) string {
 	sep := " · "
 	if overlay.UseASCII() {
 		sep = " - "
 	}
-	name := printableTitle(e.Title)
-	if name == "" {
-		name = "shell"
+	bare := printableTitle(e.Title)
+	if bare == "" {
+		bare = "shell"
 	}
+	name := bare
 	if e.Foreign {
 		if s := printableTitle(e.SessionLabel); s != "" {
 			name = s + "/" + name
 		}
 	}
-	label := name + sep + sidebarStateWords(e.State)
+	label := name
+	// Compared against the bare pane name, not the session-qualified one: the
+	// duplicate the suppression is about is "claude · claude".
+	if h := sidebarHarnessLabel(e.Harness); h != "" && !strings.EqualFold(h, bare) {
+		label += sep + h
+	}
+	label += sep + sidebarStateWords(e.State)
 	if age := agentElapsed(e.State, e.StateAt, time.Now()); age != "" {
 		label += " " + age
 	}
