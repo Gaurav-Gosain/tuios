@@ -2,8 +2,6 @@ package session
 
 import (
 	"log"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -236,17 +234,16 @@ func foregroundCommand(info foregroundInfo, running bool, shell string) string {
 }
 
 // foregroundProcess resolves the foreground process group leader of the
-// controlling terminal of the shell with the given pid, returning its comm and
-// full argv. It is the honest signal for "what is this pane actually running":
-// the shell's /proc/<pid>/stat carries the tty's foreground process group id
-// (tpgid), and the process whose pid equals that id is the program in the
+// controlling terminal of the shell with the given pid. It is the honest signal
+// for "what is this pane actually running": the tty carries a foreground process
+// group id, and the process whose pid equals that id is the program in the
 // foreground, or the shell itself when nothing else is running.
 //
-// It is Linux-only (procfs). On any other platform, or when the process is gone,
-// running is false and the caller treats the pane as running no agent. The comm
-// and argv are read from the same /proc entry so a pid reused between the two
-// reads yields at worst a stale-but-consistent name for one tick; the detector
-// re-resolves every tick and only acts on a change.
+// Both readings are per-platform. Linux takes them from procfs, darwin from
+// kern.proc.pid and kern.procargs2; a platform with neither reports nothing and
+// the caller treats the pane as running no agent. When the process is gone the
+// answer is the same. The detector re-resolves every tick and only acts on a
+// change, so a pid reused between two reads costs at worst one stale tick.
 func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 	if shellPid <= 0 {
 		return foregroundInfo{}, false
@@ -255,89 +252,14 @@ func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 	if !ok || tpgid <= 0 {
 		return foregroundInfo{}, false
 	}
-	info := foregroundInfo{
-		comm: readComm(tpgid),
-		argv: readCmdline(tpgid),
-		exe:  readExe(tpgid),
-		pid:  tpgid,
-	}
+	info := readProcessInfo(tpgid)
+	info.pid = tpgid
 	if info.comm == "" && len(info.argv) == 0 {
-		// The foreground group leader vanished between reads, or procfs is
-		// unavailable: report not-running rather than guess.
+		// The foreground group leader vanished between reads, or this platform
+		// cannot see it: report not-running rather than guess.
 		return foregroundInfo{}, false
 	}
 	return info, true
-}
-
-// readExe resolves /proc/<pid>/exe, the real binary behind a process whatever it
-// renamed itself to, or "" when it cannot be read. A deleted binary resolves to a
-// path with a " (deleted)" suffix, which is stripped so the name still matches.
-func readExe(pid int) string {
-	target, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSuffix(target, " (deleted)")
-}
-
-// readForegroundPGID reads field 8 (tpgid) of /proc/<pid>/stat, the foreground
-// process group id of the process's controlling terminal. The comm field (2) is
-// wrapped in parentheses and may itself contain spaces or parentheses, so the
-// numeric fields are parsed from after the final ')'.
-func readForegroundPGID(pid int) (int, bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err != nil {
-		return 0, false
-	}
-	return parseStatTPGID(string(data))
-}
-
-// parseStatTPGID extracts the tpgid (foreground process group id, field 8) from
-// the contents of a /proc/<pid>/stat line. The comm field (2) is wrapped in
-// parentheses and may itself contain spaces or parentheses, so the numeric fields
-// are parsed from after the final ')'.
-func parseStatTPGID(s string) (int, bool) {
-	rparen := strings.LastIndex(s, ")")
-	if rparen < 0 || rparen+2 >= len(s) {
-		return 0, false
-	}
-	// Fields after "(comm) ": state(3) ppid(4) pgrp(5) session(6) tty_nr(7)
-	// tpgid(8). Splitting the remainder gives tpgid at index 5 (state at 0).
-	fields := strings.Fields(s[rparen+1:])
-	if len(fields) < 6 {
-		return 0, false
-	}
-	tpgid, err := strconv.Atoi(fields[5])
-	if err != nil {
-		return 0, false
-	}
-	return tpgid, true
-}
-
-// readComm returns the trimmed contents of /proc/<pid>/comm, or "" on error.
-func readComm(pid int) string {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/comm")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
-// readCmdline returns the NUL-separated arguments of /proc/<pid>/cmdline as a
-// slice, or nil on error or for a kernel thread (empty cmdline).
-func readCmdline(pid int) []string {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
-	if err != nil || len(data) == 0 {
-		return nil
-	}
-	parts := strings.Split(strings.TrimRight(string(data), "\x00"), "\x00")
-	out := parts[:0]
-	for _, p := range parts {
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // applyAgentDetection reconciles each window's agent state with the foreground

@@ -26,11 +26,7 @@ func TestProcScanFalsePositives(t *testing.T) {
 	pids := allPIDs(t)
 	var matched []string
 	for _, pid := range pids {
-		info := foregroundInfo{
-			comm: readComm(pid),
-			argv: readCmdline(pid),
-			exe:  readExe(pid),
-		}
+		info := readProcessInfo(pid)
 		if info.comm == "" && len(info.argv) == 0 {
 			continue
 		}
