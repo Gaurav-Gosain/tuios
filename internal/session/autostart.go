@@ -19,6 +19,24 @@ var (
 // If not running, it starts the daemon in-process in a background goroutine.
 // Returns nil if daemon is ready, or an error if it fails to start.
 func EnsureDaemonRunning() error {
+	return EnsureDaemonRunningWith(nil)
+}
+
+// EnsureDaemonRunningWith is EnsureDaemonRunning for a caller that has the
+// user's [daemon] settings to hand. This package deliberately does not read the
+// config file (it would invert the layering, and the daemon outlives every
+// process that could own one), so the settings arrive from whoever starts it:
+// `tuios daemon` fills them in runDaemon, and a server does it here.
+//
+// Without this, a daemon autostarted by tuios-web ran with the built-in
+// defaults while the same daemon autostarted by `tuios attach` honoured the
+// file, so whether agent detection was on came down to which command happened
+// to win the start race.
+//
+// cfg is used only when this call is the one that starts the daemon. An
+// already-running daemon keeps the settings it started with, since they are
+// its own and it outlives this process.
+func EnsureDaemonRunningWith(cfg *DaemonConfig) error {
 	// Check if daemon is already running (either in-process or external)
 	if IsDaemonRunning() {
 		return nil
@@ -26,9 +44,10 @@ func EnsureDaemonRunning() error {
 
 	// Start daemon in-process (only once)
 	inProcessDaemonOnce.Do(func() {
-		cfg := &DaemonConfig{
-			Version: "in-process",
+		if cfg == nil {
+			cfg = &DaemonConfig{}
 		}
+		cfg.Version = "in-process"
 		inProcessDaemon = NewDaemon(cfg)
 
 		// Start() is non-blocking - it starts goroutines and returns
