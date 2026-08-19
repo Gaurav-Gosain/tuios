@@ -142,17 +142,17 @@ func (s *Screen) setCursorX(x int, margins bool) {
 // set if it is within the scroll margins. This follows how [ansi.CUP] works.
 func (s *Screen) setCursor(x, y int, margins bool) {
 	old := s.cur.Position
-	s_width := max(1, s.buf.Width())
-	s_height := max(1, s.buf.Height())
+	w := max(1, s.buf.Width())
+	h := max(1, s.buf.Height())
 	if !margins {
-		x = clamp(x, 0, s_width-1)
-		y = clamp(y, 0, s_height-1)
+		x = clamp(x, 0, w-1)
+		y = clamp(y, 0, h-1)
 	} else {
-		minX := min(s.scroll.Min.X, s_width-1)
+		minX := min(s.scroll.Min.X, w-1)
 		maxX := max(minX+1, s.scroll.Max.X)
 		x = clamp(s.scroll.Min.X+x, minX, maxX-1)
 
-		minY := min(s.scroll.Min.Y, s_height-1)
+		minY := min(s.scroll.Min.Y, h-1)
 		maxY := max(minY+1, s.scroll.Max.Y)
 		y = clamp(s.scroll.Min.Y+y, minY, maxY-1)
 	}
