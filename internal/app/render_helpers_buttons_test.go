@@ -18,6 +18,12 @@ import (
 func pillColumns(t *testing.T, tiling bool, width int) []rune {
 	t.Helper()
 
+	// The documented offsets are counted in from the row's right edge, so this
+	// pins the position rather than leaning on it being the default.
+	prev := config.WindowButtonPosition
+	config.WindowButtonPosition = config.WindowButtonPositionRight
+	t.Cleanup(func() { config.WindowButtonPosition = prev })
+
 	buttonColor := lipgloss.Color("#7dd3fc")
 	buttonStyle := badgeStyle(buttonColor)
 	cross := buttonStyle.Render(config.GetWindowButtonClose())

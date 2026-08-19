@@ -28,12 +28,13 @@ const (
 // the span of columns it took, and what pressing it does.
 //
 // It is recorded by the renderer as it lays the controls out, because only the
-// renderer knows how wide each one came out. Every style draws a different set
-// of glyphs at a different width, and the pill is right-aligned against a
-// border whose corner glyph is itself configurable, so a handler that derived
-// these from the window rectangle would be re-deriving the layout from
-// constants that the layout does not read. The offsets it used to derive them
-// from had already drifted one column.
+// renderer knows how wide each one came out and which end it put them on. Every
+// style draws a different set of glyphs at a different width, the pill goes to
+// whichever end appearance.window_button_position names, and the corner glyph
+// it stops short of is itself configurable, so a handler that derived these
+// from the window rectangle would be re-deriving the layout from constants the
+// layout does not read. The offsets it used to derive them from had already
+// drifted one column.
 type WindowButtonRect struct {
 	Action WindowButtonAction
 	X, W   int
