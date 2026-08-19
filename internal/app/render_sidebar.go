@@ -606,6 +606,40 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 // to about a third, and the terminals section takes the slack because it is the
 // list the user actually works in. A rail too short for the terminals floor
 // shrinks agents first, then sessions, and never below their own floors.
+//
+// # Why there is no fourth section for workspaces
+//
+// It has been asked for and the answer is no, for four reasons, the first of
+// which is this function.
+//
+// The floors below already claim 2+3+2 lines before a single row of content,
+// and every section draws its header whether or not the budget could afford it,
+// so three sections cost ten lines of chrome at the minimum. A workspaces
+// section with the same two-row floor takes that to thirteen, against a rail
+// that TestRailFitsAShortRegion walks from zero because rail growth has already
+// once overrun the region and painted over the dock. It would also have to join
+// the give-up ladder at the bottom of this function, and there is no obvious
+// answer to whether workspaces should yield before agents or after them.
+//
+// It would restate what is already on screen. The terminals section is ordered
+// by workspace and tags each pane with its workspace's name, so a workspaces
+// section would be one row per workspace carrying nothing the tags do not.
+//
+// It does not fit the rail's grammar. Sessions and agents are lists across
+// every session; terminals is the list inside the selected one. A workspace
+// only exists inside a session, so a workspaces section would be the second
+// per-session list, competing with terminals for the same lines while saying
+// less than it does.
+//
+// And a workspace already has three surfaces that cost no rail lines at all:
+// the dock's pill strip, which is always on screen and can be rearranged by
+// dragging; the digit keys; and the workspace switcher. What a fourth section
+// would have been for is seeing and steering the workspace arrangement, and
+// that is what those three do.
+//
+// What the rail owed workspaces was agreement, not a section. Its terminals
+// grouping now orders by the same display order the dock's pills use, so
+// dragging a pill rearranges the panes under it here too.
 func sidebarBudget(avail, nS, nT, nA int) (sH, tH, aH int) {
 	avail = max(avail, 0)
 	sFloor, tFloor, aFloor := min(nS, 2), min(nT, 3), min(nA, 2)
