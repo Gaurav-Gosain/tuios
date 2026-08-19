@@ -143,6 +143,23 @@ frame with 4 panes and the sidebar on makes 4 calls, about 0.3% of a 1.4 ms
 frame. Memoising it would add a theme-change invalidation surface for a gain
 nobody can perceive.
 
+`renderTerminal`'s builder growth — tried and reverted. The allocation profile's
+largest single item by object count (59%) is `strings.Builder.WriteString`, and
+the builder is pre-grown to `contentW * contentH` (10,865) while a real frame is
+~52 KB of ANSI, so it looks like it must double several times per focused frame.
+Sizing the estimate from the previous frame's `CachedContent` instead measured
+52,375 -> 52,373 B/op and 374 -> 374 allocs/op over 8 runs: no change, so it was
+reverted. The premise was wrong. B/op already equals the finished string, so the
+builder allocates its buffer once; the 374 allocations are per-style-run work
+inside ultraviolet's `renderLine`, which the profile attributes upward to the
+builder because that is where the bytes land. Recorded because the profile line
+is genuinely misleading.
+
+`pool.PutStringBuilder` drops the buffer via `Reset`, keeping only the 16-byte
+header, which reads like the exact bug this pass was hunting. It is not:
+`strings.Builder.String()` returns a string aliasing that buffer, so reusing it
+would corrupt strings already handed out. Left alone deliberately.
+
 The rail's signature fold runs even when the sidebar reserves no columns, at
 about 0.5 µs per frame. Guarding it is correct but worth 0.006% of a frame at
 120 fps, so it is recorded rather than done.
