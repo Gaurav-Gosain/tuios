@@ -262,6 +262,14 @@ type PTY struct {
 	subscribers   map[string]*ptySubscriber
 	subscribersMu sync.RWMutex
 
+	// debug mirrors TUIOS_DEBUG_INTERNAL, read once when the PTY is built.
+	// broadcast runs per chunk per subscriber, and a debugLog there costs an
+	// os.Getenv (which takes the process-wide environment lock) plus a boxed
+	// argument slice on every call, whether or not the flag is set. The env var
+	// is set from the --debug flag before any PTY exists, so a value read here
+	// is the value the run was started with.
+	debug bool
+
 	exited   bool
 	exitedMu sync.RWMutex
 	exitCode int
@@ -679,6 +687,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 		subscribers:  make(map[string]*ptySubscriber),
 		vtWriteChan:  make(chan vtChunk, 256),
 		onExit:       onExit,
+		debug:        debugEnabled(),
 	}
 
 	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
@@ -2196,7 +2205,9 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 	p.subscribersMu.RLock()
 	defer p.subscribersMu.RUnlock()
 
-	debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(chunk.data), len(p.subscribers))
+	if p.debug {
+		debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(chunk.data), len(p.subscribers))
+	}
 	for clientID, sub := range p.subscribers {
 		// A chunk appended between a subscriber's catch-up being copied and this
 		// broadcast running is in both, because Subscribe blocks the broadcast
@@ -2214,9 +2225,13 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 			// Only a chunk that was taken counts as reached: a client dropped
 			// here resumes from the gap rather than past it.
 			sub.sent.Store(seq)
-			debugLog("[DEBUG] PTY %s: sent to %s", p.ID[:8], clientID)
+			if p.debug {
+				debugLog("[DEBUG] PTY %s: sent to %s", p.ID[:8], clientID)
+			}
 		default:
-			debugLog("[DEBUG] PTY %s: channel full for %s, dropped", p.ID[:8], clientID)
+			if p.debug {
+				debugLog("[DEBUG] PTY %s: channel full for %s, dropped", p.ID[:8], clientID)
+			}
 		}
 	}
 }
