@@ -589,15 +589,14 @@ func sidebarNameAvail(cw, rightW int) int {
 // columns (off, hidden, or the screen too narrow). It also records the on-screen
 // hit geometry of every row into m.SidebarHits for the mouse handlers.
 func (m *OS) renderSidebar() *lipgloss.Layer {
-	lines, w := m.sidebarPanelLines()
-	if lines == nil {
+	panel, w := m.sidebarPanel()
+	if panel == "" {
 		return nil
 	}
 	sidebarX := 0
 	if config.SidebarPosition == "right" {
 		sidebarX = m.GetRenderWidth() - w
 	}
-	panel := strings.Join(lines, "\n")
 	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID("sidebar")
 }
 
