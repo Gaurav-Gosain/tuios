@@ -468,15 +468,18 @@ func (m *OS) sidebarStripBand(content string, cw int, edgeLeft bool, bg, edgeFg 
 	switch {
 	case rule != nil:
 	case m.SidebarFocused:
-		rule = pal.Accent
+		// Measured against the band: the accent is the theme's and read 2.76:1
+		// unlifted, on a rail whose whole job when focused is to look focused.
+		rule = theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)
 	default:
 		// FgMute, the token this codebase gives separators, rather than the
 		// notification rule this used to borrow. That rule measured 1.06:1 on the
 		// band, so the boundary the comment above calls "the only edge left" was
 		// not on screen at all whenever the rail was not focused, which is nearly
-		// always. FgMute puts it at 2.19:1: furniture, and furniture you can see.
+		// always. FgMute is furniture, and furniture you can see.
 		// The text floor deliberately does not apply here; a hairline held to
-		// 4.5:1 would be louder than the marks it frames.
+		// 4.5:1 would be louder than the marks it frames. It sits at 3.71:1
+		// since the quiet tier moved a step up the ramp.
 		rule = pal.FgMute
 	}
 	edge := lipgloss.NewStyle().Background(bg).Foreground(rule).Render(config.GetWindowBorderLeft())
@@ -583,7 +586,7 @@ func sidebarStripMoreCell(cw int, pal overlay.Palette, bg color.Color, lit bool)
 	if overlay.UseASCII() {
 		mark = ":"
 	}
-	// Measured rather than picked. Raw FgMute is the separator token and reads
+	// Measured rather than picked. Raw FgMute is the separator token and read
 	// 2.19:1 on the band, which is where the workspace pills were when a pill you
 	// could switch to looked absent. This mark is the only thing that says the
 	// spine is cut, so a strip with more sessions than lines looked like a strip
@@ -604,9 +607,10 @@ func sidebarStripMoreCell(cw int, pal overlay.Palette, bg color.Color, lit bool)
 // inwards, so the two-cell ASCII form still lands against it.
 func sidebarStripControlCell(glyph string, cw int, edgeLeft, lit bool, bg color.Color, pal overlay.Palette) string {
 	// These two are the only things on the collapsed rail a click can act on, and
-	// at raw FgMute they measured 2.19:1 against the band: the strip's controls
-	// were its least visible marks. Lifted to 4.88:1 for the same reason the tail
-	// mark is, and by the same call.
+	// at raw FgMute they measured 2.19:1 against the band, 3.71:1 since the quiet
+	// tier moved up a step: the strip's controls were its least visible marks.
+	// Lifted to the text floor for the same reason the tail mark is, and by the
+	// same call.
 	fg := theme.Readable(pal.FgMute, bg)
 	if lit {
 		fg = pal.Fg

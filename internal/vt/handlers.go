@@ -335,6 +335,12 @@ func (e *Emulator) registerDefaultOscHandlers() {
 		return true
 	})
 
+	// OSC 104 - Reset indexed colors the guest set with OSC 4
+	e.RegisterOscHandler(104, func(data []byte) bool {
+		e.handleResetPaletteColor(data)
+		return true
+	})
+
 	// OSC 52 - Clipboard operations (query/set)
 	e.RegisterOscHandler(52, func(data []byte) bool {
 		e.handleClipboard(data)

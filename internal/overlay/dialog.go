@@ -99,8 +99,10 @@ func hintStrip(hints []Hint, bg color.Color, pal Palette) (string, int) {
 	if len(hints) == 0 {
 		return "", 0
 	}
-	keyStyle := Style(bg).Foreground(pal.AccentBright).Bold(true)
-	labelStyle := Style(bg).Foreground(pal.FgMute)
+	// Both measured against the ground they land on: the accent follows the
+	// terminal theme, and FgMute is furniture rather than text.
+	keyStyle := Style(bg).Foreground(Readable(pal.AccentBright, bg)).Bold(true)
+	labelStyle := Style(bg).Foreground(pal.FgDim)
 	parts := make([]string, 0, len(hints))
 	w := 0
 	for i, h := range hints {
@@ -137,7 +139,7 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	if title := Truncate(d.Title, max(w-3, 1)); title != "" {
 		top += rule(1) +
 			Style(bg).Render(" ") +
-			Style(bg).Foreground(pal.Accent).Bold(true).Render(title) +
+			Style(bg).Foreground(Readable(pal.Accent, bg)).Bold(true).Render(title) +
 			Style(bg).Render(" ") +
 			rule(w-lipgloss.Width(title)-3)
 	} else {

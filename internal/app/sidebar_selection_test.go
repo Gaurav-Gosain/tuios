@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -19,8 +21,10 @@ func bgParams(c color.Color) string {
 }
 
 func fgParams(c color.Color) string {
-	r, g, b, _ := c.RGBA()
-	return fmt.Sprintf("38;2;%d;%d;%d", r>>8, g>>8, b>>8)
+	// Rendered rather than formatted: a palette index leaves as SGR 3x or 9x,
+	// and only a literal colour leaves as 38;2.
+	rendered := lipgloss.NewStyle().Foreground(c).Render("X")
+	return strings.TrimSuffix(strings.TrimPrefix(rendered[:strings.Index(rendered, "X")], "\x1b["), "m")
 }
 
 // treeRow returns the styled terminals-section row containing want. A pane

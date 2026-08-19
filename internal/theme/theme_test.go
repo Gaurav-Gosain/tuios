@@ -173,12 +173,6 @@ func TestDockColors(t *testing.T) {
 		{"DockColorWindow", DockColorWindow},
 		{"DockColorTerminal", DockColorTerminal},
 		{"DockColorCopy", DockColorCopy},
-		{"DockBg", DockBg},
-		{"DockFg", DockFg},
-		{"DockHighlight", DockHighlight},
-		{"DockDimmed", DockDimmed},
-		{"DockAccent", DockAccent},
-		{"DockSeparator", DockSeparator},
 	}
 
 	for _, tt := range tests {

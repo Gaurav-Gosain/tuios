@@ -60,8 +60,10 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	var lines []string
 
 	// Search input.
-	cursor := overlay.Style(bg).Foreground(pal.Accent).Render("█")
-	search := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("› ") +
+	// The accent is the theme's and the panel's ground is not, so both are
+	// measured against it. The cursor is a block, so the mark floor is enough.
+	cursor := overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Render("█")
+	search := overlay.Style(bg).Foreground(theme.Readable(pal.AccentBright, bg)).Bold(true).Render("› ") +
 		overlay.Style(bg).Foreground(pal.Fg).Render(m.CommandPaletteQuery) + cursor
 	lines = append(lines, search, overlay.Rule(width, bg, pal))
 
@@ -127,7 +129,7 @@ func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, wid
 	tag := ""
 	tagW := 0
 	if width >= paletteCategoryWidth {
-		tag = overlay.Style(bg).Foreground(pal.FgMute).Render("["+item.Category+"]") +
+		tag = overlay.Style(bg).Foreground(pal.FgDim).Render("["+item.Category+"]") +
 			overlay.Style(bg).Render(" ")
 		tagW = lipgloss.Width(item.Category) + 3
 	}
@@ -135,7 +137,7 @@ func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, wid
 	shortcut := ""
 	shortcutW := 0
 	if item.Shortcut != "" {
-		shortcut = overlay.Style(bg).Foreground(pal.FgMute).Render(item.Shortcut)
+		shortcut = overlay.Style(bg).Foreground(pal.FgDim).Render(item.Shortcut)
 		shortcutW = lipgloss.Width(item.Shortcut)
 	}
 
@@ -144,7 +146,7 @@ func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, wid
 		marker = "› "
 	}
 	name := overlay.Truncate(printableTitle(item.Name), max(width-2-tagW-shortcutW-1, 1))
-	left := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker) +
+	left := overlay.Style(bg).Foreground(theme.Readable(pal.Accent, bg)).Bold(true).Render(marker) +
 		tag + paletteRowName(name, item.AgentState, bg, nameColor, selected, pal)
 
 	gap := max(width-lipgloss.Width(left)-shortcutW, 1)

@@ -17,7 +17,8 @@ import (
 // Both states go through theme.Readable, so the strip is legible by
 // measurement rather than by whichever theme it was last looked at under. At
 // rest that is FgDim: FgMute is the token for separators and disabled things
-// and it put a workspace you can switch to at 2.19:1, present but not readable.
+// and it put a workspace you can switch to at 2.19:1, present but not readable,
+// which the quiet tier's move up the ramp lifts to 3.71:1 without making it text.
 // Active is the accent, which follows the terminal theme and so cannot be
 // trusted on its own; Charple alone measures 2.76:1 on Panel.
 func workspacePillFg(active bool, pal overlay.Palette) color.Color {

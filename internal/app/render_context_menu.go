@@ -121,7 +121,8 @@ func (m *OS) contextMenuRows(cm *ContextMenu) (start, visible int) {
 // highlight, even if the selection somehow points at it: the colors are the only
 // thing telling the user the action is unavailable, so they do not get
 // overridden. It is FgDim rather than FgMute because unavailable still has to be
-// readable, and FgMute measured 1.81:1 on the panel's Surface.
+// readable, and FgMute is the furniture tier: 3.07:1 on the panel's Surface,
+// and 1.81:1 when this was written and the tier was a step darker.
 func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg color.Color, pal overlay.Palette) string {
 	rowBg := bg
 	if selected && !it.Dim {

@@ -104,10 +104,14 @@ func TestDockWorkspacePillsDragIntoANewOrder(t *testing.T) {
 	time.Sleep(insertGuard)
 
 	// Three occupied workspaces, named so the pills can be told apart on screen.
+	//
+	// switchWorkspace rather than the keys on their own: it waits for the dock
+	// to report the workspace it landed on. newWindow takes its baseline count
+	// off that same dock, so reading it while the previous workspace's count was
+	// still on screen left it waiting for a number the new workspace never
+	// reaches.
 	for _, ws := range []string{"2", "3"} {
-		if err := term.SendKeys(tuitest.Ctrl('b'), "w", ws); err != nil {
-			t.Fatalf("switch to workspace %s: %v", ws, err)
-		}
+		switchWorkspace(t, term, ws, 0)
 		newWindow(t, term)
 	}
 	for _, wsName := range [][2]string{{"1", "EDIT"}, {"2", "REVW"}, {"3", "DPLY"}} {

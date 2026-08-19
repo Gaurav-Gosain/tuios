@@ -23,8 +23,21 @@ type Logger interface {
 type Emulator struct {
 	handlers
 
-	// The terminal's indexed 256 colors.
-	colors [256]color.Color
+	// The palette is two layers. colors holds what the guest set with OSC 4,
+	// which is the guest's own business and outlives a theme change. themePal
+	// holds the sixteen the user's tuios theme asks for, and is empty whenever
+	// no theme is active.
+	//
+	// A slot nobody has set stays nil in both, which is what lets an index
+	// travel to the host as an index and be resolved by the user's own terminal
+	// palette. Substituting anything there would repaint panes in shades the
+	// user never chose, which is the same reasoning as colorToWire in
+	// internal/session.
+	colors   [256]color.Color
+	themePal [16]color.Color
+	// paletteClaimed is whether either layer has claimed any of the sixteen,
+	// which is what decides whether SGR reads through the palette at all.
+	paletteClaimed bool
 
 	// Both main and alt screens and a pointer to the currently active screen.
 	scrs [2]Screen
@@ -1044,7 +1057,7 @@ func (e *Emulator) IndexedColor(i int) color.Color {
 		return nil
 	}
 
-	c := e.colors[i]
+	c := e.paletteEntry(i)
 	if c == nil {
 		// Return the default color. Safe conversion: i is already validated to be in [0, 255]
 		// #nosec G115 - false positive, i is validated to be in valid uint8 range above
@@ -1065,11 +1078,26 @@ func (e *Emulator) PaletteColor(i int) color.Color {
 	if i < 0 || i > 15 {
 		return nil
 	}
-	if !e.hasThemeColors() {
-		// #nosec G115 - i is validated to be in [0, 15] above
-		return ansi.BasicColor(uint8(i))
+	if c := e.paletteEntry(i); c != nil {
+		return c
 	}
-	return e.IndexedColor(i)
+	// #nosec G115 - i is validated to be in [0, 15] above
+	return ansi.BasicColor(uint8(i))
+}
+
+// paletteEntry returns whatever has been set for a palette slot, guest first,
+// theme second, and nil when the slot is still the user terminal's to decide.
+func (e *Emulator) paletteEntry(i int) color.Color {
+	if i < 0 || i > 255 {
+		return nil
+	}
+	if c := e.colors[i]; c != nil {
+		return c
+	}
+	if i < 16 {
+		return e.themePal[i]
+	}
+	return nil
 }
 
 // SetIndexedColor sets a terminal's indexed color.
@@ -1080,32 +1108,48 @@ func (e *Emulator) SetIndexedColor(i int, c color.Color) {
 	}
 
 	e.colors[i] = c
+	e.refreshPaletteClaims()
+}
+
+// refreshPaletteClaims records whether any of the sixteen is spoken for. It is
+// kept as a flag rather than recounted because the SGR handler asks on every
+// escape the guest writes, which is the hottest path the emulator has.
+func (e *Emulator) refreshPaletteClaims() {
+	e.paletteClaimed = false
+	for i := range 16 {
+		if e.colors[i] != nil || e.themePal[i] != nil {
+			e.paletteClaimed = true
+			return
+		}
+	}
 }
 
 // SetThemeColors sets the terminal's color palette from a theme.
 // This sets the default foreground, background, cursor colors and the
 // first 16 ANSI colors (0-15) which are used by terminal applications.
-// If fg, bg, and cur are all nil, theming is disabled and only default colors are set.
+//
+// A nil fg and bg mean no theme is active. That has to put the sixteen back the
+// way they were, not merely stop writing them: a theme the user has turned off
+// that stays in the color table goes on painting every pane in its own red and
+// blue, which is the "going back to none messes up the ANSI 16" report.
 func (e *Emulator) SetThemeColors(fg, bg, cur color.Color, ansiPalette [16]color.Color) {
 	e.SetDefaultForegroundColor(fg)
 	e.SetDefaultBackgroundColor(bg)
 	e.SetDefaultCursorColor(cur)
 
-	// Only set indexed colors if we have a theme (fg/bg are not nil)
-	// This prevents overriding standard terminal colors when theming is disabled
-	if fg != nil || bg != nil {
-		// Set the first 16 ANSI colors
-		for i := range 16 {
-			e.SetIndexedColor(i, ansiPalette[i])
-		}
+	if fg == nil && bg == nil {
+		e.themePal = [16]color.Color{}
+	} else {
+		e.themePal = ansiPalette
 	}
+	e.refreshPaletteClaims()
 }
 
-// hasThemeColors returns true if theme colors have been set
+// hasThemeColors reports whether anything has claimed one of the sixteen
+// palette slots, from a theme or from the guest's own OSC 4. When nothing has,
+// SGR indices are left alone so they reach the host as indices.
 func (e *Emulator) hasThemeColors() bool {
-	// Check if any indexed colors have been set
-	// If colors[0] is nil, no theme has been applied
-	return e.colors[0] != nil
+	return e.paletteClaimed
 }
 
 // resetTabStops resets the terminal tab stops to the default set.

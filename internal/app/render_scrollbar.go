@@ -279,8 +279,11 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 	top := window.Y + window.BorderOffset()
 	rows, thumbTop, thumbRows := scrollbarRows(contentH, scrollbackLen, scrollbarViewOffset(window))
 
+	// The thin bar floats straight over pane content, so the ground the tint is
+	// measured against is the pane's background and not the chrome's canvas,
+	// which is a colour that is nowhere near the bar. A track paints its own.
 	pal := theme.UI()
-	ground := pal.Canvas
+	ground := theme.TerminalBg()
 	trackInk := lipgloss.NewStyle().Foreground(pal.FgMute)
 	if config.ScrollbarStyle == config.ScrollbarStyleTrack {
 		ground = pal.Surface

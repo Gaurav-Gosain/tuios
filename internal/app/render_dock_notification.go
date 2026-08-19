@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 	"time"
 
@@ -183,14 +182,20 @@ func notifBudget(renderWidth int) int {
 // later info pushed out of the block still says so from underneath it.
 // Otherwise it is dim, because a queue of routine messages is not news.
 func (s notifStatus) notifMeta(surface lipgloss.Style) string {
+	// Dim against the block's own ground rather than a fixed grey. The grey it
+	// used to be was picked for one background and measured under 4.5:1 on two
+	// thirds of the themes.
+	bg := theme.NotificationBg()
+	dim := theme.Readable(theme.UI().FgDim, bg)
+
 	var parts []string
 	if s.msg.Sticky {
-		parts = append(parts, surface.Foreground(theme.DockDimmed()).Render("esc"))
+		parts = append(parts, surface.Foreground(dim).Render("esc"))
 	}
 	if s.queued > 0 {
-		var col color.Color = theme.DockDimmed()
+		col := dim
 		if notifSeverityRank(s.worst) > notifSeverityRank(s.msg.Type) {
-			col = theme.NotificationSeverity(s.worst)
+			col = theme.Readable(theme.NotificationSeverity(s.worst), bg)
 		}
 		parts = append(parts, surface.Foreground(col).Render(fmt.Sprintf("+%d", s.queued)))
 	}
@@ -227,8 +232,12 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		return notifBlock{}, false
 	}
 
-	sev := theme.NotificationSeverity(s.msg.Type)
-	surface := lipgloss.NewStyle().Background(theme.NotificationBg())
+	// The severity is the theme's, so it is measured against the block's ground
+	// before it is drawn on it. A mark carries its meaning in its weight as well
+	// as its colour, so it is held to the mark floor and keeps more of its hue.
+	bg := theme.NotificationBg()
+	sev := theme.ReadableAt(theme.NotificationSeverity(s.msg.Type), bg, theme.MarkFloor)
+	surface := lipgloss.NewStyle().Background(bg)
 
 	// The cap's foreground is the severity and its background is the block's
 	// dark body, so the weighted sliver is read against the body rather than

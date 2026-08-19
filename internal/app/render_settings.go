@@ -179,7 +179,9 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 // its height as the selection moves and does not re-centre itself under the
 // pointer.
 func settingsDescription(desc string, width, n int, pal overlay.Palette) []string {
-	style := overlay.Style(pal.Surface).Foreground(pal.FgMute).Italic(true)
+	// FgDim, not FgMute: this is the only line that says what a setting does,
+	// and the quiet tier is furniture rather than text.
+	style := overlay.Style(pal.Surface).Foreground(pal.FgDim).Italic(true)
 	// The "  " indent counts against the inner width, same as the marker does on
 	// a setting row, so the wrap target leaves room for it.
 	avail := width - 2
@@ -227,7 +229,7 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 	}
 	// The label yields to the control: the control is the part the row is for.
 	label := overlay.Truncate(item.Label, max(width-lipgloss.Width(control)-3, 1))
-	left := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker) +
+	left := overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Bold(true).Render(marker) +
 		overlay.Style(bg).Foreground(labelColor).Bold(selected).Render(label)
 
 	gap := max(width-lipgloss.Width(left)-lipgloss.Width(control), 1)
@@ -254,7 +256,7 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 	// screen was the theme's. The example lives on the description line now.
 	text, italic := val, false
 	if val == "" && !editing {
-		text, italic, fg = item.Unset, true, pal.FgMute
+		text, italic, fg = item.Unset, true, pal.FgDim
 	}
 	// The field never takes more than half the row, so the label it sits beside
 	// keeps something to show even on a narrow panel.

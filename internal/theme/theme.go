@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
@@ -80,17 +81,26 @@ func Current() *tint.Tint {
 }
 
 // GetANSIPalette returns the 16 ANSI colors (0-15) from the current theme.
-// These are injected into the terminal emulator.
+//
+// With no theme the sixteen are the user's terminal's, and tuios does not know
+// what they are. It returns the indices themselves rather than a guess: painted
+// with one of these, a swatch leaves as SGR 31 or 91 and the host fills it in
+// from the user's own palette, so the row really is the user's sixteen. The
+// xterm defaults that used to stand here made the picker show colours nobody
+// had chosen.
+//
+// A caller that needs channel values gets whatever RGBA the index resolves to
+// in this process, which is the xterm default. That is a guess, and only the
+// terminal can settle it.
 func GetANSIPalette() [16]color.Color {
 	t := Current()
 	if t == nil {
-		// Fallback to default xterm colors
-		return [16]color.Color{
-			lipgloss.Color("#000000"), lipgloss.Color("#cd0000"), lipgloss.Color("#00cd00"), lipgloss.Color("#cdcd00"),
-			lipgloss.Color("#0000ee"), lipgloss.Color("#cd00cd"), lipgloss.Color("#00cdcd"), lipgloss.Color("#e5e5e5"),
-			lipgloss.Color("#7f7f7f"), lipgloss.Color("#ff0000"), lipgloss.Color("#00ff00"), lipgloss.Color("#ffff00"),
-			lipgloss.Color("#5c5cff"), lipgloss.Color("#ff00ff"), lipgloss.Color("#00ffff"), lipgloss.Color("#ffffff"),
+		var pal [16]color.Color
+		for i := range pal {
+			// #nosec G115 - i is a loop index over [0, 16)
+			pal[i] = ansi.BasicColor(uint8(i))
 		}
+		return pal
 	}
 	return [16]color.Color{
 		t.Black,        // 0
@@ -139,8 +149,19 @@ func TerminalCursor() color.Color {
 	return t.Cursor
 }
 
+// borderInk measures a theme-derived border against the pane it frames. A
+// border and the pane's background come from the same theme and nothing was
+// checking that they differ: 72 of the registry's tints put an unfocused border
+// under 3:1 on its own pane, the worst at 1.19:1, which is a window with no
+// visible edge. A border is a shape, so the mark floor is what it has to clear.
+func borderInk(c color.Color) color.Color {
+	return ReadableAt(c, TerminalBg(), MarkFloor)
+}
+
 // BorderUnfocused returns the color for unfocused window borders.
 func BorderUnfocused() color.Color {
+	// A configured colour is returned as chosen: measurement was overridden on
+	// purpose, the same way the scrollbar treats a configured tint.
 	if borderUnfocusedOverride != nil {
 		return borderUnfocusedOverride
 	}
@@ -150,7 +171,7 @@ func BorderUnfocused() color.Color {
 	}
 	// Light pinkish red - use theme's red (or bright red depending on theme)
 	// Using regular Red gives a softer, more muted tone for unfocused windows
-	return t.Red
+	return borderInk(t.Red)
 }
 
 // BorderFocusedWindow returns the color for focused window borders in window management mode.
@@ -163,7 +184,7 @@ func BorderFocusedWindow() color.Color {
 		return lipgloss.Color("#AFFFFF")
 	}
 	// Light cyan for window mode - use bright cyan
-	return t.BrightCyan
+	return borderInk(t.BrightCyan)
 }
 
 // BorderFocusedTerminal returns the color for focused window borders in terminal mode.
@@ -176,7 +197,7 @@ func BorderFocusedTerminal() color.Color {
 		return lipgloss.Color("#AAFFAA")
 	}
 	// Light green for terminal mode - use bright green
-	return t.BrightGreen
+	return borderInk(t.BrightGreen)
 }
 
 // DockColorWindow returns the dock indicator color for window management mode.
@@ -340,35 +361,36 @@ func NotificationInfo() color.Color {
 	return t.Blue
 }
 
-// NotificationBg returns the background color for the message block: the dark
-// body the weighted severity cap opens.
+// NotificationBg returns the background color for the message block: the body
+// the weighted severity cap opens.
 //
-// With theming off this is the dock's own help background rather than black, so
-// a message sitting in the dock's right-hand block is made of the same material
-// as the copy-mode help line that shares the row. Black would read as a hole
-// punched in the bar.
+// It is the chrome's own raised surface, not the terminal theme's background.
+// A message is a piece of the dock, and taking its ground from the theme made
+// it a slab of the pane's colour dropped into a bar of chrome colour: under a
+// light theme, a near-white rectangle punched into a dark dock. That is the
+// whole of the "notifications look weird with color themes on" report. What
+// the severity says still follows the theme, because that is the part carrying
+// the message.
 func NotificationBg() color.Color {
-	t := Current()
-	if t == nil {
-		return lipgloss.Color("#1a1a2e")
-	}
-	return t.Bg
+	return UI().Surface
 }
 
-// NotificationFg returns the foreground color for notification message text.
+// NotificationFg returns the foreground color for notification message text,
+// on the same constant ramp as the ground it is drawn on.
 func NotificationFg() color.Color {
-	t := Current()
-	if t == nil {
-		return lipgloss.Color("#e5e5e5")
-	}
-	return t.Fg
+	return UI().Fg
 }
 
 // NotificationRule returns the color of the dock hairline that a message has
 // not lit: the unburnt remainder of the rule, and the whole rule when nothing
 // is on screen. It matches the separator the dock already draws.
+//
+// The hairline is drawn straight onto the user's terminal background, which
+// tuios never paints and cannot know, so it takes the mid grey of the chrome
+// ramp. The near-black it used to be measured 1.6:1 on a dark terminal, which
+// is a separator nobody could see on the terminals most people use.
 func NotificationRule() color.Color {
-	return lipgloss.Color("#303040")
+	return UI().FgMute
 }
 
 // NotificationSeverity maps a notification type string to its color. The type
@@ -386,40 +408,6 @@ func NotificationSeverity(notifType string) color.Color {
 	default:
 		return NotificationInfo()
 	}
-}
-
-// DockBg returns the background color for the dock.
-func DockBg() color.Color {
-	return lipgloss.Color("#2a2a3e")
-}
-
-// DockFg returns the foreground color for the dock.
-func DockFg() color.Color {
-	return lipgloss.Color("#a0a0a8")
-}
-
-// DockHighlight returns the highlight color for the dock.
-func DockHighlight() color.Color {
-	t := Current()
-	if t == nil {
-		return lipgloss.Color("#00ff00")
-	}
-	return t.BrightGreen
-}
-
-// DockDimmed returns the dimmed color for the dock.
-func DockDimmed() color.Color {
-	return lipgloss.Color("#808090")
-}
-
-// DockAccent returns the accent color for the dock.
-func DockAccent() color.Color {
-	return lipgloss.Color("#a0a0b0")
-}
-
-// DockSeparator returns the separator color for the dock.
-func DockSeparator() color.Color {
-	return lipgloss.Color("#303040")
 }
 
 // HelpKeyBadge returns the color for key badges in help menu.

@@ -2,97 +2,41 @@ package theme
 
 import (
 	"image/color"
-	"math"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/exp/charmtone"
 )
 
-// ContrastFloor is the ratio a chrome label has to clear against the ground it
-// is drawn on. WCAG AA for body text, applied to chrome because chrome is where
-// the small type is: the dock's labels are one row tall and read at a glance.
-const ContrastFloor = 4.5
+// The contrast math lives in the overlay package, which owns the palette these
+// ratios are measured on and is meant to stand on its own. These are the names
+// the rest of tuios already calls it by.
+const (
+	// ContrastFloor is the ratio a chrome label has to clear against the
+	// ground it is drawn on.
+	ContrastFloor = overlay.ContrastFloor
+	// MarkFloor is the ratio a non-text mark has to clear: a cap, a glyph, a
+	// rule, a cursor block.
+	MarkFloor = overlay.MarkFloor
+)
 
-// linearize undoes the sRGB transfer curve for one channel, which is what makes
-// the luminance below additive.
-func linearize(c float64) float64 {
-	if c <= 0.03928 {
-		return c / 12.92
-	}
-	return math.Pow((c+0.055)/1.055, 2.4)
-}
-
-// relativeLuminance is the WCAG 2.1 quantity rather than a cheap weighted
-// average of the channels. The two disagree by enough to matter at the low end,
-// which is exactly where a dock on a dark ground lives.
-func relativeLuminance(c color.Color) float64 {
-	r, g, b, _ := c.RGBA()
-	return 0.2126*linearize(float64(r)/65535) +
-		0.7152*linearize(float64(g)/65535) +
-		0.0722*linearize(float64(b)/65535)
-}
-
-// ContrastRatio returns the WCAG 2.1 contrast ratio between two colours: 1 for
-// a pair that are the same, 21 for black against white. Chrome foregrounds are
-// picked and tested against this rather than by eye, so a theme swap cannot
-// quietly take a label below the floor.
-func ContrastRatio(a, b color.Color) float64 {
-	la, lb := relativeLuminance(a), relativeLuminance(b)
-	if la < lb {
-		la, lb = lb, la
-	}
-	return (la + 0.05) / (lb + 0.05)
-}
-
-// mixColors blends a toward b by t in 0..1.
-func mixColors(a, b color.Color, t float64) color.Color {
-	ar, ag, ab, _ := a.RGBA()
-	br, bg, bb, _ := b.RGBA()
-	blend := func(x, y uint32) uint8 {
-		return uint8((float64(x)*(1-t) + float64(y)*t) / 257)
-	}
-	return color.RGBA{R: blend(ar, br), G: blend(ag, bg), B: blend(ab, bb), A: 0xFF}
-}
+// ContrastRatio returns the WCAG 2.1 contrast ratio between two colours.
+func ContrastRatio(a, b color.Color) float64 { return overlay.ContrastRatio(a, b) }
 
 // Readable returns c lifted toward the ground's text end until it clears
 // ContrastFloor against bg, and c untouched when it already does.
-//
-// It exists for the colours the theme owns. The accent follows the terminal
-// theme, so an accent label on the chrome's own dark ground is legible only for
-// the themes that happen to be bright ones; blending toward the text colour
-// keeps the hue that says "this is the current thing" and buys the legibility
-// with luminance instead.
-func Readable(c, bg color.Color) color.Color {
-	if ContrastRatio(c, bg) >= ContrastFloor {
-		return c
-	}
-	target := ContrastText(bg)
-	// Sixteen steps puts the answer within ~6% of the least blending that
-	// works, which is finer than the terminal's own colour rounding.
-	const steps = 16
-	for i := 1; i < steps; i++ {
-		if mixed := mixColors(c, target, float64(i)/steps); ContrastRatio(mixed, bg) >= ContrastFloor {
-			return mixed
-		}
-	}
-	return target
+func Readable(c, bg color.Color) color.Color { return overlay.Readable(c, bg) }
+
+// ReadableAt is Readable against a chosen floor.
+func ReadableAt(c, bg color.Color, floor float64) color.Color {
+	return overlay.ReadableAt(c, bg, floor)
 }
 
 // ContrastText picks a foreground that reads on the given (usually saturated)
-// background: near-white on a dark/mid accent, near-black on a light one. This
-// keeps title chips and active tabs legible regardless of the theme's accent.
-//
-// The choice is by measured ratio rather than by a luminance threshold. A
-// threshold has to be set somewhere, and saturated greens sit right in the miss
-// zone: a pure green reads 0.55 perceived against a 0.6 cut and so was given the
-// light ink, which measures 1.32:1 on it. Taking whichever ink measures better
-// has no miss zone to fall into.
-func ContrastText(bg color.Color) color.Color {
-	if ContrastRatio(charmtone.Butter, bg) >= ContrastRatio(charmtone.Pepper, bg) {
-		return charmtone.Butter
-	}
-	return charmtone.Pepper
-}
+// background: near-white on a dark or mid accent, near-black on a light one.
+func ContrastText(bg color.Color) color.Color { return overlay.ContrastText(bg) }
+
+// mixColors blends a toward b by t in 0..1.
+func mixColors(a, b color.Color, t float64) color.Color { return overlay.MixColors(a, b, t) }
 
 // UIPalette is the chrome color set for TUIOS floating overlays. It is an alias
 // for overlay.Palette so the overlay package stays free of any tuios
@@ -116,9 +60,14 @@ func UI() overlay.Palette {
 		Card:     charmtone.Iron,
 		Selected: charmtone.Charple,
 
-		Fg:     charmtone.Butter,
-		FgDim:  charmtone.Smoke,
-		FgMute: charmtone.Oyster,
+		Fg:    charmtone.Butter,
+		FgDim: charmtone.Smoke,
+		// One step up the ramp from Oyster, which was the quiet tier's colour
+		// until it was measured: 2.60:1 on the canvas, 1.81:1 on the surface a
+		// settings hint is written on, 1.35:1 on a card. Quiet is a tier of the
+		// hierarchy, not permission to be unreadable, and every surface that
+		// wanted a quiet ink had to work around the old one or lose the label.
+		FgMute: charmtone.Squid,
 
 		Accent:       charmtone.Charple,
 		AccentBright: charmtone.Hazy,

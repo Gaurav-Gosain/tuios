@@ -110,8 +110,11 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 			pen.Attrs &^= uv.AttrConceal
 		case 29: // Not crossed out
 			pen.Attrs &^= uv.AttrStrikethrough
-		case 30, 31, 32, 33, 34, 35, 36, 37: // Set foreground - USE THEME COLORS
-			pen.Fg = e.IndexedColor(int(param - 30))
+		case 30, 31, 32, 33, 34, 35, 36, 37: // Set foreground
+			// PaletteColor, not IndexedColor: a slot no theme and no OSC 4 has
+			// claimed stays SGR 3x on the way out, so the host paints it from
+			// the user's own palette.
+			pen.Fg = e.PaletteColor(int(param - 30))
 		case 38: // Set foreground 256 or truecolor
 			if c, skip := e.parseThemedColor(params, i); c != nil {
 				pen.Fg = c
@@ -119,8 +122,8 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 			}
 		case 39: // Default foreground
 			pen.Fg = nil
-		case 40, 41, 42, 43, 44, 45, 46, 47: // Set background - USE THEME COLORS
-			pen.Bg = e.IndexedColor(int(param - 40))
+		case 40, 41, 42, 43, 44, 45, 46, 47: // Set background
+			pen.Bg = e.PaletteColor(int(param - 40))
 		case 48: // Set background 256 or truecolor
 			if c, skip := e.parseThemedColor(params, i); c != nil {
 				pen.Bg = c
@@ -135,10 +138,10 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 			}
 		case 59: // Default underline color
 			pen.UnderlineColor = nil
-		case 90, 91, 92, 93, 94, 95, 96, 97: // Set bright foreground - USE THEME COLORS
-			pen.Fg = e.IndexedColor(int(param - 90 + 8)) // 8-15 are bright colors
-		case 100, 101, 102, 103, 104, 105, 106, 107: // Set bright background - USE THEME COLORS
-			pen.Bg = e.IndexedColor(int(param - 100 + 8)) // 8-15 are bright colors
+		case 90, 91, 92, 93, 94, 95, 96, 97: // Set bright foreground
+			pen.Fg = e.PaletteColor(int(param - 90 + 8)) // 8-15 are bright colors
+		case 100, 101, 102, 103, 104, 105, 106, 107: // Set bright background
+			pen.Bg = e.PaletteColor(int(param - 100 + 8)) // 8-15 are bright colors
 		default:
 			// Delegate any scalar attribute code this switch does not
 			// special-case to the canonical uv reader, so the themed path
