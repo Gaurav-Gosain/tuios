@@ -23,6 +23,19 @@ type OSOptions struct {
 	// and/or ApplyAppearanceConfig) before constructing the OS.
 	UserConfig *config.UserConfig
 
+	// BrowserClient says the far end is a browser tab rather than a terminal.
+	// It gates the alert sinks a browser cannot deliver, and the warning that
+	// says so. See browser_client.go.
+	BrowserClient bool
+
+	// ConfigReadOnly makes the settings page apply changes to this session only
+	// and never write the config file. Set it wherever the person driving the
+	// session is not the person whose config file it is: tuios-web serves a
+	// network client, and several of them at once, each holding the snapshot it
+	// loaded when it connected, so a save would write one client's stale view
+	// of the whole file over the operator's and over every other client's.
+	ConfigReadOnly bool
+
 	// ShowKeys enables the key display overlay.
 	ShowKeys bool
 
@@ -107,6 +120,8 @@ func NewOS(opts OSOptions) *OS {
 
 		// Keybindings
 		KeybindRegistry:   opts.KeybindRegistry,
+		ConfigReadOnly:    opts.ConfigReadOnly,
+		BrowserClient:     opts.BrowserClient,
 		ShowKeys:          opts.ShowKeys,
 		RecentKeys:        []KeyEvent{},
 		KeyHistoryMaxSize: 5,
@@ -171,6 +186,11 @@ func NewOS(opts OSOptions) *OS {
 		// Collected here and reported from Init, once there is a TUI to report
 		// them in.
 		os.ConfigWarnings = config.ConfigWarnings(cfg)
+		// A sink the client cannot deliver is a config problem like any other,
+		// and it is only knowable here, where the client is known.
+		if opts.BrowserClient {
+			os.ConfigWarnings = append(os.ConfigWarnings, browserAlertWarnings(cfg)...)
+		}
 		if cfg.Debug.ShowKeyEvents {
 			os.ShowKeys = true
 		}

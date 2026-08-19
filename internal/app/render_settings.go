@@ -126,9 +126,17 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		lines = append(lines, settingsDescription(desc, width, descLines, pal)...)
 	}
 
+	// A session that cannot write the config file says so in the title rather
+	// than only in a notification, which is gone by the time the second setting
+	// is changed.
+	title := "Settings"
+	if m.ConfigReadOnly {
+		title = "Settings (this session only)"
+	}
+
 	panel := overlay.Panel{
 		Glyph:     "", // gear
-		Title:     "Settings",
+		Title:     title,
 		Width:     width,
 		Tabs:      tabs,
 		ActiveTab: m.SettingsCategory,

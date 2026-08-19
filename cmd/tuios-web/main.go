@@ -204,9 +204,33 @@ func runWebServer() error {
 	webServerConfig.ephemeral = ephemeralMode
 	webServerConfig.version = version
 
+	// Who owns which part of the configuration, for this process:
+	//
+	//   - [daemon] belongs to the DAEMON, which outlives every client, so it is
+	//     only honoured by whoever starts it (just below). An already-running
+	//     daemon keeps what it started with.
+	//   - The appearance globals in internal/config are the SERVER's, written
+	//     once at startup because every served session's render loop reads them.
+	//   - The *UserConfig handed to a session is the SESSION's, mutable by its
+	//     settings page and never written back to the operator's file.
+	//
+	// One read feeds all three, so they cannot disagree about what the file said.
+	userConfig, err := config.LoadUserConfig()
+	if err != nil {
+		log.Printf("Warning: Failed to load config, using defaults: %v", err)
+		userConfig = config.DefaultConfig()
+	}
+
 	// If using daemon mode, ensure daemon is running
 	if !ephemeralMode {
-		if err := session.EnsureDaemonRunning(); err != nil {
+		// The [daemon] settings reach it the same way `tuios daemon` passes
+		// them (see runDaemon). Without this a daemon autostarted here ran on
+		// the built-in defaults, so whether agent detection was on depended on
+		// which command happened to start the daemon first.
+		if session.GetDebugLevel() == session.DebugOff && userConfig.Daemon.LogLevel != "" {
+			session.SetDebugLevel(session.ParseDebugLevel(userConfig.Daemon.LogLevel))
+		}
+		if err := session.EnsureDaemonRunningWith(daemonConfigFrom(userConfig)); err != nil {
 			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
 			webServerConfig.ephemeral = true
 		}
@@ -248,7 +272,23 @@ func runWebServer() error {
 	_ = os.Setenv("COLORTERM", "truecolor")
 	_ = os.Setenv("TERM_PROGRAM", "tuios-web")
 
-	// Apply global config options (CLI flags only, no user config at server level)
+	// The appearance globals, written once on the startup goroutine. A later
+	// connection must never rewrite them: they are read by the render loop of
+	// every session already drawing. internal/server/ssh.go's applyAppearanceOnce
+	// enforces the same rule for the same reason.
+	//
+	// ApplyOverrides used to be called here with a nil config, which is what
+	// made a served session ignore the file. Everything reaching the client
+	// through a package global (theme, borders, dock, sidebar, scrollbar,
+	// which-key, notification timings) came out at its built-in default, while
+	// the few settings that ride on *UserConfig (startup, hooks, agent alerts,
+	// keybindings) applied, so half the config arriving looked more like a
+	// rendering bug than a missing load.
+	//
+	// The file is the baseline; CLI flags win. Order matters: ApplyOverrides
+	// layers the flags on top of what this leaves behind.
+	config.ApplyAppearanceConfig(userConfig)
+
 	config.ApplyOverrides(config.Overrides{
 		ASCIIOnly:         asciiOnly,
 		BorderStyle:       borderStyle,
@@ -257,7 +297,7 @@ func runWebServer() error {
 		ScrollbackLines:   scrollbackLines,
 		NoAnimations:      noAnimations,
 		ThemeName:         themeName,
-	}, nil)
+	}, userConfig)
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()
@@ -271,11 +311,8 @@ func runWebServer() error {
 	sipConfig.AllowInsecureNoTLS = webInsecure
 
 	// The touch key bar is server-wide while the keys it carries are user
-	// settings, so the config is read once here instead of per session.
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		userConfig = config.DefaultConfig()
-	}
+	// settings, so it is built from the startup config read above rather than
+	// from a second load that could disagree with the globals.
 	leader := config.LeaderKey
 	if userConfig.Keybindings.LeaderKey != "" {
 		leader = userConfig.Keybindings.LeaderKey
@@ -310,6 +347,17 @@ func runWebServer() error {
 // isLoopbackHost reports whether a bind address keeps traffic inside this
 // machine. It mirrors the check sip makes when it decides whether TLS is
 // mandatory, so the two agree on which binds need a certificate.
+// daemonConfigFrom maps the user's [daemon] section onto the daemon's own
+// config, mirroring what runDaemon does in cmd/tuios so a daemon autostarted by
+// the web server behaves like one started by `tuios daemon`.
+func daemonConfigFrom(userConfig *config.UserConfig) *session.DaemonConfig {
+	return &session.DaemonConfig{
+		AgentAutoDetect:     userConfig.Daemon.AgentAutoDetect,
+		AgentDetectInterval: time.Duration(userConfig.Daemon.AgentDetectSeconds) * time.Second,
+		AgentBinaries:       userConfig.Daemon.AgentBinaries,
+	}
+}
+
 func isLoopbackHost(host string) bool {
 	if host == "" || host == "localhost" {
 		return true
@@ -504,6 +552,8 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
 		UserConfig:                userConfig,
+		ConfigReadOnly:            true,
+		BrowserClient:             true,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,
@@ -583,6 +633,8 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	tuiosInstance := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
 		UserConfig:                userConfig,
+		ConfigReadOnly:            true,
+		BrowserClient:             true,
 		ShowKeys:                  showKeys,
 		Width:                     width,
 		Height:                    height,

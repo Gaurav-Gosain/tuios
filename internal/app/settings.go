@@ -125,8 +125,20 @@ func (m *OS) applyBorderColors() {
 
 // persistSettings writes the current config to disk. Called after any settings
 // change so it survives a restart.
+//
+// A read-only session skips the write and says so once. The change itself has
+// already been applied, so the session behaves as asked for as long as it
+// lasts; what it does not do is decide the config file's contents on behalf of
+// whoever else is attached. See OSOptions.ConfigReadOnly.
 func (m *OS) persistSettings() {
 	if m.UserConfig == nil {
+		return
+	}
+	if m.ConfigReadOnly {
+		if !m.configReadOnlyTold {
+			m.configReadOnlyTold = true
+			m.ShowNotification("Settings apply to this session only; the config file is not written", "warning", 0)
+		}
 		return
 	}
 	if err := config.SaveUserConfig(m.UserConfig); err != nil {
