@@ -2,6 +2,8 @@ package fuzz
 
 import (
 	"math/rand/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
 )
 
 // source is where a generator's randomness comes from. Two implementations feed
@@ -67,6 +69,10 @@ type Generator struct {
 	w, h       int // the host size it last chose, so clicks land somewhere plausible
 	weights    []int
 	weightsSum int
+	// vt generates escape sequences for guest writes. It is created on first
+	// use rather than in the constructor so that a run which never reaches a
+	// Guest action draws exactly the stream it always did.
+	vt *vtgen.Gen
 	// minW and minH floor the host sizes this generator picks. With no floor a
 	// run spends nearly its whole budget inside the one bug class that lives
 	// below the layout's own minimum pane size and never reaches anything else,
@@ -241,13 +247,32 @@ func (g *Generator) one() Action {
 		// rather than on or off, and a target reads it either way.
 		a.A, a.B = g.u(settingCount), g.u(settingValues)
 	case Guest:
-		a.S = g.pick(guestWrites)
+		a.S = g.guest()
 	case AltScreen:
 		a.A, a.B = g.u(2), g.u(8)
 	case Burst:
 		a.A, a.B = burstLines[g.u(len(burstLines))], g.u(8)
 	}
 	return a
+}
+
+// guest returns what a pane's own program prints.
+//
+// Two thirds come from the pool of shapes that have already broken something
+// here, which keeps a campaign anchored on known-hard input. The rest come from
+// the sequence generator, so the run also reaches escape sequences nobody
+// thought to put in a pool: the pool is a memory of past bugs and the generator
+// is a search for the next one.
+func (g *Generator) guest() string {
+	if g.u(3) == 0 {
+		if g.vt == nil {
+			// Seeded from this generator's own source, so a run stays a
+			// deterministic function of the seed or of the corpus bytes.
+			g.vt = vtgen.New(g.src.next())
+		}
+		return g.vt.Next().Bytes
+	}
+	return g.pick(guestWrites)
 }
 
 // burstLines are how much a pane prints in one go. The large entries are chosen

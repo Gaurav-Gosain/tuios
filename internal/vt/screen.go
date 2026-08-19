@@ -71,6 +71,18 @@ func (s *Screen) Resize(width int, height int) {
 	}
 	s.blankWideRunesCutByTheEdge()
 	s.scroll = s.buf.Bounds()
+
+	// Both the live cursor and the saved one have to come back inside the new
+	// screen. The emulator clamps the cursor of whichever screen is active, but
+	// the other one is resized here too and nobody was clamping it: a guest on
+	// the alternate screen that was resized smaller came back to a main screen
+	// whose cursor was still addressing the old one. The saved cursor has the
+	// same problem on either screen, since a resize can land between a DECSC
+	// and its DECRC.
+	s.cur.X = clamp(s.cur.X, 0, max(s.buf.Width()-1, 0))
+	s.cur.Y = clamp(s.cur.Y, 0, max(s.buf.Height()-1, 0))
+	s.saved.X = clamp(s.saved.X, 0, max(s.buf.Width()-1, 0))
+	s.saved.Y = clamp(s.saved.Y, 0, max(s.buf.Height()-1, 0))
 }
 
 // blankWideRunesCutByTheEdge clears a double-width rune left sitting in the
@@ -217,9 +229,17 @@ func (s *Screen) SaveCursor() {
 }
 
 // RestoreCursor restores the cursor.
+//
+// The saved position is clamped to the screen, because the screen may not be
+// the one it was saved on. A guest saves the cursor, the window is resized,
+// and the guest restores: that is what every full-screen program does across a
+// window resize, and without the clamp it comes back to a column the screen no
+// longer has. Everything downstream then reads a cursor that is off the grid.
 func (s *Screen) RestoreCursor() {
 	old := s.cur.Position
 	s.cur = s.saved
+	s.cur.X = clamp(s.cur.X, 0, max(s.buf.Width()-1, 0))
+	s.cur.Y = clamp(s.cur.Y, 0, max(s.buf.Height()-1, 0))
 
 	if s.cb.CursorPosition != nil && (old.X != s.cur.X || old.Y != s.cur.Y) {
 		s.cb.CursorPosition(old, s.cur.Position)
