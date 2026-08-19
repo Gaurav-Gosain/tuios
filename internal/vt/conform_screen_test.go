@@ -160,3 +160,126 @@ func TestConform_Resets(t *testing.T) {
 		},
 	})
 }
+
+// TestConform_DECSTRResetList walks the list DEC documents for a soft reset,
+// one case per item, restricted to the state this emulator keeps. What DEC also
+// lists and is missing here, DECNRCM, DECSCA, DECSASD, DECKPM, DECRLM and
+// DECPCTERM, are modes the emulator has no notion of, so resetting them would
+// only store a value nothing reads.
+func TestConform_DECSTRResetList(t *testing.T) {
+	runConform(t, []conformCase{
+		{
+			name: "the cursor is enabled again",
+			in:   "\x1b[?25l\x1b[!p",
+			want: "",
+		},
+		{
+			name:   "origin mode goes back to absolute",
+			in:     "\x1b[2;3r\x1b[?6h\x1b[!p\x1b[2;3r\x1b[1;1HX",
+			want:   "X",
+			cursor: "1,0",
+		},
+		{
+			name:   "the scroll region goes back to the full page",
+			in:     "\x1b[2;3r\x1b[!p",
+			region: "0,0-6,4",
+		},
+		{
+			name:   "the left and right margins go with it",
+			in:     "\x1b[?69h\x1b[2;4s\x1b[!p",
+			region: "0,0-6,4",
+		},
+		{
+			name: "the character sets go back to their defaults",
+			in:   "\x1b(0\x1b[!pq",
+			want: "q",
+		},
+		{
+			name: "SGR goes back to normal",
+			in:   "\x1b[31;1;4m\x1b[!pX",
+			want: "X",
+			cells: []cellWant{
+				{x: 0, y: 0, content: "X", underline: ptr(underlineNone), attrs: ptr(uint8(0))},
+			},
+		},
+		{
+			// A soft reset in the middle of an open hyperlink would otherwise
+			// leave every character after it addressed to somebody's URL.
+			name: "an open hyperlink is closed",
+			in:   "\x1b]8;;https://example.invalid/\x07a\x1b[!pb",
+			want: "ab",
+			cells: []cellWant{
+				{x: 1, y: 0, content: "b", link: ptr("")},
+			},
+		},
+		{
+			name:   "the saved cursor goes back to home",
+			in:     "\x1b[3;4H\x1b7\x1b[!p\x1b[2;2H\x1b8X",
+			want:   "X",
+			cursor: "1,0",
+		},
+	})
+}
+
+// TestConform_DECSTRLeavesTheseAlone covers the other half of the list: what a
+// soft reset must not touch. Each is something a program relies on surviving,
+// which is the whole reason it reaches for a soft reset rather than RIS.
+func TestConform_DECSTRLeavesTheseAlone(t *testing.T) {
+	runConform(t, []conformCase{
+		{
+			name: "the screen is not cleared",
+			in:   "abc\r\ndef\x1b[!p",
+			want: "abc\ndef",
+		},
+		{
+			// DEC has a soft reset turn autowrap off. xterm and iTerm2 both
+			// decline, and esctest marks its own case for it as an intentional
+			// deviation from the spec. Following the spec would stop the line
+			// wrapping of every program that soft-resets and then prints.
+			name:   "autowrap is left on, deviating from the spec on purpose",
+			cols:   4,
+			in:     "\x1b[!pabcdef",
+			want:   "abcd\nef",
+			cursor: "2,1",
+		},
+		{
+			// Left alone means left alone in both directions: a guest that
+			// turned autowrap off keeps it off across a soft reset.
+			name:   "autowrap a guest turned off stays off",
+			cols:   4,
+			in:     "\x1b[?7l\x1b[!pabcdef",
+			want:   "abcf",
+			cursor: "3,0",
+		},
+		{
+			name: "the tab stops are not reset",
+			cols: 20,
+			in:   "\x1b[3g\x1b[!p\tX",
+			want: "                   X",
+		},
+	})
+}
+
+// TestConform_DECSTRDoesNotMoveTheCursor is stated on its own because it is the
+// item most easily broken by adding to the reset: several of the modes in the
+// list home the cursor when set or reset on their own, DECOM among them.
+func TestConform_DECSTRDoesNotMoveTheCursor(t *testing.T) {
+	for _, prefix := range []string{
+		"",
+		"\x1b[?6h",
+		"\x1b[2;3r",
+		"\x1b[?25l",
+		"\x1b(0",
+		"\x1b[31;1m",
+		"\x1b[?69h\x1b[2;5s",
+	} {
+		emu, _ := newConformEmulator(t, conformCase{
+			cols: 6, rows: 4,
+			in: prefix + "\x1b[3;4H\x1b[!p",
+		})
+		if p := emu.CursorPosition(); p.X != 3 || p.Y != 2 {
+			t.Errorf("after %q then a soft reset the cursor is at %d,%d, want 3,2",
+				prefix, p.X, p.Y)
+		}
+	}
+}
