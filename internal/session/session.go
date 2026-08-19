@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"slices"
 	"sort"
@@ -1974,6 +1975,13 @@ func colorToWire(c color.Color) string {
 		return "a" + strconv.Itoa(int(v))
 	case ansi.IndexedColor:
 		return "i" + strconv.Itoa(int(v))
+	}
+	// A color.Color interface can hold a typed-nil pointer such as
+	// (*color.RGBA)(nil). The case nil above matches only an untyped nil, and
+	// RGBA has a value receiver, so reading it through a wrapped nil panics the
+	// daemon. Encode it as the absence of color, the same as an untyped nil.
+	if rv := reflect.ValueOf(c); rv.Kind() == reflect.Pointer && rv.IsNil() {
+		return ""
 	}
 	r, g, b, _ := c.RGBA()
 	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
