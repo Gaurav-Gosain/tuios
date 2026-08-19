@@ -8,8 +8,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// aggregateTitle is the header the all-windows picker draws.
-const aggregateTitle = "Windows"
+// aggregateTitle is the header the all-windows picker draws, and aggregateHint
+// the one string on screen that only the open picker produces.
+const (
+	aggregateTitle = "Windows"
+	aggregateHint  = "jump"
+)
 
 // openAggregateView opens the all-windows picker through the command palette,
 // which is the only way in: it has no default keybinding.
@@ -30,7 +34,13 @@ func openAggregateView(t *testing.T, term *tuitest.Terminal) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("activate palette entry: %v", err)
 	}
-	if err := term.WaitForText(aggregateTitle, uiTimeout); err != nil {
+	// Waited for on the picker's own hint rather than on its title. The title is
+	// the word "Windows", which the palette row that opens it also contains, so
+	// waiting on the title returned while the palette was still on screen and
+	// every measurement below then described the palette instead.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), aggregateHint) && !strings.Contains(s.Text(), paletteTitle)
+	}, uiTimeout); err != nil {
 		t.Fatalf("the picker did not open: %v\n%s", err, term.Snapshot())
 	}
 }
@@ -42,20 +52,24 @@ func panelExtent(t *testing.T, term *tuitest.Terminal) (rows int) {
 	t.Helper()
 	s := term.Screen()
 	_, height := s.Size()
-	top, bottom := -1, -1
+	bottom := -1
 	for r := range height {
-		line := s.Line(r)
-		if top < 0 && strings.Contains(line, aggregateTitle) {
-			top = r
-		}
-		if strings.Contains(line, "esc close") {
+		if strings.Contains(s.Line(r), aggregateHint) {
 			bottom = r
 		}
 	}
-	if top < 0 || bottom < 0 {
-		t.Fatalf("could not find the picker's extent\n%s", term.Snapshot())
+	if bottom < 0 {
+		t.Fatalf("the picker's hint line is not on screen\n%s", term.Snapshot())
 	}
-	return bottom - top + 1
+	// The nearest title above the hint, which with the palette gone is the
+	// picker's own.
+	for r := bottom; r >= 0; r-- {
+		if strings.Contains(s.Line(r), aggregateTitle) {
+			return bottom - r + 1
+		}
+	}
+	t.Fatalf("the picker's title is not above its hint\n%s", term.Snapshot())
+	return 0
 }
 
 // TestAggregateViewSizesToItsContent is the reported complaint, measured. The
@@ -106,7 +120,7 @@ func TestAggregateViewRowClickJumpsToThatWindow(t *testing.T) {
 
 	openAggregateView(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, aggregateTitle, "ALPHA", "BRAVO")
+		return screenHas(s, aggregateHint, "ALPHA", "BRAVO")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the picker did not list both windows: %v\n%s", err, term.Snapshot())
 	}
@@ -118,7 +132,7 @@ func TestAggregateViewRowClickJumpsToThatWindow(t *testing.T) {
 	// The click closes the picker and lands on that window, which is what Enter
 	// on the same row does.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), aggregateTitle)
+		return !strings.Contains(s.Text(), aggregateHint)
 	}, uiTimeout); err != nil {
 		t.Fatalf("clicking a row left the picker open: %v\n%s", err, term.Snapshot())
 	}
@@ -136,7 +150,9 @@ func TestAggregateViewFitsAShortScreen(t *testing.T) {
 	term, _ := start(t, startOpts{cols: 60, rows: 14})
 	waitBoot(t, term)
 
-	for range 5 {
+	// Ten, so the list cannot possibly fit: a shorter one legitimately does, and
+	// then there is nothing to scroll and no readout to look for.
+	for range 10 {
 		newWindow(t, term)
 	}
 	openAggregateView(t, term)
