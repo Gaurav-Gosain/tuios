@@ -973,15 +973,28 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 	e.RegisterCsiHandler('r', func(params ansi.Params) bool {
 		// Set Top and Bottom Margins [ansi.DECSTBM]
+		height := e.Height()
+
 		top, _, _ := params.Param(0, 1)
 		if top < 1 {
 			top = 1
 		}
 
-		height := e.Height()
-		bottom, _ := e.parser.Param(1, height)
+		bottom, _, _ := params.Param(1, height)
 		if bottom < 1 {
 			bottom = height
+		}
+
+		// A guest is free to name a row the screen does not have, and one does
+		// whenever it sizes its region before it learns it was resized smaller.
+		// Every row here becomes a slice index in ScrollUp and friends, so an
+		// unclamped bottom is an out-of-range panic in the PTY reader: the
+		// whole daemon, not one pane. xterm clamps to the screen instead.
+		if bottom > height {
+			bottom = height
+		}
+		if top > height {
+			top = height
 		}
 
 		if top >= bottom {
@@ -1015,6 +1028,15 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			right, _, _ := params.Param(1, width)
 			if right < 1 {
 				right = width
+			}
+
+			// Same reasoning as DECSTBM above: a column past the edge becomes
+			// an out-of-range index the first time anything scrolls.
+			if right > width {
+				right = width
+			}
+			if left > width {
+				left = width
 			}
 
 			if left >= right {
