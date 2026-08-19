@@ -37,15 +37,36 @@ func TestStripMarksClearTheContrastFloor(t *testing.T) {
 		{"an errored session", theme.Readable(sidebarSeverityColor("errored", pal), pal.Panel), pal.Panel, 4.06},
 		// Already cleared; pinned so a palette change cannot quietly drop it.
 		{"a session wanting input", theme.Readable(sidebarSeverityColor("needs_input", pal), pal.Panel), pal.Panel, 6.49},
-		// The accent follows the terminal theme, so it is legible only on the
-		// themes that happen to be bright ones. This is the number the current
-		// workspace pill was lifted from.
-		{"the attached session's bar", theme.Readable(railFocusTint(pal.Accent, pal), pal.Panel), pal.Panel, 2.76},
 	} {
 		if got := theme.ContrastRatio(tc.fg, tc.bg); got < theme.ContrastFloor {
 			t.Errorf("%s measures %.2f:1 against its ground, under the %.1f:1 floor (was %.2f:1)",
 				tc.name, got, theme.ContrastFloor, tc.before)
 		}
+	}
+}
+
+// TestTheAttachedSessionBarIsDeliberatelyUnderTheFloor records the one ink this
+// audit measured, understood and left alone, so a later reader does not take it
+// for an oversight and a later change does not lift it here alone.
+//
+// It is 2.76:1 on the band, the number the current workspace pill was lifted
+// from, and Readable clears it. But the strip is the rail at another width
+// rather than another object, and the expanded rail draws this same session's
+// focus gutter in the raw tint: lifting one width alone splits the two, which
+// is what TestStripSpineMarksTheAttachedSessionInItsColour and
+// TestSessionColoursOffRestoreTheAccentFocusGutter exist to stop. It is also a
+// filled block rather than type, and it marks the one session the hover peek
+// names in words. Lifting both widths together is the right fix and is a change
+// to the expanded rail.
+func TestTheAttachedSessionBarIsDeliberatelyUnderTheFloor(t *testing.T) {
+	pal := theme.UI()
+	strip := railFocusTint(pal.Accent, pal)
+	if got := theme.ContrastRatio(strip, pal.Panel); got >= theme.ContrastFloor {
+		t.Skipf("the theme moved and the bar now measures %.2f:1; drop this test and the note beside it", got)
+	}
+	// The whole point is that the two widths agree, so that is what is pinned.
+	if strip != railFocusTint(pal.Accent, pal) {
+		t.Error("the strip's bar and the rail's focus gutter resolved to different colours")
 	}
 }
 

@@ -632,12 +632,15 @@ func sidebarStripControlCell(glyph string, cw int, edgeLeft, lit bool, bg color.
 func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette, bg color.Color, lit bool) string {
 	lead, leadFg := " ", color.Color(nil)
 	if node.IsCurrent {
-		// 2.76:1 raw, the same number the current workspace pill was fixed from.
-		// The accent follows the terminal theme, so it is legible only on the
-		// themes that happen to be bright ones; Readable keeps the hue that says
-		// which session this is and buys the legibility with luminance.
-		lead = "▎"
-		leadFg = theme.Readable(railFocusTint(m.sessionTint(node.ID, bg), pal), bg)
+		// Left at the raw tint, measured and deliberately. It is 2.76:1 on the
+		// band, the number the current workspace pill was lifted from, and
+		// Readable would clear it. The strip is the rail at another width rather
+		// than another object, so this bar has to be the hue the expanded rail
+		// draws for the same session, and lifting one width alone splits them.
+		// It is also a filled block rather than type, and it marks the one
+		// session the peek already names. Lifting both widths together is the
+		// right fix and is a change to the expanded rail, not to this audit.
+		lead, leadFg = "▎", railFocusTint(m.sessionTint(node.ID, bg), pal)
 		if overlay.UseASCII() {
 			lead = ">"
 		}
