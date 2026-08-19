@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"os/exec"
 	"sync"
 	"testing"
 )
@@ -115,4 +116,36 @@ func TestTerminalRefAfterClose(t *testing.T) {
 
 	// Starting the reader against a closed window must be a no-op, not a panic.
 	w.StartDaemonResponseReader()
+}
+
+// TestWaitForCmdRacesClose pins the same ownership rule for w.Cmd. The
+// process-monitor goroutine started in NewWindow calls waitForCmd for the whole
+// life of the window and reads w.Cmd without a lock, so Close() nilling the
+// field raced that read whenever Close ran before the goroutine was first
+// scheduled. The field is write-once now; this fails under -race if it stops
+// being.
+func TestWaitForCmdRacesClose(t *testing.T) {
+	for range 100 {
+		cmd := exec.Command("sleep", "10")
+		if err := cmd.Start(); err != nil {
+			t.Skipf("cannot start helper process: %v", err)
+		}
+		w := &Window{ID: "cmd-race-0001", Cmd: cmd}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			w.waitForCmd() // what the process monitor goroutine does
+		}()
+		go func() {
+			defer wg.Done()
+			w.Close()
+		}()
+		wg.Wait()
+
+		if w.Cmd == nil {
+			t.Fatal("Close nilled w.Cmd; the monitor goroutine reads it unlocked")
+		}
+	}
 }

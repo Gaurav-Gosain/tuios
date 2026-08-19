@@ -797,11 +797,13 @@ func (w *Window) Close() {
 	case <-time.After(10 * time.Millisecond):
 	}
 
-	// Kill the process
+	// Kill the process. w.Cmd is deliberately left set: the process-monitor
+	// goroutine reads it unlocked for as long as it lives, and nilling it here
+	// raced that read. Nothing treats a nil Cmd as "closed", and the exec.Cmd
+	// dies with the Window anyway, so leaving it costs nothing.
 	if w.Cmd != nil && w.Cmd.Process != nil {
 		_ = w.Cmd.Process.Kill()
 		w.waitForCmd()
-		w.Cmd = nil
 	}
 
 	// Clear caches to free memory
