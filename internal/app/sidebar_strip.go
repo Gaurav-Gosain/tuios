@@ -222,6 +222,11 @@ func sidebarStripPlan(rows, total int) (shown int, more bool) {
 // only thing the strip cannot say any other way. That is also why the last
 // group standing gives up its header before its marks.
 func sidebarStripPlace(groups []sidebarStripGroup, top, region int) []sidebarStripGroup {
+	// Sized to the three lists the strip can hold, so a relayout allocates
+	// nothing.
+	var alloc [3]int
+	groups = groups[:min(len(groups), len(alloc))]
+
 	n := len(groups)
 	for n > 0 {
 		need := 0
@@ -250,7 +255,6 @@ func sidebarStripPlace(groups []sidebarStripGroup, top, region int) []sidebarStr
 	// its floor gives a row back until the stack fits. Shrinking the longest
 	// list rather than the last one is what stops forty sessions from crowding
 	// out the three panes beside them.
-	alloc := make([]int, n)
 	sum := 0
 	for i, g := range groups {
 		alloc[i] = g.total
