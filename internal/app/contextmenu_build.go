@@ -368,6 +368,10 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 		title = "Session"
 	}
 	return title, append([]ContextMenuItem{
+		// Renaming and colouring both belong to the row's own session, so both
+		// are offered on every row and both read the menu's target rather than
+		// the attached session.
+		m.item(glyphRename, "Rename", "rename_session", false),
 		m.item(glyphPalette, "Session color", "set_session_accent", false),
 		m.item(glyphDetach, "Detach", "prefix_detach", !attached),
 		m.item(glyphSwitch, "Switch session...", "prefix_session_switcher", false),

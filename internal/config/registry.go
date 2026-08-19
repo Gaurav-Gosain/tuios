@@ -367,6 +367,7 @@ var ActionDescriptions = map[string]string{
 
 	// Session lifecycle (context menu rows; no default keybinding)
 	"settings_sidebar":  "Sidebar settings",
+	"rename_session":    "Rename the session the menu was opened on",
 	"kill_session":      "Kill the session the menu was opened on",
 	"kill_session_next": "Kill session, go to next",
 	"kill_session_quit": "Kill session and quit",
