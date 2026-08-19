@@ -144,7 +144,9 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 	// One write for both, so a terminal that treats BEL as "raise the window"
 	// does not race the notification it belongs to.
 	var seq []byte
-	if policy.Notify {
+	// A browser terminal parses OSC 9 and drops it, so writing it there buys
+	// nothing and the warning at startup already said so (browser_client.go).
+	if policy.Notify && !m.BrowserClient {
 		seq = hostNotifySequence(text, detectOuterMultiplexer())
 	}
 	if policy.PlaysBell() {

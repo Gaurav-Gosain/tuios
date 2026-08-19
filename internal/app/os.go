@@ -384,6 +384,9 @@ type OS struct {
 	// ConfigReadOnly stops the settings page writing the config file. Set by
 	// entrypoints that serve someone else's session; see OSOptions.
 	ConfigReadOnly bool
+	// BrowserClient says the far end is a browser tab. See browser_client.go
+	// for what that costs and what tuios says about it.
+	BrowserClient bool
 	// configReadOnlyTold keeps the "this will not be saved" notice to once per
 	// session, since it would otherwise fire on every keypress in the settings
 	// page.
