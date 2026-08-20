@@ -22,6 +22,11 @@ export const BASE_URL = `http://127.0.0.1:${PORT}`;
 // WebTransport over UDP, so consecutive ports would collide.
 export const CONFIG_PORT = String(Number(PORT) + 2);
 export const CONFIG_BASE_URL = `http://127.0.0.1:${CONFIG_PORT}`;
+// The multi-client suite needs a session no other suite has attached to, since
+// what it measures is what a second viewport does to the first one's layout.
+// Two ports up again, for the same WebTransport reason.
+export const MULTI_PORT = String(Number(PORT) + 4);
+export const MULTI_BASE_URL = `http://127.0.0.1:${MULTI_PORT}`;
 
 // A throwaway XDG tree per server per run. tuios-web reads the user's config
 // and writes session state, and a test must not touch either.
@@ -55,6 +60,7 @@ function isolatedTree(envKey) {
 
 const touch = isolatedTree('TUIOS_CT_HOME');
 const cfg = isolatedTree('TUIOS_CT_CONFIG_HOME');
+const multi = isolatedTree('TUIOS_CT_MULTI_HOME');
 
 // The config the second server is served with. Written before it starts,
 // because tuios-web reads the file once, at startup, for the whole process.
@@ -86,7 +92,7 @@ mkdirSync(join(cfg.env.XDG_CONFIG_HOME, 'tuios'), { recursive: true });
 writeFileSync(join(cfg.env.XDG_CONFIG_HOME, 'tuios', 'config.toml'), SEEDED_CONFIG);
 
 // Both, for the teardown: each server autostarts its own daemon.
-export const ISOLATED_HOMES = [touch.home, cfg.home];
+export const ISOLATED_HOMES = [touch.home, cfg.home, multi.home];
 
 const chromium = {
   executablePath: CHROMIUM,
@@ -154,9 +160,23 @@ export default defineConfig({
         launchOptions: chromium,
       },
     },
+    {
+      // No viewport here: the multi-client tests open their own contexts,
+      // because the whole subject is two of them at sizes that differ.
+      name: 'multiclient',
+      testMatch: /multiclient\.spec\.mjs/,
+      use: {
+        baseURL: MULTI_BASE_URL,
+        hasTouch: false,
+        isMobile: false,
+        deviceScaleFactor: 1,
+        launchOptions: chromium,
+      },
+    },
   ],
   webServer: [
     server(PORT, BASE_URL, touch.env),
     server(CONFIG_PORT, CONFIG_BASE_URL, cfg.env),
+    server(MULTI_PORT, MULTI_BASE_URL, multi.env),
   ],
 });
