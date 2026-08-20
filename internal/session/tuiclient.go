@@ -286,12 +286,20 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 	case MsgError:
 		var errPayload ErrorPayload
 		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
-		return nil, fmt.Errorf("attach failed: %s", errPayload.Message)
+		return nil, &attachRefused{msg: errPayload.Message}
 
 	default:
 		return nil, fmt.Errorf("unexpected response: %d", resp.Type)
 	}
 }
+
+// attachRefused reports an attach the daemon answered and declined, as opposed
+// to one that never got an answer at all. Only the first is worth a second round
+// trip: if the daemon is not replying, asking it again doubles the wait for an
+// answer that is not coming.
+type attachRefused struct{ msg string }
+
+func (e *attachRefused) Error() string { return "attach failed: " + e.msg }
 
 // Detach detaches from the current session.
 func (c *TUIClient) Detach() error {
@@ -402,6 +410,13 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		rollback.Recovery = errors.New("the client held no named session to return to")
 		return nil, rollback
 	}
+	var refused *attachRefused
+	if !errors.As(err, &refused) {
+		// The daemon did not answer, so a second round trip would only spend
+		// another timeout waiting for an answer that is not coming.
+		rollback.Recovery = errors.New("the daemon is not answering, so no return was attempted")
+		return nil, rollback
+	}
 	prevState, rerr := c.attachWhileReading(prevName, false, width, height)
 	if rerr != nil {
 		rollback.Recovery = rerr
@@ -445,7 +460,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 	case MsgError:
 		var errPayload ErrorPayload
 		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
-		return nil, fmt.Errorf("attach failed: %s", errPayload.Message)
+		return nil, &attachRefused{msg: errPayload.Message}
 
 	default:
 		return nil, fmt.Errorf("unexpected response: %d", resp.Type)
