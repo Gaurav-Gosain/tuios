@@ -236,7 +236,7 @@ func TestExplainDialErrorPassesThroughMismatch(t *testing.T) {
 		t.Fatalf("mismatch was rewritten into %T: %v", got, got)
 	}
 	msg := got.Error()
-	for _, want := range []string{"daemon 0.9.0", "CLI 1.4.0", "tuios kill-server"} {
+	for _, want := range []string{"daemon 0.9.0", "client 1.4.0", "tuios kill-server"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message missing %q:\n%s", want, msg)
 		}
