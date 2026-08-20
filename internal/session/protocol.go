@@ -582,6 +582,12 @@ const MinProtocolVersion = 3
 // refused, which is correct: it cannot read this build's messages.
 const LegacyProtocolVersion = 2
 
+// LegacyWelcomeType is the type byte a protocol-2 daemon answers a hello with.
+// Nothing else about such a daemon is reachable, but the welcome payload still
+// decodes, which is enough to name its version and how many sessions restarting
+// it would move. Only the compatibility probe reads it.
+const LegacyWelcomeType MessageType = 22
+
 // WriteMessageWithCodec writes a message with the specified codec.
 // Wire format: [4 bytes BE length][1 byte type][1 byte codec][payload]
 func WriteMessageWithCodec(w io.Writer, msg *Message, codec Codec) error {

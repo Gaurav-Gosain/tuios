@@ -167,9 +167,8 @@ func TestClientRefusesTheRealV070Numbering(t *testing.T) {
 }
 
 // TestDaemonAnswersAHello is the same failure from the other side, for the
-// daemon that outlives the client that started it, plus the upgrade case that
-// has to keep working: a client from before the field says nothing and is
-// served.
+// daemon that outlives the client that started it, and for the client too old to
+// announce a version at all.
 func TestDaemonAnswersAHello(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 
@@ -251,4 +250,27 @@ func TestDaemonAnswersAHello(t *testing.T) {
 			t.Fatalf("the daemon announced protocol %d, want %d", welcome.Protocol, ProtocolVersion)
 		}
 	})
+}
+
+// TestLegacyProbeReadsAProtocol2Welcome covers the one thing still worth reading
+// from a daemon this build cannot talk to: which version it is and how many
+// sessions restarting it would move. Both live in the welcome payload, which
+// still decodes even though its type byte is the old one.
+func TestLegacyProbeReadsAProtocol2Welcome(t *testing.T) {
+	fakeDaemonReplying(t, LegacyWelcomeType, &WelcomePayload{
+		Version:      "0.7.0",
+		Codec:        "gob",
+		SessionNames: []string{"work", "notes"},
+	})
+
+	welcome, err := probeLegacyDaemon("0.8.0")
+	if err != nil {
+		t.Fatalf("the probe could not read a protocol-2 welcome: %v", err)
+	}
+	if welcome.Version != "0.7.0" {
+		t.Fatalf("daemon version = %q, want 0.7.0", welcome.Version)
+	}
+	if len(welcome.SessionNames) != 2 {
+		t.Fatalf("session count = %d, want 2", len(welcome.SessionNames))
+	}
 }

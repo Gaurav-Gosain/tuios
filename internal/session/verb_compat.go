@@ -233,7 +233,14 @@ func probeLegacyDaemon(clientVersion string) (*WelcomePayload, error) {
 	if err != nil {
 		return nil, err
 	}
-	if resp.Type != MsgWelcome {
+	// The legacy welcome type is accepted alongside the current one. This probe
+	// exists to name the version of a daemon too old to speak the verb protocol,
+	// and such a daemon is old enough to number its messages differently: the
+	// insertion of MsgCapturePane moved MsgWelcome from 22 to 23. Insisting on
+	// the current number lost the version and the session count from the one
+	// message that needed them. The payload decodes either way, since gob leaves
+	// a field the sender did not know at its zero value.
+	if resp.Type != MsgWelcome && resp.Type != LegacyWelcomeType {
 		return nil, fmt.Errorf("expected welcome, got message type %d", resp.Type)
 	}
 
