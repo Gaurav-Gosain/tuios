@@ -140,6 +140,35 @@ func firstVisibleOnWorkspace(windows []WindowState, workspace int) string {
 // a new window; geometry is a nominal full-size box that a client re-tiles on
 // attach.
 func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (WindowState, error) {
+	return s.AddDaemonWindowWith(NewWindowOptions{Title: title, Focus: true}, onExit)
+}
+
+// NewWindowOptions says where a daemon-created window goes and what its shell
+// starts in. The zero value is the historical behaviour of AddDaemonWindow
+// except for Focus, which every existing caller wants and passes explicitly.
+type NewWindowOptions struct {
+	// Title is the window's name. Empty takes the generated default.
+	Title string
+	// Cwd is the directory the shell starts in. Empty inherits the daemon's,
+	// which is what every window did before this existed.
+	Cwd string
+	// Workspace is the workspace to place the window on. Zero means whichever
+	// workspace is current, so a caller that does not care keeps the old
+	// behaviour.
+	Workspace int
+	// Focus says whether to focus the new window. A caller opening a pane to
+	// work in later wants it created without stealing the focus from the pane
+	// the user is in.
+	Focus bool
+}
+
+// AddDaemonWindowWith creates a daemon-owned window with explicit placement.
+//
+// Placement has to happen at creation rather than as a move afterwards: a
+// window created on the current workspace and moved is visible on the wrong
+// workspace for as long as the two calls take, which an attached client renders.
+func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID string)) (WindowState, error) {
+	title := opts.Title
 	width, height := s.Size()
 	if width <= 0 {
 		width = 80
@@ -159,7 +188,15 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 		// itself, so a window looks the same however it was asked for.
 		title = "Terminal " + windowID[:8]
 	}
-	pty, err := s.CreatePTY(windowID, ptyWidth, ptyHeight, onExit)
+	// Reject the workspace before spawning anything: a PTY created for a window
+	// that then fails to be placed is a process nothing owns.
+	if opts.Workspace != 0 {
+		if bound := s.GetState().workspaceBound(); opts.Workspace < 1 || opts.Workspace > bound {
+			return WindowState{}, fmt.Errorf("workspace %d out of range (1-%d)", opts.Workspace, bound)
+		}
+	}
+
+	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, opts.Cwd, false, onExit)
 	if err != nil {
 		return WindowState{}, err
 	}
@@ -173,6 +210,9 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 		if workspace < 1 {
 			workspace = 1
 			state.CurrentWorkspace = 1
+		}
+		if opts.Workspace != 0 {
+			workspace = opts.Workspace
 		}
 
 		win = WindowState{
@@ -189,8 +229,15 @@ func (s *Session) AddDaemonWindow(title string, onExit func(ptyID string)) (Wind
 			Unplaced: true,
 		}
 		state.Windows = append(state.Windows, win)
-		state.FocusedWindowID = windowID
+		// The workspace's own focus points at the new window either way: it is
+		// the only sensible thing to focus when that workspace is next shown.
+		// Session focus moves only when the caller asked for it, so a pane opened
+		// to work in later does not pull the user out of what they are doing.
 		state.WorkspaceFocus[workspace] = windowID
+		if opts.Focus {
+			state.FocusedWindowID = windowID
+			state.CurrentWorkspace = workspace
+		}
 		return nil
 	})
 	return win, nil

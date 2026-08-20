@@ -119,7 +119,10 @@ func TestVerbSetOptionRecordsAndRoutes(t *testing.T) {
 	if m["applied"] != true {
 		t.Errorf("applied = %v, want true", m["applied"])
 	}
-	if v, ok := sess.GetOption("border_style"); !ok || v != "double" {
+	// Recorded under the full path: the bare spelling is an accepted alias for
+	// the call, and normalising it on the way in keeps one option from being two
+	// entries that can disagree.
+	if v, ok := sess.GetOption("appearance.border_style"); !ok || v != "double" {
 		t.Errorf("option not recorded: %q,%v", v, ok)
 	}
 }

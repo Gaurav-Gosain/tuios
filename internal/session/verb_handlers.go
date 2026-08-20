@@ -3,7 +3,8 @@ package session
 import (
 	"encoding/json"
 	"errors"
-	"maps"
+	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -168,8 +169,11 @@ func (d *Daemon) verbListWindows(_ *connState, params json.RawMessage) (any, *ve
 
 func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session string `json:"session"`
-		Name    string `json:"name"`
+		Session   string `json:"session"`
+		Name      string `json:"name"`
+		Workspace int    `json:"workspace"`
+		Cwd       string `json:"cwd"`
+		Focus     *bool  `json:"focus"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -178,24 +182,77 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 	if verr != nil {
 		return nil, verr
 	}
-
-	var args []string
-	if p.Name != "" {
-		args = []string{p.Name}
+	if p.Workspace < 0 {
+		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2; omit it for the current one")
 	}
+	// A directory that cannot be entered is refused rather than quietly ignored.
+	// The PTY falls back to the daemon's own directory, which means a caller that
+	// mistyped a path gets a working shell in the wrong place and no way to tell
+	// from the response.
+	if p.Cwd != "" {
+		info, err := os.Stat(p.Cwd)
+		switch {
+		case err != nil:
+			return nil, invalidParam("cwd", "cannot start a shell in "+echoName(p.Cwd)+": "+err.Error())
+		case !info.IsDir():
+			return nil, invalidParam("cwd", echoName(p.Cwd)+" is not a directory")
+		}
+	}
+	// Focusing is the historical behaviour and stays the default, because a
+	// caller opening a pane usually means to use it. Passing false is how an
+	// agent opens one to work in later without pulling the user out of the pane
+	// they are in.
+	focus := p.Focus == nil || *p.Focus
 
 	// Creating runs against daemon state whether or not a client is attached: the
 	// PTY and the window set are the daemon's. An attached renderer learns of the
 	// window from the state push and places it, so there is no round trip to the
 	// client that can time out and no second creation path to keep in step.
 	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
-	data, err := d.executeDaemonCommand(sess, "NewWindow", args, onExit)
+	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
+		Title:     p.Name,
+		Cwd:       p.Cwd,
+		Workspace: p.Workspace,
+		Focus:     focus,
+	}, onExit)
 	if err != nil {
-		return nil, mapResolveErr(err, sess)
+		return nil, newWindowErr(err, sess, p.Workspace)
 	}
-	out := map[string]any{"type": "window_created"}
-	maps.Copy(out, data)
-	return out, nil
+
+	displayName := win.Title
+	if p.Name != "" {
+		if err := sess.RenameDaemonWindow(win.ID, p.Name); err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		displayName = p.Name
+	}
+
+	// The result says where the window went, not just that one was made. A
+	// caller that asked for a workspace has to be able to confirm it without a
+	// second call, and unplaced is the honest answer to "what size is it": the
+	// box is a placeholder until a client with a viewport places it.
+	return map[string]any{
+		"type":      "window_created",
+		"window_id": win.ID,
+		"name":      displayName,
+		"workspace": win.Workspace,
+		"pty_id":    win.PTYID,
+		"focused":   focus,
+		"unplaced":  win.Unplaced,
+	}, nil
+}
+
+// newWindowErr classifies a creation failure. An out-of-range workspace is a bad
+// parameter the caller can correct; anything else came from spawning the shell.
+func newWindowErr(err error, sess *Session, ws int) *verbError {
+	if strings.Contains(err.Error(), "out of range") {
+		return hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
+			Param:  "workspace",
+			Verb:   "list-workspaces",
+			Detail: fmt.Sprintf("this session has workspaces 1 to %d; %d is outside that.", sess.GetState().workspaceBound(), ws),
+		})
+	}
+	return mapResolveErr(err, sess)
 }
 
 func (d *Daemon) verbCloseWindow(_ *connState, params json.RawMessage) (any, *verbError) {
@@ -400,72 +457,6 @@ func (d *Daemon) verbKillSession(_ *connState, params json.RawMessage) (any, *ve
 		})
 	}
 	return map[string]any{"type": "ok"}, nil
-}
-
-func (d *Daemon) verbSetOption(_ *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Session string `json:"session"`
-		Key     string `json:"key"`
-		Value   string `json:"value"`
-	}
-	if verr := decodeParams(params, &p); verr != nil {
-		return nil, verr
-	}
-	if p.Key == "" {
-		return nil, invalidParam("key", `key is required, e.g. "appearance.dockbar_position"`)
-	}
-	sess, verr := d.resolveVerbSession(p.Session)
-	if verr != nil {
-		return nil, verr
-	}
-
-	// Record the option in daemon-owned state so get-option can read it back.
-	sess.SetOption(p.Key, p.Value)
-
-	// When a TUI is attached, also route the change so options it understands
-	// apply to the live renderer. A routing failure is not fatal: the option is
-	// still recorded, so applied reflects only whether the live apply succeeded.
-	applied := false
-	if tui := d.findTUIClient(sess.ID); tui != nil {
-		res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
-			CommandType: "set_config",
-			ConfigPath:  p.Key,
-			ConfigValue: p.Value,
-		}, routedVerbTimeout)
-		applied = err == nil && res != nil && res.Success
-	}
-
-	return map[string]any{"type": "option_set", "key": p.Key, "value": p.Value, "applied": applied}, nil
-}
-
-func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Session string `json:"session"`
-		Key     string `json:"key"`
-	}
-	if verr := decodeParams(params, &p); verr != nil {
-		return nil, verr
-	}
-	if p.Key == "" {
-		return nil, invalidParam("key", `key is required, e.g. "appearance.dockbar_position"`)
-	}
-	sess, verr := d.resolveVerbSession(p.Session)
-	if verr != nil {
-		return nil, verr
-	}
-	value, ok := sess.GetOption(p.Key)
-	if !ok {
-		available := sess.OptionKeys()
-		return nil, hintedVerbError(ErrVerbOptionNotFound, "option "+p.Key+" is not set on session "+sess.Name, &VerbHint{
-			Param:      "key",
-			Verb:       "set-option",
-			Command:    "tuios set-config " + p.Key + " <value>",
-			DidYouMean: closestMatch(p.Key, available),
-			Available:  available,
-			Detail:     "get-option only reads options previously set through set-option on this session; it does not read the config file.",
-		})
-	}
-	return map[string]any{"type": "option", "key": p.Key, "value": value}, nil
 }
 
 func (d *Daemon) verbSetSessionName(_ *connState, params json.RawMessage) (any, *verbError) {

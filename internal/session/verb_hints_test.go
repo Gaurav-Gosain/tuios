@@ -197,13 +197,17 @@ func TestVerbErrorHints(t *testing.T) {
 			wantAvailable: []string{"work", "scratch", "empty"},
 		},
 		{
-			name:        "an unset option lists the options that are set",
+			// get-option answers an option that exists but was never set on this
+			// session with its default, so only a key that names no option at all
+			// is an error now, and the remedy for that is to go and look at what
+			// does exist.
+			name:        "a misspelled option says what the options are",
 			req:         `{"id":1,"verb":"get-option","params":{"session":"work","key":"appearance.border_styl"}}`,
 			wantCode:    ErrVerbOptionNotFound,
-			wantMessage: []string{"appearance.border_styl", "work"},
+			wantMessage: []string{"appearance.border_styl"},
 			wantHint: map[string]string{
 				"param":        "key",
-				"verb":         "set-option",
+				"verb":         "list-options",
 				"did_you_mean": "appearance.border_style",
 			},
 			wantAvailable: []string{"appearance.border_style"},
