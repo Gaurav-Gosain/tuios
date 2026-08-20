@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
@@ -350,21 +351,24 @@ func handleRestoreAll(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
 	o.CycleToNextVisibleWindow()
-	return o, nil
+	return maybeEnterTerminalOnFocusChange(o, prev)
 }
 
 func handlePrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
 	o.CycleToPreviousVisibleWindow()
-	return o, nil
+	return maybeEnterTerminalOnFocusChange(o, prev)
 }
 
 // makeSelectWindowHandler creates a handler for selecting a window by index.
 // The index comes from the action name, so the binding can be any key.
 func makeSelectWindowHandler(idx int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		prev := o.FocusedWindow
 		selectWindowByIndex(idx+1, o)
-		return o, nil
+		return maybeEnterTerminalOnFocusChange(o, prev)
 	}
 }
 
@@ -660,6 +664,27 @@ func handlePreselectDown(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // Mode Control Action Handlers
 // ============================================================================
 
+// maybeEnterTerminalOnFocusChange enters terminal mode after a window-focus
+// command that actually moved focus, from window-management mode. Hover-focus
+// and click-to-type keep their own policies; this is only the keyboard (and
+// prefix) focus commands. A no-op that leaves the already-focused pane focused
+// does not change mode.
+//
+// It reuses the enter_terminal_mode handler so the notification, logging, and
+// mode-switch side effects stay on one path.
+func maybeEnterTerminalOnFocusChange(o *app.OS, previousFocused int) (*app.OS, tea.Cmd) {
+	if !config.AutoEnterTerminalOnFocus {
+		return o, nil
+	}
+	if o.Mode != app.WindowManagementMode {
+		return o, nil
+	}
+	if o.FocusedWindow == previousFocused || o.FocusedWindow < 0 || len(o.Windows) == 0 {
+		return o, nil
+	}
+	return handleEnterTerminalMode(tea.KeyPressMsg{}, o)
+}
+
 func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 		focusedWindow := o.GetFocusedWindow()
@@ -868,17 +893,19 @@ func handleStopRecording(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // ============================================================================
 
 func handleScrollFocusLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
 	if o.AutoTiling && o.UseScrollingLayout {
 		o.ScrollingFocusLeft()
 	}
-	return o, nil
+	return maybeEnterTerminalOnFocusChange(o, prev)
 }
 
 func handleScrollFocusRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
 	if o.AutoTiling && o.UseScrollingLayout {
 		o.ScrollingFocusRight()
 	}
-	return o, nil
+	return maybeEnterTerminalOnFocusChange(o, prev)
 }
 
 func handleScrollMoveLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

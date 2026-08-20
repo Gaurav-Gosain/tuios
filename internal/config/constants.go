@@ -561,6 +561,19 @@ func (s *Settings) FormatWorkspaceTab(name string, index int) string {
 	).Replace(s.DockWorkspaceTabFormat)
 }
 
+// AutoEnterTerminalOnFocus enters terminal mode when a window-management
+// keyboard command actually moves focus to another pane (next/prev window,
+// numbered select, directional pane focus). Hover-focus and click-to-type keep
+// their own policies; this is only those explicit focus commands. A no-op that
+// leaves the already-focused pane focused does not change mode, so Tab/n/w stay
+// usable until the user actually focuses a different pane.
+//
+// The default is on: focusing a pane with the keyboard is a request to type in
+// it, the same bargain click-to-type="single" makes for the mouse. Set it false
+// to keep cycling windows in window-management mode without an extra Esc.
+// Set via appearance.auto_enter_terminal_on_focus config.
+var AutoEnterTerminalOnFocus = true
+
 // PaneGapMax caps it. Past this the panes on a small terminal are further apart
 // than they are wide, and spacing that swallows what it spaces has stopped
 // being spacing.
