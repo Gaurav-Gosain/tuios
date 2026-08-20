@@ -87,8 +87,8 @@ func (w *Window) applyStreamResize(chunk outputChunk) {
 		w.Terminal.Resize(chunk.width, chunk.height)
 	}
 	w.ioMu.Unlock()
-	// Dirty flags belong to the UI goroutine; these two are what the write
-	// path signals from here, and MarkTerminalsWithNewContent does the rest.
+	// Dirty flags belong to the UI goroutine; the write path only says that
+	// something arrived, and MarkTerminalsWithNewContent does the rest.
 	w.noteOutput()
 }
 
