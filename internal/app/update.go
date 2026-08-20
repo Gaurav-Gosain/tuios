@@ -1356,12 +1356,19 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Effective session size changed (min of all clients)
 		// Set the effective size - GetRenderWidth/Height will use min(terminal, effective)
 		if m.EffectiveWidth != msg.Width || m.EffectiveHeight != msg.Height {
+			oldWidth, oldHeight := m.GetRenderWidth(), m.GetRenderHeight()
 			m.EffectiveWidth = msg.Width
 			m.EffectiveHeight = msg.Height
 			m.MarkAllDirty()
 			// Retile if the effective render size changed
 			if m.AutoTiling {
 				m.TileAllWindows()
+			} else if m.GetRenderWidth() < oldWidth || m.GetRenderHeight() < oldHeight {
+				// Floating panes keep their own geometry, so a session that
+				// shrank around this client leaves them hanging over an edge
+				// that has moved in. The same clamp the host terminal's own
+				// resize does, for the resize this client did not cause.
+				m.ClampWindowsToView()
 			}
 			// CRITICAL: Force sync all daemon PTY dimensions after tiling
 			// This ensures PTYs match the new window dimensions even if no animation was created

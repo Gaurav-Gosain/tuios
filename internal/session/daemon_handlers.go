@@ -110,13 +110,19 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		effectiveHeight = payload.Height
 	}
 
-	// Update session size if needed
-	session.Resize(effectiveWidth, effectiveHeight)
-
-	// Notify other clients that a new client joined (this also broadcasts size change)
+	// Notify other clients that a new client joined (this also broadcasts size
+	// change). It runs before the session's size is recorded, because the
+	// broadcast is what compares the new effective size against the recorded one
+	// to decide there is anything to announce. Recording it first made the
+	// change invisible: a client already attached was never told the session had
+	// shrunk around it, and went on drawing its panes at columns the joining
+	// client did not have.
 	if clientCount > 1 {
 		d.notifyClientJoined(session.ID, cs)
 	}
+
+	// Update session size if needed
+	session.Resize(effectiveWidth, effectiveHeight)
 
 	// A client is now looking at the session, so the restored mark has served its
 	// purpose. Cleared before the snapshot below so the attaching client is never
@@ -359,7 +365,7 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 		cs.height = payload.Height
 		cs.mu.Unlock()
 		// Recalculate effective session size
-		d.recalculateAndBroadcastSize(cs.sessionID)
+		d.recalculateAndBroadcastSize(cs.sessionID, "")
 	} else {
 		// PTY-specific resize
 		if pty := session.GetPTY(payload.PTYID); pty != nil {
