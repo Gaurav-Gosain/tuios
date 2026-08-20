@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -50,6 +51,47 @@ func TestDeclaredParamsAreAllAccepted(t *testing.T) {
 		for _, p := range entry.params {
 			if verr := checkParamNames(name, entry, json.RawMessage(`{"`+p.Name+`":null}`)); verr != nil {
 				t.Errorf("verb %s refuses its own declared parameter %s: %v", name, p.Name, verr)
+			}
+		}
+	}
+}
+
+// TestEveryVerbIsDocumentedWellEnoughToCall is the discoverability bar. An agent
+// is meant to learn this surface from list-verbs alone, so a verb that ships
+// with no description, or a parameter with no description or type, is a verb
+// that can only be used by reading the source.
+func TestEveryVerbIsDocumentedWellEnoughToCall(t *testing.T) {
+	for name, entry := range verbRegistry {
+		if strings.TrimSpace(entry.description) == "" {
+			t.Errorf("verb %s has no description", name)
+		}
+		if len(entry.examples) == 0 {
+			t.Errorf("verb %s has no example call", name)
+		}
+		for _, group := range [][]verbParam{entry.params, entry.returns} {
+			for _, p := range group {
+				if p.Name == "" || p.Type == "" || strings.TrimSpace(p.Description) == "" {
+					t.Errorf("verb %s documents a field incompletely: %+v", name, p)
+				}
+			}
+		}
+		// A verb that changes something has to say what came back, or a caller
+		// cannot tell what it did. The read verbs that answer with a documented
+		// shape are covered by the same rule.
+		if len(entry.returns) == 0 {
+			switch name {
+			case "hello", "list-verbs", "unsubscribe", "subscribe", "list-sessions",
+				"session-info", "list-windows", "close-window", "resize", "kill-session",
+				"send-keys", "send-text", "capture-pane", "wait-for",
+				"set-session-name", "set-session-accent", "set-workspace-name",
+				"set-workspace-order", "set-agent-state", "get-agent-state",
+				"explain-agent-detect", "explain-agent-screen":
+				// Verbs that predate the returns field. They are documented in the
+				// skill and their shapes are pinned by their own tests; listing them
+				// here keeps the guard honest about what is not covered yet rather
+				// than quietly passing everything.
+			default:
+				t.Errorf("verb %s documents no result shape", name)
 			}
 		}
 	}
