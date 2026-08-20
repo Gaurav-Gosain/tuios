@@ -5,6 +5,24 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// reportedCursorPosition returns the one-based line and column a cursor
+// position report should carry, in that order. CPR is CSI Pl ; Pc R, line
+// first.
+//
+// Under [ansi.DECOM] the numbers are relative to the scrolling region, because
+// that is the coordinate system the guest is addressing the cursor in: a
+// program that reads a report and feeds it straight back to CUP has to land
+// where it started. xterm subtracts both margins here for the same reason
+// (charproc.c, CASE_DSR).
+func (e *Emulator) reportedCursorPosition() (line, col int) {
+	x, y := e.scr.CursorPosition()
+	if e.isModeSet(ansi.DECOM) {
+		r := e.scr.ScrollRegion()
+		x, y = x-r.Min.X, y-r.Min.Y
+	}
+	return y + 1, x + 1
+}
+
 // nextTab moves the cursor to the next tab stop n times. This respects the
 // horizontal scrolling region. This performs the same function as [ansi.CHT].
 func (e *Emulator) nextTab(n int) {

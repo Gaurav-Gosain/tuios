@@ -924,8 +924,8 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			// See: https://vt100.net/docs/vt510-rm/DSR-OS.html
 			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
 		case 6: // Cursor Position Report [ansi.CPR]
-			x, y := e.scr.CursorPosition()
-			_, _ = io.WriteString(e.pipe, ansi.CursorPositionReport(x+1, y+1))
+			line, col := e.reportedCursorPosition()
+			_, _ = io.WriteString(e.pipe, ansi.CursorPositionReport(line, col))
 		default:
 			return false
 		}
@@ -941,8 +941,8 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 		switch n {
 		case 6: // Extended Cursor Position Report [ansi.DECXCPR]
-			x, y := e.scr.CursorPosition()
-			_, _ = io.WriteString(e.pipe, ansi.ExtendedCursorPositionReport(x+1, y+1, 0)) // We don't support page numbers //nolint:errcheck
+			line, col := e.reportedCursorPosition()
+			_, _ = io.WriteString(e.pipe, ansi.ExtendedCursorPositionReport(line, col, 0)) // We don't support page numbers //nolint:errcheck
 		default:
 			return false
 		}
