@@ -161,6 +161,7 @@ type OS struct {
 	InteractionMode    bool                       // True when actively dragging/resizing
 	MouseSnapping      bool                       // Enable/disable mouse snapping
 	WindowExitChan     chan string                // Channel to signal window closure
+	windowExits        windowExitQueue            // Overflow for exits WindowExitChan could not take
 	PTYDataChan        chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
 	StateSyncChan      chan *session.SessionState // Channel for thread-safe state sync from callbacks
 	ClientEventChan    chan ClientEvent           // Channel for thread-safe client join/leave notifications
@@ -936,6 +937,7 @@ func (m *OS) SwitchToSession(targetSession string) error {
 // TUIClient.Close is idempotent, so calling Cleanup more than once is safe.
 // State should be synced to the daemon before Cleanup, on the UI goroutine.
 func (m *OS) Cleanup() {
+	m.stopWindowExitDrain()
 	if m.DaemonClient != nil {
 		_ = m.DaemonClient.Close()
 		return

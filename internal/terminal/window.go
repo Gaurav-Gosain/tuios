@@ -662,7 +662,11 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		select {
 		case exitChan <- id:
 		default:
-			// Channel full, exit silently
+			// Safe to drop only here: SetProcessExited above is already true,
+			// so the maintenance tick's exit sweep closes this window even if
+			// nobody ever reads the signal. A daemon-backed pane has no such
+			// backstop, which is why its exits are queued instead (see
+			// app.OS.queueWindowExit).
 		}
 	}()
 
