@@ -253,6 +253,80 @@ func waitClient(w *terminal.Window, want string) bool {
 }
 
 // ---------------------------------------------------------------------------
+// How many frames one keystroke is worth.
+
+// TestKeystrokeToPaneComposesAnIdenticalFrame is a count rather than a timing,
+// so it is not gated and does not care what else the machine is doing.
+//
+// bubbletea composes after every message it delivers, and Update forces
+// renderSkipped to false for every key ("Any user input must produce a fresh
+// frame", update.go). For a key forwarded to a daemon pane that is a frame
+// composed before anything has changed: the key went out on the socket, the
+// guest has not answered yet, and the pane still holds exactly what it held.
+// The echo arrives later as PTY output and composes a second frame, which is
+// the one that carries it.
+//
+// This pins that the first of those two frames is byte-identical to the frame
+// before the keystroke, which is what makes it waste rather than latency. If a
+// future change makes a keystroke visibly alter the frame by itself, this test
+// fails and the reasoning above needs revisiting rather than the number.
+func TestKeystrokeToPaneComposesAnIdenticalFrame(t *testing.T) {
+	r := newRigSized(t, 1, latCols, latRows)
+	w := r.m.GetFocusedWindow()
+	if w == nil {
+		t.Fatal("no focused window")
+	}
+	r.waitDaemonShows(w.PTYID, "$")
+	r.settle()
+
+	before := frame(r.m)
+	if before == "" {
+		t.Fatal("composed an empty frame")
+	}
+
+	// The write, and then the frame bubbletea would compose for the key
+	// message, taken before any echo could have made it back.
+	if err := r.m.SendInputToDaemon(w, []byte("#")); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if got := frame(r.m); got != before {
+		t.Log("a keystroke now changes the frame by itself; the wasted-compose " +
+			"finding in docs/perf.md no longer holds as written")
+		t.Fail()
+	}
+}
+
+// ---------------------------------------------------------------------------
+// The state push every keystroke pays for.
+
+// TestLatencyStateSync measures SyncStateToDaemon, which internal/input calls
+// after every key and mouse event on a daemon session, synchronously on the
+// bubbletea Update goroutine.
+//
+// It is not a round trip, so it is not what roundTripMu serialises, but it is a
+// full session-state build plus a gob encode plus a blocking socket write held
+// under the client mutex, and it happens on the frame that carries the
+// keystroke. It is measured by pane count because the state it builds is a
+// per-window slice, so whatever it costs is paid again for every pane open.
+func TestLatencyStateSync(t *testing.T) {
+	latencyGate(t)
+	for _, panes := range []int{1, 4, 8} {
+		t.Run(fmt.Sprintf("panes%d", panes), func(t *testing.T) {
+			r := newRigSized(t, panes, latCols, latRows)
+			r.settle()
+
+			var d perf.Dist
+			for range latencyRuns {
+				t0 := time.Now()
+				r.m.SyncStateToDaemon()
+				d.AddSince(t0)
+			}
+			t.Log(d.Line(fmt.Sprintf("state sync/per keystroke, %d panes", panes)))
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Frame-emit latency: what coalescing costs a quiet pane.
 
 // TestLatencyFrameEmit measures from a pane producing output to the render
