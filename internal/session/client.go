@@ -259,7 +259,9 @@ func (c *Client) sendHello() error {
 		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
 	}
 	if resp.Type != MsgWelcome {
-		return fmt.Errorf("expected welcome, got message type %d", resp.Type)
+		// See TUIClient.ConnectWithCapabilities: a reply of another type means
+		// the daemon numbers its messages differently.
+		return numberingMismatch(c.version, resp.Type)
 	}
 
 	// Parse welcome to get negotiated codec

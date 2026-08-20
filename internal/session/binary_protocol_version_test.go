@@ -13,6 +13,13 @@ import (
 // building that vintage.
 func fakeDaemon(t *testing.T, welcome *WelcomePayload) (hello chan *HelloPayload) {
 	t.Helper()
+	return fakeDaemonReplying(t, MsgWelcome, welcome)
+}
+
+// fakeDaemonReplying is fakeDaemon with the reply's type byte chosen, for the
+// daemons whose numbering differs from this build's.
+func fakeDaemonReplying(t *testing.T, replyType MessageType, welcome *WelcomePayload) (hello chan *HelloPayload) {
+	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 
 	socketPath, err := GetSocketPath()
@@ -42,7 +49,7 @@ func fakeDaemon(t *testing.T, welcome *WelcomePayload) (hello chan *HelloPayload
 			return
 		}
 		hello <- &payload
-		reply, err := NewMessageWithCodec(MsgWelcome, welcome, codec)
+		reply, err := NewMessageWithCodec(replyType, welcome, codec)
 		if err != nil {
 			return
 		}
@@ -100,11 +107,11 @@ func TestClientRefusesADaemonSpeakingAnotherProtocol(t *testing.T) {
 	}
 }
 
-// TestClientAcceptsADaemonThatPredatesTheVersionField pins the other half of the
-// decision. Every daemon that ever shipped speaks this protocol; the field
-// saying so is what is new. Reading its absence as a mismatch would refuse every
-// running daemon at exactly the release the check exists for.
-func TestClientAcceptsADaemonThatPredatesTheVersionField(t *testing.T) {
+// TestClientRefusesADaemonThatPredatesTheVersionField covers a daemon that
+// announces no version at all. Silence is age: the version fields arrived in the
+// same release as the numbering change, so a peer that does not mention one is a
+// peer from before the numbering moved, and it cannot be talked to.
+func TestClientRefusesADaemonThatPredatesTheVersionField(t *testing.T) {
 	fakeDaemon(t, &WelcomePayload{
 		Version:      "0.7.0",
 		Codec:        "gob",
@@ -112,10 +119,51 @@ func TestClientAcceptsADaemonThatPredatesTheVersionField(t *testing.T) {
 	})
 
 	c := NewTUIClient()
-	if err := c.Connect("0.8.0", 80, 24); err != nil {
-		t.Fatalf("a v0.7.0 daemon was refused by a v0.8.0 client: %v", err)
+	err := c.Connect("0.8.0", 80, 24)
+	if err == nil {
+		_ = c.Close()
+		t.Fatalf("the client attached to a daemon that announced no protocol version")
 	}
-	_ = c.Close()
+	var mismatch *ProtocolMismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("expected a *ProtocolMismatchError, got %T: %v", err, err)
+	}
+	if mismatch.DaemonProtocol != LegacyProtocolVersion {
+		t.Fatalf("silence should read as protocol %d, got %d", LegacyProtocolVersion, mismatch.DaemonProtocol)
+	}
+	if !strings.Contains(err.Error(), "tuios kill-server") {
+		t.Fatalf("the message a user sees does not name the fix:\n%s", err.Error())
+	}
+}
+
+// TestClientRefusesTheRealV070Numbering is the upgrade a user actually performs.
+// MsgCapturePane was inserted after MsgSetConfig once v0.7.0 was out, so a
+// v0.7.0 daemon answers a hello with type 22 where this build's welcome is 23.
+// Verified against a binary built from the v0.7.0 tag, which produced exactly
+// this reply; the number is pinned here so the suite keeps the case without
+// building a second binary.
+func TestClientRefusesTheRealV070Numbering(t *testing.T) {
+	const v070Welcome = MessageType(22)
+	if MsgWelcome == v070Welcome {
+		t.Fatalf("vacuous: this build's welcome is also %d, so nothing is being told apart", v070Welcome)
+	}
+	fakeDaemonReplying(t, v070Welcome, &WelcomePayload{Version: "0.7.0", Codec: "gob"})
+
+	c := NewTUIClient()
+	err := c.Connect("0.8.0", 80, 24)
+	if err == nil {
+		_ = c.Close()
+		t.Fatalf("the client accepted a v0.7.0 daemon's reply as a welcome")
+	}
+	var mismatch *ProtocolMismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("expected a *ProtocolMismatchError, got %T: %v", err, err)
+	}
+	for _, want := range []string{"0.8.0", "tuios kill-server"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("the message a user sees does not mention %q:\n%s", want, err.Error())
+		}
+	}
 }
 
 // TestDaemonAnswersAHello is the same failure from the other side, for the
@@ -176,10 +224,24 @@ func TestDaemonAnswersAHello(t *testing.T) {
 		}
 	})
 
-	t.Run("serves a client that predates the version field", func(t *testing.T) {
+	t.Run("refuses a client that predates the version field", func(t *testing.T) {
 		resp := say(t, &HelloPayload{Version: "0.7.0", PreferredCodec: "gob"})
+		if resp.Type != MsgError {
+			t.Fatalf("a client announcing no protocol version was not refused (reply type %d)", resp.Type)
+		}
+		var errPayload ErrorPayload
+		if err := resp.ParsePayloadWithCodec(&errPayload, codec); err != nil {
+			t.Fatalf("parse error reply: %v", err)
+		}
+		if !strings.Contains(errPayload.Message, "tuios kill-server") {
+			t.Fatalf("the daemon's refusal does not name the fix: %s", errPayload.Message)
+		}
+	})
+
+	t.Run("announces its own version to a client it serves", func(t *testing.T) {
+		resp := say(t, &HelloPayload{Version: "0.8.0", PreferredCodec: "gob", Protocol: ProtocolVersion})
 		if resp.Type != MsgWelcome {
-			t.Fatalf("a v0.7.0 client was refused by this daemon (reply type %d)", resp.Type)
+			t.Fatalf("a current client was refused by this daemon (reply type %d)", resp.Type)
 		}
 		var welcome WelcomePayload
 		if err := resp.ParsePayloadWithCodec(&welcome, codec); err != nil {

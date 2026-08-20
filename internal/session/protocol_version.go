@@ -26,6 +26,21 @@ func protocolMismatch(announced int) bool {
 	return v > ProtocolVersion || v < MinProtocolVersion
 }
 
+// numberingMismatch describes a daemon whose reply to the hello was not a
+// welcome at all. The message type is one byte on the wire with no name on it,
+// so a daemon from before a type was inserted answers with a number this build
+// reads as a different message. Nothing useful can be exchanged with it, and the
+// version it would have announced is unreachable, so the report says what is
+// known and names the fix.
+func numberingMismatch(clientVersion string, got MessageType) *ProtocolMismatchError {
+	return &ProtocolMismatchError{
+		ClientVersion:  clientVersion,
+		DaemonPID:      GetDaemonPID(),
+		ClientProtocol: ProtocolVersion,
+		Cause:          fmt.Errorf("the daemon answered the handshake with message type %d, which this build does not read as a welcome", got),
+	}
+}
+
 // clientProtocolRefusal is what the daemon tells a client it will not serve. It
 // is the message the user reads, so it says which side to move and the command
 // that moves it.

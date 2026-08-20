@@ -552,24 +552,34 @@ const (
 	ErrCodeCommandFailed   = 9 // Command execution failed
 )
 
-// Protocol version for compatibility checking. Both sides announce it in the
-// handshake (HelloPayload.Protocol, WelcomePayload.Protocol) and both refuse a
-// peer outside the range they serve. Bump it on any change that an older peer
-// cannot read: a new message type appended to the iota block is not one, a
-// change to an existing message's shape is.
-const ProtocolVersion = 2
+// ProtocolVersion is the wire protocol this build speaks. Both sides announce it
+// in the handshake (HelloPayload.Protocol, WelcomePayload.Protocol) and both
+// refuse a peer outside the range they serve.
+//
+// Bump it on any change an older peer cannot read. Appending a message type to
+// the end of the iota block is not such a change; inserting one is, because the
+// type is a single byte on the wire and every value after the insertion moves.
+//
+// 3 is this version because exactly that happened since v0.7.0: MsgCapturePane
+// was inserted after MsgSetConfig (f0810a1), which moved MsgWelcome from 22 to
+// 23 and every server-to-client type with it, while ProtocolVersion stayed at 2.
+// A v0.7.0 daemon answers a hello with type 22, which this build reads as
+// MsgCapturePane. It was found by building the v0.7.0 tag and pointing this
+// client at it. The number is corrected here rather than the numbering reverted,
+// because no released build speaks 3 yet, so the bump costs nothing and the
+// refusal it enables is the honest outcome for a pairing that cannot work.
+const ProtocolVersion = 3
 
 // MinProtocolVersion is the oldest wire protocol this build still serves. A peer
 // announcing anything older is told to upgrade rather than allowed to proceed
 // into undefined behavior.
-const MinProtocolVersion = 2
+const MinProtocolVersion = 3
 
 // LegacyProtocolVersion is what a peer that announces nothing is taken to speak.
-// The version fields were added while ProtocolVersion had been 2 for the whole
-// life of the binary protocol, and gob leaves a field the sender did not know at
-// its zero value, so a silent peer is an old build of a protocol this one can
-// still speak. Reading that silence as a mismatch would refuse every daemon
-// already running at exactly the release the check exists for.
+// gob leaves a field the sender did not know at its zero value, so silence is
+// age: a build from before the version fields existed, which is a build from
+// before the numbering moved. It is outside the range above, so such a peer is
+// refused, which is correct: it cannot read this build's messages.
 const LegacyProtocolVersion = 2
 
 // WriteMessageWithCodec writes a message with the specified codec.

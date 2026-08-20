@@ -218,8 +218,13 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
 	}
 	if resp.Type != MsgWelcome {
+		// A daemon that numbers its messages differently answers the hello with
+		// a type this build calls something else. That is exactly what a
+		// pre-v0.8.0 daemon does, since its MsgWelcome is 22 and this build's is
+		// 23, and it is the same fault the version check exists for, so it is
+		// reported the same way rather than as a type number nobody can act on.
 		_ = conn.Close()
-		return fmt.Errorf("expected welcome, got %d", resp.Type)
+		return numberingMismatch(version, resp.Type)
 	}
 
 	// Parse welcome to get negotiated codec
