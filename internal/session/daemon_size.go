@@ -70,8 +70,11 @@ func (d *Daemon) notifyClientJoined(sessionID string, joiningClient *connState) 
 
 	d.broadcastToSession(sessionID, MsgClientJoined, payload, joiningClient.clientID)
 
-	// Recalculate effective size and broadcast if changed
-	d.recalculateAndBroadcastSize(sessionID)
+	// Recalculate effective size and broadcast if changed. The joining client is
+	// left out: it is still inside its attach call, reading the one reply it
+	// asked for, and an unsolicited message arriving first fails the attach. It
+	// gets the size in that reply instead.
+	d.recalculateAndBroadcastSize(sessionID, joiningClient.clientID)
 }
 
 // notifyClientLeft broadcasts a client leave event to all other clients in the session.
@@ -87,12 +90,14 @@ func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string) {
 
 	// Recalculate effective size and broadcast if changed
 	if clientCount > 0 {
-		d.recalculateAndBroadcastSize(sessionID)
+		d.recalculateAndBroadcastSize(sessionID, leavingClientID)
 	}
 }
 
-// recalculateAndBroadcastSize recalculates the effective session size and broadcasts if changed.
-func (d *Daemon) recalculateAndBroadcastSize(sessionID string) {
+// recalculateAndBroadcastSize recalculates the effective session size and
+// broadcasts if changed. excludeClientID is left out of the broadcast, for the
+// client that is mid-attach and cannot take an unsolicited message yet.
+func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) {
 	session := d.manager.GetSessionByID(sessionID)
 	if session == nil {
 		return
@@ -112,7 +117,7 @@ func (d *Daemon) recalculateAndBroadcastSize(sessionID string) {
 			Height:      newHeight,
 			ClientCount: d.getSessionClientCount(sessionID),
 		}
-		d.broadcastToSession(sessionID, MsgSessionResize, payload, "")
+		d.broadcastToSession(sessionID, MsgSessionResize, payload, excludeClientID)
 		LogBasic("Session %s resized to %dx%d (min of %d clients)", session.Name, newWidth, newHeight, payload.ClientCount)
 	}
 }

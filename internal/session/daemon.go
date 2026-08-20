@@ -590,6 +590,16 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		}
 		d.pendingRequestsMu.Unlock()
 
+		// A client that drops without detaching has still left, and the effective
+		// session size is the minimum over the clients that are here. Nothing
+		// recomputed it on this path, so a browser tab closed on a phone left
+		// every other client boxed into the phone's columns for good. Runs after
+		// the client is out of d.clients, so the size is taken over the ones that
+		// remain; a clean detach cleared sessionID above and does not come here.
+		if sessionID != "" {
+			d.notifyClientLeft(sessionID, clientID)
+		}
+
 		_ = conn.Close()
 	}()
 
