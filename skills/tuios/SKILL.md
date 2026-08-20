@@ -554,6 +554,9 @@ when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 `timeout`, `protocol_mismatch`, `internal`. The CLI folds the same information
 into its messages.
 
+`option_not_found` means the path names no option in this build, and its hint
+carries the closest match; `list-options` describes them all.
+
 `needs_client` means the operation needs a rendered interface and the session has
 nobody attached. Reading, writing, waiting, creating and moving never need one;
 splitting, tiling and directional focus do.
