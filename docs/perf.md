@@ -13,6 +13,9 @@ visible consumer, idle CPU under ~0.5%.
   zero.
 - `go test ./internal/app/ -run TestIdleTickSkipsScans` — asserts idle ticks
   take the skip path (no scan work), read from the `tickStats` counter.
+- `TUIOS_PERF=1 go test ./internal/{terminal,input,app}/ -run TestLatency -v` —
+  input latency cut into hops, reported p50/p95/p99/max. See "2026-08 input
+  latency" below for what each one includes and excludes.
 - `TUIOS_E2E=1 go test ./e2e/tui/ -run TestIdleCostStaysLow` — boots the real
   binary, opens three idle shells, idles 10s, and asserts the app writes
   ~nothing to the wire (render count bounded). `TUIOS_STATS_FILE` makes the
@@ -173,3 +176,218 @@ BenchmarkIdleTick-16   0 render/tick   0 work/tick   296 B/op   5 allocs/op
 ```
 
 No standing `tea.Tick` was introduced. Full `e2e/tui` suite passes (217 s).
+
+## 2026-08 input latency
+
+Input latency is the most easily perceived number this project has, and until
+this pass it could not be decomposed. `e2e/tui/perf_test.go` already timed the
+whole echo loop against the real binary, which is the honest end-to-end figure,
+but one figure cannot say which hop to go and fix, and it reported min/med/p90
+over 16 keystrokes, where a "p99" would have been the maximum relabelled.
+
+Latency is felt at the tail, so everything below is quoted p50/p95/p99/max and
+nothing is quoted as a mean. The echo distribution turned out to be visibly
+bimodal, and a mean of it names a duration no keystroke ever took.
+
+### The harness
+
+Four measurement points at three altitudes. Each says what it includes, because
+a benchmark that omits the daemon is useful only if it admits to doing so.
+
+| where | what it measures | includes | excludes |
+|---|---|---|---|
+| `internal/terminal` `TestLatencyCoalescer` | pane output to render signal | the render coalescer, alone | daemon, guest, compositor, host |
+| `internal/input` `TestLatencyLocal` | a key tuios answers itself, to the frame | key routing, the action, `composeFrame` | daemon, guest, host terminal |
+| `internal/app` `TestLatencyEcho` | keystroke to the composed frame carrying its echo | socket, daemon, PTY, guest, ring, broadcast, client emulator, coalescer, compose | host terminal, bubbletea stdin decode, the diff written to the tty |
+| `internal/app` `TestLatencyDaemonRoundTrip` | keystroke to the client's own emulator | everything above except compose | the compositor |
+| `internal/app` `TestLatencyFrameEmit` | pane output to the render signal, on the rig | coalescer with a real guest in front of it | compose |
+| `internal/app` `TestLatencyStateSync` | the state push every key pays for | build, gob encode, socket write | — |
+| `e2e/tui` `TestPerfInputLatency` | the whole loop, real binary in a real PTY | everything, including the host | nothing |
+
+All in-process measurements run at 207x55 with n=200 (n=500 for the local ones,
+n=300 for the coalescer), so a quoted p99 is a keystroke that really happened.
+
+```
+go test ./internal/terminal/ -run TestLatencyCoalescer -v      # needs TUIOS_PERF=1
+go test ./internal/input/    -run TestLatencyLocal      -v     # needs TUIOS_PERF=1
+go test ./internal/app/      -run TestLatency           -v     # needs TUIOS_PERF=1
+cd e2e/tui && TUIOS_E2E=1 TUIOS_PERF=1 go test -count=1 -v -run TestPerf ./...
+```
+
+`internal/perf` holds the shared `Dist`, so the e2e numbers and the in-process
+ones are the same quantiles computed the same way and can be put side by side.
+Quantiles are nearest-rank rather than interpolated: an interpolated p99 invents
+a duration nobody experienced, and the question here is which real keystroke was
+the slow one.
+
+### Measurement conditions
+
+Another agent was bisecting a compositor regression on this machine for much of
+this pass, and load average ranged from 0.4 to 25. **Every before/after pair
+below was taken in the same quiet window (load 0.9 to 4.1), back to back, by
+checking the old implementation out and re-running the same harness.** Numbers
+taken under load are not compared against numbers taken without it. Counts and
+allocations are load-independent and are quoted as exact.
+
+### Where the time went
+
+Before anything was changed, at 207x55 (load under 2):
+
+| hop | p50 | p99 |
+|---|---|---|
+| key routing, 4 panes | 574 ns | 916 ns |
+| `SyncStateToDaemon`, per key, 4 panes | 17.7 µs | 29.7 µs |
+| daemon round trip, key to client emulator | 1.15 ms | 1.29 ms |
+| **render coalescer, quiet pane** | **5.01 ms** | **8.07 ms** |
+| compose one frame, 4 panes | 4.44 ms | 5.16 ms |
+| echo to composed frame, 1 pane | 9.75 ms | 10.26 ms |
+| echo to composed frame, 4 panes | 9.52 ms | 10.76 ms |
+
+Three things fall out of that table.
+
+**The wire is not the problem.** The daemon round trip, which is the part a
+multiplexer adds over a bare terminal and therefore the part worth defending,
+is 1.15 ms at p50 and barely moves at the tail. It is about a tenth of the echo.
+
+**Routing costs nothing.** 574 ns against a 4.44 ms frame is 0.013%. Deciding
+what a key means is free; drawing the result is the entire local cost.
+
+**The coalescer was half the echo.** `renderCoalescer` polled a flag on a
+free-running 8 ms ticker, so output was shown at the next tick edge regardless
+of what the pane had been doing. That charged a pane silent for a minute the
+same wait as one mid-flood, and a silent pane is exactly the state a pane is in
+when a user types at it.
+
+The coalescer's distribution is the clearest evidence in this pass:
+
+```
+coalescer/quiet pane output -> signal   n=300  min 16.6µs  p50 4.03ms  p95 8.03ms  p99 8.04ms  max 8.08ms
+```
+
+A textbook uniform distribution over [0, 8 ms]. Note the sampling detail: a
+fixed quiet period between samples locks every one to the same tick phase and
+reported min 6.01 ms / max 7.09 ms, which reads like a tight well-behaved hop
+and is one phase measured 300 times. The jitter in the sample loop is what makes
+the number honest.
+
+### What changed
+
+`renderCoalescer` now emits on the leading edge and rate-limits after it. The
+cap it exists for is unchanged, at most one render per 8 ms, so a flooding pane
+still cannot make the compositor draw partial frames; what goes away is the wait
+for a pane with nothing to coalesce against.
+
+Matched runs, same quiet window:
+
+| | before p50 | after p50 | before p99 | after p99 |
+|---|---|---|---|---|
+| coalescer, quiet pane | 5.01 ms | **20.1 µs** | 8.07 ms | **63.6 µs** |
+| frame emit, on the rig | 2.08 ms | **98.9 µs** | 2.25 ms | **199.2 µs** |
+| echo, 1 pane | 9.75 ms | **1.78 ms** | 10.26 ms | **2.15 ms** |
+| echo, 4 panes | 9.52 ms | **2.54 ms** | 10.76 ms | **3.31 ms** |
+| daemon round trip | 1.15 ms | 1.16 ms | 1.29 ms | 1.32 ms |
+
+The daemon round trip is the control: it is not on the changed path and it did
+not move, which is what says the rest of the table is the coalescer rather than
+the weather.
+
+Whole binary, `e2e/tui`, same quiet window, n=200:
+
+| | before p50 | after p50 | before p99 | after p99 |
+|---|---|---|---|---|
+| 1 pane | 9.05 ms | **8.16 ms** | 17.61 ms | **9.64 ms** |
+| 4 panes | 15.77 ms | **8.15 ms** | 17.44 ms | **16.41 ms** |
+| 8 panes | 16.67 ms | 16.62 ms | 24.66 ms | **17.63 ms** |
+| typing, 1 pane flooding | 16.12 ms | **9.65 ms** | 18.00 ms | 20.00 ms |
+| typing, 3 panes flooding | 29.49 ms | 28.54 ms | 50.23 ms | 54.30 ms |
+
+The end-to-end win is real but smaller than the in-process one, because the
+whole-binary path carries terms the in-process harness excludes (see below). At
+eight panes and under a three-pane flood the compositor dominates and swamps the
+coalescer's contribution entirely, which is consistent with everything else
+here.
+
+Idle cost improved rather than regressed. The old coalescer was a standing
+ticker per daemon window, so every open pane woke 125 times a second for the
+life of the process whether or not it had anything to draw; the timer is now
+armed only when there is output. `BenchmarkIdleTick` is unchanged at `0
+render/tick, 0 work/tick, 296 B/op, 5 allocs/op`, and `TestIdleCostStaysLow`
+reports 0 wire bytes over 10 s with `ticks=104 work=0 render=0`.
+
+### Measured and deliberately not changed
+
+**A keystroke to a pane composes a frame worth nothing.** bubbletea composes
+after every message, and `Update` forces a fresh frame for every key ("Any user
+input must produce a fresh frame"). For a key forwarded to a daemon pane, that
+frame is composed before anything has changed: the bytes went out on the socket,
+the guest has not answered, and the pane holds what it held. The echo composes a
+second frame later, and that is the one carrying it.
+`TestKeystrokeToPaneComposesAnIdenticalFrame` pins that the first frame is
+byte-identical to the one before the key, so this is waste rather than latency,
+and it is a count so it holds whatever else the machine is doing. It costs 1.66
+ms at one pane and 4.44 ms at four, and because it runs on the Update goroutine
+it also delays the echo message queued behind it.
+
+This is now the largest remaining term and it is left alone deliberately. Fixing
+it means letting `internal/input` tell `Update` that a key was forwarded
+verbatim and changed nothing else, so the compose can be skipped. The set of
+keys that *do* change something locally is large and easy to get wrong (mode
+changes, prefixes, overlays, copy mode, showkeys, which literally draws the key
+you pressed), and getting it wrong produces the worst class of bug this project
+can ship: a character that does not appear until something else redraws. It
+wants a damage-tracking design and a verification pass on the real screen, not a
+predicate bolted onto a latency fix.
+
+**The compositor has no hotspot to delete.** A CPU profile over `GetCanvas` at
+207x55 attributes 37.8% cumulative to `ansi.stringWidth` and its grapheme
+cluster iteration, 26.0% to `ultraviolet.StyledString.Draw`, and 34.7% to
+`renderWindowBox` as the caller. It is upstream text shaping reached through the
+ordinary path, not a tuios routine sitting on the critical section. There is no
+single change that makes a frame meaningfully cheaper, which is why the lever is
+composing fewer frames rather than faster ones. Note also that
+`BenchmarkCompositorGetCanvas` at nine windows costs 1.00 ms even when only one
+window is dirty: that is the per-frame floor that damage cannot avoid.
+
+**`roundTripMu` is not on the keystroke path.** It was the first thing suspected
+and the suspicion is wrong. `WritePTY` does not take it; it guards only attach,
+PTY create, session list and terminal state. What it does bound is the
+head-of-line case: the daemon dispatches inline on the connection goroutine, so
+a keystroke can sit unread in the socket buffer behind a `MsgGetTerminalState`
+issued on the same connection, which is what a workspace switch does. That is a
+real stall but it is a switch-time stall, not a typing-time one, and it is
+bounded to one outstanding round trip by the mutex being blamed for it.
+
+**`SyncStateToDaemon` per keystroke is not worth touching.** `internal/input`
+calls it after every key on a daemon session, synchronously on the Update
+goroutine: a full session-state build, a gob encode, and a blocking socket write
+under the client mutex. It reads like an obvious problem and it is 17.7 µs at
+p50 with four panes, which is 0.4% of the frame it shares a keystroke with. It
+does spike (p99 reached 312 µs at one pane and 802 µs at eight, presumably the
+write blocking), but not often enough or far enough to be worth the invalidation
+surface that skipping unchanged pushes would add.
+
+**Per-keystroke `debugLog` in `handleInput`.** The daemon's input handler calls
+`debugLog` per keystroke, which evaluates its arguments into an `...any` slice
+and calls `os.Getenv` (a process-wide lock) before the flag can be checked. This
+is the same pattern the 2026-08 hotspot pass fixed in `broadcast`, still present
+here. Left alone: a chunk's whole cost is ~100 ns, so this is noise against a
+millisecond-scale budget, and it is recorded only so the next person does not
+rediscover it and assume it matters.
+
+**Four write syscalls per keystroke.** `WritePTYInput` writes the length, the
+header, a 36-byte padded id and the payload as four separate `conn.Write` calls
+on an unbuffered socket, for a one-byte keystroke with 42 bytes of framing. The
+daemon round trip measures 1.15 ms end to end including the guest, so whatever
+the extra syscalls cost is inside that and is not what makes typing feel slow.
+Recorded rather than done.
+
+### Invariants held
+
+```
+BenchmarkIdleTick-16   0 render/tick   0 work/tick   296 B/op   5 allocs/op
+```
+
+No standing `tea.Tick` was introduced, and one standing per-pane `time.Ticker`
+was removed. No blocking daemon round trip was moved onto the Update goroutine.
+`TestIdleCostStaysLow`: 0 idle wire bytes over 10 s, `ticks=104 work=0
+render=0`. Full `e2e/tui` suite passes.
