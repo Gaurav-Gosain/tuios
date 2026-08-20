@@ -2,6 +2,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -846,6 +847,12 @@ var verboseLog = os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
 
 // SwitchToSession detaches from the current daemon session and attaches to another.
 // The connection to the daemon stays open  - only the session binding changes.
+//
+// The round trip goes first and the windows come down only once it has landed.
+// Tearing down first meant a switch the daemon refused answered "show me that
+// session" by leaving the user with no session at all, and nothing here could
+// put it back: closing a window nils its terminal and its PTY behind a latch
+// that only goes one way.
 func (m *OS) SwitchToSession(targetSession string) error {
 	if m.DaemonClient == nil {
 		return fmt.Errorf("not in daemon mode")
@@ -856,7 +863,53 @@ func (m *OS) SwitchToSession(targetSession string) error {
 
 	m.LogInfo("[SWITCH] Starting: %s → %s", m.SessionName, targetSession)
 
-	// 1. Unsubscribe from all current PTYs and close windows
+	savedWidth, savedHeight := m.Width, m.Height
+	state, err := m.DaemonClient.SwitchSession(targetSession, savedWidth, savedHeight)
+	if err != nil {
+		m.LogError("[SWITCH] %v", err)
+		var rollback *session.SwitchRollback
+		if errors.As(err, &rollback) {
+			if rollback.State != nil {
+				// The daemon took the detach and refused the attach, and the
+				// client is back where it started. Detaching dropped every
+				// subscription, so the panes still on screen have stopped
+				// streaming and have to be rebuilt from the state the return
+				// attach handed back.
+				m.SessionName = m.DaemonClient.SessionName()
+				m.rebuildForSession(rollback.State, savedWidth, savedHeight)
+				m.MarkAllDirty()
+			}
+			// Already says which session the client ended up on.
+			return err
+		}
+		// The detach never landed, so nothing was given up: this client is still
+		// on its own session with every pane streaming.
+		return fmt.Errorf("switch to %q failed: %w; still on %q", targetSession, err, m.SessionName)
+	}
+	m.SessionName = m.DaemonClient.SessionName()
+	m.rebuildForSession(state, savedWidth, savedHeight)
+
+	m.MarkAllDirty()
+	m.LogInfo("Session switch complete: now on %s with %d windows", m.SessionName, len(m.Windows))
+	m.ShowNotification("Session: "+m.SessionName, "success", config.NotificationDuration)
+	// Switching sessions is an attach: this client is now driving a different
+	// session, and a hook that tracks which session is live has to hear about it
+	// here as well as at startup.
+	m.FireAttached()
+	return nil
+}
+
+// rebuildForSession replaces everything this client holds for one session with
+// everything it holds for another: the windows go, the per-session collections
+// are reset, and the panes named by state are built and subscribed.
+//
+// It runs only once the daemon has confirmed which session this connection is
+// on, because every step of it is irreversible.
+func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHeight int) {
+	// The daemon already dropped these subscriptions when it took the detach.
+	// Unsubscribing again is what clears the client's own output, resize and
+	// exit handlers, so a pane from the session just left cannot fire into the
+	// session just joined.
 	for _, w := range m.Windows {
 		if w.DaemonMode && w.PTYID != "" {
 			m.DaemonClient.UnsubscribePTY(w.PTYID)
@@ -864,8 +917,6 @@ func (m *OS) SwitchToSession(targetSession string) error {
 		w.Close()
 	}
 
-	// 2. Clear all current state but preserve screen dimensions
-	savedWidth, savedHeight := m.Width, m.Height
 	m.Windows = nil
 	m.FocusedWindow = -1
 	m.WorkspaceTrees = make(map[int]*layout.BSPTree)
@@ -882,52 +933,37 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	m.CurrentWorkspace = 1
 	m.SubscribedPTYs = make(map[string]bool)
 
-	// 3. Detach + attach in one operation (safe with read loop running)
-	state, err := m.DaemonClient.SwitchSession(targetSession, savedWidth, savedHeight)
-	if err != nil {
-		return fmt.Errorf("switch failed: %w", err)
-	}
-	m.SessionName = m.DaemonClient.SessionName()
-
-	// 4. Restore windows from new session state
-	if state != nil && len(state.Windows) > 0 {
-		if err := m.RestoreFromState(state); err != nil {
-			m.LogError("Failed to restore state: %v", err)
-		}
-		// Restore current workspace from state
-		if state.CurrentWorkspace > 0 {
-			m.CurrentWorkspace = state.CurrentWorkspace
-		}
-		// Restore real screen dimensions (RestoreFromState may overwrite with saved values)
-		m.Width = savedWidth
-		m.Height = savedHeight
-		m.EffectiveWidth = savedWidth
-		m.EffectiveHeight = savedHeight
-
-		if err := m.RestoreTerminalStates(); err != nil {
-			m.LogError("Failed to restore terminal states: %v", err)
-		}
-		if err := m.SetupPTYOutputHandlers(); err != nil {
-			m.LogError("Failed to setup PTY handlers: %v", err)
-		}
-		// Re-tile to set correct window dimensions for current screen
-		if m.AutoTiling {
-			m.TileAllWindows()
-		}
-		// Sync PTY dimensions to match the tiled layout
-		m.SyncDaemonPTYDimensions()
-		// Trigger redraws for alt-screen apps
-		m.TriggerAltScreenRedraws()
+	if state == nil || len(state.Windows) == 0 {
+		return
 	}
 
-	m.MarkAllDirty()
-	m.LogInfo("Session switch complete: now on %s with %d windows", m.SessionName, len(m.Windows))
-	m.ShowNotification("Session: "+m.SessionName, "success", config.NotificationDuration)
-	// Switching sessions is an attach: this client is now driving a different
-	// session, and a hook that tracks which session is live has to hear about it
-	// here as well as at startup.
-	m.FireAttached()
-	return nil
+	if err := m.RestoreFromState(state); err != nil {
+		m.LogError("Failed to restore state: %v", err)
+	}
+	// Restore current workspace from state
+	if state.CurrentWorkspace > 0 {
+		m.CurrentWorkspace = state.CurrentWorkspace
+	}
+	// Restore real screen dimensions (RestoreFromState may overwrite with saved values)
+	m.Width = savedWidth
+	m.Height = savedHeight
+	m.EffectiveWidth = savedWidth
+	m.EffectiveHeight = savedHeight
+
+	if err := m.RestoreTerminalStates(); err != nil {
+		m.LogError("Failed to restore terminal states: %v", err)
+	}
+	if err := m.SetupPTYOutputHandlers(); err != nil {
+		m.LogError("Failed to setup PTY handlers: %v", err)
+	}
+	// Re-tile to set correct window dimensions for current screen
+	if m.AutoTiling {
+		m.TileAllWindows()
+	}
+	// Sync PTY dimensions to match the tiled layout
+	m.SyncDaemonPTYDimensions()
+	// Trigger redraws for alt-screen apps
+	m.TriggerAltScreenRedraws()
 }
 
 // Cleanup performs cleanup operations when the application exits.

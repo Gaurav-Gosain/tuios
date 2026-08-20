@@ -204,9 +204,9 @@ func (d *Daemon) handleDetach(cs *connState) error {
 		}
 	}
 	cs.mu.Lock()
-	// Cleared whole rather than per subscription: a switching client
-	// unsubscribes each pane before it detaches, so by here the positions are
-	// all in ptyResume and none of them are in subs.
+	// Cleared whole rather than per subscription: the loop above has already
+	// released every subscription this connection held, and a detach is the
+	// client letting all of them go, so nothing may be left claiming a position.
 	cs.ptyResume = make(map[string]int64)
 	cs.mu.Unlock()
 

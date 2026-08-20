@@ -285,12 +285,50 @@ func (c *TUIClient) Detach() error {
 	return c.send(msg)
 }
 
+// SwitchRollback reports a session switch that failed after the detach had
+// already been taken, which is the only failure a caller cannot simply ignore:
+// at that instant the connection holds no session.
+//
+// State non-nil means the client is back on Prev and the caller must rebuild
+// from that state, because detaching drops every PTY subscription: the panes it
+// still holds are pictures of shells, not shells. State nil means the return
+// failed too and the connection is attached to nothing.
+type SwitchRollback struct {
+	Target string
+	Prev   string
+	// State is the previous session as the daemon handed it back, when the
+	// return attach succeeded.
+	State *SessionState
+	// Err is why the switch failed.
+	Err error
+	// Recovery is why the return failed, set only when State is nil.
+	Recovery error
+}
+
+func (e *SwitchRollback) Error() string {
+	if e.State != nil {
+		return fmt.Sprintf("switch to %q failed: %v; still on %q", e.Target, e.Err, e.Prev)
+	}
+	return fmt.Sprintf("switch to %q failed: %v; could not return to %q either (%v). Reattach with 'tuios attach %s'",
+		e.Target, e.Err, e.Prev, e.Recovery, e.Prev)
+}
+
+func (e *SwitchRollback) Unwrap() error { return e.Err }
+
 // SwitchSession detaches from the current session and attaches to another.
 // Safe to call while the read loop is running. Serialized via mutex.
+//
+// The detach cannot be taken back on its own: the daemon drops every
+// subscription and every resume position with it. So an attach that fails after
+// it does not simply return; it attaches back to where the client came from and
+// says so in a *SwitchRollback, and the caller rebuilds from the state that
+// comes with it. A switch the daemon refuses costs the user the switch, not the
+// session.
 func (c *TUIClient) SwitchSession(targetName string, width, height int) (*SessionState, error) {
 	c.switchMu.Lock()
 	defer c.switchMu.Unlock()
 
+	prevName := c.sessionName
 	debugLog("[SWITCH] Starting session switch to %q", targetName)
 
 	// 1. Detach (fire-and-forget, daemon sends MsgDetached back)
@@ -328,9 +366,42 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 
 	// 2. Attach to new session using sendAndWaitResponse
 	debugLog("[SWITCH] Attaching to session %q (%dx%d)", targetName, width, height)
-	attachMsg, err := NewMessageWithCodec(MsgAttach, &AttachPayload{
-		SessionName: targetName,
-		CreateNew:   true, // Create if doesn't exist (for "new session" feature)
+	state, err := c.attachWhileReading(targetName, true, width, height)
+	if err == nil {
+		windowCount := 0
+		if state != nil {
+			windowCount = len(state.Windows)
+		}
+		debugLog("[SWITCH] Attached to %q (%d windows)", c.sessionName, windowCount)
+		return state, nil
+	}
+
+	// 3. The detach was taken and the attach was not, so this connection holds
+	// no session. Go back before reporting. The return does not create: an empty
+	// namesake would be a different session wearing the user's session's name,
+	// and saying what happened is better than that.
+	rollback := &SwitchRollback{Target: targetName, Prev: prevName, Err: err}
+	if prevName == "" {
+		rollback.Recovery = errors.New("the client held no named session to return to")
+		return nil, rollback
+	}
+	prevState, rerr := c.attachWhileReading(prevName, false, width, height)
+	if rerr != nil {
+		rollback.Recovery = rerr
+		debugLog("[SWITCH] Return to %q failed: %v", prevName, rerr)
+		return nil, rollback
+	}
+	rollback.State = prevState
+	debugLog("[SWITCH] Returned to %q", prevName)
+	return nil, rollback
+}
+
+// attachWhileReading performs the attach round trip through the read loop, for
+// the paths that run with the read loop already started.
+func (c *TUIClient) attachWhileReading(name string, createNew bool, width, height int) (*SessionState, error) {
+	msg, err := NewMessageWithCodec(MsgAttach, &AttachPayload{
+		SessionName: name,
+		CreateNew:   createNew,
 		Width:       width,
 		Height:      height,
 	}, c.codec)
@@ -338,7 +409,7 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		return nil, fmt.Errorf("attach encode: %w", err)
 	}
 
-	resp, err := c.sendAndWaitResponse(attachMsg, MsgAttached, MsgError)
+	resp, err := c.sendAndWaitResponse(msg, MsgAttached, MsgError)
 	if err != nil {
 		return nil, fmt.Errorf("attach: %w", err)
 	}
@@ -352,11 +423,6 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
 		c.NoteSession(payload.SessionName)
-		windowCount := 0
-		if payload.State != nil {
-			windowCount = len(payload.State.Windows)
-		}
-		debugLog("[SWITCH] Attached to %q (%d windows)", c.sessionName, windowCount)
 		return payload.State, nil
 
 	case MsgError:
