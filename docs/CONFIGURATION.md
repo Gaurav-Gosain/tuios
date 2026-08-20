@@ -885,6 +885,7 @@ floating, in window-management mode, and you open the first window yourself.
 open_default_window = false
 tiled = false
 start_in_terminal_mode = false
+daemon = false
 ```
 
 ### open_default_window
@@ -958,6 +959,41 @@ the cursor in the shell, ready to type. `start_in_terminal_mode` depends on a
 focused window, so it is only meaningful alongside `open_default_window` (or an
 attach that restores a window); enabling it alone leaves an empty session in
 window-management mode.
+
+### daemon
+
+Makes a bare `tuios` attach to a daemon-backed session instead of running a
+standalone one, for anyone who always wants the daemon and would otherwise type
+`tuios attach` every time.
+
+**Valid values:**
+- `false` - `tuios` runs a standalone session with no daemon (default)
+- `true` - `tuios` behaves like `tuios attach`: it starts the daemon if none is
+  running, restores every session saved on disk, and attaches to one of them,
+  opening a new session when nothing is saved
+
+**Default:** `false`
+
+It changes bare `tuios` and nothing else. Every subcommand already says which
+mode it wants, so `tuios new`, `tuios attach`, `tuios daemon` and the rest are
+unaffected. A standalone session that is already running is a separate process
+and is left alone; the setting decides what the *next* bare `tuios` does.
+
+**Turning it off when something goes wrong.** The setting lives in the config
+file and the thing it turns on is the daemon, so a daemon that will not start
+would otherwise leave you editing the file that is causing it. Two overrides
+skip it without touching the config:
+
+```sh
+tuios --standalone          # this run only
+TUIOS_NO_DAEMON=1 tuios     # every run in this shell
+```
+
+Both take precedence over `daemon = true`. If the daemon itself is wedged,
+`tuios kill-server` stops it and `tuios logs` says why it failed.
+
+**Also settable from:** the in-app settings page (`Ctrl+B` `,`, under Startup),
+and `tuios set-config startup.daemon true`.
 
 ## Hooks
 

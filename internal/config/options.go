@@ -383,6 +383,11 @@ var optionSpecs = []Option{
 		Description: "Start focused in terminal mode, when a window is present",
 		Default:     "false",
 	},
+	{
+		Path: "startup.daemon", Type: OptionBool, Section: "startup",
+		Description: "Make a bare \"tuios\" attach to a daemon-backed session instead of running standalone. TUIOS_NO_DAEMON=1 or --standalone overrides it",
+		Default:     "false",
+	},
 
 	// [daemon]. agent_binaries is absent: it is a list, and a value that arrives
 	// as one string has no unambiguous spelling for a list.

@@ -251,6 +251,17 @@ func runLocal() error {
 
 	userConfig := loadAndApplyConfig()
 
+	// A user who always wants the daemon should not have to type "tuios attach"
+	// every time. The decision sits here, after the config is loaded and before
+	// anything has drawn, so the standalone path is never half-entered.
+	//
+	// It affects bare "tuios" only. Every subcommand already says which mode it
+	// wants, and a session already running is a separate process this cannot
+	// reach, so turning the setting on never disturbs one.
+	if useDaemonByDefault(userConfig) {
+		return runAttach("", true)
+	}
+
 	if cpuProfile != "" {
 		f, err := os.Create(cpuProfile)
 		if err != nil {
@@ -385,4 +396,19 @@ func runSSHServer(sshHost, sshPort, sshKeyPath, defaultSession string, ephemeral
 		return fmt.Errorf("SSH server error: %w", err)
 	}
 	return nil
+}
+
+// useDaemonByDefault reports whether a bare "tuios" should attach to a
+// daemon-backed session rather than run standalone.
+//
+// Both overrides exist because the setting lives in the config file and the
+// thing it turns on is the daemon: a daemon that will not start would otherwise
+// leave the user with no way to open a terminal except to edit the file that is
+// causing it. The flag is for one run, the environment variable for a shell that
+// has to keep working.
+func useDaemonByDefault(cfg *config.UserConfig) bool {
+	if standaloneMode || os.Getenv("TUIOS_NO_DAEMON") == "1" {
+		return false
+	}
+	return cfg != nil && cfg.Startup.Daemon
 }

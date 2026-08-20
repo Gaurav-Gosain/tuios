@@ -54,6 +54,7 @@ var (
 	sharedBorders        bool
 	zoomMaxWidth         int
 	printSkill           bool
+	standaloneMode       bool
 )
 
 func main() {
@@ -161,6 +162,9 @@ comprehensive keyboard/mouse interactions.`,
 	// theme listing and preview are root-level actions that print and exit, so
 	// offering them on every subcommand would only add noise to their help.
 	rootCmd.Flags().BoolVar(&printSkill, "skill", false, "Print the agent skill for driving tuios from a pane and exit")
+	// The way out of startup.daemon for one run. It is on the root command
+	// because that is the only command the setting changes.
+	rootCmd.Flags().BoolVar(&standaloneMode, "standalone", false, "Run a standalone session without the daemon, overriding startup.daemon (TUIOS_NO_DAEMON=1 does the same for a whole shell)")
 	rootCmd.Flags().BoolVar(&listThemes, "list-themes", false, "List all available themes and exit")
 	rootCmd.Flags().StringVar(&previewTheme, "preview-theme", "", "Preview a theme's 16 ANSI colors")
 

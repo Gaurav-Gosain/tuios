@@ -69,6 +69,15 @@ type StartupConfig struct {
 	OpenDefaultWindow   bool `toml:"open_default_window"`    // Open one terminal window automatically when a session starts with none (default: false)
 	Tiled               bool `toml:"tiled"`                  // Start a new session with tiling enabled instead of floating (default: false)
 	StartInTerminalMode bool `toml:"start_in_terminal_mode"` // Start focused in terminal mode so typing goes straight to the shell, when a window is present (default: false)
+	// Daemon makes a bare "tuios" attach to a daemon-backed session instead of
+	// running a standalone one, for a user who always wants the daemon and would
+	// otherwise type "tuios attach" every time (default: false).
+	//
+	// It changes bare "tuios" and nothing else: every subcommand already says
+	// which it wants, and a session already running is a separate process this
+	// cannot reach. TUIOS_NO_DAEMON=1 and --standalone both override it, so a
+	// daemon that will not start never leaves the user without a way in.
+	Daemon bool `toml:"daemon"`
 }
 
 // TapeConfig holds settings for per-directory project tapes (.tuios.tape).
