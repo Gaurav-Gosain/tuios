@@ -43,6 +43,9 @@ type rig struct {
 	// rebuiltWindows records whether the route under test closes and rebuilds
 	// the window set, which decides what client-local view state can survive.
 	rebuiltWindows bool
+	// cols and rows are the size every client of this rig attaches at, so a
+	// test about two differently sized clients can pick its own.
+	cols, rows int
 }
 
 // ownSocket gives this test its own daemon socket. The whole binary already
@@ -60,6 +63,13 @@ func ownSocket(t *testing.T) {
 // attach" with every pane subscribed.
 func newRig(t *testing.T, panes int) *rig {
 	t.Helper()
+	return newRigSized(t, panes, rigCols, rigRows)
+}
+
+// newRigSized is newRig with the client size chosen, for the tests about what
+// two differently sized clients do to each other.
+func newRigSized(t *testing.T, panes, cols, rows int) *rig {
+	t.Helper()
 	ownSocket(t)
 	// A predictable shell keeps the pane's own output out of the comparison's
 	// way; the oracle is daemon-versus-client, so any prompt appears on both
@@ -75,15 +85,15 @@ func newRig(t *testing.T, panes int) *rig {
 
 	name := "rehydrate"
 	boot := session.NewTUIClient()
-	if err := boot.Connect("test", rigCols, rigRows); err != nil {
+	if err := boot.Connect("test", cols, rows); err != nil {
 		t.Fatalf("bootstrap connect: %v", err)
 	}
 	// A detached create comes back with one real window and one real PTY;
 	// attaching to a name that does not exist yet comes back empty.
-	if err := boot.CreateDetachedSession(name, rigCols, rigRows); err != nil {
+	if err := boot.CreateDetachedSession(name, cols, rows); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	if _, err := boot.AttachSession(name, false, rigCols, rigRows); err != nil {
+	if _, err := boot.AttachSession(name, false, cols, rows); err != nil {
 		t.Fatalf("bootstrap attach: %v", err)
 	}
 	boot.StartReadLoop()
@@ -112,10 +122,10 @@ func newRig(t *testing.T, panes int) *rig {
 	// had already left let its client-left notification be read as the attach's
 	// own answer.
 	ctl := session.NewTUIClient()
-	if err := ctl.Connect("test", rigCols, rigRows); err != nil {
+	if err := ctl.Connect("test", cols, rows); err != nil {
 		t.Fatalf("control connect: %v", err)
 	}
-	if _, err := ctl.AttachSession(name, false, rigCols, rigRows); err != nil {
+	if _, err := ctl.AttachSession(name, false, cols, rows); err != nil {
 		t.Fatalf("control attach: %v", err)
 	}
 	ctl.StartReadLoop()
@@ -126,7 +136,7 @@ func newRig(t *testing.T, panes int) *rig {
 	}
 	_ = boot.Close()
 
-	r := &rig{t: t, daemon: d, ctl: ctl, session: name}
+	r := &rig{t: t, daemon: d, ctl: ctl, session: name, cols: cols, rows: rows}
 	r.attach()
 	return r
 }
@@ -152,10 +162,10 @@ func (r *rig) attach() {
 	t.Helper()
 
 	c := session.NewTUIClient()
-	if err := c.Connect("test", rigCols, rigRows); err != nil {
+	if err := c.Connect("test", r.cols, r.rows); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	state, err := c.AttachSession(r.session, false, rigCols, rigRows)
+	state, err := c.AttachSession(r.session, false, r.cols, r.rows)
 	if err != nil {
 		t.Fatalf("attach: %v", err)
 	}
@@ -168,14 +178,14 @@ func (r *rig) attach() {
 		IsDaemonSession: true,
 		DaemonClient:    c,
 		SessionName:     c.SessionName(),
-		Width:           rigCols,
-		Height:          rigRows,
+		Width:           r.cols,
+		Height:          r.rows,
 	})
 	if m.KeybindRegistry == nil {
 		m.KeybindRegistry = config.NewKeybindRegistry(config.DefaultConfig())
 	}
-	m.Width, m.Height = rigCols, rigRows
-	m.EffectiveWidth, m.EffectiveHeight = rigCols, rigRows
+	m.Width, m.Height = r.cols, r.rows
+	m.EffectiveWidth, m.EffectiveHeight = r.cols, r.rows
 	r.m = m
 
 	if state == nil || len(state.Windows) == 0 {
