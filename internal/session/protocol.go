@@ -105,6 +105,11 @@ type HelloPayload struct {
 	KittyGraphics bool   `json:"kitty_graphics,omitempty"` // Kitty graphics protocol support
 	SixelGraphics bool   `json:"sixel_graphics,omitempty"` // Sixel graphics support
 	TerminalName  string `json:"terminal_name,omitempty"`  // Detected terminal (kitty, wezterm, etc.)
+	// Protocol is the wire protocol version the client speaks. Zero means a
+	// client that predates the field, which is read as LegacyProtocolVersion:
+	// gob ignores a field the peer does not know, so silence here is age, not
+	// disagreement.
+	Protocol int `json:"protocol,omitempty"`
 }
 
 // WelcomePayload is sent by server in response to Hello.
@@ -112,6 +117,9 @@ type WelcomePayload struct {
 	Version      string   `json:"version"`       // Server version
 	SessionNames []string `json:"session_names"` // Available sessions
 	Codec        string   `json:"codec"`         // Negotiated codec: "gob" or "json"
+	// Protocol is the wire protocol version the daemon speaks. Zero means a
+	// daemon that predates the field; see HelloPayload.Protocol.
+	Protocol int `json:"protocol,omitempty"`
 }
 
 // AttachPayload requests attachment to a session.
@@ -538,8 +546,25 @@ const (
 	ErrCodeCommandFailed   = 9 // Command execution failed
 )
 
-// Protocol version for compatibility checking.
+// Protocol version for compatibility checking. Both sides announce it in the
+// handshake (HelloPayload.Protocol, WelcomePayload.Protocol) and both refuse a
+// peer outside the range they serve. Bump it on any change that an older peer
+// cannot read: a new message type appended to the iota block is not one, a
+// change to an existing message's shape is.
 const ProtocolVersion = 2
+
+// MinProtocolVersion is the oldest wire protocol this build still serves. A peer
+// announcing anything older is told to upgrade rather than allowed to proceed
+// into undefined behavior.
+const MinProtocolVersion = 2
+
+// LegacyProtocolVersion is what a peer that announces nothing is taken to speak.
+// The version fields were added while ProtocolVersion had been 2 for the whole
+// life of the binary protocol, and gob leaves a field the sender did not know at
+// its zero value, so a silent peer is an old build of a protocol this one can
+// still speak. Reading that silence as a mismatch would refuse every daemon
+// already running at exactly the release the check exists for.
+const LegacyProtocolVersion = 2
 
 // WriteMessageWithCodec writes a message with the specified codec.
 // Wire format: [4 bytes BE length][1 byte type][1 byte codec][payload]

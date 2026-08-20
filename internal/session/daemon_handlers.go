@@ -13,6 +13,15 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 
 	cs.hello = &payload
 
+	// Refuse a client this daemon cannot serve before it can attach to anything.
+	// The codec is negotiated below, so the refusal goes out on the codec the
+	// client opened with, which is the one it can read.
+	if protocolMismatch(payload.Protocol) {
+		LogBasic("Client %s refused: speaks protocol %d, this daemon serves %d..%d",
+			cs.clientID, peerProtocol(payload.Protocol), MinProtocolVersion, ProtocolVersion)
+		return d.sendError(cs, ErrCodeInvalidMessage, clientProtocolRefusal(d.version, &payload))
+	}
+
 	// Store client's graphics capabilities for PTY pixel size reporting
 	cs.pixelWidth = payload.PixelWidth
 	cs.pixelHeight = payload.PixelHeight
@@ -41,6 +50,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		Version:      d.version,
 		SessionNames: names,
 		Codec:        cs.codec.Type().String(),
+		Protocol:     ProtocolVersion,
 	})
 }
 

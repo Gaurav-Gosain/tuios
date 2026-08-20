@@ -81,19 +81,29 @@ type ProtocolMismatchError struct {
 
 func (e *ProtocolMismatchError) Error() string {
 	var b strings.Builder
-	b.WriteString("The running TUIOS daemon does not speak this CLI's control protocol")
+	b.WriteString("The running TUIOS daemon does not speak this client's control protocol")
 
 	switch {
 	case e.DaemonVersion != "" && e.ClientVersion != "":
-		fmt.Fprintf(&b, " (daemon %s, CLI %s)", e.DaemonVersion, e.ClientVersion)
+		fmt.Fprintf(&b, " (daemon %s, client %s)", e.DaemonVersion, e.ClientVersion)
 	case e.DaemonVersion != "":
 		fmt.Fprintf(&b, " (daemon %s)", e.DaemonVersion)
 	case e.ClientVersion != "":
-		fmt.Fprintf(&b, " (CLI %s)", e.ClientVersion)
+		fmt.Fprintf(&b, " (client %s)", e.ClientVersion)
+	}
+	if e.DaemonProtocol > 0 && e.ClientProtocol > 0 {
+		fmt.Fprintf(&b, ", protocol %d against %d", e.DaemonProtocol, e.ClientProtocol)
 	}
 
-	b.WriteString(".\nMost likely cause: TUIOS was upgraded while the daemon kept running, so the old daemon is still serving the socket.")
-	b.WriteString("\nFix: run 'tuios kill-server', then run this command again.")
+	// Which side to move is the one thing the user cannot work out for
+	// themselves, so say it rather than always blaming the daemon.
+	if e.DaemonProtocol > e.ClientProtocol && e.ClientProtocol > 0 {
+		b.WriteString(".\nMost likely cause: the daemon is newer than this binary, so an older tuios is on the path.")
+		b.WriteString("\nFix: upgrade tuios, or run 'tuios kill-server' and start again with the version you want.")
+	} else {
+		b.WriteString(".\nMost likely cause: TUIOS was upgraded while the daemon kept running, so the old daemon is still serving the socket.")
+		b.WriteString("\nFix: run 'tuios kill-server', then run this command again.")
+	}
 	if e.Sessions > 0 {
 		fmt.Fprintf(&b, "\nNote: the daemon is holding %d session(s); they are saved and restored when it restarts (see 'tuios resurrect').", e.Sessions)
 	}

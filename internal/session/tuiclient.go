@@ -176,6 +176,7 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		Width:          width,
 		Height:         height,
 		PreferredCodec: "gob",
+		Protocol:       ProtocolVersion,
 	}
 
 	// Add graphics capabilities if provided
@@ -208,6 +209,14 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		return err
 	}
 
+	if resp.Type == MsgError {
+		// The only thing the daemon refuses at hello is the handshake itself,
+		// and its message already names the fix.
+		var errPayload ErrorPayload
+		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = conn.Close()
+		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
+	}
 	if resp.Type != MsgWelcome {
 		_ = conn.Close()
 		return fmt.Errorf("expected welcome, got %d", resp.Type)
@@ -218,6 +227,14 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	if err := resp.ParsePayloadWithCodec(&welcome, c.codec); err != nil {
 		_ = conn.Close()
 		return fmt.Errorf("failed to parse welcome: %w", err)
+	}
+
+	// Refuse before anything else is exchanged. Proceeding on a protocol the
+	// other side does not speak turns a clear message here into a decode error
+	// or a stall somewhere far from its cause.
+	if protocolMismatch(welcome.Protocol) {
+		_ = conn.Close()
+		return daemonProtocolMismatch(version, &welcome)
 	}
 
 	// Update codec based on what server negotiated
