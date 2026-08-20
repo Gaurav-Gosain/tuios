@@ -313,6 +313,12 @@ type Window struct {
 	// background goroutine, which otherwise races the renderer and Close().
 	coalesceSignal atomic.Bool
 
+	// coalesceWake wakes the coalescer when the flag above is set, so it can
+	// sleep between bursts instead of polling for a flag that is almost always
+	// false. Buffered 1 with a non-blocking send: the coalescer only needs to
+	// know that something arrived, not how much.
+	coalesceWake chan struct{}
+
 	// outputEpoch stamps every chunk queued for the emulator. DiscardPendingOutput
 	// bumps it, and outputWriter throws away anything stamped with an older one,
 	// which is how a pane that has just been restored from a daemon snapshot
@@ -698,6 +704,7 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 		DaemonMode:         true,
 		outputChan:         make(chan outputChunk, 16384), // Large buffer: kitty images can be 250+ chunks
 		outputDone:         make(chan struct{}),
+		coalesceWake:       make(chan struct{}, 1),
 		// suppressCallbacks defaults to false (zero value)
 	}
 	window.SetTitle(title)

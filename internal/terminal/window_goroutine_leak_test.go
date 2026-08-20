@@ -9,10 +9,10 @@ import (
 // daemon window leaves nothing running.
 //
 // NewDaemonWindow starts two goroutines - outputWriter and renderCoalescer -
-// and renderCoalescer owns an 8ms time.Ticker. Both select on w.outputDone,
-// and Close() is the only thing that closes it. Leaking either one leaks the
-// ticker, the Window, and the whole vt.Emulator with its scrollback, per
-// window, for the life of the process. That has been a real bug here, and the
+// and renderCoalescer owns an 8ms rate-limit timer. Both select on
+// w.outputDone, and Close() is the only thing that closes it. Leaking either
+// one leaks the timer, the Window, and the whole vt.Emulator with its
+// scrollback, per window, for the life of the process. That has been a real bug here, and the
 // failure mode (slow memory growth, a background goroutine still ticking for a
 // pane the user closed) is invisible to every functional test.
 //
@@ -20,7 +20,7 @@ import (
 // a bubble, the test fails if any goroutine started in the bubble is still
 // alive when the bubble's root function returns - no goroutine-count sampling,
 // no sleeping and hoping, no parsing of runtime stack dumps. It also makes the
-// ticker's fake time advance only when everything is durably blocked, so a
+// timer's fake time advance only when everything is durably blocked, so a
 // coalescer that survived Close would keep the bubble alive and be reported.
 //
 // Verified to fail on broken code: commenting out the `close(w.outputDone)` in
@@ -38,9 +38,9 @@ func TestDaemonWindowOpenCloseLeaksNoGoroutines(t *testing.T) {
 		// than one whose goroutines never left their first select.
 		w.WriteOutputAsync([]byte("hello \x1b[32mworld\x1b[0m\r\n"))
 
-		// Let outputWriter drain the queue and renderCoalescer fire at least
-		// one tick. synctest.Wait blocks until every other bubble goroutine is
-		// durably blocked; fake time then advances to the pending tick.
+		// Let outputWriter drain the queue and renderCoalescer emit at least
+		// once. synctest.Wait blocks until every other bubble goroutine is
+		// durably blocked; fake time then advances to any pending timer.
 		synctest.Wait()
 
 		w.Close()

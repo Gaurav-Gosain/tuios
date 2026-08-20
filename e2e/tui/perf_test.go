@@ -25,12 +25,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/perf"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -54,11 +54,17 @@ const (
 	// multiplexer, so this trades resolution against a suite that finishes.
 	perfStartRuns = 7
 
-	// perfKeyRuns is how many keystrokes a latency sample is taken over. Each
-	// one adds a character to the pane's prompt line, so this is also the
-	// longest the typed line gets, and it must stay inside the narrowest pane
-	// the multi-pane cases produce or the line wraps and the match breaks.
-	perfKeyRuns = 16
+	// perfKeyRuns is how many keystrokes a latency sample is taken over. It is
+	// the count a p99 has to be an observation rather than an extrapolation: at
+	// 200 the 99th percentile is the second-slowest keystroke, where at the
+	// previous 16 a "p99" would have been the maximum wearing a different name.
+	perfKeyRuns = 200
+
+	// perfLineLen is how many characters are typed onto one comment line before
+	// a fresh one is started. The line must stay inside the narrowest pane the
+	// multi-pane cases produce, or it wraps, the prefix being matched acquires
+	// a newline, and every later sample fails.
+	perfLineLen = 20
 )
 
 // perfGate skips unless perf measurement was asked for explicitly.
@@ -76,22 +82,20 @@ func perfEnvVars() []string {
 }
 
 // dist is a set of timings and the shape they came out in.
-type dist []time.Duration
+//
+// The reduction comes from internal/perf so these numbers and the in-process
+// ones are the same quantiles computed the same way, which is what makes the
+// two harnesses comparable. This module sits under that import path, so the
+// internal rule allows it.
+type dist = perf.Dist
 
-func (d dist) report(t *testing.T, what string) {
+func report(t *testing.T, d dist, what string) {
 	t.Helper()
 	if len(d) == 0 {
 		t.Errorf("%s: no samples", what)
 		return
 	}
-	s := append(dist(nil), d...)
-	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
-	at := func(q float64) time.Duration {
-		i := int(q * float64(len(s)-1))
-		return s[i]
-	}
-	t.Logf("PERF %-34s n=%2d  min %8s  med %8s  p90 %8s  max %8s",
-		what, len(s), round(s[0]), round(at(0.5)), round(at(0.9)), round(s[len(s)-1]))
+	t.Log(d.Line(what))
 }
 
 // round trims a duration to a resolution worth printing. Sub-millisecond digits
@@ -136,7 +140,7 @@ func TestPerfStartupCold(t *testing.T) {
 			boot = append(boot, waitTextAt(t, term, t0, welcomeText, bootTimeout))
 		})
 	}
-	boot.report(t, "startup/cold: exec -> first frame")
+	report(t, boot, "startup/cold: exec -> first frame")
 }
 
 // da1Query is the primary device attributes request tuios ends its capability
@@ -201,7 +205,7 @@ func TestPerfStartupAnsweringHost(t *testing.T) {
 			<-replied
 		})
 	}
-	boot.report(t, "startup/answering host: exec -> first frame")
+	report(t, boot, "startup/answering host: exec -> first frame")
 }
 
 // TestPerfStartupWarm measures the same thing against a daemon that is already
@@ -230,7 +234,7 @@ func TestPerfStartupWarm(t *testing.T) {
 		// run measure a daemon fanning state out to all of them.
 		_ = term.Close()
 	}
-	boot.report(t, "startup/warm: exec -> first frame")
+	report(t, boot, "startup/warm: exec -> first frame")
 }
 
 // TestPerfFirstPane measures the other half of "new to a usable pane": from the
@@ -255,7 +259,7 @@ func TestPerfFirstPane(t *testing.T) {
 			pane = append(pane, waitTextAt(t, term, t0, perfPromptMark, uiTimeout))
 		})
 	}
-	pane.report(t, "startup/first pane: 'n' -> prompt")
+	report(t, pane, "startup/first pane: 'n' -> prompt")
 }
 
 // TestPerfAttach measures `tuios attach` to a session that already exists and
@@ -288,7 +292,7 @@ func TestPerfAttach(t *testing.T) {
 				att = append(att, waitTextAt(t, term, t0, perfPromptMark, bootTimeout))
 				_ = term.Close()
 			}
-			att.report(t, fmt.Sprintf("attach/%d panes: exec -> rendered", panes))
+			report(t, att, fmt.Sprintf("attach/%d panes: exec -> rendered", panes))
 		})
 	}
 }
@@ -310,16 +314,32 @@ func typeLatency(t *testing.T, term *tuitest.Terminal) dist {
 	t.Helper()
 	const alphabet = "abcdefghijklmnopqrstuvwxyz"
 
-	if err := term.SendKeys("#"); err != nil {
-		t.Fatalf("send '#': %v", err)
-	}
-	if err := term.WaitForText("#", uiTimeout); err != nil {
-		t.Fatalf("comment guard never echoed: %v\n%s", err, term.Snapshot())
-	}
-
 	var d dist
-	line := "#"
+	var line string
 	for i := range perfKeyRuns {
+		// A line can only grow so far before it wraps, so the run is broken
+		// into several. Each new line opens with a marker letter unique to its
+		// cycle, which is what keeps the growing prefixes from colliding: the
+		// finished lines stay on screen above, and a fresh "#a" would otherwise
+		// be matched by the first line that ever started that way.
+		if i%perfLineLen == 0 {
+			marker := fmt.Sprintf("#%c", 'A'+i/perfLineLen)
+			if i > 0 {
+				// Leave the finished line behind. It is a comment, so the shell
+				// runs nothing and simply prints a fresh prompt.
+				if err := term.SendKeys(tuitest.Enter); err != nil {
+					t.Fatalf("end line: %v", err)
+				}
+			}
+			if err := term.SendKeys(marker); err != nil {
+				t.Fatalf("send marker %q: %v", marker, err)
+			}
+			if err := term.WaitForText(marker, uiTimeout); err != nil {
+				t.Fatalf("marker %q never echoed: %v\n%s", marker, err, term.Snapshot())
+			}
+			line = marker
+		}
+
 		ch := string(alphabet[i%len(alphabet)])
 		line += ch
 		t0 := time.Now()
@@ -349,7 +369,7 @@ func TestPerfInputLatency(t *testing.T) {
 				newWindow(t, term)
 			}
 			enterTerminalMode(t, term)
-			typeLatency(t, term).report(t, fmt.Sprintf("input latency/%d panes", panes))
+			report(t, typeLatency(t, term), fmt.Sprintf("input latency/%d panes", panes))
 		})
 	}
 }
@@ -405,7 +425,7 @@ func TestPerfTypeWhileFlooding(t *testing.T) {
 				t.Fatalf("tab back: %v", err)
 			}
 			enterTerminalMode(t, term)
-			typeLatency(t, term).report(t, fmt.Sprintf("input latency/%d panes flooding", floods))
+			report(t, typeLatency(t, term), fmt.Sprintf("input latency/%d panes flooding", floods))
 		})
 	}
 }
