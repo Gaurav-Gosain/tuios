@@ -168,18 +168,29 @@ tuios send-keys -s work -w build Escape
 tuios send-keys -s work -w build 'ctrl+b,n'      # a tuios leader chord
 ```
 
-`send-keys` parses its argument as key names by default and routes tuios's own
-bindings to the interface. Use `--literal --raw` to push characters through to
-the pane instead, though `send-text` is the simpler way to do that.
-
-The bindings live in the attached client's interface. On a session with nobody
-attached, a leader chord is accepted, exits 0, and does nothing. For window
-management that works attached or detached, use `run-command`:
+**`send-keys` is not for typing text.** It splits its argument on spaces and
+commas and maps each token to a key, so the spaces are gone by the time anything
+reaches the shell:
 
 ```sh
-tuios run-command -s work SwitchWorkspace 2
-tuios run-command --list
+tuios send-keys -s work -w build 'echo hello'    # types "echohello"
+tuios send-text -s work -w build 'echo hello
+'                                                # types "echo hello" and runs it
 ```
+
+Nothing warns you: the first form exits 0 and the pane shows a command that does
+not exist. If what you are sending would be typed by a human on a keyboard, use
+`send-text` and end it with a newline.
+
+`--literal --raw` pushes characters through unparsed, which is `send-text` with
+extra steps.
+
+Leader chords only mean something where a client is attached, because the
+bindings live in that client's interface. On a detached session `ctrl+b,n` is
+delivered to the shell as the two bytes it spells, which is almost never what you
+wanted. Do not drive the window manager by sending its keybindings: there are
+verbs for that, they work attached or detached, and they tell you what changed.
+See "Arranging panes" below.
 
 Sending input to a pane that is running an interactive agent will be read by that
 agent as if a human typed it. Do not answer another agent's prompts on its behalf
@@ -205,6 +216,31 @@ uuid. To keep the id instead:
 id=$(tuios new-window -s work --json | jq -r .window_id)
 ```
 
+Say where it goes and what it starts in, rather than creating one and moving it:
+
+```sh
+tuios new-window -s work tests --workspace 2 --cwd /src/api --no-focus
+```
+
+`--no-focus` is the one to reach for when you are opening a pane to work in
+later. Without it the new pane takes the focus, which pulls the user out of
+whatever they were doing.
+
+The result says where the pane went, so you never have to read it back:
+
+```sh
+tuios new-window -s work tests --workspace 2 --json
+```
+
+```json
+{"window_id":"19ba76b4-...","name":"tests","workspace":2,"pty_id":"198ec9d0-...","focused":true,"unplaced":true}
+```
+
+`unplaced` is worth understanding. The daemon has no viewport, so on a detached
+session it gives a new pane a nominal box and says so. The width and height in
+`list-windows` are that placeholder until a client attaches and places it. Do not
+compute anything from a pane's geometry while `unplaced` is true.
+
 Close it when the work is done:
 
 ```sh
@@ -214,6 +250,108 @@ tuios run-command -s work CloseWindow "$id"
 On a detached session, a window whose shell has exited stays in the list until
 something closes it, and `capture-pane` still reads its final screen. Close what
 you open, or a loop that opens a window per run quietly accumulates dead ones.
+
+## Arranging panes
+
+Every arrangement has a verb. Use these rather than sending the keybinding that
+triggers them: they work whether or not a client is attached, they do not depend
+on the user's keymap, and each reports what actually changed.
+
+```sh
+tuios list-workspaces -s work                  # what exists and what is on it
+tuios focus-window -s work build               # focus a named pane
+tuios focus-window -s work --relative next     # cycle within the workspace
+tuios move-window -s work 2 -w build --follow  # send a pane to workspace 2
+tuios select-workspace -s work 2               # show workspace 2
+tuios set-window -s work -w build --name "api tests"
+tuios set-window -s work -w build --minimize
+```
+
+```
+$ tuios list-workspaces -s work
+ WS  NAME    WINDOWS
+ *1  -       3
+  2  review  1
+  3  -       0
+```
+
+Focusing a window switches to that window's workspace, so `focus-window` is
+usually all you need to get to a pane wherever it is.
+
+### What needs a client attached
+
+The daemon owns the window set, so where a pane is and which one has the focus
+are its facts and it answers them detached. Geometry is the attached client's:
+only something with a viewport can measure a split or a direction. These need a
+client and say `needs_client` when there is none:
+
+```sh
+tuios split-window -s work vertical -w build --name logs
+tuios set-layout -s work --tiling true --equalize
+tuios focus-window -s work --direction left
+```
+
+`split-window` divides an existing pane and gives you the new one's id, which is
+the placement you want when the panes should sit side by side. It needs tiling
+on. Reading, writing, waiting, creating and moving never need a client.
+
+### The escape hatch
+
+A keybinding with no verb of its own is still reachable by name:
+
+```sh
+tuios run-command -s work ToggleZoom
+tuios run-command --list
+```
+
+Prefer a verb where one exists. `run-command` reports that the command ran and
+nothing about what it changed.
+
+## Configuring the appearance
+
+The sidebar, the dock, the borders, the scrollbar and the rest are all settable
+at runtime. Find the option rather than guessing it:
+
+```sh
+tuios list-options --section sidebar
+tuios list-options appearance.dock
+tuios list-options --json | jq -r '.options[].path'
+```
+
+```
+ PATH                              TYPE    DEFAULT  ACCEPTED
+ appearance.sidebar.enabled        bool    false
+ appearance.sidebar.position       string  left     left, right, hidden
+ appearance.sidebar.width          int     28
+ appearance.sidebar.show_agents    bool    true
+```
+
+Then set it and read it back:
+
+```sh
+tuios set-config appearance.sidebar.enabled true
+tuios set-config appearance.sidebar.position right
+tuios get-config appearance.dockbar_position
+```
+
+The path and the value are both checked, so a misspelled path or a value outside
+the accepted set fails and says what it should have been. A call that reports
+success changed something.
+
+Two things to read in the result. `applied` says whether an attached client put
+the change on screen; when it is false, `reason` says whether that is because
+nobody is attached (the value is recorded and applies on the next attach) or
+because the client refused it. And `get-config` answers with the value in effect,
+with `source` saying whether it came from this session or from the default, so an
+option nobody has touched still reads.
+
+```sh
+tuios get-config appearance.sidebar.position --json
+```
+
+```json
+{"key":"appearance.sidebar.position","value":"left","source":"default","default":"left","option_type":"string"}
+```
 
 ## Waiting instead of polling
 
@@ -270,6 +408,22 @@ tuios capture-pane -s work -w build --scrollback --lines 60
 The echo shows `printf 'tests_done_%s\n' 1786700000`, which the pattern does not
 match; the output shows `tests_done_1786700000`, which it does. The timestamp
 makes the previous run's marker a different string.
+
+There is no verb that runs a command and hands back its exit status: the daemon
+writes bytes to a shell and reads what comes back, and it has no idea where one
+command ends. Put the status in the marker and you get it for free:
+
+```sh
+n=$(date +%s)
+tuios send-text -s work -w build "go test ./... ; printf 'done_%s_rc=%s\n' $n \$?
+"
+tuios wait-for window-output -s work -w build --pattern "done_${n}_rc=" --timeout 300000
+tuios capture-pane -s work -w build --scrollback --lines 60 | grep -o "done_${n}_rc=[0-9]*"
+```
+
+```
+done_1786700000_rc=0
+```
 
 Or run the work in a window that exits, and wait for the exit. Nothing has to be
 matched at all, so nothing can match early. Send the output somewhere you can
@@ -401,7 +555,15 @@ when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 into its messages.
 
 `needs_client` means the operation needs a rendered interface and the session has
-nobody attached. Reading, writing and waiting never need one.
+nobody attached. Reading, writing, waiting, creating and moving never need one;
+splitting, tiling and directional focus do.
+
+A parameter the verb does not take is refused rather than ignored, and the
+failure lists what the verb does take. This matters more than it sounds: a call
+carrying a name the daemon does not know would otherwise report success and
+quietly do something else. If you get `invalid_params` naming a parameter you
+believed in, the daemon you are talking to is older than you think, and
+`list-verbs` will say what it has.
 
 ## The rest of the surface
 
@@ -413,6 +575,11 @@ tuios list-verbs
 tuios list-verbs capture-pane
 tuios list-verbs --json
 ```
+
+`list-verbs` is the whole contract: every verb, every parameter with its type and
+accepted values, the shape of what comes back, the stable error codes, and the
+request envelope. It is meant to be enough on its own, so if you are unsure what
+something takes or returns, ask it rather than guessing.
 
 Some verbs have no wrapper, notably `subscribe`, which opens a live event stream
 instead of answering once. Reach those by writing newline-delimited JSON to
@@ -450,3 +617,18 @@ watch several things at once.
   is fine at the keyboard and stale the moment an earlier window closes.
 - Check `tuios ls` exit 3 before assuming a session is gone: it may be saved on
   disk, one `tuios start-server` away from being back.
+- Use a verb, not a keybinding, to move things around. `send-keys` with a leader
+  chord depends on the user's keymap, needs a client attached, and reports
+  nothing about what happened.
+- Call `list-options` before setting an option and `list-verbs` before calling an
+  unfamiliar verb. Both are cheap, and both are exact about this build rather
+  than about the version something was documented at.
+
+## A note on the user's setup
+
+A user can set `startup.daemon = true`, which makes a plain `tuios` attach to a
+daemon-backed session instead of running a standalone one. It changes nothing
+about how you drive tuios: what decides whether you have a socket is
+`TUIOS_ENV`, which is what to guard on either way. If you are helping someone
+debug a session that will not start, `tuios --standalone` and `TUIOS_NO_DAEMON=1`
+both bypass that setting for a run and a shell respectively.

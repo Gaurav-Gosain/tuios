@@ -761,19 +761,30 @@ Supported configuration paths:
 	_ = setConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var getConfigSession string
+	var getConfigJSON bool
 	getConfigCmd := &cobra.Command{
 		Use:   "get-config <path>",
-		Short: "Read a session option from a running TUIOS session",
-		Long: `Read a session option previously set with 'tuios set-config' from a
-running TUIOS session. Options are recorded in daemon-owned state, so this works
-whether or not a TUI client is attached.`,
+		Short: "Read a configuration option from a running TUIOS session",
+		Long: `Read a configuration option from a running TUIOS session. Options are
+recorded in daemon-owned state, so this works whether or not a TUI client is
+attached.
+
+An option this session was never told is answered with what it does untold, so
+a path that exists always reads. --json reports where the value came from
+alongside it: "session" for one set here, "default" for the built-in.
+
+Run 'tuios list-options' to see every path.`,
 		Example: `  # Read the border style
-  tuios get-config border_style`,
+  tuios get-config border_style
+
+  # Read it with its source and default
+  tuios get-config appearance.sidebar.position --json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runGetConfig(getConfigSession, args[0])
+			return runGetConfig(getConfigSession, args[0], getConfigJSON)
 		},
 	}
+	getConfigCmd.Flags().BoolVar(&getConfigJSON, "json", false, "Output as JSON, with the value's source and default")
 	var setAgentStateSession string
 	var setAgentStateWindow string
 	var setAgentStateMessage string
@@ -922,6 +933,9 @@ one call where send-keys needs two.`,
 	_ = sendTextCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var newWindowSession string
+	var newWindowWorkspace int
+	var newWindowCwd string
+	var newWindowNoFocus bool
 	var newWindowJSON bool
 	newWindowCmd := &cobra.Command{
 		Use:   "new-window [name]",
@@ -930,7 +944,11 @@ one call where send-keys needs two.`,
 
 The window is created by the daemon whether or not a client is attached, so this
 works on a detached session. Give it a name to address it later without holding
-on to the id.`,
+on to the id.
+
+--workspace puts it somewhere other than the current workspace, --cwd starts its
+shell in a directory, and --no-focus opens a pane to use later without pulling
+whoever is watching out of the one they are in.`,
 		Example: `  # Open an unnamed window
   tuios new-window
 
@@ -938,6 +956,9 @@ on to the id.`,
   tuios new-window build
   tuios send-text -w build 'go build ./...
 '
+
+  # Open a pane on workspace 2, in a directory, without taking the focus
+  tuios new-window tests --workspace 2 --cwd /src/api --no-focus
 
   # Capture the new window's id for scripting
   tuios new-window --json | jq -r .window_id`,
@@ -947,12 +968,306 @@ on to the id.`,
 			if len(args) > 0 {
 				name = args[0]
 			}
-			return runNewWindow(newWindowSession, name, newWindowJSON)
+			return runNewWindow(newWindowSession, name, newWindowWorkspace, newWindowCwd,
+				!newWindowNoFocus, newWindowJSON)
 		},
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	newWindowCmd.Flags().IntVar(&newWindowWorkspace, "workspace", 0, "Workspace to open the window on (default: the current one)")
+	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the daemon's)")
+	newWindowCmd.Flags().BoolVar(&newWindowNoFocus, "no-focus", false, "Leave the focus where it is")
 	newWindowCmd.Flags().BoolVar(&newWindowJSON, "json", false, "Output result as JSON")
 	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var splitWindowSession string
+	var splitWindowWindow string
+	var splitWindowName string
+	var splitWindowJSON bool
+	splitWindowCmd := &cobra.Command{
+		Use:   "split-window <horizontal|vertical>",
+		Short: "Divide a pane and open a new one beside it",
+		Long: `Divide a pane along an axis and print the id of the pane the split created.
+
+The division is a geometry, so this needs an attached client and tiling on. It
+goes through the renderer's own splitting path, so the new pane lands in the
+tree exactly as one opened from the keyboard does.`,
+		Example: `  # Split the focused pane left/right
+  tuios split-window vertical
+
+  # Split a named pane and name what comes out of it
+  tuios split-window horizontal -w build --name logs
+
+  # Capture the new pane's id for scripting
+  tuios split-window vertical --json | jq -r .window_id`,
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"horizontal", "vertical"},
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runSplitWindow(splitWindowSession, splitWindowWindow, args[0],
+				splitWindowName, splitWindowJSON)
+		},
+	}
+	splitWindowCmd.Flags().StringVarP(&splitWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	splitWindowCmd.Flags().StringVarP(&splitWindowWindow, "window", "w", "", "Pane to split by name or ID (default: focused)")
+	splitWindowCmd.Flags().StringVar(&splitWindowName, "name", "", "Name for the new pane")
+	splitWindowCmd.Flags().BoolVar(&splitWindowJSON, "json", false, "Output result as JSON")
+	_ = splitWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var focusWindowSession string
+	var focusWindowRelative string
+	var focusWindowDirection string
+	var focusWindowJSON bool
+	focusWindowCmd := &cobra.Command{
+		Use:   "focus-window [window]",
+		Short: "Move the focus to a pane",
+		Long: `Move the focus to a pane, naming it by id or name, by position, or by
+direction, and print the pane that ended up with it.
+
+Pass exactly one of the window argument, --relative or --direction. Naming a
+window switches to its workspace. A direction is a question about the viewport,
+so that form needs an attached client; the other two work detached.`,
+		Example: `  # Focus a pane by name
+  tuios focus-window build
+
+  # Cycle through the panes on this workspace
+  tuios focus-window --relative next
+
+  # Focus the pane to the left
+  tuios focus-window --direction left`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			window := ""
+			if len(args) > 0 {
+				window = args[0]
+			}
+			return runFocusWindow(focusWindowSession, window, focusWindowRelative,
+				focusWindowDirection, focusWindowJSON)
+		},
+	}
+	focusWindowCmd.Flags().StringVarP(&focusWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	focusWindowCmd.Flags().StringVar(&focusWindowRelative, "relative", "", "Focus the next or prev window on this workspace")
+	focusWindowCmd.Flags().StringVar(&focusWindowDirection, "direction", "", "Focus the neighbouring pane: left, right, up or down")
+	focusWindowCmd.Flags().BoolVar(&focusWindowJSON, "json", false, "Output result as JSON")
+	_ = focusWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	_ = focusWindowCmd.RegisterFlagCompletionFunc("relative",
+		fixedCompletions("next", "prev"))
+	_ = focusWindowCmd.RegisterFlagCompletionFunc("direction",
+		fixedCompletions("left", "right", "up", "down"))
+
+	var moveWindowSession string
+	var moveWindowWindow string
+	var moveWindowFollow bool
+	var moveWindowJSON bool
+	moveWindowCmd := &cobra.Command{
+		Use:   "move-window <workspace>",
+		Short: "Move a window to another workspace",
+		Long: `Move a window to another workspace and report where it came from.
+
+The daemon owns the window set, so this works on a detached session. Pass
+--follow to switch to that workspace after the move instead of staying put.`,
+		Example: `  # Move the focused window to workspace 3
+  tuios move-window 3
+
+  # Move a named window and go with it
+  tuios move-window 2 -w build --follow`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			workspace, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("workspace must be a number, got %q", args[0])
+			}
+			return runMoveWindow(moveWindowSession, moveWindowWindow, workspace,
+				moveWindowFollow, moveWindowJSON)
+		},
+	}
+	moveWindowCmd.Flags().StringVarP(&moveWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	moveWindowCmd.Flags().StringVarP(&moveWindowWindow, "window", "w", "", "Window to move by name or ID (default: focused)")
+	moveWindowCmd.Flags().BoolVar(&moveWindowFollow, "follow", false, "Switch to that workspace after moving")
+	moveWindowCmd.Flags().BoolVar(&moveWindowJSON, "json", false, "Output result as JSON")
+	_ = moveWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var setWindowSession string
+	var setWindowWindow string
+	var setWindowName string
+	var setWindowMinimize bool
+	var setWindowRestore bool
+	var setWindowJSON bool
+	setWindowCmd := &cobra.Command{
+		Use:   "set-window",
+		Short: "Rename a window or minimize it",
+		Long: `Change a window's own properties: what it is called and whether it is
+minimized. Pass whichever you mean; anything left out is untouched.
+
+--name "" clears the custom name, so the window falls back to whatever its shell
+sets as the title.`,
+		Example: `  # Rename the focused window
+  tuios set-window --name "api tests"
+
+  # Clear a name and go back to the shell's title
+  tuios set-window -w build --name ""
+
+  # Minimize a window, then bring it back
+  tuios set-window -w build --minimize
+  tuios set-window -w build --restore`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if setWindowMinimize && setWindowRestore {
+				return fmt.Errorf("--minimize and --restore ask for opposite things; pass one")
+			}
+			// An unset flag has to stay unset rather than send its zero value:
+			// --name "" is a request to clear the name, which is not the same as
+			// not mentioning the name at all.
+			var name *string
+			if cmd.Flags().Changed("name") {
+				name = &setWindowName
+			}
+			var minimized *bool
+			if setWindowMinimize || setWindowRestore {
+				minimized = &setWindowMinimize
+			}
+			return runSetWindow(setWindowSession, setWindowWindow, name, minimized, setWindowJSON)
+		},
+	}
+	setWindowCmd.Flags().StringVarP(&setWindowSession, "session", "s", "", "Target session (default: most recently active)")
+	setWindowCmd.Flags().StringVarP(&setWindowWindow, "window", "w", "", "Window to change by name or ID (default: focused)")
+	setWindowCmd.Flags().StringVar(&setWindowName, "name", "", "New name, or \"\" to clear it")
+	setWindowCmd.Flags().BoolVar(&setWindowMinimize, "minimize", false, "Minimize the window")
+	setWindowCmd.Flags().BoolVar(&setWindowRestore, "restore", false, "Restore the window")
+	setWindowCmd.Flags().BoolVar(&setWindowJSON, "json", false, "Output result as JSON")
+	_ = setWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var selectWorkspaceSession string
+	var selectWorkspaceJSON bool
+	selectWorkspaceCmd := &cobra.Command{
+		Use:   "select-workspace <workspace>",
+		Short: "Show a workspace",
+		Long: `Show a workspace, the way the workspace keybindings do.
+
+This changes which workspace is displayed. To label one use
+'tuios set-workspace-name', and to move a window onto one use
+'tuios move-window'.`,
+		Example: `  # Show workspace 2
+  tuios select-workspace 2
+
+  # Show it in a named session
+  tuios select-workspace 2 -s work`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			workspace, err := strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("workspace must be a number, got %q", args[0])
+			}
+			return runSelectWorkspace(selectWorkspaceSession, workspace, selectWorkspaceJSON)
+		},
+	}
+	selectWorkspaceCmd.Flags().StringVarP(&selectWorkspaceSession, "session", "s", "", "Target session (default: most recently active)")
+	selectWorkspaceCmd.Flags().BoolVar(&selectWorkspaceJSON, "json", false, "Output result as JSON")
+	_ = selectWorkspaceCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var listWorkspacesSession string
+	var listWorkspacesJSON bool
+	listWorkspacesCmd := &cobra.Command{
+		Use:   "list-workspaces",
+		Short: "List the workspaces in a session",
+		Long: `List every workspace with its name, how many windows it holds, and which one
+is showing.
+
+The same facts were spread across session-info and list-windows, which left a
+caller deciding where to put a pane joining two results by hand.`,
+		Example: `  # List the workspaces
+  tuios list-workspaces
+
+  # Find the empty ones
+  tuios list-workspaces --json | jq '.workspaces[] | select(.window_count == 0)'`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runListWorkspaces(listWorkspacesSession, listWorkspacesJSON)
+		},
+	}
+	listWorkspacesCmd.Flags().StringVarP(&listWorkspacesSession, "session", "s", "", "Target session (default: most recently active)")
+	listWorkspacesCmd.Flags().BoolVar(&listWorkspacesJSON, "json", false, "Output as JSON")
+	_ = listWorkspacesCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var setLayoutSession string
+	var setLayoutTiling string
+	var setLayoutEqualize bool
+	var setLayoutRotate bool
+	var setLayoutJSON bool
+	setLayoutCmd := &cobra.Command{
+		Use:   "set-layout",
+		Short: "Turn tiling on or off and tidy the splits",
+		Long: `Turn tiling on or off, even out the split ratios, and flip the axis of the
+split holding the focused pane.
+
+A layout is a geometry only a renderer can compute, so this needs an attached
+client. Tiling is applied first, since evening out or rotating splits means
+nothing until the panes are tiled.`,
+		Example: `  # Tile the panes
+  tuios set-layout --tiling true
+
+  # Give every pane the same share of the screen
+  tuios set-layout --equalize
+
+  # Flip the split holding the focused pane
+  tuios set-layout --rotate`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			var tiling *bool
+			if cmd.Flags().Changed("tiling") {
+				parsed, err := strconv.ParseBool(setLayoutTiling)
+				if err != nil {
+					return fmt.Errorf("--tiling takes true or false, got %q", setLayoutTiling)
+				}
+				tiling = &parsed
+			}
+			return runSetLayout(setLayoutSession, tiling, setLayoutEqualize,
+				setLayoutRotate, setLayoutJSON)
+		},
+	}
+	setLayoutCmd.Flags().StringVarP(&setLayoutSession, "session", "s", "", "Target session (default: most recently active)")
+	setLayoutCmd.Flags().StringVar(&setLayoutTiling, "tiling", "", "Tile the panes automatically: true or false")
+	setLayoutCmd.Flags().BoolVar(&setLayoutEqualize, "equalize", false, "Reset every split ratio so the panes share the space evenly")
+	setLayoutCmd.Flags().BoolVar(&setLayoutRotate, "rotate", false, "Flip the axis of the split holding the focused pane")
+	setLayoutCmd.Flags().BoolVar(&setLayoutJSON, "json", false, "Output result as JSON")
+	_ = setLayoutCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	_ = setLayoutCmd.RegisterFlagCompletionFunc("tiling", fixedCompletions("true", "false"))
+
+	var listOptionsSession string
+	var listOptionsSection string
+	var listOptionsJSON bool
+	listOptionsCmd := &cobra.Command{
+		Use:   "list-options [prefix]",
+		Short: "List every settable configuration option",
+		Long: `List every configuration path 'tuios set-config' accepts, with its type,
+default, accepted values and description, grouped by section.
+
+This is how to find an option rather than guess it: a misspelled path used to be
+recorded, reported as set, and do nothing. Pass a path prefix to narrow the list,
+or --section to keep one group. Where this session carries an override, the
+override is shown alongside the default.`,
+		Example: `  # Everything that can be set
+  tuios list-options
+
+  # One group
+  tuios list-options --section sidebar
+
+  # Everything under a path
+  tuios list-options appearance.sidebar.
+
+  # Machine-readable, for an agent or a script
+  tuios list-options --json | jq -r '.options[].path'`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			prefix := ""
+			if len(args) > 0 {
+				prefix = args[0]
+			}
+			return runListOptions(listOptionsSession, listOptionsSection, prefix, listOptionsJSON)
+		},
+	}
+	listOptionsCmd.Flags().StringVarP(&listOptionsSession, "session", "s", "", "Target session (default: most recently active)")
+	listOptionsCmd.Flags().StringVar(&listOptionsSection, "section", "", "Only options in this group, e.g. sidebar or dock")
+	listOptionsCmd.Flags().BoolVar(&listOptionsJSON, "json", false, "Output as JSON")
+	_ = listOptionsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var waitForSession string
 	var waitForWindow string
@@ -1350,7 +1665,9 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd)
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
-	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd)
+	rootCmd.AddCommand(splitWindowCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
+	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
+	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd)
 
 	return rootCmd
 }
