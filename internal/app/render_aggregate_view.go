@@ -101,14 +101,21 @@ func (m *OS) aggregateViewRow(item AggregateViewItem, selected bool, rowBg color
 		right = overlay.Style(rowBg).Foreground(pal.FgDim).Render(dir+"  ") + right
 	}
 
+	// A space on this row is a space the row has to paint. A bare " " carries no
+	// background, so the compositor writes a cell with the pen reset and the
+	// desktop behind the panel shows through it: three of them at the head of
+	// every row read as a ragged notch down the picker's left edge, and on the
+	// selected row they cut a hole in the highlight.
+	pad := overlay.Style(rowBg).Render(" ")
+
 	// The focused pane is marked in the accent rather than with the asterisk it
 	// used to wear jammed against its name, which read as part of the name.
-	mark, markW := "  ", 2
+	mark, markW := pad+pad, 2
 	if state := item.Window.AgentState; agentStateIndicator(state) != "" {
 		mark = overlay.Style(rowBg).Foreground(agentGlyphColor(state, pal)).
-			Bold(sidebarAttention(state)).Render(agentStateIndicator(state)) + " "
+			Bold(sidebarAttention(state)).Render(agentStateIndicator(state)) + pad
 	} else if item.IsFocused {
-		mark = overlay.Style(rowBg).Foreground(pal.Accent).Render(accentMark()) + " "
+		mark = overlay.Style(rowBg).Foreground(pal.Accent).Render(accentMark()) + pad
 	}
 
 	avail := max(width-lipgloss.Width(right)-markW-3, 1)
@@ -120,7 +127,7 @@ func (m *OS) aggregateViewRow(item AggregateViewItem, selected bool, rowBg color
 		Render(overlay.Truncate(item.Title, avail))
 
 	gap := max(width-lipgloss.Width(left)-lipgloss.Width(right)-1, 1)
-	return " " + left + overlay.Style(rowBg).Render(strings.Repeat(" ", gap)) + right
+	return pad + left + overlay.Style(rowBg).Render(strings.Repeat(" ", gap)) + right
 }
 
 // aggregateRowFlag names a window that is not simply sitting in its layout.

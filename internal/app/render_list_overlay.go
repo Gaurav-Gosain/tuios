@@ -34,6 +34,10 @@ type listOverlay struct {
 	// most width cells wide (width is the fitted panel width, not the requested
 	// one); the helper fills the remainder with rowBg so the selection highlight
 	// spans the row.
+	//
+	// Every fragment of the row, spacers included, has to carry rowBg. Padding
+	// with a bare " " measures the same but paints nothing, so those cells are
+	// written with the pen reset and the desktop shows through the panel there.
 	RenderRow func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string
 }
 
