@@ -342,6 +342,20 @@ Nothing else about the mouse changes. Dragging a title bar or a border, Alt + le
 
 **Note:** A pane running an application that asked for the mouse (vim, less, htop) is only sent mouse events in terminal mode, which is true today as well. Under `"double"` the second click gets you in; under `"off"` the way in is the key bound to `enter_terminal_mode` (Enter by default). Pick `"double"` if you live in such applications. Also settable from the in-app settings page (Behavior, "Click to type").
 
+### auto_enter_terminal_on_focus
+
+Controls whether a keyboard window-focus command that actually moves focus to another pane also enters terminal mode, so typing goes to that pane without a separate `enter_terminal_mode` key (`i` or Enter by default).
+
+This is the keyboard counterpart of `click_to_type = "single"`: focusing a different pane is treated as a request to type in it. Hover-focus (`focus_follows_mouse`) and click-to-type keep their own policies; this setting only applies to the explicit focus commands (`next_window`, `prev_window`, numbered select, directional pane focus, and the matching prefix / terminal-mode binds).
+
+A command that leaves the already-focused pane focused does not change mode, so repeating a number or focusing the only visible window stays in window-management mode. Window-management keys that are not focus commands (`n` new window, `w` close, and so on) are unchanged.
+
+**Valid values:** `true`, `false`
+
+**Default:** `true`
+
+**Note:** With this on, `Tab` / `Shift+Tab` in window-management mode land you in the newly focused pane, ready to type. Further cycling from there uses the terminal-mode binds (`Alt+N` / `Alt+P`, or `Opt+Tab` on macOS). Set it to `false` to keep cycling windows in window-management mode without pressing Esc between them. Also settable from the in-app settings page (Behavior, "Auto-enter terminal on focus").
+
 ### word_characters
 
 The punctuation that counts as part of a word when a double-click selects one. Letters and digits always count and do not need listing.

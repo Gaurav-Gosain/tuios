@@ -696,6 +696,19 @@ var FocusFollowsMouseInTerminal = false
 // Set via appearance.alt_drag config.
 var AltDrag = true
 
+// AutoEnterTerminalOnFocus enters terminal mode when a window-management
+// keyboard command actually moves focus to another pane (next/prev window,
+// numbered select, directional pane focus). Hover-focus and click-to-type keep
+// their own policies; this is only those explicit focus commands. A no-op that
+// leaves the already-focused pane focused does not change mode, so Tab/n/w stay
+// usable until the user actually focuses a different pane.
+//
+// The default is on: focusing a pane with the keyboard is a request to type in
+// it, the same bargain click-to-type="single" makes for the mouse. Set it false
+// to keep cycling windows in window-management mode without an extra Esc.
+// Set via appearance.auto_enter_terminal_on_focus config.
+var AutoEnterTerminalOnFocus = true
+
 // ClickToType decides what a left click on a pane's content does while the
 // keyboard is driving the window manager. "single" enters terminal mode on the
 // release, which is what a newcomer expects a click to do and so the default.

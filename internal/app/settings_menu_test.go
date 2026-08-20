@@ -76,7 +76,7 @@ func TestSettingsCoverage(t *testing.T) {
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 	want := map[string][]string{
 		"Appearance": {"Focused border color", "Unfocused border color", "Window title format"},
-		"Behavior":   {"Preferred shell", "Click to type"},
+		"Behavior":   {"Preferred shell", "Click to type", "Auto-enter terminal on focus"},
 		"Daemon":     {"Log level"},
 	}
 	for category, labels := range want {

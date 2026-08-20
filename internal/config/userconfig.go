@@ -130,6 +130,7 @@ type AppearanceConfig struct {
 	FocusFollowsMouse           *bool   `toml:"focus_follows_mouse"`             // Focus the pane under the cursor as the mouse moves (default: false)
 	FocusFollowsMouseInTerminal *bool   `toml:"focus_follows_mouse_in_terminal"` // Also hover-focus while in terminal mode (default: false)
 	AltDrag                     *bool   `toml:"alt_drag"`                        // Alt + left-drag moves a pane (default: true)
+	AutoEnterTerminalOnFocus    *bool   `toml:"auto_enter_terminal_on_focus"`    // Enter terminal mode when a keyboard focus command actually moves focus (default: true)
 	ClickToType                 string  `toml:"click_to_type"`                   // What a click on a pane's content does in window-management mode: single, double, off (default: single)
 	WordCharacters              *string `toml:"word_characters"`                 // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
 	DockbarPosition             string  `toml:"dockbar_position"`                // Dockbar position: bottom, top, hidden
@@ -988,6 +989,12 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// survives the default being on.
 	if cfg.Appearance.AltDrag != nil {
 		AltDrag = *cfg.Appearance.AltDrag
+	}
+
+	// AutoEnterTerminalOnFocus defaults to true; a pointer so an explicit false
+	// in the config survives the default being on.
+	if cfg.Appearance.AutoEnterTerminalOnFocus != nil {
+		AutoEnterTerminalOnFocus = *cfg.Appearance.AutoEnterTerminalOnFocus
 	}
 
 	// ClickToType only takes one of its three values, so a typo in the config

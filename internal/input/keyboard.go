@@ -9,6 +9,7 @@ import (
 )
 
 func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
 	num := int(msg.String()[0] - '0')
 
 	if o.AutoTiling || strings.HasPrefix(msg.String(), "ctrl+") {
@@ -51,7 +52,7 @@ func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.Snap(o.FocusedWindow, app.SnapBottomRight)
 		}
 	}
-	return o, nil
+	return maybeEnterTerminalOnFocusChange(o, prev)
 }
 
 // The arrow keys belong to whatever overlay is up. Help scrolling is handled in

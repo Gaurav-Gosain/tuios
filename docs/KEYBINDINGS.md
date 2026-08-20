@@ -21,6 +21,8 @@ TUIOS has two main modes:
 - **Window Management Mode** - Navigate and manage windows (default on startup)
 - **Terminal Mode** - Input goes directly to the focused terminal
 
+Focusing a different window from window-management mode with `Tab`, `Shift+Tab`, `1-9` (in tiling mode), or `Alt+arrows` also enters terminal mode, so typing goes to that pane without a separate `i`/`Enter`. A no-op that leaves the already-focused pane focused stays in window-management mode. Turn this off with `appearance.auto_enter_terminal_on_focus = false` (see [CONFIGURATION.md](CONFIGURATION.md)).
+
 | Key | Action |
 |-----|--------|
 | `i` or `Enter` | Enter Terminal Mode |
@@ -81,9 +83,9 @@ The rail's remaining keys are listed by that help overlay, which reads them from
 | `m` | Minimize focused window |
 | `c` | Copy the focused pane's selection to the clipboard |
 | `Shift+M` | Restore all minimized windows |
-| `Tab` | Focus next window |
-| `Shift+Tab` | Focus previous window |
-| `1-9` | Select window by number |
+| `Tab` | Focus next window (enters terminal mode when focus actually moves) |
+| `Shift+Tab` | Focus previous window (enters terminal mode when focus actually moves) |
+| `1-9` | Select window by number (enters terminal mode when focus actually moves) |
 | `Shift+1-9` or `!@#$%^&*(` | Restore minimized window by number |
 
 ## Workspaces

@@ -556,6 +556,12 @@ func (m *OS) settingsCategories() []settingsCategory {
 					config.ClickToType = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.ClickToType = v })
 				}),
+			boolItem("Auto-enter terminal on focus", "Keyboard focus commands that move to another pane also start typing in it",
+				func() bool { return config.AutoEnterTerminalOnFocus },
+				func(m *OS, v bool) {
+					config.AutoEnterTerminalOnFocus = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.AutoEnterTerminalOnFocus = boolPtr(v) })
+				}),
 			boolItem("Reverse scroll", "Reverse scroll in the scrolling layout",
 				func() bool { return config.NiriReverseScroll },
 				func(m *OS, v bool) {
