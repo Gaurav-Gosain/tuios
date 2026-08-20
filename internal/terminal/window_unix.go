@@ -20,9 +20,10 @@ func (w *Window) TriggerRedraw() {
 	// Send SIGWINCH signal immediately to notify the shell of the resize.
 	// PTY.Resize() is synchronous, so the kernel PTY size is updated immediately.
 	// Shells query the new size via ioctl(TIOCGWINSZ) when they receive SIGWINCH.
-	w.ioMu.RLock()
+	//
+	// No lock: w.Cmd is write-once, so ioMu guarded nothing here. Signalling a
+	// process Close() already reaped just returns an error, which is ignored.
 	process := w.Cmd.Process
-	w.ioMu.RUnlock()
 
 	if process != nil {
 		// Send SIGWINCH (window change signal) to the process

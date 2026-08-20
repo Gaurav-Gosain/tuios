@@ -180,9 +180,9 @@ type Window struct {
 	ID                 string
 	Terminal           *vt.Emulator
 	Pty                xpty.Pty
-	Cmd                *exec.Cmd
-	ShellPgid          int      // Process group ID of the shell
-	cwd                cwdCache // Memoised working directory, see CWD
+	Cmd                *exec.Cmd // Write-once; the monitor goroutine reads it unlocked, see waitForCmd
+	ShellPgid          int       // Process group ID of the shell
+	cwd                cwdCache  // Memoised working directory, see CWD
 	LastUpdate         time.Time
 	Dirty              bool
 	ContentDirty       bool
