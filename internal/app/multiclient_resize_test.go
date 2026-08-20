@@ -188,6 +188,48 @@ func TestLargerClientLeavingGivesTheColumnsBack(t *testing.T) {
 	}
 }
 
+// TestFloatingPanesAreClampedWhenAnotherClientShrinksTheSession covers the
+// layout that has no retile to fall back on. A floating pane keeps its own
+// geometry, so nothing pulls it back inside an edge that moved in because
+// somebody else attached from a smaller window.
+func TestFloatingPanesAreClampedWhenAnotherClientShrinksTheSession(t *testing.T) {
+	r := newRigSized(t, 2, holderCols, holderRows)
+	r.watchSessionResize()
+	if r.m.AutoTiling {
+		t.Fatalf("the rig came up tiling; this test is about the floating layout")
+	}
+
+	// Put a pane out where the narrow client's edge will cut through it.
+	w := r.win(0)
+	w.X, w.Y = holderCols-40, 2
+	w.Resize(40, 12)
+
+	joinClient(t, r.session, joinerCols, joinerRows)
+	r.awaitSessionResize("the session to shrink around the client already attached")
+
+	// The clamp's own guarantee, the one the host terminal's resize gets: the
+	// pane is no wider than the session, and enough of it is still inside the
+	// content region to be grabbed. Off the right-hand edge entirely is what it
+	// rules out, not hanging over it.
+	rightEdge := r.m.GetLeftMargin() + r.m.GetContentWidth()
+	if w.Width > r.m.GetContentWidth() {
+		t.Fatalf("pane is %d columns wide, past the %d the session now has",
+			w.Width, r.m.GetContentWidth())
+	}
+	if w.X >= rightEdge {
+		t.Fatalf("pane starts at column %d, off the right of the %d the session now has",
+			w.X, rightEdge)
+	}
+	if w.Height > r.m.GetUsableHeight() {
+		t.Fatalf("pane is %d rows tall, past the %d the session now has",
+			w.Height, r.m.GetUsableHeight())
+	}
+	if w.Y >= r.m.GetTopMargin()+r.m.GetUsableHeight() {
+		t.Fatalf("pane starts at row %d, below the %d the session now has",
+			w.Y, r.m.GetTopMargin()+r.m.GetUsableHeight())
+	}
+}
+
 // TestDroppedClientGivesTheColumnsBack is the leave nobody announces: a browser
 // tab closed, a network drop, a client killed. The connection goes away without
 // a detach, and the columns it was holding down have to come back anyway.
