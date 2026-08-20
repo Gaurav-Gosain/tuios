@@ -245,6 +245,16 @@ func (e *Emulator) registerDefaultCcHandlers() {
 				e.carriageReturn()
 				return true
 			})
+		case ansi.SO: // Shift Out [ansi.SO], locking shift to G1
+			e.registerCcHandler(i, func() bool {
+				e.gl = 1
+				return true
+			})
+		case ansi.SI: // Shift In [ansi.SI], locking shift back to G0
+			e.registerCcHandler(i, func() bool {
+				e.gl = 0
+				return true
+			})
 		}
 	}
 
@@ -258,16 +268,6 @@ func (e *Emulator) registerDefaultCcHandlers() {
 		case ansi.RI: // Reverse Index [ansi.RI]
 			e.registerCcHandler(i, func() bool {
 				e.reverseIndex()
-				return true
-			})
-		case ansi.SO: // Shift Out [ansi.SO]
-			e.registerCcHandler(i, func() bool {
-				e.gl = 1
-				return true
-			})
-		case ansi.SI: // Shift In [ansi.SI]
-			e.registerCcHandler(i, func() bool {
-				e.gl = 0
 				return true
 			})
 		case ansi.IND: // Index [ansi.IND]
@@ -491,6 +491,20 @@ func (e *Emulator) registerDefaultEscHandlers() {
 	e.RegisterEscHandler('c', func() bool {
 		// Reset Initial State [ansi.RIS]
 		e.fullReset()
+		return true
+	})
+
+	e.RegisterEscHandler('N', func() bool {
+		// Single Shift 2 [ansi.SS2]. The eight-bit form is registered with the
+		// other C1 controls; a guest that has not asked for eight-bit controls
+		// sends this one, which is nearly all of them.
+		e.gsingle = 2
+		return true
+	})
+
+	e.RegisterEscHandler('O', func() bool {
+		// Single Shift 3 [ansi.SS3]
+		e.gsingle = 3
 		return true
 	})
 
