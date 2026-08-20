@@ -15,8 +15,12 @@ const (
 	// ground it is drawn on.
 	ContrastFloor = overlay.ContrastFloor
 	// MarkFloor is the ratio a non-text mark has to clear: a cap, a glyph, a
-	// rule, a cursor block.
+	// cursor block.
 	MarkFloor = overlay.MarkFloor
+	// StructureTarget is what a decorative rule aims at: an edge, a separator,
+	// a divider. The one class with no floor under it, and the reason there is
+	// no floor is that taking the rule away leaves the layout readable.
+	StructureTarget = overlay.StructureTarget
 )
 
 // ContrastRatio returns the WCAG 2.1 contrast ratio between two colours.
@@ -30,6 +34,10 @@ func Readable(c, bg color.Color) color.Color { return overlay.Readable(c, bg) }
 func ReadableAt(c, bg color.Color, floor float64) color.Color {
 	return overlay.ReadableAt(c, bg, floor)
 }
+
+// RailRuleOn is the structure ink for a rule drawn on a ground its caller
+// paints itself, like the collapsed strip's bands.
+func RailRuleOn(bg color.Color) color.Color { return overlay.Structure(bg) }
 
 // ContrastText picks a foreground that reads on the given (usually saturated)
 // background: near-white on a dark or mid accent, near-black on a light one.

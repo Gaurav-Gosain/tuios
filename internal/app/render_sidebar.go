@@ -476,7 +476,7 @@ func sidebarQuietDotTinted(tint, bg color.Color, pal overlay.Palette) string {
 // panes, drawn in the window-border character at the dock separator's color:
 // the rail's edge is the vertical sibling of the dock's hairline.
 func sidebarEdgeRule() string {
-	return lipgloss.NewStyle().Foreground(theme.NotificationRule()).Render(config.GetWindowBorderLeft())
+	return lipgloss.NewStyle().Foreground(theme.RailRule()).Render(config.GetWindowBorderLeft())
 }
 
 // sidebarHeaderRow renders a quiet section header: the label, lowercase and

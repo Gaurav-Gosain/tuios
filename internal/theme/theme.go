@@ -381,16 +381,27 @@ func NotificationFg() color.Color {
 	return UI().Fg
 }
 
-// NotificationRule returns the color of the dock hairline that a message has
-// not lit: the unburnt remainder of the rule, and the whole rule when nothing
-// is on screen. It matches the separator the dock already draws.
+// RailRule returns the ink for the chrome's structure: the rail's edge, the
+// dock's separator, the unburnt remainder of a notification's burn, the
+// collapsed strip's hairline and its group divider. All of it is one class,
+// held to StructureTarget rather than to either floor.
 //
-// The hairline is drawn straight onto the user's terminal background, which
-// tuios never paints and cannot know, so it takes the mid grey of the chrome
-// ramp. The near-black it used to be measured 1.6:1 on a dark terminal, which
-// is a separator nobody could see on the terminals most people use.
-func NotificationRule() color.Color {
-	return UI().FgMute
+// It was the same ink as the labels, and that is the whole of "the rail looks
+// busy": the rail's edge and the dock's separator together are more cells than
+// every label in the frame, so the largest object on screen was furniture. At
+// StructureTarget the same structure is a whisper and the labels have not
+// moved.
+//
+// The ground is the theme's when a theme is on, since that is the one the panes
+// beside the rule are painted in. Without a theme tuios paints nothing and
+// cannot ask, so the rule is measured against the chrome ramp's own canvas,
+// which is the ground every other constant ink in the rail is measured against
+// and lands within a channel step of charmtone Iron.
+func RailRule() color.Color {
+	if t := Current(); t != nil {
+		return RailRuleOn(t.Bg)
+	}
+	return RailRuleOn(UI().Canvas)
 }
 
 // NotificationSeverity maps a notification type string to its color. The type

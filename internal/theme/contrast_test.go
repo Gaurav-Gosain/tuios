@@ -5,6 +5,7 @@ import (
 	"math"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/charmtone"
 )
 
@@ -154,9 +155,13 @@ func TestBordersStayVisibleOnTheirPane(t *testing.T) {
 	_ = Initialize("")
 }
 
-// The dock hairline is drawn straight onto the user's terminal background,
-// which tuios never paints, so it has to survive both ends of the range.
-func TestDockHairlineSurvivesEitherGround(t *testing.T) {
+// The dock hairline, the rail's edge and the strip's band edge are one class:
+// decorative structure, exempt from both floors under WCAG 1.4.11 and held to
+// StructureTarget instead. What has to be true is that it lands in the same
+// whisper band on every ground rather than being quiet on one and a hard line
+// on another, which is what any fixed ink does: the dark grey that reads 1.93:1
+// on the chrome canvas measures 8.44:1 on a white terminal.
+func TestStructureIsAWhisperOnEveryGround(t *testing.T) {
 	_ = Initialize("")
 	for _, g := range []struct {
 		name string
@@ -164,9 +169,31 @@ func TestDockHairlineSurvivesEitherGround(t *testing.T) {
 	}{
 		{"a black terminal", color.RGBA{A: 0xff}},
 		{"a white terminal", color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}},
+		{"the chrome canvas", UI().Canvas},
+		{"the chrome's raised panel", UI().Panel},
+		{"a mocha terminal", lipgloss.Color("#1e1e2e")},
+		{"a latte terminal", lipgloss.Color("#eff1f5")},
 	} {
-		if got := ContrastRatio(NotificationRule(), g.bg); got < MarkFloor {
-			t.Errorf("the hairline on %s measures %.2f:1, want at least %.1f:1", g.name, got, MarkFloor)
+		got := ContrastRatio(RailRuleOn(g.bg), g.bg)
+		// The blend lands on a 32-step grid, so it undershoots the target by a
+		// step at most and can never sit above it.
+		if got > StructureTarget || got < StructureTarget*0.9 {
+			t.Errorf("the rule on %s measures %.2f:1, off the %.1f:1 structure target",
+				g.name, got, StructureTarget)
 		}
+		if got >= MarkFloor {
+			t.Errorf("the rule on %s measures %.2f:1, at or over the %.1f:1 mark floor: furniture drawn as loud as the marks it frames",
+				g.name, got, MarkFloor)
+		}
+	}
+}
+
+// The three classes are a ladder, and a ladder with a rung out of order is not
+// one. Whatever ground it is measured on, a rule is quieter than a mark and a
+// mark is quieter than a label.
+func TestTheThreeContrastClassesStayInOrder(t *testing.T) {
+	if !(StructureTarget < MarkFloor && MarkFloor < ContrastFloor) {
+		t.Errorf("structure %.1f, marks %.1f, text %.1f: the classes are out of order",
+			StructureTarget, MarkFloor, ContrastFloor)
 	}
 }

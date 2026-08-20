@@ -340,7 +340,7 @@ func notifBurnRule(s notifStatus, span int) string {
 
 	burnt := lipgloss.NewStyle().Foreground(theme.NotificationSeverity(s.msg.Type)).
 		Render(strings.Repeat(notifRuleStroke(s.msg.Type), lit))
-	rest := lipgloss.NewStyle().Foreground(theme.NotificationRule()).
+	rest := lipgloss.NewStyle().Foreground(theme.RailRule()).
 		Render(strings.Repeat(config.GetWindowSeparatorChar(), span-lit))
 	return burnt + rest
 }
