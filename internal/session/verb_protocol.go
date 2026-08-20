@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"time"
 )
 
@@ -231,6 +232,11 @@ func init() {
 				windowParam,
 				{Name: "source", Type: "string", Description: "Which buffer to capture.", Accepted: captureSources, Default: "visible"},
 				{Name: "styled", Type: "bool", Description: "Include ANSI styling in the captured text.", Default: "false"},
+				// scrollback and ansi predate source and styled and are still
+				// accepted; they are declared so a caller reading only list-verbs
+				// can see the whole call shape.
+				{Name: "scrollback", Type: "bool", Description: `Older spelling of source "recent".`, Default: "false"},
+				{Name: "ansi", Type: "bool", Description: "Older spelling of styled.", Default: "false"},
 				{Name: "lines", Type: "int", Description: "Keep only the last N non-empty-tailed lines, so the blank rows below the cursor do not count. Ignored when start or end is given."},
 				{Name: "start", Type: "int", Description: "1-based inclusive first line of the region to keep."},
 				{Name: "end", Type: "int", Description: "1-based inclusive last line of the region to keep."},
@@ -380,6 +386,7 @@ func init() {
 				sessionParam,
 				windowParam,
 				{Name: "pattern", Type: "string", Description: "Regular expression, required by window-output."},
+				{Name: "source", Type: "string", Description: "Which buffer window-output matches against. The default includes scrollback, so output that has already scrolled past still matches.", Accepted: captureSources, Default: "recent"},
 				{Name: "idle", Type: "int", Description: "Milliseconds of silence that count as idle, for window-idle.", Default: "500"},
 				{Name: "timeout", Type: "int", Description: "Milliseconds to wait before failing with the timeout code.", Default: "30000"},
 			},
@@ -508,6 +515,10 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 		})
 	}
 
+	if verr := checkParamNames(req.Verb, entry, req.Params); verr != nil {
+		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Error: verr})
+	}
+
 	result, verr := entry.handler(d, cs, req.Params)
 	if verr != nil {
 		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Error: verr})
@@ -518,6 +529,53 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 	// A subscribe verb stashes its fresh subscription for the streamer, which must
 	// start only after the ack line above is on the wire so no event precedes it.
 	d.startPendingStream(cs)
+	return nil
+}
+
+// checkParamNames refuses a request carrying a parameter the verb does not
+// declare, before the handler ever sees it.
+//
+// Dropping an unknown field is what encoding/json does by default, and it is the
+// worst answer available to a machine caller: new-window with a workspace the
+// verb did not yet take reported a created window and put it wherever it liked,
+// with a success envelope and no way to tell. A caller that guessed a name, or
+// that is newer than the daemon it reached, has to learn that from the response
+// rather than from the pane it is looking at.
+//
+// The check runs against the same schema list-verbs publishes, so the two cannot
+// drift: a parameter a handler reads but does not declare is unreachable, and a
+// caller that read list-verbs can always spell every accepted name.
+func checkParamNames(verb string, entry verbEntry, params json.RawMessage) *verbError {
+	if len(bytes.TrimSpace(params)) == 0 {
+		return nil
+	}
+	var got map[string]json.RawMessage
+	// A params value that is not an object at all is left to the handler's
+	// decode, which already reports it as invalid_params with the decode error.
+	if err := json.Unmarshal(params, &got); err != nil {
+		return nil
+	}
+
+	accepted := make([]string, 0, len(entry.params))
+	for _, p := range entry.params {
+		accepted = append(accepted, p.Name)
+	}
+
+	for name := range got {
+		if slices.ContainsFunc(entry.params, func(p verbParam) bool { return p.Name == name }) {
+			continue
+		}
+		return hintedVerbError(ErrVerbInvalidParams,
+			"verb "+verb+" has no parameter "+echoName(name),
+			&VerbHint{
+				Param:      name,
+				Verb:       "list-verbs",
+				Command:    "tuios list-verbs " + verb,
+				DidYouMean: closestMatch(name, accepted),
+				Accepted:   accepted,
+				Detail:     "an unrecognised parameter is refused rather than ignored, so a call that cannot do what it asked for never reports success.",
+			})
+	}
 	return nil
 }
 
