@@ -31,6 +31,47 @@ func (m *OS) Snap(i int, quarter SnapQuarter) *OS {
 
 	return m
 }
+
+// SnapZoneAt names the snap a pointer released at (x, y) asks for, or NoSnap.
+//
+// It lives beside calculateSnapBounds on purpose. The two were once computed in
+// different places by different rules: the bounds partitioned the content
+// region while the zones were read off the raw screen, so with a right-hand
+// sidebar the right zone sat underneath the rail. A pane dragged to the visible
+// right edge snapped nothing, and reaching the zone at all meant dragging into
+// the sidebar. Keeping them adjacent is what stops that drifting again.
+func (m *OS) SnapZoneAt(x, y int) SnapQuarter {
+	const edge = 5
+
+	topMargin := m.GetTopMargin()
+	bottomEdge := topMargin + m.GetUsableHeight()
+	leftEdge := m.GetLeftMargin()
+	rightEdge := m.GetRenderWidth() - m.GetRightMargin()
+
+	atLeft := x <= leftEdge+edge
+	atRight := x >= rightEdge-edge
+	atTop := y <= topMargin+edge
+	atBottom := y >= bottomEdge-edge
+
+	switch {
+	case atTop && atLeft:
+		return SnapTopLeft
+	case atTop && atRight:
+		return SnapTopRight
+	case atBottom && atLeft:
+		return SnapBottomLeft
+	case atBottom && atRight:
+		return SnapBottomRight
+	case atTop:
+		return SnapFullScreen
+	case atLeft:
+		return SnapLeft
+	case atRight:
+		return SnapRight
+	}
+	return NoSnap
+}
+
 func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) {
 	// Snapping partitions the content region, not the raw screen: a sidebar
 	// reserves columns the same way the dock reserves rows, so a left-snapped

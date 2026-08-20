@@ -267,41 +267,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		if dragDistance >= dragThreshold {
 			// Detect edge zones for snapping
-			// Edge zone is within edgeSize pixels of screen edge
-			const edgeSize = 5
-			topMargin := o.GetTopMargin()
-			usableHeight := o.GetUsableHeight()
-			bottomEdge := topMargin + usableHeight
-
-			atLeft := mouse.X <= edgeSize
-			atRight := mouse.X >= o.Width-edgeSize
-			atTop := mouse.Y <= topMargin+edgeSize
-			atBottom := mouse.Y >= bottomEdge-edgeSize
-
-			snapTo := app.NoSnap
-
-			if atTop && !atLeft && !atRight {
-				// Top center - fullscreen
-				snapTo = app.SnapFullScreen
-			} else if atLeft && !atTop && !atBottom {
-				// Left middle - snap left half
-				snapTo = app.SnapLeft
-			} else if atRight && !atTop && !atBottom {
-				// Right middle - snap right half
-				snapTo = app.SnapRight
-			} else if atTop && atLeft {
-				// Top-left corner - quarter
-				snapTo = app.SnapTopLeft
-			} else if atTop && atRight {
-				// Top-right corner - quarter
-				snapTo = app.SnapTopRight
-			} else if atBottom && atLeft {
-				// Bottom-left corner - quarter
-				snapTo = app.SnapBottomLeft
-			} else if atBottom && atRight {
-				// Bottom-right corner - quarter
-				snapTo = app.SnapBottomRight
-			}
+			// The zone rule lives with the bounds rule in internal/app, so the
+			// region the zones sit on and the region a snap fills cannot disagree.
+			snapTo := o.SnapZoneAt(mouse.X, mouse.Y)
 
 			if snapTo != app.NoSnap {
 				o.Snap(o.DraggedWindowIndex, snapTo)
