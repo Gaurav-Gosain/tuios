@@ -2,7 +2,6 @@ package app
 
 import (
 	"image/color"
-	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -225,13 +224,16 @@ func (m *OS) windowDotPieces(col color.Color, window *terminal.Window, isTiling 
 	pieces := []windowButtonPiece{{WindowButtonNone, gap}}
 	for _, a := range actions {
 		dot := readableDot(windowDotColor(a), ground)
-		cell := lipgloss.NewStyle().Foreground(dot).Render(config.GetWindowButtonDot())
+		glyph := config.GetWindowButtonDot()
 		if hovered {
-			cell = lipgloss.NewStyle().
-				Background(dot).
-				Foreground(theme.ContrastText(dot)).
-				Render(windowDotSymbol(a))
+			glyph = windowDotSymbol(a)
 		}
+		// The symbol is drawn in the disc's own colour rather than on it. A cell
+		// background is a rectangle, so filling it trades the round silhouette
+		// for a block at exactly the moment the pointer is on it, which is when
+		// the control is most worth recognising. Circled glyphs keep the shape
+		// and the colour, and only the marking changes.
+		cell := lipgloss.NewStyle().Foreground(dot).Render(glyph)
 		pieces = append(pieces, windowButtonPiece{a, cell + gap})
 	}
 	return pieces
@@ -310,12 +312,25 @@ func windowDotColor(action WindowButtonAction) color.Color {
 // already drawn elsewhere in the window chrome, so no new rune enters the
 // frame and the ASCII forms come along for free.
 func windowDotSymbol(action WindowButtonAction) string {
+	if config.UseASCIIOnly {
+		switch action {
+		case WindowButtonClose:
+			return "x"
+		case WindowButtonMinimize:
+			return "-"
+		default:
+			return "+"
+		}
+	}
+	// Circled forms, so a hovered control is the same disc carrying a mark
+	// rather than a different shape. They are one cell wide like the disc, so
+	// nothing moves under the pointer and no recorded rectangle shifts.
 	switch action {
 	case WindowButtonClose:
-		return strings.TrimSpace(config.GetWindowButtonClose())
+		return "\u2297" // circled times
 	case WindowButtonMinimize:
-		return "-"
+		return "\u2296" // circled minus
 	default:
-		return strings.TrimSpace(config.GetWindowButtonMaximize())
+		return "\u2295" // circled plus
 	}
 }

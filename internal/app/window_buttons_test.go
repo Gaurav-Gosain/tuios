@@ -340,11 +340,9 @@ func TestDotsRevealTheirSymbolsOnHover(t *testing.T) {
 		if strings.ContainsRune(string(hovered), dot) {
 			t.Errorf("hovered bar still shows a disc: %q", string(hovered))
 		}
-		for _, want := range []string{
-			strings.TrimSpace(config.GetWindowButtonClose()),
-			"-",
-			strings.TrimSpace(config.GetWindowButtonMaximize()),
-		} {
+		// The circled forms, so a hovered control stays the same round shape
+		// carrying a mark rather than becoming a filled block.
+		for _, want := range []string{"\u2297", "\u2296", "\u2295"} {
 			if !strings.Contains(string(hovered), want) {
 				t.Errorf("hovered bar %q is missing %q; macOS reveals all three at once", string(hovered), want)
 			}
