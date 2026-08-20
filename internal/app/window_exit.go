@@ -11,6 +11,10 @@ type windowExitQueue struct {
 	// disconnect that coincides with an exit flood does not strand it holding
 	// the whole OS. Non-nil only while a drain is running.
 	stop chan struct{}
+	// closed marks the model as gone, so a late exit from the read loop is
+	// discarded rather than queued behind a drain that has already been told to
+	// stop.
+	closed bool
 }
 
 // queueWindowExit reports a pane exit to the Update loop without blocking the
@@ -35,6 +39,9 @@ func (m *OS) queueWindowExit(windowID string) {
 	q := &m.windowExits
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.closed {
+		return
+	}
 	if !q.draining {
 		select {
 		case m.WindowExitChan <- windowID:
@@ -81,6 +88,7 @@ func (m *OS) drainWindowExits(stop chan struct{}) {
 func (m *OS) stopWindowExitDrain() {
 	q := &m.windowExits
 	q.mu.Lock()
+	q.closed = true
 	q.pending = nil
 	if q.stop != nil {
 		close(q.stop)
