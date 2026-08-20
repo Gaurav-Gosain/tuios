@@ -65,12 +65,18 @@ const (
 	MsgSessionInfo   // Response with session info
 
 	// Multi-client support messages
-	MsgStateSync       // Broadcast state update to all clients in session
-	MsgClientJoined    // Notification that another client joined the session
-	MsgClientLeft      // Notification that another client left the session
-	MsgSessionResize   // Session effective size changed (min of all clients)
-	MsgForceRefresh    // Force all clients to re-render
-	MsgRequestFullSync // Client requests full state sync from leader
+	MsgStateSync     // Broadcast state update to all clients in session
+	MsgClientJoined  // Notification that another client joined the session
+	MsgClientLeft    // Notification that another client left the session
+	MsgSessionResize // Session effective size changed (min of all clients)
+	MsgForceRefresh  // Force all clients to re-render
+	// MsgRequestFullSync is declared and never sent. No daemon has ever had a
+	// handler for it, and the case it was meant for, a client that missed a
+	// state sync, is handled where the sync is queued instead: the queue keeps
+	// the newest snapshot rather than the first (see app.OS.QueueStateSync), so
+	// there is nothing to re-request. It stays in place because the iota order
+	// is the wire format and removing it would move every value below it.
+	MsgRequestFullSync
 
 	// Appended after all existing types to keep every value above stable for
 	// older clients that share this iota order.
