@@ -690,6 +690,27 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	if kp.placements[windowID] == nil {
 		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
 	}
+	if existing := kp.placements[windowID][hostID]; existing != nil {
+		// A stream re-transmitting the same image id has its placement
+		// already on the host, at a size this path has checked; recreating it
+		// hidden made the render pass delete and re-place it on every guest
+		// frame, which is churn the host has to draw and the pane can flicker
+		// on. Refresh the geometry in place and leave the visibility alone.
+		existing.GuestX = cursorX
+		existing.AbsoluteLine = scrollbackLen + cursorY
+		existing.HostX = hostX
+		existing.HostY = hostY
+		existing.Cols = displayCols
+		existing.Rows = imgRows
+		existing.DisplayRows = displayRows
+		existing.SourceX = cmd.SourceX
+		existing.SourceY = cmd.SourceY
+		existing.SourceWidth = cmd.SourceWidth
+		existing.SourceHeight = cmd.SourceHeight
+		existing.PlacedOnAltScreen = isAltScreen
+		kittyPassthroughLog("forwardFileTransmit: refreshed placement hostID=%d in place", hostID)
+		return
+	}
 	kp.placements[windowID][hostID] = &PassthroughPlacement{
 		GuestImageID:      cmd.ImageID,
 		HostImageID:       hostID,
