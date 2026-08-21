@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -78,6 +79,12 @@ type KittyPassthrough struct {
 	hostMu       sync.Mutex // serializes writes to hostOut across render + async paths
 	// hostScratch joins a multi-part sequence into one Write. Guarded by hostMu.
 	hostScratch []byte
+	// pacedUntilNanos is the wall time before which no further frame should be
+	// sent, and writeInFlight says a write is happening now. Written under
+	// hostMu, read from the VT callback without it, so both are atomic. See
+	// hostBacklogged.
+	pacedUntilNanos atomic.Int64
+	writeInFlight   atomic.Bool
 
 	placements    map[string]map[uint32]*PassthroughPlacement
 	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
@@ -121,6 +128,12 @@ type KittyPassthrough struct {
 
 	// Pending direct transmission data (for chunked transfers)
 	pendingDirectData map[string]*pendingDirectTransmit // key: windowID
+
+	// lastBitmap and directFrames back the damage path: the bitmap the host
+	// currently holds for each image, and the transmission being assembled
+	// before it is compared with that bitmap. See kitty_damage.go.
+	lastBitmap   map[string]map[uint32]*bitmapCache
+	directFrames map[string]*directFrame
 
 	// Screen dimensions (updated by RefreshAllPlacements)
 	screenWidth  int
@@ -391,7 +404,80 @@ func (kp *KittyPassthrough) writeHostSequence(parts ...[]byte) {
 	for _, part := range parts[1:] {
 		kp.hostScratch = append(kp.hostScratch, part...)
 	}
+	started := time.Now()
+	kp.writeInFlight.Store(true)
 	_, _ = kp.hostOut.Write(kp.hostScratch)
+	kp.writeInFlight.Store(false)
+	// The host earns a rest as long as the write it just took. See
+	// hostBacklogged.
+	kp.chargePacing(time.Since(started))
+}
+
+const (
+	// pacingHoldFactor is how many times its own duration a write holds the
+	// next frame back, which is the same as saying graphics may use at most
+	// one part in five of the host's write capacity. The other four are what
+	// the render loop needs to stay responsive, and it is the render loop that
+	// carries the user's keystrokes.
+	//
+	// It scales itself. A damage patch writes in a millisecond and is held for
+	// four, which no frame rate notices; a whole 900 KB bitmap writes in thirty
+	// and is held for a hundred and twenty, which is exactly the stream that
+	// has to slow down.
+	pacingHoldFactor = 4
+	// minPacedCost is the cost below which work is free. A placement, a delete
+	// or a small damage patch costs tens of microseconds and holding the next
+	// frame back for a multiple of that would be noise, so nothing is charged
+	// for it. Only work that a frame at 60fps would actually notice paces the
+	// stream behind it.
+	minPacedCost = time.Millisecond
+	// maxPacingHold caps the hold so one pathological write cannot freeze a
+	// stream for seconds.
+	maxPacingHold = 250 * time.Millisecond
+)
+
+// hostBacklogged reports whether a frame sent right now would be piling onto a
+// host that has not finished with the last one.
+//
+// It is the only backpressure signal there is. A pty write returns as soon as
+// the kernel buffer takes the bytes, so a fast write says nothing, but a slow
+// one says the buffer is full and the terminal is behind.
+//
+// Two things make it true. A write in flight is the exact case: whatever this
+// frame adds goes behind it. Past that, each write holds the next frame back
+// for a multiple of its own cost, so an expensive stream is throttled in
+// proportion to how expensive it is. A fixed threshold was tried first and
+// behaved badly in both directions: it does not decay, so one slow write
+// suppressed every frame until some unrelated graphics write reset it.
+// chargePacing books the cost of one piece of graphics work against the
+// stream, holding the next frame back for a multiple of it.
+//
+// Both kinds of cost are charged here, because both are paid out of the same
+// budget. The write is the obvious one. The other is the work of preparing a
+// frame at all, reading it off disk and base64 encoding a megabyte, which
+// happens inside the lock the render loop needs and so delays a keystroke
+// exactly as a slow write would, while being invisible to any measurement of
+// the write itself.
+func (kp *KittyPassthrough) chargePacing(cost time.Duration) {
+	if cost < minPacedCost {
+		return
+	}
+	hold := min(cost*pacingHoldFactor, maxPacingHold)
+	until := time.Now().Add(hold).UnixNano()
+	for {
+		prev := kp.pacedUntilNanos.Load()
+		if prev >= until || kp.pacedUntilNanos.CompareAndSwap(prev, until) {
+			return
+		}
+	}
+}
+
+func (kp *KittyPassthrough) hostBacklogged() bool {
+	if kp.writeInFlight.Load() {
+		return true
+	}
+	until := kp.pacedUntilNanos.Load()
+	return until != 0 && time.Now().UnixNano() < until
 }
 
 // WriteToHost writes graphics data directly to the host terminal,

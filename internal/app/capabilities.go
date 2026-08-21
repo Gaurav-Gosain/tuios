@@ -27,15 +27,25 @@ type HostCapabilities struct {
 	// a direct (t=d) transmission, and tells guests that file media are
 	// unsupported so they stream instead.
 	KittyFileTransfer bool
-	SixelGraphics     bool
-	TrueColor         bool
-	TerminalName      string
-	PixelWidth        int
-	PixelHeight       int
-	CellWidth         int
-	CellHeight        int
-	Cols              int
-	Rows              int
+	// KittyAnimation reports whether the host terminal implements the kitty
+	// animation protocol, specifically an a=f frame edit of an image that is
+	// already on screen.
+	//
+	// It is what lets a repainting guest cost a damage rectangle instead of a
+	// whole bitmap, so it is worth a probe of its own. A terminal that ignores
+	// a=f leaves this false and gets full retransmissions, which is slow but
+	// always correct; claiming it wrongly would leave the pane frozen on its
+	// first frame.
+	KittyAnimation bool
+	SixelGraphics  bool
+	TrueColor      bool
+	TerminalName   string
+	PixelWidth     int
+	PixelHeight    int
+	CellWidth      int
+	CellHeight     int
+	Cols           int
+	Rows           int
 }
 
 // cachedCapabilities and clientCapabilities are process-globals read from
@@ -232,6 +242,14 @@ func probeTerminal(caps *HostCapabilities) {
 		fmt.Fprintf(&q, "\x1b_Gi=2,a=q,t=f,f=24,s=1,v=1;%s\x1b\\",
 			base64.StdEncoding.EncodeToString([]byte(probeFile)))
 	}
+	// Animation cannot be asked about with a=q, so it is tried instead: put a
+	// one-pixel image up quietly, edit its root frame, and see whether the
+	// edit is acknowledged. The transmit and the delete are q=2 so only the
+	// a=f speaks, and the image is never placed, so nothing reaches the
+	// screen either way.
+	q.WriteString("\x1b_Gi=3,a=t,f=32,s=1,v=1,q=2;AAAAAA==\x1b\\")
+	q.WriteString("\x1b_Gi=3,a=f,f=32,s=1,v=1,r=1,X=1,x=0,y=0;AAAAAA==\x1b\\")
+	q.WriteString("\x1b_Gi=3,a=d,d=I,q=2\x1b\\")
 	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
 	_, _ = tty.WriteString(q.String())
 
@@ -261,6 +279,9 @@ func parseGraphicsSupport(caps *HostCapabilities, response string, probedFile bo
 	// transmissions as direct ones. That costs a copy but always renders;
 	// guessing the other way renders nothing at all.
 	caps.KittyFileTransfer = probedFile && kittyProbeOK(response, 2)
+	// Same rule for animation: an explicit OK to the i=3 frame edit, or no
+	// claim at all.
+	caps.KittyAnimation = caps.KittyGraphics && kittyProbeOK(response, 3)
 }
 
 // kittyProbeOK reports whether the host answered "OK" to the a=q probe sent
@@ -350,6 +371,13 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 		caps.SixelGraphics = true
 	case "0":
 		caps.SixelGraphics = false
+	}
+
+	switch os.Getenv("TUIOS_KITTY_ANIMATION") {
+	case "1":
+		caps.KittyAnimation = true
+	case "0":
+		caps.KittyAnimation = false
 	}
 }
 

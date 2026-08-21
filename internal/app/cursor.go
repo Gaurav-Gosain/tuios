@@ -3,6 +3,7 @@ package app
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // getRealCursor returns a real terminal cursor for the focused window,
@@ -43,15 +44,28 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		return nil
 	}
 
-	window.RLockIO()
-	// Re-check under the lock: Close() nils Terminal while holding it.
-	if window.Terminal == nil {
+	// Take the lock only if it is free. A pane in an output burst holds the
+	// exclusive side almost continuously, and this read runs on the frame that
+	// carries the user's keystroke echo, so blocking here makes a flooding
+	// pane slow down typing everywhere. The cursor from the last frame that
+	// did acquire is at most one frame stale and converges the moment the
+	// burst ends, which is the same trade the compositor already makes for
+	// pane content.
+	var hidden bool
+	var pos uv.Position
+	if window.TryRLockIO() {
+		if window.Terminal == nil {
+			// Re-check under the lock: Close() nils Terminal while holding it.
+			window.RUnlockIO()
+			return nil
+		}
+		hidden = window.Terminal.IsCursorHidden()
+		pos = window.Terminal.CursorPosition()
 		window.RUnlockIO()
-		return nil
+		window.CachedCursor, window.CachedCursorHidden = pos, hidden
+	} else {
+		hidden, pos = window.CachedCursorHidden, window.CachedCursor
 	}
-	hidden := window.Terminal.IsCursorHidden()
-	pos := window.Terminal.CursorPosition()
-	window.RUnlockIO()
 
 	if hidden {
 		return nil

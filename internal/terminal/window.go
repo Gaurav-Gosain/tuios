@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	uv "github.com/charmbracelet/ultraviolet"
+
 	"charm.land/lipgloss/v2"
 	xpty "github.com/charmbracelet/x/xpty"
 
@@ -189,6 +191,13 @@ type Window struct {
 	PositionDirty bool
 	CachedContent string
 	CachedLayer   *lipgloss.Layer
+	// CachedCursor is where this window's cursor was the last time the render
+	// loop could read it. Reading the live one needs the I/O lock, which a
+	// pane flooding output holds in a near-continuous burst, and the frame
+	// that would block on it is the same frame carrying the user's keystroke
+	// echo. Serving a cursor one frame old costs nothing anyone can see.
+	CachedCursor       uv.Position
+	CachedCursorHidden bool
 	// SyncHoldContent is the last frame this window rendered from a guest that
 	// was not mid-update, kept solely so the synchronized-output hold (DEC 2026)
 	// has something complete to present. Every other cache here is invalidated

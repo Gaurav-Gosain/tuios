@@ -168,6 +168,7 @@ func clientToHostCapabilities(c *session.ClientCapabilities) *app.HostCapabiliti
 	}
 	return &app.HostCapabilities{
 		KittyGraphics:     c.KittyGraphics,
+		KittyAnimation:    c.KittyAnimation,
 		KittyFileTransfer: false,
 		SixelGraphics:     c.SixelGraphics,
 		TrueColor:         true,

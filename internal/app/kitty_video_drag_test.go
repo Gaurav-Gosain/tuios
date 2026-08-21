@@ -211,15 +211,24 @@ func TestRemoteVideoFrameConvergesAfterMidWriteMove(t *testing.T) {
 
 	_ = h.refresh() // prime at the resting position
 
-	// Arm the gate and send a changed frame: the async writer picks it up and
-	// blocks inside the host write.
+	// Arm the gate and send changed frames until one reaches the host write,
+	// where the async writer blocks. Frames are sent until one lands rather
+	// than exactly once because the passthrough paces a stream against what
+	// the host's last frame cost, and this harness produces frames faster than
+	// any guest: some are deliberately dropped. A real stream keeps arriving,
+	// which is what this loop stands in for.
 	host.armed.Store(true)
 	rewriteShm(t, h.shmName, 400, 300, 77)
-	h.send()
-	select {
-	case <-host.blocked:
-	case <-time.After(2 * time.Second):
-		t.Fatal("async frame writer never reached the host write")
+	deadline := time.After(2 * time.Second)
+	for reached := false; !reached; {
+		h.send()
+		select {
+		case <-host.blocked:
+			reached = true
+		case <-time.After(5 * time.Millisecond):
+		case <-deadline:
+			t.Fatal("async frame writer never reached the host write")
+		}
 	}
 
 	// The window moves while the frame is mid-write. The render pass records

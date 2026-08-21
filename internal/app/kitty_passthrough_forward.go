@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -164,12 +165,8 @@ func (kp *KittyPassthrough) ForwardCommand(
 		kp.forwardDelete(cmd, windowID)
 
 	case vt.KittyActionFrame, vt.KittyActionAnimation, vt.KittyActionCompose:
-		// Animation protocol (a=f, a=a, a=c) is not yet supported in passthrough.
-		// These commands require consistent image ID management between the guest
-		// app and host terminal which conflicts with tuios's ID remapping.
-		// Apps like kitty-doom that use animation should be run directly in the
-		// terminal instead of inside tuios.
-		kittyPassthroughLog("ForwardCommand: DROPPING unsupported animation action=%c", cmd.Action)
+		kittyPassthroughLog("ForwardCommand: handling ANIMATION action=%c", cmd.Action)
+		kp.forwardAnimation(cmd, rawData, windowID, ptyInput)
 
 	default:
 		kittyPassthroughLog("ForwardCommand: UNKNOWN action %c", cmd.Action)
@@ -258,6 +255,9 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 
 	hasPendingData := kp.pendingDirectData[windowID] != nil
 	if !andPlace && !hasPendingData {
+		if kp.absorbDirectFrame(cmd, rawData, windowID) {
+			return nil
+		}
 		// Pass through raw (already has framing)
 		kp.pendingOutput = append(kp.pendingOutput, rawData...)
 		return nil
@@ -352,9 +352,6 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		}
 	}
 
-	// Re-encode to base64 and emit as properly-formatted kitty chunks
-	encoded := base64.StdEncoding.EncodeToString(pending.Data)
-
 	hostX := pending.WindowX + pending.ContentOffsetX + pending.CursorX
 	hostY := pending.WindowY + pending.ContentOffsetY + pending.CursorY
 
@@ -385,44 +382,43 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		displayRows = contentHeight
 	}
 
-	// Emit transmit-only command in proper 4096-byte kitty chunks.
-	// Placement is handled by RefreshAllPlacements.
-	const chunkSize = 4096
-	for i := 0; i < len(encoded); i += chunkSize {
-		end := min(i+chunkSize, len(encoded))
-		chunk := encoded[i:end]
-		more := end < len(encoded)
-
-		var buf bytes.Buffer
-		buf.WriteString("\x1b_G")
-		if i == 0 {
-			// First chunk: full header
-			fmt.Fprintf(&buf, "a=t,i=%d,f=%d,s=%d,v=%d,q=2",
-				hostID, pending.Format, pending.Width, pending.Height)
-			if pending.Compression == vt.KittyCompressionZlib {
-				buf.WriteString(",o=z")
-			}
-		} else {
-			// Continuation chunks: just image ID (no placement params for a=t)
-			fmt.Fprintf(&buf, "i=%d,q=2", hostID)
-		}
-		if more {
-			buf.WriteString(",m=1")
-		}
-		buf.WriteByte(';')
-		buf.WriteString(chunk)
-		buf.WriteString("\x1b\\")
-		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+	// Send the difference from the frame the host already holds when that is
+	// possible; the whole bitmap only when it is not. A repainting guest sends
+	// the same image over and over, and the whole bitmap is the expensive way
+	// to say a corner of it moved.
+	update := kp.emitBitmap(windowID, hostID, pending.Format, pending.Compression,
+		pending.Width, pending.Height, pending.Data)
+	if update == bitmapFull {
+		kp.pendingOutput = append(kp.pendingOutput, kp.buildInlineChunks(
+			hostID, pending.Format, pending.Compression,
+			pending.Width, pending.Height, pending.Data)...)
 	}
 
-	kittyPassthroughLog("forwardTransmit: emitted %d bytes as %d-byte chunks, hostID=%d, imgSize=(%d,%d) srcXYWH=(%d,%d,%d,%d) imgPixels=(%d,%d)",
-		len(encoded), chunkSize, hostID, imgCols, imgRows,
+	kittyPassthroughLog("forwardTransmit: %d bitmap bytes, update=%d, hostID=%d, imgSize=(%d,%d) srcXYWH=(%d,%d,%d,%d) imgPixels=(%d,%d)",
+		len(pending.Data), update, hostID, imgCols, imgRows,
 		pending.SourceX, pending.SourceY, pending.SourceWidth, pending.SourceHeight,
 		pending.Width, pending.Height)
 
 	// Track placement for RefreshAllPlacements
 	if kp.placements[windowID] == nil {
 		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
+	}
+	if existing := kp.placements[windowID][hostID]; existing != nil && update != bitmapFull {
+		// The bitmap was patched in place or not sent at all, so the placement
+		// on the host still shows the right image at the right size. Leaving
+		// it alone is what saves the delete and the re-place that used to cost
+		// a round of both per guest frame.
+		existing.HostX, existing.HostY = hostX, hostY
+		existing.AbsoluteLine = pending.ScrollbackLen + pending.CursorY
+		existing.GuestX = pending.CursorX
+		if pending.AndPlace {
+			return &PlacementResult{
+				Rows:       imgRows,
+				Cols:       imgCols,
+				CursorMove: pending.CursorMove,
+			}
+		}
+		return nil
 	}
 	kp.placements[windowID][hostID] = &PassthroughPlacement{
 		GuestImageID:      pending.ImageID,
@@ -694,6 +690,27 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	if kp.placements[windowID] == nil {
 		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
 	}
+	if existing := kp.placements[windowID][hostID]; existing != nil {
+		// A stream re-transmitting the same image id has its placement
+		// already on the host, at a size this path has checked; recreating it
+		// hidden made the render pass delete and re-place it on every guest
+		// frame, which is churn the host has to draw and the pane can flicker
+		// on. Refresh the geometry in place and leave the visibility alone.
+		existing.GuestX = cursorX
+		existing.AbsoluteLine = scrollbackLen + cursorY
+		existing.HostX = hostX
+		existing.HostY = hostY
+		existing.Cols = displayCols
+		existing.Rows = imgRows
+		existing.DisplayRows = displayRows
+		existing.SourceX = cmd.SourceX
+		existing.SourceY = cmd.SourceY
+		existing.SourceWidth = cmd.SourceWidth
+		existing.SourceHeight = cmd.SourceHeight
+		existing.PlacedOnAltScreen = isAltScreen
+		kittyPassthroughLog("forwardFileTransmit: refreshed placement hostID=%d in place", hostID)
+		return
+	}
 	kp.placements[windowID][hostID] = &PassthroughPlacement{
 		GuestImageID:      cmd.ImageID,
 		HostImageID:       hostID,
@@ -746,15 +763,31 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		return
 	}
 
-	// Cheap early drop: a reused remote-video frame whose async writer is still
-	// busy would be dropped after we spent a file read, a zlib pass and a base64
-	// encode on it. Skip all of that here. This is the main lever against the
-	// input lag under a video flood: the VT callback returns immediately instead
-	// of burning CPU on a frame that never ships.
-	if kp.remoteClient && cmd.ImageID != 0 && len(kp.asyncFrameCh) > 0 {
-		if _, reusing := kp.imageIDMap[windowID][cmd.ImageID]; reusing {
-			kittyPassthroughLog("forwardFileTransmitInline: early-drop reused frame (async busy)")
-			return
+	// Cheap early drop: a reused frame that cannot ship yet would be dropped
+	// after we spent a file read, a zlib pass and a base64 encode on it. Skip
+	// all of that here. This is the main lever against the input lag under a
+	// video flood: the VT callback returns immediately instead of burning CPU
+	// on a frame that never ships.
+	//
+	// Two things say it cannot ship: the async writer still holds the last
+	// one, and the host still writing the last one (hostBacklogged). The
+	// second matters even where the first never triggers, because a guest
+	// rendering faster than the terminal paints will otherwise keep handing us
+	// frames to queue in front of the render loop, and the render loop is what
+	// carries the user's keystrokes.
+	//
+	// Only a reused stream is dropped. A first frame has nothing on screen
+	// behind it, so dropping it shows the user nothing at all.
+	if cmd.ImageID != 0 {
+		if id, reusing := kp.imageIDMap[windowID][cmd.ImageID]; reusing && kp.hasLiveFrame(windowID, id) {
+			if kp.hostBacklogged() {
+				kittyPassthroughLog("forwardFileTransmitInline: early-drop reused frame (host still writing)")
+				return
+			}
+			if len(kp.asyncFrameCh) > 0 {
+				kittyPassthroughLog("forwardFileTransmitInline: early-drop reused frame (async busy)")
+				return
+			}
 		}
 	}
 
@@ -762,6 +795,12 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	// /dev/shm name). Stat first and reject anything that is not a regular
 	// file: /dev/zero would read unboundedly and OOM the server, a FIFO would
 	// hang this goroutine, and a device or directory has no image bytes. Only
+	// Everything from here to the enqueue is the cost of preparing one frame,
+	// paid inside the lock the render loop needs. It is charged against the
+	// stream so the next frame waits for it, the same way a slow write is.
+	prepStarted := time.Now()
+	defer func() { kp.chargePacing(time.Since(prepStarted)) }()
+
 	// plain files are safe to slurp, and only up to the transmit cap.
 	info, err := os.Stat(filePath)
 	if err != nil {
@@ -819,6 +858,10 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	// what the guest sent uncompressed.
 	format := cmd.Format
 	compression := cmd.Compression
+	// Keep the pixels as the guest sent them. Compression below is for the
+	// wire; the damage path compares what will actually be on screen, and two
+	// frames that differ can compress to the same length.
+	rawPixels := data
 	if kp.remoteClient && compression == vt.KittyCompressionNone {
 		if z := zlibCompress(data); z != nil && len(z) < len(data) {
 			data = z
@@ -910,6 +953,27 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		return
 	}
 
+	// A host that patches frames gets the difference instead of the bitmap.
+	// That path is synchronous: a patch describes a change from one specific
+	// frame, so unlike a whole bitmap it can never be dropped, and the async
+	// queue below drops by design. It is affordable precisely because it is
+	// small; the whole-bitmap writes that made async necessary are what it
+	// replaces.
+	if kp.canPatchBitmap(windowID, hostID) {
+		switch kp.emitBitmap(windowID, hostID, format, cmd.Compression, cmd.Width, cmd.Height, rawPixels) {
+		case bitmapUnchanged:
+			kittyPassthroughLog("forwardFileTransmitInline: identical frame, sending nothing (hostID=%d)", hostID)
+		case bitmapPatched:
+			kittyPassthroughLog("forwardFileTransmitInline: patched hostID=%d instead of %d bytes", hostID, len(data))
+		default:
+			kp.pendingOutput = append(kp.pendingOutput, kp.buildInlineChunks(
+				hostID, format, compression, cmd.Width, cmd.Height, data)...)
+		}
+		kp.trackInlinePlacement(cmd, windowID, hostID, hostX, hostY,
+			displayCols, displayRows, imgRows, cursorX, scrollbackLen, cursorY, isAltScreen)
+		return
+	}
+
 	// Build the image as 4096-byte kitty chunks (t=d). Pass through
 	// format / compression / size so the overlay knows how to decode.
 	frameData := kp.buildInlineChunks(hostID, format, compression, cmd.Width, cmd.Height, data)
@@ -933,16 +997,26 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		kp.pendingOutput = append(kp.pendingOutput, frameData...)
 	}
 
-	// Track placement. Reuse an existing entry on retransmit so the
-	// previously emitted a=p does not get resent (we want the browser
-	// to keep the same canvas and just pick up the new bitmap).
+	kp.trackInlinePlacement(cmd, windowID, hostID, hostX, hostY,
+		displayCols, displayRows, imgRows, cursorX, scrollbackLen, cursorY, isAltScreen)
+	_ = andPlace // placement is always driven by RefreshAllPlacements in inline mode
+}
+
+// trackInlinePlacement records where an inlined image sits. An existing entry
+// is updated rather than replaced, so the a=p that put it there is not resent:
+// re-placing an image whose bitmap was merely refreshed costs a delete and a
+// place per guest frame and buys nothing.
+func (kp *KittyPassthrough) trackInlinePlacement(
+	cmd *vt.KittyCommand,
+	windowID string,
+	hostID uint32,
+	hostX, hostY, displayCols, displayRows, imgRows, cursorX, scrollbackLen, cursorY int,
+	isAltScreen bool,
+) {
 	if kp.placements[windowID] == nil {
 		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
 	}
-	existing, hasExisting := kp.placements[windowID][hostID]
-	if hasExisting {
-		// Retransmit path: update dims in case they changed, but keep
-		// Hidden state as-is so we do not re-emit a=p.
+	if existing := kp.placements[windowID][hostID]; existing != nil {
 		existing.Cols = displayCols
 		existing.Rows = imgRows
 		existing.DisplayRows = displayRows
@@ -951,33 +1025,32 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		existing.AbsoluteLine = scrollbackLen + cursorY
 		existing.ImagePixelWidth = cmd.Width
 		existing.ImagePixelHeight = cmd.Height
-	} else {
-		kp.placements[windowID][hostID] = &PassthroughPlacement{
-			GuestImageID:      cmd.ImageID,
-			HostImageID:       hostID,
-			WindowID:          windowID,
-			GuestX:            cursorX,
-			AbsoluteLine:      scrollbackLen + cursorY,
-			HostX:             hostX,
-			HostY:             hostY,
-			Cols:              displayCols,
-			Rows:              imgRows,
-			DisplayRows:       displayRows,
-			SourceX:           cmd.SourceX,
-			SourceY:           cmd.SourceY,
-			SourceWidth:       cmd.SourceWidth,
-			SourceHeight:      cmd.SourceHeight,
-			XOffset:           cmd.XOffset,
-			YOffset:           cmd.YOffset,
-			ZIndex:            cmd.ZIndex,
-			Virtual:           cmd.Virtual,
-			Hidden:            true, // RefreshAllPlacements emits a=p
-			PlacedOnAltScreen: isAltScreen,
-			ImagePixelWidth:   cmd.Width,
-			ImagePixelHeight:  cmd.Height,
-		}
+		return
 	}
-	_ = andPlace // placement is always driven by RefreshAllPlacements in inline mode
+	kp.placements[windowID][hostID] = &PassthroughPlacement{
+		GuestImageID:      cmd.ImageID,
+		HostImageID:       hostID,
+		WindowID:          windowID,
+		GuestX:            cursorX,
+		AbsoluteLine:      scrollbackLen + cursorY,
+		HostX:             hostX,
+		HostY:             hostY,
+		Cols:              displayCols,
+		Rows:              imgRows,
+		DisplayRows:       displayRows,
+		SourceX:           cmd.SourceX,
+		SourceY:           cmd.SourceY,
+		SourceWidth:       cmd.SourceWidth,
+		SourceHeight:      cmd.SourceHeight,
+		XOffset:           cmd.XOffset,
+		YOffset:           cmd.YOffset,
+		ZIndex:            cmd.ZIndex,
+		Virtual:           cmd.Virtual,
+		Hidden:            true, // RefreshAllPlacements emits a=p
+		PlacedOnAltScreen: isAltScreen,
+		ImagePixelWidth:   cmd.Width,
+		ImagePixelHeight:  cmd.Height,
+	}
 }
 
 // buildInlineChunks encodes raw image bytes as a kitty direct-transmission
@@ -1206,6 +1279,7 @@ func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string, clearImag
 		kp.deleteOnePlacement(p)
 	}
 	kp.placements[windowID] = nil
+	kp.forgetBitmaps(windowID, 0)
 	if clearImageMap {
 		kp.imageIDMap[windowID] = nil
 	}
@@ -1213,6 +1287,12 @@ func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string, clearImag
 
 func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string) {
 	kittyPassthroughLog("forwardDelete: delete=%c, imageID=%d, windowID=%s", cmd.Delete, cmd.ImageID, windowID[:min(8, len(windowID))])
+
+	// A guest asking for anything to be deleted invalidates what we believe
+	// the host holds, and a damage patch against a bitmap that is gone paints
+	// nothing. Forgetting costs one extra whole frame; guessing costs the
+	// image.
+	kp.forgetBitmaps(windowID, 0)
 
 	switch cmd.Delete {
 	case vt.KittyDeleteAll, 0:
