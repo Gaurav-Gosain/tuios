@@ -13,7 +13,7 @@ import (
 
 // How long is a guest allowed to hold a synchronized update open?
 //
-// vt.syncMaxHold answers 150ms, and a guest that runs over it is presented
+// vt.syncMaxHold answers 1s, and a guest that runs over it is presented
 // anyway, which is a tear. The number is only defensible if two things hold:
 // that no well-behaved guest legitimately holds an update that long, and that
 // the interval tuios measures is the guest's interval.
@@ -22,16 +22,17 @@ import (
 // implementations chose spans a factor of twenty: Windows Terminal 100ms,
 // Alacritty and mintty 150ms, st 200ms, foot, Ghostty, iTerm2, Konsole,
 // xterm.js and tmux 1s, kitty 2s, and contour, WezTerm and Zellij no bound at
-// all. 150ms is the floor of that range, and tuios is a multiplexer, which puts
-// it in tmux's company rather than Alacritty's.
+// all. tuios sat at 150ms, the floor of that range, and now sits with tmux,
+// which is the company a multiplexer belongs in: both hold someone else's
+// frame rather than drawing their own.
 //
 // The guests matter more than the company. Ink, which is what Claude Code
 // draws with, writes the opening escape, the frame and the closing escape as
 // three separate writes, so a slow reader strands the update open for as long
 // as the middle write blocks. Neovim spans partial flushes deliberately, and
 // Textual opens the update before it renders. None of them re-open the update
-// to extend the deadline, so for those guests 150ms is absolute from the first
-// byte.
+// to extend the deadline, so for those guests the bound is absolute from the
+// first byte. That is what made 150ms untenable and 1s workable.
 //
 // The second is the interesting one, and it is what this measures. tuios does
 // not time the guest. It times the gap between parsing 2026h and parsing 2026l,
@@ -144,7 +145,7 @@ func TestSyncHoldWindow(t *testing.T) {
 				t.Logf("%7d KiB: the renderer never caught the update open (%d frames)", size>>10, frames)
 			default:
 				verdict := "guest closed it"
-				if held >= 150*time.Millisecond {
+				if held >= time.Second {
 					verdict = "DEADLINE FIRED"
 				}
 				t.Logf("%7d KiB: update open %8.2f ms over %3d frames, %d torn, %s",

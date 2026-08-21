@@ -744,7 +744,28 @@ func (e *Emulator) HasAllMotionMode() bool {
 // syncMaxHold bounds how long a synchronized update is honored. An app that
 // opens sync and never closes it (a crash, or a screen switch mid-frame) must
 // not freeze the window; real terminals present anyway after a short timeout.
-const syncMaxHold = 150 * time.Millisecond
+//
+// Neither the DEC 2026 spec nor the iTerm2 proposal it derives from names a
+// value, so this is a choice about which guests get honored. The range in the
+// wild runs from Windows Terminal at 100ms through Alacritty and mintty at
+// 150ms, st at 200ms, foot, Ghostty, iTerm2, Konsole, xterm.js and tmux at 1s,
+// kitty at 2s, with contour, WezTerm and Zellij declining to bound it at all.
+//
+// 150ms was the floor of that range, and it was too low to hold the guests
+// tuios actually hosts. Ink writes the opening escape, the frame and the
+// closing escape as three separate writes, so a slow reader strands the update
+// open for as long as the middle write blocks; Neovim spans partial flushes
+// deliberately, and Textual opens the update before it renders. None of the
+// three re-open the update, and the deadline only extends on a repeated open,
+// so for them it ran from the first byte with no way to ask for more. Expiry
+// is indistinguishable from a close by the time the renderer asks, so every
+// overrun was a torn frame.
+//
+// 1s follows tmux, which sits where tuios sits: a multiplexer holding someone
+// else's frame. Transport does not spend it (a 207x55 SGR-heavy repaint is
+// 100-200KiB and clears the pipeline in well under 15ms), so the budget is
+// there for the guest.
+const syncMaxHold = time.Second
 
 // IsSyncActive reports whether the guest has an open synchronized update
 // (DEC private mode 2026): it has begun drawing a frame and does not want it
