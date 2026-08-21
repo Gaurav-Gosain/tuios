@@ -1428,9 +1428,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 
-	case launchPollMsg:
-		return m, m.launchReady()
-
 	case tapeLayoutRefreshMsg:
 		// Fired a beat after a project tape finished. Re-fetch every pane's
 		// content from the daemon and repaint, so panes created during the tape

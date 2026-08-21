@@ -525,8 +525,6 @@ type OS struct {
 	pathApps *applist.Cache
 	// launchHistory ranks programs by how recently and often they were run.
 	launchHistory *applist.Frecency
-	// pending is the queue of programs waiting for the panes they are typed into.
-	pending []*pendingLaunch
 	// Session switcher overlay
 	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string
