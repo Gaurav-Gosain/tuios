@@ -299,6 +299,24 @@ func (kp *KittyPassthrough) canPatchBitmap(windowID string, hostID uint32) bool 
 	return entry == nil || entry.fullRuns < maxFullFallbacks
 }
 
+// hasLiveFrame reports whether this image already has something on the host
+// that a dropped frame would leave standing.
+//
+// Dropping before that is true leaves the pane empty instead of one frame
+// stale. It matters most for a remote video stream, where the first reused
+// frame is also the one that hands the image over to the self-placing path:
+// throw that one away and the stream never starts.
+func (kp *KittyPassthrough) hasLiveFrame(windowID string, hostID uint32) bool {
+	if kp.remoteVideo[windowID][hostID] != nil {
+		return true
+	}
+	if kp.bitmapCacheFor(windowID, hostID) != nil {
+		return true
+	}
+	p := kp.placements[windowID][hostID]
+	return p != nil && !p.Hidden
+}
+
 // rawBytesPerPixel returns the pixel stride of a raw kitty format, or 0 for a
 // format whose bytes are not pixels and cannot be diffed.
 func rawBytesPerPixel(f vt.KittyGraphicsFormat) int {

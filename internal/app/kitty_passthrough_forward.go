@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -757,12 +758,12 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	// Only a reused stream is dropped. A first frame has nothing on screen
 	// behind it, so dropping it shows the user nothing at all.
 	if cmd.ImageID != 0 {
-		if _, reusing := kp.imageIDMap[windowID][cmd.ImageID]; reusing {
+		if id, reusing := kp.imageIDMap[windowID][cmd.ImageID]; reusing && kp.hasLiveFrame(windowID, id) {
 			if kp.hostBacklogged() {
 				kittyPassthroughLog("forwardFileTransmitInline: early-drop reused frame (host still writing)")
 				return
 			}
-			if kp.remoteClient && len(kp.asyncFrameCh) > 0 {
+			if len(kp.asyncFrameCh) > 0 {
 				kittyPassthroughLog("forwardFileTransmitInline: early-drop reused frame (async busy)")
 				return
 			}
@@ -773,6 +774,12 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	// /dev/shm name). Stat first and reject anything that is not a regular
 	// file: /dev/zero would read unboundedly and OOM the server, a FIFO would
 	// hang this goroutine, and a device or directory has no image bytes. Only
+	// Everything from here to the enqueue is the cost of preparing one frame,
+	// paid inside the lock the render loop needs. It is charged against the
+	// stream so the next frame waits for it, the same way a slow write is.
+	prepStarted := time.Now()
+	defer func() { kp.chargePacing(time.Since(prepStarted)) }()
+
 	// plain files are safe to slurp, and only up to the transmit cap.
 	info, err := os.Stat(filePath)
 	if err != nil {
