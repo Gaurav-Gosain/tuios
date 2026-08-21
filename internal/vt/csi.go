@@ -38,8 +38,34 @@ func (e *Emulator) handleRequestMode(params ansi.Params, isAnsi bool) {
 		mode = ansi.ANSIMode(n)
 	}
 
-	setting := e.modes[mode]
-	_, _ = io.WriteString(e.pipe, ansi.ReportMode(mode, setting))
+	_, _ = io.WriteString(e.pipe, ansi.ReportMode(mode, e.modeSetting(mode)))
+}
+
+// reportSetting answers a DECRQSS request for the current value of a setting.
+//
+// The reply is DCS Ps $ r <value> ST, with Ps 1 for a setting this emulator
+// reports and 0 for one it does not. Refusing is not the same as staying
+// silent, which is why the default branch answers at all: a guest that asks and
+// hears nothing waits out a timeout before deciding, and a zero tells it
+// immediately.
+//
+// Only the two margin settings are reported. They are the ones this emulator
+// holds exactly, in the form the guest would send them back. SGR and the cursor
+// style would have to be serialised from state that is not stored the way the
+// sequence spells it, and a wrong answer is worse than a refusal.
+func (e *Emulator) reportSetting(req string) {
+	r := e.scr.ScrollRegion()
+	var value string
+	switch req {
+	case "r": // DECSTBM
+		value = fmt.Sprintf("%d;%dr", r.Min.Y+1, r.Max.Y)
+	case "s": // DECSLRM
+		value = fmt.Sprintf("%d;%ds", r.Min.X+1, r.Max.X)
+	default:
+		_, _ = io.WriteString(e.pipe, "\x1bP0$r\x1b\\")
+		return
+	}
+	_, _ = io.WriteString(e.pipe, "\x1bP1$r"+value+"\x1b\\")
 }
 
 func paramsString(cmd ansi.Cmd, params ansi.Params) string {

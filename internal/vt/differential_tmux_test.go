@@ -48,6 +48,11 @@ var tmuxDiffers = map[string]string{
 		"its CursorBack clears the flag and then moves back one, landing a column earlier. " +
 		"ghostty and every terminal that follows xterm's model agree with this one",
 
+	"restore a pending wrap": "the same root cause as the backspace above. tmux has no " +
+		"pending-wrap flag to save, so a DECSC taken at the end of a full line and " +
+		"restored has nothing to restore and the next character overwrites the last one " +
+		"instead of starting a new line. xterm lists the wrap flag among what DECSC saves",
+
 	"insert splitting a wide character": "tmux declines to insert inside a double-width " +
 		"character and shifts from the cell after it instead, which silently moves the " +
 		"insertion point the program asked for. This one blanks the character the insert " +
@@ -148,6 +153,26 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"a joined emoji family", 10, 4, "\U0001f469‍\U0001f469‍\U0001f467X"},
 		{"a regional indicator pair", 10, 4, "\U0001f1fa\U0001f1f8X"},
 		{"backspace over a wide character", 10, 4, "世\bX"},
+
+		// The sequences this round fixed. Each was wrong here before, so
+		// checking them against a second implementation is worth more than
+		// checking the ones that already agreed.
+		//
+		// The character sets are absent on purpose. tmux implements them, but
+		// capture-pane prints the byte the guest sent rather than the glyph the
+		// designated set maps it to: ESC ( 0 q q q, which every curses program
+		// draws a rule with, dumps as qqq under tmux and as a rule here. There
+		// is no comparison to be had through this window, so the sets are left
+		// to conform_charset_test.go, which checks them against the manual.
+		{"shift out with nothing designated", 10, 4, "\x0eqqq"},
+		{"insert mode shifts the line right", 10, 4, "abcdef\x1b[1;1H\x1b[4hZ"},
+		{"insert mode with a wide character", 10, 4, "abcdef\x1b[1;1H\x1b[4h世"},
+		{"insert mode off again", 10, 4, "abcdef\x1b[1;1H\x1b[4h\x1b[4lZ"},
+		{"repeat a wide character", 10, 4, "世\x1b[2b"},
+		{"repeat a character carrying a mark", 10, 4, "é\x1b[2b"},
+		{"the alignment pattern clears the margins", 8, 4, "\x1b[2;3r\x1b#8\x1b[9;1HX"},
+		{"restore a pending wrap", 10, 4, "abcdefghij\x1b7\x1b[1;1H\x1b8g"},
+		{"restore origin mode with the cursor", 10, 6, "\x1b[2;5r\x1b[?6h\x1b7\x1b[?6l\x1b8\x1b[1;1HX"},
 	}
 
 	sock := "tuios-diff-" + t.Name()

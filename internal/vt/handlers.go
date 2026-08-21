@@ -245,6 +245,16 @@ func (e *Emulator) registerDefaultCcHandlers() {
 				e.carriageReturn()
 				return true
 			})
+		case ansi.SO: // Shift Out [ansi.SO], locking shift to G1
+			e.registerCcHandler(i, func() bool {
+				e.gl = 1
+				return true
+			})
+		case ansi.SI: // Shift In [ansi.SI], locking shift back to G0
+			e.registerCcHandler(i, func() bool {
+				e.gl = 0
+				return true
+			})
 		}
 	}
 
@@ -258,16 +268,6 @@ func (e *Emulator) registerDefaultCcHandlers() {
 		case ansi.RI: // Reverse Index [ansi.RI]
 			e.registerCcHandler(i, func() bool {
 				e.reverseIndex()
-				return true
-			})
-		case ansi.SO: // Shift Out [ansi.SO]
-			e.registerCcHandler(i, func() bool {
-				e.gl = 1
-				return true
-			})
-		case ansi.SI: // Shift In [ansi.SI]
-			e.registerCcHandler(i, func() bool {
-				e.gl = 0
 				return true
 			})
 		case ansi.IND: // Index [ansi.IND]
@@ -396,15 +396,13 @@ func (e *Emulator) registerDefaultEscHandlers() {
 		// the character set selection: a program that designates the
 		// line-drawing set, saves, prints text elsewhere and restores expects
 		// to be drawing lines again, and DEC specifies it that way.
-		e.scr.SaveCursor()
-		e.saveCharsets()
+		e.saveCursor()
 		return true
 	})
 
 	e.RegisterEscHandler('8', func() bool {
 		// Restore Cursor [ansi.DECRC]
-		e.scr.RestoreCursor()
-		e.restoreCharsets()
+		e.restoreCursor()
 		return true
 	})
 
@@ -491,6 +489,20 @@ func (e *Emulator) registerDefaultEscHandlers() {
 	e.RegisterEscHandler('c', func() bool {
 		// Reset Initial State [ansi.RIS]
 		e.fullReset()
+		return true
+	})
+
+	e.RegisterEscHandler('N', func() bool {
+		// Single Shift 2 [ansi.SS2]. The eight-bit form is registered with the
+		// other C1 controls; a guest that has not asked for eight-bit controls
+		// sends this one, which is nearly all of them.
+		e.gsingle = 2
+		return true
+	})
+
+	e.RegisterEscHandler('O', func() bool {
+		// Single Shift 3 [ansi.SS3]
+		e.gsingle = 3
 		return true
 	})
 
@@ -664,16 +676,19 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			if e.cb.ScreenClear != nil {
 				e.cb.ScreenClear()
 			}
-		case 3: // erase display including scrollback
+		case 3: // Erase Saved Lines, the scrollback only
+			// The visible screen is deliberately untouched. xterm, tmux, kitty
+			// and ghostty all read CSI 3 J as dropping the saved lines and
+			// nothing else, and the two are separate requests: `clear` sends
+			// ED 2 and ED 3 together, so clearing the screen here looks right
+			// under `clear` and destroys the screen for anything that sends
+			// ED 3 on its own to drop history.
+			//
+			// The markers come right without help. Clearing the ring fires the
+			// trim callback, which shifts every marker down by the lines that
+			// went and drops the ones that fell off the front, leaving the
+			// on-screen ones where the screen still has them.
 			e.scr.ClearScrollback()
-			e.scr.Clear()
-			e.KittyState().Clear()
-			if e.semanticMarkers != nil {
-				e.semanticMarkers.Clear()
-			}
-			if e.cb.ScreenClear != nil {
-				e.cb.ScreenClear()
-			}
 		default:
 			return false
 		}
@@ -924,8 +939,8 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			// See: https://vt100.net/docs/vt510-rm/DSR-OS.html
 			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.DECStatusReport(0)))
 		case 6: // Cursor Position Report [ansi.CPR]
-			x, y := e.scr.CursorPosition()
-			_, _ = io.WriteString(e.pipe, ansi.CursorPositionReport(x+1, y+1))
+			line, col := e.reportedCursorPosition()
+			_, _ = io.WriteString(e.pipe, ansi.CursorPositionReport(line, col))
 		default:
 			return false
 		}
@@ -941,8 +956,8 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 		switch n {
 		case 6: // Extended Cursor Position Report [ansi.DECXCPR]
-			x, y := e.scr.CursorPosition()
-			_, _ = io.WriteString(e.pipe, ansi.ExtendedCursorPositionReport(x+1, y+1, 0)) // We don't support page numbers //nolint:errcheck
+			line, col := e.reportedCursorPosition()
+			_, _ = io.WriteString(e.pipe, ansi.ExtendedCursorPositionReport(line, col, 0)) // We don't support page numbers //nolint:errcheck
 		default:
 			return false
 		}
@@ -955,13 +970,19 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		// always been here, in the 's' handler behind DECLRMM; without this
 		// the restore was silently dropped and the cursor stayed where the
 		// program had moved it.
-		e.scr.RestoreCursor()
+		e.restoreCursor()
 		return true
 	})
 
 	e.RegisterCsiHandler(ansi.Command(0, '!', 'p'), func(ansi.Params) bool {
 		// Soft Terminal Reset [ansi.DECSTR]
 		e.softReset()
+		return true
+	})
+
+	e.RegisterDcsHandler(ansi.Command(0, '$', 'q'), func(_ ansi.Params, data []byte) bool {
+		// Request Selection or Setting [ansi.DECRQSS]
+		e.reportSetting(string(data))
 		return true
 	})
 
@@ -1125,7 +1146,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			e.setCursorPosition(0, 0)
 		} else {
 			// Save Current Cursor Position [ansi.SCOSC]
-			e.scr.SaveCursor()
+			e.saveCursor()
 		}
 
 		return true

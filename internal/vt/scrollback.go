@@ -208,7 +208,15 @@ func (sb *Scrollback) Clear() {
 // lines need to be re-wrapped to match the new width.
 // This is a complex operation that should be called sparingly (only on resize).
 func (sb *Scrollback) Reflow(newWidth int) {
-	if newWidth <= 0 || sb.lastWidthCaptured == 0 || newWidth == sb.lastWidthCaptured {
+	if newWidth <= 0 {
+		return
+	}
+
+	// Whatever else a resize does or declines to do, it cannot leave a
+	// double-width rune straddling the new last column.
+	sb.blankWideRunesCutByTheEdge(newWidth)
+
+	if sb.lastWidthCaptured == 0 || newWidth == sb.lastWidthCaptured {
 		return // No reflow needed if width hasn't changed or is invalid
 	}
 
@@ -223,6 +231,34 @@ func (sb *Scrollback) Reflow(newWidth int) {
 	// 3. Preserves ANSI color/style information through the rewrap
 	// For now, just update the recorded width to prevent flickering
 	sb.lastWidthCaptured = newWidth
+}
+
+// blankWideRunesCutByTheEdge clears a double-width rune left holding the last
+// column a narrowed screen still has.
+//
+// History keeps the width it was written at, deliberately: this emulator does
+// not re-wrap it, because the program owns its own layout and redraws on
+// SIGWINCH. Keeping the width is fine. Keeping a lead in what is now the last
+// visible column is not: the render path walks a scrollback line with the
+// pane's own columns and draws each cell whole, so that lead comes out one
+// column wider than the pane and lands over the pane next door. The visible
+// screen has been repaired this way since a wide rune cut by a resize was found
+// there; history was reached by the same cut and nothing was repairing it.
+//
+// The style is kept so a run of coloured background does not gain a notch where
+// the character was.
+func (sb *Scrollback) blankWideRunesCutByTheEdge(newWidth int) {
+	x := newWidth - 1
+	if x < 0 {
+		return
+	}
+	for i := range sb.Len() {
+		line := sb.Line(i)
+		if x >= len(line) || line[x].Width <= 1 {
+			continue
+		}
+		line[x] = uv.Cell{Content: " ", Width: 1, Style: line[x].Style}
+	}
 }
 
 // SetCaptureWidth sets the terminal width at which scrollback lines are being captured.

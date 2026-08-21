@@ -12,6 +12,7 @@ type Screen struct {
 	buf *uv.RenderBuffer
 	// The cur of the screen.
 	cur, saved Cursor
+	savedExtra savedExtras
 	// scroll is the scroll region.
 	scroll uv.Rectangle
 	// scrollback is the scrollback buffer for lines that have scrolled off the top.
@@ -228,6 +229,15 @@ func (s *Screen) SaveCursor() {
 	s.saved = s.cur
 }
 
+// savedExtras is the part of the saved cursor that does not live in [Cursor]:
+// the pending-wrap flag and origin mode. xterm's DECSC documentation lists both
+// among what is saved, and they are per-screen because the alternate screen has
+// its own saved cursor.
+type savedExtras struct {
+	phantom bool
+	origin  bool
+}
+
 // RestoreCursor restores the cursor.
 //
 // The saved position is clamped to the screen, because the screen may not be
@@ -288,11 +298,18 @@ func (s *Screen) HideCursor() {
 // InsertCell inserts n blank characters at the cursor position pushing out
 // cells to the right and out of the screen.
 func (s *Screen) InsertCell(n int) {
+	s.insertCellAt(s.cur.X, s.cur.Y, n)
+}
+
+// insertCellAt is InsertCell at an explicit position. The print path under IRM
+// needs it: a wrap can have moved the cell it is about to write away from where
+// the cursor still sits, and moving the cursor first would fire the position
+// callback for a step that is not a cursor movement.
+func (s *Screen) insertCellAt(x, y, n int) {
 	if n <= 0 {
 		return
 	}
 
-	x, y := s.cur.X, s.cur.Y
 	line, n, ok := s.shiftBounds(x, y, n)
 	if !ok {
 		return

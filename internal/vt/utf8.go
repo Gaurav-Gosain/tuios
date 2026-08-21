@@ -1,8 +1,6 @@
 package vt
 
 import (
-	"unicode/utf8"
-
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -221,6 +219,8 @@ func (e *Emulator) extendOpenGrapheme() {
 	e.scr.SetCell(e.openGrapheme.x, e.openGrapheme.y, &cell)
 	e.openGrapheme.baseASCII = 0
 	e.openGrapheme.base = cluster
+	// The marks are part of the character now, so a repeat has to carry them.
+	e.lastCluster, e.lastClusterWidth = cluster, width
 
 	// A continuation can change the cluster's width (a variation selector turns
 	// a narrow base wide); move the cursor by the delta so following output
@@ -249,13 +249,25 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	}
 
 	x, y := e.scr.CursorPosition()
+
+	// Where the line ends and where a wrap lands. With DECLRMM set they are the
+	// horizontal margins rather than the screen edges: wrapping at the right
+	// margin is the whole reason a guest asks for one, and a terminal that
+	// accepts the mode and then runs to the edge has given it nothing. A cursor
+	// parked outside the margins keeps the screen's own edges, which is what
+	// xterm does.
+	left, right := 0, e.scr.Width()
+	if r := e.scr.ScrollRegion(); (r.Min.X != 0 || r.Max.X != right) && x >= r.Min.X && x < r.Max.X {
+		left, right = r.Min.X, r.Max.X
+	}
+
 	if e.atPhantom && awm {
 		// moves cursor down similar to [Terminal.linefeed] except it doesn't
 		// respects [ansi.LNM] mode.
 		// This will reset the phantom state i.e. pending wrap state.
 		e.index()
 		_, y = e.scr.CursorPosition()
-		x = 0
+		x = left
 	}
 
 	// Handle character set mappings
@@ -285,7 +297,7 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	// trace: CJK text loses a character wherever it happens to meet the right
 	// margin. xterm and ghostty both blank the column that cannot hold it and
 	// wrap the cluster whole.
-	if cell.Width > 1 && x+cell.Width > e.scr.Width() {
+	if cell.Width > 1 && x+cell.Width > right {
 		e.scr.SetCell(x, y, nil)
 		if !awm {
 			// Nothing to wrap to. The column stays blank rather than holding
@@ -296,11 +308,20 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 		}
 		e.index()
 		_, y = e.scr.CursorPosition()
-		x = 0
+		x = left
 	}
 
-	if cell.Width == 1 && len(content) == 1 {
-		e.lastChar, _ = utf8.DecodeRuneInString(content)
+	// Recorded before the character set mapping is undone by a repeat: REP
+	// repeats what the guest sent, and the designated set is still in force
+	// when it does.
+	e.lastCluster, e.lastClusterWidth = content, width
+
+	// Insert mode (IRM) opens room for the character rather than overwriting
+	// what is there, and a double-width cluster opens two columns rather than
+	// one. terminfo reaches this through smir/rmir, so it runs under ordinary
+	// curses programs and not only under a conformance suite.
+	if e.insertMode() {
+		e.scr.insertCellAt(x, y, cell.Width)
 	}
 
 	e.lastCellX, e.lastCellY = x, y
@@ -312,9 +333,9 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	// line. A wide cluster ending flush against the margin has to arm it too,
 	// or the next character lands on that cluster's own second cell and eats
 	// the character already there.
-	if awm && cell.Width > 0 && x+cell.Width >= e.scr.Width() {
+	if awm && cell.Width > 0 && x+cell.Width >= right {
 		e.atPhantom = true
-		x = e.scr.Width() - 1
+		x = right - 1
 	} else {
 		e.atPhantom = false
 		x += cell.Width

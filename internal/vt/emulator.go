@@ -76,13 +76,20 @@ type Emulator struct {
 	// authoritative; this is a read-side shortcut for the one mode the hot loop
 	// asks about every character.
 	cachedAutoWrap atomic.Bool
+	// Thread-safe cached insert-mode flag (IRM, updated on set/reset). Read
+	// once per printed character, for the same reason as cachedAutoWrap.
+	cachedInsertMode atomic.Bool
 	// Unix-nanos timestamp of the last sync begin, for the present-anyway timeout
 	syncSetAtNanos atomic.Int64
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
 	cachedKittyFlags atomic.Int32
 
-	// The last written character.
-	lastChar rune // either ansi.Rune or ansi.Grapheme
+	// The last cluster written, and the columns it took, for REP. A rune is
+	// not enough: a double-width character and a base carrying combining marks
+	// are both single characters a guest can ask to have repeated, and storing
+	// only an ASCII rune dropped them.
+	lastCluster      string
+	lastClusterWidth int
 	// A slice of runes to compose a grapheme.
 	grapheme []rune
 	// The cell handleGrapheme last drew into. A pending wrap makes the target
