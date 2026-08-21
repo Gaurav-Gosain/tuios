@@ -163,22 +163,27 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 }
 
 // runNewWindow opens a window in a session and reports its id, which is the
-// handle every later call needs. workspace 0 means the current one, and an
-// empty cwd means the daemon's own directory.
-func runNewWindow(sessionName, name string, workspace int, cwd string, focus, jsonOutput bool) error {
+// handle every later call needs. workspace 0 means the current one, an empty
+// cwd means the daemon's own directory, and a non-empty command is an argv the
+// window execs as its process instead of a shell.
+func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	raw, err := client.Call("new-window", map[string]any{
+	params := map[string]any{
 		"session":   sessionName,
 		"name":      name,
 		"workspace": workspace,
 		"cwd":       cwd,
 		"focus":     focus,
-	})
+	}
+	if len(command) > 0 {
+		params["command"] = command
+	}
+	raw, err := client.Call("new-window", params)
 	if err != nil {
 		return reportVerbError(explainVerbError("new-window", err), jsonOutput)
 	}

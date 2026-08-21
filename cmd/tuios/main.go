@@ -938,13 +938,17 @@ one call where send-keys needs two.`,
 	var newWindowNoFocus bool
 	var newWindowJSON bool
 	newWindowCmd := &cobra.Command{
-		Use:   "new-window [name]",
+		Use:   "new-window [name] [command...]",
 		Short: "Open a new window in a session",
 		Long: `Open a new window in a running TUIOS session and print its id.
 
 The window is created by the daemon whether or not a client is attached, so this
 works on a detached session. Give it a name to address it later without holding
 on to the id.
+
+Arguments after the name are an argv the window runs as its own process instead
+of a shell: nothing re-parses them, so nothing needs quoting, and the window
+closes when the program exits.
 
 --workspace puts it somewhere other than the current workspace, --cwd starts its
 shell in a directory, and --no-focus opens a pane to use later without pulling
@@ -957,19 +961,24 @@ whoever is watching out of the one they are in.`,
   tuios send-text -w build 'go build ./...
 '
 
+  # Open a window whose process is the program itself, no shell in between
+  tuios new-window htop /usr/bin/htop
+
   # Open a pane on workspace 2, in a directory, without taking the focus
   tuios new-window tests --workspace 2 --cwd /src/api --no-focus
 
   # Capture the new window's id for scripting
   tuios new-window --json | jq -r .window_id`,
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.ArbitraryArgs,
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
+			var command []string
 			if len(args) > 0 {
 				name = args[0]
+				command = args[1:]
 			}
 			return runNewWindow(newWindowSession, name, newWindowWorkspace, newWindowCwd,
-				!newWindowNoFocus, newWindowJSON)
+				!newWindowNoFocus, command, newWindowJSON)
 		},
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: most recently active)")

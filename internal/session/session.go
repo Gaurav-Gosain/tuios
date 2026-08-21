@@ -626,7 +626,7 @@ func (s *Session) publishState(snap *SessionState) {
 // non-nil, is invoked with the PTY ID when the process exits; it is set before
 // the monitor goroutine starts so it is always visible to monitorExit.
 func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, "", false, onExit)
+	return s.createPTY(windowID, width, height, "", nil, false, onExit)
 }
 
 // RestorePTY creates a fresh PTY for a resurrected window. It behaves like
@@ -635,10 +635,14 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 // and a one-line banner is written to the terminal so the user can see the
 // process is a freshly respawned shell, not the original long-lived one.
 func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, true, onExit)
+	return s.createPTY(windowID, width, height, cwd, nil, true, onExit)
 }
 
-func (s *Session) createPTY(windowID string, width, height int, cwd string, restored bool, onExit func(ptyID string)) (*PTY, error) {
+// command, when non-empty, is an argv exec'd as the PTY's process in place of
+// the shell. It is deliberately not persisted: a restored window respawns as a
+// shell, because silently rerunning a program the user ran once is not what
+// restoration promises.
+func (s *Session) createPTY(windowID string, width, height int, cwd string, command []string, restored bool, onExit func(ptyID string)) (*PTY, error) {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
@@ -655,7 +659,12 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 	}
 
 	// Create command
-	cmd := exec.Command(shell)
+	var cmd *exec.Cmd
+	if len(command) > 0 {
+		cmd = exec.Command(command[0], command[1:]...)
+	} else {
+		cmd = exec.Command(shell)
+	}
 	cmd.Env = s.buildEnv(windowID, restored)
 	// Start the shell in cwd when one was named and still exists; otherwise fall
 	// back to the shell's default (inherited) directory.
@@ -679,7 +688,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 	if err := ptyInstance.Start(cmd); err != nil {
 		_ = ptyInstance.Close()
 		cancel()
-		return nil, fmt.Errorf("failed to start shell: %w", err)
+		// Name the process that failed: with a command this is the program the
+		// user picked, and "shell" would send them looking at the wrong config.
+		return nil, fmt.Errorf("failed to start %s: %w", cmd.Path, err)
 	}
 
 	// Create VT emulator for persistent terminal state

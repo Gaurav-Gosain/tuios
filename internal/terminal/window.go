@@ -478,7 +478,13 @@ func shortID(id string) string {
 // NewWindow creates a new terminal window with the specified properties.
 // It spawns a shell process, sets up PTY communication, and initializes the virtual terminal.
 // Returns nil if window creation fails.
-func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}) *Window {
+//
+// command, when given, becomes the pane's process in place of the shell: argv
+// exec'd directly, no shell parsing anything. The launcher runs programs this
+// way because bytes typed at a shell are re-parsed by whatever shell it is,
+// and the window closes when the program exits, the same way it does when a
+// shell does.
+func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, command ...string) *Window {
 	if title == "" {
 		title = "Terminal " + shortID(id)
 	}
@@ -574,12 +580,14 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		},
 	})
 
-	// Detect shell
-	shell := detectShell()
-
 	// Set up environment
-	// #nosec G204 - shell is intentionally user-controlled for terminal functionality
-	cmd := exec.Command(shell)
+	// #nosec G204 - the command is the user's own shell or a program they chose
+	var cmd *exec.Cmd
+	if len(command) > 0 {
+		cmd = exec.Command(command[0], command[1:]...)
+	} else {
+		cmd = exec.Command(detectShell())
+	}
 
 	// Get cached terminal environment (detected once on first window creation)
 	termType, colorTerm := getTerminalEnv()

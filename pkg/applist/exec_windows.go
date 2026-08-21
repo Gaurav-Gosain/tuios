@@ -38,3 +38,14 @@ func pathExt() []string {
 	}
 	return out
 }
+
+// Argv is the argv that runs e as a pane's own process. CreateProcess only
+// starts real executables; a batch file runs through the interpreter cmd
+// itself would hand it to.
+func (e Entry) Argv() []string {
+	switch strings.ToLower(filepath.Ext(e.Path)) {
+	case ".bat", ".cmd":
+		return []string{"cmd.exe", "/c", e.Path}
+	}
+	return []string{e.Path}
+}

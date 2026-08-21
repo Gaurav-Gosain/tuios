@@ -2,6 +2,8 @@ package session
 
 import (
 	"bytes"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -153,5 +155,42 @@ func TestSendKeysDaemonSideNoWindows(t *testing.T) {
 	err := d.sendKeysDaemonSide(sess, &SendKeysPayload{Keys: "Enter"})
 	if err == nil {
 		t.Error("expected error sending keys to a session with no windows")
+	}
+}
+
+// TestNewWindowCommandArgsExecTheProgram pins the intent route the launcher
+// rides: args after the window name are an argv the daemon execs as the pane's
+// process. The daemon is the side that spawns the PTY, so it is the side that
+// runs the program; nothing re-parses the argv, so a path with spaces or
+// quotes in it needs no quoting at all.
+func TestNewWindowCommandArgsExecTheProgram(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the probe command is /bin/sh")
+	}
+	d, sess := newTestDaemonSession(t)
+
+	data, err := d.executeDaemonCommand(sess, "NewWindow",
+		[]string{"probe", "/bin/sh", "-c", "sleep 30"}, func(string) {})
+	if err != nil {
+		t.Fatalf("NewWindow with a command failed: %v", err)
+	}
+	if data["name"] != "probe" {
+		t.Errorf("name = %v, want probe", data["name"])
+	}
+
+	state := sess.GetState()
+	if len(state.Windows) != 1 {
+		t.Fatalf("%d windows, want 1", len(state.Windows))
+	}
+	pty := sess.GetPTY(state.Windows[0].PTYID)
+	if pty == nil {
+		t.Fatal("the created window has no PTY")
+	}
+	want := []string{"/bin/sh", "-c", "sleep 30"}
+	if !slices.Equal(pty.cmd.Args, want) {
+		t.Errorf("PTY process argv = %v, want %v", pty.cmd.Args, want)
+	}
+	if pty.IsExited() {
+		t.Error("the program exited immediately")
 	}
 }

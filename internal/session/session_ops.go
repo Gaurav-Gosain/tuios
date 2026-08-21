@@ -160,6 +160,11 @@ type NewWindowOptions struct {
 	// work in later wants it created without stealing the focus from the pane
 	// the user is in.
 	Focus bool
+	// Command, when non-empty, is an argv exec'd as the window's process in
+	// place of a shell. The daemon execs it itself because it is the side that
+	// spawns the PTY; sending bytes for a shell to re-parse instead would make
+	// the command's meaning depend on which shell answered.
+	Command []string
 }
 
 // AddDaemonWindowWith creates a daemon-owned window with explicit placement.
@@ -196,7 +201,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		}
 	}
 
-	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, opts.Cwd, false, onExit)
+	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, opts.Cwd, opts.Command, false, onExit)
 	if err != nil {
 		return WindowState{}, err
 	}
