@@ -16,6 +16,10 @@ import (
 func runTestOS(t *testing.T) *OS {
 	t.Helper()
 	return &OS{
+		// Open, because the palette is the only reader of the launcher rows and
+		// applyPathApps declines to build them for a closed one.
+		ShowCommandPalette: true,
+
 		WorkspaceFocus:   map[int]int{},
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,

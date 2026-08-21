@@ -82,13 +82,19 @@ func (m *OS) knownPathApps() []applist.Entry {
 }
 
 // applyPathApps turns a finished scan into palette rows.
+//
+// A scan can outlive the palette that asked for it, since it runs elsewhere and
+// the user may close the box before it returns. The cache keeps the entries
+// either way, so the next open still builds from them; what is skipped is
+// holding a few thousand built rows for a palette nobody is looking at.
 func (m *OS) applyPathApps(entries []applist.Entry) {
-	m.PaletteAppItems = m.runItems(entries)
-	// The palette caches its merged list, so a scan that lands while it is open
-	// has to put the new rows into that list rather than wait for a reopen.
-	if m.ShowCommandPalette {
-		m.rebuildPaletteItems()
+	if !m.ShowCommandPalette {
+		return
 	}
+	m.PaletteAppItems = m.runItems(entries)
+	// The merged list is cached, so rows arriving mid-open have to go into it
+	// rather than wait for a reopen.
+	m.rebuildPaletteItems()
 }
 
 // runItems builds one palette row per program.
