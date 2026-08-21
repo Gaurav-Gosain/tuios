@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
 )
@@ -193,6 +194,48 @@ func TestScriptIsReproducible(t *testing.T) {
 	input := []byte("a corpus entry that a mutator produced")
 	if vtgen.FromBytes(input).Script(50).String() != vtgen.FromBytes(input).Script(50).String() {
 		t.Fatal("the same bytes produced two different scripts")
+	}
+}
+
+// TestSplitWritesCutsWhereARealReadWould checks the property the helper exists
+// for. Reassembling has to be exact, or a replay is testing different input
+// from the one the script names, and the cuts have to land mid-character often
+// enough to matter, or the helper is only re-testing whole sequences under a
+// longer name.
+func TestSplitWritesCutsWhereARealReadWould(t *testing.T) {
+	cutMidCharacter := false
+	for src := range uint64(20) {
+		s := vtgen.New(src).Script(80)
+
+		var rebuilt strings.Builder
+		for _, piece := range s.SplitWrites(src) {
+			rebuilt.WriteString(piece)
+			if !utf8.ValidString(piece) {
+				cutMidCharacter = true
+			}
+		}
+		if rebuilt.String() != s.Bytes() {
+			t.Fatalf("src %d: the pieces do not reassemble into what the script writes", src)
+		}
+	}
+	if !cutMidCharacter {
+		t.Error("no boundary landed inside a multi-byte character, which is the case a PTY read hits daily")
+	}
+}
+
+// TestSplitWritesIsReproducible is the same contract the scripts themselves
+// keep: a recorded failure has to replay with the same boundaries, or the
+// boundary that caused it is gone.
+func TestSplitWritesIsReproducible(t *testing.T) {
+	s := vtgen.New(11).Script(60)
+	a, b := s.SplitWrites(3), s.SplitWrites(3)
+	if len(a) != len(b) {
+		t.Fatalf("the same source gave %d pieces and then %d", len(a), len(b))
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			t.Fatalf("piece %d differs between two runs of the same source", i)
+		}
 	}
 }
 

@@ -26,7 +26,8 @@ import (
 // of what it is meant to be.
 type Seq struct {
 	// Kind groups steps for the shrinker and for reading. One of "text",
-	// "cc", "esc", "csi", "sgr", "mode", "osc", "dcs", "apc", "resize".
+	// "cc", "esc", "csi", "sgr", "mode", "osc", "dcs", "apc", "margin",
+	// "erase", "tabs", "resize".
 	Kind string
 
 	// Bytes is what gets written to the emulator. Empty for a resize.
@@ -50,6 +51,41 @@ func (s Script) Bytes() string {
 		b.WriteString(seq.Bytes)
 	}
 	return b.String()
+}
+
+// SplitWrites chops everything a script writes into the pieces a reader would
+// actually hand the parser, at boundaries drawn from src. A PTY read boundary
+// falls wherever the kernel put it: inside a multi-byte character, halfway
+// through a CSI parameter list, between a base character and the mark that
+// belongs to it. A parser that only ever sees whole sequences is not the parser
+// that runs in production, and the state it has to carry across a boundary is
+// the state nothing else exercises.
+//
+// The pieces are small most of the time so those splits happen constantly
+// rather than by luck, with an occasional larger read so a run is not uniformly
+// one byte at a time. Resizes are dropped, the way Bytes drops them.
+func (s Script) SplitWrites(src uint64) []string {
+	b := s.Bytes()
+	if b == "" {
+		return nil
+	}
+	r := rand.New(rand.NewPCG(src, src^0x9e3779b97f4a7c15))
+	var out []string
+	for i := 0; i < len(b); {
+		var n int
+		switch r.Uint64() % 16 {
+		case 0:
+			n = 1 + int(r.Uint64()%64)
+		case 1, 2, 3, 4, 5:
+			n = 1
+		default:
+			n = 1 + int(r.Uint64()%4)
+		}
+		n = min(n, len(b)-i)
+		out = append(out, b[i:i+n])
+		i += n
+	}
+	return out
 }
 
 // String renders a script as something a person can read and retype. This is
@@ -168,6 +204,9 @@ var kindWeights = []struct {
 	{"osc", 40},
 	{"dcs", 22},
 	{"apc", 12},
+	{"margin", 35},
+	{"erase", 30},
+	{"tabs", 20},
 	{"resize", 18},
 }
 
@@ -181,6 +220,20 @@ var kindWeightSum = func() int {
 
 // Next draws one step.
 func (g *Gen) Next() Seq {
+	seq := g.draw()
+	// A guest on an eight-bit channel introduces a sequence with one C1 byte
+	// rather than with ESC and a second byte. It means the same thing and it
+	// enters the parser through a different door, so an emulator can handle
+	// every seven-bit form and still drop every eight-bit one.
+	if g.u(20) == 0 {
+		if rewritten, ok := eightBit(seq); ok {
+			return rewritten
+		}
+	}
+	return seq
+}
+
+func (g *Gen) draw() Seq {
 	n := g.u(kindWeightSum)
 	for _, k := range kindWeights {
 		if n < k.w {
@@ -189,6 +242,32 @@ func (g *Gen) Next() Seq {
 		n -= k.w
 	}
 	return g.text()
+}
+
+// eightBit rewrites a seven-bit introducer to the single C1 byte that means the
+// same thing, and the ST that closes a string with it. It reports whether it
+// found anything to rewrite, so a step with no introducer is left alone rather
+// than relabelled as something it is not.
+func eightBit(seq Seq) (Seq, bool) {
+	var b string
+	switch {
+	case strings.HasPrefix(seq.Bytes, "\x1b["):
+		b = "\x9b" + seq.Bytes[2:]
+	case strings.HasPrefix(seq.Bytes, "\x1b]"):
+		b = "\x9d" + seq.Bytes[2:]
+	case strings.HasPrefix(seq.Bytes, "\x1bP"):
+		b = "\x90" + seq.Bytes[2:]
+	case strings.HasPrefix(seq.Bytes, "\x1b_"):
+		b = "\x9f" + seq.Bytes[2:]
+	default:
+		return seq, false
+	}
+	if strings.HasSuffix(b, "\x1b\\") {
+		b = b[:len(b)-2] + "\x9c"
+	}
+	seq.Bytes = b
+	seq.Desc += ", using eight-bit controls"
+	return seq, true
 }
 
 func (g *Gen) of(kind string) Seq {
@@ -211,6 +290,12 @@ func (g *Gen) of(kind string) Seq {
 		return g.dcs()
 	case "apc":
 		return g.apc()
+	case "margin":
+		return g.margin()
+	case "erase":
+		return g.erase()
+	case "tabs":
+		return g.tabs()
 	case "resize":
 		return g.resize()
 	}
@@ -538,6 +623,19 @@ var escapes = []struct {
 	{"n", "LS2 lock shift G2"},
 	{"o", "LS3 lock shift G3"},
 	{"~", "LS1R lock shift G1 right"},
+	{"N", "SS2 single shift G2"},
+	{"O", "SS3 single shift G3"},
+	{"*B", "designate ASCII as G2"},
+	{"+B", "designate ASCII as G3"},
+	{"(1", "an SCS final nothing defines"},
+	{"%G", "select UTF-8"},
+	{"%@", "select the default encoding"},
+	{"#3", "double-height top half"},
+	{"#4", "double-height bottom half"},
+	{"#5", "single-width line"},
+	{"#6", "double-width line"},
+	{"}", "LS2R lock shift G2 right"},
+	{"|", "LS3R lock shift G3 right"},
 }
 
 func (g *Gen) esc() Seq {
@@ -716,6 +814,165 @@ func (g *Gen) apc() Seq {
 	}
 }
 
+// shown names a single parameter for a description, keeping an omitted one
+// visible. An omitted parameter takes the default where an explicit zero often
+// does not, so a report that renders both as nothing hides the difference that
+// mattered.
+func shown(p string) string {
+	if p == "" {
+		return "with the parameter omitted"
+	}
+	return "with parameter " + p
+}
+
+// pair names a two-parameter value the way a reader would say it back.
+func pair(a, b string) string {
+	name := func(s string) string {
+		if s == "" {
+			return "omitted"
+		}
+		return s
+	}
+	return name(a) + " and " + name(b)
+}
+
+// compose builds one step out of several sequences that only mean anything
+// together. Drawing them one at a time would reach the combination roughly
+// never, and the shrinker still works because it reduces whole steps.
+type compose struct {
+	bytes []string
+	names []string
+}
+
+func (c *compose) add(bytes, name string) {
+	c.bytes = append(c.bytes, bytes)
+	c.names = append(c.names, name)
+}
+
+func (c *compose) seq(kind string) Seq {
+	return Seq{Kind: kind, Bytes: strings.Join(c.bytes, ""), Desc: strings.Join(c.names, ", then ")}
+}
+
+// margin sets up left and right margins as a whole rather than one sequence at
+// a time. The failure being hunted needs several things true at once: DECLRMM
+// enabled, both margin pairs holding values sized for a screen that is about to
+// be resized, and a cursor addressed under origin mode so its coordinates are
+// read against margins that may no longer fit.
+func (g *Gen) margin() Seq {
+	var c compose
+
+	if g.u(3) == 0 {
+		c.add("\x1b[?6h", "set DECOM origin mode")
+	}
+	if g.u(4) == 0 {
+		c.add("\x1b7", "DECSC save cursor")
+	}
+	c.add("\x1b[?69h", "enable DECLRMM")
+
+	left, right := g.param(), g.param()
+	c.add("\x1b["+left+";"+right+"s", "DECSLRM left and right margins "+pair(left, right))
+
+	top, bottom := g.param(), g.param()
+	c.add("\x1b["+top+";"+bottom+"r", "DECSTBM top and bottom margins "+pair(top, bottom))
+
+	if g.u(2) == 0 {
+		row, col := g.param(), g.param()
+		c.add("\x1b["+row+";"+col+"H", "CUP cursor position "+pair(row, col))
+	}
+	if g.u(4) == 0 {
+		c.add("\x1b8", "DECRC restore cursor")
+	}
+	if g.u(5) == 0 {
+		// Turning the mode off while the margins it gated are still set leaves
+		// state a terminal has to decide about, and forgetting to clear it is
+		// how a margin outlives the mode that allowed it.
+		c.add("\x1b[?69l", "reset DECLRMM with the margins still set")
+	}
+	return c.seq("margin")
+}
+
+// eraseParams are the erase selectors worth drawing: the three values ED and EL
+// define, the scrollback one only some terminals have, and values past the end
+// of the table.
+var eraseParams = []string{"", "0", "1", "2", "3", "4", "9"}
+
+// decscaParams are the protection selectors, again with values nothing defines.
+var decscaParams = []string{"", "0", "1", "2", "3", "255"}
+
+// erase draws the erase family together with the protection attribute that
+// changes what erasing means and the resets meant to clear it. DECSCA on its
+// own does nothing visible. The case that breaks is a selective erase running
+// over cells marked protected, and then a reset that has to drop both the
+// protection on those cells and the attribute still being applied to new ones.
+func (g *Gen) erase() Seq {
+	var c compose
+
+	if g.u(2) == 0 {
+		p := g.pick(decscaParams)
+		c.add("\x1b["+p+"\"q", "DECSCA character protection "+shown(p))
+	}
+
+	p := g.pick(eraseParams)
+	switch g.u(4) {
+	case 0:
+		c.add("\x1b[?"+p+"J", "DECSED selective erase in display "+shown(p))
+	case 1:
+		c.add("\x1b[?"+p+"K", "DECSEL selective erase in line "+shown(p))
+	case 2:
+		c.add("\x1b["+p+"J", "ED erase in display "+shown(p))
+	default:
+		c.add("\x1b["+p+"K", "EL erase in line "+shown(p))
+	}
+
+	switch g.u(6) {
+	case 0:
+		c.add("\x1b[!p", "DECSTR soft reset")
+	case 1:
+		c.add("\x1bc", "RIS full reset")
+	}
+	return c.seq("erase")
+}
+
+// tbcParams are the tab-clear selectors, including two nothing defines.
+var tbcParams = []string{"", "0", "2", "3", "5", "9"}
+
+// tabs walks the tab-stop table, which nothing else here touches. The table is
+// state a resize has to carry, and a stop left past the new width after a
+// shrink is what the next tab indexes with.
+func (g *Gen) tabs() Seq {
+	var c compose
+
+	switch g.u(8) {
+	case 0:
+		c.add("\x1bH", "HTS set a tab stop at the cursor")
+	case 1:
+		n := 1 + g.u(12)
+		c.add(strings.Repeat("\t", n), fmt.Sprintf("HT tab x%d", n))
+	case 2:
+		p := g.pick(tbcParams)
+		c.add("\x1b["+p+"g", "TBC clear tab stops "+shown(p))
+	case 3:
+		p := g.param()
+		c.add("\x1b["+p+"I", "CHT forward tab "+shown(p))
+	case 4:
+		p := g.param()
+		c.add("\x1b["+p+"Z", "CBT backward tab "+shown(p))
+	case 5:
+		c.add("\x1b[?5W", "DECST8C reset tab stops to every eight columns")
+	case 6:
+		p := g.param()
+		c.add("\x1b["+p+"W", "tab-stop set "+shown(p))
+	default:
+		// Setting a stop and then jumping to it is the pair that says whether
+		// the table survived what came between them.
+		p := g.param()
+		c.add("\x1b["+p+"G", "CHA column address "+shown(p))
+		c.add("\x1bH", "HTS set a tab stop there")
+		c.add("\t", "HT tab")
+	}
+	return c.seq("tabs")
+}
+
 // texts are drawn from the classes that decide layout: a width, a cluster
 // boundary, or an encoding the decoder has to reject.
 var texts = []struct {
@@ -752,6 +1009,14 @@ var texts = []struct {
 	{"\xe4\xb8", "a character cut off mid-encoding"},
 	{"\x00\x01\x02", "C0 code points as text"},
 	{"\u0085\u009b", "C1 code points as text"},
+	{"́", "a combining mark with nothing to attach to"},
+	{strings.Repeat("x", 79) + "世́", "a wide base and its mark arriving at the right margin"},
+	{"☝️", "a hand with an emoji presentation selector"},
+	{"☝︎", "the same hand with a text presentation selector"},
+	{"e" + strings.Repeat("́", 40), "a base under forty combining marks"},
+	{"‮hello‬", "a right-to-left override run"},
+	{"a b", "a non-breaking space mid-string"},
+	{"\xed\xa0\x80", "a lone surrogate encoded as CESU-8"},
 }
 
 func (g *Gen) text() Seq {
