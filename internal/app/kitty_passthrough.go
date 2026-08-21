@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -78,6 +79,10 @@ type KittyPassthrough struct {
 	hostMu       sync.Mutex // serializes writes to hostOut across render + async paths
 	// hostScratch joins a multi-part sequence into one Write. Guarded by hostMu.
 	hostScratch []byte
+	// lastWriteNanos is how long the last host write took. Written under
+	// hostMu, read from the VT callback without it, so it is atomic. See
+	// hostBacklogged.
+	lastWriteNanos atomic.Int64
 
 	placements    map[string]map[uint32]*PassthroughPlacement
 	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
@@ -121,6 +126,12 @@ type KittyPassthrough struct {
 
 	// Pending direct transmission data (for chunked transfers)
 	pendingDirectData map[string]*pendingDirectTransmit // key: windowID
+
+	// lastBitmap and directFrames back the damage path: the bitmap the host
+	// currently holds for each image, and the transmission being assembled
+	// before it is compared with that bitmap. See kitty_damage.go.
+	lastBitmap   map[string]map[uint32]*bitmapCache
+	directFrames map[string]*directFrame
 
 	// Screen dimensions (updated by RefreshAllPlacements)
 	screenWidth  int
@@ -391,7 +402,28 @@ func (kp *KittyPassthrough) writeHostSequence(parts ...[]byte) {
 	for _, part := range parts[1:] {
 		kp.hostScratch = append(kp.hostScratch, part...)
 	}
+	started := time.Now()
 	_, _ = kp.hostOut.Write(kp.hostScratch)
+	kp.lastWriteNanos.Store(int64(time.Since(started)))
+}
+
+// hostWriteBudget is how long a write to the host may take before the host is
+// treated as not keeping up. Half a frame at 60fps: past that, the guest is
+// producing faster than the terminal can consume, and every writer behind this
+// one, including the render loop that carries keystrokes, waits for the
+// difference.
+const hostWriteBudget = 8 * time.Millisecond
+
+// hostBacklogged reports whether the last write to the host ran long enough to
+// mean it is not draining.
+//
+// It is the only backpressure signal there is. A pty write returns as soon as
+// the kernel buffer takes the bytes, so a fast write says nothing, but a slow
+// one says the buffer is full and the terminal is behind. Pacing on it is what
+// keeps a guest that renders faster than the host can paint from queueing
+// frames the user will never see in front of the input they are waiting on.
+func (kp *KittyPassthrough) hostBacklogged() bool {
+	return time.Duration(kp.lastWriteNanos.Load()) > hostWriteBudget
 }
 
 // WriteToHost writes graphics data directly to the host terminal,
