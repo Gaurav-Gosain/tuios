@@ -396,15 +396,13 @@ func (e *Emulator) registerDefaultEscHandlers() {
 		// the character set selection: a program that designates the
 		// line-drawing set, saves, prints text elsewhere and restores expects
 		// to be drawing lines again, and DEC specifies it that way.
-		e.scr.SaveCursor()
-		e.saveCharsets()
+		e.saveCursor()
 		return true
 	})
 
 	e.RegisterEscHandler('8', func() bool {
 		// Restore Cursor [ansi.DECRC]
-		e.scr.RestoreCursor()
-		e.restoreCharsets()
+		e.restoreCursor()
 		return true
 	})
 
@@ -969,7 +967,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		// always been here, in the 's' handler behind DECLRMM; without this
 		// the restore was silently dropped and the cursor stayed where the
 		// program had moved it.
-		e.scr.RestoreCursor()
+		e.restoreCursor()
 		return true
 	})
 
@@ -1139,7 +1137,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			e.setCursorPosition(0, 0)
 		} else {
 			// Save Current Cursor Position [ansi.SCOSC]
-			e.scr.SaveCursor()
+			e.saveCursor()
 		}
 
 		return true

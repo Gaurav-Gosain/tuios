@@ -62,14 +62,35 @@ func (e *Emulator) setAltScreenMode(on bool) {
 	}
 }
 
-// saveCursor saves the cursor position.
+// saveCursor saves everything DECSC saves: the position, the pen, the character
+// set selection, origin mode and the pending-wrap flag. xterm's DECSC
+// documentation lists all of them, and every path that saves a cursor here
+// (DECSC, SCOSC, DEC modes 1048 and 1049) means the same thing by it.
 func (e *Emulator) saveCursor() {
 	e.scr.SaveCursor()
+	e.saveCharsets()
+	e.scr.savedExtra = savedExtras{
+		phantom: e.atPhantom,
+		origin:  e.isModeSet(ansi.ModeOrigin),
+	}
 }
 
-// restoreCursor restores the cursor position.
+// restoreCursor is the DECRC half of saveCursor.
 func (e *Emulator) restoreCursor() {
+	// Origin mode goes back first, and through the map rather than through
+	// setMode: setting DECOM homes the cursor, which would undo the position
+	// this is about to restore.
+	setting := ansi.ModeReset
+	if e.scr.savedExtra.origin {
+		setting = ansi.ModeSet
+	}
+	e.modesMu.Lock()
+	e.modes[ansi.ModeOrigin] = setting
+	e.modesMu.Unlock()
+
 	e.scr.RestoreCursor()
+	e.restoreCharsets()
+	e.atPhantom = e.scr.savedExtra.phantom
 }
 
 // setMode sets the mode to the given value.

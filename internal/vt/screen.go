@@ -12,6 +12,7 @@ type Screen struct {
 	buf *uv.RenderBuffer
 	// The cur of the screen.
 	cur, saved Cursor
+	savedExtra savedExtras
 	// scroll is the scroll region.
 	scroll uv.Rectangle
 	// scrollback is the scrollback buffer for lines that have scrolled off the top.
@@ -226,6 +227,15 @@ func (s *Screen) ScrollRegion() uv.Rectangle {
 // SaveCursor saves the cursor.
 func (s *Screen) SaveCursor() {
 	s.saved = s.cur
+}
+
+// savedExtras is the part of the saved cursor that does not live in [Cursor]:
+// the pending-wrap flag and origin mode. xterm's DECSC documentation lists both
+// among what is saved, and they are per-screen because the alternate screen has
+// its own saved cursor.
+type savedExtras struct {
+	phantom bool
+	origin  bool
 }
 
 // RestoreCursor restores the cursor.
