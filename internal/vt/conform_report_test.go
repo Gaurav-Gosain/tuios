@@ -137,6 +137,59 @@ func TestConform_DeviceAttributes(t *testing.T) {
 	}
 }
 
+// TestConform_DECRQSS covers requests for the current value of a setting.
+//
+// DECRQSS is DCS $ q <setting> ST, answered with DCS Ps $ r <value> ST where Ps
+// is 1 for a setting the terminal reports and 0 for one it does not. The half
+// that matters most is that there is always an answer. A guest that asks and
+// hears nothing waits out a timeout before deciding, and some do that on every
+// start, so silence costs a visible pause where a refusal costs nothing.
+func TestConform_DECRQSS(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			"the scroll region with none set",
+			"\x1bP$qr\x1b\\",
+			"\x1bP1$r1;24r\x1b\\",
+		}, {
+			"the scroll region as the guest set it",
+			"\x1b[2;5r\x1bP$qr\x1b\\",
+			"\x1bP1$r2;5r\x1b\\",
+		}, {
+			"the horizontal margins with none set",
+			"\x1bP$qs\x1b\\",
+			"\x1bP1$r1;80s\x1b\\",
+		}, {
+			"the horizontal margins as the guest set them",
+			"\x1b[?69h\x1b[10;40s\x1bP$qs\x1b\\",
+			"\x1bP1$r10;40s\x1b\\",
+		}, {
+			// A setting this emulator does not report still gets an answer.
+			// Zero says so, and the guest stops waiting.
+			"a setting this emulator does not report is refused, not ignored",
+			"\x1bP$qm\x1b\\",
+			"\x1bP0$r\x1b\\",
+		}, {
+			"a setting nobody defines is refused too",
+			"\x1bP$qZZ\x1b\\",
+			"\x1bP0$r\x1b\\",
+		}, {
+			"an empty request is refused",
+			"\x1bP$q\x1b\\",
+			"\x1bP0$r\x1b\\",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := reply(t, 80, 24, tc.in); got != tc.want {
+				t.Errorf("reply = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestConform_DECRQM covers the mode-report matrix.
 //
 // DECRQM answers CSI ? Pm ; Ps $ y where Ps is 0 for a mode the terminal does
