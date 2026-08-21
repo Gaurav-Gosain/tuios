@@ -46,16 +46,23 @@ func Structure(bg color.Color) color.Color {
 	if ContrastRatio(ink, bg) <= StructureTarget {
 		return ink
 	}
-	// Thirty-two steps lands within about 3% of the target, finer than the
-	// terminal's own colour rounding, and the scan is over grounds rather than
-	// over cells: one call per rule per frame.
-	const steps = 32
-	for i := 1; i <= steps; i++ {
-		if mixed := MixColors(ink, bg, float64(i)/steps); ContrastRatio(mixed, bg) <= StructureTarget {
-			return mixed
+	// Bisected rather than scanned, because the ratio falls unevenly along the
+	// blend: near a very dark ground one step of it moves the ratio further than
+	// ten steps do near a pale one, so an even scan overshot the target by six
+	// percent on the darkest themes and by one on the rest. The ratio decreases
+	// with the blend, so halving the interval sixteen times pins the least blend
+	// that reaches the target to finer than the eight bits a colour has to say
+	// it in.
+	lo, hi := 0.0, 1.0
+	for range 16 {
+		mid := (lo + hi) / 2
+		if ContrastRatio(MixColors(ink, bg, mid), bg) > StructureTarget {
+			lo = mid
+		} else {
+			hi = mid
 		}
 	}
-	return ink
+	return MixColors(ink, bg, hi)
 }
 
 // linearize undoes the sRGB transfer curve for one channel, which is what makes

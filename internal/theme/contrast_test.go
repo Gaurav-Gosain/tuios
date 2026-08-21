@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/charmtone"
+	tint "github.com/lrstanley/bubbletint/v2"
 )
 
 // TestContrastRatioIsWCAG pins the two ends of the scale and the middle the
@@ -175,9 +176,10 @@ func TestStructureIsAWhisperOnEveryGround(t *testing.T) {
 		{"a latte terminal", lipgloss.Color("#eff1f5")},
 	} {
 		got := ContrastRatio(RailRuleOn(g.bg), g.bg)
-		// The blend lands on a 32-step grid, so it undershoots the target by a
-		// step at most and can never sit above it.
-		if got > StructureTarget || got < StructureTarget*0.9 {
+		// The bisection lands on whatever the eight bits of a channel can say, so
+		// it undershoots by a hair and can never sit above the target. Measured
+		// across every theme in the registry the spread is 1.879 to 1.900.
+		if got > StructureTarget || got < StructureTarget*0.98 {
 			t.Errorf("the rule on %s measures %.2f:1, off the %.1f:1 structure target",
 				g.name, got, StructureTarget)
 		}
@@ -186,6 +188,36 @@ func TestStructureIsAWhisperOnEveryGround(t *testing.T) {
 				g.name, got, MarkFloor)
 		}
 	}
+}
+
+// Every theme tuios can be set to, which is the only way to know the rule is
+// quiet rather than quiet on the grounds someone thought to check. A third of
+// the registry is light, and light is where a fixed dark grey stops being a
+// hairline and becomes the loudest thing in the frame.
+func TestStructureIsAWhisperOnEveryThemeGround(t *testing.T) {
+	EnsureRegistry()
+	ids := tint.TintIDs()
+	if len(ids) < 50 {
+		t.Fatalf("the registry holds %d themes; this sweep is not sweeping", len(ids))
+	}
+	light := 0
+	for _, id := range ids {
+		if err := Initialize(id); err != nil || Current() == nil {
+			t.Fatalf("theme %q did not apply", id)
+		}
+		bg := TerminalBg()
+		if ContrastRatio(bg, color.Black) > 8 {
+			light++
+		}
+		if got := ContrastRatio(RailRule(), bg); got > StructureTarget || got < StructureTarget*0.98 {
+			t.Errorf("theme %q: the rule measures %.2f:1 on its own ground, off the %.1f:1 target",
+				id, got, StructureTarget)
+		}
+	}
+	if light == 0 {
+		t.Error("no light-ground theme in the sweep; the case this measurement exists for went untested")
+	}
+	_ = Initialize("")
 }
 
 // The three classes are a ladder, and a ladder with a rung out of order is not
