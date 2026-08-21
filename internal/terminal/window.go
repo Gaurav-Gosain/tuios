@@ -337,6 +337,12 @@ type Window struct {
 	// know that something arrived, not how much.
 	coalesceWake chan struct{}
 
+	// renderCostNanos is what the client's last composed frame cost, written by
+	// the UI goroutine after every real compose. The coalescer paces itself
+	// against it so a pane cannot keep asking for frames faster than the client
+	// can draw them; see coalesceInterval.
+	renderCostNanos atomic.Int64
+
 	// outputEpoch stamps every chunk queued for the emulator. DiscardPendingOutput
 	// bumps it, and outputWriter throws away anything stamped with an older one,
 	// which is how a pane that has just been restored from a daemon snapshot
