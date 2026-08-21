@@ -19,8 +19,9 @@ import (
 // of three settings that differ only in which field they hold.
 //
 // Which options belong here is not decided here: the registry marks the ones
-// that hold a colour, and colorSettings is checked against it at startup, so an
-// option marked later cannot quietly stay a text field.
+// that hold a colour, and TestEveryColourOptionGetsThePicker walks the registry
+// against this list, so an option marked later cannot quietly stay a text
+// field.
 
 // colorSetting is one option whose value is a colour.
 type colorSetting struct {
@@ -176,8 +177,8 @@ func (m *OS) setColorOption(path, value string) tea.Cmd {
 func colorSettingItem(path string) settingItem {
 	setting, ok := lookupColorSetting(path)
 	if !ok {
-		// Unreachable while colorSettingsCoverTheRegistry holds, and a row that
-		// says so beats a blank one if it ever stops holding.
+		// Unreachable while the registry and colorSettings agree, which a test
+		// pins; a row that says so beats a blank one if they ever stop agreeing.
 		return settingItem{Label: path, Desc: "no colour setting at this path", Control: controlColor}
 	}
 	return settingItem{
