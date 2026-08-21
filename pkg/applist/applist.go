@@ -17,6 +17,36 @@ import (
 )
 
 // SourcePath names the $PATH source on an Entry.
+//
+// Source exists because there is more than one place a launchable thing can
+// come from, and one of them is a decision worth writing down: a .desktop entry
+// with Terminal=true declares that it must run inside a terminal emulator.
+// tuios is one, so those entries are things tuios can run natively and a GUI
+// launcher cannot without spawning a terminal first. They are still not
+// surfaced in the tuios palette, for three reasons.
+//
+// Almost every such entry's Exec is a program already on $PATH, so listing both
+// puts the same program in the list twice under two names. The palette's whole
+// job is that the right row is first, and near-synonyms work directly against
+// that; the cost is paid on every query while the benefit reaches only the
+// handful of entries that carry arguments or a name the basename does not
+// reveal.
+//
+// A correct reading of a .desktop file is not small: Exec field codes, TryExec,
+// NoDisplay, Hidden, OnlyShowIn, localised Name keys and Actions. Half of that
+// produces rows that fail when activated, which is worse than a row that is not
+// there.
+//
+// And it is Linux and BSD only. $PATH means the same thing on every platform
+// tuios builds for, so the palette's contents stay explicable; desktop entries
+// would make them depend on the host.
+//
+// The seam is here rather than the parser because the GUI launcher has to parse
+// .desktop files anyway, having no other source. When it does, it can hand
+// Entry values back with its own Source and tuios can merge them without a
+// second parser existing. The rule that would make that worth doing: admit a
+// Terminal=true entry only when its Exec does not resolve to a $PATH entry of
+// the same name, so it is additive rather than a synonym.
 const SourcePath = "path"
 
 // Entry is one launchable program.
