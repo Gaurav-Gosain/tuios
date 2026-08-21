@@ -19,8 +19,8 @@ func sectionsTestOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	m.SessionName = "main"
 	m.Windows = []*terminal.Window{
 		{ID: "aaaaaaaa1111", CustomName: "nvim", Width: 40, Height: 20, Workspace: 1},
-		{ID: "bbbbbbbb2222", CustomName: "refactor", Width: 40, Height: 20, Workspace: 1, AgentState: "done"},
-		{ID: "cccccccc3333", CustomName: "build", Width: 40, Height: 20, Workspace: 2, AgentState: "working"},
+		{ID: "bbbbbbbb2222", CustomName: "refactor", Width: 40, Height: 20, Workspace: 1, AgentState: "done", AgentHarness: "claude-code"},
+		{ID: "cccccccc3333", CustomName: "build", Width: 40, Height: 20, Workspace: 2, AgentState: "working", AgentHarness: "claude-code", AgentMessage: "editing files"},
 	}
 	m.FocusedWindow = 0
 	m.DaemonClient = &session.TUIClient{}
@@ -31,11 +31,11 @@ func sectionsTestOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	tree := sessiontree.Build([]sessiontree.SessionInput{
 		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
 			{ID: "aaaaaaaa1111", Title: "nvim", Focused: true, Workspace: 1},
-			{ID: "bbbbbbbb2222", Title: "refactor", AgentState: "done", Workspace: 1},
-			{ID: "cccccccc3333", Title: "build", AgentState: "working", Workspace: 2},
+			{ID: "bbbbbbbb2222", Title: "refactor", AgentState: "done", Harness: "claude-code", Workspace: 1},
+			{ID: "cccccccc3333", Title: "build", AgentState: "working", Harness: "claude-code", Message: "editing files", Workspace: 2},
 		}},
 		{Name: "api", CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
-			{ID: "dddddddd4444", Title: "server", AgentState: "needs_input", Workspace: 1},
+			{ID: "dddddddd4444", Title: "server", AgentState: "needs_input", Harness: "codex", Message: "awaiting approval", Workspace: 1},
 			{ID: "eeeeeeee5555", Title: "worker", Workspace: 3},
 		}},
 		{Name: "docs"},
@@ -81,19 +81,21 @@ func TestRailDrawsThreeSectionsInOrder(t *testing.T) {
 		t.Errorf("headers landed at sessions=%d terminals=%d agents=%d, want that order", sessions, terminals, agents)
 	}
 
-	// Pinned means the last agent row is the line directly above the footer.
+	// Pinned means the last agent row ends where the footer begins. The row is
+	// measured by its recorded rectangle rather than by its first line, since a
+	// row two lines tall ends one line further down than it starts.
 	last := -1
 	for _, h := range m.SidebarHits {
-		if h.Kind == sidebarRowAgent && h.Y0-m.GetTopMargin() > last {
-			last = h.Y0 - m.GetTopMargin()
+		if h.Kind == sidebarRowAgent && h.Y1-m.GetTopMargin() > last {
+			last = h.Y1 - m.GetTopMargin()
 		}
 	}
 	footer := lineOf(lines, "«")
 	if last < 0 || footer < 0 {
 		t.Fatalf("no agent rows or no footer:\n%s", strings.Join(lines, "\n"))
 	}
-	if last != footer-1 {
-		t.Errorf("last agent row on line %d, footer on %d: the agents block is not pinned to the bottom", last, footer)
+	if last != footer {
+		t.Errorf("last agent row ends on line %d, footer on %d: the agents block is not pinned to the bottom", last, footer)
 	}
 }
 
@@ -171,7 +173,7 @@ func TestRailSectionBudget(t *testing.T) {
 		{"no agents at all", 12, 3, 20, 0, 3, 9, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, tt, a := sidebarBudget(tc.avail, tc.nS, tc.nT, tc.nA)
+			s, tt, a := sidebarBudget(tc.avail, tc.nS, tc.nT, tc.nA, 1)
 			if s != tc.wantS || tt != tc.wantT || a != tc.wantA {
 				t.Errorf("budget(%d, %d, %d, %d) = %d/%d/%d, want %d/%d/%d",
 					tc.avail, tc.nS, tc.nT, tc.nA, s, tt, a, tc.wantS, tc.wantT, tc.wantA)
@@ -179,19 +181,46 @@ func TestRailSectionBudget(t *testing.T) {
 		})
 	}
 
+	// A tall agents section is budgeted in the same third, in lines rather than
+	// in rows: twice the lines for the same rows, and the cap doubles with them
+	// so the second line comes out of the agents' own share.
+	for _, tc := range []struct {
+		name                string
+		avail, nS, nT, nA   int
+		wantS, wantT, wantA int
+	}{
+		{"roomy, tall rows", 20, 4, 6, 5, 4, 6, 10},
+		{"tall agents capped at a third", 24, 2, 20, 12, 2, 6, 16},
+		{"tight rail shrinks tall agents first", 8, 6, 6, 6, 2, 2, 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, tt, a := sidebarBudget(tc.avail, tc.nS, tc.nT, tc.nA, sidebarAgentRowTall)
+			if s != tc.wantS || tt != tc.wantT || a != tc.wantA {
+				t.Errorf("budget(%d, %d, %d, %d, tall) = %d/%d/%d, want %d/%d/%d",
+					tc.avail, tc.nS, tc.nT, tc.nA, s, tt, a, tc.wantS, tc.wantT, tc.wantA)
+			}
+		})
+	}
+
 	// Whatever the shape, the three sections never claim more lines than exist
-	// and never claim more rows than they hold.
-	for avail := 0; avail <= 30; avail++ {
-		for nS := 0; nS <= 8; nS++ {
-			for nT := 0; nT <= 8; nT++ {
-				for nA := 0; nA <= 8; nA++ {
-					s, tt, a := sidebarBudget(avail, nS, nT, nA)
-					if s < 0 || tt < 0 || a < 0 || s+tt+a > avail {
-						t.Fatalf("budget(%d, %d, %d, %d) = %d/%d/%d overruns the rail", avail, nS, nT, nA, s, tt, a)
-					}
-					if s > nS || tt > nT || a > nA {
-						t.Fatalf("budget(%d, %d, %d, %d) = %d/%d/%d claims lines for rows that do not exist",
-							avail, nS, nT, nA, s, tt, a)
+	// and never claim more lines than their rows can fill. The row height is an
+	// axis now: an agents section that claims an odd number of tall lines has
+	// half a row on screen, and the row it belongs to is the one the click lands
+	// nowhere in.
+	for _, aRowH := range []int{1, sidebarAgentRowTall} {
+		for avail := 0; avail <= 30; avail++ {
+			for nS := 0; nS <= 8; nS++ {
+				for nT := 0; nT <= 8; nT++ {
+					for nA := 0; nA <= 8; nA++ {
+						s, tt, a := sidebarBudget(avail, nS, nT, nA, aRowH)
+						if s < 0 || tt < 0 || a < 0 || s+tt+a > avail {
+							t.Fatalf("budget(%d, %d, %d, %d, h=%d) = %d/%d/%d overruns the rail",
+								avail, nS, nT, nA, aRowH, s, tt, a)
+						}
+						if s > nS || tt > nT || a > nA*aRowH {
+							t.Fatalf("budget(%d, %d, %d, %d, h=%d) = %d/%d/%d claims lines for rows that do not exist",
+								avail, nS, nT, nA, aRowH, s, tt, a)
+						}
 					}
 				}
 			}

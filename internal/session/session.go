@@ -1228,6 +1228,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentState:    string(w.AgentState),
 			AgentStateAt:  w.AgentStateAt,
 			AgentHarness:  w.AgentHarness,
+			AgentMessage:  w.AgentMessage,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
 		})

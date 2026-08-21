@@ -423,7 +423,7 @@ func (m *OS) renderDockString() (string, int) {
 
 	separator := lipgloss.NewStyle().
 		Width(renderWidth).
-		Foreground(theme.NotificationRule()).
+		Foreground(theme.RailRule()).
 		Render(m.cachedSeparator)
 
 	// The message burns down over the hairline directly above it, across the
@@ -439,7 +439,7 @@ func (m *OS) renderDockString() (string, int) {
 		if room := renderWidth - notifX0; ruleWidth > room {
 			notifRule, ruleWidth = truncateToWidth(notifRule, room), room
 		}
-		hairline := lipgloss.NewStyle().Foreground(theme.NotificationRule())
+		hairline := lipgloss.NewStyle().Foreground(theme.RailRule())
 		sepChar := config.GetWindowSeparatorChar()
 		separator = hairline.Render(strings.Repeat(sepChar, notifX0)) + notifRule +
 			hairline.Render(strings.Repeat(sepChar, renderWidth-notifX0-ruleWidth))

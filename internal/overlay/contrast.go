@@ -12,10 +12,58 @@ import (
 // the small type is: the dock's labels are one row tall and read at a glance.
 const ContrastFloor = 4.5
 
-// MarkFloor is the ratio a non-text mark has to clear: a cap, a glyph, a rule,
-// a cursor block. WCAG holds graphical objects to 3:1 rather than 4.5:1 because
+// MarkFloor is the ratio a non-text mark has to clear: a cap, a glyph, a
+// cursor block. WCAG holds graphical objects to 3:1 rather than 4.5:1 because
 // a shape survives what small type does not.
 const MarkFloor = 3.0
+
+// StructureTarget is what decorative structure aims at: an edge rule, a
+// separator, a group divider. It is the third class beside the two floors
+// above, and the rule the three of them state together is that chrome goes
+// quieter only where WCAG never put a floor. 1.4.11 exempts a purely decorative
+// separator from the 3:1 non-text floor, and a separator is the one piece of
+// chrome that carries no meaning of its own: take the rule away and the layout
+// still reads off alignment and whitespace. Nothing that is text or a mark is
+// allowed down here.
+//
+// A target rather than a floor, because structure fails by being loud at least
+// as often as by being faint. Drawn in the same ink as the labels it frames, a
+// rail's edge plus a dock's separator is more cells than every label in the
+// frame put together, which is what a rail looks like when it looks busy.
+const StructureTarget = 1.9
+
+// Structure returns the ink a decorative rule is drawn in on a given ground:
+// the ground's own text end carried back toward the ground until it measures
+// about StructureTarget against it.
+//
+// Measured against the ground rather than fixed, because no one neutral is
+// quiet at both ends. The quietest an ink can be against black and white at the
+// same time is 4.58:1, louder than the labels a rule is meant to sit under, so
+// a fixed choice buys its quiet on one ground by drawing a hard line on the
+// other: a dark grey that whispers on Canvas measures 8.44:1 on white.
+func Structure(bg color.Color) color.Color {
+	ink := ContrastText(bg)
+	if ContrastRatio(ink, bg) <= StructureTarget {
+		return ink
+	}
+	// Bisected rather than scanned, because the ratio falls unevenly along the
+	// blend: near a very dark ground one step of it moves the ratio further than
+	// ten steps do near a pale one, so an even scan overshot the target by six
+	// percent on the darkest themes and by one on the rest. The ratio decreases
+	// with the blend, so halving the interval sixteen times pins the least blend
+	// that reaches the target to finer than the eight bits a colour has to say
+	// it in.
+	lo, hi := 0.0, 1.0
+	for range 16 {
+		mid := (lo + hi) / 2
+		if ContrastRatio(MixColors(ink, bg, mid), bg) > StructureTarget {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+	return MixColors(ink, bg, hi)
+}
 
 // linearize undoes the sRGB transfer curve for one channel, which is what makes
 // the luminance below additive.

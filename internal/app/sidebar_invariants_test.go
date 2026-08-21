@@ -19,6 +19,12 @@ import (
 // same order, no rectangle escapes the band or overlaps its predecessor, and
 // the cursor lands on a row that exists.
 func TestRailAddressingHoldsAcrossEveryCombination(t *testing.T) {
+	// The agents section's row height is the sixth axis, and it is not one the
+	// caller sets: it follows from the lines the section was given. The two
+	// counters below make the sweep say which heights it actually walked, so a
+	// budget change that quietly stopped producing one of them fails here rather
+	// than leaving half of this test exercising nothing.
+	var tall, short int
 	for _, pos := range []string{"left", "right"} {
 		for _, collapsed := range []bool{false, true} {
 			for _, peek := range []string{"", "api", "gone"} {
@@ -38,12 +44,25 @@ func TestRailAddressingHoldsAcrossEveryCombination(t *testing.T) {
 								assertHitsFollowNav(t, m)
 								assertHitsStayInTheBand(t, m)
 								assertCursorIsOnARealRow(t, m)
+								for _, hit := range m.SidebarHits {
+									if hit.Kind != sidebarRowAgent {
+										continue
+									}
+									if hit.Y1-hit.Y0 == sidebarAgentRowTall {
+										tall++
+									} else {
+										short++
+									}
+								}
 							})
 						}
 					}
 				}
 			}
 		}
+	}
+	if tall == 0 || short == 0 {
+		t.Errorf("the sweep drew %d tall agent rows and %d short ones; it is walking one height, not both", tall, short)
 	}
 }
 
@@ -118,12 +137,17 @@ func assertHitsStayInTheBand(t *testing.T, m *OS) {
 			continue
 		}
 		prev := m.SidebarHits[i-1]
+		// Clearing the row above means clearing all of it. This was "starts on a
+		// later line", which said the same thing while every row was one line
+		// tall; an agent row is two, so a rectangle can now start after its
+		// predecessor and still land inside it, which makes the row underneath
+		// answer for clicks on the row above.
 		switch {
-		case h.Y0 > prev.Y0:
+		case h.Y0 >= prev.Y1:
 		case h.Y0 == prev.Y0 && h.X0 >= prev.X1:
 		default:
-			t.Fatalf("hit %d at (%d,%d) overlaps or precedes hit %d at (%d,%d)",
-				i, h.X0, h.Y0, i-1, prev.X0, prev.Y0)
+			t.Fatalf("hit %d spans rows [%d,%d) and starts inside hit %d's [%d,%d)",
+				i, h.Y0, h.Y1, i-1, prev.Y0, prev.Y1)
 		}
 	}
 }

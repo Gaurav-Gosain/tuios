@@ -5,7 +5,9 @@ import (
 	"math"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/charmtone"
+	tint "github.com/lrstanley/bubbletint/v2"
 )
 
 // TestContrastRatioIsWCAG pins the two ends of the scale and the middle the
@@ -154,9 +156,13 @@ func TestBordersStayVisibleOnTheirPane(t *testing.T) {
 	_ = Initialize("")
 }
 
-// The dock hairline is drawn straight onto the user's terminal background,
-// which tuios never paints, so it has to survive both ends of the range.
-func TestDockHairlineSurvivesEitherGround(t *testing.T) {
+// The dock hairline, the rail's edge and the strip's band edge are one class:
+// decorative structure, exempt from both floors under WCAG 1.4.11 and held to
+// StructureTarget instead. What has to be true is that it lands in the same
+// whisper band on every ground rather than being quiet on one and a hard line
+// on another, which is what any fixed ink does: the dark grey that reads 1.93:1
+// on the chrome canvas measures 8.44:1 on a white terminal.
+func TestStructureIsAWhisperOnEveryGround(t *testing.T) {
 	_ = Initialize("")
 	for _, g := range []struct {
 		name string
@@ -164,9 +170,62 @@ func TestDockHairlineSurvivesEitherGround(t *testing.T) {
 	}{
 		{"a black terminal", color.RGBA{A: 0xff}},
 		{"a white terminal", color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}},
+		{"the chrome canvas", UI().Canvas},
+		{"the chrome's raised panel", UI().Panel},
+		{"a mocha terminal", lipgloss.Color("#1e1e2e")},
+		{"a latte terminal", lipgloss.Color("#eff1f5")},
 	} {
-		if got := ContrastRatio(NotificationRule(), g.bg); got < MarkFloor {
-			t.Errorf("the hairline on %s measures %.2f:1, want at least %.1f:1", g.name, got, MarkFloor)
+		got := ContrastRatio(RailRuleOn(g.bg), g.bg)
+		// The bisection lands on whatever the eight bits of a channel can say, so
+		// it undershoots by a hair and can never sit above the target. Measured
+		// across every theme in the registry the spread is 1.879 to 1.900.
+		if got > StructureTarget || got < StructureTarget*0.98 {
+			t.Errorf("the rule on %s measures %.2f:1, off the %.1f:1 structure target",
+				g.name, got, StructureTarget)
 		}
+		if got >= MarkFloor {
+			t.Errorf("the rule on %s measures %.2f:1, at or over the %.1f:1 mark floor: furniture drawn as loud as the marks it frames",
+				g.name, got, MarkFloor)
+		}
+	}
+}
+
+// Every theme tuios can be set to, which is the only way to know the rule is
+// quiet rather than quiet on the grounds someone thought to check. A third of
+// the registry is light, and light is where a fixed dark grey stops being a
+// hairline and becomes the loudest thing in the frame.
+func TestStructureIsAWhisperOnEveryThemeGround(t *testing.T) {
+	EnsureRegistry()
+	ids := tint.TintIDs()
+	if len(ids) < 50 {
+		t.Fatalf("the registry holds %d themes; this sweep is not sweeping", len(ids))
+	}
+	light := 0
+	for _, id := range ids {
+		if err := Initialize(id); err != nil || Current() == nil {
+			t.Fatalf("theme %q did not apply", id)
+		}
+		bg := TerminalBg()
+		if ContrastRatio(bg, color.Black) > 8 {
+			light++
+		}
+		if got := ContrastRatio(RailRule(), bg); got > StructureTarget || got < StructureTarget*0.98 {
+			t.Errorf("theme %q: the rule measures %.2f:1 on its own ground, off the %.1f:1 target",
+				id, got, StructureTarget)
+		}
+	}
+	if light == 0 {
+		t.Error("no light-ground theme in the sweep; the case this measurement exists for went untested")
+	}
+	_ = Initialize("")
+}
+
+// The three classes are a ladder, and a ladder with a rung out of order is not
+// one. Whatever ground it is measured on, a rule is quieter than a mark and a
+// mark is quieter than a label.
+func TestTheThreeContrastClassesStayInOrder(t *testing.T) {
+	if !(StructureTarget < MarkFloor && MarkFloor < ContrastFloor) {
+		t.Errorf("structure %.1f, marks %.1f, text %.1f: the classes are out of order",
+			StructureTarget, MarkFloor, ContrastFloor)
 	}
 }

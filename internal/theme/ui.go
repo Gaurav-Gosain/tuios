@@ -2,6 +2,7 @@ package theme
 
 import (
 	"image/color"
+	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/exp/charmtone"
@@ -15,8 +16,12 @@ const (
 	// ground it is drawn on.
 	ContrastFloor = overlay.ContrastFloor
 	// MarkFloor is the ratio a non-text mark has to clear: a cap, a glyph, a
-	// rule, a cursor block.
+	// cursor block.
 	MarkFloor = overlay.MarkFloor
+	// StructureTarget is what a decorative rule aims at: an edge, a separator,
+	// a divider. The one class with no floor under it, and the reason there is
+	// no floor is that taking the rule away leaves the layout readable.
+	StructureTarget = overlay.StructureTarget
 )
 
 // ContrastRatio returns the WCAG 2.1 contrast ratio between two colours.
@@ -29,6 +34,42 @@ func Readable(c, bg color.Color) color.Color { return overlay.Readable(c, bg) }
 // ReadableAt is Readable against a chosen floor.
 func ReadableAt(c, bg color.Color, floor float64) color.Color {
 	return overlay.ReadableAt(c, bg, floor)
+}
+
+// railRuleMemo holds the grounds a structure ink has been measured for and the
+// answers. The measurement bisects over contrast ratios, and the grounds a
+// frame draws rules on are a handful of constants that move only when the theme
+// does; without it the dock's separator paid for the whole bisection on every
+// frame it composed.
+//
+// Four entries rather than one because a frame uses more than one ground at a
+// time: the strip's resting bands and the one under the pointer are different
+// fills, and a single slot would miss on every band between them.
+var railRuleMemo struct {
+	sync.Mutex
+	bg   [4][4]uint32
+	ink  [4]color.Color
+	next int
+}
+
+// RailRuleOn is the structure ink for a rule drawn on a ground its caller
+// paints itself, like the collapsed strip's bands.
+func RailRuleOn(bg color.Color) color.Color {
+	r, g, b, a := bg.RGBA()
+	key := [4]uint32{r, g, b, a}
+
+	railRuleMemo.Lock()
+	defer railRuleMemo.Unlock()
+	for i, held := range railRuleMemo.ink {
+		if held != nil && railRuleMemo.bg[i] == key {
+			return held
+		}
+	}
+	ink := overlay.Structure(bg)
+	railRuleMemo.bg[railRuleMemo.next] = key
+	railRuleMemo.ink[railRuleMemo.next] = ink
+	railRuleMemo.next = (railRuleMemo.next + 1) % len(railRuleMemo.ink)
+	return ink
 }
 
 // ContrastText picks a foreground that reads on the given (usually saturated)

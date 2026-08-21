@@ -12,12 +12,14 @@ import (
 // stopped one layer short of the wire; these are the claims about what it says
 // now that it reaches the row.
 
-// railAgentRow returns the rendered line of the agents-section row for a window,
-// or "" when the rail drew none.
+// railAgentRow returns the rendered lines of the agents-section row for a
+// window, joined, or "" when the rail drew none. A row is one line or two, and
+// which one a fact landed on is the layout's business rather than these tests'.
 func railAgentRow(m *OS, lines []string, windowID string) string {
 	for _, h := range m.SidebarHits {
 		if h.Kind == sidebarRowAgent && h.WindowID == windowID {
-			return lines[h.Y0-m.GetTopMargin()]
+			top := h.Y0 - m.GetTopMargin()
+			return strings.Join(lines[top:min(h.Y1-m.GetTopMargin(), len(lines))], "\n")
 		}
 	}
 	return ""
@@ -37,7 +39,7 @@ func TestRailAgentRowSaysWhichAgent(t *testing.T) {
 			name:    "a named pane says which agent is in it",
 			title:   "refactor",
 			harness: "claude-code",
-			want:    "claude/refactor",
+			want:    "claude",
 		},
 		{
 			// The row is drawn from the foreground command for an unnamed pane, so
@@ -93,8 +95,11 @@ func TestRailAgentRowCarriesBothPrefixes(t *testing.T) {
 	})
 	lines := railPlain(t, m, tree)
 	row := railAgentRow(m, lines, "dddddddd4444")
-	if !strings.Contains(row, "api/codex/srv") {
-		t.Errorf("a foreign agent row read %q, want the session then the agent then the pane", row)
+	// Where the pane is stays on the identity line beside its name; which agent
+	// is in it moved to the note line under them, which is the one change a two
+	// line row makes to what a row says.
+	if !strings.Contains(row, "api/srv") || !strings.Contains(row, "codex") {
+		t.Errorf("a foreign agent row read %q, want the session and the pane, then the agent", row)
 	}
 }
 
@@ -143,9 +148,22 @@ func TestRailHarnessIsInTheSignature(t *testing.T) {
 	m, tree := sectionsTestOS(t, 120, 30)
 	m.sidebarPanelLinesForTree(tree)
 	before := m.sidebarSignature()
-	m.Windows[1].AgentHarness = "claude-code"
+	m.Windows[1].AgentHarness = "gemini-cli"
 	if m.sidebarSignature() == before {
 		t.Error("a window's harness is drawn on its agent row but is not in the rail signature")
+	}
+}
+
+// TestRailAgentMessageIsInTheSignature: the note line draws it, so a pane that
+// says something new and nothing else has to rebuild the rail. Folding what is
+// drawn is the whole contract the cache runs on.
+func TestRailAgentMessageIsInTheSignature(t *testing.T) {
+	m, tree := sectionsTestOS(t, 120, 30)
+	m.sidebarPanelLinesForTree(tree)
+	before := m.sidebarSignature()
+	m.Windows[1].AgentMessage = "running tests"
+	if m.sidebarSignature() == before {
+		t.Error("a window's agent message is drawn on its note line but is not in the rail signature")
 	}
 }
 

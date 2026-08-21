@@ -550,15 +550,13 @@ func (m *OS) sidebarStripBand(content string, cw int, edgeLeft bool, bg, edgeFg 
 		// unlifted, on a rail whose whole job when focused is to look focused.
 		rule = theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)
 	default:
-		// FgMute, the token this codebase gives separators, rather than the
-		// notification rule this used to borrow. That rule measured 1.06:1 on the
-		// band, so the boundary the comment above calls "the only edge left" was
-		// not on screen at all whenever the rail was not focused, which is nearly
-		// always. FgMute is furniture, and furniture you can see.
-		// The text floor deliberately does not apply here; a hairline held to
-		// 4.5:1 would be louder than the marks it frames. It sits at 3.71:1
-		// since the quiet tier moved a step up the ramp.
-		rule = pal.FgMute
+		// Measured against the band it is drawn on rather than borrowed from a
+		// text token. The notification rule it started on read 1.06:1 here, so
+		// the boundary the comment above calls "the only edge left" was not on
+		// screen at all whenever the rail was not focused; FgMute fixed that by
+		// eye and overshot to 3.71:1, a hairline drawn as loud as the marks it
+		// frames. StructureTarget is the same judgement with a number behind it.
+		rule = theme.RailRuleOn(bg)
 	}
 	edge := lipgloss.NewStyle().Background(bg).Foreground(rule).Render(config.GetWindowBorderLeft())
 	body := sidebarFit(content, cw, bg)
