@@ -676,16 +676,19 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			if e.cb.ScreenClear != nil {
 				e.cb.ScreenClear()
 			}
-		case 3: // erase display including scrollback
+		case 3: // Erase Saved Lines, the scrollback only
+			// The visible screen is deliberately untouched. xterm, tmux, kitty
+			// and ghostty all read CSI 3 J as dropping the saved lines and
+			// nothing else, and the two are separate requests: `clear` sends
+			// ED 2 and ED 3 together, so clearing the screen here looks right
+			// under `clear` and destroys the screen for anything that sends
+			// ED 3 on its own to drop history.
+			//
+			// The markers come right without help. Clearing the ring fires the
+			// trim callback, which shifts every marker down by the lines that
+			// went and drops the ones that fell off the front, leaving the
+			// on-screen ones where the screen still has them.
 			e.scr.ClearScrollback()
-			e.scr.Clear()
-			e.KittyState().Clear()
-			if e.semanticMarkers != nil {
-				e.semanticMarkers.Clear()
-			}
-			if e.cb.ScreenClear != nil {
-				e.cb.ScreenClear()
-			}
 		default:
 			return false
 		}
