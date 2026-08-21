@@ -83,6 +83,13 @@ func (h *KittyGraphicsHandler) handleTransmit(cmd *KittyCommand, place bool) boo
 
 	// Check if this is a continuation of a chunked transmission
 	pending := h.state.GetPending()
+	if pending != nil && pending.Frame {
+		// A continuation chunk carries only m and the payload, so it parses as
+		// the default action, a plain transmit. What it continues is decided by
+		// the transmission already in progress, and finishing an animation
+		// frame here would replace the image with the patch.
+		return h.handleFrame(cmd)
+	}
 	if pending != nil {
 		// Append final chunk and finalize. A false return means the
 		// transmission overran the cumulative size cap and was aborted.

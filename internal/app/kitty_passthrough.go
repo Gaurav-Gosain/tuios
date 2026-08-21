@@ -425,6 +425,12 @@ const (
 	// and is held for a hundred and twenty, which is exactly the stream that
 	// has to slow down.
 	pacingHoldFactor = 4
+	// minPacedCost is the cost below which work is free. A placement, a delete
+	// or a small damage patch costs tens of microseconds and holding the next
+	// frame back for a multiple of that would be noise, so nothing is charged
+	// for it. Only work that a frame at 60fps would actually notice paces the
+	// stream behind it.
+	minPacedCost = time.Millisecond
 	// maxPacingHold caps the hold so one pathological write cannot freeze a
 	// stream for seconds.
 	maxPacingHold = 250 * time.Millisecond
@@ -453,6 +459,9 @@ const (
 // exactly as a slow write would, while being invisible to any measurement of
 // the write itself.
 func (kp *KittyPassthrough) chargePacing(cost time.Duration) {
+	if cost < minPacedCost {
+		return
+	}
 	hold := min(cost*pacingHoldFactor, maxPacingHold)
 	until := time.Now().Add(hold).UnixNano()
 	for {

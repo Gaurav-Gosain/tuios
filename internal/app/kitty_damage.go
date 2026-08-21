@@ -307,14 +307,17 @@ func (kp *KittyPassthrough) canPatchBitmap(windowID string, hostID uint32) bool 
 // frame is also the one that hands the image over to the self-placing path:
 // throw that one away and the stream never starts.
 func (kp *KittyPassthrough) hasLiveFrame(windowID string, hostID uint32) bool {
-	if kp.remoteVideo[windowID][hostID] != nil {
+	if !kp.remoteClient {
+		// The caller has already established that this image id was
+		// transmitted before, which for every path but the remote video one
+		// means the host is holding a frame of it.
 		return true
 	}
-	if kp.bitmapCacheFor(windowID, hostID) != nil {
-		return true
-	}
-	p := kp.placements[windowID][hostID]
-	return p != nil && !p.Hidden
+	// A remote video stream places itself, and the first reused frame is what
+	// hands it over to that path. Until that has happened there is nothing on
+	// screen to leave standing, and dropping the handoff frame means the
+	// stream never starts at all.
+	return kp.remoteVideo[windowID][hostID] != nil
 }
 
 // rawBytesPerPixel returns the pixel stride of a raw kitty format, or 0 for a
