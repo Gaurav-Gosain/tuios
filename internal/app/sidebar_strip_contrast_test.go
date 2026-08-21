@@ -87,11 +87,11 @@ func TestStripMarksKeepTheirHierarchy(t *testing.T) {
 	}
 }
 
-// TestStripRulesAreVisibleFurniture. The text floor deliberately does not apply
-// to a hairline: a rule held to 4.5:1 would be louder than the marks it frames.
-// It still has to be on the screen, and at the notification rule's 1.06:1 it was
-// not. The band's edge is called the only boundary that survives a terminal with
-// no background to give, so it is the one that has to hold.
+// TestStripRulesAreVisibleFurniture. Neither floor applies to a hairline: a
+// rule held to 4.5:1 is louder than the marks it frames, and one held to 3.0 is
+// still louder than the group it separates. It has to be on the screen, and at
+// the notification rule's 1.06:1 it was not; FgMute put it on the screen by eye
+// and left it at 3.71:1, louder than a resting mark. It is measured now.
 func TestStripRulesAreVisibleFurniture(t *testing.T) {
 	pal := theme.UI()
 	// A rule has to beat the ground it is on by more than the ground beats the
@@ -101,16 +101,18 @@ func TestStripRulesAreVisibleFurniture(t *testing.T) {
 		name   string
 		fg, bg color.Color
 	}{
-		{"the band's edge", pal.FgMute, pal.Panel},
+		// The two grounds the strip's bands are drawn in: at rest, and hovered.
+		{"the band's edge", theme.RailRuleOn(pal.Panel), pal.Panel},
+		{"the edge of a hovered band", theme.RailRuleOn(pal.Surface), pal.Surface},
 	} {
 		got := theme.ContrastRatio(tc.fg, tc.bg)
 		if got <= band {
 			t.Errorf("%s measures %.2f:1, no louder than the band's own %.2f:1 ground: it is not on the screen",
 				tc.name, got, band)
 		}
-		if got >= theme.ContrastFloor {
-			t.Errorf("%s measures %.2f:1, at or over the %.1f:1 text floor: furniture drawn as loud as the marks it frames",
-				tc.name, got, theme.ContrastFloor)
+		if got > theme.StructureTarget {
+			t.Errorf("%s measures %.2f:1, over the %.1f:1 structure target: furniture drawn as loud as the marks it frames",
+				tc.name, got, theme.StructureTarget)
 		}
 	}
 }

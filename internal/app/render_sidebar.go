@@ -642,6 +642,7 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 // What the rail owed workspaces was agreement, not a section. Its terminals
 // grouping now orders by the same display order the dock's pills use, so
 // dragging a pill rearranges the panes under it here too.
+//
 // aRowH is how many lines one agent row takes, so the agents section is
 // budgeted in lines like every other section while still being counted in rows.
 // Its share of the rail stays a third of the rows either way: a tall row buys
@@ -1676,8 +1677,11 @@ const sidebarAgentRowTall = 2
 // put on a second line. A section where none of them does would pay two lines a
 // row for a column of blanks.
 func sidebarAgentsHaveNotes(agents []sidebarAgentEntry) bool {
+	// Wider than any rail, so what is asked here is whether the note exists at
+	// all rather than whether it would fit at some particular width.
+	const unbounded = 1 << 20
 	for _, e := range agents {
-		if sidebarAgentNote(e, 64) != "" {
+		if sidebarAgentNote(e, unbounded) != "" {
 			return true
 		}
 	}
