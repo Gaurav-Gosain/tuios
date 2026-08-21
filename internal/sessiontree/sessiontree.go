@@ -45,6 +45,10 @@ type Node struct {
 	// when nothing named one. Never rolled up: a session runs no agent, its
 	// panes do.
 	Harness string
+	// Message is the short note the pane reported with its state ("editing
+	// files"), empty when it reported none. Never rolled up, for the same
+	// reason Harness is not.
+	Message string
 	// Workspace is the workspace a window node sits on, or 0 when unknown. On a
 	// session node it is the workspace that session is showing, which is what
 	// decides which of its panes count as "here".
@@ -85,6 +89,8 @@ type WindowInput struct {
 	StateAt int64
 	// Harness names the agent running in the pane, empty when nothing named one.
 	Harness string
+	// Message is the note the pane reported with its state, empty for none.
+	Message string
 	// Focused marks the currently focused window in its session.
 	Focused bool
 	// Workspace is the workspace the pane sits on, or 0 when the caller does
@@ -192,6 +198,7 @@ func BuildSession(s SessionInput) Node {
 			DoneSeen:   w.DoneSeen,
 			StateAt:    w.StateAt,
 			Harness:    w.Harness,
+			Message:    w.Message,
 			IsCurrent:  w.Focused,
 			Workspace:  w.Workspace,
 		})

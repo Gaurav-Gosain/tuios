@@ -245,9 +245,11 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(w.ID)
 		mixS(m.railTitleShown(w))
 		mixS(w.AgentState)
-		// The agents section prints which agent a row is running, so a pane that
-		// swaps harness redraws even when its state and title hold still.
+		// The agents section prints which agent a row is running and the note it
+		// reported, so a pane that swaps harness or says something new redraws
+		// even when its state and title hold still.
 		mixS(w.AgentHarness)
+		mixS(w.AgentMessage)
 		// The agents section prints the age of the state, so the row changes on a
 		// minute boundary with no other input moving. Folding the whole timestamp
 		// would rebuild the rail on every frame; the minute bucket rebuilds it at

@@ -161,6 +161,12 @@ type WindowSummary struct {
 	// empty, which is what an older peer sends and what every client reads as
 	// "the agent did not say".
 	AgentHarness string `json:"agent_harness,omitempty"`
+	// AgentMessage is the short note the pane reported alongside its state
+	// ("editing files", "awaiting approval"). It is the one thing a rail
+	// watching somebody else's session cannot infer from the state alone.
+	// Additive and omitted when empty, which is what an older peer sends and
+	// what every client reads as "the agent did not say".
+	AgentMessage string `json:"agent_message,omitempty"`
 	// ForegroundCmd is what the pane is running, for a row that would otherwise
 	// repeat the title its siblings carry. Empty for a shell and for a pane the
 	// user has named, whose name is already the answer. Additive and omitted
