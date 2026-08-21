@@ -97,16 +97,16 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	// Build each row and remember its control width so the hit rects can be
 	// derived from the panel geometry afterward.
 	type rowInfo struct {
-		control string
-		isBool  bool
-		idx     int
+		control  string
+		stepless bool
+		idx      int
 	}
 	var lines []string
 	infos := make([]rowInfo, 0, end-start)
 	for i := start; i < end; i++ {
-		line, control, isBool := m.settingsRow(cat.Items[i], i == m.SettingsSelected, pal, width)
+		line, control, stepless := m.settingsRow(cat.Items[i], i == m.SettingsSelected, pal, width)
 		lines = append(lines, line)
-		infos = append(infos, rowInfo{control: control, isBool: isBool, idx: i})
+		infos = append(infos, rowInfo{control: control, stepless: stepless, idx: i})
 	}
 	for len(lines) < visible {
 		lines = append(lines, overlay.Style(bg).Render(" "))
@@ -154,7 +154,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		ctrlW := lipgloss.Width(info.control)
 		ctrlX := geo.BodyX + geo.InnerWidth - ctrlW
 		hit := overlayRowHit{Rect: full, Idx: info.idx}
-		if info.isBool {
+		if info.stepless {
 			hit.Inc = overlay.Rect{X0: ctrlX, Y0: rowY, X1: ctrlX + ctrlW, Y1: rowY + 1}
 		} else {
 			hit.Dec = overlay.Rect{X0: ctrlX, Y0: rowY, X1: ctrlX + 2, Y1: rowY + 1}
@@ -212,13 +212,18 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		marker = "› "
 	}
 
+	// Both of these are rows with no stepper arrows to record: a toggle has one
+	// target and a colour has none, since there is no next colour to step to.
 	isBool := item.Control == controlBool
+	stepless := isBool || item.Control == controlColor
 	var control string
 	switch item.Control {
 	case controlBool:
 		control = overlay.Toggle(item.boolVal(m), selected, bg, pal)
 	case controlString:
 		control = m.settingsStringControl(item, selected, bg, pal, width)
+	case controlColor:
+		control = m.settingsColorControl(item, selected, bg, pal, width)
 	default:
 		control = overlay.Cycler(overlay.Truncate(item.value(m), max(width/2, 6)), selected, bg, pal)
 	}
@@ -233,7 +238,40 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		overlay.Style(bg).Foreground(labelColor).Bold(selected).Render(label)
 
 	gap := max(width-lipgloss.Width(left)-lipgloss.Width(control), 1)
-	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + control, control, isBool
+	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + control, control, stepless
+}
+
+// settingsColorControl renders a colour setting as its swatch and its value in
+// the same bracketed field the other rows wear.
+//
+// The swatch is the colour in force, not the value stored, so an unset row shows
+// the colour it is inheriting beside the word for where that comes from. That is
+// the whole difference from the text field this replaces: "(theme)" told the
+// user their border was the theme's and never which colour that was.
+func (m *OS) settingsColorControl(item settingItem, selected bool, bg color.Color, pal overlay.Palette, width int) string {
+	val := item.value(m)
+	unset := val == item.Unset
+
+	fg := pal.Fg
+	if !selected {
+		fg = pal.FgDim
+	}
+	if unset {
+		fg = pal.FgDim
+	}
+	text := overlay.Truncate(val, min(20, max(width/2, 6)))
+
+	bracketColor := pal.FgMute
+	if selected {
+		bracketColor = pal.AccentBright
+	}
+	bracket := overlay.Style(bg).Foreground(bracketColor)
+
+	out := bracket.Render("[ ")
+	if item.swatch != nil {
+		out += colorSwatch(item.swatch(bg), bg) + overlay.Style(bg).Render(" ")
+	}
+	return out + overlay.Style(bg).Foreground(fg).Italic(unset).Render(text) + bracket.Render(" ]")
 }
 
 // settingsStringControl renders a free-text setting as a bracketed field. An

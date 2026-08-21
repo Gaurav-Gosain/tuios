@@ -27,6 +27,9 @@ const (
 	accentHitClear
 	accentHitANSI
 	accentHitSlider
+	// The target's own keywords, for a setting that takes words as well as
+	// colours.
+	accentHitNamed
 	// The key hints in the bottom border, which are the mouse's only way to
 	// apply or cancel: the keyboard has enter and esc, and a boxed button inside
 	// the dialog would be the only object of its kind in the overlay grammar.
@@ -185,10 +188,17 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	title := "accent"
-	if m.AccentPickerTarget == AccentTargetSession {
+	switch m.AccentPickerTarget {
+	case AccentTargetSession:
 		// A session's colour is shared by every client attached to it, so the
 		// dialog says which of the two the user is about to change.
 		title = "session accent"
+	case AccentTargetSetting:
+		// The setting's own label, so the dialog names the thing on the row the
+		// user pressed enter on rather than calling every colour an accent.
+		if cs, ok := lookupColorSetting(m.AccentPickerTargetID); ok {
+			title = strings.ToLower(cs.Label)
+		}
 	}
 	content, geo := overlay.Dialog{
 		Title: title,
@@ -271,6 +281,7 @@ func (m *OS) accentSpaceColumn(p accentLayoutPlan, pal overlay.Palette) []string
 	var body []string
 	at := func() int { return len(body) }
 
+	body = append(body, m.accentNamedLines(p.ColInner, at(), pal)...)
 	if p.Slots {
 		body = append(body, m.accentSlotLines(p.ColInner, at(), pal)...)
 		if p.Blanks {
@@ -310,6 +321,7 @@ func (m *OS) accentStackedBody(p accentLayoutPlan, pal overlay.Palette) []string
 	var body []string
 	at := func() int { return len(body) }
 
+	body = append(body, m.accentNamedLines(p.Inner, at(), pal)...)
 	if p.Slots {
 		body = append(body, m.accentSlotLines(p.Inner, at(), pal)...)
 	}
@@ -445,6 +457,60 @@ func (m *OS) accentSlotLines(width, y int, pal overlay.Palette) []string {
 	return []string{overlay.Fill(bright, width, bg), overlay.Fill(normal, width, bg)}
 }
 
+// accentNamedLines renders the target's keywords as a row of labelled chips,
+// each one a swatch of the colour that keyword produces beside its name.
+//
+// The swatch is the point. "muted" and "border" are the two words the scrollbar
+// tint is documented in, and the difference between them is a colour that until
+// now the panel would only tell you about by making you set it and look at the
+// bar. Painted, the row is the choice.
+//
+// Nothing is drawn for a target with no keywords, which is both border colours,
+// and the row costs them no height.
+func (m *OS) accentNamedLines(width, y int, pal overlay.Palette) []string {
+	s := &m.AccentPicker
+	if len(s.NamedOpts) == 0 {
+		return nil
+	}
+	bg := pal.Canvas
+	focused := s.Focus == accentFocusNamed
+
+	line := accentFocusMark(focused, bg, pal)
+	for i, name := range s.NamedOpts {
+		c, ok := m.namedColor(name)
+		if !ok {
+			continue
+		}
+		x := lipgloss.Width(line)
+		chip := accentSwatch(c, accentSlotWidth)
+		if name == s.Named {
+			chip = accentCursorSwatch(c, accentSlotWidth)
+		}
+		// The label is chrome, not a mark, so it takes the dim text step and
+		// lifts to the row's own accent when it is the one selected.
+		ink := pal.FgDim
+		if name == s.Named {
+			ink = theme.Readable(pal.AccentBright, bg)
+		}
+		label := overlay.Style(bg).Foreground(ink).Bold(name == s.Named).Render(" " + name)
+		next := line + chip + label
+		// Dropped rather than truncated: half a keyword names nothing, and the
+		// ones that fit are still a usable row.
+		if lipgloss.Width(next) > width {
+			break
+		}
+		line = next
+		m.accentHits = append(m.accentHits, accentHit{
+			Rect: overlay.Rect{X0: x, Y0: y, X1: lipgloss.Width(line), Y1: y + 1},
+			Kind: accentHitNamed, Col: i,
+		})
+		if i < len(s.NamedOpts)-1 {
+			line += overlay.Style(bg).Render(" ")
+		}
+	}
+	return []string{overlay.Fill(line, width, bg)}
+}
+
 // accentNowLine renders the old-to-new readout and the control that clears the
 // accent, which is the only thing on the line the mouse can press.
 func (m *OS) accentNowLine(width, y int, pal overlay.Palette) string {
@@ -457,14 +523,19 @@ func (m *OS) accentNowLine(width, y int, pal overlay.Palette) string {
 
 	line := overlay.Style(bg).Foreground(pal.FgMute).Render(" now ")
 	switch {
-	case s.Src == accentSourceSession || s.Src == accentSourceAuto:
+	case s.Src.derived():
 		// The colour is real but the target is not holding it: a pane is wearing
-		// its session's, a session is wearing the one it was assigned. Naming the
-		// source rather than printing a hex is the whole difference between the
-		// two states, and the word fits where the hex would have gone.
+		// its session's, a session is wearing the one it was assigned, a setting
+		// is showing what it falls back to or what one of its keywords produces.
+		// Naming the source rather than printing a hex is the whole difference
+		// between those states and a pinned colour, and the word fits where the
+		// hex would have gone.
 		word := " session"
-		if s.Src == accentSourceAuto {
+		switch {
+		case s.Src == accentSourceAuto:
 			word = " auto"
+		case s.SrcWord != "":
+			word = " " + s.SrcWord
 		}
 		line += accentSwatch(s.Prev.Color(), 2) +
 			overlay.Style(bg).Foreground(pal.FgDim).Render(word)
@@ -474,9 +545,15 @@ func (m *OS) accentNowLine(width, y int, pal overlay.Palette) string {
 	default:
 		line += overlay.Style(bg).Foreground(pal.FgMute).Render(accentClearGlyph() + " none")
 	}
+	// A keyword selection prints the keyword, not the hex it resolves to: the
+	// hex is what it looks like today and the keyword is what would be stored.
+	now := hexString(s.Cur)
+	if s.Named != "" {
+		now = s.Named
+	}
 	line += overlay.Style(bg).Foreground(pal.FgMute).Render(arrow) +
 		accentSwatch(s.Cur, 2) +
-		overlay.Style(bg).Foreground(pal.Fg).Render(" "+hexString(s.Cur))
+		overlay.Style(bg).Foreground(pal.Fg).Render(" "+now)
 
 	// The clear control rides the right-hand end, where "none" already means
 	// taking the accent away. It is dropped rather than overlapped when the

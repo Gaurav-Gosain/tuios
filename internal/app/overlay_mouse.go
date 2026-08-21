@@ -291,10 +291,19 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "settings":
 		m.SettingsSelected = row.Idx
 		items := m.settingsCurrentItems()
-		if row.Idx < len(items) && items[row.Idx].Control == controlString {
-			// A click anywhere on a text row opens its inline editor.
-			m.SettingsBeginEdit()
-			break
+		if row.Idx < len(items) {
+			switch items[row.Idx].Control {
+			case controlString:
+				// A click anywhere on a text row opens its inline editor.
+				m.SettingsBeginEdit()
+				return nil
+			case controlColor:
+				// And anywhere on a colour row, swatch included, opens its picker.
+				// The row's rect is the one the renderer recorded as it drew, so
+				// this lands where the user is pointing whatever the panel reflowed
+				// to.
+				return m.SettingsActivate()
+			}
 		}
 		switch {
 		case !row.Dec.Empty() && row.Dec.Contains(lx, ly):

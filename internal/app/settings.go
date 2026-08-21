@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,10 @@ const (
 	controlBool                         // [ on ] / [ off ] toggle
 	controlInt                          // ‹ n › numeric stepper
 	controlString                       // free-text field edited inline
+	// controlColor is a swatch and its value, opening the colour picker. It has
+	// no stepper: there is no next colour to step to, and typing a hex into a
+	// text field was never the way to choose one.
+	controlColor
 )
 
 // settingItem is one row on the settings page. adjust changes the value by dir
@@ -39,6 +44,10 @@ type settingItem struct {
 	adjust  func(m *OS, dir int)
 	// setStr commits an edited controlString value.
 	setStr func(m *OS, v string)
+	// swatch is the colour a controlColor row shows, given the ground it will be
+	// painted on. It is the colour in force rather than the value stored, so an
+	// unset row still shows what it is inheriting.
+	swatch func(ground color.Color) color.Color
 	// activate, when set, runs on Enter/click instead of adjusting the value
 	// (e.g. the Theme row opens the theme picker).
 	activate func(m *OS)
@@ -403,32 +412,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.Scrollbar.Style = v })
 					m.applyAppearanceLive(false)
 				}),
-			// The hex literal the tint also accepts is not offered here: this
-			// control cycles a list, and a colour is not something to cycle to.
-			enumItem("Scrollbar tint", "quiet: the pane's own ink, dimmed. border: the focused pane's accent. muted: one grey",
-				scrollbarTintOptions,
-				func() string { return config.ScrollbarTint },
-				func(m *OS, v string) {
-					config.ScrollbarTint = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Scrollbar.Tint = v })
-					m.applyAppearanceLive(false)
-				}),
-			stringItem("Focused border color", "Hex color for the focused pane border", "#89b4fa", "(theme)",
-				func(m *OS) string {
-					return m.appearanceString(func(a *config.AppearanceConfig) string { return a.BorderFocusedColor })
-				},
-				func(m *OS, v string) {
-					m.setAppearance(func(a *config.AppearanceConfig) { a.BorderFocusedColor = v })
-					m.applyBorderColors()
-				}),
-			stringItem("Unfocused border color", "Hex color for unfocused pane borders", "#585b70", "(theme)",
-				func(m *OS) string {
-					return m.appearanceString(func(a *config.AppearanceConfig) string { return a.BorderUnfocusedColor })
-				},
-				func(m *OS, v string) {
-					m.setAppearance(func(a *config.AppearanceConfig) { a.BorderUnfocusedColor = v })
-					m.applyBorderColors()
-				}),
+			// The three colour rows, adjacent and identical in shape. Each opens
+			// the picker; none of them is a text field or a cycler any more.
+			colorSettingItem("appearance.scrollbar.tint"),
+			colorSettingItem("appearance.border_focused_color"),
+			colorSettingItem("appearance.border_unfocused_color"),
 			stringItem("Window title format", "Template: {title}, {index}, {cwd}", "{index}: {title}", "(raw title)",
 				func(m *OS) string { return config.WindowTitleFormat },
 				func(m *OS, v string) {

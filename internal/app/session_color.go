@@ -279,7 +279,17 @@ const (
 	accentSourceSession
 	// accentSourceAuto is a session wearing the colour it was assigned.
 	accentSourceAuto
+	// accentSourceDefault is a setting showing the colour it falls back to
+	// because nothing is set on it. The colour is real and on screen; what the
+	// picker must not do is write it back as if the user had chosen it.
+	accentSourceDefault
 )
+
+// derived reports whether the colour came from somewhere other than the thing
+// itself, which is the case the readout names in words rather than in hex.
+func (s accentSource) derived() bool {
+	return s == accentSourceSession || s == accentSourceAuto || s == accentSourceDefault
+}
 
 // effectiveAccent is the colour a pane is actually wearing: the accent pinned
 // to it when it has one, and its session's colour otherwise. This is the whole

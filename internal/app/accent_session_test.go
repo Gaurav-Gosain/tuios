@@ -1,6 +1,7 @@
 package app
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -108,7 +109,7 @@ func TestSessionAccentEntryPointsSeedIdentically(t *testing.T) {
 	if m.AccentPickerTarget != AccentTargetSession || m.AccentPickerTargetID != "main" {
 		t.Fatalf("the rail's accent key targeted %v %q", m.AccentPickerTarget, m.AccentPickerTargetID)
 	}
-	if got := m.AccentPicker; got != direct {
+	if got := m.AccentPicker; !reflect.DeepEqual(got, direct) {
 		t.Errorf("the rail's accent key seeded %+v, want %+v", got, direct)
 	}
 	m.CloseAccentPicker()

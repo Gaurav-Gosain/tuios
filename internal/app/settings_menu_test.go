@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
 )
 
@@ -89,26 +88,16 @@ func TestSettingsCoverage(t *testing.T) {
 	}
 }
 
-// TestStringSettingsApplyAndPersist toggles the new text settings through the
-// menu and verifies both the live effect and that the value survives a reload
-// from disk.
+// TestStringSettingsApplyAndPersist toggles the text settings through the menu
+// and verifies both the live effect and that the value survives a reload from
+// disk.
+//
+// The two border colours were here and are not text settings any more: they are
+// colour rows opening the picker, and settings_color_test.go walks the same
+// ground for them.
 func TestStringSettingsApplyAndPersist(t *testing.T) {
 	useTempConfig(t)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-
-	editSetting(t, m, "Appearance", "Focused border color", "#ff0000")
-	if got := m.UserConfig.Appearance.BorderFocusedColor; got != "#ff0000" {
-		t.Errorf("focused border color = %q, want #ff0000", got)
-	}
-	// The override must reach the theme package so borders recolor live.
-	if theme.BorderFocusedWindow() == nil {
-		t.Error("focused border override was not applied to the theme package")
-	}
-
-	editSetting(t, m, "Appearance", "Unfocused border color", "#00ff00")
-	if got := m.UserConfig.Appearance.BorderUnfocusedColor; got != "#00ff00" {
-		t.Errorf("unfocused border color = %q, want #00ff00", got)
-	}
 
 	editSetting(t, m, "Appearance", "Window title format", "{index}: {title}")
 	if config.WindowTitleFormat != "{index}: {title}" {
@@ -128,9 +117,7 @@ func TestStringSettingsApplyAndPersist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload config: %v", err)
 	}
-	if reloaded.Appearance.BorderFocusedColor != "#ff0000" ||
-		reloaded.Appearance.BorderUnfocusedColor != "#00ff00" ||
-		reloaded.Appearance.WindowTitleFormat != "{index}: {title}" ||
+	if reloaded.Appearance.WindowTitleFormat != "{index}: {title}" ||
 		reloaded.Appearance.PreferredShell != "/bin/zsh" {
 		t.Errorf("persisted appearance did not round-trip: %+v", reloaded.Appearance)
 	}

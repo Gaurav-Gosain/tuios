@@ -1130,6 +1130,20 @@ func ScrollbarTintHex() (string, bool) {
 	return "", false
 }
 
+// ScrollbarTintResolved is the keyword the tint is behaving as, with unset
+// resolved to the documented default.
+//
+// Unset used to reach the renderer as the empty string and match none of its
+// cases, so it fell through to the border rule: clearing the tint gave the one
+// tint that is not the default. The registry, the validator and the config
+// header all say empty means quiet, and now so does the bar.
+func ScrollbarTintResolved() string {
+	if ScrollbarTint == "" {
+		return ScrollbarTintQuiet
+	}
+	return ScrollbarTint
+}
+
 // GetScrollbarTrackChar returns the glyph drawn on the track's uncovered cells.
 // An empty string is a blank cell, which in the track style is its surface fill
 // and in the thin style is no track at all - the pre-track look, and what ASCII
