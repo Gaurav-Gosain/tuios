@@ -91,6 +91,62 @@ func invariants(emu *vt.Emulator) string {
 	return ""
 }
 
+// replaySplit runs a script's bytes through a fresh emulator in the pieces a
+// PTY reader would have handed it, rather than one write per step. The
+// invariants are the same; what changes is that every sequence has a chance of
+// arriving in two halves with the parser holding state in between.
+func replaySplit(s vtgen.Script, seed uint64) (broken string) {
+	defer func() {
+		if r := recover(); r != nil {
+			broken = fmt.Sprintf("panic: %v", r)
+		}
+	}()
+
+	emu := vt.NewEmulator(80, 24)
+	for i, w := range s.SplitWrites(seed) {
+		if _, err := emu.WriteString(w); err != nil {
+			return fmt.Sprintf("write %d: %v", i+1, err)
+		}
+		if bad := invariants(emu); bad != "" {
+			return fmt.Sprintf("write %d (%q): %s", i+1, w, bad)
+		}
+	}
+	_ = emu.String()
+	_ = emu.Render()
+	return ""
+}
+
+// FuzzEmulatorSplitWrites is the same generator arriving in pieces.
+//
+// FuzzEmulatorScript writes one step at a time, so every sequence reaches the
+// parser whole. That is the one thing a real PTY never guarantees, and the
+// states a parser carries across a read boundary are the ones no structured
+// test reaches: a cluster whose marks are still coming, a CSI whose parameter
+// list is half read, a string waiting on the second byte of its terminator.
+func FuzzEmulatorSplitWrites(f *testing.F) {
+	for _, seed := range [][]byte{
+		{},
+		{0x7f},
+		[]byte("split me"),
+		[]byte("\xe4\xb8\x96\xe4\xb8\x96\xe4\xb8\x96"),
+	} {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		g := vtgen.FromBytes(data)
+		script := g.Script(120)
+		seed := uint64(len(data)) * 1099511628211
+		if broken := replaySplit(script, seed); broken != "" {
+			small := vtgen.Shrink(script, func(s vtgen.Script) bool {
+				return replaySplit(s, seed) != ""
+			})
+			t.Fatalf("%s\n\nreduced from %d steps to %d:\n%s",
+				broken, len(script), len(small), small)
+		}
+	})
+}
+
 // FuzzEmulatorScript is the coverage-guided target. A corpus entry decodes to a
 // script, so the mutator is steering which sequences get generated rather than
 // which bytes get rejected.
@@ -127,6 +183,16 @@ func TestVTGen_Sweep(t *testing.T) {
 
 	for seed := range uint64(seeds) {
 		script := vtgen.New(seed).Script(steps)
+		if broken := replaySplit(script, seed); broken != "" {
+			small := vtgen.Shrink(script, func(s vtgen.Script) bool {
+				return replaySplit(s, seed) != ""
+			})
+			t.Errorf("seed %d, split into reader-sized writes: %s\n\nreduced from %d steps to %d:\n%s",
+				seed, broken, len(script), len(small), small)
+			if t.Failed() {
+				return
+			}
+		}
 		if broken := replay(script); broken != "" {
 			small := vtgen.Shrink(script, func(s vtgen.Script) bool { return replay(s) != "" })
 			t.Errorf("seed %d: %s\n\nreduced from %d steps to %d:\n%s",
@@ -164,6 +230,20 @@ func TestVTGen_ReachesTheInterestingStates(t *testing.T) {
 		"invalid encoding":     false,
 		"kitty graphics":       false,
 		"DECALN":               false,
+
+		// The classes added for this round. A generator that silently stopped
+		// producing them would leave every campaign below passing while
+		// covering nothing new.
+		"DECSLRM":               false,
+		"DECOM":                 false,
+		"single shift":          false,
+		"selective erase":       false,
+		"DECSCA":                false,
+		"soft reset":            false,
+		"tab stop":              false,
+		"eight-bit controls":    false,
+		"variation selector":    false,
+		"a lone combining mark": false,
 	}
 
 	for seed := range uint64(60) {
@@ -194,6 +274,17 @@ func TestVTGen_ReachesTheInterestingStates(t *testing.T) {
 			mark("invalid encoding", strings.Contains(d, "overlong") || strings.Contains(d, "cannot start"))
 			mark("kitty graphics", strings.Contains(d, "kitty graphics"))
 			mark("DECALN", strings.Contains(d, "DECALN"))
+			mark("DECSLRM", strings.Contains(d, "DECSLRM"))
+			mark("DECOM", strings.Contains(d, "origin mode"))
+			mark("single shift", strings.Contains(d, "SS2") || strings.Contains(d, "SS3"))
+			mark("selective erase", strings.Contains(d, "DECSED") || strings.Contains(d, "DECSEL"))
+			mark("DECSCA", strings.Contains(d, "DECSCA"))
+			mark("soft reset", strings.Contains(d, "DECSTR") || strings.Contains(d, "soft reset"))
+			mark("tab stop", strings.Contains(d, "HTS") || strings.Contains(d, "TBC") ||
+				strings.Contains(d, "CHT") || strings.Contains(d, "CBT"))
+			mark("eight-bit controls", strings.Contains(d, "eight-bit controls"))
+			mark("variation selector", strings.Contains(d, "presentation selector"))
+			mark("a lone combining mark", strings.Contains(d, "combining mark with nothing to attach to"))
 		}
 	}
 
