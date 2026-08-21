@@ -67,7 +67,7 @@ type Terminal interface {
 	// Scrollback.
 	ScrollbackLen() int
 	ScrollbackLine(index int) uv.Line
-	Scrollback() *Scrollback
+	PushScrollbackLine(line uv.Line)
 	ClearScrollback()
 	SetScrollbackMaxLines(maxLines int)
 

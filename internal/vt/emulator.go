@@ -310,6 +310,13 @@ func (e *Emulator) Scrollback() *Scrollback {
 	return e.scrs[0].Scrollback()
 }
 
+// PushScrollbackLine appends a line to the main screen's scrollback. It exists
+// for snapshot restore, where history arrives as decoded lines rather than as
+// a byte stream.
+func (e *Emulator) PushScrollbackLine(line uv.Line) {
+	e.scrs[0].Scrollback().PushLine(line)
+}
+
 // ClearScrollback clears the scrollback buffer of the main screen.
 func (e *Emulator) ClearScrollback() {
 	e.scrs[0].ClearScrollback()

@@ -1777,10 +1777,9 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// sends a bounded window of its scrollback and a client keeps far more than
 	// that, so replacing the whole buffer would cut a long history down to the
 	// size of the window on every workspace switch.
-	sb := t.Scrollback()
-	if have := sb.Len(); have == 0 {
+	if have := t.ScrollbackLen(); have == 0 {
 		for _, row := range state.Scrollback {
-			sb.PushLine(stateToLine(t, row))
+			t.PushScrollbackLine(stateToLine(t, row))
 		}
 	} else if missing := state.ScrollbackLen - have; missing > 0 {
 		rows := state.Scrollback
@@ -1788,7 +1787,7 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 			rows = rows[len(rows)-missing:]
 		}
 		for _, row := range rows {
-			sb.PushLine(stateToLine(t, row))
+			t.PushScrollbackLine(stateToLine(t, row))
 		}
 	}
 
