@@ -333,8 +333,25 @@ func (e *Emulator) SemanticMarkers() *SemanticMarkerList {
 }
 
 // extractCommandText extracts the command text between a B marker position
-// and a C marker position. Called at C-marker time before output overwrites the buffer.
+// and a C marker position, for OSC 133 command capture.
 func (e *Emulator) extractCommandText(bLine, bCol, cLine, _ int) string {
+	return extractCommandTextFrom(e, bLine, bCol, cLine)
+}
+
+// markerGridReader is the read surface extractCommandTextFrom needs. Both
+// emulator implementations satisfy it; the ghostty backend passes a wrapper
+// that reads without re-taking its lock.
+type markerGridReader interface {
+	Width() int
+	Height() int
+	ScrollbackLen() int
+	ScrollbackLine(index int) uv.Line
+	CellAt(x, y int) *uv.Cell
+}
+
+// extractCommandTextFrom extracts the command text between a B marker
+// position and a C marker position.
+func extractCommandTextFrom(e markerGridReader, bLine, bCol, cLine int) string {
 	sbLen := e.ScrollbackLen()
 	width := e.Width()
 	height := e.Height()
