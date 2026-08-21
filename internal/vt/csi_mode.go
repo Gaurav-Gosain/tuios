@@ -20,7 +20,7 @@ func (e *Emulator) handleMode(params ansi.Params, set, isAnsi bool) {
 			mode = ansi.ANSIMode(param)
 		}
 
-		setting := e.modes[mode]
+		setting := e.modeSetting(mode)
 		if setting == ansi.ModePermanentlyReset || setting == ansi.ModePermanentlySet {
 			// Permanently set modes are ignored.
 			continue
@@ -175,10 +175,21 @@ func (e *Emulator) insertMode() bool {
 
 // isModeSet returns true if the mode is set.
 func (e *Emulator) isModeSet(mode ansi.Mode) bool {
+	return e.modeSetting(mode).IsSet()
+}
+
+// modeSetting reads one entry of the mode map under the lock.
+//
+// Every read of that map goes through here or through isModeSet. A bare
+// e.modes[mode] on the parser goroutine races the session layer's RestoreModes,
+// and a map read racing a map write is a runtime throw rather than a panic a
+// recover can catch, so it takes the whole daemon down and not just the pane
+// that asked.
+func (e *Emulator) modeSetting(mode ansi.Mode) ansi.ModeSetting {
 	e.modesMu.RLock()
-	m, ok := e.modes[mode]
+	m := e.modes[mode]
 	e.modesMu.RUnlock()
-	return ok && m.IsSet()
+	return m
 }
 
 // ApplicationCursorKeys returns true if DECCKM (application cursor keys mode) is enabled.
