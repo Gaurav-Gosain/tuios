@@ -664,7 +664,7 @@ func (m *OS) flushGraphicsForView() {
 			// Flush the clear commands
 			data := m.SixelPassthrough.FlushPending()
 			if len(data) > 0 {
-				_, _ = os.Stdout.Write(data)
+				m.WriteHost(data)
 			}
 		}
 	} else {
@@ -828,15 +828,12 @@ func (m *OS) GetSixelGraphicsCmd() tea.Cmd {
 		})
 	}
 
-	// Get pending sixel output and write to stdout (same stream as bubbletea)
-	// wrapped in synchronized update sequences to prevent tearing
+	// Sixel output goes out through the same serialized writer as the frames,
+	// wrapped in a synchronized update so the terminal applies it in one step.
 	data := m.SixelPassthrough.FlushPending()
 	if len(data) == 0 {
 		return nil
 	}
-	// Write to stdout with sync wrapping (same approach as kitty graphics)
-	_, _ = os.Stdout.Write([]byte("\x1b[?2026h")) // sync begin
-	_, _ = os.Stdout.Write(data)
-	_, _ = os.Stdout.Write([]byte("\x1b[?2026l")) // sync end
+	m.WriteHost(syncBegin, data, syncEnd)
 	return nil
 }

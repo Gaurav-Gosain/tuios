@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -22,7 +23,30 @@ var (
 	graphicsMu        sync.RWMutex
 	kittyGraphicsHost bool
 	sixelGraphicsHost bool
+	hostWriter        io.Writer
 )
+
+// SetHostWriter installs the writer the host terminal is reached through, so
+// what this package re-emits (DECSCUSR) is ordered against the frames and the
+// graphics sequences instead of racing them on its own descriptor. Nil means
+// stdout, which is what the tests and the tape player get.
+func SetHostWriter(w io.Writer) {
+	graphicsMu.Lock()
+	defer graphicsMu.Unlock()
+	hostWriter = w
+}
+
+// writeHost re-emits a sequence to the host terminal as one Write.
+func writeHost(data []byte) {
+	graphicsMu.RLock()
+	w := hostWriter
+	graphicsMu.RUnlock()
+	if w == nil {
+		_, _ = os.Stdout.Write(data)
+		return
+	}
+	_, _ = w.Write(data)
+}
 
 // SetGraphicsCapabilities records which graphics protocols tuios can forward to
 // the host terminal. Windows created afterwards advertise a matching terminal

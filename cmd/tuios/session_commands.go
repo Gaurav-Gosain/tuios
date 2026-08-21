@@ -271,6 +271,10 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	client.StartReadLoop()
 
 	prw := app.NewPostRenderWriter(os.Stdout)
+	// The PTY readers re-emit DECSCUSR to the host; send it through the same
+	// writer as everything else. Only the native clients do this: a server
+	// process has one of these per connection and this setter is a global.
+	terminal.SetHostWriter(prw)
 
 	initialOS := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,
@@ -280,6 +284,10 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		DaemonClient:              client,
 		SessionName:               client.SessionName(),
 		EnableGraphicsPassthrough: true,
+		// One writer for the terminal: frames, kitty and sixel sequences all
+		// serialize on it. Left nil, the passthroughs open their own /dev/tty
+		// and nothing can order their writes against a frame.
+		GraphicsOutput: prw,
 	})
 	initialOS.PostRenderWriter = prw
 

@@ -23,7 +23,7 @@ import (
 )
 
 // passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
-// and writes them directly to stdout to pass through to the parent terminal.
+// and re-emits them to the host through the writer the frames go through.
 // The VT emulator absorbs these sequences, so we need to re-emit them.
 // DECSCUSR format: CSI Ps SP q (ESC [ Ps SPACE q) where Ps is optional (0-6)
 // ioMu guards the emulator cell buffer: the PTY reader and the daemon output
@@ -149,7 +149,7 @@ func passThroughCursorStyle(data []byte) {
 			numEnd++
 		}
 		if numEnd+1 < len(data) && data[numEnd] == ' ' && data[numEnd+1] == 'q' {
-			_, _ = os.Stdout.Write(data[escIdx : numEnd+2])
+			writeHost(data[escIdx : numEnd+2])
 			idx = numEnd + 2
 			continue
 		}

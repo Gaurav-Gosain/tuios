@@ -4,7 +4,6 @@ package app
 import (
 	"bytes"
 	"maps"
-	"os"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -15,10 +14,10 @@ import (
 )
 
 // passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
-// and writes them directly to stdout to pass through to the parent terminal.
+// and re-emits them to the host through the serialized writer.
 // The VT emulator absorbs these sequences, so we need to re-emit them.
 // DECSCUSR format: CSI Ps SP q (ESC [ Ps SPACE q) where Ps is optional (0-6)
-func passThroughCursorStyle(data []byte) {
+func (m *OS) passThroughCursorStyle(data []byte) {
 	// Look for DECSCUSR pattern: \x1b[N q where N is 0-6 (or no digit)
 	idx := 0
 	for idx < len(data) {
@@ -46,7 +45,7 @@ func passThroughCursorStyle(data []byte) {
 		if numEnd+1 < len(data) && data[numEnd] == ' ' && data[numEnd+1] == 'q' {
 			// Found DECSCUSR sequence - write it to stdout
 			seq := data[escIdx : numEnd+2]
-			_, _ = os.Stdout.Write(seq)
+			m.WriteHost(seq)
 			idx = numEnd + 2
 			continue
 		}
@@ -1281,7 +1280,7 @@ func (m *OS) subscribeToPTY(window *terminal.Window, fromSeq int64) {
 	m.DaemonClient.OnPTYResized(ptyID, window.ResizeFromStream)
 	window.SetStreamOwnsSize(true)
 	err := m.DaemonClient.SubscribePTY(ptyID, fromSeq, func(data []byte) {
-		passThroughCursorStyle(data)
+		m.passThroughCursorStyle(data)
 		window.WriteOutputAsync(data)
 	})
 	if err != nil {

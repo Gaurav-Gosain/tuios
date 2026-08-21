@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -255,11 +254,7 @@ func (m *OS) ClearTextSizingPlacements(windowID string) {
 	}
 
 	if len(eraseData) > 0 {
-		var buf []byte
-		buf = append(buf, "\x1b[?2026h"...)
-		buf = append(buf, eraseData...)
-		buf = append(buf, "\x1b[?2026l"...)
-		_, _ = os.Stdout.Write(buf)
+		m.WriteHost(syncBegin, eraseData, syncEnd)
 	}
 }
 
@@ -283,7 +278,7 @@ func (m *OS) FlushTextSizing() {
 
 	if m.PostRenderWriter != nil {
 		m.PostRenderWriter.QueuePostRender(buf)
-	} else {
-		_, _ = os.Stdout.Write(buf)
+		return
 	}
+	m.WriteHost(buf)
 }

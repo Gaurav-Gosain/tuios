@@ -76,6 +76,8 @@ type KittyPassthrough struct {
 	remoteClient bool
 	hostOut      io.Writer
 	hostMu       sync.Mutex // serializes writes to hostOut across render + async paths
+	// hostScratch joins a multi-part sequence into one Write. Guarded by hostMu.
+	hostScratch []byte
 
 	placements    map[string]map[uint32]*PassthroughPlacement
 	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
@@ -360,6 +362,13 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 // mixing two APC sequences. Every writer to kp.hostOut MUST funnel through
 // here so that never happens.
 //
+// The parts are joined and handed over in one Write, because hostMu only
+// orders the writers that take it and the renderer is not one of them. What
+// orders those two is sharing one *os.File (see PostRenderWriter): the runtime
+// locks it per Write, so a whole sequence handed over in one call is delivered
+// whole. Emitting it as three - the sync brackets and the payload they wrap -
+// left two seams a frame could be written into.
+//
 // Lock ordering: hostMu is the innermost host-output lock. Callers may hold
 // kp.mu when they call this (kp.mu outer, hostMu inner); this method never
 // acquires kp.mu, so there is no lock-order cycle and no deadlock.
@@ -369,12 +378,20 @@ func (kp *KittyPassthrough) writeHostSequence(parts ...[]byte) {
 	}
 	kp.hostMu.Lock()
 	defer kp.hostMu.Unlock()
+	total := 0
 	for _, part := range parts {
-		if len(part) == 0 {
-			continue
-		}
-		_, _ = kp.hostOut.Write(part)
+		total += len(part)
 	}
+	if total == 0 {
+		return
+	}
+	// Reused across writes (it is only ever touched under hostMu) so a video
+	// stream does not allocate a frame-sized buffer per frame.
+	kp.hostScratch = append(kp.hostScratch[:0], parts[0]...)
+	for _, part := range parts[1:] {
+		kp.hostScratch = append(kp.hostScratch, part...)
+	}
+	_, _ = kp.hostOut.Write(kp.hostScratch)
 }
 
 // WriteToHost writes graphics data directly to the host terminal,
