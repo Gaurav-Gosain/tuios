@@ -94,22 +94,32 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// where it is - kitty keeps the last a=p on screen - and no delete or
 		// re-place is emitted for it.
 		//
-		// resizeFreezeSize records that last laid-out size. It is refreshed on
-		// every pass that is NOT frozen, so a plain window move (manipulated but
-		// unchanged size) still re-places and follows the pointer, and the instant
-		// the gesture ends the settled size is recorded and the image re-places
-		// once at the final geometry. The deferred PTY resize then delivers a
-		// fresh frame; nothing is left stale.
-		if prev, seen := kp.resizeFreezeSize[windowID]; info.IsBeingManipulated && seen &&
-			(prev[0] != info.Width || prev[1] != info.Height) {
-			// resizeFreezeSize is deliberately not updated, so every later tick of
-			// the same gesture keeps differing from it and stays frozen until the
-			// size settles.
-			frozen[windowID] = true
-			return
-		}
+		// resizeFreezeSize records the size seen on the PREVIOUS pass, and is
+		// written on every pass. The hold is therefore keyed on the size still
+		// moving, not on how the gesture ends: while the pointer drags, each tick
+		// differs from the last and the image is held; the tick after the pointer
+		// stops matches the last one and the image re-places once at the settled
+		// geometry. A plain window move (manipulated, unchanged size) is never
+		// frozen and still follows the pointer.
+		//
+		// Keying it on the flag instead is what stretched a browser pane. The flag
+		// is cleared by mouse release, and release is the event that goes missing
+		// when the pointer leaves the surface mid-drag - the case
+		// clearStaleManipulation exists for, and the one that sweep skips while
+		// InteractionMode is set. A hold released only by that flag then outlives
+		// its gesture forever, and a frozen pane is not an idle one: the guest has
+		// been resized, redraws at its new size and keeps streaming frames, every
+		// one of which is forwarded to the host as a fresh bitmap for the same
+		// image id. With no placement to go with them the host keeps scaling each
+		// new bitmap into the pre-resize cell rectangle. Measured on a 120x40
+		// screen whose pane was dragged from 118 to 78 content columns: the host
+		// held c=118,r=38 while every frame arriving was 780px wide, a 1.51x
+		// horizontal stretch that lasted until a click (press sets the flag,
+		// release clears it on every window) let the correct c=78,r=38 out.
+		prev, seen := kp.resizeFreezeSize[windowID]
 		kp.resizeFreezeSize[windowID] = [2]int{info.Width, info.Height}
-		frozen[windowID] = false
+		frozen[windowID] = info.IsBeingManipulated && seen &&
+			(prev[0] != info.Width || prev[1] != info.Height)
 	}
 	for windowID, placements := range kp.placements {
 		if len(placements) > 0 {
