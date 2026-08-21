@@ -148,8 +148,12 @@ type ClientCapabilities struct {
 	CellWidth     int
 	CellHeight    int
 	KittyGraphics bool
-	SixelGraphics bool
-	TerminalName  string
+	// KittyAnimation reports that the client's terminal honours a=f frame
+	// edits, which lets the daemon send damage rectangles instead of whole
+	// bitmaps to that client.
+	KittyAnimation bool
+	SixelGraphics  bool
+	TerminalName   string
 }
 
 // Connect connects to the daemon and performs handshake.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -124,6 +125,9 @@ func parseKittyControlParams(control string, cmd *KittyCommand) {
 			cmd.XOffset, _ = strconv.Atoi(value)
 		case "Y":
 			cmd.YOffset, _ = strconv.Atoi(value)
+			if v, err := strconv.ParseUint(value, 10, 32); err == nil {
+				cmd.BackgroundColor = uint32(v)
+			}
 		case "c":
 			cmd.Columns, _ = strconv.Atoi(value)
 		case "r":
@@ -168,6 +172,27 @@ func LoadFileData(filePath string) ([]byte, error) {
 		return nil, fmt.Errorf("kitty file transmit: %s exceeds %d byte limit", filePath, maxKittyTransmitBytes)
 	}
 	return data, nil
+}
+
+// removeTempTransmitFile deletes a t=t transmission file, which the protocol
+// makes the terminal's job. It refuses any path that is not in a temporary
+// directory and does not carry kitty's marker in its name, because a guest
+// picks the path and "delete whatever you are pointed at" is a way to lose
+// files that have nothing to do with graphics.
+func removeTempTransmitFile(path string) {
+	if !strings.Contains(path, "tty-graphics-protocol") {
+		return
+	}
+	dir := filepath.Dir(path)
+	for _, tmp := range []string{os.TempDir(), "/tmp", "/var/tmp", "/dev/shm"} {
+		if tmp == "" {
+			continue
+		}
+		if dir == tmp || strings.HasPrefix(dir, strings.TrimSuffix(tmp, "/")+"/") {
+			_ = os.Remove(path)
+			return
+		}
+	}
 }
 
 func BuildKittyResponse(ok bool, imageID uint32, message string) []byte {

@@ -56,10 +56,12 @@ func (h *KittyGraphicsHandler) HandleCommand(cmd *KittyCommand) bool {
 		return h.handlePlace(cmd)
 	case KittyActionDelete:
 		return h.handleDelete(cmd)
-	case KittyActionFrame, KittyActionAnimation, KittyActionCompose:
-		// Animation commands - not yet supported, but acknowledge them
-		h.sendResponse(cmd, true, "")
-		return true
+	case KittyActionFrame:
+		return h.handleFrame(cmd)
+	case KittyActionAnimation:
+		return h.handleAnimation(cmd)
+	case KittyActionCompose:
+		return h.handleCompose(cmd)
 	default:
 		return false
 	}
@@ -120,6 +122,9 @@ func (h *KittyGraphicsHandler) handleTransmit(cmd *KittyCommand, place bool) boo
 			return true
 		}
 		data = fileData
+		if cmd.Medium == KittyMediumTempFile {
+			removeTempTransmitFile(cmd.FilePath)
+		}
 	case KittyMediumSharedMemory:
 		shmData, err := loadSharedMemory(cmd.FilePath, cmd.Size)
 		if err != nil {

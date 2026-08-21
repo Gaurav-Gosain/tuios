@@ -51,6 +51,15 @@ func (s *KittyState) AddImage(img *KittyImage) {
 	}
 }
 
+// TouchImage records that an image's pixels changed, so a consumer holding a
+// stale copy can tell. Animation edits an image in place rather than
+// replacing it, so the map entry alone says nothing about freshness.
+func (s *KittyState) TouchImage(img *KittyImage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	img.TransmitTime = time.Now()
+}
+
 func (s *KittyState) GetImage(id uint32) *KittyImage {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -259,6 +268,21 @@ func (s *KittyState) AppendToPending(data []byte) bool {
 	}
 	s.pending.DataBuffer = append(s.pending.DataBuffer, data...)
 	return true
+}
+
+// FinalizeFrame ends a chunked a=f transmission and returns the command that
+// started it, carrying the accumulated payload. It returns nil when the
+// pending transmission is an image rather than a frame.
+func (s *KittyState) FinalizeFrame() *KittyCommand {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pending == nil || !s.pending.Frame {
+		return nil
+	}
+	cmd := s.pending.Command
+	cmd.Data = s.pending.DataBuffer
+	s.pending = nil
+	return &cmd
 }
 
 func (s *KittyState) FinalizePending() *KittyImage {
