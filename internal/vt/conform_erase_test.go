@@ -12,6 +12,8 @@ package vt_test
 
 import (
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 func TestConform_ScreenAlignmentPattern(t *testing.T) {
@@ -53,6 +55,62 @@ func TestConform_ScreenAlignmentPattern(t *testing.T) {
 			},
 		},
 	})
+}
+
+// TestConform_EraseSavedLines covers ED 3.
+//
+// CSI 3 J is xterm's "erase saved lines". It drops the scrollback and leaves
+// the visible screen exactly where it was. xterm, tmux, kitty and ghostty all
+// agree on that, and the reason it matters is that the two are separate
+// requests: `clear` sends CUP, ED 2 and ED 3 together, so a terminal that
+// conflates them looks right there and destroys the screen for anything that
+// sends ED 3 on its own to drop history.
+func TestConform_EraseSavedLines(t *testing.T) {
+	runConform(t, []conformCase{
+		{
+			name:   "ED 3 drops the scrollback and leaves the screen",
+			cols:   6,
+			rows:   3,
+			in:     "a\r\nb\r\nc\r\nd\r\ne\x1b[3J",
+			want:   "c\nd\ne",
+			cursor: "1,2",
+		}, {
+			name: "ED 2 clears the screen and keeps the scrollback",
+			cols: 6,
+			rows: 3,
+			in:   "a\r\nb\r\nc\r\nd\r\ne\x1b[2J",
+			want: "",
+		}, {
+			// What `clear` actually sends. Both halves have to happen.
+			name: "the pair a clear sends empties both",
+			cols: 6,
+			rows: 3,
+			in:   "a\r\nb\r\nc\r\nd\r\ne\x1b[H\x1b[2J\x1b[3J",
+			want: "",
+		},
+	})
+
+	// The scrollback half is not visible in a screen dump, so it is checked
+	// directly.
+	for _, tc := range []struct {
+		name string
+		in   string
+		want int
+	}{
+		{"ED 3 empties the scrollback", "a\r\nb\r\nc\r\nd\r\ne\x1b[3J", 0},
+		{"ED 2 leaves the scrollback alone", "a\r\nb\r\nc\r\nd\r\ne\x1b[2J", 2},
+		{"ED 0 leaves the scrollback alone", "a\r\nb\r\nc\r\nd\r\ne\x1b[0J", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			emu := vt.NewEmulator(6, 3)
+			if _, err := emu.WriteString(tc.in); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			if got := emu.ScrollbackLen(); got != tc.want {
+				t.Errorf("scrollback holds %d lines, want %d", got, tc.want)
+			}
+		})
+	}
 }
 
 // TestConform_SelectiveErase covers DECSCA, DECSED and DECSEL.
