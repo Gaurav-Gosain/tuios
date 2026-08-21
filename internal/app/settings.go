@@ -247,7 +247,6 @@ var (
 	scrollbarStyleOptions  = config.ScrollbarStyles
 	windowButtonOptions    = config.WindowButtonStyles
 	windowButtonPosOptions = config.WindowButtonPositions
-	scrollbarTintOptions   = config.ScrollbarTints
 	clickToTypeOptions     = config.ClickToTypeModes
 )
 
