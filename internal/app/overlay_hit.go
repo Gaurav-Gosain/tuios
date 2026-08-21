@@ -30,7 +30,13 @@ type overlayPanelHit struct {
 
 // overlayKindOrder is the deterministic order newly-opened overlays are added to
 // the stack (used only to break ties when several open in the same frame).
-var overlayKindOrder = []string{"help", "palette", "session", "workspace", "layout", "aggregate", "settings", "themepicker", "quit", "sessionclose"}
+//
+// "accent" was missing from this list, which cost it a place in the stack and
+// left it on the base z-index. Nothing noticed while the colour picker could
+// only be opened over the rail, with no other panel to lose a tie against. Now
+// that a settings row opens it, the tie was with the panel it was drawn on top
+// of, and every click inside the picker went to the settings row behind it.
+var overlayKindOrder = []string{"help", "palette", "session", "workspace", "layout", "aggregate", "settings", "themepicker", "accent", "quit", "sessionclose"}
 
 // openOverlayKinds returns the set of draggable overlay kinds currently shown.
 func (m *OS) openOverlayKinds() map[string]bool {
