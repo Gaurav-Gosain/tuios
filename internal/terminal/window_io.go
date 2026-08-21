@@ -35,10 +35,10 @@ const (
 //
 // The anti-flicker mechanism: instead of signaling a re-render on every
 // VT write (which shows incomplete frames mid-sync-update), we defer the
-// signal. A separate renderCoalescer goroutine fires at a capped rate
-// (~120fps) and only signals when there's actually new output. This is
-// the same technique prise uses (8ms render timer) to eliminate flicker
-// from fast-updating TUIs.
+// signal. A separate renderCoalescer goroutine fires at a capped rate and
+// only signals when there's actually new output. The cap is ~120fps while
+// frames are cheap and widens with what a frame actually costs; see
+// coalesceInterval.
 // outputChunk is one queued batch of daemon output and the epoch it was queued
 // under. See Window.outputEpoch.
 type outputChunk struct {
