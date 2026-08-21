@@ -86,7 +86,7 @@ func (b *Browser) extractContent() {
 func (b *Browser) rebuildFiltered() {
 	b.FilteredIdx = b.FilteredIdx[:0]
 	for i, block := range b.Blocks {
-		if b.SearchQuery == "" || fuzzyContains(block.Command, b.SearchQuery) || fuzzyContains(block.Output, b.SearchQuery) {
+		if b.SearchQuery == "" || containsFold(block.Command, b.SearchQuery) || containsFold(block.Output, b.SearchQuery) {
 			b.FilteredIdx = append(b.FilteredIdx, i)
 		}
 	}
@@ -96,7 +96,7 @@ func (b *Browser) rebuildFiltered() {
 func (b *Browser) rebuildFilteredJSON() {
 	b.FilteredJSON = b.FilteredJSON[:0]
 	for i, jb := range b.JSONBlocks {
-		if b.SearchQuery == "" || fuzzyContains(jb.Pretty, b.SearchQuery) || fuzzyContains(jb.Raw, b.SearchQuery) {
+		if b.SearchQuery == "" || containsFold(jb.Pretty, b.SearchQuery) || containsFold(jb.Raw, b.SearchQuery) {
 			b.FilteredJSON = append(b.FilteredJSON, i)
 		}
 	}
@@ -105,7 +105,7 @@ func (b *Browser) rebuildFilteredJSON() {
 func (b *Browser) rebuildFilteredPaths() {
 	b.FilteredPaths = b.FilteredPaths[:0]
 	for i, pb := range b.PathBlocks {
-		if b.SearchQuery == "" || fuzzyContains(pb.Raw, b.SearchQuery) || fuzzyContains(pb.Path, b.SearchQuery) {
+		if b.SearchQuery == "" || containsFold(pb.Raw, b.SearchQuery) || containsFold(pb.Path, b.SearchQuery) {
 			b.FilteredPaths = append(b.FilteredPaths, i)
 		}
 	}
@@ -313,8 +313,15 @@ func (b *Browser) selectedRealIdx() int {
 	return -1
 }
 
-// fuzzyContains does a case-insensitive substring match.
-func fuzzyContains(text, query string) bool {
+// containsFold does a case-insensitive substring match.
+//
+// This is the one search in the tree that deliberately does not use the scored
+// matcher in pkg/fuzzy. Two of its three fields are whole command outputs, and
+// a subsequence match over a multi-kilobyte blob admits almost every block, so
+// "err" would filter nothing out. Scrollback also reads in time order, and
+// reordering blocks by match quality would put a reply above the command that
+// produced it. Grep semantics are the right ones here.
+func containsFold(text, query string) bool {
 	return strings.Contains(strings.ToLower(text), strings.ToLower(query))
 }
 

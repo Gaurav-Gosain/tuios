@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
 // HelpBinding represents a single keybinding for the help menu
@@ -446,59 +447,32 @@ func formatActionName(action string) string {
 	return strings.Join(parts, " ")
 }
 
-// FuzzyMatch performs fuzzy matching on a string
-func FuzzyMatch(query, target string) (bool, []int) {
-	query = strings.ToLower(query)
-	target = strings.ToLower(target)
-
-	if query == "" {
-		return true, []int{}
-	}
-
-	matchIndices := []int{}
-	queryIdx := 0
-
-	for i := 0; i < len(target) && queryIdx < len(query); i++ {
-		if target[i] == query[queryIdx] {
-			matchIndices = append(matchIndices, i)
-			queryIdx++
-		}
-	}
-
-	return queryIdx == len(query), matchIndices
-}
-
-// SearchBindings performs fuzzy search across all bindings
+// SearchBindings ranks every binding whose description, keys or action name
+// matches the query, best match first.
+//
+// The three fields are matched as one string. Searching them separately let a
+// binding be appended twice when its keys and its action both matched, and
+// gave no way to say which of three independent hits was the better one.
 func SearchBindings(query string, categories []HelpCategory) []HelpBinding {
 	if query == "" {
 		return []HelpBinding{}
 	}
 
-	results := []HelpBinding{}
-
+	bindings := []HelpBinding{}
 	for _, category := range categories {
-		for _, binding := range category.Bindings {
-			// Search in description
-			if matched, _ := FuzzyMatch(query, binding.Description); matched {
-				results = append(results, binding)
-				continue
-			}
-
-			// Search in keys
-			for _, key := range binding.Keys {
-				if matched, _ := FuzzyMatch(query, key); matched {
-					results = append(results, binding)
-					break
-				}
-			}
-
-			// Search in action name
-			if matched, _ := FuzzyMatch(query, binding.Action); matched {
-				results = append(results, binding)
-			}
-		}
+		bindings = append(bindings, category.Bindings...)
 	}
 
+	var m fuzzy.Matcher
+	hits := m.FilterIndex(query, len(bindings), func(i int) string {
+		b := bindings[i]
+		return b.Description + " " + strings.Join(b.Keys, " ") + " " + b.Action
+	})
+
+	results := make([]HelpBinding, len(hits))
+	for i, h := range hits {
+		results[i] = bindings[h.Index]
+	}
 	return results
 }
 

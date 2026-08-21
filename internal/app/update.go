@@ -1419,6 +1419,18 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 
+	case PathAppsMsg:
+		// A finished $PATH scan, handed over here so the palette's rows are only
+		// ever built on this goroutine.
+		m.applyPathApps(msg.Entries)
+		if m.ShowCommandPalette {
+			m.MarkAllDirty()
+		}
+		return m, nil
+
+	case launchPollMsg:
+		return m, m.launchReady()
+
 	case tapeLayoutRefreshMsg:
 		// Fired a beat after a project tape finished. Re-fetch every pane's
 		// content from the daemon and repaint, so panes created during the tape

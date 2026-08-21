@@ -5,6 +5,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
 // themePickerItems returns the theme ids offered by the picker, filtered by the
@@ -15,11 +16,10 @@ func (m *OS) themePickerItems() []string {
 	if q == "" {
 		return all
 	}
-	var out []string
-	for _, id := range all {
-		if matched, _ := FuzzyMatch(q, id); matched {
-			out = append(out, id)
-		}
+	hits := fuzzy.Filter(q, all)
+	out := make([]string, len(hits))
+	for i, h := range hits {
+		out[i] = h.Text
 	}
 	return out
 }

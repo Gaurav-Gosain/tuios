@@ -297,8 +297,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// on the decoded key event, not msg.String(), so it fires under the legacy
 	// control byte and under every Kitty keyboard encoding (see isCtrlP).
 	if isCtrlP(msg) {
-		o.OpenCommandPalette()
-		return o, nil
+		return o, o.OpenCommandPalette()
 	}
 
 	// Handle paste shortcuts - intercept and request clipboard via OSC 52.

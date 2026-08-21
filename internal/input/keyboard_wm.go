@@ -201,8 +201,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	// Command palette: ctrl+p. Matched on the decoded key event, not the raw
 	// string, so it fires under every Kitty keyboard encoding (see isCtrlP).
 	if isCtrlP(msg) {
-		o.OpenCommandPalette()
-		return o, nil
+		return o, o.OpenCommandPalette()
 	}
 
 	// Emergency/safety keybindings that bypass the config system

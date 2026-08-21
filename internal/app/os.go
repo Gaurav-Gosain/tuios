@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
+	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 	"github.com/google/uuid"
 )
 
@@ -509,6 +510,23 @@ type OS struct {
 	// BuildSessionTree does a blocking daemon round trip in daemon mode, and the
 	// palette renders every frame it is on screen.
 	PaletteSessionItems []CommandPaletteItem
+	// PaletteAppItems holds one row per program on $PATH, rebuilt when a scan
+	// lands rather than per open: the scan is asynchronous and the rows outlive
+	// any one palette.
+	PaletteAppItems []CommandPaletteItem
+	// PaletteItems is the merged list the filter and the renderer read. Merging
+	// is cached because the renderer rebuilds the filtered list every frame, and
+	// with a few thousand programs on $PATH rebuilding the merge that often is
+	// the difference between a palette that costs nothing to leave open and one
+	// that does not.
+	PaletteItems []CommandPaletteItem
+	// pathApps caches the $PATH scan across opens, refreshing only the
+	// directories whose mtime moved.
+	pathApps *applist.Cache
+	// launchHistory ranks programs by how recently and often they were run.
+	launchHistory *applist.Frecency
+	// pending is the queue of programs waiting for the panes they are typed into.
+	pending []*pendingLaunch
 	// Session switcher overlay
 	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string
