@@ -75,6 +75,12 @@ func cacheRender(window *terminal.Window, content string) {
 		return
 	}
 	window.CachedContent = content
+	// Only a frame read outside a synchronized update is a complete one, so
+	// only that may become what the hold falls back on. Caching a frame taken
+	// mid-update would make the hold present the very thing it exists to hide.
+	if window.Terminal == nil || !window.Terminal.IsSyncActive() {
+		window.SyncHoldContent = content
+	}
 	window.ContentDirty = false
 }
 
@@ -94,6 +100,21 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-clean", window.CachedContent)
 		}
 		return window.CachedContent
+	}
+
+	// The guest has an open synchronized update (DEC 2026): it has begun a frame
+	// and does not want it seen half-drawn. The compositor holds the window's
+	// cached layer for this, but a retile, scroll, rename or palette change
+	// drops that layer and the content behind it, and the frame composed next
+	// read the emulator mid-update and presented half of it. Holding here
+	// instead of at the layer covers every path that composes a window, and
+	// costs nothing when there is a layer to hold. ContentDirty is left set, so
+	// the frame that arrives when the guest closes the update re-reads.
+	if window.SyncHoldContent != "" && window.Terminal != nil && window.Terminal.IsSyncActive() {
+		if renderTraceEnabled {
+			traceRender(window, isFocused, inTerminalMode, entryDirty, "sync-hold", window.SyncHoldContent)
+		}
+		return window.SyncHoldContent
 	}
 
 	// An unfocused window used to return its cache here unconditionally, even

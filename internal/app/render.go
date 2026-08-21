@@ -221,7 +221,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			}
 		}
 
-		window.ClearDirtyFlags()
+		// A window that served its held frame because the guest is mid-update was
+		// not drawn from the guest's current state, so its repaint request has
+		// to outlive the frame: clearing it here would leave nothing to re-read
+		// the emulator when the update closes.
+		if window.Terminal == nil || !window.Terminal.IsSyncActive() {
+			window.ClearDirtyFlags()
+		}
 	}
 
 	// Add shared border separator overlay when active (not in scrolling mode)

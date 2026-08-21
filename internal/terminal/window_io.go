@@ -870,6 +870,7 @@ func (w *Window) Close() {
 
 	// Clear caches to free memory
 	w.CachedContent = ""
+	w.SyncHoldContent = ""
 	w.CachedLayer = nil
 
 	// Clear copy mode to free memory

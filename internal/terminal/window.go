@@ -169,26 +169,35 @@ var (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
-	title              atomic.Pointer[string]           // Written on PTY/monitor goroutine, read on UI goroutine
-	geomSnap           atomic.Pointer[GeometrySnapshot] // See PublishGeometry
-	CustomName         string                           // User-defined window name
-	Width              int
-	Height             int
-	X                  int
-	Y                  int
-	Z                  int
-	ID                 string
-	Terminal           *vt.Emulator
-	Pty                xpty.Pty
-	Cmd                *exec.Cmd // Write-once; the monitor goroutine reads it unlocked, see waitForCmd
-	ShellPgid          int       // Process group ID of the shell
-	cwd                cwdCache  // Memoised working directory, see CWD
-	LastUpdate         time.Time
-	Dirty              bool
-	ContentDirty       bool
-	PositionDirty      bool
-	CachedContent      string
-	CachedLayer        *lipgloss.Layer
+	title         atomic.Pointer[string]           // Written on PTY/monitor goroutine, read on UI goroutine
+	geomSnap      atomic.Pointer[GeometrySnapshot] // See PublishGeometry
+	CustomName    string                           // User-defined window name
+	Width         int
+	Height        int
+	X             int
+	Y             int
+	Z             int
+	ID            string
+	Terminal      *vt.Emulator
+	Pty           xpty.Pty
+	Cmd           *exec.Cmd // Write-once; the monitor goroutine reads it unlocked, see waitForCmd
+	ShellPgid     int       // Process group ID of the shell
+	cwd           cwdCache  // Memoised working directory, see CWD
+	LastUpdate    time.Time
+	Dirty         bool
+	ContentDirty  bool
+	PositionDirty bool
+	CachedContent string
+	CachedLayer   *lipgloss.Layer
+	// SyncHoldContent is the last frame this window rendered from a guest that
+	// was not mid-update, kept solely so the synchronized-output hold (DEC 2026)
+	// has something complete to present. Every other cache here is invalidated
+	// by a layout action, which is precisely when the hold needs one: a retile
+	// or a scroll landing while the guest is between 2026h and 2026l used to
+	// leave the renderer nothing to hold and it composed the half-drawn buffer.
+	// Replaced by the next complete frame and dropped on close; deliberately
+	// untouched by MarkContentDirty, MarkPositionDirty and InvalidateCache.
+	SyncHoldContent    string
 	LastTerminalSeq    int
 	IsBeingManipulated bool // True when being dragged or resized
 	// announcedW/H are the emulator dimensions last handed downstream: to the
