@@ -225,6 +225,25 @@ func rewriteShm(t *testing.T, name string, w, h int, seed byte) {
 	}
 }
 
+// sendUntil keeps handing frames to the passthrough until cond holds.
+//
+// A stream is paced against what the host's last frame cost, so an individual
+// frame may be dropped by design, and these harnesses produce frames far
+// faster than any guest (and slower hosts, under the race detector, drop
+// more). A real stream keeps arriving until one lands, which is what this
+// stands in for. It never retries an assertion that nothing was sent.
+func sendUntil(t *testing.T, send func(), cond func() bool, timeout time.Duration) bool {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		send()
+		if waitUntil(cond, 50*time.Millisecond) {
+			return true
+		}
+	}
+	return cond()
+}
+
 // TestRemoteVideoSkipsUnchangedFrames proves the idle-frame skip: an identical
 // re-sent bitmap is not re-transmitted (the biggest idle-load/lag win), while a
 // changed bitmap still goes out.
@@ -242,8 +261,8 @@ func TestRemoteVideoSkipsUnchangedFrames(t *testing.T) {
 	}
 
 	send() // frame 1: establishes the id
-	send() // frame 2: first reused -> self-places, records the hash
-	if !waitUntil(func() bool { return host.count("a=T,i=") >= 1 }, 2*time.Second) {
+	// frame 2 onward: the first reused frame self-places and records the hash
+	if !sendUntil(t, send, func() bool { return host.count("a=T,i=") >= 1 }, 2*time.Second) {
 		t.Fatal("first self-placed frame never sent")
 	}
 
@@ -254,8 +273,8 @@ func TestRemoteVideoSkipsUnchangedFrames(t *testing.T) {
 	}
 
 	rewriteShm(t, shmName, 400, 300, 99) // change the pixels
-	send()                               // frame 4: changed content -> must send
-	if !waitUntil(func() bool { return host.count("a=T,i=") >= 2 }, 2*time.Second) {
+	// frame 4 onward: changed content must reach the host
+	if !sendUntil(t, send, func() bool { return host.count("a=T,i=") >= 2 }, 2*time.Second) {
 		t.Fatal("changed frame was not sent (skip is too aggressive)")
 	}
 }
@@ -300,8 +319,7 @@ func TestOverlayHidesAndRestoresRemoteVideo(t *testing.T) {
 	}
 
 	send() // establish
-	send() // self-place
-	if !waitUntil(func() bool { return host.count("a=T,i=") >= 1 }, 2*time.Second) {
+	if !sendUntil(t, send, func() bool { return host.count("a=T,i=") >= 1 }, 2*time.Second) {
 		t.Fatal("video never placed")
 	}
 
@@ -321,8 +339,7 @@ func TestOverlayHidesAndRestoresRemoteVideo(t *testing.T) {
 	// Overlay closes: the next frame re-places the image.
 	kp.SetOverlayActive(false)
 	rewriteShm(t, shmName, 400, 300, 200)
-	send()
-	if !waitUntil(func() bool { return host.count("a=T,i=") > placed }, 2*time.Second) {
+	if !sendUntil(t, send, func() bool { return host.count("a=T,i=") > placed }, 2*time.Second) {
 		t.Fatal("video did not re-place after the overlay closed")
 	}
 }
