@@ -977,6 +977,12 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		return true
 	})
 
+	e.RegisterDcsHandler(ansi.Command(0, '$', 'q'), func(_ ansi.Params, data []byte) bool {
+		// Request Selection or Setting [ansi.DECRQSS]
+		e.reportSetting(string(data))
+		return true
+	})
+
 	e.RegisterCsiHandler('t', func(params ansi.Params) bool {
 		// XTWINOPS - Window Manipulation
 		// See: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
