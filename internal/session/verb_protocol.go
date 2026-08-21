@@ -202,6 +202,7 @@ func init() {
 				{Name: "workspace", Type: "int", Description: "Workspace number to create the window on. Omit for the current workspace."},
 				{Name: "cwd", Type: "string", Description: "Directory to start the shell in. Omit to inherit the daemon's."},
 				{Name: "focus", Type: "bool", Description: "Focus the new window. Pass false to open a pane to work in later without moving the user out of the one they are in.", Default: "true"},
+				{Name: "command", Type: "[]string", Description: "Argv to exec as the window's process instead of a shell. No shell parses it, so nothing needs quoting; the window closes when the program exits."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the created window, which is what to address it by afterwards."},
@@ -214,6 +215,7 @@ func init() {
 			examples: []string{
 				`{"id":1,"verb":"new-window","params":{"session":"work","name":"build"}}`,
 				`{"id":1,"verb":"new-window","params":{"session":"work","name":"tests","workspace":2,"cwd":"/src/api","focus":false}}`,
+				`{"id":1,"verb":"new-window","params":{"session":"work","name":"htop","command":["/usr/bin/htop"]}}`,
 			},
 			handler: (*Daemon).verbNewWindow,
 		},

@@ -169,11 +169,12 @@ func (d *Daemon) verbListWindows(_ *connState, params json.RawMessage) (any, *ve
 
 func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session   string `json:"session"`
-		Name      string `json:"name"`
-		Workspace int    `json:"workspace"`
-		Cwd       string `json:"cwd"`
-		Focus     *bool  `json:"focus"`
+		Session   string   `json:"session"`
+		Name      string   `json:"name"`
+		Workspace int      `json:"workspace"`
+		Cwd       string   `json:"cwd"`
+		Focus     *bool    `json:"focus"`
+		Command   []string `json:"command"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -198,6 +199,11 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 			return nil, invalidParam("cwd", echoName(p.Cwd)+" is not a directory")
 		}
 	}
+	// An empty argv head would only fail later inside exec with a message that
+	// names nothing; refuse it as the parameter mistake it is.
+	if len(p.Command) > 0 && p.Command[0] == "" {
+		return nil, invalidParam("command", "command[0] is the program to exec and cannot be empty")
+	}
 	// Focusing is the historical behaviour and stays the default, because a
 	// caller opening a pane usually means to use it. Passing false is how an
 	// agent opens one to work in later without pulling the user out of the pane
@@ -214,6 +220,7 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		Cwd:       p.Cwd,
 		Workspace: p.Workspace,
 		Focus:     focus,
+		Command:   p.Command,
 	}, onExit)
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)

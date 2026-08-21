@@ -3,6 +3,8 @@ package session
 import (
 	"encoding/json"
 	"net"
+	"runtime"
+	"slices"
 	"testing"
 	"time"
 )
@@ -159,5 +161,61 @@ func TestClientSyncClearsUnplaced(t *testing.T) {
 	}
 	if got.X != 10 || got.Y != 5 || got.Width != 40 || got.Height != 12 {
 		t.Errorf("geometry = %d,%d %dx%d, want the client's 10,5 40x12", got.X, got.Y, got.Width, got.Height)
+	}
+}
+
+// TestNewWindowVerbCommandExecsTheProgram is the JSON half of the launch
+// contract: the command param is an argv the daemon execs as the window's
+// process. It exists so the verb surface and the keyboard's NewWindow intent
+// stay the same call with the same meaning.
+func TestNewWindowVerbCommandExecsTheProgram(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the probe command is /bin/sh")
+	}
+	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
+	defer d.manager.Shutdown()
+
+	sess, err := d.manager.CreateSession("execing", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("CreateSession failed: %v", err)
+	}
+
+	out, verr := d.verbNewWindow(nil, json.RawMessage(
+		`{"session":"execing","name":"probe","command":["/bin/sh","-c","sleep 30"]}`))
+	if verr != nil {
+		t.Fatalf("verbNewWindow: %v", verr)
+	}
+	res := out.(map[string]any)
+
+	pty := sess.GetPTY(res["pty_id"].(string))
+	if pty == nil {
+		t.Fatal("the created window has no PTY")
+	}
+	want := []string{"/bin/sh", "-c", "sleep 30"}
+	if !slices.Equal(pty.cmd.Args, want) {
+		t.Errorf("PTY process argv = %v, want %v", pty.cmd.Args, want)
+	}
+	if pty.IsExited() {
+		t.Error("the program exited immediately")
+	}
+}
+
+// TestNewWindowVerbRefusesEmptyCommandHead pins the refusal: an argv whose
+// program is the empty string can only fail inside exec with a message that
+// names nothing, so it is turned back at the parameter check instead.
+func TestNewWindowVerbRefusesEmptyCommandHead(t *testing.T) {
+	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
+	defer d.manager.Shutdown()
+
+	if _, err := d.manager.CreateSession("refusing", &SessionConfig{}, 80, 24); err != nil {
+		t.Fatalf("CreateSession failed: %v", err)
+	}
+
+	_, verr := d.verbNewWindow(nil, json.RawMessage(`{"session":"refusing","command":[""]}`))
+	if verr == nil {
+		t.Fatal("an empty command head was accepted")
+	}
+	if verr.Code != ErrVerbInvalidParams {
+		t.Errorf("code = %q, want %q", verr.Code, ErrVerbInvalidParams)
 	}
 }

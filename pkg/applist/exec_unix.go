@@ -39,3 +39,9 @@ func executable(info fs.FileInfo) bool {
 	}
 	return mode&0o001 != 0
 }
+
+// Argv is the argv that runs e as a pane's own process. On unix the listed
+// path is directly executable, so it is the whole command.
+func (e Entry) Argv() []string {
+	return []string{e.Path}
+}

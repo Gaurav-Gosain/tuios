@@ -362,11 +362,19 @@ func (m *OS) QuitSession() {
 // name, when non-empty, becomes the window's CustomName. It is the same argument
 // the NewWindow verb takes and it means the same thing on both paths, which it
 // did not when the daemon set CustomName and the client set the shell title.
-func (m *OS) AddWindow(name string) *OS {
+//
+// command, when given, is an argv exec'd as the pane's process instead of a
+// shell. It rides the same NewWindow request on both paths: locally straight
+// into terminal.NewWindow, in a daemon session as the intent args after the
+// name, so whichever side spawns the PTY is the side that execs and there is
+// no quoting and no pane to find afterwards.
+func (m *OS) AddWindow(name string, command ...string) *OS {
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		var args []string
-		if name != "" {
-			args = []string{name}
+		if name != "" || len(command) > 0 {
+			// The name always travels when a command does, because the args are
+			// positional: name first, argv after.
+			args = append([]string{name}, command...)
 		}
 		if err := m.DaemonClient.SendIntent("NewWindow", args...); err != nil {
 			m.LogError("Failed to ask the daemon for a new window: %v", err)
@@ -381,7 +389,7 @@ func (m *OS) AddWindow(name string) *OS {
 
 	x, y, width, height := m.NewWindowPlacement()
 
-	window := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan)
+	window := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, command...)
 	if window == nil {
 		m.LogError("Failed to create window %s (PTY creation failed)", title)
 		return m // Failed to create window

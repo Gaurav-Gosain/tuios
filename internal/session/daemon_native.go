@@ -48,7 +48,15 @@ func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []
 		if len(args) > 0 {
 			name = args[0]
 		}
-		win, err := sess.AddDaemonWindow("", onExit)
+		// args after the name are an argv to exec as the window's process. The
+		// launcher sends them so the daemon, the side that spawns the PTY, is
+		// the side that runs the program; typing into the shell instead made
+		// the command mean whatever that shell's parser decided.
+		var command []string
+		if len(args) > 1 {
+			command = args[1:]
+		}
+		win, err := sess.AddDaemonWindowWith(NewWindowOptions{Focus: true, Command: command}, onExit)
 		if err != nil {
 			return nil, err
 		}

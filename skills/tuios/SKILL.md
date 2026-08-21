@@ -208,6 +208,14 @@ tuios send-text -s work -w build 'go test ./... 2>&1 | tee /tmp/test.log
 7ddbb502  build
 ```
 
+To make the pane's process the program itself rather than a shell, put the argv
+after the name. Nothing re-parses it, so nothing needs quoting, and the pane
+closes when the program exits:
+
+```sh
+tuios new-window -s work htop /usr/bin/htop
+```
+
 The window is created by the daemon whether or not anyone is attached, so this
 works on a detached session. Naming it means you never have to hold on to the
 uuid. To keep the id instead:
