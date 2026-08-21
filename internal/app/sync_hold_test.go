@@ -176,6 +176,43 @@ func TestComposedFrameHoldsThroughRetile(t *testing.T) {
 	}
 }
 
+// TestFullscreenFastPathHoldsMidUpdate covers the other way a frame reaches the
+// host. A lone pane filling the screen skips the compositor entirely, so it used
+// to be disqualified from the fast path for the whole length of every
+// synchronized update just to inherit the compositor's hold. The hold now lives
+// where the emulator is read, so the fast path keeps it and keeps the pane.
+func TestFullscreenFastPathHoldsMidUpdate(t *testing.T) {
+	win, m := composedPane(t, "sync-hold-0004")
+	win.Width, win.Height = m.GetRenderWidth(), m.GetUsableHeight()
+	win.Resize(win.Width, win.Height)
+	if _, ok := m.fullscreenFastWindow(); !ok {
+		t.Skip("layout defaults do not put this pane on the fast path")
+	}
+
+	paintCompleteFrame(t, win)
+	if frame := ansi.Strip(m.composeFrame()); !strings.Contains(frame, "OLDLINETWO") {
+		t.Fatalf("setup:\n%s", frame)
+	}
+
+	applyHalfUpdate(t, win)
+	if _, ok := m.fullscreenFastWindow(); !ok {
+		t.Fatal("an open synchronized update still disqualifies the fast path")
+	}
+
+	frame := ansi.Strip(m.composeFrame())
+	if strings.Contains(frame, "NEWLINEONE") {
+		t.Errorf("the fast path composed a frame from the middle of the update:\n%s", frame)
+	}
+	if !strings.Contains(frame, "OLDLINETWO") {
+		t.Errorf("the fast path lost the last complete frame:\n%s", frame)
+	}
+
+	closeUpdate(t, win)
+	if frame := ansi.Strip(m.composeFrame()); !strings.Contains(frame, "NEWLINETWO") {
+		t.Errorf("the closed update never reached the fast path's frame:\n%s", frame)
+	}
+}
+
 // composedPane builds one live pane laid out on a screen, so a test can assert
 // on the frame the host is handed rather than on a render helper's return.
 func composedPane(t *testing.T, id string) (*terminal.Window, *OS) {
