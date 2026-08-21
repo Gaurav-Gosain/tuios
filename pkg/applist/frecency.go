@@ -77,21 +77,19 @@ func LoadFrecency(path string) *Frecency {
 	return f
 }
 
-// Note records that name was chosen and persists the history.
+// Note records that name was chosen. It touches memory only, so a caller on a
+// latency-sensitive goroutine can record a launch and hand the write to Save
+// somewhere it can afford to block.
 func (f *Frecency) Note(name string) {
 	if name == "" {
 		return
 	}
 	f.mu.Lock()
+	defer f.mu.Unlock()
 	r := f.recs[name]
 	r.Count++
 	r.Last = f.now().Unix()
 	f.recs[name] = r
-	data, err := f.encodeLocked()
-	f.mu.Unlock()
-	if err == nil {
-		writeAtomic(f.path, data)
-	}
 }
 
 // Boost returns what name's history adds to a match score, between 0 and
@@ -132,8 +130,8 @@ func boostFor(r record, now int64) int {
 	return min(s, MaxBoost)
 }
 
-// Save writes the history. Note already saves, so this is only for a caller
-// batching several updates.
+// Save persists the history, replacing the file in one step. It does
+// filesystem I/O; keep it off any goroutine that has to stay responsive.
 func (f *Frecency) Save() error {
 	f.mu.Lock()
 	data, err := f.encodeLocked()

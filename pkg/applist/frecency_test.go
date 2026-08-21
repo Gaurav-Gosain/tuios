@@ -76,6 +76,9 @@ func TestFrecencyRoundTrips(t *testing.T) {
 	f.Note("nvim")
 	f.Note("nvim")
 	want := f.Boost("nvim")
+	if err := f.Save(); err != nil {
+		t.Fatal(err)
+	}
 
 	reloaded := LoadFrecency(path)
 	if got := reloaded.Boost("nvim"); got != want {
@@ -101,6 +104,9 @@ func TestFrecencySurvivesCorruptFile(t *testing.T) {
 		t.Fatalf("Boost = %d from a corrupt history, want 0", got)
 	}
 	f.Note("gcc")
+	if err := f.Save(); err != nil {
+		t.Fatal(err)
+	}
 	if f.Boost("gcc") == 0 {
 		t.Error("a corrupt history must not stop a new one being recorded")
 	}
@@ -131,6 +137,9 @@ func TestFrecencyPrunes(t *testing.T) {
 	f.mu.Unlock()
 
 	f.Note("favourite")
+	if err := f.Save(); err != nil {
+		t.Fatal(err)
+	}
 
 	reloaded := LoadFrecency(path)
 	reloaded.mu.Lock()

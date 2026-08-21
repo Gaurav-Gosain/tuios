@@ -125,8 +125,12 @@ func (m *OS) runItems(entries []applist.Entry) []CommandPaletteItem {
 // program exits, so whatever it printed is still readable, which for a launcher
 // aimed at terminal programs is the better end state anyway.
 func (m *OS) RunProgram(e applist.Entry) tea.Cmd {
+	// Recorded here so the next open already ranks it, written out in a command
+	// so the file never lands on the Update goroutine.
+	var save tea.Cmd
 	if m.launchHistory != nil {
 		m.launchHistory.Note(e.Name)
+		save = saveLaunchHistory(m.launchHistory)
 	}
 
 	before := len(m.Windows)
@@ -142,11 +146,21 @@ func (m *OS) RunProgram(e applist.Entry) tea.Cmd {
 		want:     before + 1,
 		deadline: time.Now().Add(launchDeadline),
 	}
-	return pollLaunch()
+	return tea.Batch(pollLaunch(), save)
 }
 
 func pollLaunch() tea.Cmd {
 	return tea.Tick(launchPollInterval, func(time.Time) tea.Msg { return launchPollMsg{} })
+}
+
+// saveLaunchHistory writes the history off the Update goroutine. A failure is
+// swallowed: the history is a convenience, and a launch that ran is not worth
+// interrupting to report that its record did not persist.
+func saveLaunchHistory(h *applist.Frecency) tea.Cmd {
+	return func() tea.Msg {
+		_ = h.Save()
+		return nil
+	}
 }
 
 // launchReady sends a pending launch into its pane once the pane exists, and
