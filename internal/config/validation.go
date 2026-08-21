@@ -284,11 +284,39 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition,
 		[]string{"bottom", "top", "hidden"})
 	validateTitleFormat(cfg.Appearance.WindowTitleFormat, result)
+	validateBorderColors(cfg, result)
 	validateScrollbar(cfg, result)
 }
 
 // hexColorPattern matches the one colour literal the config accepts.
 var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// IsHexColor reports whether s is a colour literal the config can hold. One
+// spelling, so a value written by the settings panel, typed at the CLI or put in
+// the file by hand is the same string either way.
+func IsHexColor(s string) bool { return hexColorPattern.MatchString(s) }
+
+// validateBorderColors warns about a border override that is not a colour.
+//
+// The override is handed to lipgloss as-is and an unparseable one resolves to
+// no colour at all, so the pane it was meant to mark loses its border ink
+// instead. The value is left in place: the warning says which key is wrong, and
+// the border falls back to the theme's own colour meanwhile.
+func validateBorderColors(cfg *UserConfig, result *ValidationResult) {
+	for _, c := range [...]struct{ key, value string }{
+		{"border_focused_color", cfg.Appearance.BorderFocusedColor},
+		{"border_unfocused_color", cfg.Appearance.BorderUnfocusedColor},
+	} {
+		if c.value == "" || IsHexColor(c.value) {
+			continue
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance",
+			Key:     c.key,
+			Message: fmt.Sprintf("'%s' is not a colour (expected #RRGGBB); the theme's border colour is used instead", c.value),
+		})
+	}
+}
 
 // validateScrollbar warns about the scrollbar's free-form keys, which no enum
 // covers: the two glyphs have to measure exactly one cell or they would shift
@@ -312,7 +340,7 @@ func validateScrollbar(cfg *UserConfig, result *ValidationResult) {
 		checkGlyph("track", sb.Track)
 	}
 
-	if sb.Tint == "" || slices.Contains(ScrollbarTints, sb.Tint) || hexColorPattern.MatchString(sb.Tint) {
+	if sb.Tint == "" || slices.Contains(ScrollbarTints, sb.Tint) || IsHexColor(sb.Tint) {
 		return
 	}
 	result.Warnings = append(result.Warnings, ValidationError{

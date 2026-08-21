@@ -1124,7 +1124,7 @@ func GetScrollbarThumbChar() string {
 // rather than a keyword. A malformed one is not a colour, so it is refused here
 // as well as warned about at load: a bar drawn in nothing is invisible.
 func ScrollbarTintHex() (string, bool) {
-	if hexColorPattern.MatchString(ScrollbarTint) {
+	if IsHexColor(ScrollbarTint) {
 		return ScrollbarTint, true
 	}
 	return "", false
