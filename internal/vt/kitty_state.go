@@ -54,6 +54,11 @@ func (s *KittyState) AddImage(img *KittyImage) {
 // TouchImage records that an image's pixels changed, so a consumer holding a
 // stale copy can tell. Animation edits an image in place rather than
 // replacing it, so the map entry alone says nothing about freshness.
+//
+// The mutex here guards the maps and this timestamp, not the pixels. Pixel
+// buffers belong to the goroutine parsing the guest's output, which is the
+// only writer; a future consumer that reads them from another goroutine needs
+// its own arrangement with that owner rather than this lock.
 func (s *KittyState) TouchImage(img *KittyImage) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

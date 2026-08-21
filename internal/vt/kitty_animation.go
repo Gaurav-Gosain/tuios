@@ -117,37 +117,43 @@ func (img *KittyImage) CurrentFrame(now time.Time) int {
 		return current
 	}
 
-	// Walk forward frame by frame. A frame count is small (kitty caps
-	// animations well below the point where this matters) and gaps vary per
-	// frame, so there is no closed form worth the loss of clarity.
-	cycle := int64(0)
+	// Measure from the start of a cycle rather than from the frame playback
+	// happened to begin on, so whole cycles can be skipped by division. An
+	// animation running since this morning would otherwise be walked one
+	// frame at a time on every call.
+	cycle, offset := int64(0), int64(0)
 	for n := 1; n <= total; n++ {
+		if n < current {
+			offset += int64(img.frameGap(n))
+		}
 		cycle += int64(img.frameGap(n))
 	}
 	if cycle <= 0 {
 		return current
 	}
 
-	loops := int64(0)
-	for elapsed > 0 {
-		gap := int64(img.frameGap(current))
-		if elapsed < gap {
+	position := offset + elapsed
+	loops := position / cycle
+	position %= cycle
+
+	// s=2 runs to the end and then waits for frames that have not arrived; a
+	// finite loop count stops on the last frame the same way.
+	if loops > 0 && (img.Anim.State == KittyAnimWaiting ||
+		(img.Anim.Loops > 0 && loops >= int64(img.Anim.Loops))) {
+		return total
+	}
+
+	frame := 1
+	for n := 1; n <= total; n++ {
+		gap := int64(img.frameGap(n))
+		if position < gap {
+			frame = n
 			break
 		}
-		elapsed -= gap
-		current++
-		if current > total {
-			current = 1
-			loops++
-			// s=2 runs to the end and then waits for more frames; a finite
-			// loop count stops on the last frame the same way.
-			if img.Anim.State == KittyAnimWaiting ||
-				(img.Anim.Loops > 0 && loops >= int64(img.Anim.Loops)) {
-				return total
-			}
-		}
+		position -= gap
+		frame = n
 	}
-	return current
+	return frame
 }
 
 // handleFrame implements a=f: transmit pixels into a frame of an existing
@@ -166,7 +172,10 @@ func (h *KittyGraphicsHandler) handleFrame(cmd *KittyCommand) bool {
 		if full == nil {
 			return true
 		}
-		return h.applyFrame(full, cmd)
+		// Answer as the first chunk, not the last: only the first carries the
+		// image id, and a guest that matches replies by id never sees an
+		// acknowledgement addressed to nothing.
+		return h.applyFrame(full, full)
 	}
 	return h.applyFrame(cmd, cmd)
 }
