@@ -203,7 +203,7 @@ type PassthroughPlacement struct {
 	Rows         int  // Original image rows (before any capping)
 	DisplayRows  int  // Capped rows for initial display
 	Hidden       bool // True when placement is completely out of view
-	DataDirty    bool // True when image data was re-transmitted (needs re-place for video)
+	DataDirty    bool // Image data was re-transmitted, so the placement must be re-sent
 
 	// Source clipping parameters (pixels) - preserved for re-placement
 	SourceX      int
