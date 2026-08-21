@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -188,16 +189,17 @@ func TestScanPathAppsRunsOffTheUpdateGoroutine(t *testing.T) {
 // pane happened to be focused.
 func TestRunProgramWaitsForItsPane(t *testing.T) {
 	m := runTestOS(t)
-	m.pending = &pendingLaunch{
+	m.pending = []*pendingLaunch{{
 		line:     "'/usr/bin/htop'\r",
-		want:     1,
+		known:    map[string]struct{}{},
+		name:     "htop",
 		deadline: timeSoon(),
-	}
+	}}
 
 	if cmd := m.launchReady(); cmd == nil {
 		t.Fatal("launchReady gave up while the pane could still arrive")
 	}
-	if m.pending == nil {
+	if len(m.pending) != 1 {
 		t.Fatal("the pending launch was dropped before its pane appeared")
 	}
 }
@@ -206,12 +208,14 @@ func TestRunProgramWaitsForItsPane(t *testing.T) {
 // arrives must not leave a launch pending forever, and the user must be told.
 func TestRunProgramGivesUpAtTheDeadline(t *testing.T) {
 	m := runTestOS(t)
-	m.pending = &pendingLaunch{line: "x\r", want: 1, deadline: timePast()}
+	m.pending = []*pendingLaunch{{
+		line: "x\r", known: map[string]struct{}{}, name: "ghost", deadline: timePast(),
+	}}
 
 	if cmd := m.launchReady(); cmd != nil {
 		t.Error("launchReady re-armed past its deadline")
 	}
-	if m.pending != nil {
+	if len(m.pending) != 0 {
 		t.Error("the pending launch outlived its deadline")
 	}
 	if len(m.Notifications) == 0 {
@@ -226,10 +230,10 @@ func TestRunProgramQuotesTheAbsolutePath(t *testing.T) {
 	e := applist.Entry{Name: "odd name", Path: "/opt/bin/odd name", Dir: "/opt/bin"}
 
 	m.RunProgram(e)
-	if m.pending == nil {
+	if len(m.pending) != 1 {
 		t.Fatal("RunProgram left nothing pending")
 	}
-	line := m.pending.line
+	line := m.pending[0].line
 	if !strings.HasPrefix(line, "'/opt/bin/odd name'") {
 		t.Errorf("pending line = %q, want the absolute path single-quoted", line)
 	}
@@ -302,3 +306,65 @@ func TestPaletteFilterStillRanksWithoutFuzzyImport(t *testing.T) {
 
 func timeSoon() time.Time { return time.Now().Add(time.Minute) }
 func timePast() time.Time { return time.Now().Add(-time.Minute) }
+
+// TestTwoLaunchesEachGetTheirOwnPane is the regression for a launch that was
+// simply overwritten. Picking a second program while the first pane was still
+// on its way left the first pane empty with nothing to say why, and in a daemon
+// session the gap it happens in is wide enough to hit by hand.
+//
+// It also pins the reason the pane is found by elimination rather than by
+// focus: the second AddWindow takes focus with it, so the first launch would
+// otherwise type into the wrong pane.
+func TestTwoLaunchesEachGetTheirOwnPane(t *testing.T) {
+	m := runTestOS(t)
+	m.Windows = []*terminal.Window{newTestWindow(t, "existing", 80, 24)}
+
+	first := applist.Entry{Name: "alpha", Path: "/usr/bin/alpha", Dir: "/usr/bin"}
+	second := applist.Entry{Name: "beta", Path: "/usr/bin/beta", Dir: "/usr/bin"}
+
+	// Both requested before either pane exists, which is the daemon ordering.
+	knownA := m.windowIDs()
+	knownB := m.windowIDs()
+	m.pending = []*pendingLaunch{
+		{line: shellSingleQuote(first.Path) + "\r", known: knownA, name: first.Name, deadline: timeSoon()},
+		{line: shellSingleQuote(second.Path) + "\r", known: knownB, name: second.Name, deadline: timeSoon()},
+	}
+
+	// The first pane lands. Only the first launch may claim it.
+	paneA := newTestWindow(t, "alpha", 80, 24)
+	m.Windows = append(m.Windows, paneA)
+	if cmd := m.launchReady(); cmd == nil {
+		t.Fatal("launchReady stopped polling with a launch still queued")
+	}
+	if len(m.pending) != 1 {
+		t.Fatalf("%d launches still queued, want the second one waiting", len(m.pending))
+	}
+	if _, claimed := m.pending[0].known[paneA.ID]; !claimed {
+		t.Error("the second launch can still mistake the first launch's pane for its own")
+	}
+
+	// The second pane lands and drains the queue.
+	paneB := newTestWindow(t, "beta", 80, 24)
+	m.Windows = append(m.Windows, paneB)
+	if cmd := m.launchReady(); cmd != nil {
+		t.Error("launchReady kept polling with an empty queue")
+	}
+	if len(m.pending) != 0 {
+		t.Fatalf("%d launches left queued, want none", len(m.pending))
+	}
+}
+
+// TestRunProgramQueuesRatherThanReplaces checks the queueing at the RunProgram
+// seam, where the overwrite used to happen.
+func TestRunProgramQueuesRatherThanReplaces(t *testing.T) {
+	m := runTestOS(t)
+	m.RunProgram(applist.Entry{Name: "alpha", Path: "/usr/bin/alpha"})
+	m.RunProgram(applist.Entry{Name: "beta", Path: "/usr/bin/beta"})
+
+	if len(m.pending) != 2 {
+		t.Fatalf("%d launches pending after two requests, want 2", len(m.pending))
+	}
+	if m.pending[0].name != "alpha" || m.pending[1].name != "beta" {
+		t.Errorf("queue is %q then %q, want the requests in order", m.pending[0].name, m.pending[1].name)
+	}
+}
