@@ -56,9 +56,14 @@ func loadSharedMemory(name string, size int) ([]byte, error) {
 	result := make([]byte, len(data))
 	copy(result, data)
 
-	if err := syscall.Munmap(data); err != nil {
-		return result, nil
-	}
+	_ = syscall.Munmap(data)
+
+	// The protocol makes unlinking the terminal's job, and a guest streaming
+	// frames relies on it: nothing else ever removes these. Leaving them
+	// behind leaks tmpfs at frame rate, which on a shared machine is how you
+	// take down more than the guest. The unlink happens after the copy, so a
+	// reader that already has the data is unaffected.
+	_ = os.Remove(shmPath)
 
 	return result, nil
 }
