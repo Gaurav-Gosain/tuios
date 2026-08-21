@@ -18,6 +18,21 @@ import (
 // that no well-behaved guest legitimately holds an update that long, and that
 // the interval tuios measures is the guest's interval.
 //
+// Neither the DEC 2026 spec nor its iTerm2 ancestor names a value. What the
+// implementations chose spans a factor of twenty: Windows Terminal 100ms,
+// Alacritty and mintty 150ms, st 200ms, foot, Ghostty, iTerm2, Konsole,
+// xterm.js and tmux 1s, kitty 2s, and contour, WezTerm and Zellij no bound at
+// all. 150ms is the floor of that range, and tuios is a multiplexer, which puts
+// it in tmux's company rather than Alacritty's.
+//
+// The guests matter more than the company. Ink, which is what Claude Code
+// draws with, writes the opening escape, the frame and the closing escape as
+// three separate writes, so a slow reader strands the update open for as long
+// as the middle write blocks. Neovim spans partial flushes deliberately, and
+// Textual opens the update before it renders. None of them re-open the update
+// to extend the deadline, so for those guests 150ms is absolute from the first
+// byte.
+//
 // The second is the interesting one, and it is what this measures. tuios does
 // not time the guest. It times the gap between parsing 2026h and parsing 2026l,
 // and between those two parses sit the daemon's ring, a unix socket, the
