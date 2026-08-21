@@ -212,10 +212,9 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		marker = "› "
 	}
 
-	// Both of these are rows with no stepper arrows to record: a toggle has one
-	// target and a colour has none, since there is no next colour to step to.
-	isBool := item.Control == controlBool
-	stepless := isBool || item.Control == controlColor
+	// Neither of these rows has stepper arrows to record: a toggle has one target
+	// and a colour has none, since there is no next colour to step to.
+	stepless := item.Control == controlBool || item.Control == controlColor
 	var control string
 	switch item.Control {
 	case controlBool:
@@ -252,11 +251,10 @@ func (m *OS) settingsColorControl(item settingItem, selected bool, bg color.Colo
 	val := item.value(m)
 	unset := val == item.Unset
 
+	// An unset row is quiet whether or not it is the selected one: the word in it
+	// names a fallback rather than a value the user chose.
 	fg := pal.Fg
-	if !selected {
-		fg = pal.FgDim
-	}
-	if unset {
+	if !selected || unset {
 		fg = pal.FgDim
 	}
 	text := overlay.Truncate(val, min(20, max(width/2, 6)))
