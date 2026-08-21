@@ -751,10 +751,16 @@ func mouseRelease(t *testing.T, term *tuitest.Terminal, col, row int, button tui
 // mouseMotion sends a drag report: the motion bit plus the held button's code,
 // which is what mode 1002 emits for each cell the pointer crosses with a button
 // down.
+//
+// The action is MouseDrag rather than MouseMove. tuitest used to encode a
+// MouseMove carrying a button as a drag, so the two spelled the same wire
+// report; it now takes MouseMove at its word and drops the button, which turns
+// every report here into a bare hover. tuios reads a press, a run of hovers and
+// a release as a click, so a drag stopped moving anything at all.
 func mouseMotion(t *testing.T, term *tuitest.Terminal, col, row int, button tuitest.MouseButton, mods tuitest.KeyMods) {
 	t.Helper()
 	sendMouse(t, term, "motion", tuitest.MouseEvent{
-		Col: col, Row: row, Button: button, Action: tuitest.MouseMove, Mods: mods,
+		Col: col, Row: row, Button: button, Action: tuitest.MouseDrag, Mods: mods,
 	})
 }
 
@@ -792,10 +798,9 @@ func abs(n int) int {
 }
 
 // mouseHover sends a bare pointer motion with no button held: SGR button code
-// 35, which is the no-button value 3 plus the motion bit 32. tuitest's
-// MouseEvent cannot express it, because its MouseButton zero value is the left
-// button, so a MouseMove there always encodes a left drag. The report is
-// written by hand for that reason.
+// 35, which is the no-button value 3 plus the motion bit 32. MouseNone is what
+// spells that now; it used to be written out by hand, because the MouseButton
+// zero value is the left button and there was no way to say "no button".
 //
 // Read the doc comment on the mouse section before using this. tuios's motion
 // filter drops bare motion in every state except an active drag, resize,
@@ -805,10 +810,9 @@ func abs(n int) int {
 // menu's own hover highlight, cannot be observed from here at all.
 func mouseHover(t *testing.T, term *tuitest.Terminal, col, row int) {
 	t.Helper()
-	if err := term.SendKeys(tuitest.Key(fmt.Sprintf("\x1b[<35;%d;%dM", col+1, row+1))); err != nil {
-		t.Fatalf("hover at (%d,%d): %v", col, row, err)
-	}
-	time.Sleep(mouseGap)
+	sendMouse(t, term, "hover", tuitest.MouseEvent{
+		Col: col, Row: row, Button: tuitest.MouseNone, Action: tuitest.MouseMove,
+	})
 }
 
 // enableTiling toggles tiling on and waits for the layout to actually be tiled,

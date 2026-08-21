@@ -221,7 +221,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			}
 		}
 
-		window.ClearDirtyFlags()
+		// A window that served its held frame because the guest is mid-update was
+		// not drawn from the guest's current state, so its repaint request has
+		// to outlive the frame: clearing it here would leave nothing to re-read
+		// the emulator when the update closes.
+		if window.Terminal == nil || !window.Terminal.IsSyncActive() {
+			window.ClearDirtyFlags()
+		}
 	}
 
 	// Add shared border separator overlay when active (not in scrolling mode)
@@ -480,13 +486,6 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if window.IsBeingManipulated || window.Minimizing {
 		return nil, false
 	}
-	// The synchronized-output hold (DEC 2026) that suppresses btop flicker lives
-	// only in the compositor path (GetCanvas). A sync-active guest must fall back
-	// there, otherwise the fast path re-renders the half-updated buffer mid-frame
-	// and the flicker returns for a zoomed window.
-	if window.Terminal != nil && window.Terminal.IsSyncActive() {
-		return nil, false
-	}
 	// A scrolled-back pane shows a scrollbar thumb, which only the compositor
 	// draws as a separate layer. Fall back so a lone tiled/fullscreen window
 	// does not silently lose it. At the live tail there is no thumb, so a deep
@@ -529,7 +528,11 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 		}
 	}
 	boxContent := m.renderWindowBox(window, windowIndex, isFocused, borderColorObj)
-	window.ClearDirtyFlags()
+	// A guest mid-update was served its held frame rather than drawn, so its
+	// repaint request has to outlive this frame. Same reason as the compositor.
+	if window.Terminal == nil || !window.Terminal.IsSyncActive() {
+		window.ClearDirtyFlags()
+	}
 	// The fast path does not build a CachedLayer, so the one still held here was
 	// captured the last time the compositor ran (potentially seconds ago). Nil it
 	// so that when the fast path is later disqualified (tmux prefix, an overlay),

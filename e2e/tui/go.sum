@@ -1,5 +1,7 @@
 github.com/Gaurav-Gosain/tuitest v0.0.0-20260718154210-22f65ef6b266 h1:Ig3zXW4GtVBU7VmPuDsg0d0RF4/gif2XPaHzHH2xOm8=
 github.com/Gaurav-Gosain/tuitest v0.0.0-20260718154210-22f65ef6b266/go.mod h1:N2FLCf0nLtF7Xb/4K8e+WrrrYnu/P71LujDvxy/bd2Y=
+github.com/Gaurav-Gosain/tuitest v0.0.0-20260726152020-d8180855c594 h1:04hnqxwftnWNdK8IksgpibUpVyw16DOj49Vk65sbf3k=
+github.com/Gaurav-Gosain/tuitest v0.0.0-20260726152020-d8180855c594/go.mod h1:vtcfxGuFOpCyh2XJmdkPz9dHiFYvavMed441WWK3O/A=
 github.com/adrg/xdg v0.5.3 h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=
 github.com/adrg/xdg v0.5.3/go.mod h1:nlTsY+NNiCBGCK2tpm09vRqfVzrc2fLmXGpBLF0zlTQ=
 github.com/charmbracelet/colorprofile v0.4.3 h1:QPa1IWkYI+AOB+fE+mg/5/4HRMZcaXex9t5KX76i20Q=
