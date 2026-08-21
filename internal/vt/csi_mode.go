@@ -126,6 +126,13 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 		// on, which is a different row for every guest.
 		e.atPhantom = false
 		e.setCursorPosition(0, 0)
+	case ansi.ModeLeftRightMargin:
+		if !setting.IsSet() {
+			// Resetting DECLRMM has to give the columns back. Leaving the pair
+			// in place confines output to a region the guest has just stopped
+			// believing in, and nothing it can send afterwards would widen it.
+			e.scr.setHorizontalMargins(0, e.Width())
+		}
 	case ansi.ModeInBandResize:
 		if setting.IsSet() {
 			_, _ = io.WriteString(e.pipe, ansi.InBandResize(e.Height(), e.Width(), 0, 0))

@@ -249,13 +249,25 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	}
 
 	x, y := e.scr.CursorPosition()
+
+	// Where the line ends and where a wrap lands. With DECLRMM set they are the
+	// horizontal margins rather than the screen edges: wrapping at the right
+	// margin is the whole reason a guest asks for one, and a terminal that
+	// accepts the mode and then runs to the edge has given it nothing. A cursor
+	// parked outside the margins keeps the screen's own edges, which is what
+	// xterm does.
+	left, right := 0, e.scr.Width()
+	if r := e.scr.ScrollRegion(); (r.Min.X != 0 || r.Max.X != right) && x >= r.Min.X && x < r.Max.X {
+		left, right = r.Min.X, r.Max.X
+	}
+
 	if e.atPhantom && awm {
 		// moves cursor down similar to [Terminal.linefeed] except it doesn't
 		// respects [ansi.LNM] mode.
 		// This will reset the phantom state i.e. pending wrap state.
 		e.index()
 		_, y = e.scr.CursorPosition()
-		x = 0
+		x = left
 	}
 
 	// Handle character set mappings
@@ -285,7 +297,7 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	// trace: CJK text loses a character wherever it happens to meet the right
 	// margin. xterm and ghostty both blank the column that cannot hold it and
 	// wrap the cluster whole.
-	if cell.Width > 1 && x+cell.Width > e.scr.Width() {
+	if cell.Width > 1 && x+cell.Width > right {
 		e.scr.SetCell(x, y, nil)
 		if !awm {
 			// Nothing to wrap to. The column stays blank rather than holding
@@ -296,7 +308,7 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 		}
 		e.index()
 		_, y = e.scr.CursorPosition()
-		x = 0
+		x = left
 	}
 
 	// Recorded before the character set mapping is undone by a repeat: REP
@@ -321,9 +333,9 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	// line. A wide cluster ending flush against the margin has to arm it too,
 	// or the next character lands on that cluster's own second cell and eats
 	// the character already there.
-	if awm && cell.Width > 0 && x+cell.Width >= e.scr.Width() {
+	if awm && cell.Width > 0 && x+cell.Width >= right {
 		e.atPhantom = true
-		x = e.scr.Width() - 1
+		x = right - 1
 	} else {
 		e.atPhantom = false
 		x += cell.Width

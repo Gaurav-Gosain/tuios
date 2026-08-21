@@ -96,7 +96,7 @@ func TestConform_PrintingInsideLeftRightMargins(t *testing.T) {
 			cols: 8,
 			rows: 2,
 			in:   "zzzzzzzz\x1b[2;1Hyyyyyyyy\x1b[?69h\x1b[3;6s\x1b[2;3HABCDEFG",
-			want: "zzEFGGzz\nyyG   yy",
+			want: "zzABCDzz\nyyEFG yy",
 		}, {
 			// CUF cannot leave the margins when it starts inside them.
 			name:   "CUF stops at the right margin",
