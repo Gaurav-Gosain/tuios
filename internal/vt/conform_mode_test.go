@@ -7,7 +7,8 @@ package vt_test
 // one character; a mishandled DECAWM or IRM misplaces everything after it, and
 // the guest has no way to notice because it is not looking at the screen.
 //
-// Cases follow esctest (tests/esctest/esctest/tests/{decawm,irm,decset}.py),
+// Cases follow esctest, whose mode coverage lives in tests/decset.py and the
+// per-sequence files around it,
 // the VT510 reference manual's mode tables, and the pending-wrap model xterm
 // and ghostty share.
 
