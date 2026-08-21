@@ -2,6 +2,7 @@ package theme
 
 import (
 	"image/color"
+	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/exp/charmtone"
@@ -35,9 +36,33 @@ func ReadableAt(c, bg color.Color, floor float64) color.Color {
 	return overlay.ReadableAt(c, bg, floor)
 }
 
+// railRuleMemo is the last ground a structure ink was measured for, and the
+// answer. The measurement is a scan over contrast ratios, and the grounds a
+// frame draws rules on are a handful of constants that move only when the theme
+// does; without this the dock's separator paid for the whole scan on every
+// frame it composed.
+var railRuleMemo struct {
+	sync.Mutex
+	bg   [4]uint32
+	ink  color.Color
+	held bool
+}
+
 // RailRuleOn is the structure ink for a rule drawn on a ground its caller
 // paints itself, like the collapsed strip's bands.
-func RailRuleOn(bg color.Color) color.Color { return overlay.Structure(bg) }
+func RailRuleOn(bg color.Color) color.Color {
+	r, g, b, a := bg.RGBA()
+	key := [4]uint32{r, g, b, a}
+
+	railRuleMemo.Lock()
+	defer railRuleMemo.Unlock()
+	if railRuleMemo.held && railRuleMemo.bg == key {
+		return railRuleMemo.ink
+	}
+	ink := overlay.Structure(bg)
+	railRuleMemo.bg, railRuleMemo.ink, railRuleMemo.held = key, ink, true
+	return ink
+}
 
 // ContrastText picks a foreground that reads on the given (usually saturated)
 // background: near-white on a dark or mid accent, near-black on a light one.
