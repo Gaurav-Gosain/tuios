@@ -452,13 +452,13 @@ func (t *GhosttyTerminal) MainCellAt(x, y int) *uv.Cell {
 func (t *GhosttyTerminal) SetCell(x, y int, c *uv.Cell) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.pendingRestore().setCell(t.active, x, y, c)
+	t.pendingRestore().setActiveCell(t.active, x, y, c)
 }
 
 func (t *GhosttyTerminal) SetMainCell(x, y int, c *uv.Cell) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.pendingRestore().setCell(0, x, y, c)
+	t.pendingRestore().setGridCell(0, x, y, c)
 }
 
 func (t *GhosttyTerminal) Render() string {

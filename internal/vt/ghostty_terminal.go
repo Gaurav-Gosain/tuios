@@ -89,6 +89,10 @@ type GhosttyTerminal struct {
 	syncSetAtNanos   atomic.Int64
 	cachedKittyFlags atomic.Int32
 	closed           atomic.Bool
+	// restorePending makes the lock-free getters flush a buffered restore
+	// before answering, so state queried right after ApplyTerminalState is
+	// the restored state.
+	restorePending atomic.Bool
 
 	// tuios graphics state, owned here exactly as the pure emulator owns it.
 	kittyMain, kittyAlt  *KittyState
@@ -440,19 +444,42 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 	t.cachedKittyFlags.Store(int32(t.kittyKbd.CurrentFlags()))
 }
 
+// ensureRestored flushes a buffered restore so an atomic cache answers with
+// the restored state. The check is one atomic load on the common path.
+func (t *GhosttyTerminal) ensureRestored() {
+	if !t.restorePending.Load() {
+		return
+	}
+	t.mu.Lock()
+	t.flushRestoreLocked()
+	t.mu.Unlock()
+}
+
 // HasMouseMode reports whether any mouse tracking mode is enabled.
 // Thread-safe via an atomic cache, like the pure emulator.
-func (t *GhosttyTerminal) HasMouseMode() bool { return t.cachedHasMouse.Load() }
+func (t *GhosttyTerminal) HasMouseMode() bool {
+	t.ensureRestored()
+	return t.cachedHasMouse.Load()
+}
 
 // HasAllMotionMode reports whether mode 1003 is enabled.
-func (t *GhosttyTerminal) HasAllMotionMode() bool { return t.cachedAllMotion.Load() }
+func (t *GhosttyTerminal) HasAllMotionMode() bool {
+	t.ensureRestored()
+	return t.cachedAllMotion.Load()
+}
 
 // HasCellMotionMode reports whether mode 1002 is enabled.
-func (t *GhosttyTerminal) HasCellMotionMode() bool { return t.cachedCellMotion.Load() }
+func (t *GhosttyTerminal) HasCellMotionMode() bool {
+	t.ensureRestored()
+	return t.cachedCellMotion.Load()
+}
 
 // IsAltScreen reports the alt-screen mode bits, like the pure emulator's
 // reading of modes 1047/1049.
-func (t *GhosttyTerminal) IsAltScreen() bool { return t.cachedAltScreen.Load() }
+func (t *GhosttyTerminal) IsAltScreen() bool {
+	t.ensureRestored()
+	return t.cachedAltScreen.Load()
+}
 
 // IsSyncActive reports an open synchronized update, bounded by the same
 // syncMaxHold the pure emulator applies.
@@ -464,7 +491,10 @@ func (t *GhosttyTerminal) IsSyncActive() bool {
 }
 
 // KittyKeyboardFlags returns the current kitty keyboard flags.
-func (t *GhosttyTerminal) KittyKeyboardFlags() int { return int(t.cachedKittyFlags.Load()) }
+func (t *GhosttyTerminal) KittyKeyboardFlags() int {
+	t.ensureRestored()
+	return int(t.cachedKittyFlags.Load())
+}
 
 func (t *GhosttyTerminal) KittyKeyboardStack() []int {
 	t.mu.Lock()

@@ -19,11 +19,19 @@ func (t *GhosttyTerminal) scrollbackLenLocked() int {
 	return int(n)
 }
 
+// ScrollbackLen deliberately does not flush a pending restore:
+// ApplyTerminalState reads it between restore primitives, and a flush there
+// would split the restore into two synthesized streams, the second of whose
+// hard reset destroys the first. Pending lines count as pushed, which is
+// what the pure emulator's incremental pushes report too.
 func (t *GhosttyTerminal) ScrollbackLen() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.flushRestoreLocked()
-	return t.scrollbackLenLocked()
+	n := t.scrollbackLenLocked()
+	if t.restore != nil {
+		n += len(t.restore.scrollback)
+	}
+	return n
 }
 
 func (t *GhosttyTerminal) ScrollbackLine(index int) uv.Line {

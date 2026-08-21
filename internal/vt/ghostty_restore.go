@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	gh "go.mitchellh.com/libghostty"
 )
 
 // Snapshot restore. The pure emulator pokes restored state straight into its
@@ -39,14 +40,15 @@ type ghosttyRestore struct {
 func (t *GhosttyTerminal) pendingRestore() *ghosttyRestore {
 	if t.restore == nil {
 		t.restore = &ghosttyRestore{}
+		t.restorePending.Store(true)
 	}
 	return t.restore
 }
 
-// setCell buffers one restored cell. The target screen honors a pending
-// alt-screen restore, since ApplyTerminalState switches screens before it
-// writes cells.
-func (r *ghosttyRestore) setCell(activeNow, x, y int, c *uv.Cell) {
+// setActiveCell buffers one restored cell for the active screen. The target
+// honors a pending alt-screen restore, since ApplyTerminalState switches
+// screens before it writes cells.
+func (r *ghosttyRestore) setActiveCell(activeNow, x, y int, c *uv.Cell) {
 	idx := activeNow
 	if r.hasAltScreen {
 		idx = 0
@@ -54,6 +56,11 @@ func (r *ghosttyRestore) setCell(activeNow, x, y int, c *uv.Cell) {
 			idx = 1
 		}
 	}
+	r.setGridCell(idx, x, y, c)
+}
+
+// setGridCell buffers one restored cell on an explicit screen.
+func (r *ghosttyRestore) setGridCell(idx, x, y int, c *uv.Cell) {
 	if r.grids[idx] == nil {
 		r.grids[idx] = make(map[[2]int]*uv.Cell)
 	}
@@ -73,6 +80,7 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		return
 	}
 	t.restore = nil
+	t.restorePending.Store(false)
 
 	var seq bytes.Buffer
 
@@ -99,8 +107,13 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 
 	// The alternate screen switches on before its cells paint, so region,
 	// pen and cursor below land on the screen the snapshot took them from.
+	// The switch also ends the shadow's view of the main screen, so the
+	// stream so far is applied and the main shadow captured first.
 	altActive := r.hasAltScreen && r.altScreen
 	if altActive {
+		t.term.VTWrite(seq.Bytes())
+		seq.Reset()
+		t.captureScreenLocked(0)
 		seq.WriteString("\x1b[?1049h\x1b[2J\x1b[H")
 		appendGridPaint(&seq, r.grids[1], t.width, t.height)
 	}
@@ -277,9 +290,22 @@ func appendStyledLine(seq *bytes.Buffer, line uv.Line) {
 	var cur uv.Style
 	curSet := false
 	link := ""
+	skipNext := false
 	for x := 0; x < len(line); x++ {
 		c := line[x]
-		if c.Width == 0 && c.Content == "" {
+		if skipNext {
+			// The wide glyph before this cell advanced the cursor over it,
+			// whatever spacer convention the snapshot used.
+			skipNext = false
+			continue
+		}
+		if c.Width == 2 {
+			skipNext = true
+		}
+		if c.Width == 0 {
+			// A zero-width cell with no preceding wide glyph still holds a
+			// column.
+			seq.WriteByte(' ')
 			continue
 		}
 		if !curSet || !c.Style.Equal(&cur) {
@@ -305,4 +331,28 @@ func appendStyledLine(seq *bytes.Buffer, line uv.Line) {
 	if link != "" {
 		seq.WriteString("\x1b]8;;\x1b\\")
 	}
+}
+
+// captureScreenLocked snapshots the library's current screen into one shadow
+// buffer, regardless of dirty state. Used when a synthesized stream is about
+// to switch screens and the one being left would otherwise never be read.
+func (t *GhosttyTerminal) captureScreenLocked(idx int) {
+	_ = t.rs.SetDirty(gh.RenderStateDirtyFull)
+	if err := t.rs.Update(t.term); err != nil {
+		return
+	}
+	if err := t.rs.RowIterator(t.ri); err != nil {
+		return
+	}
+	for {
+		y, ok := t.ri.NextDirty()
+		if !ok {
+			break
+		}
+		if int(y) >= t.height {
+			continue
+		}
+		t.syncRowLocked(t.bufs[idx], int(y))
+	}
+	_ = t.rs.Clean()
 }
