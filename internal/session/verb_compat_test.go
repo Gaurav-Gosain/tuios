@@ -122,9 +122,9 @@ func TestHandshakeAgainstLegacyDaemonReportsMismatch(t *testing.T) {
 	// exact command that fixes it, naming both versions.
 	msg := mismatch.Error()
 	for _, want := range []string{
-		"The running TUIOS daemon does not speak this CLI's control protocol",
+		"The running TUIOS daemon does not speak this client's control protocol",
 		"daemon 0.9.0",
-		"CLI 1.4.0",
+		"client 1.4.0",
 		"upgraded while the daemon kept running",
 		"tuios kill-server",
 		"2 session(s)",

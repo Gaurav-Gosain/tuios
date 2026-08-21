@@ -752,9 +752,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		// Register exit handler (always needed regardless of workspace)
 		windowID := window.ID
 		m.DaemonClient.OnPTYClosed(ptyID, func() {
-			if m.WindowExitChan != nil {
-				m.WindowExitChan <- windowID
-			}
+			m.queueWindowExit(windowID)
 		})
 
 		window.EnableCallbacks()
@@ -1189,9 +1187,7 @@ func (m *OS) SetupPTYOutputHandlers() error {
 			// Register handler for when PTY process exits
 			windowID := window.ID
 			m.DaemonClient.OnPTYClosed(ptyID, func() {
-				if m.WindowExitChan != nil {
-					m.WindowExitChan <- windowID
-				}
+				m.queueWindowExit(windowID)
 			})
 		}
 	}

@@ -460,12 +460,8 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 		log.Printf("[SSH] Received state sync: trigger=%s, source=%s", triggerType, shortID(sourceID))
 		// Send state to channel for processing in Bubble Tea event loop
 		// This ensures thread-safe access to m.Windows
-		if m.StateSyncChan != nil {
-			select {
-			case m.StateSyncChan <- state:
-			default:
-				log.Printf("[SSH] Warning: StateSyncChan full, dropping state sync")
-			}
+		if m.QueueStateSync(state) {
+			log.Printf("[SSH] StateSyncChan full, superseded the queued snapshot")
 		}
 	})
 

@@ -237,6 +237,7 @@ func (c *Client) sendHello() error {
 		Width:          c.width,
 		Height:         c.height,
 		PreferredCodec: "gob", // Request gob (default)
+		Protocol:       ProtocolVersion,
 	}, c.codec)
 	if err != nil {
 		return err
@@ -252,14 +253,25 @@ func (c *Client) sendHello() error {
 		return err
 	}
 
+	if resp.Type == MsgError {
+		var errPayload ErrorPayload
+		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
+	}
 	if resp.Type != MsgWelcome {
-		return fmt.Errorf("expected welcome, got message type %d", resp.Type)
+		// See TUIClient.ConnectWithCapabilities: a reply of another type means
+		// the daemon numbers its messages differently.
+		return numberingMismatch(c.version, resp.Type)
 	}
 
 	// Parse welcome to get negotiated codec
 	var welcome WelcomePayload
 	if err := resp.ParsePayloadWithCodec(&welcome, c.codec); err != nil {
 		return fmt.Errorf("failed to parse welcome: %w", err)
+	}
+
+	if protocolMismatch(welcome.Protocol) {
+		return daemonProtocolMismatch(c.version, &welcome)
 	}
 
 	// Update codec based on what server negotiated

@@ -46,7 +46,13 @@ type rig struct {
 	// cols and rows are the size every client of this rig attaches at, so a
 	// test about two differently sized clients can pick its own.
 	cols, rows int
+	// keepExits leaves WindowExitChan undrained, which is what an Update
+	// goroutine that is busy elsewhere looks like from the read loop.
+	keepExits bool
 }
+
+// keepExits is the newRig option that leaves window exits queued.
+func keepExits(r *rig) { r.keepExits = true }
 
 // ownSocket gives this test its own daemon socket. The whole binary already
 // runs against a throwaway XDG tree (see TestMain), but every test in it shares
@@ -61,14 +67,14 @@ func ownSocket(t *testing.T) {
 // newRig brings up a daemon, creates a session with panes windows, and attaches
 // a client OS to it by the attach path. The returned rig is at route "first
 // attach" with every pane subscribed.
-func newRig(t *testing.T, panes int) *rig {
+func newRig(t *testing.T, panes int, opts ...func(*rig)) *rig {
 	t.Helper()
-	return newRigSized(t, panes, rigCols, rigRows)
+	return newRigSized(t, panes, rigCols, rigRows, opts...)
 }
 
 // newRigSized is newRig with the client size chosen, for the tests about what
 // two differently sized clients do to each other.
-func newRigSized(t *testing.T, panes, cols, rows int) *rig {
+func newRigSized(t *testing.T, panes, cols, rows int, opts ...func(*rig)) *rig {
 	t.Helper()
 	ownSocket(t)
 	// A predictable shell keeps the pane's own output out of the comparison's
@@ -137,6 +143,9 @@ func newRigSized(t *testing.T, panes, cols, rows int) *rig {
 	_ = boot.Close()
 
 	r := &rig{t: t, daemon: d, ctl: ctl, session: name, cols: cols, rows: rows}
+	for _, opt := range opts {
+		opt(r)
+	}
 	r.attach()
 	return r
 }
@@ -214,7 +223,9 @@ func (r *rig) attach() {
 	// OnPTYClosed sends on WindowExitChan from the client read loop, which is
 	// the same goroutine that dispatches PTY output. A shell that exits with
 	// nobody reading would wedge the whole stream.
-	drainExits(t, m)
+	if !r.keepExits {
+		drainExits(t, m)
+	}
 }
 
 // drainExits keeps the window-exit channel empty for the test's lifetime.

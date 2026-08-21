@@ -176,6 +176,7 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		Width:          width,
 		Height:         height,
 		PreferredCodec: "gob",
+		Protocol:       ProtocolVersion,
 	}
 
 	// Add graphics capabilities if provided
@@ -208,9 +209,22 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		return err
 	}
 
-	if resp.Type != MsgWelcome {
+	if resp.Type == MsgError {
+		// The only thing the daemon refuses at hello is the handshake itself,
+		// and its message already names the fix.
+		var errPayload ErrorPayload
+		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
 		_ = conn.Close()
-		return fmt.Errorf("expected welcome, got %d", resp.Type)
+		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
+	}
+	if resp.Type != MsgWelcome {
+		// A daemon that numbers its messages differently answers the hello with
+		// a type this build calls something else. That is exactly what a
+		// pre-v0.8.0 daemon does, since its MsgWelcome is 22 and this build's is
+		// 23, and it is the same fault the version check exists for, so it is
+		// reported the same way rather than as a type number nobody can act on.
+		_ = conn.Close()
+		return numberingMismatch(version, resp.Type)
 	}
 
 	// Parse welcome to get negotiated codec
@@ -218,6 +232,14 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	if err := resp.ParsePayloadWithCodec(&welcome, c.codec); err != nil {
 		_ = conn.Close()
 		return fmt.Errorf("failed to parse welcome: %w", err)
+	}
+
+	// Refuse before anything else is exchanged. Proceeding on a protocol the
+	// other side does not speak turns a clear message here into a decode error
+	// or a stall somewhere far from its cause.
+	if protocolMismatch(welcome.Protocol) {
+		_ = conn.Close()
+		return daemonProtocolMismatch(version, &welcome)
 	}
 
 	// Update codec based on what server negotiated
@@ -269,12 +291,20 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 	case MsgError:
 		var errPayload ErrorPayload
 		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
-		return nil, fmt.Errorf("attach failed: %s", errPayload.Message)
+		return nil, &attachRefused{msg: errPayload.Message}
 
 	default:
 		return nil, fmt.Errorf("unexpected response: %d", resp.Type)
 	}
 }
+
+// attachRefused reports an attach the daemon answered and declined, as opposed
+// to one that never got an answer at all. Only the first is worth a second round
+// trip: if the daemon is not replying, asking it again doubles the wait for an
+// answer that is not coming.
+type attachRefused struct{ msg string }
+
+func (e *attachRefused) Error() string { return "attach failed: " + e.msg }
 
 // Detach detaches from the current session.
 func (c *TUIClient) Detach() error {
@@ -285,12 +315,50 @@ func (c *TUIClient) Detach() error {
 	return c.send(msg)
 }
 
+// SwitchRollback reports a session switch that failed after the detach had
+// already been taken, which is the only failure a caller cannot simply ignore:
+// at that instant the connection holds no session.
+//
+// State non-nil means the client is back on Prev and the caller must rebuild
+// from that state, because detaching drops every PTY subscription: the panes it
+// still holds are pictures of shells, not shells. State nil means the return
+// failed too and the connection is attached to nothing.
+type SwitchRollback struct {
+	Target string
+	Prev   string
+	// State is the previous session as the daemon handed it back, when the
+	// return attach succeeded.
+	State *SessionState
+	// Err is why the switch failed.
+	Err error
+	// Recovery is why the return failed, set only when State is nil.
+	Recovery error
+}
+
+func (e *SwitchRollback) Error() string {
+	if e.State != nil {
+		return fmt.Sprintf("switch to %q failed: %v; still on %q", e.Target, e.Err, e.Prev)
+	}
+	return fmt.Sprintf("switch to %q failed: %v; could not return to %q either (%v). Reattach with 'tuios attach %s'",
+		e.Target, e.Err, e.Prev, e.Recovery, e.Prev)
+}
+
+func (e *SwitchRollback) Unwrap() error { return e.Err }
+
 // SwitchSession detaches from the current session and attaches to another.
 // Safe to call while the read loop is running. Serialized via mutex.
+//
+// The detach cannot be taken back on its own: the daemon drops every
+// subscription and every resume position with it. So an attach that fails after
+// it does not simply return; it attaches back to where the client came from and
+// says so in a *SwitchRollback, and the caller rebuilds from the state that
+// comes with it. A switch the daemon refuses costs the user the switch, not the
+// session.
 func (c *TUIClient) SwitchSession(targetName string, width, height int) (*SessionState, error) {
 	c.switchMu.Lock()
 	defer c.switchMu.Unlock()
 
+	prevName := c.sessionName
 	debugLog("[SWITCH] Starting session switch to %q", targetName)
 
 	// 1. Detach (fire-and-forget, daemon sends MsgDetached back)
@@ -328,9 +396,49 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 
 	// 2. Attach to new session using sendAndWaitResponse
 	debugLog("[SWITCH] Attaching to session %q (%dx%d)", targetName, width, height)
-	attachMsg, err := NewMessageWithCodec(MsgAttach, &AttachPayload{
-		SessionName: targetName,
-		CreateNew:   true, // Create if doesn't exist (for "new session" feature)
+	state, err := c.attachWhileReading(targetName, true, width, height)
+	if err == nil {
+		windowCount := 0
+		if state != nil {
+			windowCount = len(state.Windows)
+		}
+		debugLog("[SWITCH] Attached to %q (%d windows)", c.sessionName, windowCount)
+		return state, nil
+	}
+
+	// 3. The detach was taken and the attach was not, so this connection holds
+	// no session. Go back before reporting. The return does not create: an empty
+	// namesake would be a different session wearing the user's session's name,
+	// and saying what happened is better than that.
+	rollback := &SwitchRollback{Target: targetName, Prev: prevName, Err: err}
+	if prevName == "" {
+		rollback.Recovery = errors.New("the client held no named session to return to")
+		return nil, rollback
+	}
+	var refused *attachRefused
+	if !errors.As(err, &refused) {
+		// The daemon did not answer, so a second round trip would only spend
+		// another timeout waiting for an answer that is not coming.
+		rollback.Recovery = errors.New("the daemon is not answering, so no return was attempted")
+		return nil, rollback
+	}
+	prevState, rerr := c.attachWhileReading(prevName, false, width, height)
+	if rerr != nil {
+		rollback.Recovery = rerr
+		debugLog("[SWITCH] Return to %q failed: %v", prevName, rerr)
+		return nil, rollback
+	}
+	rollback.State = prevState
+	debugLog("[SWITCH] Returned to %q", prevName)
+	return nil, rollback
+}
+
+// attachWhileReading performs the attach round trip through the read loop, for
+// the paths that run with the read loop already started.
+func (c *TUIClient) attachWhileReading(name string, createNew bool, width, height int) (*SessionState, error) {
+	msg, err := NewMessageWithCodec(MsgAttach, &AttachPayload{
+		SessionName: name,
+		CreateNew:   createNew,
 		Width:       width,
 		Height:      height,
 	}, c.codec)
@@ -338,7 +446,7 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		return nil, fmt.Errorf("attach encode: %w", err)
 	}
 
-	resp, err := c.sendAndWaitResponse(attachMsg, MsgAttached, MsgError)
+	resp, err := c.sendAndWaitResponse(msg, MsgAttached, MsgError)
 	if err != nil {
 		return nil, fmt.Errorf("attach: %w", err)
 	}
@@ -352,17 +460,12 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
 		c.NoteSession(payload.SessionName)
-		windowCount := 0
-		if payload.State != nil {
-			windowCount = len(payload.State.Windows)
-		}
-		debugLog("[SWITCH] Attached to %q (%d windows)", c.sessionName, windowCount)
 		return payload.State, nil
 
 	case MsgError:
 		var errPayload ErrorPayload
 		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
-		return nil, fmt.Errorf("attach failed: %s", errPayload.Message)
+		return nil, &attachRefused{msg: errPayload.Message}
 
 	default:
 		return nil, fmt.Errorf("unexpected response: %d", resp.Type)
