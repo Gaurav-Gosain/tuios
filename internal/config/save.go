@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
@@ -75,28 +77,87 @@ func configFileHeader(configPath string) string {
 	return sb.String()
 }
 
-// WriteConfigFile marshals cfg to TOML (with the documented header) and writes
-// it to configPath, creating the parent directory as needed.
-func WriteConfigFile(cfg *UserConfig, configPath string) error {
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
+// renderConfigFile is cfg as the bytes of a config file, header and all. It
+// touches memory only, which is what lets a caller that must not block do this
+// half of a save itself.
+func renderConfigFile(cfg *UserConfig, configPath string) ([]byte, error) {
 	data, err := toml.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	var sb strings.Builder
 	sb.WriteString(configFileHeader(configPath))
 	if _, err := sb.Write(data); err != nil {
-		return fmt.Errorf("failed to write config data: %w", err)
+		return nil, fmt.Errorf("failed to write config data: %w", err)
 	}
+	return []byte(sb.String()), nil
+}
 
-	if err := os.WriteFile(configPath, []byte(sb.String()), 0o600); err != nil {
+// writeConfigBytes puts already-rendered bytes at configPath, creating the
+// parent directory as needed.
+func writeConfigBytes(data []byte, configPath string) error {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 	return nil
+}
+
+// WriteConfigFile marshals cfg to TOML (with the documented header) and writes
+// it to configPath, creating the parent directory as needed.
+func WriteConfigFile(cfg *UserConfig, configPath string) error {
+	data, err := renderConfigFile(cfg, configPath)
+	if err != nil {
+		return err
+	}
+	return writeConfigBytes(data, configPath)
+}
+
+// saveSeq numbers renders and saveDone the newest one that has landed, so a
+// write held up behind another cannot put an older config back.
+var (
+	saveMu   sync.Mutex
+	saveSeq  atomic.Uint64
+	saveDone atomic.Uint64
+)
+
+// RenderUserConfig reads cfg into the bytes of a config file and hands back the
+// function that writes them. The split exists because the caller is the Update
+// goroutine: rendering is memory and can happen there, the file write cannot.
+//
+// Reading cfg here rather than in the returned function is also what makes this
+// safe without a deep copy. The config is the model's own and goes on being
+// edited; a writer holding the pointer would be marshalling a struct changing
+// underneath it.
+//
+// The returned function is safe to call from anywhere and from several places at
+// once. Writes are serialised and stamped, so when two saves are in flight the
+// older one gives way rather than overwriting the newer.
+func RenderUserConfig(cfg *UserConfig) (func() error, error) {
+	configPath, err := xdg.ConfigFile("tuios/config.toml")
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve config path: %w", err)
+	}
+	data, err := renderConfigFile(cfg, configPath)
+	if err != nil {
+		return nil, err
+	}
+	gen := saveSeq.Add(1)
+	return func() error {
+		saveMu.Lock()
+		defer saveMu.Unlock()
+		if gen < saveDone.Load() {
+			return nil
+		}
+		if err := writeConfigBytes(data, configPath); err != nil {
+			return err
+		}
+		saveDone.Store(gen)
+		return nil
+	}, nil
 }
 
 // SaveUserConfig persists cfg to the user's config file at the standard XDG

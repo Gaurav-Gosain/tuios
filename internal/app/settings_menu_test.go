@@ -46,7 +46,7 @@ func editSetting(t *testing.T, m *OS, category, label, value string) {
 		t.Fatalf("editing %q did not activate", label)
 	}
 	m.SettingsEditBuffer = value
-	m.SettingsEditCommit()
+	runSave(t, m.SettingsEditCommit())
 	if m.SettingsEditActive() {
 		t.Fatalf("commit of %q left the editor active", label)
 	}
@@ -164,7 +164,7 @@ func TestDaemonLogLevelPersists(t *testing.T) {
 	if got := m.daemonLogLevel(); got != "off" {
 		t.Fatalf("default log level = %q, want off", got)
 	}
-	m.SettingsAdjust(1) // off -> errors
+	runSave(t, m.SettingsAdjust(1)) // off -> errors
 	if got := m.UserConfig.Daemon.LogLevel; got != "errors" {
 		t.Fatalf("after one step log level = %q, want errors", got)
 	}
@@ -215,7 +215,8 @@ func TestSharedBordersPaletteToggles(t *testing.T) {
 		t.Fatal("Toggle Shared Borders command not found in the palette")
 	}
 
-	toggle.Action(m)
+	_, save := toggle.Action(m)
+	runSave(t, save)
 	if !config.SharedBorders {
 		t.Error("palette toggle did not enable shared borders")
 	}

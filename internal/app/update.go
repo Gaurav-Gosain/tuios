@@ -1431,6 +1431,13 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case launchPollMsg:
 		return m, m.launchReady()
 
+	case settingsSaveFailedMsg:
+		// The write happens in a command now, so a failure has to come back here
+		// to be said out loud: the change is live either way, and the user needs
+		// to know it will not outlive the session.
+		m.ShowNotification("Could not save settings: "+msg.err.Error(), "error", 0)
+		return m, nil
+
 	case tapeLayoutRefreshMsg:
 		// Fired a beat after a project tape finished. Re-fetch every pane's
 		// content from the daemon and repaint, so panes created during the tape

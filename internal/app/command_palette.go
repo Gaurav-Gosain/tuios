@@ -180,13 +180,13 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				config.SharedBorders = !config.SharedBorders
 				m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = boolPtr(config.SharedBorders) })
 				m.applyAppearanceLive(true)
-				m.persistSettings()
+				save := m.persistSettings()
 				if config.SharedBorders {
 					m.ShowNotification("Shared Borders Enabled", "success", config.NotificationDuration)
 				} else {
 					m.ShowNotification("Shared Borders Disabled", "info", config.NotificationDuration)
 				}
-				return m, nil
+				return m, save
 			},
 		},
 		{
@@ -539,13 +539,13 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Name:     "Toggle Focus Follows Mouse",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ToggleFocusFollowsMouse()
+				save := m.ToggleFocusFollowsMouse()
 				state := "Disabled"
 				if config.FocusFollowsMouse {
 					state = "Enabled"
 				}
 				m.ShowNotification("Focus Follows Mouse "+state, "success", config.NotificationDuration)
-				return m, nil
+				return m, save
 			},
 		},
 		{
@@ -592,13 +592,13 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Shortcut: "prefix+D k",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.ToggleShowKeys()
+				save := m.ToggleShowKeys()
 				state := "Disabled"
 				if m.ShowKeys {
 					state = "Enabled"
 				}
 				m.ShowNotification("Show Keys Overlay "+state, "success", config.NotificationDuration)
-				return m, nil
+				return m, save
 			},
 		},
 		{

@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -130,21 +131,39 @@ func (m *OS) applyBorderColors() {
 // already been applied, so the session behaves as asked for as long as it
 // lasts; what it does not do is decide the config file's contents on behalf of
 // whoever else is attached. See OSOptions.ConfigReadOnly.
-func (m *OS) persistSettings() {
+// The write itself is a command, not something this does. Marshalling the
+// config and putting it on disk was happening inline, so every arrow-key press
+// on a settings row spent a file write on the goroutine that must not block, and
+// a held key spent one per repeat. Reading the config into bytes stays here
+// (memory, and the config is the model's own); the file lands off the Update
+// goroutine, the way the applist history does.
+func (m *OS) persistSettings() tea.Cmd {
 	if m.UserConfig == nil {
-		return
+		return nil
 	}
 	if m.ConfigReadOnly {
 		if !m.configReadOnlyTold {
 			m.configReadOnlyTold = true
 			m.ShowNotification("Settings apply to this session only; the config file is not written", "warning", 0)
 		}
-		return
+		return nil
 	}
-	if err := config.SaveUserConfig(m.UserConfig); err != nil {
+	write, err := config.RenderUserConfig(m.UserConfig)
+	if err != nil {
 		m.ShowNotification("Could not save settings: "+err.Error(), "error", 0)
+		return nil
+	}
+	return func() tea.Msg {
+		if err := write(); err != nil {
+			return settingsSaveFailedMsg{err: err}
+		}
+		return nil
 	}
 }
+
+// settingsSaveFailedMsg carries a failed config write back to the Update
+// goroutine, which is the only place a notification can be raised from.
+type settingsSaveFailedMsg struct{ err error }
 
 // setAppearance runs fn against the held config's appearance section when a
 // config is present, so live changes can be persisted.
@@ -184,19 +203,19 @@ func (m *OS) setDebug(fn func(d *config.DebugConfig)) {
 // persisted [debug] show_key_events config, and saves it. Shared by the settings
 // toggle, the command-palette entry, and the keybinding so all of them stay in
 // sync and survive a restart.
-func (m *OS) ToggleShowKeys() {
+func (m *OS) ToggleShowKeys() tea.Cmd {
 	m.ShowKeys = !m.ShowKeys
 	m.setDebug(func(d *config.DebugConfig) { d.ShowKeyEvents = m.ShowKeys })
-	m.persistSettings()
+	return m.persistSettings()
 }
 
 // ToggleFocusFollowsMouse flips focus-follows-mouse, mirrors the new state into
 // the persisted appearance config, and saves it. Shared by the settings row and
 // the command-palette entry so both stay in sync and survive a restart.
-func (m *OS) ToggleFocusFollowsMouse() {
+func (m *OS) ToggleFocusFollowsMouse() tea.Cmd {
 	config.FocusFollowsMouse = !config.FocusFollowsMouse
 	m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = boolPtr(config.FocusFollowsMouse) })
-	m.persistSettings()
+	return m.persistSettings()
 }
 
 // tapeAutorunConfigValue returns the configured [tape] autorun mode (not the
@@ -317,7 +336,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		},
 		func(m *OS, v string) {
 			m.applyTheme(v)
-			m.persistThemeSelection(v)
+			m.setThemeSelection(v)
 		})
 	themeItem.activate = func(m *OS) { m.OpenThemePicker() }
 
@@ -858,36 +877,37 @@ func (m *OS) SettingsPrevCategory() {
 // SettingsAdjust changes the focused setting by dir (-1 or +1) and persists it.
 // Text (controlString) settings are edited inline rather than stepped, so the
 // arrow keys are a no-op on them.
-func (m *OS) SettingsAdjust(dir int) {
+func (m *OS) SettingsAdjust(dir int) tea.Cmd {
 	items := m.settingsCurrentItems()
 	if len(items) == 0 {
-		return
+		return nil
 	}
-	if items[m.SettingsSelected].Control == controlString {
-		return
+	item := items[m.SettingsSelected]
+	if item.Control == controlString || item.adjust == nil {
+		return nil
 	}
-	items[m.SettingsSelected].adjust(m, dir)
-	m.persistSettings()
+	item.adjust(m, dir)
+	return m.persistSettings()
 }
 
 // SettingsActivate runs a setting's activate hook if it has one (e.g. opening
 // the theme picker), begins inline editing for a text setting, otherwise
 // toggles/advances the value. Bound to Enter.
-func (m *OS) SettingsActivate() {
+func (m *OS) SettingsActivate() tea.Cmd {
 	items := m.settingsCurrentItems()
 	if len(items) == 0 {
-		return
+		return nil
 	}
 	item := items[m.SettingsSelected]
 	if fn := item.activate; fn != nil {
 		fn(m)
-		return
+		return nil
 	}
 	if item.Control == controlString {
 		m.SettingsBeginEdit()
-		return
+		return nil
 	}
-	m.SettingsAdjust(1)
+	return m.SettingsAdjust(1)
 }
 
 // SettingsEditActive reports whether a text setting is currently being edited.
@@ -939,9 +959,9 @@ func (m *OS) SettingsEditCancel() {
 
 // SettingsEditCommit applies the edited (trimmed) value to the focused text
 // setting and persists it.
-func (m *OS) SettingsEditCommit() {
+func (m *OS) SettingsEditCommit() tea.Cmd {
 	if !m.SettingsEditing {
-		return
+		return nil
 	}
 	value := strings.TrimSpace(m.SettingsEditBuffer)
 	items := m.settingsCurrentItems()
@@ -952,5 +972,5 @@ func (m *OS) SettingsEditCommit() {
 	}
 	m.SettingsEditing = false
 	m.SettingsEditBuffer = ""
-	m.persistSettings()
+	return m.persistSettings()
 }

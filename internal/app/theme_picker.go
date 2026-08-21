@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
@@ -64,16 +65,18 @@ func (m *OS) CloseThemePicker() {
 // and closes it. Used for Esc, so live preview does not stick. It only persists
 // when a live preview actually changed the active theme, so a no-op cancel does
 // not rewrite config.toml (and cannot overwrite the configured theme).
-func (m *OS) CancelThemePicker() {
+func (m *OS) CancelThemePicker() tea.Cmd {
 	current := theme.CurrentThemeID()
 	if current == "" {
 		current = themeNone
 	}
 	m.applyTheme(m.ThemePickerOriginal)
+	var save tea.Cmd
 	if current != m.ThemePickerOriginal {
-		m.persistThemeSelection(m.ThemePickerOriginal)
+		save = m.persistThemeSelection(m.ThemePickerOriginal)
 	}
 	m.CloseThemePicker()
+	return save
 }
 
 // ThemePickerMove moves the selection by delta, keeping the scroll window in
@@ -106,21 +109,29 @@ func (m *OS) ThemePickerRefilter() {
 }
 
 // ThemePickerApplySelection commits the selected theme, persists it, and closes.
-func (m *OS) ThemePickerApplySelection() {
+func (m *OS) ThemePickerApplySelection() tea.Cmd {
 	items := m.themePickerItems()
 	if m.ThemePickerSelected < 0 || m.ThemePickerSelected >= len(items) {
 		m.CloseThemePicker()
-		return
+		return nil
 	}
 	sel := items[m.ThemePickerSelected]
 	m.applyTheme(sel)
-	m.persistThemeSelection(sel)
+	save := m.persistThemeSelection(sel)
 	m.CloseThemePicker()
+	return save
 }
 
 // persistThemeSelection writes the chosen theme to the config, mapping the
 // "none" sentinel to an empty theme name.
-func (m *OS) persistThemeSelection(sel string) {
+func (m *OS) persistThemeSelection(sel string) tea.Cmd {
+	m.setThemeSelection(sel)
+	return m.persistSettings()
+}
+
+// setThemeSelection mirrors the chosen theme into the held config without
+// writing it out, for the callers whose own save step follows.
+func (m *OS) setThemeSelection(sel string) {
 	m.setAppearance(func(a *config.AppearanceConfig) {
 		if sel == themeNone {
 			a.Theme = ""
@@ -128,5 +139,4 @@ func (m *OS) persistThemeSelection(sel string) {
 			a.Theme = sel
 		}
 	})
-	m.persistSettings()
 }
