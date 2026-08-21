@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
 // ConfigReloadedMsg carries a config parsed by the file watcher goroutine so it
@@ -25,6 +26,11 @@ type CommandPaletteItem struct {
 	// ("switches session"), since a row with no key still owes the user a warning.
 	Shortcut string
 	Category string // "Window", "Layout", "Session", "Navigation"
+	// Match holds the byte offsets in Name that the live query matched, filled
+	// in by FilterCommandPalette so the renderer can underline them without
+	// running the matcher a second time. Nil when nothing was typed, and for a
+	// row admitted on its Category alone.
+	Match []int
 	// AgentState marks a session/window entry whose Name carries an agent-state
 	// glyph (sessionPaletteLabel), so the renderer can color the glyph without
 	// putting ANSI into Name, which the fuzzy filter matches raw.
@@ -715,10 +721,14 @@ func paletteStateMatches(item CommandPaletteItem, states []string) bool {
 	return false
 }
 
-// FilterCommandPalette filters command palette items by a query string.
-// It performs case-insensitive substring matching on both Name and Category,
-// after an optional leading "@state" token narrows the list to the panes in
-// that state (see splitPaletteQuery).
+// FilterCommandPalette filters command palette items by a query string, best
+// match first, after an optional leading "@state" token narrows the list to the
+// panes in that state (see splitPaletteQuery).
+//
+// Matching is the shared scored matcher, so one box ranks static commands,
+// panes and programs on PATH against each other. Name is matched on its own and
+// Category is a weaker fallback, so a row admitted only by its section name can
+// never outrank one that matched what it actually says.
 func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPaletteItem {
 	if states, filtered, rest := splitPaletteQuery(query); filtered {
 		kept := make([]CommandPaletteItem, 0, len(items))
@@ -734,51 +744,30 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 	if query == "" {
 		return items
 	}
-	q := strings.ToLower(query)
+	var m fuzzy.Matcher
+	hits := m.FilterIndex(query, len(items), func(i int) string {
+		return printableTitle(items[i].Name)
+	})
 
-	type scored struct {
-		item  CommandPaletteItem
-		score int
+	named := make([]bool, len(items))
+	out := make([]CommandPaletteItem, 0, len(items))
+	for _, h := range hits {
+		named[h.Index] = true
+		item := items[h.Index]
+		item.Match = h.Positions
+		out = append(out, item)
 	}
-	var results []scored
 
-	for _, item := range items {
-		nameLower := strings.ToLower(item.Name)
-		catLower := strings.ToLower(item.Category)
-
-		score := 0
-		if strings.Contains(nameLower, q) {
-			score = 100
-			// Boost for prefix match on name
-			if strings.HasPrefix(nameLower, q) {
-				score = 200
-			}
-			// Boost for exact word match
-			for word := range strings.FieldsSeq(nameLower) {
-				if strings.HasPrefix(word, q) {
-					score += 50
-					break
-				}
-			}
-		} else if strings.Contains(catLower, q) {
-			score = 10 // Category-only match ranks lower
+	// Category hits land after every name hit rather than being scored beside
+	// them. That is the old scoring's intent without its magic numbers: typing
+	// "layout" should list the Layout section, below anything actually called
+	// layout.
+	for i, item := range items {
+		if named[i] || item.Category == "" || !fuzzy.Match(query, item.Category) {
+			continue
 		}
-
-		if score > 0 {
-			results = append(results, scored{item, score})
-		}
+		item.Match = nil
+		out = append(out, item)
 	}
-
-	// Sort by score descending (stable to preserve original order within same score)
-	for i := 1; i < len(results); i++ {
-		for j := i; j > 0 && results[j].score > results[j-1].score; j-- {
-			results[j], results[j-1] = results[j-1], results[j]
-		}
-	}
-
-	filtered := make([]CommandPaletteItem, len(results))
-	for i, r := range results {
-		filtered[i] = r.item
-	}
-	return filtered
+	return out
 }

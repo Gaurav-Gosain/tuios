@@ -135,23 +135,31 @@ func TestOpenCommandPalettePopulatesSessionItems(t *testing.T) {
 }
 
 // TestFilteredPaletteItemsMatchesSessionEntries checks that typing a query
-// unique to a window's name filters the merged (static + dynamic) list down to
-// just that entry, which is the whole point of merging them: the palette
-// becomes a way to jump straight to a session or window by name.
+// unique to a window's name ranks that entry first in the merged (static +
+// dynamic) list, which is the whole point of merging them: the palette becomes
+// a way to jump straight to a session or window by name.
+//
+// It asserts the top row rather than the row count. A scored matcher admits
+// anything the query is a subsequence of, so "second" also reaches
+// "Scroll: Cycle Column Width"; what has to hold is that it reaches it a long
+// way below the window actually called second.
 func TestFilteredPaletteItemsMatchesSessionEntries(t *testing.T) {
 	m, _, _ := sessionPaletteTestOS(t)
 	m.OpenCommandPalette()
 	m.CommandPaletteQuery = "second"
 
 	filtered := m.filteredPaletteItems()
-	if len(filtered) != 1 {
+	if len(filtered) == 0 {
+		t.Fatal("filtered = 0, want the window named second")
+	}
+	if filtered[0].Name != "Window: second" {
 		names := make([]string, len(filtered))
 		for i, it := range filtered {
 			names[i] = it.Name
 		}
-		t.Fatalf("filtered = %d, want 1, got %v", len(filtered), names)
+		t.Errorf("filtered[0].Name = %q, want %q; full list %v", filtered[0].Name, "Window: second", names)
 	}
-	if filtered[0].Name != "Window: second" {
-		t.Errorf("filtered[0].Name = %q, want %q", filtered[0].Name, "Window: second")
+	if len(filtered[0].Match) == 0 {
+		t.Error("the top row carries no match positions, so the renderer cannot highlight it")
 	}
 }

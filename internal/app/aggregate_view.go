@@ -3,9 +3,9 @@ package app
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
 // AggregateViewItem represents a window entry in the aggregate view.
@@ -61,48 +61,25 @@ func (m *OS) GetAggregateViewItems() []AggregateViewItem {
 	return items
 }
 
-// FilterAggregateViewItems filters items by query using fuzzy matching.
+// FilterAggregateViewItems filters items by query, best match first.
 func FilterAggregateViewItems(items []AggregateViewItem, query string) []AggregateViewItem {
 	if query == "" {
 		return items
 	}
 
-	query = strings.ToLower(query)
-	var filtered []AggregateViewItem
-
-	for _, item := range items {
+	var m fuzzy.Matcher
+	hits := m.FilterIndex(query, len(items), func(i int) string {
 		// Everything the row shows is searchable, and nothing it does not: a
 		// query used to be able to match a pane's scrollback, so a window could
 		// be filtered in for a reason invisible on its row.
-		searchText := strings.ToLower(fmt.Sprintf("%s %s %d",
-			item.Title, item.CWD, item.Workspace))
+		return fmt.Sprintf("%s %s %d", items[i].Title, items[i].CWD, items[i].Workspace)
+	})
 
-		if fuzzyMatch(searchText, query) {
-			filtered = append(filtered, item)
-		}
+	filtered := make([]AggregateViewItem, len(hits))
+	for i, h := range hits {
+		filtered[i] = items[h.Index]
 	}
-
 	return filtered
-}
-
-// fuzzyMatch checks if all characters in query appear in text in order.
-func fuzzyMatch(text, query string) bool {
-	ti := 0
-	for qi := 0; qi < len(query); qi++ {
-		found := false
-		for ti < len(text) {
-			if text[ti] == query[qi] {
-				ti++
-				found = true
-				break
-			}
-			ti++
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
 }
 
 // AggregateViewJump jumps to row i of the filtered list, which is what Enter
