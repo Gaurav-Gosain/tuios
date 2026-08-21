@@ -131,6 +131,9 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 	if mode == ansi.ModeAutoWrap {
 		e.cachedAutoWrap.Store(setting.IsSet())
 	}
+	if mode == ansi.ModeInsertReplace {
+		e.cachedInsertMode.Store(setting.IsSet())
+	}
 }
 
 // autoWrapMode reports DECAWM (?7) without touching the modes map.
@@ -141,6 +144,12 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 // RestoreModes, the only two writers of that entry.
 func (e *Emulator) autoWrapMode() bool {
 	return e.cachedAutoWrap.Load()
+}
+
+// insertMode reports IRM (ANSI mode 4) without touching the modes map, for the
+// same reason autoWrapMode exists: the print path asks once per character.
+func (e *Emulator) insertMode() bool {
+	return e.cachedInsertMode.Load()
 }
 
 // isModeSet returns true if the mode is set.

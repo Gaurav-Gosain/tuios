@@ -8,6 +8,7 @@ func (e *Emulator) resetModes() {
 	e.modes = ansi.Modes{
 		// Recognized modes and their default values.
 		ansi.ModeCursorKeys:          ansi.ModeReset, // ?1
+		ansi.ModeInsertReplace:       ansi.ModeReset, // 4, an ANSI mode
 		ansi.ModeOrigin:              ansi.ModeReset, // ?6
 		ansi.ModeAutoWrap:            ansi.ModeSet,   // ?7
 		ansi.ModeMouseX10:            ansi.ModeReset, // ?9

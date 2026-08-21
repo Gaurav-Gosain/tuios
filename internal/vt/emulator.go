@@ -76,6 +76,9 @@ type Emulator struct {
 	// authoritative; this is a read-side shortcut for the one mode the hot loop
 	// asks about every character.
 	cachedAutoWrap atomic.Bool
+	// Thread-safe cached insert-mode flag (IRM, updated on set/reset). Read
+	// once per printed character, for the same reason as cachedAutoWrap.
+	cachedInsertMode atomic.Bool
 	// Unix-nanos timestamp of the last sync begin, for the present-anyway timeout
 	syncSetAtNanos atomic.Int64
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)

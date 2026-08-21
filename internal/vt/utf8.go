@@ -303,6 +303,14 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 		e.lastChar, _ = utf8.DecodeRuneInString(content)
 	}
 
+	// Insert mode (IRM) opens room for the character rather than overwriting
+	// what is there, and a double-width cluster opens two columns rather than
+	// one. terminfo reaches this through smir/rmir, so it runs under ordinary
+	// curses programs and not only under a conformance suite.
+	if e.insertMode() {
+		e.scr.insertCellAt(x, y, cell.Width)
+	}
+
 	e.lastCellX, e.lastCellY = x, y
 	e.scr.SetCell(x, y, &cell)
 

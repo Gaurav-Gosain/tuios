@@ -164,7 +164,10 @@ func TestConform_DECRQM(t *testing.T) {
 		{"an unknown private mode reports not recognised", "\x1b[?9999$p", "\x1b[?9999;0$y"},
 
 		// The ANSI form has no private marker and is a separate table.
-		{"ANSI IRM reports reset by default", "\x1b[4$p", "\x1b[4;0$y"},
+		// Reset, not "not recognised": this emulator implements IRM, and
+		// telling a guest otherwise would send it down a fallback path it
+		// does not need.
+		{"ANSI IRM reports reset by default", "\x1b[4$p", "\x1b[4;2$y"},
 		{"ANSI IRM reports set after CSI 4 h", "\x1b[4h\x1b[4$p", "\x1b[4;1$y"},
 		{"ANSI LNM reports set after CSI 20 h", "\x1b[20h\x1b[20$p", "\x1b[20;1$y"},
 	} {

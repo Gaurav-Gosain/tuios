@@ -58,7 +58,7 @@ func TestConform_InsertReplaceMode(t *testing.T) {
 			// a line ends.
 			name:   "IRM still wraps at the margin",
 			in:     "\x1b[4habcdefg",
-			want:   "gabcde\nf",
+			want:   "abcdef\ng",
 			cursor: "1,1",
 		},
 	})
