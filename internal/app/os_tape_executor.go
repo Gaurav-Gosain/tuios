@@ -1022,8 +1022,11 @@ func (m *OS) SmartSplitFocusedExec() error {
 }
 
 // ShowCommandPaletteExec opens the command palette (tape executor interface).
+// The $PATH rescan it returns is dropped: the tape executor has no channel
+// back to Bubble Tea, and a tape asserting on the palette wants the rows that
+// were already there, not ones that arrive mid-assertion.
 func (m *OS) ShowCommandPaletteExec() error {
-	m.OpenCommandPalette()
+	_ = m.OpenCommandPalette()
 	return nil
 }
 

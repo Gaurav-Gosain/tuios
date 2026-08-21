@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
 
 // OSOptions configures the creation of an OS instance.
@@ -144,6 +145,13 @@ func NewOS(opts OSOptions) *OS {
 	// Sidebar order and expand/collapse state survive restarts; a load failure
 	// just means the defaults (creation order, current session expanded).
 	os.loadSidebarState()
+
+	// The $PATH cache starts empty and is filled by the first palette open, so
+	// startup pays nothing for a launcher the user may never reach for. Launch
+	// history is read here because it is one small file and the first open wants
+	// it already ranked.
+	os.pathApps = applist.NewCache()
+	os.launchHistory = applist.LoadFrecency(applist.DefaultPath())
 
 	// Initialize graphics passthrough if enabled
 	if opts.EnableGraphicsPassthrough {

@@ -430,7 +430,7 @@ func (t *Target) openOverlay(n int) {
 	case 1:
 		m.OpenSettings()
 	case 2:
-		m.OpenCommandPalette()
+		_ = m.OpenCommandPalette()
 	case 3:
 		m.OpenSessionSwitcher()
 	case 4:
