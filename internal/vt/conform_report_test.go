@@ -137,6 +137,65 @@ func TestConform_DeviceAttributes(t *testing.T) {
 	}
 }
 
+// silence reports whether the emulator wrote nothing back. Replies are written
+// during the write that provokes them, so anything at all is already in the
+// pipe by the time WriteString returns and a short wait is conclusive.
+func silence(t *testing.T, in string) string {
+	t.Helper()
+	emu := vt.NewEmulator(80, 24)
+	if _, err := emu.WriteString(in); err != nil {
+		t.Fatalf("write %q: %v", in, err)
+	}
+	got := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 512)
+		n, _ := emu.Read(buf)
+		got <- string(buf[:n])
+	}()
+	select {
+	case s := <-got:
+		return s
+	case <-time.After(200 * time.Millisecond):
+		return ""
+	}
+}
+
+// TestConform_QueriesThisEmulatorLeavesUnanswered pins the requests that get no
+// reply, so that staying silent is a decision on the record rather than a gap.
+//
+// Silence is safe for all three: each is a capability probe a guest sends with
+// a timeout and falls back from. It is not free, though, because the guest pays
+// that timeout. These are listed in the order they would be worth answering.
+func TestConform_QueriesThisEmulatorLeavesUnanswered(t *testing.T) {
+	for _, tc := range []struct{ name, in, why string }{
+		{
+			"XTVERSION", "\x1b[>0q",
+			"a guest reads the terminal's name and version from it to decide which " +
+				"extensions to use; answering would let one pick this emulator's " +
+				"kitty graphics and keyboard support without probing for them",
+		}, {
+			"DA3, the terminal unit identifier", "\x1b[=c",
+			"the answer is a made-up unit id, so there is nothing to be right about",
+		}, {
+			"DECRQSS for SGR", "\x1bP$qm\x1b\\",
+			"answered with a refusal rather than silence, see TestConform_DECRQSS",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := silence(t, tc.in)
+			if tc.name == "DECRQSS for SGR" {
+				if got != "\x1bP0$r\x1b\\" {
+					t.Errorf("reply = %q, want a refusal (%s)", got, tc.why)
+				}
+				return
+			}
+			if got != "" {
+				t.Errorf("reply = %q, want none; if this now answers, delete the case (%s)", got, tc.why)
+			}
+		})
+	}
+}
+
 // TestConform_DECRQSS covers requests for the current value of a setting.
 //
 // DECRQSS is DCS $ q <setting> ST, answered with DCS Ps $ r <value> ST where Ps
