@@ -84,8 +84,12 @@ type Emulator struct {
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
 	cachedKittyFlags atomic.Int32
 
-	// The last written character.
-	lastChar rune // either ansi.Rune or ansi.Grapheme
+	// The last cluster written, and the columns it took, for REP. A rune is
+	// not enough: a double-width character and a base carrying combining marks
+	// are both single characters a guest can ask to have repeated, and storing
+	// only an ASCII rune dropped them.
+	lastCluster      string
+	lastClusterWidth int
 	// A slice of runes to compose a grapheme.
 	grapheme []rune
 	// The cell handleGrapheme last drew into. A pending wrap makes the target

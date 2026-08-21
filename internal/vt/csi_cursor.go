@@ -129,7 +129,7 @@ func (e *Emulator) carriageReturn() {
 // equivalent to typing the same character n times. This performs the same as
 // [ansi.REP].
 func (e *Emulator) repeatPreviousCharacter(n int) {
-	if e.lastChar == 0 {
+	if e.lastCluster == "" {
 		return
 	}
 	// n comes unclamped from a CSI param (up to ~2.1 billion); repeating
@@ -138,7 +138,11 @@ func (e *Emulator) repeatPreviousCharacter(n int) {
 	if maxN := e.Width() * e.Height(); maxN > 0 && n > maxN {
 		n = maxN
 	}
+	// Held in a local because handleGrapheme writes them back on every call,
+	// which is harmless while they stay the same and would not survive a
+	// future print path that rewrote the cluster.
+	cluster, width := e.lastCluster, e.lastClusterWidth
 	for range n {
-		e.handlePrint(e.lastChar)
+		e.handleGrapheme(cluster, width)
 	}
 }

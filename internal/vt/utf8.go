@@ -1,8 +1,6 @@
 package vt
 
 import (
-	"unicode/utf8"
-
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -221,6 +219,8 @@ func (e *Emulator) extendOpenGrapheme() {
 	e.scr.SetCell(e.openGrapheme.x, e.openGrapheme.y, &cell)
 	e.openGrapheme.baseASCII = 0
 	e.openGrapheme.base = cluster
+	// The marks are part of the character now, so a repeat has to carry them.
+	e.lastCluster, e.lastClusterWidth = cluster, width
 
 	// A continuation can change the cluster's width (a variation selector turns
 	// a narrow base wide); move the cursor by the delta so following output
@@ -299,9 +299,10 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 		x = 0
 	}
 
-	if cell.Width == 1 && len(content) == 1 {
-		e.lastChar, _ = utf8.DecodeRuneInString(content)
-	}
+	// Recorded before the character set mapping is undone by a repeat: REP
+	// repeats what the guest sent, and the designated set is still in force
+	// when it does.
+	e.lastCluster, e.lastClusterWidth = content, width
 
 	// Insert mode (IRM) opens room for the character rather than overwriting
 	// what is there, and a double-width cluster opens two columns rather than
