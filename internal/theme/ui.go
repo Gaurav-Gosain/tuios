@@ -36,16 +36,20 @@ func ReadableAt(c, bg color.Color, floor float64) color.Color {
 	return overlay.ReadableAt(c, bg, floor)
 }
 
-// railRuleMemo is the last ground a structure ink was measured for, and the
-// answer. The measurement is a scan over contrast ratios, and the grounds a
+// railRuleMemo holds the grounds a structure ink has been measured for and the
+// answers. The measurement bisects over contrast ratios, and the grounds a
 // frame draws rules on are a handful of constants that move only when the theme
-// does; without this the dock's separator paid for the whole scan on every
+// does; without it the dock's separator paid for the whole bisection on every
 // frame it composed.
+//
+// Four entries rather than one because a frame uses more than one ground at a
+// time: the strip's resting bands and the one under the pointer are different
+// fills, and a single slot would miss on every band between them.
 var railRuleMemo struct {
 	sync.Mutex
-	bg   [4]uint32
-	ink  color.Color
-	held bool
+	bg   [4][4]uint32
+	ink  [4]color.Color
+	next int
 }
 
 // RailRuleOn is the structure ink for a rule drawn on a ground its caller
@@ -56,11 +60,15 @@ func RailRuleOn(bg color.Color) color.Color {
 
 	railRuleMemo.Lock()
 	defer railRuleMemo.Unlock()
-	if railRuleMemo.held && railRuleMemo.bg == key {
-		return railRuleMemo.ink
+	for i, held := range railRuleMemo.ink {
+		if held != nil && railRuleMemo.bg[i] == key {
+			return held
+		}
 	}
 	ink := overlay.Structure(bg)
-	railRuleMemo.bg, railRuleMemo.ink, railRuleMemo.held = key, ink, true
+	railRuleMemo.bg[railRuleMemo.next] = key
+	railRuleMemo.ink[railRuleMemo.next] = ink
+	railRuleMemo.next = (railRuleMemo.next + 1) % len(railRuleMemo.ink)
 	return ink
 }
 
