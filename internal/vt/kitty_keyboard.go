@@ -219,61 +219,10 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 	}
 
 	// Map special keys to their CSI u key codes
-	switch key.Code {
-	case KeyEnter:
-		code = 13
-	case KeyTab:
-		code = 9
-	case KeyBackspace:
-		code = 127
-	case KeyEscape:
-		code = 27
-	case KeySpace:
-		code = 32
-	case KeyUp:
-		return encodeSpecialKeyCSIu('A', key.Mod, flags)
-	case KeyDown:
-		return encodeSpecialKeyCSIu('B', key.Mod, flags)
-	case KeyRight:
-		return encodeSpecialKeyCSIu('C', key.Mod, flags)
-	case KeyLeft:
-		return encodeSpecialKeyCSIu('D', key.Mod, flags)
-	case KeyHome:
-		return encodeSpecialKeyCSIu('H', key.Mod, flags)
-	case KeyEnd:
-		return encodeSpecialKeyCSIu('F', key.Mod, flags)
-	case KeyInsert:
-		return encodeTildeKeyCSIu(2, key.Mod, flags)
-	case KeyDelete:
-		return encodeTildeKeyCSIu(3, key.Mod, flags)
-	case KeyPgUp:
-		return encodeTildeKeyCSIu(5, key.Mod, flags)
-	case KeyPgDown:
-		return encodeTildeKeyCSIu(6, key.Mod, flags)
-	case KeyF1:
-		return encodeSpecialKeyCSIu('P', key.Mod, flags)
-	case KeyF2:
-		return encodeSpecialKeyCSIu('Q', key.Mod, flags)
-	case KeyF3:
-		return encodeSpecialKeyCSIu('R', key.Mod, flags)
-	case KeyF4:
-		return encodeSpecialKeyCSIu('S', key.Mod, flags)
-	case KeyF5:
-		return encodeTildeKeyCSIu(15, key.Mod, flags)
-	case KeyF6:
-		return encodeTildeKeyCSIu(17, key.Mod, flags)
-	case KeyF7:
-		return encodeTildeKeyCSIu(18, key.Mod, flags)
-	case KeyF8:
-		return encodeTildeKeyCSIu(19, key.Mod, flags)
-	case KeyF9:
-		return encodeTildeKeyCSIu(20, key.Mod, flags)
-	case KeyF10:
-		return encodeTildeKeyCSIu(21, key.Mod, flags)
-	case KeyF11:
-		return encodeTildeKeyCSIu(23, key.Mod, flags)
-	case KeyF12:
-		return encodeTildeKeyCSIu(24, key.Mod, flags)
+	form := kittyKeyForm(key.Code)
+	code = form.num
+	if form.final != 'u' {
+		return encodeFormCSIu(form, key.Mod)
 	}
 
 	// For regular keys, encode as CSI code ; modifiers u.
@@ -321,24 +270,110 @@ func kittyAssociatedText(text string) string {
 	return b.String()
 }
 
-// encodeSpecialKeyCSIu encodes a special key (arrow, home, end, F1-F4) in CSI u format.
-func encodeSpecialKeyCSIu(final byte, mod KeyMod, flags int) string {
-	modParam := kittyModParam(mod)
-	_ = flags
-	if modParam > 1 {
-		return fmt.Sprintf("\x1b[1;%d%c", modParam, final)
-	}
-	return fmt.Sprintf("\x1b[%c", final)
+// csiuForm is how one key is spelled in the CSI u family: a number, then the
+// modifier field, then a terminator. Three shapes exist -- \x1b[<code>u for
+// ordinary keys, \x1b[1;<mods><letter> for the arrows and F1-F4, and
+// \x1b[<n>;<mods>~ for Insert through F12 -- and they differ only in those two
+// values. Presses and releases read the same table, so a release can never name
+// a different key than the press it ends.
+type csiuForm struct {
+	num   int
+	final byte
 }
 
-// encodeTildeKeyCSIu encodes a tilde-terminated key (Insert, Delete, PgUp, PgDown, F5+) in CSI u format.
-func encodeTildeKeyCSIu(num int, mod KeyMod, flags int) string {
-	modParam := kittyModParam(mod)
-	_ = flags
-	if modParam > 1 {
-		return fmt.Sprintf("\x1b[%d;%d~", num, modParam)
+// kittyKeyForm returns the CSI u spelling of a key code. Anything not named
+// here is its own code terminated by 'u', which is what the protocol says for
+// every ordinary character.
+func kittyKeyForm(code rune) csiuForm {
+	switch code {
+	case KeyEnter:
+		return csiuForm{13, 'u'}
+	case KeyTab:
+		return csiuForm{9, 'u'}
+	case KeyBackspace:
+		return csiuForm{127, 'u'}
+	case KeyEscape:
+		return csiuForm{27, 'u'}
+	case KeySpace:
+		return csiuForm{32, 'u'}
+	case KeyUp:
+		return csiuForm{1, 'A'}
+	case KeyDown:
+		return csiuForm{1, 'B'}
+	case KeyRight:
+		return csiuForm{1, 'C'}
+	case KeyLeft:
+		return csiuForm{1, 'D'}
+	case KeyHome:
+		return csiuForm{1, 'H'}
+	case KeyEnd:
+		return csiuForm{1, 'F'}
+	case KeyF1:
+		return csiuForm{1, 'P'}
+	case KeyF2:
+		return csiuForm{1, 'Q'}
+	case KeyF3:
+		return csiuForm{1, 'R'}
+	case KeyF4:
+		return csiuForm{1, 'S'}
+	case KeyInsert:
+		return csiuForm{2, '~'}
+	case KeyDelete:
+		return csiuForm{3, '~'}
+	case KeyPgUp:
+		return csiuForm{5, '~'}
+	case KeyPgDown:
+		return csiuForm{6, '~'}
+	case KeyF5:
+		return csiuForm{15, '~'}
+	case KeyF6:
+		return csiuForm{17, '~'}
+	case KeyF7:
+		return csiuForm{18, '~'}
+	case KeyF8:
+		return csiuForm{19, '~'}
+	case KeyF9:
+		return csiuForm{20, '~'}
+	case KeyF10:
+		return csiuForm{21, '~'}
+	case KeyF11:
+		return csiuForm{23, '~'}
+	case KeyF12:
+		return csiuForm{24, '~'}
 	}
-	return fmt.Sprintf("\x1b[%d~", num)
+	return csiuForm{int(code), 'u'}
+}
+
+// encodeFormCSIu spells a press of one of the letter- or tilde-terminated keys.
+// With no modifiers the sequence is the bare legacy one, which is what every
+// terminal sends and every application already reads.
+func encodeFormCSIu(form csiuForm, mod KeyMod) string {
+	modParam := kittyModParam(mod)
+	if modParam > 1 {
+		return fmt.Sprintf("\x1b[%d;%d%c", form.num, modParam, form.final)
+	}
+	if form.final == '~' {
+		return fmt.Sprintf("\x1b[%d~", form.num)
+	}
+	return fmt.Sprintf("\x1b[%c", form.final)
+}
+
+// EncodeKeyReleaseCSIu encodes a key release for a pane that asked to be told
+// about them, and returns "" for one that did not.
+//
+// Only the event-type flag makes a release reportable, and it is the flag a
+// compositor running in a pane cannot do without: a Wayland client is told a key
+// is down and waits to be told it came up, so a dropped release leaves the key
+// held and xkb repeating it forever. The press form is unchanged by the flag --
+// kitty sends a bare \x1b[97u for the press and \x1b[97;1:3u for its release --
+// so the release always carries the modifier field, even when empty, because the
+// event type rides on it as a subparameter.
+func EncodeKeyReleaseCSIu(key KeyPressEvent, flags int) string {
+	if flags&ansi.KittyReportEventTypes == 0 {
+		return ""
+	}
+	form := kittyKeyForm(key.Code)
+	return fmt.Sprintf("\x1b[%d;%d:3%c", form.num, kittyModParam(key.Mod), form.final)
 }
 
 // kittyModParam converts modifier flags to the CSI parameter format.
