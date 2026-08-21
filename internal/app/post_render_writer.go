@@ -61,7 +61,10 @@ func (w *PostRenderWriter) Write(p []byte) (n int, err error) {
 	// One Write for the whole frame: the bracket is worth nothing if this
 	// code is itself what splits it across two syscalls.
 	buf := make([]byte, 0, len(frameSyncBegin)+len(p)+len(pending)+len(frameSyncEnd))
-	wrap := !bytes.HasPrefix(p, frameSyncBegin)
+	// Contains, not HasPrefix: bubbletea writes an alt-screen mode change
+	// ahead of its own bracket, so the frame that enters or leaves the alt
+	// screen does not start with one.
+	wrap := !bytes.Contains(p, frameSyncBegin)
 	if wrap {
 		buf = append(buf, frameSyncBegin...)
 	}

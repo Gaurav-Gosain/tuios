@@ -77,7 +77,9 @@ func TestPostRenderWriterKeepsPostRenderDataInsideTheBracket(t *testing.T) {
 func TestPostRenderWriterDoesNotNestBrackets(t *testing.T) {
 	w, read := writerToFile(t)
 
-	frame := string(frameSyncBegin) + "\x1b[5;1Hhello" + string(frameSyncEnd)
+	// The alt-screen mode change bubbletea writes ahead of its own bracket is
+	// why this is not just a prefix check.
+	frame := "\x1b[?1049h" + string(frameSyncBegin) + "\x1b[5;1Hhello" + string(frameSyncEnd)
 	if _, err := w.Write([]byte(frame)); err != nil {
 		t.Fatalf("write: %v", err)
 	}
