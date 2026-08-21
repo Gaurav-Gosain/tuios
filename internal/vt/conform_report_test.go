@@ -55,7 +55,8 @@ func TestConform_CursorPositionReport(t *testing.T) {
 		in   string
 		want string
 	}{
-		// esctest cpr.py test_CPR_Basic: home is line 1, column 1.
+		// Home is line 1, column 1, which is where esctest's tests/cpr.py
+		// starts too.
 		{"home", "\x1b[H\x1b[6n", "\x1b[1;1R"},
 
 		// The row and the column have to be told apart, so every case below
@@ -68,7 +69,7 @@ func TestConform_CursorPositionReport(t *testing.T) {
 		// After printing, the column is one past the text.
 		{"after five characters", "hello\x1b[6n", "\x1b[1;6R"},
 
-		// esctest cpr.py test_CPR_OriginMode: with DECOM set the report is
+		// With DECOM set the report is
 		// relative to the scroll region, so the guest reads back the same
 		// numbers it would use to address the cursor.
 		{"origin mode reports region-relative", "\x1b[10;20r\x1b[?6h\x1b[1;1H\x1b[6n", "\x1b[1;1R"},
