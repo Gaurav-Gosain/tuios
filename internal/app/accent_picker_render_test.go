@@ -273,6 +273,15 @@ func TestAccentPickerKeyboardReachesEveryControl(t *testing.T) {
 		m.AccentPickerFocus(1)
 	}
 	for f := accentFocus(0); f < accentFocusCount; f++ {
+		// A stop the picker is not drawing is a stop tab must skip, which is the
+		// rule for the slot rows and the sliders on a short screen and for the
+		// keyword chips on a target that has no keywords.
+		if !m.accentFocusShown(f) {
+			if seen[f] {
+				t.Errorf("tab landed on focus %d, which this picker does not draw", f)
+			}
+			continue
+		}
 		if !seen[f] {
 			t.Errorf("tab never reached focus %d", f)
 		}

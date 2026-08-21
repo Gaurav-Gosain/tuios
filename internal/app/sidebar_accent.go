@@ -85,7 +85,12 @@ const (
 	// The theme's own colours come first, drawn first and reached first, because
 	// picking one by name is the easy answer and the whole colour space below it
 	// is the expert one.
-	accentFocusANSI accentFocus = iota
+	// The target's own keywords, where it has any. First because a value the
+	// option is documented in terms of beats one the user has to mix, and drawn
+	// first for the same reason. A target with no keywords does not draw the row
+	// and tab steps straight past it.
+	accentFocusNamed accentFocus = iota
+	accentFocusANSI
 	accentFocusHue
 	accentFocusGrid
 	accentFocusHex
@@ -131,6 +136,22 @@ type accentPickerState struct {
 	Focus   accentFocus
 	Prev    Accent // the colour the target was wearing when the picker opened
 	HadPrev bool
+	// Named is the keyword the picker is currently pointing at, for a target
+	// whose value can be a word rather than a colour (the scrollbar tint's
+	// quiet, border and muted). Empty means the selection is the colour in Cur.
+	//
+	// It is a second discriminator alongside Slot and behaves like it: every
+	// control that produces a colour of its own clears it, so a keyword cannot
+	// outlive the pick that replaced it.
+	Named string
+	// NamedOpts are the keywords this target accepts, drawn as a row of chips.
+	// Empty for a target that only takes colours, and the row is then not drawn
+	// and its keyboard stop is skipped.
+	NamedOpts []string
+	// SrcWord names where an inherited colour comes from, for the readout. A
+	// pane says "session" and a session "auto"; a setting says which of its own
+	// fallbacks is in force.
+	SrcWord string
 	// Src says where Prev came from. A colour the target was given and a colour
 	// it derives look the same on the rail and behave differently: a pane with
 	// no accent follows its session wherever that goes, a session with no accent
@@ -478,7 +499,7 @@ func (s *accentPickerState) setCur(c color.RGBA) {
 func (s *accentPickerState) takeColor(c color.RGBA) {
 	s.Cur, s.Base = c, c
 	s.Hex = hexString(c)
-	s.Slot = -1
+	s.Slot, s.Named = -1, ""
 }
 
 // takeHarmony selects a harmony chip. It moves the colour without moving Base
@@ -492,7 +513,7 @@ func (m *OS) takeHarmony(i int) {
 	c := s.harmonyColor(s.Harmony, count)
 	s.Cur = c
 	s.Hex = hexString(c)
-	s.Slot = -1
+	s.Slot, s.Named = -1, ""
 }
 
 // accentPickerSetHSL moves the picker's saturation and lightness and rebuilds
@@ -569,6 +590,10 @@ const (
 	// AccentTargetSession is a session's accent, held by the daemon and shared
 	// by every client attached to it.
 	AccentTargetSession
+	// AccentTargetSetting is a colour-valued config option, identified by its
+	// registry path. The settings panel used to edit these as text fields, which
+	// asked the user to know a hex and to know that empty meant the theme's.
+	AccentTargetSetting
 )
 
 // OpenAccentPicker opens the colour picker for a window, landing on the colour
@@ -674,8 +699,14 @@ func (m *OS) AccentPickerApply() tea.Cmd {
 	unchanged := s.HadPrev && sel == s.Prev
 	defer m.CloseAccentPicker()
 
-	if unchanged {
+	// A keyword and the colour it resolves to are the same pixels and different
+	// values, so a selection that is a keyword is never "unchanged" on the
+	// strength of its colour matching the seed.
+	if unchanged && s.Named == "" {
 		return nil
+	}
+	if target == AccentTargetSetting {
+		return m.applySettingColor(id, s.settingSelection())
 	}
 	if target == AccentTargetSession {
 		return m.setSessionAccentCmd(id, accentPayload(sel))
@@ -696,8 +727,15 @@ func (m *OS) AccentPickerClear() tea.Cmd {
 	target, id := m.AccentPickerTarget, m.AccentPickerTargetID
 	m.CloseAccentPicker()
 
-	if target == AccentTargetSession {
+	switch target {
+	case AccentTargetSession:
 		return m.setSessionAccentCmd(id, "")
+	case AccentTargetSetting:
+		// Unset, which for a border colour is back to the theme's and for the
+		// tint back to its default. This is the state a text field could only
+		// express by being empty, and the reason a picker that could set a
+		// colour and never take it back would be a regression on one.
+		return m.applySettingColor(id, "")
 	}
 	m.ClearWindowAccent(id)
 	return nil
@@ -707,6 +745,9 @@ func (m *OS) AccentPickerClear() tea.Cmd {
 // sliders and the slot rows both come and go with the screen's height, and a
 // keyboard stop on a control nobody can see is a control the user has lost.
 func (m *OS) accentFocusShown(f accentFocus) bool {
+	if f == accentFocusNamed {
+		return len(m.AccentPicker.NamedOpts) > 0
+	}
 	if f == accentFocusANSI {
 		return m.accentSlotsShown()
 	}
@@ -738,6 +779,10 @@ func (m *OS) AccentPickerFocus(delta int) {
 	switch s.Focus {
 	case accentFocusHarmony:
 		m.takeHarmony(s.Harmony)
+	case accentFocusNamed:
+		// Focus names the selection here too: arriving on the keywords takes the
+		// one under the cursor, which is the one the chip row is showing.
+		m.AccentPickerNamed(m.accentNamedIndex())
 	case accentFocusANSI:
 		slot := s.Slot
 		if slot < 0 {
@@ -773,11 +818,25 @@ func (m *OS) AccentPickerMove(dx, dy int) {
 		m.AccentPickerMoveHue(dx + dy)
 	case accentFocusHarmony:
 		m.AccentPickerMoveHarmony(dx + dy)
+	case accentFocusNamed:
+		m.AccentPickerNamed(m.accentNamedIndex() + dx + dy)
 	case accentFocusANSI:
 		m.AccentPickerMoveSlot(dx, dy)
 	default:
 		m.AccentPickerMoveCell(dx, dy)
 	}
+}
+
+// accentNamedIndex is the keyword chip the cursor is on. A selection that is a
+// colour rather than a keyword leaves the cursor at the first chip, which is
+// where arriving at the row from anywhere else should land.
+func (m *OS) accentNamedIndex() int {
+	for i, name := range m.AccentPicker.NamedOpts {
+		if name == m.AccentPicker.Named {
+			return i
+		}
+	}
+	return 0
 }
 
 // AccentPickerMoveShift is the shifted arrow: the same direction at the other
@@ -977,9 +1036,10 @@ func (m *OS) accentPickerSetHex(buf string) {
 	s := &m.AccentPicker
 	s.Focus = accentFocusHex
 	s.Hex = buf
-	// Typing a hex is asking for that exact colour, so the slot goes even before
-	// the buffer names one: a half-typed hex is no longer "cyan".
-	s.Slot = -1
+	// Typing a hex is asking for that exact colour, so the slot and the keyword
+	// go even before the buffer names one: a half-typed hex is no longer "cyan"
+	// and no longer "muted".
+	s.Slot, s.Named = -1, ""
 	c, ok := parseHexColor(buf)
 	if !ok {
 		return

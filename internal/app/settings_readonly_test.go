@@ -94,7 +94,7 @@ func TestWritableSessionStillPersists(t *testing.T) {
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 
 	focusSetting(t, m, "Sidebar", "Agents section")
-	m.SettingsAdjust(1)
+	runSave(t, m.SettingsAdjust(1))
 
 	reloaded, err := config.LoadUserConfig()
 	if err != nil {

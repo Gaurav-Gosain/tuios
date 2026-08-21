@@ -1124,10 +1124,24 @@ func GetScrollbarThumbChar() string {
 // rather than a keyword. A malformed one is not a colour, so it is refused here
 // as well as warned about at load: a bar drawn in nothing is invisible.
 func ScrollbarTintHex() (string, bool) {
-	if hexColorPattern.MatchString(ScrollbarTint) {
+	if IsHexColor(ScrollbarTint) {
 		return ScrollbarTint, true
 	}
 	return "", false
+}
+
+// ScrollbarTintResolved is the keyword the tint is behaving as, with unset
+// resolved to the documented default.
+//
+// Unset used to reach the renderer as the empty string and match none of its
+// cases, so it fell through to the border rule: clearing the tint gave the one
+// tint that is not the default. The registry, the validator and the config
+// header all say empty means quiet, and now so does the bar.
+func ScrollbarTintResolved() string {
+	if ScrollbarTint == "" {
+		return ScrollbarTintQuiet
+	}
+	return ScrollbarTint
 }
 
 // GetScrollbarTrackChar returns the glyph drawn on the track's uncovered cells.

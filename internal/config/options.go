@@ -24,6 +24,15 @@ type Option struct {
 	Min         int      `json:"min,omitempty"`        // int options only
 	Max         int      `json:"max,omitempty"`        // int options only, and only when a range is enforced
 	Deprecated  string   `json:"deprecated,omitempty"` // why it is deprecated and what replaced it
+	// Color marks a string option whose value is a colour literal. The type
+	// stays string because that is what the field holds and what crosses the
+	// protocol; this says what the string means, which is what lets the settings
+	// panel offer a colour picker instead of a text field and what makes an
+	// unparseable colour an error at the CLI rather than a broken border later.
+	//
+	// A colour option with Accepted set takes either one of those keywords or a
+	// literal, which is the scrollbar tint's shape.
+	Color bool `json:"color,omitempty"`
 }
 
 // The three types an option can carry. A config value crosses the protocol as a
@@ -170,12 +179,12 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.border_focused_color", Type: OptionString, Section: "appearance",
 		Description: "Hex colour overriding the focused pane's border, e.g. #89b4fa",
-		Default:     "",
+		Default:     "", Color: true,
 	},
 	{
 		Path: "appearance.border_unfocused_color", Type: OptionString, Section: "appearance",
 		Description: "Hex colour overriding an unfocused pane's border, e.g. #585b70",
-		Default:     "",
+		Default:     "", Color: true,
 	},
 	{
 		Path: "appearance.window_title_format", Type: OptionString, Section: "appearance",
@@ -311,7 +320,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.scrollbar.tint", Type: OptionString, Section: "scrollbar",
 		Description: "Bar colour: quiet, border, muted, or a #RRGGBB literal",
-		Default:     ScrollbarTintQuiet,
+		Accepted:    ScrollbarTints, Default: ScrollbarTintQuiet, Color: true,
 	},
 
 	// [appearance.sidebar]
@@ -572,6 +581,34 @@ func OptionPaths() []string {
 	return paths
 }
 
+// checkValue rejects a value the option cannot hold, before any of it reaches
+// the config struct.
+//
+// A colour option is why this is no longer just the Accepted membership test.
+// The two border colours take any literal and so carry no Accepted set, which
+// meant nothing checked them at all: set-option appearance.border_focused_color
+// notacolour was accepted, written, and turned up later as a border drawn in
+// nothing. The tint has a keyword set and a literal form at once, which a closed
+// set on its own cannot say.
+func (o Option) checkValue(value string) error {
+	if o.Color {
+		// Empty is how a colour option says unset: the border falls back to the
+		// theme's, the tint to its own default. Clearing has to stay reachable.
+		if value == "" || slices.Contains(o.Accepted, value) || IsHexColor(value) {
+			return nil
+		}
+		if len(o.Accepted) > 0 {
+			return fmt.Errorf("%s: %q is not a colour; expected #RRGGBB, one of %s, or empty",
+				o.Path, value, strings.Join(o.Accepted, ", "))
+		}
+		return fmt.Errorf("%s: %q is not a colour; expected #RRGGBB or empty", o.Path, value)
+	}
+	if len(o.Accepted) > 0 && !slices.Contains(o.Accepted, value) {
+		return fmt.Errorf("%s: %q is not one of %s", o.Path, value, strings.Join(o.Accepted, ", "))
+	}
+	return nil
+}
+
 // SetOptionValue validates value against the option's type and accepted set,
 // then writes it to cfg.
 func SetOptionValue(cfg *UserConfig, path, value string) error {
@@ -579,8 +616,8 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 	if !ok {
 		return fmt.Errorf("unknown config option %q", path)
 	}
-	if len(opt.Accepted) > 0 && !slices.Contains(opt.Accepted, value) {
-		return fmt.Errorf("%s: %q is not one of %s", path, value, strings.Join(opt.Accepted, ", "))
+	if err := opt.checkValue(value); err != nil {
+		return err
 	}
 	field, ok := resolveOptionField(cfg, path)
 	if !ok {

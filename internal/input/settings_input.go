@@ -19,11 +19,11 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "down", "j":
 		o.SettingsMoveDown()
 	case "left", "h":
-		o.SettingsAdjust(-1)
+		return o, o.SettingsAdjust(-1)
 	case "right", "l":
-		o.SettingsAdjust(1)
+		return o, o.SettingsAdjust(1)
 	case "enter", "space":
-		o.SettingsActivate()
+		return o, o.SettingsActivate()
 	case "tab", "]":
 		o.SettingsNextCategory()
 	case "shift+tab", "[":
@@ -40,7 +40,7 @@ func handleSettingsEditInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	case "esc":
 		o.SettingsEditCancel()
 	case "enter":
-		o.SettingsEditCommit()
+		return o, o.SettingsEditCommit()
 	case "backspace":
 		o.SettingsEditBackspace()
 	case "ctrl+u":

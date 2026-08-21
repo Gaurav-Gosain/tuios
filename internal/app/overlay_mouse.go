@@ -291,28 +291,37 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "settings":
 		m.SettingsSelected = row.Idx
 		items := m.settingsCurrentItems()
-		if row.Idx < len(items) && items[row.Idx].Control == controlString {
-			// A click anywhere on a text row opens its inline editor.
-			m.SettingsBeginEdit()
-			break
+		if row.Idx < len(items) {
+			switch items[row.Idx].Control {
+			case controlString:
+				// A click anywhere on a text row opens its inline editor.
+				m.SettingsBeginEdit()
+				return nil
+			case controlColor:
+				// And anywhere on a colour row, swatch included, opens its picker.
+				// The row's rect is the one the renderer recorded as it drew, so
+				// this lands where the user is pointing whatever the panel reflowed
+				// to.
+				return m.SettingsActivate()
+			}
 		}
 		switch {
 		case !row.Dec.Empty() && row.Dec.Contains(lx, ly):
-			m.SettingsAdjust(-1)
+			return m.SettingsAdjust(-1)
 		case !row.Inc.Empty() && row.Inc.Contains(lx, ly):
-			m.SettingsAdjust(1)
+			return m.SettingsAdjust(1)
 		case settingsControlSpanContains(row, lx, ly):
 			// A click on the value itself, between the stepper arrows, does what
 			// Enter does: toggles a bool, cycles an enum, or runs the row's
 			// activate hook (the Theme row opens the picker).
-			m.SettingsActivate()
+			return m.SettingsActivate()
 		}
 	case "palette":
 		m.CommandPaletteSelected = row.Idx
 		return m.ActivateCommandPalette()
 	case "themepicker":
 		m.ThemePickerSelected = row.Idx
-		m.ThemePickerApplySelection()
+		return m.ThemePickerApplySelection()
 	case "session":
 		// A click activates, exactly like Enter on the selected row. Selecting
 		// only, as this used to, made the switcher the one list where a click

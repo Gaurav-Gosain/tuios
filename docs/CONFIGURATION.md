@@ -691,7 +691,10 @@ ignored under `ascii_only`, which draws `|` with no track.
   applied: naming a colour overrides the measurement.
 
 Also settable from the in-app settings page (Appearance, "Scrollbar style" and
-"Scrollbar tint").
+"Scrollbar tint"). The tint row opens a colour picker: the three keywords are
+drawn as chips in the colour each one produces, and the `#RRGGBB` form is
+reached through the picker's palette, its shades grid or its hex field. Clearing
+it there returns the tint to `"quiet"`.
 
 ### theme
 

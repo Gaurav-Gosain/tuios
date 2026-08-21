@@ -10,34 +10,62 @@ import (
 )
 
 // TestSettingsTellsTheTruthAboutUnsetValues is the falsehood the audit caught:
-// "Focused border color [ #89b4fa ]" drew the row's own placeholder example in
-// the value's style, so the panel stated a colour the user had never set and
-// which was not the one on screen.
+// a text row drew its own placeholder example in the value's style, so the panel
+// stated a value the user had never set.
 //
 // An unset field now says it is unset, in the row's own terms, and the example
 // moves to the description line where an example belongs.
+//
+// It is checked on the preferred shell because the two border colours it used to
+// be checked on are no longer text fields; the colour rows have their own
+// version of this below. The shell row also reads its value off the held config
+// rather than a package global, so the assertion does not depend on what any
+// other test in the binary left behind.
 func TestSettingsTellsTheTruthAboutUnsetValues(t *testing.T) {
 	m := &OS{Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
 	m.ShowSettings = true
 
-	// Find the colour row's category and put the selection on it.
-	row := settingsRowNamed(t, m, "Focused border color")
+	row := settingsRowNamed(t, m, "Preferred shell")
 
 	line := settingsRowLine(t, m, row.Label)
 	if strings.Contains(line, "[ "+row.Placeholder+" ]") {
 		t.Errorf("the panel drew the placeholder %q as the value in force: %q", row.Placeholder, line)
 	}
 	if !strings.Contains(line, "[ "+row.Unset+" ]") {
-		t.Errorf("an unset colour did not read as unset (%q): %q", row.Unset, line)
+		t.Errorf("an unset value did not read as unset (%q): %q", row.Unset, line)
 	}
 
 	// A value that is set renders as itself.
-	m.UserConfig.Appearance.BorderFocusedColor = "#ff0000"
+	m.UserConfig.Appearance.PreferredShell = "/bin/zsh"
 	line = settingsRowLine(t, m, row.Label)
-	if !strings.Contains(line, "[ #ff0000 ]") {
-		t.Errorf("a set colour did not render its value: %q", line)
+	if !strings.Contains(line, "[ /bin/zsh ]") {
+		t.Errorf("a set value did not render itself: %q", line)
 	}
 	if strings.Contains(line, "[ "+row.Unset+" ]") {
+		t.Errorf("a set value still read as unset: %q", line)
+	}
+}
+
+// TestColourRowFramesItsValueBesideItsSwatch is the colour rows' version of the
+// same truth. The value sits inside the same bracketed field every other row
+// uses, with the swatch of the colour in force in front of it, so an unset row
+// says where its colour comes from and still shows what that colour is.
+func TestColourRowFramesItsValueBesideItsSwatch(t *testing.T) {
+	m := &OS{Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
+	m.ShowSettings = true
+	row := settingsRowNamed(t, m, "Focused border color")
+
+	line := settingsRowLine(t, m, row.Label)
+	if !strings.Contains(line, row.Unset+" ]") {
+		t.Errorf("an unset colour did not read as unset (%q): %q", row.Unset, line)
+	}
+
+	m.UserConfig.Appearance.BorderFocusedColor = "#ff0000"
+	line = settingsRowLine(t, m, row.Label)
+	if !strings.Contains(line, "#ff0000 ]") {
+		t.Errorf("a set colour did not render its value: %q", line)
+	}
+	if strings.Contains(line, row.Unset) {
 		t.Errorf("a set colour still read as unset: %q", line)
 	}
 }
@@ -60,7 +88,7 @@ func settingsRowLine(t *testing.T, m *OS, label string) string {
 func TestSettingsExamplesLiveOnTheDescriptionLine(t *testing.T) {
 	m := &OS{Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
 	m.ShowSettings = true
-	row := settingsRowNamed(t, m, "Focused border color")
+	row := settingsRowNamed(t, m, "Preferred shell")
 	if !strings.Contains(row.Desc, row.Placeholder) {
 		t.Errorf("the description %q does not carry the example %q", row.Desc, row.Placeholder)
 	}
