@@ -663,6 +663,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v bool) {
 					m.setStartup(func(s *config.StartupConfig) { s.StartInTerminalMode = v })
 				}),
+			boolItem("Daemon by default", "Plain 'tuios' attaches to a daemon session; --standalone or TUIOS_NO_DAEMON=1 overrides",
+				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.Daemon },
+				func(m *OS, v bool) {
+					m.setStartup(func(s *config.StartupConfig) { s.Daemon = v })
+				}),
 		},
 	}
 

@@ -394,11 +394,19 @@ func TestHeadlessControlPlane(t *testing.T) {
 		t.Fatalf("capture-pane missing command output.\n--- pane ---\n%s", content)
 	}
 
-	// 8. Options round trip through the daemon owned store.
-	c.result(8, "set-option", map[string]any{"session": "ctl", "key": "mouse", "value": "on"}, 5*time.Second)
-	opt := c.result(9, "get-option", map[string]any{"session": "ctl", "key": "mouse"}, 5*time.Second)
-	if got, _ := opt["value"].(string); got != "on" {
-		t.Fatalf("get-option = %q, want \"on\"", got)
+	// 8. Options round trip through the daemon owned store. The key is a real
+	//    configuration path: set-option validates against the option registry
+	//    now, so an arbitrary name is refused rather than stored, which is the
+	//    point of the validation.
+	c.result(8, "set-option", map[string]any{"session": "ctl", "key": "appearance.sidebar.position", "value": "right"}, 5*time.Second)
+	opt := c.result(9, "get-option", map[string]any{"session": "ctl", "key": "appearance.sidebar.position"}, 5*time.Second)
+	if got, _ := opt["value"].(string); got != "right" {
+		t.Fatalf("get-option = %q, want \"right\"", got)
+	}
+	// The value came from this session rather than from the default it would
+	// otherwise report, which is what makes the round trip a round trip.
+	if got, _ := opt["source"].(string); got != "session" {
+		t.Fatalf("get-option source = %q, want \"session\"", got)
 	}
 
 	// 9. close-window brings the count back down.

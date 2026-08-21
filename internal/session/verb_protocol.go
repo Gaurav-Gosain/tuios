@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"time"
 )
 
@@ -111,12 +112,17 @@ type verbParam struct {
 }
 
 // verbEntry pairs a handler with the documentation list-verbs reports: a
-// one-line description, the parameter schema, and copy-pasteable examples.
+// one-line description, the parameter schema, the result shape, and
+// copy-pasteable examples.
 type verbEntry struct {
 	description string
 	params      []verbParam
-	examples    []string
-	handler     verbHandler
+	// returns names the fields of a successful result. A caller could learn how
+	// to make the call from params alone and still had to guess what came back,
+	// which is half a contract.
+	returns  []verbParam
+	examples []string
+	handler  verbHandler
 }
 
 // verbDoc is the serialized form of a verbEntry in the list-verbs result.
@@ -124,6 +130,7 @@ type verbDoc struct {
 	Verb        string      `json:"verb"`
 	Description string      `json:"description"`
 	Params      []verbParam `json:"params"`
+	Returns     []verbParam `json:"returns,omitempty"`
 	Examples    []string    `json:"examples,omitempty"`
 }
 
@@ -188,13 +195,150 @@ func init() {
 			handler:     (*Daemon).verbListWindows,
 		},
 		"new-window": {
-			description: "Create a new window.",
+			description: "Create a new window, optionally on a named workspace and in a named directory.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "name", Type: "string", Description: "Name for the new window. Omit to use the shell's title."},
+				{Name: "workspace", Type: "int", Description: "Workspace number to create the window on. Omit for the current workspace."},
+				{Name: "cwd", Type: "string", Description: "Directory to start the shell in. Omit to inherit the daemon's."},
+				{Name: "focus", Type: "bool", Description: "Focus the new window. Pass false to open a pane to work in later without moving the user out of the one they are in.", Default: "true"},
 			},
-			examples: []string{`{"id":1,"verb":"new-window","params":{"session":"work","name":"build"}}`},
-			handler:  (*Daemon).verbNewWindow,
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the created window, which is what to address it by afterwards."},
+				{Name: "name", Type: "string", Description: "The window's name, generated when none was given."},
+				{Name: "workspace", Type: "int", Description: "Workspace the window was created on."},
+				{Name: "pty_id", Type: "string", Description: "Id of the window's PTY."},
+				{Name: "focused", Type: "bool", Description: "Whether the window took the focus."},
+				{Name: "unplaced", Type: "bool", Description: "True while the geometry is a placeholder the daemon chose without a viewport. An attached client replaces it; on a detached session it stays true and the reported size is nominal."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"new-window","params":{"session":"work","name":"build"}}`,
+				`{"id":1,"verb":"new-window","params":{"session":"work","name":"tests","workspace":2,"cwd":"/src/api","focus":false}}`,
+			},
+			handler: (*Daemon).verbNewWindow,
+		},
+		"split-window": {
+			description: "Divide a pane, putting a new one beside it. Needs an attached client and tiling on, because the division is a geometry only a renderer can compute.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window to split. Omit to split the focused one."},
+				{Name: "direction", Type: "string", Required: true, Description: "Axis to cut on.", Accepted: splitDirections},
+				{Name: "name", Type: "string", Description: "Name for the new window."},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the pane the split created."},
+				{Name: "direction", Type: "string", Description: "The axis that was cut."},
+				{Name: "name", Type: "string", Description: "The new pane's name, when one was given."},
+			},
+			examples: []string{`{"id":1,"verb":"split-window","params":{"session":"work","window":"build","direction":"vertical","name":"logs"}}`},
+			handler:  (*Daemon).verbSplitWindow,
+		},
+		"focus-window": {
+			description: "Move the focus to a pane, naming it by target, by position, or by direction. Pass exactly one of window, relative or direction.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window id or name to focus. Switches to that window's workspace."},
+				{Name: "relative", Type: "string", Description: "Focus the next or previous window on the current workspace.", Accepted: focusRelatives},
+				{Name: "direction", Type: "string", Description: "Focus the neighbouring pane in this direction. Needs an attached client, because it is a question about the viewport.", Accepted: focusDirections},
+			},
+			returns: []verbParam{
+				{Name: "focused_window_id", Type: "string", Description: "Id of the window that now has the focus."},
+				{Name: "current_workspace", Type: "int", Description: "Workspace now showing."},
+				{Name: "window", Type: "object", Description: "The focused window's full row, in the same shape list-windows reports."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"focus-window","params":{"session":"work","window":"build"}}`,
+				`{"id":1,"verb":"focus-window","params":{"session":"work","relative":"next"}}`,
+			},
+			handler: (*Daemon).verbFocusWindow,
+		},
+		"move-window": {
+			description: "Move a window to another workspace.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window to move. Omit to move the focused one."},
+				{Name: "workspace", Type: "int", Required: true, Description: "Workspace number to move the window to."},
+				{Name: "follow", Type: "bool", Description: "Switch to that workspace after moving.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the window that moved."},
+				{Name: "from_workspace", Type: "int", Description: "Workspace it was on."},
+				{Name: "workspace", Type: "int", Description: "Workspace it is on now."},
+				{Name: "current_workspace", Type: "int", Description: "Workspace showing after the call, which follow decides."},
+			},
+			examples: []string{`{"id":1,"verb":"move-window","params":{"session":"work","window":"build","workspace":2,"follow":true}}`},
+			handler:  (*Daemon).verbMoveWindow,
+		},
+		"set-window": {
+			description: "Change a window's own properties: what it is called and whether it is minimized. Pass whichever you mean.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Description: "Window to change. Omit for the focused one."},
+				{Name: "name", Type: "string", Description: "New name. Pass an empty string to clear it and fall back to the shell's title."},
+				{Name: "minimized", Type: "bool", Description: "Minimize the window, or restore it."},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the window that changed."},
+				{Name: "display_name", Type: "string", Description: "The name it shows now, which is the shell's title when the custom name was cleared."},
+				{Name: "minimized", Type: "bool", Description: "Whether it is minimized now."},
+			},
+			examples: []string{`{"id":1,"verb":"set-window","params":{"session":"work","window":"build","name":"api tests","minimized":false}}`},
+			handler:  (*Daemon).verbSetWindow,
+		},
+		"select-workspace": {
+			description: "Show a workspace. This changes which workspace is displayed; set-workspace-name and set-workspace-order change a workspace's label and its position.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "workspace", Type: "int", Required: true, Description: "Workspace number to show."},
+			},
+			returns: []verbParam{
+				{Name: "current_workspace", Type: "int", Description: "Workspace now showing."},
+				{Name: "focused_window_id", Type: "string", Description: "Window focused on it, empty when it holds none."},
+				{Name: "window_count", Type: "int", Description: "How many windows it holds."},
+			},
+			examples: []string{`{"id":1,"verb":"select-workspace","params":{"session":"work","workspace":2}}`},
+			handler:  (*Daemon).verbSelectWorkspace,
+		},
+		"list-workspaces": {
+			description: "List every workspace with its name, how many windows it holds, and which one is showing.",
+			params:      []verbParam{sessionParam},
+			returns: []verbParam{
+				{Name: "workspaces", Type: "[]object", Description: "One row per workspace: workspace, name, window_count, focused_window_id, current."},
+				{Name: "current_workspace", Type: "int", Description: "Workspace showing."},
+				{Name: "order", Type: "[]int", Description: "Display order, empty when the workspaces are in their plain ascending order."},
+			},
+			examples: []string{`{"id":1,"verb":"list-workspaces","params":{"session":"work"}}`},
+			handler:  (*Daemon).verbListWorkspaces,
+		},
+		"set-layout": {
+			description: "Turn tiling on or off and tidy the splits. Needs an attached client, because a layout is a geometry only a renderer can compute.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "tiling", Type: "bool", Description: "Tile the panes automatically, or let them float."},
+				{Name: "equalize", Type: "bool", Description: "Reset every split ratio so the panes share the space evenly.", Default: "false"},
+				{Name: "rotate", Type: "bool", Description: "Flip the axis of the split holding the focused pane.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "tiling_mode", Type: "string", Description: `"tiling" or "floating".`},
+				{Name: "layout_mode", Type: "string", Description: `Which tiling layout is in effect: bsp, master-stack, scrolling, or "unknown" on a session no client has reported one for.`},
+				{Name: "master_ratio", Type: "float", Description: "Fraction of the screen the master pane takes."},
+			},
+			examples: []string{`{"id":1,"verb":"set-layout","params":{"session":"work","tiling":true,"equalize":true}}`},
+			handler:  (*Daemon).verbSetLayout,
+		},
+		"run-command": {
+			description: "Run one tape command, the vocabulary the keybindings are written in. This is the escape hatch: prefer a verb where one exists, because a verb reports what it changed and this reports only that the command ran.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "command", Type: "string", Required: true, Description: `Tape command name, e.g. "ToggleZoom" or "SnapLeft".`},
+				{Name: "args", Type: "[]string", Description: "Arguments for the command."},
+			},
+			returns: []verbParam{
+				{Name: "command", Type: "string", Description: "The command that ran."},
+				{Name: "routed", Type: "bool", Description: "True when an attached client ran it, false when the daemon did. The two are the same command; this says which had to be available for it to work."},
+			},
+			examples: []string{`{"id":1,"verb":"run-command","params":{"session":"work","command":"ToggleZoom"}}`},
+			handler:  (*Daemon).verbRunCommand,
 		},
 		"close-window": {
 			description: "Close a window.",
@@ -231,6 +375,11 @@ func init() {
 				windowParam,
 				{Name: "source", Type: "string", Description: "Which buffer to capture.", Accepted: captureSources, Default: "visible"},
 				{Name: "styled", Type: "bool", Description: "Include ANSI styling in the captured text.", Default: "false"},
+				// scrollback and ansi predate source and styled and are still
+				// accepted; they are declared so a caller reading only list-verbs
+				// can see the whole call shape.
+				{Name: "scrollback", Type: "bool", Description: `Older spelling of source "recent".`, Default: "false"},
+				{Name: "ansi", Type: "bool", Description: "Older spelling of styled.", Default: "false"},
 				{Name: "lines", Type: "int", Description: "Keep only the last N non-empty-tailed lines, so the blank rows below the cursor do not count. Ignored when start or end is given."},
 				{Name: "start", Type: "int", Description: "1-based inclusive first line of the region to keep."},
 				{Name: "end", Type: "int", Description: "1-based inclusive last line of the region to keep."},
@@ -257,21 +406,56 @@ func init() {
 			examples: []string{`{"id":1,"verb":"kill-session","params":{"session":"work"}}`},
 			handler:  (*Daemon).verbKillSession,
 		},
-		"set-option": {
-			description: "Set a session option, applied live when a client is attached.",
+		"list-options": {
+			description: "List every settable configuration path with its type, default, accepted values and description. This is how to find an option rather than guess it.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "key", Type: "string", Required: true, Description: `Option path, e.g. "appearance.dockbar_position".`},
-				{Name: "value", Type: "string", Description: "New value, as a string."},
+				{Name: "section", Type: "string", Description: "Only options in this group, e.g. sidebar or dock. The full set of section names is reported on every call."},
+				{Name: "prefix", Type: "string", Description: `Only options whose path starts with this, e.g. "appearance.sidebar.".`},
 			},
-			examples: []string{`{"id":1,"verb":"set-option","params":{"session":"work","key":"appearance.dockbar_position","value":"top"}}`},
-			handler:  (*Daemon).verbSetOption,
+			returns: []verbParam{
+				{Name: "options", Type: "[]object", Description: "One row per option: path, type, section, description, default, and accepted/min/max/deprecated where they apply. session_value is present only where this session carries an override."},
+				{Name: "sections", Type: "[]string", Description: "Every section name, whatever the filter matched."},
+				{Name: "total", Type: "int", Description: "How many options the filter matched."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"list-options"}`,
+				`{"id":1,"verb":"list-options","params":{"section":"sidebar"}}`,
+			},
+			handler: (*Daemon).verbListOptions,
+		},
+		"set-option": {
+			description: "Set a configuration option, applied live when a client is attached. The path and the value are both checked against the option registry, so a call that could have no effect fails rather than reporting success.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "key", Type: "string", Required: true, Description: `Option path, e.g. "appearance.sidebar.enabled". Call list-options for the full set.`},
+				{Name: "value", Type: "string", Description: "New value, as a string. Booleans take true/false/on/off/1/0/yes/no."},
+			},
+			returns: []verbParam{
+				{Name: "key", Type: "string", Description: "The option that was set."},
+				{Name: "value", Type: "string", Description: "The value recorded."},
+				{Name: "applied", Type: "bool", Description: "Whether an attached client applied it to the live display."},
+				{Name: "reason", Type: "string", Description: "Why applied is false, when it is. Present only then."},
+				{Name: "deprecated", Type: "string", Description: "Why this path is deprecated and what replaced it. Present only for a deprecated path."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-option","params":{"session":"work","key":"appearance.sidebar.enabled","value":"true"}}`,
+				`{"id":1,"verb":"set-option","params":{"session":"work","key":"appearance.dockbar_position","value":"top"}}`,
+			},
+			handler: (*Daemon).verbSetOption,
 		},
 		"get-option": {
-			description: "Read a session option previously set with set-option.",
+			description: "Read an option, preferring what this session was told and falling back to what the option does untold.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "key", Type: "string", Required: true, Description: "Option path to read."},
+			},
+			returns: []verbParam{
+				{Name: "key", Type: "string", Description: "The option that was read."},
+				{Name: "value", Type: "string", Description: "The value in effect."},
+				{Name: "source", Type: "string", Description: `Where the value came from: "session" for an override set on this session, "default" for the built-in.`, Accepted: []string{"session", "default"}},
+				{Name: "default", Type: "string", Description: "What the option does untold, so a caller can tell an override from the default it matches."},
+				{Name: "option_type", Type: "string", Description: "bool, int or string."},
 			},
 			examples: []string{`{"id":1,"verb":"get-option","params":{"session":"work","key":"appearance.dockbar_position"}}`},
 			handler:  (*Daemon).verbGetOption,
@@ -380,6 +564,7 @@ func init() {
 				sessionParam,
 				windowParam,
 				{Name: "pattern", Type: "string", Description: "Regular expression, required by window-output."},
+				{Name: "source", Type: "string", Description: "Which buffer window-output matches against. The default includes scrollback, so output that has already scrolled past still matches.", Accepted: captureSources, Default: "recent"},
 				{Name: "idle", Type: "int", Description: "Milliseconds of silence that count as idle, for window-idle.", Default: "500"},
 				{Name: "timeout", Type: "int", Description: "Milliseconds to wait before failing with the timeout code.", Default: "30000"},
 			},
@@ -508,6 +693,10 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 		})
 	}
 
+	if verr := checkParamNames(req.Verb, entry, req.Params); verr != nil {
+		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Error: verr})
+	}
+
 	result, verr := entry.handler(d, cs, req.Params)
 	if verr != nil {
 		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Error: verr})
@@ -518,6 +707,53 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 	// A subscribe verb stashes its fresh subscription for the streamer, which must
 	// start only after the ack line above is on the wire so no event precedes it.
 	d.startPendingStream(cs)
+	return nil
+}
+
+// checkParamNames refuses a request carrying a parameter the verb does not
+// declare, before the handler ever sees it.
+//
+// Dropping an unknown field is what encoding/json does by default, and it is the
+// worst answer available to a machine caller: new-window with a workspace the
+// verb did not yet take reported a created window and put it wherever it liked,
+// with a success envelope and no way to tell. A caller that guessed a name, or
+// that is newer than the daemon it reached, has to learn that from the response
+// rather than from the pane it is looking at.
+//
+// The check runs against the same schema list-verbs publishes, so the two cannot
+// drift: a parameter a handler reads but does not declare is unreachable, and a
+// caller that read list-verbs can always spell every accepted name.
+func checkParamNames(verb string, entry verbEntry, params json.RawMessage) *verbError {
+	if len(bytes.TrimSpace(params)) == 0 {
+		return nil
+	}
+	var got map[string]json.RawMessage
+	// A params value that is not an object at all is left to the handler's
+	// decode, which already reports it as invalid_params with the decode error.
+	if err := json.Unmarshal(params, &got); err != nil {
+		return nil
+	}
+
+	accepted := make([]string, 0, len(entry.params))
+	for _, p := range entry.params {
+		accepted = append(accepted, p.Name)
+	}
+
+	for name := range got {
+		if slices.ContainsFunc(entry.params, func(p verbParam) bool { return p.Name == name }) {
+			continue
+		}
+		return hintedVerbError(ErrVerbInvalidParams,
+			"verb "+verb+" has no parameter "+echoName(name),
+			&VerbHint{
+				Param:      name,
+				Verb:       "list-verbs",
+				Command:    "tuios list-verbs " + verb,
+				DidYouMean: closestMatch(name, accepted),
+				Accepted:   accepted,
+				Detail:     "an unrecognised parameter is refused rather than ignored, so a call that cannot do what it asked for never reports success.",
+			})
+	}
 	return nil
 }
 
@@ -608,6 +844,7 @@ func describeVerb(name string, entry verbEntry) verbDoc {
 		Verb:        name,
 		Description: entry.description,
 		Params:      params,
+		Returns:     entry.returns,
 		Examples:    entry.examples,
 	}
 }

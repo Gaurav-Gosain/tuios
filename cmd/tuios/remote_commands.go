@@ -163,8 +163,9 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 }
 
 // runNewWindow opens a window in a session and reports its id, which is the
-// handle every later call needs.
-func runNewWindow(sessionName, name string, jsonOutput bool) error {
+// handle every later call needs. workspace 0 means the current one, and an
+// empty cwd means the daemon's own directory.
+func runNewWindow(sessionName, name string, workspace int, cwd string, focus, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -172,8 +173,11 @@ func runNewWindow(sessionName, name string, jsonOutput bool) error {
 	defer func() { _ = client.Close() }()
 
 	raw, err := client.Call("new-window", map[string]any{
-		"session": sessionName,
-		"name":    name,
+		"session":   sessionName,
+		"name":      name,
+		"workspace": workspace,
+		"cwd":       cwd,
+		"focus":     focus,
 	})
 	if err != nil {
 		return reportVerbError(explainVerbError("new-window", err), jsonOutput)
@@ -189,6 +193,294 @@ func runNewWindow(sessionName, name string, jsonOutput bool) error {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
+	return nil
+}
+
+// runSplitWindow divides a pane and reports the id of the one the split made,
+// which is the only way to address it without diffing two window lists.
+func runSplitWindow(sessionName, windowTarget, direction, name string, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("split-window", map[string]any{
+		"session":   sessionName,
+		"window":    windowTarget,
+		"direction": direction,
+		"name":      name,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("split-window", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res struct {
+		WindowID string `json:"window_id"`
+		Name     string `json:"name"`
+		Note     string `json:"note"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if res.WindowID == "" {
+		fmt.Println(res.Note)
+		return nil
+	}
+	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
+	return nil
+}
+
+// runFocusWindow moves the focus and says where it landed. A relative or
+// directional move does not name its pane in advance, so echoing the request
+// would confirm nothing.
+func runFocusWindow(sessionName, windowTarget, relative, direction string, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("focus-window", map[string]any{
+		"session":   sessionName,
+		"window":    windowTarget,
+		"relative":  relative,
+		"direction": direction,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("focus-window", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res struct {
+		FocusedWindowID string    `json:"focused_window_id"`
+		Window          windowRow `json:"window"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if res.FocusedWindowID == "" {
+		fmt.Println("No window has the focus.")
+		return nil
+	}
+	fmt.Printf("%s  %s\n", shortWindowID(res.FocusedWindowID), windowLabel(res.Window))
+	return nil
+}
+
+// runMoveWindow moves a window to another workspace.
+func runMoveWindow(sessionName, windowTarget string, workspace int, follow, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("move-window", map[string]any{
+		"session":   sessionName,
+		"window":    windowTarget,
+		"workspace": workspace,
+		"follow":    follow,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("move-window", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res struct {
+		WindowID string `json:"window_id"`
+		From     int    `json:"from_workspace"`
+		To       int    `json:"workspace"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Printf("moved %s from workspace %d to %d\n", shortWindowID(res.WindowID), res.From, res.To)
+	return nil
+}
+
+// runSetWindow changes a window's name or its minimized state. Both are
+// pointers because an unset one is left alone, and an empty name is a request
+// to clear it rather than a request to do nothing.
+func runSetWindow(sessionName, windowTarget string, name *string, minimized *bool, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	params := map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+	}
+	if name != nil {
+		params["name"] = *name
+	}
+	if minimized != nil {
+		params["minimized"] = *minimized
+	}
+
+	raw, err := client.Call("set-window", params)
+	if err != nil {
+		return reportVerbError(explainVerbError("set-window", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res windowRow
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	state := "restored"
+	if res.Minimized {
+		state = "minimized"
+	}
+	fmt.Printf("%s  %s  %s\n", shortWindowID(res.WindowID), windowLabel(res), state)
+	return nil
+}
+
+// runSelectWorkspace shows a workspace.
+func runSelectWorkspace(sessionName string, workspace int, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("select-workspace", map[string]any{
+		"session":   sessionName,
+		"workspace": workspace,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("select-workspace", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res struct {
+		Current     int `json:"current_workspace"`
+		WindowCount int `json:"window_count"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Printf("workspace %d, %d window(s)\n", res.Current, res.WindowCount)
+	return nil
+}
+
+// runListWorkspaces lists every workspace with what is on it.
+func runListWorkspaces(sessionName string, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("list-workspaces", map[string]any{"session": sessionName})
+	if err != nil {
+		return reportVerbError(explainVerbError("list-workspaces", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	return printWorkspaceList(raw)
+}
+
+// printWorkspaceList renders the workspace list in the same table shape as the
+// window list, so the two read as one tool.
+func printWorkspaceList(raw json.RawMessage) error {
+	var res struct {
+		Workspaces []struct {
+			Workspace   int    `json:"workspace"`
+			Name        string `json:"name"`
+			WindowCount int    `json:"window_count"`
+			Current     bool   `json:"current"`
+		} `json:"workspaces"`
+		Current int `json:"current_workspace"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if len(res.Workspaces) == 0 {
+		fmt.Println("No workspaces.")
+		return nil
+	}
+
+	rows := make([][]string, 0, len(res.Workspaces))
+	for _, ws := range res.Workspaces {
+		marker := ""
+		if ws.Current {
+			marker = "*"
+		}
+		rows = append(rows, []string{
+			marker + fmt.Sprintf("%d", ws.Workspace),
+			ws.Name,
+			fmt.Sprintf("%d", ws.WindowCount),
+		})
+	}
+
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
+		Headers("WS", "NAME", "WINDOWS").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			base := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return base.Bold(true).Foreground(lipgloss.Color("12"))
+			}
+			switch col {
+			case 1:
+				return base.Foreground(lipgloss.Color("3")).Bold(true)
+			case 2:
+				return base.Foreground(lipgloss.Color("8"))
+			default:
+				return base
+			}
+		})
+
+	fmt.Println(t.Render())
+	fmt.Printf("\n%d workspace(s). * marks the one showing.\n", len(res.Workspaces))
+	return nil
+}
+
+// runSetLayout turns tiling on or off and tidies the splits. tiling is a
+// pointer so a call that only equalizes leaves the tiling mode alone.
+func runSetLayout(sessionName string, tiling *bool, equalize, rotate, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	params := map[string]any{
+		"session":  sessionName,
+		"equalize": equalize,
+		"rotate":   rotate,
+	}
+	if tiling != nil {
+		params["tiling"] = *tiling
+	}
+
+	raw, err := client.Call("set-layout", params)
+	if err != nil {
+		return reportVerbError(explainVerbError("set-layout", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res struct {
+		TilingMode  string  `json:"tiling_mode"`
+		LayoutMode  string  `json:"layout_mode"`
+		MasterRatio float64 `json:"master_ratio"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Printf("%s  layout %s  master %.2f\n", res.TilingMode, res.LayoutMode, res.MasterRatio)
 	return nil
 }
 
@@ -511,6 +803,106 @@ func printSessionInfo(raw json.RawMessage) error {
 	return nil
 }
 
+// optionRow is one settable configuration path as list-options reports it.
+type optionRow struct {
+	Path        string   `json:"path"`
+	Type        string   `json:"type"`
+	Section     string   `json:"section"`
+	Description string   `json:"description"`
+	Default     string   `json:"default"`
+	Accepted    []string `json:"accepted"`
+	Min         int      `json:"min"`
+	Max         int      `json:"max"`
+	Deprecated  string   `json:"deprecated"`
+	SessionVal  string   `json:"session_value"`
+}
+
+// runListOptions lists the settable configuration paths. It is the command that
+// answers "what can I set", so the human form prints the whole contract of each
+// option rather than a bare path a caller would still have to look up.
+func runListOptions(sessionName, section, prefix string, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("list-options", map[string]any{
+		"session": sessionName,
+		"section": section,
+		"prefix":  prefix,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("list-options", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, jsonOutput)
+	}
+	var res struct {
+		Options  []optionRow `json:"options"`
+		Sections []string    `json:"sections"`
+		Total    int         `json:"total"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	printOptionList(os.Stdout, res.Options, res.Sections, res.Total)
+	return nil
+}
+
+// printOptionList writes the options grouped by section, then the section names
+// so a reader who found the list too long can narrow it without a second guess.
+func printOptionList(w io.Writer, options []optionRow, sections []string, total int) {
+	if len(options) == 0 {
+		fmt.Fprintln(w, "No options match that filter.")
+		return
+	}
+
+	// One width across every group, so the paths line up down the whole page
+	// rather than shifting at each section heading.
+	width := 0
+	for _, opt := range options {
+		if len(opt.Path) > width {
+			width = len(opt.Path)
+		}
+	}
+
+	current := ""
+	for _, opt := range options {
+		if opt.Section != current {
+			if current != "" {
+				fmt.Fprintln(w)
+			}
+			current = opt.Section
+			fmt.Fprintf(w, "[%s]\n", current)
+		}
+		deprecated := ""
+		if opt.Deprecated != "" {
+			deprecated = "  (deprecated)"
+		}
+		fmt.Fprintf(w, "  %-*s  %-6s  default %s%s\n", width, opt.Path, opt.Type, orNone(opt.Default), deprecated)
+		fmt.Fprintf(w, "  %-*s  %s\n", width, "", opt.Description)
+		if len(opt.Accepted) > 0 {
+			fmt.Fprintf(w, "  %-*s  one of: %s\n", width, "", strings.Join(opt.Accepted, ", "))
+		}
+		if opt.Max > 0 {
+			fmt.Fprintf(w, "  %-*s  range: %d to %d\n", width, "", opt.Min, opt.Max)
+		}
+		if opt.SessionVal != "" {
+			fmt.Fprintf(w, "  %-*s  this session: %s\n", width, "", opt.SessionVal)
+		}
+		if opt.Deprecated != "" {
+			fmt.Fprintf(w, "  %-*s  %s\n", width, "", opt.Deprecated)
+		}
+	}
+
+	fmt.Fprintf(w, "\n%d option(s). Set one with 'tuios set-config <path> <value>'.\n", total)
+	if len(sections) > 0 {
+		fmt.Fprintf(w, "Sections: %s\n", strings.Join(sections, ", "))
+		fmt.Fprintln(w, "Narrow with --section <name>, or pass a path prefix as the argument.")
+	}
+}
+
 // runSetConfig sets a session option over the verb protocol. The value is
 // recorded in daemon-owned state and, when a TUI is attached, applied live.
 func runSetConfig(sessionName, path, value string) error {
@@ -532,7 +924,7 @@ func runSetConfig(sessionName, path, value string) error {
 }
 
 // runGetConfig reads a session option over the verb protocol.
-func runGetConfig(sessionName, path string) error {
+func runGetConfig(sessionName, path string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -545,6 +937,20 @@ func runGetConfig(sessionName, path string) error {
 	})
 	if err != nil {
 		return explainVerbError("get-option", err)
+	}
+	// The bare value stays the default output: it is what a shell substitution
+	// wants, and printing anything else there would break every script using it.
+	if jsonOutput {
+		var pretty any
+		if err := json.Unmarshal(raw, &pretty); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		out, err := json.MarshalIndent(pretty, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to render response: %w", err)
+		}
+		fmt.Println(string(out))
+		return nil
 	}
 	var res struct {
 		Value string `json:"value"`
@@ -1198,6 +1604,14 @@ func listAvailableCommands() {
 }
 
 // Completion functions for shell autocompletion
+
+// fixedCompletions completes a flag whose values are a closed set the daemon
+// will reject anything outside of, so the shell can offer them all.
+func fixedCompletions(values ...string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return values, cobra.ShellCompDirectiveNoFileComp
+	}
+}
 
 // getSendKeysCompletions returns completions for send-keys key names.
 func getSendKeysCompletions(toComplete string) []string {

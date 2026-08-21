@@ -63,7 +63,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNoWindows, "The session exists but holds no windows to act on."},
 	{ErrVerbPTYNotFound, "The target window has no live PTY; its shell has already exited."},
 	{ErrVerbNeedsClient, "The verb needs an attached client to render it, and none is attached."},
-	{ErrVerbOptionNotFound, "The option was never set on this session."},
+	{ErrVerbOptionNotFound, "No option by that path exists. The hint carries the closest match and the full path list; list-options describes them."},
 	{ErrVerbCommandFailed, "The verb was routed to the attached client and came back failed."},
 	{ErrVerbTimeout, "A wait-for condition did not match before its timeout elapsed."},
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},

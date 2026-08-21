@@ -820,9 +820,11 @@ func (m *OS) ToggleAnimations() error {
 }
 
 // SetConfig sets a configuration option at runtime.
-// Supported paths: appearance.dockbar_position, appearance.border_style,
-// appearance.animations_enabled, appearance.hide_window_buttons,
-// appearance.window_button_style, appearance.window_button_position
+//
+// The cases below are the paths with a live effect beyond writing a value: an
+// animation switch that has to start or stop the running animations, a dockbar
+// move that repositions it. Everything else the config registry describes is
+// handled generically by setConfigFromRegistry.
 func (m *OS) SetConfig(path, value string) error {
 	switch path {
 	case "appearance.dockbar_position", "dockbar_position":
@@ -864,8 +866,46 @@ func (m *OS) SetConfig(path, value string) error {
 		m.MarkAllDirty()
 		return nil
 	default:
+		return m.setConfigFromRegistry(path, value)
+	}
+}
+
+// setConfigFromRegistry applies any option the config registry knows.
+//
+// The switch above is six paths, hand-written, and it was the whole of what a
+// running tuios could be told to change. Everything else in the file, which is
+// most of the sidebar and all but one of the dock's settings, could be written
+// into a config file and not changed while running. The registry already
+// describes every settable path and can set one on a UserConfig, so the live
+// path is that plus the funnel that pushes a config onto the globals the
+// renderer reads.
+func (m *OS) setConfigFromRegistry(path, value string) error {
+	if _, ok := config.LookupOption(path); !ok {
+		// The bare spelling of an appearance key is accepted here for the same
+		// reason the switch above accepts it: callers use both.
+		if !strings.Contains(path, ".") {
+			if _, ok := config.LookupOption("appearance." + path); ok {
+				return m.setConfigFromRegistry("appearance."+path, value)
+			}
+		}
 		return fmt.Errorf("unknown config path: %s", path)
 	}
+	if m.UserConfig == nil {
+		return fmt.Errorf("cannot set %s: no configuration is loaded", path)
+	}
+	if err := config.SetOptionValue(m.UserConfig, path, value); err != nil {
+		return err
+	}
+
+	// ApplyAppearanceConfig is the one funnel from the config struct to the
+	// globals the render path reads, so going through it means a registry option
+	// lands exactly where the same key from the config file would.
+	config.ApplyAppearanceConfig(m.UserConfig)
+	// Retile unconditionally: most of what is reachable here changes how much
+	// room the panes have (the sidebar's width and side, the dock's position),
+	// and a retile on a change that did not need one costs a frame.
+	m.applyAppearanceLive(true)
+	return nil
 }
 
 // SetTheme changes the active theme.

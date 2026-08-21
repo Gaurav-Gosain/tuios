@@ -657,9 +657,14 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, rest
 	// Create command
 	cmd := exec.Command(shell)
 	cmd.Env = s.buildEnv(windowID, restored)
-	// Start a restored shell in its saved working directory when it still
-	// exists; otherwise fall back to the shell's default (inherited) directory.
-	if restored && cwd != "" {
+	// Start the shell in cwd when one was named and still exists; otherwise fall
+	// back to the shell's default (inherited) directory.
+	//
+	// The restored flag used to gate this too, which meant a caller that asked a
+	// fresh window for a directory was answered with a shell somewhere else and
+	// no indication of it. Restoration and placement are separate questions: the
+	// flag still decides the banner, because that is what it is about.
+	if cwd != "" {
 		if info, statErr := os.Stat(cwd); statErr == nil && info.IsDir() {
 			cmd.Dir = cwd
 		}
