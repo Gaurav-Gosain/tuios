@@ -197,7 +197,7 @@ func (w *Window) outputWriter() {
 		// delivered. Unlock releases the readers waiting at that moment, so
 		// chunking hands the renderer a turn between chunks and bounds the
 		// stall at one chunk's parse instead of one batch's.
-		var t *vt.Emulator
+		var t vt.Terminal
 		for off := 0; off < len(batch); off += maxVTChunk {
 			end := min(off+maxVTChunk, len(batch))
 			w.ioMu.Lock()
@@ -325,7 +325,7 @@ func (w *Window) renderCoalescer() {
 // a pending Read with an error, so a late reader observes a closed emulator
 // instead of a nil one. This mirrors the snapshot discipline the w.Pty readers
 // already use.
-func (w *Window) terminalRef() *vt.Emulator {
+func (w *Window) terminalRef() vt.Terminal {
 	w.ioMu.RLock()
 	defer w.ioMu.RUnlock()
 	return w.Terminal

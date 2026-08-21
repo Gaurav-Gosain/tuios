@@ -180,7 +180,7 @@ type Window struct {
 	Y             int
 	Z             int
 	ID            string
-	Terminal      *vt.Emulator
+	Terminal      vt.Terminal
 	Pty           xpty.Pty
 	Cmd           *exec.Cmd // Write-once; the monitor goroutine reads it unlocked, see waitForCmd
 	ShellPgid     int       // Process group ID of the shell
@@ -493,7 +493,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	terminalWidth := max(width-2, 1)
 	terminalHeight := max(height-2, 1)
 	// Create terminal with scrollback buffer support
-	terminal := vt.NewEmulator(terminalWidth, terminalHeight)
+	terminal := vt.New(terminalWidth, terminalHeight)
 	// Set scrollback buffer size from config (default: 10000, configurable via --scrollback-lines or config file)
 	terminal.SetScrollbackMaxLines(config.ScrollbackLines)
 
@@ -710,7 +710,7 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 	// Create VT terminal with inner dimensions (accounting for borders)
 	terminalWidth := max(width-2, 1)
 	terminalHeight := max(height-2, 1)
-	terminal := vt.NewEmulator(terminalWidth, terminalHeight)
+	terminal := vt.New(terminalWidth, terminalHeight)
 	terminal.SetScrollbackMaxLines(config.ScrollbackLines)
 	terminal.SetCellSize(10, 20)
 
