@@ -33,6 +33,13 @@ func (e *Emulator) handleEsc(cmd ansi.Cmd) {
 func (e *Emulator) screenAlignmentPattern() {
 	cell := uv.Cell{Content: "E", Width: 1}
 	e.scr.Fill(&cell)
+
+	// The pattern covers the screen, so the margins that were confining output
+	// to part of it go with it. xterm calls resetmargins here, and vttest runs
+	// its margin checks straight after the alignment check on the assumption
+	// that it did.
+	e.scr.scroll = e.scr.buf.Bounds()
+
 	e.atPhantom = false
 	e.scr.setCursor(0, 0, false)
 }
