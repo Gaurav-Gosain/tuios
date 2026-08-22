@@ -85,13 +85,7 @@ func resetConfigToDefaults() error {
 	defaultCfg := config.DefaultConfig()
 
 	var sb strings.Builder
-	sb.WriteString("# TUIOS Configuration File\n")
-	sb.WriteString("# This file allows you to customize keybindings\n")
-	sb.WriteString("# Edit keybindings by modifying the arrays of keys for each action\n")
-	sb.WriteString("# Multiple keys can be bound to the same action\n")
-	sb.WriteString("#\n")
-	sb.WriteString("# Configuration location: " + configPath + "\n")
-	sb.WriteString("# Documentation: https://github.com/Gaurav-Gosain/tuios\n\n")
+	sb.WriteString(config.ConfigFileHeader(configPath))
 
 	data, err := toml.Marshal(defaultCfg)
 	if err != nil {
