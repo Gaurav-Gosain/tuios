@@ -14,6 +14,16 @@ import (
 // placeholder characters should be invisible in the text buffer.
 const kittyPlaceholderChar = 0x10EEEE
 
+// maxClusterBytes caps how much text one cell can hold. Terminals bound this
+// - xterm keeps a fixed number of combining characters per cell - because a
+// guest can pour combining marks onto one base forever, and every path that
+// grows a cell re-reads its whole content: unbounded content turns a mark
+// flood quadratic. 64 bytes holds any real cluster (a four-person ZWJ family
+// with skin tones is 25) with room to spare. The cap must be enforced the
+// same way on every growth path, or the same bytes split across writes would
+// keep a different prefix.
+const maxClusterBytes = 64
+
 // asciiStr holds the 128 single-byte ASCII strings so the printable-ASCII fast
 // path in handlePrint can pass a package-lifetime string to handleGrapheme
 // instead of allocating string(r) (which escapes to the heap) for every char.
@@ -200,8 +210,12 @@ func (e *Emulator) flushGraphemeAtWriteEnd() {
 			// the cluster stays buffered instead, and a continuation in the
 			// next Write joins it there exactly as it would have unsplit. A
 			// zero-width lead like a Prepend character only finds out what
-			// it is once its base arrives.
-			open = cluster
+			// it is once its base arrives. Past the cap it is dropped like
+			// everywhere else, or a mark flood would be re-read whole at
+			// every write boundary.
+			if len(cluster) <= maxClusterBytes {
+				open = cluster
+			}
 		case printConsumed:
 			// Combined into an existing cell, or discarded for good. Keeping
 			// it would apply it a second time at the next flush.
@@ -224,6 +238,14 @@ func (e *Emulator) extendOpenGrapheme() {
 		// normal path.
 		e.openGrapheme.disarm()
 		e.grapheme = append(e.grapheme[:0], []rune(s[len(cluster):])...)
+		return
+	}
+
+	if len(s) > maxClusterBytes {
+		// A continuation past the cap is dropped, the way every growth path
+		// drops it; the buffer stays capped, so this re-reads a bounded
+		// cluster per rune instead of an ever-growing one.
+		e.grapheme = e.grapheme[:len(e.grapheme)-1]
 		return
 	}
 
@@ -360,6 +382,9 @@ func (e *Emulator) attachZeroWidth(content string) printOutcome {
 	changed := false
 	for _, r := range content {
 		rs := string(r)
+		if len(cell.Content)+len(rs) > maxClusterBytes {
+			continue
+		}
 		if _, rw := ansi.FirstGraphemeCluster(rs, ansi.GraphemeWidth); rw != 0 {
 			// A rune that occupies columns on its own - the emoji after a
 			// joiner - is dropped rather than folded in: arriving at a
@@ -405,6 +430,19 @@ func (e *Emulator) handleGrapheme(content string, width int) printOutcome {
 // decided. It exists so a continuation re-rendering a cluster from a previous
 // Write can replay the exact margins the cluster was drawn under.
 func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) printOutcome {
+	if len(content) > maxClusterBytes {
+		// A cluster over the cap keeps its head; the marks past it go the
+		// way the attach path drops them.
+		n := maxClusterBytes
+		for n > 0 && content[n]&0xC0 == 0x80 {
+			n--
+		}
+		content = content[:n]
+		if cl, w := ansi.FirstGraphemeCluster(content, ansi.GraphemeWidth); len(cl) == len(content) {
+			width = w
+		}
+	}
+
 	awm := e.autoWrapMode()
 	cell := uv.Cell{
 		Content: content,
