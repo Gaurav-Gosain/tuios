@@ -604,3 +604,120 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 			"was typed at a shell instead: %v\n%s", err, term.Snapshot())
 	}
 }
+
+// --- acting before the list exists -----------------------------------------
+
+// openAndRace opens the launcher, types the query, and presses key with no wait
+// in between, which is how a person uses it and how the list is raced.
+func openAndRace(t *testing.T, term *tuitest.Terminal, query string, key tuitest.Key) {
+	t.Helper()
+	if err := term.SendKeys(altSpace); err != nil {
+		t.Fatalf("open launcher: %v", err)
+	}
+	if err := term.WaitForText(launcherTitle, uiTimeout); err != nil {
+		t.Fatalf("launcher never opened: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(query); err != nil {
+		t.Fatalf("type %q: %v", query, err)
+	}
+	if err := term.SendKeys(key); err != nil {
+		t.Fatalf("press the verb: %v", err)
+	}
+}
+
+// TestVerbBeforeTheScanLands is the launcher used without waiting to be told
+// the row is there.
+//
+// On the first open of a session the list is filled by a scan running off the
+// Update goroutine, so there is nothing selected yet however precisely the
+// query was typed. Both verbs used to close the launcher on no selection and
+// return, which threw the query away, dismissed the panel and said nothing:
+// indistinguishable from the key not being bound. The wait it needs is the
+// scan, not the pane's shell.
+func TestVerbBeforeTheScanLands(t *testing.T) {
+	for _, verb := range []struct {
+		name string
+		key  tuitest.Key
+	}{{"tab", tuitest.Tab}, {"enter", tuitest.Enter}} {
+		t.Run(verb.name, func(t *testing.T) {
+			dir := manyPrograms(t, 4000)
+			term, _ := start(t, startOpts{
+				cols: 160, rows: 45,
+				args: []string{"--standalone"},
+				env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+			})
+			waitBoot(t, term)
+			openAndRace(t, term, probeName, verb.key)
+
+			// The panel is still up with the query intact, and it says why the
+			// key did nothing.
+			if txt := term.Screen().Text(); !strings.Contains(txt, launcherTitle) {
+				t.Fatalf("%s before the scan landed dismissed the launcher and did "+
+					"nothing:\n%s", verb.name, term.Snapshot())
+			}
+			if err := term.WaitForText("Still finding the programs", uiTimeout); err != nil {
+				t.Fatalf("nothing said why the key did nothing: %v\n%s", err, term.Snapshot())
+			}
+
+			// The rows arrive behind the query, so the same key now works.
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return strings.Count(s.Text(), probeName) >= 2
+			}, 30*time.Second); err != nil {
+				t.Fatalf("the scan never filled the list: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys(verb.key); err != nil {
+				t.Fatalf("%s again: %v", verb.name, err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return !strings.Contains(s.Text(), launcherTitle)
+			}, uiTimeout); err != nil {
+				t.Fatalf("the second %s did nothing either: %v\n%s", verb.name, err, term.Snapshot())
+			}
+			if verb.name == "tab" {
+				// Tab leaves it waiting to be run, so Enter is what runs it.
+				if err := term.SendKeys(tuitest.Enter); err != nil {
+					t.Fatalf("enter: %v", err)
+				}
+			}
+			if err := term.WaitForText(runAnythingMarker, shellTimeout); err != nil {
+				t.Fatalf("no command reached the pane: %v\n%s", err, term.Snapshot())
+			}
+		})
+	}
+}
+
+// TestVerbOnAQueryThatMatchesNothing is the other empty list: the scan has
+// landed and the query matches none of it. Dismissing the panel there throws
+// away a query the user is part way through typing, so it stays up and says so.
+func TestVerbOnAQueryThatMatchesNothing(t *testing.T) {
+	dir := writeProbe(t)
+	term, _ := start(t, startOpts{
+		cols: 160, rows: 45,
+		args: []string{"--standalone"},
+		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+	})
+	waitBoot(t, term)
+	queryProbe(t, term) // lands the scan, so the list is full
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("esc: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), launcherTitle)
+	}, uiTimeout); err != nil {
+		t.Fatalf("launcher never closed: %v\n%s", err, term.Snapshot())
+	}
+
+	openLauncher(t, term)
+	if err := term.SendKeys("zzznomatch"); err != nil {
+		t.Fatalf("type: %v", err)
+	}
+	if err := term.WaitForText("No program matches", uiTimeout); err != nil {
+		t.Fatalf("the no-match line never appeared: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Tab); err != nil {
+		t.Fatalf("tab: %v", err)
+	}
+	if txt := term.Screen().Text(); !strings.Contains(txt, launcherTitle) {
+		t.Fatalf("tab on a query matching nothing threw the query away:\n%s", term.Snapshot())
+	}
+}

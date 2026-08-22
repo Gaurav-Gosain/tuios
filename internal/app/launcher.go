@@ -2,6 +2,7 @@ package app
 
 import (
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -250,11 +251,49 @@ func (m *OS) launcherSelection(idx int) (applist.Entry, bool) {
 	return filtered[idx].Entry, true
 }
 
+// launcherTarget resolves the row a verb was pressed on and closes the
+// launcher, or explains why there is nothing to act on and leaves it up.
+//
+// Closing on no selection is what made both verbs look broken. The list is
+// filled by a scan that runs off the Update goroutine, so on the first open of
+// a session there is nothing selected yet however precisely the query was
+// typed; pressing the key then threw the query away, dismissed the panel and
+// said nothing, which reads as the key not working. The wait it needs is the
+// scan, not the pane's shell.
+//
+// Staying open is the whole repair: the query survives, the rows arrive behind
+// it, and the same keypress works a moment later. The notification is there
+// because a key that does nothing visible is indistinguishable from a key that
+// is not bound.
+func (m *OS) launcherTarget(idx int) (applist.Entry, bool) {
+	e, ok := m.launcherSelection(idx)
+	if ok {
+		m.CloseLauncher()
+		return e, true
+	}
+	m.ShowNotification(m.launcherEmptyReason(), "info", config.NotificationDuration)
+	return applist.Entry{}, false
+}
+
+// launcherEmptyReason says why there is nothing to act on, which is two
+// different things: the scan has not landed, or it has and nothing matches.
+//
+// The wording deliberately does not repeat the panel's own empty line. A
+// notification that reads the same as text already on screen cannot be asserted
+// on, and a test that waits for it passes against a build that never raised it.
+// Saying "no program matches" before the first scan is simply wrong, and it is
+// the answer that would send someone looking for a program they do have.
+func (m *OS) launcherEmptyReason() string {
+	if len(m.LauncherItems) == 0 {
+		return "Still finding the programs on this machine"
+	}
+	return "Nothing to launch: no program matches " + m.LauncherQuery
+}
+
 // LauncherRun starts the selected program in a new pane and closes the
 // launcher. This is Enter, and the mouse click.
 func (m *OS) LauncherRun(idx int) tea.Cmd {
-	e, ok := m.launcherSelection(idx)
-	m.CloseLauncher()
+	e, ok := m.launcherTarget(idx)
 	if !ok {
 		return nil
 	}
@@ -273,8 +312,7 @@ func (m *OS) LauncherRun(idx int) tea.Cmd {
 // for a command line to finish is what completion means, and unlike a modifier
 // on Enter it is expressible under every terminal keyboard encoding.
 func (m *OS) LauncherType(idx int) tea.Cmd {
-	e, ok := m.launcherSelection(idx)
-	m.CloseLauncher()
+	e, ok := m.launcherTarget(idx)
 	if !ok {
 		return nil
 	}
