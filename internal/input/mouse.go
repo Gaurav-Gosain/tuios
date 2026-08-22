@@ -7,12 +7,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// isInTerminalContent checks if coordinates are within the terminal's content area.
-// The content area excludes the window borders (1 cell on each side, 0 for tiled).
-func isInTerminalContent(x, y int, win *terminal.Window) bool {
-	return x >= 0 && y >= 0 && x < win.ContentWidth() && y < win.ContentHeight()
-}
-
 // sendMouseToWindow forwards a mouse event to a window's terminal.
 // In daemon mode, the event is encoded as an escape sequence and written via PTY.
 // In local mode, the event is sent directly to the emulator.

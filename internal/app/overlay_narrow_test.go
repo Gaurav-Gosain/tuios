@@ -254,9 +254,6 @@ func TestOverlayDesktopSizesUnchanged(t *testing.T) {
 	if w, rows, _ := m.themePickerLayout(); w != themePickerInnerWidth || rows != themePickerVisibleRows {
 		t.Errorf("theme picker layout = %d x %d, want %d x %d", w, rows, themePickerInnerWidth, themePickerVisibleRows)
 	}
-	if got := m.dialogWidth(80); got != 80 {
-		t.Errorf("log viewer width = %d, want 80", got)
-	}
 	if got := m.tapeReviewRows(); got != tapeReviewViewportRows {
 		t.Errorf("tape review rows = %d, want %d", got, tapeReviewViewportRows)
 	}

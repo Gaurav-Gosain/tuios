@@ -221,10 +221,6 @@ func TestMacOSOptionGlyphsAreReservedOnlyOnDarwin(t *testing.T) {
 		t.Error("a bare letter must reach the shell, not be treated as a chord")
 	}
 
-	// The pure lookup helper must remain platform-independent so it stays testable.
-	if digit, ok := IsMacOSOptionKey('£'); !ok || digit != 3 {
-		t.Errorf("IsMacOSOptionKey(£) = (%d, %v), want (3, true)", digit, ok)
-	}
 }
 
 // TestTerminalPrefixChordNotRecorded verifies that prefix chords in terminal

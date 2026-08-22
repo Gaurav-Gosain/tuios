@@ -74,20 +74,6 @@ var functionKeyMap = map[rune][]byte{
 	tea.KeyF12: {0x1b, '[', '2', '4', '~'},
 }
 
-// getRawKeyBytes converts a Bubble Tea KeyPressMsg to raw bytes for PTY forwarding.
-//
-// Key improvements in this version:
-// - Leverages Bubble Tea v2 beta Key.Text field for better Unicode/international keyboard support
-// - Uses Key.Code and Key.Mod for more reliable modifier key handling
-// - Implements proper ANSI/VT escape sequence generation for terminal compatibility
-// - Better handling of complex key combinations (Ctrl+Shift+Alt combinations)
-// - Improved function key support with modifier combinations
-//
-// The function ensures applications like vim, emacs, etc. work correctly.
-func getRawKeyBytes(msg tea.KeyPressMsg) []byte {
-	return getRawKeyBytesWithMode(msg, false)
-}
-
 // getRawKeyBytesWithMode converts a Bubble Tea KeyPressMsg to raw bytes for PTY forwarding.
 // The applicationCursorKeys parameter indicates whether DECCKM mode is enabled,
 // which determines whether arrow keys send SS3 (ESC O) or CSI (ESC [) sequences.
@@ -331,106 +317,6 @@ func buildCSISequence(num, modParam int) []byte {
 
 	seq = append(seq, '~')
 	return seq
-}
-
-// ForwardKeyToTerminal is a convenience function that can be called to forward
-// a key directly to a terminal window. This is useful for implementing key
-// forwarding in other parts of the application.
-func ForwardKeyToTerminal(msg tea.KeyPressMsg, w interface{ SendInput([]byte) error }) tea.Cmd {
-	rawInput := getRawKeyBytes(msg)
-	if len(rawInput) > 0 {
-		if err := w.SendInput(rawInput); err != nil {
-			// Terminal unavailable
-			return nil
-		}
-	}
-	return nil
-}
-
-// BuildANSISequence is a public helper that builds an ANSI escape sequence for a key.
-// This can be useful for testing or debugging key sequences.
-func BuildANSISequence(msg tea.KeyPressMsg) string {
-	return string(getRawKeyBytes(msg))
-}
-
-// IsMacOSOptionKey checks if a rune represents a macOS Option+digit key press
-// and returns the digit (1-9) and true if it matches, or 0 and false otherwise.
-//
-// macOS Option key mappings:
-// Option+1 → ¡, Option+2 → ™, Option+3 → £, Option+4 → ¢, Option+5 → ∞
-// Option+6 → §, Option+7 → ¶, Option+8 → •, Option+9 → ª
-func IsMacOSOptionKey(r rune) (digit int, ok bool) {
-	switch r {
-	case '¡':
-		return 1, true
-	case '™':
-		return 2, true
-	case '£':
-		return 3, true
-	case '¢':
-		return 4, true
-	case '∞':
-		return 5, true
-	case '§':
-		return 6, true
-	case '¶':
-		return 7, true
-	case '•':
-		return 8, true
-	case 'ª':
-		return 9, true
-	default:
-		return 0, false
-	}
-}
-
-// IsMacOSOptionShiftKey checks if a rune represents a macOS Option+Shift+digit key press
-// and returns the digit (1-9) and true if it matches, or 0 and false otherwise.
-//
-// macOS Option+Shift key mappings:
-// Option+Shift+1 → ⁄, Option+Shift+2 → €, Option+Shift+3 → ‹, Option+Shift+4 → ›
-// Option+Shift+5 → ﬁ, Option+Shift+6 → ﬂ, Option+Shift+7 → ‡, Option+Shift+8 → °
-// Option+Shift+9 → ·
-func IsMacOSOptionShiftKey(r rune) (digit int, ok bool) {
-	switch r {
-	case '⁄':
-		return 1, true
-	case '€':
-		return 2, true
-	case '‹':
-		return 3, true
-	case '›':
-		return 4, true
-	case 'ﬁ':
-		return 5, true
-	case 'ﬂ':
-		return 6, true
-	case '‡':
-		return 7, true
-	case '°':
-		return 8, true
-	case '·':
-		return 9, true
-	default:
-		return 0, false
-	}
-}
-
-// IsMacOSOptionTab checks if a rune represents a macOS Option+Tab or Option+Shift+Tab key press.
-// Returns "next" for opt+tab (⇥), "prev" for opt+shift+tab (⇤), or "" if no match.
-//
-// macOS Option+Tab mappings:
-// Option+Tab → ⇥ (U+21E5, Rightwards Arrow to Bar)
-// Option+Shift+Tab → ⇤ (U+21E4, Leftwards Arrow to Bar)
-func IsMacOSOptionTab(r rune) string {
-	switch r {
-	case '⇥': // U+21E5 opt+tab
-		return "next"
-	case '⇤': // U+21E4 opt+shift+tab
-		return "prev"
-	default:
-		return ""
-	}
 }
 
 // vtKeyFromBubbletea converts a bubbletea KeyPressMsg to a VT emulator

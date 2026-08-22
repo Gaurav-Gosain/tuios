@@ -12,9 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// PrefixKeyTimeout is the duration after which prefix mode times out
-const PrefixKeyTimeout = 2 * time.Second
-
 // HandleInput is the main input coordinator that routes messages to appropriate handlers
 func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	var result tea.Model
@@ -327,11 +324,6 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Handle prefix commands in window management mode
 	if o.PrefixActive {
 		return HandlePrefixCommand(msg, o)
-	}
-
-	// Timeout prefix mode after 2 seconds
-	if o.PrefixActive && time.Since(o.LastPrefixTime) > PrefixKeyTimeout {
-		o.PrefixActive = false
 	}
 
 	// Handle window management mode keys
