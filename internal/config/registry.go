@@ -118,6 +118,26 @@ func (r *KeybindRegistry) GetTapePrefixAction(key string) string {
 	return r.lookupKeyInSection(key, r.config.Keybindings.TapePrefix)
 }
 
+// GetGlobalAction returns the action name for a key in the global scope, the
+// binds that act in window mode and terminal mode alike. Kept out of
+// buildMappings so a global bind cannot be overwritten by a same-key bind in one
+// of the seven flattened window-mode sections.
+func (r *KeybindRegistry) GetGlobalAction(key string) string {
+	return r.lookupKeyInSection(key, r.config.Keybindings.Global)
+}
+
+// GetScriptAction returns the action name for a key while a tape script is
+// playing back.
+func (r *KeybindRegistry) GetScriptAction(key string) string {
+	return r.lookupKeyInSection(key, r.config.Keybindings.Script)
+}
+
+// GetLayoutPrefixAction returns the action name for a given key in layout prefix
+// mode (Ctrl+B, L).
+func (r *KeybindRegistry) GetLayoutPrefixAction(key string) string {
+	return r.lookupKeyInSection(key, r.config.Keybindings.LayoutPrefix)
+}
+
 // GetTerminalModeAction returns the action name for a given key among the
 // direct terminal-mode binds (no prefix required).
 func (r *KeybindRegistry) GetTerminalModeAction(key string) string {
@@ -185,7 +205,10 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 		r.config.Keybindings.WorkspacePrefix,
 		r.config.Keybindings.DebugPrefix,
 		r.config.Keybindings.TapePrefix,
+		r.config.Keybindings.LayoutPrefix,
 		r.config.Keybindings.TerminalMode,
+		r.config.Keybindings.Global,
+		r.config.Keybindings.Script,
 	}
 
 	for _, section := range sections {
@@ -355,6 +378,7 @@ var ActionDescriptions = map[string]string{
 	"enter_window_mode":   "Enter window management mode",
 	"hold_window_mode":    "Hold for window management mode",
 	"toggle_help":         "Toggle help",
+	"open_settings":       "Open settings",
 	"quit":                "Quit",
 	"focus_sidebar":       "Focus sidebar",
 	"next_session":        "Next session",
@@ -448,4 +472,19 @@ var ActionDescriptions = map[string]string{
 	"terminal_focus_right": "Focus the pane to the right",
 	"terminal_focus_up":    "Focus the pane above",
 	"terminal_focus_down":  "Focus the pane below",
+	"terminal_scroll_up":   "Scroll into the pane's scrollback",
+	"terminal_scroll_down": "Scroll back down toward live output",
+	"terminal_paste_host":  "Paste from the host clipboard",
+
+	// Global (window mode and terminal mode alike)
+	"command_palette": "Open the command palette",
+	"launcher":        "Open the app launcher",
+
+	// Script playback
+	"script_pause": "Pause or resume the playing tape",
+
+	// Layout Prefix
+	"layout_prefix_load":   "Open the layout picker",
+	"layout_prefix_save":   "Save the current layout",
+	"layout_prefix_cancel": "Cancel layout prefix",
 }

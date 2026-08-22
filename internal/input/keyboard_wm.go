@@ -183,14 +183,6 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return o, nil
 	}
 
-	// Settings: comma opens the settings page directly in window mode. Checked
-	// before the config dispatch because the default keybinds map "," to a
-	// tiling resize action, which would otherwise swallow it.
-	if key == "," {
-		o.OpenSettings()
-		return o, nil
-	}
-
 	// Try config-based dispatch first (if registry is available)
 	if o.KeybindRegistry != nil {
 		action := lookupAction(msg, o.KeybindRegistry.GetAction)
@@ -208,15 +200,9 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return o, nil
 	}
 
-	// Command palette: ctrl+p. Matched on the decoded key event, not the raw
-	// string, so it fires under every Kitty keyboard encoding (see isCtrlP).
-	if isCtrlP(msg) {
-		return o, o.OpenCommandPalette()
-	}
-
-	// Launcher: alt+space, matched the same way and for the same reason.
-	if isLauncherKey(msg) {
-		return o, o.OpenLauncher()
+	// The global scope (palette, launcher) acts here and in terminal mode alike.
+	if m, cmd, ok := handleGlobalBinds(msg, o); ok {
+		return m, cmd
 	}
 
 	// Emergency/safety keybindings that bypass the config system

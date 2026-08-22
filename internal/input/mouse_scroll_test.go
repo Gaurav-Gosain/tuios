@@ -30,6 +30,9 @@ func scrollPane(t *testing.T) (*app.OS, *terminal.Window) {
 		Mode:          app.TerminalMode,
 		FocusedWindow: 0,
 		Windows:       []*terminal.Window{win},
+		// Shift+Up/Down are terminal_mode binds now rather than literals, so the
+		// pane needs a registry to resolve them.
+		KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig()),
 	}
 	return o, win
 }
@@ -286,8 +289,10 @@ func TestWindowModeWheelIsSilentAndYieldsToBindings(t *testing.T) {
 		t.Fatalf("the wheel raised %q in window management mode", o.Notifications[0].Message)
 	}
 
-	HandleWindowManagementModeKey(tea.KeyPressMsg{Code: 'n', Text: "n"}, o)
-	if win.InCopyMode() {
+	// toggle_help rather than new_window: both prove the key reached the
+	// dispatcher, and this one does not need a full OS to open a pane on.
+	HandleWindowManagementModeKey(tea.KeyPressMsg{Code: '?', Text: "?"}, o)
+	if !o.ShowHelp {
 		t.Error("a window-manager binding was swallowed by the scrolled view")
 	}
 }

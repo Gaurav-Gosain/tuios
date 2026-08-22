@@ -101,35 +101,6 @@ func HandleTapePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetTapePrefixAction)
 }
 
-// isCtrlP reports whether a key press is Ctrl+P, regardless of how the terminal
-// encoded it. The command palette binding must fire under the legacy control
-// byte (0x10) and under every Kitty keyboard protocol variant a terminal might
-// send. Matching on msg.String() is fragile: with associated-text reporting the
-// stringified key is "p", and with alternate-key reporting it is "ctrl+P", so a
-// raw-string comparison against "ctrl+p" silently misses and the key falls
-// through to the shell (in fish, Ctrl+P is history-back). The decoded key event
-// is stable across all of them: the code is 'p' and the only real modifier is
-// Ctrl.
-//
-// The lock modifiers (Caps Lock, Num Lock, Scroll Lock) are masked off before
-// the comparison. A terminal that has negotiated the Kitty keyboard protocol
-// reports the lock state in the modifier field, and the decoder keeps those bits
-// on the event, so with Num Lock on (the boot default on most keyboards) Ctrl+P
-// decodes to ModCtrl|ModNumLock rather than exactly ModCtrl. An exact-equality
-// check silently missed that and the palette never opened; this is the failure
-// the owner hit on a real terminal that the CSI-u e2e cases (which send mod 5,
-// no lock bit) did not reproduce. Masking the lock bits and then requiring the
-// remaining modifier set to be exactly Ctrl keeps a bare 'p' and every other
-// chord (Ctrl+Shift+P, Ctrl+Alt+P, Alt+P) from matching, so ordinary shell
-// typing and the other Ctrl+<letter> binds are untouched.
-func isCtrlP(msg tea.KeyPressMsg) bool {
-	if msg.Code != 'p' && msg.Code != 'P' {
-		return false
-	}
-	mods := msg.Mod &^ (tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock)
-	return mods == tea.ModCtrl
-}
-
 // handleTerminalModeBinds dispatches the direct (prefix-less) binds from the
 // [keybindings.terminal_mode] section, plus the handful of main-section actions
 // that must keep working while typing into a shell. It reports whether the key

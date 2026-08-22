@@ -246,19 +246,34 @@ func TestWorkspaceSwitchIsSwallowedOnlyOnAReservedChord(t *testing.T) {
 	}
 }
 
-func TestHardcodedTerminalKeysAreReported(t *testing.T) {
+// TestTerminalKeysAreReportedFromTheirSection pins that every key terminal mode
+// takes from the pane is named with the config table it came from. These were
+// literals in the input path and the report had to hand-list them as
+// "built-in", which is the report's way of saying the user cannot change it.
+// alt+space is in the list because the hand-list never had it at all: the
+// launcher was taking a key from the pane and nothing said so.
+func TestTerminalKeysAreReportedFromTheirSection(t *testing.T) {
 	r := registryFor(t, nil)
-	want := map[string]bool{"ctrl+p": false, "shift+up": false, "ctrl+shift+v": false}
+	want := map[string]string{
+		"ctrl+p":       "global",
+		"alt+space":    "global",
+		"shift+up":     "terminal_mode",
+		"shift+down":   "terminal_mode",
+		"ctrl+shift+v": "terminal_mode",
+	}
+	seen := map[string]bool{}
 	for _, s := range r.TerminalModeSwallowed() {
-		if _, ok := want[s.Key]; ok {
-			want[s.Key] = true
-			if s.Origin != "built-in" {
-				t.Errorf("%s is a literal in the input path, so its origin should be built-in, got %q", s.Key, s.Origin)
-			}
+		origin, ok := want[s.Key]
+		if !ok {
+			continue
+		}
+		seen[s.Key] = true
+		if s.Origin != origin {
+			t.Errorf("%s should be reported from %q, got %q", s.Key, origin, s.Origin)
 		}
 	}
-	for key, found := range want {
-		if !found {
+	for key := range want {
+		if !seen[key] {
 			t.Errorf("%s is taken by the input path but the report does not say so", key)
 		}
 	}

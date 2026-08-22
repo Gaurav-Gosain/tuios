@@ -62,24 +62,3 @@ func handleLauncherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// wanted.
 	return o, o.LauncherIconWork()
 }
-
-// isLauncherKey reports whether a key press is Alt+Space, the launcher's direct
-// binding.
-//
-// Alt+Space is the chord desktop launchers have taught people to reach for, it
-// is one a shell never wants as literal input (handleTerminalModeBinds already
-// treats any Alt chord as reserved), and unlike Ctrl+Shift+P it is
-// distinguishable under the legacy encoding as well as the Kitty one. The cost
-// is readline's set-mark, which is the same kind of trade Ctrl+P already makes
-// against fish's history-back.
-//
-// Matching is on the decoded key event rather than msg.String() for the reason
-// isCtrlP documents: the stringified key varies with the terminal's reporting
-// mode, and a raw-string comparison silently misses.
-func isLauncherKey(msg tea.KeyPressMsg) bool {
-	if msg.Code != tea.KeySpace && msg.Code != ' ' {
-		return false
-	}
-	mods := msg.Mod &^ (tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock)
-	return mods == tea.ModAlt
-}

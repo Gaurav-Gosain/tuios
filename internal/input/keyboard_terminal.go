@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -188,11 +189,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// scroll instead of being consumed by the copy mode key handler, and it
 	// enters copy mode the same silent way the wheel does.
 	if focusedWindow != nil {
-		shiftScroll := msg.String()
-		if shiftScroll == "shift+up" || shiftScroll == "shift+down" {
+		scroll := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
+		if scroll == "terminal_scroll_up" || scroll == "terminal_scroll_down" {
 			// One line per press, the way it has always been, but through the
 			// same viewport helpers the wheel uses.
-			if shiftScroll == "shift+up" {
+			if scroll == "terminal_scroll_up" {
 				if !focusedWindow.InCopyMode() && focusedWindow.ScrollbackLen() > 0 {
 					focusedWindow.EnterCopyModeImplicit()
 				}
@@ -301,26 +302,17 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// navigation through the registry, so the keys are rebindable and the block
 	// above no longer shadows them.
 
-	keyStr := msg.String()
-
-	// Command palette: ctrl+p (intercepted before terminal forwarding). Matched
-	// on the decoded key event, not msg.String(), so it fires under the legacy
-	// control byte and under every Kitty keyboard encoding (see isCtrlP).
-	if isCtrlP(msg) {
-		return o, o.OpenCommandPalette()
-	}
-
-	// Launcher: alt+space, intercepted before terminal forwarding for the same
-	// reason and matched the same way.
-	if isLauncherKey(msg) {
-		return o, o.OpenLauncher()
+	// The global scope (palette, launcher), intercepted before terminal
+	// forwarding so its keys are not typed into the shell.
+	if m, cmd, ok := handleGlobalBinds(msg, o); ok {
+		return m, cmd
 	}
 
 	// Handle paste shortcuts - intercept and request clipboard via OSC 52.
-	// Plain ctrl+v is deliberately excluded so it falls through to the passthrough
-	// block and reaches the child PTY as 0x16 (needed for vim visual-block, etc.),
-	// matching the tmux/zellij convention. Ctrl+Shift+V and host bracketed paste remain.
-	if keyStr == "ctrl+shift+v" || keyStr == "super+v" || keyStr == "super+shift+v" {
+	// Plain ctrl+v is deliberately not bound to terminal_paste_host so it falls
+	// through to the passthrough block and reaches the child PTY as 0x16 (needed
+	// for vim visual-block, etc.), matching the tmux/zellij convention.
+	if sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction) == "terminal_paste_host" {
 		if focusedWindow != nil {
 			// Use tea.ReadClipboard to request clipboard via OSC 52
 			// This will generate a tea.ClipboardMsg which we handle in handler.go
@@ -395,14 +387,14 @@ func recordTerminalKey(o *app.OS, msg tea.KeyPressMsg) {
 	}
 }
 
-// handleTerminalLayoutPrefix handles layout prefix commands (leader, L, ...).
-// The layout sub-prefix has no config section of its own yet, so its two keys
-// stay literal; entering it (prefix_layout) is configurable.
+// handleTerminalLayoutPrefix handles layout prefix commands (leader, L, ...),
+// resolved through the [keybindings.layout_prefix] section like every other
+// sub-prefix.
 func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LayoutPrefixActive = false
 	o.PrefixActive = false
-	switch msg.String() {
-	case "l":
+	switch sectionAction(msg, o, (*config.KeybindRegistry).GetLayoutPrefixAction) {
+	case "layout_prefix_load":
 		// Load layout
 		templates, _ := app.LoadLayoutTemplates()
 		o.ShowLayoutPicker = true
@@ -412,7 +404,7 @@ func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.LayoutPickerSelected = 0
 		o.LayoutPickerScroll = 0
 		return o, nil
-	case "s":
+	case "layout_prefix_save":
 		// Save layout
 		o.ShowLayoutPicker = true
 		o.LayoutPickerMode = "save"
@@ -420,9 +412,8 @@ func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.LayoutPickerSelected = 0
 		o.LayoutPickerScroll = 0
 		return o, nil
-	case "esc":
-		return o, nil
 	default:
+		// layout_prefix_cancel and any unbound key both dismiss the chord.
 		return o, nil
 	}
 }

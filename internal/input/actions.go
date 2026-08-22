@@ -134,6 +134,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("enter_terminal_mode", handleEnterTerminalMode)
 	d.Register("enter_window_mode", handleEnterWindowMode)
 	d.Register("toggle_help", handleToggleHelp)
+	d.Register("open_settings", handleOpenSettings)
 	d.Register("quit", handleQuit)
 
 	// Enter the sidebar rail's keyboard scope (window mode "s"). The exit and the
@@ -683,6 +684,14 @@ func handlePrevSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 // handleKillSessionNext kills the current session after switching this client
 // to the next one, in that order (see OS.KillSessionGoNext for why).
+// handleOpenSettings opens the settings overlay. Bound to "," in mode_control,
+// which the default layout binds too; mode_control is consulted after layout, so
+// settings wins and `keybinds doctor` names the resize bind it shadows.
+func handleOpenSettings(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenSettings()
+	return o, nil
+}
+
 // handleSettingsSidebar opens the settings overlay on its Sidebar tab, so the
 // rail's context menu lands on the rows it is about.
 func handleSettingsSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
