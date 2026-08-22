@@ -151,6 +151,7 @@ func NewOS(opts OSOptions) *OS {
 	// history is read here because it is one small file and the first open wants
 	// it already ranked.
 	os.pathApps = applist.NewCache()
+	os.desktopApps = newDesktopCache()
 	os.launchHistory = applist.LoadFrecency(applist.DefaultPath())
 
 	// Initialize graphics passthrough if enabled

@@ -1419,14 +1419,26 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 
-	case PathAppsMsg:
-		// A finished $PATH scan, handed over here so the launcher's rows are
-		// only ever built on this goroutine.
-		m.applyPathApps(msg.Entries)
+	case launcherIconsMsg:
+		// Icons decoded off the Update goroutine, filed away here so the store
+		// is only ever written on this one.
+		m.applyLauncherIcons(msg)
 		if m.ShowLauncher {
 			m.MarkAllDirty()
 		}
 		return m, nil
+
+	case PathAppsMsg:
+		// A finished $PATH scan, handed over here so the launcher's rows are
+		// only ever built on this goroutine.
+		m.applyPathApps(msg.Entries)
+		if !m.ShowLauncher {
+			return m, nil
+		}
+		m.MarkAllDirty()
+		// The rows changed, so the icons the visible ones want changed with
+		// them.
+		return m, m.LauncherIconWork()
 
 	case settingsSaveFailedMsg:
 		// The write happens in a command now, so a failure has to come back here

@@ -14,7 +14,9 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.OverlayActive() {
 		wm := msg.Mouse()
 		if o.OverlayMouseWheel(wm.X, wm.Y, msg.Button == tea.MouseWheelUp) {
-			return o, nil
+			// A wheel over the launcher scrolls rows into view whose icons have
+			// not been decoded yet. Every other panel answers nil here.
+			return o, o.LauncherIconWork()
 		}
 	}
 

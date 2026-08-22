@@ -13,18 +13,19 @@ import (
 // launcher.
 const PaletteCategoryRun = "Run"
 
-// PathAppsMsg carries a finished $PATH scan back to the Update goroutine.
+// PathAppsMsg carries a finished scan of the launcher's sources back to the
+// Update goroutine.
 type PathAppsMsg struct {
 	Entries []applist.Entry
 }
 
-// ScanPathApps refreshes the $PATH scan off the Update goroutine and delivers
-// the result as a message.
+// ScanPathApps refreshes the launcher's sources off the Update goroutine and
+// delivers the merged result as a message.
 //
 // The scan stats every directory on $PATH and reads the ones whose mtime moved,
-// which on a network mount is not something the input loop can afford to wait
-// for. Everything already found stays on screen while it runs, so the launcher
-// is typeable from the moment it opens.
+// and parses every .desktop file that changed, neither of which the input loop
+// can afford to wait for on a network mount. Everything already found stays on
+// screen while it runs, so the launcher is typeable from the moment it opens.
 func (m *OS) ScanPathApps() tea.Cmd {
 	cache := m.pathApps
 	if cache == nil {
@@ -32,27 +33,29 @@ func (m *OS) ScanPathApps() tea.Cmd {
 		// launcher; it must still open one.
 		return nil
 	}
+	desktop := m.desktopApps
 	return func() tea.Msg {
-		entries, _ := cache.Refresh()
-		return PathAppsMsg{Entries: entries}
+		return PathAppsMsg{Entries: scanLauncherSources(cache, desktop)}
 	}
 }
 
-// knownPathApps is the last scan, or nothing when this OS has no launcher.
+// knownPathApps is the last merged scan.
+//
+// It is held here rather than re-merged from the two caches on demand, because
+// the merge is a pass over several thousand entries and the launcher opens more
+// often than the filesystem changes.
 func (m *OS) knownPathApps() []applist.Entry {
-	if m.pathApps == nil {
-		return nil
-	}
-	return m.pathApps.Entries()
+	return m.launcherSource
 }
 
-// applyPathApps turns a finished scan into launcher rows.
+// applyPathApps files a finished scan away and rebuilds the rows from it.
 //
 // A scan can outlive the launcher that asked for it, since it runs elsewhere
-// and the user may close the overlay before it returns. The cache keeps the
-// entries either way, so the next open still builds from them; what is skipped
-// is holding a few thousand built rows for an overlay nobody is looking at.
-func (m *OS) applyPathApps([]applist.Entry) {
+// and the user may close the overlay before it returns. The entries are kept
+// either way, so the next open still builds from them; what is skipped is
+// holding a few thousand built rows for an overlay nobody is looking at.
+func (m *OS) applyPathApps(entries []applist.Entry) {
+	m.launcherSource = entries
 	if !m.ShowLauncher {
 		return
 	}
@@ -116,6 +119,12 @@ func (m *OS) TypeProgram(e applist.Entry) tea.Cmd {
 
 	before := len(m.Windows)
 	m.AddWindow(e.Name)
+	// Typing it out means the user is about to keep typing, so the pane is
+	// handed over ready for that. Run does not do this and should not: the two
+	// keys differ in exactly this intent, and landing in window management mode
+	// with a half-written command on the prompt would send the arguments to the
+	// window manager instead of the shell.
+	m.EnterTerminalMode()
 	if len(m.Windows) > before {
 		// Local: the pane exists as soon as AddWindow returns, so the line goes
 		// straight into it.

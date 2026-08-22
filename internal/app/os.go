@@ -527,9 +527,21 @@ type OS struct {
 	// per frame is the difference between an overlay that costs nothing to
 	// leave open and one that does not.
 	LauncherItems []LauncherItem
+	// launcherIcons holds the decoded app icons and what is currently drawn on
+	// the host. Nil until the launcher first needs one.
+	launcherIcons *launcherIcons
+	// launcherIconCells is where the last frame put each row's icon, in
+	// panel-relative cells, for the flush that follows the frame.
+	launcherIconCells []launcherIconPlacement
 	// pathApps caches the $PATH scan across opens, refreshing only the
 	// directories whose mtime moved.
 	pathApps *applist.Cache
+	// desktopApps caches the .desktop scan across opens, reparsing only the
+	// files whose mtime moved. Nil on a platform that has no such thing.
+	desktopApps *desktopCache
+	// launcherSource is the two caches merged into the one list the launcher
+	// ranks, refreshed when a scan lands.
+	launcherSource []applist.Entry
 	// launchHistory ranks programs by how recently and often they were run.
 	launchHistory *applist.Frecency
 	// pendingSeeds holds command lines waiting for the daemon-created panes

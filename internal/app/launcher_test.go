@@ -38,13 +38,14 @@ func fakeEntries(names ...string) []applist.Entry {
 }
 
 // seedLauncher fills the launcher's rows the way a finished scan does, without
-// touching the real $PATH.
+// touching the real $PATH. It goes through applyPathApps so the rows are built
+// and ordered exactly as a real scan builds them.
 func seedLauncher(t *testing.T, m *OS, names ...string) {
 	t.Helper()
-	m.LauncherItems = nil
-	for _, e := range fakeEntries(names...) {
-		m.LauncherItems = append(m.LauncherItems, LauncherItem{Entry: e})
-	}
+	open := m.ShowLauncher
+	m.ShowLauncher = true
+	m.applyPathApps(fakeEntries(names...))
+	m.ShowLauncher = open
 }
 
 func launcherNames(items []LauncherItem) []string {
@@ -151,8 +152,10 @@ func TestBoostCannotOutrankAClearlyBetterMatch(t *testing.T) {
 // things this person actually runs, not the alphabetical head of /usr/bin.
 func TestEmptyQueryLeadsWithHistory(t *testing.T) {
 	m := runTestOS(t)
-	seedLauncher(t, m, "aaa", "bbb", "ccc")
 	m.launchHistory.Note("ccc")
+	// The ordering is applied when the rows are built, which is what an open
+	// does, so the history has to be there first.
+	seedLauncher(t, m, "aaa", "bbb", "ccc")
 
 	got := launcherNames(m.filteredLauncherItems())
 	if len(got) == 0 || got[0] != "ccc" {
@@ -163,17 +166,22 @@ func TestEmptyQueryLeadsWithHistory(t *testing.T) {
 	}
 }
 
-// TestFilterDoesNotReorderTheCachedList guards the copy in sortByHistory. The
-// row list is cached across keystrokes, so a filter that sorted it in place
-// would change what the next keystroke filters.
-func TestFilterDoesNotReorderTheCachedList(t *testing.T) {
+// TestFilteringDoesNotDisturbTheCachedList is what lets the empty-query filter
+// hand its input straight back. The row list is cached across keystrokes, so a
+// filter that reordered or rewrote it would change what the next keystroke
+// filters.
+func TestFilteringDoesNotDisturbTheCachedList(t *testing.T) {
 	m := runTestOS(t)
 	seedLauncher(t, m, "aaa", "bbb", "ccc")
-	m.launchHistory.Note("ccc")
+	before := launcherNames(m.LauncherItems)
 
+	m.LauncherQuery = "b"
 	_ = m.filteredLauncherItems()
-	if got := launcherNames(m.LauncherItems); !slices.Equal(got, []string{"aaa", "bbb", "ccc"}) {
-		t.Fatalf("the cached list was reordered to %v", got)
+	m.LauncherQuery = ""
+	_ = m.filteredLauncherItems()
+
+	if got := launcherNames(m.LauncherItems); !slices.Equal(got, before) {
+		t.Fatalf("the cached list changed from %v to %v", before, got)
 	}
 }
 

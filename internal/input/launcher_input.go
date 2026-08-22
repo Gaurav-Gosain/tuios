@@ -26,23 +26,23 @@ func handleLauncherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	case "up", "ctrl+p":
 		o.LauncherMove(-1)
-		return o, nil
+		return o, o.LauncherIconWork()
 
 	case "down", "ctrl+n":
 		o.LauncherMove(1)
-		return o, nil
+		return o, o.LauncherIconWork()
 
 	case "backspace":
 		if len(o.LauncherQuery) > 0 {
 			o.LauncherQuery = o.LauncherQuery[:len(o.LauncherQuery)-1]
 			o.LauncherRefilter()
 		}
-		return o, nil
+		return o, o.LauncherIconWork()
 
 	case "ctrl+u":
 		o.LauncherQuery = ""
 		o.LauncherRefilter()
-		return o, nil
+		return o, o.LauncherIconWork()
 	}
 
 	// Accept printable characters. A space is a legitimate character in a
@@ -58,7 +58,9 @@ func handleLauncherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	o.LauncherRefilter()
-	return o, nil
+	// Typing changes which rows are on screen, so it changes which icons are
+	// wanted.
+	return o, o.LauncherIconWork()
 }
 
 // isLauncherKey reports whether a key press is Alt+Space, the launcher's direct

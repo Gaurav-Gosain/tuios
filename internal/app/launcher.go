@@ -34,7 +34,8 @@ type LauncherItem struct {
 	Match []int
 }
 
-// OpenLauncher shows the launcher and returns the command that rescans $PATH.
+// OpenLauncher shows the launcher and returns the command that rescans the
+// programs it lists.
 //
 // The scan runs off the Update goroutine and its rows arrive later, so the
 // launcher is open and typeable before it finishes; whatever the last scan
@@ -45,7 +46,21 @@ func (m *OS) OpenLauncher() tea.Cmd {
 	m.LauncherSelected = 0
 	m.LauncherScroll = 0
 	m.rebuildLauncherItems()
-	return m.ScanPathApps()
+	return tea.Batch(m.ScanPathApps(), m.LauncherIconWork())
+}
+
+// LauncherIconWork asks for the icons the rows now on screen need. It is nil
+// when there is nothing new to decode, which is the usual answer once a list
+// has been looked at, so moving the selection costs nothing.
+//
+// It is called by whatever changed which rows are visible, rather than by the
+// renderer, because the renderer cannot start work and this must not run on a
+// timer.
+func (m *OS) LauncherIconWork() tea.Cmd {
+	if !m.ShowLauncher {
+		return nil
+	}
+	return m.LauncherIconCmd(m.LauncherVisibleIcons())
 }
 
 // CloseLauncher hides the launcher and drops its rows.
@@ -59,17 +74,26 @@ func (m *OS) CloseLauncher() {
 	m.LauncherSelected = 0
 	m.LauncherScroll = 0
 	m.LauncherItems = nil
+	// A drawn icon outlives the panel that placed it, so it is taken down here
+	// rather than left for the next frame to paint over.
+	m.clearLauncherIcons()
 }
 
-// rebuildLauncherItems builds one row per known program. Called when the
-// launcher opens and when a scan lands, never per frame.
+// rebuildLauncherItems builds one row per known program, in the order an empty
+// query shows them. Called when the launcher opens and when a scan lands, never
+// per frame.
+//
+// The history ordering is applied here rather than in the filter because the
+// filter runs on every frame the launcher is drawn and this list is several
+// thousand rows long. Launch history only moves when something is launched,
+// which closes the launcher, so once per open is exactly often enough.
 func (m *OS) rebuildLauncherItems() {
 	entries := m.knownPathApps()
 	items := make([]LauncherItem, 0, len(entries))
 	for _, e := range entries {
 		items = append(items, LauncherItem{Entry: e})
 	}
-	m.LauncherItems = items
+	m.LauncherItems = orderByHistory(items, m.launchHistory)
 }
 
 // launcherItems returns the rows, building them if this OS reached the list
@@ -88,15 +112,22 @@ func (m *OS) launcherItems() []LauncherItem {
 // boost is capped at applist.MaxBoost, which is below what one matched
 // character is worth, so it lifts a near-tie and cannot drag a program the
 // query barely matches above one it matches well.
+//
+// The label is matched on its own and the entry's other names are a weaker
+// fallback, appended behind every label hit rather than scored beside them.
+// That is what lets "browser" find Firefox through its keywords and "vscode"
+// find Code without either of them outranking a program actually called that.
 func FilterLauncherItems(items []LauncherItem, query string, hist *applist.Frecency) []LauncherItem {
 	if query == "" {
-		// With nothing typed the whole list is on offer, so history is the only
-		// signal there is and it decides the order outright.
-		return sortByHistory(items, hist)
+		// With nothing typed the whole list is on offer and it is already in the
+		// order history put it in (see rebuildLauncherItems). Returning it as it
+		// stands is what keeps drawing an unfiltered launcher free of a pass
+		// over several thousand rows per frame.
+		return items
 	}
 	var m fuzzy.Matcher
 	hits := m.FilterIndex(query, len(items), func(i int) string {
-		return items[i].Entry.Name
+		return items[i].Entry.Label()
 	})
 
 	if hist != nil {
@@ -112,21 +143,43 @@ func FilterLauncherItems(items []LauncherItem, query string, hist *applist.Frece
 		}
 	}
 
+	named := make([]bool, len(items))
 	out := make([]LauncherItem, 0, len(hits))
 	for _, h := range hits {
+		named[h.Index] = true
 		item := items[h.Index]
 		item.Match = h.Positions
+		out = append(out, item)
+	}
+
+	for i, item := range items {
+		if named[i] || !matchesAlias(item.Entry, query) {
+			continue
+		}
+		// The positions index the label, and this row did not match its label,
+		// so there is nothing to highlight.
+		item.Match = nil
 		out = append(out, item)
 	}
 	return out
 }
 
-// sortByHistory puts the programs with launch history in front, strongest
-// first, and leaves everything else in scan order behind them.
+// matchesAlias reports whether query matches any of an entry's other names.
+func matchesAlias(e applist.Entry, query string) bool {
+	for _, a := range e.Aliases() {
+		if fuzzy.Match(query, a) {
+			return true
+		}
+	}
+	return false
+}
+
+// orderByHistory puts the programs with launch history in front, strongest
+// first, and leaves everything else in the order the sources listed them.
 //
-// The copy is deliberate: the caller's slice is the cached row list, and
-// sorting it in place would reorder the list the next keystroke filters.
-func sortByHistory(items []LauncherItem, hist *applist.Frecency) []LauncherItem {
+// This is what an empty launcher should open on: the things this person
+// actually runs, rather than the alphabetical head of /usr/bin.
+func orderByHistory(items []LauncherItem, hist *applist.Frecency) []LauncherItem {
 	if hist == nil {
 		return items
 	}
@@ -141,7 +194,7 @@ func sortByHistory(items []LauncherItem, hist *applist.Frecency) []LauncherItem 
 	if len(known) == 0 {
 		return items
 	}
-	// A stable sort keeps scan order between programs with equal history, so
+	// A stable sort keeps source order between programs with equal history, so
 	// the list does not shuffle under the cursor.
 	stableSortByBoost(known, hist)
 	return append(known, rest...)

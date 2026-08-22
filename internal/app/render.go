@@ -709,6 +709,16 @@ func (m *OS) flushGraphicsForView() {
 		// HideAllPlacements (they are not in `placements`).
 		m.KittyPassthrough.SetOverlayActive(hideImages)
 	}
+
+	// The launcher's own icons run past the hide above rather than through it.
+	// hideImages is about a pane's images, which have no business showing
+	// through an overlay; these belong to the overlay that is doing the hiding,
+	// and it having the screen to itself is exactly why they are legible.
+	if m.ShowLauncher {
+		m.flushLauncherIconsForFrame()
+	} else {
+		m.clearLauncherIcons()
+	}
 	if hideImages {
 		if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 			m.KittyPassthrough.HideAllPlacements()
