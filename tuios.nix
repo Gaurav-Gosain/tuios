@@ -6,11 +6,14 @@ pkgs.buildGoModule {
 
   src = ./.;
 
+  # Only build the main binary; e2e/ and other packages carry
+  # build tags (//go:build e2e) and are not standalone binaries.
+  subPackages = [ "cmd/tuios" ];
+
   # Allow Go to download the required toolchain version if the
   # nixpkgs Go is older than what go.mod specifies.
   env.GOTOOLCHAIN = "auto";
 
   # This has to be updated each time dependencies are updated.
-  # Use pkgs.lib.fakeHash to get the correct hash from a failed build.
-  vendorHash = pkgs.lib.fakeHash;
+  vendorHash = "sha256-ixUTjwNDOAYuLxBCTBeD6G5cZky8+OLcUJNhKmez8fE=";
 }
