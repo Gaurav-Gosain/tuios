@@ -1,0 +1,62 @@
+# The ghostty build tag swaps the terminal emulator for libghostty-vt. This
+# job keeps that build compiling and its differential harness honest: the
+# same bytes must produce the same state on both emulators.
+name: ghostty-vt
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "internal/vt/**"
+      - "internal/session/**"
+      - "internal/terminal/**"
+      - "scripts/ghostty-lib.sh"
+      - ".github/workflows/ghostty-vt.yml"
+      - "go.mod"
+  pull_request:
+    paths:
+      - "internal/vt/**"
+      - "internal/session/**"
+      - "internal/terminal/**"
+      - "scripts/ghostty-lib.sh"
+      - ".github/workflows/ghostty-vt.yml"
+      - "go.mod"
+
+permissions:
+  contents: read
+
+jobs:
+  differential:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Cache libghostty-vt
+        uses: actions/cache@v4
+        with:
+          path: .ghostty-vt
+          key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-native
+
+      - name: Build libghostty-vt
+        run: ./scripts/ghostty-lib.sh
+
+      - name: Tagged build compiles everywhere
+        run: PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./...
+
+      - name: Differential and wire fidelity
+        run: |
+          PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
+            go test -tags ghostty -count=1 -short \
+            ./internal/vt/ ./internal/session/ ./internal/terminal/
+
+      - name: Pure build unaffected
+        run: CGO_ENABLED=0 go build ./...
