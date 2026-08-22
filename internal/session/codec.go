@@ -142,7 +142,6 @@ func init() {
 	gob.Register(ResizePayload{})
 	gob.Register(ErrorPayload{})
 	gob.Register(PTYInfo{})
-	gob.Register(PTYListPayload{})
 	gob.Register(CreatePTYPayload{})
 	gob.Register(PTYCreatedPayload{})
 	gob.Register(ClosePTYPayload{})
@@ -175,12 +174,8 @@ func init() {
 	// Remote command payloads
 	gob.Register(ExecuteCommandPayload{})
 	gob.Register(SendKeysPayload{})
-	gob.Register(SetConfigPayload{})
 	gob.Register(RemoteCommandPayload{})
 	gob.Register(CommandResultPayload{})
 	gob.Register(GetLogsPayload{})
 	gob.Register(LogsDataPayload{})
-	gob.Register(WindowListPayload{})
-	gob.Register(QueryWindowsPayload{})
-	gob.Register(QuerySessionPayload{})
 }

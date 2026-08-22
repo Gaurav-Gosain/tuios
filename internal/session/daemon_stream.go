@@ -154,10 +154,6 @@ func (d *Daemon) sendError(cs *connState, code int, message string) error {
 	})
 }
 
-func (d *Daemon) sendPong(cs *connState) error {
-	return d.sendMessage(cs, MsgPong, nil)
-}
-
 // broadcastToSession sends a message to all TUI clients attached to a session.
 // If excludeClientID is non-empty, that client is excluded from the broadcast.
 func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, payload any, excludeClientID string) {

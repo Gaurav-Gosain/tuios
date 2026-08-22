@@ -470,46 +470,6 @@ func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 	return d.sendMessage(cs, MsgPTYClosed, &ClosePTYPayload{PTYID: payload.PTYID})
 }
 
-func (d *Daemon) handleListPTYs(cs *connState) error {
-	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
-	}
-
-	session := d.manager.GetSessionByID(cs.sessionID)
-	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
-	}
-
-	ptyIDs := session.ListPTYIDs()
-	ptys := make([]PTYInfo, 0, len(ptyIDs))
-
-	for _, id := range ptyIDs {
-		pty := session.GetPTY(id)
-		if pty != nil {
-			ptys = append(ptys, PTYInfo{
-				ID:     pty.ID,
-				Exited: pty.IsExited(),
-			})
-		}
-	}
-
-	return d.sendMessage(cs, MsgPTYList, &PTYListPayload{PTYs: ptys})
-}
-
-func (d *Daemon) handleGetState(cs *connState) error {
-	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
-	}
-
-	session := d.manager.GetSessionByID(cs.sessionID)
-	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
-	}
-
-	state := session.GetState()
-	return d.sendMessage(cs, MsgStateData, state)
-}
-
 func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
 		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")

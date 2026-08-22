@@ -674,16 +674,10 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleInput(cs, msg)
 	case MsgResize:
 		return d.handleResize(cs, msg)
-	case MsgPing:
-		return d.sendPong(cs)
 	case MsgCreatePTY:
 		return d.handleCreatePTY(cs, msg)
 	case MsgClosePTY:
 		return d.handleClosePTY(cs, msg)
-	case MsgListPTYs:
-		return d.handleListPTYs(cs)
-	case MsgGetState:
-		return d.handleGetState(cs)
 	case MsgUpdateState:
 		return d.handleUpdateState(cs, msg)
 	case MsgSubscribePTY:
@@ -694,24 +688,10 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleGetTerminalState(cs, msg)
 	case MsgExecuteCommand:
 		return d.handleExecuteCommand(cs, msg)
-	case MsgSendKeys:
-		return d.handleSendKeys(cs, msg)
-	case MsgSetConfig:
-		return d.handleSetConfig(cs, msg)
-	case MsgCapturePane:
-		return d.handleCapturePane(cs, msg)
 	case MsgCommandResult:
 		return d.handleCommandResult(cs, msg)
 	case MsgGetLogs:
 		return d.handleGetLogs(cs, msg)
-	case MsgQueryWindows:
-		return d.handleQueryWindows(cs, msg)
-	case MsgQuerySession:
-		return d.handleQuerySession(cs, msg)
-	case MsgWindowList:
-		return d.handleWindowListResponse(cs, msg)
-	case MsgSessionInfo:
-		return d.handleSessionInfoResponse(cs, msg)
 	default:
 		return fmt.Errorf("unknown message type: %d", msg.Type)
 	}

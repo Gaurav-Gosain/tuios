@@ -805,13 +805,6 @@ func TestMultiClientMessages(t *testing.T) {
 				ClientCount: 3,
 			},
 		},
-		{
-			name:    "ForceRefreshPayload",
-			msgType: MsgForceRefresh,
-			payload: &ForceRefreshPayload{
-				Reason: "client reconnected",
-			},
-		},
 	}
 
 	for _, tt := range tests {

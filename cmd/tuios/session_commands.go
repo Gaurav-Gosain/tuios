@@ -393,13 +393,6 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		}()
 	})
 
-	// Handle force refresh
-	client.OnForceRefresh(func(reason string) {
-		go func() {
-			p.Send(app.ForceRefreshMsg{Reason: reason})
-		}()
-	})
-
 	// Handle unexpected daemon disconnect (crash/reset/desync): quit cleanly
 	// instead of leaving the TUI frozen.
 	client.OnDisconnect(func(err error) {

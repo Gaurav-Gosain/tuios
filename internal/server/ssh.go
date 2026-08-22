@@ -502,19 +502,6 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 			}
 		}
 	})
-
-	// Handle force refresh (also on the read-loop goroutine; MarkAllDirty must run
-	// on the program goroutine).
-	client.OnForceRefresh(func(reason string) {
-		log.Printf("[SSH] Force refresh requested: %s", reason)
-		if m.ClientEventChan != nil {
-			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "refresh", Reason: reason}:
-			default:
-				log.Printf("[SSH] Warning: ClientEventChan full, dropping force refresh event")
-			}
-		}
-	})
 }
 
 // Window is an alias for terminal.Window for use in this package
