@@ -58,6 +58,11 @@ const (
 // every field is behind the mutex.
 type launcherIcons struct {
 	mu sync.Mutex
+	// once guards building the finder, which reads the user's icon theme out of
+	// their desktop configuration. That is filesystem work, so it happens in
+	// the decode command's goroutine on the first decode rather than on the
+	// Update goroutine when the store is first reached.
+	once sync.Once
 	// finder resolves a themed name to a file. Built once: it caches its own
 	// theme walks, and rebuilding it per open would throw those away.
 	finder *applist.IconFinder
@@ -76,20 +81,31 @@ type launcherIcons struct {
 	shown map[uint32]string
 }
 
-func newLauncherIcons(theme string) *launcherIcons {
-	f := applist.NewIconFinder(theme)
-	// The standard library decodes no SVG, and half of a themed icon set is
-	// SVG, so the finder is told to pass over those rather than hand back a
-	// file that cannot be turned into pixels.
-	f.RasterOnly = true
+func newLauncherIcons() *launcherIcons {
 	return &launcherIcons{
-		finder: f,
 		pixels: make(map[string]*image.RGBA),
 		asked:  make(map[string]bool),
 		hostID: make(map[string]uint32),
 		nextID: launcherIconIDBase,
 		shown:  make(map[uint32]string),
 	}
+}
+
+// iconFinder builds the finder on first use.
+//
+// Call it only from a decode command's own goroutine: working out which icon
+// theme the user has set means reading their desktop configuration, and the
+// Update goroutine has no business waiting on a file for that.
+func (s *launcherIcons) iconFinder() *applist.IconFinder {
+	s.once.Do(func() {
+		f := applist.NewIconFinder(applist.CurrentIconTheme())
+		// The standard library decodes no SVG, and half of a themed icon set is
+		// SVG, so the finder is told to pass over those rather than hand back a
+		// file that cannot be turned into pixels.
+		f.RasterOnly = true
+		s.finder = f
+	})
+	return s.finder
 }
 
 // launcherIconsMsg carries decoded icons back to the Update goroutine.
@@ -128,7 +144,7 @@ func (m *OS) launcherGraphicsReady() bool {
 // launcherIconState returns the icon store, building it on first use.
 func (m *OS) launcherIconState() *launcherIcons {
 	if m.launcherIcons == nil {
-		m.launcherIcons = newLauncherIcons(applist.CurrentIconTheme())
+		m.launcherIcons = newLauncherIcons()
 	}
 	return m.launcherIcons
 }
@@ -156,13 +172,13 @@ func (m *OS) LauncherIconCmd(names []string) tea.Cmd {
 		st.asked[n] = true
 		want = append(want, n)
 	}
-	finder := st.finder
 	st.mu.Unlock()
 
 	if len(want) == 0 {
 		return nil
 	}
 	return func() tea.Msg {
+		finder := st.iconFinder()
 		out := make(map[string]*image.RGBA, len(want))
 		for _, n := range want {
 			out[n] = loadIcon(finder, n, w, h)

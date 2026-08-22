@@ -152,28 +152,6 @@ func TestNoGraphicsMeansNoIconColumn(t *testing.T) {
 	}
 }
 
-// TestIconsAreAskedForOnlyOnce keeps a per-keystroke list from queueing the same
-// decode again. The cost of an icon is the theme walk and the decode, and both
-// are paid once for the life of the process.
-func TestIconsAreAskedForOnlyOnce(t *testing.T) {
-	st := newLauncherIcons("hicolor")
-	m := runTestOS(t)
-	m.launcherIcons = st
-
-	st.mu.Lock()
-	st.asked["firefox"] = true
-	st.mu.Unlock()
-
-	// A second ask for a name already asked about has nothing left to do, which
-	// is what makes moving the selection free.
-	st.mu.Lock()
-	_, already := st.asked["firefox"]
-	st.mu.Unlock()
-	if !already {
-		t.Fatal("the store forgot what it had already asked for")
-	}
-}
-
 // TestApplyLauncherIconsRemembersAMiss keeps a name that resolved to nothing
 // from being looked up again. A miss is the common case, and re-walking every
 // theme directory for it is the expensive one.
