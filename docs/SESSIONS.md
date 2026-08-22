@@ -71,7 +71,15 @@ be started as soon as it returns.
 
 More than one client can be attached to the same session at once. All of them
 see the same windows and output, and the session renders at the smallest
-attached client's size. See [MULTI_CLIENT.md](MULTI_CLIENT.md).
+attached client's size.
+
+Every attached client has full control: it sees all output, sends input, and
+manipulates windows. There is no per-client permission tier, so share a session
+only with people you would hand the keyboard to. Local clients are gated by the
+socket's Unix permissions (same user only), SSH clients by SSH authentication,
+and web clients by whatever stands in front of `tuios-web`. See
+[Multi-client sessions](https://tuios.gaurav.zip/docs/sessions) on the site for
+the full picture.
 
 ### In-app session switching
 
@@ -250,7 +258,6 @@ reboot.
 
 ## Related Documentation
 
-- [MULTI_CLIENT.md](MULTI_CLIENT.md) - several clients attached to one session
 - [CLI_REFERENCE.md](CLI_REFERENCE.md) - every command-line option
 - [protocol.md](protocol.md) - the JSON verb protocol for controlling the daemon
 - [KEYBINDINGS.md](KEYBINDINGS.md) - default keybindings
