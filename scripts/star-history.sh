@@ -12,6 +12,14 @@
 # result is also what keeps the README honest: GitHub's camo proxy caches a
 # remote image for hours regardless.
 #
+# The chart is drawn as a tuios pane: rounded accent border, a title pill on
+# the border row, window controls on the other end, and a dock strip under the
+# pane. The colors are the chrome palette theme.UI() resolves on the default
+# charmtone ramp, not a lookalike, and the chrome is constant-dark for the
+# same reason the real chrome is: it does not follow the ground it sits on,
+# which is what lets one file serve both README themes. The curve itself is
+# quantized to an 8x2 px cell grid, the way a terminal would have to draw it.
+#
 # The SVG carries no generation timestamp, so a run that finds no new stars
 # rewrites the same bytes and leaves nothing for CI to commit.
 set -eu
@@ -77,6 +85,13 @@ function comma(n,   s, out) {
 	return s out
 }
 
+# Axis and milestone labels: thousands compress to "1k" so the gutter stays
+# narrow; anything the step keeps below a thousand is written out.
+function fmtk(v) {
+	if (v >= 1000 && v % 1000 == 0) return (v / 1000) "k"
+	return comma(v)
+}
+
 # Round a raw interval up to the nearest 1, 2 or 5 times a power of ten so the
 # y axis lands on numbers a reader can add up in their head.
 function nice_step(raw,   e, f) {
@@ -95,12 +110,17 @@ function py(v) { return T + H - v * H / ymax }
 
 BEGIN {
 	split("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec", MON, " ")
-	L = 64; T = 60; W = 716; H = 232
-	VW = 800; VH = 340
-	ACCENT = "#9551f5"
-	# One grey that clears 4.3:1 against both #ffffff and GitHub's #0d1117,
-	# which is what lets a single file serve both README themes.
-	MUTED = "#75797f"
+	L = 64; T = 96; W = 696; H = 234
+	VW = 800; VH = 440
+	# theme.UI() on the default charmtone ramp: Pepper canvas, BBQ dock, Char
+	# surface, Charple accent with Hazy one step brighter, the
+	# Butter/Smoke/Squid text ramp, Structure(Pepper) for gridlines, and Julep
+	# because growth is what the success color is for. Quoted by value so the
+	# chart cannot drift when a lookalike palette would have been close enough.
+	CANVAS = "#201F26"; PANEL = "#2D2C36"; SURFACE = "#3A3943"
+	ACCENT = "#6B50FF"; HAZY = "#8B75FF"
+	FG = "#FFFAF1"; FGDIM = "#BFBCC8"; FGMUTE = "#858392"
+	STRUCT = "#4D4B4F"; JULEP = "#00FFB2"
 	n = 0
 }
 
@@ -123,29 +143,45 @@ END {
 	dmax = day[n]
 	if (dmax <= dmin) dmax = dmin + 1
 
+	R = L + W
+	B = T + H
 	step = nice_step(n / 4)
 	ymax = step * (int(n / step) + 1)
 
-	# The chart is ~716px wide, so a few hundred samples is already finer than
-	# the raster it lands on. Index 1 and index n are pinned so the curve starts
-	# at the first star and ends on the true total.
-	target = 360
-	if (n < target) target = n
-	np = 0
-	for (i = 1; i <= target; i++) {
-		k = (target == 1) ? n : int(1 + (i - 1) * (n - 1) / (target - 1) + 0.5)
-		if (np > 0 && k == pick[np]) continue
-		np++
-		pick[np] = k
-	}
-	if (pick[np] != n) { np++; pick[np] = n }
+	# The pane's border rows and the dock strip under it.
+	ptop = 22
+	pbot = VH - 44
+	dy = VH - 34
 
-	line = ""
-	for (i = 1; i <= np; i++) {
-		k = pick[i]
-		line = line sprintf("%s%.1f,%.1f", (i == 1 ? "" : " "), px(day[k]), py(k))
+	printf "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 %d %d\" width=\"%d\" height=\"%d\" role=\"img\" aria-label=\"%s star history: %s stars\">\n", VW, VH, VW, VH, repo, comma(n)
+	printf "<defs><linearGradient id=\"fade\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">"
+	printf "<stop offset=\"0\" stop-color=\"%s\" stop-opacity=\"0.30\"/>", ACCENT
+	printf "<stop offset=\"1\" stop-color=\"%s\" stop-opacity=\"0.04\"/>", ACCENT
+	printf "</linearGradient></defs>\n"
+	# No webfont: an SVG in a README cannot fetch one, so the stack asks for
+	# whatever monospace the reader's platform draws its terminals in.
+	printf "<style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>\n"
+
+	# The pane: canvas fill under a rounded accent stroke, the way the focused
+	# window wears its border.
+	printf "<rect x=\"8\" y=\"%d\" width=\"784\" height=\"%d\" rx=\"8\" fill=\"%s\"/>\n", ptop, pbot - ptop, CANVAS
+	printf "<rect x=\"8\" y=\"%d\" width=\"784\" height=\"%d\" rx=\"8\" fill=\"none\" stroke=\"%s\" stroke-width=\"2\"/>\n", ptop, pbot - ptop, ACCENT
+	# Title pill on the border row, half-circle ends like the powerline badge.
+	printf "<rect x=\"30\" y=\"%d\" width=\"116\" height=\"22\" rx=\"11\" fill=\"%s\"/>\n", ptop - 11, ACCENT
+	printf "<text x=\"88\" y=\"%d\" font-size=\"13\" font-weight=\"700\" fill=\"%s\" text-anchor=\"middle\">star-history</text>\n", ptop + 5, FG
+	# Window controls on the end the badge is not.
+	printf "<rect x=\"714\" y=\"%d\" width=\"56\" height=\"20\" rx=\"10\" fill=\"%s\"/>\n", ptop - 10, SURFACE
+	printf "<text x=\"730\" y=\"%d\" font-size=\"12\" fill=\"%s\" text-anchor=\"middle\">&#9633;</text>\n", ptop + 4, FGDIM
+	printf "<text x=\"754\" y=\"%d\" font-size=\"12\" fill=\"%s\" text-anchor=\"middle\">&#10005;</text>\n", ptop + 4, FGDIM
+
+	printf "<text x=\"34\" y=\"80\" font-size=\"30\" font-weight=\"700\" fill=\"%s\">%s<tspan dx=\"10\" font-size=\"13\" font-weight=\"500\" fill=\"%s\">stars</tspan></text>\n", FG, comma(n), FGDIM
+
+	# Gridlines dotted in structure ink: quiet by the same 1.9:1 target the
+	# real chrome holds its rules to.
+	for (v = step; v <= ymax + 0.5; v += step) {
+		printf "<line x1=\"%d\" y1=\"%.1f\" x2=\"%d\" y2=\"%.1f\" stroke=\"%s\" stroke-dasharray=\"1 5\"/>\n", L, py(v), R, py(v), STRUCT
+		printf "<text x=\"%d\" y=\"%.1f\" font-size=\"11\" fill=\"%s\" text-anchor=\"end\">%s</text>\n", L - 8, py(v) + 4, FGMUTE, fmtk(v)
 	}
-	area = sprintf("M %.1f,%.1f L ", px(dmin), py(0)) line sprintf(" L %.1f,%.1f Z", px(dmax), py(0))
 
 	# Ticks on month boundaries rather than at even pixel offsets: a reader
 	# scanning the axis is looking for months, not for equal spacing.
@@ -156,22 +192,6 @@ END {
 	mstep = 1
 	split("1 2 3 6 12", CAND, " ")
 	for (i = 1; i <= 5; i++) { mstep = CAND[i]; if (span / mstep <= 6) break }
-
-	printf "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 %d %d\" width=\"%d\" height=\"%d\" role=\"img\" aria-label=\"%s star history: %s stars\">\n", VW, VH, VW, VH, repo, comma(n)
-	printf "<defs><linearGradient id=\"fade\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">"
-	printf "<stop offset=\"0\" stop-color=\"%s\" stop-opacity=\"0.28\"/>", ACCENT
-	printf "<stop offset=\"1\" stop-color=\"%s\" stop-opacity=\"0.02\"/>", ACCENT
-	printf "</linearGradient></defs>\n"
-	printf "<style>text{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Helvetica,Arial,sans-serif}</style>\n"
-
-	printf "<text x=\"%d\" y=\"36\" fill=\"%s\" font-size=\"30\" font-weight=\"700\">%s<tspan dx=\"9\" fill=\"%s\" font-size=\"14\" font-weight=\"500\">stars</tspan></text>\n", L, ACCENT, comma(n), MUTED
-	printf "<text x=\"%d\" y=\"36\" fill=\"%s\" font-size=\"13\" text-anchor=\"end\">%s</text>\n", L + W, MUTED, repo
-
-	for (v = 0; v <= ymax + 0.5; v += step) {
-		printf "<line x1=\"%d\" y1=\"%.1f\" x2=\"%d\" y2=\"%.1f\" stroke=\"%s\" stroke-opacity=\"%s\"/>\n", L, py(v), L + W, py(v), MUTED, (v == 0 ? "0.45" : "0.18")
-		printf "<text x=\"%d\" y=\"%.1f\" fill=\"%s\" font-size=\"12\" text-anchor=\"end\">%s</text>\n", L - 12, py(v) + 4, MUTED, comma(v)
-	}
-
 	lasty = ""
 	for (mo = m0; mo <= m1; mo += mstep) {
 		ty = int(mo / 12); tm = mo % 12 + 1
@@ -179,13 +199,73 @@ END {
 		if (d < dmin || d > dmax) continue
 		lbl = (ty == lasty) ? MON[tm] : MON[tm] " " ty
 		lasty = ty
-		printf "<text x=\"%.1f\" y=\"%d\" fill=\"%s\" font-size=\"12\" text-anchor=\"middle\">%s</text>\n", px(d), T + H + 26, MUTED, lbl
+		printf "<text x=\"%.1f\" y=\"%d\" font-size=\"11\" fill=\"%s\" text-anchor=\"middle\">%s</text>\n", px(d), B + 18, FGMUTE, lbl
 	}
 
-	printf "<path d=\"%s\" fill=\"url(#fade)\"/>\n", area
-	printf "<polyline points=\"%s\" fill=\"none\" stroke=\"%s\" stroke-width=\"2.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n", line, ACCENT
-	printf "<circle cx=\"%.1f\" cy=\"%.1f\" r=\"7\" fill=\"%s\" fill-opacity=\"0.22\"/>\n", px(dmax), py(n), ACCENT
-	printf "<circle cx=\"%.1f\" cy=\"%.1f\" r=\"3.25\" fill=\"%s\"/>\n", px(dmax), py(n), ACCENT
+	# The curve as a terminal has to draw it: one 8px column per cell, height
+	# snapped to 2px eighth-blocks. The stars are sorted, so each column's
+	# count is one pointer walked forward, and the staircase keeps the cliffs
+	# a smooth curve would round off.
+	k = 0
+	fill = sprintf("M %d %d", L, B)
+	edge = ""
+	for (x = L; x < R; x += 8) {
+		xe = x + 8; if (xe > R) xe = R
+		de = dmin + (xe - L) * (dmax - dmin) / W
+		while (k < n && day[k + 1] <= de) k++
+		yq = B - int((B - py(k)) / 2 + 0.5) * 2
+		fill = fill sprintf(" L %d %d L %d %d", x, yq, xe, yq)
+		if (edge == "") edge = sprintf("M %d %d", x, yq)
+		else edge = edge sprintf(" L %d %d", x, yq)
+		edge = edge sprintf(" L %d %d", xe, yq)
+		tipy = yq
+	}
+	fill = fill sprintf(" L %d %d Z", R, B)
+	printf "<path d=\"%s\" fill=\"url(#fade)\"/>\n", fill
+	printf "<path d=\"%s\" fill=\"none\" stroke=\"%s\" stroke-width=\"2\"/>\n", edge, ACCENT
+
+	# A milestone at each gridline the curve has crossed: the crossing's exact
+	# point and date, marked with a four-point star because that is the mark
+	# this chart is about.
+	for (m = step; m <= n; m += step) {
+		mx = px(day[m]); my = py(m)
+		printf "<path d=\"M %.1f %.1f l 1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8 z\" fill=\"%s\"/>\n", mx, my - 6, HAZY
+		civil_from_days(int(day[m]))
+		printf "<text x=\"%.1f\" y=\"%.1f\" font-size=\"11\" fill=\"%s\" text-anchor=\"end\">%s &#183; %s %02d</text>\n", mx - 9, my - 9, FGDIM, fmtk(m), MON[CM], CD
+	}
+
+	# The steepest 48 hours, found by two pointers over the sorted days. Only a
+	# spike worth a tenth of the whole history gets the caption; a quiet repo's
+	# best window is just its slope, and captioning it would be noise.
+	best = 0; bi = 1; bj = 1
+	j = 1
+	for (i = 1; i <= n; i++) {
+		while (day[i] - day[j] > 2) j++
+		if (i - j + 1 > best) { best = i - j + 1; bi = i; bj = j }
+	}
+	if (best * 10 >= n && n >= 100) {
+		mx = (px(day[bj]) + px(day[bi])) / 2
+		my = (py(bj) + py(bi)) / 2
+		printf "<line x1=\"%.0f\" y1=\"%.0f\" x2=\"%.0f\" y2=\"%.0f\" stroke=\"%s\" stroke-width=\"1\"/>\n", mx - 26, my + 34, mx - 4, my + 4, JULEP
+		printf "<text x=\"%.0f\" y=\"%.0f\" font-size=\"12\" font-weight=\"700\" fill=\"%s\" text-anchor=\"end\">+%s in 48h</text>\n", mx - 20, my + 48, JULEP, comma(best)
+	}
+
+	# The cursor after the last cell, blinking, because the history is still
+	# being written. SMIL rather than script: GitHub strips scripts but serves
+	# the file as an image, where declarative animation survives.
+	printf "<rect x=\"%d\" y=\"%d\" width=\"9\" height=\"16\" fill=\"%s\">", R + 3, tipy - 14, HAZY
+	printf "<animate attributeName=\"opacity\" values=\"1;1;0;0;1\" keyTimes=\"0;0.5;0.5;0.95;1\" dur=\"1.2s\" repeatCount=\"indefinite\"/></rect>\n"
+
+	# The dock: workspace pills, the repo where the clock would go, and the
+	# mode pill saying the one thing a chart of a healthy repo should.
+	printf "<rect x=\"8\" y=\"%d\" width=\"784\" height=\"26\" rx=\"6\" fill=\"%s\"/>\n", dy, PANEL
+	printf "<rect x=\"20\" y=\"%d\" width=\"24\" height=\"18\" rx=\"4\" fill=\"%s\"/>\n", dy + 4, SURFACE
+	printf "<text x=\"32\" y=\"%d\" font-size=\"12\" font-weight=\"700\" fill=\"%s\" text-anchor=\"middle\" text-decoration=\"underline\">1</text>\n", dy + 17, HAZY
+	printf "<text x=\"62\" y=\"%d\" font-size=\"12\" fill=\"%s\" text-anchor=\"middle\">2</text>\n", dy + 17, FGDIM
+	printf "<text x=\"92\" y=\"%d\" font-size=\"12\" fill=\"%s\" text-anchor=\"middle\">3</text>\n", dy + 17, FGDIM
+	printf "<text x=\"560\" y=\"%d\" font-size=\"12\" fill=\"%s\" text-anchor=\"middle\">&#10022; %s</text>\n", dy + 17, FGDIM, repo
+	printf "<rect x=\"690\" y=\"%d\" width=\"84\" height=\"18\" rx=\"9\" fill=\"%s\"/>\n", dy + 4, ACCENT
+	printf "<text x=\"732\" y=\"%d\" font-size=\"11\" font-weight=\"700\" fill=\"%s\" text-anchor=\"middle\">NORMAL</text>\n", dy + 17, FG
 	print "</svg>"
 }
 AWK_EOF
