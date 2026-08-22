@@ -489,3 +489,52 @@ func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
 	}
 	requireTypedThenRuns(t, term)
 }
+
+// TestLauncherIconsWithABusyNeighbour is the condition that has broken other
+// placements: a tiled layout with a pane printing continuously underneath the
+// panel. The launcher's own icons are drawn over that, and every open has to
+// take its own pictures down again whatever the panes below are doing.
+func TestLauncherIconsWithABusyNeighbour(t *testing.T) {
+	stream := &hostStream{}
+	base := t.TempDir()
+	plantApps(t, base, 20)
+	term := startIn(t, base, startOpts{
+		cols: 120, rows: 40,
+		env: iconEnv(base),
+		out: stream,
+	})
+	waitBoot(t, term)
+	f := &launcherFixture{term: term, stream: stream, base: base}
+
+	newWindow(t, term)
+	newWindow(t, term)
+	enableTiling(t, term)
+	waitWindowCount(t, term, 2, "two tiled panes")
+
+	// One pane prints without stopping for the rest of the test.
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo NEIGHBOUR", "NEIGHBOUR", shellTimeout)
+	typeLine(t, term, "while :; do seq 1 40; sleep 0.05; done")
+	leaveTerminalMode(t, term)
+	time.Sleep(700 * time.Millisecond)
+
+	for i := range 3 {
+		f.openWithQuery(t, "zzapp", 3)
+		f.settle(t, true)
+		if i == 0 {
+			f.requirePlaced(t)
+		}
+		// Scroll the window so rows change picture, which is what makes the
+		// placements churn rather than merely exist.
+		for range 20 {
+			_ = term.SendKeys(tuitest.Down)
+		}
+		f.settle(t, true)
+		if err := term.SendKeys(tuitest.Esc); err != nil {
+			t.Fatalf("esc: %v", err)
+		}
+		f.waitClosed(t, "esc over a busy neighbour")
+		f.settle(t, false)
+		f.requireClean(t, fmt.Sprintf("close number %d over a busy neighbour", i+1))
+	}
+}
