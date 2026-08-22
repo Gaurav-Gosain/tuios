@@ -117,25 +117,6 @@ func (kp *KittyPassthrough) ForwardCommand(
 		if result != nil {
 			return result
 		}
-		// On the final chunk of a chunked transmission that was part of a
-		// previous TransmitPlace (chafa: T ... t ... t m=0), return the image
-		// dimensions from the tracked placement so the guest terminal reserves
-		// whitespace. Without this, the image appears but the cursor doesn't
-		// advance below it, causing text to overdraw.
-		if !cmd.More {
-			if placements := kp.placements[windowID]; placements != nil {
-				for _, p := range placements {
-					if p.Streaming {
-						return &PlacementResult{
-							Rows:       p.Rows,
-							Cols:       p.Cols,
-							CursorMove: cmd.CursorMove,
-						}
-					}
-				}
-			}
-		}
-
 	case vt.KittyActionTransmitPlace:
 		kittyPassthroughLog("ForwardCommand: handling TRANSMIT+PLACE, more=%v", cmd.More)
 		isFileBased := cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile
@@ -154,7 +135,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 			if imgRows == 0 && imgCols == 0 && !isFileBased {
 				if placements := kp.placements[windowID]; placements != nil {
 					for _, p := range placements {
-						if p.Streaming || p.Hidden {
+						if p.Hidden {
 							imgRows = p.Rows
 							imgCols = p.Cols
 							break
@@ -253,21 +234,6 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		// and text arrive in the same frame, preventing tearing.
 		return nil
 	}
-
-	// rawData includes the full APC framing: \x1b_G<params>;<data>\x1b\\
-	// Strip the framing to get just the inner content for rewriting.
-	innerData := rawData
-	if len(innerData) >= 3 && innerData[0] == '\x1b' && innerData[1] == '_' {
-		innerData = innerData[2:] // skip \x1b_
-		if innerData[0] == 'G' {
-			innerData = innerData[1:] // skip G
-		}
-	}
-	if len(innerData) >= 2 && innerData[len(innerData)-2] == '\x1b' && innerData[len(innerData)-1] == '\\' {
-		innerData = innerData[:len(innerData)-2] // strip \x1b\\
-	}
-
-	_ = innerData // innerData unused in this v0.6.0-style implementation
 
 	hasPendingData := kp.pendingDirectData[windowID] != nil
 	if !andPlace && !hasPendingData {

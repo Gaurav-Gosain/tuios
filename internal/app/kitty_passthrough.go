@@ -149,7 +149,6 @@ type KittyPassthrough struct {
 // pendingDirectTransmit holds accumulated data for chunked direct transmissions
 type pendingDirectTransmit struct {
 	Data         []byte
-	RawPayload   string // Accumulated raw base64 payload (avoids decode→re-encode)
 	Format       vt.KittyGraphicsFormat
 	Compression  vt.KittyGraphicsCompression
 	Width        int
@@ -166,11 +165,6 @@ type pendingDirectTransmit struct {
 	ZIndex       int32
 	Virtual      bool
 	CursorMove   int
-	// HeaderParams stores filtered params from the first (params-only) chunk,
-	// to be merged into the first data-carrying chunk. Needed because chafa
-	// sends params and data in separate APC sequences.
-	HeaderParams string
-	HeaderSent   bool
 	// AndPlace tracks whether the original chunk that created this pending
 	// was a TransmitPlace (action T). Chafa sends first chunk as T (andPlace=true)
 	// then subsequent chunks as t (andPlace=false). We track this so the final
@@ -195,8 +189,7 @@ type PassthroughPlacement struct {
 	PlacementID  uint32
 	WindowID     string
 	GuestX       int
-	AbsoluteLine int  // Absolute line position (scrollbackLen + cursorY at placement time)
-	Streaming    bool // True while chunks are still being received (don't re-place)
+	AbsoluteLine int // Absolute line position (scrollbackLen + cursorY at placement time)
 	HostX        int
 	HostY        int
 	Cols         int
