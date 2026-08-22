@@ -3,12 +3,12 @@
 <style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}@keyframes ap{from{opacity:0}}@keyframes bk{50%{opacity:0}}@media(prefers-reduced-motion:no-preference){.ap{animation:ap .5s ease-out backwards}.ck{animation:ap .3s backwards,bk 1.2s steps(1) infinite;animation-delay:5s}}@media(prefers-reduced-motion:reduce){.rvg{clip-path:none}.odo{display:none}.ods{display:inline!important}}</style>
 <rect x="8" y="22" width="784" height="374" rx="8" fill="#201F26"/>
 <rect x="8" y="22" width="784" height="374" rx="8" fill="none" stroke="#6B50FF" stroke-width="2"/>
-<rect x="30" y="11" width="116" height="22" rx="11" fill="#6B50FF"/>
-<text x="88" y="27" font-size="13" font-weight="700" fill="#FFFAF1" text-anchor="middle">star-history</text>
-<rect x="712" y="14" width="62" height="16" rx="8" fill="#201F26"/>
-<circle cx="726" cy="22" r="4.5" fill="#ff5f57"/>
-<circle cx="744" cy="22" r="4.5" fill="#febc2e"/>
-<circle cx="762" cy="22" r="4.5" fill="#28c840"/>
+<rect x="22" y="14" width="62" height="16" rx="8" fill="#201F26"/>
+<circle cx="36" cy="22" r="4.5" fill="#ff5f57"/>
+<circle cx="54" cy="22" r="4.5" fill="#febc2e"/>
+<circle cx="72" cy="22" r="4.5" fill="#28c840"/>
+<rect x="646" y="11" width="116" height="22" rx="11" fill="#6B50FF"/>
+<text x="704" y="27" font-size="13" font-weight="700" fill="#FFFAF1" text-anchor="middle">star-history</text>
 <defs><clipPath id="oc"><rect x="30" y="52" width="98" height="36"/></clipPath></defs>
 <g class="odo" clip-path="url(#oc)" font-size="30" font-weight="700" fill="#FFFAF1">
 <text x="34" transform="translate(0 -102)"><tspan x="34" y="80">0</tspan><tspan x="34" dy="34">1</tspan><tspan x="34" dy="34">2</tspan><tspan x="34" dy="34">3</tspan><animateTransform attributeName="transform" type="translate" values="0 0;0 0;0 -34;0 -34;0 -68;0 -68;0 -102;0 -102" keyTimes="0;0.1638;0.1788;0.2557;0.2707;0.9689;0.9839;1" dur="5s" fill="freeze"/></text>

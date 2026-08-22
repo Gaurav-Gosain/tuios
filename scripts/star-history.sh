@@ -187,21 +187,23 @@ END {
 	# window wears its border.
 	printf "<rect x=\"8\" y=\"%d\" width=\"784\" height=\"%d\" rx=\"8\" fill=\"%s\"/>\n", ptop, pbot - ptop, CANVAS
 	printf "<rect x=\"8\" y=\"%d\" width=\"784\" height=\"%d\" rx=\"8\" fill=\"none\" stroke=\"%s\" stroke-width=\"2\"/>\n", ptop, pbot - ptop, ACCENT
-	# Title pill on the border row, half-circle ends like the powerline badge.
-	printf "<rect x=\"30\" y=\"%d\" width=\"116\" height=\"22\" rx=\"11\" fill=\"%s\"/>\n", ptop - 11, ACCENT
-	printf "<text x=\"88\" y=\"%d\" font-size=\"13\" font-weight=\"700\" fill=\"%s\" text-anchor=\"middle\">star-history</text>\n", ptop + 5, FG
-	# Window controls on the end the badge is not: window_button_style dots,
-	# the macOS traffic light with close first, sitting straight on the border
-	# rather than in a pill of their own. The hexes are windowDot* from
-	# window_buttons.go, and on this canvas (charmtone Pepper) they measure
-	# 5.5:1, 9.7:1 and 7.3:1, already past the 3:1 floor readableDot enforces,
-	# so they arrive here unblended. Drawn a shade larger than a terminal
-	# cell's disc because the README scales the chart down and three 7px dots
-	# would smear into one.
-	printf "<rect x=\"712\" y=\"%d\" width=\"62\" height=\"16\" rx=\"8\" fill=\"%s\"/>\n", ptop - 8, CANVAS
-	printf "<circle cx=\"726\" cy=\"%d\" r=\"4.5\" fill=\"#ff5f57\"/>\n", ptop
-	printf "<circle cx=\"744\" cy=\"%d\" r=\"4.5\" fill=\"#febc2e\"/>\n", ptop
-	printf "<circle cx=\"762\" cy=\"%d\" r=\"4.5\" fill=\"#28c840\"/>\n", ptop
+	# Window controls against the leading corner, as window_button_position
+	# left places them: window_button_style dots, the macOS traffic light with
+	# close first, sitting straight on the border rather than in a pill of
+	# their own. The hexes are windowDot* from window_buttons.go, and on this
+	# canvas (charmtone Pepper) they measure 5.5:1, 9.7:1 and 7.3:1, already
+	# past the 3:1 floor readableDot enforces, so they arrive here unblended.
+	# Drawn a shade larger than a terminal cell's disc because the README
+	# scales the chart down and three 7px dots would smear into one.
+	printf "<rect x=\"22\" y=\"%d\" width=\"62\" height=\"16\" rx=\"8\" fill=\"%s\"/>\n", ptop - 8, CANVAS
+	printf "<circle cx=\"36\" cy=\"%d\" r=\"4.5\" fill=\"#ff5f57\"/>\n", ptop
+	printf "<circle cx=\"54\" cy=\"%d\" r=\"4.5\" fill=\"#febc2e\"/>\n", ptop
+	printf "<circle cx=\"72\" cy=\"%d\" r=\"4.5\" fill=\"#28c840\"/>\n", ptop
+	# Title pill on the end the controls are not, which is how layoutBorderRow
+	# resolves the two: the badge takes the trailing corner once the pill has
+	# the leading one. Half-circle ends like the powerline badge.
+	printf "<rect x=\"646\" y=\"%d\" width=\"116\" height=\"22\" rx=\"11\" fill=\"%s\"/>\n", ptop - 11, ACCENT
+	printf "<text x=\"704\" y=\"%d\" font-size=\"13\" font-weight=\"700\" fill=\"%s\" text-anchor=\"middle\">star-history</text>\n", ptop + 5, FG
 
 	# The count as an odometer: one clipped strip of glyphs per column,
 	# translated upward, which is how a mechanical counter actually works and
