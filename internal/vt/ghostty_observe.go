@@ -452,30 +452,12 @@ func (t *GhosttyTerminal) handleSixelDCS(params, payload []byte) {
 	rows := cmd.RowsForHeight(cellH)
 	cols := cmd.ColsForWidth(cellW)
 
+	// Reserve space whether or not a passthrough is installed: no
+	// passthrough is a test-only situation in this backend, and the cursor
+	// still moves past where the image would sit.
 	if fn := t.sixelPassthroughFunc; fn != nil {
 		t.callUnlocked(func() { fn(cmd, curX, curY, absLine) })
-		if rows > 0 {
-			t.reserveImageSpaceLocked(rows, cols)
-		}
-		return
 	}
-
-	state := t.sixelMain
-	if t.IsAltScreen() {
-		state = t.sixelAlt
-	}
-	state.AddPlacement(&SixelPlacement{
-		AbsoluteLine:   absLine,
-		ScreenX:        curX,
-		Width:          cmd.Width,
-		Height:         cmd.Height,
-		Rows:           rows,
-		Cols:           cols,
-		Data:           cmd.Data,
-		RawSequence:    cmd.RawSequence,
-		AspectRatio:    cmd.AspectRatio,
-		BackgroundMode: cmd.BackgroundMode,
-	})
 	if rows > 0 {
 		t.reserveImageSpaceLocked(rows, cols)
 	}

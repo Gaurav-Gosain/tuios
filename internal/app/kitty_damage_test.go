@@ -96,40 +96,149 @@ func splitAPC(t *testing.T, out []byte) [][]byte {
 	return seqs
 }
 
-// replayHost is the real host-side kitty implementation holding one image, so
+// replayHost is an independent reference kitty host holding one image, so
 // patches can be applied to it exactly as a kitty terminal would apply them.
+// It implements only the protocol slice the damage path emits: a=f edits of
+// the root frame (r=1), chunked with m=1, applied with X=1 overwrite or X=0
+// alpha blend. It is written from the kitty spec rather than sharing code
+// with the patch builder, so the round trip is checked against a second
+// reading of the protocol, not against the code under test.
 type replayHost struct {
-	handler *vt.KittyGraphicsHandler
-	state   *vt.KittyState
-	id      uint32
+	id  uint32
+	img *replayImage
+	// pending accumulates a chunked a=f: the first chunk carries the frame
+	// parameters, continuation chunks carry only payload.
+	pendingCmd  *vt.KittyCommand
+	pendingData []byte
+}
+
+// replayImage is what the host holds under an id.
+type replayImage struct {
+	Width  int
+	Height int
+	Format vt.KittyGraphicsFormat
+	Data   []byte
 }
 
 func newReplayHost(id uint32, format vt.KittyGraphicsFormat, width, height int, data []byte) *replayHost {
-	state := vt.NewKittyState()
-	state.AddImage(&vt.KittyImage{
-		ID:     id,
+	return &replayHost{id: id, img: &replayImage{
 		Width:  width,
 		Height: height,
 		Format: format,
 		Data:   append([]byte(nil), data...),
-	})
-	// Every patch carries q=2, so the host answers nothing at all: what it did
-	// with the pixels is the only evidence there is.
-	h := &replayHost{state: state, id: id}
-	h.handler = vt.NewKittyGraphicsHandler(vt.NewScreen(80, 24), state, io.Discard)
-	return h
+	}}
 }
 
-// image returns what the host now holds under this id. It is resolved again
-// after every replay rather than remembered, because the pane shows whatever
-// the id resolves to, and a host is free to replace the image behind it.
-func (h *replayHost) image(t *testing.T) *vt.KittyImage {
+// image returns what the host now holds under this id.
+func (h *replayHost) image(t *testing.T) *replayImage {
 	t.Helper()
-	img := h.state.GetImage(h.id)
-	if img == nil {
+	if h.img == nil {
 		t.Fatalf("host no longer holds image %d at all", h.id)
 	}
-	return img
+	return h.img
+}
+
+func (h *replayHost) handle(cmd *vt.KittyCommand) error {
+	if h.pendingCmd != nil {
+		h.pendingData = append(h.pendingData, cmd.Data...)
+		if cmd.More {
+			return nil
+		}
+		full := *h.pendingCmd
+		full.Data = h.pendingData
+		h.pendingCmd, h.pendingData = nil, nil
+		return h.applyFrameEdit(&full)
+	}
+	if cmd.Action != vt.KittyActionFrame {
+		return fmt.Errorf("unsupported action %c", cmd.Action)
+	}
+	if cmd.More {
+		first := *cmd
+		first.Data = nil
+		h.pendingCmd = &first
+		h.pendingData = append([]byte(nil), cmd.Data...)
+		return nil
+	}
+	return h.applyFrameEdit(cmd)
+}
+
+// applyFrameEdit applies one complete a=f to the root frame. In a=f, r names
+// the target frame, x/y the destination offset, s/v the source rectangle, and
+// X=1 means overwrite rather than blend.
+func (h *replayHost) applyFrameEdit(cmd *vt.KittyCommand) error {
+	if h.img == nil || cmd.ImageID != h.id {
+		return fmt.Errorf("ENOENT: image %d not found", cmd.ImageID)
+	}
+	if cmd.Rows != 1 {
+		return fmt.Errorf("only root-frame edits are supported (r=%d)", cmd.Rows)
+	}
+	if cmd.Compression != vt.KittyCompressionNone {
+		return fmt.Errorf("compressed patches are not supported")
+	}
+	img := h.img
+	bpp := rawBytesPerPixel(img.Format)
+	if bpp == 0 {
+		return fmt.Errorf("image format %d is not raw pixels", img.Format)
+	}
+	srcW, srcH := cmd.Width, cmd.Height
+	if srcW <= 0 {
+		srcW = img.Width
+	}
+	if srcH <= 0 {
+		srcH = img.Height
+	}
+	dstX, dstY := cmd.SourceX, cmd.SourceY
+	if dstX < 0 || dstY < 0 || dstX+srcW > img.Width || dstY+srcH > img.Height {
+		return fmt.Errorf("frame rectangle out of bounds")
+	}
+	srcBPP := rawBytesPerPixel(cmd.Format)
+	if srcBPP == 0 {
+		srcBPP = bpp
+	}
+	if len(cmd.Data) < srcW*srcH*srcBPP {
+		return fmt.Errorf("frame data too short: %d bytes for %dx%d", len(cmd.Data), srcW, srcH)
+	}
+	overwrite := cmd.XOffset == 1
+	dstStride := img.Width * bpp
+	srcStride := srcW * srcBPP
+	for row := range srcH {
+		so := row * srcStride
+		do := (dstY+row)*dstStride + dstX*bpp
+		if overwrite && srcBPP == bpp {
+			copy(img.Data[do:do+srcStride], cmd.Data[so:so+srcStride])
+			continue
+		}
+		for col := range srcW {
+			replayBlendPixel(img.Data[do+col*bpp:], bpp, cmd.Data[so+col*srcBPP:], srcBPP, overwrite)
+		}
+	}
+	return nil
+}
+
+// replayBlendPixel writes one source pixel over one destination pixel. A
+// source without an alpha channel is opaque.
+func replayBlendPixel(dst []byte, dstBPP int, src []byte, srcBPP int, overwrite bool) {
+	alpha := 255
+	if srcBPP == 4 {
+		alpha = int(src[3])
+	}
+	if overwrite || alpha == 255 {
+		copy(dst[:min(dstBPP, srcBPP)], src[:min(dstBPP, srcBPP)])
+		if dstBPP == 4 && srcBPP == 3 {
+			dst[3] = 255
+		}
+		return
+	}
+	if alpha == 0 {
+		return
+	}
+	inv := 255 - alpha
+	for i := range 3 {
+		dst[i] = byte((int(src[i])*alpha + int(dst[i])*inv) / 255)
+	}
+	if dstBPP == 4 {
+		dst[3] = byte(alpha + int(dst[3])*inv/255)
+	}
 }
 
 func (h *replayHost) replay(t *testing.T, out []byte) {
@@ -143,8 +252,8 @@ func (h *replayHost) replay(t *testing.T, out []byte) {
 		if err != nil {
 			t.Fatalf("host could not parse %q: %v", seq, err)
 		}
-		if !h.handler.HandleCommand(cmd) {
-			t.Fatalf("host rejected sequence %q", seq)
+		if err := h.handle(cmd); err != nil {
+			t.Fatalf("host rejected sequence %q: %v", seq, err)
 		}
 	}
 }

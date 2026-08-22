@@ -556,17 +556,16 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 	// kittySupport enabled, so APC sequences we forward here are rendered
 	// by the browser terminal.
 	tuiosInstance := app.NewOS(app.OSOptions{
-		KeybindRegistry:           keybindRegistry,
-		UserConfig:                userConfig,
-		ConfigReadOnly:            true,
-		BrowserClient:             true,
-		ShowKeys:                  showKeys,
-		Width:                     width,
-		Height:                    height,
-		EnableGraphicsPassthrough: true,
-		ForceGraphicsEnabled:      true,
-		GraphicsOutput:            graphicsOut,
-		TouchClient:               touch,
+		KeybindRegistry:      keybindRegistry,
+		UserConfig:           userConfig,
+		ConfigReadOnly:       true,
+		BrowserClient:        true,
+		ShowKeys:             showKeys,
+		Width:                width,
+		Height:               height,
+		ForceGraphicsEnabled: true,
+		GraphicsOutput:       graphicsOut,
+		TouchClient:          touch,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -637,20 +636,19 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	// force-enabled and routed through the sip PTY slave so kitty/sixel
 	// sequences reach the browser's xterm.js image addon (sip v0.1.12+).
 	tuiosInstance := app.NewOS(app.OSOptions{
-		KeybindRegistry:           keybindRegistry,
-		UserConfig:                userConfig,
-		ConfigReadOnly:            true,
-		BrowserClient:             true,
-		ShowKeys:                  showKeys,
-		Width:                     width,
-		Height:                    height,
-		IsDaemonSession:           true,
-		DaemonClient:              client,
-		SessionName:               sessionName,
-		EnableGraphicsPassthrough: true,
-		ForceGraphicsEnabled:      true,
-		GraphicsOutput:            graphicsOut,
-		TouchClient:               touch,
+		KeybindRegistry:      keybindRegistry,
+		UserConfig:           userConfig,
+		ConfigReadOnly:       true,
+		BrowserClient:        true,
+		ShowKeys:             showKeys,
+		Width:                width,
+		Height:               height,
+		IsDaemonSession:      true,
+		DaemonClient:         client,
+		SessionName:          sessionName,
+		ForceGraphicsEnabled: true,
+		GraphicsOutput:       graphicsOut,
+		TouchClient:          touch,
 	})
 
 	// Restore state from daemon if available

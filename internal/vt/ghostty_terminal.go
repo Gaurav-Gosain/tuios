@@ -114,7 +114,6 @@ type GhosttyTerminal struct {
 
 	// tuios graphics state, owned here exactly as the pure emulator owns it.
 	kittyMain, kittyAlt  *KittyState
-	sixelMain, sixelAlt  *SixelState
 	semanticMarkers      *SemanticMarkerList
 	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
 	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
@@ -147,8 +146,6 @@ func NewGhosttyTerminal(w, h int) *GhosttyTerminal {
 		kittyKbd:        newKittyKeyboardState(),
 		kittyMain:       NewKittyState(),
 		kittyAlt:        NewKittyState(),
-		sixelMain:       NewSixelState(),
-		sixelAlt:        NewSixelState(),
 		semanticMarkers: NewSemanticMarkerList(maxSemanticMarkers),
 		cursorStyle:     defaultCursorStyle,
 		cursorSteady:    defaultCursorSteady,

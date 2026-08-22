@@ -295,11 +295,10 @@ func runLocal() error {
 	prw := app.NewPostRenderWriter(os.Stdout)
 
 	initialOS := app.NewOS(app.OSOptions{
-		KeybindRegistry:           keybindRegistry,
-		UserConfig:                userConfig,
-		ShowKeys:                  showKeys,
-		IsDaemonSession:           isDaemonSession,
-		EnableGraphicsPassthrough: true,
+		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
+		ShowKeys:        showKeys,
+		IsDaemonSession: isDaemonSession,
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty
 		// and nothing can order their writes against a frame.

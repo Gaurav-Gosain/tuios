@@ -150,10 +150,6 @@ type Emulator struct {
 	// Kitty graphics passthrough callback
 	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
 
-	// Sixel graphics state for main and alt screens
-	sixelMain *SixelState
-	sixelAlt  *SixelState
-
 	// Sixel graphics passthrough callback
 	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
 
@@ -221,8 +217,6 @@ func NewEmulator(w, h int) *Emulator {
 	t.kittyAlt = NewKittyState()
 	t.registerKittyGraphicsHandler()
 
-	t.sixelMain = NewSixelState()
-	t.sixelAlt = NewSixelState()
 	t.registerSixelGraphicsHandler()
 
 	t.kittyKbd = newKittyKeyboardState()
@@ -1283,13 +1277,13 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 			return true
 		}
 
-		state := e.kittyMain
-		if e.IsAltScreen() {
-			state = e.kittyAlt
+		// No passthrough is a test-only situation: every production entry
+		// point installs one before any guest runs. Queries still deserve an
+		// answer so a probing guest does not hang.
+		if cmd.Action == KittyActionQuery {
+			_, _ = e.pipe.Write(BuildKittyResponse(true, cmd.ImageID, ""))
 		}
-
-		handler := NewKittyGraphicsHandler(e.scr, state, e.pipe)
-		return handler.HandleCommand(cmd)
+		return true
 	})
 }
 
@@ -1362,46 +1356,18 @@ func (e *Emulator) registerSixelGraphicsHandler() {
 			absLine = cursorY
 		}
 
-		// If passthrough is enabled, forward to host terminal
+		// Reserve space for the image (move cursor down), whether or not a
+		// passthrough is installed: no passthrough is a test-only situation,
+		// and the cursor still moves past where the image would sit.
 		if e.sixelPassthroughFunc != nil {
 			e.sixelPassthroughFunc(cmd, cursorX, cursorY, absLine)
-			// Reserve space for the image (move cursor down)
-			cellWidth, cellHeight := e.CellSize()
-			rows := cmd.RowsForHeight(cellHeight)
-			cols := cmd.ColsForWidth(cellWidth)
-			if rows > 0 {
-				e.ReserveImageSpace(rows, cols)
-			}
-			return true
 		}
-
-		// Local handling: store placement in state
-		state := e.sixelMain
-		if e.IsAltScreen() {
-			state = e.sixelAlt
-		}
-
 		cellWidth, cellHeight := e.CellSize()
-		placement := &SixelPlacement{
-			AbsoluteLine:   absLine,
-			ScreenX:        cursorX,
-			Width:          cmd.Width,
-			Height:         cmd.Height,
-			Rows:           cmd.RowsForHeight(cellHeight),
-			Cols:           cmd.ColsForWidth(cellWidth),
-			Data:           cmd.Data,
-			RawSequence:    cmd.RawSequence,
-			AspectRatio:    cmd.AspectRatio,
-			BackgroundMode: cmd.BackgroundMode,
+		rows := cmd.RowsForHeight(cellHeight)
+		cols := cmd.ColsForWidth(cellWidth)
+		if rows > 0 {
+			e.ReserveImageSpace(rows, cols)
 		}
-
-		state.AddPlacement(placement)
-
-		// Reserve space for the image
-		if placement.Rows > 0 {
-			e.ReserveImageSpace(placement.Rows, placement.Cols)
-		}
-
 		return true
 	})
 }
@@ -1412,11 +1378,4 @@ func (e *Emulator) SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, c
 
 func (e *Emulator) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int)) {
 	e.textSizingFunc = fn
-}
-
-func (e *Emulator) SixelState() *SixelState {
-	if e.IsAltScreen() {
-		return e.sixelAlt
-	}
-	return e.sixelMain
 }
