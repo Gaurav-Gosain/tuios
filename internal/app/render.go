@@ -550,6 +550,21 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 	return boxContent + "\n" + dockStr
 }
 
+// chargeRenderCost tells every pane's coalescer what the frame it just asked
+// for actually cost.
+//
+// One frame is composed for the whole screen, so the cost is not attributable
+// to the pane that triggered it and every coalescer is charged the same amount.
+// That is the behaviour we want anyway: when a frame is expensive, no pane
+// should be asking for the next one sooner.
+func (m *OS) chargeRenderCost(d time.Duration) {
+	for _, w := range m.Windows {
+		if w != nil {
+			w.ChargeRenderCost(d)
+		}
+	}
+}
+
 func (m *OS) View() tea.View {
 	var view tea.View
 
@@ -569,7 +584,9 @@ func (m *OS) View() tea.View {
 		// composed mid-drag, including PTY output, which arrives on a path that
 		// knows nothing about the drag.
 		m.FlushPendingBSPSync()
+		composeStart := time.Now()
 		content := m.composeFrame()
+		m.chargeRenderCost(time.Since(composeStart))
 		m.cachedViewContent = content
 		m.zenHidden = m.zenBordersHidden(false)
 		view.SetContent(content)

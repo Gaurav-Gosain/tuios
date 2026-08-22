@@ -35,10 +35,10 @@ const (
 //
 // The anti-flicker mechanism: instead of signaling a re-render on every
 // VT write (which shows incomplete frames mid-sync-update), we defer the
-// signal. A separate renderCoalescer goroutine fires at a capped rate
-// (~120fps) and only signals when there's actually new output. This is
-// the same technique prise uses (8ms render timer) to eliminate flicker
-// from fast-updating TUIs.
+// signal. A separate renderCoalescer goroutine fires at a capped rate and
+// only signals when there's actually new output. The cap is ~120fps while
+// frames are cheap and widens with what a frame actually costs; see
+// coalesceInterval.
 // outputChunk is one queued batch of daemon output and the epoch it was queued
 // under. See Window.outputEpoch.
 type outputChunk struct {
@@ -241,6 +241,49 @@ func (w *Window) outputWriter() {
 	}
 }
 
+const (
+	// minCoalesceInterval is the floor: ~120fps, the rate the coalescer used
+	// unconditionally before it learned what a frame costs.
+	minCoalesceInterval = 8 * time.Millisecond
+
+	// maxCoalesceInterval is the ceiling, so one pathological frame cannot
+	// leave a pane looking frozen while it still has output to show.
+	maxCoalesceInterval = 96 * time.Millisecond
+
+	// coalescePaceFactor is how much host capacity a flooding pane may take.
+	// At 2 a frame that costs the client 20ms buys a 40ms interval, so the UI
+	// goroutine spends about half its time composing and the other half
+	// available to whatever else needs it, which in practice is the keyboard.
+	coalescePaceFactor = 2
+)
+
+// coalesceInterval is how long this pane must wait between render signals,
+// derived from what the client's last frame actually cost.
+//
+// A fixed 8ms cap is only a cap when frames are cheaper than 8ms. Under a
+// full-screen repaint a frame costs the UI goroutine far more than that, and
+// since that goroutine is also the one that carries keystrokes, asking it for
+// another frame the instant it finishes one leaves no gap for a keypress to
+// land in: the pane's output wins every scheduling race and input waits behind
+// a frame it did not cause. Charging the pane an interval proportional to the
+// cost it imposes is what reopens that gap. It is the same debt the kitty
+// passthrough charges itself for graphics floods, in the units this path has.
+func (w *Window) coalesceInterval() time.Duration {
+	cost := time.Duration(w.renderCostNanos.Load()) * coalescePaceFactor
+	return min(max(cost, minCoalesceInterval), maxCoalesceInterval)
+}
+
+// ChargeRenderCost records what the client's last composed frame cost, so the
+// coalescer can pace itself against it. Only a real compose may be charged: a
+// frame served from the view cache costs nothing and would reset the pace to
+// the floor just as the expensive frames need it raised.
+func (w *Window) ChargeRenderCost(d time.Duration) {
+	if d < 0 {
+		return
+	}
+	w.renderCostNanos.Store(int64(d))
+}
+
 // renderCoalescer runs for daemon mode windows and fires render signals at a
 // capped rate. Multiple VT writes inside one interval coalesce into a single
 // render that shows the latest complete frame.
@@ -259,9 +302,7 @@ func (w *Window) outputWriter() {
 // bursts instead of ticking also means an idle pane costs no wakeups at all,
 // where before every open pane woke 125 times a second forever.
 func (w *Window) renderCoalescer() {
-	const interval = 8 * time.Millisecond // ~120fps cap
-
-	timer := time.NewTimer(interval)
+	timer := time.NewTimer(minCoalesceInterval)
 	if !timer.Stop() {
 		<-timer.C
 	}
@@ -299,7 +340,7 @@ func (w *Window) renderCoalescer() {
 			if armed {
 				continue
 			}
-			if wait := interval - time.Since(last); wait > 0 {
+			if wait := w.coalesceInterval() - time.Since(last); wait > 0 {
 				timer.Reset(wait)
 				armed = true
 				continue
