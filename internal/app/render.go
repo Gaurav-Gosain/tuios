@@ -480,7 +480,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowWorkspaceSwitcher || m.ShowLayoutPicker ||
 		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker ||
-		m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil {
+		m.ShowKeybindManager || m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil {
 		return nil, false
 	}
 	if (config.ShowClock && !config.HideClock) || (m.TapeRecorder != nil && m.TapeRecorder.IsRecording()) {
@@ -703,7 +703,7 @@ func (m *OS) flushGraphicsForView() {
 	hideImages := m.Resizing || m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
 		m.ShowWorkspaceSwitcher || m.ShowLayoutPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
-		m.ShowSettings || m.ShowThemePicker || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview
+		m.ShowSettings || m.ShowThemePicker || m.ShowKeybindManager || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview
 	if m.KittyPassthrough != nil {
 		// Self-placed remote video images are hidden/dropped here, not by
 		// HideAllPlacements (they are not in `placements`).

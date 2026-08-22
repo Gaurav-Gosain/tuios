@@ -117,6 +117,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleThemePickerInput(msg, o)
 	}
 
+	// Handle the keybind manager (opens over settings, like the theme picker)
+	if o.ShowKeybindManager {
+		return handleKeybindManagerInput(msg, o)
+	}
+
 	// Handle settings overlay (takes priority in terminal mode)
 	if o.ShowSettings {
 		return handleSettingsInput(msg, o)

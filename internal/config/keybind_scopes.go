@@ -182,6 +182,14 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 	return nil
 }
 
+// SectionFor returns the config table with the given name so a caller can add a
+// binding to it, or nil for a name that is not a section. The map is the live
+// one, which is the point: a recorder writing into it and then reloading the
+// registry is how a newly bound key takes effect without a restart.
+func (k *KeybindingsConfig) SectionFor(name string) map[string][]string {
+	return k.section(name)
+}
+
 // SectionNames returns every section name in the order Scopes visits them, so a
 // caller can iterate the config's tables without repeating the switch above.
 func SectionNames() []string {

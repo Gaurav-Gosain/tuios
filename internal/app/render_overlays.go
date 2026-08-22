@@ -194,6 +194,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "settings", content, geo, rows)
 	}
 
+	if m.ShowKeybindManager {
+		content, geo, rows := m.renderKeybindManager()
+		layers = m.placeOverlayPanel(layers, "keybinds", content, geo, rows)
+	}
+
 	if m.ShowThemePicker {
 		content, geo, rows := m.renderThemePicker()
 		layers = m.placeOverlayPanel(layers, "themepicker", content, geo, rows)

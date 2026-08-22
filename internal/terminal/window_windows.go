@@ -27,6 +27,13 @@ func (w *Window) HasForegroundProcess() bool {
 	return false
 }
 
+// ForegroundCommand is a stub for Windows: there is no process group owning the
+// console the way a Unix PTY has one, so the keybind report has no observed
+// program name here and says so rather than guessing one.
+func (w *Window) ForegroundCommand() string {
+	return ""
+}
+
 // SetPtyPixelSize is a stub for Windows - ConPTY doesn't support pixel dimensions.
 func (w *Window) SetPtyPixelSize(cols, rows, xpixel, ypixel int) error {
 	return nil
