@@ -127,6 +127,25 @@ func TestSkillDocumentsTheDiskLifecycle(t *testing.T) {
 	}
 }
 
+// TestSkillDocumentsRicing holds the ricing section to the two things that make
+// it usable by an agent rather than a person: where a theme file goes, and that
+// what it just applied can be measured instead of looked at. Both were absent,
+// and a theme was the one part of the appearance the skill never mentioned at
+// all.
+func TestSkillDocumentsRicing(t *testing.T) {
+	for _, want := range []string{
+		"tuios list-themes",
+		"tuios import-theme",
+		"themes dir:",
+		"illegible",
+		"### What this cannot do",
+	} {
+		if !strings.Contains(skills.TUIOS, want) {
+			t.Errorf("the skill no longer mentions %q", want)
+		}
+	}
+}
+
 // TestSkillInlineCommandsResolve resolves the commands the skill names in prose
 // rather than in a fence, so a rename cannot strand them.
 func TestSkillInlineCommandsResolve(t *testing.T) {

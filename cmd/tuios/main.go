@@ -1619,8 +1619,11 @@ Use --json for machine-readable output.`,
 		Short: "Get current session information",
 		Long: `Get detailed information about the current TUIOS session.
 
-Shows mode, workspace, tiling state, theme, and more.
-Use --json for machine-readable output.`,
+Shows mode, workspace, tiling state, size and window count.
+Use --json for machine-readable output.
+
+The theme is not here: it is a session option, reported by 'tuios list-themes'
+as active.`,
 		Example: `  # Get session info (table format)
   tuios session-info
 
