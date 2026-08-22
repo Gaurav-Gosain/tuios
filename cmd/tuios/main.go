@@ -1278,6 +1278,49 @@ override is shown alongside the default.`,
 	listOptionsCmd.Flags().BoolVar(&listOptionsJSON, "json", false, "Output as JSON")
 	_ = listOptionsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var listThemesSession string
+	var listThemesFilter string
+	var listThemesJSON bool
+	listThemesCmd := &cobra.Command{
+		Use:   "list-themes [theme]",
+		Short: "List the themes, and describe one",
+		Long: `List every registered theme and, given a name, print its colours with the
+contrast each one measures against that theme's own background.
+
+A theme is the part of the appearance 'tuios list-options' cannot describe: its
+value is a name from an open set, standing for twenty colours kept as JSON in
+the themes directory rather than as settings. This is how to find one rather
+than guess it, and how to tell whether the palette you just wrote is legible
+before anyone has to look at it.
+
+Writing <id>.json in the themes directory registers that theme; the directory is
+re-read on every call, so a theme authored a moment ago can be selected without
+a restart.`,
+		Example: `  # Narrow the registry to the ones you mean
+  tuios list-themes --filter catppuccin
+
+  # What is this theme actually made of
+  tuios list-themes catppuccin_mocha
+
+  # What is this session set to
+  tuios list-themes --json | jq -r .active
+
+  # The colours that will not read on their own background
+  tuios list-themes catppuccin_latte --json | jq -r '.palette.illegible[]'`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			return runListThemes(listThemesSession, name, listThemesFilter, listThemesJSON)
+		},
+	}
+	listThemesCmd.Flags().StringVarP(&listThemesSession, "session", "s", "", "Target session (default: most recently active)")
+	listThemesCmd.Flags().StringVar(&listThemesFilter, "filter", "", "Only ids containing this, e.g. gruvbox")
+	listThemesCmd.Flags().BoolVar(&listThemesJSON, "json", false, "Output as JSON")
+	_ = listThemesCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var waitForSession string
 	var waitForWindow string
 	var waitForPattern string
@@ -1676,7 +1719,7 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
-	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd)
+	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd)
 
 	return rootCmd
 }
