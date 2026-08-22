@@ -55,7 +55,34 @@ func (s *Screen) CellAt(x int, y int) *uv.Cell {
 
 // SetCell sets the cell at the given x, y position.
 func (s *Screen) SetCell(x, y int, c *uv.Cell) {
+	pre := s.buf.CellAt(x, y)
+	wasPaired := pre != nil && (pre.Width > 1 || (pre.Width == 0 && pre.Content == ""))
 	s.buf.SetCell(x, y, c)
+	if !wasPaired && (c == nil || c.Width <= 1) {
+		return
+	}
+	// The write may have cut a double-width rune. The buffer empties both
+	// halves of the pair it cut, but the half that no longer follows a lead
+	// is a cell no renderer draws, so the row would come out a column short.
+	// Turn any such orphan next to the write into a blank that holds its
+	// column.
+	w := 1
+	if c != nil && c.Width > 1 {
+		w = c.Width
+	}
+	for _, nx := range [2]int{x - 1, x + w} {
+		if nx < 0 {
+			continue
+		}
+		nc := s.buf.CellAt(nx, y)
+		if nc == nil || nc.Width != 0 || nc.Content != "" {
+			continue
+		}
+		if lead := s.buf.CellAt(nx-1, y); nx > 0 && lead != nil && lead.Width == 2 {
+			continue
+		}
+		s.buf.SetCell(nx, y, nil)
+	}
 }
 
 // Height returns the height of the screen.
@@ -561,6 +588,7 @@ func (s *Screen) InsertLine(n int) bool {
 	}
 
 	s.buf.InsertLineArea(y, n, s.blankCell(), s.scroll)
+	s.blankWideRunesCutByMargins()
 
 	return true
 }
@@ -584,8 +612,36 @@ func (s *Screen) DeleteLine(n int) bool {
 	}
 
 	s.buf.DeleteLineArea(y, n, s.blankCell(), scroll)
+	s.blankWideRunesCutByMargins()
 
 	return true
+}
+
+// blankWideRunesCutByMargins clears the halves of double-width runes that a
+// margin-bounded line shift severed.
+//
+// With DECLRMM margins narrower than the screen, InsertLineArea and
+// DeleteLineArea move only the cells between the margins, so a rune
+// straddling a margin loses one half: a lead left standing claims two columns
+// and every reader draws the row one cell too wide, and an orphaned
+// continuation is a cell no renderer emits, which shifts the rest of the row
+// left. Blanking both halves is what the resize path already does to a rune
+// it cuts, and what ghostty does.
+func (s *Screen) blankWideRunesCutByMargins() {
+	w := s.buf.Width()
+	for _, x := range [2]int{s.scroll.Min.X, s.scroll.Max.X} {
+		if x <= 0 || x >= w {
+			continue
+		}
+		for y := s.scroll.Min.Y; y < s.scroll.Max.Y; y++ {
+			if lead := s.buf.CellAt(x-1, y); lead != nil && lead.Width > 1 {
+				s.buf.SetCell(x-1, y, nil)
+			}
+			if cont := s.buf.CellAt(x, y); cont != nil && cont.Width == 0 && cont.Content == "" {
+				s.buf.SetCell(x, y, nil)
+			}
+		}
+	}
 }
 
 // withBlankPen runs fn with the pen background cleared, so any erase or scroll
