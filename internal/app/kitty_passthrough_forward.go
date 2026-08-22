@@ -982,6 +982,9 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		// render loop during a drag.
 		st.guestX, st.guestY = cursorX, cursorY
 		st.cols, st.rows = displayCols, displayRows
+		// The uncapped footprint too, so a frame bigger than its pane can be
+		// cropped to what fits instead of squeezed into it.
+		st.imgCols, st.imgRows = imgCols, imgRows
 		st.altScreen = isAltScreen
 		st.pxWidth, st.pxHeight = cmd.Width, cmd.Height
 

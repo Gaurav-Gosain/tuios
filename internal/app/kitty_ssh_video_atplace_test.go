@@ -5,6 +5,8 @@ import (
 	"compress/zlib"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -405,4 +407,86 @@ func TestVideoFollowsWindowMove(t *testing.T) {
 	if host.count("a=p,i=") <= before {
 		t.Fatal("video did not re-place after the window moved; it stays behind on a drag")
 	}
+}
+
+// TestRemoteVideoCropsRatherThanSqueezes is the reported stretch on the remote
+// path. A frame bigger than its pane has its cell count capped to what fits,
+// and kitty maps whatever source rectangle it is given onto that cell area - so
+// a cap with no source rectangle to match is not a crop, it is a scale, and a
+// scale on one axis and not the other is a distorted picture.
+//
+// The state carried the image's pixel dimensions next to its CAPPED cell count,
+// so the fraction of the image to show worked out as all of it however little
+// fitted. The uncapped footprint is what those pixels were divided into, and is
+// what the fraction has to be measured against.
+func TestRemoteVideoCropsRatherThanSqueezes(t *testing.T) {
+	withClientCaps(t, &HostCapabilities{
+		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
+	})
+
+	// 40x15 cells of image at a 10x20 cell, in a pane with room for 30x12.
+	const imgW, imgH = 400, 300
+	shmName := makeShmFrame(t, imgW, imgH)
+	cmd, raw := synthShmTransmitPlace(shmName, imgW, imgH)
+
+	host := &recWriter{}
+	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+
+	const winID = "window-0000-0000-0000-000000000000"
+	for range 2 { // the second frame reuses the id and self-places
+		kp.ForwardCommand(cmd, raw, winID, 0, 0, 30, 12, 0, 0, 0, 0, 0, false, func([]byte) {})
+	}
+	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
+		t.Fatal("remote video never self-placed")
+	}
+
+	got := lastATParams(t, hostText(host))
+	cols, rows := got["c"], got["r"]
+	srcW, srcH := got["w"], got["h"]
+	if srcW == 0 {
+		srcW = imgW
+	}
+	if srcH == 0 {
+		srcH = imgH
+	}
+	// What the host is given must be exactly what it is told to fill. Anything
+	// else is a scale factor applied to the bitmap.
+	if srcW != cols*10 || srcH != rows*20 {
+		t.Fatalf("a %dx%d px source drawn in a %dx%d px cell box (c=%d r=%d): kitty "+
+			"rescales the frame by %.3fx horizontally and %.3fx vertically, and a "+
+			"frame scaled unevenly is the stretch that was reported\nplacement: %v",
+			srcW, srcH, cols*10, rows*20, cols, rows,
+			float64(cols*10)/float64(srcW), float64(rows*20)/float64(srcH), got)
+	}
+}
+
+// hostText returns everything written to the host so far.
+func hostText(w *recWriter) string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+// lastATParams parses the parameters of the last a=T the host was sent.
+func lastATParams(t *testing.T, s string) map[string]int {
+	t.Helper()
+	i := strings.LastIndex(s, "a=T,")
+	if i < 0 {
+		t.Fatalf("no a=T in host output")
+	}
+	rest := s[i:]
+	if j := strings.IndexAny(rest, ";\x1b"); j >= 0 {
+		rest = rest[:j]
+	}
+	out := map[string]int{}
+	for _, kv := range strings.Split(rest, ",") {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		if n, err := strconv.Atoi(v); err == nil {
+			out[k] = n
+		}
+	}
+	return out
 }

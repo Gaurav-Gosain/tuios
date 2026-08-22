@@ -100,16 +100,31 @@ func checkAgrees(t *testing.T, cmds []wireCmd, phase string, told map[[2]int]boo
 		"guest was never given, so no frame it sends can fill it:\n%s", phase, b.String())
 }
 
-// checkLive says the stream is still reaching the host. A placement that was
-// deleted and never restored leaves the pane frozen or blank, which is the
-// third report: switch away, switch back, and the stream is dead.
-func checkLive(t *testing.T, term *tuitest.Terminal, cmds []wireCmd, phase string) {
+// checkLive says the stream is still reaching the host at the rate the guest is
+// producing it. A placement that was deleted and never restored leaves the pane
+// frozen or blank, which is the third report: switch away, switch back, and the
+// stream is dead.
+//
+// It counts rather than merely looking for one, because the failure being
+// hunted is a stream that stops. One placement arriving proves the pane was
+// alive at some instant in the phase, which is exactly what a stream that
+// delivered its last frame and died also proves. The guest paints at a known
+// rate, so a phase should carry roughly that many; well under it means frames
+// are being dropped or the placement went away and something else brought it
+// back.
+func checkLive(t *testing.T, term *tuitest.Terminal, cmds []wireCmd, phase string, want int) {
 	t.Helper()
+	if len(cmds) >= want {
+		return
+	}
 	if len(cmds) == 0 {
 		t.Errorf("phase %q: the stream went quiet - no placement reached the host in "+
 			"the whole phase, so whatever is in that pane is frozen or gone\n%s",
 			phase, term.Snapshot())
+		return
 	}
+	t.Errorf("phase %q: only %d placements reached the host where the guest painted "+
+		"about %d; the stream is stalling rather than running", phase, len(cmds), want)
 }
 
 func TestKittyPlacementStressUnderPerturbation(t *testing.T) {
@@ -145,6 +160,12 @@ func TestKittyPlacementStressUnderPerturbation(t *testing.T) {
 	time.Sleep(time.Second)
 
 	const dwell = 1200 * time.Millisecond
+	// The guest paints at 20fps and each frame reaches the host as a transmit
+	// and a placement, so a dwell carries about 2*20*dwell commands. Half of
+	// that is the floor: a phase containing a perturbation legitimately loses
+	// some frames to the hide-and-restore it triggers, and the assertion being
+	// made is that the stream kept running, not that it never skipped.
+	minPlacements := int(2 * 20 * dwell.Seconds() / 2)
 	rounds := stressRounds(t)
 	type check struct {
 		name string
@@ -175,6 +196,22 @@ func TestKittyPlacementStressUnderPerturbation(t *testing.T) {
 		time.Sleep(600 * time.Millisecond)
 		switchWorkspace(t, term, "1", 2)
 		record(tag("workspace-return"), settlePhase(host, tag("workspace-return"), dwell))
+
+		// Minimized and restored. This is the harshest delete-and-restore in
+		// the app: a minimized pane is marked not visible, which drops its
+		// placement from the host, and only the restore puts it back. A stream
+		// that does not come back from this is the pane that "stops working"
+		// after a trip to another window.
+		mouseClick(t, term, 20, 12, tuitest.MouseLeft, 0)
+		time.Sleep(300 * time.Millisecond)
+		if err := term.SendKeys("m"); err != nil {
+			t.Fatalf("minimize: %v", err)
+		}
+		time.Sleep(600 * time.Millisecond)
+		if err := term.SendKeys("M"); err != nil {
+			t.Fatalf("restore: %v", err)
+		}
+		record(tag("minimize-return"), settlePhase(host, tag("minimize-return"), dwell))
 
 		// An overlay covers the pane and then closes. Same story: the image is
 		// hidden while it is up and must come back when it goes.
@@ -209,7 +246,7 @@ func TestKittyPlacementStressUnderPerturbation(t *testing.T) {
 	for _, c := range checks {
 		got := c.get(stream)
 		total += len(got)
-		checkLive(t, term, got, c.name)
+		checkLive(t, term, got, c.name, minPlacements)
 		checkAgrees(t, got, c.name, told)
 	}
 	reportScaleFaults(t, scaleFaults(stream, cw, ch), total)

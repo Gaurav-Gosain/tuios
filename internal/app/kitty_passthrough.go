@@ -257,6 +257,11 @@ type remoteVideoState struct {
 	guestX, guestY int  // cursor position within the window at transmit time
 	cols, rows     int  // full display size in cells (capped to the pane content)
 	altScreen      bool // the screen the image was placed on
+	// imgCols/imgRows are the image's OWN size in cells, before that cap. The
+	// pixels below were divided into these, so these are what a fraction of the
+	// image has to be measured against; cols/rows above are what fits, which is
+	// a different number the moment the image is bigger than its pane.
+	imgCols, imgRows int
 	// Native pixel dimensions of the transmitted bitmap (s/v params), for
 	// source-rect cropping when the visible cell area is clamped.
 	pxWidth, pxHeight int
@@ -277,10 +282,25 @@ func (st *remoteVideoState) showGeometry() (cols, rows, srcW, srcH int) {
 	if st.showRows > 0 && st.showRows < rows {
 		rows = st.showRows
 	}
-	if (cols < st.cols || rows < st.rows) && st.pxWidth > 0 && st.pxHeight > 0 &&
-		st.cols > 0 && st.rows > 0 {
-		srcW = st.pxWidth * cols / st.cols
-		srcH = st.pxHeight * rows / st.rows
+	// Measured against the image's own cell footprint, not against the capped
+	// one. Capping is where a frame first stops fitting, and comparing with the
+	// capped number cannot see that: an image wider than its pane has
+	// cols == st.cols, so no crop was emitted and the whole bitmap was scaled
+	// into the pane instead - a squeeze on one axis, which is a stretched
+	// picture. The fraction shown is exact rather than a cell-size estimate,
+	// because the pixel count and the cell count both came off the same
+	// transmit.
+	imgCols, imgRows := st.imgCols, st.imgRows
+	if imgCols <= 0 {
+		imgCols = st.cols
+	}
+	if imgRows <= 0 {
+		imgRows = st.rows
+	}
+	if (cols < imgCols || rows < imgRows) && st.pxWidth > 0 && st.pxHeight > 0 &&
+		imgCols > 0 && imgRows > 0 {
+		srcW = st.pxWidth * cols / imgCols
+		srcH = st.pxHeight * rows / imgRows
 	}
 	return cols, rows, srcW, srcH
 }
