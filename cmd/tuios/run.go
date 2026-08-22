@@ -293,10 +293,6 @@ func runLocal() error {
 	isDaemonSession := os.Getenv("TUIOS_SESSION") != ""
 
 	prw := app.NewPostRenderWriter(os.Stdout)
-	// The PTY readers re-emit DECSCUSR to the host; send it through the same
-	// writer as everything else. Only the native clients do this: a server
-	// process has one of these per connection and this setter is a global.
-	terminal.SetHostWriter(prw)
 
 	initialOS := app.NewOS(app.OSOptions{
 		KeybindRegistry:           keybindRegistry,

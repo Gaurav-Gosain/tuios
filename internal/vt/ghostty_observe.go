@@ -137,11 +137,6 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 			style--
 		}
 		t.cursorStyle, t.cursorSteady = CursorStyle(style), !blink
-		t.queue(func(cb Callbacks) {
-			if cb.CursorStyle != nil {
-				cb.CursorStyle(CursorStyle(style), blink)
-			}
-		})
 	case final == 'u' && prefix == '>':
 		flags := 0
 		if v, ok := csiFirstParam(params); ok {
