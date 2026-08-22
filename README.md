@@ -295,7 +295,7 @@ staticcheck ./...          # Static analysis
 
 ## Star History
 
-[![Star History Chart](https://star-history.dera.page/svg?repos=Gaurav-Gosain/tuios&type=Date&theme=dark)](https://star-history.dera.page/#Gaurav-Gosain/tuios&Date)
+[![Star History Chart](./assets/star-history.svg)](https://github.com/Gaurav-Gosain/tuios/stargazers)
 
 <p style="display:flex;flex-wrap:wrap;">
 <img alt="GitHub Language Count" src="https://img.shields.io/github/languages/count/Gaurav-Gosain/tuios" style="padding:5px;margin:5px;" />

@@ -1,0 +1,49 @@
+# The README's star chart is a committed asset rather than a hotlinked image,
+# because star-history.com stopped rendering charts and its mirrors go stale.
+# This job redraws it from the stargazers API and commits the result only when
+# the count has actually moved.
+name: star-history
+
+on:
+  schedule:
+    # Weekly, off the hour. The chart only has to be right, not instant, and
+    # every redraw commits a fresh copy of the whole SVG: daily would add a
+    # few megabytes a year of history to say what a week's run says once.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  redraw:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Redraw the chart
+        env:
+          # gh reads the token from the environment; the default one is enough,
+          # since stargazers is a public read.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/star-history.sh
+
+      - name: Commit it if the count moved
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # A run that finds no new stars leaves the file byte-identical, so
+          # there is nothing to commit and nothing to push.
+          if git diff --quiet -- assets/star-history.svg; then
+            echo "star count unchanged"
+            exit 0
+          fi
+
+          STARS=$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.stargazers_count')
+          git add assets/star-history.svg
+          git commit -m "chore: redraw the star history chart at ${STARS} stars"
+          git push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
