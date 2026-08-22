@@ -112,7 +112,13 @@ func (m *OS) ThemePickerRefilter() {
 func (m *OS) ThemePickerApplySelection() tea.Cmd {
 	items := m.themePickerItems()
 	if m.ThemePickerSelected < 0 || m.ThemePickerSelected >= len(items) {
-		m.CloseThemePicker()
+		// Nothing to commit, so nothing is closed. Closing here went through
+		// CloseThemePicker, which leaves the applied theme alone: the live
+		// preview from the last query that did match rows stayed on the screen,
+		// unpersisted, with the picker gone and no way back to it but Esc that
+		// was no longer there to press. Staying up keeps both the query and the
+		// escape route that reverts.
+		m.ShowNotification("Nothing to apply: no theme matches "+m.ThemePickerQuery, "info", config.NotificationDuration)
 		return nil
 	}
 	sel := items[m.ThemePickerSelected]

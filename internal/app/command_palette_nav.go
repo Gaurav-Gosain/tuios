@@ -1,6 +1,9 @@
 package app
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
 
 // allPaletteItems returns the merged palette list: the static commands, and the
 // session/window entries built when the palette was opened.
@@ -77,7 +80,12 @@ func (m *OS) CloseCommandPalette() {
 func (m *OS) ActivateCommandPalette() tea.Cmd {
 	filtered := m.filteredPaletteItems()
 	if m.CommandPaletteSelected < 0 || m.CommandPaletteSelected >= len(filtered) {
-		m.CloseCommandPalette()
+		// Nothing to run. Closing here would dismiss the panel and throw away
+		// the query that narrowed it to nothing, which answers the key with
+		// silence and cannot be told from the key not being bound. The query is
+		// what the user is part way through typing, so it stays and so does the
+		// panel.
+		m.ShowNotification("Nothing to run: no command matches "+m.CommandPaletteQuery, "info", config.NotificationDuration)
 		return nil
 	}
 	action := filtered[m.CommandPaletteSelected].Action

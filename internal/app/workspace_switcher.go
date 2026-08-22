@@ -3,6 +3,8 @@ package app
 import (
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // WorkspaceItem is one row of the workspace switcher. Number is the workspace's
@@ -111,11 +113,21 @@ func (m *OS) WorkspaceSwitcherMove(delta, count int) {
 	moveListSelection(&m.WorkspaceSwitcherSelected, &m.WorkspaceSwitcherScroll, count, workspaceSwitcherRows, delta)
 }
 
-// workspaceSwitcherActivate switches to the workspace at the given row of the
-// filtered list and closes the switcher, mirroring its Enter binding.
-func (m *OS) workspaceSwitcherActivate(idx int) {
+// WorkspaceSwitcherActivate switches to the workspace at the given row of the
+// filtered list and closes the switcher.
+//
+// The Enter binding and the mouse click both come here rather than each writing
+// the same three lines, which is how the two came to be fixed one at a time.
+func (m *OS) WorkspaceSwitcherActivate(idx int) {
 	target, ok := m.WorkspaceSwitcherTarget(idx)
-	if ok && !target.IsCurrent {
+	if !ok {
+		// Nothing to switch to, so the switcher stays up: the query that
+		// narrowed it to nothing is what the user is typing, and dismissing it
+		// answers the key with silence.
+		m.ShowNotification("Nothing to switch to: no workspace matches "+m.WorkspaceSwitcherQuery, "info", config.NotificationDuration)
+		return
+	}
+	if !target.IsCurrent {
 		m.SwitchToWorkspace(target.Number)
 	}
 	m.closeOverlay("workspace")
