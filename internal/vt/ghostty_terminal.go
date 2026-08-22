@@ -52,6 +52,17 @@ type GhosttyTerminal struct {
 	scrollGeneration uint64 // bumped per write; invalidates scrollback cache
 	scrollCache      map[int]uv.Line
 	scrollCacheGen   uint64
+	// mainSbLen shadows the MAIN screen's history length; the library only
+	// reports the active screen's, and the alternate screen has none.
+	mainSbLen int
+	// altHistory is a decoded snapshot switched to the main screen, for
+	// history line reads while the alternate screen is active.
+	altHistory    *gh.Terminal
+	altHistoryGen uint64
+	// pendingMainSbClear defers a ClearScrollback issued during the
+	// alternate screen until the main screen is next active, where ED 3
+	// can reach the primary history.
+	pendingMainSbClear bool
 
 	// styleCache maps a libghostty style ID to its uv conversion. Reset
 	// when the theme changes, since conversion depends on the theme.
@@ -304,11 +315,17 @@ func (t *GhosttyTerminal) takeQueue() []func() {
 
 // forward hands scanner output to libghostty. The closed check covers a
 // Close that slipped in while a passthrough callback held the lock open.
+// Staleness is marked here rather than at the end of Write: scanner hooks
+// read cursor and grid state mid-chunk, right after the bytes preceding
+// their sequence were forwarded, and a kitty placement computed against the
+// previous sync's cursor lands wherever the last frame finished drawing.
 func (t *GhosttyTerminal) forward(p []byte) {
 	if t.closed.Load() {
 		return
 	}
 	t.term.VTWrite(p)
+	t.gridStale = true
+	t.scrollGeneration++
 }
 
 // Write feeds raw PTY bytes. The scanner forwards them to libghostty and
@@ -354,6 +371,7 @@ func (t *GhosttyTerminal) Close() error {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.dropAltHistoryLocked()
 	t.rc.Close()
 	t.ri.Close()
 	t.rs.Close()
@@ -456,7 +474,19 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 
 	alt1047, _ := t.term.Mode(gh.ModeAltScreen)
 	alt1049, _ := t.term.Mode(gh.ModeAltScreenSave)
-	t.cachedAltScreen.Store(alt1047 || alt1049)
+	isAlt := alt1047 || alt1049
+	t.cachedAltScreen.Store(isAlt)
+	if !isAlt {
+		if t.pendingMainSbClear {
+			t.pendingMainSbClear = false
+			t.term.VTWrite([]byte("\x1b[3J"))
+			t.scrollGeneration++
+			t.dropAltHistoryLocked()
+		}
+		if n, err := t.term.ScrollbackRows(); err == nil {
+			t.mainSbLen = int(n)
+		}
+	}
 
 	sync, _ := t.term.Mode(gh.ModeSyncOutput)
 	if sync && !t.cachedSyncOutput.Load() {

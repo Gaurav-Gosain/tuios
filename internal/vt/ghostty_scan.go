@@ -184,30 +184,39 @@ func (s *ghosttyScanner) Scan(p []byte) {
 			}
 			s.state = gsGround
 		case gsCsi:
-			s.emit(b)
 			switch {
 			case b >= '0' && b <= '9' || b == ';' || b == ':':
+				s.emit(b)
 				s.buffer(b)
 			case b >= 0x3c && b <= 0x3f:
+				s.emit(b)
 				s.csiPrefix = b
 			case b >= 0x20 && b <= 0x2f:
+				s.emit(b)
 				s.csiInter = b
 			case b >= 0x40 && b <= 0x7e:
+				// The hook runs before the final byte is emitted, so a
+				// hook that flushes observes the sink exactly as it stood
+				// before this sequence applies: ED 3 reads the pre-clear
+				// history length, an alt-screen switch reads the main
+				// screen's, and only then does the sequence take effect.
 				if s.hooks.CSI != nil && !s.overflow {
 					s.hooks.CSI(s.csiPrefix, s.csiInter, b, s.seq)
 				}
+				s.emit(b)
 				s.resetSeq()
 				s.state = gsGround
 			case b == 0x1b:
-				// Aborted CSI; the ESC was emitted above, which matches the
-				// sink seeing the same malformed stream.
+				// Aborted CSI; both sides see the same malformed stream.
 				s.resetSeq()
 				s.state = gsEsc
-				s.out = s.out[:len(s.out)-1]
 			case b < 0x20:
+				s.emit(b)
 				if s.hooks.Ctrl != nil {
 					s.hooks.Ctrl(b)
 				}
+			default:
+				s.emit(b)
 			}
 		case gsOsc:
 			switch b {
