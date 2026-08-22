@@ -70,11 +70,12 @@ func isBlankRender(s string) bool {
 // it has drawn. Leaving the frame uncached and the window dirty costs one cheap
 // re-render per frame while a pane is genuinely blank, and guarantees the next
 // frame reads the emulator again rather than freezing the gap.
-func cacheRender(window *terminal.Window, content string) {
+func cacheRender(window *terminal.Window, content string, cols, rows int) {
 	if isBlankRender(content) {
 		return
 	}
 	window.CachedContent = content
+	window.CachedContentCols, window.CachedContentRows = cols, rows
 	// Only a frame read outside a synchronized update is a complete one, so
 	// only that may become what the hold falls back on. Caching a frame taken
 	// mid-update would make the hold present the very thing it exists to hide.
@@ -84,8 +85,52 @@ func cacheRender(window *terminal.Window, content string) {
 	window.ContentDirty = false
 }
 
+// cellGrid is the part of the emulator gridFillsEveryRow reads. Taking an
+// interface keeps the emulator package out of this file's imports.
+type cellGrid interface {
+	CellAt(x, y int) *uv.Cell
+}
+
+// gridFillsEveryRow reports whether every row of the grid accounts for exactly
+// w columns, so a buffer render of it carries w columns on every one of its h
+// lines and the border box may take it as already shaped.
+//
+// It exists because that is a property of somebody else's renderer. A buffer
+// render walks the grid and emits each cell's glyph, so it is w columns wide
+// only while the grid's own widths add up to w, and an earlier version of that
+// renderer right-trimmed every line instead. Reading the widths costs a pass
+// over the cells with no allocation and no text handling at all, and it is the
+// same bookkeeping the cell loop below steps by, so the two paths agree on
+// what they are claiming.
+//
+// Nothing here looks at a cell's text. A wide rune, a combining mark and a
+// joined emoji are each just a width to this, which is why none of them can
+// fool it: the cell grid is where their column counts were decided.
+func gridFillsEveryRow(grid cellGrid, w, h int) bool {
+	if w <= 0 || h <= 0 {
+		return false
+	}
+	for y := range h {
+		total := 0
+		for x := 0; x < w && total <= w; x++ {
+			cell := grid.CellAt(x, y)
+			if cell == nil {
+				return false
+			}
+			total += cell.Width
+		}
+		if total != w {
+			return false
+		}
+	}
+	return true
+}
+
 func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalMode bool) string {
 	entryDirty := window.ContentDirty
+	// Every branch below that does not lay the whole grid out leaves this
+	// zeroed, so the border box re-flows exactly as it always did.
+	window.RenderedCols, window.RenderedRows = 0, 0
 
 	if window.IsBeingManipulated && m.Resizing {
 		out := m.renderResizeIndicator(window)
@@ -96,6 +141,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	}
 
 	if (window.IsBeingManipulated || !window.ContentDirty) && window.CachedContent != "" {
+		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-clean", window.CachedContent)
 		}
@@ -131,6 +177,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	if window.Terminal == nil {
 		window.CachedContent = "Terminal not initialized"
+		window.CachedContentCols, window.CachedContentRows = 0, 0
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "no-terminal", window.CachedContent)
 		}
@@ -140,6 +187,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	screen := window.Terminal
 	if screen == nil {
 		window.CachedContent = "No screen"
+		window.CachedContentCols, window.CachedContentRows = 0, 0
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "no-screen", window.CachedContent)
 		}
@@ -171,6 +219,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// ends, and no input is affected.
 	if !window.TryRLockIO() {
 		if window.CachedContent != "" {
+			window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 			if renderTraceEnabled {
 				traceRender(window, isFocused, inTerminalMode, entryDirty, "shed-locked", window.CachedContent)
 			}
@@ -188,7 +237,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// the slow path for cursor overlay and selection highlighting.
 	if !isFocused && window.CopyMode == nil && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
-		cacheRender(window, rendered)
+		cols, rows := 0, 0
+		if gridFillsEveryRow(screen, screen.Width(), screen.Height()) {
+			cols, rows = screen.Width(), screen.Height()
+		}
+		cacheRender(window, rendered, cols, rows)
+		window.RenderedCols, window.RenderedRows = cols, rows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "fast-unfocused", rendered)
 		}
@@ -198,6 +252,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// Fast path for scrollback mode: content is static at a given scroll
 	// position, so reuse the cache if the offset hasn't changed.
 	if window.ScrollbackOffset > 0 && window.CachedContent != "" && !window.ContentDirty {
+		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-scrollback", window.CachedContent)
 		}
@@ -337,6 +392,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
+	// Set false by any row the cell loop could not fill to exactly maxX columns.
+	gridExact := true
+
 	var batchBuilder strings.Builder
 	var currentStyle lipgloss.Style
 	var batchHasStyle bool
@@ -435,7 +493,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 		}
 
-		for x := 0; x < maxX; {
+		x := 0
+		for x < maxX {
 			var cell *uv.Cell
 
 			if showCopyCursor && x == copyModeCursorX && y == copyModeCursorY {
@@ -593,12 +652,27 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			x += cellWidth
 		}
 
+		// The loop writes one glyph per cell and steps by the cell's own width,
+		// so the row it just emitted is maxX columns wide unless a wide cell
+		// straddled the last column and pushed it one further. Checking the
+		// counter the loop already keeps costs one comparison per row and makes
+		// the claim below something this function has measured rather than
+		// something it assumes about the grid.
+		if x != maxX {
+			gridExact = false
+		}
+
 		flushBatch()
 	}
 
 	content := builder.String()
 
-	cacheRender(window, content)
+	cols, rows := 0, 0
+	if gridExact && maxX == contentW && maxY == contentH {
+		cols, rows = maxX, maxY
+	}
+	window.RenderedCols, window.RenderedRows = cols, rows
+	cacheRender(window, content, cols, rows)
 	if renderTraceEnabled {
 		traceRender(window, isFocused, inTerminalMode, entryDirty, "slow", content)
 	}

@@ -254,6 +254,7 @@ func (w *Window) MarkContentDirty() {
 	// a half-drawn buffer. It is replaced on the next render and invalidated by
 	// MarkPositionDirty, retiling, and close.
 	w.CachedContent = ""
+	w.CachedContentCols, w.CachedContentRows = 0, 0
 }
 
 // ClearDirtyFlags clears all dirty flags.
@@ -267,4 +268,5 @@ func (w *Window) ClearDirtyFlags() {
 func (w *Window) InvalidateCache() {
 	w.CachedLayer = nil
 	w.CachedContent = ""
+	w.CachedContentCols, w.CachedContentRows = 0, 0
 }

@@ -303,8 +303,7 @@ func (m *OS) toggleAutoTiling() {
 			// columns and rows their border has just taken back. A no-op for the
 			// panes reclaim already settled.
 			m.Windows[i].SetTiled(false)
-			m.Windows[i].CachedContent = ""
-			m.Windows[i].CachedLayer = nil
+			m.Windows[i].InvalidateCache()
 			m.Windows[i].ContentDirty = true
 			m.Windows[i].Dirty = true
 			m.Windows[i].PositionDirty = true

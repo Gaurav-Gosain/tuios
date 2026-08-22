@@ -140,6 +140,7 @@ func (w *Window) outputWriter() {
 			if !ok {
 				return
 			}
+			w.queuedBytes.Add(-int64(len(chunk.data)))
 			if chunk.drained != nil {
 				close(chunk.drained)
 				continue
@@ -161,6 +162,7 @@ func (w *Window) outputWriter() {
 				if !ok {
 					goto write
 				}
+				w.queuedBytes.Add(-int64(len(more.data)))
 				if more.drained != nil {
 					drained = more.drained
 					goto write
@@ -250,6 +252,18 @@ const (
 	// leave a pane looking frozen while it still has output to show.
 	maxCoalesceInterval = 96 * time.Millisecond
 
+	// catchUpBacklog is how far behind a pane's emulator has to fall before the
+	// coalescer treats the frames it is being asked for as already spent. It is
+	// about a tenth of a second of the client's own parsing, so an ordinary
+	// burst - a paste, a large directory listing - passes under it and only a
+	// pane the client has genuinely stopped keeping up with trips it.
+	catchUpBacklog = 4 << 20
+
+	// catchUpCoalesceInterval is the interval a pane that far behind is paced
+	// at: slow enough that the renderer stops taking the pane's read lock out
+	// from under its own output writer, fast enough to stay visibly alive.
+	catchUpCoalesceInterval = 250 * time.Millisecond
+
 	// coalescePaceFactor is how much host capacity a flooding pane may take.
 	// At 2 a frame that costs the client 20ms buys a 40ms interval, so the UI
 	// goroutine spends about half its time composing and the other half
@@ -268,7 +282,25 @@ const (
 // a frame it did not cause. Charging the pane an interval proportional to the
 // cost it imposes is what reopens that gap. It is the same debt the kitty
 // passthrough charges itself for graphics floods, in the units this path has.
+//
+// It also paces by what the pane is behind, not only by what a frame costs.
+// The two are the same problem seen from either end. A client that has fallen
+// behind the daemon is drawing states the bytes already queued behind them are
+// about to overwrite, and every one of those frames holds the pane's read lock
+// for the length of a compose, which is time the pane's own output writer
+// spends waiting rather than catching up. Measured on a 192 MiB flood, the
+// writer waited 1117ms in total for that lock and the pane went on painting
+// for 1215ms after the flooding program was gone: the backlog a client builds
+// is very nearly the time its own renderer took from it.
+//
+// So a pane far enough behind is paced right down. Nothing is thrown away and
+// the emulator still sees every byte, so the scrollback the user can scroll
+// back to is exactly what it would have been. What stops is the drawing of
+// frames that were never going to be looked at.
 func (w *Window) coalesceInterval() time.Duration {
+	if w.queuedBytes.Load() >= catchUpBacklog {
+		return catchUpCoalesceInterval
+	}
 	cost := time.Duration(w.renderCostNanos.Load()) * coalescePaceFactor
 	return min(max(cost, minCoalesceInterval), maxCoalesceInterval)
 }
@@ -470,7 +502,7 @@ func (w *Window) WriteOutputAsync(data []byte) {
 	case <-w.outputDone:
 		// Writer goroutine has stopped, drop data
 	case w.outputChan <- chunk:
-		// Successfully queued
+		w.queuedBytes.Add(int64(len(dataCopy)))
 	default:
 		// Channel full - drop data (shouldn't happen with large buffer)
 	}
@@ -911,6 +943,7 @@ func (w *Window) Close() {
 
 	// Clear caches to free memory
 	w.CachedContent = ""
+	w.CachedContentCols, w.CachedContentRows = 0, 0
 	w.SyncHoldContent = ""
 	w.CachedLayer = nil
 

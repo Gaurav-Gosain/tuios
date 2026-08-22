@@ -359,10 +359,13 @@ func rendersBorderless(window *terminal.Window) bool {
 // window is borderless. Shared by the compositor path and the fullscreen fast
 // path so both produce identical output.
 func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool, borderColorObj color.Color) string {
-	content := fitToContentBox(
-		m.renderTerminal(window, isFocused, m.Mode == TerminalMode),
-		window.ContentWidth(), window.ContentHeight(),
-	)
+	content := m.renderTerminal(window, isFocused, m.Mode == TerminalMode)
+	preShaped := !preShapedDisabled &&
+		window.RenderedCols == window.ContentWidth() &&
+		window.RenderedRows == window.ContentHeight()
+	if !preShaped {
+		content = fitToContentBox(content, window.ContentWidth(), window.ContentHeight())
+	}
 	if rendersBorderless(window) {
 		// No border means no title bar and so no controls. Recorded as an empty
 		// set rather than left alone, because the set outlives a frame: a pane
@@ -378,26 +381,55 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 	// cells and draw them in a blank style so only the frame fades and the
 	// layout holds still.
 	if m.zenBordersHidden(isFocused) {
-		return m.renderWindowBoxZen(window, content)
+		return m.renderWindowBoxZen(window, content, preShaped)
 	}
-	box := lipgloss.NewStyle().
+	box := sizeContentBox(lipgloss.NewStyle().
 		Align(lipgloss.Left).
 		AlignVertical(lipgloss.Top).
 		Border(getBorder()).
-		BorderTop(false)
+		BorderTop(false), window, preShaped)
 	// The title bar keeps showing the name the window still has while a rename
 	// is in flight: the dialog owns the new one, so the two together are the
 	// old-vs-new comparison.
 	return m.addToBorder(
-		box.Width(window.Width).
-			Height(window.Height-1).
-			BorderForeground(borderColorObj).
-			Render(content),
+		box.BorderForeground(borderColorObj).Render(content),
 		borderColorObj,
 		window,
 		m.workspacePosition(window),
 		m.AutoTiling,
 	)
+}
+
+// sizeContentBox gives a pane's border box the width it needs, or withholds it
+// when the body is already exactly the shape the box would force it into.
+//
+// Setting Width is what makes lipgloss word-wrap: Render subtracts the two
+// border cells and hands the body to lipgloss.Wrap. A profile of the client
+// under a flood put 19.8% of its samples in that one call, wrapping a pane body
+// the emulator had already laid out to the pane's own column count. The wrap
+// cannot move a character there, because a line already exactly as wide as the
+// wrap column has nothing to break, and the writer half of it only rewrites
+// styles that span a newline, which neither render path emits: both close the
+// pen at the end of every row.
+//
+// Withholding Width does not lose the padding. Alignment still runs whenever
+// the body has more than one line and pads every line out to the widest one,
+// which under preShaped is the content width itself, so the box is the same
+// size and the border lands on the same column. Height stays set either way:
+// vertical alignment counts lines rather than measuring them, so it is not
+// what the profile was complaining about.
+//
+// preShaped is the renderer's own measurement, never a guess about the text:
+// renderTerminal reports the rectangle it filled cell by cell, counting the
+// width each cell declared, and reports nothing at all for a frame it did not
+// lay out over the whole grid. A wide rune, a combining mark or a joined emoji
+// therefore cannot mislead this, because nothing here counts runes or bytes.
+func sizeContentBox(box lipgloss.Style, window *terminal.Window, preShaped bool) lipgloss.Style {
+	box = box.Height(window.Height - 1)
+	if preShaped {
+		return box
+	}
+	return box.Width(window.Width)
 }
 
 // renderWindowBoxZen renders a window whose zen-mode state hides the frame.
@@ -407,24 +439,26 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 // mirrors that geometry with HiddenBorder (which reserves one cell per edge with
 // spaces) and a blank title row of the same width, so the guest's content never
 // shifts a cell.
-func (m *OS) renderWindowBoxZen(window *terminal.Window, content string) string {
-	box := lipgloss.NewStyle().
+func (m *OS) renderWindowBoxZen(window *terminal.Window, content string, preShaped bool) string {
+	box := sizeContentBox(lipgloss.NewStyle().
 		Align(lipgloss.Left).
 		AlignVertical(lipgloss.Top).
 		Border(lipgloss.HiddenBorder()).
-		BorderTop(false)
+		BorderTop(false), window, preShaped)
 	// The box reserves the left/right/bottom frame cells; prepend the blank
 	// title row the bordered path would have drawn, so the total is the same
 	// Height and the content sits at the same offset.
-	return strings.Repeat(" ", window.Width) + "\n" +
-		box.Width(window.Width).
-			Height(window.Height-1).
-			Render(content)
+	return strings.Repeat(" ", window.Width) + "\n" + box.Render(content)
 }
 
 // fastPathDisabled turns the fullscreen fast path off (TUIOS_NO_FASTPATH=1) so it
 // can be compared against the compositor path.
 var fastPathDisabled = os.Getenv("TUIOS_NO_FASTPATH") == "1"
+
+// preShapedDisabled makes every pane body go back through the wrap
+// (TUIOS_NO_PRESHAPED=1), so the two border-box paths can be compared for both
+// output and cost on one binary. See sizeContentBox.
+var preShapedDisabled = os.Getenv("TUIOS_NO_PRESHAPED") == "1"
 
 // composeFrame renders the full frame, using the fullscreen fast path when it is
 // eligible and falling back to the compositor otherwise.
