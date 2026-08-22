@@ -1,0 +1,55 @@
+# Screen rules converted from herdr's agent-detection manifest for cline
+# (github.com/herdrdev/herdr, website/agent-detection/cline.toml, manifest
+# version 2026.06.10.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go. Deliberately not carried even for opt-in: herdr's fallback
+# rule that calls any non-empty cline screen "working" (regex `(?s).+` at
+# priority -10). Here that would be a rule that can never decline to answer,
+# and no opinion is the honest answer for a screen no rule recognises.
+
+schema_version = 1
+id             = "cline"
+display_name   = "Cline"
+priority       = 50
+
+# The npm package "cline" is a node shim that runs a platform binary out of
+# node_modules (comm "cline", or ".cline" from its cache); Homebrew installs
+# the binary directly.
+[detect]
+comm      = ["cline", ".cline"]
+argv0     = ["cline"]
+argv_path = ["cline/bin/cline", "@cline/cli"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: tool_permission. The explicit ask.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["let cline use this tool"]
+
+# herdr rule: tool_permission, the mode-tagged confirmations. Each pairing is
+# its own rule because herdr requires the mode tag and the question together.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["[act mode]", "execute command?", "yes"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["[act mode]", "use this tool?", "yes"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["[plan mode]", "execute command?", "yes"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["[plan mode]", "use this tool?", "yes"]

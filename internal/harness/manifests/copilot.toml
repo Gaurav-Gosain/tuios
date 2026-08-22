@@ -1,0 +1,35 @@
+# Screen rules converted from herdr's agent-detection manifest for copilot
+# (github.com/herdrdev/herdr, website/agent-detection/github-copilot.toml,
+# manifest version 2026.07.07.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rule ships, per the bundled policy in
+# registry_test.go; herdr's working rule keys on cancel hints alone, which
+# output already covers here.
+
+schema_version = 1
+id             = "copilot"
+display_name   = "GitHub Copilot"
+priority       = 50
+
+# npm @github/copilot is a node loader that spawns a platform binary named
+# copilot out of node_modules and stays resident above it, so both shapes run:
+# a node process whose run token is the loader, and a native child.
+[detect]
+comm      = ["copilot"]
+argv0     = ["copilot", "github-copilot"]
+argv_path = ["@github/copilot"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: selection_blocker. A selection dialog is on screen: an esc-cancel
+# hint together with an enter-select hint. The enter wordings are one pattern
+# because a rule carries one any-of set; (?i) keeps the folding the substrings
+# get.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+any      = ["esc to cancel", "esc cancel"]
+regex    = ["(?i)enter to select|enter to confirm|enter to submit|enter accept"]

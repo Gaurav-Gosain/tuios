@@ -1,0 +1,59 @@
+# Screen rules converted from herdr's agent-detection manifest for grok
+# (github.com/herdrdev/herdr, website/agent-detection/grok.toml, manifest
+# version 2026.07.16.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go. herdr leans on the OSC title and OSC 9;4 progress as grok's
+# primary signals; the title region is one the screen tier does not see, and
+# 9;4 already reaches the daemon through its own tier, so what ships is herdr's
+# screen fallback for the dialogs.
+
+schema_version = 1
+id             = "grok"
+display_name   = "Grok"
+priority       = 50
+
+# xAI's installer (x.ai/cli) puts a native binary at ~/.grok/bin/grok; the npm
+# trampoline (@xai-official/grok) decompresses the same binary and execs it, so
+# the running process is native either way.
+[detect]
+comm      = ["grok"]
+argv0     = ["grok", "grok-build"]
+argv_path = ["@xai-official/grok"]
+
+# "grok" is four letters and a name other software plausibly takes, so the bare
+# name only counts from grok's install layouts.
+[detect.require]
+exe_glob = ["**/.grok/**", "**/@xai-official/**"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: option_dialog_blocked. The "┃"-guttered option list a permission
+# or question dialog draws, e.g. `┃  2 (○) Yes, proceed`.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1200
+regex    = ["^\\s*┃\\s+[0-9a-z]+\\s+\\([●○]\\)\\s"]
+
+# herdr rule: permission_hints_blocked. The permission dialog's footer hints.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1190
+all      = [":select", "ctrl+o:yolo", "ctrl+c:cancel"]
+
+# herdr rule: question_dialog_hints_blocked. The ask-user-question footer.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1185
+all      = ["tab:scrollback", "shift+x:dismiss"]
+
+# herdr rule: permission_scope_selector. The pre-0.2.x permission UI, kept for
+# older releases.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1180
+all      = ["yes, proceed", "no, reject"]
+any      = ["use ← → to choose permission whitelist scope", "←/→:scope"]

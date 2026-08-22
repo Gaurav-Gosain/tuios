@@ -1,0 +1,53 @@
+# Screen rules converted from herdr's agent-detection manifest for maki
+# (github.com/herdrdev/herdr, website/agent-detection/maki.toml, manifest
+# version 2026.07.09.2, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go; herdr's working and idle rules read the status-bar spinner
+# and prompt chevron, which output and the stall timer already cover here.
+
+schema_version = 1
+id             = "maki"
+display_name   = "Maki"
+priority       = 50
+
+# maki (github.com/tontinton/maki) is a Rust binary installed to ~/.local/bin
+# by its script or to ~/.cargo/bin by cargo install.
+[detect]
+comm  = ["maki"]
+argv0 = ["maki"]
+
+# "maki" is four letters, so the bare name only counts from the documented
+# install locations. A copy elsewhere is missed, which is the cheap direction.
+[detect.require]
+exe_glob = ["**/.local/bin/maki", "**/.cargo/bin/maki"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: permission_prompt. The banner plus one of the answer-hint forms;
+# the multi-string forms are their own rules so each stays an AND.
+[[screen.rule]]
+state    = "needs_input"
+priority = 980
+all      = ["permission required"]
+any      = ["confirm allow", "confirm deny"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 980
+all      = ["permission required", "y allow", "n deny"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 980
+all      = ["permission required", "enter deny", "esc cancel"]
+
+# herdr rule: plan_complete_form. The plan sits finished, waiting on approval.
+[[screen.rule]]
+state    = "needs_input"
+priority = 970
+all      = ["plan complete", "enter confirm"]
+any      = ["space toggle parallel", "edit plan"]
