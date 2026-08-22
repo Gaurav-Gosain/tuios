@@ -663,11 +663,13 @@ tuios wait-for <condition> [flags]
 | `window-output` | The window's content matches `--pattern` |
 | `window-exit` | The window's shell exited |
 | `window-idle` | The window printed nothing for `--idle` milliseconds |
+| `agent-state` | An agent reached one of the `--until` states; without `--window`, any agent pane in the session matches |
 
 **Flags:**
 - `-s, --session <name>` - Target session (default: most recently active)
-- `-w, --window <id-or-name>` - Target window (default: focused)
+- `-w, --window <id-or-name>` - Target window (default: focused; `agent-state`: any window)
 - `--pattern <regexp>` - Go regular expression (RE2), required by `window-output`
+- `--until <states>` - Agent state(s) to wait for, comma-separated, required by `agent-state`
 - `--idle <ms>` - Milliseconds of silence that count as idle (default: 500)
 - `--timeout <ms>` - Milliseconds to wait before giving up (default: 30000)
 - `--json` - Output result as JSON
@@ -696,6 +698,9 @@ tuios wait-for window-exit -w build --timeout 600000
 
 # Wait for a session to appear
 tuios wait-for session-exists -s work
+
+# Wait until any agent in the session is waiting on a human
+tuios wait-for agent-state -s work --until needs_input
 
 # Branch on the result
 if tuios wait-for window-output -w build --pattern 'BUILD OK' --timeout 60000; then

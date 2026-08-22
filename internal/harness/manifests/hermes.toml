@@ -1,0 +1,82 @@
+# Screen rules converted from herdr's agent-detection manifest for hermes
+# (github.com/herdrdev/herdr, website/agent-detection/hermes.toml, manifest
+# version 2026.07.24.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go; herdr's working and idle rules rest on the OSC title and
+# interrupt hints, which the other tiers already carry here. herdr's compound
+# groups become one rule per alternative, so the several-strings-together
+# requirement each alternative carried survives the flattening.
+
+schema_version = 1
+id             = "hermes"
+display_name   = "Hermes"
+priority       = 50
+
+# Nous Research's installer symlinks ~/.local/bin/hermes to a Python program
+# under ~/.hermes/hermes-agent, so comm carries the script name while the
+# executable is a python. The pip package is hermes-agent.
+[detect]
+comm      = ["hermes"]
+argv0     = ["hermes", "hermes-agent"]
+argv_path = ["hermes-agent"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 14
+
+# herdr rule: dangerous_command_approval. An approval panel: one of the danger
+# wordings together with one of the dialog hints. The hint set is one pattern
+# because a rule carries one any-of set; (?i) keeps the folding the substrings
+# get.
+[[screen.rule]]
+state    = "needs_input"
+priority = 900
+regex    = ["(?i)dangerous|approval", "(?i)enter confirm|enter to confirm|↑/↓ to select|show full command"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 900
+all      = ["allow once", "deny"]
+regex    = ["(?i)enter confirm|enter to confirm|↑/↓ to select|show full command"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 900
+regex    = ["(?i)^\\s*[▸>]?\\s*1\\.\\s*allow", "(?i)enter confirm|enter to confirm|↑/↓ to select|show full command"]
+
+# herdr rule: clarification_prompt. Hermes asking the user a question.
+[[screen.rule]]
+state    = "needs_input"
+priority = 900
+regex    = ["(?i)hermes needs your|type your answer", "(?i)enter confirm|enter to confirm|enter send|press enter|↑/↓ select|↑/↓ to select|other \\(type"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 900
+regex    = ["^\\s*ask\\s+\\S", "(?i)enter confirm|enter to confirm|enter send|press enter|↑/↓ select|↑/↓ to select|other \\(type"]
+
+# herdr rule: credential_prompt. A password or key being asked for.
+[[screen.rule]]
+state    = "needs_input"
+priority = 900
+any      = ["sudo password", "skill setup"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 900
+all      = ["🔑", "for "]
+
+# herdr rule: confirmation_prompt. Session-level confirmations.
+[[screen.rule]]
+state    = "needs_input"
+priority = 900
+all      = ["approve once", "cancel"]
+any      = ["enter to confirm", "enter confirm", "type 1/2/3", "y/n quick"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 900
+all      = ["start a new session", "keep going"]
+any      = ["enter to confirm", "enter confirm", "type 1/2/3", "y/n quick"]

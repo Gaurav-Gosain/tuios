@@ -565,6 +565,7 @@ tuios wait-for window-output -s work -w build --pattern 'ok\s+github' --timeout 
 tuios wait-for window-idle   -s work -w build --idle 2000
 tuios wait-for window-exit   -s work -w build --timeout 600000
 tuios wait-for session-exists -s work
+tuios wait-for agent-state   -s work --until needs_input
 ```
 
 - `window-output` matches a Go regular expression against what the pane prints,
@@ -573,6 +574,10 @@ tuios wait-for session-exists -s work
   milliseconds. It is the right one when a command has no marker to match.
 - `window-exit` returns when the pane's shell exits, which is what you want for a
   window opened to run one thing.
+- `agent-state` returns when an agent pane reaches one of the `--until` states
+  (comma-separated). With `-w` it watches that pane; without it, any agent in
+  the session matches, so "tell me when an agent needs input" is one blocking
+  call rather than a poll loop over `get-agent-state`.
 
 A match exits 0. A timeout exits non-zero with the `timeout` error and a hint
 telling you to capture the pane and see what it actually printed. `--timeout` is
@@ -724,8 +729,8 @@ Three signals, in order of how definite they are:
 
 ```sh
 tuios wait-for window-exit -s work -w build          # the shell exited
-tuios get-agent-state -s work -w build               # what that pane reports
-tuios list-windows -s work --json | jq -r '.windows[] | select(.agent_state=="needs_input")'
+tuios wait-for agent-state -s work --until needs_input,idle,done  # an agent got there
+tuios get-agent-state -s work -w build               # what that pane reports now
 ```
 
 A pane that reports its own state is the only one you can trust to say

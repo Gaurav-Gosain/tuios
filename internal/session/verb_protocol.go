@@ -591,10 +591,14 @@ func init() {
 				{Name: "pattern", Type: "string", Description: "Regular expression, required by window-output."},
 				{Name: "source", Type: "string", Description: "Which buffer window-output matches against. The default includes scrollback, so output that has already scrolled past still matches.", Accepted: captureSources, Default: "recent"},
 				{Name: "idle", Type: "int", Description: "Milliseconds of silence that count as idle, for window-idle.", Default: "500"},
+				{Name: "until", Type: "string", Description: "Agent state(s) to wait for, comma-separated, required by agent-state. With no window, any window in the session reaching one of them matches.", Accepted: AgentStateNames},
 				{Name: "timeout", Type: "int", Description: "Milliseconds to wait before failing with the timeout code.", Default: "30000"},
 			},
-			examples: []string{`{"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"work","pattern":"done","timeout":10000}}`},
-			handler:  (*Daemon).verbWaitFor,
+			examples: []string{
+				`{"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"work","pattern":"done","timeout":10000}}`,
+				`{"id":1,"verb":"wait-for","params":{"condition":"agent-state","session":"work","until":"needs_input,idle"}}`,
+			},
+			handler: (*Daemon).verbWaitFor,
 		},
 	}
 }

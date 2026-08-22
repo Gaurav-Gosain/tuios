@@ -1392,6 +1392,7 @@ straight away without a restart.`,
 	var waitForSession string
 	var waitForWindow string
 	var waitForPattern string
+	var waitForUntil string
 	var waitForIdle int
 	var waitForTimeout int
 	var waitForJSON bool
@@ -1405,6 +1406,8 @@ Conditions:
   window-output   the window printed something matching --pattern
   window-exit     the window's shell exited
   window-idle     the window printed nothing for --idle milliseconds
+  agent-state     an agent reached one of the --until states; without --window,
+                  any agent pane in the session matches
 
 The daemon watches its own events, so this is exact where a capture-and-sleep
 loop is a guess. A condition that does not match before --timeout exits non-zero
@@ -1416,17 +1419,21 @@ with the timeout error.`,
   tuios wait-for window-idle -w build --idle 2000
 
   # Wait for a command's shell to exit
-  tuios wait-for window-exit -w build --timeout 600000`,
+  tuios wait-for window-exit -w build --timeout 600000
+
+  # Wait until any agent in the session is waiting on a human
+  tuios wait-for agent-state -s work --until needs_input`,
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: session.WaitConditionNames,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runWaitFor(waitForSession, waitForWindow, args[0], waitForPattern,
-				waitForIdle, waitForTimeout, waitForJSON)
+				waitForUntil, waitForIdle, waitForTimeout, waitForJSON)
 		},
 	}
 	waitForCmd.Flags().StringVarP(&waitForSession, "session", "s", "", "Target session (default: most recently active)")
-	waitForCmd.Flags().StringVarP(&waitForWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	waitForCmd.Flags().StringVarP(&waitForWindow, "window", "w", "", "Target window by name or ID (default: focused; agent-state: any window)")
 	waitForCmd.Flags().StringVar(&waitForPattern, "pattern", "", "Regular expression to match, required by window-output")
+	waitForCmd.Flags().StringVar(&waitForUntil, "until", "", "Agent state(s) to wait for, comma-separated, required by agent-state")
 	waitForCmd.Flags().IntVar(&waitForIdle, "idle", 0, "Milliseconds of silence that count as idle, for window-idle (default: 500)")
 	waitForCmd.Flags().IntVar(&waitForTimeout, "timeout", 30000, "Milliseconds to wait before giving up")
 	waitForCmd.Flags().BoolVar(&waitForJSON, "json", false, "Output result as JSON")

@@ -1,0 +1,41 @@
+# Screen rules converted from herdr's agent-detection manifest for kiro
+# (github.com/herdrdev/herdr, website/agent-detection/kiro.toml, manifest
+# version 2026.08.01.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go; herdr's working and idle rules read the marker line and
+# prompt chrome, which output and the stall timer already cover here.
+
+schema_version = 1
+id             = "kiro"
+display_name   = "Kiro"
+priority       = 50
+
+# AWS ships the CLI as a native binary installed to ~/.local/bin under the
+# command kiro-cli (kiro.dev/docs); "kiro" alone is the IDE, so the manifest
+# does not claim the bare four-letter name.
+[detect]
+comm  = ["kiro-cli"]
+argv0 = ["kiro-cli"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: tool_approval. The approval banner plus one of its options.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["requires approval"]
+any      = ["yes, single permission", "trust, always allow", "no (tab to edit)", "esc to close"]
+
+# herdr rule: subagent_approval. Approvals queued by subagents. The heading
+# wordings are one pattern because a rule carries one any-of set; (?i) keeps
+# the folding the substrings get.
+[[screen.rule]]
+state    = "needs_input"
+priority = 290
+all      = ["pending from subagents"]
+any      = ["approve all pending", "configure individually", "exit (cancel subagents)"]
+regex    = ["(?i)tool approvals?"]

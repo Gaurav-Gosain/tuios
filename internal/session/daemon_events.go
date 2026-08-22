@@ -27,6 +27,7 @@ const (
 	EventWindowMinimized   = "window-minimized"   // a window was minimized
 	EventWindowRestored    = "window-restored"    // a minimized window was restored
 	EventWorkspaceSwitched = "workspace-switched" // the session's current workspace changed
+	EventAgentState        = "agent-state"        // a window's agent state changed
 	EventOutput            = "output"             // a window produced output (activity)
 	EventBell              = "bell"               // a window rang the terminal bell
 	EventModeChanged       = "mode-changed"       // a terminal mode toggled (e.g. alt-screen)
@@ -55,6 +56,10 @@ type streamEvent struct {
 	Bytes   int    `json:"bytes,omitempty"`
 	Mode    string `json:"mode,omitempty"`
 	Enabled bool   `json:"enabled,omitempty"`
+	// State is the agent state an agent-state event reports, in its wire
+	// spelling; a pane ceasing to be an agent reports "none" rather than
+	// omitting the field, so the transition is visible.
+	State string `json:"state,omitempty"`
 	// Workspace carries the workspace a window moved to (window-moved) or the
 	// workspace that became current (workspace-switched). Workspaces are 1-based,
 	// so a zero value is always "not applicable" and is omitted.
@@ -75,6 +80,7 @@ type SessionEvent struct {
 	Bytes     int
 	Mode      string
 	Enabled   bool
+	State     string
 	Workspace int
 }
 

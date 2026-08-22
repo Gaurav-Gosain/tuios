@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -171,6 +172,7 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 		Window    string `json:"window"`
 		Pattern   string `json:"pattern"`
 		Source    string `json:"source"`
+		Until     string `json:"until"`
 		Idle      int    `json:"idle"`
 		Timeout   int    `json:"timeout"`
 	}
@@ -193,6 +195,8 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 		return d.waitWindowExit(p.Session, p.Window, deadline)
 	case "window-idle":
 		return d.waitWindowIdle(p.Session, p.Window, p.Idle, deadline)
+	case "agent-state":
+		return d.waitAgentState(p.Session, p.Window, p.Until, deadline)
 	default:
 		message := "unknown condition " + p.Condition
 		if p.Condition == "" {
@@ -330,6 +334,108 @@ func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline
 			return waitMatched("window-idle", map[string]any{"window": window, "idle_ms": int(idle / time.Millisecond)}), nil
 		}
 	}
+}
+
+// waitAgentState resolves when a window's agent state becomes one of the states
+// named in until. With a window it watches that pane; without one it watches the
+// whole session, which is the shape automation actually wants: "tell me when any
+// agent here needs input" was previously only expressible as a poll loop over
+// get-agent-state.
+//
+// It subscribes before the initial check, so a transition in the race window is
+// not missed, and re-reads the canonical state on every event rather than
+// trusting the payload, the waitSessionExists discipline.
+func (d *Daemon) waitAgentState(sessionName, window, until string, deadline <-chan time.Time) (any, *verbError) {
+	states, verr := parseUntilStates(until)
+	if verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(sessionName)
+	if verr != nil {
+		return nil, verr
+	}
+	// The target is pinned to a window ID up front, so a wait keeps meaning the
+	// same pane if the session's focus or names change while it blocks.
+	targetID := ""
+	if window != "" {
+		state := sess.GetState()
+		idx, err := findWindowStateIndex(state.Windows, window)
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		targetID = state.Windows[idx].ID
+	}
+
+	types := map[string]bool{EventAgentState: true}
+	if targetID != "" {
+		// A watched pane closing must fail the wait rather than run out the
+		// clock: nothing will ever report a state for it again.
+		types[EventWindowClosed] = true
+	}
+	sub := d.events.subscribe(eventFilter{session: sess.Name, types: types}, defaultEventQueue)
+	defer d.events.unsubscribe(sub)
+
+	check := func() (string, string, bool) {
+		state := sess.GetState()
+		for i := range state.Windows {
+			w := &state.Windows[i]
+			if targetID != "" && w.ID != targetID {
+				continue
+			}
+			if states[w.AgentState.Name()] {
+				return w.ID, w.AgentState.Name(), true
+			}
+		}
+		return "", "", false
+	}
+
+	if id, name, ok := check(); ok {
+		return waitMatched("agent-state", map[string]any{"window": id, "state": name}), nil
+	}
+	for {
+		select {
+		case <-deadline:
+			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for agent state "+until, &VerbHint{
+				Param:  "until",
+				Verb:   "get-agent-state",
+				Detail: "No agent reached the named state before the timeout. Read the current state, or raise timeout (milliseconds).",
+			})
+		case <-d.ctx.Done():
+			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
+		case ev := <-sub.ch:
+			if ev.Type == EventWindowClosed && targetID != "" && ev.Window == targetID {
+				return nil, newVerbError(ErrVerbWindowNotFound, "the watched window closed before reaching "+until)
+			}
+			if id, name, ok := check(); ok {
+				return waitMatched("agent-state", map[string]any{"window": id, "state": name}), nil
+			}
+		}
+	}
+}
+
+// parseUntilStates turns the comma-separated until parameter into the set of
+// wire spellings a wait accepts.
+func parseUntilStates(until string) (map[string]bool, *verbError) {
+	if strings.TrimSpace(until) == "" {
+		return nil, invalidParam("until", "until is required for the agent-state condition")
+	}
+	states := map[string]bool{}
+	for _, part := range strings.Split(until, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		st, ok := ParseAgentState(part)
+		if !ok {
+			return nil, hintedVerbError(ErrVerbInvalidParams, "unknown agent state "+echoName(part), &VerbHint{
+				Param:      "until",
+				Accepted:   AgentStateNames,
+				DidYouMean: closestMatch(part, AgentStateNames),
+			})
+		}
+		states[st.Name()] = true
+	}
+	return states, nil
 }
 
 // waitWindowOutput resolves when the target window's captured content matches

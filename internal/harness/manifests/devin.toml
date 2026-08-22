@@ -1,0 +1,36 @@
+# Screen rules converted from herdr's agent-detection manifest for devin
+# (github.com/herdrdev/herdr, website/agent-detection/devin.toml, manifest
+# version 2026.06.15.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go; herdr's working and idle rules read the footer chrome,
+# which output and the stall timer already cover here.
+
+schema_version = 1
+id             = "devin"
+display_name   = "Devin"
+priority       = 50
+
+# Cognition's installer (cli.devin.ai) ships a native binary named devin;
+# there is no real npm or pip channel.
+[detect]
+comm  = ["devin"]
+argv0 = ["devin"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: workspace_trust_prompt. Asked before Devin will do anything in a
+# new directory, and the prompt most likely to sit unnoticed.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["do you trust the authors of this directory?", "with untrusted content.", "yes, trust "]
+
+# herdr rule: permission_prompt. The tool-approval footer.
+[[screen.rule]]
+state    = "needs_input"
+priority = 290
+all      = ["approve once", "select", "confirm", "esc cancel"]

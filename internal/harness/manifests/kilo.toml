@@ -1,0 +1,50 @@
+# Screen rules converted from herdr's agent-detection manifest for kilo
+# (github.com/herdrdev/herdr, website/agent-detection/kilo.toml, manifest
+# version 2026.06.10.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go; herdr's working rule keys on an interrupt hint, which
+# output already covers here.
+
+schema_version = 1
+id             = "kilo"
+display_name   = "Kilo Code"
+priority       = 50
+
+# npm @kilocode/cli is a node shim (bins kilo and kilocode) that spawns a
+# platform binary named kilo out of node_modules, so both shapes run: a node
+# process whose run token is the shim, and a native child.
+[detect]
+comm      = ["kilo"]
+argv0     = ["kilo", "kilocode"]
+argv_path = ["@kilocode/cli"]
+
+# "kilo" is four letters and famously also a text editor, so the bare name only
+# counts backed by a JS runtime (the shim) or Kilo's node_modules layout (the
+# spawned binary).
+[detect.require]
+exe_base = ["node", "nodejs", "bun", "deno"]
+exe_glob = ["**/@kilocode/**"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: opencode_permission (kilo's TUI shares opencode's chrome). The
+# explicit banner.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["△ permission required"]
+
+# herdr rule: opencode_permission, the dialog-hints form: dismiss and confirm
+# hints together with a selection hint. The confirm wordings are one pattern
+# because a rule carries one any-of set; (?i) keeps the folding the substrings
+# get.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["esc dismiss"]
+any      = ["↑↓ select", "⇆ tab"]
+regex    = ["(?i)enter confirm|enter submit|enter toggle"]

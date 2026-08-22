@@ -11,6 +11,7 @@ package harness
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -111,8 +112,11 @@ func (r *Require) satisfied(p ProcInfo) bool {
 
 // Screen holds optional rules matched against a pane's rendered text.
 //
-// It ships disabled in every bundled manifest and has to be turned on per
-// harness by the user. A rule here is coupled to one agent's TUI at one version,
+// Bundled manifests ship at most their needs_input rules enabled; working and
+// idle rules are user opt-in, because those states already reach the daemon
+// through output and OSC 9;4, and the stall timer (the policy test in
+// registry_test.go makes the full argument). A rule here is coupled to one
+// agent's TUI at one version,
 // and agent TUIs change in patch releases, so a rule that silently stops matching
 // degrades to no opinion without telling anyone. The signals tuios prefers (the
 // harness reporting for itself, and the escape sequences it emits) are
@@ -120,21 +124,47 @@ func (r *Require) satisfied(p ProcInfo) bool {
 // the foundation.
 type Screen struct {
 	Enabled bool `toml:"enabled"`
+	// FoldCase lowercases the screen text and every substring predicate before
+	// matching, so a rule written in lowercase matches however the TUI cases its
+	// prompt this release. Regex predicates are exempt: a pattern opts into
+	// folding with (?i), and folding the text under one that did not ask would
+	// silently change what its character classes mean. Manifests converted from
+	// herdr need this on, because herdr always matches substrings case-folded.
+	FoldCase bool `toml:"fold_case"`
 	// Lines is how many lines from the bottom of the pane a rule sees.
 	Lines int          `toml:"lines"`
 	Rule  []ScreenRule `toml:"rule"`
 }
 
 // ScreenRule is one screen-text rule. The predicates combine as: every string in
-// All must be present, at least one in Any must be present, and none in Not may
-// be. An empty list is satisfied, so a rule with only Any is an "any of these".
+// All must be present, at least one in Any must be present, none in Not may be,
+// every pattern in Regex must match, and no pattern in NotRegex may match. An
+// empty list is satisfied, so a rule with only Any is an "any of these".
 type ScreenRule struct {
 	State    string   `toml:"state"`
 	Priority int      `toml:"priority"`
 	All      []string `toml:"all"`
 	Any      []string `toml:"any"`
 	Not      []string `toml:"not"`
+	// Regex and NotRegex hold RE2 patterns, compiled once at load and matched
+	// with ^ and $ anchoring lines rather than the whole tail, because the tail
+	// is lines and a rule almost always means "some line looks like this".
+	// RE2 guarantees matching linear in the text, so a pathological pattern can
+	// cost a load error but never a stalled screen scan.
+	Regex    []string `toml:"regex"`
+	NotRegex []string `toml:"not_regex"`
+
+	// Compiled forms of Regex and NotRegex, index-aligned so a report can name
+	// the pattern as the manifest spells it. Filled by parseManifest.
+	regex    []*regexp.Regexp
+	notRegex []*regexp.Regexp
 }
+
+// maxScreenPattern bounds one regex pattern's length. RE2 compiles a pattern
+// into a program roughly proportional to its size, and the screen scan runs in
+// the daemon on every settle; a pattern too long to read is refused at load,
+// where the error names the file, rather than priced on the hot path.
+const maxScreenPattern = 512
 
 // defaultScreenLines is how much of the pane bottom a screen rule sees when a
 // manifest does not say. It is small because agent TUIs draw their live state in
@@ -175,10 +205,14 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	if err := m.Detect.checkGenericNames(name, m.ID); err != nil {
 		return nil, err
 	}
-	for i, r := range m.Screen.Rule {
+	for i := range m.Screen.Rule {
+		r := &m.Screen.Rule[i]
 		if _, ok := screenStates[r.State]; !ok {
 			return nil, fmt.Errorf("%s: manifest %q screen rule %d: unknown state %q",
 				name, m.ID, i, r.State)
+		}
+		if err := r.compile(m.Screen.FoldCase); err != nil {
+			return nil, fmt.Errorf("%s: manifest %q screen rule %d: %w", name, m.ID, i, err)
 		}
 	}
 	if m.Screen.Lines <= 0 {
@@ -191,6 +225,46 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 		m.DisplayName = m.ID
 	}
 	return &m, nil
+}
+
+// compile turns a rule's regex predicates into matchers and, when the manifest
+// folds case, lowercases its substring predicates so matching stays a plain
+// Contains against a haystack lowercased once per scan.
+func (r *ScreenRule) compile(foldCase bool) error {
+	if foldCase {
+		for _, list := range [][]string{r.All, r.Any, r.Not} {
+			for i, s := range list {
+				list[i] = strings.ToLower(s)
+			}
+		}
+	}
+	var err error
+	if r.regex, err = compilePatterns(r.Regex); err != nil {
+		return err
+	}
+	r.notRegex, err = compilePatterns(r.NotRegex)
+	return err
+}
+
+// compilePatterns compiles each pattern with (?m), so ^ and $ mean lines: the
+// haystack is a pane tail joined with newlines, and anchoring the whole blob
+// is never what a rule about one rendered line wants.
+func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+	out := make([]*regexp.Regexp, len(patterns))
+	for i, p := range patterns {
+		if len(p) > maxScreenPattern {
+			return nil, fmt.Errorf("pattern %d is %d bytes, limit %d", i, len(p), maxScreenPattern)
+		}
+		re, err := regexp.Compile("(?m)" + p)
+		if err != nil {
+			return nil, fmt.Errorf("pattern %q: %w", p, err)
+		}
+		out[i] = re
+	}
+	return out, nil
 }
 
 // screenStates are the states a screen rule may assert. It is deliberately

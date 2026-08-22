@@ -1,0 +1,56 @@
+# Screen rules converted from herdr's agent-detection manifest for amp
+# (github.com/herdrdev/herdr, website/agent-detection/amp.toml, manifest version
+# 2026.07.09.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in registry_test.go:
+# herdr's working/idle rules for amp read a spinner footer and the OSC title,
+# and working/idle already reach the daemon through output and the stall timer.
+# Not carried at all: herdr's "Plugin confirmation needed" blocker, which exists
+# only in the OSC title, a region the screen tier does not see.
+
+schema_version = 1
+id             = "amp"
+display_name   = "Amp"
+priority       = 50
+
+# Amp's own installer puts a native binary at ~/.amp/bin/amp (detection
+# verified against a live pane); the npm packages (@sourcegraph/amp,
+# @ampcode/cli) run a platform binary out of node_modules.
+[detect]
+comm      = ["amp"]
+argv0     = ["amp", "amp-local"]
+argv_path = ["@sourcegraph/amp", "@ampcode/cli"]
+
+# "amp" is three letters and a plausible name for unrelated software, so the
+# bare name only counts when the executable sits in one of Amp's install
+# layouts. A copy moved elsewhere is missed, which is the cheap direction.
+[detect.require]
+exe_glob = ["**/.amp/**", "**/@ampcode/**", "**/@sourcegraph/**"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: approval_footer. The tool-approval prompt in its several wordings.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+any      = ["waiting for approval", "invoke tool", "run this command?", "allow editing file:", "allow creating file:", "confirm tool call"]
+
+# herdr rule: approval_footer, the variant whose wording leads with "approve"
+# and offers the scope options.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["approve"]
+any      = ["allow all for this session", "allow all for every session", "allow file for every session", "deny with feedback"]
+
+# tuios-authored, from a live pane: an unauthenticated amp stops on
+#   Would you like to log in to Amp? [(y)es, (n)o]:
+# and waits. herdr has no rule for it, but it is the same class of prompt as a
+# directory trust question: painted once, then silence.
+[[screen.rule]]
+state    = "needs_input"
+priority = 100
+all      = ["would you like to log in to amp?", "(y)es"]

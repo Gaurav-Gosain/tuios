@@ -1,0 +1,44 @@
+# Screen rules converted from herdr's agent-detection manifest for qoder
+# (github.com/herdrdev/herdr, website/agent-detection/qodercli.toml, herdr id
+# "qodercli", manifest version 2026.06.10.1, Apache-2.0). Regenerate a draft
+# with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go; herdr's working rules read cancel hints and spinner lines,
+# which output already covers here.
+
+schema_version = 1
+id             = "qoder"
+display_name   = "Qoder"
+priority       = 50
+
+# npm @qoder-ai/qodercli is a pure node bundle (bins qoder and qodercli); the
+# China mirror @qodercn-ai/qoderclicn ships the same CLI under its own names.
+# The process is always node, so the run token is the identity.
+[detect]
+argv0     = ["qoder", "qodercli", "qodercn", "qoderclicn"]
+argv_path = ["@qoder-ai/qodercli", "@qodercn-ai/qoderclicn"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: confirmation_or_input_blocker. The single-wording forms share one
+# any-of; the anchored forms are their own rules so each stays an AND.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+any      = ["permission required", "allow once or always?", "asking user", "enter your response", "review your answers:", "shell awaiting input"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["waiting for user confirmation"]
+any      = ["yes", "no", "allow", "reject"]
+
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["awaiting approval"]
+any      = ["allow", "reject"]

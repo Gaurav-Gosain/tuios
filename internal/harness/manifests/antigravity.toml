@@ -1,0 +1,44 @@
+# Screen rules converted from herdr's agent-detection manifest for antigravity
+# (github.com/herdrdev/herdr, website/agent-detection/antigravity.toml, herdr id
+# "agy", manifest version 2026.06.24.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go; herdr's two working rules read spinner lines, which output
+# already covers here.
+
+schema_version = 1
+id             = "antigravity"
+display_name   = "Antigravity"
+priority       = 50
+
+# Google Antigravity's CLI is a native binary named agy; there is no npm or
+# pip channel, so the name is the whole identity.
+[detect]
+comm  = ["agy"]
+argv0 = ["agy"]
+
+# "agy" is three letters, so the bare name only counts when the executable
+# really is a binary named agy sitting in a bin directory. That still refuses
+# a shell function, an alias, or a renamed process, which is what the
+# corroboration policy is for.
+[detect.require]
+exe_glob = ["**/bin/agy"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: permission_prompt. The proceed question under the permission
+# banner. herdr accepts the question as one of two forms; each form is its own
+# rule so both stay several-strings-together.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["requesting permission for:", "do you want to proceed?"]
+
+# herdr rule: permission_prompt, the amend-command form.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["requesting permission for:", "tab amend", "edit command"]

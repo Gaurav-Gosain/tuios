@@ -1,0 +1,69 @@
+# Screen rules converted from herdr's agent-detection manifest for kimi
+# (github.com/herdrdev/herdr, website/agent-detection/kimi.toml, manifest
+# version 2026.06.10.1, Apache-2.0). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Only the blocked-prompt rules ship, per the bundled policy in
+# registry_test.go; herdr's working rules read spinner lines, which output
+# already covers here.
+
+schema_version = 1
+id             = "kimi"
+display_name   = "Kimi"
+priority       = 50
+
+# Moonshot ships three shapes: a self-contained native binary at
+# ~/.kimi-code/bin/kimi, npm @moonshot-ai/kimi-code run under node, and the
+# older Python kimi-cli whose console script runs as comm kimi over a python
+# executable.
+[detect]
+comm      = ["kimi", "kimi-cli"]
+argv0     = ["kimi", "kimi-cli"]
+argv_path = ["@moonshot-ai/kimi-code", "kimi_cli"]
+
+# "kimi" is four letters and a plausible personal alias, so the bare name only
+# counts backed by a runtime one of the real shapes uses or by the native
+# install layout.
+[detect.require]
+exe_base = ["node", "nodejs", "bun", "deno"]
+exe_glob = ["**/.kimi-code/**", "**/python*"]
+
+[screen]
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: current_approval_panel. The approval panel: confirm and choose
+# hints, an approve/reject/revise option, and one of the question wordings.
+# The questions are one pattern because a rule carries one any-of set; (?i)
+# keeps the folding the substrings get.
+[[screen.rule]]
+state    = "needs_input"
+priority = 400
+all      = ["↵ confirm", " choose"]
+any      = ["approve", "reject", "revise"]
+regex    = ["(?i)run this command\\?|write this file\\?|apply these edits\\?|stop this task\\?|ready to build with this plan\\?"]
+
+# herdr rule: current_approval_panel, the free-form approve question.
+[[screen.rule]]
+state    = "needs_input"
+priority = 400
+all      = ["↵ confirm", " choose"]
+any      = ["approve", "reject", "revise"]
+regex    = ["(?i)^\\s*▶?\\s*approve .*\\?$"]
+
+# herdr rule: question_panel. Kimi asking the user a question: both the panel
+# heading and a question line must be on screen.
+[[screen.rule]]
+state    = "needs_input"
+priority = 390
+all      = ["↑↓ select", "esc cancel"]
+any      = ["↵ choose", "↵ toggle", "↵ save"]
+regex    = ["^\\s*question\\s*$", "^\\s*\\? "]
+
+# herdr rule: legacy_approval_panel, kept for older Kimi releases.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+all      = ["requesting approval", "reject"]
+any      = ["1/2/3/4 choose", "↵ confirm"]
+regex    = ["(?i)approve once|approve for this session"]

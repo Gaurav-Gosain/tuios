@@ -21,14 +21,19 @@ func (r *Registry) Classify(id string, tail []string) (state string, rule int, o
 	}
 
 	// Joined once rather than per predicate: a rule carries several strings and
-	// every one of them would otherwise walk the slice again.
+	// every one of them would otherwise walk the slice again. The folded copy is
+	// likewise made once per scan, not per rule, and only when the manifest asks.
 	hay := strings.Join(tail, "\n")
+	folded := hay
+	if m.Screen.FoldCase {
+		folded = strings.ToLower(hay)
+	}
 
 	best, bestIdx := "", -1
 	bestPri := 0
 	for i := range m.Screen.Rule {
 		rl := &m.Screen.Rule[i]
-		if !checkRule(rl, hay, nil) {
+		if !checkRule(rl, hay, folded, nil) {
 			continue
 		}
 		if bestIdx == -1 || rl.Priority > bestPri {
@@ -41,18 +46,29 @@ func (r *Registry) Classify(id string, tail []string) (state string, rule int, o
 	return best, bestIdx, true
 }
 
-// checkRule applies the three predicates: every string in All present, at least
-// one in Any present, none in Not present. An empty list is satisfied, so a rule
-// carrying only Any is an "any of these".
+// checkRule applies the predicates: every string in All present, at least one
+// in Any present, none in Not present, every Regex matching, no NotRegex
+// matching. An empty list is satisfied, so a rule carrying only Any is an "any
+// of these". Substrings check the folded haystack, which is the plain one
+// unless the manifest folds case; regexes always read the plain haystack,
+// because a pattern chooses its own case handling with (?i).
 //
 // A non-nil rep collects why each predicate refused, which is what a person
 // writing a rule needs and what classification does not. Passing nil skips every
 // allocation, so the diagnostic costs the hot path nothing and neither of them
 // carries a second copy of the predicates.
-func checkRule(rl *ScreenRule, hay string, rep *RuleReport) bool {
+func checkRule(rl *ScreenRule, hay, folded string, rep *RuleReport) bool {
+	// A rule naming no positive predicate would match every screen the harness
+	// ever paints, which is a rule that says the pane is always in its state.
+	if len(rl.All) == 0 && len(rl.Any) == 0 && len(rl.Regex) == 0 {
+		if rep != nil {
+			rep.Empty = true
+		}
+		return false
+	}
 	ok := true
 	for _, s := range rl.All {
-		if strings.Contains(hay, s) {
+		if strings.Contains(folded, s) {
 			continue
 		}
 		ok = false
@@ -61,8 +77,18 @@ func checkRule(rl *ScreenRule, hay string, rep *RuleReport) bool {
 		}
 		rep.Missing = append(rep.Missing, s)
 	}
+	for i, re := range rl.regex {
+		if re.MatchString(hay) {
+			continue
+		}
+		ok = false
+		if rep == nil {
+			return false
+		}
+		rep.MissingRegex = append(rep.MissingRegex, rl.Regex[i])
+	}
 	for _, s := range rl.Not {
-		if !strings.Contains(hay, s) {
+		if !strings.Contains(folded, s) {
 			continue
 		}
 		ok = false
@@ -71,19 +97,21 @@ func checkRule(rl *ScreenRule, hay string, rep *RuleReport) bool {
 		}
 		rep.Blocked = append(rep.Blocked, s)
 	}
-	if len(rl.Any) == 0 {
-		// A rule with no Any and no All says nothing about the screen, and would
-		// match every pane the harness runs in.
-		if len(rl.All) == 0 {
-			if rep != nil {
-				rep.Empty = true
-			}
+	for i, re := range rl.notRegex {
+		if !re.MatchString(hay) {
+			continue
+		}
+		ok = false
+		if rep == nil {
 			return false
 		}
+		rep.BlockedRegex = append(rep.BlockedRegex, rl.NotRegex[i])
+	}
+	if len(rl.Any) == 0 {
 		return ok
 	}
 	for _, s := range rl.Any {
-		if strings.Contains(hay, s) {
+		if strings.Contains(folded, s) {
 			return ok
 		}
 	}
@@ -103,11 +131,15 @@ type RuleReport struct {
 	// Missing lists the all[] strings the screen does not contain. Each one
 	// alone is enough to refuse.
 	Missing []string `json:"missing,omitempty"`
+	// MissingRegex lists the regex[] patterns that matched nothing.
+	MissingRegex []string `json:"missing_regex,omitempty"`
 	// NoneOf is the any[] list when the screen contains none of it.
 	NoneOf []string `json:"none_of,omitempty"`
 	// Blocked lists the not[] strings the screen does contain. Each one alone is
 	// enough to refuse.
 	Blocked []string `json:"blocked,omitempty"`
+	// BlockedRegex lists the not_regex[] patterns that matched.
+	BlockedRegex []string `json:"blocked_regex,omitempty"`
 	// Empty marks a rule that names no strings at all, which would otherwise
 	// match every pane the harness runs in and is refused for that reason.
 	Empty bool `json:"empty,omitempty"`
@@ -126,12 +158,16 @@ func (r *Registry) Explain(id string, tail []string) (state string, rule int, re
 		return "", -1, nil
 	}
 	hay := strings.Join(tail, "\n")
+	folded := hay
+	if m.Screen.FoldCase {
+		folded = strings.ToLower(hay)
+	}
 	reports = make([]RuleReport, 0, len(m.Screen.Rule))
 	best, bestIdx, bestPri := "", -1, 0
 	for i := range m.Screen.Rule {
 		rl := &m.Screen.Rule[i]
 		rep := RuleReport{Index: i, State: rl.State, Priority: rl.Priority}
-		rep.Matched = checkRule(rl, hay, &rep)
+		rep.Matched = checkRule(rl, hay, folded, &rep)
 		reports = append(reports, rep)
 		if !rep.Matched || !m.Screen.Enabled || len(tail) == 0 {
 			continue
