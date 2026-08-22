@@ -21,9 +21,18 @@ import (
 // position, scrollback length, ReserveImageSpace), which the pure emulator
 // tolerates because it has no internal lock. Callers of Write serialize it,
 // so dropping the lock mid-scan does not admit a second writer.
+//
+// Queued callbacks drain first, in order: the pure emulator fires callbacks
+// inline as sequences are handled, so a callback queued earlier in this
+// chunk logically precedes this hook. The alt-screen callback is the one
+// that bit: it feeds the window flag the kitty pipeline stamps placements
+// with, and a placement stamped with the pre-switch flag is suppressed as
+// belonging to the wrong screen on every later frame.
 func (t *GhosttyTerminal) callUnlocked(f func()) {
+	q := t.takeQueue()
 	t.mu.Unlock()
 	defer t.mu.Lock()
+	t.drain(q)
 	f()
 }
 
@@ -48,7 +57,8 @@ func (t *GhosttyTerminal) observeESC(inter, final byte) {
 		t.charsetIDs[3] = final
 	case 0:
 		switch final {
-		case 'c': // RIS
+		case 'c': // RIS resets to the main screen among everything else.
+			t.cachedAltScreen.Store(false)
 			t.resetShadowState()
 		case '7': // DECSC saves the charset selection with the cursor
 			t.savedCharsets = t.charsetIDs
@@ -169,6 +179,25 @@ func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 		}
 		switch n {
 		case 47, 1047, 1049:
+			// The cache must flip here, mid-write: a guest that enters the
+			// alternate screen and draws in the same chunk (yazi's image
+			// preview) has its kitty placement computed through
+			// IsAltScreen() before this Write returns, and end-of-write
+			// refresh is too late. The refresh still runs afterwards and
+			// stays authoritative.
+			if set && !t.cachedAltScreen.Load() {
+				// Entering: bank the main screen's history length while
+				// the library still shows the main screen. The hook runs
+				// before the switch is forwarded, so a flush here settles
+				// the sink on everything that preceded this sequence.
+				t.scanner.flushOut()
+				if !t.activeAltLiveLocked() {
+					if rows, err := t.term.ScrollbackRows(); err == nil {
+						t.mainSbLen = int(rows)
+					}
+				}
+			}
+			t.cachedAltScreen.Store(set)
 			t.queue(func(cb Callbacks) {
 				if cb.AltScreen != nil {
 					cb.AltScreen(set)
@@ -210,11 +239,16 @@ func (t *GhosttyTerminal) observeEraseDisplay(params []byte) {
 		// Scrollback clear: the pure emulator's ring fires a trim callback
 		// that shifts markers; the library's ring cannot, so shift by the
 		// history length being dropped. The library has not consumed the
-		// ED 3 yet, so the pre-clear length is still readable.
-		if t.semanticMarkers != nil {
-			t.semanticMarkers.AdjustForScrollbackTrim(t.scrollbackLenLocked())
+		// ED 3 yet, so the pre-clear length is still readable. On the
+		// alternate screen ED 3 is a no-op on both implementations: the
+		// alternate screen keeps no history.
+		if !t.activeAltLiveLocked() {
+			if t.semanticMarkers != nil {
+				t.semanticMarkers.AdjustForScrollbackTrim(t.scrollbackLenLocked())
+			}
+			t.mainSbLen = 0
+			t.scrollGeneration++
 		}
-		t.scrollGeneration++
 	}
 }
 
@@ -413,7 +447,8 @@ func (t *GhosttyTerminal) handleSixelDCS(params, payload []byte) {
 	}
 	curX, curY := t.cursorLocked()
 	absLine := t.scrollbackLenLocked() + curY
-	if t.IsAltScreen() {
+	if t.activeAltLiveLocked() {
+		// The cached alt flag is one chunk stale inside a scanner hook.
 		absLine = curY
 	}
 

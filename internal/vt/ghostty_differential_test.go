@@ -345,3 +345,104 @@ func TestGhosttyDiffModes(t *testing.T) {
 		}
 	}
 }
+
+// TestGhosttyDiffAltScreenScrollback pins the contract yazi's image preview
+// exposed: scrollback is the MAIN screen's history whichever screen is
+// active. The app computes kitty placement lines as ScrollbackLen()+cursorY
+// while a full-screen guest owns the alternate screen, so an implementation
+// answering with the alternate screen's empty history shifted placements by
+// the pane's entire history and previews went blank - but only in panes
+// that had history, which is why it looked intermittent.
+func TestGhosttyDiffAltScreenScrollback(t *testing.T) {
+	p := newDiffPair(t, 20, 5)
+	var b strings.Builder
+	for i := range 30 {
+		fmt.Fprintf(&b, "history %d\r\n", i)
+	}
+	p.write(t, []byte(b.String()))
+	p.compareScrollback(t, "before alt", 0)
+
+	// Reading between generations matters: the count must hold across the
+	// switch, not merely at the end.
+	p.write(t, []byte("\x1b[?1049h\x1b[Halt content"))
+	if a, g := p.pure.ScrollbackLen(), p.gh.ScrollbackLen(); a != g {
+		t.Fatalf("alt active: scrollback len pure=%d ghostty=%d", a, g)
+	}
+	p.compareScrollback(t, "alt active", 0)
+	p.compareScreens(t, "alt active")
+
+	// More main-screen history cannot appear while alt is active; leaving
+	// alt must reveal the same history plus nothing.
+	p.write(t, []byte("\x1b[?1049l"))
+	p.compareScrollback(t, "back on main", 0)
+	p.compareScreens(t, "back on main")
+
+	// ClearScrollback during alt applies to the main history, deferred on
+	// the library until the main screen returns.
+	p.write(t, []byte("\x1b[?1049halt again"))
+	p.pure.ClearScrollback()
+	p.gh.ClearScrollback()
+	if a, g := p.pure.ScrollbackLen(), p.gh.ScrollbackLen(); a != g || a != 0 {
+		t.Fatalf("cleared during alt: scrollback len pure=%d ghostty=%d, want 0", a, g)
+	}
+	p.write(t, []byte("\x1b[?1049l"))
+	if a, g := p.pure.ScrollbackLen(), p.gh.ScrollbackLen(); a != g {
+		t.Fatalf("after alt exit: scrollback len pure=%d ghostty=%d", a, g)
+	}
+}
+
+// TestGhosttyDiffKittyPassthroughContext pins what the kitty passthrough
+// pipeline reads at APC time: cursor position, scrollback length and the
+// alt-screen flag, queried from inside the callback exactly as
+// internal/app's handler queries them. All three went stale or wrong on the
+// library backend when the guest switched screens, moved the cursor and
+// drew in one chunk, which is how yazi paints a preview: the placement was
+// computed against the previous frame's cursor and screen, and the image
+// landed clipped in a corner.
+func TestGhosttyDiffKittyPassthroughContext(t *testing.T) {
+	type seen struct {
+		x, y, sb int
+		alt      bool
+		// cbAlt is the alt flag as the AltScreen callback last reported
+		// it, the way terminal.Window tracks it. The callback must have
+		// fired before a passthrough later in the same chunk, or the
+		// placement is stamped with the pre-switch screen and suppressed.
+		cbAlt bool
+	}
+	capture := func(term Terminal) *[]seen {
+		out := &[]seen{}
+		var cbAlt bool
+		term.SetCallbacks(Callbacks{AltScreen: func(v bool) { cbAlt = v }})
+		term.SetKittyPassthroughFunc(func(cmd *KittyCommand, raw []byte) {
+			pos := term.CursorPosition()
+			*out = append(*out, seen{pos.X, pos.Y, term.ScrollbackLen(), term.IsAltScreen(), cbAlt})
+		})
+		return out
+	}
+
+	p := newDiffPair(t, 40, 8)
+	pureSeen := capture(p.pure)
+	ghSeen := capture(p.gh)
+
+	var b strings.Builder
+	for i := range 30 {
+		fmt.Fprintf(&b, "history %d\r\n", i)
+	}
+	// One chunk: junk that parks the cursor bottom-right, then the
+	// alt-screen switch, a cursor move, and the image APC.
+	b.WriteString("\x1b[8;38Hjunk")
+	b.WriteString("\x1b[?1049h\x1b[3;5H")
+	b.WriteString("\x1b_Ga=T,f=32,s=1,v=1,i=7,p=1,q=2;AAAA\x1b\\")
+	// A second APC after more cursor movement, still the same chunk.
+	b.WriteString("\x1b[6;2H\x1b_Ga=p,i=7,p=2,q=2\x1b\\")
+	p.write(t, []byte(b.String()))
+
+	if len(*pureSeen) != 2 || len(*ghSeen) != 2 {
+		t.Fatalf("passthrough calls: pure=%d ghostty=%d, want 2", len(*pureSeen), len(*ghSeen))
+	}
+	for i := range *pureSeen {
+		if (*pureSeen)[i] != (*ghSeen)[i] {
+			t.Errorf("APC %d context: pure=%+v ghostty=%+v", i, (*pureSeen)[i], (*ghSeen)[i])
+		}
+	}
+}

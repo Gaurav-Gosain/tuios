@@ -7,19 +7,45 @@ import (
 	gh "go.mitchellh.com/libghostty"
 )
 
-// Scrollback lives in libghostty; lines are read back on demand through grid
-// references into history and cached per write generation, since copy mode
-// and search read the same lines many times between writes.
+// Scrollback is the MAIN screen's history, whichever screen is active: every
+// accessor on the pure emulator reads scrs[0], and consumers lean on that.
+// The app computes kitty-placement absolute lines as ScrollbackLen()+cursorY
+// while a full-screen guest owns the alternate screen, so an implementation
+// that reported the alternate screen's (empty) history shifted every
+// placement by the pane's real history and image previews vanished; wire
+// snapshots taken mid-yazi lost the pane's history the same way.
+//
+// The library reads history from the active screen only, so two shadows
+// bridge the gap: the count is cached whenever the main screen is active
+// (the alternate screen cannot grow or shrink primary history), and line
+// reads during alt go through a decoded snapshot whose private copy is
+// switched back to the main screen.
+
+// activeAltLiveLocked reports whether the alternate screen is active right
+// now, from the library rather than the post-write cache: scanner hooks run
+// mid-write, where the cache is one chunk stale.
+func (t *GhosttyTerminal) activeAltLiveLocked() bool {
+	if t.closed.Load() {
+		return false
+	}
+	a, _ := t.term.Mode(gh.ModeAltScreen)
+	b, _ := t.term.Mode(gh.ModeAltScreenSave)
+	return a || b
+}
 
 func (t *GhosttyTerminal) scrollbackLenLocked() int {
 	if t.closed.Load() {
 		return 0
 	}
+	if t.activeAltLiveLocked() {
+		return t.mainSbLen
+	}
 	n, err := t.term.ScrollbackRows()
 	if err != nil {
-		return 0
+		return t.mainSbLen
 	}
-	return int(n)
+	t.mainSbLen = int(n)
+	return t.mainSbLen
 }
 
 // ScrollbackLen deliberately does not flush a pending restore:
@@ -55,10 +81,25 @@ func (t *GhosttyTerminal) scrollbackLineLocked(index int) uv.Line {
 	if line, ok := t.scrollCache[index]; ok {
 		return line
 	}
+	src := t.term
+	if t.activeAltLiveLocked() {
+		src = t.altHistoryLocked()
+		if src == nil {
+			return nil
+		}
+	}
+	line := t.readHistoryLineLocked(src, index)
+	t.scrollCache[index] = line
+	return line
+}
+
+// readHistoryLineLocked reads one history row as uv cells from src, which is
+// either the live terminal (main screen active) or the decoded snapshot copy.
+func (t *GhosttyTerminal) readHistoryLineLocked(src *gh.Terminal, index int) uv.Line {
 	line := make(uv.Line, t.width)
 	for x := 0; x < t.width; x++ {
 		line[x] = uv.Cell{Content: " ", Width: 1}
-		ref, err := t.term.GridRef(gh.Point{Tag: gh.PointTagHistory, X: uint16(x), Y: uint32(index)})
+		ref, err := src.GridRef(gh.Point{Tag: gh.PointTagHistory, X: uint16(x), Y: uint32(index)})
 		if err != nil || ref == nil {
 			continue
 		}
@@ -108,12 +149,49 @@ func (t *GhosttyTerminal) scrollbackLineLocked(index int) uv.Line {
 		}
 		line[x] = out
 	}
-	t.scrollCache[index] = line
 	return line
 }
 
-// ClearScrollback drops history by synthesizing ED 3, the sequence whose
-// meaning is exactly this.
+// altHistoryLocked returns a decoded snapshot of the terminal with its copy
+// switched to the main screen, so primary history is readable while the real
+// terminal shows the alternate screen. Cached per write generation.
+func (t *GhosttyTerminal) altHistoryLocked() *gh.Terminal {
+	if t.altHistory != nil && t.altHistoryGen == t.scrollGeneration {
+		return t.altHistory
+	}
+	t.dropAltHistoryLocked()
+	data, err := t.term.Snapshot()
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	dec, err := gh.NewSnapshotDecoderBytes(data)
+	if err != nil {
+		return nil
+	}
+	defer dec.Close()
+	restored, err := dec.Decode()
+	if err != nil || restored == nil {
+		return nil
+	}
+	// The copy replicated the alt-screen state; switching it back exposes
+	// the primary screen's history. Only the copy is written to.
+	restored.VTWrite([]byte("\x1b[?1049l\x1b[?1047l"))
+	t.altHistory = restored
+	t.altHistoryGen = t.scrollGeneration
+	return t.altHistory
+}
+
+func (t *GhosttyTerminal) dropAltHistoryLocked() {
+	if t.altHistory != nil {
+		t.altHistory.Close()
+		t.altHistory = nil
+	}
+}
+
+// ClearScrollback drops the main screen's history. ED 3 addresses the active
+// screen, so while the alternate screen is up the clear is deferred to the
+// next return to the main screen; the count reads as cleared immediately,
+// which is what the pure emulator's direct ring clear reports.
 func (t *GhosttyTerminal) ClearScrollback() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -121,8 +199,15 @@ func (t *GhosttyTerminal) ClearScrollback() {
 		return
 	}
 	t.flushRestoreLocked()
-	t.term.VTWrite([]byte("\x1b[3J"))
+	if t.activeAltLiveLocked() {
+		t.mainSbLen = 0
+		t.pendingMainSbClear = true
+	} else {
+		t.term.VTWrite([]byte("\x1b[3J"))
+		t.mainSbLen = 0
+	}
 	t.scrollGeneration++
+	t.dropAltHistoryLocked()
 	if t.semanticMarkers != nil {
 		t.semanticMarkers.RemoveOnScreen(0)
 	}
