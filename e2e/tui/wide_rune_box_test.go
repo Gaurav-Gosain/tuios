@@ -85,7 +85,44 @@ func paintWideRunes(t *testing.T, script string, extraEnv ...string) tuitest.Scr
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 	runInShell(t, term, "sh "+script, "WIDEDONE", shellTimeout)
+	waitForPromptAfter(t, term, "WIDEDONE")
 	return term.Screen()
+}
+
+// waitForPromptAfter blocks until the shell has printed its prompt below the
+// given marker.
+//
+// The fixture's last line is not the pane's last line: the shell draws a prompt
+// after it, and whether that prompt has landed when the screen is read is a
+// race. It cost this file a flake in the full suite, where the differential
+// caught its own scaffolding, a "$" in one run against a blank in the other,
+// rather than anything about the wrap. Waiting on the prompt is waiting on the
+// state both runs have to be compared in.
+func waitForPromptAfter(t *testing.T, term *tuitest.Terminal, marker string) {
+	t.Helper()
+	settled := func(s tuitest.Screen) bool {
+		lines := strings.Split(s.Text(), "\n")
+		for i, line := range lines {
+			if !strings.Contains(line, marker) {
+				continue
+			}
+			for _, below := range lines[i+1:] {
+				if strings.Contains(below, "$") {
+					return true
+				}
+			}
+			return false
+		}
+		return false
+	}
+	if err := term.WaitFor(settled, uiTimeout); err != nil {
+		t.Fatalf("shell never returned a prompt after %s: %v\n%s", marker, err, term.Snapshot())
+	}
+	// And then for the compositor to stop redrawing, so the two runs are read
+	// in the same settled frame rather than one frame apart.
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled after %s: %v\n%s", marker, err, term.Snapshot())
+	}
 }
 
 var paneColsRe = regexp.MustCompile(`PANECOLS=(\d+)`)
