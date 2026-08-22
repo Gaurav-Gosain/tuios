@@ -20,6 +20,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/shirou/gopsutil/v4 v4.26.7
 	github.com/spf13/cobra v1.10.2
+	go.mitchellh.com/libghostty v0.0.0-20260817204349-1d44b6e69990
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 )
@@ -29,7 +30,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.28 // indirect
 	github.com/pires/go-proxyproto v0.12.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	go.mitchellh.com/libghostty v0.0.0-20260817204349-1d44b6e69990 // indirect
 )
 
 require (
