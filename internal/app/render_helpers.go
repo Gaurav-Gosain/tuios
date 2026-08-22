@@ -246,8 +246,37 @@ func getWindowTitle(window *terminal.Window, position int, maxWidth int) string 
 	return windowName
 }
 
-func (m *OS) addToBorder(content string, color color.Color, window *terminal.Window, position int, isTiling bool) string {
-	width := max(lipgloss.Width(content)-2, 0)
+// addToBorder draws the title bar and the bottom bar around an already
+// rendered border box. width is the box's inner width, the box without its two
+// border cells, and the caller passes it because the caller is what decided it.
+//
+// It used to be recovered here with lipgloss.Width(content)-2, which walks
+// every row of the rendered box through a grapheme-cluster iterator to find the
+// widest one. That is a full scan of styled text per pane per frame to learn a
+// number the caller already held: at 158x40 the scan measured 144933 ns
+// against 1.357 ns for reading it, and a profile of the flood benchmark put
+// 11% of the whole client's samples in it. See TestBorderBoxInnerWidthIsKnown
+// for the proof that the two answers agree.
+func (m *OS) addToBorder(content string, width int, color color.Color, window *terminal.Window, position int, isTiling bool) string {
+	top, bottom := m.windowBorderRows(width, color, window, position, isTiling)
+
+	lines := strings.Split(content, "\n")
+	// The box arrived with a bottom edge lipgloss drew and this one replaces,
+	// because only this function knows what the bar has to carry.
+	if len(lines) > 0 {
+		lines[len(lines)-1] = bottom
+	}
+	return top + "\n" + strings.Join(lines, "\n")
+}
+
+// windowBorderRows builds the two chrome rows a bordered pane is framed with:
+// the title bar that goes above the body and the bar that closes it below.
+// width is the box's inner width, the box without its two border cells.
+//
+// It is separate from addToBorder because the fused box path (fastWindowBox)
+// needs the same two rows without a rendered box to splice them into.
+func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Window, position int, isTiling bool) (topBorder, bottomBorder string) {
+	width = max(width, 0)
 	titlePos := config.WindowTitlePosition
 
 	style := pool.GetStyle()
@@ -283,11 +312,10 @@ func (m *OS) addToBorder(content string, color color.Color, window *terminal.Win
 		badge = windowTitleBadge(windowName, window.AgentState, color)
 	}
 	row := layoutBorderRow(badge, buttons, width, color, true)
-	topBorder := row.text
+	topBorder = row.text
 	m.recordWindowButtons(window.ID, placeWindowButtons(hits, window, row.pillStart))
 
 	// Build bottom border with optional scrollback position indicator
-	var bottomBorder string
 	scrollIndicator := ""
 	// Show scroll position when in copy mode with scroll offset
 	if window.CopyMode != nil && window.CopyMode.Active && window.CopyMode.ScrollOffset > 0 {
@@ -313,12 +341,7 @@ func (m *OS) addToBorder(content string, color color.Color, window *terminal.Win
 		bottomBorder = borderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderBottom(), width) + config.GetWindowBorderBottomRight())
 	}
 
-	lines := strings.Split(content, "\n")
-
-	if len(lines) > 0 {
-		lines[len(lines)-1] = bottomBorder
-	}
-	return topBorder + "\n" + strings.Join(lines, "\n")
+	return topBorder, bottomBorder
 }
 
 // renderTitleBadge renders a border with a centered title badge.

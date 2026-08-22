@@ -42,7 +42,7 @@ func withButtonPosition(t *testing.T, position string, fn func()) {
 func drawTopBorder(t *testing.T, m *OS, win *terminal.Window, tiling bool) ([]rune, []WindowButtonRect) {
 	t.Helper()
 	content := strings.Repeat(" ", win.Width)
-	out := m.addToBorder(content, lipgloss.Color("#7dd3fc"), win, 1, tiling)
+	out := m.addToBorder(content, lipgloss.Width(content)-2, lipgloss.Color("#7dd3fc"), win, 1, tiling)
 	top, _, _ := strings.Cut(out, "\n")
 	return []rune(ansi.Strip(top)), m.windowButtonRects[win.ID]
 }

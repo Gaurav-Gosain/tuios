@@ -65,7 +65,7 @@ func TestWindowControlsPillIsASCIISafe(t *testing.T) {
 
 			win := &terminal.Window{ID: "w", CustomName: "pane", X: 0, Y: 0, Width: 40, Height: 12, Workspace: 1}
 			m := &OS{}
-			border := m.addToBorder(strings.Repeat(" ", 40), lipgloss.Color("#ffffff"), win, 1, false)
+			border := m.addToBorder(strings.Repeat(" ", 40), 38, lipgloss.Color("#ffffff"), win, 1, false)
 			for _, r := range ansi.Strip(border) {
 				if r > 127 {
 					t.Fatalf("the window controls pill drew %q in ASCII mode: %q", r, ansi.Strip(border))
