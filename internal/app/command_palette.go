@@ -493,15 +493,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Keybinds: view, conflicts, recorder",
-			Shortcut: "prefix+k",
-			Category: "Session",
-			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.OpenKeybindManager()
-				return m, nil
-			},
-		},
-		{
 			Name:     "Theme Picker",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
