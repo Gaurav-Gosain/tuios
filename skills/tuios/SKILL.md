@@ -361,6 +361,163 @@ tuios get-config appearance.sidebar.position --json
 {"key":"appearance.sidebar.position","value":"left","source":"default","default":"left","option_type":"string"}
 ```
 
+## Ricing: themes and colours
+
+The 88 options above are scalars. A theme is not one of them: its value is a
+name drawn from an open set of several hundred, standing for twenty colours kept
+as JSON in a directory of their own. So it has its own verb.
+
+```sh
+tuios list-themes --filter catppuccin
+```
+
+```
+  catppuccin_frappe     catppuccin_latte      catppuccin_macchiato  catppuccin_mocha
+
+4 of 343 registered themes.
+
+active: gruvbox_dark (session)
+themes dir: /home/you/.config/tuios/themes
+```
+
+Filter before you guess. Theme ids use underscores, so the name a human says
+("Catppuccin Mocha") and the name that resolves (`catppuccin_mocha`) differ, and
+this is where you find out which. Setting a name that does not resolve is an
+error naming the closest one, not a silent no-op:
+
+```sh
+tuios set-config appearance.theme catppuccin_mocha
+```
+
+### Seeing what you just chose
+
+You cannot see the screen. `capture-pane` gives you the text, not the palette,
+so ask for the palette:
+
+```sh
+tuios list-themes catppuccin_mocha
+```
+
+```
+catppuccin_mocha  (Catppuccin Mocha)  dark, background #1e1e2e
+
+   fg             #cdd6f3  11.33:1  needs 4.5
+   cursor         #f5e0dc  12.95:1  needs 3.0
+ ! black          #454759   1.80:1  needs 3.0
+   red            #f38ba8   7.08:1  needs 3.0
+ ! bright_black   #585b70   2.46:1  needs 3.0
+   ...
+```
+
+Each colour is measured against that theme's own background. The floor is 4.5
+for the foreground, which is prose, and 3.0 for everything drawn as a glyph or a
+block. `!` marks a colour that does not clear it, and `--json` puts the same
+names in `.palette.illegible`:
+
+```sh
+tuios list-themes catppuccin_mocha --json | jq -r '.palette.illegible[]'
+```
+
+Two failing entries is normal and not a reason to reject a theme: almost every
+palette keeps its blacks dim on purpose, and tuios lifts a border drawn from one
+of them. A dozen failing entries means the palette is wrong. Text printed inside
+a pane is never lifted, so a foreground under 4.5 is the one to act on.
+
+### Writing a theme
+
+Ricing usually means authoring a palette rather than picking one. Write
+`<id>.json` into the themes directory that `list-themes` reported:
+
+```json
+{
+  "id": "mine",
+  "display_name": "Mine",
+  "dark": true,
+  "fg": "#c0caf5", "bg": "#1a1b26", "cursor": "#c0caf5",
+  "black": "#15161e", "red": "#f7768e", "green": "#9ece6a", "yellow": "#e0af68",
+  "blue": "#7aa2f7", "purple": "#bb9af7", "cyan": "#7dcfff", "white": "#a9b1d6",
+  "bright_black": "#414868", "bright_red": "#f7768e", "bright_green": "#9ece6a",
+  "bright_yellow": "#e0af68", "bright_blue": "#7aa2f7", "bright_purple": "#bb9af7",
+  "bright_cyan": "#7dcfff", "bright_white": "#c0caf5"
+}
+```
+
+Every field is optional except a way to name it: an absent `id` is taken from the
+filename, and an absent colour falls back to its xterm default. It is `purple`,
+not `magenta`. The directory is re-read whenever a theme is looked up, so the
+file you just wrote is selectable immediately with no restart:
+
+```sh
+tuios set-config appearance.theme mine
+tuios list-themes mine
+```
+
+A file that does not parse is skipped rather than applied, and `list-themes`
+reports it under `problems` with the reason, which is how you find out that the
+theme you wrote is not the theme you selected.
+
+### From a terminal's own theme
+
+Kitty, ghostty, alacritty and wezterm colour schemes convert directly. Do not
+transcribe one by hand; one colour in the wrong slot looks exactly like a theme
+that half-applied.
+
+```sh
+tuios import-theme ~/.config/kitty/current-theme.conf --name mine
+tuios set-config appearance.theme mine
+```
+
+The format is read from the file's content, so the extension does not matter.
+A scheme that sets only some of the twenty imports as far as it goes. Wezterm's
+Lua scheme files are not read; its toml ones are.
+
+### A rice, end to end
+
+"Make it look like Catppuccin Mocha, thicker border, sidebar on the right":
+
+```sh
+tuios list-themes --filter catppuccin
+tuios set-config appearance.theme catppuccin_mocha
+tuios set-config appearance.border_style thick
+tuios set-config appearance.sidebar.enabled true
+tuios set-config appearance.sidebar.position right
+```
+
+Read back what you changed, not what you sent:
+
+```sh
+tuios get-config appearance.border_style --json
+tuios list-themes --json | jq -r .active
+```
+
+### What this cannot do
+
+Be honest with the user about these rather than working around them:
+
+- **There is no preview and no undo.** A rice is applied one option at a time
+  and each one takes effect as it lands. If the fifth call fails, the first four
+  are still on. Record the values before you change them and put them back the
+  same way:
+
+  ```sh
+  tuios get-config appearance.border_style --json | jq -r .value
+  ```
+
+- **There is no verb for keybindings or hooks.** Both are maps rather than fixed
+  paths, so `list-options` does not carry them and `set-config` cannot set one.
+  They are edited in the config file.
+
+- **The chrome is not themed.** Overlays, the settings page and the dock's
+  furniture sit on a constant neutral ramp on purpose, the way a window manager
+  keeps its chrome constant. A theme moves the panes, the borders, the accents
+  and the tabs. If the user asks why the palette "did not apply" to a popup,
+  that is why.
+
+- **You cannot read the user's actual terminal colours.** With no theme set,
+  tuios emits colour indices and the host terminal fills them in, so the sixteen
+  on screen are the user's and tuios does not know what they are. "Match my
+  terminal" means importing that terminal's scheme file, not asking tuios.
+
 ## Waiting instead of polling
 
 Do not capture in a loop with a sleep. The daemon watches its own events and will

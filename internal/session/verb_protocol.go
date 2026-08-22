@@ -446,6 +446,29 @@ func init() {
 			},
 			handler: (*Daemon).verbSetOption,
 		},
+		"list-themes": {
+			description: "List the registered themes and describe one: its colours as hex and the contrast of each against its own background. A theme is the one part of the appearance list-options cannot describe, because its value is a name from an open set standing for a palette kept elsewhere.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "theme", Type: "string", Description: "Describe this theme as well as listing. Omit to list only."},
+				{Name: "filter", Type: "string", Description: "Only ids containing this, case-insensitively, e.g. catppuccin."},
+			},
+			returns: []verbParam{
+				{Name: "themes", Type: "[]string", Description: "Matching theme ids, capped at 100; truncated says when the cap applied."},
+				{Name: "total", Type: "int", Description: "How many themes are registered in all."},
+				{Name: "matched", Type: "int", Description: "How many the filter matched, before the cap."},
+				{Name: "active", Type: "string", Description: "The theme this session is set to. Empty means no theme, which is the terminal's own colours."},
+				{Name: "active_source", Type: "string", Description: `"session" for a theme set on this session, "default" for the built-in.`, Accepted: []string{"session", "default"}},
+				{Name: "themes_dir", Type: "string", Description: "Where a custom theme file goes. Writing <id>.json here registers it; no restart is needed."},
+				{Name: "problems", Type: "[]string", Description: "One line per theme file that could not be read, with the reason. Present only when a file is malformed."},
+				{Name: "palette", Type: "object", Description: "Present when theme was given: id, display_name, dark, bg, fg, cursor, swatches (each with hex, ratio, floor, passes) and illegible, the names of the swatches that did not clear their floor."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"list-themes","params":{"filter":"catppuccin"}}`,
+				`{"id":1,"verb":"list-themes","params":{"session":"work","theme":"catppuccin_mocha"}}`,
+			},
+			handler: (*Daemon).verbListThemes,
+		},
 		"get-option": {
 			description: "Read an option, preferring what this session was told and falling back to what the option does untold.",
 			params: []verbParam{

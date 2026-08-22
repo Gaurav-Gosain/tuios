@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/google/uuid"
 )
 
@@ -187,11 +188,21 @@ func (d *Daemon) verbSetOption(_ *connState, params json.RawMessage) (any, *verb
 	// apply can never disagree about what a value means.
 	probe := config.DefaultConfig()
 	if err := config.SetOptionValue(probe, path, p.Value); err != nil {
-		return nil, hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
+		hint := &VerbHint{
 			Param:    "value",
 			Accepted: opt.Accepted,
 			Detail:   "type " + opt.Type + ", default " + echoName(opt.Default) + ". " + opt.Description,
-		})
+		}
+		// A theme has no Accepted set to fall back on and its names are one
+		// separator apart from each other, so the near miss is the whole of what
+		// a caller needs: catppuccin-mocha for catppuccin_mocha was reported as
+		// a set that worked, and is now reported with the name that would have.
+		if opt.Theme {
+			hint.Verb = "list-themes"
+			hint.Command = "tuios list-themes --filter " + p.Value
+			hint.DidYouMean = closestMatch(p.Value, theme.AvailableThemes())
+		}
+		return nil, hintedVerbError(ErrVerbInvalidParams, err.Error(), hint)
 	}
 
 	sess, verr := d.resolveVerbSession(p.Session)

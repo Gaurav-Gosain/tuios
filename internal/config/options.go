@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Option describes one settable configuration path.
@@ -33,6 +35,13 @@ type Option struct {
 	// A colour option with Accepted set takes either one of those keywords or a
 	// literal, which is the scrollbar tint's shape.
 	Color bool `json:"color,omitempty"`
+	// Theme marks the string option whose value is a registered theme id. Like
+	// Color it says what the string means rather than what it is, and for the
+	// same reason: the set is open (a user's own theme file joins it) and far
+	// too long to publish as Accepted, so neither a closed set nor no check at
+	// all is right. Without it a misspelled theme was recorded, reported as
+	// applied, and drew the palette it already had.
+	Theme bool `json:"theme,omitempty"`
 }
 
 // The three types an option can carry. A config value crosses the protocol as a
@@ -169,7 +178,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.theme", Type: OptionString, Section: "appearance",
 		Description: "Colour theme name; empty keeps the terminal's own colours",
-		Default:     "",
+		Default:     "", Theme: true,
 	},
 	{
 		Path: "appearance.shared_borders", Type: OptionBool, Section: "appearance",
@@ -602,6 +611,13 @@ func (o Option) checkValue(value string) error {
 				o.Path, value, strings.Join(o.Accepted, ", "))
 		}
 		return fmt.Errorf("%s: %q is not a colour; expected #RRGGBB or empty", o.Path, value)
+	}
+	if o.Theme && !theme.Exists(value) {
+		// Exists re-reads the custom themes directory before it says no, so a
+		// theme file written a moment ago resolves here rather than on the next
+		// restart.
+		return fmt.Errorf("%s: no theme named %q; call list-themes for the ones there are, "+
+			"or write %s.json in the themes directory first", o.Path, value, value)
 	}
 	if len(o.Accepted) > 0 && !slices.Contains(o.Accepted, value) {
 		return fmt.Errorf("%s: %q is not one of %s", o.Path, value, strings.Join(o.Accepted, ", "))

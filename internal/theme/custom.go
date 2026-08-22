@@ -28,12 +28,27 @@ func GetThemesDir() (string, error) {
 // Returns the list of successfully loaded theme IDs.
 // Logs warnings for bad files but doesn't fail startup.
 func LoadCustomThemes(themesDir string) ([]string, error) {
+	loaded, problems, err := readCustomThemes(themesDir)
+	for _, p := range problems {
+		log.Printf("Warning: %s", p)
+	}
+	return loaded, err
+}
+
+// readCustomThemes is LoadCustomThemes with the bad files handed back instead
+// of logged.
+//
+// A log line is the right place for this at startup and the wrong place for a
+// caller that has to answer for the file: an agent writing a palette and
+// applying it needs to be told which file is malformed and how, and it cannot
+// read the daemon's log. Both callers share the scan so the two answers cannot
+// drift.
+func readCustomThemes(themesDir string) (loaded, problems []string, err error) {
 	entries, err := os.ReadDir(themesDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read themes directory: %w", err)
+		return nil, nil, fmt.Errorf("failed to read themes directory: %w", err)
 	}
 
-	var loaded []string
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
 			continue
@@ -42,7 +57,7 @@ func LoadCustomThemes(themesDir string) ([]string, error) {
 		path := filepath.Join(themesDir, entry.Name())
 		t, err := LoadCustomThemeFile(path)
 		if err != nil {
-			log.Printf("Warning: skipping custom theme %s: %v", entry.Name(), err)
+			problems = append(problems, fmt.Sprintf("skipping custom theme %s: %v", entry.Name(), err))
 			continue
 		}
 
@@ -50,7 +65,53 @@ func LoadCustomThemes(themesDir string) ([]string, error) {
 		loaded = append(loaded, t.ID)
 	}
 
-	return loaded, nil
+	return loaded, problems, nil
+}
+
+// ReloadCustomThemes re-reads the themes directory and registers what it finds,
+// replacing any theme already registered under the same id.
+//
+// The registry is built once per process behind a sync.Once, which is right for
+// the built-ins and wrong for these. A custom theme file is written while tuios
+// is running, by a person editing it or by an agent ricing on their behalf, and
+// until this existed the only way to reach a palette you had just authored was
+// to restart: selecting it reported success, logged that it did not exist, and
+// went on drawing the old one.
+//
+// The problems it returns are one line per file it could not read. They are the
+// answer to "why did my theme not turn up", which is otherwise unobtainable
+// from outside the process.
+func ReloadCustomThemes() (loaded, problems []string) {
+	EnsureRegistry()
+	dir, err := GetThemesDir()
+	if err != nil {
+		return nil, []string{err.Error()}
+	}
+	loaded, problems, err = readCustomThemes(dir)
+	if err != nil {
+		problems = append(problems, err.Error())
+	}
+	return loaded, problems
+}
+
+// Exists reports whether id names a registered theme, re-reading the themes
+// directory once before it answers no.
+//
+// The re-read is what makes "write the file, then select it" one round trip
+// rather than two and a restart. It costs a directory scan only on the path
+// that is about to fail anyway.
+func Exists(id string) bool {
+	if id == "" {
+		// Empty is the no-theme state, not a name that has to resolve.
+		return true
+	}
+	EnsureRegistry()
+	if _, ok := tint.GetTint(id); ok {
+		return true
+	}
+	ReloadCustomThemes()
+	_, ok := tint.GetTint(id)
+	return ok
 }
 
 // LoadCustomThemeFile reads a JSON file and returns a *tint.Tint.

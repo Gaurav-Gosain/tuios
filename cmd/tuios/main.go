@@ -1278,6 +1278,81 @@ override is shown alongside the default.`,
 	listOptionsCmd.Flags().BoolVar(&listOptionsJSON, "json", false, "Output as JSON")
 	_ = listOptionsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var listThemesSession string
+	var listThemesFilter string
+	var listThemesJSON bool
+	listThemesCmd := &cobra.Command{
+		Use:   "list-themes [theme]",
+		Short: "List the themes, and describe one",
+		Long: `List every registered theme and, given a name, print its colours with the
+contrast each one measures against that theme's own background.
+
+A theme is the part of the appearance 'tuios list-options' cannot describe: its
+value is a name from an open set, standing for twenty colours kept as JSON in
+the themes directory rather than as settings. This is how to find one rather
+than guess it, and how to tell whether the palette you just wrote is legible
+before anyone has to look at it.
+
+Writing <id>.json in the themes directory registers that theme; the directory is
+re-read on every call, so a theme authored a moment ago can be selected without
+a restart.`,
+		Example: `  # Narrow the registry to the ones you mean
+  tuios list-themes --filter catppuccin
+
+  # What is this theme actually made of
+  tuios list-themes catppuccin_mocha
+
+  # What is this session set to
+  tuios list-themes --json | jq -r .active
+
+  # The colours that will not read on their own background
+  tuios list-themes catppuccin_latte --json | jq -r '.palette.illegible[]'`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			return runListThemes(listThemesSession, name, listThemesFilter, listThemesJSON)
+		},
+	}
+	listThemesCmd.Flags().StringVarP(&listThemesSession, "session", "s", "", "Target session (default: most recently active)")
+	listThemesCmd.Flags().StringVar(&listThemesFilter, "filter", "", "Only ids containing this, e.g. gruvbox")
+	listThemesCmd.Flags().BoolVar(&listThemesJSON, "json", false, "Output as JSON")
+	_ = listThemesCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var importThemeName string
+	var importThemeJSON bool
+	importThemeCmd := &cobra.Command{
+		Use:   "import-theme <file>",
+		Short: "Convert a terminal colour scheme into a tuios theme",
+		Long: `Read a kitty, ghostty, alacritty or wezterm colour scheme and write it into
+the tuios themes directory as a theme you can select.
+
+All four formats carry the same twenty colours in different punctuation, and the
+format is read from the file's content rather than its name. A scheme that sets
+only some of the twenty imports as far as it goes; the rest fall back to the
+xterm defaults.
+
+The theme is registered as it is written, so the name it prints can be selected
+straight away without a restart.`,
+		Example: `  # A kitty theme
+  tuios import-theme ~/.config/kitty/current-theme.conf
+
+  # Name it something other than the file
+  tuios import-theme ~/.config/ghostty/config --name mine
+
+  # Import it and put it on
+  tuios import-theme ~/gruvbox.toml --name gruvbox
+  tuios set-config appearance.theme gruvbox`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runImportTheme(args[0], importThemeName, importThemeJSON)
+		},
+	}
+	importThemeCmd.Flags().StringVar(&importThemeName, "name", "", "Theme id to write it under (default: the file's name)")
+	importThemeCmd.Flags().BoolVar(&importThemeJSON, "json", false, "Output as JSON")
+
 	var waitForSession string
 	var waitForWindow string
 	var waitForPattern string
@@ -1544,8 +1619,11 @@ Use --json for machine-readable output.`,
 		Short: "Get current session information",
 		Long: `Get detailed information about the current TUIOS session.
 
-Shows mode, workspace, tiling state, theme, and more.
-Use --json for machine-readable output.`,
+Shows mode, workspace, tiling state, size and window count.
+Use --json for machine-readable output.
+
+The theme is not here: it is a session option, reported by 'tuios list-themes'
+as active.`,
 		Example: `  # Get session info (table format)
   tuios session-info
 
@@ -1676,7 +1754,7 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
-	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd)
+	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, importThemeCmd)
 
 	return rootCmd
 }
