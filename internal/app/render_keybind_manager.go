@@ -58,21 +58,71 @@ func keybindGlyphs() keybindMarks {
 	return keybindMarks{dead: "✕", clash: "▲", ok: " ", live: "◀", bullet: "·"}
 }
 
-// keybindLayout returns the fitted inner width, list row count, and footer.
-func (m *OS) keybindLayout() (width, rows int, hints []overlay.Hint) {
+// keybindChrome is which of the body's non-row lines a given screen has room
+// for. Every field is a line count so the renderer and the fitter agree on the
+// panel's height by construction rather than by two matching constants.
+type keybindChrome struct {
+	// header is the filter line and its rule: 2, or 0 when they are shed.
+	header int
+	// count is the "n of m" line: 1, or 0.
+	count int
+	// detail is the explanation box under the list, plus the rule above it when
+	// it is present.
+	detail int
+}
+
+// lines is how many body lines this chrome costs.
+func (c keybindChrome) lines() int {
+	n := c.header + c.count + c.detail
+	if c.detail > 0 {
+		n++ // the rule above the box
+	}
+	return n
+}
+
+// keybindShedOrder is every layout the panel will accept, most generous first.
+//
+// The order is what the panel gives up as the screen shrinks, and it is an
+// argument about what the surface is for rather than an arbitrary sequence. The
+// footer goes first, handled by panelBody: the keys it names are still on the
+// keyboard. Then the detail box, a line at a time and then entirely, because it
+// restates the row above it. Then the count, which is a convenience. The filter
+// line goes last, because on a list of a few hundred bindings it is the only way
+// to reach most of them.
+var keybindShedOrder = []keybindChrome{
+	{header: 2, count: 1, detail: 4},
+	{header: 2, count: 1, detail: 3},
+	{header: 2, count: 1, detail: 2},
+	{header: 2, count: 1, detail: 1},
+	{header: 2, count: 1, detail: 0},
+	{header: 2, count: 0, detail: 0},
+	{header: 0, count: 0, detail: 0},
+}
+
+// keybindLayout returns the fitted inner width, the list row count, the footer,
+// and which body lines survived.
+func (m *OS) keybindLayout() (width, rows int, hints []overlay.Hint, chrome keybindChrome) {
 	width = m.panelWidth(keybindInnerWidth)
-	// Body lines that are not list rows: the search line, its rule, the count
-	// line, the rule above the detail box, and the box itself.
-	extra := 3 + 1 + keybindDetailRows
-	rows, hints = m.panelBody(keybindVisibleRows, extra, width, KeybindTabNames, keybindHints)
-	return width, rows, hints
+	rh := m.GetRenderHeight()
+	for _, c := range keybindShedOrder {
+		extra := c.lines()
+		rows, hints = m.panelBody(keybindVisibleRows, extra, width, KeybindTabNames, keybindHints)
+		if rh <= 0 || rows+extra+panelChrome(0, width, KeybindTabNames, hints) <= rh {
+			return width, rows, hints, c
+		}
+	}
+	// Nothing left to shed: the last entry is a bare list, and a panel that
+	// still does not fit is one the screen cannot hold at all.
+	last := keybindShedOrder[len(keybindShedOrder)-1]
+	rows, hints = m.panelBody(keybindVisibleRows, last.lines(), width, KeybindTabNames, keybindHints)
+	return width, rows, hints, last
 }
 
 // renderKeybindManager draws the overlay and returns the panel, its geometry,
 // and the per-row hit rects the renderer recorded as it drew them.
 func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) {
 	pal := theme.UI()
-	width, visible, hints := m.keybindLayout()
+	width, visible, hints, chrome := m.keybindLayout()
 
 	var lines []string
 	var rows []overlayRowHit
@@ -84,9 +134,9 @@ func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) 
 
 	switch m.KeybindTab {
 	case KeybindTabRecord:
-		lines = m.keybindRecordBody(pal, width, visible)
+		lines = m.keybindRecordBody(pal, width, visible, chrome)
 	default:
-		lines, rows, rowYOffset = m.keybindListBody(pal, width, visible)
+		lines, rows, rowYOffset = m.keybindListBody(pal, width, visible, chrome)
 	}
 
 	panel := overlay.Panel{
@@ -121,7 +171,7 @@ func keybindPanelGlyph() string {
 
 // keybindListBody lays out the three list tabs: a filter line, the rows, a
 // count, and a detail box for the selected row.
-func (m *OS) keybindListBody(pal overlay.Palette, width, visible int) ([]string, []overlayRowHit, int) {
+func (m *OS) keybindListBody(pal overlay.Palette, width, visible int, chrome keybindChrome) ([]string, []overlayRowHit, int) {
 	bg := pal.Surface
 	var lines []string
 
@@ -138,10 +188,12 @@ func (m *OS) keybindListBody(pal overlay.Palette, width, visible int) ([]string,
 		query = m.keybindTabSubtitle()
 		cursor = ""
 	}
-	lines = append(lines,
-		prompt+overlay.Style(bg).Foreground(pal.Fg).Render(query)+cursor,
-		overlay.Rule(width, bg, pal),
-	)
+	if chrome.header > 0 {
+		lines = append(lines,
+			prompt+overlay.Style(bg).Foreground(pal.Fg).Render(query)+cursor,
+			overlay.Rule(width, bg, pal),
+		)
+	}
 	rowYOffset := len(lines)
 
 	count := m.keybindRowCount()
@@ -171,16 +223,19 @@ func (m *OS) keybindListBody(pal overlay.Palette, width, visible int) ([]string,
 		shown++
 	}
 
-	// Count line.
-	countLine := " "
-	if count > 0 {
-		countLine = "  " + lipgloss.Sprintf("%d of %d", selected+1, count)
+	if chrome.count > 0 {
+		countLine := " "
+		if count > 0 {
+			countLine = "  " + lipgloss.Sprintf("%d of %d", selected+1, count)
+		}
+		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render(countLine))
 	}
-	lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render(countLine))
 
-	// Detail box for the selected row.
-	lines = append(lines, overlay.Rule(width, bg, pal))
-	lines = append(lines, settingsDescription(m.keybindDetail(selected), width, keybindDetailRows, pal)...)
+	// Detail box for the selected row, when the screen left room for one.
+	if chrome.detail > 0 {
+		lines = append(lines, overlay.Rule(width, bg, pal))
+		lines = append(lines, settingsDescription(m.keybindDetail(selected), width, chrome.detail, pal)...)
+	}
 
 	return lines, rows, rowYOffset
 }
@@ -439,7 +494,7 @@ func scopeShortName(id string) string {
 
 // keybindRecordBody draws the recorder: what was pressed, what tuios does with
 // it, what a terminal can and cannot tell apart, and who else wants it.
-func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int) []string {
+func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome keybindChrome) []string {
 	bg := pal.Surface
 	glyphs := keybindGlyphs()
 	rep := m.KeybindReport()
@@ -547,7 +602,7 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int) []string
 
 	// The panel keeps a fixed height whatever the recorder is showing, so it
 	// does not jump around the screen between one key and the next.
-	target := visible + 3 + 1 + keybindDetailRows
+	target := visible + chrome.lines()
 	for len(lines) < target {
 		add(overlay.Style(bg).Render(" "))
 	}

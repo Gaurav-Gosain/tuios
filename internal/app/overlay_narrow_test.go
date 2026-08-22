@@ -123,6 +123,25 @@ func TestOverlayPanelsFitNarrowScreens(t *testing.T) {
 				m.SettingsEditing = false
 			}
 
+			m.OpenKeybindManager()
+			for tab := range keybindTabCount {
+				m.KeybindSetTab(tab)
+				out, _, _ = m.renderKeybindManager()
+				assertFitsScreen(t, fmt.Sprintf("keybinds[%s]", KeybindTabNames[tab]), out, sc.w, sc.h)
+			}
+			// The recorder's widest state: a captured key with a verdict, an
+			// ambiguity paragraph and a guest list all on one panel.
+			m.KeybindSetTab(KeybindTabRecord)
+			m.KeybindCapture("ctrl+b")
+			out, _, _ = m.renderKeybindManager()
+			assertFitsScreen(t, "keybinds recorded", out, sc.w, sc.h)
+			// And an empty filter result, which draws its own message row.
+			m.KeybindSetTab(KeybindTabBindings)
+			m.KeybindSetQuery("zzzz-no-match")
+			out, _, _ = m.renderKeybindManager()
+			assertFitsScreen(t, "keybinds empty", out, sc.w, sc.h)
+			m.CloseKeybindManager()
+
 			m.OpenThemePicker()
 			out, _, _ = m.renderThemePicker()
 			assertFitsScreen(t, "themepicker", out, sc.w, sc.h)
