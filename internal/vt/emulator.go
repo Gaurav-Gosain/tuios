@@ -321,25 +321,69 @@ func (e *Emulator) Render() string {
 	return b.String()
 }
 
-// renderRowBreakingClusters renders one row, splitting it wherever two
-// neighbouring cells would re-parse as a single cluster.
+// renderRowBreakingClusters renders one row into b, inserting a cluster
+// break wherever two neighbouring cells would re-parse as a single cluster.
+// It mirrors ultraviolet's renderLine cell by cell rather than delegating to
+// it, because delegating per segment cost a builder per row and the app's
+// render path draws every unfocused pane through here.
 func renderRowBreakingClusters(b *strings.Builder, line uv.Line) {
-	start := 0
+	var pen uv.Style
+	var link uv.Link
+	blanks := 0
 	prev := ""
 	for x := range line {
-		content := line[x].Content
-		if content == "" {
+		c := &line[x]
+		if c.IsZero() {
 			// A continuation cell; the wide cell before it stays prev.
 			continue
 		}
-		if clustersJoin(prev, content) {
-			b.WriteString(line[start:x].Render())
-			b.WriteString(clusterBreak)
-			start = x
+		if c.Equal(&uv.EmptyCell) {
+			if !pen.IsZero() {
+				b.WriteString(ansi.ResetStyle)
+				pen = uv.Style{}
+			}
+			if link.URL != "" {
+				b.WriteString(ansi.ResetHyperlink())
+				link = uv.Link{}
+			}
+			blanks++
+			prev = " "
+			continue
 		}
-		prev = content
+		for ; blanks > 0; blanks-- {
+			b.WriteByte(' ')
+		}
+		if clustersJoin(prev, c.Content) {
+			b.WriteString(clusterBreak)
+		}
+		if c.Style.IsZero() && !pen.IsZero() {
+			b.WriteString(ansi.ResetStyle)
+			pen = uv.Style{}
+		}
+		if !c.Style.Equal(&pen) {
+			b.WriteString(c.Style.Diff(&pen))
+			pen = c.Style
+		}
+		if c.Link != link && link.URL != "" {
+			b.WriteString(ansi.ResetHyperlink())
+			link = uv.Link{}
+		}
+		if c.Link != link {
+			b.WriteString(ansi.SetHyperlink(c.Link.URL, c.Link.Params))
+			link = c.Link
+		}
+		b.WriteString(c.String())
+		prev = c.Content
 	}
-	b.WriteString(line[start:].Render())
+	for ; blanks > 0; blanks-- {
+		b.WriteByte(' ')
+	}
+	if link.URL != "" {
+		b.WriteString(ansi.ResetHyperlink())
+	}
+	if !pen.IsZero() {
+		b.WriteString(ansi.ResetStyle)
+	}
 }
 
 var _ uv.Screen = (*Emulator)(nil)
