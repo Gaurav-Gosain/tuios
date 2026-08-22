@@ -1084,16 +1084,12 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 
 	// WindowTitlePosition defaults to bottom
-	// Only apply from config if not already set via flag (run.go applies flags separately)
-	if cfg.Appearance.WindowTitlePosition != "" && WindowTitlePosition == "bottom" {
+	if cfg.Appearance.WindowTitlePosition != "" {
 		WindowTitlePosition = cfg.Appearance.WindowTitlePosition
 	}
 
 	// HideClock defaults to false
-	// Only apply from config if not already set via flag (run.go applies flags separately)
-	if !HideClock {
-		HideClock = cfg.Appearance.HideClock
-	}
+	HideClock = cfg.Appearance.HideClock
 
 	// WindowTitleFormat defaults to empty, meaning the title is shown as-is.
 	// An empty string in the config also clears a previously set format on

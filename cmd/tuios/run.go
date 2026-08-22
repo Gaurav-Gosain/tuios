@@ -227,7 +227,7 @@ func loadAndApplyConfig() *config.UserConfig {
 		NoAnimations:         noAnimations,
 		ConfirmQuit:          confirmQuit,
 		ThemeName:            themeName,
-	}, userConfig)
+	})
 
 	return userConfig
 }
@@ -362,7 +362,7 @@ func runSSHServer(sshHost, sshPort, sshKeyPath, defaultSession string, ephemeral
 	config.ApplyOverrides(config.Overrides{
 		ASCIIOnly: asciiOnly,
 		ThemeName: themeName,
-	}, nil)
+	})
 
 	app.SetInputHandler(input.HandleInput)
 

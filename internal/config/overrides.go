@@ -64,157 +64,66 @@ type Overrides struct {
 	ZoomMaxWidth int
 }
 
-// ApplyOverrides applies CLI flag overrides to global config, falling back to user config defaults.
-// If userConfig is nil, only CLI flag values (when set) are applied.
-//
-// The userConfig fallbacks below duplicate what ApplyAppearanceConfig already
-// does, and they compute the same values from the same fields. They stay here
-// because this function must also work on its own, for the entrypoints that
-// only call it (cmd/tuios-web). Callers that do both (cmd/tuios) get the config
-// applied twice with the flags winning, which is the intended precedence; any
-// new setting belongs in ApplyAppearanceConfig, and only needs a line here if a
-// CLI flag can override it.
-func ApplyOverrides(overrides Overrides, userConfig *UserConfig) {
-	// ASCII Only - simple flag override
+// ApplyOverrides layers explicit CLI flag values over the globals that
+// ApplyAppearanceConfig set. Every entrypoint applies the config funnel
+// first; a zero value here means the flag was not given and the config's
+// value stands. Any new setting belongs in ApplyAppearanceConfig, and only
+// needs a line here if a CLI flag can override it.
+func ApplyOverrides(overrides Overrides) {
 	if overrides.ASCIIOnly {
 		UseASCIIOnly = true
 	}
-
-	// Border Style - CLI flag takes precedence, otherwise use user config
 	if overrides.BorderStyle != "" {
 		BorderStyle = overrides.BorderStyle
-	} else if userConfig != nil && userConfig.Appearance.BorderStyle != "" {
-		BorderStyle = userConfig.Appearance.BorderStyle
 	}
-
-	// Dockbar Position - CLI flag takes precedence, otherwise use user config
 	if overrides.DockbarPosition != "" {
 		DockbarPosition = overrides.DockbarPosition
-	} else if userConfig != nil && userConfig.Appearance.DockbarPosition != "" {
-		DockbarPosition = userConfig.Appearance.DockbarPosition
 	}
-
-	// Hide Window Buttons - OR of CLI flag and user config
-	if userConfig != nil {
-		HideWindowButtons = overrides.HideWindowButtons || userConfig.Appearance.HideWindowButtons
-	} else {
-		HideWindowButtons = overrides.HideWindowButtons
+	if overrides.HideWindowButtons {
+		HideWindowButtons = true
 	}
-
-	// Window Button Style - CLI flag takes precedence, otherwise use user config
 	if overrides.WindowButtonStyle != "" {
 		WindowButtonStyle = overrides.WindowButtonStyle
-	} else if userConfig != nil && userConfig.Appearance.WindowButtonStyle != "" {
-		WindowButtonStyle = userConfig.Appearance.WindowButtonStyle
 	}
-
-	// Window Button Position - CLI flag takes precedence, otherwise use user config
 	if overrides.WindowButtonPosition != "" {
 		WindowButtonPosition = overrides.WindowButtonPosition
-	} else if userConfig != nil && userConfig.Appearance.WindowButtonPosition != "" {
-		WindowButtonPosition = userConfig.Appearance.WindowButtonPosition
 	}
-
-	// Hide Scrollbar - OR of CLI flag and user config
-	if userConfig != nil {
-		HideScrollbar = overrides.HideScrollbar || userConfig.Appearance.HideScrollbar
-	} else {
-		HideScrollbar = overrides.HideScrollbar
+	if overrides.HideScrollbar {
+		HideScrollbar = true
 	}
-
-	// Window Title Position - CLI flag takes precedence, otherwise use user config
 	if overrides.WindowTitlePosition != "" {
 		WindowTitlePosition = overrides.WindowTitlePosition
-	} else if userConfig != nil && userConfig.Appearance.WindowTitlePosition != "" {
-		WindowTitlePosition = userConfig.Appearance.WindowTitlePosition
 	}
-
-	// Hide Clock - OR of CLI flag and user config (deprecated)
-	if userConfig != nil {
-		HideClock = overrides.HideClock || userConfig.Appearance.HideClock
-	} else {
-		HideClock = overrides.HideClock
+	if overrides.HideClock {
+		HideClock = true
 	}
-
-	// Show Clock - OR of CLI flag and user config
-	if userConfig != nil {
-		ShowClock = overrides.ShowClock || userConfig.Appearance.ShowClock
-	} else {
-		ShowClock = overrides.ShowClock
+	if overrides.ShowClock {
+		ShowClock = true
 	}
-
-	// Show CPU - OR of CLI flag and user config
-	if userConfig != nil {
-		ShowCPU = overrides.ShowCPU || userConfig.Appearance.ShowCPU
-	} else {
-		ShowCPU = overrides.ShowCPU
+	if overrides.ShowCPU {
+		ShowCPU = true
 	}
-
-	// Show RAM - OR of CLI flag and user config
-	if userConfig != nil {
-		ShowRAM = overrides.ShowRAM || userConfig.Appearance.ShowRAM
-	} else {
-		ShowRAM = overrides.ShowRAM
+	if overrides.ShowRAM {
+		ShowRAM = true
 	}
-
-	// Scrollback Lines - CLI flag takes precedence, otherwise use user config
+	if overrides.SharedBorders {
+		SharedBorders = true
+	}
 	if overrides.ScrollbackLines > 0 {
-		// Clamp to valid range
-		lines := overrides.ScrollbackLines
-		if lines < 100 {
-			lines = 100
-		} else if lines > 1000000 {
-			lines = 1000000
-		}
-		ScrollbackLines = lines
-	} else if userConfig != nil && userConfig.Appearance.ScrollbackLines > 0 {
-		ScrollbackLines = userConfig.Appearance.ScrollbackLines
+		ScrollbackLines = min(max(overrides.ScrollbackLines, 100), 1000000)
 	}
-
-	// Leader Key - only from user config
-	if userConfig != nil && userConfig.Keybindings.LeaderKey != "" {
-		LeaderKey = userConfig.Keybindings.LeaderKey
-	}
-
-	// Animations - disabled by flag
 	if overrides.NoAnimations {
 		AnimationsEnabled = false
 	}
-
 	if overrides.ConfirmQuit {
 		AlwaysConfirmQuit = true
 	}
-
-	// Shared Borders - CLI flag OR user config (default: false)
-	if overrides.SharedBorders {
-		SharedBorders = true
-	} else if userConfig != nil && userConfig.Appearance.SharedBorders != nil {
-		SharedBorders = *userConfig.Appearance.SharedBorders
-	}
-
-	// Theme - CLI flag takes precedence, otherwise use user config
-	themeName := overrides.ThemeName
-	if themeName == "" && userConfig != nil && userConfig.Appearance.Theme != "" {
-		themeName = userConfig.Appearance.Theme
-	}
-	if themeName != "" {
-		if err := theme.Initialize(themeName); err != nil {
-			log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
+	if overrides.ThemeName != "" {
+		if err := theme.Initialize(overrides.ThemeName); err != nil {
+			log.Printf("Warning: Failed to load theme '%s': %v", overrides.ThemeName, err)
 		}
 	}
-
-	// Zen mode max width - CLI flag takes precedence
 	if overrides.ZoomMaxWidth > 0 {
 		ZoomMaxWidth = overrides.ZoomMaxWidth
-	} else if userConfig != nil && userConfig.Appearance.ZoomMaxWidth > 0 {
-		ZoomMaxWidth = userConfig.Appearance.ZoomMaxWidth
-	}
-
-	if userConfig != nil && userConfig.Appearance.NiriReverseScroll {
-		NiriReverseScroll = true
-	}
-
-	if userConfig != nil && userConfig.Appearance.MaxFPS > 0 {
-		NormalFPS = clampMaxFPS(userConfig.Appearance.MaxFPS)
 	}
 }

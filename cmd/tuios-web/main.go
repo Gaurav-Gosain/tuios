@@ -303,7 +303,7 @@ func runWebServer() error {
 		ScrollbackLines:      scrollbackLines,
 		NoAnimations:         noAnimations,
 		ThemeName:            themeName,
-	}, userConfig)
+	})
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()

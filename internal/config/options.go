@@ -52,13 +52,13 @@ const (
 	OptionString = "string"
 )
 
-// Enum sets that validation.go spells inline rather than exporting. They are
-// named here so the registry and the validator can be read against each other.
+// The enum sets shared by the registry, the validator and the settings page,
+// so one spelling serves all three.
 var (
-	dockbarPositions     = []string{"bottom", "top", "hidden"}
-	sidebarPositions     = []string{"left", "right", "hidden"}
-	whichKeyPositions    = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
-	windowTitlePositions = []string{"bottom", "top", "hidden"}
+	DockbarPositions     = []string{"bottom", "top", "hidden"}
+	SidebarPositions     = []string{"left", "right", "hidden"}
+	WhichKeyPositions    = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
+	WindowTitlePositions = []string{"bottom", "top", "hidden"}
 	daemonLogLevels      = []string{"off", "errors", "basic", "messages", "verbose", "trace"}
 )
 
@@ -162,12 +162,12 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.whichkey_position", Type: OptionString, Section: "appearance",
 		Description: "Corner the which-key popup opens in (empty: bottom-right)",
-		Accepted:    whichKeyPositions, Default: "",
+		Accepted:    WhichKeyPositions, Default: "",
 	},
 	{
 		Path: "appearance.window_title_position", Type: OptionString, Section: "appearance",
 		Description: "Edge of the pane the title is drawn on (empty: bottom)",
-		Accepted:    windowTitlePositions, Default: "",
+		Accepted:    WindowTitlePositions, Default: "",
 	},
 	{
 		Path: "appearance.theme", Type: OptionString, Section: "appearance",
@@ -227,7 +227,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.sidebar_position", Type: OptionString, Section: "appearance",
 		Description: "Edge the session rail sits on",
-		Accepted:    sidebarPositions, Default: "",
+		Accepted:    SidebarPositions, Default: "",
 		Deprecated: "folded into [appearance.sidebar] on load; set appearance.sidebar.position",
 	},
 	{
@@ -259,7 +259,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.dockbar_position", Type: OptionString, Section: "dock",
 		Description: "Edge the dock sits on, or hidden",
-		Accepted:    dockbarPositions, Default: "bottom",
+		Accepted:    DockbarPositions, Default: "bottom",
 	},
 	{
 		Path: "appearance.dock_workspace_tabs", Type: OptionBool, Section: "dock",
@@ -335,7 +335,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.sidebar.position", Type: OptionString, Section: "sidebar",
 		Description: "Edge the rail sits on, or hidden",
-		Accepted:    sidebarPositions, Default: "left",
+		Accepted:    SidebarPositions, Default: "left",
 	},
 	{
 		Path: "appearance.sidebar.width", Type: OptionInt, Section: "sidebar",

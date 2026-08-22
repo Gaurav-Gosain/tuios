@@ -2,10 +2,10 @@ package config
 
 import "testing"
 
-// TestMaxFPSClampAgreesOnBothPaths pins the behaviour the two apply passes used
-// to spell out separately: whichever one runs, and in whichever order, a given
-// max_fps reaches the tick loop as the same number.
-func TestMaxFPSClampAgreesOnBothPaths(t *testing.T) {
+// TestMaxFPSClamp pins how a configured max_fps reaches the tick loop.
+// ApplyAppearanceConfig is the only path that applies it now; ApplyOverrides
+// carries CLI flags only.
+func TestMaxFPSClamp(t *testing.T) {
 	tests := []struct {
 		in   int
 		want int
@@ -26,22 +26,14 @@ func TestMaxFPSClampAgreesOnBothPaths(t *testing.T) {
 
 		NormalFPS = orig
 		ApplyAppearanceConfig(cfg)
-		viaApply := NormalFPS
-
-		NormalFPS = orig
-		ApplyOverrides(Overrides{}, cfg)
-		viaOverrides := NormalFPS
-
-		if viaApply != tc.want || viaOverrides != tc.want {
-			t.Errorf("max_fps %d: apply gave %d, overrides gave %d, want %d",
-				tc.in, viaApply, viaOverrides, tc.want)
+		if NormalFPS != tc.want {
+			t.Errorf("max_fps %d: apply gave %d, want %d", tc.in, NormalFPS, tc.want)
 		}
 	}
 
-	// Unset means "leave the current rate alone" on both paths.
+	// Unset means "leave the current rate alone".
 	NormalFPS = 45
 	ApplyAppearanceConfig(&UserConfig{})
-	ApplyOverrides(Overrides{}, &UserConfig{})
 	if NormalFPS != 45 {
 		t.Errorf("an unset max_fps moved the rate to %d, want it left at 45", NormalFPS)
 	}
