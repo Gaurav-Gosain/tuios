@@ -496,6 +496,14 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// render full-screen over everything.
 	placed := m.placeUnplacedWindows(state)
 
+	// A pane arriving is the event the launcher's type-it-out path waits on, so
+	// it is answered here rather than polled for. It is answered outside the
+	// switch below and not inside it: which layout the user has running decides
+	// whether a new pane needs retiling, and has nothing to say about whether a
+	// command line was waiting for it. Seeding from inside the tiling branch
+	// meant Tab typed nothing at all for anyone with tiling off.
+	m.seedAdoptedWindows(created)
+
 	// A sync that changes which windows exist also has to be absorbed by the
 	// layout, not just by the window list: a new window needs a slot in the
 	// tiling structure and a closed one leaves its tile behind. Retiling is what
@@ -886,10 +894,6 @@ func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, place
 			}
 		}
 	}
-
-	// A pane arriving is the event the launcher's type-it-out path waits on, so
-	// it is answered here rather than polled for.
-	m.seedAdoptedWindows(created)
 
 	m.TileAllWindows()
 	m.SyncStateToDaemon()

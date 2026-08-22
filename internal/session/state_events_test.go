@@ -164,10 +164,11 @@ func TestLifecycleEventsMatchHeadlessAndAttached(t *testing.T) {
 	if _, verr := d.verbCloseWindow(nil, json.RawMessage(`{"session":"headless","window":"`+createdID+`"}`)); verr != nil {
 		t.Fatalf("verbCloseWindow: %v", verr)
 	}
-	// Creating focuses the new window and names it, and closing it hands focus
-	// back, so each mutation raises its lifecycle event plus the changes it
-	// caused.
-	headlessEvents := collectEvents(t, hsub, 5, 3*time.Second)
+	// Creating focuses the new window, and closing it hands focus back, so each
+	// mutation raises its lifecycle event plus the changes it caused. Naming is
+	// not a mutation of its own: a window is created with the name it was asked
+	// for, so window-created carries it and no retitle follows.
+	headlessEvents := collectEvents(t, hsub, 4, 3*time.Second)
 
 	// Attached: a client is attached, and the same two verbs run. There is no
 	// second implementation for them to reach any more, so what this asserts is
@@ -190,13 +191,13 @@ func TestLifecycleEventsMatchHeadlessAndAttached(t *testing.T) {
 	}
 	tui.sync(attached.GetState())
 
-	attachedEvents := collectEvents(t, asub, 5, 3*time.Second)
+	attachedEvents := collectEvents(t, asub, 4, 3*time.Second)
 
 	if got, want := eventTypes(headlessEvents), eventTypes(attachedEvents); !reflect.DeepEqual(got, want) {
 		t.Fatalf("event streams differ:\n headless = %v\n attached = %v", got, want)
 	}
 	if got := eventTypes(headlessEvents); !reflect.DeepEqual(got, []string{
-		EventWindowCreated, EventWindowFocused, EventWindowRetitled, EventWindowClosed, EventWindowFocused,
+		EventWindowCreated, EventWindowFocused, EventWindowClosed, EventWindowFocused,
 	}) {
 		t.Fatalf("unexpected event sequence: %v", got)
 	}
@@ -215,6 +216,15 @@ func TestLifecycleEventsMatchHeadlessAndAttached(t *testing.T) {
 		if h["type"] == EventWindowCreated {
 			if h["title"] == "" || a["title"] == "" {
 				t.Errorf("window-created title = %q headless, %q attached, want both set", h["title"], a["title"])
+			}
+			// The name asked for arrives with the creation rather than in a
+			// retitle behind it. A subscriber that has to wait for a second
+			// event to learn what a window is called sees it under its
+			// generated title first, and anything matching on the name misses
+			// the window entirely if it only ever looks at creations.
+			if h["title"] != "build" || a["title"] != "build" {
+				t.Errorf("window-created title = %q headless, %q attached, want the name it was created with",
+					h["title"], a["title"])
 			}
 		}
 	}

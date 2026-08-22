@@ -84,12 +84,29 @@ type launcherIcons struct {
 	// same reason pixels is: a different size is a different upload.
 	hostID map[iconKey]uint32
 	nextID uint32
-	// shown is what is currently on screen, keyed by placement id, so an
-	// unchanged list emits nothing and a changed one erases what it replaces.
-	// It records where each icon was drawn as well as which one, because the
-	// panel is draggable: the same row can need a new placement without its
-	// picture having changed.
-	shown map[uint32]launcherIconPlacement
+	// shown is what is currently on screen, keyed by the pair the host keys a
+	// placement on, so an unchanged list emits nothing and a changed one erases
+	// what it replaces.
+	//
+	// The key is the image id as well as the placement id because that is what
+	// the protocol scopes a placement to: a placement id belongs to an image,
+	// so drawing a different picture at the same row is a second placement and
+	// not a replacement of the first. Keyed by row alone, scrolling the list
+	// left one orphaned image behind per row it moved, since the record of the
+	// picture that had been there was overwritten before anything deleted it.
+	//
+	// The value records where the icon was drawn, because the panel is
+	// draggable: the same row can need a new placement without its picture
+	// having changed.
+	shown map[launcherIconID]launcherIconPlacement
+}
+
+// launcherIconID is one placement on the host: the image, and the placement id
+// within that image. Deleting one needs both, and needs them as they were when
+// it was drawn rather than re-derived from the row's name and the current cell
+// size, which is a lookup that can miss.
+type launcherIconID struct {
+	img, placement uint32
 }
 
 func newLauncherIcons() *launcherIcons {
@@ -98,7 +115,7 @@ func newLauncherIcons() *launcherIcons {
 		asked:  make(map[iconKey]bool),
 		hostID: make(map[iconKey]uint32),
 		nextID: launcherIconIDBase,
-		shown:  make(map[uint32]launcherIconPlacement),
+		shown:  make(map[launcherIconID]launcherIconPlacement),
 	}
 }
 
@@ -338,18 +355,13 @@ func (m *OS) flushLauncherIcons(placements []launcherIconPlacement) {
 
 	st.mu.Lock()
 	var buf []byte
-	want := make(map[uint32]launcherIconPlacement, len(placements))
+	want := make(map[launcherIconID]launcherIconPlacement, len(placements))
 	for i, p := range placements {
-		img := st.pixels[iconKey{name: p.Name, w: w, h: h}]
+		key := iconKey{name: p.Name, w: w, h: h}
+		img := st.pixels[key]
 		if img == nil {
 			continue
 		}
-		// The placement id is the row's index in the drawn list, so a row that
-		// keeps its icon keeps its placement and only a changed row moves.
-		pid := uint32(i + 1)
-		want[pid] = p
-
-		key := iconKey{name: p.Name, w: w, h: h}
 		id, up := st.hostID[key]
 		if !up {
 			id = st.nextID
@@ -357,28 +369,42 @@ func (m *OS) flushLauncherIcons(placements []launcherIconPlacement) {
 			st.hostID[key] = id
 			buf = appendKittyTransmit(buf, id, img)
 		}
-		if st.shown[pid] == p {
+		// The placement id is the row's index in the drawn list, and the host
+		// scopes it to the image, so the pair is what identifies this picture
+		// on screen.
+		at := launcherIconID{img: id, placement: uint32(i + 1)}
+		want[at] = p
+
+		was, drawn := st.shown[at]
+		if drawn && was == p {
 			// Same picture, same cell: the frame redrew the text around it and
 			// the placement is still there, so there is nothing to say. Skipping
 			// is what keeps an open launcher from re-placing a dozen images on
-			// every keystroke, and it means the code never relies on a terminal
-			// treating a repeated a=p as a replacement rather than a second
-			// placement.
+			// every keystroke.
 			continue
 		}
-		buf = appendKittyPlace(buf, id, pid, p.X, p.Y)
+		if drawn {
+			// The panel moved under a drag. Taking the old placement down before
+			// putting the new one up costs one escape on a path that only runs
+			// while the panel is being dragged, and it is what keeps the code
+			// from relying on a host treating a repeated a=p as a replacement
+			// rather than a second placement. Both escapes are inside the same
+			// synchronised update, so nothing is presented half done.
+			buf = appendKittyUnplace(buf, at.img, at.placement)
+		}
+		buf = appendKittyPlace(buf, at.img, at.placement, p.X, p.Y)
 	}
 	// Anything that was on screen and is not now has to be deleted by hand: the
 	// frame under it was redrawn, but a kitty placement outlives the cells it
-	// covers. A placement that only moved is not deleted, because the a=p above
-	// has already moved it.
-	for pid, was := range st.shown {
-		if _, kept := want[pid]; kept {
+	// covers. Each is deleted by the ids it was drawn under, which is why they
+	// are the key: re-deriving them from the row's name and the current cell
+	// size is a lookup that misses the moment either changes, and a miss here
+	// is an image nothing will ever take down.
+	for at := range st.shown {
+		if _, kept := want[at]; kept {
 			continue
 		}
-		if id, ok := st.hostID[iconKey{name: was.Name, w: w, h: h}]; ok {
-			buf = appendKittyUnplace(buf, id, pid)
-		}
+		buf = appendKittyUnplace(buf, at.img, at.placement)
 	}
 	st.shown = want
 	st.mu.Unlock()
@@ -400,14 +426,11 @@ func (m *OS) clearLauncherIcons() {
 	if m.launcherIcons == nil {
 		return
 	}
-	w, h := iconCellSize()
 	st := m.launcherIcons
 	st.mu.Lock()
 	var buf []byte
-	for pid, was := range st.shown {
-		if id, ok := st.hostID[iconKey{name: was.Name, w: w, h: h}]; ok {
-			buf = appendKittyUnplace(buf, id, pid)
-		}
+	for at := range st.shown {
+		buf = appendKittyUnplace(buf, at.img, at.placement)
 	}
 	clear(st.shown)
 	st.mu.Unlock()

@@ -165,6 +165,15 @@ type NewWindowOptions struct {
 	// spawns the PTY; sending bytes for a shell to re-parse instead would make
 	// the command's meaning depend on which shell answered.
 	Command []string
+	// Name is the window's custom name, the one the dock and the rail show.
+	//
+	// It is set here rather than by a rename afterwards for the same reason the
+	// workspace is: two mutations are two state pushes, and a client that adopts
+	// the window on the first one sees it unnamed. That is not only a frame of
+	// the wrong title. The launcher's type-it-out path waits for a pane by the
+	// name it asked for, and adopting it unnamed meant the match never happened
+	// on any later push either, because a window is only ever new once.
+	Name string
 }
 
 // AddDaemonWindowWith creates a daemon-owned window with explicit placement.
@@ -221,14 +230,15 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		}
 
 		win = WindowState{
-			ID:        windowID,
-			Title:     title,
-			X:         0,
-			Y:         0,
-			Width:     width,
-			Height:    height,
-			Workspace: workspace,
-			PTYID:     pty.ID,
+			ID:         windowID,
+			Title:      title,
+			CustomName: opts.Name,
+			X:          0,
+			Y:          0,
+			Width:      width,
+			Height:     height,
+			Workspace:  workspace,
+			PTYID:      pty.ID,
 			// The daemon has no viewport, so this box is a placeholder that keeps
 			// the PTY a usable size until a client places the window properly.
 			Unplaced: true,
