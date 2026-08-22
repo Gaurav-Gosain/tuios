@@ -47,7 +47,7 @@ func (h *hostStream) bytes() []byte {
 
 var (
 	placementRE = regexp.MustCompile(`\x1b\[(\d+);(\d+)H\x1b_G(a=p[^\x1b]*)\x1b\\`)
-	markRE      = regexp.MustCompile(phaseMark + `([a-z-]+)\x00\x00`)
+	markRE      = regexp.MustCompile(phaseMark + `([a-z0-9-]+)\x00\x00`)
 )
 
 // placementsByPhase returns, per phase, the distinct placements emitted in it.
