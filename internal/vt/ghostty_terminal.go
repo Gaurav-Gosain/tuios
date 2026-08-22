@@ -84,6 +84,8 @@ type GhosttyTerminal struct {
 	cachedHasMouse   atomic.Bool
 	cachedAllMotion  atomic.Bool
 	cachedCellMotion atomic.Bool
+	cachedMouseSGR   atomic.Bool
+	cachedMousePx    atomic.Bool
 	cachedAltScreen  atomic.Bool
 	cachedSyncOutput atomic.Bool
 	syncSetAtNanos   atomic.Int64
@@ -300,18 +302,23 @@ func (t *GhosttyTerminal) takeQueue() []func() {
 	return q
 }
 
-// forward hands scanner output to libghostty.
+// forward hands scanner output to libghostty. The closed check covers a
+// Close that slipped in while a passthrough callback held the lock open.
 func (t *GhosttyTerminal) forward(p []byte) {
+	if t.closed.Load() {
+		return
+	}
 	t.term.VTWrite(p)
 }
 
 // Write feeds raw PTY bytes. The scanner forwards them to libghostty and
 // surfaces the sequences tuios handles itself.
 func (t *GhosttyTerminal) Write(p []byte) (int, error) {
+	t.mu.Lock()
 	if t.closed.Load() {
+		t.mu.Unlock()
 		return 0, io.ErrClosedPipe
 	}
-	t.mu.Lock()
 	t.flushRestoreLocked()
 	t.scanner.Scan(p)
 	t.gridStale = true
@@ -363,6 +370,10 @@ func (t *GhosttyTerminal) Resize(width, height int) {
 		height = 1
 	}
 	t.mu.Lock()
+	if t.closed.Load() {
+		t.mu.Unlock()
+		return
+	}
 	t.flushRestoreLocked()
 	t.width, t.height = width, height
 	_ = t.term.Resize(clampU16(width), clampU16(height), uint32(t.cellW), uint32(t.cellH))
@@ -372,7 +383,9 @@ func (t *GhosttyTerminal) Resize(width, height int) {
 	t.scrollRegion = uv.Rect(0, 0, width, height)
 	t.gridStale = true
 	t.scrollGeneration++
-	t.refreshCachesLocked()
+	// No cache refresh: a resize cannot flip a mode, and shared-border
+	// drags resize every crossing pane per motion event, so this path must
+	// not pay the query round-trips.
 	q := t.takeQueue()
 	t.mu.Unlock()
 	t.drain(q)
@@ -386,6 +399,9 @@ func (t *GhosttyTerminal) SetCellSize(width, height int) {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed.Load() {
+		return
+	}
 	t.cellW, t.cellH = width, height
 	_ = t.term.Resize(clampU16(t.width), clampU16(t.height), uint32(width), uint32(height))
 }
@@ -423,6 +439,9 @@ func (t *GhosttyTerminal) SetScreenClearFunc(f func()) {
 // refreshCachesLocked refreshes the atomic caches lock-free getters read.
 // Runs after every write; each query is one cheap library call.
 func (t *GhosttyTerminal) refreshCachesLocked() {
+	if t.closed.Load() {
+		return
+	}
 	x10, _ := t.term.Mode(gh.ModeX10Mouse)
 	normal, _ := t.term.Mode(gh.ModeNormalMouse)
 	button, _ := t.term.Mode(gh.ModeButtonMouse)
@@ -430,6 +449,10 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 	t.cachedHasMouse.Store(x10 || normal || button || any)
 	t.cachedAllMotion.Store(any)
 	t.cachedCellMotion.Store(button)
+	sgr, _ := t.term.Mode(gh.ModeSGRMouse)
+	px, _ := t.term.Mode(gh.ModeSGRPixelsMouse)
+	t.cachedMouseSGR.Store(sgr)
+	t.cachedMousePx.Store(px)
 
 	alt1047, _ := t.term.Mode(gh.ModeAltScreen)
 	alt1049, _ := t.term.Mode(gh.ModeAltScreenSave)
@@ -505,6 +528,9 @@ func (t *GhosttyTerminal) KittyKeyboardStack() []int {
 func (t *GhosttyTerminal) ApplicationCursorKeys() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed.Load() {
+		return false
+	}
 	v, _ := t.term.Mode(gh.ModeDECCKM)
 	return v
 }
@@ -512,6 +538,9 @@ func (t *GhosttyTerminal) ApplicationCursorKeys() bool {
 func (t *GhosttyTerminal) BracketedPasteEnabled() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed.Load() {
+		return false
+	}
 	v, _ := t.term.Mode(gh.ModeBracketedPaste)
 	return v
 }

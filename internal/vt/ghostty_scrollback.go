@@ -12,6 +12,9 @@ import (
 // and search read the same lines many times between writes.
 
 func (t *GhosttyTerminal) scrollbackLenLocked() int {
+	if t.closed.Load() {
+		return 0
+	}
 	n, err := t.term.ScrollbackRows()
 	if err != nil {
 		return 0
@@ -42,7 +45,7 @@ func (t *GhosttyTerminal) ScrollbackLine(index int) uv.Line {
 }
 
 func (t *GhosttyTerminal) scrollbackLineLocked(index int) uv.Line {
-	if index < 0 || index >= t.scrollbackLenLocked() {
+	if t.closed.Load() || index < 0 || index >= t.scrollbackLenLocked() {
 		return nil
 	}
 	if t.scrollCacheGen != t.scrollGeneration {
@@ -114,6 +117,9 @@ func (t *GhosttyTerminal) scrollbackLineLocked(index int) uv.Line {
 func (t *GhosttyTerminal) ClearScrollback() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed.Load() {
+		return
+	}
 	t.flushRestoreLocked()
 	t.term.VTWrite([]byte("\x1b[3J"))
 	t.scrollGeneration++

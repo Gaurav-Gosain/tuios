@@ -81,6 +81,9 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 	}
 	t.restore = nil
 	t.restorePending.Store(false)
+	if t.closed.Load() {
+		return
+	}
 
 	var seq bytes.Buffer
 
@@ -90,7 +93,7 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 	// Scrollback replays as printed lines pushed off the top.
 	if len(r.scrollback) > 0 {
 		for _, line := range r.scrollback {
-			appendStyledLine(&seq, line)
+			appendStyledLine(&seq, trimTrailingBlanks(line))
 			seq.WriteString("\x1b[0m\r\n")
 		}
 		// The last rows are still on screen; scroll them into history.
@@ -278,7 +281,7 @@ func appendGridPaint(seq *bytes.Buffer, grid map[[2]int]*uv.Cell, width, height 
 				line[x] = uv.Cell{Content: " ", Width: 1}
 			}
 		}
-		appendStyledLine(seq, line)
+		appendStyledLine(seq, trimTrailingBlanks(line))
 		seq.WriteString("\x1b[0m")
 	}
 }
@@ -337,6 +340,9 @@ func appendStyledLine(seq *bytes.Buffer, line uv.Line) {
 // buffer, regardless of dirty state. Used when a synthesized stream is about
 // to switch screens and the one being left would otherwise never be read.
 func (t *GhosttyTerminal) captureScreenLocked(idx int) {
+	if t.closed.Load() {
+		return
+	}
 	_ = t.rs.SetDirty(gh.RenderStateDirtyFull)
 	if err := t.rs.Update(t.term); err != nil {
 		return
@@ -355,4 +361,21 @@ func (t *GhosttyTerminal) captureScreenLocked(idx int) {
 		t.syncRowLocked(t.bufs[idx], int(y))
 	}
 	_ = t.rs.Clean()
+}
+
+// trimTrailingBlanks drops unstyled trailing blanks from a line before it is
+// painted. Painting a row through its last column would leave the sink's
+// pending-wrap machinery treating the row as a wrapped logical line, and the
+// next resize would reflow restored rows into each other.
+func trimTrailingBlanks(line uv.Line) uv.Line {
+	end := len(line)
+	for end > 0 {
+		c := line[end-1]
+		if (c.Content == "" || c.Content == " ") && c.Style.IsZero() && c.Link.URL == "" {
+			end--
+			continue
+		}
+		break
+	}
+	return line[:end]
 }

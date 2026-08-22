@@ -99,6 +99,9 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		}
 	case final == 's' && prefix == 0 && inter == 0:
 		// DECSLRM when left/right margin mode is on; SCOSC otherwise.
+		if t.closed.Load() {
+			return
+		}
 		t.scanner.flushOut()
 		if on, _ := t.term.Mode(gh.ModeLeftRightMargin); on {
 			left, right := csiTwoParams(params, 1, t.width)
@@ -324,6 +327,9 @@ func (t *GhosttyTerminal) handleTextSizingOSC(payload []byte) {
 		fmt.Fprintf(&seq, "\x1b[%d;%dH\x1b[0K", curY, scaledCols+1)
 	}
 	fmt.Fprintf(&seq, "\x1b[%d;%dH", curY+1, curX+1)
+	if t.closed.Load() {
+		return
+	}
 	t.term.VTWrite(seq.Bytes())
 	t.gridStale = true
 }

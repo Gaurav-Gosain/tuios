@@ -146,6 +146,9 @@ func decodeCellSlow(c *gh.Cell) decodedCell {
 // syncLocked brings the shadow grid and cursor cache up to date. Call with
 // mu held.
 func (t *GhosttyTerminal) syncLocked() {
+	if t.closed.Load() {
+		return
+	}
 	t.flushRestoreLocked()
 	if !t.gridStale {
 		return
@@ -209,10 +212,16 @@ func (t *GhosttyTerminal) syncRowLocked(buf *uv.Buffer, y int) {
 		}
 
 		switch dc.wide {
-		case gh.CellWideSpacerTail, gh.CellWideSpacerHead:
+		case gh.CellWideSpacerTail:
 			// uv.Line.Set manages wide-cell placeholders itself when the
 			// leading cell lands; writing one explicitly makes Set blank
 			// the wide cell it belongs to.
+			continue
+		case gh.CellWideSpacerHead:
+			// End-of-row spacer: the wide glyph wrapped to the next line,
+			// so this position holds nothing and must not keep whatever
+			// the previous frame left there.
+			buf.SetCell(x, y, &uv.Cell{Content: " ", Width: 1})
 			continue
 		}
 
@@ -383,6 +392,9 @@ func (t *GhosttyTerminal) paletteEntryLocked(i int) color.Color {
 
 // hyperlinkAt fetches the hyperlink URI for an active-screen cell.
 func (t *GhosttyTerminal) hyperlinkAt(x, y int) string {
+	if t.closed.Load() {
+		return ""
+	}
 	ref, err := t.term.GridRef(gh.Point{Tag: gh.PointTagActive, X: uint16(x), Y: uint32(y)})
 	if err != nil || ref == nil {
 		return ""
@@ -418,6 +430,9 @@ func (t *GhosttyTerminal) IsCursorHidden() bool {
 func (t *GhosttyTerminal) CursorPen() (uv.Style, uv.Link) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed.Load() {
+		return uv.Style{}, uv.Link{}
+	}
 	t.flushRestoreLocked()
 	gs, err := t.term.CursorStyle()
 	if err != nil || gs == nil {
@@ -515,7 +530,7 @@ func (t *GhosttyTerminal) ReserveImageSpace(rows, cols int) {
 }
 
 func (t *GhosttyTerminal) reserveImageSpaceLocked(rows, _ int) {
-	if rows <= 0 {
+	if rows <= 0 || t.closed.Load() {
 		return
 	}
 	_, startY := t.cursorLocked()

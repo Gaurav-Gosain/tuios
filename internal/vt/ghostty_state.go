@@ -60,6 +60,9 @@ func (t *GhosttyTerminal) GetModes() map[int]bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.flushRestoreLocked()
+	if t.closed.Load() {
+		return map[int]bool{}
+	}
 	modes := make(map[int]bool, len(ghosttyModeNumbers))
 	for _, m := range ghosttyModeNumbers {
 		if v, err := t.term.Mode(m.mode); err == nil {
@@ -199,6 +202,9 @@ func (t *GhosttyTerminal) refreshPaletteClaimsLocked() {
 
 // markAllDirtyLocked forces a full shadow refresh on the next sync.
 func (t *GhosttyTerminal) markAllDirtyLocked() {
+	if t.closed.Load() {
+		return
+	}
 	t.gridStale = true
 	_ = t.rs.SetDirty(gh.RenderStateDirtyFull)
 }
@@ -361,28 +367,21 @@ func (t *GhosttyTerminal) SendMouse(m Mouse) {
 }
 
 // EncodeMouseEvent encodes a mouse event for the guest, or returns "" when
-// no mouse mode is on.
+// no mouse mode is on. It reads only the atomic mode caches: motion events
+// arrive per pointer move across every window, so this path must not call
+// into the library or allocate per event.
 func (t *GhosttyTerminal) EncodeMouseEvent(m Mouse) string {
-	t.mu.Lock()
-	modeOn := false
-	for _, gm := range []gh.Mode{gh.ModeX10Mouse, gh.ModeNormalMouse, gh.ModeButtonMouse, gh.ModeAnyMouse} {
-		if v, err := t.term.Mode(gm); err == nil && v {
-			modeOn = true
-		}
-	}
-	sgr := false
-	if v, err := t.term.Mode(gh.ModeSGRMouse); err == nil {
-		sgr = v
-	}
-	pixels := false
-	if v, err := t.term.Mode(gh.ModeSGRPixelsMouse); err == nil {
-		pixels = v
-	}
-	cw, ch := t.cellW, t.cellH
-	t.mu.Unlock()
-
-	if !modeOn {
+	t.ensureRestored()
+	if !t.cachedHasMouse.Load() {
 		return ""
+	}
+	sgr := t.cachedMouseSGR.Load()
+	pixels := t.cachedMousePx.Load()
+	cw, ch := defaultCellWidth, defaultCellHeight
+	if pixels {
+		t.mu.Lock()
+		cw, ch = t.cellW, t.cellH
+		t.mu.Unlock()
 	}
 	mouse := m.Mouse()
 	_, isMotion := m.(MouseMotion)
