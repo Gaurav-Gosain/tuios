@@ -361,24 +361,16 @@ func NotificationInfo() color.Color {
 	return t.Blue
 }
 
-// NotificationBg returns the background color for the message block: the body
-// the weighted severity cap opens.
-//
-// It is the chrome's own raised surface, not the terminal theme's background.
-// A message is a piece of the dock, and taking its ground from the theme made
-// it a slab of the pane's colour dropped into a bar of chrome colour: under a
-// light theme, a near-white rectangle punched into a dark dock. That is the
-// whole of the "notifications look weird with color themes on" report. What
-// the severity says still follows the theme, because that is the part carrying
-// the message.
-func NotificationBg() color.Color {
-	return UI().Surface
-}
-
-// NotificationFg returns the foreground color for notification message text,
-// on the same constant ramp as the ground it is drawn on.
-func NotificationFg() color.Color {
-	return UI().Fg
+// NotificationGround is the ground a message's inks are measured against: the
+// bare bar the dock draws on, the same ground the strip's overflow arrows are
+// measured on. The block carries no fill of its own. It sat on the chrome's
+// Surface step once, and the slab was the largest ink object in the bar; worse,
+// every severity ink had to be lifted toward the text colour to clear the mark
+// floor on the raised grey, which washed the hue out of exactly the marks that
+// carry the message. On the bare canvas the four severities clear the floor as
+// themselves.
+func NotificationGround() color.Color {
+	return UI().Canvas
 }
 
 // RailRule returns the ink for the chrome's structure: the rail's edge, the

@@ -291,7 +291,8 @@ func (m *OS) renderDockString() (string, int) {
 	// have actually left, not against an estimate, so its width needs no
 	// correction afterwards. Correcting it afterwards is what the generic
 	// truncation below would do, and the first thing that would cut is the
-	// closing cap: the block would lose the shape that makes it part of the bar.
+	// block's trailing columns: the gap that keeps the message off the bar's
+	// right-hand end.
 	notif, hasNotif := m.renderNotificationBlock(barWidth, max(barWidth-actualLeftWidth-centerWidth, 0))
 
 	inCopyMode := focusedWindow.CopyModeVisible()

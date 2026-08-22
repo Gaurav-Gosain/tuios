@@ -391,18 +391,17 @@ var (
 	NotificationGlyphInfo string
 )
 
-// The message block's opening edge. It is the powerline cap and the severity
-// rail in one cell: a partial block drawn flush against the block's dark body,
-// opening it the way a cap does, inked two eighths for info and success, four
-// for a warning and six for an error.
+// The message block's opening edge. It is the severity rail in one cell: a
+// freestanding partial block on the bare bar, inked two eighths for info and
+// success, four for a warning and six for an error.
 //
 // Two eighths apart rather than one because a single eighth is not a difference
 // you can see without the two of them side by side, and they never are. The
 // weight is what carries severity into a greyscale screenshot or a theme with
 // no contrast to spare.
 //
-// The body behind the cap is the dark surface, never a severity fill. A sliver
-// only reads as a weight against something that is not the same colour; against
+// The ground behind the cap is the bar itself, never a fill. A sliver only
+// reads as a weight against something that is not the same colour; against
 // a solid severity field all it changes is where the field starts, with nothing
 // to compare that against, and the severities become indistinguishable. That is
 // why this design carries less colour than a filled pill would.
