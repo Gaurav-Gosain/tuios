@@ -41,8 +41,16 @@ func zlibCompress(data []byte) []byte {
 // a frame rendered for the full width down into that, squeezing the right-hand
 // side of the page. The refresh pass cannot undo it: its own clamp only ever
 // narrows what the transmit recorded.
-func paneContentCells(width, height, offsetX, offsetY int) (int, int) {
-	return width - 2*offsetX, height - 2*offsetY
+// It takes the announced content size when there is one, and falls back to the
+// rectangle less the border allowance only for a window that has never told its
+// guest anything. The announced size is the stronger answer for the same reason
+// the whole function exists: it is the size the image in that pane was drawn
+// for, and the rectangle is only a prediction of it.
+func paneContentCells(info *WindowPositionInfo) (int, int) {
+	if info.ContentWidth > 0 && info.ContentHeight > 0 {
+		return info.ContentWidth, info.ContentHeight
+	}
+	return info.Width - 2*info.ContentOffsetX, info.Height - 2*info.ContentOffsetY
 }
 
 // PlacementResult contains info about an image placement for cursor positioning
@@ -57,7 +65,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 	rawData []byte,
 	windowID string,
 	windowX, windowY int,
-	windowWidth, windowHeight int,
+	contentCols, contentRows int,
 	contentOffsetX, contentOffsetY int,
 	cursorX, cursorY int,
 	scrollbackLen int,
@@ -72,7 +80,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 			cmd.Action, kp.enabled, kp.inlineGraphics, cmd.ImageID, cmd.More, len(cmd.Data))
 	}
 	kittyPassthroughLog("ForwardCommand: action=%c, enabled=%v, imageID=%d, windowID=%s, win=(%d,%d), size=(%d,%d), cursor=(%d,%d), scrollback=%d, altScreen=%v",
-		cmd.Action, kp.enabled, cmd.ImageID, windowID[:min(8, len(windowID))], windowX, windowY, windowWidth, windowHeight, cursorX, cursorY, scrollbackLen, isAltScreen)
+		cmd.Action, kp.enabled, cmd.ImageID, windowID[:min(8, len(windowID))], windowX, windowY, contentCols, contentRows, cursorX, cursorY, scrollbackLen, isAltScreen)
 
 	// Detect and discard echoed responses to prevent feedback loops.
 	// Responses have format "i=N;OK" or "i=N;ERROR_MSG" or just "OK"/"ERROR_MSG"
@@ -120,7 +128,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 	case vt.KittyActionTransmitPlace:
 		kittyPassthroughLog("ForwardCommand: handling TRANSMIT+PLACE, more=%v", cmd.More)
 		isFileBased := cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile
-		result := kp.forwardTransmit(cmd, rawData, windowID, true, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
+		result := kp.forwardTransmit(cmd, rawData, windowID, true, windowX, windowY, contentCols, contentRows, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
 		// Return PlacementResult from direct transmit if available
 		if result != nil {
 			return result
@@ -150,7 +158,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 
 	case vt.KittyActionPlace:
 		kittyPassthroughLog("ForwardCommand: handling PLACE")
-		kp.forwardPlace(cmd, windowID, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
+		kp.forwardPlace(cmd, windowID, windowX, windowY, contentCols, contentRows, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
 		// Return ORIGINAL image dimensions for whitespace reservation
 		imgRows, imgCols := kp.calculateImageCells(cmd)
 		if imgRows > 0 || imgCols > 0 {
@@ -226,9 +234,9 @@ func (kp *KittyPassthrough) hostReadsFiles() bool {
 	return GetHostCapabilities().KittyFileTransfer
 }
 
-func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
+func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, contentCols, contentRows, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile {
-		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
+		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, contentCols, contentRows, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
 		// Don't flush immediately  - accumulate in pendingOutput.
 		// Flushed during render cycle (GetKittyGraphicsCmd) so graphics
 		// and text arrive in the same frame, preventing tearing.
@@ -273,8 +281,8 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			AndPlace:       andPlace,
 			WindowX:        windowX,
 			WindowY:        windowY,
-			WindowWidth:    windowWidth,
-			WindowHeight:   windowHeight,
+			ContentCols:    contentCols,
+			ContentRows:    contentRows,
 			ContentOffsetX: contentOffsetX,
 			ContentOffsetY: contentOffsetY,
 			CursorX:        cursorX,
@@ -337,9 +345,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	hostX := pending.WindowX + pending.ContentOffsetX + pending.CursorX
 	hostY := pending.WindowY + pending.ContentOffsetY + pending.CursorY
 
-	contentWidth, contentHeight := paneContentCells(
-		pending.WindowWidth, pending.WindowHeight,
-		pending.ContentOffsetX, pending.ContentOffsetY)
+	contentWidth, contentHeight := pending.ContentCols, pending.ContentRows
 
 	// Calculate image cell dimensions
 	imgRows := pending.Rows
@@ -412,6 +418,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		HostX:             hostX,
 		HostY:             hostY,
 		Cols:              displayCols,
+		ImageCols:         imgCols,
 		Rows:              imgRows,
 		DisplayRows:       displayRows,
 		SourceX:           pending.SourceX,
@@ -447,7 +454,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	return nil
 }
 
-func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, windowWidth, windowHeight, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) {
+func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID string, andPlace bool, windowX, windowY, contentCols, contentRows, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) {
 	if cmd.FilePath == "" {
 		return
 	}
@@ -470,7 +477,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// and never reach this path; this covers the ones that do not ask.
 	if !kp.hostReadsFiles() {
 		kp.forwardFileTransmitInline(cmd, filePath, windowID, andPlace,
-			windowX, windowY, windowWidth, windowHeight,
+			windowX, windowY, contentCols, contentRows,
 			contentOffsetX, contentOffsetY,
 			cursorX, cursorY, scrollbackLen, isAltScreen)
 		return
@@ -525,9 +532,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
 
-	// Calculate content area dimensions (accounting for borders)
-	contentWidth, contentHeight := paneContentCells(
-		windowWidth, windowHeight, contentOffsetX, contentOffsetY)
+	contentWidth, contentHeight := contentCols, contentRows
 
 	// Calculate image dimensions in cells
 	// Note: calculateImageCells returns (rows, cols) in that order
@@ -588,17 +593,28 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	if cmd.SourceY > 0 {
 		fmt.Fprintf(&buf, ",y=%d", cmd.SourceY)
 	}
-	if cmd.SourceWidth > 0 {
-		fmt.Fprintf(&buf, ",w=%d", cmd.SourceWidth)
+	// An image bigger than the pane is capped to it above, and kitty maps
+	// whatever source rectangle it is given onto that cell area. So a cap
+	// without a matching source rectangle is not a crop, it is a scale: the
+	// whole bitmap squeezed into fewer cells. Capping height alone, which is
+	// what this did, squeezes one axis and not the other, and a bitmap squeezed
+	// on one axis is a stretched picture. Both axes get a source rectangle, or
+	// neither does.
+	//
+	// The pixels per cell come from the image's own dimensions divided by its
+	// own cell footprint, not from the host's cell size. Those agree only while
+	// the guest is drawing at the size it was last given, and the interesting
+	// case here is precisely the one where it is not: a browser keeps painting
+	// at the old size for as long as its relayout takes.
+	sourceWidth, sourceHeight := cmd.SourceWidth, cmd.SourceHeight
+	if sourceWidth == 0 && displayCols < imgCols && imgCols > 0 && cmd.Width > 0 {
+		sourceWidth = displayCols * (cmd.Width / imgCols)
 	}
-	sourceHeight := cmd.SourceHeight
-	if sourceHeight == 0 && displayRows < imgRows {
-		caps := GetHostCapabilities()
-		cellH := caps.CellHeight
-		if cellH <= 0 {
-			cellH = 20
-		}
-		sourceHeight = displayRows * cellH
+	if sourceHeight == 0 && displayRows < imgRows && imgRows > 0 && cmd.Height > 0 {
+		sourceHeight = displayRows * (cmd.Height / imgRows)
+	}
+	if sourceWidth > 0 {
+		fmt.Fprintf(&buf, ",w=%d", sourceWidth)
 	}
 	if sourceHeight > 0 {
 		fmt.Fprintf(&buf, ",h=%d", sourceHeight)
@@ -691,12 +707,15 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		existing.HostX = hostX
 		existing.HostY = hostY
 		existing.Cols = displayCols
+		existing.ImageCols = imgCols
 		existing.Rows = imgRows
 		existing.DisplayRows = displayRows
 		existing.SourceX = cmd.SourceX
 		existing.SourceY = cmd.SourceY
 		existing.SourceWidth = cmd.SourceWidth
 		existing.SourceHeight = cmd.SourceHeight
+		existing.ImagePixelWidth = cmd.Width
+		existing.ImagePixelHeight = cmd.Height
 		existing.PlacedOnAltScreen = isAltScreen
 		kittyPassthroughLog("forwardFileTransmit: refreshed placement hostID=%d in place", hostID)
 		return
@@ -710,6 +729,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		HostX:             hostX,
 		HostY:             hostY,
 		Cols:              displayCols,
+		ImageCols:         imgCols,     // Uncapped, so a crop can be measured against it
 		Rows:              imgRows,     // Original image rows (for scroll clipping)
 		DisplayRows:       displayRows, // Capped rows for initial display
 		SourceX:           cmd.SourceX,
@@ -722,6 +742,14 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		Virtual:           cmd.Virtual,
 		Hidden:            true, // Start hidden, RefreshAllPlacements will place it
 		PlacedOnAltScreen: isAltScreen,
+		// The image's own pixel dimensions from the s/v params. The file and
+		// shared-memory path used to drop these, which left every source
+		// rectangle derived from a guess at the host's cell size instead of
+		// from the image, and a guess that is wrong by any amount scales the
+		// bitmap by exactly that ratio. They cost nothing to keep and they are
+		// the only exact answer available.
+		ImagePixelWidth:  cmd.Width,
+		ImagePixelHeight: cmd.Height,
 	}
 	kittyPassthroughLog("forwardFileTransmit: stored placement hostID=%d (hidden, waiting for refresh)", hostID)
 }
@@ -738,7 +766,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	filePath string,
 	windowID string,
 	andPlace bool,
-	windowX, windowY, windowWidth, windowHeight int,
+	windowX, windowY, contentCols, contentRows int,
 	contentOffsetX, contentOffsetY int,
 	cursorX, cursorY int,
 	scrollbackLen int,
@@ -876,8 +904,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 
 	// Cell dimensions. Match forwardFileTransmit semantics.
 	imgRows, imgCols := kp.calculateImageCells(cmd)
-	contentWidth, contentHeight := paneContentCells(
-		windowWidth, windowHeight, contentOffsetX, contentOffsetY)
+	contentWidth, contentHeight := contentCols, contentRows
 	displayCols := imgCols
 	displayRows := imgRows
 	if displayCols > contentWidth && contentWidth > 0 {
@@ -921,6 +948,9 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		// render loop during a drag.
 		st.guestX, st.guestY = cursorX, cursorY
 		st.cols, st.rows = displayCols, displayRows
+		// The uncapped footprint too, so a frame bigger than its pane can be
+		// cropped to what fits instead of squeezed into it.
+		st.imgCols, st.imgRows = imgCols, imgRows
 		st.altScreen = isAltScreen
 		st.pxWidth, st.pxHeight = cmd.Width, cmd.Height
 
@@ -960,7 +990,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 				hostID, format, compression, cmd.Width, cmd.Height, data)...)
 		}
 		kp.trackInlinePlacement(cmd, windowID, hostID, hostX, hostY,
-			displayCols, displayRows, imgRows, cursorX, scrollbackLen, cursorY, isAltScreen)
+			displayCols, displayRows, imgCols, imgRows, cursorX, scrollbackLen, cursorY, isAltScreen)
 		return
 	}
 
@@ -988,7 +1018,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	}
 
 	kp.trackInlinePlacement(cmd, windowID, hostID, hostX, hostY,
-		displayCols, displayRows, imgRows, cursorX, scrollbackLen, cursorY, isAltScreen)
+		displayCols, displayRows, imgCols, imgRows, cursorX, scrollbackLen, cursorY, isAltScreen)
 	_ = andPlace // placement is always driven by RefreshAllPlacements in inline mode
 }
 
@@ -1000,7 +1030,7 @@ func (kp *KittyPassthrough) trackInlinePlacement(
 	cmd *vt.KittyCommand,
 	windowID string,
 	hostID uint32,
-	hostX, hostY, displayCols, displayRows, imgRows, cursorX, scrollbackLen, cursorY int,
+	hostX, hostY, displayCols, displayRows, imgCols, imgRows, cursorX, scrollbackLen, cursorY int,
 	isAltScreen bool,
 ) {
 	if kp.placements[windowID] == nil {
@@ -1008,6 +1038,7 @@ func (kp *KittyPassthrough) trackInlinePlacement(
 	}
 	if existing := kp.placements[windowID][hostID]; existing != nil {
 		existing.Cols = displayCols
+		existing.ImageCols = imgCols
 		existing.Rows = imgRows
 		existing.DisplayRows = displayRows
 		existing.HostX = hostX
@@ -1026,6 +1057,7 @@ func (kp *KittyPassthrough) trackInlinePlacement(
 		HostX:             hostX,
 		HostY:             hostY,
 		Cols:              displayCols,
+		ImageCols:         imgCols,
 		Rows:              imgRows,
 		DisplayRows:       displayRows,
 		SourceX:           cmd.SourceX,
@@ -1154,7 +1186,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	cmd *vt.KittyCommand,
 	windowID string,
 	windowX, windowY int,
-	windowWidth, windowHeight int,
+	contentCols, contentRows int,
 	contentOffsetX, contentOffsetY int,
 	cursorX, cursorY int,
 	scrollbackLen int,
@@ -1167,9 +1199,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	// This prevents conflicts when multiple windows use the same guest image ID
 	hostID := kp.getOrAllocateHostID(windowID, cmd.ImageID)
 
-	// Calculate content area dimensions (accounting for borders)
-	contentWidth, contentHeight := paneContentCells(
-		windowWidth, windowHeight, contentOffsetX, contentOffsetY)
+	contentWidth, contentHeight := contentCols, contentRows
 
 	// Calculate image dimensions and cap to content area
 	// Note: calculateImageCells returns (rows, cols) in that order

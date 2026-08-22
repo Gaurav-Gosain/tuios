@@ -134,7 +134,7 @@ func TestSSHShmFrameSurvives(t *testing.T) {
 	// FlushPending + WriteToHost) runs in View().
 	for frame := 0; frame < 10; frame++ {
 		kp.ForwardCommand(cmd, raw, winID,
-			0, 0, 183, 42, 1, 1, 0, 0, 0, false,
+			0, 0, 181, 40, 1, 1, 0, 0, 0, false,
 			func(resp []byte) {})
 		if kp.HasPlacements() {
 			kp.RefreshAllPlacements(getWindows)

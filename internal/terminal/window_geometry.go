@@ -37,6 +37,19 @@ func (w *Window) BorderOffset() int {
 // must not touch the live fields while the update loop mutates them.
 type GeometrySnapshot struct {
 	X, Y, Width, Height, BorderOffset int
+	// ContentW/ContentH are the cells the guest has actually been told it has,
+	// which is not always Width and Height less the border allowance. Those two
+	// move apart whenever the layout changes a pane's drawable area before
+	// telling it: a live resize drag moves the rectangle every frame and defers
+	// the announcement to the gesture's end, and a press on a tiled pane drops
+	// its borderless allowance without moving the rectangle at all.
+	//
+	// Anything measuring an image against its pane wants this pair and not the
+	// other one. The guest draws to the size it was given, so a bitmap can only
+	// ever match this rectangle; measuring against a rectangle the guest has
+	// never heard of is measuring the bitmap against a box it was not drawn for,
+	// and the difference is the scale factor kitty applies to it.
+	ContentW, ContentH int
 }
 
 // PublishGeometry records the current geometry for cross-goroutine readers.
@@ -44,15 +57,22 @@ type GeometrySnapshot struct {
 // loop); the render path republishes every frame, so a snapshot is never more
 // than a frame stale, and every placement is re-laid out per frame anyway.
 func (w *Window) PublishGeometry() {
+	cw, ch := w.AnnouncedSize()
+	if cw <= 0 || ch <= 0 {
+		// Nothing announced yet, so the rectangle is the best answer available.
+		cw, ch = w.contentSize(w.Width, w.Height)
+	}
 	cur := w.geomSnap.Load()
 	if cur != nil && cur.X == w.X && cur.Y == w.Y &&
 		cur.Width == w.Width && cur.Height == w.Height &&
-		cur.BorderOffset == w.BorderOffset() {
+		cur.BorderOffset == w.BorderOffset() &&
+		cur.ContentW == cw && cur.ContentH == ch {
 		return
 	}
 	w.geomSnap.Store(&GeometrySnapshot{
 		X: w.X, Y: w.Y, Width: w.Width, Height: w.Height,
 		BorderOffset: w.BorderOffset(),
+		ContentW:     cw, ContentH: ch,
 	})
 }
 

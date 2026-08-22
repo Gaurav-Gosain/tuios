@@ -813,6 +813,14 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 				// Snapshotted above, outside kp.mu; see
 				// snapshotPlacementScrollbackLens for why it cannot be read here.
 				scrollbackLen := m.placementScrollbackLen[w.ID]
+				// The cells the guest was actually told it has, which is what an
+				// image in that pane was drawn for. It is normally the rectangle
+				// less the border allowance and transiently is not; see
+				// terminal.GeometrySnapshot.
+				announcedW, announcedH := w.AnnouncedSize()
+				if announcedW <= 0 || announcedH <= 0 {
+					announcedW, announcedH = w.ContentWidth(), w.ContentHeight()
+				}
 				backing[n] = WindowPositionInfo{
 					WindowX:            w.X,
 					WindowY:            w.Y,
@@ -820,6 +828,8 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 					ContentOffsetY:     w.BorderOffset(),
 					Width:              w.Width,
 					Height:             w.Height,
+					ContentWidth:       announcedW,
+					ContentHeight:      announcedH,
 					Visible:            visible,
 					ScrollbackLen:      scrollbackLen,
 					ScrollOffset:       w.ScrollbackOffset,
