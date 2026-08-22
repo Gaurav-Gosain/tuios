@@ -794,9 +794,30 @@ func (m *OS) Preselect(direction string) error {
 	return nil
 }
 
+// remember records a live appearance change in the config struct the registry
+// setter re-applies from.
+//
+// The setters below reach straight for the global the renderer reads, which is
+// enough right up until the next registry option is set: that path funnels
+// m.UserConfig through ApplyAppearanceConfig, and the struct still holds what
+// it held at startup. So setting a theme put the border style back to rounded,
+// and get-option went on reporting the thick the caller had asked for. Every
+// hand-written setter has to leave the struct saying what the global says.
+//
+// A path the registry cannot hold is not an error worth failing a set over: the
+// global is already written and the display is already correct. Only the
+// re-apply would drift, and there is nothing better to do about it here.
+func (m *OS) remember(path, value string) {
+	if m.UserConfig == nil {
+		return
+	}
+	_ = config.SetOptionValue(m.UserConfig, path, value)
+}
+
 // EnableAnimations enables UI animations.
 func (m *OS) EnableAnimations() error {
 	config.AnimationsEnabled = true
+	m.remember("appearance.animations_enabled", "true")
 	m.ShowNotification("Animations: ON", "info", config.NotificationDuration)
 	return nil
 }
@@ -804,19 +825,17 @@ func (m *OS) EnableAnimations() error {
 // DisableAnimations disables UI animations.
 func (m *OS) DisableAnimations() error {
 	config.AnimationsEnabled = false
+	m.remember("appearance.animations_enabled", "false")
 	m.ShowNotification("Animations: OFF", "info", config.NotificationDuration)
 	return nil
 }
 
 // ToggleAnimations toggles UI animations.
 func (m *OS) ToggleAnimations() error {
-	config.AnimationsEnabled = !config.AnimationsEnabled
 	if config.AnimationsEnabled {
-		m.ShowNotification("Animations: ON", "info", config.NotificationDuration)
-	} else {
-		m.ShowNotification("Animations: OFF", "info", config.NotificationDuration)
+		return m.DisableAnimations()
 	}
-	return nil
+	return m.EnableAnimations()
 }
 
 // SetConfig sets a configuration option at runtime.
@@ -847,6 +866,7 @@ func (m *OS) SetConfig(path, value string) error {
 		case "false", "off", "0":
 			config.HideWindowButtons = false
 		}
+		m.remember("appearance.hide_window_buttons", value)
 		m.MarkAllDirty()
 		return nil
 	case "appearance.window_button_style", "window_button_style":
@@ -855,6 +875,7 @@ func (m *OS) SetConfig(path, value string) error {
 				value, strings.Join(config.WindowButtonStyles, " or "))
 		}
 		config.WindowButtonStyle = value
+		m.remember("appearance.window_button_style", value)
 		m.MarkAllDirty()
 		return nil
 	case "appearance.window_button_position", "window_button_position":
@@ -863,6 +884,7 @@ func (m *OS) SetConfig(path, value string) error {
 				value, strings.Join(config.WindowButtonPositions, " or "))
 		}
 		config.WindowButtonPosition = value
+		m.remember("appearance.window_button_position", value)
 		m.MarkAllDirty()
 		return nil
 	default:
@@ -943,6 +965,7 @@ func (m *OS) SetDockbarPosition(position string) error {
 	switch position {
 	case "top", "bottom", "hidden":
 		config.DockbarPosition = position
+		m.remember("appearance.dockbar_position", position)
 		m.ShowNotification(fmt.Sprintf("Dockbar: %s", position), "info", config.NotificationDuration)
 		m.MarkAllDirty()
 		return nil
@@ -956,6 +979,7 @@ func (m *OS) SetBorderStyle(style string) error {
 	switch style {
 	case "rounded", "normal", "thick", "double", "hidden", "block", "ascii":
 		config.BorderStyle = style
+		m.remember("appearance.border_style", style)
 		m.ShowNotification(fmt.Sprintf("Border: %s", style), "info", config.NotificationDuration)
 		m.MarkAllDirty()
 		return nil
