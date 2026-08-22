@@ -137,6 +137,12 @@ func TestBorderlessFullPaneImageClamped(t *testing.T) {
 	if !bytes.Contains(forwarded, []byte("r=39")) {
 		t.Fatalf("expected clamped placement r=39, forwarded=%q", forwarded)
 	}
+	// Columns are not clamped at all here. A borderless pane owns every column
+	// of its rectangle, and the guest drew 1200px for all 120 of them, so
+	// anything narrower is a frame kitty has to scale down to fit.
+	if !bytes.Contains(forwarded, []byte("c=120")) {
+		t.Fatalf("expected the full pane width c=120, forwarded=%q", forwarded)
+	}
 }
 
 // buildDirectFrame builds an a=T direct (t=d) RGBA transmit+place APC for a
