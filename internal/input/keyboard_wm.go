@@ -53,6 +53,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleCommandPaletteInput(msg, o)
 	}
 
+	// Handle launcher overlay
+	if o.ShowLauncher {
+		return handleLauncherInput(msg, o)
+	}
+
 	// Handle session switcher overlay
 	if o.ShowSessionSwitcher {
 		return handleSessionSwitcherInput(msg, o)
@@ -207,6 +212,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	// string, so it fires under every Kitty keyboard encoding (see isCtrlP).
 	if isCtrlP(msg) {
 		return o, o.OpenCommandPalette()
+	}
+
+	// Launcher: alt+space, matched the same way and for the same reason.
+	if isLauncherKey(msg) {
+		return o, o.OpenLauncher()
 	}
 
 	// Emergency/safety keybindings that bypass the config system

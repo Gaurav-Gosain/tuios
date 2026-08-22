@@ -35,31 +35,127 @@ func writeProbe(t *testing.T) string {
 	return dir
 }
 
-// launchProbe drives the palette end to end: open, query, wait for the scanned
-// row, run it, and wait for the program's output in the new pane.
-func launchProbe(t *testing.T, term *tuitest.Terminal) {
+// launcherTitle is the header the launcher overlay renders. It is a different
+// overlay from the command palette, which is the point: a program is a thing
+// you start, not a verb tuios performs.
+const launcherTitle = "Run a Program"
+
+// altSpace is the launcher's direct binding.
+var altSpace = tuitest.Alt(" ")
+
+// openLauncher opens the launcher and waits for it to be on screen.
+func openLauncher(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
-	if err := term.SendKeys(legacyCtrlP); err != nil {
-		t.Fatalf("send ctrl+p: %v", err)
+	if err := term.SendKeys(altSpace); err != nil {
+		t.Fatalf("send alt+space: %v", err)
 	}
-	waitPaletteOpen(t, term, "for the launcher")
+	if err := term.WaitForText(launcherTitle, uiTimeout); err != nil {
+		t.Fatalf("the launcher never opened: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// queryProbe opens the launcher and types the probe's name, waiting for its row.
+func queryProbe(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	openLauncher(t, term)
 	if err := term.SendKeys(probeName); err != nil {
 		t.Fatalf("type the probe's name: %v", err)
 	}
-	// The $PATH scan lands asynchronously, so the row may trail the query. The
-	// row is recognised by its category tag alone: the palette elides a long
-	// name+path pair to fit, so neither the name nor the full path reliably
-	// survives, and with this query the probe is the only program that matches.
+	// The scan lands asynchronously, so the row trails the query. Waiting for
+	// the name is not enough on its own: the search box echoes it the moment it
+	// is typed, and that alone once satisfied this wait and let the test press
+	// Enter on an empty list. Two copies means the search box AND a row.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "[Run]")
+		return strings.Count(s.Text(), probeName) >= 2
 	}, uiTimeout); err != nil {
-		t.Fatalf("the scanned program never reached the palette: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the scanned program never reached the launcher: %v\n%s", err, term.Snapshot())
 	}
+}
+
+// launchProbe drives the launcher end to end: open, query, run it with Enter,
+// and wait for the program's output in the new pane.
+func launchProbe(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	queryProbe(t, term)
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("run the probe: %v", err)
 	}
 	if err := term.WaitForText(runAnythingMarker, shellTimeout); err != nil {
 		t.Fatalf("the launched program never printed: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestLauncherIsNotTheCommandPalette is the separation, checked where it is
+// visible: ctrl+p lists commands and does not list programs, and alt+space
+// lists programs.
+func TestLauncherIsNotTheCommandPalette(t *testing.T) {
+	dir := writeProbe(t)
+	term, _ := start(t, startOpts{
+		args: []string{"--standalone"},
+		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+	})
+	waitBoot(t, term)
+
+	if err := term.SendKeys(legacyCtrlP); err != nil {
+		t.Fatalf("send ctrl+p: %v", err)
+	}
+	waitPaletteOpen(t, term, "for the command palette")
+	if err := term.SendKeys(probeName); err != nil {
+		t.Fatalf("type the probe's name: %v", err)
+	}
+	// Long enough for a scan to have landed, had one been able to put the
+	// program in this box.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "No matching commands")
+	}, uiTimeout); err != nil {
+		t.Fatalf("a program on $PATH is still ranked among the commands: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("close the palette: %v", err)
+	}
+	// The launcher's key is only routed once the palette has let go of it.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), paletteTitle)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the palette never closed: %v\n%s", err, term.Snapshot())
+	}
+
+	queryProbe(t, term)
+}
+
+// TestLauncherTypesTheCommandOut is the second verb on a row. Tab opens a pane
+// running a shell with the command line waiting at its prompt, so the marker
+// the program prints must NOT appear: nothing has been run yet. The program's
+// name on the prompt is what proves the line arrived.
+func TestLauncherTypesTheCommandOut(t *testing.T) {
+	dir := writeProbe(t)
+	term, _ := start(t, startOpts{
+		args: []string{"--standalone"},
+		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+	})
+	waitBoot(t, term)
+	queryProbe(t, term)
+
+	if err := term.SendKeys(tuitest.Tab); err != nil {
+		t.Fatalf("type the probe out: %v", err)
+	}
+	// The pane's shell echoes what it was sent once its line editor is up.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), probeName) && !strings.Contains(s.Text(), launcherTitle)
+	}, shellTimeout); err != nil {
+		t.Fatalf("the command never reached the new pane's prompt: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), runAnythingMarker) {
+		t.Fatalf("the program ran, so it was not left for the user to run:\n%s", term.Snapshot())
+	}
+
+	// And pressing Enter now runs the very command that was waiting, which is
+	// the whole point of putting it there.
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("run the typed command: %v", err)
+	}
+	if err := term.WaitForText(runAnythingMarker, shellTimeout); err != nil {
+		t.Fatalf("the waiting command did not run when entered: %v\n%s", err, term.Snapshot())
 	}
 }
 

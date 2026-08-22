@@ -275,6 +275,7 @@ Press `Ctrl+B`, release, then press the command key (tmux-style).
 | `Ctrl+B` `L` | Load Layout |
 | `Ctrl+B` `P` | Command Palette (alternative) |
 | `Ctrl+P` | Command Palette |
+| `Alt+Space` | Launcher: run a program |
 | `Ctrl+B` `Ctrl+B` | Send literal Ctrl+B to terminal |
 
 ### Workspace Prefix (`Ctrl+B` `w`)

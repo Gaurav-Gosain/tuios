@@ -2,9 +2,8 @@ package app
 
 import tea "charm.land/bubbletea/v2"
 
-// allPaletteItems returns the merged palette list: the static commands, the
-// session/window entries built when the palette was opened, and one row per
-// program on $PATH.
+// allPaletteItems returns the merged palette list: the static commands, and the
+// session/window entries built when the palette was opened.
 func (m *OS) allPaletteItems() []CommandPaletteItem {
 	if m.PaletteItems == nil {
 		// A caller that reaches the list without opening the palette still gets
@@ -14,14 +13,13 @@ func (m *OS) allPaletteItems() []CommandPaletteItem {
 	return m.PaletteItems
 }
 
-// rebuildPaletteItems merges the three sources. Called when the palette opens
-// and when a $PATH scan lands, never per frame.
+// rebuildPaletteItems merges the two sources. Called when the palette opens,
+// never per frame.
 func (m *OS) rebuildPaletteItems() {
 	static := GetCommandPaletteItems()
-	items := make([]CommandPaletteItem, 0, len(static)+len(m.PaletteSessionItems)+len(m.PaletteAppItems))
+	items := make([]CommandPaletteItem, 0, len(static)+len(m.PaletteSessionItems))
 	items = append(items, static...)
 	items = append(items, m.PaletteSessionItems...)
-	items = append(items, m.PaletteAppItems...)
 	m.PaletteItems = items
 }
 
@@ -35,22 +33,14 @@ func (m *OS) filteredPaletteItems() []CommandPaletteItem {
 // from the current session tree. This is the one place that does the tree build
 // (and, in daemon mode, the daemon round trip inside it) so it happens once per
 // open rather than once per frame.
-//
-// It returns the command that rescans $PATH. The scan is off the Update
-// goroutine and its rows arrive later, so the palette is open and typeable
-// before it finishes; a program installed since the last open turns up as soon
-// as it lands.
 func (m *OS) OpenCommandPalette() tea.Cmd {
 	m.ShowCommandPalette = true
 	m.CommandPaletteQuery = ""
 	m.CommandPaletteSelected = 0
 	m.CommandPaletteScroll = 0
 	m.PaletteSessionItems = getSessionPaletteItems(m)
-	// Launch history moves as programs are run, so the rows are rebuilt here
-	// rather than only when a scan lands.
-	m.PaletteAppItems = m.runItems(m.knownPathApps())
 	m.rebuildPaletteItems()
-	return m.ScanPathApps()
+	return nil
 }
 
 // PaletteMove moves the command-palette selection by delta and keeps the scroll
@@ -77,11 +67,9 @@ func (m *OS) CloseCommandPalette() {
 	m.CommandPaletteQuery = ""
 	m.CommandPaletteSelected = 0
 	m.CommandPaletteScroll = 0
-	// A few thousand rows is the largest thing the palette holds and nothing
-	// reads them while it is shut. Both lists are rebuilt from the scan cache on
-	// the next open, so dropping them costs nothing but the rebuild.
+	// Nothing reads the merged list while the palette is shut, and it is rebuilt
+	// on the next open, so dropping it costs nothing but that rebuild.
 	m.PaletteItems = nil
-	m.PaletteAppItems = nil
 }
 
 // ActivateCommandPalette runs the currently selected command and closes the

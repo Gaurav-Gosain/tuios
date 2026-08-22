@@ -887,6 +887,10 @@ func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, place
 		}
 	}
 
+	// A pane arriving is the event the launcher's type-it-out path waits on, so
+	// it is answered here rather than polled for.
+	m.seedAdoptedWindows(created)
+
 	m.TileAllWindows()
 	m.SyncStateToDaemon()
 }

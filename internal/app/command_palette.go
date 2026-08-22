@@ -26,10 +26,6 @@ type CommandPaletteItem struct {
 	// ("switches session"), since a row with no key still owes the user a warning.
 	Shortcut string
 	Category string // "Window", "Layout", "Session", "Navigation"
-	// Boost adjusts the row's match score before ranking: positive for a program
-	// with launch history behind it, negative for the whole $PATH tier, which
-	// would otherwise bury the curated commands under everything installed.
-	Boost int
 	// Match holds the byte offsets in Name that the live query matched, filled
 	// in by FilterCommandPalette so the renderer can underline them without
 	// running the matcher a second time. Nil when nothing was typed, and for a
@@ -45,6 +41,19 @@ type CommandPaletteItem struct {
 // GetCommandPaletteItems returns all available commands for the command palette.
 func GetCommandPaletteItems() []CommandPaletteItem {
 	return []CommandPaletteItem{
+		// The launcher is its own overlay, and this is the row that opens it.
+		// It is the bridge that keeps "one box finds everything" true as an
+		// entry point without the two lists having to be ranked against each
+		// other (see launcher.go).
+		{
+			Name:     "Run a Program",
+			Shortcut: "alt+space",
+			Category: PaletteCategoryRun,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.OpenLauncher()
+			},
+		},
+
 		// Window management
 		{
 			Name:     "New Window",
@@ -729,10 +738,10 @@ func paletteStateMatches(item CommandPaletteItem, states []string) bool {
 // match first, after an optional leading "@state" token narrows the list to the
 // panes in that state (see splitPaletteQuery).
 //
-// Matching is the shared scored matcher, so one box ranks static commands,
-// panes and programs on PATH against each other. Name is matched on its own and
-// Category is a weaker fallback, so a row admitted only by its section name can
-// never outrank one that matched what it actually says.
+// Matching is the shared scored matcher, so one box ranks static commands and
+// panes against each other. Name is matched on its own and Category is a weaker
+// fallback, so a row admitted only by its section name can never outrank one
+// that matched what it actually says.
 func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPaletteItem {
 	if states, filtered, rest := splitPaletteQuery(query); filtered {
 		kept := make([]CommandPaletteItem, 0, len(items))
@@ -752,20 +761,6 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 	hits := m.FilterIndex(query, len(items), func(i int) string {
 		return printableTitle(items[i].Name)
 	})
-
-	// Boosts are applied to the match score and the list re-sorted, rather than
-	// being a sort term of their own, so a strong enough launch history can beat
-	// a slightly better match instead of only breaking ties within one.
-	boosted := false
-	for i := range hits {
-		if b := items[hits[i].Index].Boost; b != 0 {
-			hits[i].Score += b
-			boosted = true
-		}
-	}
-	if boosted {
-		fuzzy.Sort(hits)
-	}
 
 	named := make([]bool, len(items))
 	out := make([]CommandPaletteItem, 0, len(items))

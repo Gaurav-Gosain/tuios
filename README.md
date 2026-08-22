@@ -93,6 +93,7 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **9 Workspaces** - Independent workspace isolation with instant switching
 - **Modal Interface** - Vim-inspired Window Management and Terminal modes
 - **Command Palette** - Fuzzy-searchable action launcher (<kbd>Ctrl</kbd>+<kbd>P</kbd>)
+- **Launcher** - Fuzzy search everything on `$PATH` plus your installed desktop apps (<kbd>Alt</kbd>+<kbd>Space</kbd>), ranked by what you actually run. <kbd>Enter</kbd> starts it; <kbd>Tab</kbd> opens a shell with the command typed but not entered, so you can add arguments. App icons are drawn where the terminal supports kitty graphics.
 - **Pane Zoom** - Fullscreen any pane with <kbd>z</kbd> (WM mode) or <kbd>Prefix</kbd>+<kbd>z</kbd>. Shared borders hidden when zoomed, dockbar shows **Z** indicator.
 
 ### Tiling
@@ -161,6 +162,7 @@ tuios --show-keys        # Launch with key overlay for learning
 | Key | Action |
 |-----|--------|
 | <kbd>Ctrl</kbd>+<kbd>P</kbd> | **Command palette** - search and run any action |
+| <kbd>Alt</kbd>+<kbd>Space</kbd> | **Launcher** - search and start a program (<kbd>Enter</kbd> runs it, <kbd>Tab</kbd> types it out) |
 | <kbd>n</kbd> | New pane (Window Management mode) |
 | <kbd>i</kbd> / <kbd>Enter</kbd> | Enter Terminal mode |
 | <kbd>Prefix</kbd>+<kbd>Esc</kbd> or <kbd>Alt</kbd>+<kbd>Esc</kbd> | Back to Window Management mode (a bare <kbd>Esc</kbd> goes to the shell) |

@@ -1244,7 +1244,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// for the newest resize, so whatever state the flag is in, the deferred
 		// work is due now. Draining an empty PendingResizes costs nothing.
 		m.endResizeDeferral()
-		return m, nil
+		// A taller terminal shows more launcher rows, and the new ones have had
+		// no icon asked for. The settle is the right moment for that rather than
+		// every delivered size.
+		return m, m.LauncherIconWork()
 
 	case InteractionSettledMsg:
 		// A gesture started inside the delay owns the mode now, and its own
@@ -1419,14 +1422,26 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 
-	case PathAppsMsg:
-		// A finished $PATH scan, handed over here so the palette's rows are only
-		// ever built on this goroutine.
-		m.applyPathApps(msg.Entries)
-		if m.ShowCommandPalette {
+	case launcherIconsMsg:
+		// Icons decoded off the Update goroutine, filed away here so the store
+		// is only ever written on this one.
+		m.applyLauncherIcons(msg)
+		if m.ShowLauncher {
 			m.MarkAllDirty()
 		}
 		return m, nil
+
+	case PathAppsMsg:
+		// A finished $PATH scan, handed over here so the launcher's rows are
+		// only ever built on this goroutine.
+		m.applyPathApps(msg.Entries)
+		if !m.ShowLauncher {
+			return m, nil
+		}
+		m.MarkAllDirty()
+		// The rows changed, so the icons the visible ones want changed with
+		// them.
+		return m, m.LauncherIconWork()
 
 	case settingsSaveFailedMsg:
 		// The write happens in a command now, so a failure has to come back here
