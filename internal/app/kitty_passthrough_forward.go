@@ -29,6 +29,22 @@ func zlibCompress(data []byte) []byte {
 	return buf.Bytes()
 }
 
+// paneContentCells is the pane rectangle less the border cells the pane draws
+// for itself, which is the box its guest was told it has.
+//
+// The allowance has to come from the pane rather than be assumed, because half
+// the time there is none. A pane under shared borders draws no box: the divider
+// the user sees between it and its neighbour is an overlay painted in a column
+// the layout holds outside both rectangles, so the whole rectangle is guest
+// content and BorderOffset is 0. Charging it two columns anyway capped a
+// full-pane image at two columns narrower than the pane, and kitty then scaled
+// a frame rendered for the full width down into that, squeezing the right-hand
+// side of the page. The refresh pass cannot undo it: its own clamp only ever
+// narrows what the transmit recorded.
+func paneContentCells(width, height, offsetX, offsetY int) (int, int) {
+	return width - 2*offsetX, height - 2*offsetY
+}
+
 // PlacementResult contains info about an image placement for cursor positioning
 type PlacementResult struct {
 	Rows       int // Number of rows the image occupies
@@ -355,8 +371,9 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	hostX := pending.WindowX + pending.ContentOffsetX + pending.CursorX
 	hostY := pending.WindowY + pending.ContentOffsetY + pending.CursorY
 
-	contentWidth := pending.WindowWidth - 2
-	contentHeight := pending.WindowHeight - 2
+	contentWidth, contentHeight := paneContentCells(
+		pending.WindowWidth, pending.WindowHeight,
+		pending.ContentOffsetX, pending.ContentOffsetY)
 
 	// Calculate image cell dimensions
 	imgRows := pending.Rows
@@ -543,8 +560,8 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	hostY := windowY + contentOffsetY + cursorY
 
 	// Calculate content area dimensions (accounting for borders)
-	contentWidth := windowWidth - 2   // -2 for left/right borders
-	contentHeight := windowHeight - 2 // -2 for top/bottom borders
+	contentWidth, contentHeight := paneContentCells(
+		windowWidth, windowHeight, contentOffsetX, contentOffsetY)
 
 	// Calculate image dimensions in cells
 	// Note: calculateImageCells returns (rows, cols) in that order
@@ -649,10 +666,10 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		// Bounds check for video
 		visible := windowX >= 0 && windowY >= 0 && hostX >= 0 && hostY >= 0
 		if visible && displayCols > 0 {
-			visible = hostX+displayCols <= windowX+1+contentWidth
+			visible = hostX+displayCols <= windowX+contentOffsetX+contentWidth
 		}
 		if visible && displayRows > 0 {
-			visible = hostY+displayRows <= windowY+1+contentHeight
+			visible = hostY+displayRows <= windowY+contentOffsetY+contentHeight
 		}
 		if visible && kp.screenWidth > 0 && kp.screenHeight > 0 {
 			if hostX+displayCols > kp.screenWidth || hostY+displayRows >= kp.screenHeight-1 {
@@ -893,8 +910,8 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 
 	// Cell dimensions. Match forwardFileTransmit semantics.
 	imgRows, imgCols := kp.calculateImageCells(cmd)
-	contentWidth := windowWidth - 2
-	contentHeight := windowHeight - 2
+	contentWidth, contentHeight := paneContentCells(
+		windowWidth, windowHeight, contentOffsetX, contentOffsetY)
 	displayCols := imgCols
 	displayRows := imgRows
 	if displayCols > contentWidth && contentWidth > 0 {
@@ -1185,8 +1202,8 @@ func (kp *KittyPassthrough) forwardPlace(
 	hostID := kp.getOrAllocateHostID(windowID, cmd.ImageID)
 
 	// Calculate content area dimensions (accounting for borders)
-	contentWidth := windowWidth - 2
-	contentHeight := windowHeight - 2
+	contentWidth, contentHeight := paneContentCells(
+		windowWidth, windowHeight, contentOffsetX, contentOffsetY)
 
 	// Calculate image dimensions and cap to content area
 	// Note: calculateImageCells returns (rows, cols) in that order
