@@ -117,29 +117,39 @@ func (m *OS) TypeProgram(e applist.Entry) tea.Cmd {
 	// a word.
 	line := e.CommandLine() + " "
 
+	// Which half this is has to be asked directly rather than inferred from
+	// whether a pane appeared. AddWindow also returns without one when the PTY
+	// could not be created, and reading that as "this must be the daemon" put
+	// the line in a queue nothing would ever drain and told the user nothing.
+	daemon := m.IsDaemonSession && m.DaemonClient != nil
+
 	before := len(m.Windows)
 	m.AddWindow(e.Name)
+
+	if daemon {
+		// The pane is created by the daemon and arrives with a later state
+		// sync, so the line waits for it there. Waiting on the pane's arrival is
+		// an event rather than a poll, which is the whole difference from the
+		// version this replaces.
+		m.queueSeed(e.Name, line)
+		m.EnterTerminalMode()
+		return save
+	}
+
+	if len(m.Windows) == before {
+		m.ShowNotification("Could not open a pane for "+e.Name, "error", config.NotificationDuration*2)
+		return save
+	}
 	// Typing it out means the user is about to keep typing, so the pane is
 	// handed over ready for that. Run does not do this and should not: the two
 	// keys differ in exactly this intent, and landing in window management mode
 	// with a half-written command on the prompt would send the arguments to the
 	// window manager instead of the shell.
 	m.EnterTerminalMode()
-	if len(m.Windows) > before {
-		// Local: the pane exists as soon as AddWindow returns, so the line goes
-		// straight into it.
-		if err := m.SendToWindow(m.Windows[before].ID, []byte(line)); err != nil {
-			m.ShowNotification("Could not type "+e.Name+": "+err.Error(),
-				"error", config.NotificationDuration*2)
-		}
-		return save
+	if err := m.SendToWindow(m.Windows[before].ID, []byte(line)); err != nil {
+		m.ShowNotification("Could not type "+e.Name+": "+err.Error(),
+			"error", config.NotificationDuration*2)
 	}
-
-	// Daemon: the pane is created by the daemon and arrives with a later state
-	// sync, so the line waits for it there. Waiting on the pane's arrival is an
-	// event rather than a poll, which is the whole difference from the version
-	// this replaces.
-	m.queueSeed(e.Name, line)
 	return save
 }
 
@@ -183,7 +193,10 @@ func (m *OS) queueSeed(name, line string) {
 //
 // Matching is by name and each pane is claimed once, so two launches of the
 // same program in quick succession fill their own panes rather than both
-// filling the first.
+// filling the first. It is best effort and nothing more: a pane opened by Run
+// carries the same name as one opened by Tab, so launching a program both ways
+// at once can hand the line to whichever arrives first. Closing that needs a
+// token carried through the NewWindow intent, which is a protocol change.
 func (m *OS) seedAdoptedWindows(created []*terminal.Window) {
 	if len(m.pendingSeeds) == 0 || len(created) == 0 {
 		return

@@ -153,6 +153,9 @@ func FilterLauncherItems(items []LauncherItem, query string, hist *applist.Frece
 	}
 
 	for i, item := range items {
+		if len(out)-len(hits) >= maxAliasHits {
+			break
+		}
 		if named[i] || !matchesAlias(item.Entry, query) {
 			continue
 		}
@@ -163,6 +166,15 @@ func FilterLauncherItems(items []LauncherItem, query string, hist *applist.Frece
 	}
 	return out
 }
+
+// maxAliasHits caps the tail of rows admitted on a keyword rather than a name.
+//
+// A short query is a subsequence of a great many keywords ("Internet", "WWW",
+// "Utility"), and those rows arrive unranked behind every scored hit. Without a
+// cap, typing two characters buries the answer under a hundred entries that
+// merely contain those letters somewhere in their metadata, and the count in
+// the footer stops meaning anything.
+const maxAliasHits = 12
 
 // matchesAlias reports whether query matches any of an entry's other names.
 func matchesAlias(e applist.Entry, query string) bool {

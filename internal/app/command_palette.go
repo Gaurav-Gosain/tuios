@@ -26,11 +26,6 @@ type CommandPaletteItem struct {
 	// ("switches session"), since a row with no key still owes the user a warning.
 	Shortcut string
 	Category string // "Window", "Layout", "Session", "Navigation"
-	// Boost adjusts the row's match score before ranking. Nothing sets it now
-	// that the programs on $PATH have their own overlay; it is kept because the
-	// mechanism is the only way a source can argue for its rows without a
-	// second sort term, and the launcher's history ranking is the same idea.
-	Boost int
 	// Match holds the byte offsets in Name that the live query matched, filled
 	// in by FilterCommandPalette so the renderer can underline them without
 	// running the matcher a second time. Nil when nothing was typed, and for a
@@ -766,20 +761,6 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 	hits := m.FilterIndex(query, len(items), func(i int) string {
 		return printableTitle(items[i].Name)
 	})
-
-	// Boosts are applied to the match score and the list re-sorted, rather than
-	// being a sort term of their own, so a strong enough launch history can beat
-	// a slightly better match instead of only breaking ties within one.
-	boosted := false
-	for i := range hits {
-		if b := items[hits[i].Index].Boost; b != 0 {
-			hits[i].Score += b
-			boosted = true
-		}
-	}
-	if boosted {
-		fuzzy.Sort(hits)
-	}
 
 	named := make([]bool, len(items))
 	out := make([]CommandPaletteItem, 0, len(items))

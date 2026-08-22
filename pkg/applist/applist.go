@@ -84,11 +84,16 @@ type Entry struct {
 	// only way to run such an entry: Path is the .desktop file, not a program,
 	// and the arguments are part of what the entry means.
 	Exec []string
-	// Cwd is the Path= value, the directory the program wants to be started in.
-	// Empty means the launcher's own.
+	// Cwd is the Path= value, the directory the entry asks to be started in.
+	// Carried for a caller that can honour it; the tuios launcher does not yet,
+	// so a desktop entry that depends on its working directory starts in
+	// whatever one a new pane would have.
 	Cwd string
 	// Terminal reports Terminal=true: the entry has no window of its own and
-	// needs a terminal emulator around it. tuios is one.
+	// needs a terminal emulator around it. tuios is one, which is why such an
+	// entry is offered at all rather than filtered out. Nothing reads it yet;
+	// it is the field a caller would check before deciding to wrap a GUI
+	// launcher around one.
 	Terminal bool
 	// Keywords are the entry's Keywords=, words a person might search by that
 	// appear in no other field. They feed Aliases.

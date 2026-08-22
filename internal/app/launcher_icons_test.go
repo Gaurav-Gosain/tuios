@@ -157,12 +157,13 @@ func TestNoGraphicsMeansNoIconColumn(t *testing.T) {
 // theme directory for it is the expensive one.
 func TestApplyLauncherIconsRemembersAMiss(t *testing.T) {
 	m := runTestOS(t)
-	m.applyLauncherIcons(launcherIconsMsg{pixels: map[string]*image.RGBA{"absent": nil}})
+	key := iconKey{name: "absent", w: 20, h: 20}
+	m.applyLauncherIcons(launcherIconsMsg{pixels: map[iconKey]*image.RGBA{key: nil}})
 
 	st := m.launcherIconState()
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if _, ok := st.pixels["absent"]; !ok {
+	if _, ok := st.pixels[key]; !ok {
 		t.Fatal("a miss was not recorded, so it will be looked up again")
 	}
 }

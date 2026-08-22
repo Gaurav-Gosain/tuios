@@ -1244,7 +1244,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// for the newest resize, so whatever state the flag is in, the deferred
 		// work is due now. Draining an empty PendingResizes costs nothing.
 		m.endResizeDeferral()
-		return m, nil
+		// A taller terminal shows more launcher rows, and the new ones have had
+		// no icon asked for. The settle is the right moment for that rather than
+		// every delivered size.
+		return m, m.LauncherIconWork()
 
 	case InteractionSettledMsg:
 		// A gesture started inside the delay owns the mode now, and its own

@@ -640,7 +640,7 @@ func iconIniValue(path, group, key string) string {
 	return ""
 }
 
-// isFile reports whether path is a regular file, following symlinks, because a
+// iconFile reports whether path is a regular file, following symlinks, because a
 // theme directory full of links into another theme is how distributions ship
 // them and a dangling one must not be offered.
 func iconFile(path string) bool {

@@ -327,6 +327,34 @@ func TestAPaneClaimsOneSeed(t *testing.T) {
 	}
 }
 
+// TestTypeProgramAsksWhichSessionItIsIn pins the fix for a real confusion. The
+// two halves used to be told apart by whether a pane appeared, but AddWindow
+// also returns without one when the PTY could not be created, so a local
+// failure was read as "this must be the daemon" and parked the line in a queue
+// nothing would ever drain.
+//
+// A session with the flag set but no client is exactly that shape, and it has
+// to take the local path.
+func TestTypeProgramAsksWhichSessionItIsIn(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("spawns a shell")
+	}
+	m := runTestOS(t)
+	m.WindowExitChan = make(chan string, 4)
+	m.PTYDataChan = make(chan struct{}, 1)
+	defer closeWindows(m)
+	m.IsDaemonSession = true // but DaemonClient is nil, so there is no daemon
+
+	m.TypeProgram(applist.Entry{Name: "ffmpeg", Path: "/usr/bin/ffmpeg", Dir: "/usr/bin"})
+
+	if len(m.pendingSeeds) != 0 {
+		t.Fatalf("queued %d lines for a daemon that is not there", len(m.pendingSeeds))
+	}
+	if len(m.Windows) != 1 {
+		t.Fatalf("%d panes, want the local path to have opened one", len(m.Windows))
+	}
+}
+
 // TestPendingSeedsAreBounded keeps a queue that nothing drains from growing,
 // and from typing a stale line into an unrelated pane much later.
 func TestPendingSeedsAreBounded(t *testing.T) {

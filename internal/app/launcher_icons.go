@@ -28,8 +28,8 @@ import (
 //
 // Three things follow from drawing a picture in a cell grid. The escape
 // sequence has to be written after the frame the cells were reserved in, or the
-// frame paints over it: that is what launcherIconFlush and the reserved blanks
-// in launcherRow are for. Decoding and scaling are filesystem and CPU work, so
+// frame paints over it: that is what flushLauncherIconsForFrame and the
+// reserved blanks in launcherRow are for. Decoding and scaling are filesystem and CPU work, so
 // they happen in a tea.Cmd and arrive as a message, never on the Update
 // goroutine. And nothing about any of it may run on a timer, so a decode is
 // asked for once per icon and the result is kept for the life of the process.
@@ -44,8 +44,10 @@ const (
 	launcherIconRows = 1
 
 	// launcherIconIDBase is where tuios's own kitty image ids start.
-	// KittyPassthrough hands guest images ids counting up from 1, so a base this
-	// high cannot collide with one no matter how many images a pane draws.
+	// KittyPassthrough hands guest images ids counting up from 1, so a pane has
+	// to draw four billion images before its allocator reaches this range. It
+	// does wrap rather than skip the range, so this is very unlikely rather than
+	// impossible.
 	launcherIconIDBase = 0xF000_0000
 
 	// launcherIconChunk is the kitty protocol's maximum escape-sequence payload.
@@ -66,28 +68,37 @@ type launcherIcons struct {
 	// finder resolves a themed name to a file. Built once: it caches its own
 	// theme walks, and rebuilding it per open would throw those away.
 	finder *applist.IconFinder
-	// pixels is the scaled image for an icon name. A nil value is a name that
-	// resolved to nothing, cached so it is not looked up again.
-	pixels map[string]*image.RGBA
-	// asked marks names already handed to a decode, so a list that rebuilds on
+	// pixels is the scaled image for an icon at a size. A nil value is a name
+	// that resolved to nothing, cached so it is not looked up again.
+	//
+	// The size is part of the key because the pixels were scaled for it. A host
+	// that changes its font, or that answers the capability probe late, changes
+	// what a row can hold, and the box filter's whole point is being run at the
+	// size the icon is actually drawn at.
+	pixels map[iconKey]*image.RGBA
+	// asked marks icons already handed to a decode, so a list that rebuilds on
 	// every keystroke does not queue the same work again.
-	asked map[string]bool
+	asked map[iconKey]bool
 	// hostID is the kitty image id an icon was uploaded under, so it is
-	// transmitted once and merely re-placed afterwards.
-	hostID map[string]uint32
+	// transmitted once and merely re-placed afterwards. Keyed by size for the
+	// same reason pixels is: a different size is a different upload.
+	hostID map[iconKey]uint32
 	nextID uint32
 	// shown is what is currently on screen, keyed by placement id, so an
 	// unchanged list emits nothing and a changed one erases what it replaces.
-	shown map[uint32]string
+	// It records where each icon was drawn as well as which one, because the
+	// panel is draggable: the same row can need a new placement without its
+	// picture having changed.
+	shown map[uint32]launcherIconPlacement
 }
 
 func newLauncherIcons() *launcherIcons {
 	return &launcherIcons{
-		pixels: make(map[string]*image.RGBA),
-		asked:  make(map[string]bool),
-		hostID: make(map[string]uint32),
+		pixels: make(map[iconKey]*image.RGBA),
+		asked:  make(map[iconKey]bool),
+		hostID: make(map[iconKey]uint32),
 		nextID: launcherIconIDBase,
-		shown:  make(map[uint32]string),
+		shown:  make(map[uint32]launcherIconPlacement),
 	}
 }
 
@@ -108,9 +119,15 @@ func (s *launcherIcons) iconFinder() *applist.IconFinder {
 	return s.finder
 }
 
+// iconKey is one icon at one drawn size.
+type iconKey struct {
+	name string
+	w, h int
+}
+
 // launcherIconsMsg carries decoded icons back to the Update goroutine.
 type launcherIconsMsg struct {
-	pixels map[string]*image.RGBA
+	pixels map[iconKey]*image.RGBA
 }
 
 // iconCellSize is the icon's box in pixels, from the host's reported cell size.
@@ -164,13 +181,14 @@ func (m *OS) LauncherIconCmd(names []string) tea.Cmd {
 	w, h := iconCellSize()
 
 	st.mu.Lock()
-	var want []string
+	var want []iconKey
 	for _, n := range names {
-		if n == "" || st.asked[n] {
+		k := iconKey{name: n, w: w, h: h}
+		if n == "" || st.asked[k] {
 			continue
 		}
-		st.asked[n] = true
-		want = append(want, n)
+		st.asked[k] = true
+		want = append(want, k)
 	}
 	st.mu.Unlock()
 
@@ -179,9 +197,9 @@ func (m *OS) LauncherIconCmd(names []string) tea.Cmd {
 	}
 	return func() tea.Msg {
 		finder := st.iconFinder()
-		out := make(map[string]*image.RGBA, len(want))
-		for _, n := range want {
-			out[n] = loadIcon(finder, n, w, h)
+		out := make(map[iconKey]*image.RGBA, len(want))
+		for _, k := range want {
+			out[k] = loadIcon(finder, k.name, k.w, k.h)
 		}
 		return launcherIconsMsg{pixels: out}
 	}
@@ -193,8 +211,8 @@ func (m *OS) applyLauncherIcons(msg launcherIconsMsg) {
 	st := m.launcherIconState()
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	for name, img := range msg.pixels {
-		st.pixels[name] = img
+	for k, img := range msg.pixels {
+		st.pixels[k] = img
 	}
 }
 
@@ -238,7 +256,7 @@ func fitSquare(src image.Image, w, h int) *image.RGBA {
 		return nil
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	offX := (w - side) / 2
+	offX, offY := (w-side)/2, (h-side)/2
 
 	b := src.Bounds()
 	if b.Dx() <= 0 || b.Dy() <= 0 {
@@ -261,12 +279,9 @@ func fitSquare(src image.Image, w, h int) *image.RGBA {
 					sr, sg, sb, sa, n = sr+uint64(r), sg+uint64(g), sb+uint64(bl), sa+uint64(a), n+1
 				}
 			}
-			if n == 0 {
-				continue
-			}
 			// image.RGBA is alpha-premultiplied and RGBA() returns
 			// premultiplied channels, so the averages go straight in.
-			i := dst.PixOffset(offX+x, y)
+			i := dst.PixOffset(offX+x, offY+y)
 			dst.Pix[i] = uint8((sr / n) >> 8)
 			dst.Pix[i+1] = uint8((sg / n) >> 8)
 			dst.Pix[i+2] = uint8((sb / n) >> 8)
@@ -319,36 +334,49 @@ func (m *OS) flushLauncherIcons(placements []launcherIconPlacement) {
 	}
 	st := m.launcherIconState()
 
+	w, h := iconCellSize()
+
 	st.mu.Lock()
 	var buf []byte
-	want := make(map[uint32]string, len(placements))
+	want := make(map[uint32]launcherIconPlacement, len(placements))
 	for i, p := range placements {
-		img := st.pixels[p.Name]
+		img := st.pixels[iconKey{name: p.Name, w: w, h: h}]
 		if img == nil {
 			continue
 		}
 		// The placement id is the row's index in the drawn list, so a row that
 		// keeps its icon keeps its placement and only a changed row moves.
 		pid := uint32(i + 1)
-		want[pid] = p.Name
+		want[pid] = p
 
-		id, up := st.hostID[p.Name]
+		key := iconKey{name: p.Name, w: w, h: h}
+		id, up := st.hostID[key]
 		if !up {
 			id = st.nextID
 			st.nextID++
-			st.hostID[p.Name] = id
+			st.hostID[key] = id
 			buf = appendKittyTransmit(buf, id, img)
+		}
+		if st.shown[pid] == p {
+			// Same picture, same cell: the frame redrew the text around it and
+			// the placement is still there, so there is nothing to say. Skipping
+			// is what keeps an open launcher from re-placing a dozen images on
+			// every keystroke, and it means the code never relies on a terminal
+			// treating a repeated a=p as a replacement rather than a second
+			// placement.
+			continue
 		}
 		buf = appendKittyPlace(buf, id, pid, p.X, p.Y)
 	}
-	// Anything that was on screen and is not now has to be deleted by hand:
-	// the frame under it was redrawn, but a kitty placement outlives the cells
-	// it covers.
-	for pid, name := range st.shown {
-		if want[pid] == name {
+	// Anything that was on screen and is not now has to be deleted by hand: the
+	// frame under it was redrawn, but a kitty placement outlives the cells it
+	// covers. A placement that only moved is not deleted, because the a=p above
+	// has already moved it.
+	for pid, was := range st.shown {
+		if _, kept := want[pid]; kept {
 			continue
 		}
-		if id, ok := st.hostID[name]; ok {
+		if id, ok := st.hostID[iconKey{name: was.Name, w: w, h: h}]; ok {
 			buf = appendKittyUnplace(buf, id, pid)
 		}
 	}
@@ -358,8 +386,7 @@ func (m *OS) flushLauncherIcons(placements []launcherIconPlacement) {
 	if len(buf) == 0 {
 		return
 	}
-	out := append([]byte(syncBegin), buf...)
-	out = append(out, syncEnd...)
+	out := wrapSync(buf)
 	if m.PostRenderWriter != nil {
 		m.PostRenderWriter.QueuePostRender(out)
 		return
@@ -373,11 +400,12 @@ func (m *OS) clearLauncherIcons() {
 	if m.launcherIcons == nil {
 		return
 	}
+	w, h := iconCellSize()
 	st := m.launcherIcons
 	st.mu.Lock()
 	var buf []byte
-	for pid, name := range st.shown {
-		if id, ok := st.hostID[name]; ok {
+	for pid, was := range st.shown {
+		if id, ok := st.hostID[iconKey{name: was.Name, w: w, h: h}]; ok {
 			buf = appendKittyUnplace(buf, id, pid)
 		}
 	}
@@ -387,8 +415,7 @@ func (m *OS) clearLauncherIcons() {
 	if len(buf) == 0 {
 		return
 	}
-	out := append([]byte(syncBegin), buf...)
-	out = append(out, syncEnd...)
+	out := wrapSync(buf)
 	if m.PostRenderWriter != nil {
 		m.PostRenderWriter.QueuePostRender(out)
 		return
@@ -447,6 +474,19 @@ func appendKittyPlace(buf []byte, id, placement uint32, x, y int) []byte {
 // row that shows it next does not pay for the upload again.
 func appendKittyUnplace(buf []byte, id, placement uint32) []byte {
 	return append(buf, fmt.Sprintf("\x1b_Ga=d,d=i,i=%d,p=%d,q=2;\x1b\\", id, placement)...)
+}
+
+// wrapSync brackets a run of graphics escapes in a synchronised update, so the
+// host draws them all in one go rather than showing the list half redrawn.
+//
+// The buffer is built fresh rather than appended onto syncBegin, which is a
+// package-level slice: appending to it would share its backing array with every
+// other caller the moment its capacity exceeded its length.
+func wrapSync(buf []byte) []byte {
+	out := make([]byte, 0, len(syncBegin)+len(buf)+len(syncEnd))
+	out = append(out, syncBegin...)
+	out = append(out, buf...)
+	return append(out, syncEnd...)
 }
 
 // byteWriter is an io.Writer over a slice, so the PNG encoder does not need a

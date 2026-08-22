@@ -48,7 +48,8 @@ func pathExt() []string {
 // field is on Entry everywhere and an entry that carries one means it.
 func (e Entry) Argv() []string {
 	if len(e.Exec) > 0 {
-		return e.Exec
+		// Copied for the reason the unix file gives: the entry outlives the call.
+		return append([]string(nil), e.Exec...)
 	}
 	switch strings.ToLower(filepath.Ext(e.Path)) {
 	case ".bat", ".cmd":

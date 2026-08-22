@@ -49,7 +49,10 @@ func executable(info fs.FileInfo) bool {
 // directly executable on unix, so it is the whole command.
 func (e Entry) Argv() []string {
 	if len(e.Exec) > 0 {
-		return e.Exec
+		// Copied because the entry is held in a cached list that outlives this
+		// call, and a caller that trims or rewrites the argv it is given would
+		// otherwise be editing the list.
+		return append([]string(nil), e.Exec...)
 	}
 	return []string{e.Path}
 }
