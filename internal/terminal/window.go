@@ -355,6 +355,15 @@ type Window struct {
 	// can draw them; see coalesceInterval.
 	renderCostNanos atomic.Int64
 
+	// queuedBytes is how much daemon output has been queued for this pane's
+	// emulator and not yet written to it. WriteOutputAsync adds what it
+	// managed to queue, outputWriter subtracts what it takes back off, so it
+	// is the pane's backlog in bytes rather than in channel slots, which vary
+	// in size by two orders of magnitude. The coalescer reads it to find out
+	// whether the frame it is about to ask for has already been superseded;
+	// see coalesceInterval.
+	queuedBytes atomic.Int64
+
 	// outputEpoch stamps every chunk queued for the emulator. DiscardPendingOutput
 	// bumps it, and outputWriter throws away anything stamped with an older one,
 	// which is how a pane that has just been restored from a daemon snapshot
