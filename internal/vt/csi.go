@@ -11,7 +11,15 @@ import (
 )
 
 func (e *Emulator) handleCsi(cmd ansi.Cmd, params ansi.Params) {
-	e.flushGrapheme() // Flush any pending grapheme before handling CSI sequences.
+	switch cmd.Final() {
+	case 'm', 'b':
+		// SGR and REP neither print nor move the cursor, so they do not end
+		// the cluster in flight: ghostty keeps pairing regional indicators
+		// across both. Closing on REP also left the repeats unpaired, as
+		// cells no frame can re-express.
+	default:
+		e.flushGrapheme() // Flush any pending grapheme before handling CSI sequences.
+	}
 
 	// Debug logging for CSI 't' sequences (XTWINOPS)
 	if cmd.Final() == 't' && os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {

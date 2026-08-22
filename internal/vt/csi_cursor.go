@@ -136,11 +136,19 @@ func (e *Emulator) repeatPreviousCharacter(n int) {
 	if maxN := e.Width() * e.Height(); maxN > 0 && n > maxN {
 		n = maxN
 	}
-	// Held in a local because handleGrapheme writes them back on every call,
+	// Held in a local because the print path writes them back on every call,
 	// which is harmless while they stay the same and would not survive a
 	// future print path that rewrote the cluster.
-	cluster, width := e.lastCluster, e.lastClusterWidth
+	//
+	// The repeats go through handlePrint rather than straight to
+	// handleGrapheme because repeats can merge with each other the way
+	// typed characters do: two repeated regional indicators are one flag,
+	// and stamping the cluster n times instead leaves adjacent cells that
+	// any re-parse of the row would join differently.
+	cluster := e.lastCluster
 	for range n {
-		e.handleGrapheme(cluster, width)
+		for _, r := range cluster {
+			e.handlePrint(r)
+		}
 	}
 }

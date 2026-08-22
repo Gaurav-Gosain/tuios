@@ -953,25 +953,56 @@ func TestGhosttyDivergence_LeftRightMarginReset(t *testing.T) {
 // TestGhosttyDivergence_OrphanCombiningMark pins what a combining mark with
 // no base character does.
 //
-// The pure emulator gives it a cell of its own with zero width. The library
-// discards it. A zero-width cell is the shape that breaks a renderer, and the
-// invariants in vtgen_fuzz_test.go already treat a cell claiming the wrong
-// number of columns as a bug, so the library is the safer side here.
+// The pure emulator used to give it a cell of its own with zero width, which
+// broke its own Render round trip. Both backends now combine the mark with
+// the cell before the cursor and drop it at column 0, so the common cases
+// agree. What still differs is a mark aimed at a cell nothing ever wrote:
+// the library tells a written space from a never-written cell and only
+// attaches to the former, while the pure emulator's buffer holds a space
+// either way, so it attaches to both. That is the whole remaining gap, and
+// it is only visible when a guest addresses a blank area and sends a bare
+// mark.
 func TestGhosttyDivergence_OrphanCombiningMark(t *testing.T) {
-	p := newDiffPair(t, 40, 12)
-	p.write(t, []byte(diffPrelude+"́"))
+	t.Run("dropped at column 0 by both", func(t *testing.T) {
+		p := newDiffPair(t, 40, 12)
+		p.write(t, []byte(diffPrelude+"́"))
+		if d := diffScreens(p.pure, p.gh); d.found() {
+			t.Errorf("orphan mark at the origin diverged: %s", d)
+		}
+	})
 
-	pc, gc := p.pure.CellAt(0, 0), p.gh.CellAt(0, 0)
-	if pc == nil || pc.Content != "́" {
-		t.Fatalf("the pure emulator no longer stores an orphan mark as a cell (got %s); "+
-			"delete this entry", ghDiffCellText(pc))
-	}
-	if pc.Width != 0 {
-		t.Errorf("pure orphan-mark cell width = %d, want 0", pc.Width)
-	}
-	if gc != nil && gc.Content == "́" {
-		t.Errorf("ghostty now stores the orphan mark too; delete this entry")
-	}
+	t.Run("attached to the last character by both", func(t *testing.T) {
+		p := newDiffPair(t, 40, 12)
+		p.write(t, []byte(diffPrelude+"AB\á"))
+		if d := diffScreens(p.pure, p.gh); d.found() {
+			t.Errorf("mark after a control diverged: %s", d)
+		}
+		if c := p.pure.CellAt(1, 0); c == nil || c.Content != "B́" {
+			t.Errorf("pure cell (1,0) = %s, want the mark combined with the B", ghDiffCellText(c))
+		}
+	})
+
+	t.Run("attached to a written space by both", func(t *testing.T) {
+		p := newDiffPair(t, 40, 12)
+		p.write(t, []byte(diffPrelude+"AB \x1b[1;4H́"))
+		if d := diffScreens(p.pure, p.gh); d.found() {
+			t.Errorf("mark on a written space diverged: %s", d)
+		}
+	})
+
+	t.Run("never-written cell still differs", func(t *testing.T) {
+		p := newDiffPair(t, 40, 12)
+		p.write(t, []byte(diffPrelude+"\x1b[1;4H́"))
+		pc, gc := p.pure.CellAt(2, 0), p.gh.CellAt(2, 0)
+		if pc == nil || pc.Content != " ́" {
+			t.Fatalf("pure cell (2,0) = %s, want the mark on a space; if the pure "+
+				"emulator learned to tell written cells apart, delete this entry",
+				ghDiffCellText(pc))
+		}
+		if gc != nil && gc.Content == " ́" {
+			t.Errorf("ghostty now attaches to a never-written cell too; delete this entry")
+		}
+	})
 }
 
 // TestGhosttyDivergence_UnderlineStyleOutOfRange pins what an underline

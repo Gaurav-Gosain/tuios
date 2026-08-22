@@ -96,10 +96,17 @@ type Emulator struct {
 	lastClusterWidth int
 	// A slice of runes to compose a grapheme.
 	grapheme []rune
-	// The cell handleGrapheme last drew into. A pending wrap makes the target
-	// differ from the cursor position observed beforehand, so it is recorded
-	// rather than recomputed.
-	lastCellX, lastCellY int
+	// The cell handleGrapheme last drew into, and the line edges it was drawn
+	// under. A pending wrap makes the target differ from the cursor position
+	// observed beforehand, and the margins are read before the wrap is
+	// consumed, so both are recorded rather than recomputed.
+	lastCellX, lastCellY        int
+	lastCellLeft, lastCellRight int
+	// The cell a print at the right margin left the cursor standing on, or
+	// x=-1. Unlike atPhantom it is kept whether or not autowrap is on, and it
+	// goes stale the moment the cursor moves off it, which is why it is a
+	// position to compare rather than a flag to clear.
+	parkedX, parkedY int
 	// The cluster left open across a Write boundary, if any.
 	openGrapheme openGrapheme
 
@@ -193,6 +200,7 @@ func NewEmulator(w, h int) *Emulator {
 		HandleSos: t.handleSos,
 	})
 	t.pipe = newBufPipe()
+	t.parkedX = -1
 	t.resetModes()
 	t.charsetIDs = defaultCharsetIDs
 	t.tabstops = uv.DefaultTabStops(w)
@@ -261,10 +269,109 @@ func (e *Emulator) String() string {
 	return uv.TrimSpace(s)
 }
 
+// clusterBreak is written between two cells whose contents would otherwise
+// re-parse as one cluster: the cursor steps back and forward, which draws
+// nothing and ends any cluster the receiving parser has open. Plain text has
+// no other way to say that two neighbouring regional indicators are two
+// characters rather than one flag.
+const clusterBreak = "\b\x1b[C"
+
+// clustersJoin reports whether b would extend a cluster ending in a.
+func clustersJoin(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	if len(a) == 1 && a[0] < 0x80 && len(b) == 1 && b[0] < 0x80 {
+		// Two printable ASCII cells never join; this is nearly every cell of
+		// a text screen.
+		return false
+	}
+	cl, _ := ansi.FirstGraphemeCluster(a+b, ansi.GraphemeWidth)
+	return len(cl) > len(a)
+}
+
 // Render renders a snapshot of the terminal screen as a string with styles and
 // links encoded as ANSI escape codes.
+//
+// The frame must redraw the screen when replayed, and concatenation alone
+// cannot: a lone regional indicator in one cell and another in the next are
+// two characters on the grid but one flag to any parser reading them back. A
+// cluster break separates such neighbours.
 func (e *Emulator) Render() string {
-	return e.scr.buf.Render()
+	lines := e.scr.buf.Lines
+	var b strings.Builder
+	for i, line := range lines {
+		renderRowBreakingClusters(&b, line)
+		if i < len(lines)-1 {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+// renderRowBreakingClusters renders one row into b, inserting a cluster
+// break wherever two neighbouring cells would re-parse as a single cluster.
+// It mirrors ultraviolet's renderLine cell by cell rather than delegating to
+// it, because delegating per segment cost a builder per row and the app's
+// render path draws every unfocused pane through here.
+func renderRowBreakingClusters(b *strings.Builder, line uv.Line) {
+	var pen uv.Style
+	var link uv.Link
+	blanks := 0
+	prev := ""
+	for x := range line {
+		c := &line[x]
+		if c.IsZero() {
+			// A continuation cell; the wide cell before it stays prev.
+			continue
+		}
+		if c.Equal(&uv.EmptyCell) {
+			if !pen.IsZero() {
+				b.WriteString(ansi.ResetStyle)
+				pen = uv.Style{}
+			}
+			if link.URL != "" {
+				b.WriteString(ansi.ResetHyperlink())
+				link = uv.Link{}
+			}
+			blanks++
+			prev = " "
+			continue
+		}
+		for ; blanks > 0; blanks-- {
+			b.WriteByte(' ')
+		}
+		if clustersJoin(prev, c.Content) {
+			b.WriteString(clusterBreak)
+		}
+		if c.Style.IsZero() && !pen.IsZero() {
+			b.WriteString(ansi.ResetStyle)
+			pen = uv.Style{}
+		}
+		if !c.Style.Equal(&pen) {
+			b.WriteString(c.Style.Diff(&pen))
+			pen = c.Style
+		}
+		if c.Link != link && link.URL != "" {
+			b.WriteString(ansi.ResetHyperlink())
+			link = uv.Link{}
+		}
+		if c.Link != link {
+			b.WriteString(ansi.SetHyperlink(c.Link.URL, c.Link.Params))
+			link = c.Link
+		}
+		b.WriteString(c.String())
+		prev = c.Content
+	}
+	for ; blanks > 0; blanks-- {
+		b.WriteByte(' ')
+	}
+	if link.URL != "" {
+		b.WriteString(ansi.ResetHyperlink())
+	}
+	if !pen.IsZero() {
+		b.WriteString(ansi.ResetStyle)
+	}
 }
 
 var _ uv.Screen = (*Emulator)(nil)
@@ -871,8 +978,10 @@ func (e *Emulator) Resize(width int, height int) {
 	}
 
 	// A resize reflows and reclamps, so the cell an open cluster was drawn into
-	// no longer identifies that cluster. Close it.
+	// no longer identifies that cluster. Close it, and forget the parked print
+	// for the same reason.
 	e.openGrapheme = openGrapheme{}
+	e.parkedX = -1
 
 	x, y := e.scr.CursorPosition()
 	oldHeight := e.Height()
@@ -962,7 +1071,12 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 		// written the whole byte slice.
 		if len(e.grapheme) > 0 {
 			if e.lastState == parser.GroundState && state != parser.Utf8State {
-				e.flushGrapheme()
+				// A sequence is starting, but which one is not known yet, so
+				// draw the buffered cluster and leave it open: the handler
+				// closes it unless the sequence is transparent to clustering
+				// (SGR, OSC, REP), across which ghostty keeps pairing
+				// regional indicators.
+				e.flushGraphemeAtWriteEnd()
 			} else if i == len(p)-1 {
 				// Out of bytes, possibly mid-cluster: draw what we have but
 				// keep the trailing cluster open for the next Write.
