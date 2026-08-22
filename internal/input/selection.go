@@ -16,11 +16,10 @@ import (
 // and by the incoming-terminal-paste path, where a tea.PasteMsg is passthrough input
 // (for example an fcitx5 IME commit) and must be delivered silently.
 //
-// SendInput() is used instead of Terminal.Paste() because in daemon mode
-// Terminal.Paste() writes to an internal pipe that gets drained by
-// StartDaemonResponseReader(), so the data never reaches the PTY. SendInput()
-// properly routes through DaemonWriteFunc in daemon mode. Returns false when there
-// is no focused window or the write fails.
+// SendInput() is used rather than writing to the emulator's internal pipe,
+// which in daemon mode is drained by StartDaemonResponseReader() so the data
+// would never reach the PTY; SendInput() routes through DaemonWriteFunc.
+// Returns false when there is no focused window or the write fails.
 func forwardPasteToFocused(o *app.OS, text string) bool {
 	focusedWindow := o.GetFocusedWindow()
 	if focusedWindow == nil {

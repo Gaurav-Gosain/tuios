@@ -74,7 +74,6 @@ type Terminal interface {
 	SetScrollbackMaxLines(maxLines int)
 
 	// Input encoding toward the guest.
-	Paste(text string)
 	SendMouse(m Mouse)
 	EncodeMouseEvent(m Mouse) string
 	HasMouseMode() bool

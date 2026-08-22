@@ -265,12 +265,6 @@ func (s *Screen) setCursorHidden(hidden bool) {
 	}
 }
 
-// setCursorStyle sets the cursor style.
-func (s *Screen) setCursorStyle(style CursorStyle, blink bool) {
-	s.cur.Style = style
-	s.cur.Steady = !blink
-}
-
 // cursorPen returns the cursor pen.
 func (s *Screen) cursorPen() uv.Style {
 	return s.cur.Pen
@@ -440,7 +434,7 @@ func (s *Screen) ScrollUp(n int) {
 		if save {
 			for i := 0; i < n && i < scroll.Dy(); i++ {
 				line := extractLine(s.buf.Buffer, scroll.Min.Y+i, width)
-				s.scrollback.PushLineOwned(line, true)
+				s.scrollback.PushLineOwned(line)
 			}
 		}
 		s.DeleteLine(n)
@@ -504,7 +498,7 @@ func (s *Screen) rotateWholeScreenUp(n int, save bool) bool {
 	copy(lines, lines[n:])
 	if save {
 		for i, row := range recycled {
-			reuse := s.scrollback.PushLineOwnedRecycle(row, true)
+			reuse := s.scrollback.PushLineOwnedRecycle(row)
 			if len(reuse) == len(row) {
 				recycled[i] = reuse
 			} else {

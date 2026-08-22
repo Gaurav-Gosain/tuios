@@ -48,30 +48,6 @@ func TestScrollbackRingBuffer(t *testing.T) {
 	}
 }
 
-func TestScrollbackSoftWrapping(t *testing.T) {
-	sb := NewScrollback(10)
-
-	// Push soft-wrapped line
-	line1 := uv.Line{{Content: "A", Width: 1}}
-	sb.PushLineWithWrap(line1, true)
-
-	// Push hard break line
-	line2 := uv.Line{{Content: "B", Width: 1}}
-	sb.PushLineWithWrap(line2, false)
-
-	if sb.Len() != 2 {
-		t.Errorf("expected 2 lines, got %d", sb.Len())
-	}
-
-	// Verify lines were stored
-	if l := sb.Line(0); l == nil || l[0].Content != "A" {
-		t.Errorf("line 0 incorrect")
-	}
-	if l := sb.Line(1); l == nil || l[0].Content != "B" {
-		t.Errorf("line 1 incorrect")
-	}
-}
-
 func TestScrollbackClear(t *testing.T) {
 	sb := NewScrollback(10)
 
@@ -145,25 +121,6 @@ func TestScrollbackBoundsChecking(t *testing.T) {
 	// Valid access should work
 	if sb.Line(0) == nil {
 		t.Error("expected valid line at index 0")
-	}
-}
-
-func TestScrollbackWidthTracking(t *testing.T) {
-	sb := NewScrollback(10)
-
-	if sb.CaptureWidth() != 0 {
-		t.Errorf("expected initial width 0, got %d", sb.CaptureWidth())
-	}
-
-	sb.SetCaptureWidth(80)
-	if sb.CaptureWidth() != 80 {
-		t.Errorf("expected width 80, got %d", sb.CaptureWidth())
-	}
-
-	// Reflow should update width
-	sb.Reflow(100)
-	if sb.CaptureWidth() != 100 {
-		t.Errorf("expected width 100 after reflow, got %d", sb.CaptureWidth())
 	}
 }
 

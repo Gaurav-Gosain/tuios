@@ -10,7 +10,6 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 	gh "go.mitchellh.com/libghostty"
 )
 
@@ -577,17 +576,6 @@ func (t *GhosttyTerminal) BracketedPasteEnabled() bool {
 	}
 	v, _ := t.term.Mode(gh.ModeBracketedPaste)
 	return v
-}
-
-// Paste feeds text to the guest, bracketed when mode 2004 is set.
-func (t *GhosttyTerminal) Paste(text string) {
-	if t.BracketedPasteEnabled() {
-		_, _ = io.WriteString(t.pipe, ansi.BracketedPasteStart)
-		_, _ = io.WriteString(t.pipe, text)
-		_, _ = io.WriteString(t.pipe, ansi.BracketedPasteEnd)
-		return
-	}
-	_, _ = io.WriteString(t.pipe, text)
 }
 
 // ghosttyProgressState maps libghostty progress states onto the pure

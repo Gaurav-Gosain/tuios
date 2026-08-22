@@ -28,7 +28,5 @@ type Cursor struct {
 
 	uv.Position
 
-	Style  CursorStyle
-	Steady bool // Not blinking
 	Hidden bool
 }

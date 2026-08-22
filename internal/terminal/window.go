@@ -251,9 +251,8 @@ type Window struct {
 	LastClickX    int
 	LastClickY    int
 	ClickCount    int
-	// Scrollback mode support
-	ScrollbackMode   bool // True when viewing scrollback history
-	ScrollbackOffset int  // Number of lines scrolled back (0 = at bottom, viewing live output)
+	// ScrollbackOffset mirrors CopyMode.ScrollOffset for rendering
+	ScrollbackOffset int // Number of lines scrolled back (0 = at bottom, viewing live output)
 	// Alternate screen buffer tracking for TUI detection.
 	// Written on PTY/monitor goroutine, read on UI goroutine.
 	isAltScreen atomic.Bool // True when application is using alternate screen buffer (nvim, vim, etc.)
