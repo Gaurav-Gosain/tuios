@@ -18,11 +18,11 @@ package vt_test
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
-	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -41,6 +41,27 @@ func cellText(c *uv.Cell) string {
 	}
 	return fmt.Sprintf("%q w=%d fg=%v bg=%v attrs=%x ul=%d",
 		c.Content, c.Width, c.Style.Fg, c.Style.Bg, c.Style.Attrs, c.Style.Underline)
+}
+
+// sameRGB compares colors by the value a frame can carry: the frame writer
+// treats palette 16 and rgb(0,0,0) as one color and emits a single SGR run
+// for both, and no SGR encodes an alpha, so an oracle comparing spellings or
+// alpha would call a faithful frame wrong. nil only matches nil, because it
+// means the terminal default.
+func sameRGB(a, b color.Color) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	ar, ag, ab, _ := a.RGBA()
+	br, bg, bb, _ := b.RGBA()
+	return ar == br && ag == bg && ab == bb
+}
+
+// sameStyle is style equality with colors compared by value.
+func sameStyle(a, b uv.Style) bool {
+	return a.Attrs == b.Attrs && a.Underline == b.Underline &&
+		sameRGB(a.Fg, b.Fg) && sameRGB(a.Bg, b.Bg) &&
+		sameRGB(a.UnderlineColor, b.UnderlineColor)
 }
 
 // sameCell treats the several spellings of an empty cell as one, the way a
@@ -71,7 +92,7 @@ func sameCell(a, b *uv.Cell) bool {
 	if bw == 0 {
 		bw = 1
 	}
-	return ac == bc && aw == bw && a.Style == b.Style && a.Link == b.Link
+	return ac == bc && aw == bw && sameStyle(a.Style, b.Style) && a.Link == b.Link
 }
 
 // compareGrids reports the first cell two emulators disagree about.
@@ -178,57 +199,8 @@ func renderRoundTrip(s vtgen.Script) (broken string) {
 	if _, err := dst.WriteString(strings.ReplaceAll(frame, "\n", "\r\n")); err != nil {
 		return fmt.Sprintf("replaying the frame: %v", err)
 	}
-	if d := compareVisible(src, dst, "screen", "frame"); d != "" {
+	if d := compareGrids(src, dst, "screen", "frame"); d != "" {
 		return "the frame the emulator emitted does not redraw its own screen: " + d
-	}
-	return ""
-}
-
-// invisibleOnly reports whether a cell occupies no columns, so a renderer
-// draws the same thing with or without it.
-//
-// The pure emulator stores zero-width input as a cell of its own - a bidi
-// control, a combining mark with no base, a C1 code point arriving as text -
-// and Render emits none of them. Nothing on screen moves, because the cell
-// claims no columns, but the grid and the frame then describe different
-// things, which matters to anything that compares the two: a snapshot
-// serialised from the grid and a client redrawing from a frame do not agree
-// about what the pane holds. Pinned by TestVTGen_RenderDropsInvisibleCells
-// and excluded here so the round trip reports what would actually be seen.
-func invisibleOnly(c *uv.Cell) bool {
-	if c == nil || c.Content == "" {
-		return false
-	}
-	if c.Width != 0 {
-		return false
-	}
-	// A zero-width cell holding a format character is the clearest case; the
-	// check is kept general because combining marks and C1 code points reach
-	// the same state.
-	for _, r := range c.Content {
-		if unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Cc, r) {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-// compareVisible is compareGrids with the invisible-only cells forgiven.
-func compareVisible(a, b *vt.Emulator, aName, bName string) string {
-	w, h := a.Width(), a.Height()
-	if bw, bh := b.Width(), b.Height(); bw != w || bh != h {
-		return fmt.Sprintf("size %s=%dx%d %s=%dx%d", aName, w, h, bName, bw, bh)
-	}
-	for y := range h {
-		for x := range w {
-			ac, bc := a.CellAt(x, y), b.CellAt(x, y)
-			if sameCell(ac, bc) || invisibleOnly(ac) || invisibleOnly(bc) {
-				continue
-			}
-			return fmt.Sprintf("cell (%d,%d)\n  %-8s %s\n  %-8s %s",
-				x, y, aName, cellText(ac), bName, cellText(bc))
-		}
 	}
 	return ""
 }
@@ -255,22 +227,8 @@ func shrinkSame(s vtgen.Script, want string, replay func(vtgen.Script) string) v
 	return vtgen.Shrink(s, func(c vtgen.Script) bool { return brokenSig(replay(c)) == want })
 }
 
-// metamorphicFuzzGate keeps these targets opt-in for the same reason
-// TestVTGen_Metamorphic is: both properties currently fail on real bugs, and
-// a fuzz target's seed corpus runs on every `go test`, so leaving them
-// ungated turns the ordinary suite red. The pinned tests below carry the
-// regression value meanwhile.
-func metamorphicFuzzGate(f *testing.F) {
-	f.Helper()
-	if os.Getenv("TUIOS_METAMORPHIC_FUZZ") == "" {
-		f.Skip("set TUIOS_METAMORPHIC_FUZZ=1 to run the metamorphic fuzz targets; " +
-			"they report the open bugs pinned in this file")
-	}
-}
-
 // FuzzEmulatorSplitEquivalence is split equivalence as a guided campaign.
 func FuzzEmulatorSplitEquivalence(f *testing.F) {
-	metamorphicFuzzGate(f)
 	for _, seed := range [][]byte{
 		{},
 		{0x01},
@@ -295,7 +253,6 @@ func FuzzEmulatorSplitEquivalence(f *testing.F) {
 
 // FuzzEmulatorRenderRoundTrip is the round trip as a guided campaign.
 func FuzzEmulatorRenderRoundTrip(f *testing.F) {
-	metamorphicFuzzGate(f)
 	for _, seed := range [][]byte{
 		{},
 		{0x02},
@@ -318,23 +275,23 @@ func FuzzEmulatorRenderRoundTrip(f *testing.F) {
 
 // TestVTGen_Metamorphic is the deterministic half of both properties.
 //
-// It is opt-in because both properties currently fail, and the failures are
-// real: the two root causes are pinned below with minimal inputs, and until
-// they are fixed a default-on sweep would be a permanently red test that
-// people learn to ignore. TUIOS_METAMORPHIC_SEEDS switches it on and says how
-// many seeds to run. Once the pinned bugs are fixed this should lose the gate
-// and run everywhere.
+// It runs on every build now that both properties hold; the bugs it used to
+// gate on - a zero-width character eating a visible cell, and the screen
+// depending on where a PTY read boundary fell - are fixed and pinned by
+// TestVTGen_ZeroWidthAttachesOrDrops and the grapheme cell tests.
+// TUIOS_METAMORPHIC_SEEDS widens the sweep for a longer campaign; the
+// default keeps an ordinary `go test` fast.
 func TestVTGen_Metamorphic(t *testing.T) {
-	seeds := 0
+	seeds := 300
+	if testing.Short() {
+		seeds = 50
+	}
 	if v := os.Getenv("TUIOS_METAMORPHIC_SEEDS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			t.Fatalf("TUIOS_METAMORPHIC_SEEDS=%q is not a number", v)
 		}
 		seeds = n
-	}
-	if seeds <= 0 {
-		t.Skip("set TUIOS_METAMORPHIC_SEEDS=<seeds> to sweep the metamorphic properties")
 	}
 	steps := 120
 	if testing.Short() {
@@ -391,130 +348,66 @@ func TestVTGen_MetamorphicOraclesCanFail(t *testing.T) {
 	}
 }
 
-// TestVTGen_ZeroWidthCharacterLosesACell pins the bug the render round trip
-// found, reduced to two sequences.
+// TestVTGen_ZeroWidthAttachesOrDrops pins the fix for the bug the render
+// round trip found: a zero-width character with nothing to attach to used to
+// be given a cell of its own, taken from whatever was there, and the row
+// then held one more cell than it had columns. Render emitted the row
+// without it, everything after shifted one column left, and the last column
+// fell off the end - with DECALN, an E the emulator still believed was on
+// screen.
 //
-// A zero-width character with nothing to attach to - a combining mark at the
-// start of a row, a bidi control, a C1 code point arriving as text - is given
-// a cell of its own, and it takes that cell from whatever was already there.
-// The row then holds one more cell than it has columns. Render emits the row
-// without the zero-width cell, so everything after it shifts one column left
-// and the last column falls off the end.
-//
-// The lost column is not invisible. DECALN fills the screen with E, and after
-// a single zero-width character the frame is missing the E in the last column
-// while the emulator still believes it is there. That is a character on
-// screen that never reaches the host, and the emulator's own grid and its own
-// frame disagree about the pane.
-//
-// The ghostty differential found the same defect from the other direction:
-// the library discards a mark with no base rather than storing it, which is
-// TestGhosttyDivergence_OrphanCombiningMark. Not storing it would close both.
-func TestVTGen_ZeroWidthCharacterLosesACell(t *testing.T) {
+// The fix follows what ghostty and xterm do: a zero-width arrival combines
+// with the cell before the cursor (the cursor's own cell when a print is
+// parked at the margin), and is dropped when there is nothing there or when
+// it cannot extend that cell's cluster - a bidi control breaks the cluster
+// where a combining mark extends it.
+func TestVTGen_ZeroWidthAttachesOrDrops(t *testing.T) {
 	const w, h = 40, 4
 
-	cases := []struct{ name, zeroWidth string }{
-		{"bidi control", "‮"},
-		{"combining mark with no base", "́"},
+	frameCell := func(src *vt.Emulator, x, y int) *uv.Cell {
+		dst := vt.NewEmulator(src.Width(), src.Height())
+		if _, err := dst.WriteString(strings.ReplaceAll(src.Render(), "\n", "\r\n")); err != nil {
+			t.Fatal(err)
+		}
+		return dst.CellAt(x, y)
 	}
-	for _, tc := range cases {
+
+	for _, tc := range []struct{ name, zeroWidth string }{
+		{"bidi control", "\u202e"},
+		{"combining mark with no base", "\u0301"},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// DECALN fills every cell with E, so any cell the frame fails to
-			// carry shows up as a blank that should not be there.
+			// DECALN fills every cell with E and homes the cursor, so there is
+			// no cell before it to combine with: the arrival is dropped and
+			// every E survives, on the grid and in the frame.
 			src := vt.NewEmulator(w, h)
 			if _, err := src.WriteString("\x1b#8" + tc.zeroWidth); err != nil {
 				t.Fatal(err)
 			}
-
-			// The zero-width character took the first cell from the E that
-			// DECALN put there.
-			first := src.CellAt(0, 0)
-			if first == nil || first.Content != tc.zeroWidth {
-				t.Fatalf("cell (0,0) = %s, expected it to hold the zero-width character; "+
-					"if the emulator stopped storing these, delete this test",
-					cellText(first))
+			if first := src.CellAt(0, 0); first == nil || first.Content != "E" {
+				t.Errorf("cell (0,0) = %s, want the E that DECALN wrote", cellText(first))
 			}
-			if first.Width != 0 {
-				t.Errorf("cell (0,0) width = %d, want 0", first.Width)
-			}
-
-			// The last column still holds its E as far as the grid knows.
-			if last := src.CellAt(w-1, 0); last == nil || last.Content != "E" {
-				t.Fatalf("cell (%d,0) = %s, want the E that DECALN wrote", w-1, cellText(last))
-			}
-
-			// The frame does not carry it.
-			dst := vt.NewEmulator(w, h)
-			if _, err := dst.WriteString(strings.ReplaceAll(src.Render(), "\n", "\r\n")); err != nil {
-				t.Fatal(err)
-			}
-			got := dst.CellAt(w-1, 0)
-			if got != nil && got.Content == "E" {
-				t.Fatalf("the frame now carries the E in the last column, so the row no " +
-					"longer shifts; delete this test and ungate TestVTGen_Metamorphic")
-			}
-
-			// And what it does carry is shifted one column left.
-			if shifted := dst.CellAt(0, 0); shifted == nil || shifted.Content != "E" {
-				t.Errorf("frame cell (0,0) = %s, want the E from column 1 shifted left",
-					cellText(shifted))
-			}
-
-			// A mark that DOES have a base is handled correctly, which keeps
-			// this test honest about what the bug is: the failure is about
-			// having nothing to attach to, not about zero width as such.
-			ok := vt.NewEmulator(w, h)
-			if _, err := ok.WriteString("\x1b#8x́"); err != nil {
-				t.Fatal(err)
-			}
-			okDst := vt.NewEmulator(w, h)
-			if _, err := okDst.WriteString(strings.ReplaceAll(ok.Render(), "\n", "\r\n")); err != nil {
-				t.Fatal(err)
-			}
-			if c := okDst.CellAt(w-1, 0); c == nil || c.Content != "E" {
-				t.Errorf("a mark with a base also lost the last column (%s); "+
-					"the bug is wider than this test claims", cellText(c))
+			if last := frameCell(src, w-1, 0); last == nil || last.Content != "E" {
+				t.Errorf("frame cell (%d,0) = %s, want the E that DECALN wrote", w-1, cellText(last))
 			}
 		})
 	}
-}
 
-// TestVTGen_SplitEquivalenceIsOpen records that the second property still
-// fails, without pinning a seed.
-//
-// The first version of this named seed 28. Adding two modes to the generator
-// moved every seed's script and the test went green while the bug was
-// untouched, which is exactly the false all-clear a pinned seed invites: the
-// seed is a coordinate in the generator's output, not a property of the
-// emulator. So this searches a bounded range instead and reports the first
-// script it finds that draws one screen written whole and another written in
-// the pieces a PTY reader would have handed over.
-//
-// It fails when NOTHING in the range diverges, which is the day the property
-// starts holding and the gate on TestVTGen_Metamorphic should come off. The
-// range is wide because the condition is rare: three of the first two
-// thousand seeds hit it, and all three land in the last two columns, which
-// is where the right margin is.
-//
-// This is the class of bug that gets reported as a pane that "sometimes"
-// corrupts: nothing about the guest's output changed, only how much of it the
-// kernel had ready on each read.
-func TestVTGen_SplitEquivalenceIsOpen(t *testing.T) {
-	const searched = 300
-	for seed := range uint64(searched) {
-		script := vtgen.New(seed).Script(120)
-		broken := splitEquivalence(script, seed)
-		if broken == "" {
-			continue
-		}
-		small := shrinkSame(script, brokenSig(broken), func(c vtgen.Script) string {
-			return splitEquivalence(c, seed)
-		})
-		t.Logf("seed %d still diverges on write boundaries: %s\n\nreduced from %d steps to %d:\n%s",
-			seed, broken, len(script), len(small), small)
-		return
+	// A mark with a base joins it, whether the base is in the same write or
+	// the cluster was closed in between: after a control it combines with the
+	// cell just written, which is where ghostty and xterm put it.
+	src := vt.NewEmulator(w, h)
+	if _, err := src.WriteString("ab\a\u0301"); err != nil {
+		t.Fatal(err)
 	}
-	t.Fatalf("none of the first %d seeds diverged on write boundaries any more; "+
-		"the property may now hold, so ungate TestVTGen_Metamorphic and delete this test",
-		searched)
+	if c := src.CellAt(1, 0); c == nil || c.Content != "b\u0301" {
+		t.Errorf("cell (1,0) = %s, want the mark combined with the b", cellText(c))
+	}
+	// The bidi control cannot extend the b\u0301 cluster and is dropped.
+	if _, err := src.WriteString("\u202e"); err != nil {
+		t.Fatal(err)
+	}
+	if c := src.CellAt(1, 0); c == nil || c.Content != "b\u0301" {
+		t.Errorf("cell (1,0) = %s after a bidi control, want it unchanged", cellText(c))
+	}
 }

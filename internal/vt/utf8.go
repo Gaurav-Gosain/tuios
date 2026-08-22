@@ -1,6 +1,8 @@
 package vt
 
 import (
+	"unicode/utf8"
+
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -31,6 +33,13 @@ type openGrapheme struct {
 	active bool
 	x, y   int
 	width  int
+	// The margins the cluster was drawn under. handleGrapheme reads its
+	// margins from the cursor before consuming a pending wrap, which is what
+	// xterm does, so a continuation re-rendering the cell cannot recompute
+	// them from the cell's own position: a cluster that wrapped in from
+	// outside the margins was drawn under the screen's edges, not the
+	// margins it landed inside.
+	left, right int
 	// base is the cluster as drawn. A continuation rune has to be appended to
 	// it to find out whether the two are one cluster, and the drawing path does
 	// not otherwise keep the text around.
@@ -56,10 +65,11 @@ func (o *openGrapheme) baseCluster() string {
 // arm records a cluster as open at the cell it was drawn in. It touches no
 // pointer field unless one is already set, keeping the printable-ASCII path
 // free of write barriers.
-func (o *openGrapheme) arm(x, y, width int, ascii byte, base string) {
+func (o *openGrapheme) arm(x, y, width, left, right int, ascii byte, base string) {
 	o.active = true
 	o.x, o.y = x, y
 	o.width = width
+	o.left, o.right = left, right
 	o.baseASCII = ascii
 	if o.base != "" || base != "" {
 		o.base = base
@@ -104,7 +114,7 @@ func (e *Emulator) handlePrint(r rune) {
 		// Rebuilding the cell from the byte the guest sent would undo the
 		// mapping, so with a set designated the cluster is closed instead.
 		if e.charsets[e.gl] == nil && e.gsingle == 0 {
-			e.openGrapheme.arm(e.lastCellX, e.lastCellY, 1, byte(r), "")
+			e.openGrapheme.arm(e.lastCellX, e.lastCellY, 1, e.lastCellLeft, e.lastCellRight, byte(r), "")
 		} else {
 			e.openGrapheme.disarm()
 		}
@@ -173,14 +183,28 @@ func (e *Emulator) flushGraphemeAtWriteEnd() {
 	var open string
 	for len(graphemes) > 0 {
 		cluster, width := ansi.FirstGraphemeCluster(graphemes, method)
-		e.handleGrapheme(cluster, width)
+		res := e.handleGrapheme(cluster, width)
 		graphemes = graphemes[len(cluster):]
-		if len(graphemes) == 0 {
+		if len(graphemes) > 0 {
+			continue
+		}
+		switch res {
+		case printedCell:
 			// handleGrapheme records where it actually drew, which is not
 			// derivable from the cursor beforehand: a pending wrap makes it
 			// index to the next line first.
 			open = cluster
-			e.openGrapheme.arm(e.lastCellX, e.lastCellY, width, 0, cluster)
+			e.openGrapheme.arm(e.lastCellX, e.lastCellY, width, e.lastCellLeft, e.lastCellRight, 0, cluster)
+		case printDeferred:
+			// Nothing reached the screen, so there is no cell to reopen;
+			// the cluster stays buffered instead, and a continuation in the
+			// next Write joins it there exactly as it would have unsplit. A
+			// zero-width lead like a Prepend character only finds out what
+			// it is once its base arrives.
+			open = cluster
+		case printConsumed:
+			// Combined into an existing cell, or discarded for good. Keeping
+			// it would apply it a second time at the next flush.
 		}
 	}
 	// Keep only the open cluster so a continuation extends it and nothing else.
@@ -204,10 +228,32 @@ func (e *Emulator) extendOpenGrapheme() {
 	}
 
 	// A continuation can widen the cluster, and the cell it is already sitting
-	// in may not have room. Half a character at the right edge is dropped by
-	// the buffer, taking the base with it, so keep the width that fits.
-	if room := e.scr.Width() - e.openGrapheme.x; width > room {
-		width = room
+	// in may not have room: a presentation selector arriving after its base
+	// was drawn in the last column. The whole-write path never leaves the
+	// wide cluster there, so the split path cannot either. The margins are
+	// the ones the base was drawn under, not the ones its cell now sits in.
+	ox, oy := e.openGrapheme.x, e.openGrapheme.y
+	left, right := e.openGrapheme.left, e.openGrapheme.right
+	if width > right-ox {
+		drawn := e.openGrapheme.baseCluster()
+		e.openGrapheme.disarm()
+		if e.autoWrapMode() {
+			// Redraw the whole cluster from the cell its base was drawn in,
+			// with the wrap it would have taken arriving unsplit; ghostty
+			// moves the widened cluster to the next line the same way.
+			e.scr.SetCell(ox, oy, nil)
+			e.scr.setCursor(ox, oy, false)
+			e.atPhantom = false
+			if e.handleGraphemeWithin(cluster, width, left, right) == printedCell {
+				e.openGrapheme.arm(e.lastCellX, e.lastCellY, width, e.lastCellLeft, e.lastCellRight, 0, cluster)
+			}
+			return
+		}
+		// No wrap to move to. The base keeps its cell and the continuation
+		// runes fall back to the zero-width attach rules, which is what the
+		// unsplit write does with a wide cluster it cannot place.
+		e.grapheme = append(e.grapheme[:0], []rune(s[len(drawn):])...)
+		return
 	}
 
 	cell := uv.Cell{
@@ -222,24 +268,143 @@ func (e *Emulator) extendOpenGrapheme() {
 	// The marks are part of the character now, so a repeat has to carry them.
 	e.lastCluster, e.lastClusterWidth = cluster, width
 
-	// A continuation can change the cluster's width (a variation selector turns
-	// a narrow base wide); move the cursor by the delta so following output
-	// still lands after it.
+	// A continuation can change the cluster's width (a variation selector
+	// turns a narrow base wide); recompute the cursor from the cluster's own
+	// cell with the same margin rules the draw path uses, so following output
+	// still lands after it and a cluster grown flush against the margin
+	// parks and arms the pending wrap exactly as it would have unsplit.
 	if width != e.openGrapheme.width {
-		x, y := e.scr.CursorPosition()
-		x += width - e.openGrapheme.width
-		x = max(x, 0)
-		if w := e.scr.Width(); x >= w {
-			x = w - 1
-			e.atPhantom = e.autoWrapMode()
+		x, y := ox, oy
+		if x+width >= right {
+			e.parkedX, e.parkedY = x, y
+			if e.autoWrapMode() {
+				e.atPhantom = true
+				x = right - 1
+			} else {
+				e.atPhantom = false
+				x += width
+			}
+		} else {
+			e.parkedX = -1
+			e.atPhantom = false
+			x += width
 		}
 		e.scr.setCursor(x, y, false)
 		e.openGrapheme.width = width
 	}
 }
 
+// printOutcome says what handleGrapheme did with a cluster, which a caller
+// leaving state across a Write boundary has to know: only a stored cell can
+// be reopened, only an unconsumed cluster may stay buffered.
+type printOutcome uint8
+
+const (
+	// printedCell: stored as a cell at the cursor.
+	printedCell printOutcome = iota
+	// printConsumed: combined into an existing cell, or discarded for good.
+	printConsumed
+	// printDeferred: nothing happened yet; the cluster may still grow into
+	// something printable.
+	printDeferred
+)
+
+// attachZeroWidth handles a zero-width cluster that arrives with no open
+// cluster to extend: a combining mark after a control or a cursor move, a
+// bidi control, a mark at the start of a row.
+//
+// Terminals attach these to the cell just written - ghostty and xterm both
+// combine with the cell before the cursor, or with the cursor's own cell
+// under a pending wrap - and drop them when there is nothing there: at
+// column 0, over a never-written cell, or when the code point cannot form
+// one cluster with the cell's content (a bidi control breaks the cluster
+// where a combining mark extends it). Storing them as cells of their own
+// instead gave the row more cells than columns, and Render, which emits
+// nothing for them, shifted everything after one column left.
+func (e *Emulator) attachZeroWidth(content string) printOutcome {
+	x, y := e.scr.CursorPosition()
+	tx := x - 1
+	if x == e.parkedX && y == e.parkedY {
+		// The cursor is still standing on the cell it last drew - a print at
+		// the right margin, wrapped or not - so that cell is the base.
+		tx = x
+	}
+	if tx < 0 {
+		return printDeferred
+	}
+	c := e.scr.CellAt(tx, y)
+	if (c == nil || c.Content == "") && tx > 0 {
+		// The cell before the cursor may be the continuation of a wide
+		// character; the mark belongs on its lead.
+		if lead := e.scr.CellAt(tx-1, y); lead != nil && lead.Width == 2 {
+			tx, c = tx-1, lead
+		}
+	}
+	if c == nil || c.Content == "" {
+		// Nothing to combine with yet. The cluster may still be completed by
+		// a later write - a Prepend character measures zero until its base
+		// arrives - so it stays buffered rather than dropped.
+		return printDeferred
+	}
+
+	// One rune at a time, with a final verdict per rune, because that is the
+	// only shape that gives the same screen however the run was split across
+	// writes: each code point's fate depends only on the cell as it stands,
+	// never on the runes still in flight. A rune joins if the cell still
+	// reads as a single cluster of the same width with it appended. A rune
+	// that would break the cluster (a bidi control) or change the measured
+	// width (a keycap or presentation selector on a narrow base) is dropped:
+	// the cell cannot grow without eating its neighbour, and the grid never
+	// lies about width.
+	cell := *c
+	changed := false
+	for _, r := range content {
+		rs := string(r)
+		if _, rw := ansi.FirstGraphemeCluster(rs, ansi.GraphemeWidth); rw != 0 {
+			// A rune that occupies columns on its own - the emoji after a
+			// joiner - is dropped rather than folded in: arriving at a
+			// cluster boundary instead it would start a cell of its own,
+			// and its fate must not depend on where a write boundary fell.
+			continue
+		}
+		joined := cell.Content + rs
+		cl, cw := ansi.FirstGraphemeCluster(joined, ansi.GraphemeWidth)
+		if len(cl) != len(joined) || cw != cell.Width {
+			continue
+		}
+		cell.Content = joined
+		changed = true
+	}
+	if changed {
+		e.scr.SetCell(tx, y, &cell)
+	}
+	return printConsumed
+}
+
 // handleGrapheme handles UTF-8 graphemes.
-func (e *Emulator) handleGrapheme(content string, width int) {
+func (e *Emulator) handleGrapheme(content string, width int) printOutcome {
+	if width == 0 {
+		return e.attachZeroWidth(content)
+	}
+
+	// Where the line ends and where a wrap lands. With DECLRMM set they are the
+	// horizontal margins rather than the screen edges: wrapping at the right
+	// margin is the whole reason a guest asks for one, and a terminal that
+	// accepts the mode and then runs to the edge has given it nothing. A cursor
+	// parked outside the margins keeps the screen's own edges, which is what
+	// xterm does.
+	x, _ := e.scr.CursorPosition()
+	left, right := 0, e.scr.Width()
+	if r := e.scr.ScrollRegion(); (r.Min.X != 0 || r.Max.X != right) && x >= r.Min.X && x < r.Max.X {
+		left, right = r.Min.X, r.Max.X
+	}
+	return e.handleGraphemeWithin(content, width, left, right)
+}
+
+// handleGraphemeWithin is handleGrapheme with the line's edges already
+// decided. It exists so a continuation re-rendering a cluster from a previous
+// Write can replay the exact margins the cluster was drawn under.
+func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) printOutcome {
 	awm := e.autoWrapMode()
 	cell := uv.Cell{
 		Content: content,
@@ -249,17 +414,6 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	}
 
 	x, y := e.scr.CursorPosition()
-
-	// Where the line ends and where a wrap lands. With DECLRMM set they are the
-	// horizontal margins rather than the screen edges: wrapping at the right
-	// margin is the whole reason a guest asks for one, and a terminal that
-	// accepts the mode and then runs to the edge has given it nothing. A cursor
-	// parked outside the margins keeps the screen's own edges, which is what
-	// xterm does.
-	left, right := 0, e.scr.Width()
-	if r := e.scr.ScrollRegion(); (r.Min.X != 0 || r.Max.X != right) && x >= r.Min.X && x < r.Max.X {
-		left, right = r.Min.X, r.Max.X
-	}
 
 	if e.atPhantom && awm {
 		// moves cursor down similar to [Terminal.linefeed] except it doesn't
@@ -298,14 +452,29 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	// margin. xterm and ghostty both blank the column that cannot hold it and
 	// wrap the cluster whole.
 	if cell.Width > 1 && x+cell.Width > right {
-		e.scr.SetCell(x, y, nil)
 		if !awm {
-			// Nothing to wrap to. The column stays blank rather than holding
-			// half a character.
-			e.lastCellX, e.lastCellY = x, y
-			e.scr.setCursor(x, y, false)
-			return
+			// Nothing to wrap to. A cluster wide from its first rune - a CJK
+			// character - is discarded whole and the cell keeps what it
+			// already held, which is what ghostty does. A cluster a selector
+			// widened has a base that fits on its own, so the base is drawn
+			// as it would have been arriving first. Either way the zero-width
+			// tail falls back to the attach rules. The split-write path
+			// reaches this state one rune at a time, so anything else here
+			// would make the screen depend on where a read boundary fell.
+			_, sz := utf8.DecodeRuneInString(content)
+			base, tail := content[:sz], content[sz:]
+			_, bw := ansi.FirstGraphemeCluster(base, ansi.GraphemeWidth)
+			if bw > 0 && x+bw <= right {
+				e.handleGraphemeWithin(base, bw, left, right)
+			} else {
+				e.scr.setCursor(x, y, false)
+			}
+			if tail != "" {
+				e.attachZeroWidth(tail)
+			}
+			return printConsumed
 		}
+		e.scr.SetCell(x, y, nil)
 		e.index()
 		_, y = e.scr.CursorPosition()
 		x = left
@@ -325,6 +494,7 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	}
 
 	e.lastCellX, e.lastCellY = x, y
+	e.lastCellLeft, e.lastCellRight = left, right
 	e.scr.SetCell(x, y, &cell)
 
 	// Pending wrap: the cursor stays on the character just drawn and the wrap
@@ -333,7 +503,18 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 	// line. A wide cluster ending flush against the margin has to arm it too,
 	// or the next character lands on that cluster's own second cell and eats
 	// the character already there.
-	if awm && cell.Width > 0 && x+cell.Width >= right {
+	//
+	// parked records the same condition without the autowrap gate: whether or
+	// not the line will wrap, the cursor is left standing on the cell just
+	// drawn, and a zero-width arrival has to know that to combine with the
+	// right cell. ghostty keeps its pending-wrap flag this way.
+	parked := x+cell.Width >= right
+	if parked {
+		e.parkedX, e.parkedY = x, y
+	} else {
+		e.parkedX = -1
+	}
+	if awm && parked {
 		e.atPhantom = true
 		x = right - 1
 	} else {
@@ -343,4 +524,5 @@ func (e *Emulator) handleGrapheme(content string, width int) {
 
 	// NOTE: We don't reset the phantom state here, we handle it up above.
 	e.scr.setCursor(x, y, false)
+	return printedCell
 }

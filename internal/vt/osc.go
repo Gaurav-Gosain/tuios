@@ -13,7 +13,8 @@ import (
 
 // handleOsc handles an OSC escape sequence.
 func (e *Emulator) handleOsc(cmd int, data []byte) {
-	e.flushGrapheme() // Flush any pending grapheme before handling OSC sequences.
+	// No grapheme flush: an OSC neither prints nor moves the cursor, so the
+	// cluster in flight stays open across it, as ghostty keeps it.
 	if !e.handlers.handleOsc(cmd, data) {
 		e.logf("unhandled sequence: OSC %q", data)
 	}

@@ -153,6 +153,7 @@ func (e *Emulator) fullReset() {
 	e.charsets = [4]CharSet{}
 	e.charsetIDs = defaultCharsetIDs
 	e.atPhantom = false
+	e.parkedX = -1
 	e.grapheme = e.grapheme[:0]
 	e.openGrapheme = openGrapheme{}
 	e.lastCluster, e.lastClusterWidth = "", 0
