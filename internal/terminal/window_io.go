@@ -14,6 +14,21 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
+// debugLogf appends one formatted line to /tmp/tuios-debug.log when
+// TUIOS_DEBUG_INTERNAL=1, and is a no-op otherwise. One helper instead of a
+// getenv+open at every call site, and one file instead of several.
+func debugLogf(format string, v ...any) {
+	if os.Getenv("TUIOS_DEBUG_INTERNAL") != "1" {
+		return
+	}
+	f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(f, format, v...)
+	_ = f.Close()
+}
+
 const (
 	// maxBatch caps how much pending PTY output one pass of outputWriter
 	// coalesces before writing it to the emulator.
@@ -659,15 +674,9 @@ func (w *Window) handleIOOperations() {
 					}
 
 					// Debug: Log all data from PTY (applications sending queries)
-					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-						if len(buf[:n]) >= 2 && buf[0] == '\x1b' {
-							debugMsg := fmt.Sprintf("[%s] PTY->Terminal query: %q (hex: % x)\n",
-								time.Now().Format("15:04:05.000"), string(buf[:n]), buf[:n])
-							if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-								_, _ = f.WriteString(debugMsg)
-								_ = f.Close()
-							}
-						}
+					if n >= 2 && buf[0] == '\x1b' {
+						debugLogf("[%s] PTY->Terminal query: %q (hex: % x)\n",
+							time.Now().Format("15:04:05.000"), string(buf[:n]), buf[:n])
 					}
 
 					// Terminal.Write mutates the cell buffer, so it needs the
@@ -717,27 +726,13 @@ func (w *Window) handleIOOperations() {
 					data := buf[:n]
 
 					// Debug: Log ALL data from terminal response pipe when debug mode is enabled
-					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-						debugMsg := fmt.Sprintf("[%s] Terminal->PTY [%s] ALL data (%d bytes): %q (hex: % x)\n",
-							time.Now().Format("15:04:05.000"), shortID(w.ID), len(data), string(data), data)
-						if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-							_, _ = f.WriteString(debugMsg)
-							_ = f.Close()
-						}
-					}
+					debugLogf("[%s] Terminal->PTY [%s] ALL data (%d bytes): %q (hex: % x)\n",
+						time.Now().Format("15:04:05.000"), shortID(w.ID), len(data), string(data), data)
 
 					// Debug: Log XTWINOPS responses when debug mode is enabled
-					if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-						if len(data) >= 6 && data[0] == '\x1b' && data[1] == '[' && data[len(data)-1] == 't' {
-							// This looks like an XTWINOPS response
-							debugMsg := fmt.Sprintf("[%s] XTWINOPS response to PTY: %q (hex: % x)\n",
-								time.Now().Format("15:04:05.000"), string(data), data)
-							// Append to debug log file
-							if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-								_, _ = f.WriteString(debugMsg)
-								_ = f.Close()
-							}
-						}
+					if len(data) >= 6 && data[0] == '\x1b' && data[1] == '[' && data[len(data)-1] == 't' {
+						debugLogf("[%s] XTWINOPS response to PTY: %q (hex: % x)\n",
+							time.Now().Format("15:04:05.000"), string(data), data)
 					}
 
 					// Write to PTY. Snapshot the handle under the read lock
@@ -773,26 +768,16 @@ func (w *Window) SendInput(input []byte) error {
 	// In daemon mode, use the callback to send input to daemon PTY
 	if w.DaemonMode {
 		if w.DaemonWriteFunc == nil {
-			// Debug: this might be why input fails
-			if f, _ := os.OpenFile("/tmp/tuios-input-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); f != nil {
-				_, _ = fmt.Fprintf(f, "[%s] SendInput: DaemonWriteFunc is nil! PTYID=%s\n",
-					time.Now().Format("15:04:05.000"), w.PTYID)
-				_ = f.Close()
-			}
+			debugLogf("[%s] SendInput: DaemonWriteFunc is nil! PTYID=%s\n",
+				time.Now().Format("15:04:05.000"), w.PTYID)
 			return fmt.Errorf("daemon write function not set")
 		}
 		return w.DaemonWriteFunc(input)
 	}
 
 	// Debug: Log all SendInput calls when debug mode is enabled
-	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		debugMsg := fmt.Sprintf("[%s] SendInput [%s] (%d bytes): %q (hex: % x)\n",
-			time.Now().Format("15:04:05.000"), shortID(w.ID), len(input), string(input), input)
-		if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-			_, _ = f.WriteString(debugMsg)
-			_ = f.Close()
-		}
-	}
+	debugLogf("[%s] SendInput [%s] (%d bytes): %q (hex: % x)\n",
+		time.Now().Format("15:04:05.000"), shortID(w.ID), len(input), string(input), input)
 
 	// Local mode - write directly to PTY.
 	//

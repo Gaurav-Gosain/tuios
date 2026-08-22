@@ -96,7 +96,7 @@ func BenchmarkStateCodec(b *testing.B) {
 	for _, n := range []int{4, 16, 64} {
 		st := benchState(n)
 
-		for _, ct := range []CodecType{CodecJSON, CodecGob} {
+		for _, ct := range []CodecType{CodecGob} {
 			codec := GetCodec(ct)
 			b.Run(fmt.Sprintf("%s/windows-%d/encode", ct, n), func(b *testing.B) {
 				b.ReportAllocs()

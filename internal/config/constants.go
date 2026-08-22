@@ -713,12 +713,6 @@ var CopyOnSelect = true
 // Set via appearance.focus_follows_mouse config.
 var FocusFollowsMouse = false
 
-// FocusFollowsMouseInTerminal extends focus-follows-mouse into terminal mode,
-// where it is off by default: while typing, the pointer sits over a pane for
-// reasons other than a focus request, so hover-focus there is a separate opt-in.
-// Set via appearance.focus_follows_mouse_in_terminal config.
-var FocusFollowsMouseInTerminal = false
-
 // AltDrag makes alt + left-drag move a pane, the gesture nearly every desktop
 // window manager binds. It is on by default because the hands that know it
 // already outnumber the ones that do not. Turning it off hands alt-drag back to

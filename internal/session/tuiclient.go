@@ -232,7 +232,7 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	}
 
 	// Update codec based on what server negotiated
-	c.codec = NegotiateCodec(welcome.Codec)
+	c.codec = DefaultCodec()
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))
@@ -878,19 +878,10 @@ func (c *TUIClient) readLoop() {
 func (c *TUIClient) handleMessage(msg *Message) {
 	switch msg.Type {
 	case MsgPTYOutput:
-		// Try binary format first (optimized path from daemon)
-		var ptyID string
-		var data []byte
+		// MsgPTYOutput is always the binary format (36-byte PTY ID + data).
 		ptyID, data, err := ParseBinaryPTYMessage(msg.Payload)
 		if err != nil || ptyID == "" {
-			// Fall back to codec format
-			var payload PTYOutputPayload
-			if err := msg.ParsePayloadWithCodec(&payload, c.codec); err == nil && payload.PTYID != "" {
-				ptyID = payload.PTYID
-				data = payload.Data
-			} else {
-				return
-			}
+			return
 		}
 
 		c.ptyHandlersMu.RLock()

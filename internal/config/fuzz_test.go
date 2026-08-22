@@ -232,9 +232,6 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 		if cfg.Appearance.DockbarPosition == "" {
 			t.Fatalf("dockbar_position survived fill as empty")
 		}
-		if cfg.Daemon.DefaultCodec == "" {
-			t.Fatalf("default_codec survived fill as empty")
-		}
 
 		// Every validation finding must be reportable to the user.
 		for _, e := range result.Errors {

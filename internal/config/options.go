@@ -60,7 +60,6 @@ var (
 	whichKeyPositions    = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
 	windowTitlePositions = []string{"bottom", "top", "hidden"}
 	daemonLogLevels      = []string{"off", "errors", "basic", "messages", "verbose", "trace"}
-	daemonCodecs         = []string{"gob", "json"}
 )
 
 // optionSpecs is the registry, hand-written so each entry can say what the
@@ -123,11 +122,6 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.focus_follows_mouse", Type: OptionBool, Section: "appearance",
 		Description: "Focus the pane under the cursor as the mouse moves",
-		Default:     "false",
-	},
-	{
-		Path: "appearance.focus_follows_mouse_in_terminal", Type: OptionBool, Section: "appearance",
-		Description: "Also hover-focus while in terminal mode",
 		Default:     "false",
 	},
 	{
@@ -413,16 +407,6 @@ var optionSpecs = []Option{
 		Path: "daemon.log_level", Type: OptionString, Section: "daemon",
 		Description: "How much the daemon logs",
 		Accepted:    daemonLogLevels, Default: "off",
-	},
-	{
-		Path: "daemon.default_codec", Type: OptionString, Section: "daemon",
-		Description: "Wire codec for the daemon protocol",
-		Accepted:    daemonCodecs, Default: "gob",
-	},
-	{
-		Path: "daemon.socket_path", Type: OptionString, Section: "daemon",
-		Description: "Socket path; empty uses $XDG_RUNTIME_DIR/tuios/daemon.sock",
-		Default:     "",
 	},
 	{
 		Path: "daemon.agent_autodetect", Type: OptionBool, Section: "daemon",

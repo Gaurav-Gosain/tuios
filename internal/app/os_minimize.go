@@ -1,8 +1,6 @@
 package app
 
 import (
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -28,15 +26,6 @@ func (m *OS) MinimizeWindow(i int) {
 
 		// Set highlight timestamp for dock tab
 		window.MinimizeHighlightUntil = now.Add(1 * time.Second)
-
-		// DEBUG: Log minimize action
-		if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-			if f, err := os.OpenFile("/tmp/tuios-minimize-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
-				_, _ = fmt.Fprintf(f, "[MINIMIZE] Window index=%d, ID=%s, CustomName=%s, Highlight set until %s\n",
-					i, window.ID, window.CustomName, window.MinimizeHighlightUntil.Format("15:04:05.000"))
-				_ = f.Close()
-			}
-		}
 
 		// Change focus to next visible window
 		if i == m.FocusedWindow {

@@ -36,9 +36,9 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 			cs.clientID, payload.CellWidth, payload.CellHeight, payload.KittyGraphics, payload.SixelGraphics, payload.TerminalName)
 	}
 
-	// Negotiate codec based on client preference
-	cs.codec = NegotiateCodec(payload.PreferredCodec)
-	LogBasic("Client %s negotiated codec: %s", cs.clientID, cs.codec.Type())
+	// gob is the only payload codec; PreferredCodec stays in the handshake
+	// for wire stability but cannot select anything else.
+	cs.codec = DefaultCodec()
 
 	sessions := d.manager.ListSessions()
 	names := make([]string, len(sessions))
@@ -326,17 +326,13 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 		return nil
 	}
 
-	// Try binary format first (36-byte PTY ID + data)
+	// MsgInput is always the binary format (36-byte PTY ID + data); the gob
+	// InputPayload fallback misparsed any gob payload of 36 bytes or more as
+	// a PTY id, and no current client sends one.
 	ptyID, data, err := ParseBinaryPTYMessage(msg.Payload)
 	if err != nil {
-		// Fall back to codec format
-		var payload InputPayload
-		if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
-			debugLog("[DEBUG] handleInput: failed to parse payload: %v", err)
-			return nil
-		}
-		ptyID = payload.PTYID
-		data = payload.Data
+		debugLog("[DEBUG] handleInput: failed to parse payload: %v", err)
+		return nil
 	}
 
 	if ptyID != "" {

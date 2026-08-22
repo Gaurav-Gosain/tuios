@@ -274,8 +274,8 @@ func (c *Client) sendHello() error {
 		return daemonProtocolMismatch(c.version, &welcome)
 	}
 
-	// Update codec based on what server negotiated
-	c.codec = NegotiateCodec(welcome.Codec)
+	// gob is the only payload codec.
+	c.codec = DefaultCodec()
 
 	return nil
 }

@@ -299,18 +299,6 @@ type FocusPTYPayload struct {
 	PTYID string `json:"pty_id"`
 }
 
-// InputPayload carries input to a specific PTY.
-type InputPayload struct {
-	PTYID string `json:"pty_id"`
-	Data  []byte `json:"data"`
-}
-
-// PTYOutputPayload carries output from a specific PTY.
-type PTYOutputPayload struct {
-	PTYID string `json:"pty_id"`
-	Data  []byte `json:"data"`
-}
-
 // ResizePTYPayload requests resizing a specific PTY.
 type ResizePTYPayload struct {
 	PTYID  string `json:"pty_id"`
@@ -640,7 +628,7 @@ func readMessageBody(r io.Reader, totalLen uint32) (*Message, CodecType, error) 
 	}
 
 	// Debug logging
-	LogMessage("RECV", msg, GetCodec(codecType))
+	LogMessage("RECV", msg, DefaultCodec())
 
 	return msg, codecType, nil
 }
@@ -767,15 +755,4 @@ func ParseBinaryPTYMessage(payload []byte) (ptyID string, data []byte, err error
 	}
 	data = payload[36:]
 	return ptyID, data, nil
-}
-
-// NegotiateCodec determines the codec to use based on client preference.
-// Returns gob by default unless the client explicitly requests json.
-func NegotiateCodec(preferredCodec string) Codec {
-	switch preferredCodec {
-	case "json", "JSON":
-		return GetCodec(CodecJSON)
-	default:
-		return GetCodec(CodecGob)
-	}
 }
