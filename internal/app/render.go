@@ -383,6 +383,16 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 	if m.zenBordersHidden(isFocused) {
 		return m.renderWindowBoxZen(window, content, preShaped)
 	}
+	// A body that is already the pane's rectangle needs nothing from lipgloss
+	// but a border cell on each end of each row, and paying Style.Render to
+	// work that out costs four measuring passes over the body. See
+	// fastWindowBox; the title bar comes out identical either way.
+	if preShaped {
+		if out, ok := m.fastWindowBox(content, window, borderColorObj,
+			m.workspacePosition(window), m.AutoTiling); ok {
+			return out
+		}
+	}
 	box := sizeContentBox(lipgloss.NewStyle().
 		Align(lipgloss.Left).
 		AlignVertical(lipgloss.Top).
