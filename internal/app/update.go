@@ -1420,10 +1420,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case PathAppsMsg:
-		// A finished $PATH scan, handed over here so the palette's rows are only
-		// ever built on this goroutine.
+		// A finished $PATH scan, handed over here so the launcher's rows are
+		// only ever built on this goroutine.
 		m.applyPathApps(msg.Entries)
-		if m.ShowCommandPalette {
+		if m.ShowLauncher {
 			m.MarkAllDirty()
 		}
 		return m, nil

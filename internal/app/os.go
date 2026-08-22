@@ -510,21 +510,31 @@ type OS struct {
 	// BuildSessionTree does a blocking daemon round trip in daemon mode, and the
 	// palette renders every frame it is on screen.
 	PaletteSessionItems []CommandPaletteItem
-	// PaletteAppItems holds one row per program on $PATH, rebuilt when a scan
-	// lands rather than per open: the scan is asynchronous and the rows outlive
-	// any one palette.
-	PaletteAppItems []CommandPaletteItem
 	// PaletteItems is the merged list the filter and the renderer read. Merging
 	// is cached because the renderer rebuilds the filtered list every frame, and
 	// with a few thousand programs on $PATH rebuilding the merge that often is
 	// the difference between a palette that costs nothing to leave open and one
 	// that does not.
 	PaletteItems []CommandPaletteItem
+	// Launcher overlay: the programs a session can start, which is a separate
+	// list from the palette's commands (see launcher.go for why).
+	ShowLauncher     bool
+	LauncherQuery    string
+	LauncherSelected int
+	LauncherScroll   int
+	// LauncherItems holds one row per known program, rebuilt when a scan lands
+	// rather than per frame: with a few thousand programs on $PATH, rebuilding
+	// per frame is the difference between an overlay that costs nothing to
+	// leave open and one that does not.
+	LauncherItems []LauncherItem
 	// pathApps caches the $PATH scan across opens, refreshing only the
 	// directories whose mtime moved.
 	pathApps *applist.Cache
 	// launchHistory ranks programs by how recently and often they were run.
 	launchHistory *applist.Frecency
+	// pendingSeeds holds command lines waiting for the daemon-created panes
+	// they are to be typed into.
+	pendingSeeds []pendingSeed
 	// Session switcher overlay
 	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string

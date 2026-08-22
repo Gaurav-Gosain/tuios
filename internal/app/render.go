@@ -477,7 +477,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if len(m.Animations) > 0 || m.Renaming() {
 		return nil, false
 	}
-	if m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher || m.ShowWorkspaceSwitcher || m.ShowLayoutPicker ||
+	if m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher || m.ShowWorkspaceSwitcher || m.ShowLayoutPicker ||
 		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker ||
 		m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil {
@@ -700,7 +700,7 @@ func (m *OS) flushGraphicsForView() {
 	// been told the new size yet, so it smears across the panes for the length
 	// of the drag. Hiding keeps the image data resident, so the gesture ending
 	// puts it back with no round trip to whatever drew it.
-	hideImages := m.Resizing || m.ShowHelp || m.ShowCommandPalette || m.ShowSessionSwitcher ||
+	hideImages := m.Resizing || m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher ||
 		m.ShowWorkspaceSwitcher || m.ShowLayoutPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
 		m.ShowSettings || m.ShowThemePicker || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview

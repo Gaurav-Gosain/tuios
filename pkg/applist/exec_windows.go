@@ -49,3 +49,17 @@ func (e Entry) Argv() []string {
 	}
 	return []string{e.Path}
 }
+
+// CommandLine is e written the way the user would have typed it, for a launcher
+// that puts the command on a shell's prompt instead of running it.
+//
+// The bare name is preferred over the listed path because it resolves to the
+// same file: Scan applies the same %PATH% and %PATHEXT% rule the shell does. A
+// name carrying a space or a quote is wrapped in double quotes, which is the
+// one quoting form both cmd.exe and PowerShell read the same way.
+func (e Entry) CommandLine() string {
+	if !strings.ContainsAny(e.Name, " \t\"'&|<>^%!") {
+		return e.Name
+	}
+	return `"` + strings.ReplaceAll(e.Path, `"`, `""`) + `"`
+}

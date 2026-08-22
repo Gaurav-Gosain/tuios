@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"slices"
+	"strings"
 	"syscall"
 )
 
@@ -44,4 +45,57 @@ func executable(info fs.FileInfo) bool {
 // path is directly executable, so it is the whole command.
 func (e Entry) Argv() []string {
 	return []string{e.Path}
+}
+
+// CommandLine is e written the way the user would have typed it, for a launcher
+// that puts the command on a shell's prompt instead of running it.
+//
+// The bare name is preferred over the listed path because it is shorter, it is
+// what the user recognises, and it resolves to the same file: Scan applies the
+// shell's own $PATH rule, so the name that won here is the name the shell wins
+// with. A name a shell would re-read (a space, a quote, a glob character) is
+// not worth guessing at, so those fall back to the single-quoted absolute path.
+func (e Entry) CommandLine() string {
+	if shellSafe(e.Name) {
+		return e.Name
+	}
+	return shellQuote(e.Path)
+}
+
+// shellSafe reports whether s means itself to a POSIX shell.
+//
+// The set is allow-listed rather than deny-listed, so a character nobody
+// thought about gets quoted, which is merely ugly, instead of being handed to
+// the shell to interpret.
+func shellSafe(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.', r == '_', r == '-', r == '+':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// shellQuote wraps s so a POSIX shell reads it as one literal word. The only
+// character a single-quoted string cannot hold is the single quote itself,
+// which is closed, escaped and reopened.
+func shellQuote(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) + 2)
+	b.WriteByte('\'')
+	for i := range len(s) {
+		if s[i] == '\'' {
+			b.WriteString(`'\''`)
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	b.WriteByte('\'')
+	return b.String()
 }

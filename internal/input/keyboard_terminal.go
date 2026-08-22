@@ -147,6 +147,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleCommandPaletteInput(msg, o)
 	}
 
+	// Handle launcher (takes priority in terminal mode)
+	if o.ShowLauncher {
+		return handleLauncherInput(msg, o)
+	}
+
 	// Handle log viewer (takes priority in terminal mode)
 	if o.ShowLogs {
 		return handleLogViewerKey(msg, o)
@@ -298,6 +303,12 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// control byte and under every Kitty keyboard encoding (see isCtrlP).
 	if isCtrlP(msg) {
 		return o, o.OpenCommandPalette()
+	}
+
+	// Launcher: alt+space, intercepted before terminal forwarding for the same
+	// reason and matched the same way.
+	if isLauncherKey(msg) {
+		return o, o.OpenLauncher()
 	}
 
 	// Handle paste shortcuts - intercept and request clipboard via OSC 52.
