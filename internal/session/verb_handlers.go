@@ -221,6 +221,7 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		Workspace: p.Workspace,
 		Focus:     focus,
 		Command:   p.Command,
+		Name:      p.Name,
 	}, onExit)
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)
@@ -228,9 +229,6 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 
 	displayName := win.Title
 	if p.Name != "" {
-		if err := sess.RenameDaemonWindow(win.ID, p.Name); err != nil {
-			return nil, mapResolveErr(err, sess)
-		}
 		displayName = p.Name
 	}
 

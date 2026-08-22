@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -391,4 +392,100 @@ func TestLauncherDrawsNoIconsWithoutGraphics(t *testing.T) {
 	if n := distinctLauncherImages(f.stream.bytes()); n != 0 {
 		t.Fatalf("%d launcher images were uploaded with graphics off", n)
 	}
+}
+
+// --- type it out -----------------------------------------------------------
+
+// requireTypedThenRuns is the only honest assertion for the type-it-out path.
+//
+// Seeing the command's name on screen proves nothing: the pane's border carries
+// it as a title, and the tty's own line discipline echoes bytes written before
+// the shell has turned echo off, so text can be on screen that no line editor
+// ever received. Pressing Enter and requiring the program to run is what tells
+// a command line waiting to be edited from a picture of one.
+func requireTypedThenRuns(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	if strings.Contains(term.Screen().Text(), runAnythingMarker) {
+		t.Fatalf("the program ran, so it was not left for the user to run:\n%s", term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("run the typed command: %v", err)
+	}
+	if err := term.WaitForText(runAnythingMarker, shellTimeout); err != nil {
+		t.Fatalf("no command was waiting at the prompt to be run: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestLauncherTypesOutIntoASpawningPane is the local half: the pane and its PTY
+// exist the moment the launcher asks for them, and the line is written into a
+// shell that has not started yet.
+func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
+	dir := writeProbe(t)
+	term, _ := start(t, startOpts{
+		args: []string{"--standalone"},
+		env:  []string{"PATH=" + dir + ":/usr/bin:/bin", "SHELL=/usr/bin/fish"},
+	})
+	waitBoot(t, term)
+	queryProbe(t, term)
+
+	if err := term.SendKeys(tuitest.Tab); err != nil {
+		t.Fatalf("tab: %v", err)
+	}
+	// fish announces itself, which is how the shell being up is told from the
+	// line discipline having echoed the bytes before it started.
+	if err := term.WaitForText("Welcome to fish", shellTimeout); err != nil {
+		t.Fatalf("the pane's shell never started: %v\n%s", err, term.Snapshot())
+	}
+	requireTypedThenRuns(t, term)
+}
+
+// TestLauncherTypesOutIntoADaemonPane is the other half: the pane is created by
+// the daemon and reaches this client in a state push, by which time its shell
+// has been running for a while.
+//
+// It is the half the report was about. The line was parked for a pane matching
+// the name the launcher asked for, and the daemon pushed the pane's creation
+// and its naming as two separate states, so the client adopted it unnamed and
+// nothing ever matched.
+func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
+	dir := writeProbe(t)
+	// The daemon spawns the pane's shell from its own environment, and this
+	// path types a bare name for that shell to resolve, so the probe has to be
+	// on the daemon's $PATH and not only on the client's. The daemon inherits
+	// this process's, which is what makes setting it here enough.
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	base := t.TempDir()
+	killDaemon(t, base)
+
+	if out, err := tuiosCLI(t, base, "new", "e2e-type", "--detach"); err != nil {
+		t.Fatalf("create detached session: %v: %s", err, out)
+	}
+	term := startIn(t, base, startOpts{
+		args: []string{"attach", "e2e-type"},
+		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+	})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatalf("window mode: %v", err)
+	}
+	if err := term.WaitForText("Window Management Mode", uiTimeout); err != nil {
+		t.Fatalf("never reached window management mode: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(insertGuard)
+
+	queryProbe(t, term)
+	if err := term.SendKeys(tuitest.Tab); err != nil {
+		t.Fatalf("tab: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 2
+	}, shellTimeout); err != nil {
+		t.Fatalf("the daemon never created the pane: %v\n%s", err, term.Snapshot())
+	}
+	requireTypedThenRuns(t, term)
 }

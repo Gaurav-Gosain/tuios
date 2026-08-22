@@ -513,6 +513,14 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// into the layout; otherwise the window is left floating over the tiled panes
 	// even though the daemon's own geometry for it is already correct (which is
 	// how it looked on screen: a full-size window over an otherwise clean split).
+	// A pane arriving is the event the launcher's type-it-out path waits on, so
+	// it is answered here rather than polled for. It is answered before the
+	// switch below and not inside it: which layout the user has running decides
+	// whether a new pane needs retiling, and has nothing to say about whether a
+	// command line was waiting for it. Seeding from inside the tiling branch
+	// meant Tab typed nothing at all for anyone with tiling off.
+	m.seedAdoptedWindows(created)
+
 	switch {
 	case m.AutoTiling && (len(created) > 0 || len(removed) > 0 || placed):
 		m.adoptSyncedWindows(created, removed, placed)
@@ -886,10 +894,6 @@ func (m *OS) adoptSyncedWindows(created []*terminal.Window, removed []int, place
 			}
 		}
 	}
-
-	// A pane arriving is the event the launcher's type-it-out path waits on, so
-	// it is answered here rather than polled for.
-	m.seedAdoptedWindows(created)
 
 	m.TileAllWindows()
 	m.SyncStateToDaemon()

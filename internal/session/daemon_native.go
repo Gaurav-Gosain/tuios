@@ -56,15 +56,13 @@ func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []
 		if len(args) > 1 {
 			command = args[1:]
 		}
-		win, err := sess.AddDaemonWindowWith(NewWindowOptions{Focus: true, Command: command}, onExit)
+		win, err := sess.AddDaemonWindowWith(
+			NewWindowOptions{Focus: true, Command: command, Name: name}, onExit)
 		if err != nil {
 			return nil, err
 		}
 		displayName := win.Title
 		if name != "" {
-			if err := sess.RenameDaemonWindow(win.ID, name); err != nil {
-				return nil, err
-			}
 			displayName = name
 		}
 		return map[string]any{"window_id": win.ID, "name": displayName}, nil
