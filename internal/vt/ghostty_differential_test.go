@@ -129,6 +129,41 @@ func colorEquivalent(a, b interface {
 	return ar == br && ag == bg && ab_ == bb
 }
 
+// compareRender asserts the two rendered frames display the same thing. The
+// frames are re-parsed through fresh emulators and compared as displayed
+// cells rather than as bytes: the same color legitimately encodes as SGR 30
+// or 38;5;0 depending on which form the guest used, and only one side knows
+// which that was. The grid comparison sees converted cells; this sees the
+// layer that turns them into host output, which is where the style-churn
+// bug lived.
+func (p *diffPair) compareRender(t *testing.T, context string) {
+	t.Helper()
+	pr, gr := p.pure.Render(), p.gh.Render()
+	if pr == gr {
+		return
+	}
+	w, h := p.pure.Width(), p.pure.Height()
+	pe := NewEmulator(w, h)
+	ge := NewEmulator(w, h)
+	_, _ = pe.Write([]byte(pr))
+	_, _ = ge.Write([]byte(gr))
+	bad := 0
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			pc, gc := pe.CellAt(x, y), ge.CellAt(x, y)
+			if !cellsEquivalent(pc, gc) {
+				bad++
+				if bad <= 6 {
+					t.Errorf("%s: rendered frame cell (%d,%d)\n pure    %s\n ghostty %s", context, x, y, ghDiffCellText(pc), ghDiffCellText(gc))
+				}
+			}
+		}
+	}
+	if bad > 6 {
+		t.Errorf("%s: rendered frames differ in %d cells total", context, bad)
+	}
+}
+
 func (p *diffPair) compareCursor(t *testing.T, context string) {
 	t.Helper()
 	pp, gp := p.pure.CursorPosition(), p.gh.CursorPosition()
@@ -223,6 +258,7 @@ func TestGhosttyDiffBasicSequences(t *testing.T) {
 			p.write(t, []byte(tc.in))
 			p.compareScreens(t, tc.name)
 			p.compareCursor(t, tc.name)
+			p.compareRender(t, tc.name)
 		})
 	}
 }
@@ -241,17 +277,21 @@ func TestGhosttyDiffCorpus(t *testing.T) {
 				t.Fatal(err)
 			}
 			p := newDiffPair(t, 80, 24)
-			// Feed in PTY-sized chunks to exercise boundary handling.
+			// Feed in PTY-sized chunks, and read between chunks: a sync
+			// per chunk is what the app does, and per-snapshot state such
+			// as style IDs only churns when reads interleave writes.
 			for off := 0; off < len(data); off += 4096 {
 				end := off + 4096
 				if end > len(data) {
 					end = len(data)
 				}
 				p.write(t, data[off:end])
+				p.compareScreens(t, fmt.Sprintf("%s@%d", filepath.Base(f), end))
 			}
 			p.compareScreens(t, filepath.Base(f))
 			p.compareCursor(t, filepath.Base(f))
 			p.compareScrollback(t, filepath.Base(f), 50)
+			p.compareRender(t, filepath.Base(f))
 		})
 	}
 }
@@ -283,6 +323,7 @@ func TestGhosttyDiffScrollback(t *testing.T) {
 	p.write(t, []byte(b.String()))
 	p.compareScreens(t, "scrollback")
 	p.compareScrollback(t, "scrollback", 0)
+	p.compareRender(t, "scrollback")
 }
 
 func TestGhosttyDiffModes(t *testing.T) {
